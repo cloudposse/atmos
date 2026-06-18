@@ -12,22 +12,22 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-type fakeSandbox struct {
+type fakeContainer struct {
 	id      string
 	name    string
 	command []string
 	opts    *container.ExecOptions
 }
 
-func (f *fakeSandbox) ID() string {
+func (f *fakeContainer) ID() string {
 	return f.id
 }
 
-func (f *fakeSandbox) Name() string {
+func (f *fakeContainer) Name() string {
 	return f.name
 }
 
-func (f *fakeSandbox) Exec(_ context.Context, command []string, opts *container.ExecOptions) error {
+func (f *fakeContainer) Exec(_ context.Context, command []string, opts *container.ExecOptions) error {
 	f.command = command
 	f.opts = opts
 	if opts.Stdout != nil {
@@ -36,14 +36,14 @@ func (f *fakeSandbox) Exec(_ context.Context, command []string, opts *container.
 	return nil
 }
 
-func (f *fakeSandbox) Cleanup(bool) error {
+func (f *fakeContainer) Cleanup(bool) error {
 	return nil
 }
 
-func TestWorkflowSandboxExecShellPassesStepEnvAndMappedWorkingDirectory(t *testing.T) {
-	fake := &fakeSandbox{id: "container-id", name: "sandbox"}
-	sandbox := &WorkflowSandbox{
-		sandbox: fake,
+func TestContainerSessionExecShellPassesStepEnvAndMappedWorkingDirectory(t *testing.T) {
+	fake := &fakeContainer{id: "container-id", name: "sandbox"}
+	session := &ContainerSession{
+		backend: fake,
 		config: &schema.WorkflowContainer{
 			Shell:     "/bin/bash",
 			Workspace: "/workspace",
@@ -71,7 +71,7 @@ func TestWorkflowSandboxExecShellPassesStepEnvAndMappedWorkingDirectory(t *testi
 	}
 	stepEnv := []string{"SHARED=step", "STEP=1"}
 
-	err := sandbox.ExecShell(context.Background(), &SandboxParams{
+	err := session.ExecShell(context.Background(), &ContainerStepParams{
 		Step:        step,
 		WorkflowDef: workflowDef,
 		HostWorkDir: "/repo/services/api",
@@ -88,17 +88,17 @@ func TestWorkflowSandboxExecShellPassesStepEnvAndMappedWorkingDirectory(t *testi
 	assert.NotContains(t, fake.opts.Env, "SHARED=container")
 }
 
-func TestWorkflowSandboxExecShellRejectsWorkingDirectoryOutsideWorkspace(t *testing.T) {
-	fake := &fakeSandbox{id: "container-id", name: "sandbox"}
-	sandbox := &WorkflowSandbox{
-		sandbox:       fake,
+func TestContainerSessionExecShellRejectsWorkingDirectoryOutsideWorkspace(t *testing.T) {
+	fake := &fakeContainer{id: "container-id", name: "sandbox"}
+	session := &ContainerSession{
+		backend:       fake,
 		config:        &schema.WorkflowContainer{Workspace: "/workspace"},
 		hostWorkspace: "/repo",
 	}
 	step := &schema.WorkflowStep{Name: "test", Type: "shell", Command: "pwd"}
 	workflowDef := &schema.WorkflowDefinition{Output: "none"}
 
-	err := sandbox.ExecShell(context.Background(), &SandboxParams{
+	err := session.ExecShell(context.Background(), &ContainerStepParams{
 		Step:        step,
 		WorkflowDef: workflowDef,
 		HostWorkDir: "/tmp/outside",

@@ -259,12 +259,12 @@ func ExecuteWorkflow(
 	commandLineIdentity string,
 ) (retErr error) {
 	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflow")()
-	var activeSandbox *workflowPkg.WorkflowSandbox
+	var activeContainer *workflowPkg.ContainerSession
 	defer func() {
-		if activeSandbox == nil {
+		if activeContainer == nil {
 			return
 		}
-		if cleanupErr := activeSandbox.Cleanup(retErr == nil); cleanupErr != nil && retErr == nil {
+		if cleanupErr := activeContainer.Cleanup(retErr == nil); cleanupErr != nil && retErr == nil {
 			retErr = cleanupErr
 		}
 	}()
@@ -435,7 +435,7 @@ func ExecuteWorkflow(
 			switch {
 			case workflowPkg.StepContainerOverride(&step):
 				err = retry.Do(context.Background(), step.Retry, func() error {
-					return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.SandboxParams{
+					return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
 						Workflow:     workflow,
 						WorkflowPath: workflowPath,
 						BasePath:     atmosConfig.BasePath,
@@ -449,8 +449,8 @@ func ExecuteWorkflow(
 					})
 				})
 			case workflowDefinition.Container != nil && workflowDefinition.Container.IsEnabled() && !workflowPkg.StepContainerDisabled(&step):
-				if activeSandbox == nil {
-					activeSandbox, err = workflowPkg.StartWorkflowSandbox(context.Background(), &workflowPkg.SandboxParams{
+				if activeContainer == nil {
+					activeContainer, err = workflowPkg.StartWorkflowContainer(context.Background(), &workflowPkg.ContainerStepParams{
 						Workflow:     workflow,
 						WorkflowPath: workflowPath,
 						BasePath:     atmosConfig.BasePath,
@@ -463,7 +463,7 @@ func ExecuteWorkflow(
 					}
 				}
 				err = retry.Do(context.Background(), step.Retry, func() error {
-					return activeSandbox.ExecShell(context.Background(), &workflowPkg.SandboxParams{
+					return activeContainer.ExecShell(context.Background(), &workflowPkg.ContainerStepParams{
 						Step:        &step,
 						WorkflowDef: workflowDefinition,
 						HostWorkDir: workDir,

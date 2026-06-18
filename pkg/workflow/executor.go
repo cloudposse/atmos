@@ -48,12 +48,12 @@ func mergeWorkflowEnv(workflowEnv, stepEnv map[string]string) map[string]string 
 
 // Executor handles workflow execution with dependency injection for testing.
 type Executor struct {
-	runner       CommandRunner
-	authProvider AuthProvider
-	ui           UIProvider
-	depProvider  DependencyProvider
-	stepVars     *stepPkg.Variables
-	sandbox      *WorkflowSandbox
+	runner           CommandRunner
+	authProvider     AuthProvider
+	ui               UIProvider
+	depProvider      DependencyProvider
+	stepVars         *stepPkg.Variables
+	containerSession *ContainerSession
 }
 
 // NewExecutor creates a new Executor with the given dependencies.
@@ -75,13 +75,13 @@ func (e *Executor) WithDependencyProvider(provider DependencyProvider) *Executor
 	return e
 }
 
-func (e *Executor) cleanupWorkflowSandbox(success bool) error {
-	if e.sandbox == nil {
+func (e *Executor) cleanupWorkflowContainer(success bool) error {
+	if e.containerSession == nil {
 		return nil
 	}
-	sandbox := e.sandbox
-	e.sandbox = nil
-	return sandbox.Cleanup(success)
+	session := e.containerSession
+	e.containerSession = nil
+	return session.Cleanup(success)
 }
 
 // Execute runs a workflow with the given options.
@@ -98,7 +98,7 @@ func (e *Executor) Execute(params *WorkflowParams) (result *ExecutionResult, err
 		Success:      true,
 	}
 	defer func() {
-		if cleanupErr := e.cleanupWorkflowSandbox(result.Success); cleanupErr != nil && result.Success {
+		if cleanupErr := e.cleanupWorkflowContainer(result.Success); cleanupErr != nil && result.Success {
 			result.Success = false
 			result.Error = cleanupErr
 			err = cleanupErr
@@ -589,10 +589,10 @@ func (e *Executor) runCommand(params *WorkflowParams, step *schema.WorkflowStep,
 }
 
 // runShellStep executes a shell-type step, dispatching to a step-level container
-// override, the workflow-level sandbox, or the host shell runner.
+// override, the workflow-level container, or the host shell runner.
 func (e *Executor) runShellStep(params *WorkflowParams, step *schema.WorkflowStep, cmdParams *runCommandParams, workDir string) error {
 	if StepContainerOverride(step) {
-		return RunStepContainerOverride(params.Ctx, &SandboxParams{
+		return RunStepContainerOverride(params.Ctx, &ContainerStepParams{
 			Workflow:     params.Workflow,
 			WorkflowPath: params.WorkflowPath,
 			BasePath:     params.AtmosConfig.BasePath,
@@ -606,11 +606,11 @@ func (e *Executor) runShellStep(params *WorkflowParams, step *schema.WorkflowSte
 		})
 	}
 	if params.WorkflowDefinition.Container != nil && params.WorkflowDefinition.Container.IsEnabled() && !StepContainerDisabled(step) {
-		sandbox, err := e.ensureWorkflowSandbox(params, cmdParams.stepEnv)
+		session, err := e.ensureWorkflowContainer(params, cmdParams.stepEnv)
 		if err != nil {
 			return err
 		}
-		return sandbox.ExecShell(params.Ctx, &SandboxParams{
+		return session.ExecShell(params.Ctx, &ContainerStepParams{
 			Step:        step,
 			WorkflowDef: params.WorkflowDefinition,
 			HostWorkDir: cmdParams.workingDirectory,
@@ -622,11 +622,11 @@ func (e *Executor) runShellStep(params *WorkflowParams, step *schema.WorkflowSte
 	return e.runner.RunShell(cmdParams.command, commandName, workDir, cmdParams.stepEnv, params.Opts.DryRun)
 }
 
-func (e *Executor) ensureWorkflowSandbox(params *WorkflowParams, runtimeEnv []string) (*WorkflowSandbox, error) {
-	if e.sandbox != nil {
-		return e.sandbox, nil
+func (e *Executor) ensureWorkflowContainer(params *WorkflowParams, runtimeEnv []string) (*ContainerSession, error) {
+	if e.containerSession != nil {
+		return e.containerSession, nil
 	}
-	sandbox, err := StartWorkflowSandbox(params.Ctx, &SandboxParams{
+	session, err := StartWorkflowContainer(params.Ctx, &ContainerStepParams{
 		Workflow:     params.Workflow,
 		WorkflowPath: params.WorkflowPath,
 		BasePath:     params.AtmosConfig.BasePath,
@@ -637,8 +637,8 @@ func (e *Executor) ensureWorkflowSandbox(params *WorkflowParams, runtimeEnv []st
 	if err != nil {
 		return nil, err
 	}
-	e.sandbox = sandbox
-	return sandbox, nil
+	e.containerSession = session
+	return session, nil
 }
 
 // handleStepError handles a step execution error and returns the appropriate result.

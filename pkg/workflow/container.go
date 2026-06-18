@@ -23,10 +23,10 @@ const (
 	currentDir = "."
 )
 
-// SandboxParams carries workflow and step execution inputs for the workflow
-// container sandbox entry points. It keeps the public functions within the
+// ContainerStepParams carries workflow and step execution inputs for the workflow
+// container entry points. It keeps the public functions within the
 // argument limit and groups related values together.
-type SandboxParams struct {
+type ContainerStepParams struct {
 	Workflow     string
 	WorkflowPath string
 	BasePath     string
@@ -39,14 +39,14 @@ type SandboxParams struct {
 	DryRun       bool
 }
 
-// WorkflowSandbox owns the long-lived container-backed sandbox for a workflow run.
-type WorkflowSandbox struct {
-	sandbox       sandboxContainer
+// ContainerSession owns the long-lived container backing a workflow run.
+type ContainerSession struct {
+	backend       containerBackend
 	config        *schema.WorkflowContainer
 	hostWorkspace string
 }
 
-type sandboxContainer interface {
+type containerBackend interface {
 	ID() string
 	Name() string
 	Exec(ctx context.Context, command []string, opts *container.ExecOptions) error
@@ -74,7 +74,7 @@ func CalculateWorkingDirectory(workflowDef *schema.WorkflowDefinition, step *sch
 	return workDir
 }
 
-// StepContainerDisabled reports whether the step explicitly opts out of the workflow sandbox.
+// StepContainerDisabled reports whether the step explicitly opts out of the workflow container.
 func StepContainerDisabled(step *schema.WorkflowStep) bool {
 	return step.Container != nil && !step.Container.IsEnabled()
 }
@@ -84,8 +84,8 @@ func StepContainerOverride(step *schema.WorkflowStep) bool {
 	return step.Container != nil && step.Container.IsEnabled()
 }
 
-// StartWorkflowSandbox starts the workflow-level sandbox if configured.
-func StartWorkflowSandbox(ctx context.Context, params *SandboxParams) (*WorkflowSandbox, error) {
+// StartWorkflowContainer starts the workflow-level container if configured.
+func StartWorkflowContainer(ctx context.Context, params *ContainerStepParams) (*ContainerSession, error) {
 	if params == nil {
 		return nil, errUtils.ErrNilParam
 	}
@@ -94,25 +94,25 @@ func StartWorkflowSandbox(ctx context.Context, params *SandboxParams) (*Workflow
 		return nil, nil
 	}
 
-	hostWorkspace, err := workflowSandboxHostWorkspace(workflowDef, params.BasePath)
+	hostWorkspace, err := workflowContainerHostWorkspace(workflowDef, params.BasePath)
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := buildSandboxConfig(params, workflowDef.Container, hostWorkspace)
+	cfg, err := buildContainerConfig(params, workflowDef.Container, hostWorkspace)
 	if err != nil {
 		return nil, err
 	}
-	sandbox, err := container.StartSandbox(ctx, &cfg)
+	backend, err := container.StartSandbox(ctx, &cfg)
 	if err != nil {
 		return nil, err
 	}
 	if params.DryRun {
 		ui.Writef("%s create %s %s\n", runtimePreviewName(cfg.RuntimeName), cfg.Name, cfg.Image)
 	}
-	return &WorkflowSandbox{sandbox: sandbox, config: workflowDef.Container, hostWorkspace: hostWorkspace}, nil
+	return &ContainerSession{backend: backend, config: workflowDef.Container, hostWorkspace: hostWorkspace}, nil
 }
 
-func workflowSandboxHostWorkspace(workflowDef *schema.WorkflowDefinition, basePath string) (string, error) {
+func workflowContainerHostWorkspace(workflowDef *schema.WorkflowDefinition, basePath string) (string, error) {
 	workDir := strings.TrimSpace(workflowDef.WorkingDirectory)
 	if workDir == "" {
 		var err error
@@ -129,7 +129,7 @@ func workflowSandboxHostWorkspace(workflowDef *schema.WorkflowDefinition, basePa
 	return filepath.Abs(workDir)
 }
 
-func buildSandboxConfig(params *SandboxParams, cfg *schema.WorkflowContainer, hostWorkspace string) (container.SandboxConfig, error) {
+func buildContainerConfig(params *ContainerStepParams, cfg *schema.WorkflowContainer, hostWorkspace string) (container.SandboxConfig, error) {
 	if strings.TrimSpace(cfg.Image) == "" {
 		return container.SandboxConfig{}, fmt.Errorf("%w: workflow container image is required", errUtils.ErrContainerRuntimeOperation)
 	}
@@ -143,27 +143,27 @@ func buildSandboxConfig(params *SandboxParams, cfg *schema.WorkflowContainer, ho
 		return container.SandboxConfig{}, fmt.Errorf("%w: workflow container cleanup must be always, on_success, never, or empty", errUtils.ErrContainerRuntimeOperation)
 	}
 
-	sandboxCfg := container.NewWorkflowSandboxConfig(params.Workflow, params.WorkflowPath, hostWorkspace)
-	sandboxCfg.RuntimeName = cfg.Runtime
-	sandboxCfg.RuntimeAutoStart = cfg.RuntimeAutoStart
-	sandboxCfg.Image = cfg.Image
-	sandboxCfg.WorkspaceFolder = defaultString(cfg.Workspace, "/workspace")
-	sandboxCfg.WorkspaceReadOnly = cfg.WorkspaceReadOnly
-	sandboxCfg.Mounts = convertWorkflowMounts(cfg.Mounts)
-	sandboxCfg.Ports = convertWorkflowPorts(cfg.Ports)
-	sandboxCfg.Env = envMapToSlice(cfg.Env)
-	sandboxCfg.RuntimeEnv = params.RuntimeEnv
-	sandboxCfg.User = cfg.User
-	sandboxCfg.RunArgs = cfg.RunArgs
-	sandboxCfg.PullPolicy = cfg.Pull
-	sandboxCfg.CleanupPolicy = cfg.Cleanup
-	sandboxCfg.DryRun = params.DryRun
-	return sandboxCfg, nil
+	containerCfg := container.NewWorkflowSandboxConfig(params.Workflow, params.WorkflowPath, hostWorkspace)
+	containerCfg.RuntimeName = cfg.Runtime
+	containerCfg.RuntimeAutoStart = cfg.RuntimeAutoStart
+	containerCfg.Image = cfg.Image
+	containerCfg.WorkspaceFolder = defaultString(cfg.Workspace, "/workspace")
+	containerCfg.WorkspaceReadOnly = cfg.WorkspaceReadOnly
+	containerCfg.Mounts = convertWorkflowMounts(cfg.Mounts)
+	containerCfg.Ports = convertWorkflowPorts(cfg.Ports)
+	containerCfg.Env = envMapToSlice(cfg.Env)
+	containerCfg.RuntimeEnv = params.RuntimeEnv
+	containerCfg.User = cfg.User
+	containerCfg.RunArgs = cfg.RunArgs
+	containerCfg.PullPolicy = cfg.Pull
+	containerCfg.CleanupPolicy = cfg.Cleanup
+	containerCfg.DryRun = params.DryRun
+	return containerCfg, nil
 }
 
-// ExecShell runs a shell command inside the workflow sandbox.
-func (s *WorkflowSandbox) ExecShell(ctx context.Context, params *SandboxParams) error {
-	if s == nil || s.sandbox == nil || params == nil {
+// ExecShell runs a shell command inside the workflow container.
+func (s *ContainerSession) ExecShell(ctx context.Context, params *ContainerStepParams) error {
+	if s == nil || s.backend == nil || params == nil {
 		return errUtils.ErrNilParam
 	}
 	step := params.Step
@@ -174,13 +174,13 @@ func (s *WorkflowSandbox) ExecShell(ctx context.Context, params *SandboxParams) 
 	shell := defaultString(s.config.Shell, workflowContainerDefaultShell)
 	env := mergeEnvSlices(envMapToSlice(s.config.Env), params.StepEnv)
 	cmd := []string{shell, "-lc", params.Command}
-	if s.sandbox.ID() == s.sandbox.Name() {
-		ui.Writef("%s exec %s %s\n", runtimePreviewName(s.config.Runtime), s.sandbox.Name(), strings.Join(cmd, " "))
+	if s.backend.ID() == s.backend.Name() {
+		ui.Writef("%s exec %s %s\n", runtimePreviewName(s.config.Runtime), s.backend.Name(), strings.Join(cmd, " "))
 		return nil
 	}
 
 	if step.Tty || step.Interactive {
-		return s.sandbox.Exec(ctx, cmd, &container.ExecOptions{
+		return s.backend.Exec(ctx, cmd, &container.ExecOptions{
 			User:         s.config.User,
 			WorkingDir:   containerWorkDir,
 			Env:          env,
@@ -194,7 +194,7 @@ func (s *WorkflowSandbox) ExecShell(ctx context.Context, params *SandboxParams) 
 
 	writer := stepPkg.NewOutputModeWriter(stepPkg.GetOutputMode(step, params.WorkflowDef), step.Name, stepPkg.GetViewportConfig(step, params.WorkflowDef))
 	_, _, err = writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
-		return s.sandbox.Exec(ctx, cmd, &container.ExecOptions{
+		return s.backend.Exec(ctx, cmd, &container.ExecOptions{
 			User:         s.config.User,
 			WorkingDir:   containerWorkDir,
 			Env:          env,
@@ -207,8 +207,8 @@ func (s *WorkflowSandbox) ExecShell(ctx context.Context, params *SandboxParams) 
 	return err
 }
 
-// RunStepContainerOverride runs a shell step in a one-shot step-level sandbox.
-func RunStepContainerOverride(ctx context.Context, params *SandboxParams) error {
+// RunStepContainerOverride runs a shell step in a one-shot step-level container.
+func RunStepContainerOverride(ctx context.Context, params *ContainerStepParams) error {
 	if params == nil {
 		return errUtils.ErrNilParam
 	}
@@ -224,7 +224,7 @@ func RunStepContainerOverride(ctx context.Context, params *SandboxParams) error 
 	hostWorkspace := params.HostWorkDir
 	if hostWorkspace == "" {
 		var err error
-		hostWorkspace, err = workflowSandboxHostWorkspace(workflowDef, params.BasePath)
+		hostWorkspace, err = workflowContainerHostWorkspace(workflowDef, params.BasePath)
 		if err != nil {
 			return err
 		}
@@ -251,7 +251,7 @@ func RunStepContainerOverride(ctx context.Context, params *SandboxParams) error 
 }
 
 // buildEphemeralStepConfig assembles the one-shot container config for a step override.
-func buildEphemeralStepConfig(params *SandboxParams, cfg *schema.WorkflowContainer, absHostWorkspace string) *container.EphemeralConfig {
+func buildEphemeralStepConfig(params *ContainerStepParams, cfg *schema.WorkflowContainer, absHostWorkspace string) *container.EphemeralConfig {
 	step := params.Step
 	shell := defaultString(cfg.Shell, workflowContainerDefaultShell)
 	return &container.EphemeralConfig{
@@ -279,7 +279,7 @@ func buildEphemeralStepConfig(params *SandboxParams, cfg *schema.WorkflowContain
 }
 
 // writeEphemeralResult renders captured stdout/stderr from a one-shot step container.
-func writeEphemeralResult(params *SandboxParams, result *container.EphemeralResult, runErr error) {
+func writeEphemeralResult(params *ContainerStepParams, result *container.EphemeralResult, runErr error) {
 	step := params.Step
 	if result == nil || step.Tty || step.Interactive {
 		return
@@ -504,10 +504,10 @@ func validCleanup(value string) bool {
 	return value == "" || value == container.CleanupAlways || value == container.CleanupOnSuccess || value == container.CleanupNever
 }
 
-// Cleanup removes the workflow sandbox according to policy.
-func (s *WorkflowSandbox) Cleanup(success bool) error {
-	if s == nil || s.sandbox == nil {
+// Cleanup removes the workflow container according to policy.
+func (s *ContainerSession) Cleanup(success bool) error {
+	if s == nil || s.backend == nil {
 		return nil
 	}
-	return s.sandbox.Cleanup(success)
+	return s.backend.Cleanup(success)
 }
