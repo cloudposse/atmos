@@ -66,6 +66,12 @@ Do not use LocalStack for this workflow.
 
 ## Cleanup
 
+This gist demonstrates the store-output loop, not declared secrets, so its stores
+are regular output stores (no `secret: true`). Clean up with the AWS CLI because
+`atmos secret delete` only removes **declared** secrets, and these hook-written
+values are not declared. For the `secret: true` + `atmos secret delete` workflow,
+see [`gists/aws-secrets`](../aws-secrets).
+
 ```bash
 aws ssm delete-parameter --region us-east-1 \
   --name /atmos-gist/store-hooks/producer/output-demo/demo_id

@@ -1891,6 +1891,9 @@ func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) e
 	return nil
 }
 
+// findYAMLMappingPath walks a YAML document or mapping node to the node reached by
+// following the given sequence of mapping keys, returning nil if any key along the
+// path is missing or a non-mapping node is encountered before the path is consumed.
 func findYAMLMappingPath(node *goyaml.Node, path ...string) *goyaml.Node {
 	if node == nil {
 		return nil

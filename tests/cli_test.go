@@ -779,7 +779,21 @@ func TestMain(m *testing.M) {
 	// the affected tests.
 	testhelpers.ProvisionToolchain(logger, testhelpers.DefaultTools)
 
+	// Auto-start the Floci cloud emulators for the opt-in Floci E2E tests. This is a
+	// no-op unless ATMOS_TEST_FLOCI=true and the FLOCI_* endpoint env vars are unset,
+	// so CI (which pre-sets them to its service containers) is unaffected. On machines
+	// without Docker it records a skip reason and the Floci tests skip cleanly.
+	flociCleanup, flociErr := maybeStartFloci(context.Background())
+	if flociErr != nil {
+		logger.Warn("Floci auto-start failed; Floci tests will skip", "error", flociErr)
+	}
+
 	exitCode := m.Run() // ALWAYS run tests so they can skip properly
+
+	// Tear down any Floci emulators we auto-started.
+	if flociCleanup != nil {
+		flociCleanup()
+	}
 
 	// Clean up sandboxes.
 	cleanupSandboxes()

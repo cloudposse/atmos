@@ -165,6 +165,9 @@ func buildAuthManager(atmosConfig *schema.AtmosConfiguration, scope secretScope)
 	return authManager, nil
 }
 
+// injectSecretStoreAuthResolver wires the auth manager into atmosConfig as the
+// store auth-context resolver so secret stores can resolve credentials lazily
+// during `atmos secret` operations. It is a no-op when either argument is nil.
 func injectSecretStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) {
 	if atmosConfig == nil || authManager == nil {
 		return

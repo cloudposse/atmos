@@ -182,6 +182,9 @@ func (s *AzureKeyVaultStore) initIdentityClient() error {
 	return nil
 }
 
+// defaultCredential returns the token credential used to authenticate the Key Vault
+// client: a local stub when the store is configured withoutAuth (for Floci/local
+// testing), otherwise Azure's default credential chain.
 func (s *AzureKeyVaultStore) defaultCredential(options *azidentity.DefaultAzureCredentialOptions) (azcore.TokenCredential, error) {
 	if s.withoutAuth {
 		return localAzureTokenCredential{}, nil
@@ -189,6 +192,8 @@ func (s *AzureKeyVaultStore) defaultCredential(options *azidentity.DefaultAzureC
 	return azidentity.NewDefaultAzureCredential(options)
 }
 
+// localAzureTokenCredential is a stub azcore.TokenCredential that returns a fixed,
+// non-functional token for local/no-auth Key Vault testing against an emulator.
 type localAzureTokenCredential struct{}
 
 func (localAzureTokenCredential) GetToken(context.Context, policy.TokenRequestOptions) (azcore.AccessToken, error) {
@@ -198,10 +203,14 @@ func (localAzureTokenCredential) GetToken(context.Context, policy.TokenRequestOp
 	}, nil
 }
 
+// azureInsecureEndpointTransport wraps an HTTP transport and rewrites request URLs
+// from https to http so the Key Vault client can talk to an insecure local endpoint.
 type azureInsecureEndpointTransport struct {
 	base policy.Transporter
 }
 
+// Do rewrites the request scheme to http and forwards it to the wrapped transport,
+// falling back to http.DefaultClient when no base transport is set.
 func (t azureInsecureEndpointTransport) Do(req *http.Request) (*http.Response, error) {
 	clone := req.Clone(req.Context())
 	clone.URL.Scheme = "http"

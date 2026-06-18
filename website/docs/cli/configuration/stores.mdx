@@ -149,6 +149,7 @@ stores:
       prefix: myapp
       stack_delimiter: "/"
       # Optional: custom endpoint for AWS-compatible local/test APIs
+      # (`endpoint_url` is an accepted alias; `endpoint` wins if both are set)
       endpoint: http://localhost:4566
       # Optional: assume role for cross-account access
       read_role_arn: arn:aws:iam::123456789012:role/SSMReader
@@ -169,6 +170,7 @@ stores:
       prefix: myapp
       stack_delimiter: "/"
       # Optional: custom endpoint for AWS-compatible local/test APIs
+      # (`endpoint_url` is an accepted alias; `endpoint` wins if both are set)
       endpoint: http://localhost:4566
       # Optional: assume role for cross-account access
       read_role_arn: arn:aws:iam::123456789012:role/SecretsReader
@@ -193,10 +195,12 @@ stores:
       # Optional for Key Vault-compatible local endpoints whose auth challenge
       # resource does not match the endpoint host
       disable_challenge_resource_verification: true
-      # Optional for plaintext local endpoints
+      # Optional for plaintext local endpoints (rewrites http:// to https:// over an insecure transport)
       endpoint_insecure: true
       # Optional for emulators that accept any bearer token
       without_authentication: true
+      # Optional: permit sending the credential over plain http (does not rewrite the URL like endpoint_insecure)
+      insecure_allow_credential_with_http: true
 ```
 </File>
 
@@ -215,6 +219,7 @@ stores:
       prefix: myapp
       stack_delimiter: "_"
       # Optional: custom endpoint for local/test APIs
+      # (`endpoint_url` is an accepted alias; `endpoint` wins if both are set)
       endpoint: localhost:4568
       # Optional for plaintext local gRPC endpoints
       endpoint_insecure: true

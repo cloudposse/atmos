@@ -14,6 +14,7 @@ import (
 	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/tests"
 )
@@ -677,10 +678,11 @@ func TestNewSSMStore(t *testing.T) {
 
 func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 	tests := []struct {
-		name        string
-		region      string
-		authContext *AWSAuthConfig
-		wantLen     int
+		name          string
+		region        string
+		storeEndpoint string
+		authContext   *AWSAuthConfig
+		wantLen       int
 	}{
 		{
 			name:   "all fields populated",
@@ -693,6 +695,22 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 				EndpointURL:     "http://localhost:4566",
 			},
 			wantLen: 5, // creds + config + profile + store region + endpoint
+		},
+		{
+			name:          "store endpoint used when auth context endpoint empty",
+			region:        "us-east-1",
+			storeEndpoint: "http://store-endpoint",
+			authContext:   &AWSAuthConfig{},
+			wantLen:       2, // store region + store endpoint
+		},
+		{
+			name:          "store endpoint takes precedence over auth context endpoint",
+			region:        "us-east-1",
+			storeEndpoint: "http://store-endpoint",
+			authContext: &AWSAuthConfig{
+				EndpointURL: "http://auth-endpoint",
+			},
+			wantLen: 2, // store region + store endpoint (auth endpoint ignored)
 		},
 		{
 			name:   "empty credentials file",
@@ -736,11 +754,59 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store := &SSMStore{region: tt.region}
+			store := &SSMStore{region: tt.region, endpoint: tt.storeEndpoint}
 			opts := store.buildAuthConfigOpts(tt.authContext)
 			assert.Len(t, opts, tt.wantLen)
 		})
 	}
+}
+
+func TestNewSSMStore_EndpointFallback(t *testing.T) {
+	ptr := func(s string) *string { return &s }
+
+	tests := []struct {
+		name         string
+		endpoint     *string
+		endpointURL  *string
+		wantEndpoint string
+	}{
+		{
+			name:         "no endpoint configured",
+			wantEndpoint: "",
+		},
+		{
+			name:         "endpoint takes precedence over endpoint_url",
+			endpoint:     ptr("http://endpoint"),
+			endpointURL:  ptr("http://endpoint-url"),
+			wantEndpoint: "http://endpoint",
+		},
+		{
+			name:         "endpoint_url used when endpoint nil",
+			endpointURL:  ptr("http://endpoint-url"),
+			wantEndpoint: "http://endpoint-url",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := NewSSMStore(SSMStoreOptions{
+				Region:      "us-east-1",
+				Endpoint:    tt.endpoint,
+				EndpointURL: tt.endpointURL,
+			}, "")
+			require.NoError(t, err)
+			ssmStore, ok := s.(*SSMStore)
+			require.True(t, ok)
+			assert.Equal(t, tt.wantEndpoint, ssmStore.endpoint)
+		})
+	}
+}
+
+func TestSSMStore_InitDefaultClient_WithEndpoint(t *testing.T) {
+	store := &SSMStore{region: "us-east-1", endpoint: "http://localhost:4566"}
+
+	require.NoError(t, store.initDefaultClient())
+	assert.NotNil(t, store.client)
 }
 
 func TestSSMStore_getKey(t *testing.T) {

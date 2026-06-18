@@ -179,6 +179,10 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	return nil
 }
 
+// injectDescribeComponentStoreAuthResolver wires the auth manager into atmosConfig
+// as the store auth-context resolver so identity-aware stores can resolve
+// credentials lazily during describe-component. It is a no-op when either argument
+// is nil.
 func injectDescribeComponentStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) {
 	if atmosConfig == nil || authManager == nil {
 		return

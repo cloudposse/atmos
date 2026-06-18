@@ -176,22 +176,16 @@ func requireFlociEndpoint(t *testing.T, endpointEnvVar, defaultEndpoint string) 
 		t.Skip("set ATMOS_TEST_FLOCI=true and start Floci before running this integration test")
 	}
 
-	endpoint := ""
-	if endpointEnvVar != "" {
-		endpoint = os.Getenv(endpointEnvVar)
+	endpoint, fromEnv := resolveFlociEndpoint(endpointEnvVar, defaultEndpoint)
+
+	// When this test's endpoint was not explicitly provided and auto-start (TestMain)
+	// could not bring Floci up (e.g. no container runtime is available), skip with
+	// that reason rather than failing the health check. An explicitly provided
+	// endpoint is always health-checked so a misconfiguration fails loudly.
+	if !fromEnv && flociAutostartSkip != "" {
+		t.Skip(flociAutostartSkip)
 	}
-	if endpoint == "" && endpointEnvVar == "" {
-		endpoint = os.Getenv("AWS_ENDPOINT_URL")
-	}
-	if endpoint == "" {
-		endpoint = os.Getenv("FLOCI_ENDPOINT_URL")
-	}
-	if endpoint == "" {
-		endpoint = defaultEndpoint
-	}
-	if endpoint == "" {
-		endpoint = flociDefaultEndpoint
-	}
+
 	endpoint = normalizeFlociEndpoint(endpoint)
 
 	parsed, err := url.Parse(endpoint)
@@ -221,6 +215,28 @@ func requireFlociEndpoint(t *testing.T, endpointEnvVar, defaultEndpoint string) 
 	require.NoError(t, resp.Body.Close())
 
 	return endpoint
+}
+
+// resolveFlociEndpoint determines the Floci endpoint to use and reports whether it
+// came from an explicitly set environment variable (as opposed to a built-in
+// default). The resolution order mirrors the long-standing harness behavior:
+// the named endpoint var, then AWS_ENDPOINT_URL (only when no named var is given),
+// then FLOCI_ENDPOINT_URL, then the provided default, then the package default.
+func resolveFlociEndpoint(endpointEnvVar, defaultEndpoint string) (endpoint string, fromEnv bool) {
+	if endpointEnvVar != "" {
+		if v := os.Getenv(endpointEnvVar); v != "" {
+			return v, true
+		}
+	} else if v := os.Getenv("AWS_ENDPOINT_URL"); v != "" {
+		return v, true
+	}
+	if v := os.Getenv("FLOCI_ENDPOINT_URL"); v != "" {
+		return v, true
+	}
+	if defaultEndpoint != "" {
+		return defaultEndpoint, false
+	}
+	return flociDefaultEndpoint, false
 }
 
 func normalizeFlociEndpoint(endpoint string) string {

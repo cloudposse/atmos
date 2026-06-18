@@ -73,6 +73,29 @@ It centralizes endpoint discovery, the `ATMOS_TEST_FLOCI=true` opt-in gate,
 temporary fixture copies, command env, local Atmos binary execution, and common
 AWS verification clients.
 
+#### Running locally (auto-start)
+
+When you opt in with `ATMOS_TEST_FLOCI=true` and leave the `FLOCI_*` endpoint
+variables unset, the suite **starts the Floci emulators for you**
+(using [testcontainers](https://golang.testcontainers.org/)) and tears them down
+when the run finishes. The container runtime is auto-detected via `pkg/container`,
+so either **Docker or Podman** works — for Podman the machine's API socket is wired
+into testcontainers automatically (and the Ryuk reaper is disabled, since rootless
+Podman cannot run it):
+
+```bash
+ATMOS_TEST_FLOCI=true go test ./tests -run Floci
+```
+
+If no container runtime is available, the Floci tests **skip** with an explanatory
+message rather than failing. The emulator images are pinned in
+`tests/floci_containers_test.go` and kept in sync with the CI service containers.
+
+#### Bringing your own Floci
+
+To target a Floci instance you manage (or the CI service containers), pre-set the
+endpoint variables. Auto-start sees they are already set and does nothing:
+
 ```bash
 ATMOS_TEST_FLOCI=true \
 FLOCI_ENDPOINT_URL=http://localhost:4566 \

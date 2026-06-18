@@ -205,6 +205,10 @@ func (s *SecretsManagerStore) Set(stack string, component string, key string, va
 	return s.putOrCreate(ctx, secretID, strValue)
 }
 
+// marshalSecretsManagerValue encodes a value for storage in AWS Secrets Manager.
+// A string that already holds valid JSON object or array is passed through verbatim
+// to avoid double-encoding it as a quoted JSON string; everything else is marshaled
+// to JSON.
 func marshalSecretsManagerValue(value any) ([]byte, error) {
 	if str, ok := value.(string); ok {
 		trimmed := strings.TrimSpace(str)

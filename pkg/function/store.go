@@ -161,6 +161,9 @@ func (f *StoreGetFunction) Execute(ctx context.Context, args string, execCtx *Ex
 	return value, nil
 }
 
+// ensureStoreFunctionCanRead guards the !store and !store.get functions against
+// reading from a store marked secret: true, returning ErrStoreIsSecret so callers
+// are directed to !secret instead.
 func ensureStoreFunctionCanRead(execCtx *ExecutionContext, storeName string) error {
 	if cfg, ok := execCtx.AtmosConfig.StoresConfig[storeName]; ok && cfg.Secret {
 		return fmt.Errorf("%w: store %q", errUtils.ErrStoreIsSecret, storeName)

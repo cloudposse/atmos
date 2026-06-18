@@ -188,6 +188,10 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	return nil
 }
 
+// injectHookStoreAuthResolver wires the resolved auth manager from info into
+// atmosConfig as the store auth-context resolver so stores invoked by hooks can
+// resolve credentials lazily. It is a no-op when the inputs are nil or info holds
+// no usable AuthManager.
 func injectHookStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
 	if atmosConfig == nil || info == nil || info.AuthManager == nil {
 		return

@@ -104,6 +104,8 @@ func GetClientOptions(opts AuthOptions) []option.ClientOption {
 	return clientOpts
 }
 
+// normalizeEndpoint trims surrounding whitespace and strips any http:// or
+// https:// scheme prefix so the result is suitable for option.WithEndpoint.
 func normalizeEndpoint(endpoint string) string {
 	endpoint = strings.TrimSpace(endpoint)
 	endpoint = strings.TrimPrefix(endpoint, "http://")

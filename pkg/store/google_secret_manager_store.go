@@ -192,6 +192,8 @@ func (s *GSMStore) identityAuthOptions(authContext *GCPAuthConfig) gcp.AuthOptio
 	return opts
 }
 
+// defaultAuthOptions builds the GCP AuthOptions for this store from its configured
+// credentials, endpoint, insecure-endpoint flag, and without-authentication flag.
 func (s *GSMStore) defaultAuthOptions() gcp.AuthOptions {
 	return gcp.AuthOptions{
 		Credentials:           gcp.GetCredentialsFromStore(s.credentials),
