@@ -124,13 +124,18 @@ func TestVerifierCommandRunnerAutoInstallUsesResolvedVersion(t *testing.T) {
 }
 
 func TestVerifierCommandRunnerAutoInstallFailsBeforeInstallingLatest(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "unexpected verifier install", http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
 	reg := &verifierBootstrapRegistry{
 		latest: "",
 		tool: &registry.Tool{
 			Type:       "http",
 			RepoOwner:  "slsa-framework",
 			RepoName:   "slsa-verifier",
-			Asset:      "https://example.com/{{.Version}}/slsa-verifier",
+			Asset:      ts.URL + "/{{.Version}}/slsa-verifier",
 			Format:     "raw",
 			BinaryName: "slsa-verifier",
 		},
