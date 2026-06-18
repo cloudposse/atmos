@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
 
 // TestCleanupLogFile tests log file cleanup functionality.
@@ -1132,6 +1133,73 @@ func TestParseUseVersionFromArgsInternal(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parseUseVersionFromArgsInternal(tt.args)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExecute_ReexecsExplicitUseVersionBeforeUnknownCommandResolution(t *testing.T) {
+	tests := []struct {
+		name  string
+		args  []string
+		env   string
+		value string
+	}{
+		{
+			name:  "env var",
+			args:  []string{"atmos", "future-secret", "list"},
+			env:   "ref:main",
+			value: "ref:main",
+		},
+		{
+			name:  "equals flag",
+			args:  []string{"atmos", "future-secret", "list", "--use-version=ref:main"},
+			value: "ref:main",
+		},
+		{
+			name:  "separate flag",
+			args:  []string{"atmos", "future-secret", "list", "--use-version", "ref:main"},
+			value: "ref:main",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			oldCheckAndReexec := checkAndReexec
+			t.Cleanup(func() {
+				checkAndReexec = oldCheckAndReexec
+			})
+
+			t.Setenv(pkgversion.VersionUseEnvVar, "")
+			if tt.env != "" {
+				t.Setenv(pkgversion.UseVersionEnvVar, tt.env)
+			} else {
+				t.Setenv(pkgversion.UseVersionEnvVar, "")
+			}
+
+			os.Args = tt.args
+			RootCmd.SetArgs(tt.args[1:])
+
+			reexecCalled := false
+			sentinel := errors.New("simulated re-exec")
+			checkAndReexec = func(config *schema.AtmosConfiguration) bool {
+				reexecCalled = true
+				assert.NotNil(t, config)
+				assert.Equal(t, tt.value, os.Getenv(pkgversion.VersionUseEnvVar))
+				panic(sentinel)
+			}
+
+			var recovered any
+			func() {
+				defer func() {
+					recovered = recover()
+				}()
+				_ = Execute()
+			}()
+
+			assert.Same(t, sentinel, recovered)
+			assert.True(t, reexecCalled)
 		})
 	}
 }
