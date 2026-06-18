@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -259,6 +260,7 @@ func TestEnableHeatmapIfRequested(t *testing.T) {
 	os.Args = []string{"atmos", "--heatmap", "version"}
 	enableHeatmapIfRequested()
 	done = perf.Track(nil, "cmd.test.heatmap.enabled")
+	time.Sleep(2 * time.Millisecond)
 	done()
 	assert.Contains(t, captureHeatmap(), "cmd.test.heatmap.enabled")
 }
