@@ -214,6 +214,29 @@ func TestSDKClientDiffReportsChangedForDifferingObjects(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, "changed", results[0].Action)
+	assert.Contains(t, results[0].Diff, "-  key: value")
+	assert.Contains(t, results[0].Diff, "+  key: changed")
+}
+
+func TestSDKClientDiffOmitsSecretBody(t *testing.T) {
+	// A changed Secret must report the action but carry no diff body, so its
+	// data never reaches the unmasked CI job summary.
+	live := kubernetesObject("v1", "Secret", "creds", "default")
+	live.Object["data"] = map[string]any{"password": "b2xk"} // "old".
+	dryRun := live.DeepCopy()
+	dryRun.Object["data"] = map[string]any{"password": "bmV3"} // "new".
+
+	client, fakeClient := newFakeSDKClientWithFake(live.DeepCopy())
+	prependApplyDryRunReactor(fakeClient, dryRun)
+
+	results, err := client.Diff(context.Background(), []*unstructured.Unstructured{
+		kubernetesObject("v1", "Secret", "creds", ""),
+	})
+
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "changed", results[0].Action)
+	assert.Empty(t, results[0].Diff, "secret diff body must be omitted")
 }
 
 func TestSDKClientDiffWrapsLiveReadError(t *testing.T) {
@@ -310,6 +333,10 @@ func newFakeSDKClientWithFake(objects ...runtime.Object) (*sdkClient, *fake.Fake
 	mapper.Add(
 		runtimeschema.GroupVersionKind{Version: "v1", Kind: "Namespace"},
 		meta.RESTScopeRoot,
+	)
+	mapper.Add(
+		runtimeschema.GroupVersionKind{Version: "v1", Kind: "Secret"},
+		meta.RESTScopeNamespace,
 	)
 
 	dynamicClient := fake.NewSimpleDynamicClient(runtime.NewScheme(), objects...)

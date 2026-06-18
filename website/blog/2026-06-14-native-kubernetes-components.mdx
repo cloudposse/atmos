@@ -50,9 +50,13 @@ detection that drives Terraform pipelines works for Kubernetes.
 When native CI is enabled, Kubernetes commands now write a compact job summary
 to the CI provider summary file, such as `$GITHUB_STEP_SUMMARY` in GitHub
 Actions. The summary reports object actions for `plan`/`diff`, `apply`/`deploy`,
-`delete`, and `validate`, plus an error section on failure. This first CI slice
-is deliberately summary-only: Kubernetes commands do not emit `$GITHUB_OUTPUT`
-values, commit statuses, PR comments, or stored artifacts.
+`delete`, and `validate`, plus an error section on failure. For `plan`/`diff` it
+also includes a collapsible **Kubernetes Diff** block with the per-object unified
+diff (GitHub renders the `+`/`-` lines in green and red); the same diff appears in
+the terminal output. `Secret` objects are omitted from the diff so their data is
+never printed or written to the summary. This first CI slice is deliberately
+summary-only: Kubernetes commands do not emit `$GITHUB_OUTPUT` values, commit
+statuses, PR comments, or stored artifacts.
 
 ## Deliver to a Cluster — or a GitOps Repository
 

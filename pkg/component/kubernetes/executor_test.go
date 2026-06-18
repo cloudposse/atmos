@@ -875,6 +875,41 @@ func TestRunApplyAndDiffPrintResultsOnSuccess(t *testing.T) {
 	assert.Contains(t, diffOut, "v1/ConfigMap default/settings")
 }
 
+func TestObjectCIResultsCarriesDiff(t *testing.T) {
+	in := []objectResult{
+		{Action: "changed", Resource: "v1/ConfigMap", Namespace: "default", Name: "settings", Diff: "-old\n+new\n"},
+		{Action: "no-change", Resource: "v1/ConfigMap", Namespace: "default", Name: "other"},
+	}
+
+	out := objectCIResults(in)
+
+	require.Len(t, out, 2)
+	assert.Equal(t, "-old\n+new\n", out[0].Diff)
+	assert.Empty(t, out[1].Diff)
+}
+
+func TestPrintResultsEmitsDiffBodyWhenPresent(t *testing.T) {
+	out := captureKubernetesStdout(t, func() {
+		printResults([]objectResult{
+			{Action: "changed", Resource: "v1/ConfigMap", Namespace: "default", Name: "settings", Diff: "-  key: old\n+  key: new"},
+		})
+	})
+
+	assert.Contains(t, out, "changed v1/ConfigMap default/settings")
+	assert.Contains(t, out, "-  key: old")
+	assert.Contains(t, out, "+  key: new")
+}
+
+func TestPrintResultsStaysSingleLineWithoutDiff(t *testing.T) {
+	out := captureKubernetesStdout(t, func() {
+		printResults([]objectResult{
+			{Action: "applied", Resource: "v1/ConfigMap", Namespace: "default", Name: "settings"},
+		})
+	})
+
+	assert.Equal(t, "applied v1/ConfigMap default/settings\n", out)
+}
+
 func TestEventsFor(t *testing.T) {
 	tests := []struct {
 		operation Operation

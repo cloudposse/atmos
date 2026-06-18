@@ -43,6 +43,10 @@ type objectResult struct {
 	Resource  string
 	Namespace string
 	Name      string
+	// Diff holds the unified diff (GitHub ```diff syntax) between the live and
+	// desired object for plan/diff operations. Empty for no-change objects,
+	// Secret objects (deliberately omitted), and operations that do not diff.
+	Diff string
 }
 
 func newSDKClient() (*sdkClient, error) {
@@ -178,12 +182,20 @@ func (c *sdkClient) Diff(ctx context.Context, objects []*unstructured.Unstructur
 			action = "no-change"
 		}
 
-		results = append(results, objectResult{
+		objResult := objectResult{
 			Action:    action,
 			Resource:  resourceID(obj),
 			Namespace: namespace,
 			Name:      obj.GetName(),
-		})
+		}
+		// Capture the unified diff for changed/created objects. Secrets are
+		// omitted so their data never reaches the unmasked CI job summary, and
+		// no-change objects have nothing to show. On create, liveObject is nil
+		// (NotFound), yielding an all-additions diff.
+		if action != "no-change" && !isSecret(obj) {
+			objResult.Diff = buildUnifiedDiff(liveObject, dryRunObject)
+		}
+		results = append(results, objResult)
 	}
 	return results, nil
 }

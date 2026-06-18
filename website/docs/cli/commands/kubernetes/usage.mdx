@@ -77,7 +77,9 @@ ATMOS_COMPONENT=argocd atmos kubernetes deploy argocd -s plat-ue2-prod
 
 When `ci.enabled: true` and Atmos runs in a supported CI provider, Kubernetes commands write a
 compact job summary to the provider summary file (`$GITHUB_STEP_SUMMARY` on GitHub Actions).
-The summary includes object action counts and an error section on failure.
+The summary includes object action counts and an error section on failure. For `plan`/`diff` it
+also adds a collapsible **Kubernetes Diff** block with the per-object unified diff (`Secret`
+objects are omitted).
 
 Kubernetes CI support is summary-only in v1. It does not emit `$GITHUB_OUTPUT` variables, commit
 statuses, PR comments, or stored artifacts.

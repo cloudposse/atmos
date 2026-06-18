@@ -370,9 +370,14 @@ func printResults(results []objectResult) {
 	for _, result := range results {
 		if result.Namespace == "" {
 			_ = data.Writef("%s %s %s\n", result.Action, result.Resource, result.Name)
-			continue
+		} else {
+			_ = data.Writef("%s %s %s/%s\n", result.Action, result.Resource, result.Namespace, result.Name)
 		}
-		_ = data.Writef("%s %s %s/%s\n", result.Action, result.Resource, result.Namespace, result.Name)
+		// For plan/diff, print the unified diff body beneath the action line.
+		// Empty for apply/delete/no-change/Secret objects.
+		if result.Diff != "" {
+			_ = data.Writef("%s\n", result.Diff)
+		}
 	}
 }
 
@@ -424,6 +429,7 @@ func objectCIResults(results []objectResult) []schema.KubernetesObjectCIResult {
 			Resource:  result.Resource,
 			Namespace: result.Namespace,
 			Name:      result.Name,
+			Diff:      result.Diff,
 		})
 	}
 	return out

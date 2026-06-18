@@ -49,13 +49,29 @@ The command does not require the `kubectl` binary and does not run `kubectl diff
 atmos kubernetes diff argocd -s plat-ue2-dev
 ```
 
-Example output:
+Example output (each created or changed object is followed by its unified diff;
+`no-change` objects and `Secret` objects show only the action line):
 
-```text
+```diff
 create v1/Namespace argocd
+--- a/v1/Namespace_argocd.yaml
++++ b/v1/Namespace_argocd.yaml
+@@ -0,0 +1,4 @@
++apiVersion: v1
++kind: Namespace
++metadata:
++  name: argocd
 changed apps/v1/Deployment argocd/argocd-server
+@@ -8,7 +8,7 @@
+   replicas: 2
+-  image: argocd-server:2.10.0
++  image: argocd-server:2.11.0
 no-change v1/Service argocd/argocd-server
 ```
+
+When run in CI (`ci.enabled: true`), the same diff is also written to the job summary as a
+collapsible **Kubernetes Diff** block. See [Job Summaries](/ci/job-summaries). `Secret` objects
+are omitted from the diff so their data is never printed or written to the summary.
 
 ## Flags
 

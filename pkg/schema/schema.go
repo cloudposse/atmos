@@ -726,6 +726,10 @@ type KubernetesObjectCIResult struct {
 	Resource  string
 	Namespace string
 	Name      string
+	// Diff holds the unified diff for this object (plan/diff only). Empty for
+	// no-change objects, Secret objects (deliberately omitted), and operations
+	// that do not produce a diff.
+	Diff string
 }
 
 // CIConfig contains CI/CD integration configuration.

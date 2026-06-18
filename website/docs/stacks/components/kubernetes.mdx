@@ -269,7 +269,9 @@ The summary includes the stack, component, command status, per-action object cou
 and an error section when the command fails:
 
 - `render`: rendered objects
-- `plan` / `diff`: created, changed, and no-change objects
+- `plan` / `diff`: created, changed, and no-change objects, plus a collapsible **Kubernetes Diff**
+  block with the per-object unified diff (`Secret` objects are omitted so their data is never
+  written to the job summary)
 - `apply` / `deploy`: applied or delivered objects
 - `delete`: deleted and not-found objects
 - `validate`: valid and invalid objects

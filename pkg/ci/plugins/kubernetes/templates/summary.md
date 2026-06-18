@@ -33,6 +33,17 @@ Objects: **{{.ObjectsTotal}}**
 </details>
 {{- end }}
 
+{{- if .Diff }}
+
+<details><summary>Kubernetes Diff</summary>
+
+```diff
+{{ .Diff }}
+```
+
+</details>
+{{- end }}
+
 {{- if .Error }}
 
 <details><summary>Error</summary>

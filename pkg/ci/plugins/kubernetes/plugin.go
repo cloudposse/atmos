@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"sort"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	ci "github.com/cloudposse/atmos/pkg/ci"
@@ -125,6 +126,10 @@ type templateContext struct {
 	*schema.KubernetesCIResult
 	Status string
 	Counts []actionCount
+	// Diff is the aggregated, truncated unified diff across all changed objects,
+	// rendered into a single collapsible details block (mirrors the Terraform
+	// plugin's .Output). Empty when no object carries a diff.
+	Diff string
 }
 
 type actionCount struct {
@@ -138,7 +143,38 @@ func newTemplateContext(result *schema.KubernetesCIResult) templateContext {
 		KubernetesCIResult: result,
 		Status:             summaryStatus(result),
 		Counts:             counts,
+		Diff:               aggregateDiff(result),
 	}
+}
+
+// aggregateDiff concatenates each changed object's unified diff under a
+// `# <Resource> <ns>/<name>` header, then caps the total via the shared
+// truncation helper so the CI job summary stays within platform limits.
+func aggregateDiff(result *schema.KubernetesCIResult) string {
+	var b strings.Builder
+	for _, action := range result.Actions {
+		if action.Diff == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteString("\n")
+		}
+		fmt.Fprintf(&b, "# %s %s\n", action.Resource, objectRef(action.Namespace, action.Name))
+		b.WriteString(action.Diff)
+		if !strings.HasSuffix(action.Diff, "\n") {
+			b.WriteString("\n")
+		}
+	}
+	return plugin.TruncateDetail(b.String())
+}
+
+// objectRef formats a namespaced object reference, omitting the namespace for
+// cluster-scoped objects.
+func objectRef(namespace, name string) string {
+	if namespace == "" {
+		return name
+	}
+	return namespace + "/" + name
 }
 
 func sortedActionCounts(counts map[string]int) []actionCount {
