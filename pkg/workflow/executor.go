@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -52,6 +53,7 @@ type Executor struct {
 	ui           UIProvider
 	depProvider  DependencyProvider
 	stepVars     *stepPkg.Variables
+	sandbox      *WorkflowSandbox
 }
 
 // NewExecutor creates a new Executor with the given dependencies.
@@ -73,19 +75,35 @@ func (e *Executor) WithDependencyProvider(provider DependencyProvider) *Executor
 	return e
 }
 
+func (e *Executor) cleanupWorkflowSandbox(success bool) error {
+	if e.sandbox == nil {
+		return nil
+	}
+	sandbox := e.sandbox
+	e.sandbox = nil
+	return sandbox.Cleanup(success)
+}
+
 // Execute runs a workflow with the given options.
 // This is the main entry point for workflow execution.
-func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
+func (e *Executor) Execute(params *WorkflowParams) (result *ExecutionResult, err error) {
 	if params == nil || params.AtmosConfig == nil {
 		return nil, errUtils.ErrNilParam
 	}
 	defer perf.Track(params.AtmosConfig, "workflow.Executor.Execute")()
 
-	result := &ExecutionResult{
+	result = &ExecutionResult{
 		WorkflowName: params.Workflow,
 		Steps:        make([]StepResult, 0),
 		Success:      true,
 	}
+	defer func() {
+		if cleanupErr := e.cleanupWorkflowSandbox(result.Success); cleanupErr != nil && result.Success {
+			result.Success = false
+			result.Error = cleanupErr
+			err = cleanupErr
+		}
+	}()
 
 	steps := params.WorkflowDefinition.Steps
 
@@ -107,7 +125,7 @@ func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
 	log.Debug("Executing workflow", "workflow", params.Workflow, "path", params.WorkflowPath)
 
 	// Handle --from-step flag.
-	steps, err := e.handleFromStep(steps, params.WorkflowDefinition, params.Workflow, params.Opts.FromStep, result)
+	steps, err = e.handleFromStep(steps, params.WorkflowDefinition, params.Workflow, params.Opts.FromStep, result)
 	if err != nil {
 		return result, err
 	}
@@ -286,7 +304,7 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 	if stepPkg.IsExtendedStepType(commandType) {
 		return e.executeRegisteredStep(params, step, cmdParams)
 	}
-	err = e.runCommand(params, cmdParams)
+	err = e.runCommand(params, step, cmdParams)
 	if err != nil {
 		return e.handleStepError(params, step.Name, cmdParams, err)
 	}
@@ -524,7 +542,7 @@ type runCommandParams struct {
 }
 
 // runCommand executes the appropriate command type.
-func (e *Executor) runCommand(params *WorkflowParams, cmdParams *runCommandParams) error {
+func (e *Executor) runCommand(params *WorkflowParams, step *schema.WorkflowStep, cmdParams *runCommandParams) error {
 	// Use working directory if set, otherwise default to current directory.
 	workDir := cmdParams.workingDirectory
 	if workDir == "" {
@@ -533,9 +551,36 @@ func (e *Executor) runCommand(params *WorkflowParams, cmdParams *runCommandParam
 
 	switch cmdParams.commandType {
 	case "shell":
+		if StepContainerOverride(step) {
+			return RunStepContainerOverride(
+				params.Ctx,
+				params.Workflow,
+				params.WorkflowPath,
+				params.AtmosConfig.BasePath,
+				params.WorkflowDefinition,
+				step,
+				cmdParams.workingDirectory,
+				cmdParams.command,
+				cmdParams.stepEnv,
+				append(os.Environ(), cmdParams.stepEnv...),
+				params.Opts.DryRun,
+			)
+		}
+		if params.WorkflowDefinition.Container != nil && params.WorkflowDefinition.Container.IsEnabled() && !StepContainerDisabled(step) {
+			sandbox, err := e.ensureWorkflowSandbox(params, cmdParams.stepEnv)
+			if err != nil {
+				return err
+			}
+			return sandbox.ExecShell(params.Ctx, step, params.WorkflowDefinition, cmdParams.workingDirectory, cmdParams.command, cmdParams.stepEnv)
+		}
 		commandName := fmt.Sprintf("%s-step-%d", params.Workflow, cmdParams.stepIdx)
 		return e.runner.RunShell(cmdParams.command, commandName, workDir, cmdParams.stepEnv, params.Opts.DryRun)
 	case "atmos":
+		if StepContainerOverride(step) {
+			return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
+				WithExplanation("Step-level `container` overrides support shell steps in v1. Set `container: false` or use `type: shell`.").
+				Err()
+		}
 		return e.executeAtmosCommand(params, cmdParams.command, cmdParams.finalStack, cmdParams.stepEnv, workDir)
 	default:
 		// Return error without printing - handleStepError will print it with resume context.
@@ -544,6 +589,26 @@ func (e *Executor) runCommand(params *WorkflowParams, cmdParams *runCommandParam
 			WithHintf("Available types:\n%s", u.FormatList([]string{"atmos", "shell"})).
 			Err()
 	}
+}
+
+func (e *Executor) ensureWorkflowSandbox(params *WorkflowParams, runtimeEnv []string) (*WorkflowSandbox, error) {
+	if e.sandbox != nil {
+		return e.sandbox, nil
+	}
+	sandbox, err := StartWorkflowSandbox(
+		params.Ctx,
+		params.Workflow,
+		params.WorkflowPath,
+		params.AtmosConfig.BasePath,
+		params.WorkflowDefinition,
+		append(os.Environ(), runtimeEnv...),
+		params.Opts.DryRun,
+	)
+	if err != nil {
+		return nil, err
+	}
+	e.sandbox = sandbox
+	return sandbox, nil
 }
 
 // handleStepError handles a step execution error and returns the appropriate result.
@@ -684,30 +749,10 @@ func (e *Executor) calculateFinalStack(workflowDef *schema.WorkflowDefinition, s
 // Step-level working_directory overrides workflow-level.
 // Relative paths are resolved against base_path.
 func (e *Executor) calculateWorkingDirectory(workflowDef *schema.WorkflowDefinition, step *schema.WorkflowStep, basePath string) string {
-	// Step-level overrides workflow-level.
-	workDir := strings.TrimSpace(workflowDef.WorkingDirectory)
-	if stepWorkDir := strings.TrimSpace(step.WorkingDirectory); stepWorkDir != "" {
-		workDir = stepWorkDir
+	workDir := CalculateWorkingDirectory(workflowDef, step, basePath)
+	if workDir != "" {
+		log.Debug("Using working directory for workflow step", "working_directory", workDir)
 	}
-
-	if workDir == "" {
-		return ""
-	}
-
-	// Resolve relative paths against base_path.
-	// Guard against empty basePath to avoid accidentally relative paths.
-	if !filepath.IsAbs(workDir) {
-		resolvedBasePath := basePath
-		if strings.TrimSpace(resolvedBasePath) == "" {
-			resolvedBasePath = "."
-		}
-		workDir = filepath.Join(resolvedBasePath, workDir)
-	}
-
-	// Note: Directory validation happens at execution time in the adapters.
-	// This allows YAML functions like !repo-root to be resolved first during config loading.
-	log.Debug("Using working directory for workflow step", "working_directory", workDir)
-
 	return workDir
 }
 

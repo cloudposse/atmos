@@ -1,5 +1,11 @@
 package schema
 
+import (
+	"fmt"
+
+	"gopkg.in/yaml.v3"
+)
+
 // DescribeWorkflowsItem represents a workflow item in the describe workflows output.
 type DescribeWorkflowsItem struct {
 	File     string `yaml:"file" json:"file" mapstructure:"file"`
@@ -96,6 +102,53 @@ type ContainerRunStep struct {
 	Ports             []ContainerPort  `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`
 }
 
+// WorkflowContainer configures a workflow-level container-backed sandbox or a
+// step-level container override. A YAML value of `false` disables inheritance.
+type WorkflowContainer struct {
+	Enabled           *bool             `yaml:"-" json:"-" mapstructure:"-"`
+	Image             string            `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`
+	Shell             string            `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`
+	Runtime           string            `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
+	RuntimeAutoStart  bool              `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	Pull              string            `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`
+	Workspace         string            `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
+	WorkspaceReadOnly bool              `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"`
+	Cleanup           string            `yaml:"cleanup,omitempty" json:"cleanup,omitempty" mapstructure:"cleanup"`
+	User              string            `yaml:"user,omitempty" json:"user,omitempty" mapstructure:"user"`
+	RunArgs           []string          `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`
+	Mounts            []ContainerMount  `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`
+	Ports             []ContainerPort   `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`
+	Env               map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+}
+
+// UnmarshalYAML supports both object syntax and `container: false`.
+func (c *WorkflowContainer) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		var enabled bool
+		if err := value.Decode(&enabled); err != nil {
+			return fmt.Errorf("container must be a mapping or boolean: %w", err)
+		}
+		c.Enabled = &enabled
+		return nil
+	case yaml.MappingNode:
+		type workflowContainer WorkflowContainer
+		var decoded workflowContainer
+		if err := value.Decode(&decoded); err != nil {
+			return err
+		}
+		*c = WorkflowContainer(decoded)
+		return nil
+	default:
+		return fmt.Errorf("container must be a mapping or boolean, got YAML node kind %d", value.Kind)
+	}
+}
+
+// IsEnabled reports whether the container config should be applied.
+func (c *WorkflowContainer) IsEnabled() bool {
+	return c != nil && (c.Enabled == nil || *c.Enabled)
+}
+
 // WorkflowStep represents a single step in a workflow.
 type WorkflowStep struct {
 	// Existing fields.
@@ -185,6 +238,7 @@ type WorkflowStep struct {
 	RunArgs           []string            `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`                                  // Runtime-specific create args.
 	Mounts            []ContainerMount    `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`                                        // Extra container mounts.
 	Ports             []ContainerPort     `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`                                           // Port mappings.
+	Container         *WorkflowContainer  `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`                               // Workflow container override or false to run on host.
 
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
@@ -201,10 +255,11 @@ type WorkflowDefinition struct {
 	Description      string `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
 	WorkingDirectory string `yaml:"working_directory,omitempty" json:"working_directory,omitempty" mapstructure:"working_directory"`
 	// Dependencies lists external tools required for this workflow to execute successfully.
-	Dependencies *Dependencies     `yaml:"dependencies,omitempty" json:"dependencies,omitempty" mapstructure:"dependencies"`
-	Steps        []WorkflowStep    `yaml:"steps" json:"steps" mapstructure:"steps"`
-	Stack        string            `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
-	Env          map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+	Dependencies *Dependencies      `yaml:"dependencies,omitempty" json:"dependencies,omitempty" mapstructure:"dependencies"`
+	Steps        []WorkflowStep     `yaml:"steps" json:"steps" mapstructure:"steps"`
+	Stack        string             `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
+	Env          map[string]string  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+	Container    *WorkflowContainer `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
 
 	// Output mode fields.
 	Output   string          `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Default output mode for steps.

@@ -257,8 +257,17 @@ func ExecuteWorkflow(
 	commandLineStack string,
 	fromStep string,
 	commandLineIdentity string,
-) error {
+) (retErr error) {
 	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflow")()
+	var activeSandbox *workflowPkg.WorkflowSandbox
+	defer func() {
+		if activeSandbox == nil {
+			return
+		}
+		if cleanupErr := activeSandbox.Cleanup(retErr == nil); cleanupErr != nil && retErr == nil {
+			retErr = cleanupErr
+		}
+	}()
 
 	// Reset step executor state at the start of each workflow to ensure clean variable scope.
 	ResetStepExecutorState()
@@ -404,6 +413,10 @@ func ExecuteWorkflow(
 		if err != nil {
 			return err
 		}
+		workDir := workflowPkg.CalculateWorkingDirectory(workflowDefinition, &step, atmosConfig.BasePath)
+		if workDir == "" {
+			workDir = "."
+		}
 
 		// Clear progress line and re-render as permanent record before step execution.
 		// This ensures progress line appears as header, then step output below it.
@@ -419,19 +432,55 @@ func ExecuteWorkflow(
 			// steps keep the existing masked shell-interpreter behavior.
 			stepPkg.RenderCommand(&step, workflowDefinition, command)
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			err = retry.Do(context.Background(), step.Retry, func() error {
-				return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
-					Command:     command,
-					Name:        commandName,
-					Dir:         ".",
-					Env:         stepEnv,
-					TTY:         step.Tty,
-					Interactive: step.Interactive,
-					DryRun:      dryRun,
-				}, func() error {
-					return ExecuteShell(command, commandName, ".", stepEnv, dryRun)
+			if workflowPkg.StepContainerOverride(&step) {
+				err = retry.Do(context.Background(), step.Retry, func() error {
+					return workflowPkg.RunStepContainerOverride(
+						context.Background(),
+						workflow,
+						workflowPath,
+						atmosConfig.BasePath,
+						workflowDefinition,
+						&step,
+						workDir,
+						command,
+						stepEnv,
+						stepEnv,
+						dryRun,
+					)
 				})
-			})
+			} else if workflowDefinition.Container != nil && workflowDefinition.Container.IsEnabled() && !workflowPkg.StepContainerDisabled(&step) {
+				if activeSandbox == nil {
+					activeSandbox, err = workflowPkg.StartWorkflowSandbox(
+						context.Background(),
+						workflow,
+						workflowPath,
+						atmosConfig.BasePath,
+						workflowDefinition,
+						stepEnv,
+						dryRun,
+					)
+					if err != nil {
+						break
+					}
+				}
+				err = retry.Do(context.Background(), step.Retry, func() error {
+					return activeSandbox.ExecShell(context.Background(), &step, workflowDefinition, workDir, command, stepEnv)
+				})
+			} else {
+				err = retry.Do(context.Background(), step.Retry, func() error {
+					return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+						Command:     command,
+						Name:        commandName,
+						Dir:         workDir,
+						Env:         stepEnv,
+						TTY:         step.Tty,
+						Interactive: step.Interactive,
+						DryRun:      dryRun,
+					}, func() error {
+						return ExecuteShell(command, commandName, workDir, stepEnv, dryRun)
+					})
+				})
+			}
 		case schema.TaskTypeExec:
 			// Replace the Atmos process with the command (shell exec semantics).
 			// Validated earlier to be the final step; no retry wrapper (the

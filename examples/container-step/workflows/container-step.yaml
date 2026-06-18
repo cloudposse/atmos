@@ -2,6 +2,40 @@ name: Container Step
 description: Workflows demonstrating container build, push, and run steps.
 
 workflows:
+  workflow-container:
+    description: Run multiple shell steps in one workflow-level container sandbox
+    working_directory: .
+    container:
+      image: alpine:latest
+      workspace: /workspace
+      cleanup: always
+      env:
+        CONTAINER_MESSAGE: "hello from container env"
+      mounts:
+        - source: .
+          target: /repo-readonly
+          read_only: true
+    env:
+      WORKFLOW_MESSAGE: "hello from workflow env"
+    steps:
+      - name: first
+        type: shell
+        command: |
+          echo "$CONTAINER_MESSAGE"
+          echo "$WORKFLOW_MESSAGE"
+          pwd
+
+      - name: step-env
+        type: shell
+        env:
+          WORKFLOW_MESSAGE: "hello from step env"
+        command: echo "$WORKFLOW_MESSAGE"
+
+      - name: host
+        type: shell
+        container: false
+        command: echo "this step runs on the host"
+
   hello:
     description: Run a simple command in a container
     steps:

@@ -127,6 +127,7 @@ type Task struct {
 	RunArgs           []string            `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`                                  // Runtime-specific create args.
 	Mounts            []ContainerMount    `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`                                        // Extra container mounts.
 	Ports             []ContainerPort     `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`                                           // Port mappings.
+	Container         *WorkflowContainer  `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`                               // Workflow container override or false to run on host.
 
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
@@ -290,6 +291,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		RunArgs:           task.RunArgs,
 		Mounts:            task.Mounts,
 		Ports:             task.Ports,
+		Container:         task.Container,
 
 		Outputs: task.Outputs,
 
@@ -396,6 +398,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		RunArgs:           step.RunArgs,
 		Mounts:            step.Mounts,
 		Ports:             step.Ports,
+		Container:         step.Container,
 
 		Outputs: step.Outputs,
 

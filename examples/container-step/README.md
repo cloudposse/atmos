@@ -20,6 +20,9 @@ atmos workflow bake-build-run -f container-step
 # Workflow using a run action
 atmos workflow hello -f container-step
 
+# Workflow-level container sandbox shared by shell steps
+atmos workflow workflow-container -f container-step
+
 # Show workspace and environment behavior
 atmos workflow workspace -f container-step
 atmos workflow env -f container-step
@@ -62,4 +65,4 @@ needed. See [Auth & Integrations](https://atmos.tools/cli/configuration/auth) an
 | `atmos.yaml` | Custom commands, workflow base path, and the ECR `auth:` example |
 | `Dockerfile` | Tiny image used by the build/run examples |
 | `docker-bake.hcl` | Docker Buildx Bake build definition |
-| `workflows/container-step.yaml` | Workflow examples for container steps |
+| `workflows/container-step.yaml` | Workflow examples for container steps and workflow-level container sandboxes |

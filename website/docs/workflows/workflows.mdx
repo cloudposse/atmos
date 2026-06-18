@@ -33,6 +33,100 @@ workflows:
       - command: terraform apply eks/alb-controller -auto-approve
 ```
 
+## Workflow Containers
+
+Workflows can run shell steps inside a long-lived container-backed sandbox. This is similar to a GitHub Actions job container: Atmos creates one container for the workflow run, mounts the workflow working directory into it, executes eligible `shell` steps with `docker exec` or `podman exec`, and removes the container when the workflow exits.
+
+```yaml title=stacks/workflows/containerized.yaml
+workflows:
+  test:
+    description: Run commands inside a workflow container
+    working_directory: .
+    container:
+      image: alpine:latest
+      shell: /bin/sh
+      workspace: /workspace
+      cleanup: always
+      env:
+        TOOL_CACHE: /tmp/tools
+      mounts:
+        - source: ~/.aws
+          target: /root/.aws
+          read_only: true
+    env:
+      WORKFLOW_MESSAGE: hello from workflow env
+    steps:
+      - name: dependencies
+        type: shell
+        command: apk add --no-cache jq
+
+      - name: test
+        type: shell
+        working_directory: services/api
+        env:
+          STEP_MESSAGE: hello from step env
+        command: |
+          pwd
+          echo "$WORKFLOW_MESSAGE"
+          echo "$STEP_MESSAGE"
+          jq --version
+
+      - name: host-check
+        type: shell
+        container: false
+        command: echo "this step runs on the host"
+```
+
+<dl>
+  <dt>`container.image`</dt>
+  <dd>Container image used for the workflow sandbox. Required when `container` is configured.</dd>
+
+  <dt>`container.runtime`</dt>
+  <dd>Optional runtime override: `docker` or `podman`. When omitted, Atmos auto-detects the runtime.</dd>
+
+  <dt>`container.runtime_auto_start`</dt>
+  <dd>When supported, allow Atmos to attempt runtime recovery, such as starting a Podman machine.</dd>
+
+  <dt>`container.pull`</dt>
+  <dd>Image pull policy: `missing` (default), `always`, or `never`.</dd>
+
+  <dt>`container.workspace`</dt>
+  <dd>Path inside the container where the workflow working directory is mounted. Defaults to `/workspace`.</dd>
+
+  <dt>`container.workspace_read_only`</dt>
+  <dd>Mount the workflow workspace read-only when set to `true`.</dd>
+
+  <dt>`container.cleanup`</dt>
+  <dd>Sandbox cleanup policy: `always` (default), `on_success`, or `never`. Atmos uses unique container names and labels so reruns are not blocked by orphaned sandboxes from crashed or killed runs.</dd>
+
+  <dt>`container.env`</dt>
+  <dd>Environment defaults passed to commands in the sandbox. Workflow and step `env` values are also passed to container exec, and step `env` overrides workflow values for the same key.</dd>
+
+  <dt>`container.mounts`</dt>
+  <dd>Additional mounts using `type`, `source`, `target`, and optional `read_only` fields.</dd>
+
+  <dt>`container.ports`</dt>
+  <dd>Port mappings using `host`, `container`, and optional `protocol` fields.</dd>
+</dl>
+
+### Step Behavior in Workflow Containers
+
+- `shell` steps run inside the workflow container by default.
+- Set `container: false` on a step to run it on the host.
+- Set a step-level `container:` block to run that shell step in its own one-shot container override.
+- Existing `type: container` build, push, and run steps keep their explicit container-step behavior and do not inherit the workflow container.
+- Interactive and TTY shell steps are supported with the same `interactive` and `tty` fields.
+
+### Working Directory Mapping
+
+`working_directory` remains a host-side Atmos path in workflow configuration. Atmos resolves it on the host, verifies it is inside the mounted workflow workspace, then maps it to the corresponding container path.
+
+For example, with `container.workspace: /workspace`, a step `working_directory: services/api` runs inside the container at `/workspace/services/api`.
+
+### Sandboxed Execution
+
+Workflow containers provide container-backed sandboxed execution for developer workflows. Atmos relies on Docker or Podman isolation and does not add a stronger security boundary beyond the configured container runtime.
+
 ## Retry Configuration
 
 The `retry` section accepts the following parameters. **All parameters are optional** - omit any
