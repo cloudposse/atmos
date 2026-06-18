@@ -137,7 +137,7 @@ func TestStartInteractive_WithAbsoluteTestBinary(t *testing.T) {
 	exe, err := os.Executable()
 	require.NoError(t, err)
 
-	err = StartInteractive(exe, nil, []string{"_ATMOS_SHELL_TEST_EXIT_OK=1"})
+	err = StartInteractive(exe, nil, append(os.Environ(), "_ATMOS_SHELL_TEST_EXIT_OK=1"))
 	assert.NoError(t, err)
 }
 
@@ -145,7 +145,7 @@ func TestStartInteractive_PropagatesExitCode(t *testing.T) {
 	exe, err := os.Executable()
 	require.NoError(t, err)
 
-	err = StartInteractive(exe, nil, []string{"_ATMOS_SHELL_TEST_EXIT_ONE=1"})
+	err = StartInteractive(exe, nil, append(os.Environ(), "_ATMOS_SHELL_TEST_EXIT_ONE=1"))
 	require.Error(t, err)
 
 	var exitErr errUtils.ExitCodeError

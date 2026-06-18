@@ -3,6 +3,7 @@ package cmd
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +17,16 @@ func TestDocsCmd_WithoutStacks(t *testing.T) {
 }
 
 func TestDocsCmdOpensDefaultDocsURL(t *testing.T) {
-	t.Setenv("GO_TEST", "1")
+	var openedURL string
+	originalOpenDocsURL := openDocsURL
+	t.Cleanup(func() {
+		openDocsURL = originalOpenDocsURL
+	})
+	openDocsURL = func(url string) error {
+		openedURL = url
+		return nil
+	}
 
 	require.NoError(t, docsCmd.RunE(docsCmd, nil))
+	assert.Equal(t, atmosDocsURL, openedURL)
 }

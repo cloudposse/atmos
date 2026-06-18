@@ -306,6 +306,11 @@ func TestProcessChdirFlagPrecedence(t *testing.T) {
 func TestProcessEarlyChdirFlagAdditionalBranches(t *testing.T) {
 	_ = NewTestKit(t)
 
+	originalArgs := os.Args
+	t.Cleanup(func() {
+		os.Args = originalArgs
+	})
+
 	originalWd, err := os.Getwd()
 	require.NoError(t, err)
 	t.Cleanup(func() {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -401,14 +402,14 @@ func TestApplyCLIFlagOverrides(t *testing.T) {
 			name: "profile file flag enables file profiler",
 			setupCmd: func(cmd *cobra.Command) {
 				cmd.Flags().String("profile-file", "", "")
-				cmd.Flags().Set("profile-file", "/tmp/heap.prof")
+				cmd.Flags().Set("profile-file", filepath.Join(os.TempDir(), "heap.prof"))
 			},
 			initial: profiler.DefaultConfig(),
 			expected: profiler.Config{
 				Enabled:     true,
 				Host:        profiler.DefaultConfig().Host,
 				Port:        profiler.DefaultConfig().Port,
-				File:        "/tmp/heap.prof",
+				File:        filepath.Join(os.TempDir(), "heap.prof"),
 				ProfileType: profiler.DefaultConfig().ProfileType,
 			},
 		},
@@ -484,7 +485,7 @@ func TestBuildProfilerConfigComposesConfigAndFlags(t *testing.T) {
 
 	assert.NoError(t, cmd.Flags().Set("profiler-port", "7070"))
 	assert.NoError(t, cmd.Flags().Set("profiler-host", "0.0.0.0"))
-	assert.NoError(t, cmd.Flags().Set("profile-file", "/tmp/trace.out"))
+	assert.NoError(t, cmd.Flags().Set("profile-file", filepath.Join(os.TempDir(), "trace.out")))
 	assert.NoError(t, cmd.Flags().Set("profile-type", "trace"))
 
 	config, err := buildProfilerConfig(cmd, &schema.AtmosConfiguration{
@@ -499,7 +500,7 @@ func TestBuildProfilerConfigComposesConfigAndFlags(t *testing.T) {
 	assert.True(t, config.Enabled)
 	assert.Equal(t, "0.0.0.0", config.Host)
 	assert.Equal(t, 7070, config.Port)
-	assert.Equal(t, "/tmp/trace.out", config.File)
+	assert.Equal(t, filepath.Join(os.TempDir(), "trace.out"), config.File)
 	assert.Equal(t, profiler.ProfileTypeTrace, config.ProfileType)
 }
 

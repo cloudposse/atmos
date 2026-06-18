@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -159,21 +161,25 @@ func TestUsageErrorHelpersExit(t *testing.T) {
 	root.AddCommand(known)
 
 	assert.Panics(t, func() {
+		exitCode = 0
 		showUsageAndExit(root, nil)
 	})
 	assert.Equal(t, 1, exitCode)
 
 	assert.Panics(t, func() {
+		exitCode = 0
 		showUsageAndExit(root, []string{"knwon"})
 	})
 	assert.Equal(t, 1, exitCode)
 
 	assert.Panics(t, func() {
+		exitCode = 0
 		_ = showFlagUsageAndExit(known, errors.New("flag needs an argument: --stack"))
 	})
 	assert.Equal(t, 1, exitCode)
 
 	assert.Panics(t, func() {
+		exitCode = 0
 		_ = showFlagUsageAndExit(known, errors.New("unknown flag: --bad"))
 	})
 	assert.Equal(t, 1, exitCode)
@@ -225,11 +231,36 @@ func TestEnableHeatmapIfRequested(t *testing.T) {
 		perf.EnableTracking(false)
 	})
 
+	captureHeatmap := func() string {
+		oldStderr := os.Stderr
+		r, w, err := os.Pipe()
+		require.NoError(t, err)
+		os.Stderr = w
+		t.Cleanup(func() {
+			os.Stderr = oldStderr
+		})
+
+		require.NoError(t, displayPerformanceHeatmap(nil, "table"))
+		require.NoError(t, w.Close())
+		os.Stderr = oldStderr
+
+		var output bytes.Buffer
+		_, err = io.Copy(&output, r)
+		require.NoError(t, err)
+		return output.String()
+	}
+
 	os.Args = []string{"atmos", "version"}
 	enableHeatmapIfRequested()
+	done := perf.Track(nil, "cmd.test.heatmap.disabled")
+	done()
+	assert.NotContains(t, captureHeatmap(), "cmd.test.heatmap.disabled")
 
 	os.Args = []string{"atmos", "--heatmap", "version"}
 	enableHeatmapIfRequested()
+	done = perf.Track(nil, "cmd.test.heatmap.enabled")
+	done()
+	assert.Contains(t, captureHeatmap(), "cmd.test.heatmap.enabled")
 }
 
 func TestIsVersionCommand(t *testing.T) {
