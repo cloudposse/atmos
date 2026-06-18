@@ -3,6 +3,34 @@ base_path: "."
 workflows:
   base_path: "workflows"
 
+# Auth is only exercised when a step (or `--identity`) names an identity, e.g. the
+# `push-ecr` workflow. Authenticating `dev-admin` auto-provisions the linked
+# `aws/ecr` integration, which performs the Docker login used by the push.
+# Replace the provider, account, and region with your own to try it against ECR.
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start/
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: AdministratorAccess
+        account: dev
+  integrations:
+    dev/ecr/primary:
+      kind: aws/ecr
+      via:
+        identity: dev-admin
+      spec:
+        registry:
+          account_id: "123456789012"
+          region: us-east-2
+
 commands:
   - name: container
     description: Run container action examples

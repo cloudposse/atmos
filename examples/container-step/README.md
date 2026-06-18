@@ -34,11 +34,32 @@ atmos workflow failing-check -f container-step
 atmos workflow shell -f container-step
 ```
 
+## Pushing to a Private Registry (ECR) with an Identity
+
+Container steps don't implement registry login themselves. Set `identity:` on the
+step (or pass `--identity`) and Atmos's auth integrations materialize the
+credentials: authenticating the identity auto-provisions any linked
+`auto_provision` integration, and the `aws/ecr` integration performs the Docker
+login the push then uses.
+
+The `auth:` block in `atmos.yaml` links the `dev-admin` identity to an `aws/ecr`
+integration. Replace the provider, account, and region with your own, then:
+
+```shell
+# Requires AWS access and a real ECR registry (see the auth: block in atmos.yaml).
+atmos workflow push-ecr -f container-step --identity dev-admin
+```
+
+The flow: `identity` → authenticate → `aws/ecr` integration logs in to ECR → the
+`push` step's `docker push` uses that login. No explicit `docker login` step is
+needed. See [Auth & Integrations](https://atmos.tools/cli/configuration/auth) and
+[`atmos aws ecr login`](https://atmos.tools/cli/commands/aws/ecr-login).
+
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `atmos.yaml` | Custom commands and workflow base path |
+| `atmos.yaml` | Custom commands, workflow base path, and the ECR `auth:` example |
 | `Dockerfile` | Tiny image used by the build/run examples |
 | `docker-bake.hcl` | Docker Buildx Bake build definition |
 | `workflows/container-step.yaml` | Workflow examples for container steps |

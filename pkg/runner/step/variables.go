@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -75,6 +76,28 @@ func (v *Variables) SetWithOutputs(name string, result *StepResult, outputs map[
 	}
 	v.Set(name, result)
 	return nil
+}
+
+// EnvSlice returns the variable environment as a sorted slice of "KEY=VALUE"
+// entries, suitable for use as a subprocess environment. The slice is the
+// complete environment (it includes the inherited OS environment loaded by
+// NewVariables plus any workflow/step/identity-resolved entries), so callers can
+// hand it to a container runtime via container.EnvSetter to carry credentials
+// materialized by auth integrations (e.g. DOCKER_CONFIG for ECR login).
+func (v *Variables) EnvSlice() []string {
+	defer perf.Track(nil, "step.Variables.EnvSlice")()
+
+	keys := make([]string, 0, len(v.Env))
+	for k := range v.Env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	env := make([]string, 0, len(keys))
+	for _, k := range keys {
+		env = append(env, k+"="+v.Env[k])
+	}
+	return env
 }
 
 // GetValue returns a step's primary value.

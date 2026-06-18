@@ -51,6 +51,7 @@ func (h *ContainerHandler) executeRun(ctx context.Context, step *schema.Workflow
 	if err != nil {
 		return nil, err
 	}
+	applyRuntimeEnv(runtime, vars)
 
 	result, err := container.RunEphemeralContainer(ctx, runtime, config)
 	if result == nil {

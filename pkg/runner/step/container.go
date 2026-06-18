@@ -74,6 +74,18 @@ func (h *ContainerHandler) ExecuteWithWorkflow(ctx context.Context, step *schema
 	}
 }
 
+// applyRuntimeEnv forwards the step's resolved environment to the container
+// runtime so its CLI subprocesses (build/push/run) can use credentials
+// materialized by auth integrations — e.g. the DOCKER_CONFIG written by the
+// aws/ecr integration after the workflow executor authenticates the step
+// `identity:`. Runtimes that don't support a custom environment are left to
+// inherit os.Environ().
+func applyRuntimeEnv(runtime container.Runtime, vars *Variables) {
+	if setter, ok := runtime.(container.EnvSetter); ok {
+		setter.SetEnv(vars.EnvSlice())
+	}
+}
+
 func resolveOptional(vars *Variables, value, field, stepName string) (string, error) {
 	if value == "" {
 		return "", nil

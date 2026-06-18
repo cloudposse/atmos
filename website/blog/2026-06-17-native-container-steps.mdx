@@ -84,6 +84,43 @@ Every named step exposes `value`, `values`, `metadata`, `outputs`, `skipped`, an
 command-like steps add `stdout`, `stderr`, and `exit_code`. Existing `{{ .steps.<name>.value }}`
 references keep working.
 
+## Pushing to ECR with an Identity
+
+Container steps don't reinvent registry login — they reuse Atmos
+[auth integrations](/cli/configuration/auth). Put `identity:` on the step (or pass `--identity`) and
+authenticating that identity auto-provisions its linked integrations. An `aws/ecr` integration performs
+the Docker login, and the step's `push` uses it — no `aws ecr get-login-password | docker login` dance:
+
+```yaml
+# atmos.yaml
+auth:
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      via: { provider: company-sso }
+      principal: { name: AdministratorAccess, account: dev }
+  integrations:
+    dev/ecr/primary:
+      kind: aws/ecr
+      via: { identity: dev-admin }
+      spec:
+        registry: { account_id: "123456789012", region: us-east-2 }
+```
+
+```yaml
+# workflow step
+- name: push
+  type: container
+  action: push
+  identity: dev-admin
+  push:
+    image: "{{ .steps.build.outputs.image }}"
+```
+
+The identity-resolved environment — including the `DOCKER_CONFIG` the integration exports and any
+`AWS_*` credentials — is forwarded to the container runtime subprocess, so private base-image pulls
+during `build` and pushes to private registries work even with an isolated Docker config directory.
+
 ## Try It
 
 The new `examples/container-step` example demonstrates build, push, run, Bake, and step outputs:

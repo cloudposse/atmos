@@ -1,7 +1,6 @@
 package container
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -318,12 +317,24 @@ func buildAttachCommand(opts *AttachOptions) ([]string, *ExecOptions) {
 	return cmd, execOpts
 }
 
-// execWithRuntime executes a command in a container using the specified runtime.
-// This function is shared between Docker and Podman runtimes to avoid duplication.
-func execWithRuntime(ctx context.Context, runtimeName string, containerID string, cmd []string, opts *ExecOptions) error {
-	args := buildExecArgs(containerID, cmd, opts)
-	execCmd := exec.CommandContext(ctx, runtimeName, args...)
+// applyCommandEnv sets the environment for a container CLI subprocess.
+// When env is non-empty it becomes the command's complete environment (callers
+// pass the fully composed environment, which already includes the inherited
+// process environment), letting credentials materialized by auth integrations —
+// e.g. the DOCKER_CONFIG written by the aws/ecr integration, or AWS_* variables —
+// reach the docker/podman CLI. An empty env leaves cmd.Env nil so the command
+// inherits os.Environ() unchanged.
+func applyCommandEnv(cmd *exec.Cmd, env []string) {
+	if len(env) == 0 {
+		return
+	}
+	cmd.Env = env
+}
 
+// runExecCommand wires IO streams onto an already-built container exec command
+// (constructed via the runtime's env-aware command helper) and runs it.
+// This function is shared between Docker and Podman runtimes to avoid duplication.
+func runExecCommand(execCmd *exec.Cmd, runtimeName string, opts *ExecOptions) error {
 	// Setup IO streams with defaults.
 	stdin, stdout, stderr := getIOStreams(opts)
 	attachIOStreams(execCmd, opts, stdin, stdout, stderr)

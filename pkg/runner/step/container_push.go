@@ -37,6 +37,7 @@ func (h *ContainerHandler) executePush(ctx context.Context, step *schema.Workflo
 	if err != nil {
 		return nil, err
 	}
+	applyRuntimeEnv(runtime, vars)
 
 	return runPushImages(ctx, runtime, pushConfig, tags)
 }

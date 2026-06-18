@@ -96,7 +96,87 @@ steps:
 
   <dt>`ports`</dt>
   <dd>Port mappings using `host`, `container`, and optional `protocol` fields.</dd>
+
+  <dt>`identity`</dt>
+  <dd>Atmos [auth identity](/cli/configuration/auth) used to authenticate the step. Authenticating an identity auto-provisions its linked [integrations](/cli/configuration/auth) — for example an `aws/ecr` integration performs the Docker login needed to `push` to (or `build`/`run` from) a private ECR registry. Applies to the whole step and can also be supplied on the command line with `--identity`.</dd>
 </dl>
+
+##### Registry authentication (pushing to ECR and other private registries)
+
+Container steps do not implement registry login themselves. Instead, set `identity:` on the step (or pass `--identity`) and let Atmos's [auth integrations](/cli/configuration/auth) materialize the credentials. When the step's identity is authenticated, every integration linked to it with `auto_provision: true` runs automatically; the `aws/ecr` integration writes a Docker login to the standard Docker config, which the step's `docker`/`podman` subprocess then uses.
+
+```yaml
+# atmos.yaml — authenticate an identity and link an aws/ecr integration to it.
+auth:
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: AdministratorAccess
+        account: dev
+  integrations:
+    dev/ecr/primary:
+      kind: aws/ecr
+      via:
+        identity: dev-admin
+      spec:
+        registry:
+          account_id: "123456789012"
+          region: us-east-2
+```
+
+```yaml
+# The push step references the identity; ECR login happens automatically.
+steps:
+  - name: build
+    type: container
+    action: build
+    build:
+      context: .
+      tags:
+        - 123456789012.dkr.ecr.us-east-2.amazonaws.com/app:{{ .env.GIT_SHA }}
+    outputs:
+      image: "{{ .metadata.image }}"
+
+  - name: push
+    type: container
+    action: push
+    identity: dev-admin
+    push:
+      image: "{{ .steps.build.outputs.image }}"
+    outputs:
+      image: "{{ .metadata.image }}"
+      digest: "{{ .metadata.digest }}"
+```
+
+:::tip
+The identity-resolved environment (including the `DOCKER_CONFIG` exported by the `aws/ecr` integration and any `AWS_*` credentials) is forwarded to the container runtime subprocess, so private base-image pulls during `build` and pushes to private registries work even when Atmos uses an isolated Docker config directory.
+:::
+
+##### Build caching and registry mirrors
+
+Build-layer caching is available through the Docker Buildx Bake path: set cache backends with `bake.set` (or define `cache-from`/`cache-to` natively in your `docker-bake.hcl`).
+
+```yaml
+steps:
+  - name: build
+    type: container
+    action: build
+    build:
+      runtime: docker
+      engine: buildx
+      bake:
+        file: docker-bake.hcl
+        target: app
+        set:
+          - "*.cache-from=type=registry,ref=ghcr.io/acme/app:cache"
+          - "*.cache-to=type=registry,ref=ghcr.io/acme/app:cache,mode=max"
+        push: true
+```
+
+The non-bake `build` path supports `no_cache` and `pull` only. Registry **mirrors** are not a build flag — configure them at the daemon level (`daemon.json` `registry-mirrors`) or in the buildkit builder (`buildkitd.toml`); container steps then use whatever the runtime is configured to use.
 
 #### input
 

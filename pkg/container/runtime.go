@@ -41,6 +41,15 @@ type Runtime interface {
 	Info(ctx context.Context) (*RuntimeInfo, error)
 }
 
+// EnvSetter is implemented by runtimes whose CLI subprocesses can be launched
+// with a specific environment. The container step uses this to forward the
+// identity-resolved environment (e.g. the DOCKER_CONFIG materialized by the
+// aws/ecr auth integration, or AWS_* credentials) so build/push/run can reach
+// private registries. Runtimes that do not implement it inherit os.Environ().
+type EnvSetter interface {
+	SetEnv(env []string)
+}
+
 // BuildConfig represents container image build configuration.
 type BuildConfig struct {
 	Dockerfile string

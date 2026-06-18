@@ -30,13 +30,33 @@ func cleanPodmanOutput(output []byte) string {
 }
 
 // PodmanRuntime implements the Runtime interface for Podman.
-type PodmanRuntime struct{}
+type PodmanRuntime struct {
+	// env is the complete environment for podman CLI subprocesses. When nil the
+	// commands inherit os.Environ(); when set (via SetEnv) it carries credentials
+	// materialized by auth integrations, e.g. DOCKER_CONFIG for ECR login.
+	env []string
+}
 
 // NewPodmanRuntime creates a new Podman runtime.
 func NewPodmanRuntime() *PodmanRuntime {
 	defer perf.Track(nil, "container.NewPodmanRuntime")()
 
 	return &PodmanRuntime{}
+}
+
+// SetEnv sets the environment for podman CLI subprocesses launched by this runtime.
+// See EnvSetter for the rationale.
+func (p *PodmanRuntime) SetEnv(env []string) {
+	defer perf.Track(nil, "container.PodmanRuntime.SetEnv")()
+
+	p.env = env
+}
+
+// command builds a podman CLI command with the runtime's configured environment applied.
+func (p *PodmanRuntime) command(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, podmanCmd, args...)
+	applyCommandEnv(cmd, p.env)
+	return cmd
 }
 
 // Build builds a container image from a Dockerfile.
@@ -49,7 +69,7 @@ func (p *PodmanRuntime) Build(ctx context.Context, config *BuildConfig) error {
 
 	args := buildBuildArgs(config)
 
-	cmd := exec.CommandContext(ctx, podmanCmd, args...)
+	cmd := p.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: podman build failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -65,7 +85,7 @@ func (p *PodmanRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 
 	args := buildCreateArgs(config)
 
-	cmd := exec.CommandContext(ctx, podmanCmd, args...)
+	cmd := p.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("%w: podman create failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -87,7 +107,7 @@ func (p *PodmanRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 func (p *PodmanRuntime) Start(ctx context.Context, containerID string) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Start")()
 
-	cmd := exec.CommandContext(ctx, podmanCmd, "start", containerID)
+	cmd := p.command(ctx, "start", containerID)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: podman start failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -104,7 +124,7 @@ func (p *PodmanRuntime) Stop(ctx context.Context, containerID string, timeout ti
 	timeoutSecs := int(timeout.Seconds())
 	args := buildStopArgs(containerID, timeoutSecs)
 
-	cmd := exec.CommandContext(ctx, podmanCmd, args...)
+	cmd := p.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: podman stop failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -120,7 +140,7 @@ func (p *PodmanRuntime) Remove(ctx context.Context, containerID string, force bo
 
 	args := buildRemoveArgs(containerID, force)
 
-	cmd := exec.CommandContext(ctx, podmanCmd, args...)
+	cmd := p.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: podman rm failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -158,7 +178,7 @@ func (p *PodmanRuntime) Inspect(ctx context.Context, containerID string) (*Info,
 func (p *PodmanRuntime) List(ctx context.Context, filters map[string]string) ([]Info, error) {
 	defer perf.Track(nil, "container.PodmanRuntime.List")()
 
-	output, err := executePodmanList(ctx, filters)
+	output, err := p.executePodmanList(ctx, filters)
 	if err != nil {
 		return nil, err
 	}
@@ -182,10 +202,10 @@ func buildPodmanListArgs(filters map[string]string) []string {
 	return args
 }
 
-func executePodmanList(ctx context.Context, filters map[string]string) ([]byte, error) {
+func (p *PodmanRuntime) executePodmanList(ctx context.Context, filters map[string]string) ([]byte, error) {
 	args := buildPodmanListArgs(filters)
 
-	cmd := exec.CommandContext(ctx, podmanCmd, args...)
+	cmd := p.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%w: podman ps failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -249,7 +269,7 @@ func parseLabelsMap(labels map[string]interface{}) map[string]string {
 func (p *PodmanRuntime) Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Exec")()
 
-	return execWithRuntime(ctx, podmanCmd, containerID, cmd, opts)
+	return runExecCommand(p.command(ctx, buildExecArgs(containerID, cmd, opts)...), podmanCmd, opts)
 }
 
 // Attach attaches to a running container with an interactive shell.
@@ -264,7 +284,7 @@ func (p *PodmanRuntime) Attach(ctx context.Context, containerID string, opts *At
 func (p *PodmanRuntime) Pull(ctx context.Context, image string) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Pull")()
 
-	cmd := exec.CommandContext(ctx, podmanCmd, "pull", image)
+	cmd := p.command(ctx, "pull", image)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: podman pull failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -277,7 +297,7 @@ func (p *PodmanRuntime) Pull(ctx context.Context, image string) error {
 func (p *PodmanRuntime) Tag(ctx context.Context, source, target string) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Tag")()
 
-	cmd := exec.CommandContext(ctx, podmanCmd, buildTagArgs(source, target)...) //nolint:gosec // podman CLI invoked with controlled, non-user-shell arguments.
+	cmd := p.command(ctx, buildTagArgs(source, target)...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: podman tag failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -290,7 +310,7 @@ func (p *PodmanRuntime) Tag(ctx context.Context, source, target string) error {
 func (p *PodmanRuntime) Push(ctx context.Context, image string) (*PushResult, error) {
 	defer perf.Track(nil, "container.PodmanRuntime.Push")()
 
-	cmd := exec.CommandContext(ctx, podmanCmd, buildPushArgs(image)...) //nolint:gosec // podman CLI invoked with controlled, non-user-shell arguments.
+	cmd := p.command(ctx, buildPushArgs(image)...)
 	output, err := cmd.CombinedOutput()
 	cleanOutput := cleanPodmanOutput(output)
 	result := &PushResult{
@@ -309,7 +329,7 @@ func (p *PodmanRuntime) Push(ctx context.Context, image string) (*PushResult, er
 func (p *PodmanRuntime) ImageInspect(ctx context.Context, image string) (*ImageInfo, error) {
 	defer perf.Track(nil, "container.PodmanRuntime.ImageInspect")()
 
-	cmd := exec.CommandContext(ctx, podmanCmd, buildImageInspectArgs(image)...) //nolint:gosec // podman CLI invoked with controlled, non-user-shell arguments.
+	cmd := p.command(ctx, buildImageInspectArgs(image)...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%w: podman image inspect failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -334,7 +354,7 @@ func (p *PodmanRuntime) Logs(ctx context.Context, containerID string, follow boo
 
 	args := buildLogsArgs(containerID, follow, tail)
 
-	cmd := exec.CommandContext(ctx, podmanCmd, args...)
+	cmd := p.command(ctx, args...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
@@ -345,7 +365,7 @@ func (p *PodmanRuntime) Logs(ctx context.Context, containerID string, follow boo
 func (p *PodmanRuntime) Info(ctx context.Context) (*RuntimeInfo, error) {
 	defer perf.Track(nil, "container.PodmanRuntime.Info")()
 
-	cmd := exec.CommandContext(ctx, podmanCmd, "version", "--format", "{{.Version}}")
+	cmd := p.command(ctx, "version", "--format", "{{.Version}}")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%w: podman version failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))

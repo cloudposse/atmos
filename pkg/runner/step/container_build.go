@@ -44,6 +44,7 @@ func (h *ContainerHandler) executeBuild(ctx context.Context, step *schema.Workfl
 	if err != nil {
 		return nil, err
 	}
+	applyRuntimeEnv(runtime, vars)
 
 	if err := runtime.Build(ctx, buildConfig); err != nil {
 		return NewStepResult(firstString(buildConfig.Tags)).

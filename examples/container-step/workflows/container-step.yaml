@@ -96,6 +96,35 @@ workflows:
             /usr/local/bin/example
             uname -a
 
+  # Requires AWS access and the `auth:` block in atmos.yaml (a real provider,
+  # account, and ECR registry). `identity:` authenticates the step, which
+  # auto-provisions the linked `aws/ecr` integration (Docker login). The push
+  # then uses those credentials — no explicit `docker login` step needed.
+  push-ecr:
+    description: Build and push to a private ECR registry using an Atmos identity
+    steps:
+      - name: build
+        type: container
+        action: build
+        identity: dev-admin
+        build:
+          context: .
+          dockerfile: Dockerfile
+          tags:
+            - 123456789012.dkr.ecr.us-east-2.amazonaws.com/atmos-container-step:local
+        outputs:
+          image: "{{ .metadata.image }}"
+
+      - name: push
+        type: container
+        action: push
+        identity: dev-admin
+        push:
+          image: "{{ .steps.build.outputs.image }}"
+        outputs:
+          image: "{{ .metadata.image }}"
+          digest: "{{ .metadata.digest }}"
+
   workspace:
     description: Show the default workspace mount
     steps:
