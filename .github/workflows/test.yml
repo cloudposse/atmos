@@ -116,10 +116,7 @@ jobs:
       fail-fast: false
       matrix:
         flavor:
-          # Use the `large` runner (16-128 GiB RAM floor, large disk) for the linux job: it runs
-          # `make testacc-cover` with `-coverpkg=./...` across the whole repo, which OOMs (exit 137)
-          # on the `terraform` runner's 8 GiB RAM floor. macos/windows run plain `testacc` (no coverage).
-          - { os: "runs-on=${{github.run_id}}/runner=large/tag=atmos/extras=s3-cache/private=false", target: linux }
+          - { os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false", target: linux }
           - { os: "windows-latest", target: windows }
           - { os: "macos-latest", target: macos }
     timeout-minutes: 60
