@@ -8,6 +8,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -60,6 +61,8 @@ type SetAuthContextParams struct {
 // SetAuthContext populates the AWS auth context with Atmos-managed credential paths.
 // This enables in-process AWS SDK calls to use Atmos-managed credentials.
 func SetAuthContext(params *SetAuthContextParams) error {
+	defer perf.Track(nil, "aws.SetAuthContext")()
+
 	if params == nil {
 		return fmt.Errorf("%w: SetAuthContext parameters cannot be nil", errUtils.ErrInvalidAuthConfig)
 	}

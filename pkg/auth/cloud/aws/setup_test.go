@@ -273,39 +273,54 @@ func TestSetAuthContext_PopulatesAuthContext(t *testing.T) {
 }
 
 func TestSetAuthContext_WithIdentityResolverEndpoint(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmp)
-	homedir.Reset()
+	// The identity resolver endpoint is keyed by lowercase identity name. The
+	// "lowercase fallback" case exercises the strings.ToLower lookup in
+	// endpointURLFromManager when the caller passes a mixed-case identity name.
+	tests := []struct {
+		name         string
+		identityName string
+	}{
+		{name: "exact match", identityName: "test-identity"},
+		{name: "lowercase fallback", identityName: "Test-Identity"},
+	}
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", tmp)
+			homedir.Reset()
 
-	mockManager := types.NewMockAuthManager(ctrl)
-	mockManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
-		"test-identity": {
-			Credentials: map[string]interface{}{
-				"aws": map[string]interface{}{
-					"resolver": map[string]interface{}{
-						"url": "http://identity.localstack:4566",
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockManager := types.NewMockAuthManager(ctrl)
+			mockManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+				"test-identity": {
+					Credentials: map[string]interface{}{
+						"aws": map[string]interface{}{
+							"resolver": map[string]interface{}{
+								"url": "http://identity.localstack:4566",
+							},
+						},
 					},
 				},
-			},
-		},
-	})
+			})
 
-	authContext := &schema.AuthContext{}
-	err := SetAuthContext(&SetAuthContextParams{
-		AuthContext:  authContext,
-		StackInfo:    &schema.ConfigAndStacksInfo{},
-		ProviderName: "test-provider",
-		IdentityName: "test-identity",
-		Credentials:  &types.AWSCredentials{Region: "us-west-2"},
-		BasePath:     "",
-		Manager:      mockManager,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, authContext.AWS)
-	assert.Equal(t, "http://identity.localstack:4566", authContext.AWS.EndpointURL)
+			authContext := &schema.AuthContext{}
+			err := SetAuthContext(&SetAuthContextParams{
+				AuthContext:  authContext,
+				StackInfo:    &schema.ConfigAndStacksInfo{},
+				ProviderName: "test-provider",
+				IdentityName: tt.identityName,
+				Credentials:  &types.AWSCredentials{Region: "us-west-2"},
+				BasePath:     "",
+				Manager:      mockManager,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, authContext.AWS)
+			assert.Equal(t, "http://identity.localstack:4566", authContext.AWS.EndpointURL)
+		})
+	}
 }
 
 func TestSetAuthContext_WithProviderResolverFallback(t *testing.T) {
