@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -683,6 +684,13 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 		storeEndpoint string
 		authContext   *AWSAuthConfig
 		wantLen       int
+		// Expected applied effects after the built options are evaluated against a
+		// config.LoadOptions. These assert precedence behavior, not just option count.
+		wantRegion     string
+		wantEndpoint   string
+		wantProfile    string
+		wantCredsFiles []string
+		wantCfgFiles   []string
 	}{
 		{
 			name:   "all fields populated",
@@ -694,7 +702,12 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 				Region:          "eu-west-1",
 				EndpointURL:     "http://localhost:4566",
 			},
-			wantLen: 5, // creds + config + profile + store region + endpoint
+			wantLen:        5,                       // creds + config + profile + store region + endpoint
+			wantRegion:     "us-east-1",             // store region wins over auth context region
+			wantEndpoint:   "http://localhost:4566", // store endpoint empty, so auth endpoint used
+			wantProfile:    "prod",
+			wantCredsFiles: []string{"/path/to/creds"},
+			wantCfgFiles:   []string{"/path/to/config"},
 		},
 		{
 			name:          "store endpoint used when auth context endpoint empty",
@@ -702,6 +715,8 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 			storeEndpoint: "http://store-endpoint",
 			authContext:   &AWSAuthConfig{},
 			wantLen:       2, // store region + store endpoint
+			wantRegion:    "us-east-1",
+			wantEndpoint:  "http://store-endpoint",
 		},
 		{
 			name:          "store endpoint takes precedence over auth context endpoint",
@@ -710,7 +725,9 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 			authContext: &AWSAuthConfig{
 				EndpointURL: "http://auth-endpoint",
 			},
-			wantLen: 2, // store region + store endpoint (auth endpoint ignored)
+			wantLen:      2, // store region + store endpoint (auth endpoint ignored)
+			wantRegion:   "us-east-1",
+			wantEndpoint: "http://store-endpoint", // store endpoint wins over auth endpoint
 		},
 		{
 			name:   "empty credentials file",
@@ -719,7 +736,10 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 				ConfigFile: "/path/to/config",
 				Profile:    "prod",
 			},
-			wantLen: 3, // config + profile + region
+			wantLen:      3, // config + profile + region
+			wantRegion:   "us-east-1",
+			wantProfile:  "prod",
+			wantCfgFiles: []string{"/path/to/config"},
 		},
 		{
 			name:   "region fallback from auth context",
@@ -728,13 +748,16 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 				CredentialsFile: "/path/to/creds",
 				Region:          "eu-west-1",
 			},
-			wantLen: 2, // creds + auth region
+			wantLen:        2,           // creds + auth region
+			wantRegion:     "eu-west-1", // store region empty, so auth context region used
+			wantCredsFiles: []string{"/path/to/creds"},
 		},
 		{
 			name:        "all empty auth context with store region",
 			region:      "us-east-1",
 			authContext: &AWSAuthConfig{},
 			wantLen:     1, // just store region
+			wantRegion:  "us-east-1",
 		},
 		{
 			name:        "both regions empty",
@@ -748,7 +771,8 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 			authContext: &AWSAuthConfig{
 				Profile: "prod-admin",
 			},
-			wantLen: 1, // just profile
+			wantLen:     1, // just profile
+			wantProfile: "prod-admin",
 		},
 	}
 
@@ -757,6 +781,18 @@ func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
 			store := &SSMStore{region: tt.region, endpoint: tt.storeEndpoint}
 			opts := store.buildAuthConfigOpts(tt.authContext)
 			assert.Len(t, opts, tt.wantLen)
+
+			// Apply the built options and assert their effect, so endpoint/region/profile
+			// precedence cannot regress while still passing the length check.
+			var lo config.LoadOptions
+			for _, opt := range opts {
+				require.NoError(t, opt(&lo))
+			}
+			assert.Equal(t, tt.wantRegion, lo.Region)
+			assert.Equal(t, tt.wantEndpoint, lo.BaseEndpoint)
+			assert.Equal(t, tt.wantProfile, lo.SharedConfigProfile)
+			assert.Equal(t, tt.wantCredsFiles, lo.SharedCredentialsFiles)
+			assert.Equal(t, tt.wantCfgFiles, lo.SharedConfigFiles)
 		})
 	}
 }

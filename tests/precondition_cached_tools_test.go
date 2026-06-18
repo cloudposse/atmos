@@ -74,11 +74,14 @@ func TestPrependCachedTestTool(t *testing.T) {
 		t.Cleanup(func() { os.RemoveAll(binDir) })
 
 		// t.Setenv records the original PATH and restores it after the test; the function
-		// under test mutates PATH via os.Setenv, which the restore undoes.
-		t.Setenv("PATH", "/usr/bin")
+		// under test mutates PATH via os.Setenv, which the restore undoes. Use a temp dir
+		// for the existing PATH entry so the expectation is OS-agnostic.
+		existingPath := filepath.Join(t.TempDir(), "existing-bin")
+		require.NoError(t, os.MkdirAll(existingPath, 0o755))
+		t.Setenv("PATH", existingPath)
 
 		prependCachedTestTool("atmos-fake-present")
-		assert.Equal(t, binDir+string(os.PathListSeparator)+"/usr/bin", os.Getenv("PATH"))
+		assert.Equal(t, binDir+string(os.PathListSeparator)+existingPath, os.Getenv("PATH"))
 	})
 
 	t.Run("present cached binary sets PATH when PATH is empty", func(t *testing.T) {

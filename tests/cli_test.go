@@ -783,7 +783,9 @@ func TestMain(m *testing.M) {
 	// no-op unless ATMOS_TEST_FLOCI=true and the FLOCI_* endpoint env vars are unset,
 	// so CI (which pre-sets them to its service containers) is unaffected. On machines
 	// without Docker it records a skip reason and the Floci tests skip cleanly.
-	flociCleanup, flociErr := maybeStartFloci(context.Background())
+	flociCtx, flociCancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer flociCancel()
+	flociCleanup, flociErr := maybeStartFloci(flociCtx)
 	if flociErr != nil {
 		logger.Warn("Floci auto-start failed; Floci tests will skip", "error", flociErr)
 	}
