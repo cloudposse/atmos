@@ -896,14 +896,15 @@ func executeCustomCommand(
 			stepType = "shell"
 		}
 
-		// Registered (non-exec) step handlers take precedence; exec is handled inline below.
-		if _, ok := stepPkg.Get(stepType); ok && stepType != schema.TaskTypeExec {
-			err = runRegisteredStepHandler(executor, &step, commandToRun, workDir, env)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
-			continue
-		}
-
 		// Execute the step based on type.
+		//
+		// shell/exec/atmos use the legacy, cross-platform, child-reaping paths
+		// below; only genuinely-extended step types (container, input, confirm,
+		// …) route through the registered step handlers via the default case.
+		// Routing shell/atmos through the handlers regressed Windows (handlers
+		// hardcode `sh -c` → exit 126) and leaked orphaned `atmos` child
+		// processes on Linux (no process-group cleanup), so they stay on the
+		// legacy paths.
 		switch stepType {
 		case "shell":
 			// Execute shell command (backward compatible).
@@ -944,6 +945,9 @@ func executeCustomCommand(
 				workflowStep := step.ToWorkflowStep()
 				// Update command with template-resolved value.
 				workflowStep.Command = commandToRun
+				// Carry the resolved env onto the step so handlers that read
+				// step.Env (e.g. the container handler's in-container env) see it.
+				workflowStep.Env = envSliceToMap(env)
 				// Propagate working directory to extended step if not already set.
 				if workflowStep.WorkingDirectory == "" {
 					workflowStep.WorkingDirectory = workDir
@@ -980,29 +984,6 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	}
 
 	return &clone, nil
-}
-
-// runRegisteredStepHandler converts a custom command task into a workflow step
-// and executes it through a registered step handler, preserving step outputs.
-func runRegisteredStepHandler(executor *stepPkg.StepExecutor, step *schema.Task, commandToRun, workDir string, env []string) error {
-	// Convert Task to WorkflowStep for handler compatibility.
-	workflowStep := step.ToWorkflowStep()
-	workflowStep.Command = commandToRun
-	workflowStep.Env = envSliceToMap(env)
-	if workflowStep.WorkingDirectory == "" {
-		workflowStep.WorkingDirectory = workDir
-	}
-
-	// Update environment variables for template resolution (reuse executor to preserve step outputs).
-	for _, envVar := range env {
-		parts := strings.SplitN(envVar, "=", 2)
-		if len(parts) == 2 {
-			executor.SetEnv(parts[0], parts[1])
-		}
-	}
-
-	_, err := executor.Execute(context.Background(), &workflowStep)
-	return err
 }
 
 func envSliceToMap(env []string) map[string]string {
