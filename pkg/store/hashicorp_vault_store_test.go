@@ -96,17 +96,19 @@ func TestVaultStore_HTTPKVv2Integration(t *testing.T) {
 			var body struct {
 				Data map[string]any `json:"data"`
 			}
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				writeVaultJSON(w, http.StatusBadRequest, map[string]any{"errors": []string{"invalid json"}})
+				return
+			}
 			data[path] = body.Data
-			writeJSON(t, w, map[string]any{"data": map[string]any{"version": 1}})
+			writeVaultJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"version": 1}})
 		case http.MethodGet:
 			value, ok := data[path]
 			if !ok {
-				w.WriteHeader(http.StatusNotFound)
-				writeJSON(t, w, map[string]any{"errors": []string{"missing secret"}})
+				writeVaultJSON(w, http.StatusNotFound, map[string]any{"errors": []string{"missing secret"}})
 				return
 			}
-			writeJSON(t, w, map[string]any{
+			writeVaultJSON(w, http.StatusOK, map[string]any{
 				"data": map[string]any{
 					"data":     value,
 					"metadata": map[string]any{"version": 1},
@@ -165,8 +167,7 @@ func TestVaultStore_HTTPKVv2Integration(t *testing.T) {
 func TestVaultStore_HTTPKVv2Integration_ServerErrorWrapped(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/secret/data/prod/api/API_KEY", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		writeJSON(t, w, map[string]any{"errors": []string{"boom"}})
+		writeVaultJSON(w, http.StatusInternalServerError, map[string]any{"errors": []string{"boom"}})
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -180,6 +181,12 @@ func TestVaultStore_HTTPKVv2Integration_ServerErrorWrapped(t *testing.T) {
 	_, err = raw.Get("prod", "api", "API_KEY")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrVaultRead)
+}
+
+func writeVaultJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func TestVaultStore_Set_Validation(t *testing.T) {
