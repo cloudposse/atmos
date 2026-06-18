@@ -47,6 +47,7 @@ func TestResolveAWSAuthContext_Success(t *testing.T) {
 				ConfigFile:      expectedConfigFile,
 				Profile:         "prod",
 				Region:          "us-east-1",
+				EndpointURL:     "http://localhost:4566",
 			},
 		},
 	}
@@ -57,19 +58,6 @@ func TestResolveAWSAuthContext_Success(t *testing.T) {
 	mockManager.EXPECT().
 		GetStackInfo().
 		Return(managerStackInfo)
-	mockManager.EXPECT().
-		GetIdentities().
-		Return(map[string]schema.Identity{
-			"prod-admin": {
-				Credentials: map[string]interface{}{
-					"aws": map[string]interface{}{
-						"resolver": map[string]interface{}{
-							"url": "http://localhost:4566",
-						},
-					},
-				},
-			},
-		})
 
 	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
 
@@ -110,9 +98,6 @@ func TestResolveAWSAuthContext_RealmScopedPaths(t *testing.T) {
 	mockManager.EXPECT().
 		GetStackInfo().
 		Return(managerStackInfo)
-	mockManager.EXPECT().
-		GetIdentities().
-		Return(nil)
 
 	resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
 
@@ -164,9 +149,6 @@ func TestResolveAWSAuthContext_PointerMismatch(t *testing.T) {
 	mockManager.EXPECT().
 		GetStackInfo().
 		Return(managerStackInfo)
-	mockManager.EXPECT().
-		GetIdentities().
-		Return(nil)
 
 	resolver := NewResolver(mockManager, resolverStackInfo)
 
@@ -391,144 +373,6 @@ func TestResolveGCPAuthContext_NoGCPContext(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, authConfig)
 	assert.Contains(t, err.Error(), "GCP auth context not available")
-}
-
-func TestAWSConfigForIdentity(t *testing.T) {
-	tests := []struct {
-		name     string
-		identity *schema.Identity
-		wantNil  bool
-		wantURL  string
-	}{
-		{
-			name:     "nil identity",
-			identity: nil,
-			wantNil:  true,
-		},
-		{
-			name:     "nil credentials map",
-			identity: &schema.Identity{Credentials: nil},
-			wantNil:  true,
-		},
-		{
-			name: "no aws key in credentials",
-			identity: &schema.Identity{
-				Credentials: map[string]interface{}{
-					"azure": map[string]interface{}{},
-				},
-			},
-			wantNil: true,
-		},
-		{
-			name: "valid aws resolver decodes",
-			identity: &schema.Identity{
-				Credentials: map[string]interface{}{
-					"aws": map[string]interface{}{
-						"resolver": map[string]interface{}{
-							"url": "http://localhost:4566",
-						},
-					},
-				},
-			},
-			wantNil: false,
-			wantURL: "http://localhost:4566",
-		},
-		{
-			name: "aws key without resolver decodes to empty config",
-			identity: &schema.Identity{
-				Credentials: map[string]interface{}{
-					"aws": map[string]interface{}{},
-				},
-			},
-			wantNil: false,
-			wantURL: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := awsConfigForIdentity(tt.identity)
-			if tt.wantNil {
-				assert.Nil(t, cfg)
-				return
-			}
-			assert.NotNil(t, cfg)
-			if tt.wantURL == "" {
-				assert.Nil(t, cfg.Resolver)
-				return
-			}
-			assert.NotNil(t, cfg.Resolver)
-			assert.Equal(t, tt.wantURL, cfg.Resolver.URL)
-		})
-	}
-}
-
-func TestResolver_AWSIdentityEndpointURL(t *testing.T) {
-	resolverIdentity := schema.Identity{
-		Credentials: map[string]interface{}{
-			"aws": map[string]interface{}{
-				"resolver": map[string]interface{}{
-					"url": "http://localhost:4566",
-				},
-			},
-		},
-	}
-	noResolverIdentity := schema.Identity{
-		Credentials: map[string]interface{}{
-			"aws": map[string]interface{}{},
-		},
-	}
-
-	tests := []struct {
-		name         string
-		identityName string
-		identities   map[string]schema.Identity
-		want         string
-	}{
-		{
-			name:         "empty identities map",
-			identityName: "prod-admin",
-			identities:   map[string]schema.Identity{},
-			want:         "",
-		},
-		{
-			name:         "exact name match returns url",
-			identityName: "prod-admin",
-			identities:   map[string]schema.Identity{"prod-admin": resolverIdentity},
-			want:         "http://localhost:4566",
-		},
-		{
-			name:         "case-insensitive fallback match returns url",
-			identityName: "Prod-Admin",
-			identities:   map[string]schema.Identity{"prod-admin": resolverIdentity},
-			want:         "http://localhost:4566",
-		},
-		{
-			name:         "identity not found returns empty",
-			identityName: "missing",
-			identities:   map[string]schema.Identity{"prod-admin": resolverIdentity},
-			want:         "",
-		},
-		{
-			name:         "identity without aws resolver returns empty",
-			identityName: "prod-admin",
-			identities:   map[string]schema.Identity{"prod-admin": noResolverIdentity},
-			want:         "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockManager := types.NewMockAuthManager(ctrl)
-			mockManager.EXPECT().GetIdentities().Return(tt.identities)
-
-			resolver := NewResolver(mockManager, &schema.ConfigAndStacksInfo{})
-			assert.Equal(t, tt.want, resolver.awsIdentityEndpointURL(tt.identityName))
-		})
-	}
 }
 
 func TestResolver_NilManagerStackInfo(t *testing.T) {

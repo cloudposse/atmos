@@ -3,6 +3,7 @@ package aws
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -52,6 +53,7 @@ type SetAuthContextParams struct {
 	IdentityName string
 	Credentials  types.ICredentials
 	BasePath     string
+	Manager      types.AuthManager
 	Realm        string // Realm for credential isolation (optional).
 }
 
@@ -87,7 +89,8 @@ func SetAuthContext(params *SetAuthContextParams) error {
 	// Stack inheritance allows components to override identity configuration.
 	if regionOverride := getComponentRegionOverride(params.StackInfo, params.IdentityName); regionOverride != "" {
 		region = regionOverride
-		log.Debug("Using component-level region override",
+		log.Debug(
+			"Using component-level region override",
 			"identity", params.IdentityName,
 			"region", region,
 		)
@@ -99,9 +102,11 @@ func SetAuthContext(params *SetAuthContextParams) error {
 		ConfigFile:      configPath,
 		Profile:         params.IdentityName,
 		Region:          region,
+		EndpointURL:     endpointURLFromManager(params.Manager, params.IdentityName),
 	}
 
-	log.Debug("Set AWS auth context",
+	log.Debug(
+		"Set AWS auth context",
 		"profile", params.IdentityName,
 		"credentials", credentialsPath,
 		"config", configPath,
@@ -109,6 +114,29 @@ func SetAuthContext(params *SetAuthContextParams) error {
 	)
 
 	return nil
+}
+
+func endpointURLFromManager(manager types.AuthManager, identityName string) string {
+	if manager == nil {
+		return ""
+	}
+
+	var identity *schema.Identity
+	identities := manager.GetIdentities()
+	if len(identities) > 0 {
+		if found, ok := identities[identityName]; ok {
+			identity = &found
+		} else if found, ok := identities[strings.ToLower(identityName)]; ok {
+			identity = &found
+		}
+	}
+
+	if url := resolverEndpointURL(identity, nil); url != "" {
+		return url
+	}
+
+	provider, _ := manager.ResolveProviderConfig(identityName)
+	return resolverEndpointURL(nil, provider)
 }
 
 // getComponentRegionOverride extracts region override from component auth config.
