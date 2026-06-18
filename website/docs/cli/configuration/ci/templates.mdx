@@ -90,8 +90,9 @@ Templates receive a context object with plan/apply data.
 Native [Kubernetes components](/cli/commands/kubernetes/usage) render a single summary
 template (default name `summary`) for every command (`render`, `plan`, `diff`, `apply`,
 `deploy`, `delete`, `validate`). For `plan`/`diff`, the `.Diff` variable holds the aggregated
-unified diff of all changed objects (rendered as a collapsible ` ```diff ` block). `Secret`
-objects are deliberately omitted from `.Diff` so their data never reaches the job summary.
+unified diff of all changed objects (rendered as a collapsible diff block using GitHub's `diff`
+fenced code syntax). `Secret` objects are deliberately omitted from `.Diff` so their data never
+reaches the job summary.
 
 | Variable | Type | Description |
 |----------|------|-------------|
