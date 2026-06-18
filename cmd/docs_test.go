@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,4 +30,19 @@ func TestDocsCmdOpensDefaultDocsURL(t *testing.T) {
 
 	require.NoError(t, docsCmd.RunE(docsCmd, nil))
 	assert.Equal(t, atmosDocsURL, openedURL)
+}
+
+func TestDocsCmdReturnsDefaultDocsOpenError(t *testing.T) {
+	openErr := errors.New("browser unavailable")
+	originalOpenDocsURL := openDocsURL
+	t.Cleanup(func() {
+		openDocsURL = originalOpenDocsURL
+	})
+	openDocsURL = func(string) error {
+		return openErr
+	}
+
+	err := docsCmd.RunE(docsCmd, nil)
+	require.ErrorIs(t, err, openErr)
+	assert.ErrorContains(t, err, "open Atmos docs")
 }
