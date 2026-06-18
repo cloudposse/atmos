@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestDocsCmd_WithoutStacks verifies that docs command does not require stack configuration.
@@ -11,4 +13,10 @@ func TestDocsCmd_WithoutStacks(t *testing.T) {
 	// by verifying InitCliConfig is called with processStacks=false in docs.go:38
 	// No runtime test needed - this is enforced by code structure.
 	t.Log("docs command uses InitCliConfig with processStacks=false")
+}
+
+func TestDocsCmdOpensDefaultDocsURL(t *testing.T) {
+	t.Setenv("GO_TEST", "1")
+
+	require.NoError(t, docsCmd.RunE(docsCmd, nil))
 }

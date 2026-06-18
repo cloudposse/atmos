@@ -16,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -134,6 +135,101 @@ func TestAppendUsageSection(t *testing.T) {
 
 	assert.Contains(t, got, "## Usage")
 	assert.Contains(t, got, "```shell\natmos git push <name-or-path> [flags]\n```")
+}
+
+func TestUsageErrorHelpersExit(t *testing.T) {
+	_ = NewTestKit(t)
+
+	originalOsExit := errUtils.OsExit
+	t.Cleanup(func() {
+		errUtils.OsExit = originalOsExit
+	})
+
+	type exitPanic struct {
+		code int
+	}
+	var exitCode int
+	errUtils.OsExit = func(code int) {
+		exitCode = code
+		panic(exitPanic{code: code})
+	}
+
+	root := &cobra.Command{Use: "atmos"}
+	known := &cobra.Command{Use: "known", Run: func(*cobra.Command, []string) {}}
+	root.AddCommand(known)
+
+	assert.Panics(t, func() {
+		showUsageAndExit(root, nil)
+	})
+	assert.Equal(t, 1, exitCode)
+
+	assert.Panics(t, func() {
+		showUsageAndExit(root, []string{"knwon"})
+	})
+	assert.Equal(t, 1, exitCode)
+
+	assert.Panics(t, func() {
+		_ = showFlagUsageAndExit(known, errors.New("flag needs an argument: --stack"))
+	})
+	assert.Equal(t, 1, exitCode)
+
+	assert.Panics(t, func() {
+		_ = showFlagUsageAndExit(known, errors.New("unknown flag: --bad"))
+	})
+	assert.Equal(t, 1, exitCode)
+}
+
+func TestHandlePathResolutionError(t *testing.T) {
+	sentinelErrors := []error{
+		errUtils.ErrAmbiguousComponentPath,
+		errUtils.ErrComponentNotInStack,
+		errUtils.ErrStackNotFound,
+		errUtils.ErrUserAborted,
+	}
+
+	for _, sentinel := range sentinelErrors {
+		t.Run(sentinel.Error(), func(t *testing.T) {
+			err := handlePathResolutionError(sentinel)
+			assert.ErrorIs(t, err, sentinel)
+		})
+	}
+
+	t.Run("generic error is wrapped with path resolution failed", func(t *testing.T) {
+		err := handlePathResolutionError(errors.New("raw resolver failure"))
+		assert.ErrorIs(t, err, errUtils.ErrPathResolutionFailed)
+		assert.Contains(t, err.Error(), "raw resolver failure")
+	})
+}
+
+func TestVersionManagementCommandClassification(t *testing.T) {
+	root := &cobra.Command{Use: "atmos"}
+	versionCmd := &cobra.Command{Use: "version"}
+	installCmd := &cobra.Command{Use: "install"}
+	uninstallCmd := &cobra.Command{Use: "uninstall"}
+	listCmd := &cobra.Command{Use: "list"}
+	versionCmd.AddCommand(installCmd, uninstallCmd, listCmd)
+	root.AddCommand(versionCmd)
+
+	assert.False(t, isVersionManagementCommand(nil))
+	assert.True(t, isVersionManagementCommand(versionCmd))
+	assert.True(t, isVersionManagementCommand(installCmd))
+	assert.True(t, isVersionManagementCommand(uninstallCmd))
+	assert.False(t, isVersionManagementCommand(listCmd))
+	assert.False(t, isVersionManagementCommand(&cobra.Command{Use: "version"}))
+}
+
+func TestEnableHeatmapIfRequested(t *testing.T) {
+	oldArgs := os.Args
+	t.Cleanup(func() {
+		os.Args = oldArgs
+		perf.EnableTracking(false)
+	})
+
+	os.Args = []string{"atmos", "version"}
+	enableHeatmapIfRequested()
+
+	os.Args = []string{"atmos", "--heatmap", "version"}
+	enableHeatmapIfRequested()
 }
 
 func TestIsVersionCommand(t *testing.T) {
@@ -1279,6 +1375,23 @@ func TestComponentsArgCompletion(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestComponentsArgCompletionDelegatesToFlagCompletion(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("target", "", "target flag")
+	err := cmd.RegisterFlagCompletionFunc("target", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return []string{"one", "two"}, cobra.ShellCompDirectiveNoFileComp
+	})
+	require.NoError(t, err)
+
+	completions, directive := ComponentsArgCompletion(cmd, []string{"component", "--target"}, "")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.Equal(t, []string{"one", "two"}, completions)
+
+	completions, directive = ComponentsArgCompletion(cmd, []string{"component"}, "--target")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.Equal(t, []string{"one", "two"}, completions)
 }
 
 // TestIsGitRepository tests the isGitRepository function.
