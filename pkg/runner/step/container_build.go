@@ -14,14 +14,14 @@ import (
 // validateBuildAction checks the configuration of a `build` container step.
 func validateBuildAction(step *schema.WorkflowStep) error {
 	build := effectiveBuildStep(step)
-	if !isValidContainerRuntime(build.Runtime) {
-		return invalidContainerField(step, "build.runtime", build.Runtime, "Runtime must be `docker`, `podman`, or empty for auto-detect")
+	if !isValidContainerRuntime(build.Provider) {
+		return invalidContainerField(step, "build.provider", build.Provider, "Provider must be `docker`, `podman`, or empty for auto-detect")
 	}
 	if !isValidContainerBuildEngine(build.Engine) {
 		return invalidContainerField(step, "build.engine", build.Engine, "Build engine must be `buildx` or empty for the runtime default")
 	}
-	if (build.Engine == containerBuildEngineBuildx || build.Bake != nil) && build.Runtime != string(container.TypeDocker) {
-		return invalidContainerField(step, "build.runtime", build.Runtime, "Docker Buildx and Bake require `runtime: docker` in V1; Podman uses the native `podman build` path")
+	if (build.Engine == containerBuildEngineBuildx || build.Bake != nil) && build.Provider != string(container.TypeDocker) {
+		return invalidContainerField(step, "build.provider", build.Provider, "Docker Buildx and Bake require `provider: docker` in V1; Podman uses the native `podman build` path")
 	}
 	return nil
 }
@@ -33,7 +33,7 @@ func (h *ContainerHandler) executeBuild(ctx context.Context, step *schema.Workfl
 		return nil, err
 	}
 
-	runtimeName := strings.TrimSpace(build.Runtime)
+	runtimeName := strings.TrimSpace(build.Provider)
 	if step.DryRun {
 		preview := container.BuildImageBuildPreview(runtimeName, buildConfig)
 		ui.Writeln(preview)

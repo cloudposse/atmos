@@ -77,9 +77,9 @@ func TestFormatInspectTime(t *testing.T) {
 
 func TestEffectiveInspectStep(t *testing.T) {
 	// Flat `image:`/`runtime:` shorthand is adopted.
-	got := effectiveInspectStep(&schema.WorkflowStep{Image: "alpine:latest", Runtime: "podman"})
+	got := effectiveInspectStep(&schema.WorkflowStep{Image: "alpine:latest", Provider: "podman"})
 	assert.Equal(t, "alpine:latest", got.Image)
-	assert.Equal(t, "podman", got.Runtime)
+	assert.Equal(t, "podman", got.Provider)
 
 	// An explicit `inspect:` block wins over the flat shorthand.
 	got = effectiveInspectStep(&schema.WorkflowStep{

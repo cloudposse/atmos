@@ -204,11 +204,11 @@ func TestContainerHandlerValidation(t *testing.T) {
 		{
 			name: "invalid runtime",
 			step: &schema.WorkflowStep{
-				Name:    "test",
-				Type:    "container",
-				Image:   "alpine:latest",
-				Command: "echo hello",
-				Runtime: "containerd",
+				Name:     "test",
+				Type:     "container",
+				Image:    "alpine:latest",
+				Command:  "echo hello",
+				Provider: "containerd",
 			},
 			expectErr: true,
 		},

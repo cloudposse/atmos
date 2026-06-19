@@ -22,8 +22,8 @@ func (h *ContainerHandler) validateRunAction(step *schema.WorkflowStep) error {
 	if err := h.ValidateRequired(step, "run.command", run.Command); err != nil {
 		return err
 	}
-	if !isValidContainerRuntime(run.Runtime) {
-		return invalidContainerField(step, "run.runtime", run.Runtime, "Runtime must be `docker`, `podman`, or empty for auto-detect")
+	if !isValidContainerRuntime(run.Provider) {
+		return invalidContainerField(step, "run.provider", run.Provider, "Provider must be `docker`, `podman`, or empty for auto-detect")
 	}
 	if !isValidContainerPull(run.Pull) {
 		return invalidContainerField(step, "run.pull", run.Pull, "Pull policy must be `missing`, `always`, `never`, or empty")
@@ -40,7 +40,7 @@ func (h *ContainerHandler) executeRun(ctx context.Context, step *schema.Workflow
 		return nil, err
 	}
 
-	runtimeName := strings.TrimSpace(run.Runtime)
+	runtimeName := strings.TrimSpace(run.Provider)
 	if step.DryRun {
 		preview := container.BuildEphemeralPreview(runtimeName, config)
 		ui.Writeln(preview)
@@ -197,8 +197,8 @@ func mergeRunScalarFields(run *schema.ContainerRunStep, step *schema.WorkflowSte
 	if run.Shell == "" {
 		run.Shell = step.Shell
 	}
-	if run.Runtime == "" {
-		run.Runtime = step.Runtime
+	if run.Provider == "" {
+		run.Provider = step.Provider
 	}
 	if run.Pull == "" {
 		run.Pull = step.Pull

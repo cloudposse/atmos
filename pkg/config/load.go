@@ -407,6 +407,14 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		viper.GetViper().Set("profiles.base_path", atmosConfig.Profiles.BasePath)
 	}
 
+	// Bridge the first-class `container.runtime.auto_start` YAML setting to the env
+	// var that container runtime detection reads (pkg/container). PromoteAtmosEnv
+	// respects precedence: an explicitly-set ATMOS_CONTAINER_RUNTIME_AUTO_START
+	// always wins over config and is never overwritten.
+	if atmosConfig.Container.Runtime.AutoStart {
+		envpkg.PromoteAtmosEnv(map[string]string{"ATMOS_CONTAINER_RUNTIME_AUTO_START": "true"})
+	}
+
 	return atmosConfig, nil
 }
 

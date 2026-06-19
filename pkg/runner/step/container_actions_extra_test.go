@@ -26,10 +26,10 @@ func TestValidateBuildAction(t *testing.T) {
 		name string
 		step *schema.WorkflowStep
 	}{
-		{"bad runtime", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Runtime: "containerd"}}},
+		{"bad runtime", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Provider: "containerd"}}},
 		{"bad engine", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Engine: "kaniko"}}},
-		{"buildx requires docker", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Engine: "buildx", Runtime: "podman"}}},
-		{"bake requires docker", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Runtime: "podman", Bake: &schema.ContainerBuildBakeStep{File: "x"}}}},
+		{"buildx requires docker", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Engine: "buildx", Provider: "podman"}}},
+		{"bake requires docker", &schema.WorkflowStep{Build: &schema.ContainerBuildStep{Provider: "podman", Bake: &schema.ContainerBuildBakeStep{File: "x"}}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -87,7 +87,7 @@ func TestValidateInspectAction(t *testing.T) {
 
 	// Bad runtime.
 	require.Error(t, h.validateInspectAction(&schema.WorkflowStep{
-		Inspect: &schema.ContainerInspectStep{Image: "alpine", Runtime: "containerd"},
+		Inspect: &schema.ContainerInspectStep{Image: "alpine", Provider: "containerd"},
 	}))
 }
 
@@ -152,9 +152,9 @@ func TestConvertContainerPorts(t *testing.T) {
 }
 
 func TestEffectiveInspectStepRuntimeShorthand(t *testing.T) {
-	got := effectiveInspectStep(&schema.WorkflowStep{Image: "alpine", Runtime: "podman", RuntimeAutoStart: true})
+	got := effectiveInspectStep(&schema.WorkflowStep{Image: "alpine", Provider: "podman", RuntimeAutoStart: true})
 	assert.Equal(t, "alpine", got.Image)
-	assert.Equal(t, "podman", got.Runtime)
+	assert.Equal(t, "podman", got.Provider)
 	assert.True(t, got.RuntimeAutoStart)
 
 	// Ensure the BakeConfig type is referenced so a field rename fails the build.

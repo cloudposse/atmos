@@ -167,7 +167,7 @@ func TestTasks_UnmarshalYAML_WithContainerFields(t *testing.T) {
   image: alpine:latest
   command: echo hello
   shell: /bin/sh
-  runtime: docker
+  provider: docker
   pull: always
   workspace: /workspace
   workspace_read_only: true
@@ -194,7 +194,7 @@ func TestTasks_UnmarshalYAML_WithContainerFields(t *testing.T) {
 	assert.Equal(t, "container", task.Type)
 	assert.Equal(t, "alpine:latest", task.Image)
 	assert.Equal(t, "/bin/sh", task.Shell)
-	assert.Equal(t, "docker", task.Runtime)
+	assert.Equal(t, "docker", task.Provider)
 	assert.Equal(t, "always", task.Pull)
 	assert.Equal(t, "/workspace", task.Workspace)
 	assert.True(t, task.WorkspaceReadOnly)
@@ -217,7 +217,7 @@ func TestTasks_UnmarshalYAML_WithContainerActionBlocksAndOutputs(t *testing.T) {
   type: container
   action: build
   build:
-    runtime: docker
+    provider: docker
     runtime_auto_start: true
     engine: buildx
     context: .
@@ -255,7 +255,7 @@ func TestTasks_UnmarshalYAML_WithContainerActionBlocksAndOutputs(t *testing.T) {
 	assert.Equal(t, "container", task.Type)
 	assert.Equal(t, "build", task.Action)
 	require.NotNil(t, task.Build)
-	assert.Equal(t, "docker", task.Build.Runtime)
+	assert.Equal(t, "docker", task.Build.Provider)
 	assert.True(t, task.Build.RuntimeAutoStart)
 	assert.Equal(t, "buildx", task.Build.Engine)
 	assert.Equal(t, ".", task.Build.Context)
@@ -321,7 +321,7 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 		Timeout:           30 * time.Second,
 		Image:             "alpine:latest",
 		Shell:             "/bin/sh",
-		Runtime:           "docker",
+		Provider:          "docker",
 		Pull:              "always",
 		Workspace:         "/workspace",
 		WorkspaceReadOnly: true,
@@ -362,7 +362,7 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 	assert.Equal(t, task.Retry, step.Retry)
 	assert.Equal(t, task.Image, step.Image)
 	assert.Equal(t, task.Shell, step.Shell)
-	assert.Equal(t, task.Runtime, step.Runtime)
+	assert.Equal(t, task.Provider, step.Provider)
 	assert.Equal(t, task.Pull, step.Pull)
 	assert.Equal(t, task.Workspace, step.Workspace)
 	assert.Equal(t, task.WorkspaceReadOnly, step.WorkspaceReadOnly)
@@ -393,7 +393,7 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 		},
 		Image:             "alpine:latest",
 		Shell:             "/bin/sh",
-		Runtime:           "docker",
+		Provider:          "docker",
 		Pull:              "always",
 		Workspace:         "/workspace",
 		WorkspaceReadOnly: true,
@@ -434,7 +434,7 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 	assert.Equal(t, step.Retry, task.Retry)
 	assert.Equal(t, step.Image, task.Image)
 	assert.Equal(t, step.Shell, task.Shell)
-	assert.Equal(t, step.Runtime, task.Runtime)
+	assert.Equal(t, step.Provider, task.Provider)
 	assert.Equal(t, step.Pull, task.Pull)
 	assert.Equal(t, step.Workspace, task.Workspace)
 	assert.Equal(t, step.WorkspaceReadOnly, task.WorkspaceReadOnly)

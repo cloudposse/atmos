@@ -15,8 +15,8 @@ func (h *ContainerHandler) validatePushAction(step *schema.WorkflowStep) error {
 	if err := h.ValidateRequired(step, "push.image", push.Image); err != nil {
 		return err
 	}
-	if !isValidContainerRuntime(push.Runtime) {
-		return invalidContainerField(step, "push.runtime", push.Runtime, "Runtime must be `docker`, `podman`, or empty for auto-detect")
+	if !isValidContainerRuntime(push.Provider) {
+		return invalidContainerField(step, "push.provider", push.Provider, "Provider must be `docker`, `podman`, or empty for auto-detect")
 	}
 	return nil
 }
@@ -28,7 +28,7 @@ func (h *ContainerHandler) executePush(ctx context.Context, step *schema.Workflo
 		return nil, err
 	}
 
-	runtimeName := strings.TrimSpace(push.Runtime)
+	runtimeName := strings.TrimSpace(push.Provider)
 	if step.DryRun {
 		return previewPush(runtimeName, pushConfig, tags), nil
 	}

@@ -18,6 +18,10 @@ const (
 
 	// Env var that selects the container runtime (docker|podman).
 	envContainerRuntime = "ATMOS_CONTAINER_RUNTIME"
+
+	// Env var feature flag (bridged from `container.runtime.auto_start`): when
+	// truthy, Atmos may auto-init/start the Podman machine during detection.
+	envContainerRuntimeAutoStart = "ATMOS_CONTAINER_RUNTIME_AUTO_START"
 )
 
 // RuntimeStatus represents the availability status of a container runtime.
@@ -110,6 +114,11 @@ func DetectRuntimeWithPreference(ctx context.Context, preferred string) (Runtime
 func DetectRuntimeWithPreferenceAndRecovery(ctx context.Context, preferred string, autoStart bool) (Runtime, error) {
 	defer perf.Track(nil, "container.DetectRuntimeWithPreferenceAndRecovery")()
 
+	// The global ATMOS_CONTAINER_RUNTIME_AUTO_START feature flag (bridged from
+	// container.runtime.auto_start) enables recovery for every container operation,
+	// so users need not set runtime_auto_start on each step.
+	autoStart = autoStart || autoStartFromEnv()
+
 	// Resolve the runtime that DetectRuntime will actually select so recovery
 	// matches the resolution order (preferred flag, then ATMOS_CONTAINER_RUNTIME,
 	// then Docker, then Podman). Reading the env here mirrors DetectRuntime above.
@@ -126,6 +135,13 @@ func DetectRuntimeWithPreferenceAndRecovery(ctx context.Context, preferred strin
 	}
 
 	return DetectRuntimeWithPreference(ctx, preferred)
+}
+
+// autoStartFromEnv reports whether the ATMOS_CONTAINER_RUNTIME_AUTO_START feature
+// flag is enabled. Mirrors the envContainerRuntime viper pattern above.
+func autoStartFromEnv() bool {
+	_ = viper.BindEnv(envContainerRuntimeAutoStart, envContainerRuntimeAutoStart)
+	return viper.GetBool(envContainerRuntimeAutoStart)
 }
 
 // isAvailable checks if a container runtime is available and running.

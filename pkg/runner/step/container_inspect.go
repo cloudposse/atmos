@@ -29,8 +29,8 @@ func (h *ContainerHandler) validateInspectAction(step *schema.WorkflowStep) erro
 	if err := h.ValidateRequired(step, "inspect.image", inspect.Image); err != nil {
 		return err
 	}
-	if !isValidContainerRuntime(inspect.Runtime) {
-		return invalidContainerField(step, "inspect.runtime", inspect.Runtime, "Runtime must be `docker`, `podman`, or empty for auto-detect")
+	if !isValidContainerRuntime(inspect.Provider) {
+		return invalidContainerField(step, "inspect.provider", inspect.Provider, "Provider must be `docker`, `podman`, or empty for auto-detect")
 	}
 	return nil
 }
@@ -47,7 +47,7 @@ func (h *ContainerHandler) executeInspect(ctx context.Context, step *schema.Work
 		return NewStepResult(image).WithMetadata(exitCodeMetadata, 0).WithMetadata("image", image), nil
 	}
 
-	runtime, err := container.DetectRuntimeWithPreferenceAndRecovery(ctx, strings.TrimSpace(inspect.Runtime), inspect.RuntimeAutoStart)
+	runtime, err := container.DetectRuntimeWithPreferenceAndRecovery(ctx, strings.TrimSpace(inspect.Provider), inspect.RuntimeAutoStart)
 	if err != nil {
 		return nil, err
 	}
@@ -76,8 +76,8 @@ func effectiveInspectStep(step *schema.WorkflowStep) schema.ContainerInspectStep
 	if inspect.Image == "" {
 		inspect.Image = step.Image
 	}
-	if inspect.Runtime == "" {
-		inspect.Runtime = step.Runtime
+	if inspect.Provider == "" {
+		inspect.Provider = step.Provider
 	}
 	inspect.RuntimeAutoStart = inspect.RuntimeAutoStart || step.RuntimeAutoStart
 	return inspect

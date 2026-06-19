@@ -41,7 +41,7 @@ func TestBuildContainerConfig(t *testing.T) {
 	}
 	cfg := &schema.WorkflowContainer{
 		Image:             "alpine:latest",
-		Runtime:           "podman",
+		Provider:          "podman",
 		Pull:              container.PullAlways,
 		Cleanup:           container.CleanupOnSuccess,
 		Workspace:         "/work",
@@ -75,7 +75,7 @@ func TestBuildContainerConfigValidationErrors(t *testing.T) {
 		cfg  *schema.WorkflowContainer
 	}{
 		{"missing image", &schema.WorkflowContainer{}},
-		{"bad runtime", &schema.WorkflowContainer{Image: "x", Runtime: "containerd"}},
+		{"bad runtime", &schema.WorkflowContainer{Image: "x", Provider: "containerd"}},
 		{"bad pull", &schema.WorkflowContainer{Image: "x", Pull: "sometimes"}},
 		{"bad cleanup", &schema.WorkflowContainer{Image: "x", Cleanup: "maybe"}},
 	}
@@ -98,11 +98,11 @@ func TestMergeWorkflowContainer_NilCases(t *testing.T) {
 
 func TestMergeWorkflowContainer_ScalarsCollectionsAndToggles(t *testing.T) {
 	base := &schema.WorkflowContainer{
-		Image:   "base",
-		Shell:   "/bin/sh",
-		Runtime: "docker",
-		Env:     map[string]string{"BASE": "1"},
-		Mounts:  []schema.ContainerMount{{Source: "/base"}},
+		Image:    "base",
+		Shell:    "/bin/sh",
+		Provider: "docker",
+		Env:      map[string]string{"BASE": "1"},
+		Mounts:   []schema.ContainerMount{{Source: "/base"}},
 	}
 	override := &schema.WorkflowContainer{
 		Image:             "override",
@@ -123,7 +123,7 @@ func TestMergeWorkflowContainer_ScalarsCollectionsAndToggles(t *testing.T) {
 	// Scalars: override wins where set, base kept otherwise.
 	assert.Equal(t, "override", merged.Image)
 	assert.Equal(t, "/bin/sh", merged.Shell) // base kept (override empty).
-	assert.Equal(t, "docker", merged.Runtime)
+	assert.Equal(t, "docker", merged.Provider)
 	assert.Equal(t, "root", merged.User)
 	assert.Equal(t, container.PullAlways, merged.Pull)
 	// Toggles OR together.

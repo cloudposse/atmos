@@ -119,7 +119,7 @@ type Task struct {
 	RuntimeAutoStart  bool                  `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
 	Image             string                `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`                                           // Container image to run.
 	Shell             string                `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                                           // Shell used to execute command in container.
-	Runtime           string                `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`                                     // docker, podman, or empty for auto-detect.
+	Provider          string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`                                  // docker, podman, or empty for auto-detect.
 	Pull              string                `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`                                              // missing, always, never.
 	Workspace         string                `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`                               // Container workspace path.
 	WorkspaceReadOnly bool                  `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"` // Mount workspace read-only.
@@ -284,7 +284,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		RuntimeAutoStart:  task.RuntimeAutoStart,
 		Image:             task.Image,
 		Shell:             task.Shell,
-		Runtime:           task.Runtime,
+		Provider:          task.Provider,
 		Pull:              task.Pull,
 		Workspace:         task.Workspace,
 		WorkspaceReadOnly: task.WorkspaceReadOnly,
@@ -392,7 +392,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		RuntimeAutoStart:  step.RuntimeAutoStart,
 		Image:             step.Image,
 		Shell:             step.Shell,
-		Runtime:           step.Runtime,
+		Provider:          step.Provider,
 		Pull:              step.Pull,
 		Workspace:         step.Workspace,
 		WorkspaceReadOnly: step.WorkspaceReadOnly,

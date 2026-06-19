@@ -143,11 +143,11 @@ func TestExecutor_Execute_ContainerStepUsesRegistry(t *testing.T) {
 	workflowDef := &schema.WorkflowDefinition{
 		Steps: []schema.WorkflowStep{
 			{
-				Name:    "container-step",
-				Type:    "container",
-				Image:   "alpine:latest",
-				Command: "echo hello",
-				Runtime: "docker",
+				Name:     "container-step",
+				Type:     "container",
+				Image:    "alpine:latest",
+				Command:  "echo hello",
+				Provider: "docker",
 			},
 		},
 	}

@@ -68,7 +68,7 @@ type ContainerBuildBakeStep struct {
 
 // ContainerBuildStep configures a container image build action.
 type ContainerBuildStep struct {
-	Runtime          string                  `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
+	Provider         string                  `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
 	RuntimeAutoStart bool                    `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
 	Engine           string                  `yaml:"engine,omitempty" json:"engine,omitempty" mapstructure:"engine"`
 	Context          string                  `yaml:"context,omitempty" json:"context,omitempty" mapstructure:"context"`
@@ -83,7 +83,7 @@ type ContainerBuildStep struct {
 
 // ContainerPushStep configures a container image push action.
 type ContainerPushStep struct {
-	Runtime          string   `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
+	Provider         string   `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
 	RuntimeAutoStart bool     `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
 	Image            string   `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`
 	Tags             []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
@@ -92,7 +92,7 @@ type ContainerPushStep struct {
 // ContainerInspectStep configures a container image inspect action that renders
 // curated image metadata.
 type ContainerInspectStep struct {
-	Runtime          string `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
+	Provider         string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
 	RuntimeAutoStart bool   `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
 	Image            string `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`
 }
@@ -102,7 +102,7 @@ type ContainerRunStep struct {
 	Image             string           `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`
 	Command           string           `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
 	Shell             string           `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`
-	Runtime           string           `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
+	Provider          string           `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
 	RuntimeAutoStart  bool             `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
 	Pull              string           `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`
 	Workspace         string           `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
@@ -120,7 +120,7 @@ type WorkflowContainer struct {
 	Enabled           *bool             `yaml:"-" json:"-" mapstructure:"-"`
 	Image             string            `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`
 	Shell             string            `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`
-	Runtime           string            `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
+	Provider          string            `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
 	RuntimeAutoStart  bool              `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
 	Pull              string            `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`
 	Workspace         string            `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
@@ -242,7 +242,7 @@ type WorkflowStep struct {
 	RuntimeAutoStart  bool                  `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
 	Image             string                `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`                                           // Container image to run.
 	Shell             string                `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                                           // Shell used to execute command in container.
-	Runtime           string                `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`                                     // docker, podman, or empty for auto-detect.
+	Provider          string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`                                  // docker, podman, or empty for auto-detect.
 	Pull              string                `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`                                              // missing, always, never.
 	Workspace         string                `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`                               // Container workspace path.
 	WorkspaceReadOnly bool                  `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"` // Mount workspace read-only.

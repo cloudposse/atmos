@@ -44,7 +44,7 @@ steps:
     type: container
     action: build
     build:
-      runtime: docker
+      provider: docker
       engine: buildx
       tags:
         - app:bake
@@ -59,25 +59,28 @@ steps:
   <dd>Container action: `build`, `push`, or `run`. When omitted, flat container fields are treated as backward-compatible `run` shorthand.</dd>
 
   <dt>`build`</dt>
-  <dd>Build action block. Supports `runtime`, `runtime_auto_start`, `engine`, `context`, `dockerfile`, `tags`, `build_args`, `target`, `no_cache`, `pull`, and optional Docker Buildx Bake configuration under `bake`.</dd>
+  <dd>Build action block. Supports `provider`, `runtime_auto_start`, `engine`, `context`, `dockerfile`, `tags`, `build_args`, `target`, `no_cache`, `pull`, and optional Docker Buildx Bake configuration under `bake`.</dd>
 
   <dt>`build.engine`</dt>
-  <dd>Optional build engine. `buildx` enables Docker Buildx commands and requires `runtime: docker` in V1.</dd>
+  <dd>Optional build engine. `buildx` enables Docker Buildx commands and requires `provider: docker` in V1.</dd>
 
   <dt>`build.bake`</dt>
-  <dd>Docker Buildx Bake configuration. Supports `file`, `files`, `target`, `targets`, `set`, `vars`, `load`, `push`, and `print`. Bake requires Docker Buildx in V1; `runtime: podman` is rejected for Bake builds.</dd>
+  <dd>Docker Buildx Bake configuration. Supports `file`, `files`, `target`, `targets`, `set`, `vars`, `load`, `push`, and `print`. Bake requires Docker Buildx in V1; `provider: podman` is rejected for Bake builds.</dd>
 
   <dt>`push`</dt>
-  <dd>Push action block. Supports `runtime`, `runtime_auto_start`, `image`, and optional `tags` to tag before pushing.</dd>
+  <dd>Push action block. Supports `provider`, `runtime_auto_start`, `image`, and optional `tags` to tag before pushing.</dd>
 
   <dt>`run`</dt>
-  <dd>Run action block. Supports `runtime`, `runtime_auto_start`, `image`, `command`, `shell`, `pull`, `workspace`, `workspace_read_only`, `cleanup`, `user`, `run_args`, `mounts`, and `ports`.</dd>
+  <dd>Run action block. Supports `provider`, `runtime_auto_start`, `image`, `command`, `shell`, `pull`, `workspace`, `workspace_read_only`, `cleanup`, `user`, `run_args`, `mounts`, and `ports`.</dd>
 
   <dt>`outputs`</dt>
   <dd>Declared outputs evaluated after the step succeeds. Use `{{ .steps.NAME.outputs.KEY }}` in later steps.</dd>
 
-  <dt>`runtime`</dt>
-  <dd>Optional runtime override: `docker` or `podman`. When omitted, Atmos auto-detects the runtime.</dd>
+  <dt>`provider`</dt>
+  <dd>Container runtime provider: `docker` or `podman`. When omitted, Atmos auto-detects the runtime (Docker, then Podman). Defaults globally from `container.runtime.provider`.</dd>
+
+  <dt>`runtime_auto_start`</dt>
+  <dd>When `true`, Atmos auto-initializes/starts the Podman machine if no running runtime is found. Defaults globally from `container.runtime.auto_start` (or the `ATMOS_CONTAINER_RUNTIME_AUTO_START` env var).</dd>
 
   <dt>`pull`</dt>
   <dd>Image pull policy: `missing` (default), `always`, or `never`.</dd>
@@ -165,7 +168,7 @@ steps:
     type: container
     action: build
     build:
-      runtime: docker
+      provider: docker
       engine: buildx
       bake:
         file: docker-bake.hcl

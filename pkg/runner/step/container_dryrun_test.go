@@ -81,7 +81,7 @@ func TestValidatePushAction(t *testing.T) {
 
 	// Bad runtime.
 	require.Error(t, h.validatePushAction(&schema.WorkflowStep{
-		Push: &schema.ContainerPushStep{Image: "app:local", Runtime: "containerd"},
+		Push: &schema.ContainerPushStep{Image: "app:local", Provider: "containerd"},
 	}))
 }
 

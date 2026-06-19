@@ -136,7 +136,7 @@ func buildContainerConfig(params *ContainerStepParams, cfg *schema.WorkflowConta
 	if strings.TrimSpace(cfg.Image) == "" {
 		return container.SandboxConfig{}, fmt.Errorf("%w: workflow container image is required", errUtils.ErrContainerRuntimeOperation)
 	}
-	if !validRuntime(cfg.Runtime) {
+	if !validRuntime(cfg.Provider) {
 		return container.SandboxConfig{}, fmt.Errorf("%w: workflow container runtime must be docker, podman, or empty", errUtils.ErrContainerRuntimeOperation)
 	}
 	if !validPull(cfg.Pull) {
@@ -147,7 +147,7 @@ func buildContainerConfig(params *ContainerStepParams, cfg *schema.WorkflowConta
 	}
 
 	containerCfg := container.NewWorkflowSandboxConfig(params.Workflow, params.WorkflowPath, hostWorkspace)
-	containerCfg.RuntimeName = cfg.Runtime
+	containerCfg.RuntimeName = cfg.Provider
 	containerCfg.RuntimeAutoStart = cfg.RuntimeAutoStart
 	containerCfg.Image = cfg.Image
 	containerCfg.WorkspaceFolder = defaultString(cfg.Workspace, "/workspace")
@@ -180,7 +180,7 @@ func (s *ContainerSession) ExecShell(ctx context.Context, params *ContainerStepP
 	env := mergeEnvSlices(envMapToSlice(s.config.Env), params.StepEnv)
 	cmd := []string{shell, "-lc", params.Command}
 	if s.backend.ID() == s.backend.Name() {
-		ui.Writef("%s exec %s %s\n", runtimePreviewName(s.config.Runtime), s.backend.Name(), strings.Join(cmd, " "))
+		ui.Writef("%s exec %s %s\n", runtimePreviewName(s.config.Provider), s.backend.Name(), strings.Join(cmd, " "))
 		return nil
 	}
 
@@ -234,10 +234,10 @@ func RunStepContainerOverride(ctx context.Context, params *ContainerStepParams) 
 	}
 	ephemeral := buildEphemeralStepConfig(params, cfg, absHostWorkspace)
 	if params.DryRun {
-		ui.Writeln(container.BuildEphemeralPreview(runtimePreviewName(cfg.Runtime), ephemeral))
+		ui.Writeln(container.BuildEphemeralPreview(runtimePreviewName(cfg.Provider), ephemeral))
 		return nil
 	}
-	runtime, err := container.DetectRuntimeWithPreferenceAndRecovery(ctx, cfg.Runtime, cfg.RuntimeAutoStart)
+	runtime, err := container.DetectRuntimeWithPreferenceAndRecovery(ctx, cfg.Provider, cfg.RuntimeAutoStart)
 	if err != nil {
 		return err
 	}
@@ -335,8 +335,8 @@ func mergeContainerScalars(merged, override *schema.WorkflowContainer) {
 	if override.Shell != "" {
 		merged.Shell = override.Shell
 	}
-	if override.Runtime != "" {
-		merged.Runtime = override.Runtime
+	if override.Provider != "" {
+		merged.Provider = override.Provider
 	}
 	if override.Pull != "" {
 		merged.Pull = override.Pull

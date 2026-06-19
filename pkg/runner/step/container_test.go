@@ -28,7 +28,7 @@ func TestContainerHandlerBuildConfig(t *testing.T) {
 		Image:            "{{ .steps.image.value }}",
 		Command:          "echo $FOO",
 		WorkingDirectory: tmpDir,
-		Runtime:          "docker",
+		Provider:         "docker",
 		Pull:             container.PullAlways,
 		Cleanup:          container.CleanupOnSuccess,
 		Env: map[string]string{
@@ -204,8 +204,8 @@ func TestContainerHandlerValidateActionBlocks(t *testing.T) {
 		Type:   "container",
 		Action: "build",
 		Build: &schema.ContainerBuildStep{
-			Runtime: "podman",
-			Engine:  "buildx",
+			Provider: "podman",
+			Engine:   "buildx",
 			Bake: &schema.ContainerBuildBakeStep{
 				File: "docker-bake.hcl",
 			},
@@ -224,7 +224,7 @@ func TestContainerHandlerValidateActionBlocks(t *testing.T) {
 		Type:   "container",
 		Action: "build",
 		Build: &schema.ContainerBuildStep{
-			Runtime: "docker",
+			Provider: "docker",
 			Bake: &schema.ContainerBuildBakeStep{
 				File: "docker-bake.hcl",
 			},

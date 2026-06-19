@@ -76,7 +76,7 @@ workflows:
         type: container
         action: build
         build:
-          runtime: docker
+          provider: docker
           engine: buildx
           tags:
             - atmos-container-step:bake

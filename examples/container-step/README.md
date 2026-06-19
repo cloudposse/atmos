@@ -2,6 +2,22 @@
 
 Build, push, and run containers from Atmos workflows and custom commands.
 
+## Container runtime
+
+Global container-runtime defaults live under the top-level `container:` namespace in
+`atmos.yaml`:
+
+```yaml
+container:
+  runtime:
+    provider: podman    # docker | podman (default: auto-detect docker, then podman)
+    auto_start: true    # auto-init/start the Podman machine when no running runtime is found
+```
+
+This example sets `auto_start: true` so it works out of the box on macOS/Linux. The same
+controls exist per step (`provider:`, `runtime_auto_start:`) and via the
+`ATMOS_CONTAINER_RUNTIME_AUTO_START` env var (which overrides config).
+
 ## Try It
 
 ```shell

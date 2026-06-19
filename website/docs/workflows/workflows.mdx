@@ -81,11 +81,11 @@ workflows:
   <dt>`container.image`</dt>
   <dd>Container image used for the workflow sandbox. Required when `container` is configured.</dd>
 
-  <dt>`container.runtime`</dt>
-  <dd>Optional runtime override: `docker` or `podman`. When omitted, Atmos auto-detects the runtime.</dd>
+  <dt>`container.provider`</dt>
+  <dd>Container runtime provider: `docker` or `podman`. When omitted, Atmos auto-detects the runtime (Docker, then Podman). Defaults globally from the top-level `container.runtime.provider`.</dd>
 
   <dt>`container.runtime_auto_start`</dt>
-  <dd>When supported, allow Atmos to attempt runtime recovery, such as starting a Podman machine.</dd>
+  <dd>When `true`, allow Atmos to attempt runtime recovery, such as starting a Podman machine. Defaults globally from the top-level `container.runtime.auto_start` setting (or the `ATMOS_CONTAINER_RUNTIME_AUTO_START` env var).</dd>
 
   <dt>`container.pull`</dt>
   <dd>Image pull policy: `missing` (default), `always`, or `never`.</dd>
