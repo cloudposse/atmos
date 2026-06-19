@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,6 +32,22 @@ const (
 	// EnvAWSProfile is the environment variable for AWS profile.
 	envAWSProfile = "AWS_PROFILE"
 )
+
+var testToolPathLocks sync.Map
+
+type cachedTestTool struct {
+	Repo    string
+	Version string
+	Binary  string
+}
+
+var cachedTestTools = []cachedTestTool{
+	{Repo: "opentofu/opentofu", Version: "1.12.2", Binary: "tofu"},
+	{Repo: "hashicorp/terraform", Version: "1.15.6", Binary: "terraform"},
+	{Repo: "hashicorp/packer", Version: "1.14.2", Binary: "packer"},
+	{Repo: "helmfile/helmfile", Version: "v1.1.0", Binary: "helmfile"},
+	{Repo: "helm/helm", Version: "v3.19.2", Binary: "helm"},
+}
 
 // ShouldCheckPreconditions returns true if precondition checks should be performed.
 // Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to bypass all precondition checks.
@@ -328,9 +346,50 @@ func RequireExecutable(t *testing.T, name string, purpose string) {
 
 	_, err := exec.LookPath(name)
 	if err != nil {
+		prependCachedTestTool(name)
+	}
+
+	_, err = exec.LookPath(name)
+	if err != nil {
 		t.Skipf("'%s' not found in PATH: required for %s. Install the tool or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
 			name, purpose)
 	}
+}
+
+func prependCachedTestTool(binary string) {
+	tool, ok := cachedTestToolForBinary(binary)
+	if !ok {
+		return
+	}
+
+	lockValue, _ := testToolPathLocks.LoadOrStore(binary, &sync.Once{})
+	lockValue.(*sync.Once).Do(func() {
+		cacheDir, err := os.UserCacheDir()
+		if err != nil {
+			return
+		}
+		binDir := filepath.Join(cacheDir, "atmos", "test-toolchain", "bin", filepath.FromSlash(tool.Repo), tool.Version)
+		binaryPath := filepath.Join(binDir, tool.Binary)
+		if _, err := os.Stat(binaryPath); err != nil {
+			return
+		}
+
+		path := os.Getenv("PATH")
+		if path == "" {
+			os.Setenv("PATH", binDir)
+			return
+		}
+		os.Setenv("PATH", binDir+string(os.PathListSeparator)+path)
+	})
+}
+
+func cachedTestToolForBinary(binary string) (cachedTestTool, bool) {
+	for _, tool := range cachedTestTools {
+		if tool.Binary == binary {
+			return tool, true
+		}
+	}
+	return cachedTestTool{}, false
 }
 
 // RequireEnvVar checks if an environment variable is set.

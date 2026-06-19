@@ -497,6 +497,77 @@ func TestConfigureWriter(t *testing.T) {
 	}
 }
 
+func TestColorWriterConfigurationBranches(t *testing.T) {
+	t.Run("debug info prints without panic", func(t *testing.T) {
+		var buf bytes.Buffer
+		profileDetector := colorprofile.NewWriter(&buf, os.Environ())
+		profileDetector.Profile = colorprofile.ANSI
+
+		printColorDebugInfo(profileDetector, colorConfig{
+			forceColor:         true,
+			explicitlyDisabled: false,
+			debugColors:        true,
+		})
+	})
+
+	t.Run("disabled writer uses ascii profile", func(t *testing.T) {
+		var buf bytes.Buffer
+		w, profile, renderer := configureDisabledColorWriter(&buf, true)
+
+		if w == nil {
+			t.Fatal("expected writer")
+		}
+		if profile != colorprofile.Ascii {
+			t.Fatalf("expected ascii profile, got %v", profile)
+		}
+		if renderer == nil {
+			t.Fatal("expected renderer")
+		}
+	})
+
+	t.Run("forced writer uses ansi256 profile", func(t *testing.T) {
+		var buf bytes.Buffer
+		w, profile, renderer := configureForcedColorWriter(&buf, true)
+
+		if w == nil {
+			t.Fatal("expected writer")
+		}
+		if profile != colorprofile.ANSI256 {
+			t.Fatalf("expected ANSI256 profile, got %v", profile)
+		}
+		if renderer == nil {
+			t.Fatal("expected renderer")
+		}
+	})
+
+	tests := []struct {
+		name     string
+		detected colorprofile.Profile
+	}{
+		{name: "true color", detected: colorprofile.TrueColor},
+		{name: "ansi256", detected: colorprofile.ANSI256},
+		{name: "ansi", detected: colorprofile.ANSI},
+		{name: "ascii", detected: colorprofile.Ascii},
+	}
+
+	for _, tt := range tests {
+		t.Run("auto detect "+tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			w, profile, renderer := configureAutoDetectColorWriter(&buf, tt.detected, true)
+
+			if w == nil {
+				t.Fatal("expected writer")
+			}
+			if profile != tt.detected {
+				t.Fatalf("expected detected profile %v, got %v", tt.detected, profile)
+			}
+			if renderer == nil {
+				t.Fatal("expected renderer")
+			}
+		})
+	}
+}
+
 func TestCreateHelpStyles(t *testing.T) {
 	t.Run("creates non-nil styles", func(t *testing.T) {
 		renderer := lipgloss.NewRenderer(os.Stdout)

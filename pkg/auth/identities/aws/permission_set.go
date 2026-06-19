@@ -341,6 +341,7 @@ func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, params *ty
 		IdentityName: params.IdentityName,
 		Credentials:  params.Credentials,
 		BasePath:     "",
+		Manager:      params.Manager,
 		Realm:        params.Realm,
 	}); err != nil {
 		return fmt.Errorf("%w: failed to set auth context: %w", errUtils.ErrAwsAuth, err)

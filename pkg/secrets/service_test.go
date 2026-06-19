@@ -48,6 +48,43 @@ func TestService_SetGetDelete(t *testing.T) {
 	assert.Equal(t, "v1", got)
 }
 
+func TestService_StoreReferenceOverridesSecretName(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := store.NewMockStore(ctrl)
+	mockStore.EXPECT().
+		Set("prod", "api", "op://{{ .atmos_stack }}/{{ .atmos_component }}/password", "v1").
+		Return(nil)
+	mockStore.EXPECT().
+		Get("prod", "api", "op://{{ .atmos_stack }}/{{ .atmos_component }}/password").
+		Return("v1", nil)
+
+	cfg := &schema.AtmosConfiguration{
+		StoresConfig: store.StoresConfig{
+			"op": store.StoreConfig{Type: "onepassword", Secret: true},
+		},
+		Stores: store.StoreRegistry{"op": mockStore},
+	}
+	section := map[string]any{
+		"secrets": map[string]any{
+			"vars": map[string]any{
+				"DB_PASSWORD": map[string]any{
+					"store":     "op",
+					"reference": "op://{{ .atmos_stack }}/{{ .atmos_component }}/password",
+				},
+			},
+		},
+	}
+	svc := NewService(cfg, "prod", "api", section)
+
+	require.NoError(t, svc.Set("DB_PASSWORD", "v1"))
+
+	got, err := svc.Get("DB_PASSWORD", ResolveOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "v1", got)
+}
+
 func TestService_Set_Undeclared(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

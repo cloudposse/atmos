@@ -62,10 +62,6 @@ func runSecretSet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := guardInstanceOverride(svc, scope, target.name); err != nil {
-		return err
-	}
-
 	if err := svc.Set(target.name, resolvedValue); err != nil {
 		return err
 	}
@@ -131,24 +127,6 @@ func declaredNames(svc secretService) []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// guardInstanceOverride rejects setting an instance-level value for a secret that is stack-scoped
-// at the targeted component. An instance may only carry its own value if it declares the secret
-// under the component (which pulls it to instance scope); otherwise the write would silently shadow
-// the shared stack value, so it is a hard error. Secrets that are already instance-scoped, or whose
-// scope can't be resolved (let the backend decide), pass through.
-func guardInstanceOverride(svc secretService, scope secretScope, name string) error {
-	if scope.Component == "" {
-		return nil
-	}
-	if sc, ok := svc.ScopeOf(name); ok && sc == secrets.ScopeStack {
-		return errUtils.Build(secrets.ErrSecretNotOverridable).
-			WithExplanationf("secret %q is stack-scoped in stack %q; component %q has not declared it as an instance override", name, scope.Stack, scope.Component).
-			WithHintf("declare %q under component %q's `secrets.vars` to override it at instance scope, or omit --component to set the shared stack value", name, scope.Component).
-			Err()
-	}
-	return nil
 }
 
 // resolveSetValue determines the secret value from the inline value, stdin, or a prompt.

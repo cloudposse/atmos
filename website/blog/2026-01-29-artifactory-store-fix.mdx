@@ -23,9 +23,9 @@ This is now fixed. Retrieving values from Artifactory works correctly regardless
 
 The store documentation had several issues that could cause confusion:
 
-- **Wrong field names**: Examples showed `backend` and `config` instead of the correct `type` and `options`
-- **Wrong store type names**: Examples showed `aws/ssm` instead of the correct `aws-ssm-parameter-store`
-- **Non-existent backends**: Vault and AWS Secrets Manager were documented but aren't actually implemented
+- **Wrong field names**: Examples showed `backend` and `config` instead of the correct `kind` and `options`
+- **Wrong store selectors**: Examples mixed old `type` names with the newer slash-style `kind` names
+- **Non-existent backends**: Vault was documented before it was implemented
 - **Missing backends**: Azure Key Vault and Google Secret Manager were implemented but not documented
 - **Artifactory setup**: Added guidance on using Generic repository type in JFrog Artifactory
 

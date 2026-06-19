@@ -209,7 +209,7 @@ func (s *VaultStore) GetKey(key string) (any, error) {
 func (s *VaultStore) getByPath(path string) (any, error) {
 	data, err := s.client.Get(context.TODO(), path)
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormatWithID, ErrVaultRead, path, err)
+		return nil, fmt.Errorf("%w '%s': %w", ErrVaultRead, path, err)
 	}
 	if data == nil {
 		return nil, fmt.Errorf("%w '%s'", ErrVaultEmptyData, path)
@@ -257,6 +257,9 @@ func (s *VaultStore) Has(stack string, component string, key string) (bool, erro
 
 // isVaultNotFound reports whether the error chain indicates a missing Vault secret (404).
 func isVaultNotFound(err error) bool {
+	if errors.Is(err, vault.ErrSecretNotFound) {
+		return true
+	}
 	var respErr *vault.ResponseError
 	if errors.As(err, &respErr) {
 		return respErr.StatusCode == vaultHTTPNotFound
