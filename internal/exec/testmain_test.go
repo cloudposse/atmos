@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -32,6 +33,22 @@ func TestMain(m *testing.M) {
 	// this env var causes it to exit 1 immediately, simulating a failed workspace
 	// command without requiring the POSIX "false" command.
 	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {
+		os.Exit(1)
+	}
+
+	// Fake "atmos" command: workflow/custom-command steps of type "atmos" resolve the
+	// binary via os.Executable(), which in tests is THIS test binary. Without this
+	// short-circuit the spawned process would fall through to m.Run() and re-run the
+	// whole internal/exec suite, which spawns more "atmos" subprocesses — a recursive
+	// fork-bomb that hangs the coverage run (`go test -coverpkg=./...`). The Go test
+	// runner always passes "-test.*" flags, so a positional first argument identifies a
+	// subprocess command invocation. Mirrors pkg/runner and pkg/runner/step TestMains.
+	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
+		// Minimal atmos semantics for workflow tests: `version` succeeds, anything else
+		// (e.g. `invalid-command`, `terraform plan ...` against a missing stack) fails.
+		if os.Args[1] == "version" {
+			os.Exit(0)
+		}
 		os.Exit(1)
 	}
 
