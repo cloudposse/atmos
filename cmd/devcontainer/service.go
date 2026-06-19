@@ -19,16 +19,6 @@ type Service struct {
 	logOutput   io.Writer // Writer for log output (defaults to os.Stdout).
 }
 
-// NewService creates a service with default providers.
-func NewService() *Service {
-	return &Service{
-		config:    &DefaultConfigProvider{},
-		runtime:   NewDockerRuntimeProvider(),
-		ui:        &DefaultUIProvider{},
-		logOutput: os.Stdout,
-	}
-}
-
 // NewTestableService creates a Service configured with the provided config, runtime, and UI providers for use in tests.
 func NewTestableService(
 	config ConfigProvider,
@@ -55,14 +45,6 @@ func NewTestableServiceWithLogOutput(
 		runtime:   runtime,
 		ui:        ui,
 		logOutput: logOutput,
-	}
-}
-
-// SetLogOutput sets the writer for log output.
-// This allows tests and alternative frontends to capture or redirect log output.
-func (s *Service) SetLogOutput(w io.Writer) {
-	if w != nil {
-		s.logOutput = w
 	}
 }
 

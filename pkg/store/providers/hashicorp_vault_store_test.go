@@ -2,7 +2,11 @@ package providers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	vault "github.com/hashicorp/vault/api"
@@ -81,6 +85,110 @@ func TestVaultStore_SetGetDeleteHas(t *testing.T) {
 	has, err = s.Has("prod", "api", "API_KEY")
 	require.NoError(t, err)
 	assert.False(t, has)
+}
+
+func TestVaultStore_HTTPKVv2Integration(t *testing.T) {
+	data := map[string]map[string]any{}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/secret/data/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/v1/secret/data/")
+		switch r.Method {
+		case http.MethodPut, http.MethodPost:
+			var body struct {
+				Data map[string]any `json:"data"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				writeVaultJSON(w, http.StatusBadRequest, map[string]any{"errors": []string{"invalid json"}})
+				return
+			}
+			data[path] = body.Data
+			writeVaultJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"version": 1}})
+		case http.MethodGet:
+			value, ok := data[path]
+			if !ok {
+				writeVaultJSON(w, http.StatusNotFound, map[string]any{"errors": []string{"missing secret"}})
+				return
+			}
+			writeVaultJSON(w, http.StatusOK, map[string]any{
+				"data": map[string]any{
+					"data":     value,
+					"metadata": map[string]any{"version": 1},
+				},
+			})
+		case http.MethodDelete:
+			delete(data, path)
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	t.Setenv("VAULT_ADDR", "")
+	t.Setenv("VAULT_TOKEN", "")
+
+	prefix := "atmos"
+	delim := "-"
+	raw, err := NewVaultStore(&VaultStoreOptions{
+		Address:        srv.URL,
+		Token:          "test-token",
+		Mount:          "secret",
+		Prefix:         &prefix,
+		StackDelimiter: &delim,
+	}, "")
+	require.NoError(t, err)
+	s := raw.(*VaultStore)
+
+	require.NoError(t, s.Set("plat-prod", "api", "API_KEY", "secret-value"))
+	assert.Equal(t, map[string]any{vaultValueKey: "secret-value"}, data["atmos/plat/prod/api/API_KEY"])
+
+	got, err := s.Get("plat-prod", "api", "API_KEY")
+	require.NoError(t, err)
+	assert.Equal(t, "secret-value", got)
+
+	data["atmos/shared/token"] = map[string]any{vaultValueKey: "shared-token"}
+	got, err = s.GetKey("shared/token")
+	require.NoError(t, err)
+	assert.Equal(t, "shared-token", got)
+
+	has, err := s.Has("plat-prod", "api", "API_KEY")
+	require.NoError(t, err)
+	assert.True(t, has)
+
+	require.NoError(t, s.Delete("plat-prod", "api", "API_KEY"))
+	_, ok := data["atmos/plat/prod/api/API_KEY"]
+	assert.False(t, ok)
+
+	has, err = s.Has("plat-prod", "api", "API_KEY")
+	require.NoError(t, err)
+	assert.False(t, has)
+}
+
+func TestVaultStore_HTTPKVv2Integration_ServerErrorWrapped(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/secret/data/prod/api/API_KEY", func(w http.ResponseWriter, _ *http.Request) {
+		writeVaultJSON(w, http.StatusInternalServerError, map[string]any{"errors": []string{"boom"}})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	t.Setenv("VAULT_ADDR", "")
+	t.Setenv("VAULT_TOKEN", "")
+
+	raw, err := NewVaultStore(&VaultStoreOptions{Address: srv.URL, Token: "test-token", Mount: "secret"}, "")
+	require.NoError(t, err)
+
+	_, err = raw.Get("prod", "api", "API_KEY")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, store.ErrVaultRead)
+}
+
+func writeVaultJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func TestVaultStore_Set_Validation(t *testing.T) {
@@ -192,7 +300,7 @@ func TestVaultStore_Delete_ErrorWrapped(t *testing.T) {
 }
 
 func TestVaultStore_Has_EmptyDataMapsToFalse(t *testing.T) {
-	// The common "not found" path: Get returns ErrVaultEmptyData for a missing path, which Has
+	// The common "not found" path: Get returns store.ErrVaultEmptyData for a missing path, which Has
 	// treats as absence.
 	s := newTestVaultStore(newFakeVaultKV())
 
@@ -221,6 +329,7 @@ func TestVaultStore_SetAuthContext(t *testing.T) {
 }
 
 func TestIsVaultNotFound(t *testing.T) {
+	assert.True(t, isVaultNotFound(vault.ErrSecretNotFound))
 	assert.True(t, isVaultNotFound(&vault.ResponseError{StatusCode: vaultHTTPNotFound}))
 	assert.False(t, isVaultNotFound(&vault.ResponseError{StatusCode: 500}))
 	assert.False(t, isVaultNotFound(errors.New("plain error")))

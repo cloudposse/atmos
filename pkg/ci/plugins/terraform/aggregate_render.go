@@ -154,21 +154,6 @@ func writeAggregateGroup(b *strings.Builder, label string, components []terrafor
 	b.WriteString(markdownTableRowEnd)
 }
 
-// writeAggregateDetails renders collapsible output sections for selected components.
-func writeAggregateDetails(b *strings.Builder, title string, components []terraformPlanAggregateComponent, include func(*terraformPlanAggregateComponent) bool) {
-	selected := selectedAggregateComponents(components, include)
-	if len(selected) == 0 {
-		return
-	}
-
-	b.WriteString("\n### ")
-	b.WriteString(title)
-	b.WriteString(markdownLineBreak)
-	for _, component := range selected {
-		writeAggregateDetail(b, component)
-	}
-}
-
 // writeAggregateDetailsWithinLimit renders detail sections without exceeding
 // the GitHub Actions 1 MB step-summary limit. Overview tables are preserved
 // first; verbose Terraform output details are omitted when the budget is tight.

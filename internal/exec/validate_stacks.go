@@ -363,7 +363,7 @@ func createComponentStackMap(
 
 					// Find Atmos stack name
 					if atmosConfig.Stacks.NameTemplate != "" {
-						stackName, err = ProcessTmpl(atmosConfig, "validate-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+						stackName, err = ProcessTmpl(atmosConfig, "validate-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 						if err != nil {
 							return nil, err
 						}

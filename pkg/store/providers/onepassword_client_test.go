@@ -115,6 +115,7 @@ func TestConnectClient_Resolve(t *testing.T) {
 	fake := newFakeConnectClient()
 	fake.items[fake.key("Datadog", "Shared")] = itemWith(
 		&connectop.ItemField{Label: "api_key", Value: "dd-key"},
+		&connectop.ItemField{ID: "field-id", Label: "other", Value: "by-id"},
 	)
 	c := newTestConnectClient(fake)
 
@@ -122,6 +123,12 @@ func TestConnectClient_Resolve(t *testing.T) {
 		got, err := c.Resolve(context.Background(), "op://Shared/Datadog/api_key")
 		require.NoError(t, err)
 		assert.Equal(t, "dd-key", got)
+	})
+
+	t.Run("found by field ID", func(t *testing.T) {
+		got, err := c.Resolve(context.Background(), "op://Shared/Datadog/field-id")
+		require.NoError(t, err)
+		assert.Equal(t, "by-id", got)
 	})
 
 	t.Run("field absent returns not found", func(t *testing.T) {

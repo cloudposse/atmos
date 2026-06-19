@@ -25,6 +25,7 @@ type SSMStore struct {
 	awsConfig      *aws.Config
 	readRoleArn    *string
 	writeRoleArn   *string
+	endpoint       string
 	newSTSClient   func(cfg aws.Config) STSClient
 	newSSMClient   func(cfg aws.Config) SSMClient
 
@@ -46,6 +47,8 @@ type SSMStoreOptions struct {
 	StackDelimiter *string `mapstructure:"stack_delimiter"`
 	ReadRoleArn    *string `mapstructure:"read_role_arn"`
 	WriteRoleArn   *string `mapstructure:"write_role_arn"`
+	Endpoint       *string `mapstructure:"endpoint"`
+	EndpointURL    *string `mapstructure:"endpoint_url"`
 }
 
 // Ensure SSMStore implements the store.Store and related interfaces.
@@ -70,7 +73,8 @@ type STSClient interface {
 }
 
 // NewSSMStore initializes a new SSMStore.
-// If identityName is non-empty, client initialization is deferred until first use (lazy init).
+// Client initialization is deferred until first use so callers can inject an auth resolver
+// after config load and before the first backend operation.
 func NewSSMStore(options SSMStoreOptions, identityName string) (store.Store, error) {
 	if options.Region == "" {
 		return nil, store.ErrRegionRequired
@@ -79,6 +83,7 @@ func NewSSMStore(options SSMStoreOptions, identityName string) (store.Store, err
 	store := &SSMStore{
 		region:       options.Region,
 		identityName: identityName,
+		endpoint:     firstNonEmptyStringPtr(options.Endpoint, options.EndpointURL),
 		newSTSClient: func(cfg aws.Config) STSClient {
 			return sts.NewFromConfig(cfg)
 		},
@@ -102,13 +107,6 @@ func NewSSMStore(options SSMStoreOptions, identityName string) (store.Store, err
 	}
 	if options.WriteRoleArn != nil {
 		store.writeRoleArn = options.WriteRoleArn
-	}
-
-	// If no identity is configured, initialize the client eagerly (backward compatible behavior).
-	if identityName == "" {
-		if err := store.initDefaultClient(); err != nil {
-			return nil, err
-		}
 	}
 
 	return store, nil
@@ -148,12 +146,15 @@ func (s *SSMStore) paramType() types.ParameterType {
 // initDefaultClient initializes the AWS client using the default credential chain.
 func (s *SSMStore) initDefaultClient() error {
 	ctx := context.TODO()
-	awsConfig, err := config.LoadDefaultConfig(ctx)
+	cfgOpts := []func(*config.LoadOptions) error{config.WithRegion(s.region)}
+	if s.endpoint != "" {
+		cfgOpts = append(cfgOpts, config.WithBaseEndpoint(s.endpoint))
+	}
+	awsConfig, err := config.LoadDefaultConfig(ctx, cfgOpts...)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, store.ErrLoadAWSConfig, err)
 	}
 
-	awsConfig.Region = s.region
 	s.awsConfig = &awsConfig
 	s.client = ssm.NewFromConfig(awsConfig)
 
@@ -206,6 +207,13 @@ func (s *SSMStore) buildAuthConfigOpts(authContext *store.AWSAuthConfig) []func(
 	}
 	if region != "" {
 		cfgOpts = append(cfgOpts, config.WithRegion(region))
+	}
+	endpoint := s.endpoint
+	if endpoint == "" {
+		endpoint = authContext.EndpointURL
+	}
+	if endpoint != "" {
+		cfgOpts = append(cfgOpts, config.WithBaseEndpoint(endpoint))
 	}
 
 	return cfgOpts

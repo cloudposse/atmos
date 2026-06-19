@@ -1,0 +1,27 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+
+stores:
+  secrets/azure:
+    kind: azure/keyvault
+    secret: true
+    options:
+      endpoint: !env FLOCI_AZURE_KEYVAULT_ENDPOINT
+      prefix: !env FLOCI_AZURE_SECRETS_PREFIX
+      endpoint_insecure: true
+      without_authentication: true
+      disable_challenge_resource_verification: true
+
+logs:
+  file: /dev/stderr
+  level: Info

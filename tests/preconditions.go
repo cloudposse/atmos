@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,6 +32,22 @@ const (
 	// EnvAWSProfile is the environment variable for AWS profile.
 	envAWSProfile = "AWS_PROFILE"
 )
+
+var testToolPathLocks sync.Map
+
+type cachedTestTool struct {
+	Repo    string
+	Version string
+	Binary  string
+}
+
+var cachedTestTools = []cachedTestTool{
+	{Repo: "opentofu/opentofu", Version: "1.12.2", Binary: "tofu"},
+	{Repo: "hashicorp/terraform", Version: "1.15.6", Binary: "terraform"},
+	{Repo: "hashicorp/packer", Version: "1.14.2", Binary: "packer"},
+	{Repo: "helmfile/helmfile", Version: "v1.1.0", Binary: "helmfile"},
+	{Repo: "helm/helm", Version: "v3.19.2", Binary: "helm"},
+}
 
 // ShouldCheckPreconditions returns true if precondition checks should be performed.
 // Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to bypass all precondition checks.
@@ -328,9 +346,50 @@ func RequireExecutable(t *testing.T, name string, purpose string) {
 
 	_, err := exec.LookPath(name)
 	if err != nil {
+		prependCachedTestTool(name)
+	}
+
+	_, err = exec.LookPath(name)
+	if err != nil {
 		t.Skipf("'%s' not found in PATH: required for %s. Install the tool or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
 			name, purpose)
 	}
+}
+
+func prependCachedTestTool(binary string) {
+	tool, ok := cachedTestToolForBinary(binary)
+	if !ok {
+		return
+	}
+
+	lockValue, _ := testToolPathLocks.LoadOrStore(binary, &sync.Once{})
+	lockValue.(*sync.Once).Do(func() {
+		cacheDir, err := os.UserCacheDir()
+		if err != nil {
+			return
+		}
+		binDir := filepath.Join(cacheDir, "atmos", "test-toolchain", "bin", filepath.FromSlash(tool.Repo), tool.Version)
+		binaryPath := filepath.Join(binDir, tool.Binary)
+		if _, err := os.Stat(binaryPath); err != nil {
+			return
+		}
+
+		path := os.Getenv("PATH")
+		if path == "" {
+			os.Setenv("PATH", binDir)
+			return
+		}
+		os.Setenv("PATH", binDir+string(os.PathListSeparator)+path)
+	})
+}
+
+func cachedTestToolForBinary(binary string) (cachedTestTool, bool) {
+	for _, tool := range cachedTestTools {
+		if tool.Binary == binary {
+			return tool, true
+		}
+	}
+	return cachedTestTool{}, false
 }
 
 // RequireEnvVar checks if an environment variable is set.
@@ -515,84 +574,4 @@ func SkipOnDarwinARM64(t *testing.T, reason string) {
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
 		t.Skipf("Skipping on darwin/arm64: %s. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to override", reason)
 	}
-}
-
-const (
-	// Container runtime names.
-	containerRuntimeDocker = "docker"
-	containerRuntimePodman = "podman"
-)
-
-// RequireContainerRuntime checks if a container runtime (Docker or Podman) is available.
-// It prefers Docker but will accept Podman if Docker is not available.
-// Returns the name of the available runtime ("docker" or "podman").
-func RequireContainerRuntime(t *testing.T) string {
-	t.Helper()
-
-	if !ShouldCheckPreconditions() {
-		return containerRuntimeDocker // Default assumption when checks are disabled
-	}
-
-	// Try Docker first
-	if cmd := exec.Command(containerRuntimeDocker, "version"); cmd.Run() == nil {
-		t.Logf("Container runtime available: Docker")
-		return containerRuntimeDocker
-	}
-
-	// Try Podman as fallback
-	if cmd := exec.Command(containerRuntimePodman, "version"); cmd.Run() == nil {
-		t.Logf("Container runtime available: Podman")
-		return containerRuntimePodman
-	}
-
-	t.Skipf("No container runtime available. Install Docker (https://docs.docker.com/get-docker/) or Podman (https://podman.io/getting-started/installation), or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
-	return ""
-}
-
-// RequireDocker checks if Docker is available and running.
-// Use this for tests that specifically require Docker (not Podman).
-func RequireDocker(t *testing.T) {
-	t.Helper()
-
-	if !ShouldCheckPreconditions() {
-		return
-	}
-
-	// Check if docker command exists
-	_, err := exec.LookPath(containerRuntimeDocker)
-	if err != nil {
-		t.Skipf("Docker not found in PATH. Install Docker (https://docs.docker.com/get-docker/) or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
-	}
-
-	// Check if Docker daemon is running
-	cmd := exec.Command(containerRuntimeDocker, "info")
-	if err := cmd.Run(); err != nil {
-		t.Skipf("Docker daemon not running. Start Docker or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
-	}
-
-	t.Logf("Docker is available and running")
-}
-
-// RequirePodman checks if Podman is available and running.
-// Use this for tests that specifically require Podman (not Docker).
-func RequirePodman(t *testing.T) {
-	t.Helper()
-
-	if !ShouldCheckPreconditions() {
-		return
-	}
-
-	// Check if podman command exists
-	_, err := exec.LookPath(containerRuntimePodman)
-	if err != nil {
-		t.Skipf("Podman not found in PATH. Install Podman (https://podman.io/getting-started/installation) or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
-	}
-
-	// Check if Podman is working
-	cmd := exec.Command(containerRuntimePodman, "info")
-	if err := cmd.Run(); err != nil {
-		t.Skipf("Podman not working properly. Check Podman installation or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
-	}
-
-	t.Logf("Podman is available and working")
 }

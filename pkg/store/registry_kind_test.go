@@ -12,6 +12,7 @@ func TestMapLegacyType(t *testing.T) {
 		"aws-secrets-manager":     KindAWSASM,
 		"hashicorp-vault":         KindHashicorpVault,
 		"azure-key-vault":         KindAzureKeyVault,
+		"google/secretmanager":    KindGCPSecret,
 		"google-secret-manager":   KindGCPSecret,
 		"gsm":                     KindGCPSecret,
 		"redis":                   KindRedis,
@@ -43,11 +44,16 @@ func TestApplySecretDefaults_OnePasswordImpliesSecret(t *testing.T) {
 	cfg := StoresConfig{
 		// 1Password without explicit `secret:` must become a secret store.
 		"op": StoreConfig{Type: "onepassword"},
+		// Local/CI secret backends are also secret-by-default.
+		"keychain": StoreConfig{Type: "keyring"},
+		"github":   StoreConfig{Kind: "github/actions"},
 		// An explicit secret:false on a non-secret-by-default kind is left untouched.
 		"ssm": StoreConfig{Type: "aws-ssm-parameter-store"},
 	}
 	ApplySecretDefaults(cfg)
 	assert.True(t, cfg["op"].Secret, "1Password store should default to secret: true")
+	assert.True(t, cfg["keychain"].Secret, "Keychain store should default to secret: true")
+	assert.True(t, cfg["github"].Secret, "GitHub Actions store should default to secret: true")
 	assert.False(t, cfg["ssm"].Secret, "SSM store should not be forced secret")
 }
 

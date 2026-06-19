@@ -7,8 +7,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/schema"
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 )
 
 // writeMinimalAtmosProject writes a self-contained Atmos project (config + one stack + one
@@ -77,6 +81,28 @@ func TestLoadService_InitConfigError(t *testing.T) {
 	_, err := loadService(secretScope{Stack: "dev", Component: "vpc"})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
+}
+
+func TestInjectSecretStoreAuthResolver_ResolverOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	mockStore := storepkg.NewMockIdentityAwareStore(ctrl)
+
+	authManager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{})
+	mockStore.EXPECT().
+		SetAuthContext(gomock.Not(nil), "").
+		Do(func(resolver storepkg.AuthContextResolver, identityName string) {
+			assert.NotNil(t, resolver)
+			assert.Empty(t, identityName)
+		})
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Stores: storepkg.StoreRegistry{
+			"explicit-identity-store": mockStore,
+		},
+	}
+
+	injectSecretStoreAuthResolver(atmosConfig, authManager)
 }
 
 func TestLoadServiceAndConfig_ComponentNotFound(t *testing.T) {

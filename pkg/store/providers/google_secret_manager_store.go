@@ -36,12 +36,15 @@ type GSMClient interface {
 
 // GSMStore is an implementation of the store.Store interface for Google Secret Manager.
 type GSMStore struct {
-	client         GSMClient
-	projectID      string
-	prefix         string
-	stackDelimiter *string
-	replication    *secretmanagerpb.Replication
-	credentials    *string // store.Store-level credentials (from options).
+	client                GSMClient
+	projectID             string
+	prefix                string
+	stackDelimiter        *string
+	replication           *secretmanagerpb.Replication
+	credentials           *string // Store-level credentials (from options).
+	endpoint              string
+	endpointInsecure      bool
+	withoutAuthentication bool
 
 	// Identity-based authentication fields.
 	identityName string
@@ -52,11 +55,15 @@ type GSMStore struct {
 
 // GSMStoreOptions defines the configuration options for Google Secret Manager store.
 type GSMStoreOptions struct {
-	Prefix         *string   `mapstructure:"prefix"`
-	ProjectID      string    `mapstructure:"project_id"`
-	StackDelimiter *string   `mapstructure:"stack_delimiter"`
-	Credentials    *string   `mapstructure:"credentials"` // Optional JSON credentials
-	Locations      *[]string `mapstructure:"locations"`   // Optional replication locations
+	Prefix                *string   `mapstructure:"prefix"`
+	ProjectID             string    `mapstructure:"project_id"`
+	StackDelimiter        *string   `mapstructure:"stack_delimiter"`
+	Credentials           *string   `mapstructure:"credentials"` // Optional JSON credentials
+	Locations             *[]string `mapstructure:"locations"`   // Optional replication locations
+	Endpoint              *string   `mapstructure:"endpoint"`
+	EndpointURL           *string   `mapstructure:"endpoint_url"`
+	EndpointInsecure      bool      `mapstructure:"endpoint_insecure"`
+	WithoutAuthentication bool      `mapstructure:"without_authentication"`
 }
 
 // Verify that GSMStore implements the store.Store, store.IdentityAwareStore,
@@ -78,9 +85,12 @@ func NewGSMStore(options GSMStoreOptions, identityName string) (store.Store, err
 	}
 
 	store := &GSMStore{
-		projectID:    options.ProjectID,
-		credentials:  options.Credentials,
-		identityName: identityName,
+		projectID:             options.ProjectID,
+		credentials:           options.Credentials,
+		endpoint:              firstNonEmptyStringPtr(options.Endpoint, options.EndpointURL),
+		endpointInsecure:      options.EndpointInsecure,
+		withoutAuthentication: options.WithoutAuthentication,
+		identityName:          identityName,
 	}
 
 	if options.Prefix != nil {
@@ -125,9 +135,7 @@ func (s *GSMStore) IdentityName() string {
 func (s *GSMStore) initDefaultClient() error {
 	ctx := context.Background()
 
-	clientOpts := gcp.GetClientOptions(gcp.AuthOptions{
-		Credentials: gcp.GetCredentialsFromStore(s.credentials),
-	})
+	clientOpts := gcp.GetClientOptions(s.defaultAuthOptions())
 
 	client, err := secretmanager.NewClient(ctx, clientOpts...)
 	if err != nil {
@@ -174,9 +182,7 @@ func (s *GSMStore) initIdentityClient() error {
 }
 
 func (s *GSMStore) identityAuthOptions(authContext *store.GCPAuthConfig) gcp.AuthOptions {
-	opts := gcp.AuthOptions{
-		Credentials: gcp.GetCredentialsFromStore(s.credentials),
-	}
+	opts := s.defaultAuthOptions()
 	if authContext == nil {
 		return opts
 	}
@@ -190,6 +196,17 @@ func (s *GSMStore) identityAuthOptions(authContext *store.GCPAuthConfig) gcp.Aut
 		opts.Credentials = authContext.CredentialsFile
 	}
 	return opts
+}
+
+// defaultAuthOptions builds the GCP AuthOptions for this store from its configured
+// credentials, endpoint, insecure-endpoint flag, and without-authentication flag.
+func (s *GSMStore) defaultAuthOptions() gcp.AuthOptions {
+	return gcp.AuthOptions{
+		Credentials:           gcp.GetCredentialsFromStore(s.credentials),
+		Endpoint:              s.endpoint,
+		EndpointInsecure:      s.endpointInsecure,
+		WithoutAuthentication: s.withoutAuthentication,
+	}
 }
 
 // ensureClient lazily initializes the GCP client if it hasn't been initialized yet.

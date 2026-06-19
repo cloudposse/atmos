@@ -7,5 +7,5 @@
 
 💡 Step type 'invalid' is not supported
 
-💡 Each step must specify a valid type: 'atmos', 'shell', or an interactive type
-like 'input', 'confirm', 'choose'
+💡 Each step must specify a valid type: 'atmos', 'shell', 'exec', or an
+interactive type like 'input', 'confirm', 'choose'

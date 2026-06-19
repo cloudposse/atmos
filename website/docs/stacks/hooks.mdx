@@ -212,10 +212,10 @@ Atmos Pro run page, and PR comments.
 
 ### `kind: store`
 
-Reads Terraform outputs and writes them to an external store (SSM,
-Secrets Manager, Azure Key Vault, etc.). Use this to share state between
-components without backend wiring — paired with the [`!store`
-function](/stacks/sharing-state/stores) for reading.
+Reads Terraform outputs and writes them to an external store such as
+`kind: aws/ssm`, `kind: aws/asm`, Azure Key Vault, or Google Secret Manager.
+Use this to share state between components without backend wiring — paired with
+the [`!store` function](/stacks/sharing-state/stores) for reading.
 
 ```yaml
 hooks:

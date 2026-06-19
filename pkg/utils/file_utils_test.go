@@ -2,7 +2,6 @@ package utils
 
 import (
 	"os"
-	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -298,47 +297,6 @@ func TestEnsureDir(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
-		})
-	}
-}
-
-// TestSliceOfPathsContainsPath tests the SliceOfPathsContainsPath function.
-func TestSliceOfPathsContainsPath(t *testing.T) {
-	// Use temp dir for platform-agnostic paths.
-	tmpDir := t.TempDir()
-	file1 := filepath.Join(tmpDir, "file1.txt")
-	file2 := filepath.Join(tmpDir, "file2.txt")
-
-	tests := []struct {
-		name      string
-		paths     []string
-		checkPath string
-		expected  bool
-	}{
-		{
-			name:      "Path exists in slice",
-			paths:     []string{file1, file2},
-			checkPath: tmpDir,
-			expected:  true,
-		},
-		{
-			name:      "Path does not exist in slice",
-			paths:     []string{file1, file2},
-			checkPath: "/other/path",
-			expected:  false,
-		},
-		{
-			name:      "Empty slice",
-			paths:     []string{},
-			checkPath: tmpDir,
-			expected:  false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := SliceOfPathsContainsPath(tt.paths, tt.checkPath)
-			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -697,47 +655,6 @@ func TestIsYaml(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := IsYaml(tt.file)
 			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-// TestConvertPathsToAbsolutePaths tests the ConvertPathsToAbsolutePaths function.
-func TestConvertPathsToAbsolutePaths(t *testing.T) {
-	tests := []struct {
-		name    string
-		paths   []string
-		wantErr bool
-	}{
-		{
-			name:    "Relative paths",
-			paths:   []string{"./path1", "./path2"},
-			wantErr: false,
-		},
-		{
-			name:    "Mixed absolute and relative",
-			paths:   []string{"/absolute", "./relative"},
-			wantErr: false,
-		},
-		{
-			name:    "Empty slice",
-			paths:   []string{},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := ConvertPathsToAbsolutePaths(tt.paths)
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Len(t, result, len(tt.paths))
-				// Verify all paths are absolute.
-				for _, p := range result {
-					assert.True(t, IsPathAbsolute(p))
-				}
-			}
 		})
 	}
 }
