@@ -61,7 +61,10 @@ func (h *ContainerHandler) executeInspect(ctx context.Context, step *schema.Work
 		return NewStepResult(image).WithMetadata(exitCodeMetadata, 1).WithError(err.Error()), err
 	}
 
-	ui.Writeln(renderImageInspect(image, info))
+	// Title as a Markdown heading (bold "Image" + the image name as inline code),
+	// then the borderless key/value body.
+	ui.Markdown(fmt.Sprintf("## Image `%s`", image))
+	ui.Writeln(renderImageInspect(info))
 
 	return NewStepResult(image).
 		WithMetadata(exitCodeMetadata, 0).
@@ -86,12 +89,13 @@ func effectiveInspectStep(step *schema.WorkflowStep) schema.ContainerInspectStep
 	return inspect
 }
 
-// renderImageInspect builds a curated borderless two-column view of image metadata.
-// It selects the fields a person actually wants after a build (identity, provenance,
-// size, platform) rather than dumping the full inspect JSON. Keys are bold and
+// renderImageInspect builds a curated borderless two-column body of image metadata
+// (the title is rendered separately by the caller as a Markdown heading). It selects
+// the fields a person actually wants after a build (identity, provenance, size,
+// platform) rather than dumping the full inspect JSON. Keys are bold and
 // left-aligned; the column width is driven by the longest plain key so values
 // start at a consistent offset.
-func renderImageInspect(image string, info *container.ImageInfo) string {
+func renderImageInspect(info *container.ImageInfo) string {
 	rows := collectInspectRows(info)
 
 	// Determine column width from the longest plain key (no ANSI).
@@ -102,33 +106,24 @@ func renderImageInspect(image string, info *container.ImageInfo) string {
 		}
 	}
 
-	// Obtain theme styles for bold keys and styled title; degrade gracefully when
-	// styles are unavailable (non-TTY, CI, no-color).
+	// Obtain theme styles for bold keys; degrade gracefully when styles are
+	// unavailable (non-TTY, CI, no-color).
 	styles := theme.GetCurrentStyles()
-
-	// Build title line.
-	var b strings.Builder
-	if styles != nil {
-		fmt.Fprintf(&b, "%s %s\n\n", styles.Label.Render("Image:"), styles.Title.Render(image))
-	} else {
-		fmt.Fprintf(&b, "Image: %s\n\n", image)
-	}
 
 	// Build each data row. Padding is applied to the plain key text; the bold
 	// style is then wrapped around the padded string so ANSI codes do not
 	// distort the column alignment.
+	var b strings.Builder
 	for _, r := range rows {
 		plainKey := r.key + strings.Repeat(" ", colWidth-lipgloss.Width(r.key))
-		var styledKey string
+		styledKey := plainKey
 		if styles != nil {
 			styledKey = styles.Label.Render(plainKey)
-		} else {
-			styledKey = plainKey
 		}
 		fmt.Fprintf(&b, "%s  %s\n", styledKey, r.value)
 	}
 
-	return b.String()
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // inspectRow is a rendered key/value pair for the inspect view.

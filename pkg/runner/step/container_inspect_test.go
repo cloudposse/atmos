@@ -27,15 +27,15 @@ func TestRenderImageInspect(t *testing.T) {
 		Labels:       map[string]string{"org.opencontainers.image.title": "Atmos Example", "extra": "x"},
 	}
 
-	raw := renderImageInspect("atmos-container-step:local", info)
+	// renderImageInspect renders only the borderless key/value body; the title is a
+	// separate Markdown heading rendered by the caller.
+	raw := renderImageInspect(info)
 	// Strip ANSI codes so assertions are independent of the active color profile.
 	out := ansiRE.ReplaceAllString(raw, "")
 
-	// Title line contains the image name (no Markdown heading syntax).
-	assert.Contains(t, out, "atmos-container-step:local")
-	assert.NotContains(t, out, "## Image")
-	// No Markdown table pipes.
+	// No Markdown table pipes and no heading inside the body.
 	assert.NotContains(t, out, "| ID |")
+	assert.NotContains(t, out, "## Image")
 
 	// Each data row: key present + value present (borderless, two-column).
 	assert.Contains(t, out, "fef51e975bdc")
@@ -55,7 +55,7 @@ func TestRenderImageInspect(t *testing.T) {
 func TestRenderImageInspectOmitsEmptyFields(t *testing.T) {
 	// A minimal image (e.g. when inspect returns sparse data) must not render
 	// empty rows for Size, Platform, or Created.
-	raw := renderImageInspect("scratch:latest", &container.ImageInfo{ID: "abc123abc123def"})
+	raw := renderImageInspect(&container.ImageInfo{ID: "abc123abc123def"})
 	out := ansiRE.ReplaceAllString(raw, "")
 
 	assert.NotContains(t, out, "Size")
