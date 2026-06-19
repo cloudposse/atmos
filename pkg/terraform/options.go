@@ -50,6 +50,9 @@ type ShellOptions struct {
 	// as TF_VAR_<name> environment variables. By default they are not exported (and never
 	// written to the on-disk varfile), so terraform inside the shell will not see them.
 	WithSecrets bool
+	// SkipInit, when true, skips `terraform init` before launching the shell (from --skip-init).
+	// Workspace selection is unaffected and stays governed by the workspaces_enabled setting.
+	SkipInit bool
 	ProcessingOptions
 }
 

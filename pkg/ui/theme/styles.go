@@ -489,16 +489,6 @@ func GetInfoStyle() lipgloss.Style {
 	return styles.Info
 }
 
-// GetNoticeStyle returns the notice style from the current theme.
-// Notice style is used for neutral informational messages, typically in empty states.
-func GetNoticeStyle() lipgloss.Style {
-	styles := GetCurrentStyles()
-	if styles == nil {
-		return lipgloss.NewStyle()
-	}
-	return styles.Notice
-}
-
 // GetDebugStyle returns the debug style from the current theme.
 func GetDebugStyle() lipgloss.Style {
 	styles := GetCurrentStyles()

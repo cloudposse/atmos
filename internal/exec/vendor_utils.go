@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -272,7 +273,7 @@ func validateTagsAndComponents(
 			ErrDuplicateComponents, duplicates, vendorConfigFileName)
 	}
 
-	if component != "" && !u.SliceContainsString(components, component) {
+	if component != "" && !slices.Contains(components, component) {
 		return fmt.Errorf("%w component '%s', file '%s'",
 			ErrComponentNotDefined, component, vendorConfigFileName)
 	}
@@ -463,7 +464,7 @@ func processVendorImports(
 ) ([]schema.AtmosVendorSource, []string, error) {
 	var mergedSources []schema.AtmosVendorSource
 	for _, imp := range imports {
-		if u.SliceContainsString(allImports, imp) {
+		if slices.Contains(allImports, imp) {
 			return nil, nil, fmt.Errorf(
 				"%w '%s' in the vendor config file '%s'. It was already imported in the import chain",
 				ErrDuplicateImport,
@@ -479,7 +480,7 @@ func processVendorImports(
 			return nil, nil, err
 		}
 
-		if u.SliceContainsString(vendorConfig.Spec.Imports, imp) {
+		if slices.Contains(vendorConfig.Spec.Imports, imp) {
 			return nil, nil, fmt.Errorf("%w file '%s'", ErrVendorConfigSelfImport, imp)
 		}
 
@@ -583,10 +584,4 @@ func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.F
 // Delegates to pkg/vendor for the shared implementation.
 func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (bool, error) {
 	return vendor.ShouldExcludeFile(excludedPaths, trimmedSrc)
-}
-
-// shouldIncludeFile checks if the file matches any of the included patterns.
-// Delegates to pkg/vendor for the shared implementation.
-func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (bool, error) {
-	return vendor.ShouldIncludeFile(includedPaths, trimmedSrc)
 }

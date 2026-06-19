@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -18,14 +19,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
-
-// ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command.
-// Deprecated: Use ExecuteTerraformGenerateVarfiles with typed parameters instead.
-func ExecuteTerraformGenerateVarfilesCmd(cmd interface{}, args []string) error {
-	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfilesCmd")()
-
-	return errUtils.ErrDeprecatedCmdNotCallable
-}
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks.
 func ExecuteTerraformGenerateVarfiles(
@@ -72,8 +65,7 @@ func ExecuteTerraformGenerateVarfiles(
 
 			// Check if `components` filter is provided
 			if len(components) == 0 ||
-				u.SliceContainsString(components, componentName) {
-
+				slices.Contains(components, componentName) {
 				// Component vars
 				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[string]any); !ok {
 					continue
@@ -170,7 +162,7 @@ func ExecuteTerraformGenerateVarfiles(
 				// Stack name
 				var stackName string
 				if atmosConfig.Stacks.NameTemplate != "" {
-					stackName, err = ProcessTmpl(atmosConfig, "terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+					stackName, err = ProcessTmpl(atmosConfig, "terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 					if err != nil {
 						return err
 					}
@@ -256,11 +248,10 @@ func ExecuteTerraformGenerateVarfiles(
 				if len(stacks) == 0 ||
 					// `stacks` filter can contain the names of the top-level stack config files:
 					// atmos terraform generate varfiles --stacks=orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2
-					u.SliceContainsString(stacks, stackFileName) ||
+					slices.Contains(stacks, stackFileName) ||
 					// `stacks` filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
-					u.SliceContainsString(stacks, stackName) {
-
+					slices.Contains(stacks, stackName) {
 					// Replace the tokens in the file template
 					// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
 					fileName := cfg.ReplaceContextTokens(context, fileTemplate)
