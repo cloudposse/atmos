@@ -1,0 +1,19 @@
+components:
+  terraform:
+    bucket:
+      metadata:
+        component: bucket
+      dependencies:
+        tools:
+          terraform: "1.9.7"
+      hooks:
+        native-ci-sarif:
+          events:
+            - after-terraform-plan
+            - after-terraform-apply
+          kind: command
+          command: python3
+          args:
+            - "scripts/native_ci_sarif.py"
+          format: sarif
+          on_failure: warn

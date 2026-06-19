@@ -1,0 +1,45 @@
+import:
+  - catalog/bucket
+
+vars:
+  stage: test
+
+env:
+  AWS_PROFILE: ""
+  TF_CLI_ARGS_plan: "-compact-warnings"
+  TF_CLI_ARGS_apply: "-compact-warnings"
+
+terraform:
+  backend_type: local
+  backend:
+    local:
+      path: "terraform.tfstate"
+  providers:
+    aws:
+      region: "us-east-1"
+      access_key: "test"
+      secret_key: "test"
+      s3_use_path_style: true
+      skip_credentials_validation: true
+      skip_metadata_api_check: true
+      skip_requesting_account_id: true
+      endpoints:
+        sts: &floci_url "http://localhost:4566"
+        s3: *floci_url
+        apigateway: *floci_url
+        apigatewayv2: *floci_url
+        cloudformation: *floci_url
+        cloudwatch: *floci_url
+        dynamodb: *floci_url
+        ec2: *floci_url
+        es: *floci_url
+        elasticache: *floci_url
+        iam: *floci_url
+        lambda: *floci_url
+        rds: *floci_url
+        route53: *floci_url
+        secretsmanager: *floci_url
+        ses: *floci_url
+        sns: *floci_url
+        sqs: *floci_url
+        ssm: *floci_url
