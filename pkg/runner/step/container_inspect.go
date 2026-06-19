@@ -6,9 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // notableInspectLabels are OCI image labels worth surfacing in the rendered
@@ -58,7 +61,7 @@ func (h *ContainerHandler) executeInspect(ctx context.Context, step *schema.Work
 		return NewStepResult(image).WithMetadata(exitCodeMetadata, 1).WithError(err.Error()), err
 	}
 
-	ui.Markdown(renderImageInspect(image, info))
+	ui.Writeln(renderImageInspect(image, info))
 
 	return NewStepResult(image).
 		WithMetadata(exitCodeMetadata, 0).
@@ -83,39 +86,82 @@ func effectiveInspectStep(step *schema.WorkflowStep) schema.ContainerInspectStep
 	return inspect
 }
 
-// renderImageInspect builds a curated Markdown view of image metadata. It selects
-// the fields a person actually wants after a build (identity, provenance, size,
-// platform) rather than dumping the full inspect JSON.
+// renderImageInspect builds a curated borderless two-column view of image metadata.
+// It selects the fields a person actually wants after a build (identity, provenance,
+// size, platform) rather than dumping the full inspect JSON. Keys are bold and
+// left-aligned; the column width is driven by the longest plain key so values
+// start at a consistent offset.
 func renderImageInspect(image string, info *container.ImageInfo) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "## Image `%s`\n\n", image)
-	b.WriteString("| Property | Value |\n| --- | --- |\n")
+	rows := collectInspectRows(info)
 
-	row := func(key, value string) {
-		if value == "" {
-			return
+	// Determine column width from the longest plain key (no ANSI).
+	colWidth := 0
+	for _, r := range rows {
+		if w := lipgloss.Width(r.key); w > colWidth {
+			colWidth = w
 		}
-		fmt.Fprintf(&b, "| %s | %s |\n", key, value)
 	}
 
-	row("ID", shortDigest(info.ID))
-	row("Digest", shortDigest(firstString(info.RepoDigests)))
-	if len(info.RepoTags) > 0 {
-		row("Tags", strings.Join(info.RepoTags, ", "))
+	// Obtain theme styles for bold keys and styled title; degrade gracefully when
+	// styles are unavailable (non-TTY, CI, no-color).
+	styles := theme.GetCurrentStyles()
+
+	// Build title line.
+	var b strings.Builder
+	if styles != nil {
+		fmt.Fprintf(&b, "%s %s\n\n", styles.Label.Render("Image:"), styles.Title.Render(image))
+	} else {
+		fmt.Fprintf(&b, "Image: %s\n\n", image)
 	}
-	row("Created", formatInspectTime(info.Created))
-	row("Size", humanizeBytes(info.Size))
-	row("Platform", platformString(info.Os, info.Architecture))
+
+	// Build each data row. Padding is applied to the plain key text; the bold
+	// style is then wrapped around the padded string so ANSI codes do not
+	// distort the column alignment.
+	for _, r := range rows {
+		plainKey := r.key + strings.Repeat(" ", colWidth-lipgloss.Width(r.key))
+		var styledKey string
+		if styles != nil {
+			styledKey = styles.Label.Render(plainKey)
+		} else {
+			styledKey = plainKey
+		}
+		fmt.Fprintf(&b, "%s  %s\n", styledKey, r.value)
+	}
+
+	return b.String()
+}
+
+// inspectRow is a rendered key/value pair for the inspect view.
+type inspectRow struct{ key, value string }
+
+// collectInspectRows selects the curated, non-empty image-metadata fields to
+// render (identity, provenance, size, platform, notable OCI labels).
+func collectInspectRows(info *container.ImageInfo) []inspectRow {
+	var rows []inspectRow
+	add := func(key, value string) {
+		if value != "" {
+			rows = append(rows, inspectRow{key, value})
+		}
+	}
+
+	add("ID", shortDigest(info.ID))
+	add("Digest", shortDigest(firstString(info.RepoDigests)))
+	if len(info.RepoTags) > 0 {
+		add("Tags", strings.Join(info.RepoTags, ", "))
+	}
+	add("Created", formatInspectTime(info.Created))
+	add("Size", humanizeBytes(info.Size))
+	add("Platform", platformString(info.Os, info.Architecture))
 	if info.Layers > 0 {
-		row("Layers", fmt.Sprintf("%d", info.Layers))
+		add("Layers", fmt.Sprintf("%d", info.Layers))
 	}
 	if len(info.Labels) > 0 {
-		row("Labels", fmt.Sprintf("%d", len(info.Labels)))
+		add("Labels", fmt.Sprintf("%d", len(info.Labels)))
 	}
 	for _, l := range notableInspectLabels {
-		row(l.label, info.Labels[l.key])
+		add(l.label, info.Labels[l.key])
 	}
-	return b.String()
+	return rows
 }
 
 // shortDigest truncates a `sha256:<hex>` reference (optionally prefixed with a

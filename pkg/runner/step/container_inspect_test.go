@@ -1,6 +1,7 @@
 package step
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,6 +9,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// ansiRE matches ANSI escape sequences so tests can strip them and assert on
+// plain content without depending on the active terminal color profile.
+var ansiRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func TestRenderImageInspect(t *testing.T) {
 	info := &container.ImageInfo{
@@ -22,30 +27,43 @@ func TestRenderImageInspect(t *testing.T) {
 		Labels:       map[string]string{"org.opencontainers.image.title": "Atmos Example", "extra": "x"},
 	}
 
-	out := renderImageInspect("atmos-container-step:local", info)
+	raw := renderImageInspect("atmos-container-step:local", info)
+	// Strip ANSI codes so assertions are independent of the active color profile.
+	out := ansiRE.ReplaceAllString(raw, "")
 
-	assert.Contains(t, out, "## Image `atmos-container-step:local`")
-	assert.Contains(t, out, "| ID | fef51e975bdc |")
-	assert.Contains(t, out, "| Digest | sha256:b7e390e5767e |")
-	assert.Contains(t, out, "| Tags | atmos-container-step:local |")
-	assert.Contains(t, out, "| Created | 2026-06-18 23:06:08 UTC |")
-	assert.Contains(t, out, "| Size | 8.5 MiB |")
-	assert.Contains(t, out, "| Platform | linux/arm64 |")
-	assert.Contains(t, out, "| Layers | 2 |")
-	assert.Contains(t, out, "| Labels | 2 |")
-	assert.Contains(t, out, "| Title | Atmos Example |")
-	// Curated, not a JSON/map dump.
+	// Title line contains the image name (no Markdown heading syntax).
+	assert.Contains(t, out, "atmos-container-step:local")
+	assert.NotContains(t, out, "## Image")
+	// No Markdown table pipes.
+	assert.NotContains(t, out, "| ID |")
+
+	// Each data row: key present + value present (borderless, two-column).
+	assert.Contains(t, out, "fef51e975bdc")
+	assert.Contains(t, out, "sha256:b7e390e5767e")
+	assert.Contains(t, out, "atmos-container-step:local")
+	assert.Contains(t, out, "2026-06-18 23:06:08 UTC")
+	assert.Contains(t, out, "8.5 MiB")
+	assert.Contains(t, out, "linux/arm64")
+	assert.Contains(t, out, "Layers")
+	assert.Contains(t, out, "Labels")
+	assert.Contains(t, out, "Title")
+	assert.Contains(t, out, "Atmos Example")
+	// Curated output — no raw Go map dump.
 	assert.NotContains(t, out, "map[")
 }
 
 func TestRenderImageInspectOmitsEmptyFields(t *testing.T) {
 	// A minimal image (e.g. when inspect returns sparse data) must not render
-	// empty rows like "| Size |  |".
-	out := renderImageInspect("scratch:latest", &container.ImageInfo{ID: "abc123abc123def"})
-	assert.NotContains(t, out, "| Size |")
-	assert.NotContains(t, out, "| Platform |")
-	assert.NotContains(t, out, "| Created |")
-	assert.Contains(t, out, "| ID | abc123abc123 |")
+	// empty rows for Size, Platform, or Created.
+	raw := renderImageInspect("scratch:latest", &container.ImageInfo{ID: "abc123abc123def"})
+	out := ansiRE.ReplaceAllString(raw, "")
+
+	assert.NotContains(t, out, "Size")
+	assert.NotContains(t, out, "Platform")
+	assert.NotContains(t, out, "Created")
+	// The ID row must appear with the truncated digest.
+	assert.Contains(t, out, "ID")
+	assert.Contains(t, out, "abc123abc123")
 }
 
 func TestShortDigest(t *testing.T) {
