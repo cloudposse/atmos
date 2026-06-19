@@ -23,13 +23,17 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubCI "github.com/cloudposse/atmos/pkg/ci/providers/github"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 )
 
 // Compile-time sentinel: tests below depend on these schema.ConfigAndStacksInfo
@@ -762,6 +766,53 @@ func TestRunHooksWithOutput_InjectsLastAuthContext(t *testing.T) {
 	assert.NotNil(t, gotCtx, "auth context must survive through runHooksWithOutput")
 	assert.Equal(t, "test-profile", gotCtx.AWS.Profile)
 	assert.Equal(t, "mock-auth-manager", gotMgr)
+}
+
+func TestInjectHookStoreAuthResolver_ResolverOnly(t *testing.T) {
+	tests := []struct {
+		name     string
+		identity string
+	}{
+		{
+			name:     "empty command identity does not inject default identity",
+			identity: "",
+		},
+		{
+			name:     "explicit command identity does not override store identity",
+			identity: "cli-admin",
+		},
+		{
+			name:     "disabled identity does not fall back to default identity",
+			identity: cfg.IdentityFlagDisabledValue,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			authManager := authtypes.NewMockAuthManager(ctrl)
+			mockStore := storepkg.NewMockIdentityAwareStore(ctrl)
+
+			mockStore.EXPECT().
+				SetAuthContext(gomock.Not(nil), "").
+				Do(func(resolver storepkg.AuthContextResolver, identityName string) {
+					assert.NotNil(t, resolver)
+					assert.Empty(t, identityName)
+				})
+
+			atmosConfig := &schema.AtmosConfiguration{
+				Stores: storepkg.StoreRegistry{
+					"explicit-identity-store": mockStore,
+				},
+			}
+			info := &schema.ConfigAndStacksInfo{
+				Identity:    tc.identity,
+				AuthManager: authManager,
+			}
+
+			injectHookStoreAuthResolver(atmosConfig, info)
+		})
+	}
 }
 
 // TestInteractiveStackSelection_PromptError verifies that when the

@@ -1,0 +1,27 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+
+stores:
+  secrets/gcp:
+    kind: gcp/secretmanager
+    secret: true
+    options:
+      project_id: !env FLOCI_GCP_PROJECT_ID
+      prefix: !env FLOCI_GCP_SECRETS_PREFIX
+      endpoint: !env FLOCI_GCP_ENDPOINT
+      endpoint_insecure: true
+      without_authentication: true
+
+logs:
+  file: /dev/stderr
+  level: Info

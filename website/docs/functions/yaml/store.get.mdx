@@ -71,7 +71,7 @@ dynamically.
 | **Key Format**    | Constructs key from stack/component/key pattern | Uses exact key as provided                      |
 | **Use Case**      | Retrieve Atmos-managed component outputs        | Retrieve arbitrary values from external systems |
 | **Key Pattern**   | `prefix/stack/component/key`                    | Any format the store supports                   |
-| **Typical Usage** | Cross-component dependencies                    | Global configs, external secrets                |
+| **Typical Usage** | Cross-component dependencies                    | Global configs, externally managed values       |
 
 :::tip
 If you need to retrieve values that follow the Atmos stack/component/key pattern, use the
@@ -165,5 +165,5 @@ prefix, path, or normalization specific to that store
 - **External Systems**: This function is ideal for interoperability with values written by external systems that don't
 follow Atmos naming conventions
 - **Performance**: Direct key access is typically faster than pattern-based retrieval since no key construction is needed
-- **Security**: Like `!store`, `!store.get` reads values in cleartext, so using it with secrets will expose them to `stdout` in describe commands. For secrets, mark the store [`secret: true`](/cli/configuration/secrets) and read it with [`!secret`](/functions/yaml/secret), which masks values and gates access
+- **Security**: Like `!store`, `!store.get` reads values in cleartext and cannot read stores marked `secret: true`. For secrets, mark the store [`secret: true`](/cli/configuration/secrets) and read it with [`!secret`](/functions/yaml/secret), which masks values and gates access
 - **Access Control**: Ensure your store credentials have permission to access the keys you're trying to retrieve

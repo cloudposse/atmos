@@ -18,7 +18,9 @@ Each store entry in `atmos.yaml` follows this schema:
 ```yaml
 stores:
   <store-name>:
-    type: <provider-type>       # Required: one of the five provider types
+    kind: <provider-kind>       # Preferred: e.g. aws/ssm, aws/asm, azure/keyvault, gcp/secretmanager
+    type: <provider-type>       # Legacy alias for kind (kind wins when both are set)
+    secret: <bool>              # Optional: mark as a secret backend (resolved only via !secret)
     identity: <identity-name>   # Optional: Atmos auth identity for credential resolution
     options:                    # Required: provider-specific options
       prefix: <string>         # Optional: key prefix for namespace isolation
@@ -30,6 +32,8 @@ The `StoreConfig` struct in code:
 ```go
 type StoreConfig struct {
     Type     string                 `yaml:"type"`
+    Kind     string                 `yaml:"kind,omitempty"`
+    Secret   bool                   `yaml:"secret,omitempty"`
     Identity string                 `yaml:"identity,omitempty"`
     Options  map[string]interface{} `yaml:"options"`
 }
@@ -37,9 +41,11 @@ type StoreConfig struct {
 
 ## AWS SSM Parameter Store
 
-### Type
+### Kind
 
-`aws-ssm-parameter-store`
+`aws/ssm`
+
+Legacy `type` alias: `aws-ssm-parameter-store`
 
 ### Options
 
@@ -50,6 +56,8 @@ type StoreConfig struct {
 | `stack_delimiter` | string | No | `"-"` | Character used to split stack names into path segments |
 | `read_role_arn` | string | No | -- | IAM role ARN to assume for read operations |
 | `write_role_arn` | string | No | -- | IAM role ARN to assume for write operations |
+| `endpoint` | string | No | -- | Custom SSM endpoint URL, for AWS-compatible local/test APIs (e.g. `http://localhost:4566`) |
+| `endpoint_url` | string | No | -- | Alias for `endpoint`; `endpoint` wins if both are set |
 
 ### Authentication
 
@@ -86,7 +94,7 @@ SSM parameters are stored as `String` type with `Overwrite: true`. Values are JS
 stores:
   # Production read-write store
   prod/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: us-east-1
       prefix: atmos
@@ -95,14 +103,14 @@ stores:
 
   # Development store (same account, no role assumption needed)
   dev/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: us-west-2
       prefix: atmos
 
   # Identity-based store
   shared/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     identity: shared-aws
     options:
       region: us-east-1
@@ -110,11 +118,45 @@ stores:
 
 ---
 
+## AWS Secrets Manager
+
+### Kind
+
+`aws/asm`
+
+Legacy `type` alias: `aws-secrets-manager`
+
+### Options
+
+| Option | Type | Required | Default | Description |
+|--------|------|----------|---------|-------------|
+| `region` | string | Yes | -- | AWS region for Secrets Manager |
+| `prefix` | string | No | `""` | Prefix prepended to all secret IDs |
+| `stack_delimiter` | string | No | `"/"` | Character used to split stack names into secret ID segments |
+| `endpoint` | string | No | -- | Custom Secrets Manager endpoint URL, for AWS-compatible local/test APIs (e.g. `http://localhost:4566`) |
+| `endpoint_url` | string | No | -- | Alias for `endpoint`; `endpoint` wins if both are set |
+
+Use `secret: true` for declared secrets that are managed through `atmos secret` and resolved with `!secret`.
+
+```yaml
+stores:
+  prod/asm:
+    kind: aws/asm
+    secret: true
+    options:
+      region: us-east-1
+      prefix: atmos/secrets
+```
+
+---
+
 ## Azure Key Vault
 
-### Type
+### Kind
 
-`azure-key-vault`
+`azure/keyvault`
+
+Legacy type: `azure-key-vault`
 
 ### Options
 
@@ -123,6 +165,11 @@ stores:
 | `vault_url` | string | Yes | -- | Full URL of the Azure Key Vault (e.g., `https://my-vault.vault.azure.net/`) |
 | `prefix` | string | No | `""` | Prefix prepended to secret names |
 | `stack_delimiter` | string | No | `"-"` | Character used to split stack names |
+| `endpoint` | string | No | -- | Alias for `vault_url`; useful for Key Vault-compatible local/test endpoints |
+| `endpoint_insecure` | bool | No | `false` | Local/test only: accept a plaintext `http://` endpoint (rewrites it to `https://` over an insecure transport) |
+| `without_authentication` | bool | No | `false` | Local/test only: skip authentication for emulators that accept any bearer token (implies `insecure_allow_credential_with_http`) |
+| `insecure_allow_credential_with_http` | bool | No | `false` | Local/test only: permit sending the bearer credential over plain HTTP (does not rewrite the URL like `endpoint_insecure`) |
+| `disable_challenge_resource_verification` | bool | No | `false` | Local/test only: skip Key Vault auth-challenge resource verification when the challenge resource does not match the endpoint host |
 
 ### Authentication
 
@@ -155,14 +202,14 @@ For `GetKey`, the same normalization is applied to the raw key.
 ```yaml
 stores:
   prod/azure:
-    type: azure-key-vault
+    kind: azure/keyvault
     options:
       vault_url: "https://prod-infra-vault.vault.azure.net/"
       prefix: atmos
 
   # With identity-based auth
   shared/azure:
-    type: azure-key-vault
+    kind: azure/keyvault
     identity: azure-shared
     options:
       vault_url: "https://shared-vault.vault.azure.net/"
@@ -172,9 +219,11 @@ stores:
 
 ## Google Secret Manager
 
-### Type
+### Kind
 
-`google-secret-manager` or `gsm`
+`gcp/secretmanager`
+
+Legacy types: `google-secret-manager`, `google/secretmanager`, `gsm`
 
 ### Options
 
@@ -185,6 +234,10 @@ stores:
 | `stack_delimiter` | string | No | `"-"` | Character used to split stack names |
 | `credentials` | string | No | -- | Inline JSON service account credentials |
 | `locations` | list of strings | No | -- | Replication locations (omit for automatic replication) |
+| `endpoint` | string | No | -- | Custom Secret Manager endpoint, for local/test APIs (e.g. `localhost:4568`) |
+| `endpoint_url` | string | No | -- | Alias for `endpoint`; `endpoint` wins if both are set |
+| `endpoint_insecure` | bool | No | `false` | Local/test only: use a plaintext (non-TLS) gRPC endpoint |
+| `without_authentication` | bool | No | `false` | Local/test only: skip authentication for emulators that do not validate Google credentials |
 
 ### Authentication
 
@@ -227,7 +280,7 @@ All GCP operations have a 30-second context timeout.
 ```yaml
 stores:
   prod/gcp:
-    type: google-secret-manager
+    kind: gcp/secretmanager
     options:
       project_id: my-prod-project
       prefix: atmos
@@ -235,7 +288,7 @@ stores:
         - us-east1
         - us-west1
 
-  # Using short alias
+  # Legacy alias
   dev/gcp:
     type: gsm
     options:
@@ -475,7 +528,7 @@ Atmos deep-merges all levels into the final hook configuration.
 ### Common Errors
 
 **`store type not found: <type>`**
-The `type` field does not match any registered provider. Valid types: `aws-ssm-parameter-store`, `azure-key-vault`, `google-secret-manager`, `gsm`, `redis`, `artifactory`.
+The `kind` or legacy `type` field does not match any registered provider. Valid kinds include: `aws/ssm`, `aws/asm`, `azure/keyvault`, `gcp/secretmanager`, `redis`, `artifactory`.
 
 **`region is required in ssm store configuration`**
 The `region` option is missing from an AWS SSM store. This is a required field.

@@ -1,0 +1,38 @@
+base_path: "./"
+
+components:
+  terraform:
+    command: tofu
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+    apply_auto_approve: true
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+
+templates:
+  settings:
+    enabled: true
+    evaluations: 1
+    sprig:
+      enabled: true
+
+stores:
+  outputs/ssm:
+    kind: aws/ssm
+    options:
+      region: us-east-1
+      prefix: /atmos-gist/store-hooks
+
+  outputs/asm:
+    kind: aws/asm
+    options:
+      region: us-east-1
+      prefix: atmos-gist/store-hooks
+
+logs:
+  file: /dev/stderr
+  level: Info
