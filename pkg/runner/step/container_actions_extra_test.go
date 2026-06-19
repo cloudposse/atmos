@@ -13,7 +13,7 @@ import (
 
 func TestBuildSpinnerMessage(t *testing.T) {
 	assert.Equal(t, "Building image alpine:latest", buildSpinnerMessage("Building image", "alpine:latest"))
-	assert.Equal(t, "Building image", buildSpinnerMessage("Building image", "")) // tagless bake build
+	assert.Equal(t, "Building image", buildSpinnerMessage("Building image", "")) // tagless bake build.
 }
 
 func TestValidateBuildAction(t *testing.T) {

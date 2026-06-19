@@ -195,7 +195,7 @@ func TestBuildSandboxCreateConfig(t *testing.T) {
 	assert.Equal(t, "n", got.Name)
 	assert.Equal(t, "alpine", got.Image)
 	assert.True(t, got.OverrideCommand)
-	require.Len(t, got.Mounts, 2) // user mount + appended workspace mount
+	require.Len(t, got.Mounts, 2) // user mount + appended workspace mount.
 	ws := got.Mounts[1]
 	assert.Equal(t, "/repo", ws.Source)
 	assert.Equal(t, "/workspace", ws.Target)
@@ -240,7 +240,7 @@ func TestSandboxIDAndName(t *testing.T) {
 	assert.Equal(t, "", nilSandbox.Name())
 
 	dryRun := &Sandbox{config: SandboxConfig{Name: "gen-name"}}
-	assert.Equal(t, "gen-name", dryRun.ID()) // no containerID -> falls back to name
+	assert.Equal(t, "gen-name", dryRun.ID()) // no containerID -> falls back to name.
 	assert.Equal(t, "gen-name", dryRun.Name())
 
 	started := &Sandbox{config: SandboxConfig{Name: "gen-name"}, containerID: "cid"}

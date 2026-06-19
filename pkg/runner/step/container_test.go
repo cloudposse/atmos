@@ -83,12 +83,12 @@ func TestCredentialFileMounts(t *testing.T) {
 	require.NoError(t, os.Mkdir(credDir, 0o700))
 
 	env := []string{
-		"AWS_SHARED_CREDENTIALS_FILE=" + credFile,           // allowlisted regular file → mounted
-		"SHELL=" + shellFile,                                // non-allowlisted regular file → skipped
-		"KUBECONFIG=" + credDir,                             // allowlisted but a directory → skipped
-		"AWS_CONFIG_FILE=" + filepath.Join(dir, "absent"),   // allowlisted but missing → skipped
-		"NOT_A_PATH=hello",                                  // not a path → skipped
-		"SSH_AUTH_SOCK=" + filepath.Join(dir, "agent.sock"), // non-allowlisted, missing socket → skipped
+		"AWS_SHARED_CREDENTIALS_FILE=" + credFile,           // allowlisted regular file → mounted.
+		"SHELL=" + shellFile,                                // non-allowlisted regular file → skipped.
+		"KUBECONFIG=" + credDir,                             // allowlisted but a directory → skipped.
+		"AWS_CONFIG_FILE=" + filepath.Join(dir, "absent"),   // allowlisted but missing → skipped.
+		"NOT_A_PATH=hello",                                  // not a path → skipped.
+		"SSH_AUTH_SOCK=" + filepath.Join(dir, "agent.sock"), // non-allowlisted, missing socket → skipped.
 	}
 
 	mounts := credentialFileMounts(env)

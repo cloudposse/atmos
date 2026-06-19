@@ -122,7 +122,7 @@ func TestMergeWorkflowContainer_ScalarsCollectionsAndToggles(t *testing.T) {
 
 	// Scalars: override wins where set, base kept otherwise.
 	assert.Equal(t, "override", merged.Image)
-	assert.Equal(t, "/bin/sh", merged.Shell) // base kept (override empty)
+	assert.Equal(t, "/bin/sh", merged.Shell) // base kept (override empty).
 	assert.Equal(t, "docker", merged.Runtime)
 	assert.Equal(t, "root", merged.User)
 	assert.Equal(t, container.PullAlways, merged.Pull)
@@ -131,7 +131,7 @@ func TestMergeWorkflowContainer_ScalarsCollectionsAndToggles(t *testing.T) {
 	assert.True(t, merged.WorkspaceReadOnly)
 	// Collections: override replaces when non-empty.
 	assert.Equal(t, map[string]string{"OVERRIDE": "2"}, merged.Env)
-	assert.Equal(t, []schema.ContainerMount{{Source: "/base"}}, merged.Mounts) // base kept (override empty)
+	assert.Equal(t, []schema.ContainerMount{{Source: "/base"}}, merged.Mounts) // base kept (override empty).
 	assert.Equal(t, []string{"--rm"}, merged.RunArgs)
 
 	// Isolation: mutating merged must not affect base.
@@ -182,7 +182,7 @@ func TestConvertWorkflowMounts(t *testing.T) {
 		{Type: "volume", Source: "vol", Target: "/data", ReadOnly: true},
 	})
 	require.Len(t, mounts, 2)
-	assert.Equal(t, "bind", mounts[0].Type) // defaulted
+	assert.Equal(t, "bind", mounts[0].Type) // defaulted.
 	assert.Equal(t, "/h", mounts[0].Source)
 	assert.Equal(t, "volume", mounts[1].Type)
 	assert.True(t, mounts[1].ReadOnly)
@@ -194,7 +194,7 @@ func TestConvertWorkflowPorts(t *testing.T) {
 		{Host: 53, Container: 53, Protocol: "udp"},
 	})
 	require.Len(t, ports, 2)
-	assert.Equal(t, "tcp", ports[0].Protocol) // defaulted
+	assert.Equal(t, "tcp", ports[0].Protocol) // defaulted.
 	assert.Equal(t, 8080, ports[0].HostPort)
 	assert.Equal(t, "udp", ports[1].Protocol)
 }
@@ -281,7 +281,7 @@ func TestBuildEphemeralStepConfig(t *testing.T) {
 	assert.Equal(t, "alpine", got.Image)
 	assert.Equal(t, []string{"/bin/bash", "-lc", "echo hi"}, got.Command)
 	assert.Equal(t, "/abs/work", got.WorkspaceHostPath)
-	assert.Equal(t, "/workspace", got.WorkspaceFolder) // defaulted
+	assert.Equal(t, "/workspace", got.WorkspaceFolder) // defaulted.
 	assert.Equal(t, "root", got.User)
 	assert.True(t, got.TTY)
 	assert.Contains(t, got.Env, "C=9")
@@ -453,9 +453,9 @@ func TestExecutor_RunShellStepHostPath(t *testing.T) {
 	params := &WorkflowParams{
 		Ctx:                context.Background(),
 		Workflow:           "wf",
-		WorkflowDefinition: &schema.WorkflowDefinition{}, // no workflow-level container
+		WorkflowDefinition: &schema.WorkflowDefinition{}, // no workflow-level container.
 	}
-	step := &schema.WorkflowStep{Name: "s"} // no step container override
+	step := &schema.WorkflowStep{Name: "s"} // no step container override.
 	cmdParams := &runCommandParams{command: "echo hi", stepEnv: []string{"E=1"}, workingDirectory: "/wd"}
 
 	require.NoError(t, e.runShellStep(params, step, cmdParams, "/wd"))
@@ -466,7 +466,7 @@ func TestEnvSliceToMap(t *testing.T) {
 	assert.Equal(
 		t,
 		map[string]string{"A": "1", "B": "2"},
-		envSliceToMap([]string{"A=1", "B=2", "malformed"}), // malformed (no '=') is skipped
+		envSliceToMap([]string{"A=1", "B=2", "malformed"}), // malformed (no '=') is skipped.
 	)
 }
 
@@ -502,7 +502,7 @@ func TestExecutor_RunShellStep_WorkflowContainerExec(t *testing.T) {
 			Output:    "none",
 		},
 	}
-	step := &schema.WorkflowStep{Name: "s"} // not container-disabled
+	step := &schema.WorkflowStep{Name: "s"} // not container-disabled.
 	cmdParams := &runCommandParams{command: "pwd", workingDirectory: "."}
 
 	require.NoError(t, e.runShellStep(params, step, cmdParams, "."))

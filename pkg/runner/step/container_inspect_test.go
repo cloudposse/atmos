@@ -14,7 +14,7 @@ func TestRenderImageInspect(t *testing.T) {
 		ID:           "fef51e975bdcb872c3ff2d3b4e4d0ff0c0f522096a0f52f54f9dc4d306de0e32",
 		RepoTags:     []string{"atmos-container-step:local"},
 		RepoDigests:  []string{"localhost/atmos-container-step@sha256:b7e390e5767ed0aabbccddeeff"},
-		Size:         8_912_896, // 8.5 MiB
+		Size:         8_912_896, // 8.5 MiB.
 		Created:      "2026-06-18T23:06:08Z",
 		Architecture: "arm64",
 		Os:           "linux",
