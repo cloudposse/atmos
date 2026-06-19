@@ -6,6 +6,7 @@ components:
       dependencies:
         tools:
           terraform: "1.9.7"
+          checkov: "3.2.529"
       hooks:
         native-ci-sarif:
           events:
@@ -16,4 +17,21 @@ components:
           args:
             - "scripts/native_ci_sarif.py"
           format: sarif
+          on_failure: warn
+        checkov-policy:
+          events:
+            - after-terraform-plan
+            - after-terraform-apply
+          kind: checkov
+          args:
+            - "-d"
+            - "$ATMOS_COMPONENT_PATH"
+            - "-o"
+            - "sarif"
+            - "--output-file-path"
+            - "$ATMOS_OUTPUT_DIR"
+            - "--quiet"
+            - "--soft-fail"
+            - "--check"
+            - "CKV_AWS_21"
           on_failure: warn

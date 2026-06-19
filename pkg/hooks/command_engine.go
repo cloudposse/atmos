@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -310,7 +311,7 @@ func emitCIAnnotations(ctx *ExecContext, out *Output) {
 		annotations = append(annotations, ci.Annotation{
 			Path:      f.Path,
 			StartLine: f.Line,
-			Level:     annotationLevelForSeverity(f.Severity),
+			Level:     annotationLevelForHook(ctx, f.Severity),
 			Title:     f.RuleID,
 			Message:   f.Message,
 		})
@@ -331,10 +332,21 @@ func publishCIResults(ctx *ExecContext, out *Output) {
 	if !ciResultsEnabled(ctx) {
 		return
 	}
-	report := ci.SARIFReport{Body: out.Summary.SARIF, Category: deriveSARIFCategory(ctx)}
+	body := out.Summary.SARIF
+	if reportsAsWarning(ctx) {
+		body = normalizeSARIFLevels(body, "warning")
+	}
+	report := ci.SARIFReport{Body: body, Category: deriveSARIFCategory(ctx)}
 	if err := ci.ReportSARIF(context.Background(), report); err != nil {
 		log.Debug("Failed to publish SARIF results to CI provider", logKeyKind, ctx.Hook.Kind, "error", err)
 	}
+}
+
+func annotationLevelForHook(ctx *ExecContext, severity string) ci.AnnotationLevel {
+	if reportsAsWarning(ctx) {
+		return ci.AnnotationWarning
+	}
+	return annotationLevelForSeverity(severity)
 }
 
 // annotationLevelForSeverity maps a normalized scanner severity to the CI
@@ -346,6 +358,77 @@ func annotationLevelForSeverity(severity string) ci.AnnotationLevel {
 		return ci.AnnotationError
 	default:
 		return ci.AnnotationWarning
+	}
+}
+
+func reportsAsWarning(ctx *ExecContext) bool {
+	return ctx != nil && ctx.Hook != nil && ctx.Hook.OnFailure != OnFailureFail
+}
+
+func normalizeSARIFLevels(sarif []byte, level string) []byte {
+	if len(sarif) == 0 || level == "" {
+		return sarif
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(sarif, &doc); err != nil {
+		return sarif
+	}
+	runs, ok := doc["runs"].([]any)
+	if !ok {
+		return sarif
+	}
+	for _, rawRun := range runs {
+		run, ok := rawRun.(map[string]any)
+		if !ok {
+			continue
+		}
+		normalizeRunResultLevels(run, level)
+		normalizeRunRuleLevels(run, level)
+	}
+	out, err := json.Marshal(doc)
+	if err != nil {
+		return sarif
+	}
+	return out
+}
+
+func normalizeRunResultLevels(run map[string]any, level string) {
+	results, ok := run["results"].([]any)
+	if !ok {
+		return
+	}
+	for _, rawResult := range results {
+		result, ok := rawResult.(map[string]any)
+		if ok {
+			result["level"] = level
+		}
+	}
+}
+
+func normalizeRunRuleLevels(run map[string]any, level string) {
+	tool, ok := run["tool"].(map[string]any)
+	if !ok {
+		return
+	}
+	driver, ok := tool["driver"].(map[string]any)
+	if !ok {
+		return
+	}
+	rules, ok := driver["rules"].([]any)
+	if !ok {
+		return
+	}
+	for _, rawRule := range rules {
+		rule, ok := rawRule.(map[string]any)
+		if !ok {
+			continue
+		}
+		defaultConfig, ok := rule["defaultConfiguration"].(map[string]any)
+		if !ok {
+			defaultConfig = map[string]any{}
+			rule["defaultConfiguration"] = defaultConfig
+		}
+		defaultConfig["level"] = level
 	}
 }
 

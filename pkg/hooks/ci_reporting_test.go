@@ -1,9 +1,11 @@
 package hooks
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -65,6 +67,52 @@ func TestAnnotationLevelForSeverity(t *testing.T) {
 	assert.Equal(t, ci.AnnotationWarning, annotationLevelForSeverity("low"))
 	assert.Equal(t, ci.AnnotationWarning, annotationLevelForSeverity("info"))
 	assert.Equal(t, ci.AnnotationWarning, annotationLevelForSeverity(""))
+}
+
+func TestAnnotationLevelForHook(t *testing.T) {
+	warnCtx := &ExecContext{Hook: &Hook{OnFailure: OnFailureWarn}}
+	assert.Equal(t, ci.AnnotationWarning, annotationLevelForHook(warnCtx, "critical"))
+	assert.Equal(t, ci.AnnotationWarning, annotationLevelForHook(warnCtx, "high"))
+
+	failCtx := &ExecContext{Hook: &Hook{OnFailure: OnFailureFail}}
+	assert.Equal(t, ci.AnnotationError, annotationLevelForHook(failCtx, "critical"))
+	assert.Equal(t, ci.AnnotationError, annotationLevelForHook(failCtx, "high"))
+	assert.Equal(t, ci.AnnotationWarning, annotationLevelForHook(failCtx, "low"))
+}
+
+func TestNormalizeSARIFLevels(t *testing.T) {
+	const body = `{
+		"runs": [{
+			"tool": {
+				"driver": {
+					"rules": [{
+						"id": "CKV_AWS_21",
+						"defaultConfiguration": {"level": "error"},
+						"properties": {"security-severity": 8.9}
+					}]
+				}
+			},
+			"results": [{
+				"ruleId": "CKV_AWS_21",
+				"level": "error",
+				"message": {"text": "Ensure the S3 bucket has versioning enabled"}
+			}]
+		}]
+	}`
+
+	out := normalizeSARIFLevels([]byte(body), "warning")
+
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(out, &doc))
+	run := doc["runs"].([]any)[0].(map[string]any)
+	result := run["results"].([]any)[0].(map[string]any)
+	assert.Equal(t, "warning", result["level"])
+	assert.Equal(t, "CKV_AWS_21", result["ruleId"], "rule identity must be preserved")
+
+	rule := run["tool"].(map[string]any)["driver"].(map[string]any)["rules"].([]any)[0].(map[string]any)
+	defaultConfig := rule["defaultConfiguration"].(map[string]any)
+	assert.Equal(t, "warning", defaultConfig["level"])
+	assert.Equal(t, 8.9, rule["properties"].(map[string]any)["security-severity"], "security metadata must be preserved")
 }
 
 func TestDeriveSARIFCategory(t *testing.T) {

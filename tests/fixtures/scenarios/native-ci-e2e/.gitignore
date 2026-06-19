@@ -1,5 +1,6 @@
 **/.terraform/**
 **/.terraform.lock.hcl
+!components/terraform/bucket/.terraform.lock.hcl
 **/*.planfile
 **/terraform.tfstate
 **/terraform.tfstate.backup

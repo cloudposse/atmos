@@ -8,7 +8,8 @@ import os
 from pathlib import Path
 
 
-RULE_ID = "ATMOS_NATIVE_CI_E2E"
+RULE_ID = "ATMOS_CUSTOM_COMMAND_SMOKE"
+MESSAGE = "Custom command SARIF smoke test"
 
 
 def repo_relative_component_file() -> str:
@@ -39,9 +40,7 @@ def main() -> int:
                         "rules": [
                             {
                                 "id": RULE_ID,
-                                "shortDescription": {
-                                    "text": "Native CI hook annotation smoke test"
-                                },
+                                "shortDescription": {"text": MESSAGE},
                                 "defaultConfiguration": {"level": "warning"},
                                 "properties": {"severity": "LOW"},
                             }
@@ -53,7 +52,7 @@ def main() -> int:
                         "ruleId": RULE_ID,
                         "level": "warning",
                         "message": {
-                            "text": "Native CI hook annotation smoke test"
+                            "text": MESSAGE
                         },
                         "locations": [
                             {
