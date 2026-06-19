@@ -14,6 +14,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// ciEnabledCtx returns a minimal ExecContext with CI integration enabled — the
+// master switch the reporting steps (summary/annotations/results) now require.
+func ciEnabledCtx() *ExecContext {
+	return &ExecContext{
+		Hook:        &Hook{Kind: "checkov"},
+		AtmosConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		Info:        &schema.ConfigAndStacksInfo{Stack: "test", ComponentFromArg: "bucket"},
+	}
+}
+
 // renderCISummary should append a hook's markdown summary to the GitHub Actions
 // job step summary when running in CI, so scanner findings surface in the
 // pipeline run rather than only the terminal log stream.
@@ -27,7 +37,7 @@ func TestRenderCISummary_WritesToGitHubStepSummary(t *testing.T) {
 	t.Setenv("GITHUB_STEP_SUMMARY", summaryPath)
 
 	const body = "## checkov\n\n✅ no findings\n"
-	renderCISummary(&Output{Summary: &Summary{Kind: "checkov", Body: body}})
+	renderCISummary(ciEnabledCtx(), &Output{Summary: &Summary{Kind: "checkov", Body: body}})
 
 	got, err := os.ReadFile(summaryPath)
 	require.NoError(t, err)
@@ -48,7 +58,7 @@ func TestRenderCISummary_NoStepSummaryIsNoop(t *testing.T) {
 	t.Setenv("GITHUB_STEP_SUMMARY", "")
 
 	assert.NotPanics(t, func() {
-		renderCISummary(&Output{Summary: &Summary{Kind: "checkov", Body: "## checkov\n\nfindings\n"}})
+		renderCISummary(ciEnabledCtx(), &Output{Summary: &Summary{Kind: "checkov", Body: "## checkov\n\nfindings\n"}})
 	})
 }
 
@@ -63,9 +73,9 @@ func TestRenderCISummary_NothingToReport(t *testing.T) {
 	t.Setenv("GITHUB_ACTIONS", "true")
 	t.Setenv("GITHUB_STEP_SUMMARY", summaryPath)
 
-	renderCISummary(nil)
-	renderCISummary(&Output{})
-	renderCISummary(&Output{Summary: &Summary{Kind: "checkov", Body: ""}})
+	renderCISummary(ciEnabledCtx(), nil)
+	renderCISummary(ciEnabledCtx(), &Output{})
+	renderCISummary(ciEnabledCtx(), &Output{Summary: &Summary{Kind: "checkov", Body: ""}})
 
 	_, err := os.Stat(summaryPath)
 	assert.True(t, os.IsNotExist(err), "no summary file should be created when there is nothing to report")
@@ -86,8 +96,8 @@ func TestRenderCISummary_AppendsSeparatedChaptersPreservingExisting(t *testing.T
 	t.Setenv("GITHUB_ACTIONS", "true")
 	t.Setenv("GITHUB_STEP_SUMMARY", summaryPath)
 
-	renderCISummary(&Output{Summary: &Summary{Kind: "checkov", Body: "## checkov\n\n✅ no findings\n"}})
-	renderCISummary(&Output{Summary: &Summary{Kind: "trivy", Body: "## trivy\n\n✅ no findings\n"}})
+	renderCISummary(ciEnabledCtx(), &Output{Summary: &Summary{Kind: "checkov", Body: "## checkov\n\n✅ no findings\n"}})
+	renderCISummary(ciEnabledCtx(), &Output{Summary: &Summary{Kind: "trivy", Body: "## trivy\n\n✅ no findings\n"}})
 
 	got, err := os.ReadFile(summaryPath)
 	require.NoError(t, err)
@@ -140,7 +150,7 @@ func TestCommandEngine_Run_WritesSummaryToCIStepSummary(t *testing.T) {
 	ctx := &ExecContext{
 		Hook:        kind.ResolveDefaults(hook),
 		Kind:        kind,
-		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: t.TempDir()},
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: t.TempDir(), CI: schema.CIConfig{Enabled: true}},
 		Info:        &schema.ConfigAndStacksInfo{Stack: "s", ComponentFromArg: "c"},
 	}
 

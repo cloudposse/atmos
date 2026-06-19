@@ -525,18 +525,77 @@ When a hook's kind produces a markdown summary (every built-in kind
 does), Atmos renders **the same bytes** in:
 
 - Your terminal (via `ui.MarkdownMessage`)
-- The GitHub Actions [job step summary](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#adding-a-job-summary) — automatically, when running in GitHub Actions (i.e. `GITHUB_STEP_SUMMARY` is set)
+- The GitHub Actions [job step summary](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#adding-a-job-summary)
 - The Atmos Pro run page (when Pro is connected)
 
 No separate "terminal-friendly" vs "Pro-friendly" variants — write
 markdown once, get it everywhere.
 
-This is what surfaces scanner findings in the pipeline run instead of
-leaving them buried in the log stream. It requires no configuration: when
-Atmos detects it is running inside GitHub Actions, each hook's summary is
-appended to the job step summary as well as printed to the log. Writing the
-step summary is best-effort — it never fails the hook or the terraform
-command if the summary file can't be written.
+## CI Reporting
+
+When running in CI (GitHub Actions), Atmos can surface scanner-hook findings
+in the pipeline itself instead of leaving them buried in the `terraform plan`
+log. Three independent outputs are available, all under `ci:` and all gated by
+the `ci.enabled` master switch:
+
+```yaml
+ci:
+  enabled: true          # required for any CI reporting to fire
+  summary: true          # markdown report in the job step summary  (default: on)
+  annotations: true      # inline ::error/::warning on the PR diff   (default: on)
+  results: true          # upload SARIF to GitHub Code Scanning      (default: off)
+```
+
+<dl>
+  <dt>`ci.summary`</dt>
+  <dd>Appends each hook's markdown summary to the GitHub Actions job step summary. Default on.</dd>
+
+  <dt>`ci.annotations`</dt>
+  <dd>Renders each finding as an inline GitHub annotation (`::error`/`::warning`) anchored at its file and line on the pull request diff. This is the **non-Code-Scanning** path — it needs no GitHub Advanced Security. Default on.</dd>
+
+  <dt>`ci.results`</dt>
+  <dd>Uploads the raw SARIF to GitHub **Code Scanning** (the Security tab) as tracked alerts. Requires GitHub Advanced Security on private repos. Default off (opt-in). The analysis category is derived automatically from the scan target (`atmos/&lt;component&gt;` for shared component source, `atmos/&lt;stack&gt;/&lt;component&gt;` for a per-stack workdir) so per-component uploads don't overwrite each other.</dd>
+</dl>
+
+All three are **best-effort**: a reporting failure logs at debug and never fails
+the hook or the terraform command. Outside CI they no-op. Findings derive from the
+tool's SARIF, so the three built-in SARIF scanners — `checkov`, `trivy`, `kics` —
+all participate; `infracost` (cost, not findings) does not.
+
+### Required GitHub Actions permissions
+
+```yaml
+permissions:
+  contents: read
+  security-events: write   # ONLY required for ci.results (SARIF upload)
+```
+
+`ci.summary` and `ci.annotations` need **no special permissions** — the step
+summary is a file write and annotations are log output. `ci.results` uploads to
+Code Scanning, which requires the `security-events: write` permission (and GitHub
+Advanced Security on private repositories). Note: pull requests **from forks** do
+not receive `security-events: write` on the default token, so `ci.results` is
+skipped there.
+
+### Custom hooks
+
+A custom `kind: command` hook gets the same reporting as the built-in scanners by
+declaring `format: sarif` — any SARIF-emitting tool (tfsec, semgrep, gitleaks,
+snyk, …) then flows to the summary, annotations, and Code Scanning with no extra
+code:
+
+```yaml
+hooks:
+  tfsec:
+    events: [after-terraform-plan]
+    kind: command
+    command: tfsec
+    args: ["--format", "sarif", "--out", "$ATMOS_OUTPUT_FILE", "$ATMOS_COMPONENT_PATH"]
+    format: sarif              # parse output as SARIF
+    # results: results.sarif   # optional: read SARIF from this file in $ATMOS_OUTPUT_DIR
+```
+
+The report is labeled by the SARIF's own tool name (e.g. "tfsec").
 
 ## Backwards Compatibility
 
