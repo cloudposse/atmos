@@ -25,7 +25,7 @@ func (p *Provider) ReportSARIF(ctx context.Context, report provider.SARIFReport)
 	defer perf.Track(nil, "github.Provider.ReportSARIF")()
 
 	if err := p.ensureClient(); err != nil {
-		return err
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCISARIFUploadFailed, err)
 	}
 
 	cictx, err := p.Context()

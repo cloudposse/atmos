@@ -2,11 +2,13 @@ package ci
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 )
 
@@ -16,16 +18,18 @@ type reportingMockProvider struct {
 	mockProvider
 	annotations []provider.Annotation
 	sarif       []provider.SARIFReport
+	annotateErr error
+	sarifErr    error
 }
 
 func (m *reportingMockProvider) Annotate(a []provider.Annotation) error {
 	m.annotations = append(m.annotations, a...)
-	return nil
+	return m.annotateErr
 }
 
 func (m *reportingMockProvider) ReportSARIF(_ context.Context, r provider.SARIFReport) error {
 	m.sarif = append(m.sarif, r)
-	return nil
+	return m.sarifErr
 }
 
 func TestAnnotate(t *testing.T) {
@@ -61,6 +65,22 @@ func TestAnnotate(t *testing.T) {
 		require.NoError(t, Annotate(nil))
 		assert.Empty(t, m.annotations)
 	})
+
+	t.Run("wraps provider failures with annotation sentinel", func(t *testing.T) {
+		restore := SwapRegistryForTest()
+		defer restore()
+		providerErr := errors.New("provider annotation failed")
+		m := &reportingMockProvider{
+			mockProvider: mockProvider{name: "cap", detected: true},
+			annotateErr:  providerErr,
+		}
+		Register(m)
+
+		err := Annotate([]Annotation{{Path: "a.tf", StartLine: 1, Message: "x"}})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCIAnnotationFailed)
+		assert.ErrorIs(t, err, providerErr)
+	})
 }
 
 func TestReportSARIF(t *testing.T) {
@@ -95,5 +115,21 @@ func TestReportSARIF(t *testing.T) {
 		Register(m)
 		require.NoError(t, ReportSARIF(context.Background(), SARIFReport{Category: "c"}))
 		assert.Empty(t, m.sarif)
+	})
+
+	t.Run("wraps provider failures with SARIF upload sentinel", func(t *testing.T) {
+		restore := SwapRegistryForTest()
+		defer restore()
+		providerErr := errors.New("provider SARIF upload failed")
+		m := &reportingMockProvider{
+			mockProvider: mockProvider{name: "cap", detected: true},
+			sarifErr:     providerErr,
+		}
+		Register(m)
+
+		err := ReportSARIF(context.Background(), SARIFReport{Body: []byte(`{}`), Category: "c"})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCISARIFUploadFailed)
+		assert.ErrorIs(t, err, providerErr)
 	})
 }

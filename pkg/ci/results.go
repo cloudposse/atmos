@@ -2,7 +2,9 @@ package ci
 
 import (
 	"context"
+	"fmt"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -48,7 +50,10 @@ func Annotate(annotations []Annotation) error {
 	if !ok {
 		return nil
 	}
-	return a.Annotate(annotations)
+	if err := a.Annotate(annotations); err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCIAnnotationFailed, err)
+	}
+	return nil
 }
 
 // ReportSARIF publishes a SARIF document to the active CI provider's
@@ -69,5 +74,8 @@ func ReportSARIF(ctx context.Context, report SARIFReport) error {
 	if !ok {
 		return nil
 	}
-	return r.ReportSARIF(ctx, report)
+	if err := r.ReportSARIF(ctx, report); err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCISARIFUploadFailed, err)
+	}
+	return nil
 }
