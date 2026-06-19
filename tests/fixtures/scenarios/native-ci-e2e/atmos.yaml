@@ -41,9 +41,8 @@ auth:
         access_key_id: test
         secret_access_key: test
         region: us-east-1
-        aws:
-          resolver:
-            url: "http://localhost:4566"
+      spec:
+        endpoint_url: "http://localhost:4566"
       default: true
 
 ci:

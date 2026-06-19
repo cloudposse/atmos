@@ -134,12 +134,12 @@ func endpointURLFromManager(manager types.AuthManager, identityName string) stri
 		}
 	}
 
-	if url := resolverEndpointURL(identity, nil); url != "" {
+	if url := baseEndpointURL(identity, nil); url != "" {
 		return url
 	}
 
 	provider, _ := manager.ResolveProviderConfig(identityName)
-	return resolverEndpointURL(nil, provider)
+	return baseEndpointURL(nil, provider)
 }
 
 // getComponentRegionOverride extracts region override from component auth config.

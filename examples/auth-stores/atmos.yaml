@@ -25,14 +25,18 @@ auth:
         assume_role: arn:aws:iam::111111111111:role/ProdAdmin
 
     azure-prod:
-      kind: azure/workload-identity
+      kind: azure/subscription
       via:
         provider: azure-oidc
+      principal:
+        subscription_id: "22222222-2222-2222-2222-222222222222"
 
     gcp-prod:
-      kind: gcp/adc
+      kind: gcp/project
       via:
         provider: gcp-adc
+      principal:
+        project_id: acme-prod-123456
 
 # Stores with identity-based authentication.
 # Each store uses a named identity instead of the default credential chain.

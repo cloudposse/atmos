@@ -73,19 +73,17 @@ func TestIdentityNamesWithDots(t *testing.T) {
 	assert.Equal(t, "simple-name", config.Auth.IdentityCaseMap["simple-name"])
 }
 
-func TestAuthIdentitiesResolveYAMLFunctionsWhenPreservingKeys(t *testing.T) {
+func TestAuthIdentitiesResolveYAMLFunctionsInSpecWhenPreservingKeys(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "atmos.yaml")
-	t.Setenv("TEST_ATMOS_AWS_RESOLVER_URL", "http://localhost:4566")
+	t.Setenv("TEST_ATMOS_AWS_ENDPOINT_URL", "http://localhost:4566")
 
 	configContent := `auth:
   identities:
     floci.superuser:
       kind: aws/user
-      credentials:
-        aws:
-          resolver:
-            url: !env TEST_ATMOS_AWS_RESOLVER_URL
+      spec:
+        endpoint_url: !env TEST_ATMOS_AWS_ENDPOINT_URL
 `
 	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
@@ -98,11 +96,7 @@ func TestAuthIdentitiesResolveYAMLFunctionsWhenPreservingKeys(t *testing.T) {
 
 	identity, exists := config.Auth.Identities["floci.superuser"]
 	require.True(t, exists)
-	awsConfig, ok := identity.Credentials["aws"].(map[string]interface{})
-	require.True(t, ok)
-	resolverConfig, ok := awsConfig["resolver"].(map[string]interface{})
-	require.True(t, ok)
-	assert.Equal(t, "http://localhost:4566", resolverConfig["url"])
+	assert.Equal(t, "http://localhost:4566", identity.Spec["endpoint_url"])
 }
 
 // TestIdentityNamesWithDotsErrorHandling tests that fixAuthIdentities gracefully handles edge cases.
