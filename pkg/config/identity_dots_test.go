@@ -73,6 +73,38 @@ func TestIdentityNamesWithDots(t *testing.T) {
 	assert.Equal(t, "simple-name", config.Auth.IdentityCaseMap["simple-name"])
 }
 
+func TestAuthIdentitiesResolveYAMLFunctionsWhenPreservingKeys(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "atmos.yaml")
+	t.Setenv("TEST_ATMOS_AWS_RESOLVER_URL", "http://localhost:4566")
+
+	configContent := `auth:
+  identities:
+    floci.superuser:
+      kind: aws/user
+      credentials:
+        aws:
+          resolver:
+            url: !env TEST_ATMOS_AWS_RESOLVER_URL
+`
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
+	require.NoError(t, err)
+
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configPath},
+	}
+	config, err := LoadConfig(configAndStacksInfo)
+	require.NoError(t, err)
+
+	identity, exists := config.Auth.Identities["floci.superuser"]
+	require.True(t, exists)
+	awsConfig, ok := identity.Credentials["aws"].(map[string]interface{})
+	require.True(t, ok)
+	resolverConfig, ok := awsConfig["resolver"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "http://localhost:4566", resolverConfig["url"])
+}
+
 // TestIdentityNamesWithDotsErrorHandling tests that fixAuthIdentities gracefully handles edge cases.
 func TestIdentityNamesWithDotsErrorHandling(t *testing.T) {
 	tests := []struct {

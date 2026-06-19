@@ -31,6 +31,55 @@ func TestNewStore_NotSecret(t *testing.T) {
 	require.ErrorIs(t, err, ErrStoreNotSecret)
 }
 
+func TestNewStore_ClaimedSecretStoreKinds(t *testing.T) {
+	tests := []struct {
+		name            string
+		config          store.StoreConfig
+		secretByDefault bool
+	}{
+		{name: "aws ssm", config: store.StoreConfig{Kind: store.KindAWSSSM}},
+		{name: "aws secrets manager", config: store.StoreConfig{Kind: store.KindAWSASM}},
+		{name: "hashicorp vault", config: store.StoreConfig{Kind: store.KindHashicorpVault}},
+		{name: "azure key vault", config: store.StoreConfig{Kind: store.KindAzureKeyVault}},
+		{name: "gcp secret manager", config: store.StoreConfig{Kind: store.KindGCPSecret}},
+		{name: "onepassword", config: store.StoreConfig{Kind: store.KindOnePassword}, secretByDefault: true},
+		{name: "onepassword legacy alias", config: store.StoreConfig{Type: "1password"}, secretByDefault: true},
+		{name: "keychain", config: store.StoreConfig{Kind: store.KindKeychain}, secretByDefault: true},
+		{name: "keychain legacy alias", config: store.StoreConfig{Type: "keyring"}, secretByDefault: true},
+		{name: "github actions", config: store.StoreConfig{Kind: store.KindGitHubActions}, secretByDefault: true},
+		{name: "github actions legacy alias", config: store.StoreConfig{Type: "github-actions"}, secretByDefault: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			cfgMap := store.StoresConfig{"app": tt.config}
+			store.ApplySecretDefaults(cfgMap)
+			cfg := &schema.AtmosConfiguration{
+				StoresConfig: cfgMap,
+				Stores:       store.StoreRegistry{"app": store.NewMockStore(ctrl)},
+			}
+
+			p, err := newStoreProvider(cfg, "app")
+			if tt.secretByDefault {
+				require.NoError(t, err)
+				assert.NotNil(t, p)
+				return
+			}
+			require.ErrorIs(t, err, ErrStoreNotSecret)
+
+			secretConfig := tt.config
+			secretConfig.Secret = true
+			cfg.StoresConfig["app"] = secretConfig
+			p, err = newStoreProvider(cfg, "app")
+			require.NoError(t, err)
+			assert.NotNil(t, p)
+		})
+	}
+}
+
 func TestStoreProvider_SetGet(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

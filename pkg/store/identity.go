@@ -13,6 +13,7 @@ type AWSAuthConfig struct {
 	ConfigFile      string
 	Profile         string
 	Region          string
+	EndpointURL     string
 }
 
 // AzureAuthConfig holds the Azure-specific authentication configuration resolved from an identity.
