@@ -44,6 +44,29 @@ func TestGetResolverConfigOption_IdentityResolver(t *testing.T) {
 	assert.NotNil(t, opt, "Expected resolver option to be returned")
 }
 
+func TestResolverEndpointURL_IdentityTakesPrecedence(t *testing.T) {
+	identity := &schema.Identity{
+		Credentials: map[string]interface{}{
+			"aws": map[string]interface{}{
+				"resolver": map[string]interface{}{
+					"url": "http://identity.localstack:4566",
+				},
+			},
+		},
+	}
+	provider := &schema.Provider{
+		Spec: map[string]interface{}{
+			"aws": map[string]interface{}{
+				"resolver": map[string]interface{}{
+					"url": "http://provider.localstack:4566",
+				},
+			},
+		},
+	}
+
+	assert.Equal(t, "http://identity.localstack:4566", resolverEndpointURL(identity, provider))
+}
+
 func TestGetResolverConfigOption_ProviderResolver(t *testing.T) {
 	// Test provider resolver when identity has no resolver
 	provider := &schema.Provider{

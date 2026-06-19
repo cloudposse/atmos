@@ -99,6 +99,17 @@ func TestSecretsManagerStore_SetCreatesThenUpdates(t *testing.T) {
 	assert.Equal(t, "v2", got)
 }
 
+func TestSecretsManagerStore_SetPreservesStructuredJSONString(t *testing.T) {
+	fake := newFakeSecretsManager()
+	s := newTestASMStore(fake)
+
+	require.NoError(t, s.Set("prod", "api", "DB_CONFIG", `{"username":"demo","password":"secret"}`))
+
+	got, err := s.Get("prod", "api", "DB_CONFIG")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"username": "demo", "password": "secret"}, got)
+}
+
 func TestSecretsManagerStore_DeleteAndHas(t *testing.T) {
 	fake := newFakeSecretsManager()
 	s := newTestASMStore(fake)
@@ -147,6 +158,19 @@ func TestNewSecretsManagerStore_DefersClientForIdentity(t *testing.T) {
 	assert.Equal(t, "_", *asm.stackDelimiter)
 	assert.Equal(t, "aws/admin", asm.identityName)
 	assert.Nil(t, asm.client, "identity-based store must defer client creation")
+}
+
+func TestNewSecretsManagerStore_DefersClientWithoutIdentity(t *testing.T) {
+	s, err := NewSecretsManagerStore(SecretsManagerStoreOptions{
+		Region: "us-west-2",
+	}, "")
+	require.NoError(t, err)
+
+	asm, ok := s.(*SecretsManagerStore)
+	require.True(t, ok)
+	assert.Equal(t, "us-west-2", asm.region)
+	assert.Empty(t, asm.identityName)
+	assert.Nil(t, asm.client, "default-credential store must defer client creation")
 }
 
 func TestNewSecretsManagerStore_DefaultStackDelimiter(t *testing.T) {

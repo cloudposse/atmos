@@ -9,12 +9,36 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+func TestInjectDescribeComponentStoreAuthResolver_ResolverOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	mockStore := storepkg.NewMockIdentityAwareStore(ctrl)
+
+	authManager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{})
+	mockStore.EXPECT().
+		SetAuthContext(gomock.Not(nil), "").
+		Do(func(resolver storepkg.AuthContextResolver, identityName string) {
+			assert.NotNil(t, resolver)
+			assert.Empty(t, identityName)
+		})
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Stores: storepkg.StoreRegistry{
+			"explicit-identity-store": mockStore,
+		},
+	}
+
+	injectDescribeComponentStoreAuthResolver(atmosConfig, authManager)
+}
 
 func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 	// Set up gomock controller

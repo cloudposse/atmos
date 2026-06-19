@@ -1,0 +1,16 @@
+vars:
+  stage: consumer
+
+components:
+  terraform:
+    reader:
+      metadata:
+        component: output-demo
+      dependencies:
+        tools:
+          opentofu: "1.12.2"
+      vars:
+        cross_stack_ssm: !store outputs/ssm producer output-demo demo_id
+        cross_stack_asm: !store outputs/asm producer output-demo demo_id
+        cross_stack_ssm_query: !store outputs/ssm producer output-demo structured_config | query .endpoint
+        cross_stack_template: !template '{{ atmos.Store "outputs/asm" "producer" "output-demo" "demo_id" }}'

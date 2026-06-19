@@ -280,6 +280,11 @@ func TestNewOnePasswordClient_Selection(t *testing.T) {
 			wantSDK: true,
 		},
 		{
+			name:        "explicit connect",
+			opts:        OnePasswordStoreOptions{Mode: opModeConnect, ConnectHost: "https://op.example", ConnectToken: "ct"},
+			wantConnect: true,
+		},
+		{
 			name:    "unknown mode",
 			opts:    OnePasswordStoreOptions{Mode: "bogus", Token: "sa"},
 			wantErr: true,
@@ -312,12 +317,34 @@ func TestNewOnePasswordClient_Selection(t *testing.T) {
 }
 
 func TestNewOnePasswordClient_EnvFallback(t *testing.T) {
+	t.Run("service account token from env", func(t *testing.T) {
+		t.Setenv("OP_CONNECT_HOST", "")
+		t.Setenv("OP_CONNECT_TOKEN", "")
+		t.Setenv("OP_SERVICE_ACCOUNT_TOKEN", "env-sa-token")
+
+		client, err := newOnePasswordClient(&OnePasswordStoreOptions{Mode: opModeServiceAccount})
+		require.NoError(t, err)
+		_, ok := client.(*sdkClient)
+		assert.True(t, ok)
+	})
+
+	t.Run("connect credentials from env", func(t *testing.T) {
+		t.Setenv("OP_CONNECT_HOST", "https://connect.example")
+		t.Setenv("OP_CONNECT_TOKEN", "env-connect-token")
+		t.Setenv("OP_SERVICE_ACCOUNT_TOKEN", "")
+
+		client, err := newOnePasswordClient(&OnePasswordStoreOptions{Mode: opModeConnect})
+		require.NoError(t, err)
+		_, ok := client.(*connectClient)
+		assert.True(t, ok)
+	})
+}
+
+func TestNewOnePasswordClient_ExplicitConnectDoesNotFallbackToServiceAccount(t *testing.T) {
 	t.Setenv("OP_CONNECT_HOST", "")
 	t.Setenv("OP_CONNECT_TOKEN", "")
 	t.Setenv("OP_SERVICE_ACCOUNT_TOKEN", "env-sa-token")
 
-	client, err := newOnePasswordClient(&OnePasswordStoreOptions{})
-	require.NoError(t, err)
-	_, ok := client.(*sdkClient)
-	assert.True(t, ok)
+	_, err := newOnePasswordClient(&OnePasswordStoreOptions{Mode: opModeConnect})
+	assert.ErrorIs(t, err, ErrOnePasswordNoAuth)
 }

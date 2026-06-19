@@ -19,19 +19,25 @@ The `stores` section in `atmos.yaml` configures external key-value stores that c
 stores:
   # AWS SSM Parameter Store
   prod/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
+    options:
+      region: us-east-1
+
+  # AWS Secrets Manager
+  prod/asm:
+    kind: aws/asm
     options:
       region: us-east-1
 
   # Azure Key Vault
   prod/azure:
-    type: azure-key-vault
+    kind: azure/keyvault
     options:
       vault_url: "https://my-keyvault.vault.azure.net/"
 
   # Google Secret Manager
   prod/gcp:
-    type: google-secret-manager
+    kind: gcp/secretmanager
     options:
       project_id: my-project
 
@@ -65,16 +71,22 @@ vars:
   api_key: !store prod/ssm::/app/api-key
 ```
 
-## Supported Store Types
+## Supported Store Kinds
+
+Use `kind` for new store definitions. The legacy `type` field is still accepted for
+backward compatibility; when both are set, `kind` wins.
 
 <dl>
-  <dt>`aws-ssm-parameter-store`</dt>
+  <dt>`aws/ssm` (legacy type: `aws-ssm-parameter-store`)</dt>
   <dd>AWS Systems Manager Parameter Store. Stores and retrieves parameters from SSM.</dd>
 
-  <dt>`azure-key-vault`</dt>
+  <dt>`aws/asm` (legacy type: `aws-secrets-manager`)</dt>
+  <dd>AWS Secrets Manager. Stores and retrieves string or JSON secret values.</dd>
+
+  <dt>`azure/keyvault` (legacy type: `azure-key-vault`)</dt>
   <dd>Azure Key Vault. Stores and retrieves secrets from Azure.</dd>
 
-  <dt>`google-secret-manager` (or `gsm`)</dt>
+  <dt>`gcp/secretmanager` (legacy types: `google-secret-manager`, `google/secretmanager`, `gsm`)</dt>
   <dd>Google Cloud Secret Manager. Stores and retrieves secrets from GCP.</dd>
 
   <dt>`redis`</dt>
@@ -96,13 +108,13 @@ Stores are an excellent place to keep secrets. Mark any store sensitive by setti
 stores:
   # Regular store (machine outputs) — accessed with !store
   terraform-outputs:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: us-east-1
 
   # Secret store (SecureString) — accessed with !secret
   app-secrets:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     secret: true
     options:
       region: us-east-1
@@ -114,7 +126,7 @@ A `secret: true` store:
 
 - **Writes the sensitive at-rest variant** of its backend (e.g. SSM `SecureString`, Key Vault secret).
 - **Masks values automatically** in command output, so secrets don't leak into logs the way a plain `!store` value can.
-- **Is resolved only with [`!secret`](/functions/yaml/secret)** and the [`atmos secret`](/cli/commands/secret/usage) CLI — using `!store` against a `secret: true` store is an error, which keeps the declarative secret registry mandatory by construction.
+- **Is resolved only with [`!secret`](/functions/yaml/secret)** and the [`atmos secret`](/cli/commands/secret/usage) CLI — using `!store`, `!store.get`, or `atmos.Store` against a `secret: true` store is an error, which keeps the declarative secret registry mandatory by construction.
 
 Some backends are secret managers by nature (1Password, the OS keychain, GitHub Actions) and default to `secret: true` even when you omit it. For declaring, provisioning, and reading secrets, see [Secrets Configuration](/cli/configuration/secrets).
 
@@ -130,15 +142,39 @@ Some backends are secret managers by nature (1Password, the OS keychain, GitHub 
 ```yaml
 stores:
   prod/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: us-east-1
       # Optional
       prefix: myapp
       stack_delimiter: "/"
+      # Optional: custom endpoint for AWS-compatible local/test APIs
+      # (`endpoint_url` is an accepted alias; `endpoint` wins if both are set)
+      endpoint: http://localhost:4566
       # Optional: assume role for cross-account access
       read_role_arn: arn:aws:iam::123456789012:role/SSMReader
       write_role_arn: arn:aws:iam::123456789012:role/SSMWriter
+```
+</File>
+
+### AWS Secrets Manager
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  prod/asm:
+    kind: aws/asm
+    options:
+      region: us-east-1
+      # Optional
+      prefix: myapp
+      stack_delimiter: "/"
+      # Optional: custom endpoint for AWS-compatible local/test APIs
+      # (`endpoint_url` is an accepted alias; `endpoint` wins if both are set)
+      endpoint: http://localhost:4566
+      # Optional: assume role for cross-account access
+      read_role_arn: arn:aws:iam::123456789012:role/SecretsReader
+      write_role_arn: arn:aws:iam::123456789012:role/SecretsWriter
 ```
 </File>
 
@@ -148,12 +184,23 @@ stores:
 ```yaml
 stores:
   prod/azure:
-    type: azure-key-vault
+    kind: azure/keyvault
     options:
       vault_url: "https://my-keyvault.vault.azure.net/"
       # Optional
       prefix: myapp
       stack_delimiter: "-"
+      # Optional alias for vault_url, useful for local/test endpoints
+      endpoint: http://localhost:4567
+      # Optional for Key Vault-compatible local endpoints whose auth challenge
+      # resource does not match the endpoint host
+      disable_challenge_resource_verification: true
+      # Optional for plaintext local endpoints (rewrites http:// to https:// over an insecure transport)
+      endpoint_insecure: true
+      # Optional for emulators that accept any bearer token
+      without_authentication: true
+      # Optional: permit sending the credential over plain http (does not rewrite the URL like endpoint_insecure)
+      insecure_allow_credential_with_http: true
 ```
 </File>
 
@@ -165,12 +212,19 @@ Authentication uses the [Azure Default Credential chain](https://learn.microsoft
 ```yaml
 stores:
   prod/gcp:
-    type: google-secret-manager  # or "gsm"
+    kind: gcp/secretmanager
     options:
       project_id: my-project
       # Optional
       prefix: myapp
       stack_delimiter: "_"
+      # Optional: custom endpoint for local/test APIs
+      # (`endpoint_url` is an accepted alias; `endpoint` wins if both are set)
+      endpoint: localhost:4568
+      # Optional for plaintext local gRPC endpoints
+      endpoint_insecure: true
+      # Optional for emulators that do not validate Google credentials
+      without_authentication: true
       # Optional: JSON credentials (or use GOOGLE_APPLICATION_CREDENTIALS env var)
       credentials: '{"type":"service_account",...}'
       # Optional: replication locations

@@ -19,6 +19,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -27,6 +28,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store/authbridge"
 )
 
 // errWrapFormat is the format string for wrapping errors with a cause.
@@ -126,6 +128,7 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	if err != nil {
 		return errors.Join(errUtils.ErrInitializeCLIConfig, err)
 	}
+	injectHookStoreAuthResolver(&atmosConfig, &info)
 
 	// Resolve path-based component arguments before getting hooks.
 	// Path resolution must happen before GetHooks because GetHooks calls
@@ -183,6 +186,24 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	}
 
 	return nil
+}
+
+// injectHookStoreAuthResolver wires the resolved auth manager from info into
+// atmosConfig as the store auth-context resolver so stores invoked by hooks can
+// resolve credentials lazily. It is a no-op when the inputs are nil or info holds
+// no usable AuthManager.
+func injectHookStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	if atmosConfig == nil || info == nil || info.AuthManager == nil {
+		return
+	}
+
+	authManager, ok := info.AuthManager.(authtypes.AuthManager)
+	if !ok {
+		return
+	}
+
+	resolver := authbridge.NewResolver(authManager, info)
+	atmosConfig.Stores.SetAuthContextResolver(resolver)
 }
 
 // runCIHooksForDeploy fires CI hooks using already-resolved info.
