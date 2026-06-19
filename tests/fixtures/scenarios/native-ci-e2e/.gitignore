@@ -1,0 +1,8 @@
+**/.terraform/**
+**/.terraform.lock.hcl
+**/*.planfile
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/terraform.tfstate.d/**
+github-output.txt
+github-step-summary.txt

@@ -73,9 +73,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
+      - name: Add Terraform from Atmos toolchain to PATH
+        run: |
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain env --format=github
 
       - name: Run make build-all install
         run: |
