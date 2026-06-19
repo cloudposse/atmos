@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 )
 
@@ -101,4 +103,16 @@ func TestProvider_ReportSARIF_UploadsGzippedCategorizedSARIF(t *testing.T) {
 	run := doc["runs"].([]any)[0].(map[string]any)
 	details := run["automationDetails"].(map[string]any)
 	assert.Equal(t, "atmos/bucket", details["id"], "category must be stamped into the uploaded SARIF")
+}
+
+func TestProvider_ReportSARIF_WrapsClientInitFailure(t *testing.T) {
+	t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+
+	p := NewProvider()
+	err := p.ReportSARIF(context.Background(), provider.SARIFReport{Body: []byte(`{}`)})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCISARIFUploadFailed)
+	assert.True(t, errors.Is(err, errUtils.ErrGitHubTokenNotFound), "keeps underlying client init error matchable")
 }

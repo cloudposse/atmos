@@ -2,6 +2,7 @@ package sarif
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/hooks"
 )
@@ -30,7 +31,11 @@ func customFormatOutputPath(ctx *hooks.ExecContext) string {
 		return ""
 	}
 	if ctx.Hook.Results != "" {
-		return filepath.Join(ctx.OutputDir, ctx.Hook.Results)
+		rel := filepath.Clean(ctx.Hook.Results)
+		if filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return ""
+		}
+		return filepath.Join(ctx.OutputDir, rel)
 	}
 	return ctx.OutputFile
 }
