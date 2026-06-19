@@ -554,7 +554,7 @@ ci:
   <dd>Renders each finding as an inline GitHub annotation (`::error`/`::warning`) anchored at its file and line on the pull request diff. This is the **non-Code-Scanning** path — it needs no GitHub Advanced Security. Default on.</dd>
 
   <dt>`ci.results`</dt>
-  <dd>Uploads the raw SARIF to GitHub **Code Scanning** (the Security tab) as tracked alerts. Requires GitHub Advanced Security on private repos. Default off (opt-in). The analysis category is derived automatically from the scan target (`atmos/&lt;component&gt;` for shared component source, `atmos/&lt;stack&gt;/&lt;component&gt;` for a per-stack workdir) so per-component uploads don't overwrite each other.</dd>
+  <dd>Uploads the raw SARIF to GitHub **Code Scanning** (the Security tab) as tracked alerts. Code Scanning is **free on public repositories**; on **private/internal repositories it requires [GitHub Advanced Security](https://docs.github.com/en/get-started/learning-about-github/about-github-advanced-security)** — a paid add-on that **GitHub** licenses per active committer. Default off (opt-in). The analysis category is derived automatically from the scan target (`atmos/&lt;component&gt;` for shared component source, `atmos/&lt;stack&gt;/&lt;component&gt;` for a per-stack workdir) so per-component uploads don't overwrite each other.</dd>
 </dl>
 
 All three are **best-effort**: a reporting failure logs at debug and never fails
@@ -570,12 +570,14 @@ permissions:
   security-events: write   # ONLY required for ci.results (SARIF upload)
 ```
 
-`ci.summary` and `ci.annotations` need **no special permissions** — the step
-summary is a file write and annotations are log output. `ci.results` uploads to
-Code Scanning, which requires the `security-events: write` permission (and GitHub
-Advanced Security on private repositories). Note: pull requests **from forks** do
-not receive `security-events: write` on the default token, so `ci.results` is
-skipped there.
+`ci.summary` and `ci.annotations` need **no special permissions and no paid
+add-on** — the step summary is a file write and annotations are log output, so
+they work on any repository. `ci.results` uploads to Code Scanning, which
+requires the `security-events: write` permission and — on **private/internal
+repositories** — **GitHub Advanced Security, which GitHub licenses as a paid
+add-on per active committer** (Code Scanning is free on public repositories).
+Note: pull requests **from forks** do not receive
+`security-events: write` on the default token, so `ci.results` is skipped there.
 
 ### Custom hooks
 
