@@ -1,0 +1,68 @@
+---
+slug: scanner-annotations-and-code-scanning
+title: "Scanner Findings as Inline PR Annotations and Code Scanning Alerts"
+authors: [osterman]
+tags: [enhancement, security]
+---
+
+Security scanner hooks (Checkov, Trivy, KICS) can now surface findings as **inline GitHub annotations** on the pull request diff and upload them to **GitHub Code Scanning** (the Security tab) — natively, with no `github/codeql-action` step. Custom hooks running any SARIF-emitting tool get the same treatment by adding `format: sarif`.
+
+<!--truncate-->
+
+## The Problem
+
+[Scanner hooks](/stacks/hooks) already render a findings summary to the terminal, the job step summary, and the Atmos Pro run page. But the two richest GitHub surfaces were missing:
+
+- **Inline annotations** — findings pinned to the exact file and line on the PR diff, where reviewers actually look.
+- **Code Scanning alerts** — tracked findings in the Security tab with an open → fixed lifecycle across runs.
+
+The findings were right there in the parsed SARIF; they just had nowhere to go.
+
+## The Solution
+
+Three independent CI reporting outputs, all under `ci:` and gated by the `ci.enabled` master switch:
+
+```yaml
+ci:
+  enabled: true
+  summary: true        # markdown report in the job step summary  (default: on)
+  annotations: true    # inline ::error/::warning on the PR diff   (default: on)
+  results: true        # upload SARIF to GitHub Code Scanning      (default: off)
+```
+
+- **`ci.annotations`** turns each finding into a GitHub `::error`/`::warning` annotation anchored at its file and line. This is the **non-Code-Scanning** path — it needs no GitHub Advanced Security, so it works on any repo.
+- **`ci.results`** uploads the raw SARIF to Code Scanning. Atmos derives the analysis category from the scan target automatically, so a `terraform plan` across many components tracks each as its own analysis instead of overwriting.
+
+Both are implemented as **native CI provider capabilities** (extending the same provider interface that already powers job summaries, check runs, and PR comments), not by shelling out to a third-party action. Everything is best-effort: a reporting failure never fails your hook or your plan, and outside CI it all no-ops.
+
+### Built-in and custom tools
+
+The three SARIF scanners — `checkov`, `trivy`, `kics` — participate automatically. Any **custom** tool does too, just by declaring `format: sarif`:
+
+```yaml
+hooks:
+  tfsec:
+    events: [after-terraform-plan]
+    kind: command
+    command: tfsec
+    args: ["--format", "sarif", "--out", "$ATMOS_OUTPUT_FILE", "$ATMOS_COMPONENT_PATH"]
+    format: sarif
+```
+
+### Permissions
+
+```yaml
+permissions:
+  contents: read
+  security-events: write   # only needed for ci.results (SARIF upload)
+```
+
+Annotations and the summary need no special permissions. `ci.results` uploads to Code Scanning, which needs `security-events: write` (and GitHub Advanced Security on private repos).
+
+## How to Use It
+
+See [CI Reporting](/stacks/hooks#ci-reporting) in the hooks documentation for the full reference.
+
+## Get Involved
+
+Want findings routed somewhere else — GitLab security dashboards, threaded PR review comments? [Open an issue](https://github.com/cloudposse/atmos/issues) or join us in the [Atmos community](https://cloudposse.com/slack).

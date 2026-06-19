@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -98,7 +99,9 @@ func (e *CommandEngine) Run(ctx *ExecContext) (*Output, error) {
 
 	out := captureOutput(ctx, outputFile)
 	renderTerminal(ctx, out)
-	renderCISummary(out)
+	renderCISummary(ctx, out)
+	emitCIAnnotations(ctx, out)
+	publishCIResults(ctx, out)
 
 	if runErr != nil {
 		return out, applyOnFailure(ctx, runErr)
@@ -229,8 +232,8 @@ func captureOutput(ctx *ExecContext, outputFile string) *Output {
 		}
 	}
 
-	if ctx.Kind.ResultHandler != nil {
-		summary, hErr := ctx.Kind.ResultHandler(ctx)
+	if handler := resolveResultHandler(ctx); handler != nil {
+		summary, hErr := handler(ctx)
 		if hErr != nil {
 			log.Warn(
 				"Hook ResultHandler failed",
@@ -271,8 +274,11 @@ func renderTerminal(ctx *ExecContext, out *Output) {
 // It is a no-op outside CI. Writing to the step summary is best-effort: a
 // failure here must never fail the hook (the findings already rendered to the
 // terminal), so the error is logged at debug and swallowed.
-func renderCISummary(out *Output) {
+func renderCISummary(ctx *ExecContext, out *Output) {
 	if out == nil || out.Summary == nil || out.Summary.Body == "" {
+		return
+	}
+	if !ciSummaryEnabled(ctx) {
 		return
 	}
 	// The step summary is append-only and shared: a prior step or hook may
@@ -285,6 +291,123 @@ func renderCISummary(out *Output) {
 	if err := ci.WriteStepSummary("\n" + out.Summary.Body); err != nil {
 		log.Debug("Failed to write hook summary to CI step summary", "error", err)
 	}
+}
+
+// emitCIAnnotations renders the hook's findings as inline CI annotations
+// (GitHub: `::error`/`::warning` on the PR diff) when `ci.annotations` is
+// enabled. Best-effort: the findings already rendered to the terminal/summary,
+// so a failure here logs at debug and never fails the hook. The active provider
+// decides whether/how to render — outside CI it no-ops.
+func emitCIAnnotations(ctx *ExecContext, out *Output) {
+	if out == nil || out.Summary == nil || len(out.Summary.Findings) == 0 {
+		return
+	}
+	if !ciAnnotationsEnabled(ctx) {
+		return
+	}
+	annotations := make([]ci.Annotation, 0, len(out.Summary.Findings))
+	for _, f := range out.Summary.Findings {
+		annotations = append(annotations, ci.Annotation{
+			Path:      f.Path,
+			StartLine: f.Line,
+			Level:     annotationLevelForSeverity(f.Severity),
+			Title:     f.RuleID,
+			Message:   f.Message,
+		})
+	}
+	if err := ci.Annotate(annotations); err != nil {
+		log.Debug("Failed to emit CI annotations", logKeyKind, ctx.Hook.Kind, "error", err)
+	}
+}
+
+// publishCIResults uploads the hook's raw SARIF to the CI provider's
+// security-findings store (GitHub Code Scanning) when `ci.results` is enabled.
+// The analysis category is auto-derived from the scan target. Best-effort:
+// a failure logs at debug and never fails the hook; outside CI it no-ops.
+func publishCIResults(ctx *ExecContext, out *Output) {
+	if out == nil || out.Summary == nil || len(out.Summary.SARIF) == 0 {
+		return
+	}
+	if !ciResultsEnabled(ctx) {
+		return
+	}
+	report := ci.SARIFReport{Body: out.Summary.SARIF, Category: deriveSARIFCategory(ctx)}
+	if err := ci.ReportSARIF(context.Background(), report); err != nil {
+		log.Debug("Failed to publish SARIF results to CI provider", logKeyKind, ctx.Hook.Kind, "error", err)
+	}
+}
+
+// annotationLevelForSeverity maps a normalized scanner severity to the CI
+// annotation level. Critical/High surface as errors; everything else as
+// warnings (matching the scanner default of not blocking the plan).
+func annotationLevelForSeverity(severity string) ci.AnnotationLevel {
+	switch severity {
+	case "critical", "high":
+		return ci.AnnotationError
+	default:
+		return ci.AnnotationWarning
+	}
+}
+
+// deriveSARIFCategory builds the Code Scanning analysis category from the
+// actual scan target — the identity GitHub uses to keep multiple uploads for
+// one commit (e.g. one per component) from overwriting each other. When the
+// scan ran against a per-stack provisioned workdir, findings are stack-specific
+// so the category is `atmos/<stack>/<component>`; when it ran against the shared
+// in-repo component source, findings are stack-independent so the category is
+// just `atmos/<component>` (deduped across every stack that uses the component).
+// The tool is not embedded — GitHub already keys analyses by tool.
+func deriveSARIFCategory(ctx *ExecContext) string {
+	if ctx == nil || ctx.Info == nil {
+		return ""
+	}
+	comp := ctx.Info.ComponentFromArg
+	if comp == "" {
+		comp = ctx.Info.FinalComponent
+	}
+	if ctx.AtmosConfig != nil {
+		if _, exists, err := component.BuildAndResolveWorkdirPath(ctx.AtmosConfig, ctx.Info, cfg.TerraformComponentType); err == nil && exists {
+			return "atmos/" + ctx.Info.Stack + "/" + comp
+		}
+	}
+	return "atmos/" + comp
+}
+
+// ciEnabled reports whether CI integration is enabled in config — the master
+// switch all CI reporting outputs (summary/annotations/results) require.
+func ciEnabled(ctx *ExecContext) bool {
+	return ctx != nil && ctx.AtmosConfig != nil && ctx.AtmosConfig.CI.Enabled
+}
+
+// ciSummaryEnabled reports whether the job step summary should be written.
+// Defaults to true (nil) when ci.enabled, matching ci.summary's default.
+func ciSummaryEnabled(ctx *ExecContext) bool {
+	if !ciEnabled(ctx) {
+		return false
+	}
+	e := ctx.AtmosConfig.CI.Summary.Enabled
+	return e == nil || *e
+}
+
+// ciAnnotationsEnabled reports whether inline annotations should be emitted.
+// Defaults to true (nil) when ci.enabled.
+func ciAnnotationsEnabled(ctx *ExecContext) bool {
+	if !ciEnabled(ctx) {
+		return false
+	}
+	e := ctx.AtmosConfig.CI.Annotations.Enabled
+	return e == nil || *e
+}
+
+// ciResultsEnabled reports whether SARIF should be uploaded to the provider's
+// findings store. Defaults to false (nil) — opt-in, since it has side effects
+// and extra requirements (GitHub Advanced Security, security-events: write).
+func ciResultsEnabled(ctx *ExecContext) bool {
+	if !ciEnabled(ctx) {
+		return false
+	}
+	e := ctx.AtmosConfig.CI.Results.Enabled
+	return e != nil && *e
 }
 
 // buildAtmosEnv builds the ATMOS_* env-var map for the subprocess.
