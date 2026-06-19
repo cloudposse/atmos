@@ -460,3 +460,50 @@ func TestExecutor_RunShellStepHostPath(t *testing.T) {
 
 	require.NoError(t, e.runShellStep(params, step, cmdParams, "/wd"))
 }
+
+func TestEnvSliceToMap(t *testing.T) {
+	assert.Nil(t, envSliceToMap(nil))
+	assert.Equal(
+		t,
+		map[string]string{"A": "1", "B": "2"},
+		envSliceToMap([]string{"A=1", "B=2", "malformed"}), // malformed (no '=') is skipped
+	)
+}
+
+func TestExecutor_RunShellStep_ContainerOverrideDryRun(t *testing.T) {
+	e := &Executor{}
+	params := &WorkflowParams{
+		Ctx:                context.Background(),
+		AtmosConfig:        &schema.AtmosConfiguration{},
+		WorkflowDefinition: &schema.WorkflowDefinition{},
+		Opts:               ExecuteOptions{DryRun: true},
+	}
+	// A step-level container override routes to RunStepContainerOverride; dry-run
+	// short-circuits before any real runtime.
+	step := &schema.WorkflowStep{Name: "s", Container: &schema.WorkflowContainer{Image: "alpine"}}
+	cmdParams := &runCommandParams{command: "echo hi", workingDirectory: "."}
+
+	require.NoError(t, e.runShellStep(params, step, cmdParams, "."))
+}
+
+func TestExecutor_RunShellStep_WorkflowContainerExec(t *testing.T) {
+	// A cached dry-run session (backend ID == Name) makes ExecShell preview and
+	// return without invoking the runtime.
+	e := &Executor{containerSession: &ContainerSession{
+		backend:       &fakeContainer{id: "same", name: "same"},
+		config:        &schema.WorkflowContainer{Workspace: "/workspace"},
+		hostWorkspace: "/repo",
+	}}
+	params := &WorkflowParams{
+		Ctx:         context.Background(),
+		AtmosConfig: &schema.AtmosConfiguration{},
+		WorkflowDefinition: &schema.WorkflowDefinition{
+			Container: &schema.WorkflowContainer{Image: "alpine"},
+			Output:    "none",
+		},
+	}
+	step := &schema.WorkflowStep{Name: "s"} // not container-disabled
+	cmdParams := &runCommandParams{command: "pwd", workingDirectory: "."}
+
+	require.NoError(t, e.runShellStep(params, step, cmdParams, "."))
+}

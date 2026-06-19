@@ -1140,3 +1140,11 @@ func TestType_String(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildImageInspectArgs(t *testing.T) {
+	assert.Equal(
+		t,
+		[]string{"image", "inspect", "--format", "{{json .}}", "alpine:latest"},
+		buildImageInspectArgs("alpine:latest"),
+	)
+}
