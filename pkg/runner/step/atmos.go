@@ -112,7 +112,10 @@ func (h *AtmosHandler) resolveWorkDir(step *schema.WorkflowStep, vars *Variables
 
 // resolveEnvVars resolves environment variables.
 func (h *AtmosHandler) resolveEnvVars(step *schema.WorkflowStep, vars *Variables) ([]string, error) {
-	envMap := make(map[string]string, len(vars.Env)+len(step.Env))
+	// Size the hint to vars.Env (the OS environment, the dominant source); step.Env
+	// is a handful of overrides and the map grows as needed. Summing both lengths
+	// trips CodeQL's allocation-overflow query for no real benefit.
+	envMap := make(map[string]string, len(vars.Env))
 	for k, v := range vars.Env {
 		envMap[k] = v
 	}
