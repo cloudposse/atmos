@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -168,14 +169,22 @@ func normalizeSandboxConfig(config *SandboxConfig) {
 func createSandboxContainer(ctx context.Context, runtime Runtime, config *SandboxConfig) (string, error) {
 	createConfig := buildSandboxCreateConfig(config)
 	containerID, err := runtime.Create(ctx, createConfig)
-	if err == nil || config.PullPolicy != PullMissing {
-		if err != nil {
-			return "", fmt.Errorf("%w: create workflow sandbox: %w", errUtils.ErrContainerRuntimeOperation, err)
-		}
+	if err == nil {
 		return containerID, nil
 	}
+	// Only the missing-image case is recoverable by pulling. Any other create
+	// failure (bad mount, invalid arg, daemon error) must surface as-is — pulling
+	// then would mask the real cause behind a misleading registry error.
+	if config.PullPolicy != PullMissing || !isImageMissingError(err) {
+		return "", fmt.Errorf("%w: create workflow sandbox: %w", errUtils.ErrContainerRuntimeOperation, err)
+	}
+	createErr := err
 	if pullErr := runtime.Pull(ctx, config.Image); pullErr != nil {
-		return "", fmt.Errorf("%w: create workflow sandbox and pull image: %w", errUtils.ErrContainerRuntimeOperation, pullErr)
+		return "", fmt.Errorf(
+			"%w: create workflow sandbox and pull image: %w",
+			errUtils.ErrContainerRuntimeOperation,
+			errors.Join(createErr, pullErr),
+		)
 	}
 	containerID, err = runtime.Create(ctx, createConfig)
 	if err != nil {

@@ -2,11 +2,14 @@ package container
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestStartSandbox_RemovesStoppedMatchingOrphansAndUsesUniqueName(t *testing.T) {
@@ -106,4 +109,41 @@ func TestSandboxCleanupPolicies(t *testing.T) {
 			require.NoError(t, sandbox.Cleanup(tt.success))
 		})
 	}
+}
+
+func TestCreateSandboxContainer_PullsOnImageMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx := context.Background()
+	runtime := NewMockRuntime(ctrl)
+	config := &SandboxConfig{Image: "alpine:latest", PullPolicy: PullMissing}
+
+	// Image-missing create error is recoverable: pull, then recreate succeeds.
+	gomock.InOrder(
+		runtime.EXPECT().Create(ctx, gomock.Any()).Return("", errors.New("no such image: alpine:latest")),
+		runtime.EXPECT().Pull(ctx, "alpine:latest").Return(nil),
+		runtime.EXPECT().Create(ctx, gomock.Any()).Return("cid", nil),
+	)
+
+	id, err := createSandboxContainer(ctx, runtime, config)
+	require.NoError(t, err)
+	assert.Equal(t, "cid", id)
+}
+
+func TestCreateSandboxContainer_NonImageErrorDoesNotPull(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx := context.Background()
+	runtime := NewMockRuntime(ctrl)
+	config := &SandboxConfig{Image: "alpine:latest", PullPolicy: PullMissing}
+	createErr := errors.New("statfs /run/agent.sock: operation not supported")
+
+	// Exactly one Create and no Pull: a non-image-missing failure surfaces as-is.
+	runtime.EXPECT().Create(ctx, gomock.Any()).Return("", createErr)
+
+	_, err := createSandboxContainer(ctx, runtime, config)
+	require.ErrorIs(t, err, createErr)
+	require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
 }

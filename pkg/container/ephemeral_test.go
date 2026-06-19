@@ -155,11 +155,9 @@ func TestRunEphemeralContainer_PullMissingCreateAndPullErrors(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
 }
 
-// TestRunEphemeralContainer_PullMissingNonImageErrorDoesNotPull asserts that a
-// create failure that is NOT about a missing image (e.g. a bad mount) surfaces
-// as-is without a pull/retry. Pulling there would mask the real cause behind a
-// misleading registry error — the regression that made a bad bind-mount look
-// like "unable to pull localhost/<image>".
+// TestIsImageMissingError verifies the classifier only matches known
+// image-missing patterns and does not treat unrelated create failures
+// (for example mount/path errors) as missing-image conditions.
 func TestIsImageMissingError(t *testing.T) {
 	cases := []struct {
 		name string
@@ -181,6 +179,11 @@ func TestIsImageMissingError(t *testing.T) {
 	}
 }
 
+// TestRunEphemeralContainer_PullMissingNonImageErrorDoesNotPull asserts that a
+// create failure that is NOT about a missing image (e.g. a bad mount) surfaces
+// as-is without a pull/retry. Pulling there would mask the real cause behind a
+// misleading registry error — the regression that made a bad bind-mount look
+// like "unable to pull localhost/<image>".
 func TestRunEphemeralContainer_PullMissingNonImageErrorDoesNotPull(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

@@ -107,6 +107,15 @@ workflows:
 
   <dt>`container.ports`</dt>
   <dd>Port mappings using `host`, `container`, and optional `protocol` fields.</dd>
+
+  <dt>`container.shell`</dt>
+  <dd>Shell used to execute commands inside the container. For example: `/bin/sh`, `/bin/bash`.</dd>
+
+  <dt>`container.user`</dt>
+  <dd>User context for container execution. Accepts a username or `UID:GID` format.</dd>
+
+  <dt>`container.run_args`</dt>
+  <dd>Additional arguments passed to the container runtime's run command.</dd>
 </dl>
 
 ### Step Behavior in Workflow Containers

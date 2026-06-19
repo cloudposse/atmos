@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/container"
+	"github.com/cloudposse/atmos/pkg/perf"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -86,6 +87,8 @@ func StepContainerOverride(step *schema.WorkflowStep) bool {
 
 // StartWorkflowContainer starts the workflow-level container if configured.
 func StartWorkflowContainer(ctx context.Context, params *ContainerStepParams) (*ContainerSession, error) {
+	defer perf.Track(nil, "workflow.StartWorkflowContainer")()
+
 	if params == nil {
 		return nil, errUtils.ErrNilParam
 	}
@@ -163,7 +166,9 @@ func buildContainerConfig(params *ContainerStepParams, cfg *schema.WorkflowConta
 
 // ExecShell runs a shell command inside the workflow container.
 func (s *ContainerSession) ExecShell(ctx context.Context, params *ContainerStepParams) error {
-	if s == nil || s.backend == nil || params == nil {
+	defer perf.Track(nil, "workflow.ContainerSession.ExecShell")()
+
+	if s == nil || s.backend == nil || params == nil || params.Step == nil || params.WorkflowDef == nil {
 		return errUtils.ErrNilParam
 	}
 	step := params.Step
@@ -209,7 +214,9 @@ func (s *ContainerSession) ExecShell(ctx context.Context, params *ContainerStepP
 
 // RunStepContainerOverride runs a shell step in a one-shot step-level container.
 func RunStepContainerOverride(ctx context.Context, params *ContainerStepParams) error {
-	if params == nil {
+	defer perf.Track(nil, "workflow.RunStepContainerOverride")()
+
+	if params == nil || params.WorkflowDef == nil || params.Step == nil {
 		return errUtils.ErrNilParam
 	}
 	workflowDef := params.WorkflowDef
@@ -221,15 +228,7 @@ func RunStepContainerOverride(ctx context.Context, params *ContainerStepParams) 
 	if strings.TrimSpace(cfg.Image) == "" {
 		return fmt.Errorf("%w: step container image is required", errUtils.ErrContainerRuntimeOperation)
 	}
-	hostWorkspace := params.HostWorkDir
-	if hostWorkspace == "" {
-		var err error
-		hostWorkspace, err = workflowContainerHostWorkspace(workflowDef, params.BasePath)
-		if err != nil {
-			return err
-		}
-	}
-	absHostWorkspace, err := filepath.Abs(hostWorkspace)
+	absHostWorkspace, err := resolveStepHostWorkspace(params)
 	if err != nil {
 		return err
 	}
@@ -248,6 +247,20 @@ func RunStepContainerOverride(ctx context.Context, params *ContainerStepParams) 
 	result, err := container.RunEphemeralContainer(ctx, runtime, ephemeral)
 	writeEphemeralResult(params, result, err)
 	return err
+}
+
+// resolveStepHostWorkspace returns the absolute host workspace path for a step
+// container override, defaulting to the workflow's host workspace when unset.
+func resolveStepHostWorkspace(params *ContainerStepParams) (string, error) {
+	hostWorkspace := params.HostWorkDir
+	if hostWorkspace == "" {
+		var err error
+		hostWorkspace, err = workflowContainerHostWorkspace(params.WorkflowDef, params.BasePath)
+		if err != nil {
+			return "", err
+		}
+	}
+	return filepath.Abs(hostWorkspace)
 }
 
 // buildEphemeralStepConfig assembles the one-shot container config for a step override.
