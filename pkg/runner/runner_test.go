@@ -167,7 +167,9 @@ func TestRun_PropagatesError(t *testing.T) {
 
 	err := Run(ctx, &task, mockRunner, opts)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "exit status")
+	// Non-zero subprocess exits surface as ExitCodeError ("subcommand exited
+	// with code N"), matching the legacy shell-interpreter behavior.
+	assert.Contains(t, err.Error(), "subcommand exited with code 1")
 }
 
 func TestRun_Timeout(t *testing.T) {

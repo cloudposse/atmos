@@ -893,7 +893,15 @@ func executeCustomCommand(
 		// Determine step type - default to shell if not specified.
 		stepType := strings.TrimSpace(step.Type)
 		if stepType == "" {
-			stepType = "shell"
+			stepType = schema.TaskTypeShell
+		}
+
+		// A step whose templated command renders empty - e.g. a conditional
+		// `{{ if .Flags.x }}...{{ end }}` that evaluates false - is a no-op for
+		// shell/atmos steps, matching the legacy shell interpreter that ran an
+		// empty script successfully. Extended steps may have no command by design.
+		if (stepType == schema.TaskTypeShell || stepType == schema.TaskTypeAtmos) && strings.TrimSpace(commandToRun) == "" {
+			continue
 		}
 
 		for _, envVar := range env {
@@ -905,10 +913,10 @@ func executeCustomCommand(
 
 		// Execute the step based on type.
 		switch stepType {
-		case "shell":
+		case schema.TaskTypeShell:
 			workflowStep := step.ToWorkflowStep()
 			workflowStep.Command = commandToRun
-			workflowStep.Type = "shell"
+			workflowStep.Type = schema.TaskTypeShell
 			if workflowStep.WorkingDirectory == "" {
 				workflowStep.WorkingDirectory = workDir
 			}
@@ -921,10 +929,10 @@ func executeCustomCommand(
 				Dir:     workDir,
 				Env:     env,
 			})
-		case "atmos":
+		case schema.TaskTypeAtmos:
 			workflowStep := step.ToWorkflowStep()
 			workflowStep.Command = commandToRun
-			workflowStep.Type = "atmos"
+			workflowStep.Type = schema.TaskTypeAtmos
 			if workflowStep.WorkingDirectory == "" {
 				workflowStep.WorkingDirectory = workDir
 			}

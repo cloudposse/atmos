@@ -213,8 +213,12 @@ func GetOutputMode(step *schema.WorkflowStep, workflow *schema.WorkflowDefinitio
 		return OutputMode(workflow.Output)
 	}
 
-	// Default to log mode.
-	return OutputModeLog
+	// Default to raw (undecorated) output: plain shell/atmos command steps stream
+	// their output directly, matching the pre-handler behavior. The step-boundary
+	// decoration (`[name]` header, ✓/✗ footer) is opt-in via `output: log` and
+	// would otherwise double-label workflow steps (which already render a label)
+	// and add noise to custom-command steps (which have no name).
+	return OutputModeRaw
 }
 
 // GetViewportConfig returns the effective viewport config for a step.

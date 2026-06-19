@@ -2,14 +2,18 @@ package step
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os/exec"
 	"sort"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const exitCodeMetadata = "exit_code"
@@ -55,10 +59,11 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		return nil, err
 	}
 
-	// Get output mode - use default log mode if not in workflow context.
+	// Get output mode - default to raw (undecorated) so plain shell steps stream
+	// output directly; the `[name]`/✓/✗ decoration is opt-in via `output: log`.
 	mode := OutputMode(step.Output)
 	if mode == "" {
-		mode = OutputModeLog
+		mode = OutputModeRaw
 	}
 
 	return h.executePrepared(ctx, shellExecutionRequest{
@@ -175,11 +180,20 @@ func (h *ShellHandler) executePrepared(ctx context.Context, req shellExecutionRe
 	if cfg.workDir != "" {
 		cmd.Dir = cfg.workDir
 	}
-	cmd.Env = cfg.env
+
+	// Apply the shell-depth circuit breaker before spawning. A non-nil error here
+	// means the maximum nesting depth was exceeded (infinite atmos->shell->atmos
+	// recursion), so fail the step instead of running the command.
+	env, err := applyShellLevel(cfg.env)
+	if err != nil {
+		return NewStepResult("").WithMetadata(exitCodeMetadata, 1), err
+	}
+	cmd.Env = env
 
 	writer := NewOutputModeWriter(req.mode, step.Name, req.viewport)
 	stdout, stderr, err := writer.Execute(cmd)
 	if err != nil {
+		err = wrapExitError(err)
 		return NewStepResult(stdout).
 			WithError(stderr).
 			WithMetadata("stdout", stdout).
@@ -195,6 +209,41 @@ func (h *ShellHandler) executePrepared(ctx context.Context, req shellExecutionRe
 		WithMetadata("stdout", stdout).
 		WithMetadata("stderr", stderr).
 		WithMetadata(exitCodeMetadata, 0), nil
+}
+
+// applyShellLevel appends an incremented ATMOS_SHLVL to env (overriding any
+// inherited value, since Go's exec keeps the last duplicate key) so a child
+// process that re-enters Atmos advances the shell depth. It returns an error
+// when the depth would exceed the maximum: the circuit breaker that stops
+// runaway atmos->shell->atmos recursion (e.g. a custom command whose step runs
+// `atmos <same-command>`). The tty/interactive session path applies the same
+// guard in pkg/process.RunShellSession; plain steps build their command here,
+// so the guard must be applied at this layer too.
+func applyShellLevel(env []string) ([]string, error) {
+	level, err := u.GetNextShellLevel()
+	if err != nil {
+		return nil, err
+	}
+	return append(env, fmt.Sprintf("ATMOS_SHLVL=%d", level)), nil
+}
+
+// wrapExitError converts a subprocess exit failure into an ExitCodeError so it
+// renders as "subcommand exited with code N" and is recognized as an
+// already-reported subcommand failure, matching the legacy ShellRunner path
+// that these handlers replaced. Non-exit errors are returned unchanged.
+func wrapExitError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var exitCodeErr errUtils.ExitCodeError
+	if errors.As(err, &exitCodeErr) {
+		return err
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return errUtils.ExitCodeError{Code: process.ExitCode(exitErr)}
+	}
+	return err
 }
 
 func envMapToSlice(envMap map[string]string) []string {

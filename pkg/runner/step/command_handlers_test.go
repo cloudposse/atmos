@@ -201,10 +201,10 @@ func TestGetOutputMode(t *testing.T) {
 			expected:       OutputModeRaw,
 		},
 		{
-			name:           "default to log when both empty",
+			name:           "default to raw when both empty",
 			stepOutput:     "",
 			workflowOutput: "",
-			expected:       OutputModeLog,
+			expected:       OutputModeRaw,
 		},
 	}
 

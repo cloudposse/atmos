@@ -40,9 +40,10 @@ func (h *AtmosHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		return nil, err
 	}
 
+	// Default to raw (undecorated) output; `output: log` opts into step decoration.
 	mode := OutputMode(step.Output)
 	if mode == "" {
-		mode = OutputModeLog
+		mode = OutputModeRaw
 	}
 
 	return h.runAtmosCommand(ctx, step.Name, opts, mode, step.Viewport)
@@ -164,10 +165,17 @@ func (h *AtmosHandler) runAtmosCommand(ctx context.Context, stepName string, opt
 	if opts.workDir != "" {
 		cmd.Dir = opts.workDir
 	}
-	cmd.Env = opts.envVars
+
+	// Apply the shell-depth circuit breaker before spawning a nested atmos.
+	env, levelErr := applyShellLevel(opts.envVars)
+	if levelErr != nil {
+		return h.buildAtmosResult("", "", levelErr), levelErr
+	}
+	cmd.Env = env
 
 	writer := NewOutputModeWriter(mode, stepName, viewport)
 	stdout, stderr, err := writer.Execute(cmd)
+	err = wrapExitError(err)
 
 	return h.buildAtmosResult(stdout, stderr, err), err
 }
