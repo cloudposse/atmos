@@ -57,7 +57,7 @@ permissions:
   security-events: write   # only needed for ci.results (SARIF upload)
 ```
 
-Annotations and the summary need no special permissions. `ci.results` uploads to Code Scanning, which needs `security-events: write` (and GitHub Advanced Security on private repos).
+Annotations and the summary need no special permissions and no paid add-on — they work on any repo. `ci.results` uploads to Code Scanning, which needs `security-events: write` and, on **private repos**, **GitHub Advanced Security — a paid add-on that GitHub licenses per active committer**. Code Scanning is free on public repos. That's exactly why annotations default on and `ci.results` defaults off — everyone gets inline feedback for free, and only GHAS subscribers opt into the Security-tab integration.
 
 ## How to Use It
 
