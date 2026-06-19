@@ -84,6 +84,7 @@ auth:
 ### GitHub Actions OIDC
 
 For CI/CD pipelines in GitHub Actions. Requires `id-token: write` permission in the workflow.
+Use this through a CI profile selected with `ATMOS_PROFILE`.
 
 ```yaml
 auth:
@@ -94,6 +95,10 @@ auth:
       spec:
         audience: sts.us-east-1.amazonaws.com   # Optional, defaults to STS endpoint
 ```
+
+The cloud IAM trust policy must constrain GitHub OIDC `sub` claims to the intended repository
+and branch or GitHub environment, for example `repo:ORG/REPO:ref:refs/heads/main` or
+`repo:ORG/REPO:environment:prod`.
 
 ### GCP Application Default Credentials
 
@@ -319,7 +324,11 @@ Disable Atmos-managed auth to use native cloud provider credentials:
 
 ```bash
 atmos terraform plan mycomponent --stack=dev --identity=false
-# or
+```
+
+Or:
+
+```bash
 export ATMOS_IDENTITY=false
 ```
 
@@ -335,13 +344,17 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    env:
+      ATMOS_PROFILE: github
     steps:
       - uses: actions/checkout@v6
-      - run: atmos terraform apply mycomponent -s prod
+      - run: atmos terraform deploy mycomponent -s prod
 ```
 
 For AWS OIDC, configure `github/oidc` provider with `aws/assume-role` identity. For GCP WIF, configure
 `gcp/workload-identity-federation` provider -- `token_source` is auto-detected in GitHub Actions.
+Do not add a routine `atmos auth login` step to non-interactive OIDC workflows; Atmos exchanges
+the OIDC token when the command runs.
 
 ### Disabling Auth in CI
 
@@ -355,14 +368,17 @@ run: atmos terraform apply mycomponent --stack=prod
 
 ## Profiles for Environment Switching
 
-Use Atmos profiles to swap provider and identity configurations while keeping names consistent:
+Use Atmos profiles to swap provider and identity configurations while keeping names consistent.
+For profile directory layout, activation, and merge behavior, load
+[atmos-profiles](../atmos-profiles/SKILL.md):
 
 ```bash
 atmos --profile developer terraform plan myapp -s dev
 ATMOS_PROFILE=ci atmos terraform apply myapp -s prod
 ```
 
-Each profile is a directory (e.g., `profiles/developer/auth.yaml`) containing auth overrides.
+Keep this skill focused on the auth sections inside a profile, such as providers, identities, and
+keyring settings.
 
 ## ECR Integrations
 

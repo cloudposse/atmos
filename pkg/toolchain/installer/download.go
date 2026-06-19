@@ -100,17 +100,26 @@ func downloadToCache(url, cachePath string) (string, error) {
 	}
 
 	var result string
+	var lastErr error
+	attempts := 0
 	err := retry.WithPredicate(
 		context.Background(),
 		retryConfig,
 		func() error {
+			attempts++
 			var downloadErr error
 			result, downloadErr = downloadToCacheOnce(url, cachePath)
+			if downloadErr != nil {
+				lastErr = downloadErr
+			}
 			return downloadErr
 		},
 		isRetryableDownloadError,
 	)
 	if err != nil {
+		if lastErr != nil && isRetryableDownloadError(lastErr) {
+			return "", buildDownloadRetryError(url, attempts, lastErr)
+		}
 		return "", err
 	}
 	return result, nil
@@ -128,7 +137,9 @@ func downloadToCacheOnce(url, cachePath string) (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
+		requestErr := &downloadRequestError{url: url, err: err}
 		return "", errors.Join(errUtils.ErrDownloadRetryable, errUtils.Build(errUtils.ErrDownloadFailed).
+			WithCause(requestErr).
 			WithExplanationf("Failed to download asset from `%s`", url).
 			WithHint("Check your internet connection").
 			WithHint("Verify GitHub access: `curl -I https://api.github.com`").
@@ -172,17 +183,59 @@ func writeResponseToCache(body io.Reader, cachePath string) (string, error) {
 	return cachePath, nil
 }
 
+type downloadHTTPStatusError struct {
+	url        string
+	statusCode int
+}
+
+func (e *downloadHTTPStatusError) Error() string {
+	defer perf.Track(nil, "installer.downloadHTTPStatusError.Error")()
+
+	if statusText := e.statusText(); statusText != "" {
+		return fmt.Sprintf("HTTP %d %s: %s", e.statusCode, statusText, e.url)
+	}
+	return fmt.Sprintf("HTTP %d: %s", e.statusCode, e.url)
+}
+
+func (e *downloadHTTPStatusError) statusText() string {
+	return http.StatusText(e.statusCode)
+}
+
+type downloadRequestError struct {
+	url string
+	err error
+}
+
+func (e *downloadRequestError) Error() string {
+	defer perf.Track(nil, "installer.downloadRequestError.Error")()
+
+	return fmt.Sprintf("request failed for %s: %v", e.url, e.err)
+}
+
+func (e *downloadRequestError) Unwrap() error {
+	defer perf.Track(nil, "installer.downloadRequestError.Unwrap")()
+
+	return e.err
+}
+
 // buildDownloadError creates a detailed error for failed downloads.
 // For 404 errors, includes ErrHTTP404 so isHTTP404() can detect it for version fallback.
 func buildDownloadError(url string, statusCode int) error {
 	defer perf.Track(nil, "buildDownloadError")()
+
+	statusErr := &downloadHTTPStatusError{url: url, statusCode: statusCode}
+	explanation := fmt.Sprintf("Download failed with HTTP %d", statusCode)
+	if statusText := statusErr.statusText(); statusText != "" {
+		explanation = fmt.Sprintf("%s %s", explanation, statusText)
+	}
 
 	// For 404, include ErrHTTP404 so the version fallback mechanism can detect it.
 	if statusCode == http.StatusNotFound {
 		return errors.Join(
 			ErrHTTP404,
 			errUtils.Build(errUtils.ErrDownloadFailed).
-				WithExplanationf("Download failed with HTTP %d", statusCode).
+				WithCause(statusErr).
+				WithExplanation(explanation).
 				WithHint("Asset not found - check tool name and version are correct").
 				WithHint("The tool registry may have a different version format").
 				WithContext("url", url).
@@ -193,7 +246,8 @@ func buildDownloadError(url string, statusCode int) error {
 	}
 
 	builder := errUtils.Build(errUtils.ErrDownloadFailed).
-		WithExplanationf("Download failed with HTTP %d", statusCode).
+		WithCause(statusErr).
+		WithExplanation(explanation).
 		WithContext("url", url).
 		WithContext("status_code", statusCode).
 		WithExitCode(1)
@@ -213,6 +267,49 @@ func buildDownloadError(url string, statusCode int) error {
 		return errors.Join(errUtils.ErrDownloadRetryable, err)
 	}
 	return err
+}
+
+func buildDownloadRetryError(url string, attempts int, lastErr error) error {
+	summary := downloadErrorSummary(lastErr)
+	builder := errUtils.Build(errUtils.ErrDownloadFailed).
+		WithCausef("failed to download %s after %d attempts: %s", url, attempts, summary).
+		WithExplanationf("Failed to download asset from `%s` after %d attempts. Last error: %s", url, attempts, summary).
+		WithHint("Check GitHub status: https://www.githubstatus.com").
+		WithContext("url", url).
+		WithContext("attempts", attempts).
+		WithExitCode(1)
+
+	var statusErr *downloadHTTPStatusError
+	if errors.As(lastErr, &statusErr) {
+		builder.WithContext("status_code", statusErr.statusCode)
+		if statusText := statusErr.statusText(); statusText != "" {
+			builder.WithContext("status", statusText)
+		}
+	}
+
+	var requestErr *downloadRequestError
+	if errors.As(lastErr, &requestErr) && requestErr.err != nil {
+		builder.WithContext("error", requestErr.err.Error())
+	}
+
+	return builder.Err()
+}
+
+func downloadErrorSummary(err error) string {
+	var statusErr *downloadHTTPStatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.Error()
+	}
+
+	var requestErr *downloadRequestError
+	if errors.As(err, &requestErr) {
+		return requestErr.Error()
+	}
+
+	if err != nil {
+		return err.Error()
+	}
+	return "unknown error"
 }
 
 func isRetryableHTTPStatus(statusCode int) bool {

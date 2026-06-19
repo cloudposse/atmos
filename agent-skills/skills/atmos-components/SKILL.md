@@ -1,6 +1,6 @@
 ---
 name: atmos-components
-description: "Component architecture: Terraform root modules, abstract components, component inheritance, versioning, mixins, catalog patterns"
+description: "Component architecture: Terraform root modules, remote source provisioning, abstract components, component inheritance, versioning, mixins, catalog patterns"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -92,8 +92,10 @@ components:
           - us-east-1a
           - us-east-1b
       settings:
-        spacelift:
-          workspace_enabled: true
+        validation:
+          check-cidr:
+            schema_type: jsonschema
+            schema_path: schemas/vpc.json
 
     eks-cluster:
       metadata:
@@ -110,12 +112,72 @@ Each component configuration can include these sections:
 | `metadata` | Component location, inheritance, type, and Atmos behavior |
 | `vars` | Input variables passed to Terraform/Helmfile/Packer |
 | `env` | Environment variables set during execution |
-| `settings` | Integration metadata (Spacelift, validation, depends_on) |
+| `settings` | Integration metadata such as Atlantis, validation, and custom settings |
+| `dependencies` | Component, file, folder, and tool dependencies |
 | `hooks` | Lifecycle event handlers |
 | `backend` / `backend_type` | Terraform state backend configuration |
 | `providers` | Terraform provider configuration |
 | `command` | Override the executable (e.g., `tofu` instead of `terraform`) |
 | `auth` | Authentication identity reference |
+
+## Dependencies
+
+Use `dependencies.components` for component ordering and affected/dependent analysis:
+
+```yaml
+components:
+  terraform:
+    app:
+      dependencies:
+        components:
+          - component: vpc
+          - component: database
+            stack: plat-ue2-prod
+          - kind: file
+            path: configs/app.yaml
+          - kind: folder
+            path: src/lambda
+```
+
+Do not add new `settings.depends_on` examples. If a repository already uses that legacy field,
+recommend migrating it to `dependencies.components`.
+
+## Source Provisioning and Workdirs
+
+Components can declare `source` in stack config for just-in-time provisioning from Git, OCI, S3,
+HTTP, or local paths. Treat source provisioning as part of component configuration: it controls
+how the component implementation is fetched, while `vars`, `env`, `backend`, and other sections
+control how that implementation is run.
+
+Use component source provisioning when different stacks need different remote component versions,
+or when the repository should not commit the fetched implementation. When source provisioning is
+used, prefer `provision.workdir.enabled: true` so each component-stack instance gets an isolated
+execution directory.
+
+```yaml
+components:
+  terraform:
+    vpc:
+      source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0"
+      provision:
+        workdir:
+          enabled: true
+```
+
+Atmos provisions sources automatically before Terraform commands when needed. Use explicit source
+commands when an agent needs to inspect, refresh, or clean the fetched implementation:
+
+```shell
+atmos terraform source pull vpc --stack dev
+atmos terraform source describe vpc --stack dev
+atmos terraform source list --stack dev
+atmos terraform source delete vpc --stack dev
+atmos list sources
+```
+
+For protected sources, route identity and provider details to `atmos-auth`. For checked-in copies
+of remote components, route to `atmos-vendoring`; vendoring and source provisioning are alternatives
+for obtaining component implementation code.
 
 ## Abstract vs Real Components
 
@@ -419,17 +481,11 @@ Use `atmos vendor pull` to pin specific upstream versions. See the atmos-vendori
 ## Best Practices
 
 1. **One concern per component**: Each component should provision a single logical piece of infrastructure (VPC, EKS cluster, database). Do not combine resources with different lifecycles.
-
 2. **Use abstract base components**: Define catalog defaults as `abstract` components and inherit from them.
-
 3. **Keep inheritance chains shallow**: Limit to 2-3 levels for readability and debuggability.
-
 4. **Use metadata.component for instances**: When deploying the same module multiple times, use `metadata.component` to share the implementation.
-
 5. **Use metadata.name for versioning**: Set `metadata.name` to maintain stable Terraform workspace key prefixes across version upgrades.
-
 6. **Design for reuse**: Components should accept configuration through variables, not hard-coded values. Use the catalog pattern to define sensible defaults.
-
 7. **Use `atmos describe component`**: Always verify the resolved configuration before applying changes.
 
 ```bash

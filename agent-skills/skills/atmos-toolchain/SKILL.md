@@ -32,17 +32,32 @@ jq 1.7.1
 
 - One tool per line, format: `toolname version [version2 version3...]`
 - Multiple versions per tool are supported; first version is the default
-- File location: project root (default), overridable via `toolchain.file_path` in atmos.yaml
+- File location: project root (default), overridable via `toolchain.versions_file` in atmos.yaml,
+  `--tool-versions`, or `ATMOS_TOOL_VERSIONS`
+
+Use `.tool-versions` for general project tools that should be installed for developers, agents, or
+interactive shells but are not a dependency of a specific stack, component, workflow, or command. For
+example, put `jq`, `yq`, `kubectl`, or a general `terraform` default here when the whole repo expects them.
+
+Use `dependencies.tools` when the tool is part of a stack/component/workflow/command contract. Those
+dependencies are installed and injected into that execution context and can override `.tool-versions`
+defaults. Do not rely on `.tool-versions` alone when CI or a stack requires a specific Terraform,
+OpenTofu, scanner, or generator version.
 
 ### Tool Installation Path
 
-Tools are installed to `.tools/` (default) in a structured layout:
+By default, tools are installed in the XDG data directory for Atmos, such as
+`~/.local/share/atmos/toolchain` on Linux/macOS. If the XDG data directory cannot be created, Atmos
+falls back to `.tools` in the current project.
+
+Installed tools use this layout under the selected install path:
 
 ```text
-.tools/bin/{os}/{tool}/{version}/{binary}
+<install-path>/bin/{os}/{tool}/{version}/{binary}
 ```
 
-Override via `toolchain.install_path` in atmos.yaml or `ATMOS_TOOLCHAIN_PATH` env var.
+Override the install path with `toolchain.install_path` in `atmos.yaml` or `ATMOS_TOOLCHAIN_PATH`
+when tools must be stored in a project-local, shared, or cached directory.
 
 ### Registries
 
@@ -114,8 +129,8 @@ GitHub artifact attestations via `gh`, and `minisign`.
 
 ```yaml
 toolchain:
-  install_path: .tools              # Where to install tools
-  file_path: .tool-versions         # Path to version file
+  install_path: .tools              # Optional override; default is XDG data dir
+  versions_file: .tool-versions     # Path to version file
 
   aliases:
     terraform: hashicorp/terraform
@@ -204,7 +219,8 @@ atmos toolchain registry search jq         # Search across registries
 1. CLI flags (highest)
 2. Environment variables
 3. atmos.yaml configuration
-4. Defaults (lowest)
+4. XDG data directory
+5. `.tools` fallback
 
 ## Shell Integration
 
@@ -215,6 +231,122 @@ eval "$(atmos toolchain env --format=bash)"
 ```
 
 Other shell formats: `--format=fish`, `--format=powershell`, `--format=github` (for CI).
+
+For shells where evaluation is not desirable, prepend the generated toolchain path directly:
+
+```bash
+export PATH="$(atmos toolchain path):$PATH"
+```
+
+Set `ATMOS_TOOLCHAIN_PATH` when the installed-tools directory must be shared, cached, or moved outside
+the repo checkout:
+
+```bash
+export ATMOS_TOOLCHAIN_PATH="$HOME/.cache/atmos/tools"
+eval "$(atmos toolchain env --format=bash)"
+```
+
+In GitHub Actions, use the GitHub format. When `$GITHUB_PATH` is available, Atmos appends toolchain
+paths to it automatically:
+
+```yaml
+- name: Install toolchain tools
+  run: |
+    atmos toolchain install
+    atmos toolchain env --format=github
+```
+
+## Tool Dependencies in Atmos Config
+
+Declare tool dependencies close to the thing that needs them. Atmos installs missing tools from the
+toolchain registry and injects them into the command environment. Use these dependencies for tools
+required by stacks, components, workflows, and custom commands; use `.tool-versions` for general
+project tools.
+
+```yaml
+# Top-level defaults
+dependencies:
+  tools:
+    aws-cli: "^2.0.0"
+
+# Component-type defaults
+terraform:
+  dependencies:
+    tools:
+      terraform: "~> 1.10.0"
+      tflint: "^0.54.0"
+
+# Component-specific tools
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "1.10.3"
+          checkov: "latest"
+
+# Workflow tools
+workflows:
+  validate:
+    dependencies:
+      tools:
+        tflint: "^0.54.0"
+
+# Custom command tools
+commands:
+  - name: scan
+    dependencies:
+      tools:
+        checkov: "3.0.0"
+```
+
+Use exact versions for reproducible CI, SemVer ranges for managed upgrade windows, and `latest`
+only for non-production workflows where drift is acceptable.
+
+In Atmos CI, prefer `dependencies.tools` over GitHub setup actions such as
+`hashicorp/setup-terraform` or `opentofu/setup-opentofu`. Setup actions install a runner-level binary,
+while Atmos tool dependencies travel with the stack, component, workflow, or command that requires
+the tool and are injected into that execution context.
+
+## Custom Registries in atmos.yaml
+
+Add your own tools under `toolchain.registries` when the public Aqua registry does not define them.
+Use a high-priority `type: atmos` registry for inline definitions, and keep the public Aqua registry
+as a fallback:
+
+```yaml
+toolchain:
+  aliases:
+    policyctl: company/policyctl
+
+  registries:
+    - name: company
+      type: atmos
+      priority: 150
+      tools:
+        company/policyctl:
+          type: github_release
+          url: "policyctl_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+          format: tar.gz
+          binary_name: policyctl
+
+    - name: aqua
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+```
+
+For shared registry files, use `type: aqua` with a local or remote `source` and a higher priority than
+the public registry:
+
+```yaml
+toolchain:
+  registries:
+    - name: company-registry
+      type: aqua
+      source: file://./toolchain/company-registry.yaml
+      priority: 100
+```
 
 ## Template Variables in Registries
 
@@ -267,6 +399,7 @@ atmos toolchain list
   run: |
     atmos toolchain install
     atmos toolchain env --format=github
+    # Automatically appends paths to $GITHUB_PATH when available
 ```
 
 ### Custom Tool Registry
