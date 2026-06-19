@@ -25,27 +25,31 @@ type ResolverConfig struct {
 func GetResolverConfigOption(identity *schema.Identity, provider *schema.Provider) config.LoadOptionsFunc {
 	defer perf.Track(nil, "aws.GetResolverConfigOption")()
 
-	// Check identity first (takes precedence)
-	// Look for aws.resolver in identity.Credentials map
+	url := resolverEndpointURL(identity, provider)
+	if url == "" {
+		return nil
+	}
+	return createResolverOption(url)
+}
+
+func resolverEndpointURL(identity *schema.Identity, provider *schema.Provider) string {
 	if identity != nil {
 		if awsConfig := extractAWSConfig(identity.Credentials); awsConfig != nil {
 			if awsConfig.Resolver != nil && awsConfig.Resolver.URL != "" {
-				return createResolverOption(awsConfig.Resolver.URL)
+				return awsConfig.Resolver.URL
 			}
 		}
 	}
 
-	// Fallback to provider
-	// Look for aws.resolver in provider.Spec map
 	if provider != nil {
 		if awsConfig := extractAWSConfig(provider.Spec); awsConfig != nil {
 			if awsConfig.Resolver != nil && awsConfig.Resolver.URL != "" {
-				return createResolverOption(awsConfig.Resolver.URL)
+				return awsConfig.Resolver.URL
 			}
 		}
 	}
 
-	return nil
+	return ""
 }
 
 // extractAWSConfig extracts AWSConfig from a map[string]interface{} using mapstructure.

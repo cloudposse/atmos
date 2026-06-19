@@ -20,6 +20,10 @@ import (
 
 const atmosDocsURL = "https://atmos.tools"
 
+var openDocsURL = func(url string) error {
+	return browser.New().Open(url)
+}
+
 // docsCmd opens the Atmos docs and can display component documentation
 var docsCmd = &cobra.Command{
 	Use:                "docs",
@@ -120,7 +124,7 @@ var docsCmd = &cobra.Command{
 		}
 
 		// Opens atmos.tools docs if no component argument is provided
-		if err := browser.New().Open(atmosDocsURL); err != nil {
+		if err := openDocsURL(atmosDocsURL); err != nil {
 			return fmt.Errorf("open Atmos docs: %w", err)
 		}
 

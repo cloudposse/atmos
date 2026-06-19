@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	p "github.com/cloudposse/atmos/pkg/provenance"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -94,6 +95,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	if provenance {
 		atmosConfig.TrackProvenance = true
 	}
+	injectDescribeComponentStoreAuthResolver(&atmosConfig, describeComponentParams.AuthManager)
 
 	var componentSection map[string]any
 	var mergeContext *m.MergeContext
@@ -123,6 +125,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	} else {
 		// Use the standard version
 		componentSection, err = d.executeDescribeComponent(&ExecuteDescribeComponentParams{
+			AtmosConfig:          &atmosConfig,
 			Component:            component,
 			Stack:                stack,
 			ProcessTemplates:     processTemplates,
@@ -174,6 +177,19 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	}
 
 	return nil
+}
+
+// injectDescribeComponentStoreAuthResolver wires the auth manager into atmosConfig
+// as the store auth-context resolver so identity-aware stores can resolve
+// credentials lazily during describe-component. It is a no-op when either argument
+// is nil.
+func injectDescribeComponentStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) {
+	if atmosConfig == nil || authManager == nil {
+		return
+	}
+
+	resolver := authbridge.NewResolver(authManager, authManager.GetStackInfo())
+	atmosConfig.Stores.SetAuthContextResolver(resolver)
 }
 
 func (d *DescribeComponentExec) viewConfig(atmosConfig *schema.AtmosConfiguration, displayName string, format string, data any) error {

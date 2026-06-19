@@ -1149,6 +1149,9 @@ type AWSAuthContext struct {
 
 	// Region is the AWS region (optional, may be empty if not specified in identity).
 	Region string `json:"region,omitempty" yaml:"region,omitempty"`
+
+	// EndpointURL is the optional AWS service endpoint resolver URL.
+	EndpointURL string `json:"endpoint_url,omitempty" yaml:"endpoint_url,omitempty"`
 }
 
 // AzureAuthContext holds Azure-specific authentication context.

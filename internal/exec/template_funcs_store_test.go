@@ -7,7 +7,9 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -94,6 +96,22 @@ func TestStoreTemplateFunc(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStoreTemplateFuncRejectsSecretStore(t *testing.T) {
+	mockStore := store.NewMockStore(gomock.NewController(t))
+	atmosConfig := schema.AtmosConfiguration{
+		StoresConfig: store.StoresConfig{
+			"secret-store": {Kind: "aws/ssm", Secret: true},
+		},
+		Stores: map[string]store.Store{
+			"secret-store": mockStore,
+		},
+	}
+
+	_, err := storeFunc(&atmosConfig, "secret-store", "dev", "app", "password")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStoreIsSecret)
 }
 
 func TestComponentConfigWithStoreTemplateFunc(t *testing.T) {

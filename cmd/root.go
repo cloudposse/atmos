@@ -113,6 +113,10 @@ var atmosConfig schema.AtmosConfiguration
 // profilerServer holds the global profiler server instance.
 var profilerServer *profiler.Server
 
+// checkAndReexec performs Atmos version switching. It is a package variable so
+// tests can replace it without installing or execing another Atmos binary.
+var checkAndReexec = pkgversion.CheckAndReexec
+
 // logFileHandle holds the opened log file for the lifetime of the program.
 var logFileHandle *os.File
 
@@ -368,6 +372,23 @@ func processChdirFlag(cmd *cobra.Command) error {
 	return nil
 }
 
+// maybeReexecExplicitUseVersion handles explicit --use-version / ATMOS_USE_VERSION
+// requests before Cobra resolves the command tree. This lets a currently
+// installed binary switch to a newer binary for commands it does not know about.
+func maybeReexecExplicitUseVersion(atmosConfig *schema.AtmosConfiguration) bool {
+	explicitVersion := parseUseVersionFromArgs()
+	if explicitVersion == "" {
+		//nolint:forbidigo // Must use os.Getenv before Cobra/Viper command parsing.
+		explicitVersion = os.Getenv(pkgversion.UseVersionEnvVar)
+	}
+	if explicitVersion == "" {
+		return false
+	}
+
+	_ = os.Setenv(pkgversion.VersionUseEnvVar, explicitVersion)
+	return checkAndReexec(atmosConfig)
+}
+
 // RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
 	Use:   "atmos",
@@ -512,7 +533,7 @@ var RootCmd = &cobra.Command{
 				// CheckAndReexec returns true only on successful syscall.Exec, which replaces
 				// the current process entirely. This means true is never returned in practice
 				// since exec doesn't return. We call it for its side effects.
-				_ = pkgversion.CheckAndReexec(&tmpConfig)
+				_ = checkAndReexec(&tmpConfig)
 			}
 		}
 
@@ -1511,6 +1532,10 @@ func Execute() error {
 			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		}
 	}
+
+	// Explicit --use-version / ATMOS_USE_VERSION must run before Cobra command
+	// resolution so unknown commands can be delegated to the requested binary.
+	maybeReexecExplicitUseVersion(&atmosConfig)
 
 	// Initialize markdown renderers only if config loaded successfully
 	// This prevents deep exits in InitializeMarkdown when config is invalid

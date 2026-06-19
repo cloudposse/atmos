@@ -24,6 +24,10 @@ func storeFunc(
 
 	log.Debug("Executing template function", "function", functionName)
 
+	if cfg, ok := atmosConfig.StoresConfig[storeName]; ok && cfg.Secret {
+		return nil, fmt.Errorf("%w: store %q (in %s)", errUtils.ErrStoreIsSecret, storeName, functionName)
+	}
+
 	// If the result for the component in the stack already exists in the cache, return it
 	existing, found := storeFuncSyncMap.Load(slug)
 	if found && existing != nil {
