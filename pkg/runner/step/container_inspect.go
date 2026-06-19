@@ -123,7 +123,9 @@ func renderImageInspect(info *container.ImageInfo) string {
 		fmt.Fprintf(&b, "%s  %s\n", styledKey, r.value)
 	}
 
-	return strings.TrimRight(b.String(), "\n")
+	// Left-margin the whole block (lipgloss) so it aligns under the Markdown
+	// heading rendered by the caller.
+	return lipgloss.NewStyle().MarginLeft(2).Render(strings.TrimRight(b.String(), "\n"))
 }
 
 // inspectRow is a rendered key/value pair for the inspect view.
