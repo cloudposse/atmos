@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -146,4 +147,110 @@ func TestCreateSandboxContainer_NonImageErrorDoesNotPull(t *testing.T) {
 	_, err := createSandboxContainer(ctx, runtime, config)
 	require.ErrorIs(t, err, createErr)
 	require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+}
+
+func TestNewWorkflowSandboxConfig(t *testing.T) {
+	cfg := NewWorkflowSandboxConfig("deploy", "workflows/deploy.yaml", "/repo")
+	assert.Contains(t, cfg.Name, "atmos-workflow-")
+	assert.Equal(t, "deploy", cfg.Workflow)
+	assert.Equal(t, "workflows/deploy.yaml", cfg.WorkflowPath)
+	assert.Equal(t, "/repo", cfg.WorkspaceHostPath)
+	assert.Equal(t, "/workspace", cfg.WorkspaceFolder)
+	assert.Equal(t, PullMissing, cfg.PullPolicy)
+	assert.Equal(t, CleanupAlways, cfg.CleanupPolicy)
+	assert.Equal(t, SandboxTypeWorkflow, cfg.Labels[SandboxLabelType])
+	assert.Equal(t, "deploy", cfg.Labels[SandboxLabelWorkflow])
+	assert.NotEmpty(t, cfg.RunID)
+}
+
+func TestNormalizeSandboxConfig(t *testing.T) {
+	cfg := &SandboxConfig{RunID: "rid", Workflow: "w", WorkflowPath: "p", WorkspaceHostPath: "/repo"}
+	normalizeSandboxConfig(cfg)
+	assert.Equal(t, "atmos-workflow-rid", cfg.Name)
+	assert.Equal(t, "/workspace", cfg.WorkspaceFolder)
+	assert.Equal(t, PullMissing, cfg.PullPolicy)
+	assert.Equal(t, CleanupAlways, cfg.CleanupPolicy)
+	assert.Equal(t, SandboxTypeWorkflow, cfg.Labels[SandboxLabelType])
+	assert.Equal(t, "w", cfg.Labels[SandboxLabelWorkflow])
+	assert.Equal(t, "p", cfg.Labels[SandboxLabelWorkflowPath])
+	assert.Equal(t, "rid", cfg.Labels[SandboxLabelRunID])
+	assert.Equal(t, "/repo", cfg.Labels[SandboxLabelWorkspace])
+
+	// Existing values are preserved (no clobbering).
+	custom := &SandboxConfig{Name: "n", WorkspaceFolder: "/w", PullPolicy: PullAlways, CleanupPolicy: CleanupNever}
+	normalizeSandboxConfig(custom)
+	assert.Equal(t, "n", custom.Name)
+	assert.Equal(t, "/w", custom.WorkspaceFolder)
+	assert.Equal(t, PullAlways, custom.PullPolicy)
+	assert.Equal(t, CleanupNever, custom.CleanupPolicy)
+}
+
+func TestBuildSandboxCreateConfig(t *testing.T) {
+	cfg := &SandboxConfig{
+		Name: "n", Image: "alpine", WorkspaceFolder: "/workspace", WorkspaceHostPath: "/repo",
+		WorkspaceReadOnly: true,
+		Mounts:            []Mount{{Type: "bind", Source: "/x", Target: "/y"}},
+	}
+	got := buildSandboxCreateConfig(cfg)
+	assert.Equal(t, "n", got.Name)
+	assert.Equal(t, "alpine", got.Image)
+	assert.True(t, got.OverrideCommand)
+	require.Len(t, got.Mounts, 2) // user mount + appended workspace mount
+	ws := got.Mounts[1]
+	assert.Equal(t, "/repo", ws.Source)
+	assert.Equal(t, "/workspace", ws.Target)
+	assert.True(t, ws.ReadOnly)
+
+	// No workspace host path -> no workspace mount appended.
+	got2 := buildSandboxCreateConfig(&SandboxConfig{Name: "n", Image: "alpine"})
+	assert.Empty(t, got2.Mounts)
+}
+
+func TestMatchesSandboxLabels(t *testing.T) {
+	cfg := &SandboxConfig{Workflow: "deploy", WorkflowPath: "p", WorkspaceHostPath: "/repo"}
+	full := map[string]string{
+		SandboxLabelType: SandboxTypeWorkflow, SandboxLabelWorkflow: "deploy",
+		SandboxLabelWorkflowPath: "p", SandboxLabelWorkspace: "/repo",
+	}
+	assert.True(t, matchesSandboxLabels(full, cfg))
+	assert.False(t, matchesSandboxLabels(nil, cfg))
+	assert.False(t, matchesSandboxLabels(map[string]string{SandboxLabelType: "other"}, cfg))
+	assert.False(t, matchesSandboxLabels(
+		map[string]string{SandboxLabelType: SandboxTypeWorkflow, SandboxLabelWorkflow: "other"}, cfg,
+	))
+}
+
+func TestIsContainerRunning(t *testing.T) {
+	assert.True(t, isContainerRunning("Running"))
+	assert.True(t, isContainerRunning("Up 3 minutes"))
+	assert.False(t, isContainerRunning("Exited (0)"))
+	assert.False(t, isContainerRunning(""))
+}
+
+func TestSanitizeSandboxName(t *testing.T) {
+	assert.Equal(t, "deploy-prod", sanitizeSandboxName("deploy/prod"))
+	assert.Equal(t, "workflow", sanitizeSandboxName("///"))
+	assert.Equal(t, "abc", sanitizeSandboxName("abc"))
+	assert.Len(t, sanitizeSandboxName(strings.Repeat("a", 60)), maxSandboxNameLength)
+}
+
+func TestSandboxIDAndName(t *testing.T) {
+	var nilSandbox *Sandbox
+	assert.Equal(t, "", nilSandbox.ID())
+	assert.Equal(t, "", nilSandbox.Name())
+
+	dryRun := &Sandbox{config: SandboxConfig{Name: "gen-name"}}
+	assert.Equal(t, "gen-name", dryRun.ID()) // no containerID -> falls back to name
+	assert.Equal(t, "gen-name", dryRun.Name())
+
+	started := &Sandbox{config: SandboxConfig{Name: "gen-name"}, containerID: "cid"}
+	assert.Equal(t, "cid", started.ID())
+}
+
+func TestSandboxExec_DryRunAndNil(t *testing.T) {
+	var nilSandbox *Sandbox
+	assert.ErrorIs(t, nilSandbox.Exec(context.Background(), []string{"true"}, &ExecOptions{}), errUtils.ErrNilParam)
+
+	dryRun := &Sandbox{config: SandboxConfig{DryRun: true}}
+	assert.NoError(t, dryRun.Exec(context.Background(), []string{"true"}, &ExecOptions{}))
 }
