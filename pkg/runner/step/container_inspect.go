@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -124,8 +125,11 @@ func renderImageInspect(info *container.ImageInfo) string {
 	}
 
 	// Left-margin the whole block (lipgloss) so it aligns under the Markdown
-	// heading rendered by the caller.
-	return lipgloss.NewStyle().MarginLeft(2).Render(strings.TrimRight(b.String(), "\n"))
+	// heading rendered by the caller, plus a bottom margin to separate it from
+	// any following step output. lipgloss right-pads each line to a uniform block
+	// width; strip that padding with the shared ANSI-aware per-line trimmer.
+	rendered := lipgloss.NewStyle().MarginLeft(2).MarginBottom(1).Render(strings.TrimRight(b.String(), "\n"))
+	return atmosansi.TrimLinesRight(rendered)
 }
 
 // inspectRow is a rendered key/value pair for the inspect view.
