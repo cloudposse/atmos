@@ -864,7 +864,8 @@ commands:
 
       # Show warning for production
       - name: prod_warning
-        type: warn
+        type: toast
+        level: warn
         content: "You are about to deploy to PRODUCTION!"
 
       # Confirm deployment
@@ -880,7 +881,8 @@ commands:
 
       # Show success message
       - name: done
-        type: success
+        type: toast
+        level: success
         content: "Deployment to {{ .steps.env.value }} completed!"
 ```
 
@@ -949,7 +951,8 @@ commands:
         options: [low, medium, high, critical]
         default: medium
 
-      - type: success
+      - type: toast
+        level: success
         content: |
           Ticket created:
           Title: {{ .steps.title.value }}

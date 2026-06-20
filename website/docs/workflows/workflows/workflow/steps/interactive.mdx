@@ -5,7 +5,11 @@ sidebar_position: 12
 slug: /workflows/steps/interactive
 ---
 
-The step-level `interactive` field attaches host stdin to a `type: shell` step.
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The step-level `interactive` field attaches your terminal's stdin to a `type: shell` step, so the command can read input from you while it runs.
+</Intro>
 
 ```yaml
 steps:

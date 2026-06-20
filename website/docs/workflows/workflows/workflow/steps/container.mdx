@@ -5,7 +5,11 @@ sidebar_position: 9
 slug: /workflows/steps/container
 ---
 
-The step-level `container` field controls workflow container inheritance for a step. It is separate from `type: container`.
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The step-level `container` field controls whether a single step runs inside the workflow's container sandbox or on the host. It is separate from the [`type: container`](/workflows/steps/type/container) step type.
+</Intro>
 
 ## Workflow Container Override
 
@@ -33,7 +37,7 @@ steps:
 
 ## Container Step Type
 
-The `type: container` value is a step type for Docker or Podman actions:
+The [`type: container`](/workflows/steps/type/container) value is a step type for Docker or Podman actions:
 
 ```yaml
 steps:

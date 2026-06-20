@@ -5,7 +5,11 @@ sidebar_position: 3
 slug: /workflows/steps/retry
 ---
 
-The step-level `retry` field retries a failed step.
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The step-level `retry` field automatically re-runs a failed step using a configurable backoff strategy, making workflows resilient to transient failures.
+</Intro>
 
 ```yaml
 steps:

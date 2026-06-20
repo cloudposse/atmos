@@ -5,19 +5,41 @@ sidebar_position: 5
 slug: /workflows/container
 ---
 
-The workflow-level `container` field starts a long-lived container sandbox for eligible `type: shell` steps.
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+With a `container` defined on a workflow, Atmos runs your `type: shell` steps inside a single persistent container for the duration of the workflow run, instead of on the host. Every step shares the same image, tools, and environment, so tools you install in an early step stay available to later steps. It uses the same container runtime that powers the [`type: container`](/workflows/steps/type/container) step.
+</Intro>
+
+The example below uses every field. See [Mounts](#mounts), [Ports](#ports), and [Per-step overrides](#per-step-overrides) for the nested definitions.
 
 ```yaml
 workflows:
   test:
     working_directory: .
     container:
-      image: alpine:latest
-      shell: /bin/sh
-      workspace: /workspace
-      cleanup: always
-      env:
+      image: alpine:latest         # required
+      shell: /bin/sh               # shell used to run each command (default /bin/sh)
+      provider: docker             # docker | podman (auto-detected when omitted)
+      runtime_auto_start: true     # start the Podman machine if no runtime is running
+      pull: missing                # missing (default) | always | never
+      workspace: /workspace        # where working_directory is mounted (default /workspace)
+      workspace_read_only: false   # mount the workspace read-only
+      cleanup: always              # always (default) | on_success | never
+      user: "1000:1000"            # username or UID:GID
+      run_args:                    # extra args passed to `docker run` / `podman run`
+        - --network=host
+      env:                         # environment defaults for every step
         TOOL_CACHE: /tmp/tools
+      mounts:                      # additional volume mounts (see Mounts below)
+        - type: bind
+          source: ~/.aws
+          target: /root/.aws
+          read_only: true
+      ports:                       # published ports (see Ports below)
+        - host: 8080
+          container: 80
+          protocol: tcp
     steps:
       - name: dependencies
         type: shell
@@ -26,9 +48,13 @@ workflows:
         type: shell
         working_directory: services/api
         command: jq --version
+      - name: on-host
+        type: shell
+        command: echo "this step runs on the host"
+        container: false           # opt a single step out of the sandbox
 ```
 
-This field is different from `steps[].type: container`, which is a step type for container build, push, run, and inspect operations.
+This field is different from [`steps[].type: container`](/workflows/steps/type/container), which is a step type for container build, push, run, and inspect operations.
 
 ## Fields
 
@@ -36,14 +62,17 @@ This field is different from `steps[].type: container`, which is a step type for
   <dt>`image`</dt>
   <dd>Container image for the workflow sandbox. Required when `container` is configured.</dd>
 
+  <dt>`shell`</dt>
+  <dd>Shell used to execute commands inside the container. Defaults to `/bin/sh`.</dd>
+
   <dt>`provider`</dt>
   <dd>Container runtime provider: `docker` or `podman`. When omitted, Atmos auto-detects Docker, then Podman.</dd>
 
   <dt>`runtime_auto_start`</dt>
-  <dd>Allows Atmos to attempt runtime recovery, such as starting a Podman machine.</dd>
+  <dd>Allows Atmos to attempt runtime recovery, such as starting a Podman machine, instead of failing when no runtime is running.</dd>
 
   <dt>`pull`</dt>
-  <dd>Image pull policy: `missing`, `always`, or `never`.</dd>
+  <dd>Image pull policy: `missing` (default), `always`, or `never`.</dd>
 
   <dt>`workspace`</dt>
   <dd>Container path where the workflow working directory is mounted. Defaults to `/workspace`.</dd>
@@ -52,25 +81,114 @@ This field is different from `steps[].type: container`, which is a step type for
   <dd>Mounts the workflow workspace read-only when set to `true`.</dd>
 
   <dt>`cleanup`</dt>
-  <dd>Sandbox cleanup policy: `always`, `on_success`, or `never`.</dd>
-
-  <dt>`env`</dt>
-  <dd>Environment defaults passed to commands in the sandbox.</dd>
-
-  <dt>`mounts`</dt>
-  <dd>Additional mounts using `type`, `source`, `target`, and optional `read_only` fields.</dd>
-
-  <dt>`ports`</dt>
-  <dd>Port mappings using `host`, `container`, and optional `protocol` fields.</dd>
-
-  <dt>`shell`</dt>
-  <dd>Shell used to execute commands inside the container.</dd>
+  <dd>Sandbox cleanup policy: `always` (default), `on_success`, or `never`.</dd>
 
   <dt>`user`</dt>
   <dd>User context for container execution. Accepts a username or `UID:GID` format.</dd>
 
   <dt>`run_args`</dt>
-  <dd>Additional arguments passed to the container runtime's run command.</dd>
+  <dd>List of additional arguments passed to the container runtime's `run` command, such as `--network=host`.</dd>
+
+  <dt>`env`</dt>
+  <dd>Map of environment variables passed to every command in the sandbox.</dd>
+
+  <dt>`mounts`</dt>
+  <dd>List of additional volume mounts. See [Mounts](#mounts).</dd>
+
+  <dt>`ports`</dt>
+  <dd>List of published port mappings. See [Ports](#ports).</dd>
 </dl>
 
-Use `container: false` on a step to run that step on the host instead of inside the workflow sandbox.
+## Mounts
+
+`mounts` is a list of mount objects. Use it to share host paths, named volumes, or in-memory `tmpfs` filesystems into the sandbox:
+
+```yaml
+container:
+  image: alpine:latest
+  mounts:
+    - type: bind             # mount a host path
+      source: ~/.aws         # `~` expands to the host home directory
+      target: /root/.aws
+      read_only: true
+    - type: volume           # mount a named volume
+      source: build-cache
+      target: /cache
+    - type: tmpfs            # mount an in-memory filesystem
+      target: /tmp/scratch
+```
+
+<dl>
+  <dt>`type`</dt>
+  <dd>Mount type: `bind` (default), `volume`, or `tmpfs`.</dd>
+
+  <dt>`source`</dt>
+  <dd>Host path for `bind` mounts or the volume name for `volume` mounts. Not used for `tmpfs`. `~` expands to the host home directory.</dd>
+
+  <dt>`target`</dt>
+  <dd>Required. Path inside the container where the mount is attached.</dd>
+
+  <dt>`read_only`</dt>
+  <dd>Mounts the source read-only when set to `true`. Defaults to `false`.</dd>
+</dl>
+
+## Ports
+
+`ports` is a list of port mappings that publish container ports to the host:
+
+```yaml
+container:
+  image: nginx:latest
+  ports:
+    - host: 8080             # port on the host
+      container: 80          # port inside the container
+      protocol: tcp          # tcp (default) or udp
+    - host: 5353
+      container: 53
+      protocol: udp
+```
+
+<dl>
+  <dt>`host`</dt>
+  <dd>Host port number to publish.</dd>
+
+  <dt>`container`</dt>
+  <dd>Container port number to map to the host port.</dd>
+
+  <dt>`protocol`</dt>
+  <dd>Port protocol: `tcp` (default) or `udp`.</dd>
+</dl>
+
+## Per-step overrides
+
+Every step inherits the workflow sandbox by default. A step can nest its own `container` field to override the inherited settings, or set `container: false` to run on the host:
+
+```yaml
+workflows:
+  build:
+    container:
+      image: golang:1.26
+      env:
+        CGO_ENABLED: "0"
+    steps:
+      - name: compile
+        type: shell
+        command: go build ./...          # runs in the golang:1.26 sandbox
+      - name: bundle
+        type: shell
+        command: npm run bundle
+        container:                        # override just this step
+          image: node:22
+          env:
+            NODE_ENV: production
+      - name: release
+        type: shell
+        command: ./scripts/release.sh
+        container: false                  # run on the host
+```
+
+A per-step `container` is merged onto the workflow sandbox rather than replacing it wholesale:
+
+- Scalar fields you set (`image`, `shell`, `provider`, `pull`, `workspace`, `cleanup`, `user`) overlay the inherited value; unset fields keep the workflow value. In the example above, `bundle` runs `node:22` but still inherits `cleanup` and `provider` from the workflow.
+- `runtime_auto_start` and `workspace_read_only` are enabled if either the workflow or the step sets them.
+- `mounts`, `ports`, `env`, and `run_args` replace the inherited list when the step provides a non-empty value, so list the full set you want for that step.

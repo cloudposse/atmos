@@ -5,7 +5,11 @@ sidebar_position: 4
 slug: /workflows/dependencies
 ---
 
-The workflow-level `dependencies` field declares tool versions required by a workflow.
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The workflow-level `dependencies` field declares the tool versions a workflow requires, so Atmos can provision them before any step runs.
+</Intro>
 
 ```yaml
 workflows:

@@ -7,7 +7,7 @@ slug: /workflows/workflow
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-A workflow is one named object under the top-level `workflows` map. It owns workflow-level defaults and the ordered `steps` array.
+A workflow is one named object at `workflows.<name>` inside a [workflow manifest](/workflows). It owns workflow-level defaults and the ordered `steps` array Atmos runs for that workflow.
 </Intro>
 
 ```yaml
@@ -62,3 +62,5 @@ workflows:
 </dl>
 
 Workflow-level fields provide defaults. Step-level fields override them where the step supports the same field.
+
+For workflow file discovery, naming, and when to choose workflows instead of custom commands, start with the [workflows](/workflows) page.
