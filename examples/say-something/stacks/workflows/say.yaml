@@ -1,0 +1,93 @@
+# Say Something Example
+#
+# Demonstrates the `say` step type, which speaks a message aloud using
+# text-to-speech (TTS) and degrades gracefully to printing the message when
+# audio is unavailable (no TTS engine, CI, or other headless environments).
+#
+# Run with: atmos workflow <name> -f say
+#
+# Features demonstrated:
+# - Cross-platform voice selection (CSS font-family-style stack)
+# - Speech rate control (slow | normal | fast)
+# - Print policies (fallback | always | never)
+# - Composing `say` with other step types in a pipeline
+
+workflows:
+
+  # The simplest notification: speak a message, or print it as a Markdown
+  # blockquote when speech is unavailable (the default `print: fallback`).
+  notify:
+    description: Speak a completion message (prints it instead in CI/headless)
+    steps:
+      - name: done
+        type: say
+        content: "Your deployment is complete"
+
+  # Voice selection works like a CSS font-family stack: list candidate voices
+  # from any platform and the first one actually installed on the host wins.
+  # macOS uses human names (Samantha), Windows uses names like Zira/David,
+  # and espeak on Linux uses language codes like en-us.
+  voices:
+    description: Pick the first available voice from a cross-platform stack
+    steps:
+      - name: greet
+        type: say
+        content: "Hello from Atmos"
+        voice:
+          - Samantha            # macOS
+          - Microsoft Zira      # Windows (matches "Microsoft Zira Desktop")
+          - en-us               # Linux (espeak)
+
+  # The `rate` field accepts slow, normal (default), or fast and is mapped to
+  # each engine's native cadence.
+  rates:
+    description: Demonstrate slow and fast speech rates
+    steps:
+      - name: slow
+        type: say
+        content: "I am speaking slowly"
+        rate: slow
+      - name: fast
+        type: say
+        content: "Now I am speaking quickly"
+        rate: fast
+
+  # The `print` field controls whether the message is also shown on screen:
+  #   - fallback (default): speak when possible, else print a Markdown blockquote
+  #   - always:            print the blockquote AND speak when possible
+  #   - never:             speak when possible, otherwise stay silent
+  print-modes:
+    description: Demonstrate the three print policies
+    steps:
+      - name: speak-and-show
+        type: say
+        content: "This message is always printed and also spoken"
+        print: always
+      - name: speak-only
+        type: say
+        content: "This is only spoken; nothing is printed when speech is unavailable"
+        print: never
+      - name: speak-or-show
+        type: say
+        content: "Spoken when possible, otherwise printed as a quote"
+        print: fallback
+
+  # `say` composes with other step types. Here it announces each milestone of a
+  # small build pipeline. Using `print: always` keeps the announcements visible
+  # in logs even when audio is available.
+  pipeline:
+    description: Announce each milestone of a small build pipeline
+    steps:
+      - name: start
+        type: say
+        content: "Starting the build"
+        print: always
+      - name: building
+        type: spin
+        title: "Building application..."
+        command: "sleep 2 && echo 'Build complete!'"
+        timeout: 30s
+      - name: finish
+        type: say
+        content: "Build finished successfully"
+        print: always

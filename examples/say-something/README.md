@@ -1,0 +1,73 @@
+# Say Something Demo
+
+This example demonstrates the `say` workflow step type, which speaks a message aloud using **text-to-speech (TTS)**. It's ideal for notifying you when a long-running workflow finishes or stalls — an audible cue for when you've switched to another window.
+
+`say` works across platforms by detecting an available speech engine (`say` on macOS, `spd-say`/`espeak`/`espeak-ng` on Linux, PowerShell's `System.Speech` on Windows). When no engine is available — or when running in CI or another headless environment — it degrades gracefully by printing the message as a Markdown blockquote instead.
+
+## Prerequisites
+
+- Atmos CLI installed
+- A text-to-speech engine for audio output (optional — without one, messages are printed)
+
+## Quick Start
+
+```bash
+cd examples/say-something
+
+# Speak a completion message (prints it as a quote if speech is unavailable)
+atmos workflow notify -f say
+
+# Pick the first available voice from a cross-platform stack
+atmos workflow voices -f say
+
+# Hear slow vs. fast speech
+atmos workflow rates -f say
+
+# See the three print policies
+atmos workflow print-modes -f say
+
+# Announce each milestone of a build pipeline
+atmos workflow pipeline -f say
+```
+
+## How `say` Works
+
+```yaml
+steps:
+  - name: notify
+    type: say
+    content: "Deployment is complete"
+    voice: [Samantha, Microsoft Zira, en-us]   # first installed voice wins
+    rate: normal                                # slow | normal | fast
+    print: fallback                             # fallback | always | never
+```
+
+### Cross-platform voices (`voice`)
+
+Voice selection works like a CSS `font-family` stack: you provide an **ordered list** of candidate voices and the first one actually installed on the host is used. If none match, the engine's default voice is used.
+
+Voice names are platform-specific, so a portable stack mixes them:
+
+| Platform | Example voice names |
+|----------|---------------------|
+| macOS    | `Samantha`, `Alex`, `Daniel` |
+| Windows  | `Zira`, `David` (matches `Microsoft Zira Desktop`) |
+| Linux    | `en-us`, `en-gb` (espeak language codes) |
+
+List installed voices with `say -v "?"` (macOS), `espeak --voices` (Linux), or via PowerShell's `GetInstalledVoices()` (Windows).
+
+### Speech rate (`rate`)
+
+`slow`, `normal` (default), or `fast`, mapped to each engine's native cadence.
+
+### Print policy (`print`)
+
+| Value | Behavior |
+|-------|----------|
+| `fallback` (default) | Speak when possible; otherwise print the message as a Markdown blockquote. |
+| `always` | Always print the blockquote **and** also speak when possible. |
+| `never` | Speak when possible; otherwise stay silent (no printed output). |
+
+## CI/CD Considerations
+
+`say` never fails a workflow. In CI it automatically prints the message instead of attempting to speak, so you can leave `say` steps in workflows that run both locally and in pipelines.
