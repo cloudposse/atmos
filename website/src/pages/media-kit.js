@@ -137,7 +137,7 @@ const animatedWordmarks = [
 
 const poweredBy = [
   {
-    title: "Powered by atmos",
+    title: "Powered by Atmos",
     variant: "Dark badge",
     tone: "light",
     usage:
@@ -149,7 +149,7 @@ const poweredBy = [
     ),
   },
   {
-    title: "Powered by atmos",
+    title: "Powered by Atmos",
     variant: "Light badge",
     tone: "dark",
     usage:
@@ -161,7 +161,7 @@ const poweredBy = [
     ),
   },
   {
-    title: "Powered by atmos CI",
+    title: "Powered by Atmos CI",
     variant: "CI gradient badge",
     tone: "dark",
     usage:
@@ -173,7 +173,7 @@ const poweredBy = [
     ),
   },
   {
-    title: "Powered by atmos CI",
+    title: "Powered by Atmos CI",
     variant: "CI gradient on light",
     tone: "light",
     usage:
@@ -277,8 +277,19 @@ function PreviewActions({ href, label }) {
   const [copied, markCopied] = useCopyFeedback();
 
   async function copyLink() {
-    await navigator.clipboard.writeText(absoluteAssetUrl(href));
-    markCopied("link");
+    const url = absoluteAssetUrl(href);
+
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Text clipboard is not available");
+      }
+
+      await navigator.clipboard.writeText(url);
+      markCopied("link");
+    } catch {
+      // Keep UX non-breaking when clipboard access is unavailable.
+      window.prompt("Copy link:", url);
+    }
   }
 
   async function copyImage() {

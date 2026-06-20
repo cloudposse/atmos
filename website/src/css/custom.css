@@ -1136,5 +1136,7 @@ html[data-theme='dark'] .mediaKitBadgeCard {
 
 .mediaKitBadgeCard img {
     max-height: 64px;
-    width: 100%;
+    max-width: 100%;
+    width: auto;
+    object-fit: contain;
 }
