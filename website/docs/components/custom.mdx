@@ -6,6 +6,7 @@ id: custom
 description: Bring any tool—Ansible, Kubernetes manifests, shell scripts, CDK, and more—under the same stack-based configuration used for Terraform, Helmfile, and Packer.
 ---
 import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 Beyond the native component types, Atmos lets you define **custom component types** so you can manage *any* tool—Kubernetes manifests, shell scripts, CDK apps, Ansible-as-a-script, and more—with the same stack-based configuration system used for Terraform, Helmfile, and Packer.
@@ -68,6 +69,12 @@ Global `vars`, `settings`, and `env` are merged automatically, and a component's
 | Definition | Always available | Defined via a custom command |
 | Stack configuration | `components.<type>.<name>` | `components.<type>.<name>` |
 | Configuration access | Native flags/varfiles | `{{ .Component.* }}` templates |
+
+## Try It
+
+Explore a complete, working example that defines a custom `script` component type and configures it through stacks.
+
+<EmbedExample example="custom-components" />
 
 ## Related
 
