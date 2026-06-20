@@ -2,6 +2,7 @@ package sopsauth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -10,6 +11,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
 )
+
+// errEmptyAWSAuthContext indicates the resolver returned a nil AWS auth context without an error.
+var errEmptyAWSAuthContext = errors.New("resolved empty AWS auth context")
 
 // AWSKMS resolves the identity's AWS credentials and wraps them as a getsops KMS credentials
 // provider. The KMS endpoint itself is resolved by getsops from the standard AWS endpoint
@@ -20,6 +24,9 @@ func (b *resolverBuilder) AWSKMS(ctx context.Context, identity string) (KMSAppli
 	authContext, err := b.resolver.ResolveAWSAuthContext(ctx, identity)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve AWS auth context for SOPS identity %q: %w", identity, err)
+	}
+	if authContext == nil {
+		return nil, fmt.Errorf("%w for SOPS identity %q", errEmptyAWSAuthContext, identity)
 	}
 
 	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsAuthConfigOpts(authContext)...)

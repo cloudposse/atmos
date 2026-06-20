@@ -16,6 +16,9 @@ import (
 // credentials file to authenticate the SOPS GCP KMS operation.
 var errNoGCPCredentials = errors.New("no GCP credentials (access token or credentials file) resolved")
 
+// errEmptyGCPAuthContext indicates the resolver returned a nil GCP auth context without an error.
+var errEmptyGCPAuthContext = errors.New("resolved empty GCP auth context")
+
 // GCPKMS resolves the identity's GCP credentials. An access token (the common federated case) is
 // wrapped as a static OAuth2 token source; otherwise a service-account credentials file is used.
 func (b *resolverBuilder) GCPKMS(ctx context.Context, identity string) (GCPApplier, error) {
@@ -24,6 +27,9 @@ func (b *resolverBuilder) GCPKMS(ctx context.Context, identity string) (GCPAppli
 	authContext, err := b.resolver.ResolveGCPAuthContext(ctx, identity)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve GCP auth context for SOPS identity %q: %w", identity, err)
+	}
+	if authContext == nil {
+		return nil, fmt.Errorf("%w for SOPS identity %q", errEmptyGCPAuthContext, identity)
 	}
 
 	if authContext.AccessToken != "" {

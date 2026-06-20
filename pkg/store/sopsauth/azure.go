@@ -2,6 +2,7 @@ package sopsauth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -9,6 +10,9 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// errEmptyAzureAuthContext indicates the resolver returned a nil Azure auth context without an error.
+var errEmptyAzureAuthContext = errors.New("resolved empty Azure auth context")
 
 // AzureKV resolves the identity's Azure credentials and wraps them as a getsops Key Vault token
 // credential. It mirrors the Azure Key Vault store: the default Azure credential chain is used with
@@ -19,6 +23,9 @@ func (b *resolverBuilder) AzureKV(ctx context.Context, identity string) (AzureAp
 	authContext, err := b.resolver.ResolveAzureAuthContext(ctx, identity)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve Azure auth context for SOPS identity %q: %w", identity, err)
+	}
+	if authContext == nil {
+		return nil, fmt.Errorf("%w for SOPS identity %q", errEmptyAzureAuthContext, identity)
 	}
 
 	options := &azidentity.DefaultAzureCredentialOptions{}
