@@ -539,9 +539,9 @@ const config = {
                     height: 36
                 },
                 items: [
-                    // Secondary links (Latest Release, Community, Changelog,
-                    // Roadmap) moved to the site-wide footer to declutter the
-                    // navbar. See src/theme/Footer/.
+                    // Secondary links (Latest Release, Community, Roadmap)
+                    // moved to the site-wide footer to declutter the navbar.
+                    // See src/theme/Footer/.
                     {
                         type: 'doc',
                         docId: 'intro/index',
@@ -557,11 +557,6 @@ const config = {
                         to: '/examples',
                         position: 'left',
                         label: 'Examples'
-                    },
-                    {
-                        to: '/pro',
-                        position: 'left',
-                        label: 'Pro'
                     },
                     // GitHub stars badge
                     {
@@ -580,8 +575,13 @@ const config = {
                         'aria-label': 'GitHub repository',
                     },
                     {
-                        to: 'https://cloudposse.com/services/support/',
-                        label: 'Get Help',
+                        label: 'Changelog',
+                        position: 'right',
+                        to: '/changelog'
+                    },
+                    {
+                        to: '/pro',
+                        label: 'Pro',
                         position: 'right',
                         className: 'button button--primary navbar-cta-button'
                     }

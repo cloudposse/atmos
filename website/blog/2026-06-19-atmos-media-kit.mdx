@@ -5,61 +5,37 @@ authors: [osterman]
 tags: [documentation]
 ---
 
+import ThemedImage from '@theme/ThemedImage';
+
 The official [Atmos Media Kit](/media-kit) is now available with downloadable logo assets, usage guidance, brand colors, and product language for teams writing about or building integrations with Atmos.
 
-<div
-  aria-label="Atmos media kit logo previews"
-  style={{
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-    gap: '1rem',
-    margin: '1.5rem 0',
-  }}
->
-  <a
-    href="/media-kit"
-    style={{
-      alignItems: 'center',
-      background: '#fff',
-      border: '1px solid var(--ifm-color-emphasis-200)',
-      borderRadius: '8px',
-      display: 'flex',
-      justifyContent: 'center',
-      minHeight: '112px',
-      padding: '1.25rem',
-    }}
-  >
-    <img src="/img/atmos-logo-gradient-on-light.svg" alt="Atmos logo" style={{maxHeight: '64px', width: '100%'}} />
+<div className="mediaKitBadgeGrid" aria-label="Atmos media kit logo previews">
+  <a className="mediaKitBadgeCard" href="/media-kit">
+    <ThemedImage
+      alt="Atmos logo"
+      sources={{
+        light: '/img/atmos-logo-gradient-on-light.svg',
+        dark: '/img/atmos-logo-gradient.svg',
+      }}
+    />
   </a>
-  <a
-    href="/media-kit"
-    style={{
-      alignItems: 'center',
-      background: '#fff',
-      border: '1px solid var(--ifm-color-emphasis-200)',
-      borderRadius: '8px',
-      display: 'flex',
-      justifyContent: 'center',
-      minHeight: '112px',
-      padding: '1.25rem',
-    }}
-  >
-    <img src="/img/powered-by-atmos-gradient.svg" alt="Powered by Atmos CI badge" style={{maxHeight: '64px', width: '100%'}} />
+  <a className="mediaKitBadgeCard" href="/media-kit">
+    <ThemedImage
+      alt="Powered by Atmos CI badge"
+      sources={{
+        light: '/img/powered-by-atmos-gradient-on-light.svg',
+        dark: '/img/powered-by-atmos-gradient.svg',
+      }}
+    />
   </a>
-  <a
-    href="/media-kit"
-    style={{
-      alignItems: 'center',
-      background: '#fff',
-      border: '1px solid var(--ifm-color-emphasis-200)',
-      borderRadius: '8px',
-      display: 'flex',
-      justifyContent: 'center',
-      minHeight: '112px',
-      padding: '1.25rem',
-    }}
-  >
-    <img src="/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI logo" style={{maxHeight: '64px', width: '100%'}} />
+  <a className="mediaKitBadgeCard" href="/media-kit">
+    <ThemedImage
+      alt="Atmos CI logo"
+      sources={{
+        light: '/img/atmos-ci-gradient-on-light.svg',
+        dark: '/img/atmos-ci-gradient.svg',
+      }}
+    />
   </a>
 </div>
 

@@ -1109,3 +1109,32 @@ html.sidebar-resizing * {
 html.sidebar-resizing .theme-doc-sidebar-container {
     transition: none !important;
 }
+
+/* Media-kit badge previews used in blog posts and announcements. */
+.mediaKitBadgeGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.mediaKitBadgeCard {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 112px;
+    padding: 1.25rem;
+    border-radius: 8px;
+    background: #ffffff;
+    border: 1px solid var(--ifm-color-emphasis-200);
+}
+
+html[data-theme='dark'] .mediaKitBadgeCard {
+    background: #171717;
+    border-color: var(--ifm-color-emphasis-300);
+}
+
+.mediaKitBadgeCard img {
+    max-height: 64px;
+    width: 100%;
+}
