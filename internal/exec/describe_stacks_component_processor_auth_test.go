@@ -432,3 +432,47 @@ func TestProcessComponentEntry_OutOfScopeSkipsAuth(t *testing.T) {
 		})
 	}
 }
+
+// TestResolveComponentAuthManager_CachesByAuthSection verifies that components sharing an auth
+// section resolve the per-component AuthManager only once per describe-stacks pass: a second
+// component with the same auth section reuses the cached manager (resolver not called again),
+// while a distinct auth section misses the cache and resolves anew.
+// See docs/fixes/2026-06-20-describe-stacks-per-identity-auth-cache.md.
+func TestResolveComponentAuthManager_CachesByAuthSection(t *testing.T) {
+	t.Parallel()
+
+	type sentinelAuthManager struct{ auth.AuthManager }
+	mgr := &sentinelAuthManager{}
+
+	spy := &componentAuthResolverSpy{returnMgr: mgr}
+	p := &describeStacksProcessor{
+		atmosConfig:           &schema.AtmosConfiguration{},
+		processTemplates:      true,
+		processYamlFunctions:  false,
+		componentAuthResolver: spy.resolver(),
+		finalStacksMap:        make(map[string]any),
+		authManagerCache:      make(map[string]auth.AuthManager),
+	}
+
+	// First component with auth section A: cache miss, resolver runs once.
+	got1, err := p.resolveComponentAuthManager(componentSectionWithAuth(authSectionWithDefault()), "comp-a", "stack-1")
+	require.NoError(t, err)
+	assert.Same(t, mgr, got1, "first resolution returns the resolver's manager")
+	require.EqualValues(t, 1, spy.calls.Load(), "first component must invoke the resolver")
+
+	// Second component with the SAME auth section (different component and stack): cache hit.
+	got2, err := p.resolveComponentAuthManager(componentSectionWithAuth(authSectionWithDefault()), "comp-b", "stack-2")
+	require.NoError(t, err)
+	assert.Same(t, mgr, got2, "cache hit returns the same manager instance")
+	assert.EqualValues(t, 1, spy.calls.Load(), "second component with an identical auth section must reuse the cached manager")
+
+	// Third component with a DIFFERENT auth section: cache miss, resolver runs again.
+	otherAuth := map[string]any{
+		"identities": map[string]any{
+			"other-default": map[string]any{"default": true},
+		},
+	}
+	_, err = p.resolveComponentAuthManager(componentSectionWithAuth(otherAuth), "comp-c", "stack-3")
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, spy.calls.Load(), "a distinct auth section must miss the cache and resolve anew")
+}
