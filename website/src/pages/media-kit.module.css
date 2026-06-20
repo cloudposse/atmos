@@ -328,7 +328,7 @@
   );
   background-size: 300% 300%;
   mix-blend-mode: color;
-  animation: atmosGradient 15s ease infinite;
+  animation: atmos-gradient 15s ease infinite;
   /* Clip the gradient to the alien silhouette so only the mark is recolored
      (matches the navbar logo), with no rectangular block around it. */
   -webkit-mask: url(/img/atmos-logo-bw.svg) center / contain no-repeat;
@@ -364,14 +364,14 @@
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: atmosGradient 15s ease infinite;
+  animation: atmos-gradient 15s ease infinite;
   font-family: 'Optimistic Text', -apple-system, ui-sans-serif, system-ui, sans-serif;
   font-size: clamp(2.7rem, 9vw, 4.6rem);
   font-weight: 800;
   line-height: 1;
 }
 
-@keyframes atmosGradient {
+@keyframes atmos-gradient {
   0% {
     background-position: 0% 50%;
   }
@@ -486,7 +486,7 @@
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  animation: atmosGradient 15s ease infinite;
+  animation: atmos-gradient 15s ease infinite;
 }
 
 /* --- Brand colors --- */
