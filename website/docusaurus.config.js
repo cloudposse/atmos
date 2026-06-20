@@ -47,6 +47,10 @@ const config = {
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
                     {
+                        from: '/brandkit',
+                        to: '/media-kit'
+                    },
+                    {
                         from: '/blog',
                         to: '/changelog'
                     },

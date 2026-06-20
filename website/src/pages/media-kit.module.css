@@ -1,0 +1,616 @@
+.mediaKit {
+  width: 100vw;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 4rem 1rem 5rem;
+  box-sizing: border-box;
+  color: var(--ifm-font-color-base);
+  overflow-x: hidden;
+  white-space: normal;
+}
+
+.mediaKit * {
+  white-space: normal;
+}
+
+.hero {
+  max-width: 720px;
+  margin-bottom: 2rem;
+  min-width: 0;
+}
+
+.eyebrow,
+.assetKicker {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin: 0 0 0.9rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 4px;
+  color: var(--ifm-color-emphasis-700);
+  background: var(--ifm-color-emphasis-100);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 0;
+  color: var(--ifm-heading-color);
+  font-size: clamp(2.1rem, 5vw, 3.4rem);
+  line-height: 1;
+}
+
+.hero p {
+  color: var(--ifm-color-emphasis-700);
+  font-size: 1.05rem;
+  line-height: 1.7;
+  overflow-wrap: break-word;
+}
+
+.hero .lede {
+  margin: 1.2rem 0 0.9rem;
+  color: var(--ifm-font-color-base);
+  font-size: 1.25rem;
+}
+
+.downloadPanel {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  margin: 2rem 0 3rem;
+  padding: 1.15rem 1.25rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  background: var(--ifm-card-background-color);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+}
+
+.downloadPanel > div {
+  min-width: 0;
+}
+
+.downloadIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 7px;
+  color: var(--ifm-heading-color);
+  background: var(--ifm-background-color);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.downloadPanel h2 {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+}
+
+.downloadPanel p {
+  margin: 0;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.assetGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.assetCard {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  background: var(--ifm-card-background-color);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04);
+}
+
+.preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 230px;
+  padding: 3rem;
+}
+
+.preview.light {
+  background: #ffffff;
+}
+
+.preview.dark {
+  background: #171717;
+}
+
+/* Fixed render box + object-fit so every logo lands at the same optical size,
+   regardless of each source SVG's intrinsic dimensions (max-* alone only
+   shrinks oversized art and leaves small art tiny). */
+.preview img {
+  display: block;
+  width: 100%;
+  height: 150px;
+  object-fit: contain;
+}
+
+/* Wordmarks are ~3:1, so cap their height lower than the marks for balance. */
+.preview.wordmark img {
+  height: 88px;
+}
+
+.assetBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1.3rem;
+  min-height: 220px;
+  padding: 1.25rem;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.assetBody h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.08rem;
+}
+
+.assetBody p {
+  margin: 0;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.assetKicker {
+  margin-bottom: 0.75rem;
+  font-size: 0.66rem;
+}
+
+.fileList {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: auto;
+}
+
+.fileLink {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--ifm-font-color-base);
+  background: var(--ifm-color-emphasis-100);
+  font-size: 0.84rem;
+  text-decoration: none;
+}
+
+.fileLink:hover {
+  color: var(--ifm-heading-color);
+  text-decoration: none;
+  border-color: var(--ifm-color-emphasis-300);
+  background: var(--ifm-card-background-color);
+}
+
+.fileLink span {
+  overflow-wrap: anywhere;
+}
+
+.fileLink strong {
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.78rem;
+}
+
+.aboutSection,
+.linksSection {
+  margin-top: 3.5rem;
+}
+
+.aboutSection h2,
+.linksSection h2 {
+  margin-bottom: 1rem;
+  font-size: 1.45rem;
+}
+
+.sectionLede {
+  max-width: 640px;
+  margin: -0.25rem 0 1.25rem;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.6;
+}
+
+.aboutPanel {
+  display: grid;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  background: var(--ifm-card-background-color);
+}
+
+.copyBlock h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.copyBlock p {
+  margin: 0 0 0.85rem;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.7;
+}
+
+.copyBlock p:last-child {
+  margin-bottom: 0;
+}
+
+.factGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 0;
+}
+
+.factItem {
+  padding-top: 1rem;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.factItem dt {
+  margin-bottom: 0.2rem;
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.factItem dd {
+  margin: 0;
+  color: var(--ifm-heading-color);
+  font-weight: 600;
+}
+
+.linksGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.linksGrid a {
+  display: inline-flex;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 6px;
+  color: var(--ifm-font-color-base);
+  background: var(--ifm-card-background-color);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.linksGrid a:hover {
+  color: var(--ifm-link-color);
+  border-color: var(--ifm-color-emphasis-300);
+  text-decoration: none;
+}
+
+/* --- Animated mark (the live web treatment from the top-left navbar logo) --- */
+.animatedMark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Size to the mark itself (alien aspect ~438:504), so the surrounding
+     area stays the card background instead of a clipped gradient block. */
+  width: 130px;
+  height: 150px;
+}
+
+.animatedMark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.animatedMark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    -45deg,
+    rgba(151, 245, 151, 0.45),
+    rgba(46, 200, 255, 0.5),
+    rgba(88, 60, 231, 0.45),
+    rgba(35, 213, 171, 0.5)
+  );
+  background-size: 300% 300%;
+  mix-blend-mode: color;
+  animation: atmosGradient 15s ease infinite;
+  /* Clip the gradient to the alien silhouette so only the mark is recolored
+     (matches the navbar logo), with no rectangular block around it. */
+  -webkit-mask: url(/img/atmos-logo-bw.svg) center / contain no-repeat;
+  mask: url(/img/atmos-logo-bw.svg) center / contain no-repeat;
+  pointer-events: none;
+}
+
+.animatedWordmarkPreview {
+  display: block;
+  width: min(100%, 330px);
+  height: auto;
+  max-height: 122px;
+  object-fit: contain;
+}
+
+.animatedWordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  max-width: 100%;
+}
+
+.animatedWordmark .animatedMark {
+  flex: 0 0 auto;
+  width: 72px;
+  height: 82px;
+}
+
+.animatedWordmarkText {
+  color: transparent;
+  background: linear-gradient(-45deg, #97f597, #2ec8ff, #583ce7, #23d5ab);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: atmosGradient 15s ease infinite;
+  font-family: 'Optimistic Text', -apple-system, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(2.7rem, 9vw, 4.6rem);
+  font-weight: 800;
+  line-height: 1;
+}
+
+@keyframes atmosGradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animatedMark::before,
+  .animatedWordmarkText,
+  .badgeAnimated .badgeName {
+    animation: none;
+  }
+}
+
+/* --- Powered-by badges --- */
+.badgeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+}
+
+.badgeStage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 130px;
+  padding: 2rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+}
+
+.badgeStage.light {
+  background: #ffffff;
+}
+
+.badgeStage.dark {
+  background: #171717;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.9rem 0.5rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-family: var(--ifm-font-family-base);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.badge.dark {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: #1f1f1f;
+}
+
+.badge.light {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+}
+
+.badgeMark {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.badgeText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  text-align: left;
+}
+
+.badgePre {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.badge.dark .badgePre {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.badge.light .badgePre {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.badgeName {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.badge.dark .badgeName {
+  color: #ffffff;
+}
+
+.badge.light .badgeName {
+  color: #171717;
+}
+
+.badgeAnimated .badgeName {
+  background: linear-gradient(-45deg, #97f597, #2ec8ff, #583ce7, #23d5ab);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: atmosGradient 15s ease infinite;
+}
+
+/* --- Brand colors --- */
+.colorGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 1rem;
+}
+
+.swatch {
+  overflow: hidden;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  background: var(--ifm-card-background-color);
+}
+
+.swatchChip {
+  height: 84px;
+}
+
+.swatchMeta {
+  padding: 0.6rem 0.7rem 0.7rem;
+}
+
+.swatchName {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.swatchHex {
+  margin-top: 0.15rem;
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+}
+
+/* --- Usage guidelines --- */
+.guidelines {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.guideCol {
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  background: var(--ifm-card-background-color);
+}
+
+.guideHead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.guideHead.do {
+  color: #1f9d63;
+}
+
+.guideHead.dont {
+  color: #d2453c;
+}
+
+.guideList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guideList li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.55rem;
+  padding: 0.4rem 0;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.guideList li::before {
+  font-weight: 700;
+}
+
+.guideCol.do .guideList li::before {
+  content: "✓";
+  color: #1f9d63;
+}
+
+.guideCol.dont .guideList li::before {
+  content: "✕";
+  color: #d2453c;
+}
+
+@media screen and (max-width: 760px) {
+  .mediaKit {
+    padding: 2.5rem 0.625rem 5rem;
+  }
+
+  .guidelines {
+    grid-template-columns: 1fr;
+  }
+
+  .downloadPanel {
+    grid-template-columns: auto 1fr;
+  }
+
+  .downloadPanel a {
+    grid-column: 1 / -1;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .assetGrid,
+  .factGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .preview {
+    min-height: 190px;
+    padding: 2rem;
+  }
+}
