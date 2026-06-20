@@ -1,0 +1,137 @@
+/**
+ * Custom site-wide footer styles.
+ *
+ * Colors reuse Infima theme tokens (defined in src/css/custom.css) so the
+ * footer adapts automatically to light/dark mode. Local fallbacks are provided
+ * for tokens that aren't theme-defined.
+ */
+
+.footer {
+  --footer-text: var(--ifm-footer-color, var(--ifm-font-color-base));
+  --footer-muted: var(--ifm-color-emphasis-600);
+  --footer-divider: var(--ifm-color-emphasis-200);
+
+  background: var(--ifm-background-surface-color);
+  border-top: 1px solid var(--footer-divider);
+  padding: 3.5rem 1rem 2rem;
+}
+
+.container {
+  max-width: var(--ifm-container-width, 1140px);
+  margin: 0 auto;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2rem;
+}
+
+.column {
+  min-width: 0;
+}
+
+.columnTitle {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--footer-muted);
+  margin: 0 0 1rem;
+}
+
+.itemList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  margin-bottom: 0.6rem;
+}
+
+.link {
+  color: var(--footer-text);
+  font-size: 0.95rem;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.link:hover {
+  color: var(--ifm-color-primary-light);
+  text-decoration: none;
+}
+
+.bottomBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--footer-divider);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.brandLink {
+  display: inline-flex;
+  align-items: center;
+}
+
+.brandLogo {
+  display: block;
+  height: 28px;
+  width: auto;
+}
+
+.copyright {
+  color: var(--footer-muted);
+  font-size: 0.875rem;
+}
+
+.social {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.socialLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  color: var(--footer-muted);
+  font-size: 1.25rem;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.socialLink:hover {
+  color: var(--ifm-color-primary-light);
+  background-color: var(--ifm-color-emphasis-200);
+}
+
+@media (max-width: 996px) {
+  .columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+
+  .bottomBar {
+    justify-content: center;
+    text-align: center;
+  }
+}

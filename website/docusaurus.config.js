@@ -539,12 +539,9 @@ const config = {
                     height: 36
                 },
                 items: [
-                    {
-                        label: `Latest Release`,
-                        href: `https://github.com/cloudposse/atmos/releases/latest`,
-                        position: 'left',
-                        className: 'latest-release-link'  // Add a class to identify this link
-                    },
+                    // Secondary links (Latest Release, Community, Changelog,
+                    // Roadmap) moved to the site-wide footer to declutter the
+                    // navbar. See src/theme/Footer/.
                     {
                         type: 'doc',
                         docId: 'intro/index',
@@ -565,21 +562,6 @@ const config = {
                         to: '/pro',
                         position: 'left',
                         label: 'Pro'
-                    },
-                    {
-                        label: 'Community',
-                        position: 'left',
-                        to: '/community'
-                    },
-                    {
-                        label: 'Changelog',
-                        position: 'left',
-                        to: '/changelog'
-                    },
-                    {
-                        label: 'Roadmap',
-                        position: 'left',
-                        to: '/roadmap'
                     },
                     // GitHub stars badge
                     {
