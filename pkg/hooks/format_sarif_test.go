@@ -2,6 +2,7 @@ package hooks_test
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,12 @@ func TestCommandKind_FormatSARIF_SurfacesFindings(t *testing.T) {
 	exe, err := os.Executable()
 	require.NoError(t, err)
 
+	workspace := t.TempDir()
+	t.Setenv("GITHUB_WORKSPACE", workspace)
+	componentRoot := filepath.Join(workspace, "components", "terraform", "bucket")
+	require.NoError(t, os.MkdirAll(componentRoot, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentRoot, "main.tf"), []byte("resource \"aws_s3_bucket\" \"this\" {}\n"), 0o600))
+
 	kind := &hooks.Kind{Name: "command", Engine: &hooks.CommandEngine{}}
 	hook := &hooks.Hook{
 		Kind:    "command",
@@ -40,8 +47,8 @@ func TestCommandKind_FormatSARIF_SurfacesFindings(t *testing.T) {
 	ctx := &hooks.ExecContext{
 		Hook:        hook,
 		Kind:        kind,
-		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: t.TempDir()},
-		Info:        &schema.ConfigAndStacksInfo{Stack: "test", ComponentFromArg: "bucket"},
+		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: filepath.Join(workspace, "components", "terraform")},
+		Info:        &schema.ConfigAndStacksInfo{Stack: "test", ComponentFromArg: "bucket", FinalComponent: "bucket"},
 	}
 
 	out, err := kind.Engine.Run(ctx)
@@ -55,11 +62,12 @@ func TestCommandKind_FormatSARIF_SurfacesFindings(t *testing.T) {
 	// Structured findings surfaced for annotations.
 	require.Len(t, out.Summary.Findings, 1)
 	f := out.Summary.Findings[0]
-	assert.Equal(t, "main.tf", f.Path)
+	assert.Equal(t, "components/terraform/bucket/main.tf", f.Path)
 	assert.Equal(t, 6, f.Line)
 	assert.Equal(t, "high", f.Severity) // SARIF level "error" → high.
 	assert.Equal(t, "AVD-AWS-0001", f.RuleID)
 
 	// Raw SARIF surfaced for upload.
 	assert.NotEmpty(t, out.Summary.SARIF)
+	assert.Contains(t, string(out.Summary.SARIF), "components/terraform/bucket/main.tf")
 }

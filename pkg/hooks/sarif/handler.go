@@ -50,6 +50,7 @@ func NewResultHandler(opts HandlerOptions) hooks.ResultHandler {
 			return nil, fmt.Errorf("%s: read SARIF: %w: %w", labelOrDefault(opts.Kind, ""), errUtils.ErrReadFile, err)
 		}
 
+		data = normalizeArtifactURIs(data, ctx)
 		findings, err := Parse(data)
 		if err != nil {
 			return nil, fmt.Errorf("%s: parse SARIF: %w: %w", labelOrDefault(opts.Kind, ""), errUtils.ErrParseFile, err)
@@ -71,9 +72,8 @@ func NewResultHandler(opts HandlerOptions) hooks.ResultHandler {
 			Counts:   findings.CountsBySeverity(),
 			Body:     body,
 			Findings: toHookFindings(findings),
-			// Pass the SARIF through verbatim (not the parsed model) so an
-			// upload preserves the tool's full fidelity — all rules, helpUris,
-			// fixes, partial fingerprints, etc.
+			// Preserve the tool's SARIF fidelity while normalizing artifact
+			// paths so annotations and Code Scanning can anchor to PR files.
 			SARIF: data,
 		}, nil
 	}

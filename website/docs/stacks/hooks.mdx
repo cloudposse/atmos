@@ -562,6 +562,11 @@ the hook or the terraform command. Outside CI they no-op. Findings derive from t
 tool's SARIF, so the three built-in SARIF scanners — `checkov`, `trivy`, `kics` —
 all participate; `infracost` (cost, not findings) does not.
 
+`ci.annotations` and `ci.results` can both place line-level feedback on a pull
+request. Enable both when you intentionally want the lightweight Actions
+annotation and the tracked Code Scanning alert; otherwise enable only one of
+them to avoid duplicate comments on the same lines.
+
 ### Required GitHub Actions permissions
 
 ```yaml

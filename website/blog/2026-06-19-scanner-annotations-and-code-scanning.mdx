@@ -35,6 +35,11 @@ ci:
 
 Both are implemented as **native CI provider capabilities** (extending the same provider interface that already powers job summaries, check runs, and PR comments), not by shelling out to a third-party action. Everything is best-effort: a reporting failure never fails your hook or your plan, and outside CI it all no-ops.
 
+Because both outputs can attach line-level feedback to a pull request, enable
+both only when you want both the lightweight Actions annotation and the tracked
+Code Scanning alert. If duplicate comments on the same lines are noisy for your
+team, enable only one of `ci.annotations` or `ci.results`.
+
 ### Built-in and custom tools
 
 The three SARIF scanners — `checkov`, `trivy`, `kics` — participate automatically. Any **custom** tool does too, just by declaring `format: sarif`:
