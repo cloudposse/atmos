@@ -16,7 +16,7 @@ The `identity` field authenticates an Atmos auth identity before a custom comman
 When an identity is specified, Atmos will:
 1. Authenticate using the specified identity (prompting for MFA if required)
 2. Write temporary credentials to a file
-3. Set environment variables pointing to the credential files (`AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`, etc.)
+3. Set environment variables for the temporary credential files (`AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`) and profile selection (`AWS_PROFILE`, etc.)
 4. Execute all command steps with these environment variables
 
 ### Example: Custom Command with Authentication

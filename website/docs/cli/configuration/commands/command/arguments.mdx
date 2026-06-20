@@ -24,7 +24,6 @@ commands:
     arguments:
       - name: name
         description: Name to greet
-        required: true
         default: John Doe
     steps:
       - "echo Hello {{ .Arguments.name }}!"
