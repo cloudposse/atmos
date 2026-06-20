@@ -553,6 +553,20 @@ func TestDecodeTaskFromMap_InvalidTimeout(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to decode task at index 2")
 }
 
+func TestDecodeTaskFromMap_InvalidStructuredOutput(t *testing.T) {
+	m := map[string]any{
+		"command": "echo hello",
+		"output": map[string]any{
+			"mode":         "grouped",
+			"show_summary": []any{"not-a-bool"},
+		},
+	}
+
+	_, err := decodeTaskFromMap(m, 3)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to decode task output at index 3")
+}
+
 func TestDecodeTaskFromMap_EmptyMap(t *testing.T) {
 	m := map[string]any{}
 

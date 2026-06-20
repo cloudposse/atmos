@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"runtime"
 	"testing"
 	"time"
 
@@ -58,12 +59,44 @@ func TestControlCommandExecutorExecuteShell(t *testing.T) {
 	assert.Equal(t, "cli-id", gotIdentity)
 	assert.Equal(t, map[string]string{"WORKFLOW": "true"}, gotWorkflowEnv)
 	assert.Equal(t, map[string]string{"STEP": "true"}, gotStepEnv)
-	assert.Equal(t, "sh", gotProgram)
-	assert.Equal(t, []string{"-c", "make build"}, gotArgs)
+	wantProgram, wantArgs := controlShellInvocation("make build")
+	assert.Equal(t, wantProgram, gotProgram)
+	assert.Equal(t, wantArgs, gotArgs)
 	assert.Equal(t, []string{"MERGED=true"}, gotEnv)
 	assert.Equal(t, "build ok", result.Stdout)
 	assert.Equal(t, "build warning", result.Stderr)
 	assert.False(t, result.Canceled)
+}
+
+func TestControlShellInvocationForOS(t *testing.T) {
+	t.Run("non-windows", func(t *testing.T) {
+		program, args := controlShellInvocationForOS("linux", "", "make build")
+		assert.Equal(t, "sh", program)
+		assert.Equal(t, []string{"-c", "make build"}, args)
+	})
+
+	t.Run("windows default", func(t *testing.T) {
+		program, args := controlShellInvocationForOS("windows", "", "make build")
+		assert.Equal(t, "cmd.exe", program)
+		assert.Equal(t, []string{"/C", "make build"}, args)
+	})
+
+	t.Run("windows comspec", func(t *testing.T) {
+		program, args := controlShellInvocationForOS("windows", `C:\Windows\System32\cmd.exe`, "make build")
+		assert.Equal(t, `C:\Windows\System32\cmd.exe`, program)
+		assert.Equal(t, []string{"/C", "make build"}, args)
+	})
+
+	t.Run("current os", func(t *testing.T) {
+		program, args := controlShellInvocation("make build")
+		if runtime.GOOS == "windows" {
+			assert.NotEmpty(t, program)
+			assert.Equal(t, []string{"/C", "make build"}, args)
+			return
+		}
+		assert.Equal(t, "sh", program)
+		assert.Equal(t, []string{"-c", "make build"}, args)
+	})
 }
 
 func TestControlCommandExecutorExecuteAtmosAddsStackBeforeTerminator(t *testing.T) {

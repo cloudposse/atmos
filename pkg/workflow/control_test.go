@@ -110,3 +110,24 @@ func TestExecuteControlStepMatrixExpandsRows(t *testing.T) {
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"plan vpc dev", "plan eks dev"}, commands)
 }
+
+func TestMatrixRowSuffixIncludesAxisNames(t *testing.T) {
+	assert.Contains(t, matrixRowSuffix(map[string]string{"axis": "a/b"}), "axis_a_b_")
+	assert.Contains(t, matrixRowSuffix(map[string]string{"axis": "a b"}), "axis_a_b_")
+	assert.NotEqual(
+		t,
+		matrixRowSuffix(map[string]string{"axis": "a/b"}),
+		matrixRowSuffix(map[string]string{"axis": "a b"}),
+	)
+	assert.NotEqual(
+		t,
+		matrixRowSuffix(map[string]string{"component": "app", "stack": "dev"}),
+		matrixRowSuffix(map[string]string{"component": "dev", "stack": "app"}),
+	)
+}
+
+func TestSanitizeControlNameEmptyFallback(t *testing.T) {
+	assert.Equal(t, "empty", sanitizeControlName(""))
+	assert.Equal(t, "empty", sanitizeControlName("///"))
+	assert.Regexp(t, `^empty_empty_[a-z0-9]+$`, matrixRowSuffix(map[string]string{"": "///"}))
+}

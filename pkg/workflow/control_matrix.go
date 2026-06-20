@@ -1,9 +1,13 @@
 package workflow
 
 import (
+	"hash/fnv"
 	"sort"
+	"strconv"
 	"strings"
 )
+
+const controlNameHashBase = 36
 
 func expandMatrix(matrix map[string][]string) []map[string]string {
 	axes := make([]string, 0, len(matrix))
@@ -37,9 +41,23 @@ func matrixRowSuffix(row map[string]string) string {
 	sort.Strings(axes)
 	parts := make([]string, 0, len(axes))
 	for _, axis := range axes {
-		parts = append(parts, sanitizeControlName(row[axis]))
+		parts = append(parts, matrixRowPart(axis, row[axis]))
 	}
 	return strings.Join(parts, controlNameSep)
+}
+
+func matrixRowPart(axis, value string) string {
+	return strings.Join([]string{
+		sanitizeControlName(axis),
+		sanitizeControlName(value),
+		controlNameHash(axis + "\x00" + value),
+	}, controlNameSep)
+}
+
+func controlNameHash(value string) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(value))
+	return strconv.FormatUint(h.Sum64(), controlNameHashBase)
 }
 
 func sanitizeControlName(value string) string {
@@ -56,7 +74,11 @@ func sanitizeControlName(value string) string {
 			b.WriteByte('_')
 		}
 	}
-	return strings.Trim(b.String(), controlNameSep)
+	sanitized := strings.Trim(b.String(), controlNameSep)
+	if sanitized == "" {
+		return "empty"
+	}
+	return sanitized
 }
 
 func controlPrefix(outputCfg controlOutputConfig, stepName string, matrix map[string]string, dataFunc ControlTemplateDataFunc) string {

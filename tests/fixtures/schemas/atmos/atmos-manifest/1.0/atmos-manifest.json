@@ -1315,6 +1315,10 @@
           "type": "string",
           "description": "Identity to use for the workflow step"
         },
+        "timeout": {
+          "type": "string",
+          "description": "Timeout duration for the workflow step"
+        },
         "env": {
           "type": "object",
           "additionalProperties": {

@@ -433,7 +433,10 @@ func decodeTaskItem(item any, index int) (Task, error) {
 // decodeTaskFromMap decodes a map into a Task using mapstructure.
 func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	var task Task
-	m = normalizeTaskOutputMap(m, &task)
+	m, err := normalizeTaskOutputMap(m, &task)
+	if err != nil {
+		return Task{}, fmt.Errorf("failed to decode task output at index %d: %w", index, err)
+	}
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		Result:           &task,
 		TagName:          "mapstructure",
@@ -453,14 +456,14 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	return task, nil
 }
 
-func normalizeTaskOutputMap(m map[string]any, task *Task) map[string]any {
+func normalizeTaskOutputMap(m map[string]any, task *Task) (map[string]any, error) {
 	output, ok := m["output"]
 	if !ok {
-		return m
+		return m, nil
 	}
 	switch v := output.(type) {
 	case string:
-		return m
+		return m, nil
 	case map[string]any:
 		var cfg ParallelOutputConfig
 		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
@@ -468,10 +471,14 @@ func normalizeTaskOutputMap(m map[string]any, task *Task) map[string]any {
 			TagName:          "mapstructure",
 			WeaklyTypedInput: true,
 		})
-		if err == nil && decoder.Decode(v) == nil {
-			task.Output = cfg.Mode
-			task.ParallelOutput = &cfg
+		if err != nil {
+			return nil, err
 		}
+		if err := decoder.Decode(v); err != nil {
+			return nil, err
+		}
+		task.Output = cfg.Mode
+		task.ParallelOutput = &cfg
 		copied := make(map[string]any, len(m)-1)
 		for key, val := range m {
 			if key == "output" {
@@ -479,8 +486,8 @@ func normalizeTaskOutputMap(m map[string]any, task *Task) map[string]any {
 			}
 			copied[key] = val
 		}
-		return copied
+		return copied, nil
 	default:
-		return m
+		return m, nil
 	}
 }

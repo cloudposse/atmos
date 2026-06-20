@@ -4,6 +4,8 @@ This example demonstrates `parallel` and `matrix` workflow control steps with `n
 
 ## Try It
 
+Requires a POSIX shell, or WSL on Windows, because the example workflows run shell commands.
+
 ```shell
 cd examples/parallel-steps
 

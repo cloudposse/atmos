@@ -419,7 +419,7 @@ func ExecuteWorkflow(
 				workflowDefinition:  workflowDefinition,
 				dryRun:              dryRun,
 				commandLineStack:    commandLineStack,
-				commandLineIdentity: commandLineIdentity,
+				commandLineIdentity: stepIdentity,
 				baseEnv:             baseEnv,
 				authManager:         authManager,
 			}, &steps[stepIdx])

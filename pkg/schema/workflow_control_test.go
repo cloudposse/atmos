@@ -72,13 +72,54 @@ func TestValidateWorkflowSteps_ControlSteps(t *testing.T) {
 			wantErr: "cyclic needs dependency",
 		},
 		{
-			name: "interactive child disallowed",
+			name: "unsupported child type disallowed",
 			steps: []WorkflowStep{{
 				Name:  "checks",
 				Type:  TaskTypeParallel,
 				Steps: []WorkflowStep{{Name: "prompt", Type: "input", Prompt: "Continue?"}},
 			}},
 			wantErr: "cannot run inside concurrent step",
+		},
+		{
+			name: "interactive child disallowed",
+			steps: []WorkflowStep{{
+				Name: "checks",
+				Type: TaskTypeParallel,
+				Steps: []WorkflowStep{{
+					Name:        "prompt",
+					Type:        TaskTypeShell,
+					Command:     "read answer",
+					Interactive: true,
+				}},
+			}},
+			wantErr: "cannot set tty or interactive",
+		},
+		{
+			name: "top-level duplicate names allowed",
+			steps: []WorkflowStep{
+				{Name: "deploy", Type: TaskTypeShell, Command: "echo first"},
+				{Name: "deploy", Type: TaskTypeShell, Command: "echo second"},
+			},
+		},
+		{
+			name: "top-level needs disallowed",
+			steps: []WorkflowStep{
+				{Name: "build", Type: TaskTypeShell, Command: "make build"},
+				{Name: "test", Type: TaskTypeShell, Command: "make test", Needs: []string{"build"}},
+			},
+			wantErr: "sets needs outside a concurrent control step",
+		},
+		{
+			name: "duplicate child names disallowed",
+			steps: []WorkflowStep{{
+				Name: "checks",
+				Type: TaskTypeParallel,
+				Steps: []WorkflowStep{
+					{Name: "lint", Type: TaskTypeShell, Command: "make lint"},
+					{Name: "lint", Type: TaskTypeShell, Command: "make lint-again"},
+				},
+			}},
+			wantErr: "duplicate step name",
 		},
 		{
 			name: "invalid output mode",

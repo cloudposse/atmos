@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -14,6 +15,8 @@ import (
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -849,6 +852,49 @@ func TestPrepareStepEnvironment_NilAuthManager(t *testing.T) {
 
 	assert.ErrorIs(t, err, errUtils.ErrAuthManager)
 	assert.Nil(t, env)
+}
+
+type controlStepIdentityAuthManager struct {
+	auth.AuthManager
+	identities []string
+}
+
+func (m *controlStepIdentityAuthManager) GetCachedCredentials(_ context.Context, identityName string) (*authTypes.WhoamiInfo, error) {
+	return &authTypes.WhoamiInfo{Identity: identityName}, nil
+}
+
+func (m *controlStepIdentityAuthManager) PrepareShellEnvironment(_ context.Context, identityName string, currentEnv []string) ([]string, error) {
+	m.identities = append(m.identities, identityName)
+	return append(currentEnv, "ATMOS_IDENTITY="+identityName), nil
+}
+
+func TestExecuteWorkflowControlStepUsesResolvedIdentityFallback(t *testing.T) {
+	showSummary := false
+	authManager := &controlStepIdentityAuthManager{}
+	parent := &schema.WorkflowStep{
+		Name: "checks",
+		Type: schema.TaskTypeParallel,
+		ParallelOutput: &schema.ParallelOutputConfig{
+			Mode:        "none",
+			ShowSummary: &showSummary,
+		},
+		Steps: []schema.WorkflowStep{{
+			Name:    "child",
+			Type:    schema.TaskTypeShell,
+			Command: "echo child",
+		}},
+	}
+
+	err := executeWorkflowControlStep(context.Background(), &workflowControlContext{
+		workflowDefinition:  &schema.WorkflowDefinition{},
+		dryRun:              true,
+		commandLineIdentity: "parent-id",
+		baseEnv:             []string{"BASE_VAR=base-value"},
+		authManager:         authManager,
+	}, parent)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"parent-id"}, authManager.identities)
 }
 
 // TestWorkflowMatch tests the WorkflowMatch struct.

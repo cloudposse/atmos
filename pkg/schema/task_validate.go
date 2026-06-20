@@ -121,11 +121,11 @@ func execStepLabel(view *execStepView, index int) string {
 }
 
 func validateControlSteps(steps []WorkflowStep, inConcurrentGroup bool, parent string) error {
-	names, err := collectWorkflowStepNames(steps, parent)
-	if err != nil {
-		return err
-	}
 	if inConcurrentGroup {
+		names, err := collectWorkflowStepNames(steps, parent)
+		if err != nil {
+			return err
+		}
 		if err := validateNeedsGraph(steps, names, parent); err != nil {
 			return err
 		}
@@ -154,6 +154,9 @@ func validateControlStepList(steps []WorkflowStep, inConcurrentGroup bool, paren
 				return err
 			}
 			continue
+		}
+		if len(step.Needs) > 0 {
+			return fmt.Errorf("%w: %s sets needs outside a concurrent control step", ErrWorkflowControlStepInvalid, workflowStepLabel(step, i))
 		}
 		if !isWorkflowControlStep(stepType) {
 			continue

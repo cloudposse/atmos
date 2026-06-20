@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -85,11 +86,12 @@ func (executor *ControlCommandExecutor) stepEnv(step *schema.WorkflowStep) ([]st
 
 func (executor *ControlCommandExecutor) executeShell(ctx context.Context, step *schema.WorkflowStep, stepEnv []string, output ControlChildOutput) (*ControlChildResult, error) {
 	ioSpec := executor.commandStreams(output)
+	program, args := controlShellInvocation(step.Command)
 	err := retry.Do(ctx, step.Retry, func() error {
 		return executor.runCommand(&ControlCommandRequest{
 			Context: ctx,
-			Program: "sh",
-			Args:    []string{"-c", step.Command},
+			Program: program,
+			Args:    args,
 			Env:     stepEnv,
 			Streams: ioSpec.streams,
 			Stdout:  ioSpec.stdout,
@@ -98,6 +100,21 @@ func (executor *ControlCommandExecutor) executeShell(ctx context.Context, step *
 	})
 	ioSpec.flush()
 	return controlChildExecutionResult(ioSpec.stdout, ioSpec.stderr, err), err
+}
+
+func controlShellInvocation(command string) (string, []string) {
+	return controlShellInvocationForOS(runtime.GOOS, os.Getenv("COMSPEC"), command) //nolint:forbidigo // COMSPEC is a Windows system variable, not Atmos configuration.
+}
+
+func controlShellInvocationForOS(goos, comspec, command string) (string, []string) {
+	if goos == "windows" {
+		program := strings.TrimSpace(comspec)
+		if program == "" {
+			program = "cmd.exe"
+		}
+		return program, []string{"/C", command}
+	}
+	return "sh", []string{"-c", command}
 }
 
 func (executor *ControlCommandExecutor) executeAtmos(ctx context.Context, step *schema.WorkflowStep, stepEnv []string, output ControlChildOutput) (*ControlChildResult, error) {
