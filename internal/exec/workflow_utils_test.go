@@ -12,10 +12,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/auth"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
@@ -854,23 +854,22 @@ func TestPrepareStepEnvironment_NilAuthManager(t *testing.T) {
 	assert.Nil(t, env)
 }
 
-type controlStepIdentityAuthManager struct {
-	auth.AuthManager
-	identities []string
-}
-
-func (m *controlStepIdentityAuthManager) GetCachedCredentials(_ context.Context, identityName string) (*authTypes.WhoamiInfo, error) {
-	return &authTypes.WhoamiInfo{Identity: identityName}, nil
-}
-
-func (m *controlStepIdentityAuthManager) PrepareShellEnvironment(_ context.Context, identityName string, currentEnv []string) ([]string, error) {
-	m.identities = append(m.identities, identityName)
-	return append(currentEnv, "ATMOS_IDENTITY="+identityName), nil
-}
-
 func TestExecuteWorkflowControlStepUsesResolvedIdentityFallback(t *testing.T) {
 	showSummary := false
-	authManager := &controlStepIdentityAuthManager{}
+	ctrl := gomock.NewController(t)
+	authManager := authTypes.NewMockAuthManager(ctrl)
+	gomock.InOrder(
+		authManager.EXPECT().
+			GetCachedCredentials(gomock.Any(), "parent-id").
+			Return(&authTypes.WhoamiInfo{Identity: "parent-id"}, nil),
+		authManager.EXPECT().
+			PrepareShellEnvironment(gomock.Any(), "parent-id", gomock.Any()).
+			DoAndReturn(func(_ context.Context, identityName string, currentEnv []string) ([]string, error) {
+				assert.Equal(t, "parent-id", identityName)
+				assert.Contains(t, currentEnv, "BASE_VAR=base-value")
+				return append(currentEnv, "ATMOS_IDENTITY="+identityName), nil
+			}),
+	)
 	parent := &schema.WorkflowStep{
 		Name: "checks",
 		Type: schema.TaskTypeParallel,
@@ -894,7 +893,6 @@ func TestExecuteWorkflowControlStepUsesResolvedIdentityFallback(t *testing.T) {
 	}, parent)
 
 	require.NoError(t, err)
-	assert.Equal(t, []string{"parent-id"}, authManager.identities)
 }
 
 // TestWorkflowMatch tests the WorkflowMatch struct.
