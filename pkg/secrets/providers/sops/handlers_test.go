@@ -103,6 +103,10 @@ func TestKmsKeyToMasterKey(t *testing.T) {
 	// Mutating the source map must not affect the already-converted master key.
 	key.Context["app"] = "mutated"
 	assert.Equal(t, "atmos", *mk.EncryptionContext["app"], "encryption context must be deep-copied")
+
+	// Mutating the converted result must not affect the original source map.
+	*mk.EncryptionContext["env"] = "changed-in-result"
+	assert.Equal(t, "prod", key.Context["env"], "source context must remain unchanged")
 }
 
 // TestAzureMasterKey verifies the keyservice→master-key conversion for Azure Key Vault keys.
