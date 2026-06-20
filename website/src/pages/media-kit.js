@@ -3,6 +3,24 @@ import Layout from "@theme/Layout";
 import Link from "@docusaurus/Link";
 import styles from "./media-kit.module.css";
 
+const mediaKitDownloadDir = "/downloads/media-kit";
+
+function mediaKitFiles(baseName, svgHref) {
+  return [
+    { label: `${baseName}.svg`, type: "SVG", href: svgHref },
+    {
+      label: `${baseName}.png`,
+      type: "PNG",
+      href: `${mediaKitDownloadDir}/${baseName}.png`,
+    },
+    {
+      label: `${baseName}.jpg`,
+      type: "JPG",
+      href: `${mediaKitDownloadDir}/${baseName}.jpg`,
+    },
+  ];
+}
+
 const assetGroups = [
   {
     title: "Atmos Mark",
@@ -11,14 +29,7 @@ const assetGroups = [
     usage: "Use the full-color mark where the brand icon can stand on its own.",
     preview: "/img/atmos-logo.svg",
     previewTone: "light",
-    files: [
-      { label: "atmos-logo.svg", type: "SVG", href: "/img/atmos-logo.svg" },
-      {
-        label: "atmos-logo.png - 111 x 128",
-        type: "PNG",
-        href: "/img/atmos-logo.png",
-      },
-    ],
+    files: mediaKitFiles("atmos-mark-color", "/img/atmos-logo.svg"),
   },
   {
     title: "Atmos Mark",
@@ -28,13 +39,7 @@ const assetGroups = [
       "Use the monochrome mark for restrained placements and dark UI surfaces.",
     preview: "/img/atmos-logo-bw.svg",
     previewTone: "dark",
-    files: [
-      {
-        label: "atmos-logo-bw.svg",
-        type: "SVG",
-        href: "/img/atmos-logo-bw.svg",
-      },
-    ],
+    files: mediaKitFiles("atmos-mark-monochrome", "/img/atmos-logo-bw.svg"),
   },
   {
     title: "Atmos Wordmark",
@@ -44,13 +49,10 @@ const assetGroups = [
       "Use on dark backgrounds when the full Atmos name should be visible.",
     preview: "/img/atmos-docs-logo-light.svg",
     previewTone: "dark",
-    files: [
-      {
-        label: "atmos-docs-logo-light.svg",
-        type: "SVG",
-        href: "/img/atmos-docs-logo-light.svg",
-      },
-    ],
+    files: mediaKitFiles(
+      "atmos-wordmark-light",
+      "/img/atmos-docs-logo-light.svg",
+    ),
   },
   {
     title: "Atmos Wordmark",
@@ -60,28 +62,10 @@ const assetGroups = [
       "Use on light backgrounds when the full Atmos name should be visible.",
     preview: "/img/atmos-docs-logo-dark.svg",
     previewTone: "light",
-    files: [
-      {
-        label: "atmos-docs-logo-dark.svg",
-        type: "SVG",
-        href: "/img/atmos-docs-logo-dark.svg",
-      },
-    ],
-  },
-];
-
-const animatedMarks = [
-  {
-    variant: "On dark",
-    tone: "dark",
-    usage:
-      "The animated mark on a dark surface, matching the app and docs header.",
-  },
-  {
-    variant: "On light",
-    tone: "light",
-    usage:
-      "The animated mark on a light surface, using the monochrome mark with cool green, blue, and purple motion from the site UI.",
+    files: mediaKitFiles(
+      "atmos-wordmark-dark",
+      "/img/atmos-docs-logo-dark.svg",
+    ),
   },
 ];
 
@@ -93,13 +77,7 @@ const animatedWordmarks = [
     usage:
       "The animated gradient Atmos lockup for dark header and sidebar placements.",
     preview: "/img/atmos-logo-gradient.svg",
-    files: [
-      {
-        label: "atmos-logo-gradient.svg",
-        type: "SVG",
-        href: "/img/atmos-logo-gradient.svg",
-      },
-    ],
+    files: mediaKitFiles("atmos-logo-gradient", "/img/atmos-logo-gradient.svg"),
   },
   {
     title: "Atmos Logo Gradient",
@@ -108,13 +86,10 @@ const animatedWordmarks = [
     usage:
       "The same animated lockup tuned for white and light neutral backgrounds.",
     preview: "/img/atmos-logo-gradient-on-light.svg",
-    files: [
-      {
-        label: "atmos-logo-gradient-on-light.svg",
-        type: "SVG",
-        href: "/img/atmos-logo-gradient-on-light.svg",
-      },
-    ],
+    files: mediaKitFiles(
+      "atmos-logo-gradient-on-light",
+      "/img/atmos-logo-gradient-on-light.svg",
+    ),
   },
   {
     title: "Atmos CI Gradient",
@@ -123,13 +98,7 @@ const animatedWordmarks = [
     usage:
       "The animated Atmos CI lockup for dark native CI summaries, CI docs, and CI-related placements.",
     preview: "/img/atmos-ci-gradient.svg",
-    files: [
-      {
-        label: "atmos-ci-gradient.svg",
-        type: "SVG",
-        href: "/img/atmos-ci-gradient.svg",
-      },
-    ],
+    files: mediaKitFiles("atmos-ci-gradient", "/img/atmos-ci-gradient.svg"),
   },
   {
     title: "Atmos CI Gradient",
@@ -138,13 +107,10 @@ const animatedWordmarks = [
     usage:
       "The animated Atmos CI lockup tuned for white and light neutral CI placements.",
     preview: "/img/atmos-ci-gradient-on-light.svg",
-    files: [
-      {
-        label: "atmos-ci-gradient-on-light.svg",
-        type: "SVG",
-        href: "/img/atmos-ci-gradient-on-light.svg",
-      },
-    ],
+    files: mediaKitFiles(
+      "atmos-ci-gradient-on-light",
+      "/img/atmos-ci-gradient-on-light.svg",
+    ),
   },
   {
     title: "Atmos AI Gradient",
@@ -153,13 +119,7 @@ const animatedWordmarks = [
     usage:
       "The animated Atmos AI lockup for dark AI features, AI docs, and assistant-related placements.",
     preview: "/img/atmos-ai-gradient.svg",
-    files: [
-      {
-        label: "atmos-ai-gradient.svg",
-        type: "SVG",
-        href: "/img/atmos-ai-gradient.svg",
-      },
-    ],
+    files: mediaKitFiles("atmos-ai-gradient", "/img/atmos-ai-gradient.svg"),
   },
   {
     title: "Atmos AI Gradient",
@@ -168,20 +128,62 @@ const animatedWordmarks = [
     usage:
       "The animated Atmos AI lockup tuned for white and light neutral AI placements.",
     preview: "/img/atmos-ai-gradient-on-light.svg",
-    files: [
-      {
-        label: "atmos-ai-gradient-on-light.svg",
-        type: "SVG",
-        href: "/img/atmos-ai-gradient-on-light.svg",
-      },
-    ],
+    files: mediaKitFiles(
+      "atmos-ai-gradient-on-light",
+      "/img/atmos-ai-gradient-on-light.svg",
+    ),
   },
 ];
 
 const poweredBy = [
-  { variant: "Dark", tone: "dark", stage: "dark" },
-  { variant: "Light", tone: "light", stage: "light" },
-  { variant: "Animated", tone: "dark", stage: "dark", animated: true },
+  {
+    title: "Powered by atmos",
+    variant: "Dark badge",
+    tone: "light",
+    usage:
+      "Use on light surfaces when a project wants to show it runs on Atmos.",
+    preview: "/img/powered-by-atmos-dark.svg",
+    files: mediaKitFiles(
+      "powered-by-atmos-dark",
+      "/img/powered-by-atmos-dark.svg",
+    ),
+  },
+  {
+    title: "Powered by atmos",
+    variant: "Light badge",
+    tone: "dark",
+    usage:
+      "Use on dark surfaces when a project wants to show it runs on Atmos.",
+    preview: "/img/powered-by-atmos-light.svg",
+    files: mediaKitFiles(
+      "powered-by-atmos-light",
+      "/img/powered-by-atmos-light.svg",
+    ),
+  },
+  {
+    title: "Powered by atmos CI",
+    variant: "CI gradient badge",
+    tone: "dark",
+    usage:
+      "Use on dark surfaces for projects, examples, and CI summaries that specifically run on Atmos CI.",
+    preview: "/img/powered-by-atmos-gradient.svg",
+    files: mediaKitFiles(
+      "powered-by-atmos-gradient",
+      "/img/powered-by-atmos-gradient.svg",
+    ),
+  },
+  {
+    title: "Powered by atmos CI",
+    variant: "CI gradient on light",
+    tone: "light",
+    usage:
+      "The same Atmos CI badge tuned for white and light neutral surfaces.",
+    preview: "/img/powered-by-atmos-gradient-on-light.svg",
+    files: mediaKitFiles(
+      "powered-by-atmos-gradient-on-light",
+      "/img/powered-by-atmos-gradient-on-light.svg",
+    ),
+  },
 ];
 
 // Atmos brand palette, sourced from the official logo assets.
@@ -202,6 +204,12 @@ const accentColors = [
   { name: "Sky", hex: "#2ec8ff" },
   { name: "Mint", hex: "#23d5ab" },
   { name: "Glow Green", hex: "#97f597" },
+];
+
+// Dark surfaces used behind the badges and the animated web treatment.
+const surfaceColors = [
+  { name: "Deep Navy", hex: "#0d141d" },
+  { name: "Midnight", hex: "#050914" },
 ];
 
 const guidelines = {
@@ -232,7 +240,7 @@ const facts = [
     href: "https://github.com/cloudposse/atmos/blob/main/LICENSE",
   },
   { label: "Since", value: "2020" },
-  { label: "Maintainer", value: "Cloud Posse" },
+  { label: "Maintainer", value: "Cloud Posse", href: "https://cloudposse.com" },
   { label: "Website", value: "atmos.tools", href: "https://atmos.tools" },
   {
     label: "GitHub",
@@ -246,16 +254,85 @@ const facts = [
   },
 ];
 
+function absoluteAssetUrl(href) {
+  if (typeof window === "undefined") {
+    return href;
+  }
+
+  return new URL(href, window.location.origin).href;
+}
+
+function useCopyFeedback() {
+  const [copied, setCopied] = useState(null);
+
+  function markCopied(kind) {
+    setCopied(kind);
+    window.setTimeout(() => setCopied(null), 1600);
+  }
+
+  return [copied, markCopied];
+}
+
+function PreviewActions({ href, label }) {
+  const [copied, markCopied] = useCopyFeedback();
+
+  async function copyLink() {
+    await navigator.clipboard.writeText(absoluteAssetUrl(href));
+    markCopied("link");
+  }
+
+  async function copyImage() {
+    const url = absoluteAssetUrl(href);
+
+    try {
+      if (!window.ClipboardItem || !navigator.clipboard?.write) {
+        throw new Error("Image clipboard is not available");
+      }
+
+      const response = await fetch(url);
+      const blob = await response.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type || "image/svg+xml"]: blob }),
+      ]);
+      markCopied("image");
+    } catch {
+      await navigator.clipboard.writeText(url);
+      markCopied("link");
+    }
+  }
+
+  return (
+    <div className={styles.previewActions} aria-label={`${label} actions`}>
+      <button type="button" onClick={copyImage}>
+        {copied === "image" ? "Copied" : "Copy image"}
+      </button>
+      <button type="button" onClick={copyLink}>
+        {copied === "link" ? "Copied" : "Copy link"}
+      </button>
+    </div>
+  );
+}
+
+function AssetPreview({ href, label, tone, className = "", children }) {
+  return (
+    <div className={`${styles.preview} ${styles[tone]} ${className}`}>
+      {children}
+      {href ? <PreviewActions href={href} label={label} /> : null}
+    </div>
+  );
+}
+
 function AssetCard({ asset }) {
   return (
     <article className={styles.assetCard}>
-      <div
-        className={`${styles.preview} ${styles[asset.previewTone]} ${
-          asset.kind === "wordmark" ? styles.wordmark : ""
-        }`}
+      <AssetPreview
+        href={asset.preview}
+        label={`${asset.title} ${asset.variant}`}
+        tone={asset.previewTone}
+        className={asset.kind === "wordmark" ? styles.wordmark : ""}
       >
         <img src={asset.preview} alt={`${asset.title} ${asset.variant}`} />
-      </div>
+      </AssetPreview>
       <div className={styles.assetBody}>
         <div>
           <p className={styles.assetKicker}>{asset.variant}</p>
@@ -280,44 +357,20 @@ function AssetCard({ asset }) {
   );
 }
 
-function AnimatedCard({ mark }) {
-  return (
-    <article className={styles.assetCard}>
-      <div className={`${styles.preview} ${styles[mark.tone]}`}>
-        <span className={styles.animatedMark}>
-          <img
-            src="/img/atmos-logo-bw.svg"
-            alt={`Animated Atmos mark, ${mark.variant}`}
-          />
-        </span>
-      </div>
-      <div className={styles.assetBody}>
-        <div>
-          <p className={styles.assetKicker}>{mark.variant}</p>
-          <h2>Animated Mark</h2>
-          <p>{mark.usage}</p>
-        </div>
-        <div className={styles.fileList}>
-          <a className={styles.fileLink} href="/img/atmos-logo-bw.svg" download>
-            <span>atmos-logo-bw.svg</span>
-            <strong>SVG</strong>
-          </a>
-        </div>
-      </div>
-    </article>
-  );
-}
-
 function AnimatedWordmarkCard({ lockup }) {
   return (
     <article className={styles.assetCard}>
-      <div className={`${styles.preview} ${styles[lockup.tone]}`}>
+      <AssetPreview
+        href={lockup.preview}
+        label={`${lockup.title}, ${lockup.variant}`}
+        tone={lockup.tone}
+      >
         <img
           className={styles.animatedWordmarkPreview}
           src={lockup.preview}
           alt={`${lockup.title}, ${lockup.variant}`}
         />
-      </div>
+      </AssetPreview>
       <div className={styles.assetBody}>
         <div>
           <p className={styles.assetKicker}>{lockup.variant}</p>
@@ -342,23 +395,38 @@ function AnimatedWordmarkCard({ lockup }) {
   );
 }
 
-function PoweredByBadge({ tone, animated }) {
+function PoweredByCard({ badge }) {
   return (
-    <span
-      className={`${styles.badge} ${styles[tone]} ${animated ? styles.badgeAnimated : ""}`}
-    >
-      {animated ? (
-        <span className={styles.animatedMark} style={{ width: 26, height: 26 }}>
-          <img className={styles.badgeMark} src="/img/atmos-logo-bw.svg" alt="" />
-        </span>
-      ) : (
-        <img className={styles.badgeMark} src="/img/atmos-logo.svg" alt="" />
-      )}
-      <span className={styles.badgeText}>
-        <span className={styles.badgePre}>Powered by</span>
-        <span className={styles.badgeName}>Atmos</span>
-      </span>
-    </span>
+    <article className={styles.assetCard}>
+      <AssetPreview
+        href={badge.preview}
+        label={`${badge.title} ${badge.variant}`}
+        tone={badge.tone}
+        className={styles.badgePreview}
+      >
+        <img src={badge.preview} alt={`${badge.title}, ${badge.variant}`} />
+      </AssetPreview>
+      <div className={styles.assetBody}>
+        <div>
+          <p className={styles.assetKicker}>{badge.variant}</p>
+          <h2>{badge.title}</h2>
+          <p>{badge.usage}</p>
+        </div>
+        <div className={styles.fileList}>
+          {badge.files.map((file) => (
+            <a
+              key={file.href}
+              className={styles.fileLink}
+              href={file.href}
+              download
+            >
+              <span>{file.label}</span>
+              <strong>{file.type}</strong>
+            </a>
+          ))}
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -432,7 +500,7 @@ export default function MediaKitPage() {
           </div>
           <div>
             <h2 id="media-kit-download">Media kit download</h2>
-            <p>Light and dark SVGs, plus available PNG exports.</p>
+            <p>Light and dark SVGs, plus generated PNG and JPG exports.</p>
           </div>
           <a
             className="button button--primary"
@@ -455,9 +523,6 @@ export default function MediaKitPage() {
         >
           <h2 id="animated-mark">Animated web treatment</h2>
           <div className={styles.assetGrid}>
-            {animatedMarks.map((mark) => (
-              <AnimatedCard key={mark.variant} mark={mark} />
-            ))}
             {animatedWordmarks.map((lockup) => (
               <AnimatedWordmarkCard
                 key={`${lockup.title}-${lockup.variant}`}
@@ -470,18 +535,14 @@ export default function MediaKitPage() {
         <section className={styles.aboutSection} aria-labelledby="powered-by">
           <h2 id="powered-by">Powered by Atmos</h2>
           <p className={styles.sectionLede}>
-            Show that your project runs on Atmos. Use the dark badge on light
-            surfaces, the light badge on dark surfaces, and the animated badge
-            anywhere it can shine.
+            Show that your project runs on Atmos using real SVG badges from the
+            media kit. Use the dark badge on light surfaces, the light badge on
+            dark surfaces, and the CI gradient badge — in dark or light — for
+            Atmos CI placements.
           </p>
-          <div className={styles.badgeGrid}>
+          <div className={styles.assetGrid}>
             {poweredBy.map((badge) => (
-              <div
-                key={badge.variant}
-                className={`${styles.badgeStage} ${styles[badge.stage]}`}
-              >
-                <PoweredByBadge tone={badge.tone} animated={badge.animated} />
-              </div>
+              <PoweredByCard key={badge.variant} badge={badge} />
             ))}
           </div>
         </section>
@@ -506,6 +567,16 @@ export default function MediaKitPage() {
             canonical brand palette.
           </p>
           <ColorSwatches colors={accentColors} />
+        </section>
+
+        <section className={styles.aboutSection} aria-labelledby="surface-colors">
+          <h2 id="surface-colors">Surface colors</h2>
+          <p className={styles.sectionLede}>
+            The deep navy backgrounds used behind the dark badges and the
+            animated web treatment. Pair them with the light wordmarks and the
+            animated gradient for high-contrast, brand-forward dark surfaces.
+          </p>
+          <ColorSwatches colors={surfaceColors} />
         </section>
 
         <section
@@ -590,6 +661,35 @@ export default function MediaKitPage() {
               )}
             </dl>
           </div>
+        </section>
+
+        <section
+          className={styles.aboutSection}
+          aria-labelledby="maintained-by"
+        >
+          <h2 id="maintained-by">Maintained by Cloud Posse</h2>
+          <p className={styles.sectionLede}>
+            Atmos is built and maintained by Cloud Posse, a DevOps accelerator
+            for cloud-native startups and enterprises.
+          </p>
+          <a
+            className={styles.maintainerLogo}
+            href="https://cloudposse.com"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Cloud Posse — visit cloudposse.com"
+          >
+            <img
+              className={styles.logoForLightTheme}
+              src="/img/cloudposse-logo-dark.svg"
+              alt="Cloud Posse"
+            />
+            <img
+              className={styles.logoForDarkTheme}
+              src="/img/cloudposse-logo-light.svg"
+              alt="Cloud Posse"
+            />
+          </a>
         </section>
 
         <section

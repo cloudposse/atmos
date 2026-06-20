@@ -1,63 +1,89 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const rootDir = path.resolve(__dirname, '..');
-const staticDir = path.join(rootDir, 'static');
-const outputDir = path.join(staticDir, 'downloads');
-const outputPath = path.join(outputDir, 'atmos-media-kit.zip');
+const rootDir = path.resolve(__dirname, "..");
+const staticDir = path.join(rootDir, "static");
+const outputDir = path.join(staticDir, "downloads");
+const rasterDir = path.join(outputDir, "media-kit");
+const outputPath = path.join(outputDir, "atmos-media-kit.zip");
 
-const files = [
+const assets = [
   {
-    source: 'img/atmos-logo.svg',
-    destination: 'atmos-media-kit/atmos-mark-color.svg',
+    source: "img/atmos-logo.svg",
+    destinationBase: "atmos-mark-color",
+    jpgBackground: "#ffffff",
   },
   {
-    source: 'img/atmos-logo-bw.svg',
-    destination: 'atmos-media-kit/atmos-mark-monochrome.svg',
+    source: "img/atmos-logo-bw.svg",
+    destinationBase: "atmos-mark-monochrome",
+    jpgBackground: "#171717",
   },
   {
-    source: 'img/atmos-logo.png',
-    destination: 'atmos-media-kit/atmos-mark-color.png',
+    source: "img/atmos-docs-logo-dark.svg",
+    destinationBase: "atmos-wordmark-dark",
+    jpgBackground: "#ffffff",
   },
   {
-    source: 'img/atmos-docs-logo-dark.svg',
-    destination: 'atmos-media-kit/atmos-wordmark-dark.svg',
+    source: "img/atmos-docs-logo-light.svg",
+    destinationBase: "atmos-wordmark-light",
+    jpgBackground: "#171717",
   },
   {
-    source: 'img/atmos-docs-logo-light.svg',
-    destination: 'atmos-media-kit/atmos-wordmark-light.svg',
+    source: "img/atmos-logo-gradient.svg",
+    destinationBase: "atmos-logo-gradient",
+    jpgBackground: "#171717",
   },
   {
-    source: 'img/atmos-logo-gradient.svg',
-    destination: 'atmos-media-kit/atmos-logo-gradient.svg',
+    source: "img/atmos-logo-gradient-on-light.svg",
+    destinationBase: "atmos-logo-gradient-on-light",
+    jpgBackground: "#ffffff",
   },
   {
-    source: 'img/atmos-logo-gradient-on-light.svg',
-    destination: 'atmos-media-kit/atmos-logo-gradient-on-light.svg',
+    source: "img/atmos-ci-gradient.svg",
+    destinationBase: "atmos-ci-gradient",
+    jpgBackground: "#171717",
   },
   {
-    source: 'img/atmos-ci-gradient.svg',
-    destination: 'atmos-media-kit/atmos-ci-gradient.svg',
+    source: "img/atmos-ci-gradient-on-light.svg",
+    destinationBase: "atmos-ci-gradient-on-light",
+    jpgBackground: "#ffffff",
   },
   {
-    source: 'img/atmos-ci-gradient-on-light.svg',
-    destination: 'atmos-media-kit/atmos-ci-gradient-on-light.svg',
+    source: "img/atmos-ai-gradient.svg",
+    destinationBase: "atmos-ai-gradient",
+    jpgBackground: "#171717",
   },
   {
-    source: 'img/atmos-ai-gradient.svg',
-    destination: 'atmos-media-kit/atmos-ai-gradient.svg',
+    source: "img/atmos-ai-gradient-on-light.svg",
+    destinationBase: "atmos-ai-gradient-on-light",
+    jpgBackground: "#ffffff",
   },
   {
-    source: 'img/atmos-ai-gradient-on-light.svg',
-    destination: 'atmos-media-kit/atmos-ai-gradient-on-light.svg',
+    source: "img/powered-by-atmos-dark.svg",
+    destinationBase: "powered-by-atmos-dark",
+    jpgBackground: "#ffffff",
   },
   {
-    source: 'img/powered-by-atmos-gradient.svg',
-    destination: 'atmos-media-kit/powered-by-atmos-gradient.svg',
+    source: "img/powered-by-atmos-light.svg",
+    destinationBase: "powered-by-atmos-light",
+    jpgBackground: "#171717",
+  },
+  {
+    source: "img/powered-by-atmos-gradient.svg",
+    destinationBase: "powered-by-atmos-gradient",
+    jpgBackground: "#171717",
+  },
+  {
+    source: "img/powered-by-atmos-gradient-on-light.svg",
+    destinationBase: "powered-by-atmos-gradient-on-light",
+    jpgBackground: "#ffffff",
   },
 ];
+
+const rasterDensity = 192;
 
 const crcTable = new Uint32Array(256);
 for (let i = 0; i < 256; i += 1) {
@@ -79,8 +105,11 @@ function crc32(buffer) {
 function dosDateTime(date = new Date()) {
   const year = Math.max(date.getFullYear(), 1980);
   const dosTime =
-    (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1);
-  const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+    (date.getHours() << 11) |
+    (date.getMinutes() << 5) |
+    (date.getSeconds() >> 1);
+  const dosDate =
+    ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
   return { dosDate, dosTime };
 }
 
@@ -103,7 +132,7 @@ function createZip(entries) {
   const { dosDate, dosTime } = dosDateTime();
 
   for (const entry of entries) {
-    const fileName = Buffer.from(entry.name, 'utf8');
+    const fileName = Buffer.from(entry.name, "utf8");
     const data = entry.data;
     const checksum = crc32(data);
     const size = data.length;
@@ -163,15 +192,50 @@ function createZip(entries) {
     uint16(0),
   ]);
 
-  return Buffer.concat([...localParts, centralDirectory, endOfCentralDirectory]);
+  return Buffer.concat([
+    ...localParts,
+    centralDirectory,
+    endOfCentralDirectory,
+  ]);
 }
 
 mkdirSync(outputDir, { recursive: true });
+rmSync(rasterDir, { force: true, recursive: true });
+mkdirSync(rasterDir, { recursive: true });
 
-const entries = files.map((file) => ({
-  name: file.destination,
-  data: readFileSync(path.join(staticDir, file.source)),
-}));
+async function rasterizeAsset(asset) {
+  const sourcePath = path.join(staticDir, asset.source);
+  const svg = readFileSync(sourcePath);
+  const source = sharp(svg, { density: rasterDensity });
+  const png = await source.clone().png().toBuffer();
+  const jpg = await source
+    .clone()
+    .flatten({ background: asset.jpgBackground })
+    .jpeg({ mozjpeg: true, quality: 92 })
+    .toBuffer();
+
+  writeFileSync(path.join(rasterDir, `${asset.destinationBase}.png`), png);
+  writeFileSync(path.join(rasterDir, `${asset.destinationBase}.jpg`), jpg);
+
+  return [
+    {
+      name: `atmos-media-kit/${asset.destinationBase}.svg`,
+      data: svg,
+    },
+    {
+      name: `atmos-media-kit/${asset.destinationBase}.png`,
+      data: png,
+    },
+    {
+      name: `atmos-media-kit/${asset.destinationBase}.jpg`,
+      data: jpg,
+    },
+  ];
+}
+
+const entries = (await Promise.all(assets.map(rasterizeAsset))).flat();
 
 writeFileSync(outputPath, createZip(entries));
-console.log(`Generated ${path.relative(rootDir, outputPath)}`);
+console.log(
+  `Generated ${path.relative(rootDir, outputPath)} and ${path.relative(rootDir, rasterDir)}`,
+);
