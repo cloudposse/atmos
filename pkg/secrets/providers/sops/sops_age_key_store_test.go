@@ -1,8 +1,10 @@
-package providers
+package sops
 
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/secrets/providers"
 
 	"filippo.io/age"
 	"github.com/stretchr/testify/assert"
@@ -22,10 +24,10 @@ func newKeychainBackedConfig(t *testing.T) *schema.AtmosConfiguration {
 	return &schema.AtmosConfiguration{Stores: store.StoreRegistry{"keychain": kc}}
 }
 
-func ageStoreProvider(t *testing.T, cfg *schema.AtmosConfiguration, spec map[string]any) Provider {
+func ageStoreProvider(t *testing.T, cfg *schema.AtmosConfiguration, spec map[string]any) providers.Provider {
 	t.Helper()
 	section := map[string]any{"dev-sops": map[string]any{"kind": "sops/age", "spec": spec}}
-	p, err := newSopsProvider(cfg, "dev-sops", section)
+	p, err := New(cfg, "dev-sops", section)
 	require.NoError(t, err)
 	return p
 }
@@ -50,7 +52,7 @@ func TestSopsProvider_AgeKeyStore_ReadRoundTrip(t *testing.T) {
 		"age_key":        map[string]any{"store": "keychain"},
 	})
 
-	coord := Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
+	coord := providers.Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
 	require.NoError(t, p.Set(coord, "dd-secret"))
 
 	got, err := p.Get(coord)
@@ -74,7 +76,7 @@ func TestSopsProvider_AgeKeyStore_KeygenWritesAndReads(t *testing.T) {
 		"recipients_file": filepath.Join(base, ".sops.yaml"),
 	})
 
-	kg, ok := gen.(KeyGenerator)
+	kg, ok := gen.(providers.KeyGenerator)
 	require.True(t, ok)
 	require.False(t, kg.HasKey(), "store starts without a key")
 
@@ -89,7 +91,7 @@ func TestSopsProvider_AgeKeyStore_KeygenWritesAndReads(t *testing.T) {
 		"age_recipients": res.Public,
 		"age_key":        map[string]any{"store": "keychain"},
 	})
-	coord := Coordinate{Stack: "dev", Component: "api", Key: "K"}
+	coord := providers.Coordinate{Stack: "dev", Component: "api", Key: "K"}
 	require.NoError(t, reader.Set(coord, "v"))
 	got, err := reader.Get(coord)
 	require.NoError(t, err)
@@ -108,9 +110,9 @@ func TestSopsProvider_AgeKeyStore_NotConfigured(t *testing.T) {
 		"age_recipients": identity.Recipient().String(),
 		"age_key":        map[string]any{"store": "nope"},
 	})
-	require.NoError(t, p.Set(Coordinate{Stack: "dev", Component: "api", Key: "K"}, "v"))
+	require.NoError(t, p.Set(providers.Coordinate{Stack: "dev", Component: "api", Key: "K"}, "v"))
 
-	_, err = p.Get(Coordinate{Stack: "dev", Component: "api", Key: "K"})
+	_, err = p.Get(providers.Coordinate{Stack: "dev", Component: "api", Key: "K"})
 	require.ErrorIs(t, err, ErrSopsAgeKey)
 }
 

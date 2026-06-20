@@ -1,0 +1,43 @@
+base_path: "./"
+
+components:
+  terraform:
+    command: tofu
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+    apply_auto_approve: true
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  name_pattern: "{stage}"
+
+# A SOPS aws-kms secrets provider. The data key is wrapped with an AWS KMS key, so
+# encrypt/decrypt require AWS credentials. The `identity` here is what issue #2637 is about:
+# Atmos must authenticate as this identity and use ITS credentials for the KMS calls,
+# instead of requiring ambient AWS credentials in the process environment.
+secrets:
+  providers:
+    sops-kms:
+      kind: sops/aws-kms
+      identity: floci-superuser
+      spec:
+        file: secrets/{{ .atmos_stack }}.enc.yaml
+
+auth:
+  identities:
+    floci-superuser:
+      kind: aws/user
+      credentials:
+        access_key_id: test
+        secret_access_key: test
+        region: us-east-1
+        aws:
+          resolver:
+            url: !env FLOCI_ENDPOINT_URL
+      default: true
+
+logs:
+  file: /dev/stderr
+  level: Info
