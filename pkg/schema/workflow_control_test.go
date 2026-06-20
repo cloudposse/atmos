@@ -150,6 +150,93 @@ func TestValidateWorkflowSteps_ControlSteps(t *testing.T) {
 			}},
 			wantErr: "requires at least one matrix axis",
 		},
+		{
+			name: "unnamed control step needs children",
+			steps: []WorkflowStep{{
+				Type: TaskTypeParallel,
+			}},
+			wantErr: "step at index 0 requires at least one nested step",
+		},
+		{
+			name: "negative max concurrency",
+			steps: []WorkflowStep{{
+				Name:           "checks",
+				Type:           TaskTypeParallel,
+				MaxConcurrency: -1,
+				Steps:          []WorkflowStep{{Name: "test", Type: TaskTypeShell, Command: "make test"}},
+			}},
+			wantErr: "sets negative max_concurrency",
+		},
+		{
+			name: "negative fail max failures",
+			steps: []WorkflowStep{{
+				Name:  "checks",
+				Type:  TaskTypeParallel,
+				Fail:  &ParallelFailConfig{MaxFailures: -1},
+				Steps: []WorkflowStep{{Name: "test", Type: TaskTypeShell, Command: "make test"}},
+			}},
+			wantErr: "sets negative fail.max_failures",
+		},
+		{
+			name: "matrix empty axis name",
+			steps: []WorkflowStep{{
+				Name:   "plans",
+				Type:   TaskTypeMatrix,
+				Matrix: map[string][]string{"": {"dev"}},
+				Steps:  []WorkflowStep{{Name: "plan", Type: TaskTypeShell, Command: "plan"}},
+			}},
+			wantErr: "contains an empty matrix axis name",
+		},
+		{
+			name: "matrix empty axis values",
+			steps: []WorkflowStep{{
+				Name:   "plans",
+				Type:   TaskTypeMatrix,
+				Matrix: map[string][]string{"stack": {}},
+				Steps:  []WorkflowStep{{Name: "plan", Type: TaskTypeShell, Command: "plan"}},
+			}},
+			wantErr: "must contain at least one value",
+		},
+		{
+			name: "invalid output order",
+			steps: []WorkflowStep{{
+				Name:           "checks",
+				Type:           TaskTypeParallel,
+				ParallelOutput: &ParallelOutputConfig{Mode: "grouped", Order: "random"},
+				Steps:          []WorkflowStep{{Name: "test", Type: TaskTypeShell, Command: "make test"}},
+			}},
+			wantErr: "sets unsupported output.order",
+		},
+		{
+			name: "default child type allowed",
+			steps: []WorkflowStep{{
+				Name:  "checks",
+				Type:  TaskTypeParallel,
+				Steps: []WorkflowStep{{Name: "plan", Command: "terraform plan"}},
+			}},
+		},
+		{
+			name: "child output mode disallowed",
+			steps: []WorkflowStep{{
+				Name:  "checks",
+				Type:  TaskTypeParallel,
+				Steps: []WorkflowStep{{Name: "test", Type: TaskTypeShell, Command: "make test", Output: "raw"}},
+			}},
+			wantErr: "cannot set child output mode",
+		},
+		{
+			name: "child nested steps disallowed",
+			steps: []WorkflowStep{{
+				Name: "checks",
+				Type: TaskTypeParallel,
+				Steps: []WorkflowStep{{
+					Name:  "nested",
+					Type:  TaskTypeShell,
+					Steps: []WorkflowStep{{Name: "inner", Type: TaskTypeShell, Command: "echo inner"}},
+				}},
+			}},
+			wantErr: "cannot declare nested steps",
+		},
 	}
 
 	for _, tt := range tests {
@@ -163,4 +250,18 @@ func TestValidateWorkflowSteps_ControlSteps(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
 	}
+}
+
+func TestWorkflowStep_UnmarshalYAML_InvalidStructuredOutput(t *testing.T) {
+	input := `
+type: parallel
+output:
+  - grouped
+steps:
+  - name: test
+    type: shell
+    command: make test
+`
+	var step WorkflowStep
+	require.Error(t, yaml.Unmarshal([]byte(input), &step))
 }

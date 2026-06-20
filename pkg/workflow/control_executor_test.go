@@ -222,3 +222,19 @@ func TestControlChildExecutionResultCanceled(t *testing.T) {
 	assert.Equal(t, "err", result.Stderr)
 	assert.True(t, result.Canceled)
 }
+
+func TestControlCommandExecutorCommandStreamsPrefixed(t *testing.T) {
+	executor := &ControlCommandExecutor{}
+	ioSpec := executor.commandStreams(ControlChildOutput{
+		Mode:   ControlOutputPrefixed,
+		Prefix: "[child] ",
+	})
+
+	_, err := ioSpec.streams.Stdout.Write([]byte("stdout\n"))
+	require.NoError(t, err)
+	_, err = ioSpec.streams.Stderr.Write([]byte("stderr\n"))
+	require.NoError(t, err)
+	ioSpec.flush()
+	assert.NotNil(t, ioSpec.stdout)
+	assert.NotNil(t, ioSpec.stderr)
+}
