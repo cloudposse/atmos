@@ -362,3 +362,73 @@ func TestProcessComponentEntry_ComponentAuthResolverErrorIsFatal(t *testing.T) {
 	assert.Contains(t, err.Error(), "test-stack")
 	assert.EqualValues(t, 1, spy.calls.Load(), "resolver should stop processing after the first auth failure")
 }
+
+// TestProcessComponentEntry_OutOfScopeSkipsAuth verifies that per-component auth is NOT resolved
+// for a component the caller did not request — whether it is filtered out by the requested stack
+// or excluded by the --components filter. Both filters must run before resolveComponentAuthManager;
+// otherwise `atmos secret list -s <stack>` authenticates every component in every other stack and
+// hangs on large repos. See docs/fixes/2026-06-20-secret-list-stack-scope-per-component-auth.md.
+func TestProcessComponentEntry_OutOfScopeSkipsAuth(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		filterByStack string
+		components    []string
+		stackFileName string
+		componentName string
+	}{
+		{
+			// stackFileName differs from filterByStack, so this component is out of scope.
+			name:          "out_of_scope_stack",
+			filterByStack: "wanted-stack",
+			stackFileName: "other-stack",
+			componentName: "test-component",
+		},
+		{
+			// componentName is not in p.components, so this component is out of scope.
+			name:          "out_of_scope_component",
+			components:    []string{"wanted-component"},
+			stackFileName: "test-stack",
+			componentName: "other-component",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			// The spy returns an error, so if the resolver were invoked the call would surface as
+			// a non-nil error from processComponentEntry. An out-of-scope component must skip it.
+			spy := &componentAuthResolverSpy{
+				returnMgr: nil,
+				returnErr: assert.AnError,
+			}
+
+			componentSection := componentSectionWithAuth(authSectionWithDefault())
+			allTypeComponents := map[string]any{tc.componentName: componentSection}
+			p := &describeStacksProcessor{
+				atmosConfig:           &schema.AtmosConfiguration{},
+				filterByStack:         tc.filterByStack,
+				components:            tc.components,
+				processTemplates:      true,
+				processYamlFunctions:  false,
+				componentAuthResolver: spy.resolver(),
+				finalStacksMap:        make(map[string]any),
+			}
+
+			err := p.processComponentEntry(
+				tc.stackFileName,
+				"",
+				"helmfile",
+				tc.componentName,
+				componentSection,
+				allTypeComponents,
+				processComponentTypeOpts{},
+			)
+
+			require.NoError(t, err, "out-of-scope component must be skipped without resolving auth")
+			assert.EqualValues(t, 0, spy.calls.Load(), "per-component auth must not run for an out-of-scope component")
+		})
+	}
+}

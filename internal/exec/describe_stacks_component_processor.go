@@ -332,14 +332,9 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	info.Context = resolvedContext
 	info.AuthDisabled = p.authDisabled
 
-	// Resolve the per-component auth manager (may fall back to the parent).
-	componentAuthManager, err := p.resolveComponentAuthManager(componentSection, componentName, stackName)
-	if err != nil {
-		return err
-	}
-	propagateAuth(&info, componentAuthManager)
-
 	// Filter: skip this component if it does not belong to the requested stack.
+	// Done before resolveComponentAuthManager (below) so out-of-scope components don't trigger a
+	// full auth cycle. See docs/fixes/2026-06-20-secret-list-stack-scope-per-component-auth.md.
 	if shouldFilterByStack(p.filterByStack, stackFileName, stackName) {
 		return nil
 	}
@@ -357,6 +352,14 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	if !componentIncluded {
 		return nil
 	}
+
+	// Resolve the per-component auth manager (may fall back to the parent). Must run before the
+	// template and YAML-function processing below, which read info.AuthContext.
+	componentAuthManager, err := p.resolveComponentAuthManager(componentSection, componentName, stackName)
+	if err != nil {
+		return err
+	}
+	propagateAuth(&info, componentAuthManager)
 
 	// Ensure the stack-level entry exists (only for included components).
 	if !u.MapKeyExists(p.finalStacksMap, stackName) {
