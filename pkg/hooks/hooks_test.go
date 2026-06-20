@@ -844,6 +844,30 @@ func TestRunAll_SkipHooksBypassesPreflightBinaryCheck(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRunAll_PreflightOnlyChecksMatchingEvent(t *testing.T) {
+	h := Hooks{
+		config: &schema.AtmosConfiguration{},
+		info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "test-component",
+			Stack:            "test-stack",
+		},
+		items: map[string]Hook{
+			"plan-scanner": {
+				Events:  []string{"after-terraform-plan"},
+				Kind:    "command",
+				Command: "definitely-not-on-path-atmos-test",
+			},
+		},
+	}
+
+	err := h.RunAll(BeforeTerraformApply, h.config, h.info, nil, nil)
+	require.NoError(t, err, "plan-only hook must not block apply preflight")
+
+	err = h.RunAll(AfterTerraformPlan, h.config, h.info, nil, nil)
+	require.Error(t, err, "matching event must still preflight hook binaries")
+	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+}
+
 func TestHooksPreflight_NoOpBranches(t *testing.T) {
 	skipNone := func(string) bool { return false }
 
@@ -904,7 +928,7 @@ func TestHooksPreflight_NoOpBranches(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.hooks.preflight(tt.cfg, tt.info, tt.skip)
+			err := tt.hooks.preflight(BeforeTerraformPlan, tt.cfg, tt.info, tt.skip)
 			require.NoError(t, err)
 			assert.True(t, tt.hooks.preflightDone)
 		})
@@ -920,7 +944,20 @@ func TestHooksVerifyAllBinaries(t *testing.T) {
 			"skipped":    {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
 		}}
 
-		err := h.verifyAllBinaries(func(name string) bool { return name == "skipped" })
+		err := h.verifyAllBinaries(BeforeTerraformPlan, func(name string) bool { return name == "skipped" })
+		require.NoError(t, err)
+	})
+
+	t.Run("skips hooks for other events", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"plan-only": {
+				Events:  []string{"after-terraform-plan"},
+				Kind:    "command",
+				Command: "definitely-not-on-path-atmos-test",
+			},
+		}}
+
+		err := h.verifyAllBinaries(BeforeTerraformApply, nil)
 		require.NoError(t, err)
 	})
 
@@ -929,7 +966,7 @@ func TestHooksVerifyAllBinaries(t *testing.T) {
 			"missing": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
 		}}
 
-		err := h.verifyAllBinaries(nil)
+		err := h.verifyAllBinaries(BeforeTerraformPlan, nil)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
 	})

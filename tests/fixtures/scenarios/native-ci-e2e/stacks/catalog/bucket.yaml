@@ -7,6 +7,7 @@ components:
         tools:
           terraform: "1.9.7"
           checkov: "3.2.529"
+          kics: "2.1.20"
       hooks:
         checkov-policy:
           events:

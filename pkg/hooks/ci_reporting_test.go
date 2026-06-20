@@ -95,6 +95,7 @@ func TestNormalizeSARIFLevels(t *testing.T) {
 			"results": [{
 				"ruleId": "CKV_AWS_21",
 				"level": "error",
+				"properties": {"security-severity": "8.9"},
 				"message": {"text": "Ensure the S3 bucket has versioning enabled"}
 			}]
 		}]
@@ -108,23 +109,32 @@ func TestNormalizeSARIFLevels(t *testing.T) {
 	result := run["results"].([]any)[0].(map[string]any)
 	assert.Equal(t, "warning", result["level"])
 	assert.Equal(t, "CKV_AWS_21", result["ruleId"], "rule identity must be preserved")
+	assert.Equal(t, nonBlockingSecuritySeverity, result["properties"].(map[string]any)["security-severity"], "result security severity must be non-blocking")
 
 	rule := run["tool"].(map[string]any)["driver"].(map[string]any)["rules"].([]any)[0].(map[string]any)
 	defaultConfig := rule["defaultConfiguration"].(map[string]any)
 	assert.Equal(t, "warning", defaultConfig["level"])
-	assert.Equal(t, 8.9, rule["properties"].(map[string]any)["security-severity"], "security metadata must be preserved")
+	assert.Equal(t, nonBlockingSecuritySeverity, rule["properties"].(map[string]any)["security-severity"], "rule security severity must be non-blocking")
 }
 
 func TestDeriveSARIFCategory(t *testing.T) {
 	// Nil/empty inputs return empty (no category).
-	assert.Equal(t, "", deriveSARIFCategory(nil))
-	assert.Equal(t, "", deriveSARIFCategory(&ExecContext{}))
+	assert.Equal(t, "", deriveSARIFCategory(nil, nil))
+	assert.Equal(t, "", deriveSARIFCategory(&ExecContext{}, nil))
 
-	// Shared in-repo source (no per-stack workdir resolves) → component-only,
-	// so the same finding dedups across every stack that uses the component.
-	ctx := &ExecContext{
-		AtmosConfig: &schema.AtmosConfiguration{TerraformDirAbsolutePath: t.TempDir()},
-		Info:        &schema.ConfigAndStacksInfo{Stack: "plat-ue2-prod", ComponentFromArg: "bucket"},
-	}
-	assert.Equal(t, "atmos/bucket", deriveSARIFCategory(ctx))
+	t.Run("uses SARIF tool driver name", func(t *testing.T) {
+		const body = `{"runs":[{"tool":{"driver":{"name":"Trivy"}}}]}`
+		ctx := &ExecContext{Hook: &Hook{Kind: "kics", Command: "kics"}}
+		assert.Equal(t, "Trivy", deriveSARIFCategory(ctx, []byte(body)))
+	})
+
+	t.Run("falls back to hook kind", func(t *testing.T) {
+		ctx := &ExecContext{Hook: &Hook{Kind: "kics", Command: "kics"}}
+		assert.Equal(t, "kics", deriveSARIFCategory(ctx, []byte(`{"runs":[]}`)))
+	})
+
+	t.Run("falls back to hook command", func(t *testing.T) {
+		ctx := &ExecContext{Hook: &Hook{Kind: "command", Command: "custom-scanner"}}
+		assert.Equal(t, "custom-scanner", deriveSARIFCategory(ctx, []byte(`not-json`)))
+	})
 }

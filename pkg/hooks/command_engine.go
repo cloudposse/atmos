@@ -40,6 +40,8 @@ const (
 	metadataKeyComponent = "component"
 )
 
+const nonBlockingSecuritySeverity = "0.0"
+
 // executableBits is the standard "any execute" Unix permission mask.
 // A binary on PATH must have at least one of owner/group/other execute
 // bits set; we use this to skip non-runnable files (data files, READMEs,
@@ -336,7 +338,7 @@ func publishCIResults(ctx *ExecContext, out *Output) {
 	if reportsAsWarning(ctx) {
 		body = normalizeSARIFLevels(body, "warning")
 	}
-	report := ci.SARIFReport{Body: body, Category: deriveSARIFCategory(ctx)}
+	report := ci.SARIFReport{Body: body, Category: deriveSARIFCategory(ctx, body)}
 	if err := ci.ReportSARIF(context.Background(), report); err != nil {
 		log.Debug("Failed to publish SARIF results to CI provider", logKeyKind, ctx.Hook.Kind, "error", err)
 	}
@@ -401,6 +403,7 @@ func normalizeRunResultLevels(run map[string]any, level string) {
 		result, ok := rawResult.(map[string]any)
 		if ok {
 			result["level"] = level
+			normalizeSecuritySeverity(result)
 		}
 	}
 }
@@ -429,31 +432,70 @@ func normalizeRunRuleLevels(run map[string]any, level string) {
 			rule["defaultConfiguration"] = defaultConfig
 		}
 		defaultConfig["level"] = level
+		normalizeSecuritySeverity(rule)
+	}
+}
+
+func normalizeSecuritySeverity(item map[string]any) {
+	properties, ok := item["properties"].(map[string]any)
+	if !ok {
+		return
+	}
+	if _, ok := properties["security-severity"]; ok {
+		properties["security-severity"] = nonBlockingSecuritySeverity
 	}
 }
 
 // deriveSARIFCategory builds the Code Scanning analysis category from the
-// actual scan target — the identity GitHub uses to keep multiple uploads for
-// one commit (e.g. one per component) from overwriting each other. When the
-// scan ran against a per-stack provisioned workdir, findings are stack-specific
-// so the category is `atmos/<stack>/<component>`; when it ran against the shared
-// in-repo component source, findings are stack-independent so the category is
-// just `atmos/<component>` (deduped across every stack that uses the component).
-// The tool is not embedded — GitHub already keys analyses by tool.
-func deriveSARIFCategory(ctx *ExecContext) string {
-	if ctx == nil || ctx.Info == nil {
+// scanner tool identity. The same component source can appear in many stacks,
+// so stack/component are intentionally not part of the category.
+func deriveSARIFCategory(ctx *ExecContext, sarif []byte) string {
+	if toolName := firstSARIFToolName(sarif); toolName != "" {
+		return toolName
+	}
+	if ctx == nil || ctx.Hook == nil {
 		return ""
 	}
-	comp := ctx.Info.ComponentFromArg
-	if comp == "" {
-		comp = ctx.Info.FinalComponent
+	if ctx.Hook.Kind == "command" && ctx.Hook.Command != "" {
+		return ctx.Hook.Command
 	}
-	if ctx.AtmosConfig != nil {
-		if _, exists, err := component.BuildAndResolveWorkdirPath(ctx.AtmosConfig, ctx.Info, cfg.TerraformComponentType); err == nil && exists {
-			return "atmos/" + ctx.Info.Stack + "/" + comp
+	if ctx.Hook.Kind != "" {
+		return ctx.Hook.Kind
+	}
+	return ctx.Hook.Command
+}
+
+func firstSARIFToolName(sarif []byte) string {
+	if len(sarif) == 0 {
+		return ""
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(sarif, &doc); err != nil {
+		return ""
+	}
+	runs, ok := doc["runs"].([]any)
+	if !ok {
+		return ""
+	}
+	for _, rawRun := range runs {
+		run, ok := rawRun.(map[string]any)
+		if !ok {
+			continue
+		}
+		tool, ok := run["tool"].(map[string]any)
+		if !ok {
+			continue
+		}
+		driver, ok := tool["driver"].(map[string]any)
+		if !ok {
+			continue
+		}
+		name, ok := driver["name"].(string)
+		if ok && strings.TrimSpace(name) != "" {
+			return strings.TrimSpace(name)
 		}
 	}
-	return "atmos/" + comp
+	return ""
 }
 
 // ciEnabled reports whether CI integration is enabled in config — the master

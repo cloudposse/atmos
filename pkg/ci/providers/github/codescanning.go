@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/go-github/v59/github"
 
@@ -20,7 +21,7 @@ import (
 // GitHub Code Scanning (the Security tab). Requires GitHub Advanced Security on
 // private repos and a token with the `security_events` write scope. The report
 // Category is stamped into each run's automationDetails.id so multiple uploads
-// for the same commit (e.g. one per component) are tracked as distinct analyses.
+// for the same commit are tracked as distinct analyses.
 func (p *Provider) ReportSARIF(ctx context.Context, report provider.SARIFReport) error {
 	defer perf.Track(nil, "github.Provider.ReportSARIF")()
 
@@ -73,9 +74,11 @@ func gzipBase64(data []byte) (string, error) {
 // withCategory stamps category into each SARIF run's automationDetails.id —
 // the field GitHub uses to keep separate analyses for the same commit from
 // overwriting each other. Code Scanning has no separate "category" upload
-// parameter; it is carried inside the SARIF. Best-effort: if category is empty
-// or the document can't be parsed, the original bytes are returned unchanged so
-// the upload still proceeds (GitHub will assign a default identity).
+// parameter; it is carried inside the SARIF. GitHub interprets id as
+// category/run-id, so a plain category is written with a trailing slash.
+// Best-effort: if category is empty or the document can't be parsed, the
+// original bytes are returned unchanged so the upload still proceeds (GitHub
+// will assign a default identity).
 func withCategory(sarif []byte, category string) []byte {
 	if category == "" {
 		return sarif
@@ -98,7 +101,7 @@ func withCategory(sarif []byte, category string) []byte {
 		if !ok {
 			details = map[string]any{}
 		}
-		details["id"] = category
+		details["id"] = categoryID(category)
 		run["automationDetails"] = details
 	}
 	out, err := json.Marshal(doc)
@@ -106,4 +109,11 @@ func withCategory(sarif []byte, category string) []byte {
 		return sarif
 	}
 	return out
+}
+
+func categoryID(category string) string {
+	if category == "" || strings.Contains(category, "/") {
+		return category
+	}
+	return category + "/"
 }

@@ -22,13 +22,22 @@ func TestWithCategory(t *testing.T) {
 	const sarif = `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"checkov"}}}]}`
 
 	t.Run("injects automationDetails.id into each run", func(t *testing.T) {
-		out := withCategory([]byte(sarif), "atmos/test/bucket")
+		out := withCategory([]byte(sarif), "checkov")
 		var doc map[string]any
 		require.NoError(t, json.Unmarshal(out, &doc))
 		runs := doc["runs"].([]any)
 		run := runs[0].(map[string]any)
 		details := run["automationDetails"].(map[string]any)
-		assert.Equal(t, "atmos/test/bucket", details["id"])
+		assert.Equal(t, "checkov/", details["id"])
+	})
+
+	t.Run("keeps explicit category id unchanged", func(t *testing.T) {
+		out := withCategory([]byte(sarif), "checkov/run-1")
+		var doc map[string]any
+		require.NoError(t, json.Unmarshal(out, &doc))
+		run := doc["runs"].([]any)[0].(map[string]any)
+		details := run["automationDetails"].(map[string]any)
+		assert.Equal(t, "checkov/run-1", details["id"])
 	})
 
 	t.Run("empty category returns input unchanged", func(t *testing.T) {
@@ -80,7 +89,7 @@ func TestProvider_ReportSARIF_UploadsGzippedCategorizedSARIF(t *testing.T) {
 	p := NewProviderWithClient(NewClientWithHTTPClient(&http.Client{Transport: ct}))
 
 	const sarif = `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"checkov"}},"results":[]}]}`
-	err := p.ReportSARIF(context.Background(), provider.SARIFReport{Body: []byte(sarif), Category: "atmos/bucket"})
+	err := p.ReportSARIF(context.Background(), provider.SARIFReport{Body: []byte(sarif), Category: "checkov"})
 	require.NoError(t, err)
 
 	// Decode the upload payload: { commit_sha, ref, sarif: <gzip+base64> }.
@@ -102,7 +111,7 @@ func TestProvider_ReportSARIF_UploadsGzippedCategorizedSARIF(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &doc))
 	run := doc["runs"].([]any)[0].(map[string]any)
 	details := run["automationDetails"].(map[string]any)
-	assert.Equal(t, "atmos/bucket", details["id"], "category must be stamped into the uploaded SARIF")
+	assert.Equal(t, "checkov/", details["id"], "category must be stamped into the uploaded SARIF")
 }
 
 func TestProvider_ReportSARIF_WrapsClientInitFailure(t *testing.T) {
