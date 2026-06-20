@@ -66,7 +66,7 @@ ci:
   summary:
     enabled: true
   annotations:
-    enabled: true
+    enabled: false
   results:
     enabled: true
   checks:

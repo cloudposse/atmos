@@ -152,6 +152,9 @@ func (m uriMapper) repoRelative(path, fallback string) string {
 }
 
 func pathFromSARIFURI(raw string) (string, bool) {
+	if isWindowsDrivePath(raw) {
+		return raw, true
+	}
 	if u, err := url.Parse(raw); err == nil && u.Scheme != "" {
 		if u.Scheme != "file" {
 			return "", false
@@ -162,6 +165,17 @@ func pathFromSARIFURI(raw string) (string, bool) {
 		return u.Path, true
 	}
 	return raw, true
+}
+
+func isWindowsDrivePath(path string) bool {
+	if len(path) < 3 || path[1] != ':' {
+		return false
+	}
+	drive := path[0]
+	if (drive < 'A' || drive > 'Z') && (drive < 'a' || drive > 'z') {
+		return false
+	}
+	return path[2] == '/' || path[2] == '\\'
 }
 
 func cleanAbs(path string) string {

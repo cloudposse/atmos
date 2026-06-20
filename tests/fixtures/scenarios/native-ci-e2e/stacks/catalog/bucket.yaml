@@ -8,24 +8,13 @@ components:
           terraform: "1.9.7"
           checkov: "3.2.529"
       hooks:
-        native-ci-sarif:
-          events:
-            - after-terraform-plan
-            - after-terraform-apply
-          kind: command
-          command: python3
-          args:
-            - "scripts/native_ci_sarif.py"
-          format: sarif
-          on_failure: warn
         checkov-policy:
           events:
             - after-terraform-plan
-            - after-terraform-apply
           kind: checkov
           args:
-            - "-d"
-            - "$ATMOS_COMPONENT_PATH"
+            - "-f"
+            - "$ATMOS_COMPONENT_PATH/checkov_target.tf"
             - "-o"
             - "sarif"
             - "--output-file-path"
@@ -34,4 +23,33 @@ components:
             - "--soft-fail"
             - "--check"
             - "CKV_AWS_21"
+          on_failure: warn
+        trivy-policy:
+          events:
+            - after-terraform-plan
+          kind: trivy
+          args:
+            - "config"
+            - "--format"
+            - "sarif"
+            - "--output"
+            - "$ATMOS_OUTPUT_FILE"
+            - "--quiet"
+            - "$ATMOS_COMPONENT_PATH/trivy_target.tf"
+          on_failure: warn
+        kics-policy:
+          events:
+            - after-terraform-plan
+          kind: kics
+          args:
+            - "scan"
+            - "-p"
+            - "$ATMOS_COMPONENT_PATH/kics_target.tf"
+            - "-o"
+            - "$ATMOS_OUTPUT_DIR"
+            - "--report-formats"
+            - "sarif"
+            - "--no-progress"
+          env:
+            KICS_QUERIES_PATH: "$KICS_QUERIES_PATH"
           on_failure: warn
