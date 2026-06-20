@@ -113,6 +113,8 @@ Atmos natively supports four component types:
 
 Each type has its own configuration schema, but they share common patterns for `metadata` and `settings`.
 
+Beyond the native types, you can define **[custom component types](/components/custom)** to manage any tool—Kubernetes manifests, shell scripts, CDK apps, and more—with the same stack-based configuration.
+
 ## Directory Structure
 
 Components are stored in your project's `components/` directory:
@@ -194,3 +196,4 @@ For more powerful filtering options, consider [describing stacks](/describe/stac
 - [Helmfile Components](/components/helmfile) — Helmfile configurations
 - [Packer Components](/components/packer) — Packer templates
 - [Ansible Components](/components/ansible) — Ansible playbooks
+- [Custom Component Types](/components/custom) — Bring any tool under stack-based config
