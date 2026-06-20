@@ -1,0 +1,76 @@
+---
+title: container
+sidebar_label: container
+sidebar_position: 5
+slug: /workflows/container
+---
+
+The workflow-level `container` field starts a long-lived container sandbox for eligible `type: shell` steps.
+
+```yaml
+workflows:
+  test:
+    working_directory: .
+    container:
+      image: alpine:latest
+      shell: /bin/sh
+      workspace: /workspace
+      cleanup: always
+      env:
+        TOOL_CACHE: /tmp/tools
+    steps:
+      - name: dependencies
+        type: shell
+        command: apk add --no-cache jq
+      - name: test
+        type: shell
+        working_directory: services/api
+        command: jq --version
+```
+
+This field is different from `steps[].type: container`, which is a step type for container build, push, run, and inspect operations.
+
+## Fields
+
+<dl>
+  <dt>`image`</dt>
+  <dd>Container image for the workflow sandbox. Required when `container` is configured.</dd>
+
+  <dt>`provider`</dt>
+  <dd>Container runtime provider: `docker` or `podman`. When omitted, Atmos auto-detects Docker, then Podman.</dd>
+
+  <dt>`runtime_auto_start`</dt>
+  <dd>Allows Atmos to attempt runtime recovery, such as starting a Podman machine.</dd>
+
+  <dt>`pull`</dt>
+  <dd>Image pull policy: `missing`, `always`, or `never`.</dd>
+
+  <dt>`workspace`</dt>
+  <dd>Container path where the workflow working directory is mounted. Defaults to `/workspace`.</dd>
+
+  <dt>`workspace_read_only`</dt>
+  <dd>Mounts the workflow workspace read-only when set to `true`.</dd>
+
+  <dt>`cleanup`</dt>
+  <dd>Sandbox cleanup policy: `always`, `on_success`, or `never`.</dd>
+
+  <dt>`env`</dt>
+  <dd>Environment defaults passed to commands in the sandbox.</dd>
+
+  <dt>`mounts`</dt>
+  <dd>Additional mounts using `type`, `source`, `target`, and optional `read_only` fields.</dd>
+
+  <dt>`ports`</dt>
+  <dd>Port mappings using `host`, `container`, and optional `protocol` fields.</dd>
+
+  <dt>`shell`</dt>
+  <dd>Shell used to execute commands inside the container.</dd>
+
+  <dt>`user`</dt>
+  <dd>User context for container execution. Accepts a username or `UID:GID` format.</dd>
+
+  <dt>`run_args`</dt>
+  <dd>Additional arguments passed to the container runtime's run command.</dd>
+</dl>
+
+Use `container: false` on a step to run that step on the host instead of inside the workflow sandbox.

@@ -1,0 +1,21 @@
+---
+title: identity
+sidebar_label: identity
+sidebar_position: 4
+slug: /workflows/steps/identity
+---
+
+The step-level `identity` field authenticates an Atmos auth identity before the step runs.
+
+```yaml
+steps:
+  - name: deploy-vpc
+    command: terraform apply vpc -s plat-ue2-prod
+    identity: superadmin
+```
+
+When an identity is specified, Atmos authenticates it, prepares temporary credentials, and passes the resulting environment to the subprocess.
+
+The command-line `--identity` flag provides a default identity for steps that do not set their own. A step-level `identity` overrides the command-line value.
+
+Configure identities in [`auth`](/cli/configuration/auth).

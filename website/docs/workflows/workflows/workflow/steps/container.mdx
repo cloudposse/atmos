@@ -1,0 +1,57 @@
+---
+title: container
+sidebar_label: container
+sidebar_position: 9
+slug: /workflows/steps/container
+---
+
+The step-level `container` field controls workflow container inheritance for a step. It is separate from `type: container`.
+
+## Workflow Container Override
+
+When the workflow has a [container](/workflows/container), eligible `type: shell` steps run inside it by default. Set `container: false` to run a shell step on the host:
+
+```yaml
+steps:
+  - name: host-check
+    type: shell
+    container: false
+    command: echo "this step runs on the host"
+```
+
+Set a step-level `container` object to run that shell step in its own container configuration:
+
+```yaml
+steps:
+  - name: isolated
+    type: shell
+    container:
+      image: alpine:latest
+      shell: /bin/sh
+    command: uname -a
+```
+
+## Container Step Type
+
+The `type: container` value is a step type for Docker or Podman actions:
+
+```yaml
+steps:
+  - name: build
+    type: container
+    action: build
+    build:
+      context: .
+      dockerfile: Dockerfile
+      tags:
+        - app:local
+
+  - name: smoke
+    type: container
+    action: run
+    run:
+      image: app:local
+      command: uname -a
+```
+
+Supported actions are `build`, `push`, `run`, and `inspect`. Action-specific configuration lives under the matching `build`, `push`, `run`, or `inspect` field on the same step object.

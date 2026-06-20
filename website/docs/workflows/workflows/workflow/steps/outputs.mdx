@@ -1,0 +1,54 @@
+---
+title: outputs
+sidebar_label: outputs
+sidebar_position: 10
+slug: /workflows/steps/outputs
+---
+
+The step-level `outputs` field declares named outputs derived from a step result.
+
+```yaml
+steps:
+  - name: build
+    type: container
+    action: build
+    build:
+      context: .
+      tags:
+        - app:local
+    outputs:
+      image: "{{ .metadata.image }}"
+
+  - name: smoke
+    type: container
+    action: run
+    run:
+      image: "{{ .steps.build.outputs.image }}"
+      command: uname -a
+```
+
+Later steps can read declared outputs with `{{ .steps.<name>.outputs.<key> }}`.
+
+## Step Result Context
+
+Templates can access prior step results:
+
+<dl>
+  <dt>`{{ .steps.<name>.value }}`</dt>
+  <dd>Primary value from the step.</dd>
+
+  <dt>`{{ .steps.<name>.values }}`</dt>
+  <dd>Array of values, used by multi-select steps.</dd>
+
+  <dt>`{{ .steps.<name>.metadata.<key> }}`</dt>
+  <dd>Metadata such as stdout, stderr, exit code, image, or digest when available.</dd>
+
+  <dt>`{{ .steps.<name>.outputs.<key> }}`</dt>
+  <dd>Declared output value.</dd>
+
+  <dt>`{{ .steps.<name>.skipped }}`</dt>
+  <dd>Whether the step was skipped.</dd>
+
+  <dt>`{{ .steps.<name>.error }}`</dt>
+  <dd>Error message if the step failed.</dd>
+</dl>

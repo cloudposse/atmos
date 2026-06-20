@@ -1,0 +1,70 @@
+---
+title: workflows
+sidebar_label: workflows
+slug: /workflows
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `workflows` key is the top-level section of a workflow manifest. It contains named workflow definitions that Atmos can run with `atmos workflow`.
+</Intro>
+
+Workflow manifests live in YAML files under the directory configured by [`workflows.base_path`](/cli/configuration/workflows) in `atmos.yaml`.
+
+```yaml title="stacks/workflows/deploy.yaml"
+workflows:
+  eks-up:
+    description: Bring up the EKS cluster.
+    steps:
+      - command: terraform apply vpc -auto-approve
+      - command: terraform apply eks/cluster -auto-approve
+      - command: terraform apply eks/alb-controller -auto-approve
+```
+
+## Manifest Shape
+
+Each workflow file must define a `workflows` map:
+
+```yaml
+workflows:
+  <workflow-name>:
+    description: <description>
+    steps: []
+```
+
+The keys under `workflows` are workflow names. Each value is a single [workflow](/workflows/workflow) object.
+
+## File Discovery
+
+Atmos searches the configured workflow directory for YAML files. When a workflow name is unique, the file can be omitted:
+
+```shell
+atmos workflow eks-up --stack tenant1-ue2-dev
+```
+
+Use `--file` when multiple files contain the same workflow name or when a script should be explicit:
+
+```shell
+atmos workflow eks-up --file deploy --stack tenant1-ue2-dev
+```
+
+The `--file` value is relative to `workflows.base_path`; the `.yaml` extension is optional.
+
+## Related
+
+- [workflow](/workflows/workflow) describes one named entry under `workflows`.
+- [steps](/workflows/steps) describes the workflow's ordered step array.
+- [CLI workflow configuration](/cli/configuration/workflows) describes the `atmos.yaml` `workflows.base_path` setting.
+
+<span id="step-types" />
+<span id="retry-configuration" />
+<span id="workflow-containers" />
+<span id="using-authentication-with-workflows" />
+
+Older section links now point to YAML-shaped pages:
+
+- [steps type](/workflows/steps/type)
+- [steps retry](/workflows/steps/retry)
+- [workflow container](/workflows/container)
+- [steps identity](/workflows/steps/identity)

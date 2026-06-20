@@ -1,0 +1,44 @@
+---
+title: show
+sidebar_label: show
+sidebar_position: 7
+slug: /workflows/show
+---
+
+The workflow-level `show` field controls opt-in workflow display features.
+
+```yaml
+workflows:
+  verbose-deploy:
+    show:
+      header: true
+      flags: true
+      count: true
+      command: true
+      progress: true
+    steps:
+      - name: plan
+        type: atmos
+        command: terraform plan vpc
+```
+
+## Fields
+
+<dl>
+  <dt>`header`</dt>
+  <dd>Display the workflow description as a styled header before the first step executes.</dd>
+
+  <dt>`flags`</dt>
+  <dd>Show command-line flag values under the header, such as `stack` and `identity`.</dd>
+
+  <dt>`command`</dt>
+  <dd>Show each step command before execution.</dd>
+
+  <dt>`count`</dt>
+  <dd>Show step count prefixes such as `[1/5]`.</dd>
+
+  <dt>`progress`</dt>
+  <dd>Show a right-aligned progress bar during execution in TTY mode.</dd>
+</dl>
+
+Step-level `show` values deep-merge with workflow-level defaults. Only fields set on the step override the workflow value.

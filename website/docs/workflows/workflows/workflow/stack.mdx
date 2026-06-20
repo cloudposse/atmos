@@ -1,0 +1,28 @@
+---
+title: stack
+sidebar_label: stack
+sidebar_position: 1
+slug: /workflows/stack
+---
+
+The workflow-level `stack` field sets the default Atmos stack for `type: atmos` steps.
+
+```yaml
+workflows:
+  deploy-vpc:
+    stack: tenant1-ue2-dev
+    steps:
+      - command: terraform plan vpc
+      - command: terraform apply vpc -auto-approve
+```
+
+## Precedence
+
+Stack values are resolved from lowest to highest priority:
+
+1. Stack flags embedded in the step `command`.
+2. Workflow-level `stack`.
+3. Step-level `stack`.
+4. The command-line `--stack` flag.
+
+Prefer reusable workflows that omit `stack` and receive it from the command line when the same workflow should run across environments.

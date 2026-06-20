@@ -1,0 +1,64 @@
+---
+title: workflow
+sidebar_label: workflow
+slug: /workflows/workflow
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+A workflow is one named object under the top-level `workflows` map. It owns workflow-level defaults and the ordered `steps` array.
+</Intro>
+
+```yaml
+workflows:
+  deploy:
+    description: Deploy infrastructure
+    stack: tenant1-ue2-dev
+    env:
+      TF_LOG: INFO
+    working_directory: !repo-root
+    dependencies:
+      tools:
+        tflint: "^0.54.0"
+    output: log
+    show:
+      header: true
+      count: true
+    steps:
+      - name: plan
+        command: terraform plan vpc
+```
+
+## Fields
+
+<dl>
+  <dt>`description`</dt>
+  <dd>Human-readable text shown by workflow listing and display surfaces.</dd>
+
+  <dt>`stack`</dt>
+  <dd>Workflow-level default stack for Atmos command steps. See [stack](/workflows/stack).</dd>
+
+  <dt>`env`</dt>
+  <dd>Workflow-level environment variables passed to steps. See [env](/workflows/env).</dd>
+
+  <dt>`working_directory`</dt>
+  <dd>Workflow-level working directory default. See [working_directory](/workflows/working-directory).</dd>
+
+  <dt>`dependencies`</dt>
+  <dd>Workflow-specific tool dependencies. See [dependencies](/workflows/dependencies).</dd>
+
+  <dt>`container`</dt>
+  <dd>Workflow-level container sandbox for eligible shell steps. See [container](/workflows/container).</dd>
+
+  <dt>`output`</dt>
+  <dd>Workflow-level default output mode for command steps. See [output](/workflows/output).</dd>
+
+  <dt>`show`</dt>
+  <dd>Workflow-level display defaults. See [show](/workflows/show).</dd>
+
+  <dt>`steps`</dt>
+  <dd>Ordered array of step objects. See [steps](/workflows/steps).</dd>
+</dl>
+
+Workflow-level fields provide defaults. Step-level fields override them where the step supports the same field.

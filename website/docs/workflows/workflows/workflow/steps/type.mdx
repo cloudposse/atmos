@@ -1,0 +1,78 @@
+---
+title: type
+sidebar_label: type
+sidebar_position: 2
+slug: /workflows/steps/type
+---
+
+The step `type` field selects how Atmos executes or renders a step. Step types are values of `steps[].type`; they are not sibling YAML sections.
+
+```yaml
+steps:
+  - name: prompt
+    type: input
+    prompt: Enter deployment message
+```
+
+## Command Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| `atmos` | Run an Atmos CLI command. This is the default for command steps. | `command`, `stack`, `identity` |
+| `shell` | Run a shell command or script. | `command`, `working_directory`, `env`, `tty`, `interactive` |
+| `exec` | Replace the Atmos process with another executable. Must be the final step. | `command` |
+| `container` | Build, push, run, or inspect containers. | `action`, `build`, `push`, `run`, `inspect` |
+
+## Interactive Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| `input` | Prompt for single-line text. | `prompt`, `placeholder`, `default`, `password` |
+| `confirm` | Prompt for yes/no confirmation. | `prompt`, `default` |
+| `choose` | Select one option. | `prompt`, `options`, `default` |
+| `filter` | Filter and select options, optionally multiple. | `prompt`, `options`, `multiple`, `limit` |
+| `file` | Select a file. | `prompt`, `path`, `extensions` |
+| `write` | Capture multi-line text. | `prompt`, `placeholder`, `height` |
+
+## UI and Output Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| `success` | Display a success message. | `content` |
+| `info` | Display an informational message. | `content` |
+| `warn` | Display a warning message. | `content` |
+| `error` | Display an error message. | `content` |
+| `markdown` | Render Markdown content. | `content` |
+| `spin` | Display a spinner while running a command. | `title`, `command`, `timeout` |
+| `table` | Display tabular data. | `title`, `columns`, `data` |
+| `pager` | Display content in a pager. | `title`, `content`, `path`, `markdown` |
+| `format` | Render a Go template string. | `content` |
+| `join` | Join strings. | `options`, `separator`, `content` |
+| `style` | Apply terminal styling. | `content`, `foreground`, `background`, `border`, `padding` |
+| `linebreak` | Print blank lines. | `count` |
+| `log` | Emit a structured log message. | `level`, `content`, `fields` |
+
+## Terminal and Control Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| `alert` | Ring the terminal bell and optionally print a message. | `content` |
+| `title` | Set or restore the terminal title. | `content` |
+| `clear` | Clear the current terminal line. | none |
+| `env` | Set variables for subsequent workflow steps. | `vars` |
+| `exit` | Exit the workflow immediately. | `code`, `content` |
+
+Use type-specific fields on the same step object:
+
+```yaml
+steps:
+  - name: environments
+    type: table
+    title: Available Environments
+    columns:
+      - name
+      - region
+    data:
+      - name: dev
+        region: us-east-1
+```

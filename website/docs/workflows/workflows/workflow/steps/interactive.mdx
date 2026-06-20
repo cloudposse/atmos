@@ -1,0 +1,19 @@
+---
+title: interactive
+sidebar_label: interactive
+sidebar_position: 12
+slug: /workflows/steps/interactive
+---
+
+The step-level `interactive` field attaches host stdin to a `type: shell` step.
+
+```yaml
+steps:
+  - name: psql
+    type: shell
+    command: psql "$DATABASE_URL"
+    interactive: true
+    tty: true
+```
+
+While an interactive step runs, Atmos lets the child process handle Ctrl-C. Combine `interactive: true` with [`tty: true`](/workflows/steps/tty) for full terminal sessions.
