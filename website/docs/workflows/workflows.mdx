@@ -59,6 +59,9 @@ parameter to disable that feature or use unlimited behavior.
 
   <dt>`random_jitter`</dt>
   <dd>Jitter factor between 0.0 and 1.0 to add randomness to delays. Omit for no jitter.</dd>
+
+  <dt>`conditions`</dt>
+  <dd>List of regular expressions identifying which failures are retryable. For the [`webhook`](#webhook) step type, patterns are matched against `"<status-code> <response-body>"`, letting you retry responses that would otherwise fail fast (e.g., a specific `4xx`). Omit to use each step type's default retry classification.</dd>
 </dl>
 
 :::note Configuration Philosophy

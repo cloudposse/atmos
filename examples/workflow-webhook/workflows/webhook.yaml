@@ -1,0 +1,50 @@
+workflows:
+  notify:
+    description: |
+      Calls an external HTTP endpoint with a JSON payload, retrying transient
+      failures (5xx/429/network) with exponential backoff. Set WEBHOOK_URL to a
+      reachable endpoint before running:
+
+        WEBHOOK_URL=https://example.com/hook atmos workflow notify -f webhook
+    steps:
+      - name: trigger
+        type: webhook
+        url: "{{ .env.WEBHOOK_URL }}"
+        method: POST
+        query:
+          source: atmos
+        headers:
+          Content-Type: application/json
+        body: '{"event":"deploy","status":"started"}'
+        expect:
+          status: [200, 201, 202, 204]
+        timeout: 30s
+        retry:
+          max_attempts: 5
+          backoff_strategy: exponential
+          initial_delay: 1s
+          max_delay: 30s
+
+      - name: report
+        type: log
+        level: info
+        content: "Webhook returned HTTP {{ .steps.trigger.metadata.status_code }}"
+
+  poll-health:
+    description: |
+      Polls a health endpoint until it returns a healthy body, retrying until the
+      response matches. Set HEALTH_URL before running.
+    steps:
+      - name: health
+        type: webhook
+        url: "{{ .env.HEALTH_URL }}"
+        method: GET
+        expect:
+          status: [200]
+          response:
+            - /"status"\s*:\s*"(ok|healthy)"/
+        timeout: 5s
+        retry:
+          max_attempts: 10
+          backoff_strategy: constant
+          initial_delay: 2s
