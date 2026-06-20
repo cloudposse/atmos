@@ -53,6 +53,10 @@ const files = [
     source: 'img/atmos-ai-gradient-on-light.svg',
     destination: 'atmos-media-kit/atmos-ai-gradient-on-light.svg',
   },
+  {
+    source: 'img/powered-by-atmos-gradient.svg',
+    destination: 'atmos-media-kit/powered-by-atmos-gradient.svg',
+  },
 ];
 
 const crcTable = new Uint32Array(256);
