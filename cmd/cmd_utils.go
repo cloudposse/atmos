@@ -724,7 +724,7 @@ func executeCustomCommand(
 	// Determine working directory for command execution.
 	workDir, err := resolveWorkingDirectory(commandConfig.WorkingDirectory, atmosConfig.BasePath, currentDirPath)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "Invalid working_directory", "https://atmos.tools/cli/configuration/commands#working-directory")
+		errUtils.CheckErrorPrintAndExit(err, "Invalid working_directory", "https://atmos.tools/cli/configuration/commands/working-directory")
 	}
 	if commandConfig.WorkingDirectory != "" {
 		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
@@ -734,7 +734,7 @@ func executeCustomCommand(
 	// the Atmos process, so it must be the final step and must not set
 	// supervisor-only fields (tty, interactive, retry, timeout, output).
 	if err := schema.ValidateExecTasks(commandConfig.Steps); err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "https://atmos.tools/cli/configuration/commands#interactive-and-tty-steps")
+		errUtils.CheckErrorPrintAndExit(err, "", "https://atmos.tools/cli/configuration/commands/steps#interactive-and-tty-steps")
 	}
 
 	// Initialize step executor once before loop - reused across steps to preserve outputs.

@@ -1,0 +1,111 @@
+---
+title: arguments
+sidebar_label: arguments
+sidebar_position: 1
+slug: /cli/configuration/commands/arguments
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `arguments` field declares positional arguments for a custom command. Argument values are available to steps, env, and templates as `{{ .Arguments.<name> }}`.
+</Intro>
+
+## Positional Arguments
+
+If a positional argument is required but not provided by the user, the command fails — unless you define a `default`.
+
+For example, this `greet` command accepts one `name` argument and defaults to "John Doe":
+
+```yaml
+commands:
+  - name: greet
+    description: This command says hello to the provided name
+    arguments:
+      - name: name
+        description: Name to greet
+        required: true
+        default: John Doe
+    steps:
+      - "echo Hello {{ .Arguments.name }}!"
+```
+
+Run it with an argument:
+
+```shell
+atmos greet Alice
+```
+
+or rely on the default:
+
+```shell
+atmos greet
+```
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Required. Argument name, referenced as `{{ .Arguments.<name> }}`.</dd>
+
+  <dt>`description`</dt>
+  <dd>Help text shown in `atmos help`.</dd>
+
+  <dt>`required`</dt>
+  <dd>When `true`, the command fails if the argument is omitted and no `default` is set.</dd>
+
+  <dt>`default`</dt>
+  <dd>Value used when the argument is omitted.</dd>
+
+  <dt>`type`</dt>
+  <dd>Optional semantic type: `component` or `stack`. See [Typed Arguments](#typed-arguments).</dd>
+</dl>
+
+## Trailing Arguments
+
+Atmos supports **trailing arguments** after `--` (a standalone double-dash). The `--` is a delimiter that signals the end of Atmos-specific options. Anything after `--` is passed directly to the underlying command without being interpreted by Atmos, and is available in `{{ .TrailingArgs }}`.
+
+```yaml
+commands:
+  - name: ansible run
+    description: "Runs an Ansible playbook, allowing extra arguments after --."
+    arguments:
+      - name: playbook
+        description: "The Ansible playbook to run"
+        default: site.yml
+        required: true
+    steps:
+      - "ansible-playbook {{ .Arguments.playbook }} {{ .TrailingArgs }}"
+```
+
+Output:
+
+```bash
+$ atmos ansible run -- --limit web
+Running: ansible-playbook site.yml --limit web
+
+PLAY [web] *********************************************************************
+```
+
+## Typed Arguments
+
+Set `type: component` or `type: stack` to tell Atmos that an argument provides the component
+name or stack name. Atmos then resolves the matching component configuration and exposes it as
+`{{ .Component.* }}`. See [`component`](/cli/configuration/commands/component) for the full
+custom component type workflow.
+
+```yaml
+commands:
+  - name: script
+    description: "Run script components"
+    arguments:
+      - name: component
+        description: "Component name"
+        type: component              # this argument provides the component name
+        required: true
+    component:
+      type: script
+    steps:
+      - 'echo "Running {{ .Component.component }} in {{ .Component.atmos_stack }}"'
+```
+
+For flags, use [`semantic_type`](/cli/configuration/commands/flags#semantic-types) instead of
+`type` (since `type` on a flag specifies its data type).

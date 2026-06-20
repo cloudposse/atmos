@@ -107,7 +107,7 @@ const DOCS_MAP = {
   ],
   'custom-components': [
     { label: 'Custom Commands', url: '/cli/configuration/commands' },
-    { label: 'Custom Component Types', url: '/cli/configuration/commands#custom-component-types' },
+    { label: 'Custom Component Types', url: '/cli/configuration/commands/component#custom-component-types' },
   ],
   'interactive-workflows': [
     { label: 'Workflows', url: '/workflows' },
