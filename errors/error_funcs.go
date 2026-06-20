@@ -69,28 +69,6 @@ func InitializeMarkdown(config *schema.AtmosConfiguration) {
 	}
 }
 
-// GetMarkdownRenderer returns the package-level markdown renderer and may return nil
-// if the renderer has not been initialized via InitializeMarkdown or has been cleared.
-// This function is not safe for concurrent access during initialization.
-func GetMarkdownRenderer() *markdown.Renderer {
-	return render
-}
-
-// printPlainError writes a plain-text error to stderr without Markdown formatting.
-// This is used as a fallback when the markdown renderer is not available.
-func printPlainError(title string, err error, suggestion string) {
-	maskedStderr := os.Stderr
-	if title != "" {
-		title = cases.Title(language.English).String(title)
-		fmt.Fprintf(maskedStderr, "\n%s: %v\n", title, err)
-	} else {
-		fmt.Fprintf(maskedStderr, "\nError: %v\n", err)
-	}
-	if suggestion != "" {
-		fmt.Fprintf(maskedStderr, "%s\n", suggestion)
-	}
-}
-
 // printStructuredPlainError extracts ErrorBuilder enrichments and prints them
 // in a structured plain text format. This is used when the markdown renderer
 // is not available (e.g., during early startup errors before config is loaded).

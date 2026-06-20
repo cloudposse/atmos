@@ -6,13 +6,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
-	"sort"
 	"strings"
 	"sync"
 
 	yaml "gopkg.in/yaml.v3"
 
-	"github.com/cloudposse/atmos/pkg/config/homedir"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -53,10 +51,6 @@ const (
 	AtmosYamlFuncAwsOrganizationID       = "!aws.organization_id"
 
 	DefaultYAMLIndent = 2
-
-	// Cache statistics constants.
-	cacheStatsPercentageMultiplier = 100
-	cacheStatsTopFilesCount        = 10
 )
 
 var (
@@ -163,17 +157,12 @@ var (
 	parsedYAMLLocks   = make(map[string]*sync.Mutex)
 	parsedYAMLLocksMu sync.Mutex
 
-	// Cache statistics for debugging and optimization.
-	parsedYAMLCacheStats = struct {
+	// Cache hit/miss counters. Exposed (unexported) so tests can verify that
+	// repeated parses of the same file are served from the cache.
+	parsedYAMLCacheStats struct {
 		sync.RWMutex
-		hits         int64
-		misses       int64
-		totalCalls   int64
-		uniqueFiles  map[string]int // file path -> call count
-		uniqueHashes map[string]int // content hash -> call count
-	}{
-		uniqueFiles:  make(map[string]int),
-		uniqueHashes: make(map[string]int),
+		hits   int64
+		misses int64
 	}
 
 	ErrIncludeYamlFunctionInvalidArguments    = errors.New("invalid number of arguments in the !include function")
@@ -280,22 +269,6 @@ func cacheDecodedYAML(file, content string, data map[string]any, positions Posit
 		data:      dataCopy,
 		positions: clonePositions(positions),
 	})
-}
-
-// clearDecodedYAMLCache empties the decoded YAML cache. Exported indirectly
-// via ClearDecodedYAMLCache for tests that need to reset state between subtests.
-func clearDecodedYAMLCache() {
-	decodedYAMLCache.Range(func(key, _ any) bool {
-		decodedYAMLCache.Delete(key)
-		return true
-	})
-}
-
-// ClearDecodedYAMLCache clears the decoded YAML result cache. Call between
-// independent operations (like tests) to ensure fresh processing of files
-// whose on-disk content may have changed.
-func ClearDecodedYAMLCache() {
-	clearDecodedYAMLCache()
 }
 
 // generateParsedYAMLCacheKey generates a cache key from file path and content.
@@ -435,20 +408,13 @@ func cacheParsedYAML(file string, content string, node *yaml.Node, positions Pos
 	})
 }
 
-// clearParsedYAMLCache empties the parsed YAML cache. Exported indirectly via
-// ClearParsedYAMLCache for tests that need to reset state between subtests.
+// clearParsedYAMLCache empties the parsed YAML cache. Used by tests that need to
+// reset cache state between subtests for isolation.
 func clearParsedYAMLCache() {
 	parsedYAMLCache.Range(func(key, _ any) bool {
 		parsedYAMLCache.Delete(key)
 		return true
 	})
-}
-
-// ClearParsedYAMLCache clears the parsed YAML cache.
-// This should be called between independent operations (like tests) to ensure
-// fresh processing of files whose on-disk content may have changed.
-func ClearParsedYAMLCache() {
-	clearParsedYAMLCache()
 }
 
 // parseAndCacheYAML parses YAML content and caches the result.
@@ -519,65 +485,6 @@ func handleCacheMiss(atmosConfig *schema.AtmosConfiguration, file string, input 
 	return node, positions, nil
 }
 
-// PrintParsedYAMLCacheStats prints cache statistics for debugging.
-// This helps identify cache effectiveness and opportunities for optimization.
-func PrintParsedYAMLCacheStats() {
-	parsedYAMLCacheStats.RLock()
-	defer parsedYAMLCacheStats.RUnlock()
-
-	totalCalls := parsedYAMLCacheStats.totalCalls
-	hits := parsedYAMLCacheStats.hits
-	misses := parsedYAMLCacheStats.misses
-	uniqueFiles := len(parsedYAMLCacheStats.uniqueFiles)
-	uniqueHashes := len(parsedYAMLCacheStats.uniqueHashes)
-
-	var hitRate float64
-	if totalCalls > 0 {
-		hitRate = float64(hits) / float64(totalCalls) * cacheStatsPercentageMultiplier
-	}
-
-	var callsPerFile, callsPerHash float64
-	if uniqueFiles > 0 {
-		callsPerFile = float64(totalCalls) / float64(uniqueFiles)
-	}
-	if uniqueHashes > 0 {
-		callsPerHash = float64(totalCalls) / float64(uniqueHashes)
-	}
-
-	log.Info(
-		"YAML Cache Statistics",
-		"totalCalls", totalCalls,
-		"cacheHits", hits,
-		"cacheMisses", misses,
-		"hitRate", hitRate,
-		"uniqueFiles", uniqueFiles,
-		"uniqueHashes", uniqueHashes,
-		"callsPerFile", callsPerFile,
-		"callsPerHash", callsPerHash,
-	)
-
-	// Print top files by call count.
-	type fileCount struct {
-		file  string
-		count int
-	}
-	var fileCounts []fileCount
-	for file, count := range parsedYAMLCacheStats.uniqueFiles {
-		fileCounts = append(fileCounts, fileCount{file, count})
-	}
-
-	// Sort by count descending.
-	sort.Slice(fileCounts, func(i, j int) bool {
-		return fileCounts[i].count > fileCounts[j].count
-	})
-
-	// Print top most-called files.
-	log.Info("Top 10 most-called files:")
-	for i := 0; i < cacheStatsTopFilesCount && i < len(fileCounts); i++ {
-		log.Info("  ", "file", fileCounts[i].file, "calls", fileCounts[i].count)
-	}
-}
-
 // PrintAsYAML prints the provided value as YAML document to the console with syntax highlighting.
 // Use PrintAsYAMLSimple for non-TTY output (pipes, redirects) to avoid expensive highlighting.
 func PrintAsYAML(atmosConfig *schema.AtmosConfiguration, data any) error {
@@ -615,28 +522,6 @@ func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
 		return DefaultYAMLIndent
 	}
 	return atmosConfig.Settings.Terminal.TabWidth
-}
-
-func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) error {
-	defer perf.Track(atmosConfig, "utils.PrintAsYAMLWithConfig")()
-
-	if atmosConfig == nil {
-		return ErrNilAtmosConfig
-	}
-
-	indent := getIndentFromConfig(atmosConfig)
-	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
-	if err != nil {
-		return err
-	}
-
-	highlighted, err := HighlightCodeWithConfig(atmosConfig, y, "yaml")
-	if err != nil {
-		PrintMessage(y)
-		return nil
-	}
-	PrintMessage(highlighted)
-	return nil
 }
 
 func GetHighlightedYAML(atmosConfig *schema.AtmosConfiguration, data any) (string, error) {
@@ -764,44 +649,6 @@ func WrapLongStrings(data any, maxLength int) any {
 	default:
 		// For all other types (int, bool, etc.), return as-is
 		return data
-	}
-}
-
-// GetUserHomeDir returns the current user's home directory or empty string if unavailable.
-func GetUserHomeDir() string {
-	defer perf.Track(nil, "utils.GetUserHomeDir")()
-
-	hd, err := homedir.Dir()
-	if err != nil {
-		return ""
-	}
-	return hd
-}
-
-// ObfuscateSensitivePaths walks any data structure (maps, slices, etc), and in any string which starts with the specified homeDir, replaces it with "~".
-func ObfuscateSensitivePaths(data any, homeDir string) any {
-	defer perf.Track(nil, "utils.ObfuscateSensitivePaths")()
-
-	switch v := data.(type) {
-	case map[string]any:
-		res := make(map[string]any, len(v))
-		for k, val := range v {
-			res[k] = ObfuscateSensitivePaths(val, homeDir)
-		}
-		return res
-	case []any:
-		res := make([]any, len(v))
-		for i, val := range v {
-			res[i] = ObfuscateSensitivePaths(val, homeDir)
-		}
-		return res
-	case string:
-		if homeDir != "" && strings.HasPrefix(v, homeDir) {
-			return "~" + v[len(homeDir):]
-		}
-		return v
-	default:
-		return v
 	}
 }
 
@@ -1059,16 +906,6 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 
 	var zeroValue T
 
-	// Track total calls and unique files/hashes.
-	parsedYAMLCacheStats.Lock()
-	parsedYAMLCacheStats.totalCalls++
-	parsedYAMLCacheStats.uniqueFiles[file]++
-	// Extract content hash for tracking.
-	hash := sha256.Sum256([]byte(input))
-	contentHash := hex.EncodeToString(hash[:])
-	parsedYAMLCacheStats.uniqueHashes[contentHash]++
-	parsedYAMLCacheStats.Unlock()
-
 	// Fast path: when callers want map[string]any (the production hot path
 	// — schema.AtmosSectionMapType is `map[string]any`), try the post-Decode
 	// + post-Intern cache first. A hit lets us skip yaml.Node.Decode and
@@ -1081,8 +918,8 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 			// (entry inserted by a non-provenance caller), fall through to
 			// re-decode via the slow path which will repopulate positions.
 			if !atmosConfig.TrackProvenance || len(cachedPositions) > 0 {
-				// Count decoded-cache hits in the same counter as parsed-node
-				// cache hits; both represent successful avoidance of work.
+				// Count decoded-cache hits alongside parsed-node cache hits;
+				// both represent successful avoidance of work.
 				parsedYAMLCacheStats.Lock()
 				parsedYAMLCacheStats.hits++
 				parsedYAMLCacheStats.Unlock()

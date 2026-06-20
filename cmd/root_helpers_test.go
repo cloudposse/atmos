@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -23,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
 
 // TestCleanupLogFile tests log file cleanup functionality.
@@ -281,6 +283,46 @@ func TestApplyProfilerEnvironmentOverrides(t *testing.T) {
 				Enabled:     true,
 			},
 		},
+		{
+			name: "profile type override is parsed",
+			atmosConfig: schema.AtmosConfiguration{
+				Profiler: profiler.Config{
+					ProfileType: profiler.ProfileTypeHeap,
+				},
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Host:        profiler.DefaultConfig().Host,
+				Port:        profiler.DefaultConfig().Port,
+				ProfileType: profiler.ProfileTypeHeap,
+				Enabled:     false,
+			},
+		},
+		{
+			name: "enabled override is applied",
+			atmosConfig: schema.AtmosConfiguration{
+				Profiler: profiler.Config{
+					Enabled: true,
+				},
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Host:        profiler.DefaultConfig().Host,
+				Port:        profiler.DefaultConfig().Port,
+				ProfileType: profiler.DefaultConfig().ProfileType,
+				Enabled:     true,
+			},
+		},
+		{
+			name: "invalid profile type returns parse error",
+			atmosConfig: schema.AtmosConfiguration{
+				Profiler: profiler.Config{
+					ProfileType: "invalid",
+				},
+			},
+			initial:     profiler.DefaultConfig(),
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -290,11 +332,13 @@ func TestApplyProfilerEnvironmentOverrides(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrParseFlag)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected.Host, config.Host)
 				assert.Equal(t, tt.expected.Port, config.Port)
 				assert.Equal(t, tt.expected.Enabled, config.Enabled)
+				assert.Equal(t, tt.expected.ProfileType, config.ProfileType)
 				if tt.expected.File != "" {
 					assert.Equal(t, tt.expected.File, config.File)
 				}
@@ -341,6 +385,58 @@ func TestApplyCLIFlagOverrides(t *testing.T) {
 			},
 		},
 		{
+			name: "override host flag",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("profiler-host", "", "")
+				cmd.Flags().Set("profiler-host", "127.0.0.1")
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Enabled:     false,
+				Host:        "127.0.0.1",
+				Port:        profiler.DefaultConfig().Port,
+				ProfileType: profiler.DefaultConfig().ProfileType,
+			},
+		},
+		{
+			name: "profile file flag enables file profiler",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("profile-file", "", "")
+				cmd.Flags().Set("profile-file", filepath.Join(os.TempDir(), "heap.prof"))
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Enabled:     true,
+				Host:        profiler.DefaultConfig().Host,
+				Port:        profiler.DefaultConfig().Port,
+				File:        filepath.Join(os.TempDir(), "heap.prof"),
+				ProfileType: profiler.DefaultConfig().ProfileType,
+			},
+		},
+		{
+			name: "profile type flag overrides type",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("profile-type", "", "")
+				cmd.Flags().Set("profile-type", "goroutine")
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Enabled:     false,
+				Host:        profiler.DefaultConfig().Host,
+				Port:        profiler.DefaultConfig().Port,
+				ProfileType: profiler.ProfileTypeGoroutine,
+			},
+		},
+		{
+			name: "invalid profile type flag returns parse error",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("profile-type", "", "")
+				cmd.Flags().Set("profile-type", "invalid")
+			},
+			initial:     profiler.DefaultConfig(),
+			expectError: true,
+		},
+		{
 			name: "no flags changed",
 			setupCmd: func(cmd *cobra.Command) {
 				cmd.Flags().Bool("profiler-enabled", false, "")
@@ -366,13 +462,57 @@ func TestApplyCLIFlagOverrides(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrParseFlag)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected.Enabled, config.Enabled)
 				assert.Equal(t, tt.expected.Port, config.Port)
+				assert.Equal(t, tt.expected.Host, config.Host)
+				assert.Equal(t, tt.expected.File, config.File)
+				assert.Equal(t, tt.expected.ProfileType, config.ProfileType)
 			}
 		})
 	}
+}
+
+func TestBuildProfilerConfigComposesConfigAndFlags(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("profiler-enabled", false, "")
+	cmd.Flags().Int("profiler-port", 0, "")
+	cmd.Flags().String("profiler-host", "", "")
+	cmd.Flags().String("profile-file", "", "")
+	cmd.Flags().String("profile-type", "", "")
+
+	assert.NoError(t, cmd.Flags().Set("profiler-port", "7070"))
+	assert.NoError(t, cmd.Flags().Set("profiler-host", "0.0.0.0"))
+	assert.NoError(t, cmd.Flags().Set("profile-file", filepath.Join(os.TempDir(), "trace.out")))
+	assert.NoError(t, cmd.Flags().Set("profile-type", "trace"))
+
+	config, err := buildProfilerConfig(cmd, &schema.AtmosConfiguration{
+		Profiler: profiler.Config{
+			Host:        "localhost",
+			Port:        6061,
+			ProfileType: profiler.ProfileTypeHeap,
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.True(t, config.Enabled)
+	assert.Equal(t, "0.0.0.0", config.Host)
+	assert.Equal(t, 7070, config.Port)
+	assert.Equal(t, filepath.Join(os.TempDir(), "trace.out"), config.File)
+	assert.Equal(t, profiler.ProfileTypeTrace, config.ProfileType)
+}
+
+func TestSetupProfilerSkipsWhenDisabledWithoutFile(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("profiler-enabled", false, "")
+	cmd.Flags().Int("profiler-port", 0, "")
+	cmd.Flags().String("profiler-host", "", "")
+	cmd.Flags().String("profile-file", "", "")
+	cmd.Flags().String("profile-type", "", "")
+
+	assert.NoError(t, setupProfiler(cmd, &schema.AtmosConfiguration{}))
 }
 
 // TestApplyProfileFileFlag tests profile file flag handling.
@@ -1136,6 +1276,90 @@ func TestParseUseVersionFromArgsInternal(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestExecute_ReexecsExplicitUseVersionBeforeUnknownCommandResolution(t *testing.T) {
+	tests := []struct {
+		name  string
+		args  []string
+		env   string
+		value string
+	}{
+		{
+			name:  "env var",
+			args:  []string{"atmos", "future-secret", "list"},
+			env:   "ref:main",
+			value: "ref:main",
+		},
+		{
+			name:  "equals flag",
+			args:  []string{"atmos", "future-secret", "list", "--use-version=ref:main"},
+			value: "ref:main",
+		},
+		{
+			name:  "separate flag",
+			args:  []string{"atmos", "future-secret", "list", "--use-version", "ref:main"},
+			value: "ref:main",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			oldCheckAndReexec := checkAndReexec
+			t.Cleanup(func() {
+				checkAndReexec = oldCheckAndReexec
+			})
+
+			t.Setenv(pkgversion.VersionUseEnvVar, "")
+			if tt.env != "" {
+				t.Setenv(pkgversion.UseVersionEnvVar, tt.env)
+			} else {
+				t.Setenv(pkgversion.UseVersionEnvVar, "")
+			}
+
+			oldArgs := os.Args
+			t.Cleanup(func() {
+				os.Args = oldArgs
+			})
+
+			os.Args = tt.args
+			RootCmd.SetArgs(tt.args[1:])
+
+			reexecCalled := false
+			sentinel := errors.New("simulated re-exec")
+			checkAndReexec = func(config *schema.AtmosConfiguration) bool {
+				reexecCalled = true
+				assert.NotNil(t, config)
+				assert.Equal(t, tt.value, os.Getenv(pkgversion.VersionUseEnvVar))
+				panic(sentinel)
+			}
+
+			var recovered any
+			func() {
+				defer func() {
+					recovered = recover()
+				}()
+				_ = Execute()
+			}()
+
+			assert.Same(t, sentinel, recovered)
+			assert.True(t, reexecCalled)
+		})
+	}
+}
+
+func TestExecuteVersionSmoke(t *testing.T) {
+	_ = NewTestKit(t)
+
+	oldArgs := os.Args
+	t.Cleanup(func() {
+		os.Args = oldArgs
+	})
+	os.Args = []string{"atmos", "--version"}
+
+	assert.NoError(t, ExecuteVersion())
 }
 
 // TestBuildFlagDescription tests flag description building.

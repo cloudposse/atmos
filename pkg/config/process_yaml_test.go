@@ -1120,3 +1120,54 @@ func TestProcessSequenceElement(t *testing.T) {
 		assert.Equal(t, "value", resultMap["key"])
 	})
 }
+
+func TestDecodeNodeWithYamlFunctions(t *testing.T) {
+	t.Run("nil node returns nil", func(t *testing.T) {
+		got, err := decodeNodeWithYamlFunctions(nil)
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("empty document returns nil", func(t *testing.T) {
+		node := &yaml.Node{Kind: yaml.DocumentNode}
+		got, err := decodeNodeWithYamlFunctions(node)
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("nested mapping and sequence of scalars", func(t *testing.T) {
+		var node yaml.Node
+		require.NoError(t, yaml.Unmarshal([]byte("name: test\nlist:\n  - a\n  - b\nnested:\n  inner: value\n"), &node))
+
+		got, err := decodeNodeWithYamlFunctions(&node)
+		require.NoError(t, err)
+		want := map[string]interface{}{
+			"name":   "test",
+			"list":   []interface{}{"a", "b"},
+			"nested": map[string]interface{}{"inner": "value"},
+		}
+		assert.Equal(t, want, got)
+	})
+
+	t.Run("plain scalar decodes normally", func(t *testing.T) {
+		var node yaml.Node
+		require.NoError(t, yaml.Unmarshal([]byte("42"), &node))
+
+		got, err := decodeNodeWithYamlFunctions(&node)
+		require.NoError(t, err)
+		assert.Equal(t, 42, got)
+	})
+
+	t.Run("custom env tag is evaluated", func(t *testing.T) {
+		t.Setenv("TEST_DECODE_NODE_VAR", "envval")
+
+		var node yaml.Node
+		require.NoError(t, yaml.Unmarshal([]byte("fromenv: !env TEST_DECODE_NODE_VAR\n"), &node))
+
+		got, err := decodeNodeWithYamlFunctions(&node)
+		require.NoError(t, err)
+		gotMap, ok := got.(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, "envval", gotMap["fromenv"])
+	})
+}

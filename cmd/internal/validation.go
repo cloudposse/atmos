@@ -23,15 +23,6 @@ func WithStackValidation(check bool) ValidateOption {
 	}
 }
 
-// WithConfigInfo sets the config info for validation, respecting config selection flags.
-func WithConfigInfo(info *schema.ConfigAndStacksInfo) ValidateOption {
-	return func(cfg *ValidateConfig) {
-		if info != nil {
-			cfg.ConfigInfo = *info
-		}
-	}
-}
-
 // ValidateAtmosConfig checks the Atmos configuration and returns an error instead of exiting.
 // This makes the function testable by allowing errors to be handled by the caller.
 //

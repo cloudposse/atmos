@@ -379,15 +379,6 @@ func LoadConfigWithAuthAndEnv(
 	return baseCfg, nil
 }
 
-// LoadConfig loads AWS config using standard AWS SDK credential resolution.
-// This is a wrapper around LoadConfigWithAuth for convenience.
-// For code that needs Atmos auth support, use LoadConfigWithAuth instead.
-func LoadConfig(ctx context.Context, region string, roleArn string, assumeRoleDuration time.Duration) (aws.Config, error) {
-	defer perf.Track(nil, "identity.LoadConfig")()
-
-	return LoadConfigWithAuth(ctx, region, roleArn, assumeRoleDuration, nil)
-}
-
 // ValidateAWSCredentials performs an early check that AWS credentials are available and valid.
 // Uses STS GetCallerIdentity which is lightweight and always works if credentials are valid.
 // If authCtx is provided, credentials from the Atmos Auth identity are used.

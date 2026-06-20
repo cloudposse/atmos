@@ -38,20 +38,20 @@ auth:
 # Each store uses a named identity instead of the default credential chain.
 stores:
   prod/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     identity: prod-admin
     options:
       region: us-east-1
       prefix: /atmos/prod
 
   prod/keyvault:
-    type: azure-key-vault
+    kind: azure/keyvault
     identity: azure-prod
     options:
       vault_url: https://prod-secrets.vault.azure.net
 
   prod/gsm:
-    type: google-secret-manager
+    kind: gcp/secretmanager
     identity: gcp-prod
     options:
       project_id: acme-prod-123456

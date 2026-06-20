@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
@@ -343,7 +344,7 @@ func processCustomTagsWithContext(
 
 func skipFunc(skip []string, f string) bool {
 	t := strings.TrimPrefix(f, "!")
-	c := u.SliceContainsString(skip, t)
+	c := slices.Contains(skip, t)
 	return c
 }
 

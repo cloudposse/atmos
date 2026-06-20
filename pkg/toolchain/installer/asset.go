@@ -47,13 +47,6 @@ func (i *Installer) buildAssetURLForPlatform(tool *registry.Tool, version, goos,
 	}
 }
 
-// buildHTTPAssetURL builds an asset URL for HTTP type tools.
-func (i *Installer) buildHTTPAssetURL(tool *registry.Tool, version string) (string, error) {
-	defer perf.Track(nil, "Installer.buildHTTPAssetURL")()
-
-	return i.buildHTTPAssetURLForPlatform(tool, version, runtime.GOOS, runtime.GOARCH)
-}
-
 func (i *Installer) buildHTTPAssetURLForPlatform(tool *registry.Tool, version, goos, goarch string) (string, error) {
 	if tool.Asset == "" {
 		return "", fmt.Errorf("%w: Asset URL template is required for HTTP type tools", ErrInvalidToolSpec)
@@ -74,13 +67,6 @@ func (i *Installer) buildHTTPAssetURLForPlatform(tool *registry.Tool, version, g
 	}
 
 	return url, nil
-}
-
-// buildGitHubReleaseURL builds an asset URL for GitHub release type tools.
-func (i *Installer) buildGitHubReleaseURL(tool *registry.Tool, version string) (string, error) {
-	defer perf.Track(nil, "Installer.buildGitHubReleaseURL")()
-
-	return i.buildGitHubReleaseURLForPlatform(tool, version, runtime.GOOS, runtime.GOARCH)
 }
 
 func (i *Installer) buildGitHubReleaseURLForPlatform(tool *registry.Tool, version, goos, goarch string) (string, error) {
