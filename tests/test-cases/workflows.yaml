@@ -50,7 +50,14 @@ tests:
       # Exit code 127 is Unix/POSIX specific. Windows returns different codes.
       os: !not windows
     expect:
-      diff: []
+      diff:
+        # The shell's "command not found" message is platform-specific: Linux
+        # /bin/sh (dash) prints "sh: 1: nonexistentcommand: not found", macOS
+        # prints "sh: nonexistentcommand: command not found". (The pre-refactor
+        # mvdan interpreter printed an OS-identical "executable file not found in
+        # $PATH", which is why a single golden used to suffice.) Ignore that one
+        # line; the workflow-level failure (exit 127, hints) is asserted below.
+        - 'nonexistentcommand.*not found'
       stderr:
         - "workflow step execution failed"
         - "## Hints"
