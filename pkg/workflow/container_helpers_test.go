@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -15,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 func boolPtr(b bool) *bool { return &b }
@@ -465,26 +465,10 @@ func TestRunStepContainerOverride_GuardsDisabledAndDryRun(t *testing.T) {
 }
 
 func TestRunStepContainerOverride_UsesRuntimeEnvWithFakeDocker(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake docker script is POSIX shell based")
-	}
-	dir := t.TempDir()
-	dockerPath := filepath.Join(dir, "docker")
-	script := `#!/bin/sh
-if [ "$1" != "info" ] && [ "$ATMOS_FAKE_AUTH" != "present" ]; then
-  echo "missing forwarded env" >&2
-  exit 9
-fi
-case "$1" in
-  info) exit 0 ;;
-  create) echo "container-id" ;;
-  start|rm) exit 0 ;;
-  exec) echo "container stdout" ;;
-  *) exit 0 ;;
-esac
-`
-	require.NoError(t, os.WriteFile(dockerPath, []byte(script), 0o755))
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testhelpers.InstallFakeContainerRuntime(t, testhelpers.FakeContainerRuntimeSpec{
+		Name: string(container.TypeDocker),
+		Mode: testhelpers.FakeContainerRuntimeWorkflowEnv,
+	})
 
 	err := RunStepContainerOverride(context.Background(), &ContainerStepParams{
 		WorkflowDef: &schema.WorkflowDefinition{Output: "none"},

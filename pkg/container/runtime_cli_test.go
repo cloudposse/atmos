@@ -2,91 +2,20 @@ package container
 
 import (
 	"context"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
-func installFakeRuntime(t *testing.T, name string, body string) {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake runtime scripts are POSIX shell based")
-	}
-	dir := t.TempDir()
-	path := filepath.Join(dir, name)
-	require.NoError(t, os.WriteFile(path, []byte(body), 0o755))
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-}
-
-func fakeRuntimeScript(runtimeName string) string {
-	return `#!/bin/sh
-if [ "$1" != "info" ] && [ "$1" != "version" ]; then
-  if [ "$ATMOS_FAKE_AUTH" != "present" ]; then
-    echo "missing forwarded env" >&2
-    exit 9
-  fi
-fi
-case "$1" in
-  info)
-    exit 0
-    ;;
-  version)
-    echo "1.2.3"
-    ;;
-  tag)
-    echo "tagged"
-    ;;
-  push)
-    echo "latest: digest: sha256:abcdef1234567890 size: 1234"
-    ;;
-  image)
-    if [ "$2" = "inspect" ]; then
-      printf '%s\n' '{"Id":"sha256:abcdef","RepoTags":["app:local"],"RepoDigests":["app@sha256:abcdef"],"Size":2048,"Created":"2026-06-19T00:00:00Z","Architecture":"arm64","Os":"linux","Config":{"Labels":{"app":"test"}},"RootFS":{"Layers":["l1","l2"]}}'
-      exit 0
-    fi
-    echo "unknown image command" >&2
-    exit 4
-    ;;
-  create)
-    echo "pull progress"
-    echo "` + runtimeName + `-container-id"
-    ;;
-  start|stop|rm|pull)
-    exit 0
-    ;;
-  inspect)
-    printf '%s\n' '{"Id":"container-id","Name":"/box","Image":"sha256:img","State":{"Status":"running"},"Config":{"Labels":{"app":"test"}},"Created":"2026-06-19T00:00:00Z"}'
-    ;;
-  ps)
-    if [ "` + runtimeName + `" = "podman" ]; then
-      printf '%s\n' '[{"Id":"podman-id","Names":["podman-box"],"Image":"alpine","State":"running","Labels":{"app":"test"}}]'
-    else
-      printf '%s\n' '{"ID":"docker-id","Names":"/docker-box","Image":"alpine","State":"running","Labels":"app=test"}'
-      printf '%s\n' 'not-json'
-    fi
-    ;;
-  exec)
-    echo "exec stdout"
-    ;;
-  logs)
-    echo "log stdout"
-    ;;
-  *)
-    echo "unknown command: $*" >&2
-    exit 4
-    ;;
-esac
-`
-}
-
 func TestDockerRuntimeCLIMethodsUseConfiguredEnv(t *testing.T) {
-	installFakeRuntime(t, dockerCmd, fakeRuntimeScript("docker"))
+	testhelpers.InstallFakeContainerRuntime(t, testhelpers.FakeContainerRuntimeSpec{
+		Name: dockerCmd,
+		Mode: testhelpers.FakeContainerRuntimeFull,
+	})
 	ctx := context.Background()
 	runtime := NewDockerRuntime()
 	runtime.SetEnv([]string{"ATMOS_FAKE_AUTH=present"})
@@ -129,7 +58,10 @@ func TestDockerRuntimeCLIMethodsUseConfiguredEnv(t *testing.T) {
 }
 
 func TestPodmanRuntimeCLIMethodsUseConfiguredEnv(t *testing.T) {
-	installFakeRuntime(t, podmanCmd, fakeRuntimeScript("podman"))
+	testhelpers.InstallFakeContainerRuntime(t, testhelpers.FakeContainerRuntimeSpec{
+		Name: podmanCmd,
+		Mode: testhelpers.FakeContainerRuntimeFull,
+	})
 	ctx := context.Background()
 	runtime := NewPodmanRuntime()
 	runtime.SetEnv([]string{"ATMOS_FAKE_AUTH=present"})
@@ -167,15 +99,14 @@ func TestPodmanRuntimeCLIMethodsUseConfiguredEnv(t *testing.T) {
 }
 
 func TestRuntimeCreateErrorsOnEmptyContainerID(t *testing.T) {
-	script := `#!/bin/sh
-case "$1" in
-  info) exit 0 ;;
-  create) exit 0 ;;
-  *) exit 0 ;;
-esac
-`
-	installFakeRuntime(t, dockerCmd, script)
-	installFakeRuntime(t, podmanCmd, script)
+	testhelpers.InstallFakeContainerRuntime(t, testhelpers.FakeContainerRuntimeSpec{
+		Name: dockerCmd,
+		Mode: testhelpers.FakeContainerRuntimeEmptyCreate,
+	})
+	testhelpers.InstallFakeContainerRuntime(t, testhelpers.FakeContainerRuntimeSpec{
+		Name: podmanCmd,
+		Mode: testhelpers.FakeContainerRuntimeEmptyCreate,
+	})
 
 	_, dockerErr := NewDockerRuntime().Create(context.Background(), &CreateConfig{Name: "box", Image: "alpine"})
 	require.Error(t, dockerErr)
@@ -187,18 +118,14 @@ esac
 }
 
 func TestRuntimePushReturnsPartialResultOnError(t *testing.T) {
-	script := `#!/bin/sh
-case "$1" in
-  info) exit 0 ;;
-  push)
-    echo "error digest: sha256:feedface"
-    exit 7
-    ;;
-  *) exit 0 ;;
-esac
-`
-	installFakeRuntime(t, dockerCmd, script)
-	installFakeRuntime(t, podmanCmd, strings.ReplaceAll(script, "error digest", "error\\ndigest"))
+	testhelpers.InstallFakeContainerRuntime(t, testhelpers.FakeContainerRuntimeSpec{
+		Name: dockerCmd,
+		Mode: testhelpers.FakeContainerRuntimePushError,
+	})
+	testhelpers.InstallFakeContainerRuntime(t, testhelpers.FakeContainerRuntimeSpec{
+		Name: podmanCmd,
+		Mode: testhelpers.FakeContainerRuntimePushError,
+	})
 
 	dockerResult, dockerErr := NewDockerRuntime().Push(context.Background(), "app:local")
 	require.Error(t, dockerErr)

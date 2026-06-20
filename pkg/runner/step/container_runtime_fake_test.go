@@ -2,9 +2,6 @@ package step
 
 import (
 	"context"
-	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,41 +9,15 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 func installStepFakeDocker(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("fake docker script is POSIX shell based")
-	}
-	dir := t.TempDir()
-	script := `#!/bin/sh
-case "$1" in
-  info) exit 0 ;;
-  build|pull|start|rm|tag) exit 0 ;;
-  create)
-    echo "container-id"
-    ;;
-  exec)
-    echo "run stdout"
-    ;;
-  image)
-    if [ "$2" = "inspect" ]; then
-      printf '%s\n' '{"Id":"sha256:built","RepoTags":["app:local"],"RepoDigests":["app@sha256:built"],"Size":1024,"Created":"2026-06-19T00:00:00Z","Architecture":"amd64","Os":"linux","Config":{"Labels":{"app":"test"}},"RootFS":{"Layers":["l1"]}}'
-      exit 0
-    fi
-    exit 4
-    ;;
-  ps)
-    exit 0
-    ;;
-  *)
-    exit 0
-    ;;
-esac
-`
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o755))
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	testhelpers.InstallFakeContainerRuntime(t, testhelpers.FakeContainerRuntimeSpec{
+		Name: string(container.TypeDocker),
+		Mode: testhelpers.FakeContainerRuntimeStep,
+	})
 }
 
 func TestContainerHandlerExecuteRunWithFakeDocker(t *testing.T) {
