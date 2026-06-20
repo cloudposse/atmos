@@ -54,8 +54,8 @@ export const footerColumns: FooterColumn[] = [
     title: 'Community',
     items: [
       { label: 'Community Hub', to: '/community' },
-      { label: 'Slack', href: 'https://cloudposse.com/slack' },
-      { label: 'Office Hours', href: 'https://cloudposse.com/office-hours' },
+      { label: 'Slack', to: '/community/slack' },
+      { label: 'Office Hours', to: '/community/office-hours' },
       { label: 'Newsletter', href: 'https://newsletter.cloudposse.com' },
       {
         label: 'GitHub Issues',
@@ -73,14 +73,25 @@ export const footerColumns: FooterColumn[] = [
   },
 ];
 
+/** Short tagline shown beneath the wordmark in the footer brand block. */
+export const brandTagline =
+  'Open-source framework for DevOps to manage and orchestrate Terraform, OpenTofu, Helmfile, and more.';
+
 export interface SocialLink {
   label: string;
   href: string;
   /** Icon key resolved in `index.tsx`. */
-  icon: 'github' | 'slack';
+  icon: 'github' | 'twitter' | 'linkedin' | 'youtube' | 'slack';
 }
 
 export const socialLinks: SocialLink[] = [
   { label: 'GitHub', href: 'https://github.com/cloudposse/atmos', icon: 'github' },
+  { label: 'X', href: 'https://twitter.com/cloudposse', icon: 'twitter' },
+  {
+    label: 'LinkedIn',
+    href: 'https://www.linkedin.com/company/cloudposse/',
+    icon: 'linkedin',
+  },
+  { label: 'YouTube', href: 'https://www.youtube.com/@cloudposse', icon: 'youtube' },
   { label: 'Slack', href: 'https://cloudposse.com/slack', icon: 'slack' },
 ];
