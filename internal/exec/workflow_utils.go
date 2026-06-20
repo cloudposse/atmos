@@ -283,10 +283,10 @@ func ExecuteWorkflow(
 	// Validate exec steps before executing anything: an exec step replaces
 	// the Atmos process, so it must be the final step and must not set
 	// supervisor-only fields (tty, interactive, retry, timeout, output).
-	if err := schema.ValidateExecWorkflowSteps(workflowDefinition.Steps); err != nil {
+	if err := schema.ValidateWorkflowSteps(workflowDefinition.Steps); err != nil {
 		return errUtils.Build(err).
 			WithTitle(WorkflowErrTitle).
-			WithHint("Steps of type `exec` replace the Atmos process; move the exec step to the end of the workflow and remove unsupported fields").
+			WithHint("Check workflow step type, nested steps, needs dependencies, and control-step output/fail configuration").
 			WithContext("workflow", workflow).
 			WithExitCode(1).
 			Err()
@@ -413,6 +413,16 @@ func ExecuteWorkflow(
 		}
 
 		switch commandType {
+		case schema.TaskTypeParallel, schema.TaskTypeMatrix:
+			err = executeWorkflowControlStep(context.Background(), &workflowControlContext{
+				atmosConfig:         atmosConfig,
+				workflowDefinition:  workflowDefinition,
+				dryRun:              dryRun,
+				commandLineStack:    commandLineStack,
+				commandLineIdentity: commandLineIdentity,
+				baseEnv:             baseEnv,
+				authManager:         authManager,
+			}, &steps[stepIdx])
 		case "shell":
 			// Render command before execution if show.command is enabled.
 			// Steps with tty/interactive attach the user's terminal; plain
@@ -789,24 +799,21 @@ func promptForWorkflowFile(matches []WorkflowMatch) (string, error) {
 }
 
 func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefinition) {
-	steps := workflowDefinition.Steps
+	generateWorkflowStepNames(workflowDefinition.Steps, "")
+}
 
-	if steps == nil {
-		return
-	}
-
-	// Check if the steps have the `name` attribute.
-	// If not, generate a friendly name consisting of a prefix of `step` and followed by the index of the
-	// step (the index starts with 1, so the first generated step name would be `step1`)
-	for index, step := range steps {
+func generateWorkflowStepNames(steps []schema.WorkflowStep, parent string) {
+	for index := range steps {
+		step := &steps[index]
 		if step.Name == "" {
-			// When iterating through a slice with a range loop, if elements need to be changed,
-			// changing the returned value from the range is not changing the original slice element.
-			// That return value is a copy of the element.
-			// So doing changes to it will not affect the original elements.
-			// We need to access the element with the index returned from the range iterator and change it there.
-			// https://medium.com/@nsspathirana/common-mistakes-with-go-slices-95f2e9b362a9
-			steps[index].Name = fmt.Sprintf("step%d", index+1)
+			if parent == "" {
+				step.Name = fmt.Sprintf("step%d", index+1)
+			} else {
+				step.Name = fmt.Sprintf("%s_step%d", parent, index+1)
+			}
+		}
+		if len(step.Steps) > 0 {
+			generateWorkflowStepNames(step.Steps, step.Name)
 		}
 	}
 }

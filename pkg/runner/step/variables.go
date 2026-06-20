@@ -128,6 +128,13 @@ func (v *Variables) templateData() map[string]any {
 	}
 }
 
+// TemplateData returns the data structure used for Go template execution.
+func (v *Variables) TemplateData() map[string]any {
+	defer perf.Track(nil, "step.Variables.TemplateData")()
+
+	return v.templateData()
+}
+
 // Resolve resolves Go templates in the given string using variable data.
 func (v *Variables) Resolve(input string) (string, error) {
 	defer perf.Track(nil, "step.Variables.Resolve")()

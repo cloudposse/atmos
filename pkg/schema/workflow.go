@@ -1,5 +1,7 @@
 package schema
 
+import "gopkg.in/yaml.v3"
+
 // DescribeWorkflowsItem represents a workflow item in the describe workflows output.
 type DescribeWorkflowsItem struct {
 	File     string `yaml:"file" json:"file" mapstructure:"file"`
@@ -28,6 +30,20 @@ type ShowConfig struct {
 	Progress *bool `yaml:"progress,omitempty" json:"progress,omitempty" mapstructure:"progress"`
 }
 
+// ParallelFailConfig configures failure behavior for parallel and matrix steps.
+type ParallelFailConfig struct {
+	Mode        string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+	MaxFailures int    `yaml:"max_failures,omitempty" json:"max_failures,omitempty" mapstructure:"max_failures"`
+}
+
+// ParallelOutputConfig configures parent-owned output rendering for parallel and matrix steps.
+type ParallelOutputConfig struct {
+	Mode        string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+	Order       string `yaml:"order,omitempty" json:"order,omitempty" mapstructure:"order"`
+	ShowSummary *bool  `yaml:"show_summary,omitempty" json:"show_summary,omitempty" mapstructure:"show_summary"`
+	Prefix      string `yaml:"prefix,omitempty" json:"prefix,omitempty" mapstructure:"prefix"`
+}
+
 // WorkflowStep represents a single step in a workflow.
 type WorkflowStep struct {
 	// Existing fields.
@@ -38,6 +54,7 @@ type WorkflowStep struct {
 	WorkingDirectory string       `yaml:"working_directory,omitempty" json:"working_directory,omitempty" mapstructure:"working_directory"`
 	Retry            *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 	Identity         string       `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+	Needs            []string     `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
@@ -64,11 +81,12 @@ type WorkflowStep struct {
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
 	// Display configuration.
-	Output   string          `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
-	Height   int             `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
-	Viewport *ViewportConfig `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Viewport settings for output mode.
-	Timeout  string          `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`    // Timeout duration.
-	Count    int             `yaml:"count,omitempty" json:"count,omitempty" mapstructure:"count"`          // Count for linebreak type.
+	Output         string                `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
+	ParallelOutput *ParallelOutputConfig `yaml:"-" json:"parallel_output,omitempty" mapstructure:"parallel_output"`    // Structured output for parallel/matrix.
+	Height         int                   `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
+	Viewport       *ViewportConfig       `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Viewport settings for output mode.
+	Timeout        string                `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`    // Timeout duration.
+	Count          int                   `yaml:"count,omitempty" json:"count,omitempty" mapstructure:"count"`          // Count for linebreak type.
 
 	// Style step fields (like gum style).
 	Foreground       string `yaml:"foreground,omitempty" json:"foreground,omitempty" mapstructure:"foreground"`                      // Foreground color.
@@ -102,6 +120,62 @@ type WorkflowStep struct {
 
 	// Show configuration for this step (overrides workflow-level show settings).
 	Show *ShowConfig `yaml:"show,omitempty" json:"show,omitempty" mapstructure:"show"`
+
+	// Control step fields.
+	Steps          []WorkflowStep      `yaml:"steps,omitempty" json:"steps,omitempty" mapstructure:"steps"`
+	MaxConcurrency int                 `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty" mapstructure:"max_concurrency"`
+	Matrix         map[string][]string `yaml:"matrix,omitempty" json:"matrix,omitempty" mapstructure:"matrix"`
+	Fail           *ParallelFailConfig `yaml:"fail,omitempty" json:"fail,omitempty" mapstructure:"fail"`
+}
+
+// UnmarshalYAML supports both legacy scalar output values and structured
+// control-step output configuration under the same "output" YAML key.
+func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
+	type plain WorkflowStep
+	outputNode, sanitized := splitMappingField(value, "output")
+	if err := sanitized.Decode((*plain)(step)); err != nil {
+		return err
+	}
+	return decodeWorkflowStepOutput(outputNode, &step.Output, &step.ParallelOutput)
+}
+
+func decodeWorkflowStepOutput(node *yaml.Node, scalar *string, structured **ParallelOutputConfig) error {
+	if node == nil {
+		return nil
+	}
+	switch node.Kind {
+	case yaml.ScalarNode:
+		*scalar = node.Value
+	case yaml.MappingNode:
+		var cfg ParallelOutputConfig
+		if err := node.Decode(&cfg); err != nil {
+			return err
+		}
+		*scalar = cfg.Mode
+		*structured = &cfg
+	default:
+		return node.Decode(scalar)
+	}
+	return nil
+}
+
+func splitMappingField(value *yaml.Node, field string) (*yaml.Node, *yaml.Node) {
+	if value == nil || value.Kind != yaml.MappingNode {
+		return nil, value
+	}
+	copied := *value
+	copied.Content = make([]*yaml.Node, 0, len(value.Content))
+	var fieldNode *yaml.Node
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		key := value.Content[i]
+		val := value.Content[i+1]
+		if key.Value == field {
+			fieldNode = val
+			continue
+		}
+		copied.Content = append(copied.Content, key, val)
+	}
+	return fieldNode, &copied
 }
 
 // WorkflowDefinition represents a complete workflow with steps.

@@ -16,6 +16,10 @@ const (
 	TaskTypeShell = "shell"
 	// TaskTypeAtmos is the task type for atmos commands.
 	TaskTypeAtmos = "atmos"
+	// TaskTypeParallel is the task type for running nested steps concurrently.
+	TaskTypeParallel = "parallel"
+	// TaskTypeMatrix is the task type for expanding and running nested steps concurrently.
+	TaskTypeMatrix = "matrix"
 	// TaskTypeExec is the task type for commands that replace the Atmos
 	// process entirely (shell exec semantics). Must be the final step.
 	TaskTypeExec = "exec"
@@ -49,6 +53,8 @@ type Task struct {
 	Retry *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 	// Identity specifies the authentication identity to use.
 	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+	// Needs lists sibling task names that must complete before this task can run.
+	Needs []string `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
@@ -75,10 +81,11 @@ type Task struct {
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
 	// Display configuration.
-	Output   string          `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
-	Height   int             `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
-	Viewport *ViewportConfig `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Viewport settings for output mode.
-	Count    int             `yaml:"count,omitempty" json:"count,omitempty" mapstructure:"count"`          // Count for linebreak type.
+	Output         string                `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
+	ParallelOutput *ParallelOutputConfig `yaml:"-" json:"parallel_output,omitempty" mapstructure:"parallel_output"`    // Structured output for parallel/matrix.
+	Height         int                   `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
+	Viewport       *ViewportConfig       `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Viewport settings for output mode.
+	Count          int                   `yaml:"count,omitempty" json:"count,omitempty" mapstructure:"count"`          // Count for linebreak type.
 
 	// Style step fields (like gum style).
 	Foreground       string `yaml:"foreground,omitempty" json:"foreground,omitempty" mapstructure:"foreground"`                      // Foreground color.
@@ -112,6 +119,23 @@ type Task struct {
 
 	// Show configuration for this step (overrides workflow-level show settings).
 	Show *ShowConfig `yaml:"show,omitempty" json:"show,omitempty" mapstructure:"show"`
+
+	// Control step fields.
+	Steps          []WorkflowStep      `yaml:"steps,omitempty" json:"steps,omitempty" mapstructure:"steps"`
+	MaxConcurrency int                 `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty" mapstructure:"max_concurrency"`
+	Matrix         map[string][]string `yaml:"matrix,omitempty" json:"matrix,omitempty" mapstructure:"matrix"`
+	Fail           *ParallelFailConfig `yaml:"fail,omitempty" json:"fail,omitempty" mapstructure:"fail"`
+}
+
+// UnmarshalYAML supports both legacy scalar output values and structured
+// control-step output configuration under the same "output" YAML key.
+func (task *Task) UnmarshalYAML(value *yaml.Node) error {
+	type plain Task
+	outputNode, sanitized := splitMappingField(value, "output")
+	if err := sanitized.Decode((*plain)(task)); err != nil {
+		return err
+	}
+	return decodeWorkflowStepOutput(outputNode, &task.Output, &task.ParallelOutput)
 }
 
 // Tasks is a slice of Task that supports flexible YAML unmarshaling.
@@ -189,6 +213,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		WorkingDirectory: task.WorkingDirectory,
 		Retry:            task.Retry,
 		Identity:         task.Identity,
+		Needs:            task.Needs,
 		Interactive:      task.Interactive,
 		Tty:              task.Tty,
 
@@ -213,11 +238,12 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Extensions: task.Extensions,
 
 		// Display configuration.
-		Output:   task.Output,
-		Height:   task.Height,
-		Viewport: task.Viewport,
-		Timeout:  timeoutStr,
-		Count:    task.Count,
+		Output:         task.Output,
+		ParallelOutput: task.ParallelOutput,
+		Height:         task.Height,
+		Viewport:       task.Viewport,
+		Timeout:        timeoutStr,
+		Count:          task.Count,
 
 		// Style step fields.
 		Foreground:       task.Foreground,
@@ -251,6 +277,12 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 
 		// Show configuration.
 		Show: task.Show,
+
+		// Control step fields.
+		Steps:          task.Steps,
+		MaxConcurrency: task.MaxConcurrency,
+		Matrix:         task.Matrix,
+		Fail:           task.Fail,
 	}
 }
 
@@ -273,6 +305,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		WorkingDirectory: step.WorkingDirectory,
 		Retry:            step.Retry,
 		Identity:         step.Identity,
+		Needs:            step.Needs,
 		Interactive:      step.Interactive,
 		Tty:              step.Tty,
 		Timeout:          timeout,
@@ -298,10 +331,11 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Extensions: step.Extensions,
 
 		// Display configuration.
-		Output:   step.Output,
-		Height:   step.Height,
-		Viewport: step.Viewport,
-		Count:    step.Count,
+		Output:         step.Output,
+		ParallelOutput: step.ParallelOutput,
+		Height:         step.Height,
+		Viewport:       step.Viewport,
+		Count:          step.Count,
 
 		// Style step fields.
 		Foreground:       step.Foreground,
@@ -335,6 +369,12 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 
 		// Show configuration.
 		Show: step.Show,
+
+		// Control step fields.
+		Steps:          step.Steps,
+		MaxConcurrency: step.MaxConcurrency,
+		Matrix:         step.Matrix,
+		Fail:           step.Fail,
 	}
 }
 
@@ -393,6 +433,7 @@ func decodeTaskItem(item any, index int) (Task, error) {
 // decodeTaskFromMap decodes a map into a Task using mapstructure.
 func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	var task Task
+	m = normalizeTaskOutputMap(m, &task)
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		Result:           &task,
 		TagName:          "mapstructure",
@@ -410,4 +451,36 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 		task.Type = TaskTypeShell
 	}
 	return task, nil
+}
+
+func normalizeTaskOutputMap(m map[string]any, task *Task) map[string]any {
+	output, ok := m["output"]
+	if !ok {
+		return m
+	}
+	switch v := output.(type) {
+	case string:
+		return m
+	case map[string]any:
+		var cfg ParallelOutputConfig
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result:           &cfg,
+			TagName:          "mapstructure",
+			WeaklyTypedInput: true,
+		})
+		if err == nil && decoder.Decode(v) == nil {
+			task.Output = cfg.Mode
+			task.ParallelOutput = &cfg
+		}
+		copied := make(map[string]any, len(m)-1)
+		for key, val := range m {
+			if key == "output" {
+				continue
+			}
+			copied[key] = val
+		}
+		return copied
+	default:
+		return m
+	}
 }
