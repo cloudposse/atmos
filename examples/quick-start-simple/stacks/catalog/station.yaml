@@ -5,7 +5,6 @@ components:
     station:
       metadata:
         component: weather
-        description: "Weather station component"
       vars:
         location: Los Angeles
         lang: en
