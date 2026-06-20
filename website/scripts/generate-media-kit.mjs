@@ -1,7 +1,8 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import sharp from "sharp";
+import { Resvg } from "@resvg/resvg-js";
+import jpeg from "jpeg-js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -83,7 +84,8 @@ const assets = [
   },
 ];
 
-const rasterDensity = 192;
+// Render rasters at 2x the SVG's intrinsic size for crisp exports.
+const rasterZoom = 2;
 
 const crcTable = new Uint32Array(256);
 for (let i = 0; i < 256; i += 1) {
@@ -203,16 +205,34 @@ mkdirSync(outputDir, { recursive: true });
 rmSync(rasterDir, { force: true, recursive: true });
 mkdirSync(rasterDir, { recursive: true });
 
-async function rasterizeAsset(asset) {
+function rasterizeAsset(asset) {
   const sourcePath = path.join(staticDir, asset.source);
   const svg = readFileSync(sourcePath);
-  const source = sharp(svg, { density: rasterDensity });
-  const png = await source.clone().png().toBuffer();
-  const jpg = await source
-    .clone()
-    .flatten({ background: asset.jpgBackground })
-    .jpeg({ mozjpeg: true, quality: 92 })
-    .toBuffer();
+  const svgString = svg.toString("utf8");
+
+  // PNG keeps a transparent background.
+  const png = new Resvg(svgString, {
+    fitTo: { mode: "zoom", value: rasterZoom },
+    font: { loadSystemFonts: true },
+  })
+    .render()
+    .asPng();
+
+  // JPEG has no alpha channel, so composite the artwork over the asset's
+  // background color, then encode the resulting RGBA pixmap.
+  const rendered = new Resvg(svgString, {
+    fitTo: { mode: "zoom", value: rasterZoom },
+    font: { loadSystemFonts: true },
+    background: asset.jpgBackground,
+  }).render();
+  const jpg = jpeg.encode(
+    {
+      data: Buffer.from(rendered.pixels),
+      width: rendered.width,
+      height: rendered.height,
+    },
+    92,
+  ).data;
 
   writeFileSync(path.join(rasterDir, `${asset.destinationBase}.png`), png);
   writeFileSync(path.join(rasterDir, `${asset.destinationBase}.jpg`), jpg);
@@ -233,7 +253,7 @@ async function rasterizeAsset(asset) {
   ];
 }
 
-const entries = (await Promise.all(assets.map(rasterizeAsset))).flat();
+const entries = assets.map(rasterizeAsset).flat();
 
 writeFileSync(outputPath, createZip(entries));
 console.log(

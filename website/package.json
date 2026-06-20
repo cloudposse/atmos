@@ -39,6 +39,7 @@
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@fortawesome/react-fontawesome": "^0.2.2",
     "@mdx-js/react": "^3.1.0",
+    "@resvg/resvg-js": "^2.6.2",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "custom-loaders": "file:plugins/custom-loaders",
@@ -48,6 +49,7 @@
     "framer-motion": "^12.23.24",
     "gray-matter": "^4.0.3",
     "html-loader": "^5.1.0",
+    "jpeg-js": "^0.4.4",
     "marked": "^15.0.4",
     "node-fetch": "^3.3.2",
     "posthog-docusaurus": "^2.0.2",
@@ -68,7 +70,6 @@
     "remark-mdx": "^3.1.1",
     "remark-parse": "^11.0.0",
     "remark-stringify": "^11.0.0",
-    "sharp": "^0.35.2",
     "unified": "^11.0.5"
   },
   "devDependencies": {
