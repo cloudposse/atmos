@@ -10,9 +10,11 @@
 package say
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -187,7 +189,9 @@ func (s *commandSpeaker) Speak(text string) error {
 // resolveVoice picks the first requested voice installed on the host, returning
 // the backend's exact installed name. Returns "" (backend default) when no
 // voice is requested or none match. When enumeration is unsupported it falls
-// back to passing the first requested name through verbatim.
+// back to passing the first requested name through verbatim; for any other
+// enumeration failure it uses the backend default rather than risk forcing an
+// invalid voice.
 func (s *commandSpeaker) resolveVoice() string {
 	if len(s.voices) == 0 {
 		return ""
@@ -195,8 +199,12 @@ func (s *commandSpeaker) resolveVoice() string {
 
 	installed, err := ListVoices(s.info, s.runner)
 	if err != nil {
-		log.Debug("Voice enumeration unavailable; passing first requested voice through", "error", err)
-		return s.voices[0]
+		if errors.Is(err, errUtils.ErrVoiceListUnsupported) {
+			log.Debug("Voice enumeration unsupported; passing first requested voice through", "error", err)
+			return s.voices[0]
+		}
+		log.Debug("Voice enumeration failed; using backend default voice", "error", err)
+		return ""
 	}
 
 	return matchVoice(installed, s.voices)

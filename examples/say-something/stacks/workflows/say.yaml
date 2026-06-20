@@ -83,10 +83,8 @@ workflows:
         content: "Starting the build"
         print: always
       - name: building
-        type: spin
-        title: "Building application..."
-        command: "sleep 2 && echo 'Build complete!'"
-        timeout: 30s
+        type: sleep
+        timeout: 2s            # simulate a build (cross-platform; no shell needed)
       - name: finish
         type: say
         content: "Build finished successfully"

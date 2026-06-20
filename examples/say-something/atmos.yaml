@@ -4,5 +4,4 @@ workflows:
   base_path: "stacks/workflows"
 
 logs:
-  file: "/dev/stderr"
   level: Info

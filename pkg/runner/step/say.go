@@ -47,7 +47,9 @@ func (h *SayHandler) Execute(ctx context.Context, step *schema.WorkflowStep, var
 	}
 
 	printQuote := func(text string) error {
-		ui.MarkdownMessage("> " + text)
+		// Prefix every line so multi-line content stays a valid blockquote.
+		quoted := "> " + strings.ReplaceAll(text, "\n", "\n> ")
+		ui.MarkdownMessage(quoted)
 		return nil
 	}
 	noop := func(string) error { return nil }

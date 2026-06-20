@@ -556,7 +556,7 @@ steps:
 </dl>
 
 :::tip
-Use `say` at the end of long-running workflows for an audible cue when you've switched to another window. In CI it automatically prints the message instead of attempting to speak.
+Use `say` at the end of long-running workflows for an audible cue when you've switched to another window. In CI it skips speech and follows the `print` policy (default `fallback` prints the message).
 :::
 
 #### title

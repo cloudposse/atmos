@@ -126,6 +126,21 @@ func TestCommandSpeakerResolveVoicePassthroughWhenUnsupported(t *testing.T) {
 	assert.Empty(t, runner.outputCalls, "unsupported enumeration must not shell out")
 }
 
+func TestCommandSpeakerResolveVoiceEmptyOnEnumerationError(t *testing.T) {
+	// macOS supports enumeration, so a non-ErrVoiceListUnsupported failure must
+	// fall back to the backend default ("") rather than force an invalid voice.
+	runner := &mockRunner{outputErr: assert.AnError}
+	sp := &commandSpeaker{
+		info:     &SayInfo{Path: "/usr/bin/say", Backend: BackendMacSay},
+		voices:   []string{"Samantha"},
+		runner:   runner,
+		fallback: func(string) error { return nil },
+	}
+
+	assert.Empty(t, sp.resolveVoice(), "an enumeration error on a supported backend must use the backend default")
+	assert.Len(t, runner.outputCalls, 1, "resolveVoice must have attempted enumeration")
+}
+
 func TestCommandSpeakerResolveVoiceEmptyWhenNoneRequested(t *testing.T) {
 	sp := &commandSpeaker{
 		info:   &SayInfo{Path: "/usr/bin/say", Backend: BackendMacSay},

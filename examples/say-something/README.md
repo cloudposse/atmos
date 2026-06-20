@@ -2,7 +2,7 @@
 
 This example demonstrates the `say` workflow step type, which speaks a message aloud using **text-to-speech (TTS)**. It's ideal for notifying you when a long-running workflow finishes or stalls — an audible cue for when you've switched to another window.
 
-`say` works across platforms by detecting an available speech engine (`say` on macOS, `spd-say`/`espeak`/`espeak-ng` on Linux, PowerShell's `System.Speech` on Windows). When no engine is available — or when running in CI or another headless environment — it degrades gracefully by printing the message as a Markdown blockquote instead.
+`say` works across platforms by detecting an available speech engine (`say` on macOS, `spd-say`/`espeak`/`espeak-ng` on Linux, PowerShell's `System.Speech` on Windows). When no engine is available — or when running in CI or another headless environment — it degrades gracefully according to the `print` policy (by default, printing the message as a Markdown blockquote).
 
 ## Prerequisites
 
@@ -70,4 +70,4 @@ List installed voices with `say -v "?"` (macOS), `espeak --voices` (Linux), or v
 
 ## CI/CD Considerations
 
-`say` never fails a workflow. In CI it automatically prints the message instead of attempting to speak, so you can leave `say` steps in workflows that run both locally and in pipelines.
+`say` never fails a workflow. In CI it skips speech and follows the `print` policy (`fallback` by default prints the message), so you can leave `say` steps in workflows that run both locally and in pipelines.
