@@ -64,6 +64,95 @@ func TestResolveBuildBake(t *testing.T) {
 	assert.True(t, got.Push)
 }
 
+func TestBuildConfigResolutionErrors(t *testing.T) {
+	h := &ContainerHandler{}
+	vars := NewVariables()
+
+	tests := []struct {
+		name string
+		step *schema.WorkflowStep
+	}{
+		{
+			name: "context",
+			step: &schema.WorkflowStep{
+				Name:  "build",
+				Build: &schema.ContainerBuildStep{Context: "{{"},
+			},
+		},
+		{
+			name: "dockerfile",
+			step: &schema.WorkflowStep{
+				Name:  "build",
+				Build: &schema.ContainerBuildStep{Dockerfile: "{{"},
+			},
+		},
+		{
+			name: "target",
+			step: &schema.WorkflowStep{
+				Name:  "build",
+				Build: &schema.ContainerBuildStep{Target: "{{"},
+			},
+		},
+		{
+			name: "tags",
+			step: &schema.WorkflowStep{
+				Name:  "build",
+				Build: &schema.ContainerBuildStep{Tags: []string{"{{"}},
+			},
+		},
+		{
+			name: "build args",
+			step: &schema.WorkflowStep{
+				Name:  "build",
+				Build: &schema.ContainerBuildStep{BuildArgs: map[string]string{"A": "{{"}},
+			},
+		},
+		{
+			name: "bake file",
+			step: &schema.WorkflowStep{
+				Name:  "build",
+				Build: &schema.ContainerBuildStep{Bake: &schema.ContainerBuildBakeStep{File: "{{"}},
+			},
+		},
+		{
+			name: "bake vars",
+			step: &schema.WorkflowStep{
+				Name:  "build",
+				Build: &schema.ContainerBuildStep{Bake: &schema.ContainerBuildBakeStep{Vars: map[string]string{"A": "{{"}}},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := h.buildBuildConfig(tt.step, vars)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestRunConfigResolutionErrors(t *testing.T) {
+	h := &ContainerHandler{}
+	vars := NewVariables()
+
+	_, err := h.resolveRunCommand(context.Background(), &schema.WorkflowStep{Name: "s"}, vars, &schema.ContainerRunStep{Command: "{{"})
+	require.Error(t, err)
+
+	_, err = h.resolveRunCommand(context.Background(), &schema.WorkflowStep{Name: "s", Command: "{{"}, vars, &schema.ContainerRunStep{})
+	require.Error(t, err)
+
+	_, err = resolveRunBasics(vars, &schema.ContainerRunStep{Image: "{{"}, "s")
+	require.Error(t, err)
+
+	_, err = resolveContainerEnv(vars, &schema.WorkflowStep{Name: "s", Env: map[string]string{"A": "{{"}})
+	require.Error(t, err)
+
+	_, err = convertContainerMounts(vars, []schema.ContainerMount{{Source: "{{", Target: "/target"}})
+	require.Error(t, err)
+
+	_, err = convertContainerMounts(vars, []schema.ContainerMount{{Source: "/source", Target: "{{"}})
+	require.Error(t, err)
+}
+
 func TestDefaultMountType(t *testing.T) {
 	assert.Equal(t, "bind", defaultMountType(""))
 	assert.Equal(t, "volume", defaultMountType("volume"))

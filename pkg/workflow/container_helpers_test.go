@@ -2,7 +2,9 @@ package workflow
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -88,6 +90,24 @@ func TestBuildContainerConfigValidationErrors(t *testing.T) {
 	}
 }
 
+func TestWorkflowContainerHostWorkspace(t *testing.T) {
+	base := t.TempDir()
+	relative, err := workflowContainerHostWorkspace(&schema.WorkflowDefinition{WorkingDirectory: "services/api"}, base)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(base, "services", "api"), relative)
+
+	absoluteDir := filepath.Join(base, "absolute")
+	absolute, err := workflowContainerHostWorkspace(&schema.WorkflowDefinition{WorkingDirectory: absoluteDir}, "/ignored")
+	require.NoError(t, err)
+	assert.Equal(t, absoluteDir, absolute)
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	defaulted, err := workflowContainerHostWorkspace(&schema.WorkflowDefinition{}, base)
+	require.NoError(t, err)
+	assert.Equal(t, cwd, defaulted)
+}
+
 func TestMergeWorkflowContainer_NilCases(t *testing.T) {
 	base := &schema.WorkflowContainer{Image: "base"}
 	override := &schema.WorkflowContainer{Image: "override"}
@@ -139,6 +159,48 @@ func TestMergeWorkflowContainer_ScalarsCollectionsAndToggles(t *testing.T) {
 	assert.Equal(t, "base", base.Image)
 }
 
+func TestMergeWorkflowContainer_OverrideEveryScalarAndCollection(t *testing.T) {
+	base := &schema.WorkflowContainer{
+		Image:     "base",
+		Shell:     "/bin/sh",
+		Provider:  "docker",
+		Pull:      container.PullMissing,
+		Cleanup:   container.CleanupAlways,
+		Workspace: "/base",
+		User:      "1000",
+		RunArgs:   []string{"--base"},
+		Mounts:    []schema.ContainerMount{{Source: "/base", Target: "/base"}},
+		Ports:     []schema.ContainerPort{{Host: 1000, Container: 1000}},
+		Env:       map[string]string{"BASE": "1"},
+	}
+	override := &schema.WorkflowContainer{
+		Image:     "override",
+		Shell:     "/bin/bash",
+		Provider:  "podman",
+		Pull:      container.PullAlways,
+		Cleanup:   container.CleanupNever,
+		Workspace: "/override",
+		User:      "root",
+		RunArgs:   []string{"--override"},
+		Mounts:    []schema.ContainerMount{{Source: "/override", Target: "/override"}},
+		Ports:     []schema.ContainerPort{{Host: 2000, Container: 2000}},
+		Env:       map[string]string{"OVERRIDE": "1"},
+	}
+
+	merged := mergeWorkflowContainer(base, override)
+	assert.Equal(t, "override", merged.Image)
+	assert.Equal(t, "/bin/bash", merged.Shell)
+	assert.Equal(t, "podman", merged.Provider)
+	assert.Equal(t, container.PullAlways, merged.Pull)
+	assert.Equal(t, container.CleanupNever, merged.Cleanup)
+	assert.Equal(t, "/override", merged.Workspace)
+	assert.Equal(t, "root", merged.User)
+	assert.Equal(t, []string{"--override"}, merged.RunArgs)
+	assert.Equal(t, []schema.ContainerMount{{Source: "/override", Target: "/override"}}, merged.Mounts)
+	assert.Equal(t, []schema.ContainerPort{{Host: 2000, Container: 2000}}, merged.Ports)
+	assert.Equal(t, map[string]string{"OVERRIDE": "1"}, merged.Env)
+}
+
 func TestMapHostWorkDirToContainer(t *testing.T) {
 	workspace := filepath.Join(string(filepath.Separator)+"repo", "root")
 	sub := filepath.Join(workspace, "services", "api")
@@ -165,6 +227,16 @@ func TestMapHostWorkDirToContainer(t *testing.T) {
 			assert.Equal(t, tt.wantResult, got)
 		})
 	}
+}
+
+func TestMapHostWorkDirToContainer_CustomWorkspaceAndRelativeInput(t *testing.T) {
+	workspace := t.TempDir()
+	subdir := filepath.Join(workspace, "nested")
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+
+	got, err := mapHostWorkDirToContainer(subdir, workspace, "/repo")
+	require.NoError(t, err)
+	assert.Equal(t, "/repo/nested", got)
 }
 
 func TestMapHostWorkDirToContainer_OutsideWorkspaceErrors(t *testing.T) {
@@ -388,6 +460,43 @@ func TestRunStepContainerOverride_GuardsDisabledAndDryRun(t *testing.T) {
 		WorkflowDef:  &schema.WorkflowDefinition{Container: &schema.WorkflowContainer{Image: "alpine"}},
 		Step:         &schema.WorkflowStep{Name: "s"},
 		DryRun:       true,
+	})
+	require.NoError(t, err)
+}
+
+func TestRunStepContainerOverride_UsesRuntimeEnvWithFakeDocker(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker script is POSIX shell based")
+	}
+	dir := t.TempDir()
+	dockerPath := filepath.Join(dir, "docker")
+	script := `#!/bin/sh
+if [ "$1" != "info" ] && [ "$ATMOS_FAKE_AUTH" != "present" ]; then
+  echo "missing forwarded env" >&2
+  exit 9
+fi
+case "$1" in
+  info) exit 0 ;;
+  create) echo "container-id" ;;
+  start|rm) exit 0 ;;
+  exec) echo "container stdout" ;;
+  *) exit 0 ;;
+esac
+`
+	require.NoError(t, os.WriteFile(dockerPath, []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	err := RunStepContainerOverride(context.Background(), &ContainerStepParams{
+		WorkflowDef: &schema.WorkflowDefinition{Output: "none"},
+		Step: &schema.WorkflowStep{
+			Name: "containerized",
+			Container: &schema.WorkflowContainer{
+				Image:    "alpine",
+				Provider: string(container.TypeDocker),
+			},
+		},
+		Command:    "echo hi",
+		RuntimeEnv: []string{"ATMOS_FAKE_AUTH=present"},
 	})
 	require.NoError(t, err)
 }
