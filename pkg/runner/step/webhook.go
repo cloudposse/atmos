@@ -36,6 +36,10 @@ const (
 	httpServerErrorMin = 500
 	httpSuccessMin     = 200
 	httpSuccessMax     = 299
+
+	// Bound how much of a response body is read into memory to protect against
+	// large/error endpoint responses spiking memory.
+	webhookMaxResponseBodyBytes int64 = 4 << 20 // 4 MiB.
 )
 
 // Webhook step result metadata keys.
@@ -235,7 +239,7 @@ func performWebhookRequest(ctx context.Context, client *http.Client, req *webhoo
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, webhookMaxResponseBodyBytes))
 	if err != nil {
 		return nil, &webhookHTTPError{transport: true, cause: err}
 	}
@@ -372,13 +376,27 @@ func buildWebhookRequest(step *schema.WorkflowStep, vars *Variables) (*webhookRe
 			Err()
 	}
 
+	// url.Parse accepts relative URLs; reject them here so they fail fast with clear
+	// config feedback instead of surfacing later as retryable transport errors.
+	if parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return nil, errUtils.Build(errUtils.ErrWebhookRequestFailed).
+			WithContext("step", step.Name).
+			WithContext("url", rawURL).
+			WithHint("Provide a valid absolute URL (e.g. https://example.com/hook)").
+			Err()
+	}
+
 	if err := applyQueryParams(parsedURL, step, vars); err != nil {
 		return nil, err
 	}
 
 	headers, err := vars.ResolveEnvMap(step.Headers)
 	if err != nil {
-		return nil, fmt.Errorf("step '%s': failed to resolve headers: %w", step.Name, err)
+		return nil, errUtils.Build(errUtils.ErrTemplateEvaluation).
+			WithCause(err).
+			WithContext("step", step.Name).
+			WithContext("field", "headers").
+			Err()
 	}
 	if headers == nil {
 		headers = make(map[string]string)
@@ -411,7 +429,12 @@ func applyQueryParams(parsedURL *url.URL, step *schema.WorkflowStep, vars *Varia
 	for key, value := range step.Query {
 		resolved, err := vars.Resolve(value)
 		if err != nil {
-			return fmt.Errorf("step '%s': failed to resolve query param %q: %w", step.Name, key, err)
+			return errUtils.Build(errUtils.ErrTemplateEvaluation).
+				WithCause(err).
+				WithContext("step", step.Name).
+				WithContext("field", "query").
+				WithContext("param", key).
+				Err()
 		}
 		query.Set(key, resolved)
 	}
@@ -425,7 +448,11 @@ func buildWebhookBody(step *schema.WorkflowStep, vars *Variables, headers map[st
 	if step.Body != "" {
 		resolved, err := vars.Resolve(step.Body)
 		if err != nil {
-			return nil, fmt.Errorf("step '%s': failed to resolve body: %w", step.Name, err)
+			return nil, errUtils.Build(errUtils.ErrTemplateEvaluation).
+				WithCause(err).
+				WithContext("step", step.Name).
+				WithContext("field", "body").
+				Err()
 		}
 		return []byte(resolved), nil
 	}
@@ -436,14 +463,22 @@ func buildWebhookBody(step *schema.WorkflowStep, vars *Variables, headers map[st
 
 	resolvedForm, err := vars.ResolveEnvMap(step.Form)
 	if err != nil {
-		return nil, fmt.Errorf("step '%s': failed to resolve form: %w", step.Name, err)
+		return nil, errUtils.Build(errUtils.ErrTemplateEvaluation).
+			WithCause(err).
+			WithContext("step", step.Name).
+			WithContext("field", "form").
+			Err()
 	}
 
 	existingCT := findHeader(headers, contentTypeHeader)
 	if strings.Contains(strings.ToLower(existingCT), contentTypeJSON) {
 		encoded, err := json.Marshal(resolvedForm)
 		if err != nil {
-			return nil, fmt.Errorf("step '%s': failed to encode form as JSON: %w", step.Name, err)
+			return nil, errUtils.Build(errUtils.ErrWebhookRequestFailed).
+				WithCause(err).
+				WithContext("step", step.Name).
+				WithContext("field", "form").
+				Err()
 		}
 		return encoded, nil
 	}
