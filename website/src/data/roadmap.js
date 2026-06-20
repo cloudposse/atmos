@@ -283,12 +283,14 @@ export const roadmapConfig = {
         { label: 'Unified task execution (`pkg/runner`)', status: 'shipped', quarter: 'q4-2025', pr: 1901, changelog: 'unified-task-runner', description: 'A single execution engine for all task types—Terraform, Helmfile, shell, and custom commands.', benefits: 'Consistent behavior across all command types. Same output handling, error reporting, and logging.' },
         { label: 'Workflow environment variables', status: 'shipped', quarter: 'q1-2026', pr: 2050, changelog: 'workflow-environment-variables', description: 'Set environment variables once per workflow and override only what matters at each step.', benefits: 'Parameterize workflow steps using simple environment variables.' },
         { label: 'Terminal steps: tty/interactive fields and exec step type', status: 'shipped', quarter: 'q2-2026', pr: 2602, changelog: 'tty-interactive-steps', description: 'Shell steps in custom commands and workflows can set `tty: true` to allocate a PTY for the child process and `interactive: true` to hand the terminal directly to tools like `aws ssm start-session`, `ssh`, or `psql`. A new `type: exec` step type replaces the Atmos process via execve so the target program owns the terminal directly; it must be the final step in its command or workflow, and on Windows the exec is emulated with exit-code propagation. Secret masking is preserved, Ctrl-C is forwarded to the child instead of killing Atmos, and exit codes propagate correctly across all three modes.', benefits: 'Interactive CLI tools, terminal sessions, database clients, and SSH tunnels launch directly from atmos.yaml without wrapper scripts. Use `type: exec` when you want the target program to fully replace Atmos as the process (e.g. drop into a shell or hand off to a long-running daemon).' },
+        { label: 'Parallel and matrix workflow control steps', status: 'shipped', quarter: 'q2-2026', pr: 2635, changelog: 'parallel-matrix-workflow-steps', description: 'Add `parallel` and `matrix` control steps for non-interactive workflow children, with sibling `needs` dependencies, bounded concurrency, configurable failure behavior, grouped or prefixed output, and deterministic summaries.', category: 'featured', priority: 'high', benefits: 'Turn long sequential runbooks into dependency-aware workflows that finish faster while keeping output readable. Independent checks, tests, plans, and generated matrix jobs can run concurrently without shell glue or CI-only YAML.' },
       ],
       issues: [],
       prs: [
         { number: 1899, title: 'Implement workflow step types with registry pattern' },
         { number: 1901, title: 'Create pkg/runner with unified task execution' },
         { number: 2050, title: 'Add workflow environment variables with hierarchical merging' },
+        { number: 2635, title: 'Add parallel and matrix workflow control steps' },
       ],
     },
     {
