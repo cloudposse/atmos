@@ -1,0 +1,254 @@
+---
+title: Default Args
+sidebar_label: default args
+sidebar_class_name: command
+description: Set default command-line arguments per command in atmos.yaml, overridable by profiles
+---
+
+import Intro from '@site/src/components/Intro';
+import KeyPoints from '@site/src/components/KeyPoints';
+import Note from '@site/src/components/Note';
+import File from '@site/src/components/File';
+
+<Intro>
+Set default command-line arguments for any Atmos command in `atmos.yaml`, addressed by command path. Disable identity by default, turn off YAML-function processing for `describe`, or pin any flag — and override it with [profiles](/cli/configuration/profiles), environment variables, or on the command line.
+</Intro>
+
+<KeyPoints>
+- Define default args per command, addressed by command path (`<command>.args`)
+- Use the top-level `args:` list for defaults that apply to every command
+- Raw argument tokens — any flag, repeated flag, or positional works, with no per-command setup
+- Overridable by profiles, environment variables, and the command line
+</KeyPoints>
+
+## Configuration
+
+List default arguments under a command's path. The top-level `args:` applies globally; each
+`<command-path>.args` applies to that command (and its subcommands):
+
+<File title="atmos.yaml">
+```yaml
+# Global default args — applied to every command that accepts the flag.
+args:
+  - --identity=false
+
+# `atmos describe ...`
+describe:
+  args:
+    - --process-functions=false
+    - --skip=terraform.state
+    - --skip=terraform.output
+
+# `atmos terraform ...`
+terraform:
+  args:
+    - --identity=false
+```
+</File>
+
+Default args are spliced onto the command line before Atmos parses it, exactly as if you had typed
+them — so any flag, repeated flag (like `--skip`), or positional argument works, with no per-command
+configuration.
+
+### Path-derived addressing
+
+The key is derived from the **command line**, most-specific wins:
+
+<dl>
+  <dt>`args` (top-level)</dt>
+  <dd>Applied to every command.</dd>
+
+  <dt>`describe.args`</dt>
+  <dd>Applied to `atmos describe` and all of its subcommands.</dd>
+
+  <dt>`describe.component.args`</dt>
+  <dd>Applied to `atmos describe component` specifically (overrides `describe.args`).</dd>
+
+  <dt>`terraform.args`</dt>
+  <dd>Applied to `atmos terraform`.</dd>
+</dl>
+
+<Note>
+`terraform.args` is keyed by the **command** `atmos terraform` — it is distinct from
+`components.terraform`, which configures the terraform component type. The addressing follows the
+command line, not where a command's other configuration happens to live.
+</Note>
+
+### Overriding a broader default at a deeper path
+
+Args from every matching level are applied together, least-specific first, so a more-specific path
+overrides a broader one by re-declaring the same flag (the later value wins):
+
+<File title="atmos.yaml">
+```yaml
+# Global: disable identity everywhere.
+args:
+  - --identity=false
+
+describe:
+  component:
+    args:
+      # `atmos describe component` re-enables it with a specific identity.
+      - --identity=admin
+```
+</File>
+
+Running `atmos describe component vpc -s prod` resolves to `--identity=false --identity=admin`, and
+the most-specific value (`admin`) wins. Passing `--identity=...` on the command line still overrides
+both.
+
+### Flags and positional arguments
+
+Default args are **raw tokens**, not a typed flag map — so flags (`--skip=x`), repeated flags, and
+positional arguments are all passed straight through. They are spliced in right after the command
+path, before the arguments you type.
+
+Flags get full override semantics: a more-specific path wins, and an explicit flag on the command
+line (or its environment variable) suppresses the default. Positionals behave differently — they are
+not flags, so they are never suppressed, and because they are inserted *before* what you type, a
+defaulted positional is **added to** your positional arguments rather than replacing them. For that
+reason, defaults are best suited to flags.
+
+<File title="atmos.yaml">
+```yaml
+terraform:
+  args:
+    - -input=false   # passed straight through to terraform
+```
+</File>
+
+### Repeated flags (list values)
+
+For a flag that takes a **list**, repeat it — each value is its own entry in the `args:` list, exactly
+as you would type them. For example, `atmos describe component` accepts `--skip` repeatedly to skip
+multiple YAML functions:
+
+<File title="atmos.yaml">
+```yaml
+describe:
+  component:
+    args:
+      - --skip=terraform.state
+      - --skip=terraform.output
+```
+</File>
+
+That is equivalent to typing:
+
+```shell
+atmos describe component vpc -s prod --skip=terraform.state --skip=terraform.output
+```
+
+The same pattern works for any repeatable flag, including pass-through tool flags such as Terraform's
+`-var`:
+
+<File title="atmos.yaml">
+```yaml
+terraform:
+  args:
+    - -var=region=us-east-1
+    - -var=stage=prod
+```
+</File>
+
+<Note>
+For an Atmos flag, the configured list is **replaced, not extended**: passing that flag once on the
+command line suppresses *all* of its configured defaults — so `atmos describe component vpc -s prod
+--skip=vars` skips only `vars`, not the configured `terraform.state` and `terraform.output`. To keep
+the defaults and add to them, repeat them on the command line. (Tool-native flags like Terraform's
+`-var` are passed straight through, so the tool's own rules decide how command-line values combine
+with the defaults.)
+</Note>
+
+## Precedence
+
+Default args sit below the command line and environment variables:
+
+```text
+CLI flag  >  ENV var  >  command default args  >  global default args  >  built-in default
+```
+
+A default arg is skipped when its flag is already present on the command line, or when its environment
+variable is set. So an explicit `--process-functions=true` or `ATMOS_PROCESS_FUNCTIONS=true` always
+wins over a configured default.
+
+## Overriding with profiles
+
+Because default args live in configuration, [profiles](/cli/configuration/profiles) override them with
+no special handling — a profile is merged into the active configuration before args are resolved.
+
+<File title="profiles/ci/settings.yaml">
+```yaml
+args:
+  - --identity=false
+describe:
+  args:
+    - --process-functions=false
+```
+</File>
+
+```shell
+atmos describe component vpc -s prod --profile=ci
+# or
+ATMOS_PROFILE=ci atmos describe component vpc -s prod
+```
+
+## Examples
+
+Disable authentication by default for every command, re-enabling it on the command line when needed:
+
+```yaml
+args:
+  - --identity=false
+```
+
+```shell
+atmos describe component vpc -s prod                  # identity disabled
+atmos terraform plan vpc -s prod --identity=admin     # CLI flag re-enables it
+```
+
+Turn off YAML-function processing by default for `describe`:
+
+```yaml
+describe:
+  args:
+    - --process-functions=false
+```
+
+```shell
+atmos describe component vpc -s prod                         # functions left unprocessed
+atmos describe component vpc -s prod --process-functions=true   # CLI override
+```
+
+Default every `atmos list` command to JSON output, and include all component types for
+`atmos list components` specifically. Because `list.args` applies to the whole `list` subtree, one
+entry covers `list stacks`, `list components`, `list values`, and the rest:
+
+```yaml
+list:
+  # Applies to every `atmos list ...` subcommand.
+  args:
+    - --format=json
+  # `atmos list components` only — adds to the inherited list.args.
+  components:
+    args:
+      - --type=all
+```
+
+```shell
+atmos list stacks                       # JSON
+atmos list components                   # JSON, includes abstract components (--type=all)
+atmos list components --format=table    # CLI flag overrides the default format
+```
+
+<Note>
+The path follows the **command**, and the supported flags are the subcommand's own — so put a flag
+under the subcommand that accepts it (e.g. `--type` under `list.components`, `--max-columns` under
+`list.values`). An injected flag the target subcommand doesn't define is an error, just as it would be
+if you typed it.
+</Note>
+
+<Note>
+For `terraform`, `helmfile`, and `packer`, you can also default the tool's native flags (e.g.
+`terraform.args: [-input=false]`) — they are passed straight through to the underlying tool.
+</Note>

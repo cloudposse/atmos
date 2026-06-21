@@ -1637,6 +1637,12 @@ func preprocessArgs() {
 		return
 	}
 
+	// Step 0: Inject config-sourced default args for the target command (global `args:` and
+	// path-derived `<command>.args:`). atmosConfig is already loaded here (with profiles
+	// merged), so profile-defined args are honored. Defaults whose flag is already on the CLI
+	// or set via env are skipped, preserving CLI > ENV > config precedence.
+	osArgs = flags.InjectDefaultArgs(RootCmd, atmosConfig.RawConfig, osArgs)
+
 	// Step 1: Preprocess NoOptDefVal flags (native Atmos flags like --identity, --pager).
 	// This rewrites --identity value → --identity=value before Cobra parses.
 	processedArgs := preprocessNoOptDefValFlags(osArgs)
@@ -1646,9 +1652,10 @@ func preprocessArgs() {
 	// Note: This may call RootCmd.SetArgs() if there are compat flags.
 	hasCompatFlags := preprocessCompatibilityFlags(processedArgs)
 
-	// If no compat flags were processed but NoOptDefVal changed the args,
-	// we need to set the processed args for Cobra to use.
-	if !hasCompatFlags && !slicesEqual(processedArgs, osArgs) {
+	// If no compat flags were processed but injection or NoOptDefVal changed the args,
+	// we need to set the processed args for Cobra to use. Compare against the original
+	// os.Args (not the post-injection osArgs) so injected default args are not dropped.
+	if !hasCompatFlags && !slicesEqual(processedArgs, os.Args[1:]) {
 		RootCmd.SetArgs(processedArgs)
 	}
 }

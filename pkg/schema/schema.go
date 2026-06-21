@@ -129,6 +129,11 @@ type AtmosConfiguration struct {
 	MCP MCPSettings `yaml:"mcp,omitempty" json:"mcp,omitempty" mapstructure:"mcp"`
 	// LSP settings.
 	LSP LSPSettings `yaml:"lsp,omitempty" json:"lsp,omitempty" mapstructure:"lsp"`
+	// RawConfig holds the fully merged atmos.yaml settings (with any active profile applied)
+	// as a generic map. It powers path-derived lookups that the typed struct can't express —
+	// notably per-command default args (`<command>.args` and the global `settings.args`).
+	// Populated during config load; never serialized.
+	RawConfig AtmosSectionMapType `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
