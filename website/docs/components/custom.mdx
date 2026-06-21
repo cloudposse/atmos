@@ -3,13 +3,13 @@ title: Using Custom Component Types
 sidebar_position: 7
 sidebar_label: Custom
 id: custom
-description: Bring any tool—Ansible, Kubernetes manifests, shell scripts, CDK, and more—under the same stack-based configuration used for Terraform, Helmfile, and Packer.
+description: Bring any tool—AWS CDK, CloudFormation, Pulumi, Bicep, database migrations, and more—under the same stack-based configuration used for Terraform, Helmfile, and Packer.
 ---
 import Intro from '@site/src/components/Intro'
 import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
-Beyond the native component types, Atmos lets you define **custom component types** so you can manage *any* tool—Kubernetes manifests, shell scripts, CDK apps, Ansible-as-a-script, and more—with the same stack-based configuration system used for Terraform, Helmfile, and Packer.
+Beyond the native component types, Atmos lets you define **custom component types** so you can manage *any* tool—AWS CDK, CloudFormation, Pulumi, Bicep, database migrations, and more—with the same stack-based configuration system used for Terraform, Helmfile, and Packer.
 </Intro>
 
 Custom component types are defined through [custom commands](/cli/configuration/commands). Unlike the native types, which ship with built-in orchestration, a custom type is one you wire up yourself: you declare the type on a custom command and supply the execution `steps`, while Atmos handles stack resolution, inheritance, and configuration merging exactly as it does for native components.
