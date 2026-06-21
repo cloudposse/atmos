@@ -1,4 +1,4 @@
-package providers
+package sops
 
 import (
 	"os"
@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/secrets/providers"
 
 	"filippo.io/age"
 	cockroachErrors "github.com/cockroachdb/errors"
@@ -22,9 +24,9 @@ func TestSopsProvider_SupportsScope(t *testing.T) {
 	p, _ := newAgeProvider(t)
 
 	assert.True(t, p.SupportsScope(""), "empty scope (instance default) must always be supported")
-	assert.True(t, p.SupportsScope(ScopeStack))
-	assert.True(t, p.SupportsScope(ScopeInstance))
-	assert.False(t, p.SupportsScope(Scope("environment")), "an unknown scope is not supported")
+	assert.True(t, p.SupportsScope(providers.ScopeStack))
+	assert.True(t, p.SupportsScope(providers.ScopeInstance))
+	assert.False(t, p.SupportsScope(providers.Scope("environment")), "an unknown scope is not supported")
 }
 
 // TestSopsProvider_KeyGroups_NoRecipientsNoSopsConfig proves that creating a fresh file with
@@ -40,7 +42,7 @@ func TestSopsProvider_KeyGroups_NoRecipientsNoSopsConfig(t *testing.T) {
 	p := ageProviderWith(t, file, "", "") // no recipients, no key file.
 
 	// Set must create the file, which requires resolving recipients first.
-	err := p.Set(Coordinate{Stack: "dev", Component: "api", Key: "K"}, "v")
+	err := p.Set(providers.Coordinate{Stack: "dev", Component: "api", Key: "K"}, "v")
 	require.ErrorIs(t, err, ErrSopsRecipients)
 }
 
@@ -51,7 +53,7 @@ func TestSopsProvider_KeyGroups_InvalidRecipients(t *testing.T) {
 	file := filepath.Join(dir, "dev.enc.yaml")
 	p := ageProviderWith(t, file, "not-a-valid-age-recipient", "")
 
-	err := p.Set(Coordinate{Stack: "dev", Component: "api", Key: "K"}, "v")
+	err := p.Set(providers.Coordinate{Stack: "dev", Component: "api", Key: "K"}, "v")
 	require.ErrorIs(t, err, ErrSopsRecipients)
 }
 
@@ -65,7 +67,7 @@ func TestSopsProvider_KeyGroups_MalformedSopsConfig(t *testing.T) {
 	file := filepath.Join(dir, "dev.enc.yaml")
 	p := ageProviderWith(t, file, "", "")
 
-	err := p.Set(Coordinate{Stack: "dev", Component: "api", Key: "K"}, "v")
+	err := p.Set(providers.Coordinate{Stack: "dev", Component: "api", Key: "K"}, "v")
 	require.ErrorIs(t, err, ErrSopsRecipients)
 }
 
@@ -80,7 +82,7 @@ func TestSopsProvider_KeyGroups_NoMatchingCreationRule(t *testing.T) {
 	file := filepath.Join(dir, "dev.enc.yaml")
 	p := ageProviderWith(t, file, "", "")
 
-	err := p.Set(Coordinate{Stack: "dev", Component: "api", Key: "K"}, "v")
+	err := p.Set(providers.Coordinate{Stack: "dev", Component: "api", Key: "K"}, "v")
 	require.ErrorIs(t, err, ErrSopsRecipients)
 }
 
@@ -93,7 +95,7 @@ func TestSopsProvider_DecryptDoc_CorruptFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(file, []byte("this: is\nnot: a sops file\n"), 0o600))
 
 	reader := ageProviderWith(t, file, identity.Recipient().String(), keyFile)
-	_, err := reader.Get(Coordinate{Stack: "dev", Component: "api", Key: "K"})
+	_, err := reader.Get(providers.Coordinate{Stack: "dev", Component: "api", Key: "K"})
 	require.ErrorIs(t, err, ErrSopsDecrypt)
 }
 
@@ -106,7 +108,7 @@ func TestSopsProvider_EditFile_CorruptFile(t *testing.T) {
 
 	p := ageProviderWith(t, file, identity.Recipient().String(), keyFile)
 	// createIfMissing is true for Set, but the file exists, so it takes the load+decrypt path.
-	err := p.Set(Coordinate{Stack: "dev", Component: "api", Key: "K"}, "v")
+	err := p.Set(providers.Coordinate{Stack: "dev", Component: "api", Key: "K"}, "v")
 	require.ErrorIs(t, err, ErrSopsDecrypt)
 }
 
@@ -125,7 +127,7 @@ func TestSopsProvider_EditFile_ReadErrorNotNotExist(t *testing.T) {
 	require.NoError(t, os.Mkdir(asDir, 0o755))
 
 	p := ageProviderWith(t, asDir, identity.Recipient().String(), keyFile)
-	err := p.Set(Coordinate{Stack: "dev", Component: "api", Key: "K"}, "v")
+	err := p.Set(providers.Coordinate{Stack: "dev", Component: "api", Key: "K"}, "v")
 	require.ErrorIs(t, err, ErrSopsDecrypt)
 	require.NotErrorIs(t, err, ErrSecretFileNotFound)
 }
@@ -151,9 +153,9 @@ func TestSopsProvider_WriteNewFile_MkdirAllFails(t *testing.T) {
 	file := filepath.Join(parentAsFile, "sub", "dev.enc.yaml")
 	p := ageProviderWith(t, file, identity.Recipient().String(), "")
 
-	resettable, ok := p.(FileResettable)
+	resettable, ok := p.(providers.FileResettable)
 	require.True(t, ok)
-	err = resettable.Reset(Coordinate{Stack: "dev", Component: "api", Key: "K"})
+	err = resettable.Reset(providers.Coordinate{Stack: "dev", Component: "api", Key: "K"})
 	require.ErrorIs(t, err, ErrSopsEncrypt)
 }
 
@@ -179,9 +181,9 @@ func TestSopsProvider_WriteNewFile_WriteFileFails(t *testing.T) {
 	file := filepath.Join(roDir, "dev.enc.yaml")
 	p := ageProviderWith(t, file, identity.Recipient().String(), "")
 
-	resettable, ok := p.(FileResettable)
+	resettable, ok := p.(providers.FileResettable)
 	require.True(t, ok)
-	err = resettable.Reset(Coordinate{Stack: "dev", Component: "api", Key: "K"})
+	err = resettable.Reset(providers.Coordinate{Stack: "dev", Component: "api", Key: "K"})
 	require.Error(t, err)
 }
 
@@ -215,7 +217,7 @@ func TestExpandKeyPath_Error(t *testing.T) {
 // `~user` form) surfaces ErrSopsAgeKeyFile via the expandKeyPath failure branch of ageKeyFileClient.
 func TestSopsProvider_AgeKeyFileClient_ExpandError(t *testing.T) {
 	identity, _, file := ageKeyFileFixture(t)
-	coord := Coordinate{Stack: "dev", Component: "api", Key: "K"}
+	coord := providers.Coordinate{Stack: "dev", Component: "api", Key: "K"}
 
 	writer := ageProviderWith(t, file, identity.Recipient().String(), "")
 	require.NoError(t, writer.Set(coord, "v"))
@@ -246,7 +248,7 @@ func TestSopsProvider_KeyClient_EnvFallback(t *testing.T) {
 	require.Empty(t, sp.ageKeyFile)
 	require.Empty(t, sp.ageKeyStore)
 
-	coord := Coordinate{Stack: "dev", Component: "api", Key: "K"}
+	coord := providers.Coordinate{Stack: "dev", Component: "api", Key: "K"}
 	require.NoError(t, p.Set(coord, "v"))
 	got, err := p.Get(coord)
 	require.NoError(t, err, "default local client must resolve the key from SOPS_AGE_KEY_FILE")
@@ -254,10 +256,10 @@ func TestSopsProvider_KeyClient_EnvFallback(t *testing.T) {
 }
 
 // TestNewSopsProvider_NotFound proves an unknown provider name (absent from both the section and
-// atmos.yaml) is reported as ErrProviderNotFound.
+// atmos.yaml) is reported as providers.ErrProviderNotFound.
 func TestNewSopsProvider_NotFound(t *testing.T) {
-	_, err := newSopsProvider(&schema.AtmosConfiguration{}, "missing", nil)
-	require.ErrorIs(t, err, ErrProviderNotFound)
+	_, err := New(&schema.AtmosConfiguration{}, "missing", nil)
+	require.ErrorIs(t, err, providers.ErrProviderNotFound)
 }
 
 // TestNewSopsProvider_NoFileSpec proves a provider declared without `spec.file` is now valid: the
@@ -268,17 +270,17 @@ func TestNewSopsProvider_NoFileSpec(t *testing.T) {
 	section := map[string]any{
 		"dev-sops": map[string]any{"kind": "sops/age", "spec": map[string]any{}},
 	}
-	prov, err := newSopsProvider(&schema.AtmosConfiguration{}, "dev-sops", section)
+	prov, err := New(&schema.AtmosConfiguration{}, "dev-sops", section)
 	require.NoError(t, err)
 
 	sp, ok := prov.(*sopsProvider)
 	require.True(t, ok)
 
-	stackFile, err := sp.FilePath(Coordinate{Stack: "dev", Scope: ScopeStack})
+	stackFile, err := sp.FilePath(providers.Coordinate{Stack: "dev", Scope: providers.ScopeStack})
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join("secrets", "dev"+sopsFileExt), stackFile)
 
-	instanceFile, err := sp.FilePath(Coordinate{Stack: "dev", Component: "api", Scope: ScopeInstance})
+	instanceFile, err := sp.FilePath(providers.Coordinate{Stack: "dev", Component: "api", Scope: providers.ScopeInstance})
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join("secrets", "dev.api"+sopsFileExt), instanceFile)
 }
@@ -293,7 +295,7 @@ func TestNewSopsProvider_TopLevelProviders(t *testing.T) {
 			Spec: map[string]any{"file": filepath.Join(t.TempDir(), "dev.enc.yaml")},
 		},
 	}
-	p, err := newSopsProvider(cfg, "top", nil)
+	p, err := New(cfg, "top", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "sops/age", p.Kind())
 }
@@ -321,7 +323,7 @@ func TestSopsErrorWrappers_SentinelsAndHints(t *testing.T) {
 
 	t.Run("decryptErr with key file mentions the path", func(t *testing.T) {
 		p := &sopsProvider{ageKeyFile: "/my/keys.txt"}
-		err := p.decryptErr("/dev.enc.yaml", os.ErrInvalid)
+		err := p.decryptErr("/dev.enc.yaml", nil, os.ErrInvalid)
 		require.ErrorIs(t, err, ErrSopsDecrypt)
 		hints := cockroachErrors.GetAllHints(err)
 		require.NotEmpty(t, hints)
@@ -331,7 +333,7 @@ func TestSopsErrorWrappers_SentinelsAndHints(t *testing.T) {
 
 	t.Run("decryptErr without key file suggests env vars", func(t *testing.T) {
 		p := &sopsProvider{}
-		err := p.decryptErr("/dev.enc.yaml", os.ErrInvalid)
+		err := p.decryptErr("/dev.enc.yaml", nil, os.ErrInvalid)
 		require.ErrorIs(t, err, ErrSopsDecrypt)
 		hints := cockroachErrors.GetAllHints(err)
 		require.NotEmpty(t, hints)

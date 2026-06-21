@@ -146,22 +146,3 @@ func TestStoreProvider_LocalStatusCheck(t *testing.T) {
 	notLocal := &storeProvider{store: &localFakeStore{local: false}}
 	assert.False(t, notLocal.LocalStatusCheck(), "a LocalStore returning false is not local")
 }
-
-func TestNewSops_FromSection(t *testing.T) {
-	cfg := &schema.AtmosConfiguration{}
-	section := map[string]any{
-		"dev-sops": map[string]any{
-			"kind": "sops/age",
-			"spec": map[string]any{"file": "secrets/dev.enc.yaml"},
-		},
-	}
-	p, err := newSopsProvider(cfg, "dev-sops", section)
-	require.NoError(t, err)
-	assert.Equal(t, "sops/age", p.Kind())
-}
-
-func TestNewSops_NotFound(t *testing.T) {
-	cfg := &schema.AtmosConfiguration{}
-	_, err := newSopsProvider(cfg, "missing", nil)
-	require.ErrorIs(t, err, ErrProviderNotFound)
-}

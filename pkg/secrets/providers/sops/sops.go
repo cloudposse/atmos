@@ -1,4 +1,4 @@
-package providers
+package sops
 
 import (
 	"bytes"
@@ -27,13 +27,15 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets/providers"
 	"github.com/cloudposse/atmos/pkg/store"
+	"github.com/cloudposse/atmos/pkg/store/sopsauth"
 )
 
 // init self-registers the SOPS track (track 2) so backend selection is a registry
-// lookup rather than a central switch. Its constructor already matches Constructor.
+// lookup rather than a central switch. New already matches providers.Constructor.
 func init() {
-	Register(TrackSops, newSopsProvider)
+	providers.Register(providers.TrackSops, New)
 }
 
 const (
@@ -56,7 +58,7 @@ const (
 	ageKeyStoreComponent = "age-key"
 )
 
-// sopsProvider implements the Provider interface over a SOPS-encrypted file (track 2). It uses
+// sopsProvider implements the providers.Provider interface over a SOPS-encrypted file (track 2). It uses
 // the getsops/sops Go SDK in-process — it does NOT shell out to the `sops` binary. Reads use the
 // stable `decrypt` package; mutations load the encrypted tree, decrypt the data key via the age
 // keysource (SOPS_AGE_KEY_FILE/SOPS_AGE_KEY), edit a top-level key, and re-encrypt in place.
@@ -88,24 +90,43 @@ type sopsProvider struct {
 	recipientsFile string
 	// stores is the configured store registry (atmosConfig.Stores), used to resolve ageKeyStore.
 	stores store.StoreRegistry
+	// authResolver authenticates an Atmos identity and returns cloud credentials for cloud-KMS kinds
+	// (sops/aws-kms, sops/gcp-kms, sops/azure-kv). Nil when no identity context was injected, in which
+	// case cloud KMS falls back to the ambient credential chain (backward-compatible).
+	authResolver store.AuthContextResolver
+	// effectiveIdentity is the identity used for cloud-KMS auth, resolved with precedence:
+	// per-provider `identity` > --identity/ATMOS_IDENTITY > stack/component default.
+	effectiveIdentity string
 }
 
-// newSopsProvider builds a SOPS provider. The provider definition is resolved from the
+// New builds a SOPS provider. The provider definition is resolved from the
 // stack/component `secrets.providers` map first (so providers can be declared in a stack),
 // then from the top-level `secrets.providers` in atmos.yaml.
-func newSopsProvider(atmosConfig *schema.AtmosConfiguration, name string, sectionProviders map[string]any) (Provider, error) {
-	defer perf.Track(atmosConfig, "providers.newSopsProvider")()
+func New(atmosConfig *schema.AtmosConfiguration, name string, sectionProviders map[string]any) (providers.Provider, error) {
+	defer perf.Track(atmosConfig, "sops.New")()
 
-	kind, spec, ok := lookupSopsProvider(sectionProviders, name)
+	def, ok := lookupSopsProvider(sectionProviders, name)
 	if !ok {
 		cfg, found := atmosConfig.Secrets.Providers[name]
 		if !found {
-			return nil, fmt.Errorf(errFmtWrapQuoted, ErrProviderNotFound, name)
+			return nil, fmt.Errorf(errFmtWrapQuoted, providers.ErrProviderNotFound, name)
 		}
-		kind = cfg.Kind
-		spec = cfg.Spec
+		def = sopsProviderDef{kind: cfg.Kind, identity: cfg.Identity, spec: cfg.Spec}
 	}
 
+	// Resolve the auth context for cloud-KMS kinds. Identity precedence: per-provider `identity`,
+	// then the injected default (--identity/ATMOS_IDENTITY or the stack/component effective identity).
+	var authResolver store.AuthContextResolver
+	effectiveIdentity := def.identity
+	if atmosConfig.SecretsAuth != nil {
+		authResolver = atmosConfig.SecretsAuth.Resolver
+		if effectiveIdentity == "" {
+			effectiveIdentity = atmosConfig.SecretsAuth.DefaultIdentity
+		}
+	}
+
+	kind := def.kind
+	spec := def.spec
 	// `spec.file` is the advanced template override. When it is omitted, the file path is derived
 	// in code from each secret's scope under `spec.path` (default `secrets`), which is
 	// collision-safe by construction (stack and instance secrets land in distinct files).
@@ -123,36 +144,47 @@ func newSopsProvider(atmosConfig *schema.AtmosConfiguration, name string, sectio
 	ak := parseAgeKeySpec(spec)
 
 	return &sopsProvider{
-		name:           name,
-		kind:           kind,
-		file:           file,
-		path:           path,
-		ageRecipients:  ageRecipients,
-		ageKeyFile:     ak.file,
-		ageKey:         ak.value,
-		ageKeyStore:    ak.storeName,
-		ageKeyPath:     ak.path,
-		recipientsFile: recipientsFile,
-		stores:         atmosConfig.Stores,
+		name:              name,
+		kind:              kind,
+		file:              file,
+		path:              path,
+		ageRecipients:     ageRecipients,
+		ageKeyFile:        ak.file,
+		ageKey:            ak.value,
+		ageKeyStore:       ak.storeName,
+		ageKeyPath:        ak.path,
+		recipientsFile:    recipientsFile,
+		stores:            atmosConfig.Stores,
+		authResolver:      authResolver,
+		effectiveIdentity: effectiveIdentity,
 	}, nil
 }
 
+// sopsProviderDef is a resolved SOPS provider definition (kind, optional auth identity, and spec).
+type sopsProviderDef struct {
+	kind     string
+	identity string
+	spec     map[string]any
+}
+
 // lookupSopsProvider reads a provider definition from a stack/component `secrets.providers`
-// map: `{ providers: { <name>: { kind: ..., spec: { ... } } } }`.
-func lookupSopsProvider(sectionProviders map[string]any, name string) (kind string, spec map[string]any, ok bool) {
+// map: `{ providers: { <name>: { kind: ..., identity: ..., spec: { ... } } } }`.
+func lookupSopsProvider(sectionProviders map[string]any, name string) (sopsProviderDef, bool) {
 	if sectionProviders == nil {
-		return "", nil, false
+		return sopsProviderDef{}, false
 	}
 	raw, found := sectionProviders[name].(map[string]any)
 	if !found {
-		return "", nil, false
+		return sopsProviderDef{}, false
 	}
-	kind, _ = raw["kind"].(string)
-	spec, _ = raw["spec"].(map[string]any)
-	if spec == nil {
-		spec = map[string]any{}
+	def := sopsProviderDef{}
+	def.kind, _ = raw["kind"].(string)
+	def.identity, _ = raw["identity"].(string)
+	def.spec, _ = raw["spec"].(map[string]any)
+	if def.spec == nil {
+		def.spec = map[string]any{}
 	}
-	return kind, spec, true
+	return def, true
 }
 
 func (p *sopsProvider) Kind() string {
@@ -165,15 +197,15 @@ func (p *sopsProvider) Kind() string {
 // path encodes the scope (a stack file shared by every instance, or a per-instance file). Global
 // is NOT supported yet — file placement is scope-keyed and a stack/component-less file location
 // has no derivation rule; revisit if demand appears.
-func (p *sopsProvider) SupportsScope(scope Scope) bool {
+func (p *sopsProvider) SupportsScope(scope providers.Scope) bool {
 	defer perf.Track(nil, "providers.sopsProvider.SupportsScope")()
 
-	return scope == "" || scope == ScopeStack || scope == ScopeInstance
+	return scope == "" || scope == providers.ScopeStack || scope == providers.ScopeInstance
 }
 
-// FilePath reports the backing file a coordinate resolves to, satisfying FilePathProvider so
+// FilePath reports the backing file a coordinate resolves to, satisfying providers.FilePathProvider so
 // `describe affected` can treat it as an implicit dependency.
-func (p *sopsProvider) FilePath(coord Coordinate) (string, error) {
+func (p *sopsProvider) FilePath(coord providers.Coordinate) (string, error) {
 	defer perf.Track(nil, "providers.sopsProvider.FilePath")()
 
 	return p.resolveFile(coord)
@@ -183,7 +215,7 @@ func (p *sopsProvider) FilePath(coord Coordinate) (string, error) {
 // derived in code from the coordinate's scope (collision-safe); otherwise the configured
 // `spec.file` Go template is rendered, exposing `{{ .atmos_stack }}` / `{{ .atmos_component }}`
 // (consistent with the rest of Atmos templating) plus sprig functions.
-func (p *sopsProvider) resolveFile(coord Coordinate) (string, error) {
+func (p *sopsProvider) resolveFile(coord providers.Coordinate) (string, error) {
 	if p.file == "" {
 		return p.derivePath(coord), nil
 	}
@@ -213,19 +245,19 @@ func (p *sopsProvider) resolveFile(coord Coordinate) (string, error) {
 // The instance id may contain `/` (e.g. `vpc/primary`), which renders as nested subdirs. The two
 // scopes can never collide because a stack file has exactly the stack segment while an instance
 // file always carries an additional component segment.
-func (p *sopsProvider) derivePath(coord Coordinate) string {
+func (p *sopsProvider) derivePath(coord providers.Coordinate) string {
 	base := p.path
 	if base == "" {
 		base = defaultSopsPath
 	}
 	name := coord.Stack
-	if coord.Scope != ScopeStack && coord.Component != "" {
+	if coord.Scope != providers.ScopeStack && coord.Component != "" {
 		name = coord.Stack + "." + coord.Component
 	}
 	return filepath.Join(base, name+sopsFileExt)
 }
 
-func (p *sopsProvider) Set(coord Coordinate, value any) error {
+func (p *sopsProvider) Set(coord providers.Coordinate, value any) error {
 	defer perf.Track(nil, "providers.sopsProvider.Set")()
 
 	file, err := p.resolveFile(coord)
@@ -237,7 +269,7 @@ func (p *sopsProvider) Set(coord Coordinate, value any) error {
 	})
 }
 
-func (p *sopsProvider) Get(coord Coordinate) (any, error) {
+func (p *sopsProvider) Get(coord providers.Coordinate) (any, error) {
 	defer perf.Track(nil, "providers.sopsProvider.Get")()
 
 	file, err := p.resolveFile(coord)
@@ -255,7 +287,7 @@ func (p *sopsProvider) Get(coord Coordinate) (any, error) {
 	return value, nil
 }
 
-func (p *sopsProvider) Delete(coord Coordinate) error {
+func (p *sopsProvider) Delete(coord providers.Coordinate) error {
 	defer perf.Track(nil, "providers.sopsProvider.Delete")()
 
 	file, err := p.resolveFile(coord)
@@ -271,7 +303,7 @@ func (p *sopsProvider) Delete(coord Coordinate) error {
 	})
 }
 
-func (p *sopsProvider) Status(coord Coordinate) (bool, error) {
+func (p *sopsProvider) Status(coord providers.Coordinate) (bool, error) {
 	defer perf.Track(nil, "providers.sopsProvider.Status")()
 
 	// "Initialized" means the secret's key is present in the encrypted file. SOPS YAML keeps
@@ -324,8 +356,8 @@ func (p *sopsProvider) keyExists(file, key string) (bool, error) {
 
 // Reset overwrites the encrypted file with a clean, empty document (creating it if missing),
 // re-using the file's recipients (from `spec.age_recipients` or the matching `.sops.yaml`
-// creation rule). It implements the FileResettable capability.
-func (p *sopsProvider) Reset(coord Coordinate) error {
+// creation rule). It implements the providers.FileResettable capability.
+func (p *sopsProvider) Reset(coord providers.Coordinate) error {
 	defer perf.Track(nil, "providers.sopsProvider.Reset")()
 
 	file, err := p.resolveFile(coord)
@@ -359,7 +391,7 @@ func (p *sopsProvider) decryptDoc(file string) (map[string]any, error) {
 		return nil, err
 	}
 	if _, err := decryptTree(&tree, sopsaes.NewCipher(), client); err != nil {
-		return nil, p.decryptErr(file, err)
+		return nil, p.decryptErr(file, &tree, err)
 	}
 
 	clear, err := store.EmitPlainFile(tree.Branches)
@@ -404,7 +436,7 @@ func (p *sopsProvider) editFile(file string, createIfMissing bool, mutate func(s
 	cipher := sopsaes.NewCipher()
 	dataKey, err := decryptTree(&tree, cipher, client)
 	if err != nil {
-		return p.decryptErr(file, err)
+		return p.decryptErr(file, &tree, err)
 	}
 
 	if len(tree.Branches) == 0 {
@@ -441,7 +473,9 @@ func (p *sopsProvider) writeNewFile(file string, branch sops.TreeBranch) error {
 		FilePath: file,
 	}
 
-	dataKey, errs := tree.GenerateDataKey()
+	// Generate the data key via the provider's key service so cloud-KMS recipients (AWS/GCP/Azure)
+	// are encrypted using the Atmos identity's credentials rather than the ambient credential chain.
+	dataKey, errs := tree.GenerateDataKeyWithKeyServices([]keyservice.KeyServiceClient{p.encryptKeyClient()})
 	if len(errs) > 0 {
 		return fmt.Errorf(errFmtWrapFile, ErrSopsEncrypt, file, errors.Join(errs...))
 	}
@@ -524,17 +558,57 @@ func ageKeyErr(cause error) error {
 		Err()
 }
 
-// decryptErr wraps a SOPS data-key/MAC decryption failure as ErrSopsDecrypt with actionable hints
-// about the age private key. The errors.Is(result, ErrSopsDecrypt) check still holds.
-func (p *sopsProvider) decryptErr(file string, cause error) error {
+// decryptErr wraps a SOPS data-key/MAC decryption failure as ErrSopsDecrypt with actionable hints.
+// Hints are derived from the file's actual master-key types (not a declared kind): a cloud-KMS file
+// gets identity/permission hints, an age file gets age-key hints. The errors.Is(result,
+// ErrSopsDecrypt) check still holds.
+func (p *sopsProvider) decryptErr(file string, tree *sops.Tree, cause error) error {
 	b := errUtils.Build(ErrSopsDecrypt).WithCause(fmt.Errorf("%q: %w", file, cause))
-	if p.ageKeyFile != "" {
-		b = b.WithHintf("Ensure `spec.age_key_file` (%s) holds the age private key matching this file's recipients.", p.ageKeyFile)
-	} else {
-		b = b.WithHint("Provide the age private key: set `spec.age_key_file` in the provider config, or export SOPS_AGE_KEY_FILE / SOPS_AGE_KEY.")
+
+	cloudType, hasAge := sopsKeyTypes(tree)
+
+	// Cloud-KMS files fail on credentials/permissions, not age keys — give identity-oriented hints.
+	if cloudType != "" {
+		if p.effectiveIdentity != "" {
+			b = b.WithHintf("Ensure the identity %q is allowed to decrypt with this file's %s key (e.g. kms:Decrypt / equivalent IAM permission).", p.effectiveIdentity, cloudKeyTypeName(cloudType))
+			b = b.WithHintf("Verify the identity is correct via `secrets.providers.%s.identity`, `--identity`, or `ATMOS_IDENTITY`.", p.name)
+		} else {
+			b = b.WithHintf("Set an identity so Atmos can authenticate the %s decrypt: `secrets.providers.%s.identity`, `--identity`, or `ATMOS_IDENTITY` (or run inside `atmos auth exec`).", cloudKeyTypeName(cloudType), p.name)
+		}
 	}
-	b = b.WithHint("Generate an age key with `age-keygen -o keys.txt`; its `# public key:` line is the `spec.age_recipients` used to encrypt.")
+
+	// Age files (or files whose key types could not be determined) get age-key hints.
+	if hasAge || cloudType == "" {
+		if p.ageKeyFile != "" {
+			b = b.WithHintf("Ensure `spec.age_key_file` (%s) holds the age private key matching this file's recipients.", p.ageKeyFile)
+		} else {
+			b = b.WithHint("Provide the age private key: set `spec.age_key_file` in the provider config, or export SOPS_AGE_KEY_FILE / SOPS_AGE_KEY.")
+		}
+		b = b.WithHint("Generate an age key with `age-keygen -o keys.txt`; its `# public key:` line is the `spec.age_recipients` used to encrypt.")
+	}
 	return b.Err()
+}
+
+// sopsKeyTypes inspects an encrypted tree's master keys and reports the first cloud-KMS key-type
+// identifier present (kms/gcp_kms/azure_kv, empty if none) and whether an age key is present. It lets
+// decryptErr tailor hints to the file's real recipients instead of a declared provider kind.
+func sopsKeyTypes(tree *sops.Tree) (cloudType string, hasAge bool) {
+	if tree == nil {
+		return "", false
+	}
+	for _, group := range tree.Metadata.KeyGroups {
+		for _, mk := range group {
+			switch mk.TypeToIdentifier() {
+			case keyTypeAWSKMS, keyTypeGCPKMS, keyTypeAzureKV:
+				if cloudType == "" {
+					cloudType = mk.TypeToIdentifier()
+				}
+			case keyTypeAge:
+				hasAge = true
+			}
+		}
+	}
+	return cloudType, hasAge
 }
 
 // keyClient returns the key service used to decrypt the SOPS data key. The age private key is
@@ -544,6 +618,45 @@ func (p *sopsProvider) decryptErr(file string, cause error) error {
 // SOPS_AGE_KEY_FILE/SOPS_AGE_KEY (unchanged, backward-compatible behavior). The key text is
 // injected via an identity-aware key service (no process-environment mutation).
 func (p *sopsProvider) keyClient() (keyservice.KeyServiceClient, error) {
+	// Decryption needs the age PRIVATE key (when age recipients are used), so the base client resolves
+	// it from configured material / SOPS_AGE_KEY*. Cloud-KMS key types are wrapped to authenticate via
+	// the identity. Everything else delegates to the base client.
+	base, err := p.ageKeyClient()
+	if err != nil {
+		return nil, err
+	}
+	return p.wrapCloudKeyService(base), nil
+}
+
+// encryptKeyClient returns the key service used to encrypt a fresh data key (writeNewFile). Unlike
+// decryption, encryption never needs the age PRIVATE key — age encrypts to its public recipients —
+// so the base is the plain local client (no private-key resolution, which would fail when only the
+// recipients are configured). Cloud-KMS key types are still wrapped to encrypt via the identity.
+func (p *sopsProvider) encryptKeyClient() keyservice.KeyServiceClient {
+	return p.wrapCloudKeyService(keyservice.NewLocalClient())
+}
+
+// wrapCloudKeyService wraps a base key service so cloud-KMS key types (AWS/GCP/Azure, inferred from
+// the file's recipients at runtime — not from a declared kind) authenticate as the resolved identity
+// and inject its credentials. Without a resolvable identity the base client is returned unchanged,
+// preserving the ambient-credential fallback (issue #2637).
+func (p *sopsProvider) wrapCloudKeyService(base keyservice.KeyServiceClient) keyservice.KeyServiceClient {
+	if p.authResolver == nil || p.effectiveIdentity == "" {
+		return base
+	}
+	return &sopsKeyServiceClient{
+		builder:  sopsauth.NewBuilder(p.authResolver),
+		identity: p.effectiveIdentity,
+		fallback: base,
+	}
+}
+
+// ageKeyClient returns the key service for age and other local key types. The age private key is
+// sourced, in precedence order, from inline material (`spec.age_key`), a configured store
+// (`age_key.store`), a key file (`spec.age_key_file`), or — when none is set — the default local
+// client, which resolves the key from SOPS_AGE_KEY_FILE/SOPS_AGE_KEY. Keys are injected via an
+// identity-aware key service (no process-environment mutation).
+func (p *sopsProvider) ageKeyClient() (keyservice.KeyServiceClient, error) {
 	switch {
 	case p.ageKey != "":
 		return ageClientFromKeyMaterial(p.ageKey, ageKeyErr)
