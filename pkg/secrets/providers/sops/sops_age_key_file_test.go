@@ -1,9 +1,11 @@
-package providers
+package sops
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/secrets/providers"
 
 	"filippo.io/age"
 	"github.com/stretchr/testify/assert"
@@ -33,7 +35,7 @@ func ageKeyFileFixture(t *testing.T) (*age.X25519Identity, string, string) {
 }
 
 // ageProviderWith builds a SOPS provider with the given recipients/key-file spec.
-func ageProviderWith(t *testing.T, file, recipients, ageKeyFile string) Provider {
+func ageProviderWith(t *testing.T, file, recipients, ageKeyFile string) providers.Provider {
 	t.Helper()
 
 	spec := map[string]any{"file": file}
@@ -44,7 +46,7 @@ func ageProviderWith(t *testing.T, file, recipients, ageKeyFile string) Provider
 		spec["age_key_file"] = ageKeyFile
 	}
 	section := map[string]any{"dev-sops": map[string]any{"kind": "sops/age", "spec": spec}}
-	p, err := newSopsProvider(&schema.AtmosConfiguration{}, "dev-sops", section)
+	p, err := New(&schema.AtmosConfiguration{}, "dev-sops", section)
 	require.NoError(t, err)
 	return p
 }
@@ -54,8 +56,8 @@ func ageProviderWith(t *testing.T, file, recipients, ageKeyFile string) Provider
 // file — i.e. the key is sourced from config, not the environment.
 func TestSopsProvider_AgeKeyFileDecrypts(t *testing.T) {
 	identity, keyFile, file := ageKeyFileFixture(t)
-	datadog := Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
-	redis := Coordinate{Stack: "dev", Component: "api", Key: "REDIS_URL"}
+	datadog := providers.Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
+	redis := providers.Coordinate{Stack: "dev", Component: "api", Key: "REDIS_URL"}
 
 	// Encrypt a fresh file using only recipients (no private key needed to encrypt).
 	writer := ageProviderWith(t, file, identity.Recipient().String(), "")
@@ -85,7 +87,7 @@ func TestSopsProvider_AgeKeyFileDecrypts(t *testing.T) {
 // TestSopsProvider_AgeKeyFileWrongKeyFails proves a non-matching key file surfaces ErrSopsDecrypt.
 func TestSopsProvider_AgeKeyFileWrongKeyFails(t *testing.T) {
 	identity, _, file := ageKeyFileFixture(t)
-	coord := Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
+	coord := providers.Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
 
 	writer := ageProviderWith(t, file, identity.Recipient().String(), "")
 	require.NoError(t, writer.Set(coord, "dd-abc123secret"))
@@ -104,7 +106,7 @@ func TestSopsProvider_AgeKeyFileWrongKeyFails(t *testing.T) {
 // TestSopsProvider_AgeKeyFileMissingFile proves an unreadable key file surfaces ErrSopsAgeKeyFile.
 func TestSopsProvider_AgeKeyFileMissingFile(t *testing.T) {
 	identity, _, file := ageKeyFileFixture(t)
-	coord := Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
+	coord := providers.Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
 
 	writer := ageProviderWith(t, file, identity.Recipient().String(), "")
 	require.NoError(t, writer.Set(coord, "dd-abc123secret"))
@@ -120,14 +122,14 @@ func TestSopsProvider_FileNotFoundFriendlyError(t *testing.T) {
 	_, keyFile, file := ageKeyFileFixture(t) // file is intentionally never created.
 	reader := ageProviderWith(t, file, "", keyFile)
 
-	_, err := reader.Get(Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"})
+	_, err := reader.Get(providers.Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"})
 	require.ErrorIs(t, err, ErrSecretFileNotFound)
 }
 
 // TestSopsProvider_AgeKeyFileEnvExpansion proves `$ENV` references in age_key_file are expanded.
 func TestSopsProvider_AgeKeyFileEnvExpansion(t *testing.T) {
 	identity, keyFile, file := ageKeyFileFixture(t)
-	coord := Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
+	coord := providers.Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
 
 	writer := ageProviderWith(t, file, identity.Recipient().String(), "")
 	require.NoError(t, writer.Set(coord, "dd-abc123secret"))

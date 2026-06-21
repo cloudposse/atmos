@@ -102,7 +102,7 @@ func TestInjectSecretStoreAuthResolver_ResolverOnly(t *testing.T) {
 		},
 	}
 
-	injectSecretStoreAuthResolver(atmosConfig, authManager)
+	injectSecretStoreAuthResolver(atmosConfig, authManager, secretScope{Identity: "explicit-identity"})
 }
 
 func TestLoadServiceAndConfig_ComponentNotFound(t *testing.T) {
