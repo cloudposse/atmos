@@ -50,15 +50,21 @@ func componentArgCompletion(cmd *cobra.Command, args []string, _ string) ([]stri
 	if len(args) > 0 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
+	// Honor the --stack flag and restrict suggestions to container components so
+	// completion never offers non-container or wrong-stack components.
+	stack := ""
+	if stackFlag := cmd.Flag("stack"); stackFlag != nil {
+		stack = stackFlag.Value.String()
+	}
 	atmosConfig, err := cfg.InitCliConfig(globalInfoForCompletion(cmd), true)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, stack, nil, []string{cfg.ContainerComponentType}, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	components, err := l.FilterAndListComponents("", stacksMap)
+	components, err := l.FilterAndListComponents(stack, stacksMap)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

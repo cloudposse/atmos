@@ -73,5 +73,5 @@ Add the service to `compositions.storefront.services` first to allow it.
 
 The members here are [container components](../container-component), but a
 composition can group any component kinds. Operate each member with its own
-component commands (e.g. `atmos container up frontend -s local`); `atmos container
+component commands (e.g. `atmos container up frontend -s local`), and `atmos container
 list` shows their running state.

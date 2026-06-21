@@ -871,7 +871,10 @@ func resolveCustomComponentInheritance(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.resolveCustomComponentInheritance")()
 
-	bases := customComponentInheritsBases(componentMap)
+	bases, err := customComponentInheritsBases(componentMap)
+	if err != nil {
+		return nil, err
+	}
 	if len(bases) == 0 {
 		return componentMap, nil
 	}
@@ -910,15 +913,20 @@ func resolveCustomComponentInheritance(
 }
 
 // customComponentInheritsBases returns the ordered base component names from a
-// component's `metadata.inherits` list.
-func customComponentInheritsBases(componentMap map[string]any) []string {
+// component's `metadata.inherits` list. A `metadata.inherits` that is present
+// but not a list is a config error and is reported rather than silently ignored.
+func customComponentInheritsBases(componentMap map[string]any) ([]string, error) {
 	metadata, ok := componentMap[cfg.MetadataSectionName].(map[string]any)
 	if !ok {
-		return nil
+		return nil, nil
 	}
-	inherits, ok := metadata[cfg.InheritsSectionName].([]any)
+	rawInherits, exists := metadata[cfg.InheritsSectionName]
+	if !exists {
+		return nil, nil
+	}
+	inherits, ok := rawInherits.([]any)
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("%w: custom component metadata.%s must be a list", errUtils.ErrInvalidComponentMetadataInherits, cfg.InheritsSectionName)
 	}
 	bases := make([]string, 0, len(inherits))
 	for _, item := range inherits {
@@ -926,7 +934,7 @@ func customComponentInheritsBases(componentMap map[string]any) []string {
 			bases = append(bases, name)
 		}
 	}
-	return bases
+	return bases, nil
 }
 
 // sanitizeBaseForInheritance deep-copies a base component and strips the

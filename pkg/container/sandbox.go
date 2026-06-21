@@ -171,7 +171,7 @@ func createSandboxContainer(ctx context.Context, runtime Runtime, config *Sandbo
 	// Only the missing-image case is recoverable by pulling. Any other create
 	// failure (bad mount, invalid arg, daemon error) must surface as-is — pulling
 	// then would mask the real cause behind a misleading registry error.
-	if config.PullPolicy != PullMissing || !isImageMissingError(err) {
+	if config.PullPolicy != PullMissing || !IsImageMissingError(err) {
 		return "", fmt.Errorf("%w: create workflow sandbox: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 	createErr := err

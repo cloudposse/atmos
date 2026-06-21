@@ -87,14 +87,11 @@ func (p *ContainerComponentProvider) ValidateComponent(config map[string]any) er
 		}
 	}
 
-	vars, _ := config["vars"].(map[string]any)
-	if vars == nil {
-		return fmt.Errorf("%w: container component requires vars.image or vars.build", errUtils.ErrComponentValidationFailed)
-	}
-	_, hasImage := vars["image"]
-	_, hasBuild := vars["build"]
+	// image and build are first-class top-level sections (not under vars).
+	_, hasImage := config["image"]
+	_, hasBuild := config["build"]
 	if !hasImage && !hasBuild {
-		return fmt.Errorf("%w: container component requires vars.image or vars.build", errUtils.ErrComponentValidationFailed)
+		return fmt.Errorf("%w: container component requires image or build", errUtils.ErrComponentValidationFailed)
 	}
 	return nil
 }

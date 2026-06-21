@@ -35,7 +35,7 @@ atmos container push <component> -s <stack>
 atmos container pull <component> -s <stack>
 
 # Lifecycle
-atmos container run <component> -s <stack>           # one-shot foreground process (vars.run)
+atmos container run <component> -s <stack>           # one-shot foreground process (run)
 atmos container up <component> -s <stack>            # create/start the long-running container
 atmos container down <component> -s <stack>          # stop + rm
 atmos container restart|stop|rm <component> -s <stack>
@@ -49,8 +49,8 @@ atmos container exec <component> -s <stack> -- sh    # command after `--`
 </Terminal>
 
 :::tip Build before start
-`up` and `run` build the image automatically when the component declares `vars.build` and the image
-is not present locally. Components that reference an existing `vars.image` are pulled on demand.
+`up` and `run` build the image automatically when the component declares `build:` and the image
+is not present locally. Components that reference an existing `image:` are pulled on demand.
 :::
 
 ## Configuration

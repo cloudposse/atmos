@@ -111,7 +111,7 @@ func (r *resolved) runtime(ctx context.Context) (ctr.Runtime, error) {
 	return runtime, nil
 }
 
-// ExecuteBuild builds the component image from vars.build.
+// ExecuteBuild builds the component image from the build configuration.
 func ExecuteBuild(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecuteBuild")()
 
@@ -121,7 +121,7 @@ func ExecuteBuild(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	}
 	buildConfig := r.spec.ToBuildConfig()
 	if buildConfig == nil {
-		return fmt.Errorf("%w: component %q has no vars.build to build", errUtils.ErrComponentConfigInvalid, r.component)
+		return fmt.Errorf("%w: component %q has no build configuration", errUtils.ErrComponentConfigInvalid, r.component)
 	}
 	if r.dryRun {
 		ui.Infof("[dry-run] build %s (context: %s)", strings.Join(buildConfig.Tags, ", "), buildConfig.Context)
@@ -189,7 +189,7 @@ func ExecutePull(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
-// ExecuteRun runs the component as a one-shot foreground container (vars.run).
+// ExecuteRun runs the component as a one-shot foreground container (run).
 func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecuteRun")()
 
@@ -232,7 +232,7 @@ func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
-// ExecuteUp creates or starts the long-lived named container (vars.run).
+// ExecuteUp creates or starts the long-lived named container (run).
 func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecuteUp")()
 
@@ -442,16 +442,20 @@ func discover(ctx context.Context, info *schema.ConfigAndStacksInfo) (*discovere
 }
 
 // ensureImage builds the component image before start when the component has a
-// `vars.build` and the image is not already present locally. This lets `up` and
+// `build` and the image is not already present locally. This lets `up` and
 // `run` work without a separate `build` step (build-before-start). Components
 // without a build (image-only) are pulled on demand by the runtime instead.
 func (r *resolved) ensureImage(ctx context.Context, runtime ctr.Runtime, image string) error {
 	if r.spec.Build == nil {
 		return nil
 	}
-	// Already built/available locally — nothing to do.
+	// Already built/available locally — nothing to do. Only a missing image is
+	// recoverable by building; transport/auth/daemon failures must surface as-is
+	// so the real cause is not masked behind a misleading build.
 	if _, err := runtime.ImageInspect(ctx, image); err == nil {
 		return nil
+	} else if !ctr.IsImageMissingError(err) {
+		return fmt.Errorf("%w: inspect image %q for %q: %w", errUtils.ErrComponentExecutionFailed, image, r.component, err)
 	}
 	buildConfig := r.spec.ToBuildConfig()
 	if buildConfig == nil {
@@ -467,7 +471,7 @@ func (r *resolved) ensureImage(ctx context.Context, runtime ctr.Runtime, image s
 // requireImage returns the configured image or an error.
 func (r *resolved) requireImage() (string, error) {
 	if strings.TrimSpace(r.spec.Image) == "" {
-		return "", fmt.Errorf("%w: component %q has no vars.image", errUtils.ErrComponentConfigInvalid, r.component)
+		return "", fmt.Errorf("%w: component %q has no image configured", errUtils.ErrComponentConfigInvalid, r.component)
 	}
 	return r.spec.Image, nil
 }

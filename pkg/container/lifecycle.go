@@ -100,6 +100,9 @@ func UpWithRuntime(ctx context.Context, runtime Runtime, config *NamedConfig) (*
 	return upWithRuntime(ctx, runtime, config, name)
 }
 
+// upWithRuntime reconciles the desired named container against the given runtime:
+// it reuses a running instance, starts a stopped one, or creates and starts a new
+// one. A created-but-unstartable container is cleaned up best-effort.
 func upWithRuntime(ctx context.Context, runtime Runtime, config *NamedConfig, name string) (*Named, error) {
 	existing, found, err := FindInstance(ctx, runtime, config.Stack, config.ComponentType, config.Component)
 	if err != nil {
@@ -121,12 +124,23 @@ func upWithRuntime(ctx context.Context, runtime Runtime, config *NamedConfig, na
 		return nil, err
 	}
 	if err := runtime.Start(ctx, containerID); err != nil {
-		_ = runtime.Remove(context.Background(), containerID, true)
+		// Best-effort cleanup of the created-but-unstarted container. If removal
+		// also fails, surface both so operators can see the orphan.
+		if rmErr := runtime.Remove(context.Background(), containerID, true); rmErr != nil {
+			return nil, fmt.Errorf(
+				"%w: start container %q and cleanup failed: %w",
+				errUtils.ErrContainerRuntimeOperation,
+				containerID,
+				errors.Join(err, rmErr),
+			)
+		}
 		return nil, fmt.Errorf("%w: start container %q: %w", errUtils.ErrContainerRuntimeOperation, containerID, err)
 	}
 	return &Named{config: *config, runtime: runtime, containerID: containerID, name: name}, nil
 }
 
+// createNamedContainer creates the named container, honoring the pull policy and
+// recovering from a missing image by pulling once and retrying the create.
 func createNamedContainer(ctx context.Context, runtime Runtime, config *NamedConfig, name string) (string, error) {
 	createConfig := buildNamedCreateConfig(config, name)
 	if config.PullPolicy == PullAlways {
@@ -142,7 +156,7 @@ func createNamedContainer(ctx context.Context, runtime Runtime, config *NamedCon
 	// Only a missing image is recoverable by pulling. Any other create failure
 	// (bad mount, invalid arg, daemon error) must surface as-is so the real
 	// cause is not masked behind a misleading registry error.
-	if config.PullPolicy == PullNever || !isImageMissingError(err) {
+	if config.PullPolicy == PullNever || !IsImageMissingError(err) {
 		return "", fmt.Errorf("%w: create container: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 	createErr := err
@@ -160,6 +174,8 @@ func createNamedContainer(ctx context.Context, runtime Runtime, config *NamedCon
 	return containerID, nil
 }
 
+// buildNamedCreateConfig assembles the runtime CreateConfig for a named container,
+// merging canonical instance labels with any caller-supplied labels.
 func buildNamedCreateConfig(config *NamedConfig, name string) *CreateConfig {
 	labels := InstanceLabels(config.Stack, config.ComponentType, config.Component)
 	for k, v := range config.Labels {

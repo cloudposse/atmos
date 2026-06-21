@@ -88,8 +88,10 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 		Identity:                cfg.NormalizeIdentityValue(globalFlags.Identity.Value()),
 		ProfilesFromArg:         globalFlags.Profile,
 	}
-	if stackFlag := cmd.Flag("stack"); stackFlag != nil && stackFlag.Value.String() != "" {
-		info.Stack = stackFlag.Value.String()
+	// Resolve the stack via viper so the full precedence chain is honored
+	// (flag > ATMOS_STACK env > config), not just the directly-set Cobra flag.
+	if stack := viper.GetViper().GetString("stack"); stack != "" {
+		info.Stack = stack
 	}
 	return info
 }

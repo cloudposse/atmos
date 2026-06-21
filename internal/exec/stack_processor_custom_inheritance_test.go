@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -38,8 +39,44 @@ func TestResolveCustomComponentInheritance_DeepMergesBase(t *testing.T) {
 	ports, ok := run["ports"].([]any)
 	require.True(t, ok)
 	require.Len(t, ports, 1)
+	first, ok := ports[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 8080, first["host"])
+	assert.Equal(t, 80, first["container"])
 
 	// Own image wins over the base image.
+	assert.Equal(t, "nginx:alpine", merged["image"])
+}
+
+// TestResolveCustomComponentInheritance_MalformedInheritsErrors verifies a
+// `metadata.inherits` that is present but not a list is reported as a config
+// error rather than silently ignored.
+func TestResolveCustomComponentInheritance_MalformedInheritsErrors(t *testing.T) {
+	all := map[string]any{
+		"api": map[string]any{
+			// inherits is a bare string, not a list.
+			"metadata": map[string]any{"inherits": "web/defaults"},
+			"image":    "nginx:alpine",
+		},
+	}
+
+	_, err := resolveCustomComponentInheritance(inheritanceTestConfig(), all["api"].(map[string]any), all, map[string]bool{})
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrInvalidComponentMetadataInherits)
+}
+
+// TestResolveCustomComponentInheritance_NoInherits is the negative-path control:
+// a component without `metadata.inherits` must resolve unchanged and never trip
+// the malformed-inherits error.
+func TestResolveCustomComponentInheritance_NoInherits(t *testing.T) {
+	component := map[string]any{
+		"image": "nginx:alpine",
+		"run":   map[string]any{"ports": []any{map[string]any{"host": 80, "container": 80}}},
+	}
+	all := map[string]any{"api": component}
+
+	merged, err := resolveCustomComponentInheritance(inheritanceTestConfig(), all["api"].(map[string]any), all, map[string]bool{})
+	require.NoError(t, err)
 	assert.Equal(t, "nginx:alpine", merged["image"])
 }
 

@@ -61,6 +61,8 @@ func TestExecuteUp_CreatesAndStarts(t *testing.T) {
 				assert.Equal(t, "atmos-dev-container-api", c.Name)
 				assert.Equal(t, []string{"./api"}, c.Command)
 				require.Len(t, c.Ports, 1)
+				assert.Equal(t, 8080, c.Ports[0].HostPort)
+				assert.Equal(t, 8080, c.Ports[0].ContainerPort)
 				assert.Equal(t, "8080", c.Env["PORT"])
 				assert.Equal(t, "dev/container/api", c.Labels[ctr.LabelInstance])
 				return "cid", nil

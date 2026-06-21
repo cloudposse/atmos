@@ -40,6 +40,11 @@ func init() {
 		panic(err)
 	}
 
+	// Only `exec` accepts arbitrary flags after "--" to pass through to the
+	// container. Whitelisting unknown flags on the other verbs would mask typos,
+	// so scope it to execCmd alone (not all verbs).
+	execCmd.FParseErrWhitelist = struct{ UnknownFlags bool }{UnknownFlags: true}
+
 	containerCmd.AddCommand(
 		listCmd,
 		buildCmd, pushCmd, pullCmd, runCmd, upCmd, psCmd,
@@ -94,8 +99,10 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 		ProfilesFromArg:         globalFlags.Profile,
 	}
 
-	if stackFlag := cmd.Flag("stack"); stackFlag != nil && stackFlag.Value.String() != "" {
-		info.Stack = stackFlag.Value.String()
+	// Resolve the stack via viper so the full precedence chain is honored
+	// (flag > ATMOS_STACK env > config), not just the directly-set Cobra flag.
+	if stack := v.GetString("stack"); stack != "" {
+		info.Stack = stack
 	}
 	if dryRunFlag := cmd.Flag("dry-run"); dryRunFlag != nil && dryRunFlag.Value.String() == "true" {
 		info.DryRun = true

@@ -57,7 +57,9 @@ kinds — define abstract base components with shared `run`/`build` defaults and
 atmos container build api -s dev      # build the image from `build`
 atmos container up api -s dev         # create/start the long-running container (build-on-missing)
 atmos container list                  # all container components + running state
-atmos container ps|logs|exec api -s dev
+atmos container ps api -s dev         # show running state
+atmos container logs api -s dev       # stream logs
+atmos container exec api -s dev -- sh # run a command inside the container
 atmos container down api -s dev       # stop + rm
 ```
 

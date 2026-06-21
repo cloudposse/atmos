@@ -31,13 +31,20 @@ func ExecuteValidate(_ context.Context, info *schema.ConfigAndStacksInfo, name s
 		return err
 	}
 
-	members := collectMembers(stacksMap, name)
-	report, err := Validate(name, members, atmosConfig.Compositions)
+	report, err := reportForStacks(stacksMap, name, atmosConfig.Compositions)
 	if err != nil {
 		return err
 	}
 	renderReport(&report)
 	return nil
+}
+
+// reportForStacks collects the components that claim membership in the named
+// composition across all stacks and builds the soft fulfillment Report. Split
+// out from ExecuteValidate so the collect→validate core is unit-testable without
+// config init or stack describe.
+func reportForStacks(stacksMap map[string]any, name string, compositions map[string]schema.Composition) (Report, error) {
+	return Validate(name, collectMembers(stacksMap, name), compositions)
 }
 
 // collectMembers returns the sorted, de-duplicated set of component names across

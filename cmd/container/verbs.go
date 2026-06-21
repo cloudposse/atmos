@@ -15,8 +15,6 @@ func newVerbCmd(name, short, long string) *cobra.Command {
 		Use:   name,
 		Short: short,
 		Long:  long,
-		// Allow unknown flags after "--" to pass through to the container (e.g. exec).
-		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 		RunE: func(c *cobra.Command, args []string) error {
 			return runVerb(c, c.Name(), args)
 		},
@@ -39,21 +37,21 @@ func newVerbCmd(name, short, long string) *cobra.Command {
 // Image artifact lifecycle.
 var (
 	buildCmd = newVerbCmd("build",
-		"Build the component image from vars.build",
-		"Build the component's container image using Docker or Podman from the `vars.build` configuration.")
+		"Build the component image from build",
+		"Build the component's container image using Docker or Podman from the `build` configuration.")
 	pushCmd = newVerbCmd("push",
 		"Push the component image to its registry",
-		"Push the component's image (vars.image) to its container registry.")
+		"Push the component's image (image) to its container registry.")
 	pullCmd = newVerbCmd("pull",
 		"Pull the component image",
-		"Pull the component's image (vars.image) from its container registry.")
+		"Pull the component's image (image) from its container registry.")
 )
 
 // Container lifecycle.
 var (
 	runCmd = newVerbCmd("run",
 		"Run the component as a one-shot foreground container",
-		"Run the component's container in the foreground as a one-shot process using `vars.run`.")
+		"Run the component's container in the foreground as a one-shot process using `run`.")
 	upCmd = newVerbCmd("up",
 		"Create or start the long-running container",
 		"Create or start the component's long-running named container, labeled by its canonical instance address.")

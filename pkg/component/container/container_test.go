@@ -85,14 +85,15 @@ func TestProvider_ValidateComponent(t *testing.T) {
 		"metadata": map[string]any{"type": "abstract"},
 	}))
 	require.NoError(t, p.ValidateComponent(map[string]any{
-		"vars": map[string]any{"image": "alpine"},
+		"image": "alpine",
 	}))
 	require.NoError(t, p.ValidateComponent(map[string]any{
-		"vars": map[string]any{"build": map[string]any{"context": "."}},
+		"build": map[string]any{"context": "."},
 	}))
 
-	// Real component with neither image nor build is invalid.
-	require.Error(t, p.ValidateComponent(map[string]any{"vars": map[string]any{}}))
+	// Real component with neither image nor build is invalid. Legacy vars.image
+	// is no longer part of the contract — image/build are first-class keys.
+	require.Error(t, p.ValidateComponent(map[string]any{"vars": map[string]any{"image": "alpine"}}))
 	require.Error(t, p.ValidateComponent(map[string]any{}))
 }
 
