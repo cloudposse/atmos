@@ -97,6 +97,21 @@ func TestRunSecretList_VerifyFlagThreaded(t *testing.T) {
 	})
 }
 
+// TestRunSecretList_VerifyWithoutFullScope_Warns covers the branch where --verify is passed but the
+// target is not fully scoped: enumerating and authenticating every instance is exactly the expensive
+// pass listing avoids, so it warns and falls back to the credential-free enumerated path.
+func TestRunSecretList_VerifyWithoutFullScope_Warns(t *testing.T) {
+	setupIO(t)
+
+	overrideEnumerateScopes(t, []scopeEntry{
+		{Stack: "prod", Component: "api", Section: listScopeSection(map[string]string{"API_KEY": ""})},
+	}, nil)
+
+	// --verify with only --stack (component unset) → warning branch, then enumerated rendering.
+	err := runSecretSubcommand(t, "list", "--stack", "prod", "--verify")
+	require.NoError(t, err)
+}
+
 // TestRunSecretList_SingleScope drives runSecretList's fast path (both facets set): it loads the
 // scoped service, converts its statuses to rows, and renders them — covering statusRow and the
 // scope/backend/status label helpers.

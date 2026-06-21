@@ -640,6 +640,21 @@ func TestGSMStore_Has(t *testing.T) {
 			want:    false,
 			wantErr: ErrPermissionDenied,
 		},
+		{
+			// A non-gRPC-status error has no recognizable code, so it is wrapped as a generic
+			// access failure rather than mapped to absence.
+			name:    "non_status_error_wrapped",
+			mockFn:  func(m *MockGSMClient) { matchGetVersion(m, nil, errors.New("boom")) },
+			want:    false,
+			wantErr: ErrAccessSecret,
+		},
+		{
+			// An empty key is rejected before any client call.
+			name:    "empty_key",
+			mockFn:  func(m *MockGSMClient) {},
+			want:    false,
+			wantErr: ErrEmptyKey,
+		},
 	}
 
 	for _, tt := range tests {
@@ -653,7 +668,11 @@ func TestGSMStore_Has(t *testing.T) {
 				StackDelimiter: &testDelimiter,
 			})
 
-			got, err := store.Has("dev-usw2", "app/service", "config-key")
+			key := "config-key"
+			if tt.name == "empty_key" {
+				key = ""
+			}
+			got, err := store.Has("dev-usw2", "app/service", key)
 			if tt.wantErr != nil {
 				assert.ErrorIs(t, err, tt.wantErr)
 			} else {

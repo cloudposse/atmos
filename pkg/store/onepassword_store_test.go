@@ -218,6 +218,64 @@ func TestOnePasswordStore_Has_FallsBackToResolveWhenNoExistenceCheck(t *testing.
 	assert.False(t, has)
 }
 
+// existsErrOPClient implements onePasswordExistenceChecker and returns a configurable error from
+// Exists, exercising Has's checker error-mapping branches.
+type existsErrOPClient struct {
+	existsErr error
+}
+
+func (f *existsErrOPClient) Resolve(_ context.Context, _ string) (string, error) {
+	return "", ErrOnePasswordNotFound
+}
+
+func (f *existsErrOPClient) Exists(_ context.Context, _ string) (bool, error) {
+	return false, f.existsErr
+}
+func (f *existsErrOPClient) Set(_ context.Context, _, _ string) error { return nil }
+func (f *existsErrOPClient) Delete(_ context.Context, _ string) error { return nil }
+
+// TestOnePasswordStore_Has_CheckerNotFound proves a not-found error from the existence checker
+// maps to absence (false, nil) rather than propagating.
+func TestOnePasswordStore_Has_CheckerNotFound(t *testing.T) {
+	s := newTestOPStore(&existsErrOPClient{existsErr: ErrOnePasswordNotFound}, "")
+
+	has, err := s.Has("prod", "api", "op://Shared/Datadog/api_key")
+	require.NoError(t, err)
+	assert.False(t, has)
+}
+
+// TestOnePasswordStore_Has_MalformedReference proves a reference that fails to render is returned
+// as an error before any client call.
+func TestOnePasswordStore_Has_MalformedReference(t *testing.T) {
+	s := newTestOPStore(newFakeOPClient(nil), "")
+
+	_, err := s.Has("prod", "api", "op://{{ .atmos_stack ")
+	require.Error(t, err)
+}
+
+// TestOnePasswordStore_Has_FallbackResolveError proves the value-resolving fallback propagates a
+// non-not-found error from a client that lacks an existence check.
+func TestOnePasswordStore_Has_FallbackResolveError(t *testing.T) {
+	fake := &resolveErrOnlyOPClient{err: errors.New("403 forbidden")}
+	s := newTestOPStore(fake, "")
+
+	_, err := s.Has("prod", "api", "op://Shared/Datadog/api_key")
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrOnePasswordNotFound)
+}
+
+// resolveErrOnlyOPClient is a onePasswordClient without an existence check whose Resolve always
+// fails, driving Has's fallback error branch.
+type resolveErrOnlyOPClient struct {
+	err error
+}
+
+func (f *resolveErrOnlyOPClient) Resolve(_ context.Context, _ string) (string, error) {
+	return "", f.err
+}
+func (f *resolveErrOnlyOPClient) Set(_ context.Context, _, _ string) error { return nil }
+func (f *resolveErrOnlyOPClient) Delete(_ context.Context, _ string) error { return nil }
+
 func TestOnePasswordStore_GetKey(t *testing.T) {
 	fake := newFakeOPClient(map[string]string{
 		"op://Shared/Datadog/api_key": "dd-key",

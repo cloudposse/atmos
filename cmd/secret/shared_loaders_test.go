@@ -140,6 +140,66 @@ func TestLoadServiceSeams_Error(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestLoadServiceForList_VerifyFalse_Success(t *testing.T) {
+	t.Chdir(writeMinimalAtmosProject(t))
+
+	// verify=false is the credential-free path: it resolves the component with auth disabled and
+	// builds the service from declarations alone — no identity authentication, no store resolver.
+	svc, err := loadServiceForList(secretScope{Stack: "dev", Component: "vpc"}, false)
+	require.NoError(t, err)
+	require.NotNil(t, svc)
+
+	// The component declares no secrets, so the service is real but has no declarations.
+	assert.Empty(t, svc.Declarations())
+	assert.False(t, svc.IsDeclared("ANY_SECRET"))
+}
+
+func TestLoadServiceForList_VerifyTrue_Delegates(t *testing.T) {
+	t.Chdir(writeMinimalAtmosProject(t))
+
+	// verify=true delegates to loadService, which authenticates; the no-auth/no-secret component
+	// still resolves fully in-process, so a real service is returned.
+	svc, err := loadServiceForList(secretScope{Stack: "dev", Component: "vpc"}, true)
+	require.NoError(t, err)
+	require.NotNil(t, svc)
+	assert.Empty(t, svc.Declarations())
+}
+
+func TestLoadServiceForList_InitConfigError(t *testing.T) {
+	// An empty dir has no Atmos config, so InitCliConfig fails before any component work, on both
+	// the verify=false branch and (via loadService) the verify=true branch.
+	t.Chdir(t.TempDir())
+
+	_, err := loadServiceForList(secretScope{Stack: "dev", Component: "vpc"}, false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
+
+	_, err = loadServiceForList(secretScope{Stack: "dev", Component: "vpc"}, true)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
+}
+
+func TestLoadServiceForListSeam_Success(t *testing.T) {
+	t.Chdir(writeMinimalAtmosProject(t))
+
+	// The deps.go seam wrapper delegates to the real loader; drive it directly (both verify values)
+	// so its wrapping logic is covered, not just the underlying function.
+	svc, err := loadServiceForListFn(secretScope{Stack: "dev", Component: "vpc"}, false)
+	require.NoError(t, err)
+	require.NotNil(t, svc)
+
+	svc2, err := loadServiceForListFn(secretScope{Stack: "dev", Component: "vpc"}, true)
+	require.NoError(t, err)
+	require.NotNil(t, svc2)
+}
+
+func TestLoadServiceForListSeam_Error(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	_, err := loadServiceForListFn(secretScope{Stack: "dev", Component: "vpc"}, false)
+	require.Error(t, err)
+}
+
 func TestBuildAuthManager_ComponentNotFound(t *testing.T) {
 	t.Chdir(writeMinimalAtmosProject(t))
 
