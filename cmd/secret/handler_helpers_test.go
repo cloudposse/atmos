@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // testStreams is a minimal io.Streams backed by buffers, used to initialize the data/ui channels so
@@ -39,6 +40,25 @@ func setupIO(t *testing.T) {
 	}
 	data.InitWriter(ioCtx)
 	t.Cleanup(func() { data.Reset() })
+}
+
+// setupIOCapture is like setupIO but also initializes the UI formatter against the same buffers and
+// returns stdout/stderr, so a test can assert on emitted UI output (e.g. ui.Warning, which routes
+// through the UI channel and is otherwise dropped when the formatter is uninitialized).
+func setupIOCapture(t *testing.T) (stdout, stderr *bytes.Buffer) {
+	t.Helper()
+
+	stdout = &bytes.Buffer{}
+	stderr = &bytes.Buffer{}
+	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: stdout, stderr: stderr}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	if err != nil {
+		t.Fatalf("failed to create I/O context: %v", err)
+	}
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(func() { data.Reset() })
+	return stdout, stderr
 }
 
 // resetSecretFlags resets the secret command tree's persistent scope flags and every subcommand's

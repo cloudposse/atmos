@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/stretchr/testify/assert"
 )
@@ -18,6 +19,9 @@ type mockClient struct {
 	getSecretFunc    func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
 	setSecretFunc    func(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error)
 	deleteSecretFunc func(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error)
+	// listVersionsFunc returns the single page yielded by the versions pager, letting tests
+	// simulate existence (nil error) or not-found/permission errors without a secret value.
+	listVersionsFunc func(name string) (azsecrets.ListSecretPropertiesVersionsResponse, error)
 }
 
 func (m *mockClient) GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
@@ -30,6 +34,19 @@ func (m *mockClient) SetSecret(ctx context.Context, name string, parameters azse
 
 func (m *mockClient) DeleteSecret(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error) {
 	return m.deleteSecretFunc(ctx, name, options)
+}
+
+// NewListSecretPropertiesVersionsPager builds a real runtime.Pager backed by listVersionsFunc so
+// the mock exercises the same NextPage code path the store uses, returning metadata only.
+func (m *mockClient) NewListSecretPropertiesVersionsPager(name string, _ *azsecrets.ListSecretPropertiesVersionsOptions) *runtime.Pager[azsecrets.ListSecretPropertiesVersionsResponse] {
+	return runtime.NewPager(runtime.PagingHandler[azsecrets.ListSecretPropertiesVersionsResponse]{
+		More: func(azsecrets.ListSecretPropertiesVersionsResponse) bool {
+			return false
+		},
+		Fetcher: func(_ context.Context, _ *azsecrets.ListSecretPropertiesVersionsResponse) (azsecrets.ListSecretPropertiesVersionsResponse, error) {
+			return m.listVersionsFunc(name)
+		},
+	})
 }
 
 func TestAzureKeyVaultStore_Set(t *testing.T) {
@@ -320,39 +337,57 @@ func TestAzureKeyVaultStore_Delete(t *testing.T) {
 func TestAzureKeyVaultStore_Has(t *testing.T) {
 	tests := []struct {
 		name     string
-		mockFunc func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
+		mockFunc func(name string) (azsecrets.ListSecretPropertiesVersionsResponse, error)
 		want     bool
 		wantErr  error
 	}{
 		{
 			name: "present",
-			mockFunc: func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
-				value := "test-value"
-				return azsecrets.GetSecretResponse{Secret: azsecrets.Secret{Value: &value}}, nil
+			mockFunc: func(name string) (azsecrets.ListSecretPropertiesVersionsResponse, error) {
+				// A secret with at least one version exists; the value is never part of this response.
+				id := azsecrets.ID("https://test.vault.azure.net/secrets/" + name + "/v1")
+				return azsecrets.ListSecretPropertiesVersionsResponse{
+					SecretPropertiesListResult: azsecrets.SecretPropertiesListResult{
+						Value: []*azsecrets.SecretProperties{{ID: &id}},
+					},
+				}, nil
 			},
 			want: true,
 		},
 		{
 			name: "absent",
-			mockFunc: func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
-				return azsecrets.GetSecretResponse{}, &azcore.ResponseError{StatusCode: statusCodeNotFound}
+			mockFunc: func(string) (azsecrets.ListSecretPropertiesVersionsResponse, error) {
+				return azsecrets.ListSecretPropertiesVersionsResponse{}, &azcore.ResponseError{StatusCode: statusCodeNotFound}
 			},
 			want: false,
 		},
 		{
 			name: "other error propagated",
-			mockFunc: func(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
-				return azsecrets.GetSecretResponse{}, &azcore.ResponseError{StatusCode: statusCodeForbidden}
+			mockFunc: func(string) (azsecrets.ListSecretPropertiesVersionsResponse, error) {
+				return azsecrets.ListSecretPropertiesVersionsResponse{}, &azcore.ResponseError{StatusCode: statusCodeForbidden}
 			},
 			want:    false,
 			wantErr: ErrPermissionDenied,
+		},
+		{
+			name: "generic error wrapped as access failure",
+			mockFunc: func(string) (azsecrets.ListSecretPropertiesVersionsResponse, error) {
+				return azsecrets.ListSecretPropertiesVersionsResponse{}, errTestBackend
+			},
+			want:    false,
+			wantErr: ErrAccessSecret,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := &mockClient{
-				getSecretFunc: tt.mockFunc,
+				listVersionsFunc: tt.mockFunc,
+				// Has() must never retrieve the secret value: fail loudly if GetSecret is reached.
+				getSecretFunc: func(context.Context, string, string, *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error) {
+					t.Fatal("Has() must not call GetSecret; existence is checked via the versions pager")
+					return azsecrets.GetSecretResponse{}, nil
+				},
 			}
 			store := &AzureKeyVaultStore{
 				client:         client,
@@ -367,6 +402,36 @@ func TestAzureKeyVaultStore_Has(t *testing.T) {
 				assert.NoError(t, err)
 			}
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestAzureKeyVaultStore_HasValidatesInput confirms Has() validates its arguments before touching
+// the client, matching Get/Set/Delete.
+func TestAzureKeyVaultStore_HasValidatesInput(t *testing.T) {
+	store := &AzureKeyVaultStore{
+		client:         &mockClient{},
+		vaultURL:       "https://test.vault.azure.net",
+		stackDelimiter: stringPtr("-"),
+	}
+
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+		key       string
+		wantErr   error
+	}{
+		{name: "empty stack", stack: "", component: "app", key: "secret", wantErr: ErrEmptyStack},
+		{name: "empty component", stack: "dev", component: "", key: "secret", wantErr: ErrEmptyComponent},
+		{name: "empty key", stack: "dev", component: "app", key: "", wantErr: ErrEmptyKey},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := store.Has(tt.stack, tt.component, tt.key)
+			assert.False(t, got)
+			assert.ErrorIs(t, err, tt.wantErr)
 		})
 	}
 }

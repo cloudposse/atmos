@@ -739,13 +739,27 @@ jobs:
         with:
           persist-credentials: false
 
+      # The example stacks pin their `# yaml-language-server: $schema` modeline to the
+      # published schema at atmos.tools, which only updates after a PR merges and the site
+      # deploys. yaml-language-server gives the inline modeline absolute precedence over the
+      # `schemaMapping` below, so without this step the examples would always validate against
+      # the live (stale) schema — and a PR could never add a schema field and use it in an
+      # example at the same time. Rewrite the modeline URL to the in-repo schema (ephemeral,
+      # CI checkout only) so examples are validated against the schema this PR actually ships.
+      # The committed files keep the public URL for users who copy them.
+      - name: Use in-repo schema for validation
+        run: |
+          find "examples/${{ matrix.demo-folder }}/stacks" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 \
+            | xargs -0 --no-run-if-empty sed -i \
+              "s#https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#file://${GITHUB_WORKSPACE}/website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#g"
+
       - name: Validate YAML Schema for Stacks
         uses: InoUno/yaml-ls-check@2c229b85b877b2853b40bd0fbdcfccff5ff735c7 # v1.4.0
         with:
           root: "examples/${{ matrix.demo-folder }}/stacks"
           schemaMapping: |
             {
-              "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
+              "file://${{ github.workspace }}/website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
                 "examples/${{ matrix.demo-folder }}/stacks/**/*.yaml",
                 "examples/${{ matrix.demo-folder }}/stacks/**/*.yml"
               ]

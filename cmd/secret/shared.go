@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
+	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 )
 
@@ -118,8 +119,9 @@ func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosCon
 		return nil, nil, err
 	}
 
-	// Bridge auth credentials into identity-aware secret stores (lazy resolution).
-	injectSecretStoreAuthResolver(&atmosConfig, authManager)
+	// Bridge auth credentials into identity-aware secret stores and cloud-KMS SOPS providers
+	// (lazy resolution).
+	injectSecretStoreAuthResolver(&atmosConfig, authManager, scope)
 
 	section, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
 		AtmosConfig:          &atmosConfig,
@@ -136,6 +138,45 @@ func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosCon
 	}
 
 	return secrets.NewService(&atmosConfig, scope.Stack, scope.Component, section), &atmosConfig, nil
+}
+
+// loadServiceForList loads a scoped secrets service for `secret list`. It is credential-free by
+// default: with verify=false it resolves the component config with auth disabled (no identity
+// authentication, no store auth resolver) and builds the service from the declarations alone —
+// SOPS status is still answered locally, remote-store status is reported as unknown. With
+// verify=true it delegates to loadService, which authenticates and wires the store resolver so
+// remote existence checks (Has) can run.
+func loadServiceForList(scope secretScope, verify bool) (*secrets.Service, error) {
+	defer perf.Track(nil, "secret.loadServiceForList")()
+
+	if verify {
+		return loadService(scope)
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+		ComponentFromArg: scope.Component,
+		Stack:            scope.Stack,
+	}, true)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitConfig, err)
+	}
+
+	section, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		AtmosConfig:          &atmosConfig,
+		Component:            scope.Component,
+		Stack:                scope.Stack,
+		ComponentType:        scope.ComponentType,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{"secret"}, // resolve includes etc., but never retrieve secrets here.
+		AuthManager:          nil,
+		AuthDisabled:         true, // listing reads declarations only — no identity, no decryption.
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to load component config: %w", err)
+	}
+
+	return secrets.NewService(&atmosConfig, scope.Stack, scope.Component, section), nil
 }
 
 // buildAuthManager merges component auth and creates an authenticated manager for the scope.
@@ -165,14 +206,36 @@ func buildAuthManager(atmosConfig *schema.AtmosConfiguration, scope secretScope)
 	return authManager, nil
 }
 
-// injectSecretStoreAuthResolver wires the auth manager into atmosConfig as the
-// store auth-context resolver so secret stores can resolve credentials lazily
-// during `atmos secret` operations. It is a no-op when either argument is nil.
-func injectSecretStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) {
+// injectSecretStoreAuthResolver wires the auth manager into atmosConfig as the store auth-context
+// resolver (so secret stores resolve credentials lazily) and as the SecretsAuth context (so cloud-KMS
+// SOPS providers authenticate KMS calls as the effective identity instead of requiring ambient
+// credentials). It is a no-op when either argument is nil.
+func injectSecretStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager, scope secretScope) {
 	if atmosConfig == nil || authManager == nil {
 		return
 	}
 
 	resolver := authbridge.NewResolver(authManager, authManager.GetStackInfo())
 	atmosConfig.Stores.SetAuthContextResolver(resolver)
+	atmosConfig.SecretsAuth = &store.SecretsAuthContext{
+		Resolver:        resolver,
+		DefaultIdentity: secretsDefaultIdentity(scope, authManager),
+	}
+}
+
+// secretsDefaultIdentity resolves the effective identity for cloud-KMS SOPS providers: an explicit
+// `--identity`/`ATMOS_IDENTITY` (when not a select/disabled sentinel), otherwise the identity the
+// auth manager actually authenticated (the last link in its chain). A per-provider
+// `secrets.providers.<name>.identity` still takes precedence over this in the provider itself.
+func secretsDefaultIdentity(scope secretScope, authManager auth.AuthManager) string {
+	switch scope.Identity {
+	case "", cfg.IdentityFlagSelectValue, cfg.IdentityFlagDisabledValue:
+		// Fall back to the authenticated chain below.
+	default:
+		return scope.Identity
+	}
+	if chain := authManager.GetChain(); len(chain) > 0 {
+		return chain[len(chain)-1]
+	}
+	return ""
 }

@@ -53,6 +53,16 @@ func (m *MockGSMClient) AccessSecretVersion(ctx context.Context, req *secretmana
 	return args.Get(0).(*secretmanagerpb.AccessSecretVersionResponse), args.Error(1)
 }
 
+// GetSecretVersion mocks the GSM GetSecretVersion API call, which returns version metadata
+// without accessing or decrypting the secret payload.
+func (m *MockGSMClient) GetSecretVersion(ctx context.Context, req *secretmanagerpb.GetSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error) {
+	args := m.Called(mock.Anything, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*secretmanagerpb.SecretVersion), args.Error(1)
+}
+
 // DeleteSecret mocks the GSM DeleteSecret API call.
 func (m *MockGSMClient) DeleteSecret(ctx context.Context, req *secretmanagerpb.DeleteSecretRequest, opts ...gax.CallOption) error {
 	args := m.Called(mock.Anything, req)
@@ -590,16 +600,17 @@ func TestGSMStore_Delete(t *testing.T) {
 func TestGSMStore_Has(t *testing.T) {
 	testPrefix := "test-prefix"
 	testDelimiter := "-"
-	const accessName = "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key/versions/latest"
+	// Has builds the same version resource name that Get uses for AccessSecretVersion.
+	const versionName = "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key/versions/latest"
 
-	matchAccess := func(m *MockGSMClient, resp *secretmanagerpb.AccessSecretVersionResponse, err error) {
-		call := m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
-			return req.Name == accessName
+	matchGetVersion := func(m *MockGSMClient, version *secretmanagerpb.SecretVersion, err error) {
+		call := m.On("GetSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.GetSecretVersionRequest) bool {
+			return req.Name == versionName
 		}))
 		if err != nil {
 			call.Return(nil, err)
 		} else {
-			call.Return(resp, nil)
+			call.Return(version, nil)
 		}
 	}
 
@@ -612,22 +623,37 @@ func TestGSMStore_Has(t *testing.T) {
 		{
 			name: "present",
 			mockFn: func(m *MockGSMClient) {
-				matchAccess(m, &secretmanagerpb.AccessSecretVersionResponse{
-					Payload: &secretmanagerpb.SecretPayload{Data: []byte(`"test-value"`)},
-				}, nil)
+				matchGetVersion(m, &secretmanagerpb.SecretVersion{Name: versionName}, nil)
 			},
 			want: true,
 		},
 		{
 			name:   "absent",
-			mockFn: func(m *MockGSMClient) { matchAccess(m, nil, status.Error(codes.NotFound, "resource not found")) },
+			mockFn: func(m *MockGSMClient) { matchGetVersion(m, nil, status.Error(codes.NotFound, "resource not found")) },
 			want:   false,
 		},
 		{
-			name:    "other error propagated",
-			mockFn:  func(m *MockGSMClient) { matchAccess(m, nil, status.Error(codes.PermissionDenied, "permission denied")) },
+			name: "other error propagated",
+			mockFn: func(m *MockGSMClient) {
+				matchGetVersion(m, nil, status.Error(codes.PermissionDenied, "permission denied"))
+			},
 			want:    false,
 			wantErr: ErrPermissionDenied,
+		},
+		{
+			// A non-gRPC-status error has no recognizable code, so it is wrapped as a generic
+			// access failure rather than mapped to absence.
+			name:    "non_status_error_wrapped",
+			mockFn:  func(m *MockGSMClient) { matchGetVersion(m, nil, errors.New("boom")) },
+			want:    false,
+			wantErr: ErrAccessSecret,
+		},
+		{
+			// An empty key is rejected before any client call.
+			name:    "empty_key",
+			mockFn:  func(m *MockGSMClient) {},
+			want:    false,
+			wantErr: ErrEmptyKey,
 		},
 	}
 
@@ -642,13 +668,19 @@ func TestGSMStore_Has(t *testing.T) {
 				StackDelimiter: &testDelimiter,
 			})
 
-			got, err := store.Has("dev-usw2", "app/service", "config-key")
+			key := "config-key"
+			if tt.name == "empty_key" {
+				key = ""
+			}
+			got, err := store.Has("dev-usw2", "app/service", key)
 			if tt.wantErr != nil {
 				assert.ErrorIs(t, err, tt.wantErr)
 			} else {
 				assert.NoError(t, err)
 			}
 			assert.Equal(t, tt.want, got)
+			// Existence must be checked WITHOUT accessing/decrypting the payload.
+			mockClient.AssertNotCalled(t, "AccessSecretVersion")
 			mockClient.AssertExpectations(t)
 		})
 	}
