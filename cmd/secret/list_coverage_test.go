@@ -101,7 +101,7 @@ func TestRunSecretList_VerifyFlagThreaded(t *testing.T) {
 // target is not fully scoped: enumerating and authenticating every instance is exactly the expensive
 // pass listing avoids, so it warns and falls back to the credential-free enumerated path.
 func TestRunSecretList_VerifyWithoutFullScope_Warns(t *testing.T) {
-	setupIO(t)
+	_, stderr := setupIOCapture(t)
 
 	overrideEnumerateScopes(t, []scopeEntry{
 		{Stack: "prod", Component: "api", Section: listScopeSection(map[string]string{"API_KEY": ""})},
@@ -110,6 +110,10 @@ func TestRunSecretList_VerifyWithoutFullScope_Warns(t *testing.T) {
 	// --verify with only --stack (component unset) → warning branch, then enumerated rendering.
 	err := runSecretSubcommand(t, "list", "--stack", "prod", "--verify")
 	require.NoError(t, err)
+
+	// The warning must actually be emitted (UI channel / stderr), not just the success condition.
+	assert.Contains(t, stderr.String(), "requires both --stack and --component",
+		"the --verify-without-full-scope warning must be emitted")
 }
 
 // TestRunSecretList_SingleScope drives runSecretList's fast path (both facets set): it loads the

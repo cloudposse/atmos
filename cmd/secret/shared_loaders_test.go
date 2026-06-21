@@ -196,7 +196,12 @@ func TestLoadServiceForListSeam_Success(t *testing.T) {
 func TestLoadServiceForListSeam_Error(t *testing.T) {
 	t.Chdir(t.TempDir())
 
+	// Both seam branches must propagate the underlying loader error: verify=false (credential-free)
+	// and verify=true (delegates to loadService) both fail when there is no Atmos config.
 	_, err := loadServiceForListFn(secretScope{Stack: "dev", Component: "vpc"}, false)
+	require.Error(t, err)
+
+	_, err = loadServiceForListFn(secretScope{Stack: "dev", Component: "vpc"}, true)
 	require.Error(t, err)
 }
 
