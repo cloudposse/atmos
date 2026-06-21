@@ -101,4 +101,7 @@ exclude = [
   # tldp.org (intermittent 502 Bad Gateway in CI; sibling exit-code references
   # like gnu.org, man.openbsd.org, and refspecs.linuxfoundation.org are excluded for the same reason)
   "tldp\\.org",
+  # no-color.org (intermittent connection timeouts in CI; the NO_COLOR standard
+  # site referenced from the help-system and io-handling PRDs)
+  "no-color\\.org",
 ]
