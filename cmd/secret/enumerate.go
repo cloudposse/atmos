@@ -43,9 +43,13 @@ func enumerateSecretScopes(facet secretScope) ([]scopeEntry, *schema.AtmosConfig
 		components = []string{facet.Component}
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(
+	// Listing only reads the static `secrets.vars` declarations (see collectSecretScopeEntries →
+	// secrets.ExtractDeclarations); it never retrieves a secret value, so per-component auth is
+	// pure overhead. Disable it explicitly so a 72-component stack doesn't run 72 auth cycles
+	// (credentials-file rewrite + keyring rebuild) just to enumerate declarations.
+	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
 		&atmosConfig, facet.Stack, components, nil, nil,
-		false, true, true, false, []string{"secret"}, nil,
+		false, true, true, false, []string{"secret"}, nil, true,
 	)
 	if err != nil {
 		return nil, nil, err

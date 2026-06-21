@@ -99,6 +99,18 @@ type FileResettable interface {
 	Reset(coord Coordinate) error
 }
 
+// LocalStatus is an optional capability marking providers whose Status() existence check is
+// credential-free — it needs no network access, no authentication, and no decryption. SOPS
+// reports local because "is the key present?" is answered from the cleartext key names in the
+// encrypted file. Store-backed providers report local only when their underlying store is local
+// (e.g. the OS keychain); remote stores (SSM, Secrets Manager, Key Vault, GCP, Vault, 1Password)
+// are not local. `atmos secret list` always checks local providers, but reports non-local
+// providers as Unknown unless verification is explicitly requested (`--verify`).
+type LocalStatus interface {
+	// LocalStatusCheck reports whether Status() is credential-free for this provider instance.
+	LocalStatusCheck() bool
+}
+
 // FilePathProvider is an optional capability for file-backed providers (e.g. SOPS) that can
 // report the on-disk path a coordinate resolves to. `describe affected` uses it to treat the
 // backing file as an automatic dependency of every component that consumes the secret, so a

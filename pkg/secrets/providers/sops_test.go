@@ -130,10 +130,33 @@ func TestSopsProvider_GetWithoutKeyFails(t *testing.T) {
 	_, err := p.Get(coord)
 	require.ErrorIs(t, err, ErrSopsDecrypt)
 
-	// Status swallows the decrypt failure as "not initialized".
+	// Status is credential-free: it reports the key as initialized from the cleartext key names
+	// in the encrypted file, WITHOUT the age key and WITHOUT decrypting. So even though Get fails
+	// above, Status returns true for a present key.
 	ok, statusErr := p.Status(coord)
 	require.NoError(t, statusErr)
-	assert.False(t, ok)
+	assert.True(t, ok)
+
+	// And it reports local (LocalStatus capability), so listing never authenticates for SOPS.
+	ls, isLocal := p.(LocalStatus)
+	require.True(t, isLocal, "sops provider must implement LocalStatus")
+	assert.True(t, ls.LocalStatusCheck())
+}
+
+// TestSopsProvider_StatusAbsentKeyWithoutKey verifies the negative path: a key that was never
+// set reports not-initialized via the credential-free existence check (no age key, no decrypt).
+func TestSopsProvider_StatusAbsentKeyWithoutKey(t *testing.T) {
+	p, _ := newAgeProvider(t)
+	present := Coordinate{Stack: "dev", Component: "api", Key: "PRESENT"}
+	require.NoError(t, p.Set(present, "value"))
+
+	// No age identity available — existence must still resolve from cleartext keys.
+	t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(t.TempDir(), "absent.txt"))
+
+	absent := Coordinate{Stack: "dev", Component: "api", Key: "NEVER_SET"}
+	ok, statusErr := p.Status(absent)
+	require.NoError(t, statusErr)
+	assert.False(t, ok, "absent key must report not-initialized")
 }
 
 func TestSopsProvider_DeleteMissingFileIsNoOp(t *testing.T) {

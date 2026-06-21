@@ -300,6 +300,41 @@ func TestSSMStore_Set(t *testing.T) {
 	}
 }
 
+// TestSSMStore_Has_NoDecryption proves the existence check never decrypts: GetParameter is
+// called with WithDecryption=false (so kms:Decrypt is not required), a present parameter reports
+// true, and a ParameterNotFound reports false.
+func TestSSMStore_Has_NoDecryption(t *testing.T) {
+	stackDelimiter := "/"
+	param := "/test-prefix/dev/usw2/app/service/config-key"
+
+	t.Run("present_without_decryption", func(t *testing.T) {
+		mockSSM := new(MockSSMClient)
+		store := &SSMStore{client: mockSSM, prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
+		mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+			Name:           aws.String(param),
+			WithDecryption: aws.Bool(false),
+		}).Return(&ssm.GetParameterOutput{Parameter: &types.Parameter{Value: aws.String("ignored")}}, nil)
+
+		ok, err := store.Has("dev/usw2/app", "service", "config-key")
+		require.NoError(t, err)
+		assert.True(t, ok)
+		mockSSM.AssertExpectations(t) // fails if a WithDecryption=true call was made instead.
+	})
+
+	t.Run("absent_returns_false", func(t *testing.T) {
+		mockSSM := new(MockSSMClient)
+		store := &SSMStore{client: mockSSM, prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
+		mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+			Name:           aws.String(param),
+			WithDecryption: aws.Bool(false),
+		}).Return((*ssm.GetParameterOutput)(nil), &types.ParameterNotFound{})
+
+		ok, err := store.Has("dev/usw2/app", "service", "config-key")
+		require.NoError(t, err)
+		assert.False(t, ok)
+	})
+}
+
 func TestSSMStore_Get(t *testing.T) {
 	mockSSM := new(MockSSMClient)
 	mockSTS := new(MockSTSClient)

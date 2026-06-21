@@ -66,6 +66,37 @@ func TestEmptyListMessage(t *testing.T) {
 	assert.Contains(t, emptyListMessage(secretScope{}), "any stack")
 }
 
+// TestStatusLabel_Unknown covers the credential-free "unknown" state (remote backend not
+// verified), and that an error takes precedence over unknown/initialized.
+func TestStatusLabel_Unknown(t *testing.T) {
+	assert.Equal(t, "unknown", statusLabel(&secrets.Status{Unknown: true}))
+	assert.Equal(t, "error", statusLabel(&secrets.Status{Err: errors.New("x"), Unknown: true, Initialized: true}))
+}
+
+// TestRunSecretList_VerifyFlagThreaded proves --verify reaches Service.Status on the fully-scoped
+// path so remote backends are actually contacted; without it, verification is off (credential-free).
+func TestRunSecretList_VerifyFlagThreaded(t *testing.T) {
+	setupIO(t)
+
+	t.Run("verify_set", func(t *testing.T) {
+		svc := newFakeSecretService()
+		svc.statuses = []secrets.Status{{Declaration: secrets.Declaration{Name: "API_KEY"}, Initialized: true}}
+		installService(t, svc, nil)
+
+		require.NoError(t, runSecretSubcommand(t, "list", "--stack", "dev", "--component", "api", "--verify"))
+		assert.True(t, svc.statusVerify, "--verify must be threaded to Status")
+	})
+
+	t.Run("verify_unset", func(t *testing.T) {
+		svc := newFakeSecretService()
+		svc.statuses = []secrets.Status{{Declaration: secrets.Declaration{Name: "API_KEY"}, Unknown: true}}
+		installService(t, svc, nil)
+
+		require.NoError(t, runSecretSubcommand(t, "list", "--stack", "dev", "--component", "api"))
+		assert.False(t, svc.statusVerify, "verification is off by default")
+	})
+}
+
 // TestRunSecretList_SingleScope drives runSecretList's fast path (both facets set): it loads the
 // scoped service, converts its statuses to rows, and renders them — covering statusRow and the
 // scope/backend/status label helpers.
