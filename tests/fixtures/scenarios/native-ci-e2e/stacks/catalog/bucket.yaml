@@ -22,8 +22,10 @@ components:
             - "$ATMOS_OUTPUT_DIR"
             - "--quiet"
             - "--soft-fail"
+            # Scope to versioning + access logging; the logging check is
+            # suppressed inline in checkov_target.tf so only versioning reports.
             - "--check"
-            - "CKV_AWS_21"
+            - "CKV_AWS_21,CKV_AWS_18"
           on_failure: warn
         trivy-policy:
           events:
@@ -36,10 +38,12 @@ components:
             - "--output"
             - "$ATMOS_OUTPUT_FILE"
             - "--quiet"
-            # Limit to MEDIUM severity; on a bare bucket AWS-0090 (versioning)
-            # is the only MEDIUM check, so exactly one finding is reported.
+            # Scope to LOW+MEDIUM; with the public-access block in place the
+            # only findings are AWS-0090 (versioning, MEDIUM) and AWS-0089
+            # (logging, LOW). The logging finding is suppressed inline in
+            # trivy_target.tf so only versioning reports.
             - "--severity"
-            - "MEDIUM"
+            - "MEDIUM,LOW"
             - "$ATMOS_COMPONENT_PATH/trivy_target.tf"
           on_failure: warn
         kics-policy:
@@ -55,10 +59,10 @@ components:
             - "--report-formats"
             - "sarif"
             - "--no-progress"
-            # Include only the S3 versioning query so exactly one finding is
-            # reported (S3 Bucket Without Versioning).
+            # Scope to the versioning + logging queries; the logging query is
+            # disabled inline in kics_target.tf so only versioning reports.
             - "--include-queries"
-            - "568a4d22-3517-44a6-a7ad-6a7eed88722c"
+            - "568a4d22-3517-44a6-a7ad-6a7eed88722c,f861041c-8c9f-4156-acfc-5e6e524f5884"
           env:
             KICS_QUERIES_PATH: "$KICS_QUERIES_PATH"
           on_failure: warn
