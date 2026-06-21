@@ -1,10 +1,12 @@
-package providers
+package sops
 
 import (
 	"context"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/secrets/providers"
 
 	"filippo.io/age"
 	"github.com/getsops/sops/v3/keyservice"
@@ -17,7 +19,7 @@ import (
 // newInlineAgeKeyProvider builds a SOPS provider sourcing its private key from inline
 // `spec.age_key` material (with recipients pinned), so encrypt/decrypt route through the
 // identity-injecting ageKeyServiceClient — exercising its Encrypt delegation and Decrypt paths.
-func newInlineAgeKeyProvider(t *testing.T, ageKey, recipients string) (Provider, string) {
+func newInlineAgeKeyProvider(t *testing.T, ageKey, recipients string) (providers.Provider, string) {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -35,7 +37,7 @@ func newInlineAgeKeyProvider(t *testing.T, ageKey, recipients string) (Provider,
 			},
 		},
 	}
-	p, err := newSopsProvider(&schema.AtmosConfiguration{}, "dev-sops", section)
+	p, err := New(&schema.AtmosConfiguration{}, "dev-sops", section)
 	require.NoError(t, err)
 	return p, file
 }
@@ -47,7 +49,7 @@ func TestSopsProvider_InlineAgeKey_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	p, file := newInlineAgeKeyProvider(t, identity.String(), identity.Recipient().String())
-	coord := Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
+	coord := providers.Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
 
 	require.NoError(t, p.Set(coord, "dd-inline-secret"))
 	raw, err := os.ReadFile(file)
@@ -68,7 +70,7 @@ func TestSopsProvider_InlineAgeKey_Invalid(t *testing.T) {
 
 	// Encrypt a real file with a valid inline key first.
 	valid, file := newInlineAgeKeyProvider(t, identity.String(), identity.Recipient().String())
-	coord := Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
+	coord := providers.Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
 	require.NoError(t, valid.Set(coord, "dd-inline-secret"))
 	require.FileExists(t, file)
 
@@ -83,7 +85,7 @@ func TestSopsProvider_InlineAgeKey_Invalid(t *testing.T) {
 			},
 		},
 	}
-	bad, err := newSopsProvider(&schema.AtmosConfiguration{}, "dev-sops", section)
+	bad, err := New(&schema.AtmosConfiguration{}, "dev-sops", section)
 	require.NoError(t, err)
 
 	_, err = bad.Get(coord)

@@ -23,7 +23,9 @@ func (r ValidationResult) Valid() bool {
 func (s *Service) Validate() ValidationResult {
 	defer perf.Track(s.atmosConfig, "secrets.Service.Validate")()
 
-	statuses := s.Status()
+	// Validation is authoritative: it must contact remote backends to confirm initialization,
+	// so it always verifies (verify=true). Local backends (e.g. SOPS) remain credential-free.
+	statuses := s.Status(true)
 	result := ValidationResult{All: statuses}
 	for i := range statuses {
 		st := statuses[i]
