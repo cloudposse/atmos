@@ -35,6 +35,9 @@ terraform:
         es: *floci_url
         elasticache: *floci_url
         iam: *floci_url
+        # Route KMS to Floci. Without this, aws_kms_key requests escape to real
+        # AWS and fail with UnrecognizedClientException (the test creds are fake).
+        kms: *floci_url
         lambda: *floci_url
         rds: *floci_url
         route53: *floci_url
