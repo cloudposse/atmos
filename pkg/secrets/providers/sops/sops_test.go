@@ -132,10 +132,67 @@ func TestSopsProvider_GetWithoutKeyFails(t *testing.T) {
 	_, err := p.Get(coord)
 	require.ErrorIs(t, err, ErrSopsDecrypt)
 
-	// Status swallows the decrypt failure as "not initialized".
+	// Status is credential-free: it reports the key as initialized from the cleartext key names
+	// in the encrypted file, WITHOUT the age key and WITHOUT decrypting. So even though Get fails
+	// above, Status returns true for a present key.
 	ok, statusErr := p.Status(coord)
 	require.NoError(t, statusErr)
-	assert.False(t, ok)
+	assert.True(t, ok)
+
+	// And it reports local (LocalStatus capability), so listing never authenticates for SOPS.
+	ls, isLocal := p.(providers.LocalStatus)
+	require.True(t, isLocal, "sops provider must implement LocalStatus")
+	assert.True(t, ls.LocalStatusCheck())
+}
+
+// TestSopsProvider_StatusAbsentKeyWithoutKey verifies the negative path: a key that was never
+// set reports not-initialized via the credential-free existence check (no age key, no decrypt).
+func TestSopsProvider_StatusAbsentKeyWithoutKey(t *testing.T) {
+	p, _ := newAgeProvider(t)
+	present := providers.Coordinate{Stack: "dev", Component: "api", Key: "PRESENT"}
+	require.NoError(t, p.Set(present, "value"))
+
+	// No age identity available — existence must still resolve from cleartext keys.
+	t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(t.TempDir(), "absent.txt"))
+
+	absent := providers.Coordinate{Stack: "dev", Component: "api", Key: "NEVER_SET"}
+	ok, statusErr := p.Status(absent)
+	require.NoError(t, statusErr)
+	assert.False(t, ok, "absent key must report not-initialized")
+}
+
+// TestSopsProvider_StatusCorruptFile proves a present-but-unparseable encrypted file is treated as
+// "not initialized" (false, nil) rather than a hard error — matching the prior Get-based behavior
+// and covering keyExists's LoadEncryptedFile error branch.
+func TestSopsProvider_StatusCorruptFile(t *testing.T) {
+	p := newAgeProviderWithFile(t, "dev.enc.yaml")
+	sp, ok := p.(*sopsProvider)
+	require.True(t, ok)
+
+	coord := providers.Coordinate{Stack: "dev", Component: "api", Key: "ANY"}
+	file, err := sp.resolveFile(coord)
+	require.NoError(t, err)
+	// Write content that exists but is not a valid SOPS-encrypted YAML document.
+	require.NoError(t, os.WriteFile(file, []byte(":\n  - not valid sops ["), 0o600))
+
+	got, statusErr := p.Status(coord)
+	require.NoError(t, statusErr)
+	assert.False(t, got, "an unparseable file reports not-initialized")
+}
+
+// TestSopsProvider_KeyExistsEmptyFile covers keyExists on a present but empty file: it must not
+// report the key as present and must not panic on a tree with no branches.
+func TestSopsProvider_KeyExistsEmptyFile(t *testing.T) {
+	p := newAgeProviderWithFile(t, "dev.enc.yaml")
+	sp, ok := p.(*sopsProvider)
+	require.True(t, ok)
+
+	file, err := sp.resolveFile(providers.Coordinate{Stack: "dev", Component: "api"})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(file, []byte(""), 0o600))
+
+	present, _ := sp.keyExists(file, "ANY")
+	assert.False(t, present, "an empty file has no keys")
 }
 
 func TestSopsProvider_DeleteMissingFileIsNoOp(t *testing.T) {

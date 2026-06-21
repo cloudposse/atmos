@@ -17,7 +17,7 @@ type secretService interface {
 	Delete(name string) error
 	DeleteAll() (int, error)
 	ImportFromStore(name string, src secrets.ImportSource, dryRun bool) error
-	Status() []secrets.Status
+	Status(verify bool) []secrets.Status
 	IsDeclared(name string) bool
 	ScopeOf(name string) (secrets.Scope, bool)
 	Validate() secrets.ValidationResult
@@ -32,6 +32,17 @@ var (
 	// Load a scoped secrets service (config + auth + component resolution).
 	loadServiceFn = func(scope secretScope) (secretService, error) {
 		svc, err := loadService(scope)
+		if err != nil {
+			return nil, err
+		}
+		return svc, nil
+	}
+
+	// Load a scoped service for `secret list`. When verify is false (the default) it authenticates
+	// nothing and wires no store resolver, so listing is credential-free; when verify is true it
+	// authenticates (delegating to loadService) so remote-backend existence checks can run.
+	loadServiceForListFn = func(scope secretScope, verify bool) (secretService, error) {
+		svc, err := loadServiceForList(scope, verify)
 		if err != nil {
 			return nil, err
 		}

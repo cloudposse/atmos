@@ -140,6 +140,45 @@ func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosCon
 	return secrets.NewService(&atmosConfig, scope.Stack, scope.Component, section), &atmosConfig, nil
 }
 
+// loadServiceForList loads a scoped secrets service for `secret list`. It is credential-free by
+// default: with verify=false it resolves the component config with auth disabled (no identity
+// authentication, no store auth resolver) and builds the service from the declarations alone —
+// SOPS status is still answered locally, remote-store status is reported as unknown. With
+// verify=true it delegates to loadService, which authenticates and wires the store resolver so
+// remote existence checks (Has) can run.
+func loadServiceForList(scope secretScope, verify bool) (*secrets.Service, error) {
+	defer perf.Track(nil, "secret.loadServiceForList")()
+
+	if verify {
+		return loadService(scope)
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+		ComponentFromArg: scope.Component,
+		Stack:            scope.Stack,
+	}, true)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitConfig, err)
+	}
+
+	section, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		AtmosConfig:          &atmosConfig,
+		Component:            scope.Component,
+		Stack:                scope.Stack,
+		ComponentType:        scope.ComponentType,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{"secret"}, // resolve includes etc., but never retrieve secrets here.
+		AuthManager:          nil,
+		AuthDisabled:         true, // listing reads declarations only — no identity, no decryption.
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to load component config: %w", err)
+	}
+
+	return secrets.NewService(&atmosConfig, scope.Stack, scope.Component, section), nil
+}
+
 // buildAuthManager merges component auth and creates an authenticated manager for the scope.
 func buildAuthManager(atmosConfig *schema.AtmosConfiguration, scope secretScope) (auth.AuthManager, error) {
 	componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{

@@ -25,12 +25,27 @@ type DeletableStore interface {
 }
 
 // StatusStore extends Store with an existence check used by `atmos secret list`/`validate`
-// to report whether a declared secret has been initialized, without retrieving (and thus
-// without registering) its value.
+// to report whether a declared secret has been initialized.
+//
+// Has MUST determine existence without retrieving or decrypting the value: it uses a
+// metadata/describe API (e.g. SSM GetParameter with WithDecryption=false, Secrets Manager
+// DescribeSecret, GCP GetSecretVersion) so that listing never requires a decrypt-capable
+// identity (no kms:Decrypt) and never registers a plaintext value with the masker.
 type StatusStore interface {
 	Store
-	// Has reports whether a value exists for a specific stack, component, and key.
+	// Has reports whether a value exists for a specific stack, component, and key, without
+	// retrieving or decrypting the value.
 	Has(stack string, component string, key string) (bool, error)
+}
+
+// LocalStore is an optional marker for stores whose existence check (Has) needs no network
+// access and no authentication — e.g. the OS keychain. `atmos secret list` treats local
+// stores as always-safe to check (free), and reports non-local (remote) stores as Unknown
+// unless verification is explicitly requested (`--verify`). Remote stores must NOT implement it.
+type LocalStore interface {
+	Store
+	// IsLocal reports whether the store operates without network access or authentication.
+	IsLocal() bool
 }
 
 // SecretAwareStore is implemented by stores that change their at-rest behavior when used as

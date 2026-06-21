@@ -306,12 +306,52 @@ func (p *sopsProvider) Delete(coord providers.Coordinate) error {
 func (p *sopsProvider) Status(coord providers.Coordinate) (bool, error) {
 	defer perf.Track(nil, "providers.sopsProvider.Status")()
 
-	_, err := p.Get(coord)
+	// "Initialized" means the secret's key is present in the encrypted file. SOPS YAML keeps
+	// keys in cleartext (only values are ENC[...]), so we can answer this by parsing the
+	// encrypted tree alone — no key service, no decryption, no authenticated identity. This
+	// keeps `atmos secret list`/`validate` fast and credential-free; only `Get` decrypts.
+	file, err := p.resolveFile(coord)
 	if err != nil {
-		// Treat a missing key or undecryptable file as "not initialized" rather than a hard error.
 		return false, nil
 	}
-	return true, nil
+	present, err := p.keyExists(file, coord.Key)
+	if err != nil {
+		// Treat a missing or unreadable file as "not initialized" rather than a hard error,
+		// matching the prior Get-based behavior.
+		return false, nil
+	}
+	return present, nil
+}
+
+// LocalStatusCheck reports that SOPS Status() is credential-free: it answers "is the key set?"
+// by reading the cleartext key names from the local encrypted file — no age key, no decryption,
+// no authenticated identity. Implements the LocalStatus capability.
+func (p *sopsProvider) LocalStatusCheck() bool {
+	defer perf.Track(nil, "providers.sopsProvider.LocalStatusCheck")()
+
+	return true
+}
+
+// keyExists reports whether the encrypted SOPS file has the given top-level key, without
+// decrypting any values. It returns an error only when the file cannot be read or parsed.
+func (p *sopsProvider) keyExists(file, key string) (bool, error) {
+	enc, err := os.ReadFile(file)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, fileNotFoundErr(file)
+		}
+		return false, fmt.Errorf(errFmtWrapFile, ErrSopsDecrypt, file, err)
+	}
+
+	store := sopsyaml.NewStore(&sopsconfig.YAMLStoreConfig{})
+	tree, err := store.LoadEncryptedFile(enc)
+	if err != nil {
+		return false, fmt.Errorf(errFmtWrapFile, ErrSopsDecrypt, file, err)
+	}
+	if len(tree.Branches) == 0 {
+		return false, nil
+	}
+	return branchHasKey(tree.Branches[0], key), nil
 }
 
 // Reset overwrites the encrypted file with a clean, empty document (creating it if missing),
@@ -741,6 +781,18 @@ func setBranchValue(branch sops.TreeBranch, key string, value any) sops.TreeBran
 		}
 	}
 	return append(branch, sops.TreeItem{Key: key, Value: value})
+}
+
+// branchHasKey reports whether the branch contains the given top-level key. It compares the
+// cleartext key only — it never inspects the (encrypted) value — so it is safe to call on an
+// undecrypted SOPS tree.
+func branchHasKey(branch sops.TreeBranch, key string) bool {
+	for i := range branch {
+		if fmt.Sprint(branch[i].Key) == key {
+			return true
+		}
+	}
+	return false
 }
 
 // removeBranchKey returns a branch with the given top-level key removed.

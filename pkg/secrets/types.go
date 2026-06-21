@@ -63,6 +63,12 @@ type Status struct {
 	Declaration Declaration
 	Coordinate  providers.Coordinate
 	Initialized bool
+	// Unknown is true when the secret's initialization state was not checked because doing so
+	// would require contacting a remote backend (network + credentials), and verification was not
+	// requested. Listing is credential-free by default: local backends (e.g. SOPS) are always
+	// checked, but remote stores are reported as Unknown unless `--verify` is passed. When Unknown
+	// is true, Initialized is meaningless.
+	Unknown bool
 	// Err holds any error encountered while checking status (e.g. access denied).
 	Err error
 }
