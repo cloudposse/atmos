@@ -36,6 +36,10 @@ components:
             - "--output"
             - "$ATMOS_OUTPUT_FILE"
             - "--quiet"
+            # Limit to MEDIUM severity; on a bare bucket AWS-0090 (versioning)
+            # is the only MEDIUM check, so exactly one finding is reported.
+            - "--severity"
+            - "MEDIUM"
             - "$ATMOS_COMPONENT_PATH/trivy_target.tf"
           on_failure: warn
         kics-policy:
@@ -51,10 +55,10 @@ components:
             - "--report-formats"
             - "sarif"
             - "--no-progress"
-            # Exclude the account-level "IAM Access Analyzer Not Enabled" query;
-            # it is not a per-bucket property and would add unrelated noise.
-            - "--exclude-queries"
-            - "e592a0c5-5bdb-414c-9066-5dba7cdea370"
+            # Include only the S3 versioning query so exactly one finding is
+            # reported (S3 Bucket Without Versioning).
+            - "--include-queries"
+            - "568a4d22-3517-44a6-a7ad-6a7eed88722c"
           env:
             KICS_QUERIES_PATH: "$KICS_QUERIES_PATH"
           on_failure: warn
