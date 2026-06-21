@@ -1,0 +1,129 @@
+package container
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+func TestDefaultConfig(t *testing.T) {
+	assert.Equal(t, "components/container", DefaultConfig().BasePath)
+}
+
+func TestParseConfig(t *testing.T) {
+	config, err := parseConfig(map[string]any{"base_path": "custom/container"})
+	require.NoError(t, err)
+	assert.Equal(t, "custom/container", config.BasePath)
+}
+
+func TestFromComponentSection(t *testing.T) {
+	// First-class top-level keys (NOT under vars).
+	section := map[string]any{
+		"composition": "storefront",
+		"image":       "localhost:5001/api:abc",
+		"build": map[string]any{
+			"context":    "app",
+			"dockerfile": "Dockerfile",
+			"tags":       []any{"localhost:5001/api:abc"},
+			"build_args": map[string]any{"VERSION": "1.0"},
+		},
+		"run": map[string]any{
+			"command": "./api",
+			"ports": []any{
+				map[string]any{"host": 8080, "container": 80},
+			},
+			"mounts": []any{
+				map[string]any{"source": ".", "target": "/workspace", "read_only": true},
+			},
+			"user": "app",
+		},
+	}
+
+	spec, err := FromComponentSection(section)
+	require.NoError(t, err)
+	assert.Equal(t, "localhost:5001/api:abc", spec.Image)
+	assert.Equal(t, "storefront", spec.Composition)
+
+	require.NotNil(t, spec.Build)
+	assert.Equal(t, "app", spec.Build.Context)
+	assert.Equal(t, []string{"localhost:5001/api:abc"}, spec.Build.Tags)
+	assert.Equal(t, "1.0", spec.Build.BuildArgs["VERSION"]) // snake_case build_args decoded via yaml tag
+
+	require.NotNil(t, spec.Run)
+	assert.Equal(t, "./api", spec.Run.Command)
+	assert.Equal(t, "app", spec.Run.User)
+	require.Len(t, spec.Run.Ports, 1)
+	assert.Equal(t, 8080, spec.Run.Ports[0].Host)
+	assert.Equal(t, 80, spec.Run.Ports[0].Container)
+	require.Len(t, spec.Run.Mounts, 1)
+	assert.Equal(t, "/workspace", spec.Run.Mounts[0].Target)
+	assert.True(t, spec.Run.Mounts[0].ReadOnly) // snake_case read_only decoded via yaml tag
+}
+
+func TestFromComponentSection_NoVarsNesting(t *testing.T) {
+	// image/build/run under `vars` must NOT be picked up (they are first-class now).
+	section := map[string]any{
+		"vars": map[string]any{"image": "should-be-ignored"},
+	}
+	spec, err := FromComponentSection(section)
+	require.NoError(t, err)
+	assert.Empty(t, spec.Image)
+	assert.Nil(t, spec.Build)
+	assert.Nil(t, spec.Run)
+}
+
+func TestContainerSpec_ToBuildConfig(t *testing.T) {
+	spec := ContainerSpec{Build: &schema.ContainerBuildStep{
+		Context:    "app",
+		Dockerfile: "Dockerfile",
+		Tags:       []string{"img:1"},
+		Target:     "prod",
+		NoCache:    true,
+	}}
+	bc := spec.ToBuildConfig()
+	require.NotNil(t, bc)
+	assert.Equal(t, "app", bc.Context)
+	assert.Equal(t, []string{"img:1"}, bc.Tags)
+	assert.Equal(t, "prod", bc.Target)
+	assert.True(t, bc.NoCache)
+
+	assert.Nil(t, (&ContainerSpec{}).ToBuildConfig())
+}
+
+func TestContainerSpec_CommandArgs(t *testing.T) {
+	assert.Nil(t, (&ContainerSpec{}).CommandArgs())
+	spec := ContainerSpec{Run: &schema.ContainerRunStep{Command: "./api --port 8080"}}
+	assert.Equal(t, []string{"./api", "--port", "8080"}, spec.CommandArgs())
+}
+
+func TestContainerSpec_Mounts(t *testing.T) {
+	spec := ContainerSpec{Run: &schema.ContainerRunStep{Mounts: []schema.ContainerMount{
+		{Source: ".", Target: "/workspace", ReadOnly: true},
+	}}}
+	mounts := spec.Mounts()
+	require.Len(t, mounts, 1)
+	assert.Equal(t, "bind", mounts[0].Type) // defaulted
+	assert.Equal(t, "/workspace", mounts[0].Target)
+	assert.True(t, mounts[0].ReadOnly)
+
+	assert.Nil(t, (&ContainerSpec{}).Mounts())
+}
+
+func TestContainerSpec_Ports(t *testing.T) {
+	spec := ContainerSpec{Run: &schema.ContainerRunStep{Ports: []schema.ContainerPort{
+		{Host: 8080, Container: 80},
+		{Host: 53, Container: 53, Protocol: "udp"},
+	}}}
+	ports := spec.Ports()
+	require.Len(t, ports, 2)
+	assert.Equal(t, 8080, ports[0].HostPort)
+	assert.Equal(t, 80, ports[0].ContainerPort)
+	assert.Equal(t, "tcp", ports[0].Protocol) // defaulted
+	assert.Equal(t, 53, ports[1].ContainerPort)
+	assert.Equal(t, "udp", ports[1].Protocol)
+
+	assert.Nil(t, (&ContainerSpec{}).Ports())
+}

@@ -101,6 +101,7 @@ type PushResult struct {
 type CreateConfig struct {
 	Name            string
 	Image           string
+	Command         []string // Command/args to run; appended after the image. Ignored when OverrideCommand is set.
 	WorkspaceFolder string
 	Mounts          []Mount
 	Ports           []PortBinding

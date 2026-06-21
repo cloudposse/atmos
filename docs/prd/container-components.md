@@ -36,31 +36,34 @@ use a [compose component](compose-components.md) instead.
 
 ## Public Interface
 
+`image`, `build`, and `run` are **first-class component sections** — siblings of `composition`/`env`/
+`metadata`, **not** nested under `vars` (which is reserved for arbitrary template variables). The
+`build`/`run` shapes are the same structs as the [`type: container` workflow step](container-actions-and-step-outputs.md)
+(`ContainerBuildStep`/`ContainerRunStep`), so component and step configuration stay consistent. Ports
+and mounts are structured. Container application env comes from the component `env:` section (resolved
+with secrets), not from `run`.
+
 ```yaml
 components:
   container:
     api:
       composition: storefront            # first-class membership (see compositions.md)
-      vars:
-        image: "localhost:5001/api:{{ .git.sha }}"
+      image: "localhost:5001/api:{{ .git.sha }}"
 
-        build:
-          context: app
-          dockerfile: Dockerfile
-          tags:
-            - "localhost:5001/api:{{ .git.sha }}"
+      build:
+        context: app
+        dockerfile: Dockerfile
+        tags:
+          - "localhost:5001/api:{{ .git.sha }}"
 
-        run:
-          command: ./api
-          ports:
-            - "8080:8080"
-          env:
-            PORT: "8080"
-          mounts:
-            - source: .
-              target: /workspace
-          healthcheck:
-            command: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      run:
+        command: ./api
+        ports:
+          - host: 8080
+            container: 8080
+        mounts:
+          - source: .
+            target: /workspace
 
       secrets:
         vars:
@@ -68,11 +71,13 @@ components:
             store: app-secrets
             required: true
       env:
+        PORT: "8080"
         NPM_TOKEN: !secret NPM_TOKEN
 ```
 
 Component config is the canonical home for component-scoped secrets, env, and identity/auth — exactly
-like other component kinds. Inheritance, catalogs, and deep-merge apply normally.
+like other component kinds. Inheritance, catalogs, and deep-merge apply normally (`metadata.inherits`
+deep-merges `build`/`run`/`image` from abstract base components).
 
 ## Lifecycle
 

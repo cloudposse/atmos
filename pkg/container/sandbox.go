@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"regexp"
-	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -24,8 +22,6 @@ const (
 
 // maxSandboxNameLength bounds the sanitized container name length.
 const maxSandboxNameLength = 48
-
-var sandboxNamePattern = regexp.MustCompile(`[^a-zA-Z0-9_.-]+`)
 
 // SandboxConfig describes a long-lived workflow sandbox container.
 type SandboxConfig struct {
@@ -253,19 +249,11 @@ func matchesSandboxLabels(labels map[string]string, config *SandboxConfig) bool 
 }
 
 func isContainerRunning(status string) bool {
-	status = strings.ToLower(status)
-	return strings.Contains(status, "running") || strings.HasPrefix(status, "up ")
+	return IsContainerRunning(status)
 }
 
 func sanitizeSandboxName(value string) string {
-	value = strings.Trim(sandboxNamePattern.ReplaceAllString(value, "-"), "-.")
-	if value == "" {
-		return "workflow"
-	}
-	if len(value) > maxSandboxNameLength {
-		return value[:maxSandboxNameLength]
-	}
-	return value
+	return sanitizeName(value, "workflow", maxSandboxNameLength)
 }
 
 // ID returns the runtime container ID. In dry run it returns the generated name.

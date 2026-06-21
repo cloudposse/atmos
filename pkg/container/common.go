@@ -110,6 +110,10 @@ func addImageAndCommand(args []string, config *CreateConfig) []string {
 
 	if config.OverrideCommand {
 		args = append(args, "-c", "sleep infinity")
+	} else {
+		// Long-lived service containers run their own command (or the image's
+		// default ENTRYPOINT/CMD when none is given).
+		args = append(args, config.Command...)
 	}
 
 	return args

@@ -38,6 +38,9 @@
     "components": {
       "$ref": "#/definitions/components"
     },
+    "compositions": {
+      "$ref": "#/definitions/compositions"
+    },
     "secrets": {
       "$ref": "#/definitions/component_secrets"
     },
@@ -195,6 +198,9 @@
             },
             "packer": {
               "$ref": "#/definitions/packer_components"
+            },
+            "container": {
+              "$ref": "#/definitions/container_components"
             }
           },
           "required": []
@@ -388,6 +394,87 @@
           "additionalProperties": false
         }
       ]
+    },
+    "container_components": {
+      "title": "container_components",
+      "description": "Container components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/container_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "container_component_manifest": {
+      "title": "container_component_manifest",
+      "description": "Container component manifest. A stack-scoped, persistent container service. `image`, `build`, and `run` are first-class sections (not under `vars`).",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "composition": {
+          "type": "string",
+          "description": "Name of the composition this component is a member of (must be declared under the top-level `compositions` section)."
+        },
+        "image": {
+          "type": "string",
+          "description": "Container image reference (supports Go templates)."
+        },
+        "build": {
+          "type": "object",
+          "description": "Image build configuration (context, dockerfile, tags, build_args, target, etc.).",
+          "additionalProperties": true
+        },
+        "run": {
+          "type": "object",
+          "description": "Container run configuration (command, ports, mounts, user, etc.).",
+          "additionalProperties": true
+        },
+        "env": {
+          "$ref": "#/definitions/env"
+        },
+        "settings": {
+          "$ref": "#/definitions/settings"
+        },
+        "metadata": {
+          "$ref": "#/definitions/metadata"
+        },
+        "command": {
+          "$ref": "#/definitions/command"
+        }
+      }
+    },
+    "compositions": {
+      "title": "compositions",
+      "description": "Named multi-service systems. Components join a composition via their `composition` field.",
+      "type": "object",
+      "patternProperties": {
+        "^[/a-zA-Z0-9-_{}. ]+$": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "services": {
+              "type": "array",
+              "description": "Closed set of service names that may claim membership (open for fulfillment).",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
     },
     "helmfile_component_manifest": {
       "title": "helmfile_component_manifest",

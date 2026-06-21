@@ -1,0 +1,32 @@
+base_path: "."
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.stage }}"
+
+components:
+  container:
+    base_path: "components/container"
+
+# Global container runtime defaults (the top-level `container:` namespace).
+container:
+  runtime:
+    # Auto-init/start the Podman machine when no running runtime is found, so the
+    # example works out of the box on macOS/Linux. Also settable via the
+    # ATMOS_CONTAINER_RUNTIME_AUTO_START env var. With Docker running this is a no-op.
+    auto_start: true
+    # provider: podman   # optional: pin docker|podman (default: auto-detect docker, then podman)
+
+# A composition groups multiple services into one system. Membership is declared
+# per-component via the first-class `composition:` field. The `services:` list is
+# a closed contract for membership (declaring an unknown one is an error) but open
+# for fulfillment (a declared service with no component in this stack is allowed).
+compositions:
+  storefront:
+    description: Storefront API, a background worker, and a database
+    services:
+      - api
+      - worker
+      - database   # declared but not provided in this stack — allowed

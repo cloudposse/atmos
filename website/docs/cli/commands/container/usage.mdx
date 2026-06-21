@@ -1,0 +1,187 @@
+---
+title: atmos container
+sidebar_label: container
+sidebar_class_name: command
+id: usage
+description: Build, run, and operate persistent, stack-scoped container components.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use the `atmos container` subcommands to build, run, and operate **container components** — stack-scoped,
+Atmos-native, persistent containers. One component is one service. Atmos owns the image artifact
+(build/push/pull) and an optional long-running named container lifecycle (`up`/`ps`/`logs`/`exec`/
+`restart`/`stop`/`rm`/`down`), discovered by labels derived from the canonical component instance
+address — not from local state files.
+</Intro>
+
+<Screengrab title="atmos container --help" slug="atmos-container--help" />
+
+A container component is the per-service building block. A set of container components grouped by a
+[composition](#compositions) is effectively "your own Compose" — Atmos orchestrates a multi-container
+local system with no `compose.yaml`. This is distinct from the ephemeral [`type: container`
+step](/workflows), which is `docker run --rm` and workflow-scoped; the component is
+declarative, addressable infrastructure.
+
+## Usage
+
+<Terminal>
+```shell
+# Image artifact
+atmos container build <component> -s <stack>
+atmos container push <component> -s <stack>
+atmos container pull <component> -s <stack>
+
+# Lifecycle
+atmos container run <component> -s <stack>           # one-shot foreground process (vars.run)
+atmos container up <component> -s <stack>            # create/start the long-running container
+atmos container down <component> -s <stack>          # stop + rm
+atmos container restart|stop|rm <component> -s <stack>
+
+# Inspection
+atmos container list                                 # all container components + running state
+atmos container ps <component> -s <stack>
+atmos container logs <component> -s <stack>
+atmos container exec <component> -s <stack> -- sh    # command after `--`
+```
+</Terminal>
+
+:::tip Build before start
+`up` and `run` build the image automatically when the component declares `vars.build` and the image
+is not present locally. Components that reference an existing `vars.image` are pulled on demand.
+:::
+
+## Configuration
+
+Define container components under `components.container` in your stack manifests. `image`, `build`, and
+`run` are **first-class component sections** (siblings of `composition`/`env`/`metadata`) — NOT nested
+under `vars`, consistent with the container workflow step:
+
+```yaml
+components:
+  container:
+    api:
+      composition: storefront            # first-class composition membership
+      image: "localhost:5001/api:{{ .git.sha }}"
+      build:
+        context: app
+        dockerfile: Dockerfile
+        tags:
+          - "localhost:5001/api:{{ .git.sha }}"
+      run:
+        command: ./api
+        ports:
+          - host: 8080
+            container: 8080
+        mounts:
+          - source: .
+            target: /workspace
+      secrets:
+        vars:
+          NPM_TOKEN:
+            store: app-secrets
+            required: true
+      env:                               # component env (resolved with secrets)
+        PORT: "8080"
+        NPM_TOKEN: !secret NPM_TOKEN
+```
+
+Inheritance (`metadata.inherits`), catalogs, and deep-merge apply exactly like other component kinds —
+abstract base components can carry shared `build`/`run` defaults.
+
+### Runtime selection
+
+The container runtime is auto-detected (Docker first, then Podman). Override it globally in `atmos.yaml`:
+
+```yaml
+container:
+  runtime:
+    provider: podman      # or docker, or empty for auto-detect
+    auto_start: true      # auto-init/start the Podman machine when needed
+```
+
+It can also be set with the `ATMOS_CONTAINER_RUNTIME` environment variable.
+
+## Component Instance Identity
+
+A container component instance is identified by `<stack>/<component_type>/<component>`. Atmos projects
+that onto a deterministic runtime name and labels:
+
+| Field | Value (example) |
+|-------|-----------------|
+| Instance | `dev/container/api` |
+| Runtime name | `atmos-dev-container-api` |
+| Labels | `com.cloudposse.atmos.stack=dev`, `com.cloudposse.atmos.component_type=container`, `com.cloudposse.atmos.component=api`, `com.cloudposse.atmos.instance=dev/container/api` |
+
+`ps`, `logs`, `exec`, `restart`, `stop`, `rm`, and `down` discover the container by these labels — there
+are no local state files to lose or corrupt.
+
+## Running state
+
+`atmos container list` shows the running state of every container component — a green ● dot on a TTY,
+and `running`/`stopped`/`unknown` text otherwise. When no container runtime is available, rows are
+reported as `unknown` rather than failing the listing. (Container running state lives here, not in the
+generic `atmos list components`, which treats all component kinds uniformly.)
+
+## Compositions
+
+A composition groups components into a system. Components declare membership via the `composition`
+field; the top-level `compositions` section declares the closed set of services:
+
+```yaml
+compositions:
+  storefront:
+    description: Storefront system
+    services: [api, worker, database]
+```
+
+- Declaring `composition: X` for a service not listed in `compositions.X.services` is a **hard error**.
+- A declared service with no component in a stack is **allowed** (membership is closed, fulfillment is open).
+- `atmos composition validate <name> -s <stack>` reports fulfilled vs. not-provided-here services.
+
+## Arguments
+
+<dl>
+  <dt>`<component>`</dt>
+  <dd>The container component to operate on. Required for all subcommands except `list`.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s` <em>(required for component subcommands)</em></dt>
+  <dd>The stack the component is defined in.</dd>
+
+  <dt>`--identity`</dt>
+  <dd>Authenticate with the given identity before running (e.g. for registry access on build/push/pull).</dd>
+
+  <dt>`--dry-run`</dt>
+  <dd>Print what would happen without touching the runtime.</dd>
+
+  <dt>`--` <em>(exec)</em></dt>
+  <dd>Everything after `--` is the command run inside the container, e.g. `atmos container exec api -s dev -- sh -c 'env'`.</dd>
+</dl>
+
+## Examples
+
+<Terminal>
+```shell
+# Build the image, start the long-running container, and confirm it is running.
+atmos container build api -s dev
+atmos container up api -s dev
+atmos container list             # api shows a ● running indicator
+
+# Operate the running container (discovered by label).
+atmos container ps api -s dev
+atmos container logs api -s dev
+atmos container exec api -s dev -- sh
+
+# Tear down.
+atmos container down api -s dev
+
+# Report a composition's fulfilled vs. not-provided services.
+atmos composition validate storefront -s dev
+```
+</Terminal>

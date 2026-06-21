@@ -219,6 +219,10 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentKind 
 		return atmosConfig.Components.Packer.BasePath
 	case cfg.AnsibleSectionName:
 		return atmosConfig.Components.Ansible.BasePath
+	case cfg.ContainerSectionName:
+		// Container components are configured via the Plugins map (no typed field);
+		// fall back to the conventional base path.
+		return "components/container"
 	default:
 		return ""
 	}
