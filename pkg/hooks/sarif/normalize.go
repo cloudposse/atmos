@@ -21,6 +21,7 @@ var bindGitHubWorkspaceOnce sync.Once //nolint:gochecknoglobals // one-time vipe
 
 type uriMapper struct {
 	workspace  string
+	baseRoot   string
 	sourceRoot string
 	scanRoot   string
 }
@@ -50,6 +51,7 @@ func normalizeArtifactURIs(data []byte, ctx *hooks.ExecContext) []byte {
 func newURIMapper(ctx *hooks.ExecContext) uriMapper {
 	return uriMapper{
 		workspace:  cleanAbs(githubWorkspace()),
+		baseRoot:   cleanAbs(atmosBasePath(ctx)),
 		sourceRoot: cleanAbs(sourceComponentPath(ctx)),
 		scanRoot:   cleanAbs(scanComponentPath(ctx)),
 	}
@@ -130,10 +132,35 @@ func (m uriMapper) normalizeAbs(path, fallback string) string {
 	return fallback
 }
 
+// normalizeRel maps a relative SARIF path to a repo-relative path. Scanners
+// disagree on what a relative path is anchored to: kics and Checkov emit paths
+// relative to the Atmos working directory (e.g. components/terraform/<c>/x.tf),
+// while others emit just the file name relative to the component dir. Resolve by
+// trying each candidate base and using the first that points at a real file, so
+// a base that already contains the component prefix is not prepended again
+// (which previously produced doubled paths like
+// components/terraform/<c>/components/terraform/<c>/x.tf that GitHub Code
+// Scanning could not anchor).
 func (m uriMapper) normalizeRel(path, fallback string) string {
 	if unsafeRelativePath(path) {
 		return fallback
 	}
+	// A path under the provisioned scan dir maps back to the committed source
+	// component dir (mirrors normalizeAbs) so per-stack workdirs resolve to
+	// files that actually exist in the repository.
+	if m.scanRoot != "" && m.sourceRoot != "" && fileExists(filepath.Join(m.scanRoot, path)) {
+		return m.repoRelative(filepath.Join(m.sourceRoot, path), fallback)
+	}
+	for _, base := range m.relativeBases() {
+		abs := filepath.Join(base, path)
+		if !fileExists(abs) {
+			continue
+		}
+		if rel, ok := relUnder(m.workspace, abs); ok {
+			return filepath.ToSlash(rel)
+		}
+	}
+	// Nothing resolved on disk; preserve prior best-effort behavior.
 	if fileExists(filepath.Join(m.workspace, path)) {
 		return filepath.ToSlash(path)
 	}
@@ -141,6 +168,22 @@ func (m uriMapper) normalizeRel(path, fallback string) string {
 		return fallback
 	}
 	return m.repoRelative(filepath.Join(m.sourceRoot, path), fallback)
+}
+
+// relativeBases lists the directories a relative SARIF path may be anchored to,
+// deduped and non-empty.
+func (m uriMapper) relativeBases() []string {
+	candidates := []string{m.workspace, m.baseRoot, m.scanRoot, m.sourceRoot}
+	seen := make(map[string]bool, len(candidates))
+	bases := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		if c == "" || seen[c] {
+			continue
+		}
+		seen[c] = true
+		bases = append(bases, c)
+	}
+	return bases
 }
 
 func (m uriMapper) repoRelative(path, fallback string) string {
@@ -218,6 +261,18 @@ func githubWorkspace() string {
 		_ = viper.BindEnv(githubWorkspaceViperKey, "GITHUB_WORKSPACE")
 	})
 	return viper.GetString(githubWorkspaceViperKey)
+}
+
+// atmosBasePath returns the absolute Atmos base path (the working directory),
+// which is the root that kics and Checkov anchor their relative SARIF paths to.
+func atmosBasePath(ctx *hooks.ExecContext) string {
+	if ctx == nil || ctx.AtmosConfig == nil {
+		return ""
+	}
+	if ctx.AtmosConfig.BasePathAbsolute != "" {
+		return ctx.AtmosConfig.BasePathAbsolute
+	}
+	return ctx.AtmosConfig.BasePath
 }
 
 func scanComponentPath(ctx *hooks.ExecContext) string {
