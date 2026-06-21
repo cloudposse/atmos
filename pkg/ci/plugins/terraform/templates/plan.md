@@ -9,7 +9,7 @@
 ## No Changes for `{{.Component}}` in `{{.Stack}}`
 {{- end }}
 
-<a href="https://cloudposse.com/"><img src="https://cloudposse.com/logo-300x69.svg" width="100px" align="right"/></a>
+<a href="https://atmos.tools/ci"><img src="https://atmos.tools/img/atmos-ci-gradient.svg" alt="Atmos CI" width="220px" align="right"/></a>
 
 {{- if .Result.HasErrors }}
 [![failed](https://shields.io/badge/PLAN-FAILED-ff0000?style=for-the-badge)](#user-content-result-{{$target}})
