@@ -332,6 +332,7 @@ func TestSSMStore_Has_NoDecryption(t *testing.T) {
 		ok, err := store.Has("dev/usw2/app", "service", "config-key")
 		require.NoError(t, err)
 		assert.False(t, ok)
+		mockSSM.AssertExpectations(t) // fails if GetParameter stops being called.
 	})
 }
 

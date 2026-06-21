@@ -228,9 +228,9 @@ type onePasswordExistenceChecker interface {
 // existence check (onePasswordExistenceChecker), Has uses it so that probing for existence does
 // not reveal/retrieve the secret value. Otherwise it falls back to a value-resolving probe.
 //
-// Limitation: the production SDK and Connect clients do not yet implement Exists, so for those
-// backends Has currently still resolves the value. The no-reveal path is exercised by clients
-// that opt into onePasswordExistenceChecker.
+// Both production clients (native SDK and Connect) implement the metadata-only Exists check, so
+// in practice Has never resolves the value. The value-resolving fallback remains only for clients
+// that do not opt into onePasswordExistenceChecker.
 func (s *OnePasswordStore) Has(stack string, component string, key string) (bool, error) {
 	reference, err := s.referenceFor(key, stack, component)
 	if err != nil {

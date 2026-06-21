@@ -258,7 +258,7 @@ func (s *SSMStore) assumeRole(ctx context.Context, roleArn *string) (*aws.Config
 		RoleSessionName: aws.String("atmos-ssm-session"),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to assume role %s: %w", *roleArn, err)
+		return nil, fmt.Errorf("%w %s: %w", ErrAssumeRole, *roleArn, err)
 	}
 
 	cfg := s.awsConfig.Copy()
@@ -302,7 +302,7 @@ func (s *SSMStore) Set(stack string, component string, key string, value any) er
 	// Assume write role if specified
 	cfg, err := s.assumeRole(ctx, s.writeRoleArn)
 	if err != nil {
-		return fmt.Errorf("failed to assume write role: %w", err)
+		return fmt.Errorf(errWrapFormat, ErrAssumeRole, err)
 	}
 
 	// Use the same client if no role was assumed
@@ -353,7 +353,7 @@ func (s *SSMStore) Get(stack string, component string, key string) (any, error) 
 	// Assume the read role if specified
 	cfg, err := s.assumeRole(ctx, s.readRoleArn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to assume read role: %w", err)
+		return nil, fmt.Errorf(errWrapFormat, ErrAssumeRole, err)
 	}
 
 	// Use the same client if no role was assumed
@@ -415,7 +415,7 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 	// Assume the read role if specified
 	cfg, err := s.assumeRole(ctx, s.readRoleArn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to assume read role: %w", err)
+		return nil, fmt.Errorf(errWrapFormat, ErrAssumeRole, err)
 	}
 
 	// Use the same client if no role was assumed
@@ -470,7 +470,7 @@ func (s *SSMStore) Delete(stack string, component string, key string) error {
 
 	cfg, err := s.assumeRole(ctx, s.writeRoleArn)
 	if err != nil {
-		return fmt.Errorf("failed to assume write role: %w", err)
+		return fmt.Errorf(errWrapFormat, ErrAssumeRole, err)
 	}
 
 	client := s.client
@@ -515,7 +515,7 @@ func (s *SSMStore) Has(stack string, component string, key string) (bool, error)
 	// Assume the read role if specified (existence still needs a read identity, just not decrypt).
 	cfg, err := s.assumeRole(ctx, s.readRoleArn)
 	if err != nil {
-		return false, fmt.Errorf("failed to assume read role: %w", err)
+		return false, fmt.Errorf(errWrapFormat, ErrAssumeRole, err)
 	}
 
 	client := s.client
