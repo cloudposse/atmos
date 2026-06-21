@@ -3,6 +3,18 @@ name: Native CI
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    # Only run when something this E2E actually exercises changes, so unrelated
+    # PRs aren't spammed with scanner SARIF/code-scanning annotations.
+    paths:
+      # The E2E fixture + its validation test-case.
+      - "tests/fixtures/scenarios/native-ci-e2e/**"
+      - "tests/test-cases/native-ci-e2e.yaml"
+      # The workflow itself.
+      - ".github/workflows/native-ci.yml"
+      # The feature this E2E exercises, so scanner/CI source changes still run it.
+      - "pkg/ci/**"
+      - "pkg/hooks/**"
+      - "actions/cache/**"
   workflow_dispatch:
 
 permissions:
