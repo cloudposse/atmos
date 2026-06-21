@@ -890,6 +890,10 @@
               "type": "string",
               "description": "Terraform/OpenTofu/Helmfile component"
             },
+            "description": {
+              "type": "string",
+              "description": "Human-readable component description"
+            },
             "inherits": {
               "oneOf": [
                 {

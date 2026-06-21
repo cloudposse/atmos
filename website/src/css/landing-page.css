@@ -1,4 +1,4 @@
-html[data-theme="dark"] .landing-page footer {
+html[data-theme="dark"] .landing-page .cta-footer {
   background: rgb(0 0 0 / 21%);
 }
 
@@ -403,18 +403,18 @@ html[data-theme="dark"] .section__description h2 {
   text-align: center;
 }
 
-.landing-page footer h2 {
+.landing-page .cta-footer h2 {
   color: #ccc;
 }
 
-.landing-page footer h3 {
+.landing-page .cta-footer h3 {
   font-size: 2em;
   line-height: 1.7em;
   color: #7c7b7b;
   text-align: center;
 }
 
-.landing-page footer {
+.landing-page .cta-footer {
   background: #0a1922;
   min-width: 100vw;
   margin: 3em;
@@ -508,7 +508,7 @@ strong.underline::after {
     margin-bottom: 0;
   }
 
-  .landing-page footer h2 {
+  .landing-page .cta-footer h2 {
     display: flex;
     flex-direction: column;
   }
