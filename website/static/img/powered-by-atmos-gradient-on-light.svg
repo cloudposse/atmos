@@ -1,0 +1,24 @@
+<svg width="236" height="48" viewBox="0 0 236 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Powered by atmos CI</title>
+  <desc id="desc">A compact Powered by atmos CI badge with an animated atmos gradient wordmark for light backgrounds.</desc>
+  <defs>
+    <linearGradient id="badgeAccent" x1="26" y1="10" x2="216" y2="38" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#29a54c">
+        <animate attributeName="stop-color" values="#29a54c;#3578e5;#583ce7;#168f73;#29a54c" dur="15s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="0.5" stop-color="#3578e5">
+        <animate attributeName="stop-color" values="#3578e5;#168f73;#29a54c;#583ce7;#3578e5" dur="15s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="1" stop-color="#583ce7">
+        <animate attributeName="stop-color" values="#583ce7;#29a54c;#3578e5;#168f73;#583ce7" dur="15s" repeatCount="indefinite"/>
+      </stop>
+      <animateTransform attributeName="gradientTransform" type="translate" values="-45 0;45 0;-45 0" dur="15s" repeatCount="indefinite"/>
+    </linearGradient>
+  </defs>
+  <rect x="0.75" y="0.75" width="234.5" height="46.5" rx="12" fill="#ffffff"/>
+  <rect x="0.75" y="0.75" width="234.5" height="46.5" rx="12" fill="none" stroke="#171717" stroke-opacity="0.14" stroke-width="1.5"/>
+  <text x="22" y="29" fill="#5b6470" font-family="Inter, Arial, Helvetica, sans-serif" font-size="12.5" font-weight="600" letter-spacing="0.2">Powered by</text>
+  <text x="100" y="32" fill="url(#badgeAccent)" font-family="Inter, Arial, Helvetica, sans-serif" font-size="26" font-weight="800" letter-spacing="0">atmos</text>
+  <rect x="183" y="13" width="28" height="21" rx="6" fill="url(#badgeAccent)" fill-opacity="0.14" stroke="url(#badgeAccent)" stroke-opacity="0.7"/>
+  <text x="189" y="29" fill="#1f2937" font-family="Inter, Arial, Helvetica, sans-serif" font-size="13" font-weight="800" letter-spacing="0.45">CI</text>
+</svg>

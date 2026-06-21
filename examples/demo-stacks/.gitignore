@@ -8,3 +8,7 @@
 **/terraform.tfstate.backup
 **/terraform.tfstate.d/**
 **/cache.*.txt
+
+# Keep a committed multi-platform lock for myapp so recorded `terraform init`
+# finds complete checksums and skips the "Incomplete lock file" warning.
+!components/terraform/myapp/.terraform.lock.hcl
