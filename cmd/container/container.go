@@ -47,7 +47,7 @@ func init() {
 
 	containerCmd.AddCommand(
 		listCmd,
-		buildCmd, pushCmd, pullCmd, runCmd, upCmd, psCmd,
+		buildCmd, pushCmd, pullCmd, runCmd, upCmd, startCmd, psCmd,
 		logsCmd, execCmd, attachCmd, restartCmd, stopCmd, rmCmd, downCmd,
 	)
 
@@ -108,6 +108,12 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 		info.DryRun = true
 	}
 
+	// `--all` is registered only on the bulk-capable lifecycle verbs, so read it
+	// directly from the executing command's flag (nil-safe for the other verbs).
+	if allFlag := cmd.Flag("all"); allFlag != nil && allFlag.Value.String() == "true" {
+		info.All = true
+	}
+
 	return info
 }
 
@@ -135,6 +141,15 @@ func initConfigAndStacksInfo(cmd *cobra.Command, subCommand string, args []strin
 // runVerb is the shared dispatch for all container subcommands: it builds the
 // execution info and delegates to the registered container component provider.
 func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
+	// Rebind the executing command's flags (including the inherited --stack) to
+	// Viper so the full precedence chain (flag > ATMOS_STACK env > config) is
+	// honored. The init-time BindToViper binds the parser's own flag set, not the
+	// flags Cobra actually parses into, so without this per-execution rebind the
+	// --stack flag value is silently dropped (only ATMOS_STACK would be read).
+	if err := containerParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+		return err
+	}
+
 	info := initConfigAndStacksInfo(cmd, subCommand, args)
 	provider := component.MustGetProvider(cfg.ContainerComponentType)
 	return provider.Execute(&component.ExecutionContext{
@@ -146,5 +161,20 @@ func runVerb(cmd *cobra.Command, subCommand string, args []string) error {
 		ConfigAndStacksInfo: info,
 		// Args carries the pass-through command (after "--"), used by `exec`.
 		Args: info.AdditionalArgsAndFlags,
+		// Flags carries verb-specific flags (e.g. logs --follow/--tail) when present.
+		Flags: verbFlags(cmd),
 	})
+}
+
+// verbFlags collects verb-specific flag values (nil-safe — only the flags
+// registered on the executing command are present) for the component provider.
+func verbFlags(cmd *cobra.Command) map[string]any {
+	flagValues := map[string]any{}
+	if f := cmd.Flag("follow"); f != nil {
+		flagValues["follow"] = f.Value.String() == "true"
+	}
+	if f := cmd.Flag("tail"); f != nil {
+		flagValues["tail"] = f.Value.String()
+	}
+	return flagValues
 }

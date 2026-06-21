@@ -19,6 +19,25 @@ func TestParseConfig(t *testing.T) {
 	assert.Equal(t, "custom/container", config.BasePath)
 }
 
+func TestParseConfig_DecodeError(t *testing.T) {
+	// A non-map raw value cannot decode into the Config struct.
+	_, err := parseConfig([]any{1, 2, 3})
+	require.Error(t, err)
+}
+
+func TestDecodeSection(t *testing.T) {
+	var build schema.ContainerBuildStep
+	require.NoError(t, decodeSection(map[string]any{"context": "app", "dockerfile": "Dockerfile"}, &build))
+	assert.Equal(t, "app", build.Context)
+	assert.Equal(t, "Dockerfile", build.Dockerfile)
+}
+
+func TestDecodeSection_Error(t *testing.T) {
+	// A scalar cannot decode into a struct.
+	var build schema.ContainerBuildStep
+	require.Error(t, decodeSection("not-a-map", &build))
+}
+
 func TestFromComponentSection(t *testing.T) {
 	// First-class top-level keys (NOT under vars).
 	section := map[string]any{

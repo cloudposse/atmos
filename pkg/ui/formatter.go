@@ -528,6 +528,19 @@ func FormatExperimentalBadge() string {
 	return f.styles.ExperimentalBadge.Render("EXPERIMENTAL")
 }
 
+// FormatComponentLabel renders a short colored badge for a per-item label (e.g. a
+// container log prefix), cycling background colors by index so each item gets a
+// distinct, stable color in the log-level label style. When color is
+// unsupported (non-TTY, NO_COLOR, dumb terminal) it degrades to a plain `[name]`
+// label so output stays readable in pipes and CI.
+func FormatComponentLabel(name string, index int) string {
+	f, err := getFormatter()
+	if err != nil || !f.SupportsColor() {
+		return "[" + name + "]"
+	}
+	return theme.ComponentLabelStyle(index).Render(name)
+}
+
 // Writef writes formatted text to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Writef() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Writef(format string, a ...interface{}) {

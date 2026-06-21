@@ -12,18 +12,24 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// Seams for testability — overridden in tests.
+var (
+	initCliConfig  = cfg.InitCliConfig
+	describeStacks = e.ExecuteDescribeStacks
+)
+
 // ExecuteValidate produces a soft report of which composition services are
 // fulfilled and which are not provided in a stack, and surfaces any unknown
 // members (which are hard errors enforced during component execution).
 func ExecuteValidate(_ context.Context, info *schema.ConfigAndStacksInfo, name string) error {
 	defer perf.Track(nil, "composition.ExecuteValidate")()
 
-	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	atmosConfig, err := initCliConfig(*info, true)
 	if err != nil {
 		return err
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(
+	stacksMap, err := describeStacks(
 		&atmosConfig, info.Stack, nil, nil, nil,
 		false, false, false, false, nil, nil,
 	)

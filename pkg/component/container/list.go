@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/charmbracelet/lipgloss"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	ctr "github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -52,7 +52,7 @@ func ExecuteList(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		return emptyListOrError(err)
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(
+	stacksMap, err := describeStacks(
 		&atmosConfig, info.Stack, nil,
 		[]string{cfg.ContainerComponentType}, nil,
 		false, false, false, false, nil, nil,
@@ -173,20 +173,39 @@ func annotateRunningState(ctx context.Context, runtime ctr.Runtime, rows []insta
 
 // renderInstanceTable prints the container instances as an aligned table to the
 // data channel, with a colored dot indicator on a TTY.
+//
+// The status dot is rendered OUTSIDE tabwriter and prepended per line at a fixed
+// display width. The tabwriter pads by byte count, so the dot's ANSI color codes
+// would otherwise inflate its column and push every following column out of
+// alignment (the header, with no dot, would not match the rows).
 func renderInstanceTable(rows []instanceRow) error {
 	tty := terminal.New().IsTTY(terminal.Stdout)
 
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "  \tSTACK\tCOMPONENT\tIMAGE\tSTATUS")
+	fmt.Fprintln(w, "STACK\tCOMPONENT\tIMAGE\tSTATUS")
 	for _, row := range rows {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-			statusDot(row.status, tty), row.stack, row.component, row.image, row.status)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", row.stack, row.component, row.image, row.status)
 	}
 	if err := w.Flush(); err != nil {
 		return err
 	}
-	return data.Write(buf.String())
+
+	// Prepend the indicator column: two display columns wide for both the header
+	// (blank) and each row (dot + space), so the tabwriter-aligned text lines up.
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	var out strings.Builder
+	for i, line := range lines {
+		switch {
+		case i == 0:
+			out.WriteString("  " + line + "\n")
+		case i-1 < len(rows):
+			out.WriteString(statusDot(rows[i-1].status, tty) + " " + line + "\n")
+		default:
+			out.WriteString(line + "\n")
+		}
+	}
+	return data.Write(out.String())
 }
 
 // statusDot returns a colored dot for a TTY (green=running, gray otherwise) or a

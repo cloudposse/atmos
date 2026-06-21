@@ -12,7 +12,7 @@ import Intro from '@site/src/components/Intro'
 <Intro>
 Use the `atmos container` subcommands to build, run, and operate **container components** — stack-scoped,
 Atmos-native, persistent containers. One component is one service. Atmos owns the image artifact
-(build/push/pull) and an optional long-running named container lifecycle (`up`/`ps`/`logs`/`exec`/
+(build/push/pull) and an optional long-running named container lifecycle (`up`/`start`/`ps`/`logs`/`exec`/
 `attach`/`restart`/`stop`/`rm`/`down`), discovered by labels derived from the canonical component instance
 address — not from local state files.
 </Intro>
@@ -38,12 +38,21 @@ atmos container pull <component> -s <stack>
 atmos container run <component> -s <stack>           # one-shot foreground process (run)
 atmos container up <component> -s <stack>            # create/start the long-running container
 atmos container down <component> -s <stack>          # stop + rm
+atmos container start <component> -s <stack>         # start an existing stopped container (inverse of stop)
 atmos container restart|stop|rm <component> -s <stack>
+
+# Bulk lifecycle (no component) — see "Bulk operation" below
+atmos container up --all                             # all container components in all stacks
+atmos container up --all --stack=<stack>             # all container components in one stack
+atmos container up                                   # interactive picker (stack + components)
 
 # Inspection
 atmos container list                                 # all container components + running state
-atmos container ps <component> -s <stack>
-atmos container logs <component> -s <stack>
+atmos container ps                                   # running state of all components (optionally -s <stack>)
+atmos container ps <component> -s <stack>            # running state of one component
+atmos container logs <component> -s <stack>          # one component
+atmos container logs --all --stack=<stack>           # all components in a stack
+atmos container logs --all --follow                  # tail all components, interleaved + prefixed
 atmos container exec <component> -s <stack> -- sh    # run a command / open a shell (new process)
 atmos container attach <component> -s <stack>        # attach to the container's main process (PID 1)
 ```
@@ -116,8 +125,21 @@ that onto a deterministic runtime name and labels:
 | Runtime name | `atmos-dev-container-api` |
 | Labels | `tools.atmos.stack=dev`, `tools.atmos.component_type=container`, `tools.atmos.component=api`, `tools.atmos.instance=dev/container/api` |
 
-`ps`, `logs`, `exec`, `attach`, `restart`, `stop`, `rm`, and `down` discover the container by these labels — there
-are no local state files to lose or corrupt.
+`start`, `ps`, `logs`, `exec`, `attach`, `restart`, `stop`, `rm`, and `down` discover the container by these
+labels — there are no local state files to lose or corrupt.
+
+## Lifecycle verbs: `up`/`down` vs `start`/`stop`
+
+The lifecycle has two complementary pairs, mirroring `docker compose`:
+
+- **`up` ↔ `down`** — the full lifecycle. `up` **creates or starts** the named container (building the
+  image first if needed); `down` **stops and removes** it (`stop` + `rm`).
+- **`start` ↔ `stop`** — toggle the running state of an **existing** container in place. `start` brings a
+  stopped container back without recreating it; `stop` halts it without removing it. `restart` is `stop`
+  then `start`.
+
+Use `start` to resume a container you previously `stop`ped; use `up` when the container may not exist yet
+(it will be created). `rm` removes a stopped container; `down` is the stop-and-remove shortcut.
 
 ## `exec` vs `attach`
 
@@ -136,6 +158,56 @@ Both connect you to a running container, but they are not the same:
 and `running`/`stopped`/`unknown` text otherwise. When no container runtime is available, rows are
 reported as `unknown` rather than failing the listing. (Container running state lives here, not in the
 generic `atmos list components`, which treats all component kinds uniformly.)
+
+## Bulk operation
+
+The lifecycle verbs that are safe to batch — `build`, `push`, `pull`, `up`, `start`, `restart`, `stop`,
+`rm`, and `down` — can operate on **many components at once**. For these verbs the `<component>` argument
+is optional, and there are three ways to select what to operate on:
+
+<dl>
+  <dt>`--all`</dt>
+  <dd>Operate on **every** (non-abstract) container component, in dependency-free sorted order. Scope it
+  to a single stack with `--stack=<stack>`; without a stack it spans **all** stacks.</dd>
+
+  <dt>`--all --stack=<stack>`</dt>
+  <dd>Operate on every container component in just that stack.</dd>
+
+  <dt>no component (interactive)</dt>
+  <dd>In an interactive terminal, Atmos prompts for a **stack** (skipped if only one exists or `--stack`
+  is given) and then a **multi-select of components** (all pre-selected). Outside a TTY (CI, pipes) this
+  is an error — pass `--all` or a `<component>` instead.</dd>
+</dl>
+
+Bulk runs are **continue-on-error**: every selected component is attempted, per-component failures are
+reported as they happen, and the command exits non-zero with an aggregated summary if any failed.
+Teardown verbs (`down`, `stop`, `rm`) run in **reverse** order of the start verbs so dependents are
+removed before what they depend on.
+
+:::note Mutually exclusive
+A `<component>` argument and `--all` cannot be combined. `--all` is available on the bulk-capable
+lifecycle verbs and on `logs` (see below); `run`, `exec`, and `attach` remain single-component. `ps` and
+`list` need no `--all` — omitting the component already shows all (optionally filtered by `--stack`).
+:::
+
+### Following logs across components
+
+`logs` supports the same selection (`<component>`, `--all`, or interactive) plus `--follow`/`-f` and
+`--tail`:
+
+<Terminal>
+```shell
+atmos container logs api --stack=dev --follow          # tail one component
+atmos container logs --all --stack=dev                 # all components, printed in turn
+atmos container logs --all --follow                    # tail every component, interleaved
+```
+</Terminal>
+
+When following more than one component, the streams run **concurrently** and each line is prefixed with a
+colored, width-aligned **component label** — the same badge style as Atmos log levels, with a distinct
+color per component — like `docker compose logs -f`. Where color is unavailable (non-TTY, `NO_COLOR`,
+CI), the label degrades to a plain `[api]` / `[worker]` prefix. Press `Ctrl-C` to stop following. Without
+`--follow`, multiple components are printed sequentially under an `==> stack/component <==` header.
 
 ## Compositions
 
@@ -157,14 +229,30 @@ compositions:
 
 <dl>
   <dt>`<component>`</dt>
-  <dd>The container component to operate on. Required for all subcommands except `list`.</dd>
+  <dd>The container component to operate on. Required for `run`, `exec`, and `attach`;
+  **optional** for the bulk-capable verbs (`build`, `push`, `pull`, `up`, `start`, `restart`, `stop`,
+  `rm`, `down`) and `logs`, where omitting it selects components via `--all` or an interactive picker (see
+  [Bulk operation](#bulk-operation)). For `ps`, omitting it lists all components' running state (like
+  `list`, optionally filtered by `--stack`). Not used by `list`.</dd>
 </dl>
 
 ## Flags
 
 <dl>
-  <dt>`--stack` / `-s` <em>(required for component subcommands)</em></dt>
-  <dd>The stack the component is defined in.</dd>
+  <dt>`--stack` / `-s` <em>(required for single-component subcommands)</em></dt>
+  <dd>The stack the component is defined in. For bulk verbs it scopes the operation to one stack.</dd>
+
+  <dt>`--all` <em>(bulk verbs only)</em></dt>
+  <dd>Operate on all container components instead of a single one — across all stacks, or one stack when
+  combined with `--stack=<stack>`. Cannot be combined with a `<component>` argument. See
+  [Bulk operation](#bulk-operation).</dd>
+
+  <dt>`--follow` / `-f` <em>(logs)</em></dt>
+  <dd>Stream logs continuously. With multiple components the streams are interleaved and each line is
+  prefixed with the component name. Press `Ctrl-C` to stop.</dd>
+
+  <dt>`--tail` <em>(logs)</em></dt>
+  <dd>Number of lines to show from the end of the logs, or `all` (default).</dd>
 
   <dt>`--identity`</dt>
   <dd>Authenticate with the given identity before running (e.g. for registry access on build/push/pull).</dd>
@@ -186,13 +274,27 @@ atmos container up api -s dev
 atmos container list             # api shows a ● running indicator
 
 # Operate the running container (discovered by label).
-atmos container ps api -s dev
+atmos container ps                       # running state of every component
 atmos container logs api -s dev
 atmos container exec api -s dev -- sh    # new shell process inside the container
 atmos container attach api -s dev        # connect to the container's main process (Ctrl-P Ctrl-Q to detach)
 
+# Stop and later resume the same container in place (no recreate).
+atmos container stop api -s dev
+atmos container start api -s dev
+
 # Tear down.
 atmos container down api -s dev
+
+# Bulk: bring up every container component in a stack, then everywhere.
+atmos container up --all --stack=dev
+atmos container up --all
+
+# Bulk: tear down a whole stack (reverse order), continue-on-error.
+atmos container down --all --stack=dev
+
+# Bulk: interactive picker (TTY) — choose a stack, then components.
+atmos container up
 
 # Report a composition's fulfilled vs. not-provided services.
 atmos composition validate storefront -s dev

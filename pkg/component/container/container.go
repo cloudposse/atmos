@@ -120,12 +120,14 @@ var verbExecutors = map[string]verbExecutor{
 	"up": func(ctx context.Context, info *schema.ConfigAndStacksInfo, _ []string) error {
 		return ExecuteUp(ctx, info)
 	},
+	"start": func(ctx context.Context, info *schema.ConfigAndStacksInfo, _ []string) error {
+		return ExecuteStart(ctx, info)
+	},
 	"ps": func(ctx context.Context, info *schema.ConfigAndStacksInfo, _ []string) error {
 		return ExecutePs(ctx, info)
 	},
-	"logs": func(ctx context.Context, info *schema.ConfigAndStacksInfo, _ []string) error {
-		return ExecuteLogs(ctx, info)
-	},
+	// `logs` is dispatched directly in Execute (it needs --follow/--tail and
+	// single/multi handling), so it is intentionally not in this map.
 	"exec": ExecuteExec,
 	"attach": func(ctx context.Context, info *schema.ConfigAndStacksInfo, _ []string) error {
 		return ExecuteAttach(ctx, info)
@@ -144,9 +146,26 @@ var verbExecutors = map[string]verbExecutor{
 	},
 }
 
-// Execute dispatches a container subcommand to the matching executor.
+// Execute dispatches a container subcommand to the matching executor. Bulk-capable
+// lifecycle verbs fan out to ExecuteBulk when `--all` is set or no component was
+// given (interactive picker); otherwise they run against the single component.
 func (p *ContainerComponentProvider) Execute(execCtx *component.ExecutionContext) error {
 	defer perf.Track(execCtx.AtmosConfig, "container.Execute")()
+
+	if shouldRunBulk(execCtx.SubCommand, &execCtx.ConfigAndStacksInfo) {
+		return ExecuteBulk(context.Background(), &execCtx.ConfigAndStacksInfo, execCtx.SubCommand)
+	}
+
+	// `logs` has its own single/multi + follow handling driven by --follow/--tail.
+	if execCtx.SubCommand == "logs" {
+		return ExecuteLogsWithOptions(context.Background(), &execCtx.ConfigAndStacksInfo, logsOptionsFrom(execCtx.Flags))
+	}
+
+	// `ps` with no component lists every container component's running state
+	// (like `list`); with a component it shows that one's detail.
+	if execCtx.SubCommand == "ps" && execCtx.ConfigAndStacksInfo.ComponentFromArg == "" {
+		return ExecuteList(context.Background(), &execCtx.ConfigAndStacksInfo)
+	}
 
 	exec, ok := verbExecutors[execCtx.SubCommand]
 	if !ok {
@@ -167,7 +186,7 @@ func (p *ContainerComponentProvider) GetAvailableCommands() []string {
 	defer perf.Track(nil, "container.ContainerComponentProvider.GetAvailableCommands")()
 
 	return []string{
-		"build", "push", "pull", "run", "up", "ps",
+		"build", "push", "pull", "run", "up", "start", "ps",
 		"logs", "exec", "attach", "restart", "stop", "rm", "down",
 	}
 }

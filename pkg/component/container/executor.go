@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // Seams for testability — overridden in tests.
@@ -25,6 +26,7 @@ var (
 	processStacks            = e.ProcessStacks
 	detectRuntime            = ctr.DetectRuntimeWithPreferenceAndRecovery
 	initCliConfig            = cfg.InitCliConfig
+	describeStacks           = e.ExecuteDescribeStacks
 )
 
 // defaultStopTimeout is the grace period for stop/restart/down operations.
@@ -131,7 +133,11 @@ func ExecuteBuild(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-	if err := runtime.Build(ctx, buildConfig); err != nil {
+	if err := spinner.ExecWithSpinner(
+		fmt.Sprintf("Building %s", r.component),
+		fmt.Sprintf("%s built", r.component),
+		func() error { return runtime.Build(ctx, buildConfig) },
+	); err != nil {
 		return fmt.Errorf("%w: build %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
 	}
 	return nil
@@ -157,7 +163,11 @@ func ExecutePush(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-	if _, err := runtime.Push(ctx, image); err != nil {
+	if err := spinner.ExecWithSpinner(
+		fmt.Sprintf("Pushing %s", image),
+		fmt.Sprintf("%s pushed", image),
+		func() error { _, pushErr := runtime.Push(ctx, image); return pushErr },
+	); err != nil {
 		return fmt.Errorf("%w: push %q: %w", errUtils.ErrComponentExecutionFailed, image, err)
 	}
 	return nil
@@ -183,7 +193,11 @@ func ExecutePull(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-	if err := runtime.Pull(ctx, image); err != nil {
+	if err := spinner.ExecWithSpinner(
+		fmt.Sprintf("Pulling %s", image),
+		fmt.Sprintf("%s pulled", image),
+		func() error { return runtime.Pull(ctx, image) },
+	); err != nil {
 		return fmt.Errorf("%w: pull %q: %w", errUtils.ErrComponentExecutionFailed, image, err)
 	}
 	return nil
@@ -267,14 +281,20 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err := r.ensureImage(ctx, runtime, image); err != nil {
 		return err
 	}
-	named, err := ctr.UpWithRuntime(ctx, runtime, namedConfig)
-	if err != nil {
+	if err := spinner.ExecWithSpinnerDynamic(
+		fmt.Sprintf("Starting %s", r.component),
+		func() (string, error) {
+			named, upErr := ctr.UpWithRuntime(ctx, runtime, namedConfig)
+			if upErr != nil {
+				return "", upErr
+			}
+			if named.AlreadyRunning {
+				return fmt.Sprintf("%s is already running (%s)", r.component, named.Name()), nil
+			}
+			return fmt.Sprintf("%s is up (%s)", r.component, named.Name()), nil
+		},
+	); err != nil {
 		return fmt.Errorf("%w: up %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
-	}
-	if named.AlreadyRunning {
-		ui.Infof("%s is already running (%s)", r.component, named.Name())
-	} else {
-		ui.Successf("%s is up (%s)", r.component, named.Name())
 	}
 	return nil
 }
@@ -287,11 +307,11 @@ func ExecuteDown(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-	if err := ctr.Down(ctx, runtime, r.stack, cfg.ContainerComponentType, r.component); err != nil {
-		return err
-	}
-	ui.Successf("%s is down", r.component)
-	return nil
+	return spinner.ExecWithSpinner(
+		fmt.Sprintf("Stopping %s", r.component),
+		fmt.Sprintf("%s is down", r.component),
+		func() error { return ctr.Down(ctx, runtime, r.stack, cfg.ContainerComponentType, r.component) },
+	)
 }
 
 // ExecutePs reports the running state of the component's container.
@@ -314,19 +334,14 @@ func ExecutePs(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
-// ExecuteLogs streams logs from the component's container.
+// ExecuteLogs streams logs from a single component's container (no follow, all
+// lines). The richer multi-component / follow behavior lives in
+// ExecuteLogsWithOptions (logs.go); this thin entry point is kept for callers and
+// tests that stream one component with defaults.
 func ExecuteLogs(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecuteLogs")()
 
-	d, err := discover(ctx, info)
-	if err != nil {
-		return err
-	}
-	// Stream to the default data/UI channels (nil writers).
-	if err := d.runtime.Logs(ctx, containerRef(d.in), false, "all", nil, nil); err != nil {
-		return fmt.Errorf("%w: logs %q: %w", errUtils.ErrComponentExecutionFailed, d.r.component, err)
-	}
-	return nil
+	return ExecuteLogsWithOptions(ctx, info, logsOptions{tail: defaultLogsTail})
 }
 
 // ExecuteExec runs a command in the component's container. Args after `--` form
@@ -381,15 +396,44 @@ func ExecuteRestart(ctx context.Context, info *schema.ConfigAndStacksInfo) error
 		return err
 	}
 	id := containerRef(d.in)
-	if ctr.IsContainerRunning(d.in.Status) {
-		if err := d.runtime.Stop(ctx, id, defaultStopTimeout); err != nil {
-			return fmt.Errorf("%w: stop %q: %w", errUtils.ErrComponentExecutionFailed, d.r.component, err)
-		}
+	return spinner.ExecWithSpinner(
+		fmt.Sprintf("Restarting %s", d.r.component),
+		fmt.Sprintf("%s restarted", d.r.component),
+		func() error {
+			if ctr.IsContainerRunning(d.in.Status) {
+				if err := d.runtime.Stop(ctx, id, defaultStopTimeout); err != nil {
+					return fmt.Errorf("%w: stop %q: %w", errUtils.ErrComponentExecutionFailed, d.r.component, err)
+				}
+			}
+			if err := d.runtime.Start(ctx, id); err != nil {
+				return fmt.Errorf("%w: start %q: %w", errUtils.ErrComponentExecutionFailed, d.r.component, err)
+			}
+			return nil
+		},
+	)
+}
+
+// ExecuteStart starts the component's existing (stopped) container in place,
+// discovered by label. It is the inverse of stop: unlike `up`, it never creates
+// or recreates the container — if none exists, `up` is the way to create it.
+func ExecuteStart(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "container.ExecuteStart")()
+
+	d, err := discover(ctx, info)
+	if err != nil {
+		return err
 	}
-	if err := d.runtime.Start(ctx, id); err != nil {
+	if ctr.IsContainerRunning(d.in.Status) {
+		ui.Infof("%s is already running", d.r.component)
+		return nil
+	}
+	if err := spinner.ExecWithSpinner(
+		fmt.Sprintf("Starting %s", d.r.component),
+		fmt.Sprintf("%s started", d.r.component),
+		func() error { return d.runtime.Start(ctx, containerRef(d.in)) },
+	); err != nil {
 		return fmt.Errorf("%w: start %q: %w", errUtils.ErrComponentExecutionFailed, d.r.component, err)
 	}
-	ui.Successf("%s restarted", d.r.component)
 	return nil
 }
 
@@ -401,10 +445,13 @@ func ExecuteStop(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-	if err := d.runtime.Stop(ctx, containerRef(d.in), defaultStopTimeout); err != nil {
+	if err := spinner.ExecWithSpinner(
+		fmt.Sprintf("Stopping %s", d.r.component),
+		fmt.Sprintf("%s stopped", d.r.component),
+		func() error { return d.runtime.Stop(ctx, containerRef(d.in), defaultStopTimeout) },
+	); err != nil {
 		return fmt.Errorf("%w: stop %q: %w", errUtils.ErrComponentExecutionFailed, d.r.component, err)
 	}
-	ui.Successf("%s stopped", d.r.component)
 	return nil
 }
 
@@ -416,10 +463,13 @@ func ExecuteRm(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-	if err := d.runtime.Remove(ctx, containerRef(d.in), true); err != nil {
+	if err := spinner.ExecWithSpinner(
+		fmt.Sprintf("Removing %s", d.r.component),
+		fmt.Sprintf("%s removed", d.r.component),
+		func() error { return d.runtime.Remove(ctx, containerRef(d.in), true) },
+	); err != nil {
 		return fmt.Errorf("%w: remove %q: %w", errUtils.ErrComponentExecutionFailed, d.r.component, err)
 	}
-	ui.Successf("%s removed", d.r.component)
 	return nil
 }
 
@@ -481,8 +531,11 @@ func (r *resolved) ensureImage(ctx context.Context, runtime ctr.Runtime, image s
 	if buildConfig == nil {
 		return nil
 	}
-	ui.Infof("Building %s for %s…", image, r.component)
-	if err := runtime.Build(ctx, buildConfig); err != nil {
+	if err := spinner.ExecWithSpinner(
+		fmt.Sprintf("Building %s for %s", image, r.component),
+		fmt.Sprintf("Built %s for %s", image, r.component),
+		func() error { return runtime.Build(ctx, buildConfig) },
+	); err != nil {
 		return fmt.Errorf("%w: build %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
 	}
 	return nil

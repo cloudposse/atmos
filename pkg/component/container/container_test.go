@@ -100,10 +100,11 @@ func TestProvider_ValidateComponent(t *testing.T) {
 func TestProvider_GetAvailableCommands(t *testing.T) {
 	commands := (&ContainerComponentProvider{}).GetAvailableCommands()
 	assert.Contains(t, commands, "up")
+	assert.Contains(t, commands, "start")
 	assert.Contains(t, commands, "down")
 	assert.Contains(t, commands, "ps")
 	assert.Contains(t, commands, "attach")
-	assert.Len(t, commands, 13)
+	assert.Len(t, commands, 14)
 }
 
 func TestProvider_Execute_UnknownSubcommand(t *testing.T) {
