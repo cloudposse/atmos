@@ -56,7 +56,8 @@ func TestTemplateRendering(t *testing.T) {
 				"dev-us-east-1",
 				"aws_vpc.main",
 				"+ aws_subnet",
-				"cloudposse.com",
+				"https://atmos.tools/ci",
+				"atmos-ci-gradient.svg",
 			},
 			wantNotContains: []string{
 				"DESTROY",
@@ -258,7 +259,8 @@ func TestTemplateRendering(t *testing.T) {
 			wantContains: []string{
 				"APPLY-CREATE-success",
 				"Apply Succeeded",
-				"cloudposse.com",
+				"https://atmos.tools/ci",
+				"atmos-ci-gradient.svg",
 				"+ aws_s3_bucket.main",
 				"Created",
 			},
