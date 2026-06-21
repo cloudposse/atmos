@@ -13,7 +13,7 @@ import Intro from '@site/src/components/Intro'
 Use the `atmos container` subcommands to build, run, and operate **container components** — stack-scoped,
 Atmos-native, persistent containers. One component is one service. Atmos owns the image artifact
 (build/push/pull) and an optional long-running named container lifecycle (`up`/`ps`/`logs`/`exec`/
-`restart`/`stop`/`rm`/`down`), discovered by labels derived from the canonical component instance
+`attach`/`restart`/`stop`/`rm`/`down`), discovered by labels derived from the canonical component instance
 address — not from local state files.
 </Intro>
 
@@ -44,7 +44,8 @@ atmos container restart|stop|rm <component> -s <stack>
 atmos container list                                 # all container components + running state
 atmos container ps <component> -s <stack>
 atmos container logs <component> -s <stack>
-atmos container exec <component> -s <stack> -- sh    # command after `--`
+atmos container exec <component> -s <stack> -- sh    # run a command / open a shell (new process)
+atmos container attach <component> -s <stack>        # attach to the container's main process (PID 1)
 ```
 </Terminal>
 
@@ -113,10 +114,21 @@ that onto a deterministic runtime name and labels:
 |-------|-----------------|
 | Instance | `dev/container/api` |
 | Runtime name | `atmos-dev-container-api` |
-| Labels | `com.cloudposse.atmos.stack=dev`, `com.cloudposse.atmos.component_type=container`, `com.cloudposse.atmos.component=api`, `com.cloudposse.atmos.instance=dev/container/api` |
+| Labels | `tools.atmos.stack=dev`, `tools.atmos.component_type=container`, `tools.atmos.component=api`, `tools.atmos.instance=dev/container/api` |
 
-`ps`, `logs`, `exec`, `restart`, `stop`, `rm`, and `down` discover the container by these labels — there
+`ps`, `logs`, `exec`, `attach`, `restart`, `stop`, `rm`, and `down` discover the container by these labels — there
 are no local state files to lose or corrupt.
+
+## `exec` vs `attach`
+
+Both connect you to a running container, but they are not the same:
+
+- **`exec`** starts a **new process** inside the container. With a command after `--` it runs that
+  command; with no command it opens a shell (`/bin/sh`). This is how you "shell in."
+- **`attach`** connects your terminal to the container's **existing main process (PID 1)** — the
+  process the container runs — mirroring `docker attach` / `docker compose attach`. Use it when PID 1
+  is itself interactive (a REPL, a foreground server streaming to stdout). Detach with the runtime's
+  detach keys (`Ctrl-P` `Ctrl-Q`), which leaves the container running.
 
 ## Running state
 
@@ -161,7 +173,7 @@ compositions:
   <dd>Print what would happen without touching the runtime.</dd>
 
   <dt>`--` <em>(exec)</em></dt>
-  <dd>Everything after `--` is the command run inside the container, e.g. `atmos container exec api -s dev -- sh -c 'env'`.</dd>
+  <dd>Everything after `--` is the command run inside the container, e.g. `atmos container exec api -s dev -- sh -c 'env'`. `attach` takes no command — it connects to the existing main process.</dd>
 </dl>
 
 ## Examples
@@ -176,7 +188,8 @@ atmos container list             # api shows a ● running indicator
 # Operate the running container (discovered by label).
 atmos container ps api -s dev
 atmos container logs api -s dev
-atmos container exec api -s dev -- sh
+atmos container exec api -s dev -- sh    # new shell process inside the container
+atmos container attach api -s dev        # connect to the container's main process (Ctrl-P Ctrl-Q to detach)
 
 # Tear down.
 atmos container down api -s dev

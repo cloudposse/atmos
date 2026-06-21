@@ -14,13 +14,13 @@ import (
 // instead of local state files.
 const (
 	// LabelStack records the stack of the component instance.
-	LabelStack = "com.cloudposse.atmos.stack"
+	LabelStack = "tools.atmos.stack"
 	// LabelComponentType records the component kind (e.g. "container").
-	LabelComponentType = "com.cloudposse.atmos.component_type"
+	LabelComponentType = "tools.atmos.component_type"
 	// LabelComponent records the component name.
-	LabelComponent = "com.cloudposse.atmos.component"
+	LabelComponent = "tools.atmos.component"
 	// LabelInstance records the full canonical instance address.
-	LabelInstance = "com.cloudposse.atmos.instance"
+	LabelInstance = "tools.atmos.instance"
 )
 
 // maxRuntimeNameLength bounds the sanitized runtime container name length.

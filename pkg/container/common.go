@@ -285,10 +285,11 @@ func buildLogsArgs(containerID string, follow bool, tail string) []string {
 	return args
 }
 
-// buildAttachCommand builds the shell command and exec options for an attach operation.
+// buildShellCommand builds the shell command and exec options for opening an
+// interactive shell in a container (via `exec`).
 // This function is shared between Docker and Podman runtimes to avoid duplication.
 // Extracted to allow testing the command building logic without executing commands.
-func buildAttachCommand(opts *AttachOptions) ([]string, *ExecOptions) {
+func buildShellCommand(opts *ShellOptions) ([]string, *ExecOptions) {
 	shell := "/bin/bash"
 	var shellArgs []string
 
@@ -316,13 +317,43 @@ func buildAttachCommand(opts *AttachOptions) ([]string, *ExecOptions) {
 		if opts.User != "" {
 			execOpts.User = opts.User
 		}
-		// Copy IO streams from AttachOptions to ExecOptions.
+		// Copy IO streams from ShellOptions to ExecOptions.
 		execOpts.Stdin = opts.Stdin
 		execOpts.Stdout = opts.Stdout
 		execOpts.Stderr = opts.Stderr
 	}
 
 	return cmd, execOpts
+}
+
+// buildAttachArgs builds the `attach` CLI arguments and exec options for
+// attaching to a container's main process (PID 1). Shared between Docker and
+// Podman, which accept identical `attach --no-stdin --detach-keys` syntax.
+// Extracted to allow testing the argument building logic without executing.
+func buildAttachArgs(containerID string, opts *AttachOptions) ([]string, *ExecOptions) {
+	args := []string{"attach"}
+	execOpts := &ExecOptions{
+		Tty:          true,
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	if opts != nil {
+		if opts.NoStdin {
+			args = append(args, "--no-stdin")
+			execOpts.AttachStdin = false
+		}
+		if opts.DetachKeys != "" {
+			args = append(args, "--detach-keys", opts.DetachKeys)
+		}
+		execOpts.Stdin = opts.Stdin
+		execOpts.Stdout = opts.Stdout
+		execOpts.Stderr = opts.Stderr
+	}
+
+	args = append(args, containerID)
+	return args, execOpts
 }
 
 // applyCommandEnv sets the environment for a container CLI subprocess.

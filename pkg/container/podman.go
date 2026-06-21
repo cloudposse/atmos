@@ -272,12 +272,20 @@ func (p *PodmanRuntime) Exec(ctx context.Context, containerID string, cmd []stri
 	return runExecCommand(p.command(ctx, buildExecArgs(containerID, cmd, opts)...), podmanCmd, opts)
 }
 
-// Attach attaches to a running container with an interactive shell.
+// Shell opens an interactive shell in a running container (a new shell process via `exec`).
+func (p *PodmanRuntime) Shell(ctx context.Context, containerID string, opts *ShellOptions) error {
+	defer perf.Track(nil, "container.PodmanRuntime.Shell")()
+
+	cmd, execOpts := buildShellCommand(opts)
+	return p.Exec(ctx, containerID, cmd, execOpts)
+}
+
+// Attach connects to a running container's main process (PID 1) via `podman attach`.
 func (p *PodmanRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Attach")()
 
-	cmd, execOpts := buildAttachCommand(opts)
-	return p.Exec(ctx, containerID, cmd, execOpts)
+	args, execOpts := buildAttachArgs(containerID, opts)
+	return runExecCommand(p.command(ctx, args...), podmanCmd, execOpts)
 }
 
 // Pull pulls a container image.

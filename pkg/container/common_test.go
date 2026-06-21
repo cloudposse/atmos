@@ -727,10 +727,10 @@ func TestAddExecOptions(t *testing.T) {
 	}
 }
 
-func TestBuildAttachCommand(t *testing.T) {
+func TestBuildShellCommand(t *testing.T) {
 	tests := []struct {
 		name            string
-		opts            *AttachOptions
+		opts            *ShellOptions
 		expectedCmd     []string
 		expectedExecOpt *ExecOptions
 	}{
@@ -747,7 +747,7 @@ func TestBuildAttachCommand(t *testing.T) {
 		},
 		{
 			name:        "empty options - uses defaults",
-			opts:        &AttachOptions{},
+			opts:        &ShellOptions{},
 			expectedCmd: []string{"/bin/bash"},
 			expectedExecOpt: &ExecOptions{
 				Tty:          true,
@@ -758,7 +758,7 @@ func TestBuildAttachCommand(t *testing.T) {
 		},
 		{
 			name: "custom shell",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				Shell: "/bin/sh",
 			},
 			expectedCmd: []string{"/bin/sh"},
@@ -771,7 +771,7 @@ func TestBuildAttachCommand(t *testing.T) {
 		},
 		{
 			name: "shell with args",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				Shell:     "/bin/bash",
 				ShellArgs: []string{"-l", "-i"},
 			},
@@ -785,7 +785,7 @@ func TestBuildAttachCommand(t *testing.T) {
 		},
 		{
 			name: "custom user",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				User: "node",
 			},
 			expectedCmd: []string{"/bin/bash"},
@@ -799,7 +799,7 @@ func TestBuildAttachCommand(t *testing.T) {
 		},
 		{
 			name: "all options",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				Shell:     "/bin/zsh",
 				ShellArgs: []string{"-c", "echo hello"},
 				User:      "developer",
@@ -817,12 +817,86 @@ func TestBuildAttachCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd, execOpts := buildAttachCommand(tt.opts)
+			cmd, execOpts := buildShellCommand(tt.opts)
 
 			// Verify command.
 			assert.Equal(t, tt.expectedCmd, cmd, "command should match expected")
 
 			// Verify exec options.
+			assert.Equal(t, tt.expectedExecOpt, execOpts, "exec options should match expected")
+		})
+	}
+}
+
+func TestBuildAttachArgs(t *testing.T) {
+	tests := []struct {
+		name            string
+		opts            *AttachOptions
+		expectedArgs    []string
+		expectedExecOpt *ExecOptions
+	}{
+		{
+			name:         "nil options - attaches stdin/stdout/stderr to PID 1",
+			opts:         nil,
+			expectedArgs: []string{"attach", "cid"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+			},
+		},
+		{
+			name:         "empty options - defaults",
+			opts:         &AttachOptions{},
+			expectedArgs: []string{"attach", "cid"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+			},
+		},
+		{
+			name:         "no-stdin attaches output only",
+			opts:         &AttachOptions{NoStdin: true},
+			expectedArgs: []string{"attach", "--no-stdin", "cid"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  false,
+				AttachStdout: true,
+				AttachStderr: true,
+			},
+		},
+		{
+			name:         "custom detach keys",
+			opts:         &AttachOptions{DetachKeys: "ctrl-x"},
+			expectedArgs: []string{"attach", "--detach-keys", "ctrl-x", "cid"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+			},
+		},
+		{
+			name:         "no-stdin and detach keys together",
+			opts:         &AttachOptions{NoStdin: true, DetachKeys: "ctrl-x"},
+			expectedArgs: []string{"attach", "--no-stdin", "--detach-keys", "ctrl-x", "cid"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  false,
+				AttachStdout: true,
+				AttachStderr: true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args, execOpts := buildAttachArgs("cid", tt.opts)
+
+			assert.Equal(t, tt.expectedArgs, args, "args should match expected")
 			assert.Equal(t, tt.expectedExecOpt, execOpts, "exec options should match expected")
 		})
 	}

@@ -48,7 +48,7 @@ func init() {
 	containerCmd.AddCommand(
 		listCmd,
 		buildCmd, pushCmd, pullCmd, runCmd, upCmd, psCmd,
-		logsCmd, execCmd, restartCmd, stopCmd, rmCmd, downCmd,
+		logsCmd, execCmd, attachCmd, restartCmd, stopCmd, rmCmd, downCmd,
 	)
 
 	RegisterContainerCompletions(containerCmd)

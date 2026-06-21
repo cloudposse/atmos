@@ -43,6 +43,10 @@ func (r *pushRuntime) Exec(context.Context, string, []string, *container.ExecOpt
 	return nil
 }
 
+func (r *pushRuntime) Shell(context.Context, string, *container.ShellOptions) error {
+	return nil
+}
+
 func (r *pushRuntime) Attach(context.Context, string, *container.AttachOptions) error {
 	return nil
 }

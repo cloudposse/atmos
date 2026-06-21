@@ -174,18 +174,18 @@ func TestDockerRuntime_Info(t *testing.T) {
 	assert.NotEmpty(t, info.Version)
 }
 
-// TestDockerRuntime_Attach validates Docker's Attach() method logic for shell selection
+// TestDockerRuntime_Shell validates Docker's Shell() method logic for shell selection
 // and argument handling. Tests verify that options are correctly interpreted and passed
-// to the underlying Exec() call by testing the buildAttachCommand builder function.
+// to the underlying Exec() call by testing the buildShellCommand builder function.
 //
 // Tests are intentionally duplicated to verify both implementations independently, ensuring
 // consistency across runtimes and allowing runtime-specific test evolution if needed.
 //
-//nolint:dupl // Docker and Podman implement identical Runtime interface with same Attach() behavior.
-func TestDockerRuntime_Attach(t *testing.T) {
+//nolint:dupl // Docker and Podman implement identical Runtime interface with same Shell() behavior.
+func TestDockerRuntime_Shell(t *testing.T) {
 	tests := []struct {
 		name         string
-		opts         *AttachOptions
+		opts         *ShellOptions
 		expectShell  string
 		expectArgs   []string
 		expectUser   string
@@ -203,7 +203,7 @@ func TestDockerRuntime_Attach(t *testing.T) {
 		},
 		{
 			name:         "empty AttachOptions uses defaults",
-			opts:         &AttachOptions{},
+			opts:         &ShellOptions{},
 			expectShell:  "/bin/bash",
 			expectArgs:   nil,
 			expectUser:   "",
@@ -212,7 +212,7 @@ func TestDockerRuntime_Attach(t *testing.T) {
 		},
 		{
 			name: "custom shell",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				Shell: "/bin/sh",
 			},
 			expectShell:  "/bin/sh",
@@ -223,7 +223,7 @@ func TestDockerRuntime_Attach(t *testing.T) {
 		},
 		{
 			name: "shell with args",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				Shell:     "/bin/bash",
 				ShellArgs: []string{"-l", "-i"},
 			},
@@ -235,7 +235,7 @@ func TestDockerRuntime_Attach(t *testing.T) {
 		},
 		{
 			name: "custom user preserved in exec options",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				User: "node",
 			},
 			expectShell:  "/bin/bash",
@@ -249,7 +249,7 @@ func TestDockerRuntime_Attach(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Call the builder function that constructs the command and exec options.
-			cmd, execOpts := buildAttachCommand(tt.opts)
+			cmd, execOpts := buildShellCommand(tt.opts)
 
 			// Verify command structure: first element is shell, rest are args.
 			require.NotEmpty(t, cmd, "command should not be empty")

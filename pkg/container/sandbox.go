@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	SandboxLabelType         = "com.atmos.type"
-	SandboxLabelWorkflow     = "com.atmos.workflow"
-	SandboxLabelWorkflowPath = "com.atmos.workflow.path"
-	SandboxLabelRunID        = "com.atmos.run.id"
-	SandboxLabelWorkspace    = "com.atmos.workspace"
+	SandboxLabelType         = "tools.atmos.type"
+	SandboxLabelWorkflow     = "tools.atmos.workflow"
+	SandboxLabelWorkflowPath = "tools.atmos.workflow.path"
+	SandboxLabelRunID        = "tools.atmos.run.id"
+	SandboxLabelWorkspace    = "tools.atmos.workspace"
 	SandboxTypeWorkflow      = "workflow-sandbox"
 )
 

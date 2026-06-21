@@ -352,6 +352,26 @@ func ExecuteExec(ctx context.Context, info *schema.ConfigAndStacksInfo, command 
 	return nil
 }
 
+// ExecuteAttach attaches local stdin/stdout/stderr to the component container's
+// main process (PID 1), mirroring `docker/podman attach`. Unlike `exec`, it does
+// not start a new shell — it connects to the existing process. Detach with the
+// runtime's detach keys (Ctrl-P Ctrl-Q), which leaves the container running.
+func ExecuteAttach(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "container.ExecuteAttach")()
+
+	d, err := discover(ctx, info)
+	if err != nil {
+		return err
+	}
+	if !ctr.IsContainerRunning(d.in.Status) {
+		return fmt.Errorf("%w: %q is not running (try `atmos container up`)", errUtils.ErrComponentExecutionFailed, d.r.component)
+	}
+	if err := d.runtime.Attach(ctx, containerRef(d.in), &ctr.AttachOptions{}); err != nil {
+		return fmt.Errorf("%w: attach %q: %w", errUtils.ErrComponentExecutionFailed, d.r.component, err)
+	}
+	return nil
+}
+
 // ExecuteRestart stops then starts the component's container.
 func ExecuteRestart(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecuteRestart")()

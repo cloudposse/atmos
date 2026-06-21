@@ -197,6 +197,44 @@ func runningInfo() []ctr.Info {
 	return []ctr.Info{{ID: "cid", Status: "running", Labels: ctr.InstanceLabels("dev", "container", "api")}}
 }
 
+func TestExecuteAttach_AttachesToRunning(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	rt := NewMockRuntime(ctrl)
+	withStubs(t, map[string]any{"image": "alpine"}, nil, rt)
+
+	gomock.InOrder(
+		rt.EXPECT().List(gomock.Any(), ctr.DiscoveryFilter("dev", "container", "api")).Return(runningInfo(), nil),
+		rt.EXPECT().Attach(gomock.Any(), "cid", gomock.Any()).Return(nil),
+	)
+
+	require.NoError(t, ExecuteAttach(context.Background(), infoFor("api")))
+}
+
+func TestExecuteAttach_NotFoundIsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	rt := NewMockRuntime(ctrl)
+	withStubs(t, map[string]any{"image": "alpine"}, nil, rt)
+
+	// No container discovered: discover() errors and Attach is never called.
+	rt.EXPECT().List(gomock.Any(), ctr.DiscoveryFilter("dev", "container", "api")).Return([]ctr.Info{}, nil)
+	require.Error(t, ExecuteAttach(context.Background(), infoFor("api")))
+}
+
+func TestExecuteAttach_NotRunningIsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	rt := NewMockRuntime(ctrl)
+	withStubs(t, map[string]any{"image": "alpine"}, nil, rt)
+
+	// Negative path: the container exists but is stopped, so attach must error
+	// without ever calling the runtime's Attach (no EXPECT().Attach here).
+	stopped := []ctr.Info{{ID: "cid", Status: "exited", Labels: ctr.InstanceLabels("dev", "container", "api")}}
+	rt.EXPECT().List(gomock.Any(), ctr.DiscoveryFilter("dev", "container", "api")).Return(stopped, nil)
+	require.Error(t, ExecuteAttach(context.Background(), infoFor("api")))
+}
+
 func TestExecuteLogs_Streams(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

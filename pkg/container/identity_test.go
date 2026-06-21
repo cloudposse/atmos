@@ -65,7 +65,7 @@ func TestInstanceLabels(t *testing.T) {
 
 func TestDiscoveryFilter(t *testing.T) {
 	filter := DiscoveryFilter("dev", "container", "api")
-	assert.Equal(t, "com.cloudposse.atmos.instance=dev/container/api", filter["label"])
+	assert.Equal(t, "tools.atmos.instance=dev/container/api", filter["label"])
 }
 
 func TestIsContainerRunning_Exported(t *testing.T) {

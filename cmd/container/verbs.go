@@ -94,4 +94,7 @@ var (
 	execCmd = newVerbCmd("exec",
 		"Execute a command in the component container",
 		"Execute a command in the component's running container. Use `--` to separate the command, e.g. `atmos container exec api -s dev -- sh`.")
+	attachCmd = newVerbCmd("attach",
+		"Attach to the component container's main process",
+		"Attach local stdin/stdout/stderr to the component's running container (its PID 1 / main process), discovered by label. Unlike `exec`, this does not start a new shell — it connects to the existing process. Detach with the runtime's detach keys (Ctrl-P Ctrl-Q), which leaves the container running.")
 )

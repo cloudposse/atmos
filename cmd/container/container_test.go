@@ -31,7 +31,7 @@ func TestContainerCommandStructure(t *testing.T) {
 	}
 	for _, want := range []string{
 		"build", "push", "pull", "run", "up", "ps",
-		"logs", "exec", "restart", "stop", "rm", "down",
+		"logs", "exec", "attach", "restart", "stop", "rm", "down",
 	} {
 		assert.Contains(t, names, want)
 	}

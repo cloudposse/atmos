@@ -102,7 +102,8 @@ func TestProvider_GetAvailableCommands(t *testing.T) {
 	assert.Contains(t, commands, "up")
 	assert.Contains(t, commands, "down")
 	assert.Contains(t, commands, "ps")
-	assert.Len(t, commands, 12)
+	assert.Contains(t, commands, "attach")
+	assert.Len(t, commands, 13)
 }
 
 func TestProvider_Execute_UnknownSubcommand(t *testing.T) {

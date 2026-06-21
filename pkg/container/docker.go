@@ -311,12 +311,20 @@ func (d *DockerRuntime) Exec(ctx context.Context, containerID string, cmd []stri
 	return runExecCommand(d.command(ctx, buildExecArgs(containerID, cmd, opts)...), dockerCmd, opts)
 }
 
-// Attach attaches to a running container with an interactive shell.
+// Shell opens an interactive shell in a running container (a new shell process via `exec`).
+func (d *DockerRuntime) Shell(ctx context.Context, containerID string, opts *ShellOptions) error {
+	defer perf.Track(nil, "container.DockerRuntime.Shell")()
+
+	cmd, execOpts := buildShellCommand(opts)
+	return d.Exec(ctx, containerID, cmd, execOpts)
+}
+
+// Attach connects to a running container's main process (PID 1) via `docker attach`.
 func (d *DockerRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions) error {
 	defer perf.Track(nil, "container.DockerRuntime.Attach")()
 
-	cmd, execOpts := buildAttachCommand(opts)
-	return d.Exec(ctx, containerID, cmd, execOpts)
+	args, execOpts := buildAttachArgs(containerID, opts)
+	return runExecCommand(d.command(ctx, args...), dockerCmd, execOpts)
 }
 
 // Pull pulls a container image.

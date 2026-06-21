@@ -125,10 +125,10 @@ atmos-dev-container-api
 Runtime labels preserve the canonical fields:
 
 ```text
-com.cloudposse.atmos.stack=dev
-com.cloudposse.atmos.component_type=container
-com.cloudposse.atmos.component=api
-com.cloudposse.atmos.instance=dev/container/api
+tools.atmos.stack=dev
+tools.atmos.component_type=container
+tools.atmos.component=api
+tools.atmos.instance=dev/container/api
 ```
 
 Lifecycle commands such as `ps`, `logs`, `exec`, `restart`, `stop`, `rm`, and `down` discover

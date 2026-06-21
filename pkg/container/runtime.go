@@ -26,6 +26,13 @@ type Runtime interface {
 
 	// Execution - IO streams configured via options structs
 	Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions) error
+	// Shell opens an interactive shell in a running container (a new shell
+	// process via `exec`). Used to "shell into" a container.
+	Shell(ctx context.Context, containerID string, opts *ShellOptions) error
+	// Attach connects local stdin/stdout/stderr to a running container's main
+	// process (PID 1) via `docker/podman attach`. Unlike Shell, it does not
+	// start a new process — it attaches to the existing one (Docker/Compose
+	// `attach` semantics).
 	Attach(ctx context.Context, containerID string, opts *AttachOptions) error
 
 	// Image operations
@@ -160,11 +167,29 @@ type ExecOptions struct {
 	Stderr io.Writer
 }
 
-// AttachOptions represents options for attaching to containers.
-type AttachOptions struct {
+// ShellOptions represents options for opening an interactive shell in a
+// container (via `exec`). Shell/ShellArgs select the shell program and its
+// arguments; an empty Shell defaults to /bin/bash.
+type ShellOptions struct {
 	Shell     string
 	ShellArgs []string
 	User      string
+
+	// IO streams for input/output. If nil, defaults to os.Stdin and iolib.Data/UI.
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// AttachOptions represents options for attaching to a container's main process
+// (PID 1) via `docker/podman attach`.
+type AttachOptions struct {
+	// NoStdin attaches output only, leaving the container's stdin unconnected
+	// (maps to `--no-stdin`).
+	NoStdin bool
+	// DetachKeys overrides the key sequence that detaches without stopping the
+	// container (maps to `--detach-keys`; runtime default is ctrl-p,ctrl-q).
+	DetachKeys string
 
 	// IO streams for input/output. If nil, defaults to os.Stdin and iolib.Data/UI.
 	Stdin  io.Reader

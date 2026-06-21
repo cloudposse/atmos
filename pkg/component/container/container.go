@@ -127,6 +127,9 @@ var verbExecutors = map[string]verbExecutor{
 		return ExecuteLogs(ctx, info)
 	},
 	"exec": ExecuteExec,
+	"attach": func(ctx context.Context, info *schema.ConfigAndStacksInfo, _ []string) error {
+		return ExecuteAttach(ctx, info)
+	},
 	"restart": func(ctx context.Context, info *schema.ConfigAndStacksInfo, _ []string) error {
 		return ExecuteRestart(ctx, info)
 	},
@@ -165,6 +168,6 @@ func (p *ContainerComponentProvider) GetAvailableCommands() []string {
 
 	return []string{
 		"build", "push", "pull", "run", "up", "ps",
-		"logs", "exec", "restart", "stop", "rm", "down",
+		"logs", "exec", "attach", "restart", "stop", "rm", "down",
 	}
 }
