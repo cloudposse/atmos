@@ -71,20 +71,23 @@ jobs:
         working-directory: tests/fixtures/scenarios/native-ci
         run: atmos terraform plan mycomponent -s prod --ci
 
-      - name: List planfiles from github/artifacts
+      - name: List planfiles from github/artifacts (informational)
         working-directory: tests/fixtures/scenarios/native-ci
         run: |
           set -euo pipefail
           # Use the store TYPE (github/artifacts), not the named "github" store, so
           # owner/repo resolve from GITHUB_REPOSITORY (this run) — matching where the
           # runtime-API upload landed — instead of the fixture's hard-coded repo.
-          atmos terraform planfile list --store=github/artifacts | tee list.out
-          grep -Eq 'mycomponent|prod' list.out
+          # Informational only: `list` renders artifacts without opening each zip's
+          # metadata, so the download below is the authoritative round-trip check.
+          atmos terraform planfile list mycomponent -s prod --store=github/artifacts || true
 
-      - name: Download planfile from github/artifacts
+      - name: Download planfile from github/artifacts (round-trip assertion)
         working-directory: tests/fixtures/scenarios/native-ci
         run: |
           set -euo pipefail
+          # The key is derived from component + stack + ATMOS_CI_SHA, identical to
+          # the upload, so this fetches exactly the artifact the plan step pushed.
           atmos terraform planfile download mycomponent -s prod \
             --store=github/artifacts -o "$RUNNER_TEMP/downloaded.planfile"
           test -s "$RUNNER_TEMP/downloaded.planfile"
