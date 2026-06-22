@@ -731,7 +731,12 @@ type mockUploader struct {
 	createFn       func(ctx context.Context, req *createArtifactRequest) (*createArtifactResponse, error)
 	uploadFn       func(ctx context.Context, uploadURL string, data []byte) error
 	finalizeFn     func(ctx context.Context, req *finalizeArtifactRequest) (*finalizeArtifactResponse, error)
+	listFn         func(ctx context.Context, req *runtimeListArtifactsRequest) (*runtimeListArtifactsResponse, error)
 	getSignedURLFn func(ctx context.Context, req *getSignedArtifactURLRequest) (*getSignedArtifactURLResponse, error)
+}
+
+func (m *mockUploader) ListArtifacts(ctx context.Context, req *runtimeListArtifactsRequest) (*runtimeListArtifactsResponse, error) {
+	return m.listFn(ctx, req)
 }
 
 func (m *mockUploader) CreateArtifact(ctx context.Context, req *createArtifactRequest) (*createArtifactResponse, error) {
@@ -1849,27 +1854,41 @@ func TestStore_DownloadViaRuntime(t *testing.T) {
 		}))
 		defer blob.Close()
 
+		store := &Store{prefix: "planfile"}
+		wantName := store.artifactName("prod/mycomponent/abc123.tfplan.tar")
+
 		var capturedReq *getSignedArtifactURLRequest
 		mock := &mockUploader{
+			// The run's artifact list reports the uploading job's backend IDs,
+			// which differ from the current (downloading) job's token IDs.
+			listFn: func(_ context.Context, _ *runtimeListArtifactsRequest) (*runtimeListArtifactsResponse, error) {
+				return &runtimeListArtifactsResponse{Artifacts: []runtimeArtifact{
+					{Name: "some-other-artifact"},
+					{
+						Name:                    wantName,
+						WorkflowRunBackendID:    "uploader-run-id",
+						WorkflowJobRunBackendID: "uploader-job-id",
+					},
+				}}, nil
+			},
 			getSignedURLFn: func(_ context.Context, req *getSignedArtifactURLRequest) (*getSignedArtifactURLResponse, error) {
 				capturedReq = req
 				return &getSignedArtifactURLResponse{SignedURL: blob.URL}, nil
 			},
 		}
-
-		store := &Store{prefix: "planfile", downloader: mock}
+		store.downloader = mock
 
 		reader, meta, err := store.Download(context.Background(), "prod/mycomponent/abc123.tfplan.tar")
 		require.NoError(t, err)
 		require.NotNil(t, reader)
 		defer reader.Close()
 
-		// The runtime request carries the backend IDs from the token and the
-		// prefixed, sanitized artifact name.
+		// The signed-URL request must carry the UPLOADING job's backend IDs (from
+		// the artifact list), not the current job's, plus the artifact name.
 		require.NotNil(t, capturedReq)
-		assert.Equal(t, "run-backend-id-123", capturedReq.WorkflowRunBackendID)
-		assert.Equal(t, "job-backend-id-456", capturedReq.WorkflowJobRunBackendID)
-		assert.Equal(t, store.artifactName("prod/mycomponent/abc123.tfplan.tar"), capturedReq.Name)
+		assert.Equal(t, "uploader-run-id", capturedReq.WorkflowRunBackendID)
+		assert.Equal(t, "uploader-job-id", capturedReq.WorkflowJobRunBackendID)
+		assert.Equal(t, wantName, capturedReq.Name)
 
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
@@ -1911,8 +1930,8 @@ func TestStore_DownloadViaRuntime(t *testing.T) {
 		// Runtime download fails (e.g. artifact belongs to a different run) →
 		// the store must fall back to the REST path.
 		mock := &mockUploader{
-			getSignedURLFn: func(_ context.Context, _ *getSignedArtifactURLRequest) (*getSignedArtifactURLResponse, error) {
-				return nil, fmt.Errorf("artifact not found in current run")
+			listFn: func(_ context.Context, _ *runtimeListArtifactsRequest) (*runtimeListArtifactsResponse, error) {
+				return nil, fmt.Errorf("runtime list failed")
 			},
 		}
 
@@ -1970,6 +1989,48 @@ func TestRuntimeUploader_GetSignedArtifactURL(t *testing.T) {
 
 		uploader := newRuntimeUploader(server.URL, "test-token")
 		_, err := uploader.GetSignedArtifactURL(context.Background(), &getSignedArtifactURLRequest{Name: "x"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "status 500")
+	})
+}
+
+func TestRuntimeUploader_ListArtifacts(t *testing.T) {
+	t.Run("returns the run's artifacts", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.Contains(t, r.URL.Path, "ListArtifacts")
+			assert.Equal(t, "Bearer test-runtime-token", r.Header.Get("Authorization"))
+
+			var req runtimeListArtifactsRequest
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+			assert.Equal(t, "run-id", req.WorkflowRunBackendID)
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(runtimeListArtifactsResponse{Artifacts: []runtimeArtifact{
+				{Name: "planfile-prod--mycomponent--abc123.tfplan.tar", WorkflowRunBackendID: "run-id", WorkflowJobRunBackendID: "job-id"},
+			}})
+		}))
+		defer server.Close()
+
+		uploader := newRuntimeUploader(server.URL, "test-runtime-token")
+		resp, err := uploader.ListArtifacts(context.Background(), &runtimeListArtifactsRequest{
+			WorkflowRunBackendID:    "run-id",
+			WorkflowJobRunBackendID: "job-id",
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.Artifacts, 1)
+		assert.Equal(t, "planfile-prod--mycomponent--abc123.tfplan.tar", resp.Artifacts[0].Name)
+		assert.Equal(t, "job-id", resp.Artifacts[0].WorkflowJobRunBackendID)
+	})
+
+	t.Run("server error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		uploader := newRuntimeUploader(server.URL, "test-token")
+		_, err := uploader.ListArtifacts(context.Background(), &runtimeListArtifactsRequest{})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "status 500")
 	})

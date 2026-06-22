@@ -46,6 +46,11 @@ const (
 
 	// artifactVersion is the artifact API version.
 	artifactVersion = 4
+
+	// HTTP header names and values used by the runtime Twirp client.
+	headerContentType   = "Content-Type"
+	headerAuthorization = "Authorization"
+	contentTypeJSON     = "application/json"
 )
 
 // artifactUploader handles the GitHub Actions runtime API calls for artifact upload.
@@ -64,13 +69,39 @@ type artifactUploader interface {
 // artifactDownloader fetches artifacts via the GitHub Actions runtime API.
 // Unlike the REST API (which only serves an artifact after its producing run
 // has completed), the runtime API can read artifacts from the in-progress run,
-// enabling same-run plan-then-apply handoff. It is scoped to the current run's
-// backend IDs, so it cannot see other runs' artifacts — callers fall back to
-// the REST API for those.
+// enabling same-run plan-then-apply handoff. It is scoped to the current run
+// (across all of its jobs), so it cannot see other runs' artifacts — callers
+// fall back to the REST API for those.
 type artifactDownloader interface {
-	// GetSignedArtifactURL returns a signed blob URL for the named artifact in
-	// the current run.
+	// ListArtifacts lists the artifacts in the current run (across jobs). Each
+	// entry carries the backend IDs of the job that uploaded it.
+	ListArtifacts(ctx context.Context, req *runtimeListArtifactsRequest) (*runtimeListArtifactsResponse, error)
+
+	// GetSignedArtifactURL returns a signed blob URL for an artifact, addressed
+	// by the backend IDs of the job that uploaded it.
 	GetSignedArtifactURL(ctx context.Context, req *getSignedArtifactURLRequest) (*getSignedArtifactURLResponse, error)
+}
+
+// runtimeListArtifactsRequest is the request body for the runtime ListArtifacts API.
+// The backend IDs are the current job's; the service returns all artifacts in the
+// run (the run backend ID is shared across the run's jobs).
+type runtimeListArtifactsRequest struct {
+	WorkflowRunBackendID    string `json:"workflow_run_backend_id"`
+	WorkflowJobRunBackendID string `json:"workflow_job_run_backend_id"`
+}
+
+// runtimeArtifact is a single artifact entry from the runtime ListArtifacts API.
+// The backend IDs identify the job that uploaded the artifact and are required to
+// request its signed download URL.
+type runtimeArtifact struct {
+	WorkflowRunBackendID    string `json:"workflow_run_backend_id"`
+	WorkflowJobRunBackendID string `json:"workflow_job_run_backend_id"`
+	Name                    string `json:"name"`
+}
+
+// runtimeListArtifactsResponse is the response from the runtime ListArtifacts API.
+type runtimeListArtifactsResponse struct {
+	Artifacts []runtimeArtifact `json:"artifacts"`
 }
 
 // getSignedArtifactURLRequest is the request body for the GetSignedArtifactURL API.
@@ -555,10 +586,33 @@ func (s *Store) downloadViaRuntime(ctx context.Context, key string) (io.ReadClos
 		return nil, nil, fmt.Errorf("%w: failed to parse runtime token: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 
-	resp, err := s.downloader.GetSignedArtifactURL(ctx, &getSignedArtifactURLRequest{
+	// List the run's artifacts (across jobs) and find ours by name. A signed URL
+	// must be requested with the backend IDs of the job that uploaded the
+	// artifact, which an earlier job in the run set — not the current job's.
+	listResp, err := s.downloader.ListArtifacts(ctx, &runtimeListArtifactsRequest{
 		WorkflowRunBackendID:    ids.WorkflowRunBackendID,
 		WorkflowJobRunBackendID: ids.WorkflowJobRunBackendID,
-		Name:                    s.artifactName(key),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	name := s.artifactName(key)
+	var found *runtimeArtifact
+	for i := range listResp.Artifacts {
+		if listResp.Artifacts[i].Name == name {
+			found = &listResp.Artifacts[i]
+			break
+		}
+	}
+	if found == nil {
+		return nil, nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, key)
+	}
+
+	resp, err := s.downloader.GetSignedArtifactURL(ctx, &getSignedArtifactURLRequest{
+		WorkflowRunBackendID:    found.WorkflowRunBackendID,
+		WorkflowJobRunBackendID: found.WorkflowJobRunBackendID,
+		Name:                    name,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -1023,41 +1077,62 @@ func (u *runtimeUploader) FinalizeArtifact(ctx context.Context, req *finalizeArt
 	return &result, nil
 }
 
-// GetSignedArtifactURL calls the GetSignedArtifactURL Twirp endpoint, returning
-// a signed blob URL for the named artifact in the current run.
-//
-//nolint:dupl // Mirrors the sibling CreateArtifact/FinalizeArtifact Twirp calls in this file.
-func (u *runtimeUploader) GetSignedArtifactURL(ctx context.Context, req *getSignedArtifactURLRequest) (*getSignedArtifactURLResponse, error) {
-	defer perf.Track(nil, "github.runtimeUploader.GetSignedArtifactURL")()
-
-	endpoint := u.baseURL + artifactServicePath + "/GetSignedArtifactURL"
-
-	body, err := json.Marshal(req)
+// postRuntimeJSON posts a JSON request to a Twirp method on the runtime artifact
+// service and decodes the JSON response into out. It backs the download-side
+// runtime calls (ListArtifacts, GetSignedArtifactURL).
+func (u *runtimeUploader) postRuntimeJSON(ctx context.Context, method string, in, out any) error {
+	body, err := json.Marshal(in)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal get signed URL request: %w", err)
+		return fmt.Errorf("failed to marshal %s request: %w", method, err)
 	}
 
+	endpoint := u.baseURL + artifactServicePath + "/" + method
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+		return fmt.Errorf("failed to build %s request: %w", method, err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json") //nolint:revive // Matches sibling Twirp methods in this file.
-	httpReq.Header.Set("Authorization", "Bearer "+u.token)
+	httpReq.Header.Set(headerContentType, contentTypeJSON)
+	httpReq.Header.Set(headerAuthorization, "Bearer "+u.token)
 
 	resp, err := u.httpClient.Do(httpReq) //nolint:gosec // G704: endpoint is the trusted ACTIONS_RESULTS_URL Twirp service.
 	if err != nil {
-		return nil, fmt.Errorf("failed to call GetSignedArtifactURL: %w", err)
+		return fmt.Errorf("failed to call %s: %w", method, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GetSignedArtifactURL returned status %d: %s", resp.StatusCode, string(respBody)) //nolint:err113 // Matches the sibling Twirp status-error style in this file.
+		return fmt.Errorf("%w: %s returned status %d: %s", errUtils.ErrArtifactDownloadFailed, method, resp.StatusCode, string(respBody))
 	}
 
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("failed to decode %s response: %w", method, err)
+	}
+
+	return nil
+}
+
+// ListArtifacts calls the ListArtifacts Twirp endpoint, returning the artifacts
+// in the current run (across its jobs).
+func (u *runtimeUploader) ListArtifacts(ctx context.Context, req *runtimeListArtifactsRequest) (*runtimeListArtifactsResponse, error) {
+	defer perf.Track(nil, "github.runtimeUploader.ListArtifacts")()
+
+	var result runtimeListArtifactsResponse
+	if err := u.postRuntimeJSON(ctx, "ListArtifacts", req, &result); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+// GetSignedArtifactURL calls the GetSignedArtifactURL Twirp endpoint, returning
+// a signed blob URL for the named artifact in the current run.
+func (u *runtimeUploader) GetSignedArtifactURL(ctx context.Context, req *getSignedArtifactURLRequest) (*getSignedArtifactURLResponse, error) {
+	defer perf.Track(nil, "github.runtimeUploader.GetSignedArtifactURL")()
+
 	var result getSignedArtifactURLResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode GetSignedArtifactURL response: %w", err)
+	if err := u.postRuntimeJSON(ctx, "GetSignedArtifactURL", req, &result); err != nil {
+		return nil, err
 	}
 
 	return &result, nil
