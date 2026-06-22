@@ -1,4 +1,4 @@
-package providers
+package sops
 
 import (
 	"os"

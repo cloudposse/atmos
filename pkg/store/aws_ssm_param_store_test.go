@@ -300,6 +300,130 @@ func TestSSMStore_Set(t *testing.T) {
 	}
 }
 
+// TestSSMStore_Has_NoDecryption proves the existence check never decrypts: GetParameter is
+// called with WithDecryption=false (so kms:Decrypt is not required), a present parameter reports
+// true, and a ParameterNotFound reports false.
+func TestSSMStore_Has_NoDecryption(t *testing.T) {
+	stackDelimiter := "/"
+	param := "/test-prefix/dev/usw2/app/service/config-key"
+
+	t.Run("present_without_decryption", func(t *testing.T) {
+		mockSSM := new(MockSSMClient)
+		store := &SSMStore{client: mockSSM, prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
+		mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+			Name:           aws.String(param),
+			WithDecryption: aws.Bool(false),
+		}).Return(&ssm.GetParameterOutput{Parameter: &types.Parameter{Value: aws.String("ignored")}}, nil)
+
+		ok, err := store.Has("dev/usw2/app", "service", "config-key")
+		require.NoError(t, err)
+		assert.True(t, ok)
+		mockSSM.AssertExpectations(t) // fails if a WithDecryption=true call was made instead.
+	})
+
+	t.Run("absent_returns_false", func(t *testing.T) {
+		mockSSM := new(MockSSMClient)
+		store := &SSMStore{client: mockSSM, prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
+		mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+			Name:           aws.String(param),
+			WithDecryption: aws.Bool(false),
+		}).Return((*ssm.GetParameterOutput)(nil), &types.ParameterNotFound{})
+
+		ok, err := store.Has("dev/usw2/app", "service", "config-key")
+		require.NoError(t, err)
+		assert.False(t, ok)
+		mockSSM.AssertExpectations(t) // fails if GetParameter stops being called.
+	})
+}
+
+// TestSSMStore_Has_ReadRole proves Has assumes the configured read role and runs the
+// (decryption-free) existence check against the assumed-role client.
+func TestSSMStore_Has_ReadRole(t *testing.T) {
+	stackDelimiter := "/"
+	mockSSM := new(MockSSMClient)
+	mockSTS := new(MockSTSClient)
+	mockAssumedSSM := new(MockSSMClient)
+
+	store := &SSMStore{
+		client:         mockSSM,
+		prefix:         "/test-prefix",
+		stackDelimiter: &stackDelimiter,
+		awsConfig:      &aws.Config{Region: "us-west-2"},
+		readRoleArn:    aws.String("arn:aws:iam::123456789012:role/read-role"),
+		newSTSClient:   func(cfg aws.Config) STSClient { return mockSTS },
+		newSSMClient:   func(cfg aws.Config) SSMClient { return mockAssumedSSM },
+	}
+
+	mockSTS.On("AssumeRole", mock.Anything, &sts.AssumeRoleInput{
+		RoleArn:         aws.String("arn:aws:iam::123456789012:role/read-role"),
+		RoleSessionName: aws.String("atmos-ssm-session"),
+	}).Return(&sts.AssumeRoleOutput{
+		Credentials: &ststypes.Credentials{
+			AccessKeyId:     aws.String("AKIATEST"),
+			SecretAccessKey: aws.String("secret"),
+			SessionToken:    aws.String("token"),
+		},
+	}, nil)
+	mockAssumedSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+		Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+		WithDecryption: aws.Bool(false),
+	}).Return(&ssm.GetParameterOutput{Parameter: &types.Parameter{Value: aws.String("ignored")}}, nil)
+
+	ok, err := store.Has("dev/usw2/app", "service", "config-key")
+	require.NoError(t, err)
+	assert.True(t, ok)
+	mockSTS.AssertExpectations(t)
+	mockAssumedSSM.AssertExpectations(t) // existence check ran against the assumed-role client.
+}
+
+// TestSSMStore_Has_ErrorPaths covers Has's non-success branches: empty key, getKey failure,
+// read-role assumption failure, and a non-not-found GetParameter error.
+func TestSSMStore_Has_ErrorPaths(t *testing.T) {
+	stackDelimiter := "/"
+
+	t.Run("empty_key", func(t *testing.T) {
+		store := &SSMStore{client: new(MockSSMClient), prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
+		_, err := store.Has("dev/usw2/app", "service", "")
+		require.ErrorIs(t, err, ErrEmptyKey)
+	})
+
+	t.Run("get_key_error_nil_delimiter", func(t *testing.T) {
+		// A nil stack delimiter makes getKey fail before any client call.
+		store := &SSMStore{client: new(MockSSMClient), prefix: "/test-prefix", stackDelimiter: nil}
+		_, err := store.Has("dev/usw2/app", "service", "config-key")
+		require.ErrorIs(t, err, ErrGetKey)
+	})
+
+	t.Run("assume_read_role_fails", func(t *testing.T) {
+		mockSTS := new(MockSTSClient)
+		store := &SSMStore{
+			client:         new(MockSSMClient),
+			prefix:         "/test-prefix",
+			stackDelimiter: &stackDelimiter,
+			awsConfig:      &aws.Config{Region: "us-west-2"},
+			readRoleArn:    aws.String("arn:aws:iam::123456789012:role/read-role"),
+			newSTSClient:   func(cfg aws.Config) STSClient { return mockSTS },
+			newSSMClient:   func(cfg aws.Config) SSMClient { return new(MockSSMClient) },
+		}
+		mockSTS.On("AssumeRole", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("boom"))
+
+		_, err := store.Has("dev/usw2/app", "service", "config-key")
+		require.ErrorIs(t, err, ErrAssumeRole)
+	})
+
+	t.Run("other_get_parameter_error_is_wrapped", func(t *testing.T) {
+		mockSSM := new(MockSSMClient)
+		store := &SSMStore{client: mockSSM, prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
+		mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+			Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+			WithDecryption: aws.Bool(false),
+		}).Return((*ssm.GetParameterOutput)(nil), errors.New("access denied"))
+
+		_, err := store.Has("dev/usw2/app", "service", "config-key")
+		require.ErrorIs(t, err, ErrGetParameter)
+	})
+}
+
 func TestSSMStore_Get(t *testing.T) {
 	mockSSM := new(MockSSMClient)
 	mockSTS := new(MockSTSClient)
