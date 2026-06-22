@@ -210,11 +210,51 @@ func (s *OnePasswordStore) Delete(stack string, component string, key string) er
 	return nil
 }
 
+// onePasswordExistenceChecker is an optional capability a onePasswordClient may implement to
+// answer existence queries without revealing the secret value (e.g. checking item/field metadata
+// rather than resolving the plaintext). Has prefers it when available and otherwise falls back to
+// a value-resolving probe.
+//
+// It lives in the store (not the client interface) so that adding it does not force every client
+// implementation to change at once; clients opt in by implementing Exists.
+type onePasswordExistenceChecker interface {
+	// Exists reports whether the referenced secret exists without returning/revealing its value.
+	// A missing vault/item/field returns (false, nil); auth/transport failures return an error.
+	Exists(ctx context.Context, reference string) (bool, error)
+}
+
 // Has reports whether the referenced secret exists, treating a not-found reference as absence
-// while propagating auth/transport errors.
+// while propagating auth/transport errors. When the underlying client supports a metadata-only
+// existence check (onePasswordExistenceChecker), Has uses it so that probing for existence does
+// not reveal/retrieve the secret value. Otherwise it falls back to a value-resolving probe.
+//
+// Both production clients (native SDK and Connect) implement the metadata-only Exists check, so
+// in practice Has never resolves the value. The value-resolving fallback remains only for clients
+// that do not opt into onePasswordExistenceChecker.
 func (s *OnePasswordStore) Has(stack string, component string, key string) (bool, error) {
-	_, err := s.Get(stack, component, key)
+	reference, err := s.referenceFor(key, stack, component)
 	if err != nil {
+		return false, err
+	}
+	client, err := s.getClient()
+	if err != nil {
+		return false, err
+	}
+
+	// Prefer a metadata-only existence check that does not reveal the secret value.
+	if checker, ok := client.(onePasswordExistenceChecker); ok {
+		exists, existsErr := checker.Exists(context.TODO(), reference)
+		if existsErr != nil {
+			if errors.Is(existsErr, ErrOnePasswordNotFound) {
+				return false, nil
+			}
+			return false, fmt.Errorf(errWrapFormatWithID, ErrOnePasswordResolve, reference, existsErr)
+		}
+		return exists, nil
+	}
+
+	// Fallback: resolve the value, mapping a not-found reference to absence.
+	if _, err := s.resolve(reference); err != nil {
 		if errors.Is(err, ErrOnePasswordNotFound) {
 			return false, nil
 		}

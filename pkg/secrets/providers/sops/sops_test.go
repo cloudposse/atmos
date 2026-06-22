@@ -1,9 +1,11 @@
-package providers
+package sops
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/secrets/providers"
 
 	"filippo.io/age"
 	"github.com/stretchr/testify/assert"
@@ -15,7 +17,7 @@ import (
 // newAgeProvider creates a SOPS provider backed by a freshly generated age key written to
 // SOPS_AGE_KEY_FILE, with the recipient passed explicitly via spec.age_recipients. This exercises
 // the full in-process encrypt/decrypt path with NO `sops` binary and no committed fixtures.
-func newAgeProvider(t *testing.T) (Provider, string) {
+func newAgeProvider(t *testing.T) (providers.Provider, string) {
 	t.Helper()
 
 	identity, err := age.GenerateX25519Identity()
@@ -36,7 +38,7 @@ func newAgeProvider(t *testing.T) (Provider, string) {
 			},
 		},
 	}
-	p, err := newSopsProvider(&schema.AtmosConfiguration{}, "dev-sops", section)
+	p, err := New(&schema.AtmosConfiguration{}, "dev-sops", section)
 	require.NoError(t, err)
 	return p, file
 }
@@ -44,7 +46,7 @@ func newAgeProvider(t *testing.T) (Provider, string) {
 // newAgeProviderWithFile is like newAgeProvider but lets the caller control the spec.file
 // template (joined under a temp dir), so tests can exercise stack-scoped (no component in the
 // path) vs component-scoped (component in the path) storage layouts.
-func newAgeProviderWithFile(t *testing.T, nameTemplate string) Provider {
+func newAgeProviderWithFile(t *testing.T, nameTemplate string) providers.Provider {
 	t.Helper()
 
 	identity, err := age.GenerateX25519Identity()
@@ -64,15 +66,15 @@ func newAgeProviderWithFile(t *testing.T, nameTemplate string) Provider {
 			},
 		},
 	}
-	p, err := newSopsProvider(&schema.AtmosConfiguration{}, "dev-sops", section)
+	p, err := New(&schema.AtmosConfiguration{}, "dev-sops", section)
 	require.NoError(t, err)
 	return p
 }
 
 func TestSopsProvider_RoundTrip(t *testing.T) {
 	p, file := newAgeProvider(t)
-	datadog := Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
-	redis := Coordinate{Stack: "dev", Component: "api", Key: "REDIS_URL"}
+	datadog := providers.Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
+	redis := providers.Coordinate{Stack: "dev", Component: "api", Key: "REDIS_URL"}
 
 	// Not initialized before the file exists.
 	ok, err := p.Status(datadog)
@@ -113,8 +115,8 @@ func TestSopsProvider_RoundTrip(t *testing.T) {
 	assert.Equal(t, "redis://prod:6379", gotRedis)
 
 	// Reset wipes the whole file back to a clean, empty document.
-	resettable, ok := p.(FileResettable)
-	require.True(t, ok, "sops provider must implement FileResettable")
+	resettable, ok := p.(providers.FileResettable)
+	require.True(t, ok, "sops provider must implement providers.FileResettable")
 	require.NoError(t, resettable.Reset(redis))
 	_, err = p.Get(redis)
 	require.ErrorIs(t, err, ErrSecretNotInitialized)
@@ -122,7 +124,7 @@ func TestSopsProvider_RoundTrip(t *testing.T) {
 
 func TestSopsProvider_GetWithoutKeyFails(t *testing.T) {
 	p, _ := newAgeProvider(t)
-	coord := Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
+	coord := providers.Coordinate{Stack: "dev", Component: "api", Key: "DATADOG_API_KEY"}
 	require.NoError(t, p.Set(coord, "dd-abc123secret"))
 
 	// Without the age identity, decryption genuinely fails (proves retrieval decrypts).
@@ -130,27 +132,84 @@ func TestSopsProvider_GetWithoutKeyFails(t *testing.T) {
 	_, err := p.Get(coord)
 	require.ErrorIs(t, err, ErrSopsDecrypt)
 
-	// Status swallows the decrypt failure as "not initialized".
+	// Status is credential-free: it reports the key as initialized from the cleartext key names
+	// in the encrypted file, WITHOUT the age key and WITHOUT decrypting. So even though Get fails
+	// above, Status returns true for a present key.
 	ok, statusErr := p.Status(coord)
 	require.NoError(t, statusErr)
-	assert.False(t, ok)
+	assert.True(t, ok)
+
+	// And it reports local (LocalStatus capability), so listing never authenticates for SOPS.
+	ls, isLocal := p.(providers.LocalStatus)
+	require.True(t, isLocal, "sops provider must implement LocalStatus")
+	assert.True(t, ls.LocalStatusCheck())
+}
+
+// TestSopsProvider_StatusAbsentKeyWithoutKey verifies the negative path: a key that was never
+// set reports not-initialized via the credential-free existence check (no age key, no decrypt).
+func TestSopsProvider_StatusAbsentKeyWithoutKey(t *testing.T) {
+	p, _ := newAgeProvider(t)
+	present := providers.Coordinate{Stack: "dev", Component: "api", Key: "PRESENT"}
+	require.NoError(t, p.Set(present, "value"))
+
+	// No age identity available — existence must still resolve from cleartext keys.
+	t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(t.TempDir(), "absent.txt"))
+
+	absent := providers.Coordinate{Stack: "dev", Component: "api", Key: "NEVER_SET"}
+	ok, statusErr := p.Status(absent)
+	require.NoError(t, statusErr)
+	assert.False(t, ok, "absent key must report not-initialized")
+}
+
+// TestSopsProvider_StatusCorruptFile proves a present-but-unparseable encrypted file is treated as
+// "not initialized" (false, nil) rather than a hard error — matching the prior Get-based behavior
+// and covering keyExists's LoadEncryptedFile error branch.
+func TestSopsProvider_StatusCorruptFile(t *testing.T) {
+	p := newAgeProviderWithFile(t, "dev.enc.yaml")
+	sp, ok := p.(*sopsProvider)
+	require.True(t, ok)
+
+	coord := providers.Coordinate{Stack: "dev", Component: "api", Key: "ANY"}
+	file, err := sp.resolveFile(coord)
+	require.NoError(t, err)
+	// Write content that exists but is not a valid SOPS-encrypted YAML document.
+	require.NoError(t, os.WriteFile(file, []byte(":\n  - not valid sops ["), 0o600))
+
+	got, statusErr := p.Status(coord)
+	require.NoError(t, statusErr)
+	assert.False(t, got, "an unparseable file reports not-initialized")
+}
+
+// TestSopsProvider_KeyExistsEmptyFile covers keyExists on a present but empty file: it must not
+// report the key as present and must not panic on a tree with no branches.
+func TestSopsProvider_KeyExistsEmptyFile(t *testing.T) {
+	p := newAgeProviderWithFile(t, "dev.enc.yaml")
+	sp, ok := p.(*sopsProvider)
+	require.True(t, ok)
+
+	file, err := sp.resolveFile(providers.Coordinate{Stack: "dev", Component: "api"})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(file, []byte(""), 0o600))
+
+	present, _ := sp.keyExists(file, "ANY")
+	assert.False(t, present, "an empty file has no keys")
 }
 
 func TestSopsProvider_DeleteMissingFileIsNoOp(t *testing.T) {
 	p, _ := newAgeProvider(t)
 	// No file created yet; deleting is idempotent.
-	require.NoError(t, p.Delete(Coordinate{Stack: "dev", Component: "api", Key: "NOPE"}))
+	require.NoError(t, p.Delete(providers.Coordinate{Stack: "dev", Component: "api", Key: "NOPE"}))
 }
 
 func TestSopsProvider_FilePathTemplate(t *testing.T) {
 	p := &sopsProvider{file: "secrets/{{ .atmos_stack }}.{{ .atmos_component }}.enc.yaml"}
-	got, err := p.resolveFile(Coordinate{Stack: "dev", Component: "api"})
+	got, err := p.resolveFile(providers.Coordinate{Stack: "dev", Component: "api"})
 	require.NoError(t, err)
 	assert.Equal(t, filepath.FromSlash("secrets/dev.api.enc.yaml"), filepath.FromSlash(got))
 
 	// An unknown template variable is a hard error (missingkey=error).
 	bad := &sopsProvider{file: "secrets/{{ .not_a_var }}.enc.yaml"}
-	_, err = bad.resolveFile(Coordinate{Stack: "dev", Component: "api"})
+	_, err = bad.resolveFile(providers.Coordinate{Stack: "dev", Component: "api"})
 	require.ErrorIs(t, err, ErrSopsFilePathTemplate)
 }
 
@@ -161,8 +220,8 @@ func TestSopsProvider_StackScopedSharing(t *testing.T) {
 	p := newAgeProviderWithFile(t, "{{ .atmos_stack }}.enc.yaml")
 	sp := p.(*sopsProvider)
 
-	api := Coordinate{Stack: "dev", Component: "api", Key: "SHARED_TOKEN"}
-	web := Coordinate{Stack: "dev", Component: "web", Key: "SHARED_TOKEN"}
+	api := providers.Coordinate{Stack: "dev", Component: "api", Key: "SHARED_TOKEN"}
+	web := providers.Coordinate{Stack: "dev", Component: "web", Key: "SHARED_TOKEN"}
 
 	apiFile, err := sp.resolveFile(api)
 	require.NoError(t, err)
@@ -186,8 +245,8 @@ func TestSopsProvider_ComponentScopedIsolation(t *testing.T) {
 	p := newAgeProviderWithFile(t, "{{ .atmos_stack }}.{{ .atmos_component }}.enc.yaml")
 	sp := p.(*sopsProvider)
 
-	api := Coordinate{Stack: "dev", Component: "api", Key: "API_KEY"}
-	web := Coordinate{Stack: "dev", Component: "web", Key: "WEB_KEY"}
+	api := providers.Coordinate{Stack: "dev", Component: "api", Key: "API_KEY"}
+	web := providers.Coordinate{Stack: "dev", Component: "web", Key: "WEB_KEY"}
 
 	apiFile, err := sp.resolveFile(api)
 	require.NoError(t, err)
@@ -206,6 +265,6 @@ func TestSopsProvider_ComponentScopedIsolation(t *testing.T) {
 	assert.Equal(t, "web-secret", gotWeb)
 
 	// Component isolation: web's file exists but does not contain api's key.
-	_, err = p.Get(Coordinate{Stack: "dev", Component: "web", Key: "API_KEY"})
+	_, err = p.Get(providers.Coordinate{Stack: "dev", Component: "web", Key: "API_KEY"})
 	require.ErrorIs(t, err, ErrSecretNotInitialized)
 }
