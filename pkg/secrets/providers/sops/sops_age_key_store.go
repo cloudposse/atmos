@@ -1,4 +1,4 @@
-package providers
+package sops
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"github.com/getsops/sops/v3/keyservice"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/secrets/providers"
 	"github.com/cloudposse/atmos/pkg/store"
 )
 
@@ -73,7 +74,7 @@ func (p *sopsProvider) ageKeyStoreTriple() (string, string, string) {
 func (p *sopsProvider) writeKeyToStore(identity string) (string, error) {
 	st, ok := p.stores[p.ageKeyStore]
 	if !ok || st == nil {
-		return "", ageKeyStoreErr(p.ageKeyStore, fmt.Errorf(errFmtWrapQuoted, ErrStoreNotFound, p.ageKeyStore))
+		return "", ageKeyStoreErr(p.ageKeyStore, fmt.Errorf(errFmtWrapQuoted, providers.ErrStoreNotFound, p.ageKeyStore))
 	}
 	stack, component, key := p.ageKeyStoreTriple()
 	if err := st.Set(stack, component, key, identity); err != nil {
@@ -103,7 +104,7 @@ func (p *sopsProvider) storeHasKey() bool {
 func (p *sopsProvider) ageKeyStoreClient() (keyservice.KeyServiceClient, error) {
 	st, ok := p.stores[p.ageKeyStore]
 	if !ok || st == nil {
-		return nil, ageKeyStoreErr(p.ageKeyStore, fmt.Errorf(errFmtWrapQuoted, ErrStoreNotFound, p.ageKeyStore))
+		return nil, ageKeyStoreErr(p.ageKeyStore, fmt.Errorf(errFmtWrapQuoted, providers.ErrStoreNotFound, p.ageKeyStore))
 	}
 	stack, component, key := p.ageKeyStoreTriple()
 	v, err := st.Get(stack, component, key)

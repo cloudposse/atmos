@@ -120,21 +120,29 @@ func TestStoreProvider_DeleteUnsupported(t *testing.T) {
 	require.ErrorIs(t, err, ErrDeleteNotSupported)
 }
 
-func TestNewSops_FromSection(t *testing.T) {
-	cfg := &schema.AtmosConfiguration{}
-	section := map[string]any{
-		"dev-sops": map[string]any{
-			"kind": "sops/age",
-			"spec": map[string]any{"file": "secrets/dev.enc.yaml"},
-		},
-	}
-	p, err := newSopsProvider(cfg, "dev-sops", section)
-	require.NoError(t, err)
-	assert.Equal(t, "sops/age", p.Kind())
-}
+// localFakeStore implements store.Store plus store.LocalStore (IsLocal=true), modeling a local
+// backend like the OS keychain.
+type localFakeStore struct{ local bool }
 
-func TestNewSops_NotFound(t *testing.T) {
-	cfg := &schema.AtmosConfiguration{}
-	_, err := newSopsProvider(cfg, "missing", nil)
-	require.ErrorIs(t, err, ErrProviderNotFound)
+func (s *localFakeStore) Set(_, _, _ string, _ any) error { return nil }
+func (s *localFakeStore) Get(_, _, _ string) (any, error) { return nil, nil }
+func (s *localFakeStore) GetKey(_ string) (any, error)    { return nil, nil }
+func (s *localFakeStore) IsLocal() bool                   { return s.local }
+
+// TestStoreProvider_LocalStatusCheck proves the provider forwards the underlying store's locality:
+// a store without LocalStore (remote) reports false; a local store reports its IsLocal() value.
+func TestStoreProvider_LocalStatusCheck(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// A plain MockStore does not implement store.LocalStore → treated as remote.
+	remote := &storeProvider{store: store.NewMockStore(ctrl)}
+	assert.False(t, remote.LocalStatusCheck(), "a store without LocalStore must be non-local")
+
+	// A store implementing LocalStore forwards its IsLocal() result.
+	local := &storeProvider{store: &localFakeStore{local: true}}
+	assert.True(t, local.LocalStatusCheck(), "a local store must report local")
+
+	notLocal := &storeProvider{store: &localFakeStore{local: false}}
+	assert.False(t, notLocal.LocalStatusCheck(), "a LocalStore returning false is not local")
 }

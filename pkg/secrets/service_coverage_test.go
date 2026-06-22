@@ -103,7 +103,9 @@ func TestService_Status_ProviderError(t *testing.T) {
 	}
 	svc := NewService(cfg, "prod", "api", section)
 
-	statuses := svc.Status()
+	// The provider can't be resolved, so the per-secret error is set before the verify gate;
+	// verify=true keeps the assertion exercising the full status path.
+	statuses := svc.Status(true)
 	require.Len(t, statuses, 1)
 	require.Error(t, statuses[0].Err)
 	assert.False(t, statuses[0].Initialized)

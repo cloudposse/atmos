@@ -4,6 +4,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets/providers"
+	// Blank import registers the SOPS backend track (track 2) via its init(); the store track
+	// self-registers from within the providers package.
+	_ "github.com/cloudposse/atmos/pkg/secrets/providers/sops"
 )
 
 // providerFor resolves the appropriate backend provider for a declaration via the providers

@@ -472,6 +472,8 @@ require sigs.k8s.io/controller-runtime v0.24.1
 
 require github.com/testcontainers/testcontainers-go v0.42.0
 
+require github.com/aws/aws-sdk-go-v2/service/kms v1.51.1
+
 require (
 	cloud.google.com/go/kms v1.31.0 // indirect
 	cloud.google.com/go/longrunning v1.0.0 // indirect
@@ -479,7 +481,6 @@ require (
 	filippo.io/hpke v0.4.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys v1.4.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
-	github.com/aws/aws-sdk-go-v2/service/kms v1.51.1 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/bytecodealliance/wasmtime-go/v43 v43.0.2 // indirect
