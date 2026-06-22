@@ -1,10 +1,13 @@
-# End-to-end test for the `github/artifacts` planfile store, modeling the real
-# plan-then-apply CI workflow across two separate jobs:
+# End-to-end test for the `github/artifacts` planfile store via the EXPLICIT CLI
+# (manual) path, across two separate jobs:
 #
 #   plan job   -> `atmos terraform plan --ci` uploads the planfile to GitHub
 #                 Actions Artifacts.
-#   apply job  -> downloads that artifact (cross-job, same run) and runs
-#                 `atmos terraform apply --planfile=<downloaded>` against it.
+#   apply job  -> explicitly `atmos terraform planfile download` the artifact
+#                 (cross-job, same run) and `atmos terraform apply --planfile=...`.
+#
+# The AUTOMATIC hook-driven flow (plan --ci upload -> deploy --ci auto download +
+# verify + apply) is tested separately in planfile-verify-e2e.yml.
 #
 # This is the one path no Go unit test can cover: the backend talks to the
 # GitHub Actions Artifacts API directly using the runner-only
@@ -12,6 +15,11 @@
 # `run:` steps. We dogfood the in-repo `actions/github-runtime` action
 # (mode: env) to surface them — exactly the wiring documented at
 # /ci/planfile-storage.
+#
+# The IaC binary is also dogfooded through the Atmos toolchain: the fixture
+# declares `dependencies.tools.opentofu` (+ `command: tofu`), so
+# `atmos terraform plan/apply` auto-installs OpenTofu and resolves it from the
+# toolchain PATH — no hashicorp/setup-terraform action required.
 name: Planfile Artifacts E2E
 
 on:
@@ -61,11 +69,6 @@ jobs:
           make build
           echo "$PWD/build" >> "$GITHUB_PATH"
 
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
-        with:
-          terraform_wrapper: false # atmos invokes terraform directly; the wrapper corrupts output parsing.
-
       # Surface the runner's ACTIONS_* credentials to every later run step.
       # This is the entire reason github/artifacts works from a `run:` step.
       - name: Expose GitHub Actions runtime credentials
@@ -96,11 +99,6 @@ jobs:
         run: |
           make build
           echo "$PWD/build" >> "$GITHUB_PATH"
-
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
-        with:
-          terraform_wrapper: false
 
       - name: Expose GitHub Actions runtime credentials
         uses: ./actions/github-runtime

@@ -288,7 +288,53 @@ This automatic naming ensures:
 
 Planfiles are stored in the component's working directory:
 
+```text
+<component-working-dir>/<stack>-<component>.planfile
 ```
+
+## Drift Verification
+
+When [planfile storage](/ci/planfile-storage) is configured and `atmos terraform deploy` runs in CI
+mode, Atmos verifies the stored plan against current state before applying: it downloads the planfile
+that `plan --ci` uploaded, generates a fresh plan, and compares them with the JSON plan-diff. This
+guarantees that exactly what was reviewed gets applied — and nothing else.
+
+Control the behavior with `components.terraform.planfiles.verify`:
+
+```yaml
+components:
+  terraform:
+    planfiles:
+      priority: [github]
+      stores:
+        github:
+          type: github/artifacts
+      # Drift verification behavior on `deploy` (default: fail under CI).
+      verify: fail   # fail | warn | off
+```
+
+<dl>
+  <dt>`fail` <em>(default under CI)</em></dt>
+  <dd>Fail the deploy when the stored plan drifts from a fresh plan; apply the verified plan on a match.</dd>
+
+  <dt>`warn`</dt>
+  <dd>Log a warning on drift but proceed with the deploy (applies the freshly generated plan).</dd>
+
+  <dt>`off`</dt>
+  <dd>Disable verification entirely; the stored plan is not downloaded and `deploy` performs a normal plan-and-apply.</dd>
+</dl>
+
+Per-run overrides: `--verify-plan` forces `fail`, `--no-verify-plan` forces `off`. Precedence is
+**CLI flag > config > CI default**. Verification runs only on `deploy` (not `apply`), and only under CI
+when planfile storage is configured.
+
+:::note GitHub Actions runtime token
+With the `github/artifacts` store, the automatic download uses the GitHub Artifacts runtime API, so the
+workflow must surface `ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL` with the
+[`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action
+(`mode: env`) before `deploy` — the same requirement as the upload on `plan`. See
+[Planfile Storage → Using GitHub Artifacts in GitHub Actions](/ci/planfile-storage#using-github-artifacts-in-github-actions).
+:::
 
 ## Working with Planfiles in Practice
 

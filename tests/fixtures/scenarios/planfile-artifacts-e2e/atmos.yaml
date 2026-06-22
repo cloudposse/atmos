@@ -2,6 +2,10 @@ base_path: "./"
 
 components:
   terraform:
+    # Dogfood OpenTofu via the Atmos toolchain instead of hashicorp/setup-terraform.
+    # The component declares `dependencies.tools.opentofu`, which Atmos resolves,
+    # installs, and puts on PATH automatically before `atmos terraform plan/apply`.
+    command: tofu
     base_path: "components/terraform"
     apply_auto_approve: false
     deploy_run_init: true

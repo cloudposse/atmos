@@ -25,6 +25,9 @@ uploads planfiles to storage, and `atmos terraform deploy` downloads and verifie
 components:
   terraform:
     planfiles:
+      # Drift verification on `deploy`: fail (default under CI) | warn | off
+      verify: fail
+
       # Stores are tried in priority order
       priority:
         - "github"
@@ -134,25 +137,56 @@ When `atmos terraform plan` runs in CI mode with planfile storage configured:
 
 ### Deploy Phase
 
-When `atmos terraform deploy` runs:
+When `atmos terraform deploy` runs in CI mode with planfile storage configured, verification is
+**automatic**:
 
 1. Downloads the stored planfile bundle from storage
 2. Verifies SHA256 integrity checksums
 3. Generates a fresh plan against current infrastructure
-4. Performs semantic comparison between stored and fresh plans
+4. Performs JSON-structural comparison between stored and fresh plans
 5. **If plans match:** Applies the verified plan
-6. **If plans differ:** Fails with a drift detection error
+6. **If plans drift:** Fails the deploy (mode `fail`) or warns and proceeds (mode `warn`)
 
 This ensures that exactly what was reviewed during the plan phase gets applied, with no
-silent infrastructure drift.
+silent infrastructure drift. Verification runs on `deploy` only — `apply` stays a thin wrapper.
+
+:::note GitHub Actions runtime token
+With the `github/artifacts` store, the automatic download (like the upload) talks to the GitHub
+Artifacts runtime API, so `deploy` must also run after the
+[`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action
+surfaces `ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL` — see
+[Using GitHub Artifacts in GitHub Actions](#using-github-artifacts-in-github-actions) above.
+:::
 
 ## Plan Verification
 
-The deploy command uses semantic plan comparison — not naive text diff. It compares the
-JSON plan structures to detect meaningful differences while ignoring cosmetic changes.
+Verification compares the **JSON plan structures** (`terraform show -json`) of the stored and fresh
+plans — not a naive text diff — detecting meaningful changes while ignoring cosmetic noise (sorted keys,
+masked sensitive values, skipped computed-hash attributes and data sources).
 
-If drift is detected, the deploy fails with a clear error showing what changed since the
-plan was created.
+This semantic comparison is deliberate. A plan legitimately contains values that vary between review and
+apply — attributes "known after apply," computed fields, hashes, ordering, timestamps. A byte-for-byte
+check (or Terraform's own saved-plan apply, which any state-lineage change invalidates) would reject a
+plan that is still perfectly valid. Verification needs **wiggle room**: tolerate benign variation while
+still catching substantive drift — a resource added, removed, or actually changed.
+
+It is configurable via `components.terraform.planfiles.verify`:
+
+```yaml
+components:
+  terraform:
+    planfiles:
+      verify: fail   # fail (default under CI) | warn | off
+```
+
+- **`fail`** (default under CI): fail the deploy on drift.
+- **`warn`**: log the drift but proceed with the fresh plan.
+- **`off`**: skip verification (and the stored-plan download).
+
+Per-run overrides: `--verify-plan` (force `fail`) and `--no-verify-plan` (force `off`); CLI flags beat
+config, which beats the CI default. See
+[`atmos terraform deploy`](/cli/commands/terraform/deploy#automatic-plan-verification-in-ci) and
+[Planfile drift verification](/components/terraform/planfiles#drift-verification).
 
 ## CLI Commands
 

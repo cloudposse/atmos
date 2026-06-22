@@ -1,0 +1,68 @@
+---
+slug: native-ci-planfile-verification
+title: "Plan-then-Deploy in CI: Planfile Storage and Automatic Drift Verification"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos native CI now supports the full plan-then-deploy workflow with planfiles: `atmos terraform plan --ci` uploads the planfile to durable storage, and `atmos terraform deploy --ci` automatically downloads it, re-plans, compares the two, and applies **only what was reviewed** — failing on drift by default.
+
+<!--truncate-->
+
+## What Changed
+
+Two pieces landed together:
+
+- **Planfile storage that works in GitHub Actions.** The `github/artifacts` store talks to the GitHub Actions Artifacts API directly — including the runtime download path, so a planfile uploaded by a **plan** job can be consumed by a separate **deploy** job in the same run. (S3 and local stores work too.)
+- **Automatic, configurable drift verification on `deploy`.** When planfile storage is configured and you run `atmos terraform deploy --ci`, Atmos downloads the stored plan, generates a fresh plan against current state, compares them with a JSON-structural plan-diff, and:
+  - **`fail`** (default under CI): blocks the deploy on drift,
+  - **`warn`**: logs the drift but proceeds,
+  - **`off`**: skips verification entirely.
+
+Configure it once:
+
+```yaml
+components:
+  terraform:
+    planfiles:
+      verify: fail   # fail | warn | off
+      priority: [github]
+      stores:
+        github:
+          type: github/artifacts
+```
+
+Override per run with `--verify-plan` / `--no-verify-plan` (CLI beats config beats the CI default).
+
+## Why This Matters
+
+The gap between "the plan you reviewed" and "what actually gets applied" is where infrastructure surprises live. By storing the reviewed planfile and re-verifying it at apply time, Atmos guarantees that deploys apply exactly what passed review — or stop with a clear drift error showing what changed.
+
+### Why a naive diff doesn't work
+
+A plan isn't a frozen artifact. Between the moment it's reviewed and the moment it's applied, a plan legitimately contains values that vary — attributes "known after apply," computed fields, hashes, ordering, timestamps. A byte-for-byte comparison of two planfiles (or of raw `terraform show` text) flags all of that as a change, so a plan that is still perfectly valid gets rejected as "drifted." Terraform's own saved-plan apply is even stricter: any movement in state lineage invalidates the saved plan outright, even when the planned changes haven't actually changed.
+
+That's the real-world problem with planfiles: the rigid approaches make plans go *invalid* long before they go *wrong*. To be useful, verification needs **wiggle room** — it must tolerate benign variation while still catching real drift.
+
+Atmos's verification is **semantic**, not naive. It parses both plans to JSON, sorts keys for determinism, masks sensitive values, and ignores the fields that vary without changing intent (computed-hash attributes, data-source reads). So it flags what matters — a resource added, removed, or substantively changed — while letting the noise that doesn't invalidate the plan slide. That distinction is what makes plan-then-deploy practical instead of perpetually red.
+
+Verification lives on `deploy`, not `apply`, by construction: `deploy` re-runs `plan` as part of the command, so there's a fresh plan to diff the stored one against. `apply` never re-plans, so it stays a thin, predictable wrapper around `terraform apply`.
+
+## How to Use It
+
+Inside GitHub Actions, the `github/artifacts` store needs the runner's runtime credentials (`ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL`), which GitHub withholds from `run:` steps. Surface them once with the in-repo [`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action:
+
+```yaml
+steps:
+  - uses: cloudposse/atmos/actions/github-runtime@v1
+    with:
+      mode: env
+  - run: atmos terraform plan mycomponent -s prod --ci    # uploads the planfile
+  - run: atmos terraform deploy mycomponent -s prod --ci   # downloads, verifies, applies
+```
+
+See [Planfile Storage](/ci/planfile-storage), [Planfile drift verification](/components/terraform/planfiles#drift-verification), and [`atmos terraform deploy`](/cli/commands/terraform/deploy#automatic-plan-verification-in-ci).
+
+## Get Involved
+
+Planfile storage is evolving — try it in your pipelines and tell us how the `fail` / `warn` / `off` semantics fit your workflow. Open an issue or discussion on [GitHub](https://github.com/cloudposse/atmos).

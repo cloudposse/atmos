@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -38,6 +39,7 @@ type TerraformRunOptions struct {
 	PlanSkipPlanfile bool
 	DeployRunInit    bool
 	VerifyPlan       bool
+	NoVerifyPlan     bool
 
 	// Multi-component flags.
 	Query      string
@@ -57,6 +59,20 @@ type TerraformRunOptions struct {
 	UploadStatus bool
 }
 
+// VerifyPlanCLIOverride returns the explicit planfile-verify mode requested via
+// CLI flags: off for --no-verify-plan, fail for --verify-plan, empty if neither.
+// --no-verify-plan wins when both are set.
+func (o *TerraformRunOptions) VerifyPlanCLIOverride() schema.PlanfileVerifyMode {
+	switch {
+	case o.NoVerifyPlan:
+		return schema.PlanfileVerifyOff
+	case o.VerifyPlan:
+		return schema.PlanfileVerifyFail
+	default:
+		return ""
+	}
+}
+
 // ParseTerraformRunOptions parses and validates shared terraform flags from Viper.
 func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 	defer perf.Track(nil, "terraform.ParseTerraformRunOptions")()
@@ -74,6 +90,7 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		PlanSkipPlanfile:        v.GetBool("skip-planfile"),
 		DeployRunInit:           v.GetBool("deploy-run-init"),
 		VerifyPlan:              v.GetBool("verify-plan"),
+		NoVerifyPlan:            v.GetBool("no-verify-plan"),
 		Query:                   v.GetString("query"),
 		Components:              v.GetStringSlice("components"),
 		All:                     v.GetBool("all"),

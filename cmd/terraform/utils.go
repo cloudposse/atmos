@@ -162,14 +162,26 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		forceCIMode = viper.GetBool("ci")
 	}
 
-	// Read --verify-plan flag early (same pattern as --ci above).
-	// PreRunE runs before RunE, so info.VerifyPlan is not yet set by applyOptionsToInfo().
-	// The CI hook handler needs it to decide whether to download with stored prefix.
+	// Read the verify-plan flags early (same pattern as --ci above). PreRunE runs
+	// before RunE, so info is not yet populated by applyOptionsToInfo(). The
+	// before.terraform.deploy hook reads the resulting CLI override to decide
+	// whether to download the stored planfile (skipped when verification is off).
 	verifyPlan, _ := cmd_.Flags().GetBool("verify-plan")
 	if !verifyPlan {
 		verifyPlan = viper.GetBool("verify-plan")
 	}
-	info.VerifyPlan = verifyPlan
+	noVerifyPlan, _ := cmd_.Flags().GetBool("no-verify-plan")
+	if !noVerifyPlan {
+		noVerifyPlan = viper.GetBool("no-verify-plan")
+	}
+	switch {
+	case noVerifyPlan:
+		info.VerifyPlanMode = schema.PlanfileVerifyOff
+	case verifyPlan:
+		info.VerifyPlanMode = schema.PlanfileVerifyFail
+	default:
+		info.VerifyPlanMode = ""
+	}
 
 	// Run CI hooks based on component provider bindings.
 	// This is separate from user-defined hooks and runs automatically when CI is enabled.
@@ -578,7 +590,7 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	if opts.DeployRunInit {
 		info.DeployRunInit = "true"
 	}
-	info.VerifyPlan = opts.VerifyPlan
+	info.VerifyPlanMode = opts.VerifyPlanCLIOverride()
 }
 
 // terraformRunWithOptions is the shared execution logic for terraform subcommands.
@@ -663,23 +675,47 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	}
 	wasMultiComponentExecution = false
 
-	// Verify stored planfile matches current state before deploying.
-	if subCommand == "deploy" && info.VerifyPlan {
-		verifyAtmosConfig, configErr := cfg.InitCliConfig(info, true)
-		if configErr == nil {
-			canonicalPlanPath := e.ConstructTerraformComponentPlanfilePath(&verifyAtmosConfig, &info)
-			componentDir := filepath.Dir(canonicalPlanPath)
-			storedPlanPath := filepath.Join(componentDir, planfile.StoredPlanPrefix+planfile.PlanFilename)
-
-			if _, statErr := os.Stat(storedPlanPath); statErr == nil {
-				if verifyErr := e.VerifyPlanfile(&info, storedPlanPath); verifyErr != nil {
-					return verifyErr
-				}
-			}
-		}
+	// Verify the stored planfile matches current state before deploying.
+	if verifyErr := verifyStoredPlanForDeploy(subCommand, &info); verifyErr != nil {
+		return verifyErr
 	}
 
 	return executeSingleComponent(&info, shellOpts...)
+}
+
+// verifyStoredPlanForDeploy runs planfile drift verification before a deploy
+// apply. It is a no-op for non-deploy commands, when planfile verification is
+// off, or when no stored planfile was downloaded (the stored planfile only
+// exists when the before.terraform.deploy hook fetched it under CI). On a match,
+// or under warn, it points info at the freshly generated plan for apply.
+func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksInfo) error {
+	if subCommand != "deploy" {
+		return nil
+	}
+
+	verifyAtmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		// Config errors surface on the normal execution path; nothing to verify here.
+		return nil //nolint:nilerr // intentionally deferring config errors to the main path.
+	}
+
+	if v := verifyAtmosConfig.Components.Terraform.Planfiles.Verify; !v.IsValid() {
+		return fmt.Errorf("%w: components.terraform.planfiles.verify %q is invalid (want fail|warn|off)", errUtils.ErrInvalidConfig, v)
+	}
+
+	canonicalPlanPath := e.ConstructTerraformComponentPlanfilePath(&verifyAtmosConfig, info)
+	storedPlanPath := filepath.Join(filepath.Dir(canonicalPlanPath), planfile.StoredPlanPrefix+planfile.PlanFilename)
+	if _, statErr := os.Stat(storedPlanPath); statErr != nil {
+		return nil //nolint:nilerr // no stored planfile downloaded => nothing to verify.
+	}
+
+	// A stored planfile implies the CI download hook ran, so resolve with ciEnabled=true.
+	mode := planfile.ResolveVerifyMode(&verifyAtmosConfig, true, info.VerifyPlanMode)
+	if mode == schema.PlanfileVerifyOff {
+		return nil
+	}
+
+	return e.VerifyPlanfile(info, storedPlanPath, mode)
 }
 
 func terraformSignalContext(actualCmd *cobra.Command) (context.Context, context.CancelFunc) {
