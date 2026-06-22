@@ -1954,6 +1954,137 @@ func TestStore_DownloadViaRuntime(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "rest tar content", string(content))
 	})
+
+	t.Run("invalid runtime token returns download error", func(t *testing.T) {
+		// A token that is not a valid JWT fails the scope parse before any HTTP call.
+		t.Setenv("ACTIONS_RUNTIME_TOKEN", "not-a-jwt")
+
+		store := &Store{prefix: "planfile", downloader: &mockUploader{}}
+
+		_, _, err := store.downloadViaRuntime(context.Background(), "prod/mycomponent/abc123.tfplan.tar")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
+	})
+
+	t.Run("artifact not found in run list", func(t *testing.T) {
+		t.Setenv("ACTIONS_RUNTIME_TOKEN", createFakeJWT(t, map[string]any{
+			"scp": "Actions.Results:run-id:job-id",
+		}))
+
+		// The list returns artifacts, but none match the requested key's name.
+		mock := &mockUploader{
+			listFn: func(_ context.Context, _ *runtimeListArtifactsRequest) (*runtimeListArtifactsResponse, error) {
+				return &runtimeListArtifactsResponse{Artifacts: []runtimeArtifact{
+					{Name: "some-other-artifact"},
+				}}, nil
+			},
+		}
+		store := &Store{prefix: "planfile", downloader: mock}
+
+		_, _, err := store.downloadViaRuntime(context.Background(), "prod/mycomponent/abc123.tfplan.tar")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactNotFound)
+	})
+
+	t.Run("signed URL request error", func(t *testing.T) {
+		t.Setenv("ACTIONS_RUNTIME_TOKEN", createFakeJWT(t, map[string]any{
+			"scp": "Actions.Results:run-id:job-id",
+		}))
+
+		store := &Store{prefix: "planfile"}
+		wantName := store.artifactName("prod/mycomponent/abc123.tfplan.tar")
+		store.downloader = &mockUploader{
+			listFn: func(_ context.Context, _ *runtimeListArtifactsRequest) (*runtimeListArtifactsResponse, error) {
+				return &runtimeListArtifactsResponse{Artifacts: []runtimeArtifact{{Name: wantName}}}, nil
+			},
+			getSignedURLFn: func(_ context.Context, _ *getSignedArtifactURLRequest) (*getSignedArtifactURLResponse, error) {
+				return nil, fmt.Errorf("signed URL request failed")
+			},
+		}
+
+		_, _, err := store.downloadViaRuntime(context.Background(), "prod/mycomponent/abc123.tfplan.tar")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "signed URL request failed")
+	})
+
+	t.Run("empty signed URL", func(t *testing.T) {
+		t.Setenv("ACTIONS_RUNTIME_TOKEN", createFakeJWT(t, map[string]any{
+			"scp": "Actions.Results:run-id:job-id",
+		}))
+
+		store := &Store{prefix: "planfile"}
+		wantName := store.artifactName("prod/mycomponent/abc123.tfplan.tar")
+		store.downloader = &mockUploader{
+			listFn: func(_ context.Context, _ *runtimeListArtifactsRequest) (*runtimeListArtifactsResponse, error) {
+				return &runtimeListArtifactsResponse{Artifacts: []runtimeArtifact{{Name: wantName}}}, nil
+			},
+			getSignedURLFn: func(_ context.Context, _ *getSignedArtifactURLRequest) (*getSignedArtifactURLResponse, error) {
+				return &getSignedArtifactURLResponse{SignedURL: ""}, nil
+			},
+		}
+
+		_, _, err := store.downloadViaRuntime(context.Background(), "prod/mycomponent/abc123.tfplan.tar")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
+		assert.Contains(t, err.Error(), "empty signed URL")
+	})
+
+	t.Run("blob download failure", func(t *testing.T) {
+		t.Setenv("ACTIONS_RUNTIME_TOKEN", createFakeJWT(t, map[string]any{
+			"scp": "Actions.Results:run-id:job-id",
+		}))
+
+		// The blob server returns an error status, so fetchBlob fails.
+		blob := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer blob.Close()
+
+		store := &Store{prefix: "planfile"}
+		wantName := store.artifactName("prod/mycomponent/abc123.tfplan.tar")
+		store.downloader = &mockUploader{
+			listFn: func(_ context.Context, _ *runtimeListArtifactsRequest) (*runtimeListArtifactsResponse, error) {
+				return &runtimeListArtifactsResponse{Artifacts: []runtimeArtifact{{Name: wantName}}}, nil
+			},
+			getSignedURLFn: func(_ context.Context, _ *getSignedArtifactURLRequest) (*getSignedArtifactURLResponse, error) {
+				return &getSignedArtifactURLResponse{SignedURL: blob.URL}, nil
+			},
+		}
+
+		_, _, err := store.downloadViaRuntime(context.Background(), "prod/mycomponent/abc123.tfplan.tar")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
+	})
+}
+
+// TestStore_FetchBlob verifies the pre-signed blob fetch handles non-success
+// statuses and transport errors.
+func TestStore_FetchBlob(t *testing.T) {
+	t.Run("non-200 status returns download error", func(t *testing.T) {
+		blob := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte("access denied"))
+		}))
+		defer blob.Close()
+
+		store := &Store{}
+		_, err := store.fetchBlob(context.Background(), blob.URL)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
+		assert.Contains(t, err.Error(), "status 403")
+	})
+
+	t.Run("transport error returns download error", func(t *testing.T) {
+		// Start a server, capture its URL, then close it so the request fails.
+		blob := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+		url := blob.URL
+		blob.Close()
+
+		store := &Store{}
+		_, err := store.fetchBlob(context.Background(), url)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
+	})
 }
 
 func TestRuntimeUploader_GetSignedArtifactURL(t *testing.T) {
@@ -2033,5 +2164,19 @@ func TestRuntimeUploader_ListArtifacts(t *testing.T) {
 		_, err := uploader.ListArtifacts(context.Background(), &runtimeListArtifactsRequest{})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "status 500")
+	})
+
+	t.Run("invalid JSON response returns decode error", func(t *testing.T) {
+		// A 200 with a non-JSON body must surface a decode error from postRuntimeJSON.
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte("not-json"))
+		}))
+		defer server.Close()
+
+		uploader := newRuntimeUploader(server.URL, "test-token")
+		_, err := uploader.ListArtifacts(context.Background(), &runtimeListArtifactsRequest{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "decode")
 	})
 }
