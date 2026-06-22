@@ -19,6 +19,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -58,6 +59,30 @@ type artifactUploader interface {
 
 	// FinalizeArtifact finalizes the artifact after upload.
 	FinalizeArtifact(ctx context.Context, req *finalizeArtifactRequest) (*finalizeArtifactResponse, error)
+}
+
+// artifactDownloader fetches artifacts via the GitHub Actions runtime API.
+// Unlike the REST API (which only serves an artifact after its producing run
+// has completed), the runtime API can read artifacts from the in-progress run,
+// enabling same-run plan-then-apply handoff. It is scoped to the current run's
+// backend IDs, so it cannot see other runs' artifacts — callers fall back to
+// the REST API for those.
+type artifactDownloader interface {
+	// GetSignedArtifactURL returns a signed blob URL for the named artifact in
+	// the current run.
+	GetSignedArtifactURL(ctx context.Context, req *getSignedArtifactURLRequest) (*getSignedArtifactURLResponse, error)
+}
+
+// getSignedArtifactURLRequest is the request body for the GetSignedArtifactURL API.
+type getSignedArtifactURLRequest struct {
+	WorkflowRunBackendID    string `json:"workflow_run_backend_id"`
+	WorkflowJobRunBackendID string `json:"workflow_job_run_backend_id"`
+	Name                    string `json:"name"`
+}
+
+// getSignedArtifactURLResponse is the response from the GetSignedArtifactURL API.
+type getSignedArtifactURLResponse struct {
+	SignedURL string `json:"signed_url"`
 }
 
 // createArtifactRequest is the request body for the CreateArtifact API.
@@ -116,6 +141,7 @@ type Store struct {
 	httpClient    *http.Client
 	baseURL       string
 	uploader      artifactUploader
+	downloader    artifactDownloader
 	owner         string
 	repo          string
 	prefix        string
@@ -139,12 +165,17 @@ func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 	retentionDays := getRetentionDays(opts.Options)
 	prefix, _ := opts.Options["prefix"].(string)
 
-	// Create the runtime uploader if running inside GitHub Actions.
+	// Create the runtime client if running inside GitHub Actions. It backs both
+	// upload and the same-run download path (the REST API can't read an artifact
+	// from the still-running producing run).
 	var uploader artifactUploader
+	var downloader artifactDownloader
 	runtimeToken := os.Getenv("ACTIONS_RUNTIME_TOKEN")
 	resultsURL := os.Getenv("ACTIONS_RESULTS_URL")
 	if runtimeToken != "" && resultsURL != "" {
-		uploader = newRuntimeUploader(resultsURL, runtimeToken)
+		runtime := newRuntimeUploader(resultsURL, runtimeToken)
+		uploader = runtime
+		downloader = runtime
 	}
 
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
@@ -155,6 +186,7 @@ func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 		httpClient:    httpClient,
 		baseURL:       "https://api.github.com",
 		uploader:      uploader,
+		downloader:    downloader,
 		owner:         owner,
 		repo:          repo,
 		prefix:        prefix,
@@ -487,6 +519,19 @@ func parseNextPage(linkHeader string) int {
 func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *artifact.Metadata, error) {
 	defer perf.Track(nil, "github.Download")()
 
+	// Prefer the runtime API when available: it can read an artifact from the
+	// in-progress run (e.g. a planfile uploaded by an earlier job in the same
+	// run), which the REST API cannot. The runtime API is scoped to the current
+	// run, so fall back to REST for artifacts from other (completed) runs.
+	if s.downloader != nil {
+		rc, meta, err := s.downloadViaRuntime(ctx, key)
+		if err == nil {
+			return rc, meta, nil
+		}
+		log.Debug("Runtime artifact download failed; falling back to REST API",
+			"key", key, "error", err)
+	}
+
 	a, err := s.findArtifact(ctx, key)
 	if err != nil {
 		return nil, nil, err
@@ -498,6 +543,59 @@ func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *artif
 	}
 
 	return extractFromZip(zipData)
+}
+
+// downloadViaRuntime fetches an artifact from the current run via the GitHub
+// Actions runtime API and extracts the tar stream + metadata from its zip.
+func (s *Store) downloadViaRuntime(ctx context.Context, key string) (io.ReadCloser, *artifact.Metadata, error) {
+	defer perf.Track(nil, "github.downloadViaRuntime")()
+
+	ids, err := getBackendIDsFromToken(os.Getenv("ACTIONS_RUNTIME_TOKEN"))
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: failed to parse runtime token: %w", errUtils.ErrArtifactDownloadFailed, err)
+	}
+
+	resp, err := s.downloader.GetSignedArtifactURL(ctx, &getSignedArtifactURLRequest{
+		WorkflowRunBackendID:    ids.WorkflowRunBackendID,
+		WorkflowJobRunBackendID: ids.WorkflowJobRunBackendID,
+		Name:                    s.artifactName(key),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if resp.SignedURL == "" {
+		return nil, nil, fmt.Errorf("%w: runtime API returned an empty signed URL", errUtils.ErrArtifactDownloadFailed)
+	}
+
+	zipData, err := s.fetchBlob(ctx, resp.SignedURL)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return extractFromZip(zipData)
+}
+
+// fetchBlob downloads the bytes at a pre-signed blob URL. The URL carries its
+// own authentication, so it is fetched with a plain client (no GitHub token).
+func (s *Store) fetchBlob(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to create blob request: %w", errUtils.ErrArtifactDownloadFailed, err)
+	}
+
+	client := &http.Client{Timeout: httpTimeout}
+	resp, err := client.Do(req) //nolint:gosec // G704: url is a GitHub-issued, pre-signed blob URL from the runtime API.
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to download artifact blob: %w", errUtils.ErrArtifactDownloadFailed, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("%w: blob download returned status %d: %s", errUtils.ErrArtifactDownloadFailed, resp.StatusCode, string(body))
+	}
+
+	return io.ReadAll(resp.Body)
 }
 
 // findArtifact finds an artifact by key.
@@ -920,6 +1018,46 @@ func (u *runtimeUploader) FinalizeArtifact(ctx context.Context, req *finalizeArt
 	var result finalizeArtifactResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode FinalizeArtifact response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// GetSignedArtifactURL calls the GetSignedArtifactURL Twirp endpoint, returning
+// a signed blob URL for the named artifact in the current run.
+//
+//nolint:dupl // Mirrors the sibling CreateArtifact/FinalizeArtifact Twirp calls in this file.
+func (u *runtimeUploader) GetSignedArtifactURL(ctx context.Context, req *getSignedArtifactURLRequest) (*getSignedArtifactURLResponse, error) {
+	defer perf.Track(nil, "github.runtimeUploader.GetSignedArtifactURL")()
+
+	endpoint := u.baseURL + artifactServicePath + "/GetSignedArtifactURL"
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal get signed URL request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json") //nolint:revive // Matches sibling Twirp methods in this file.
+	httpReq.Header.Set("Authorization", "Bearer "+u.token)
+
+	resp, err := u.httpClient.Do(httpReq) //nolint:gosec // G704: endpoint is the trusted ACTIONS_RESULTS_URL Twirp service.
+	if err != nil {
+		return nil, fmt.Errorf("failed to call GetSignedArtifactURL: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GetSignedArtifactURL returned status %d: %s", resp.StatusCode, string(respBody)) //nolint:err113 // Matches the sibling Twirp status-error style in this file.
+	}
+
+	var result getSignedArtifactURLResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode GetSignedArtifactURL response: %w", err)
 	}
 
 	return &result, nil
