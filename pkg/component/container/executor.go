@@ -143,7 +143,10 @@ func ExecuteBuild(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
-// ExecutePush pushes the component image to its registry.
+// ExecutePush pushes the component image to its registry. It sends every
+// configured build tag (so registry-qualified tags in `build.tags` push to
+// multiple registries in one operation), falling back to the single top-level
+// image when no build tags are set. Pushes happen in order and fail fast.
 func ExecutePush(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecutePush")()
 
@@ -151,24 +154,28 @@ func ExecutePush(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	if err != nil {
 		return err
 	}
-	image, err := r.requireImage()
-	if err != nil {
-		return err
+	refs := r.spec.PushRefs()
+	if len(refs) == 0 {
+		return fmt.Errorf("%w: component %q has no image or build.tags to push", errUtils.ErrComponentConfigInvalid, r.component)
 	}
 	if r.dryRun {
-		ui.Infof("[dry-run] push %s", image)
+		for _, ref := range refs {
+			ui.Infof("[dry-run] push %s", ref)
+		}
 		return nil
 	}
 	runtime, err := r.runtime(ctx)
 	if err != nil {
 		return err
 	}
-	if err := spinner.ExecWithSpinner(
-		fmt.Sprintf("Pushing %s", image),
-		fmt.Sprintf("%s pushed", image),
-		func() error { _, pushErr := runtime.Push(ctx, image); return pushErr },
-	); err != nil {
-		return fmt.Errorf("%w: push %q: %w", errUtils.ErrComponentExecutionFailed, image, err)
+	for _, ref := range refs {
+		if err := spinner.ExecWithSpinner(
+			fmt.Sprintf("Pushing %s", ref),
+			fmt.Sprintf("%s pushed", ref),
+			func() error { _, pushErr := runtime.Push(ctx, ref); return pushErr },
+		); err != nil {
+			return fmt.Errorf("%w: push %q: %w", errUtils.ErrComponentExecutionFailed, ref, err)
+		}
 	}
 	return nil
 }

@@ -114,6 +114,37 @@ func decodeSection(raw any, result any) error {
 	return decoder.Decode(raw)
 }
 
+// PushRefs returns the image references that `push` should send. When a build
+// with tags is configured it returns every build tag (deduped, order-preserving)
+// — so listing registry-qualified tags in `build.tags` pushes the image to
+// multiple registries in one operation. Otherwise it returns the single
+// top-level image (or nil when neither is set).
+func (s *ContainerSpec) PushRefs() []string {
+	defer perf.Track(nil, "container.ContainerSpec.PushRefs")()
+
+	if s.Build != nil && len(s.Build.Tags) > 0 {
+		seen := make(map[string]struct{}, len(s.Build.Tags))
+		refs := make([]string, 0, len(s.Build.Tags))
+		for _, tag := range s.Build.Tags {
+			if tag == "" {
+				continue
+			}
+			if _, dup := seen[tag]; dup {
+				continue
+			}
+			seen[tag] = struct{}{}
+			refs = append(refs, tag)
+		}
+		if len(refs) > 0 {
+			return refs
+		}
+	}
+	if strings.TrimSpace(s.Image) != "" {
+		return []string{s.Image}
+	}
+	return nil
+}
+
 // ToBuildConfig maps the build spec onto a runtime BuildConfig.
 func (s *ContainerSpec) ToBuildConfig() *ctr.BuildConfig {
 	defer perf.Track(nil, "container.ContainerSpec.ToBuildConfig")()

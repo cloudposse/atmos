@@ -31,7 +31,7 @@ declarative, addressable infrastructure.
 ```shell
 # Image artifact
 atmos container build <component> -s <stack>
-atmos container push <component> -s <stack>
+atmos container push <component> -s <stack>          # pushes every build tag (→ multiple registries)
 atmos container pull <component> -s <stack>
 
 # Lifecycle
@@ -100,6 +100,49 @@ components:
 
 Inheritance (`metadata.inherits`), catalogs, and deep-merge apply exactly like other component kinds —
 abstract base components can carry shared `build`/`run` defaults.
+
+`build.tags` is a list — the build applies all of them to the image, and `push` sends **every** tag, so
+listing registry-qualified tags there pushes to multiple registries in one operation (see
+[Push to multiple registries](#push-to-multiple-registries)).
+
+### Push to multiple registries
+
+`atmos container push <component>` (and `atmos container push --all`) pushes **every entry in
+`build.tags`** — so a single push ships the image to as many registries as you list. The build already
+applied each tag to the image locally, so push just sends them in order:
+
+```yaml
+components:
+  container:
+    app:
+      image: app:v1                                   # local ref used by run/up
+      build:
+        context: .
+        tags:
+          - 1234.dkr.ecr.us-east-1.amazonaws.com/app:v1   # AWS ECR
+          - ghcr.io/cloudposse/app:v1                      # GitHub Container Registry
+```
+
+```shell
+atmos container build app --stack=prod    # builds once, applies both tags
+atmos container push app --stack=prod     # pushes to ECR and GHCR
+```
+
+Notes:
+
+- Pushes run **in order and fail fast** — the first registry that errors stops the push (fix it and
+  re-run; already-pushed registries are simply re-pushed, which is a no-op when the digest is unchanged).
+- When a component has **no `build.tags`**, `push` falls back to the single top-level `image` (the
+  original behavior).
+- Use `--dry-run` to preview exactly which references will be pushed:
+  ```shell
+  atmos container push app --stack=prod --dry-run
+  # ▶ [dry-run] push 1234.dkr.ecr.us-east-1.amazonaws.com/app:v1
+  # ▶ [dry-run] push ghcr.io/cloudposse/app:v1
+  ```
+
+Authenticate to each registry first (e.g. via `--identity` for cloud registries, or the runtime's own
+`docker/podman login`).
 
 ### Runtime selection
 
@@ -272,6 +315,10 @@ compositions:
 atmos container build api -s dev
 atmos container up api -s dev
 atmos container list             # api shows a ● running indicator
+
+# Build once and push the image to every registry in build.tags (e.g. ECR + GHCR).
+atmos container build api -s dev
+atmos container push api -s dev
 
 # Operate the running container (discovered by label).
 atmos container ps                       # running state of every component
