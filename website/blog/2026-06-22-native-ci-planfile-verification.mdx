@@ -52,7 +52,7 @@ A planfile is a frozen snapshot — but the plan it represents never really is. 
 
 That's the real-world problem: rigid checks make a plan go *invalid* long before it goes *wrong*. Useful verification needs **wiggle room** — tolerate the benign shifts, catch the real ones.
 
-Atmos's verification is **semantic**, not naive. It parses both plans to JSON, normalizes the noise (sorted keys, masked secrets, computed-hash attributes, data-source reads), and compares what matters. So it flags a resource added, removed, or substantively changed — while letting the incidental variation slide. That's what makes plan-then-deploy practical instead of perpetually red.
+Atmos's verification is **semantic**, not naive. It parses both plans to JSON, normalizes the noise (sorted keys, masked secrets, computed-hash attributes, data-source reads), and compares what matters. So it flags a resource added, removed, or substantively changed — while letting the incidental variation slide. That's what makes plan-then-deploy practical.
 
 Verification lives on `deploy`, not `apply`, by construction: `deploy` re-runs `plan` as part of the command, so there's a fresh plan to diff the stored one against. `apply` never re-plans, so it stays a thin, predictable wrapper around `terraform apply`.
 
