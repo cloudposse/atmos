@@ -2,6 +2,7 @@
 package exec
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -77,6 +78,12 @@ type describeStacksProcessor struct {
 	// componentAuthResolver builds a per-component AuthManager; defaults to
 	// createComponentAuthManager and is overridable in tests.
 	componentAuthResolver componentAuthManagerResolver
+	// authManagerCache memoizes per-component AuthManagers within one describe-stacks pass, keyed by
+	// auth section + parent chain, so components sharing an auth section reuse one manager instead of
+	// re-running the full auth cycle (credential writes, file locks, keyring rebuilds). The pass is
+	// single-threaded, so a plain map needs no locking.
+	// See docs/fixes/2026-06-22-describe-stacks-scope-and-cache-per-component-auth.md.
+	authManagerCache map[string]auth.AuthManager
 }
 
 // newDescribeStacksProcessor creates a processor with an empty result map.
@@ -122,6 +129,7 @@ func newDescribeStacksProcessorWithAuthDisabled( //nolint:revive // argument-lim
 		authManager:           authManager,
 		finalStacksMap:        make(map[string]any),
 		componentAuthResolver: createComponentAuthManager,
+		authManagerCache:      make(map[string]auth.AuthManager),
 	}
 }
 
@@ -161,6 +169,17 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 	if !hasAuth || !hasDefaultIdentity(authSection) {
 		return componentAuthManager, nil
 	}
+
+	// Reuse a manager already resolved for the same auth section this pass. The resolver derives its
+	// result only from the auth section, the (constant) global config, and the parent manager
+	// (componentName/stackName are logging only), so an identical key yields an equivalent manager.
+	cacheKey, cacheable := p.componentAuthCacheKey(authSection)
+	if cacheable {
+		if cached, ok := p.authManagerCache[cacheKey]; ok {
+			return cached, nil
+		}
+	}
+
 	resolver := p.componentAuthResolver
 	if resolver == nil {
 		resolver = createComponentAuthManager
@@ -169,10 +188,40 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 	if createErr != nil {
 		return componentAuthManager, fmt.Errorf("%w: failed to resolve auth for component %q in stack %q: %w", errUtils.ErrAuthManager, componentName, stackName, createErr)
 	}
+	result := componentAuthManager
 	if resolved != nil {
-		return resolved, nil
+		result = resolved
 	}
-	return componentAuthManager, nil
+	if cacheable {
+		p.cacheComponentAuthManager(cacheKey, result)
+	}
+	return result, nil
+}
+
+// componentAuthCacheKey keys the per-component auth cache by the parent chain plus a deterministic
+// JSON fingerprint of the auth section. Because identities are defined globally and only referenced
+// by components, "same auth section" is a safe, provable proxy for "same identity" — it never merges
+// components whose sections differ. Returns cacheable=false when the section can't be serialized
+// (e.g. non-string map keys), so the caller resolves without caching.
+func (p *describeStacksProcessor) componentAuthCacheKey(authSection map[string]any) (string, bool) {
+	fingerprint, err := json.Marshal(authSection)
+	if err != nil {
+		return "", false
+	}
+	var parentChain string
+	if p.authManager != nil {
+		parentChain = strings.Join(p.authManager.GetChain(), ">")
+	}
+	return parentChain + "\x00" + string(fingerprint), true
+}
+
+// cacheComponentAuthManager stores a resolved manager, lazily creating the map so struct-literal
+// processors (e.g. in tests) also memoize.
+func (p *describeStacksProcessor) cacheComponentAuthManager(key string, manager auth.AuthManager) {
+	if p.authManagerCache == nil {
+		p.authManagerCache = make(map[string]auth.AuthManager)
+	}
+	p.authManagerCache[key] = manager
 }
 
 // processStackFile processes one stack file, iterating over all requested component types.
@@ -332,14 +381,9 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	info.Context = resolvedContext
 	info.AuthDisabled = p.authDisabled
 
-	// Resolve the per-component auth manager (may fall back to the parent).
-	componentAuthManager, err := p.resolveComponentAuthManager(componentSection, componentName, stackName)
-	if err != nil {
-		return err
-	}
-	propagateAuth(&info, componentAuthManager)
-
 	// Filter: skip this component if it does not belong to the requested stack.
+	// Done before resolveComponentAuthManager (below) so out-of-scope components don't trigger a
+	// full auth cycle. See docs/fixes/2026-06-22-describe-stacks-scope-and-cache-per-component-auth.md.
 	if shouldFilterByStack(p.filterByStack, stackFileName, stackName) {
 		return nil
 	}
@@ -357,6 +401,14 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	if !componentIncluded {
 		return nil
 	}
+
+	// Resolve the per-component auth manager (may fall back to the parent). Must run before the
+	// template and YAML-function processing below, which read info.AuthContext.
+	componentAuthManager, err := p.resolveComponentAuthManager(componentSection, componentName, stackName)
+	if err != nil {
+		return err
+	}
+	propagateAuth(&info, componentAuthManager)
 
 	// Ensure the stack-level entry exists (only for included components).
 	if !u.MapKeyExists(p.finalStacksMap, stackName) {
