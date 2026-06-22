@@ -62,7 +62,7 @@ When you apply a planfile, Terraform uses this snapshot instead of re-calculatin
 
 ### 3. **CI/CD Pipeline Safety**
 - **Atomic Operations**: Apply exactly what passed through your CI/CD tests
-- **Artifact Storage**: Store planfiles in external storage (e.g., S3, GitHub Actions artifacts). Atmos provides a [planfile storage GitHub Action](https://github.com/cloudposse/github-action-atmos-terraform-planfile) for this purpose
+- **Artifact Storage**: Store planfiles in external storage (e.g., S3, GitHub Actions artifacts). Atmos provides a [planfile storage GitHub Action](https://github.com/cloudposse/github-action-atmos-terraform-planfile) for this purpose. The native `github/artifacts` store talks to the GitHub Artifacts API directly, so inside GitHub Actions you must surface the runner's runtime credentials with the [`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action — see [Planfile Storage](/ci/planfile-storage#using-github-artifacts-in-github-actions)
 - **Change Documentation**: Saved planfiles provide a record of what changes were planned, useful for understanding what was deployed (not for automated rollback)
 - **Multi-Stage Pipelines**: Separate plan generation, validation, approval, and application stages
 

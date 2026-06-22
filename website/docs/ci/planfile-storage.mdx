@@ -65,6 +65,62 @@ If `components.terraform.planfiles` is not configured, planfile storage operatio
 skipped. CI summaries and status checks still work without planfile storage.
 :::
 
+## Using GitHub Artifacts in GitHub Actions
+
+The `github/artifacts` backend talks to the **GitHub Actions Artifacts API directly** — Atmos is
+the native client, not a wrapper around `actions/upload-artifact`. To do that it needs the runner's
+runtime credentials, `ACTIONS_RUNTIME_TOKEN` and `ACTIONS_RESULTS_URL`.
+
+GitHub injects those into **action steps** (`uses:`) but **withholds them from `run:` steps** — a
+deliberate least-privilege decision. So when Atmos's own commands do the upload from a `run:` step,
+they will fail with:
+
+```
+GitHub Artifacts upload requires running within GitHub Actions
+(ACTIONS_RUNTIME_TOKEN and ACTIONS_RESULTS_URL must be set)
+```
+
+Surface the credentials with the Atmos [`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime)
+action. With `mode: env` it exports the credentials to `$GITHUB_ENV` once, and GitHub then injects
+them automatically into every later `run:` step — Atmos's commands pick them up from the environment
+with no per-step wiring:
+
+<File title=".github/workflows/atmos.yaml">
+```yaml
+steps:
+  - uses: cloudposse/atmos/actions/github-runtime@v1   # pin to a release or SHA
+    with:
+      mode: env
+
+  # Credentials are now in the environment of every later run step.
+  - run: atmos terraform plan mycomponent -s prod --ci    # uploads the planfile to github/artifacts
+  - run: atmos terraform deploy mycomponent -s prod --ci  # downloads, verifies, then applies
+```
+</File>
+
+To keep the credentials out of unrelated steps, use the default `mode: output` instead: the action
+emits masked step outputs that you thread, via `env:`, only into the steps that store planfiles. This
+is the same `github-runtime` mechanism the `atmos ci cache` backend uses — see the
+[cache configuration docs](/cli/configuration/ci/cache) for the full security tradeoff between
+scoped (`mode: output`) and ambient (`mode: env`) credentials.
+
+<File title="Least-privilege alternative (mode: output)">
+```yaml
+steps:
+  - uses: cloudposse/atmos/actions/github-runtime@v1
+    id: ghr
+  - run: atmos terraform plan mycomponent -s prod --ci
+    env:
+      ACTIONS_RUNTIME_TOKEN: ${{ steps.ghr.outputs.runtime-token }}
+      ACTIONS_RESULTS_URL:   ${{ steps.ghr.outputs.results-url }}
+```
+</File>
+
+:::note
+You only need this when **Atmos** performs the upload from a `run:` step. The credentials are already
+present inside `uses:` action steps, and the `local/dir` and `aws/s3` backends don't use them at all.
+:::
+
 ## How It Works
 
 ### Plan Phase
@@ -110,6 +166,6 @@ plan was created.
 ## Related
 
 - [Native CI Overview](/ci) - Feature overview
-- [Native CI Overview](/ci) - Feature overview
+- [CI Cache Configuration](/cli/configuration/ci/cache) - The same `github-runtime` credential mechanism, in depth
 - [CI Configuration](/cli/configuration/ci) - Full configuration reference
 - [`atmos terraform planfile`](/cli/commands/terraform/planfile) - CLI commands

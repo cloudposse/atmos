@@ -236,7 +236,9 @@ func (s *Store) artifactName(key string) string {
 // Upload uploads a single data stream as a GitHub artifact.
 // Creates a zip containing archive.tar (the data stream) + metadata.json.
 // This requires running within GitHub Actions with ACTIONS_RUNTIME_TOKEN and
-// ACTIONS_RESULTS_URL environment variables set.
+// ACTIONS_RESULTS_URL environment variables set. GitHub withholds those from
+// `run:` steps, so surface them with the actions/github-runtime helper action
+// when invoking Atmos from a shell step.
 func (s *Store) Upload(ctx context.Context, key string, data io.Reader, size int64, metadata *artifact.Metadata) error {
 	defer perf.Track(nil, "github.Upload")()
 
