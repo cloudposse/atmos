@@ -155,6 +155,52 @@ func TestConnectClient_Resolve(t *testing.T) {
 	})
 }
 
+func TestConnectClient_Exists(t *testing.T) {
+	fake := newFakeConnectClient()
+	fake.items[fake.key("Datadog", "Shared")] = itemWith(
+		&connectop.ItemField{Label: "api_key", Value: "dd-key"},
+		&connectop.ItemField{ID: "field-id", Label: "other", Value: "by-id"},
+	)
+	c := newTestConnectClient(fake)
+
+	t.Run("present by label", func(t *testing.T) {
+		ok, err := c.Exists(context.Background(), "op://Shared/Datadog/api_key")
+		require.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("present by field ID", func(t *testing.T) {
+		ok, err := c.Exists(context.Background(), "op://Shared/Datadog/field-id")
+		require.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("field absent returns false", func(t *testing.T) {
+		ok, err := c.Exists(context.Background(), "op://Shared/Datadog/missing")
+		require.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("item not found returns false", func(t *testing.T) {
+		ok, err := c.Exists(context.Background(), "op://Shared/Nope/api_key")
+		require.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("invalid reference", func(t *testing.T) {
+		_, err := c.Exists(context.Background(), "op://Shared/Datadog")
+		assert.ErrorIs(t, err, store.ErrOnePasswordInvalidReference)
+	})
+
+	t.Run("transport error propagates", func(t *testing.T) {
+		boom := newFakeConnectClient()
+		boom.getErr = errors.New("503 service unavailable")
+		_, err := newTestConnectClient(boom).Exists(context.Background(), "op://Shared/Datadog/api_key")
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, store.ErrOnePasswordNotFound)
+	})
+}
+
 func TestConnectClient_Set_UpdatesExistingField(t *testing.T) {
 	fake := newFakeConnectClient()
 	fake.items[fake.key("Datadog", "Shared")] = itemWith(

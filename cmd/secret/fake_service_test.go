@@ -33,6 +33,7 @@ type fakeSecretService struct {
 	// Configurable return values.
 	declarations   []secrets.Declaration
 	statuses       []secrets.Status
+	statusVerify   bool // records the verify arg passed to the last Status call.
 	validation     secrets.ValidationResult
 	declared       map[string]bool
 	getValues      map[string]any
@@ -103,7 +104,10 @@ func (f *fakeSecretService) ImportFromStore(name string, src secrets.ImportSourc
 	return f.importErr
 }
 
-func (f *fakeSecretService) Status() []secrets.Status { return f.statuses }
+func (f *fakeSecretService) Status(verify bool) []secrets.Status {
+	f.statusVerify = verify
+	return f.statuses
+}
 
 func (f *fakeSecretService) IsDeclared(name string) bool { return f.declared[name] }
 
@@ -152,7 +156,21 @@ func installService(t *testing.T, svc secretService, loadErr error) {
 		}
 		return svc, nil
 	}
-	t.Cleanup(func() { loadServiceFn = orig })
+
+	// `secret list` (fully-scoped) loads via loadServiceForListFn; override it too so list tests
+	// use the same fake. The verify flag is irrelevant to the fake (it returns canned statuses).
+	origList := loadServiceForListFn
+	loadServiceForListFn = func(_ secretScope, _ bool) (secretService, error) {
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		return svc, nil
+	}
+
+	t.Cleanup(func() {
+		loadServiceFn = orig
+		loadServiceForListFn = origList
+	})
 }
 
 // installServiceAndConfig overrides loadServiceAndConfigFn (used by exec/shell) and restores the

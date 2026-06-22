@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -30,6 +29,7 @@ type GSMClient interface {
 	CreateSecret(ctx context.Context, req *secretmanagerpb.CreateSecretRequest, opts ...gax.CallOption) (*secretmanagerpb.Secret, error)
 	AddSecretVersion(ctx context.Context, req *secretmanagerpb.AddSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error)
 	AccessSecretVersion(ctx context.Context, req *secretmanagerpb.AccessSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.AccessSecretVersionResponse, error)
+	GetSecretVersion(ctx context.Context, req *secretmanagerpb.GetSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error)
 	DeleteSecret(ctx context.Context, req *secretmanagerpb.DeleteSecretRequest, opts ...gax.CallOption) error
 	Close() error
 }
@@ -458,16 +458,48 @@ func (s *GSMStore) Delete(stack string, component string, key string) error {
 	return nil
 }
 
-// Has reports whether a secret exists for the given stack, component, and key. It performs a
-// Get and maps a not-found result to false; any other error is propagated.
+// Has reports whether a secret exists for the given stack, component, and key. It queries the
+// latest version's metadata via GetSecretVersion, which does NOT access or decrypt the secret
+// payload. A not-found result maps to false; any other error is propagated.
 func (s *GSMStore) Has(stack string, component string, key string) (bool, error) {
-	_, err := s.Get(stack, component, key)
-	if err != nil {
-		if errors.Is(err, store.ErrResourceNotFound) {
-			return false, nil
-		}
+	if key == "" {
+		return false, store.ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
 		return false, err
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
+	defer cancel()
+
+	// Get the secret ID using getKey.
+	secretID, err := s.getKey(stack, component, key)
+	if err != nil {
+		return false, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
+	}
+
+	// Build the resource name for the latest version, matching Get's naming scheme.
+	name := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", s.projectID, secretID)
+
+	// Fetch only the version metadata; this avoids accessing/decrypting the payload.
+	_, err = s.client.GetSecretVersion(ctx, &secretmanagerpb.GetSecretVersionRequest{
+		Name: name,
+	})
+	if err != nil {
+		st, ok := status.FromError(err)
+		if ok {
+			switch st.Code() {
+			case codes.NotFound:
+				return false, nil
+			case codes.PermissionDenied:
+				return false, fmt.Errorf(errWrapFormatWithID, store.ErrPermissionDenied, fmt.Sprintf("secret %s", secretID), err)
+			}
+		}
+		return false, fmt.Errorf(errWrapFormat, store.ErrAccessSecret, err)
+	}
+
+	// The existence of the version means the secret is initialized.
 	return true, nil
 }
 

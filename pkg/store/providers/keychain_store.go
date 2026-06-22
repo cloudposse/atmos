@@ -175,13 +175,20 @@ func (s *KeychainStore) Delete(stack string, component string, key string) error
 	return nil
 }
 
-// Has reports whether a value exists for the stack/component/key triple.
+// Has reports whether a value exists for the stack/component/key triple. It uses the keyring's
+// native existence check — no value is retrieved or decrypted.
 func (s *KeychainStore) Has(stack string, component string, key string) (bool, error) {
 	composed, err := s.composeKey(stack, component, key)
 	if err != nil {
 		return false, err
 	}
 	return s.kr.Has(composed)
+}
+
+// IsLocal reports that the OS keychain operates without network access or authentication, so
+// `atmos secret list` can check its status for free (no --verify needed). Implements LocalStore.
+func (s *KeychainStore) IsLocal() bool {
+	return true
 }
 
 // keychainEncodeValue JSON-encodes a value for storage so any type round-trips through the

@@ -264,7 +264,7 @@ func (s *SSMStore) assumeRole(ctx context.Context, roleArn *string) (*aws.Config
 		RoleSessionName: aws.String("atmos-ssm-session"),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to assume role %s: %w", *roleArn, err)
+		return nil, fmt.Errorf("%w %s: %w", store.ErrAssumeRole, *roleArn, err)
 	}
 
 	cfg := s.awsConfig.Copy()
@@ -308,7 +308,7 @@ func (s *SSMStore) Set(stack string, component string, key string, value any) er
 	// Assume write role if specified
 	cfg, err := s.assumeRole(ctx, s.writeRoleArn)
 	if err != nil {
-		return fmt.Errorf("failed to assume write role: %w", err)
+		return fmt.Errorf(errWrapFormat, store.ErrAssumeRole, err)
 	}
 
 	// Use the same client if no role was assumed
@@ -359,7 +359,7 @@ func (s *SSMStore) Get(stack string, component string, key string) (any, error) 
 	// Assume the read role if specified
 	cfg, err := s.assumeRole(ctx, s.readRoleArn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to assume read role: %w", err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrAssumeRole, err)
 	}
 
 	// Use the same client if no role was assumed
@@ -421,7 +421,7 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 	// Assume the read role if specified
 	cfg, err := s.assumeRole(ctx, s.readRoleArn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to assume read role: %w", err)
+		return nil, fmt.Errorf(errWrapFormat, store.ErrAssumeRole, err)
 	}
 
 	// Use the same client if no role was assumed
@@ -490,7 +490,7 @@ func (s *SSMStore) Delete(stack string, component string, key string) error {
 
 	cfg, err := s.assumeRole(ctx, s.writeRoleArn)
 	if err != nil {
-		return fmt.Errorf("failed to assume write role: %w", err)
+		return fmt.Errorf(errWrapFormat, store.ErrAssumeRole, err)
 	}
 
 	client := s.client
@@ -512,15 +512,50 @@ func (s *SSMStore) Delete(stack string, component string, key string) error {
 	return nil
 }
 
-// Has reports whether a parameter exists for an Atmos component in a stack. It uses Get and
-// treats a not-found error as a non-existent (uninitialized) value.
+// Has reports whether a parameter exists for an Atmos component in a stack. It performs an
+// existence check WITHOUT decryption: GetParameter is called with WithDecryption=false, so it
+// returns whether the parameter exists without requiring kms:Decrypt and without retrieving the
+// plaintext value. A not-found error is treated as a non-existent (uninitialized) value.
 func (s *SSMStore) Has(stack string, component string, key string) (bool, error) {
-	_, err := s.Get(stack, component, key)
+	if key == "" {
+		return false, store.ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return false, err
+	}
+
+	ctx := context.TODO()
+
+	paramName, err := s.getKey(stack, component, key)
+	if err != nil {
+		return false, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
+	}
+
+	// Assume the read role if specified (existence still needs a read identity, just not decrypt).
+	cfg, err := s.assumeRole(ctx, s.readRoleArn)
+	if err != nil {
+		return false, fmt.Errorf(errWrapFormat, store.ErrAssumeRole, err)
+	}
+
+	client := s.client
+	if s.readRoleArn != nil {
+		if s.newSSMClient != nil {
+			client = s.newSSMClient(*cfg)
+		} else {
+			client = ssm.NewFromConfig(*cfg)
+		}
+	}
+
+	_, err = client.GetParameter(ctx, &ssm.GetParameterInput{
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(false), // existence check only — never decrypt the value.
+	})
 	if err != nil {
 		if isParameterNotFound(err) {
 			return false, nil
 		}
-		return false, err
+		return false, fmt.Errorf(errWrapFormatWithID, store.ErrGetParameter, paramName, err)
 	}
 	return true, nil
 }

@@ -17,6 +17,7 @@ var (
 	ErrSetParameter    = errors.New("failed to set parameter")
 	ErrGetParameter    = errors.New("failed to get parameter")
 	ErrDeleteParameter = errors.New("failed to delete parameter")
+	ErrAssumeRole      = errors.New("failed to assume role")
 
 	// ErrDeleteNotSupported is returned by stores that do not support deletion.
 	ErrDeleteNotSupported = errors.New("delete is not supported by this store")

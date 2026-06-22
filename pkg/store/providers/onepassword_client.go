@@ -141,6 +141,38 @@ func (c *sdkClient) Resolve(ctx context.Context, reference string) (string, erro
 	return value, nil
 }
 
+// Exists reports whether the field the reference points to exists, WITHOUT returning its value.
+// It walks vault → item → field using the same listing/get helpers as Set/Delete and matches the
+// field by title/ID only; the concealed value is never read. A missing vault, item, or field
+// reports (false, nil). This satisfies onePasswordExistenceChecker so Has can probe existence
+// without resolving (revealing) the secret.
+//
+// Note: the SDK has no value-less describe API, so GetItem still transports the item over the
+// wire; the guarantee is that the plaintext value is never returned to the caller.
+func (c *sdkClient) Exists(ctx context.Context, reference string) (bool, error) {
+	api, err := c.get(ctx)
+	if err != nil {
+		return false, err
+	}
+	ref, err := parseOPReference(reference)
+	if err != nil {
+		return false, err
+	}
+	vaultID, found, err := c.resolveVaultID(ctx, api, ref.vault)
+	if err != nil || !found {
+		return false, err
+	}
+	itemID, found, err := c.resolveItemID(ctx, api, vaultID, ref.item)
+	if err != nil || !found {
+		return false, err
+	}
+	item, err := api.GetItem(ctx, vaultID, itemID)
+	if err != nil {
+		return false, err
+	}
+	return indexOfSDKField(item.Fields, ref.field) >= 0, nil
+}
+
 func (c *sdkClient) Set(ctx context.Context, reference, value string) error {
 	api, err := c.get(ctx)
 	if err != nil {
@@ -312,6 +344,33 @@ func (c *connectClient) Resolve(_ context.Context, reference string) (string, er
 		}
 	}
 	return "", store.ErrOnePasswordNotFound
+}
+
+// Exists reports whether the field the reference points to exists, WITHOUT returning its value.
+// It fetches the item and matches the field by label/ID only; the concealed value is never read.
+// A not-found vault/item, or a missing field, reports (false, nil). This satisfies
+// onePasswordExistenceChecker so Has can probe existence without resolving (revealing) the secret.
+//
+// Note: Connect has no value-less describe API, so GetItem still transports the item over the
+// wire; the guarantee is that the plaintext value is never returned to the caller.
+func (c *connectClient) Exists(_ context.Context, reference string) (bool, error) {
+	ref, err := parseOPReference(reference)
+	if err != nil {
+		return false, err
+	}
+	opItem, err := c.client.GetItem(ref.item, ref.vault)
+	if err != nil {
+		if isOPNotFound(err.Error()) {
+			return false, nil
+		}
+		return false, err
+	}
+	for _, f := range opItem.Fields {
+		if f != nil && fieldMatches(f.Label, f.ID, ref.field) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (c *connectClient) Set(_ context.Context, reference, value string) error {

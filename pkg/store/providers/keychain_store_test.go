@@ -27,6 +27,16 @@ func TestKeychainStore_ImplementsInterfaces(t *testing.T) {
 	assert.True(t, ok, "keychain store must support Has")
 }
 
+// TestKeychainStore_IsLocal proves the OS keychain is reported as a local store, so
+// `atmos secret list` can check its status for free (no --verify required).
+func TestKeychainStore_IsLocal(t *testing.T) {
+	s := newTestKeychainStore(t)
+
+	ls, ok := s.(store.LocalStore)
+	require.True(t, ok, "keychain store must implement store.LocalStore")
+	assert.True(t, ls.IsLocal(), "the OS keychain operates without network or auth")
+}
+
 func TestKeychainStore_SetGetRoundTrip(t *testing.T) {
 	s := newTestKeychainStore(t)
 

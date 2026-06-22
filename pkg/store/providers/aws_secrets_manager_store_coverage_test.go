@@ -18,7 +18,7 @@ import (
 var errResolveAuth = errors.New("resolve failed")
 
 // TestSecretsManagerStore_EnsureClient_IdentityNoResolver verifies that calling a public
-// operation on an identity-based store with no injected resolver returns ErrIdentityNotConfigured.
+// operation on an identity-based store with no injected resolver returns store.ErrIdentityNotConfigured.
 // This drives ensureClient() into the identity branch and initIdentityClient()'s guard.
 func TestSecretsManagerStore_EnsureClient_IdentityNoResolver(t *testing.T) {
 	delim := "-"
@@ -35,7 +35,7 @@ func TestSecretsManagerStore_EnsureClient_IdentityNoResolver(t *testing.T) {
 }
 
 // TestSecretsManagerStore_EnsureClient_IdentityResolverError verifies that a resolver error
-// is wrapped with ErrAuthContextNotAvailable and surfaced through a public operation.
+// is wrapped with store.ErrAuthContextNotAvailable and surfaced through a public operation.
 func TestSecretsManagerStore_EnsureClient_IdentityResolverError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 

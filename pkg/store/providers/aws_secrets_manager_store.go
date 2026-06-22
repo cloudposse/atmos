@@ -47,6 +47,7 @@ type SecretsManagerClient interface {
 	CreateSecret(ctx context.Context, params *secretsmanager.CreateSecretInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.CreateSecretOutput, error)
 	PutSecretValue(ctx context.Context, params *secretsmanager.PutSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.PutSecretValueOutput, error)
 	GetSecretValue(ctx context.Context, params *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
+	DescribeSecret(ctx context.Context, params *secretsmanager.DescribeSecretInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.DescribeSecretOutput, error)
 	DeleteSecret(ctx context.Context, params *secretsmanager.DeleteSecretInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.DeleteSecretOutput, error)
 }
 
@@ -344,14 +345,33 @@ func (s *SecretsManagerStore) Delete(stack string, component string, key string)
 }
 
 // Has reports whether a secret exists, treating ResourceNotFound as non-existent.
+// It uses DescribeSecret, which returns only metadata, so existence can be checked
+// without retrieving or decrypting the secret value (no decrypt-capable identity required).
 func (s *SecretsManagerStore) Has(stack string, component string, key string) (bool, error) {
-	_, err := s.Get(stack, component, key)
+	if key == "" {
+		return false, store.ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return false, err
+	}
+
+	secretID, err := s.getKey(stack, component, key)
 	if err != nil {
+		return false, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
+	}
+
+	ctx := context.TODO()
+	if _, err := s.client.DescribeSecret(ctx, &secretsmanager.DescribeSecretInput{
+		SecretId: aws.String(secretID),
+	}); err != nil {
 		var notFound *smtypes.ResourceNotFoundException
 		if errors.As(err, &notFound) {
 			return false, nil
 		}
-		return false, err
+		// Reuse store.ErrGetSecret as the existence-check failure sentinel (no dedicated
+		// store.ErrDescribeSecret exists in errors.go, which is owned by other code).
+		return false, fmt.Errorf("%w '%s': %w", store.ErrGetSecret, secretID, err)
 	}
 	return true, nil
 }
