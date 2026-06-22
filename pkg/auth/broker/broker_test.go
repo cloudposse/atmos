@@ -38,6 +38,7 @@ func resetRegistry() {
 	registry = nil
 	registryMu.Unlock()
 	ensureOnce = sync.Once{}
+	resetBrokeredForTest()
 }
 
 func TestRegister_IgnoresNil(t *testing.T) {
@@ -115,4 +116,67 @@ func TestEnsureCredentials_NoProviders(t *testing.T) {
 	assert.NotPanics(t, func() {
 		EnsureCredentials(context.Background(), &schema.AtmosConfiguration{})
 	})
+}
+
+func TestHasBrokeredCredentials_TrueAfterNonEmptyProvision(t *testing.T) {
+	resetRegistry()
+	t.Cleanup(resetRegistry)
+
+	key := "ATMOS_BROKER_TEST_BROKERED"
+	require.NoError(t, os.Unsetenv(key))
+
+	assert.False(t, HasBrokeredCredentials(), "no brokering should have happened yet")
+
+	Register(&fakeProvider{name: "mints", enabled: true, env: map[string]string{key: "tok"}})
+	runEnabledBrokers(context.Background(), &schema.AtmosConfiguration{})
+
+	assert.True(t, HasBrokeredCredentials(), "a non-empty provision must mark brokered credentials")
+	require.NoError(t, os.Unsetenv(key))
+}
+
+func TestHasBrokeredCredentials_FalseWhenEmptyOrErrored(t *testing.T) {
+	resetRegistry()
+	t.Cleanup(resetRegistry)
+
+	// Enabled but returns an empty env (no token), and an enabled broker that errors.
+	Register(&fakeProvider{name: "empty", enabled: true, env: map[string]string{}})
+	Register(&fakeProvider{name: "boom", enabled: true, err: errors.New("mint failed")})
+	runEnabledBrokers(context.Background(), &schema.AtmosConfiguration{})
+
+	assert.False(t, HasBrokeredCredentials(), "no token was provisioned, so nothing is brokered")
+}
+
+// TestEnsureCredentials_ConcurrentProvisionOnce proves the sync.Once happens-before barrier:
+// concurrent callers provision exactly once AND every caller observes the exported env after
+// EnsureCredentials returns (the credential is in place before any caller proceeds to clone).
+// Run under -race to catch ordering regressions if vendoring is ever parallelized.
+func TestEnsureCredentials_ConcurrentProvisionOnce(t *testing.T) {
+	resetRegistry()
+	t.Cleanup(resetRegistry)
+
+	key := "ATMOS_BROKER_TEST_CONCURRENT"
+	require.NoError(t, os.Unsetenv(key))
+
+	p := &fakeProvider{name: "once", enabled: true, env: map[string]string{key: "ready"}}
+	Register(p)
+
+	const goroutines = 16
+	var wg sync.WaitGroup
+	observed := make([]string, goroutines)
+	wg.Add(goroutines)
+	for i := range goroutines {
+		go func(idx int) {
+			defer wg.Done()
+			EnsureCredentials(context.Background(), &schema.AtmosConfiguration{})
+			observed[idx] = os.Getenv(key)
+		}(i)
+	}
+	wg.Wait()
+
+	assert.Equal(t, 1, p.provisioned, "concurrent EnsureCredentials must provision exactly once")
+	assert.True(t, HasBrokeredCredentials())
+	for i, v := range observed {
+		assert.Equal(t, "ready", v, "goroutine %d must observe the exported credential after EnsureCredentials returns", i)
+	}
+	require.NoError(t, os.Unsetenv(key))
 }

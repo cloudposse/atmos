@@ -47,6 +47,14 @@ var (
 	// The ensureOnce guard makes EnsureCredentials run the brokers at most once per process,
 	// so repeated remote reads within a single command do not re-provision.
 	ensureOnce sync.Once
+
+	// The brokeredMu mutex guards brokeredCredentials.
+	brokeredMu sync.Mutex
+	// The brokeredCredentials flag records whether any enabled broker provisioned a
+	// non-empty environment this process (e.g., Atmos Pro github/sts minted a token).
+	// Consumers use HasBrokeredCredentials to decide whether to tolerate a freshly minted
+	// token's brief post-creation auth window (see HasBrokeredCredentials).
+	brokeredCredentials bool
 )
 
 // Register adds a credential broker to the registry. It is safe to call from init().
@@ -87,17 +95,43 @@ func runEnabledBrokers(ctx context.Context, atmosConfig *schema.AtmosConfigurati
 		log.Debug("Running credential broker", "broker", p.Name())
 		env, err := p.Provision(ctx, atmosConfig)
 		if err != nil {
-			// Non-fatal: a private read will surface its own auth error downstream.
-			log.Debug("Credential broker failed", "broker", p.Name(), "error", err)
+			// Non-fatal, but surfaced at Warn (not Debug): when a broker fails, the private
+			// reads it was meant to authorize will fail downstream with a bare
+			// `git Authentication failed`, and at the default Warning log level a Debug line
+			// here would be invisible — leaving the user no causal link to the real cause.
+			log.Warn("Credential broker failed; private reads may fail without these credentials", "broker", p.Name(), "error", err)
 			continue
+		}
+
+		if len(env) > 0 {
+			markBrokered()
 		}
 
 		for key, value := range env {
 			if err := os.Setenv(key, value); err != nil {
-				log.Debug("Failed to export credential broker variable", "broker", p.Name(), "key", key, "error", err)
+				log.Warn("Failed to export credential broker variable", "broker", p.Name(), "key", key, "error", err)
 			}
 		}
 	}
+}
+
+// markBrokered records that a broker provisioned credentials this process.
+func markBrokered() {
+	brokeredMu.Lock()
+	brokeredCredentials = true
+	brokeredMu.Unlock()
+}
+
+// HasBrokeredCredentials reports whether any enabled broker provisioned credentials (a
+// non-empty environment) this process. The git downloader uses this to enable bounded
+// retry of transient auth failures: a freshly minted GitHub token can briefly return 401
+// before GitHub propagates it across its git frontends, and Atmos should tolerate that
+// window only when it minted the token — never for ordinary static credentials, where a
+// wrong/expired token must fail fast.
+func HasBrokeredCredentials() bool {
+	brokeredMu.Lock()
+	defer brokeredMu.Unlock()
+	return brokeredCredentials
 }
 
 // SwapRegistryForTest clears the broker registry and the once guard, returning a restore function
@@ -112,13 +146,23 @@ func SwapRegistryForTest() func() {
 	registry = nil
 	ensureOnce = sync.Once{}
 	registryMu.Unlock()
+	resetBrokeredForTest()
 
 	return func() {
 		registryMu.Lock()
 		registry = prev
 		ensureOnce = sync.Once{}
 		registryMu.Unlock()
+		resetBrokeredForTest()
 	}
+}
+
+// resetBrokeredForTest clears the brokered-credentials flag so a test observes only what
+// its own registered providers provision. Pairs with SwapRegistryForTest.
+func resetBrokeredForTest() {
+	brokeredMu.Lock()
+	brokeredCredentials = false
+	brokeredMu.Unlock()
 }
 
 // snapshot returns a copy of the registry so brokers run without holding the lock.
