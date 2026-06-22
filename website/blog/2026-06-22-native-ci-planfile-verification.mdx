@@ -42,7 +42,7 @@ The gap between "the plan you reviewed" and "what actually gets applied" is wher
 
 By default `deploy` doesn't replay the stored planfile. It re-plans, checks the fresh plan against the one you reviewed, and applies the fresh plan only if they match.
 
-Why not just apply the stored plan directly? Because a plan is usually **reviewed and applied by different identities** — a read-only role on the PR, a privileged role on merge. A binary plan built under one role won't apply under another (and breaks if state moved in between). That's the most common plan-then-apply failure. Re-planning at apply time uses the right identity and state; the diff still proves nothing changed since review.
+Why not just apply the stored plan directly? A saved plan is brittle. It goes stale the moment the state changes — which, between a PR and its merge, it usually has. And while Terraform bakes the assumed role into the plan, the **base credentials** that authenticate (and assume that role) come from the apply environment, not the plan — so a plan built on the PR can fail to apply on merge. Re-planning at apply time uses the current state and the apply-time credentials; the diff still proves nothing changed since review.
 
 Want byte-for-byte replay anyway? Use `deploy --from-plan` (or `apply --planfile`).
 

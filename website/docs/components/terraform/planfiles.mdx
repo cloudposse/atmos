@@ -298,9 +298,10 @@ When [planfile storage](/ci/planfile-storage) is configured and `atmos terraform
 mode, Atmos verifies the stored plan against current state before applying: it downloads the planfile
 that `plan --ci` uploaded, generates a **fresh** plan, and compares them with the JSON plan-diff. On a
 match it applies the *fresh* plan — reconciled against, not replayed from, the reviewed one. This keeps
-the review guarantee while using the apply-time identity and state, avoiding the common failure where
-the role that created the plan differs from the role applying it. (To replay the stored planfile
-directly, use [`--from-plan` / `--planfile`](/cli/commands/terraform/deploy).)
+the review guarantee while using the apply-time state and credentials, avoiding the brittleness of a
+saved plan: it goes stale when state moves, and its base credentials come from the apply environment,
+not the plan. (To replay the stored planfile directly, use
+[`--from-plan` / `--planfile`](/cli/commands/terraform/deploy).)
 
 Control the behavior with `components.terraform.planfiles.verify`:
 
