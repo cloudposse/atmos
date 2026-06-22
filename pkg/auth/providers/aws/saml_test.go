@@ -714,7 +714,7 @@ func TestSAMLProvider_selectRole_PartialMatch(t *testing.T) {
 }
 
 func TestSAMLProvider_WithCustomEndpoint(t *testing.T) {
-	// Test SAML provider with custom endpoint configuration
+	// Test SAML provider with custom endpoint configuration.
 	config := &schema.Provider{
 		Kind:   "aws/saml",
 		Region: "us-east-1",
@@ -742,7 +742,7 @@ func TestSAMLProvider_WithCustomEndpoint(t *testing.T) {
 }
 
 func TestSAMLProvider_WithoutCustomEndpoint(t *testing.T) {
-	// Test SAML provider without custom endpoint configuration
+	// Test SAML provider without custom endpoint configuration.
 	config := &schema.Provider{
 		Kind:   "aws/saml",
 		Region: "us-east-1",

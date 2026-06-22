@@ -113,6 +113,8 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 }
 
 func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
+	defer perf.Track(atmosConfig, "hooks.Hooks.RunAll")()
+
 	log.Debug("Running hooks", "count", len(h.items))
 	skipPredicate := newSkipPredicate(resolveSkipHooks(cmd))
 

@@ -17,7 +17,7 @@ import (
 
 const githubWorkspaceViperKey = "github-workspace"
 
-var bindGitHubWorkspaceOnce sync.Once //nolint:gochecknoglobals // one-time viper env binding
+var bindGitHubWorkspaceOnce sync.Once //nolint:gochecknoglobals // one-time viper env binding.
 
 type uriMapper struct {
 	workspace  string

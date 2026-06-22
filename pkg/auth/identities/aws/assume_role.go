@@ -58,7 +58,7 @@ func (i *assumeRoleIdentity) newSTSClient(ctx context.Context, awsBase *types.AW
 		config.WithRegion(region),
 	}
 
-	// Add custom endpoint if configured
+	// Add custom endpoint if configured.
 	if resolverOpt := awsCloud.GetBaseEndpointConfigOption(i.config, nil); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}

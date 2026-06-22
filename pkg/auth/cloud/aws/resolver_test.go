@@ -20,7 +20,7 @@ func TestGetResolverConfigOption_NoResolver(t *testing.T) {
 }
 
 func TestGetResolverConfigOption_IdentityResolver(t *testing.T) {
-	// Test legacy identity resolver takes precedence
+	// Test legacy identity resolver takes precedence.
 	identity := &schema.Identity{
 		Credentials: map[string]interface{}{
 			"aws": map[string]interface{}{
@@ -300,7 +300,7 @@ func TestGetResolverConfigOption_ProviderEmptyURL(t *testing.T) {
 }
 
 func TestCreateBaseEndpointOption(t *testing.T) {
-	// Test that createBaseEndpointOption returns a valid config option
+	// Test that createBaseEndpointOption returns a valid config option.
 	url := "http://localhost:4566"
 	opt := createBaseEndpointOption(url)
 	assert.NotNil(t, opt, "Expected non-nil config option")

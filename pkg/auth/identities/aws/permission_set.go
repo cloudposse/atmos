@@ -405,7 +405,7 @@ func (i *permissionSetIdentity) newSSOClient(ctx context.Context, awsBase *types
 		config.WithCredentialsProvider(awssdk.AnonymousCredentials{}),
 	}
 
-	// Add custom endpoint if configured
+	// Add custom endpoint if configured.
 	if resolverOpt := awsCloud.GetBaseEndpointConfigOption(i.config, nil); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}

@@ -259,13 +259,13 @@ stores:
     identity: floci-superuser
     options:
       region: us-east-1
-      endpoint_url: "http://localhost:4566"
+      endpoint: "http://localhost:4566"
 
   local/gsm:
     kind: gcp/secretmanager
     options:
       project_id: local-project
-      endpoint_url: "http://localhost:4588"
+      endpoint: "http://localhost:4588"
       endpoint_insecure: true
       without_authentication: true
 

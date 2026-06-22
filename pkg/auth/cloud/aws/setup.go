@@ -125,12 +125,17 @@ func endpointURLFromManager(manager types.AuthManager, identityName string) stri
 	}
 
 	var identity *schema.Identity
+	// Track the key that actually matched (original or lowercase fallback) so the
+	// provider fallback below resolves against the same key the identity matched.
+	resolvedKey := identityName
 	identities := manager.GetIdentities()
 	if len(identities) > 0 {
+		lower := strings.ToLower(identityName)
 		if found, ok := identities[identityName]; ok {
 			identity = &found
-		} else if found, ok := identities[strings.ToLower(identityName)]; ok {
+		} else if found, ok := identities[lower]; ok {
 			identity = &found
+			resolvedKey = lower
 		}
 	}
 
@@ -138,7 +143,7 @@ func endpointURLFromManager(manager types.AuthManager, identityName string) stri
 		return url
 	}
 
-	provider, _ := manager.ResolveProviderConfig(identityName)
+	provider, _ := manager.ResolveProviderConfig(resolvedKey)
 	return baseEndpointURL(nil, provider)
 }
 

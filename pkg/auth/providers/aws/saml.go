@@ -290,7 +290,7 @@ func (p *samlProvider) assumeRoleWithSAMLWithDeps(
 		config.WithRegion(p.region),
 	}
 
-	// Add custom endpoint if configured
+	// Add custom endpoint if configured.
 	if resolverOpt := awsCloud.GetBaseEndpointConfigOption(nil, p.config); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}

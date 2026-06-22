@@ -17,9 +17,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/hooks"
-	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/checkov" // self-register checkov kind
-	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/kics"    // self-register kics kind
-	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/trivy"   // self-register trivy kind
+	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/checkov" // self-register checkov kind.
+	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/kics"    // self-register kics kind.
+	_ "github.com/cloudposse/atmos/pkg/hooks/kinds/trivy"   // self-register trivy kind.
 	"github.com/cloudposse/atmos/pkg/hooks/sarif"
 	"github.com/cloudposse/atmos/pkg/schema"
 )

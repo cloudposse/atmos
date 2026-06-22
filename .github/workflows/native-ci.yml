@@ -76,16 +76,32 @@ jobs:
           scanner_assets="$RUNNER_TEMP/native-ci-scanners/assets"
           mkdir -p "$scanner_bin" "$scanner_assets"
 
+          # Download and verify the Trivy binary against its published checksum
+          # before extracting, so a tampered or corrupted archive never executes.
           curl -fsSL \
             -o "$RUNNER_TEMP/trivy.tar.gz" \
             "https://github.com/aquasecurity/trivy/releases/download/v${NATIVE_CI_TRIVY_VERSION}/trivy_${NATIVE_CI_TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSL \
+            -o "$RUNNER_TEMP/trivy_checksums.txt" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${NATIVE_CI_TRIVY_VERSION}/trivy_${NATIVE_CI_TRIVY_VERSION}_checksums.txt"
+          trivy_sha="$(grep " trivy_${NATIVE_CI_TRIVY_VERSION}_Linux-64bit.tar.gz$" "$RUNNER_TEMP/trivy_checksums.txt" | awk '{print $1}')"
+          echo "${trivy_sha}  $RUNNER_TEMP/trivy.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$scanner_bin" trivy
 
+          # Download and verify the KICS binary against its published checksum
+          # before extracting.
           curl -fsSL \
             -o "$RUNNER_TEMP/kics.tar.gz" \
             "https://github.com/Checkmarx/kics/releases/download/v${NATIVE_CI_KICS_VERSION}/kics_${NATIVE_CI_KICS_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL \
+            -o "$RUNNER_TEMP/kics_checksums.txt" \
+            "https://github.com/Checkmarx/kics/releases/download/v${NATIVE_CI_KICS_VERSION}/checksums.txt"
+          kics_sha="$(grep " kics_${NATIVE_CI_KICS_VERSION}_linux_amd64.tar.gz$" "$RUNNER_TEMP/kics_checksums.txt" | awk '{print $1}')"
+          echo "${kics_sha}  $RUNNER_TEMP/kics.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/kics.tar.gz" -C "$scanner_bin" kics
 
+          # The KICS query assets (extracted-info.zip) have no published checksum,
+          # so they cannot be verified the same way. They are data, not an executable.
           curl -fsSL \
             -o "$RUNNER_TEMP/kics-extracted-info.zip" \
             "https://github.com/Checkmarx/kics/releases/download/v${NATIVE_CI_KICS_VERSION}/extracted-info.zip"
