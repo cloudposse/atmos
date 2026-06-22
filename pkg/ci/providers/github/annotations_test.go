@@ -2,6 +2,7 @@ package github
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -77,4 +78,23 @@ func TestProvider_Annotate_WritesOneLinePerFinding(t *testing.T) {
 	require.Len(t, lines, 2)
 	assert.Equal(t, "::error file=a.tf,line=1,title=R1::first", lines[0])
 	assert.Equal(t, "::warning file=b.tf,line=2,title=R2::second", lines[1])
+}
+
+// failWriter fails every write, standing in for a broken log stream.
+type failWriter struct{}
+
+func (failWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
+
+// A write failure on the annotation stream surfaces as an error rather than
+// being silently dropped.
+func TestProvider_Annotate_WriteErrorPropagates(t *testing.T) {
+	prev := annotationsOut
+	annotationsOut = failWriter{}
+	defer func() { annotationsOut = prev }()
+
+	p := NewProvider()
+	err := p.Annotate([]provider.Annotation{
+		{Path: "a.tf", StartLine: 1, Level: provider.AnnotationError, Title: "R1", Message: "first"},
+	})
+	require.Error(t, err)
 }

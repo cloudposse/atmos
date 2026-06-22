@@ -14,6 +14,11 @@ func TestCustomFormatOutputPath(t *testing.T) {
 	outputDir := t.TempDir()
 	outputFile := filepath.Join(outputDir, "default.sarif")
 
+	t.Run("nil ctx or hook returns empty", func(t *testing.T) {
+		assert.Empty(t, customFormatOutputPath(nil))
+		assert.Empty(t, customFormatOutputPath(&hooks.ExecContext{}))
+	})
+
 	t.Run("uses output file when results is empty", func(t *testing.T) {
 		got := customFormatOutputPath(&hooks.ExecContext{
 			Hook:       &hooks.Hook{},

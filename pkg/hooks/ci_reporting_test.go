@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -136,5 +137,162 @@ func TestDeriveSARIFCategory(t *testing.T) {
 	t.Run("falls back to hook command", func(t *testing.T) {
 		ctx := &ExecContext{Hook: &Hook{Kind: "command", Command: "custom-scanner"}}
 		assert.Equal(t, "custom-scanner", deriveSARIFCategory(ctx, []byte(`not-json`)))
+	})
+
+	// Final fallback: no SARIF tool name, empty Kind — returns the bare command.
+	t.Run("falls back to command when kind is empty", func(t *testing.T) {
+		ctx := &ExecContext{Hook: &Hook{Kind: "", Command: "only-command"}}
+		assert.Equal(t, "only-command", deriveSARIFCategory(ctx, []byte(`{"runs":[]}`)))
+	})
+}
+
+// reportsAsWarning is true only when a hook exists and its on-failure mode is
+// not "fail" (warn/ignore downgrade findings to warnings); nil ctx/hook are safe.
+func TestReportsAsWarning(t *testing.T) {
+	assert.False(t, reportsAsWarning(nil), "nil ctx")
+	assert.False(t, reportsAsWarning(&ExecContext{}), "nil hook")
+	assert.False(t, reportsAsWarning(&ExecContext{Hook: &Hook{OnFailure: OnFailureFail}}), "fail mode")
+	assert.True(t, reportsAsWarning(&ExecContext{Hook: &Hook{OnFailure: OnFailureWarn}}), "warn mode")
+	assert.True(t, reportsAsWarning(&ExecContext{Hook: &Hook{OnFailure: OnFailureIgnore}}), "ignore mode")
+}
+
+// firstSARIFToolName extracts the first run's tool driver name, tolerating every
+// shape of malformed/partial SARIF by returning "" rather than panicking.
+func TestFirstSARIFToolName(t *testing.T) {
+	tests := []struct {
+		name  string
+		sarif string
+		want  string
+	}{
+		{name: "empty", sarif: "", want: ""},
+		{name: "invalid json", sarif: "not-json", want: ""},
+		{name: "runs missing", sarif: `{}`, want: ""},
+		{name: "runs not array", sarif: `{"runs":{}}`, want: ""},
+		{name: "run not map", sarif: `{"runs":["x"]}`, want: ""},
+		{name: "tool missing", sarif: `{"runs":[{}]}`, want: ""},
+		{name: "driver missing", sarif: `{"runs":[{"tool":{}}]}`, want: ""},
+		{name: "name missing", sarif: `{"runs":[{"tool":{"driver":{}}}]}`, want: ""},
+		{name: "name blank", sarif: `{"runs":[{"tool":{"driver":{"name":"  "}}}]}`, want: ""},
+		{name: "name present trimmed", sarif: `{"runs":[{"tool":{"driver":{"name":" Trivy "}}}]}`, want: "Trivy"},
+		{
+			name:  "skips empty run then finds name",
+			sarif: `{"runs":[{},{"tool":{"driver":{"name":"kics"}}}]}`,
+			want:  "kics",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, firstSARIFToolName([]byte(tt.sarif)))
+		})
+	}
+}
+
+// normalizeSARIFLevels must tolerate every malformed/partial SARIF shape and
+// return the input unchanged, never panicking. It also creates a missing
+// defaultConfiguration so the forced level always lands on each rule.
+func TestNormalizeSARIFLevels_EdgeCases(t *testing.T) {
+	// Inputs that can't be rewritten are returned verbatim.
+	for _, tt := range []struct {
+		name, sarif string
+	}{
+		{"empty", ""},
+		{"empty level handled below", `{"runs":[]}`},
+		{"invalid json", "not-json"},
+		{"runs not array", `{"runs":{}}`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.NotPanics(t, func() { normalizeSARIFLevels([]byte(tt.sarif), "warning") })
+		})
+	}
+
+	// Empty level short-circuits and returns the input byte-for-byte.
+	in := []byte(`{"runs":[{"results":[{"level":"error"}]}]}`)
+	assert.Equal(t, in, normalizeSARIFLevels(in, ""))
+
+	// Non-map runs/results/rules entries are skipped without error; a rule with
+	// no defaultConfiguration gets one created and leveled.
+	const body = `{
+		"runs": [
+			"not-a-map",
+			{
+				"results": ["not-a-map", {"level": "error"}],
+				"tool": {"driver": {"rules": [
+					"not-a-map",
+					{"id": "R1"}
+				]}}
+			}
+		]
+	}`
+	out := normalizeSARIFLevels([]byte(body), "warning")
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(out, &doc))
+	run := doc["runs"].([]any)[1].(map[string]any)
+	result := run["results"].([]any)[1].(map[string]any)
+	assert.Equal(t, "warning", result["level"])
+	rule := run["tool"].(map[string]any)["driver"].(map[string]any)["rules"].([]any)[1].(map[string]any)
+	// defaultConfiguration was absent and must be created with the forced level.
+	assert.Equal(t, "warning", rule["defaultConfiguration"].(map[string]any)["level"])
+}
+
+// emitCIAnnotations maps a summary's findings to provider annotations when CI
+// annotations are enabled, and is a safe no-op otherwise.
+func TestEmitCIAnnotations(t *testing.T) {
+	restore := ci.SwapRegistryForTest()
+	defer restore()
+	ci.Register(github.NewProvider())
+	t.Setenv("GITHUB_ACTIONS", "true")
+
+	out := &Output{Summary: &Summary{
+		Kind: "checkov",
+		Findings: []Finding{
+			{Path: "main.tf", Line: 6, Severity: "high", RuleID: "CKV_AWS_19", Message: "encrypt the bucket"},
+			{Path: "main.tf", Line: 9, Severity: "low", RuleID: "CKV_AWS_21", Message: "enable versioning"},
+		},
+	}}
+	assert.NotPanics(t, func() { emitCIAnnotations(ciEnabledCtx(), out) })
+
+	// No-ops: nil output, empty findings, and annotations disabled.
+	assert.NotPanics(t, func() {
+		emitCIAnnotations(ciEnabledCtx(), nil)
+		emitCIAnnotations(ciEnabledCtx(), &Output{Summary: &Summary{Kind: "checkov"}})
+	})
+	disabled := &ExecContext{
+		Hook:        &Hook{Kind: "checkov"},
+		AtmosConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true, Annotations: schema.CIAnnotationsConfig{Enabled: boolPtr(false)}}},
+	}
+	assert.NotPanics(t, func() { emitCIAnnotations(disabled, out) })
+}
+
+// publishCIResults uploads SARIF when ci.results is enabled, normalizing levels
+// to warnings for non-failing hooks, and is a safe best-effort no-op otherwise.
+func TestPublishCIResults(t *testing.T) {
+	restore := ci.SwapRegistryForTest()
+	defer restore()
+	ci.Register(github.NewProvider())
+	t.Setenv("GITHUB_ACTIONS", "true")
+
+	const sarif = `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"checkov"}},` +
+		`"results":[{"ruleId":"CKV_AWS_21","level":"error"}]}]}`
+
+	resultsCtx := func(onFailure string) *ExecContext {
+		return &ExecContext{
+			Hook:        &Hook{Kind: "checkov", OnFailure: onFailure},
+			AtmosConfig: &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true, Results: schema.CIResultsConfig{Enabled: boolPtr(true)}}},
+			Info:        &schema.ConfigAndStacksInfo{Stack: "test", ComponentFromArg: "bucket"},
+		}
+	}
+
+	// Best-effort: a missing upload client is swallowed, never panics. Exercises
+	// both the warning-normalization branch (warn) and the verbatim branch (fail).
+	assert.NotPanics(t, func() {
+		publishCIResults(resultsCtx(OnFailureWarn), &Output{Summary: &Summary{Kind: "checkov", SARIF: []byte(sarif)}})
+		publishCIResults(resultsCtx(OnFailureFail), &Output{Summary: &Summary{Kind: "checkov", SARIF: []byte(sarif)}})
+	})
+
+	// No-ops: nil output, empty SARIF, and results disabled (the default).
+	assert.NotPanics(t, func() {
+		publishCIResults(resultsCtx(OnFailureFail), nil)
+		publishCIResults(resultsCtx(OnFailureFail), &Output{Summary: &Summary{Kind: "checkov"}})
+		publishCIResults(ciEnabledCtx(), &Output{Summary: &Summary{Kind: "checkov", SARIF: []byte(sarif)}})
 	})
 }

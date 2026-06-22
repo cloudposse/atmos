@@ -49,6 +49,24 @@ func TestWithCategory(t *testing.T) {
 		bad := []byte("not json")
 		assert.Equal(t, bad, withCategory(bad, "cat"))
 	})
+
+	t.Run("runs not an array returns unchanged", func(t *testing.T) {
+		bad := []byte(`{"runs":{"not":"an array"}}`)
+		assert.Equal(t, bad, withCategory(bad, "cat"))
+	})
+
+	t.Run("non-map run entries are skipped", func(t *testing.T) {
+		// First run is a bare string (skipped via continue); second is a real run
+		// and must still receive the stamped automationDetails.id.
+		in := []byte(`{"runs":["not-a-map",{"tool":{"driver":{"name":"kics"}}}]}`)
+		out := withCategory(in, "kics")
+		var doc map[string]any
+		require.NoError(t, json.Unmarshal(out, &doc))
+		runs := doc["runs"].([]any)
+		assert.Equal(t, "not-a-map", runs[0], "non-map run left untouched")
+		details := runs[1].(map[string]any)["automationDetails"].(map[string]any)
+		assert.Equal(t, "kics/", details["id"])
+	})
 }
 
 func TestGzipBase64RoundTrip(t *testing.T) {
@@ -112,6 +130,41 @@ func TestProvider_ReportSARIF_UploadsGzippedCategorizedSARIF(t *testing.T) {
 	run := doc["runs"].([]any)[0].(map[string]any)
 	details := run["automationDetails"].(map[string]any)
 	assert.Equal(t, "checkov/", details["id"], "category must be stamped into the uploaded SARIF")
+}
+
+// With a usable client but no repository/commit context (GITHUB_REPOSITORY and
+// GITHUB_SHA unset), ReportSARIF must fail the precondition check rather than
+// attempt an unanchored upload.
+func TestProvider_ReportSARIF_MissingRepoContext(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("GITHUB_REPOSITORY", "")
+	t.Setenv("GITHUB_SHA", "")
+
+	p := NewProviderWithClient(NewClientWithHTTPClient(&http.Client{Transport: &captureTransport{}}))
+	err := p.ReportSARIF(context.Background(), provider.SARIFReport{Body: []byte(`{}`), Category: "checkov"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCISARIFUploadFailed)
+}
+
+// errTransport fails every request, standing in for a rejected Code Scanning
+// upload (e.g. missing Advanced Security or token scope).
+type errTransport struct{}
+
+func (errTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("upload rejected")
+}
+
+// A failed UploadSarif call is wrapped in ErrCISARIFUploadFailed.
+func TestProvider_ReportSARIF_WrapsUploadFailure(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("GITHUB_REPOSITORY", "acme/widgets")
+	t.Setenv("GITHUB_SHA", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+
+	p := NewProviderWithClient(NewClientWithHTTPClient(&http.Client{Transport: errTransport{}}))
+	const sarif = `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"checkov"}}}]}`
+	err := p.ReportSARIF(context.Background(), provider.SARIFReport{Body: []byte(sarif), Category: "checkov"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCISARIFUploadFailed)
 }
 
 func TestProvider_ReportSARIF_WrapsClientInitFailure(t *testing.T) {
