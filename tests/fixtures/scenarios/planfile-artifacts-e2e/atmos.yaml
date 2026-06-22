@@ -1,0 +1,52 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+    # Planfile storage via the GitHub Actions Artifacts backend.
+    #
+    # Inside GitHub Actions the upload hook (fired by `--ci`) auto-detects the
+    # runner and uploads with prefix "planfile" to the current repository
+    # (GITHUB_REPOSITORY). The named "github" store below mirrors that exactly —
+    # prefix "planfile" and no hard-coded owner/repo — so `planfile download
+    # --store=github` resolves the identical artifact name for the round-trip.
+    planfiles:
+      priority:
+        - "github"
+      stores:
+        github:
+          type: github/artifacts
+          options:
+            prefix: planfile
+            retention_days: 1
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+
+settings:
+  experimental: silence
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Empty auth configuration (no identities configured).
+auth:
+
+ci:
+  enabled: true
+  # Keep the E2E focused on planfile storage. Check runs and PR comments need
+  # statuses/pull-requests write scope this workflow does not grant, so disable
+  # them to avoid noisy (harmless) 403 warnings.
+  checks:
+    enabled: false
+  comments:
+    enabled: false

@@ -1,13 +1,17 @@
-# End-to-end test for the `github/artifacts` planfile store.
+# End-to-end test for the `github/artifacts` planfile store, modeling the real
+# plan-then-apply CI workflow across two separate jobs:
 #
-# This is the one path that CANNOT be exercised by a Go unit test: it needs a
-# real GitHub Actions runner, because the backend talks to the GitHub Actions
-# Artifacts API directly using the runner-only ACTIONS_RUNTIME_TOKEN /
-# ACTIONS_RESULTS_URL credentials. GitHub withholds those from `run:` steps, so
-# we dogfood the in-repo `actions/github-runtime` action (mode: env) to surface
-# them — exactly the wiring documented at /ci/planfile-storage.
+#   plan job   -> `atmos terraform plan --ci` uploads the planfile to GitHub
+#                 Actions Artifacts.
+#   apply job  -> downloads that artifact (cross-job, same run) and runs
+#                 `atmos terraform apply --planfile=<downloaded>` against it.
 #
-# Flow: plan --ci (uploads to github/artifacts) -> list -> download (round-trip).
+# This is the one path no Go unit test can cover: the backend talks to the
+# GitHub Actions Artifacts API directly using the runner-only
+# ACTIONS_RUNTIME_TOKEN / ACTIONS_RESULTS_URL, which GitHub withholds from
+# `run:` steps. We dogfood the in-repo `actions/github-runtime` action
+# (mode: env) to surface them — exactly the wiring documented at
+# /ci/planfile-storage.
 name: Planfile Artifacts E2E
 
 on:
@@ -19,7 +23,7 @@ on:
       - 'cmd/terraform/planfile/**'
       - 'pkg/ci/plugins/terraform/**'
       - 'actions/github-runtime/**'
-      - 'tests/fixtures/scenarios/native-ci/**'
+      - 'tests/fixtures/scenarios/planfile-artifacts-e2e/**'
       - '.github/workflows/planfile-artifacts-e2e.yml'
 
 permissions:
@@ -30,15 +34,17 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Pin the SHA so the plan upload and the apply download derive the identical
+  # planfile key across both jobs.
+  ATMOS_CI_SHA: ${{ github.sha }}
+  GITHUB_TOKEN: ${{ github.token }}
+  FIXTURE_DIR: tests/fixtures/scenarios/planfile-artifacts-e2e
+
 jobs:
-  planfile-artifacts:
-    name: github/artifacts round-trip
+  plan:
+    name: plan (upload planfile)
     runs-on: ubuntu-latest
-    env:
-      # Pin the SHA so upload and readback derive the identical planfile key.
-      ATMOS_CI_SHA: ${{ github.sha }}
-      # Needed by `planfile list`/`download`, which read artifacts via the REST API.
-      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -67,28 +73,56 @@ jobs:
         with:
           mode: env
 
-      - name: Plan (uploads planfile to github/artifacts)
-        working-directory: tests/fixtures/scenarios/native-ci
+      - name: Plan and upload the planfile
+        working-directory: tests/fixtures/scenarios/planfile-artifacts-e2e
         run: atmos terraform plan mycomponent -s prod --ci
 
-      - name: List planfiles from github/artifacts (informational)
-        working-directory: tests/fixtures/scenarios/native-ci
-        run: |
-          set -euo pipefail
-          # Use the store TYPE (github/artifacts), not the named "github" store, so
-          # owner/repo resolve from GITHUB_REPOSITORY (this run) — matching where the
-          # runtime-API upload landed — instead of the fixture's hard-coded repo.
-          # Informational only: `list` renders artifacts without opening each zip's
-          # metadata, so the download below is the authoritative round-trip check.
-          atmos terraform planfile list mycomponent -s prod --store=github/artifacts || true
+  apply:
+    name: apply (consume planfile)
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
-      - name: Download planfile from github/artifacts (round-trip assertion)
-        working-directory: tests/fixtures/scenarios/native-ci
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Build atmos
+        run: |
+          make build
+          echo "$PWD/build" >> "$GITHUB_PATH"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_wrapper: false
+
+      - name: Expose GitHub Actions runtime credentials
+        uses: ./actions/github-runtime
+        with:
+          mode: env
+
+      - name: Download the planfile uploaded by the plan job
+        working-directory: tests/fixtures/scenarios/planfile-artifacts-e2e
         run: |
           set -euo pipefail
-          # The key is derived from component + stack + ATMOS_CI_SHA, identical to
-          # the upload, so this fetches exactly the artifact the plan step pushed.
+          # The named "github" store carries prefix=planfile and resolves owner/repo
+          # from GITHUB_REPOSITORY — matching exactly what the plan job's --ci upload
+          # hook wrote (planfile-<stack>--<component>--<sha>.tfplan.tar in this run).
+          # Artifacts are run-scoped, so the plan job's upload is visible here.
           atmos terraform planfile download mycomponent -s prod \
-            --store=github/artifacts -o "$RUNNER_TEMP/downloaded.planfile"
+            --store=github -o "$RUNNER_TEMP/downloaded.planfile"
           test -s "$RUNNER_TEMP/downloaded.planfile"
-          echo "Round-trip OK: planfile uploaded to and retrieved from GitHub Artifacts."
+
+      - name: Apply the downloaded planfile
+        working-directory: tests/fixtures/scenarios/planfile-artifacts-e2e
+        run: |
+          set -euo pipefail
+          # Apply exactly the plan that was reviewed in the plan job — no re-plan.
+          atmos terraform apply mycomponent -s prod --planfile="$RUNNER_TEMP/downloaded.planfile"
+          echo "Round-trip OK: planfile uploaded by the plan job was applied by the apply job."
