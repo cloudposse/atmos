@@ -48,11 +48,11 @@ Want byte-for-byte replay anyway? Use `deploy --from-plan` (or `apply --planfile
 
 ### Why a naive diff doesn't work
 
-A plan isn't a frozen artifact. Between the moment it's reviewed and the moment it's applied, a plan legitimately contains values that vary — attributes "known after apply," computed fields, hashes, ordering, timestamps. A byte-for-byte comparison of two planfiles (or of raw `terraform show` text) flags all of that as a change, so a plan that is still perfectly valid gets rejected as "drifted." Terraform's own saved-plan apply is even stricter: any movement in state lineage invalidates the saved plan outright, even when the planned changes haven't actually changed.
+A planfile is a frozen snapshot — but the plan it represents never really is. Between review and apply the details shift: values "known after apply," computed fields, hashes, ordering, timestamps. You adjust course as you go without changing *what* you set out to do. A byte-for-byte comparison can't tell the difference — it flags every shift as drift, so a plan that's still doing exactly what you reviewed gets rejected. Terraform's own saved-plan apply is stricter still: any movement in state lineage invalidates the snapshot outright, even when the substance hasn't changed.
 
-That's the real-world problem with planfiles: the rigid approaches make plans go *invalid* long before they go *wrong*. To be useful, verification needs **wiggle room** — it must tolerate benign variation while still catching real drift.
+That's the real-world problem: rigid checks make a plan go *invalid* long before it goes *wrong*. Useful verification needs **wiggle room** — tolerate the benign shifts, catch the real ones.
 
-Atmos's verification is **semantic**, not naive. It parses both plans to JSON, sorts keys for determinism, masks sensitive values, and ignores the fields that vary without changing intent (computed-hash attributes, data-source reads). So it flags what matters — a resource added, removed, or substantively changed — while letting the noise that doesn't invalidate the plan slide. That distinction is what makes plan-then-deploy practical instead of perpetually red.
+Atmos's verification is **semantic**, not naive. It parses both plans to JSON, normalizes the noise (sorted keys, masked secrets, computed-hash attributes, data-source reads), and compares what matters. So it flags a resource added, removed, or substantively changed — while letting the incidental variation slide. That's what makes plan-then-deploy practical instead of perpetually red.
 
 Verification lives on `deploy`, not `apply`, by construction: `deploy` re-runs `plan` as part of the command, so there's a fresh plan to diff the stored one against. `apply` never re-plans, so it stays a thin, predictable wrapper around `terraform apply`.
 
