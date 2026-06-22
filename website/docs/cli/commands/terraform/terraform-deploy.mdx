@@ -355,7 +355,7 @@ When running in CI mode (`--ci` flag or auto-detected), the `deploy` command pro
 
 1. **Before deploy** — Downloads stored planfiles from configured storage (S3, GitHub Artifacts, or local)
 2. **Verification** — Generates a fresh plan and compares it against the stored plan to detect drift
-3. **Apply** — Applies the verified plan if it matches, or fails with a drift error
+3. **Apply** — Applies the **fresh** plan (built with the apply-time identity and state) once the diff confirms it matches the reviewed plan, or fails with a drift error. This reconciles rather than replays the stored binary, avoiding the common failure where the plan-time and apply-time roles differ. To replay the stored planfile directly instead, use `--from-plan` / `--planfile`.
 4. **After deploy** — Writes job summaries, CI output variables, and updates status checks
 
 ```shell

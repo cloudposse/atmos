@@ -144,11 +144,14 @@ When `atmos terraform deploy` runs in CI mode with planfile storage configured, 
 2. Verifies SHA256 integrity checksums
 3. Generates a fresh plan against current infrastructure
 4. Performs JSON-structural comparison between stored and fresh plans
-5. **If plans match:** Applies the verified plan
+5. **If plans match:** Applies the **fresh** plan (generated with the apply-time identity and state)
 6. **If plans drift:** Fails the deploy (mode `fail`) or warns and proceeds (mode `warn`)
 
-This ensures that exactly what was reviewed during the plan phase gets applied, with no
-silent infrastructure drift. Verification runs on `deploy` only — `apply` stays a thin wrapper.
+Atmos reconciles rather than replays: it applies the freshly generated plan once the diff confirms it
+matches what was reviewed, so the deploy uses the apply-time role and state while still guaranteeing no
+material drift. This avoids the most common saved-plan failure — the identity that created the plan
+differing from the one applying it. (To replay the stored binary directly, use `--from-plan` /
+`--planfile`.) Verification runs on `deploy` only — `apply` stays a thin wrapper.
 
 :::note GitHub Actions runtime token
 With the `github/artifacts` store, the automatic download (like the upload) talks to the GitHub

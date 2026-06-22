@@ -13,7 +13,11 @@
 - Generate a fresh `terraform plan` (without CI side effects — no upload, no checks, no summaries)
 - Compare the two planfiles using plan-diff (`internal/exec/terraform_plan_diff*.go`)
 - On drift: **fail** the deploy (mode `fail`) or **warn and proceed** (mode `warn`)
-- Apply the fresh planfile if plans match
+- Apply the **fresh** planfile if plans match (reconcile, don't replay): the freshly generated plan is
+  built with the apply-time identity and state, so the deploy avoids the most common saved-plan failure —
+  the role that produced the plan differing from the role applying it — while the diff preserves the
+  review guarantee. (Replaying the stored binary directly is still available via `--from-plan` /
+  `--planfile`.)
 - **Automatic under CI when planfile storage is configured.** Configurable via
   `components.terraform.planfiles.verify` (`fail` | `warn` | `off`, default `fail` under CI), and
   overridable per-run with `--verify-plan` (force `fail`) / `--no-verify-plan` (force `off`). Precedence:

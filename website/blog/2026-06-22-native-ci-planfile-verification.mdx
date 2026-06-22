@@ -5,7 +5,7 @@ authors: [osterman]
 tags: [feature]
 ---
 
-Atmos native CI now supports the full plan-then-deploy workflow with planfiles: `atmos terraform plan --ci` uploads the planfile to durable storage, and `atmos terraform deploy --ci` automatically downloads it, re-plans, compares the two, and applies **only what was reviewed** — failing on drift by default.
+Atmos native CI now supports the full plan-then-deploy workflow with planfiles: `atmos terraform plan --ci` uploads the planfile to durable storage, and `atmos terraform deploy --ci` automatically downloads it, generates a **fresh** plan, reconciles it against the reviewed plan, and applies the fresh plan — only if they match, failing on drift by default.
 
 <!--truncate-->
 
@@ -36,7 +36,15 @@ Override per run with `--verify-plan` / `--no-verify-plan` (CLI beats config bea
 
 ## Why This Matters
 
-The gap between "the plan you reviewed" and "what actually gets applied" is where infrastructure surprises live. By storing the reviewed planfile and re-verifying it at apply time, Atmos guarantees that deploys apply exactly what passed review — or stop with a clear drift error showing what changed.
+The gap between "the plan you reviewed" and "what actually gets applied" is where infrastructure surprises live.
+
+### Reconcile, don't replay
+
+By default Atmos does **not** blindly replay the stored binary planfile. It generates a **fresh** plan at deploy time, reconciles it against the reviewed plan, and applies the fresh one — only if they match. That's deliberate, and it's the crux of why this is a material improvement.
+
+The most common reason a saved plan fails to apply in the real world is that the **identity used to create the plan differs from the identity used to apply it** (and state may have moved in between). A reviewed plan is typically produced under a read-only/plan role on a PR, then applied under a privileged role on merge — and replaying a binary plan created under one role with another role fails outright. Re-planning at apply time uses the *apply-time* identity and state, while the diff guarantees nothing material changed since review. You get the review guarantee **without** the brittleness of replaying a stale binary.
+
+Replaying the stored planfile directly is still supported — `atmos terraform deploy --from-plan` or `apply --planfile` — for when you genuinely want byte-for-byte application. Just know that it requires the apply-time role and state to match plan time, which is exactly the failure mode the reconcile-by-default mode avoids.
 
 ### Why a naive diff doesn't work
 
