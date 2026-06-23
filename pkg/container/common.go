@@ -1,17 +1,30 @@
 package container
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
+
+// extractContainerID returns the last non-empty line of `create` output.
+// Both `docker create` and `podman create` print image-pull progress before the
+// container ID when the image is missing locally, so the ID is the final non-empty line.
+func extractContainerID(output []byte) string {
+	lines := strings.Split(string(output), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if line := strings.TrimSpace(lines[i]); line != "" {
+			return line
+		}
+	}
+	return ""
+}
 
 // buildCreateArgs builds the common arguments for container creation.
 // This function is shared between Docker and Podman runtimes to avoid duplication.
@@ -48,11 +61,11 @@ func addRuntimeFlags(args []string, config *CreateConfig) []string {
 
 func addMetadata(args []string, config *CreateConfig) []string {
 	for key, value := range config.Labels {
-		args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
+		args = append(args, "--label", fmt.Sprintf(keyValueFormat, key, value))
 	}
 
 	for key, value := range config.Env {
-		args = append(args, "-e", fmt.Sprintf("%s=%s", key, value))
+		args = append(args, "-e", fmt.Sprintf(keyValueFormat, key, value))
 	}
 
 	return args
@@ -86,7 +99,11 @@ func addImageAndCommand(args []string, config *CreateConfig) []string {
 	args = append(args, config.RunArgs...)
 
 	if config.OverrideCommand {
-		args = append(args, "--entrypoint", "/bin/sh")
+		// Keep-alive containers run `/bin/sh -c "sleep infinity"` as PID 1, which
+		// ignores SIGTERM (the kernel applies no default signal disposition to PID 1).
+		// Force the stop signal to SIGKILL so teardown (stop / rm -f) is immediate
+		// instead of blocking for the runtime's full stop grace period.
+		args = append(args, "--stop-signal", "SIGKILL", "--entrypoint", "/bin/sh")
 	}
 
 	args = append(args, config.Image)
@@ -136,11 +153,30 @@ func addExecOptions(args []string, opts *ExecOptions) []string {
 // This function is shared between Docker and Podman runtimes to avoid duplication.
 // Extracted to allow testing the argument building logic without executing commands.
 func buildBuildArgs(config *BuildConfig) []string {
+	if config.Bake != nil {
+		return buildBakeArgs(config)
+	}
+
 	args := []string{"build"}
+	if config.Engine == "buildx" {
+		args = []string{"buildx", "build"}
+	}
+
+	if config.NoCache {
+		args = append(args, "--no-cache")
+	}
+
+	if config.Pull {
+		args = append(args, "--pull")
+	}
+
+	if config.Target != "" {
+		args = append(args, "--target", config.Target)
+	}
 
 	// Add build args.
 	for key, value := range config.Args {
-		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", key, value))
+		args = append(args, "--build-arg", fmt.Sprintf(keyValueFormat, key, value))
 	}
 
 	// Add tags.
@@ -152,6 +188,60 @@ func buildBuildArgs(config *BuildConfig) []string {
 	args = append(args, "-f", config.Dockerfile, config.Context)
 
 	return args
+}
+
+func buildBakeArgs(config *BuildConfig) []string {
+	args := []string{"buildx", "bake"}
+
+	for _, file := range appendFile(config.Bake.File, config.Bake.Files) {
+		args = append(args, "--file", file)
+	}
+
+	if config.NoCache {
+		args = append(args, "--no-cache")
+	}
+	if config.Pull {
+		args = append(args, "--pull")
+	}
+	if config.Bake.Load {
+		args = append(args, "--load")
+	}
+	if config.Bake.Push {
+		args = append(args, "--push")
+	}
+	if config.Bake.Print {
+		args = append(args, "--print")
+	}
+	for key, value := range config.Bake.Vars {
+		args = append(args, "--var", fmt.Sprintf(keyValueFormat, key, value))
+	}
+	for _, value := range config.Bake.Set {
+		args = append(args, "--set", value)
+	}
+
+	args = append(args, appendFile(config.Bake.Target, config.Bake.Targets)...)
+	return args
+}
+
+func appendFile(first string, rest []string) []string {
+	values := make([]string, 0, len(rest)+1)
+	if first != "" {
+		values = append(values, first)
+	}
+	values = append(values, rest...)
+	return values
+}
+
+func buildTagArgs(source, target string) []string {
+	return []string{"tag", source, target}
+}
+
+func buildPushArgs(image string) []string {
+	return []string{"push", image}
+}
+
+func buildImageInspectArgs(image string) []string {
+	return []string{"image", "inspect", "--format", "{{json .}}", image}
 }
 
 // buildRemoveArgs builds the arguments for a container remove operation.
@@ -231,12 +321,24 @@ func buildAttachCommand(opts *AttachOptions) ([]string, *ExecOptions) {
 	return cmd, execOpts
 }
 
-// execWithRuntime executes a command in a container using the specified runtime.
-// This function is shared between Docker and Podman runtimes to avoid duplication.
-func execWithRuntime(ctx context.Context, runtimeName string, containerID string, cmd []string, opts *ExecOptions) error {
-	args := buildExecArgs(containerID, cmd, opts)
-	execCmd := exec.CommandContext(ctx, runtimeName, args...)
+// applyCommandEnv sets the environment for a container CLI subprocess.
+// When env is non-empty it becomes the command's complete environment (callers
+// pass the fully composed environment, which already includes the inherited
+// process environment), letting credentials materialized by auth integrations —
+// e.g. the DOCKER_CONFIG written by the aws/ecr integration, or AWS_* variables —
+// reach the docker/podman CLI. An empty env leaves cmd.Env nil so the command
+// inherits os.Environ() unchanged.
+func applyCommandEnv(cmd *exec.Cmd, env []string) {
+	if len(env) == 0 {
+		return
+	}
+	cmd.Env = env
+}
 
+// runExecCommand wires IO streams onto an already-built container exec command
+// (constructed via the runtime's env-aware command helper) and runs it.
+// This function is shared between Docker and Podman runtimes to avoid duplication.
+func runExecCommand(execCmd *exec.Cmd, runtimeName string, opts *ExecOptions) error {
 	// Setup IO streams with defaults.
 	stdin, stdout, stderr := getIOStreams(opts)
 	attachIOStreams(execCmd, opts, stdin, stdout, stderr)
