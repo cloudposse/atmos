@@ -718,10 +718,11 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 }
 
 // verifyStoredPlanForDeploy runs planfile drift verification before a deploy
-// apply. It is a no-op for non-deploy commands, when planfile verification is
-// off, or when no stored planfile was downloaded (the stored planfile only
-// exists when the before.terraform.deploy hook fetched it under CI). On a match,
-// or under warn, it points info at the freshly generated plan for apply.
+// apply. It is a no-op for non-deploy commands, when planfile storage is not
+// configured, when planfile verification is off, or when no stored planfile was
+// downloaded (the stored planfile only exists when the before.terraform.deploy
+// hook fetched it under CI). On a match, or under warn, it points info at the
+// freshly generated plan for apply.
 func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksInfo) error {
 	if subCommand != "deploy" {
 		return nil
@@ -735,6 +736,14 @@ func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksIn
 
 	if v := verifyAtmosConfig.Components.Terraform.Planfiles.Verify; !v.IsValid() {
 		return fmt.Errorf("%w: components.terraform.planfiles.verify %q is invalid (want fail|warn|off)", errUtils.ErrInvalidConfig, v)
+	}
+
+	// Planfile verification is opt-in via planfile storage. Without it there is no
+	// stored plan to download, verify, or require, so deploy proceeds untouched
+	// (mirrors the before.terraform.deploy download hook's storage gate). This also
+	// keeps plain `deploy` (no planfile config) free of verification warnings.
+	if !planfile.StorageConfigured(&verifyAtmosConfig.Components.Terraform.Planfiles) {
+		return nil
 	}
 
 	canonicalPlanPath := e.ConstructTerraformComponentPlanfilePath(&verifyAtmosConfig, info)
