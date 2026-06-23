@@ -18,6 +18,7 @@ Two pieces landed together:
   - **`fail`** (default under CI): blocks the deploy on drift,
   - **`warn`**: logs the drift but proceeds,
   - **`off`**: skips verification entirely.
+- **A defined answer for "no stored plan found."** `verify` covers the case where a stored plan *exists* but differs. A companion `on_missing` setting covers the case where there is **no** stored plan to verify against — previously a silent fresh apply. It defaults to the resolved `verify` mode, so a fail-by-default CI deploy now fails loudly instead of quietly applying something unverified. That means a green `deploy` actually *proves* verification ran — no log-scraping required.
 
 Configure it once:
 
@@ -25,14 +26,15 @@ Configure it once:
 components:
   terraform:
     planfiles:
-      verify: fail   # fail | warn | off
+      verify: fail        # drift: stored plan exists but differs (fail | warn | off)
+      on_missing: fail    # no stored plan was found (defaults to tracking `verify`)
       priority: [github]
       stores:
         github:
           type: github/artifacts
 ```
 
-Override per run with `--verify-plan` / `--no-verify-plan` (CLI beats config beats the CI default).
+Override per run with `--verify-plan` / `--no-verify-plan` (CLI beats config beats the CI default). And because CI is auto-detected (`CI` / `GITHUB_ACTIONS`), the `--ci` flag is optional in a real pipeline — `atmos terraform deploy mycomponent -s prod` behaves natively and exits non-zero on drift or a missing plan, so your workflow asserts via exit codes instead of grepping logs.
 
 ## Why This Matters
 

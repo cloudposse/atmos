@@ -629,6 +629,12 @@ type PlanfilesConfig struct {
 	// One of: fail | warn | off. Empty means unset (defaults to fail under CI
 	// when planfile storage is configured, otherwise off).
 	Verify PlanfileVerifyMode `yaml:"verify,omitempty" json:"verify,omitempty" mapstructure:"verify"`
+	// OnMissing controls what `deploy` does when no stored planfile was found to
+	// verify against (distinct from Verify, which governs the drift comparison
+	// when a stored plan exists). One of: fail | warn | off. Empty means unset
+	// (tracks the resolved Verify mode, so a fail-by-default CI deploy also fails
+	// loudly rather than silently applying an unverified fresh plan).
+	OnMissing PlanfileVerifyMode `yaml:"on_missing,omitempty" json:"on_missing,omitempty" mapstructure:"on_missing"`
 }
 
 // PlanfileVerifyMode controls how `atmos terraform deploy` reacts when the
