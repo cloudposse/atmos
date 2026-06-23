@@ -81,6 +81,9 @@ func TestIsContainerRunning_Exported(t *testing.T) {
 		{"exited (0) 5 minutes ago", false},
 		{"created", false},
 		{"", false},
+		// "not running" must not match on a naive substring check.
+		{"not running", false},
+		{"  running  ", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.status, func(t *testing.T) {

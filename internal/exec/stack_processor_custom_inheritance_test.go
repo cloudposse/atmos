@@ -65,6 +65,22 @@ func TestResolveCustomComponentInheritance_MalformedInheritsErrors(t *testing.T)
 	require.ErrorIs(t, err, errUtils.ErrInvalidComponentMetadataInherits)
 }
 
+// A `metadata.inherits` list containing a non-string item is reported as a config
+// error rather than silently dropping the malformed entry.
+func TestResolveCustomComponentInheritance_NonStringInheritsItemErrors(t *testing.T) {
+	all := map[string]any{
+		"api": map[string]any{
+			// inherits is a list, but one item is not a string.
+			"metadata": map[string]any{"inherits": []any{"web/defaults", 42}},
+			"image":    "nginx:alpine",
+		},
+	}
+
+	_, err := resolveCustomComponentInheritance(inheritanceTestConfig(), all["api"].(map[string]any), all, map[string]bool{})
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrInvalidComponentMetadataInherits)
+}
+
 // TestResolveCustomComponentInheritance_NoInherits is the negative-path control:
 // a component without `metadata.inherits` must resolve unchanged and never trip
 // the malformed-inherits error.

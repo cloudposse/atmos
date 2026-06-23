@@ -502,29 +502,37 @@
     "compositions": {
       "title": "compositions",
       "description": "Named multi-service systems. Components join a composition via their `composition` field.",
-      "type": "object",
-      "patternProperties": {
-        "^[/a-zA-Z0-9-_{}. ]+$": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
           "type": "object",
-          "additionalProperties": false,
-          "required": ["services"],
-          "properties": {
-            "description": {
-              "type": "string"
-            },
-            "services": {
-              "type": "array",
-              "description": "Closed set of service names that may claim membership (open for fulfillment).",
-              "minItems": 1,
-              "uniqueItems": true,
-              "items": {
-                "type": "string"
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["services"],
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "services": {
+                  "type": "array",
+                  "description": "Closed set of service names that may claim membership (open for fulfillment).",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  }
+                }
               }
             }
-          }
+          },
+          "additionalProperties": false
         }
-      },
-      "additionalProperties": false
+      ]
     },
     "helmfile_component_manifest": {
       "title": "helmfile_component_manifest",

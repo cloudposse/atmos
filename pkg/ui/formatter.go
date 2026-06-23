@@ -538,6 +538,9 @@ func FormatComponentLabel(name string, index int) string {
 	if err != nil || !f.SupportsColor() {
 		return "[" + name + "]"
 	}
+	if index < 0 {
+		index = 0
+	}
 	return theme.ComponentLabelStyle(index).Render(name)
 }
 

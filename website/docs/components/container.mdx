@@ -63,7 +63,7 @@ atmos container exec api -s dev -- sh # run a command inside the container
 atmos container down api -s dev       # stop + rm
 ```
 
-Each instance is named and labeled from its canonical address `<stack>/container/<component>` (e.g.
+Each instance is named and labeled from its canonical address `<stack>/container/<component>` (e.g.,
 `atmos-dev-container-api`), so lifecycle commands discover it by label — there are no local state files.
 
 `atmos container list` shows a running/stopped/unknown indicator for each container component.

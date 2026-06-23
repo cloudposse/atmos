@@ -424,6 +424,7 @@ var (
 	ErrComponentListFailed                = errors.New("failed to list components")
 	ErrComponentValidationFailed          = errors.New("component validation failed")
 	ErrComponentExecutionFailed           = errors.New("component execution failed")
+	ErrNoRunningContainer                 = errors.New("no running container found")
 	ErrComponentArtifactGeneration        = errors.New("component artifact generation failed")
 	ErrComponentProviderRegistration      = errors.New("failed to register component provider")
 	ErrInvalidTerraformBackend            = errors.New("invalid terraform.backend section")

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/shlex"
 	"github.com/mitchellh/mapstructure"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -165,15 +166,22 @@ func (s *ContainerSpec) ToBuildConfig() *ctr.BuildConfig {
 	}
 }
 
-// CommandArgs splits the run command string into argv. An empty command yields
-// nil so the image's default ENTRYPOINT/CMD is used.
-func (s *ContainerSpec) CommandArgs() []string {
+// CommandArgs tokenizes the run command string into argv using shell-style
+// quoting so quoted arguments (e.g. `sh -c "echo hi"`) survive intact when passed
+// directly as argv (as `up` does, unlike `run` which wraps in `/bin/sh -lc`). An
+// empty command yields nil so the image's default ENTRYPOINT/CMD is used. A
+// malformed command (e.g. an unbalanced quote) is a config error.
+func (s *ContainerSpec) CommandArgs() ([]string, error) {
 	defer perf.Track(nil, "container.ContainerSpec.CommandArgs")()
 
 	if s.Run == nil || strings.TrimSpace(s.Run.Command) == "" {
-		return nil
+		return nil, nil
 	}
-	return strings.Fields(s.Run.Command)
+	args, err := shlex.Split(s.Run.Command)
+	if err != nil {
+		return nil, fmt.Errorf("%w: run.command %q: %w", errUtils.ErrComponentConfigInvalid, s.Run.Command, err)
+	}
+	return args, nil
 }
 
 // Ports maps the structured run port specs onto runtime PortBindings.

@@ -179,9 +179,12 @@ func createNamedContainer(ctx context.Context, runtime Runtime, config *NamedCon
 // buildNamedCreateConfig assembles the runtime CreateConfig for a named container,
 // merging canonical instance labels with any caller-supplied labels.
 func buildNamedCreateConfig(config *NamedConfig, name string) *CreateConfig {
-	labels := InstanceLabels(config.Stack, config.ComponentType, config.Component)
+	labels := map[string]string{}
 	for k, v := range config.Labels {
 		labels[k] = v
+	}
+	for k, v := range InstanceLabels(config.Stack, config.ComponentType, config.Component) {
+		labels[k] = v // reserved identity labels are authoritative.
 	}
 
 	return &CreateConfig{

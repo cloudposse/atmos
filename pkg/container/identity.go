@@ -79,8 +79,12 @@ func DiscoveryFilter(stack, componentType, component string) map[string]string {
 func IsContainerRunning(status string) bool {
 	defer perf.Track(nil, "container.IsContainerRunning")()
 
-	status = strings.ToLower(status)
-	return strings.Contains(status, "running") || strings.HasPrefix(status, "up ")
+	status = strings.TrimSpace(strings.ToLower(status))
+	fields := strings.Fields(status)
+	if len(fields) == 0 {
+		return false
+	}
+	return fields[0] == "running" || fields[0] == "up"
 }
 
 // sanitizeName replaces characters invalid in container names with "-", trims

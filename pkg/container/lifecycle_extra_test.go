@@ -213,20 +213,30 @@ func TestBuildNamedCreateConfig(t *testing.T) {
 	assert.Equal(t, "dev/container/api", got.Labels[LabelInstance])
 	assert.Equal(t, "x", got.Labels["custom"])
 
-	// Isolation: mutating the result labels must not mutate the source config.
+	// Isolation (result→source): mutating the result labels must not mutate the
+	// source config.
 	got.Labels["mutated"] = "y"
 	_, exists := cfg.Labels["mutated"]
 	assert.False(t, exists)
+
+	// Isolation (source→result): mutating the source config after the build must
+	// not leak into the already-built result (no shared backing map).
+	cfg.Labels["added-after"] = "z"
+	_, leaked := got.Labels["added-after"]
+	assert.False(t, leaked)
 }
 
-func TestBuildNamedCreateConfig_CallerLabelOverride(t *testing.T) {
-	// A caller label is merged over the canonical instance label.
+func TestBuildNamedCreateConfig_IdentityLabelsAuthoritative(t *testing.T) {
+	// Reserved identity labels are authoritative: a caller attempting to override
+	// one must not win, otherwise label-based discovery (FindInstance/Up/Down)
+	// would no longer match this instance. Non-reserved caller labels still merge.
 	cfg := &NamedConfig{
 		Stack: "dev", ComponentType: "container", Component: "api", Image: "img:1",
-		Labels: map[string]string{LabelInstance: "overridden"},
+		Labels: map[string]string{LabelInstance: "overridden", "custom": "x"},
 	}
 	got := buildNamedCreateConfig(cfg, "name")
-	assert.Equal(t, "overridden", got.Labels[LabelInstance])
+	assert.Equal(t, "dev/container/api", got.Labels[LabelInstance])
+	assert.Equal(t, "x", got.Labels["custom"])
 }
 
 func TestContainerRef(t *testing.T) {

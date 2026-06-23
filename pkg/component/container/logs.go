@@ -195,57 +195,90 @@ func streamLogsConcurrent(ctx context.Context, info *schema.ConfigAndStacksInfo,
 	ctx, stop := followContext(ctx)
 	defer stop()
 
-	// One shared lock keeps concurrent prefixed lines from interleaving mid-line.
-	writeMu := &sync.Mutex{}
 	var wg sync.WaitGroup
-	errCh := make(chan error, len(targets))
+	streamer := &logStreamer{
+		opts: opts,
+		// Width-align labels so log content lines up across components.
+		width: maxComponentNameLen(targets),
+		// One shared lock keeps concurrent prefixed lines from interleaving mid-line.
+		writeMu: &sync.Mutex{},
+		wg:      &wg,
+		errCh:   make(chan error, len(targets)),
+	}
 
-	// Width-align labels so log content lines up across components.
-	width := maxComponentNameLen(targets)
+	// Real discovery failures (runtime/config/integration) are collected and
+	// surfaced; only the expected "no running container" case is skippable.
+	var discoverErrs []error
 
 	for i, t := range targets {
 		itemInfo := logsInfoFor(info, &t)
 		d, err := discover(ctx, &itemInfo)
 		if err != nil {
-			// A component that has no running container is skipped, not fatal.
-			ui.Warningf("%s/%s: %v", t.stack, t.component, err)
+			if errors.Is(err, errUtils.ErrNoRunningContainer) {
+				// A component that has no running container is skipped, not fatal.
+				ui.Warningf("%s/%s: %v", t.stack, t.component, err)
+				continue
+			}
+			// Any other failure must surface instead of being masked by the
+			// success path below.
+			discoverErrs = append(discoverErrs, fmt.Errorf("%w: %s/%s: %w", errUtils.ErrComponentExecutionFailed, t.stack, t.component, err))
 			continue
 		}
 
-		// A colored per-component label (uppercased and centered, cycled by index,
-		// log-level-badge style) that degrades to `[NAME]` without color support.
-		// The trailing space separates the label from the log line.
-		prefix := ui.FormatComponentLabel(centerLabel(t.component, width), i) + " "
-		stdout := iolib.NewLinePrefixWriterRaw(prefix, iolib.Data, writeMu)
-		stderr := iolib.NewLinePrefixWriterRaw(prefix, iolib.UI, writeMu)
-		runtime, ref, stack, comp := d.runtime, containerRef(d.in), t.stack, t.component
-
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() { _ = stdout.Flush(); _ = stderr.Flush() }()
-			// Suppress the error caused by our own cancellation (Ctrl-C).
-			if err := runtime.Logs(ctx, ref, true, opts.tail, stdout, stderr); err != nil && ctx.Err() == nil {
-				errCh <- fmt.Errorf("%s/%s: %w", stack, comp, err)
-			}
-		}()
+		streamer.launch(ctx, d, &t, i)
 	}
 
 	wg.Wait()
-	close(errCh)
+	close(streamer.errCh)
+
+	// Real discovery failures surface regardless of how streaming ended.
+	errs := discoverErrs
 
 	// Ctrl-C: graceful stop (per-stream errors were already suppressed above).
 	if ctx.Err() != nil {
 		noteFollowStopped()
+		if len(errs) > 0 {
+			return errors.Join(errs...)
+		}
 		return nil
 	}
 
-	var errs []error
-	for e := range errCh {
+	for e := range streamer.errCh {
 		errs = append(errs, e)
 	}
 	if len(errs) > 0 {
 		return errors.Join(errs...)
 	}
 	return nil
+}
+
+// logStreamer carries the loop-invariant state shared by every concurrent log
+// stream launched in streamLogsConcurrent.
+type logStreamer struct {
+	opts    logsOptions
+	width   int
+	writeMu *sync.Mutex
+	wg      *sync.WaitGroup
+	errCh   chan error
+}
+
+// launch follows one discovered target's logs in a new goroutine, writing output
+// behind a colored per-component prefix (cycled by index, degrading to `[NAME]`
+// without color) and reporting any non-cancellation error on the shared errCh.
+func (s *logStreamer) launch(ctx context.Context, d *discovered, t *instanceRow, index int) {
+	// The trailing space separates the label from the log line.
+	prefix := ui.FormatComponentLabel(centerLabel(t.component, s.width), index) + " "
+	stdout := iolib.NewLinePrefixWriterRaw(prefix, iolib.Data, s.writeMu)
+	stderr := iolib.NewLinePrefixWriterRaw(prefix, iolib.UI, s.writeMu)
+	runtime, ref, stack, comp := d.runtime, containerRef(d.in), t.stack, t.component
+
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		defer func() { _ = stdout.Flush(); _ = stderr.Flush() }()
+		// Suppress the error caused by our own cancellation (Ctrl-C).
+		if err := runtime.Logs(ctx, ref, true, s.opts.tail, stdout, stderr); err != nil && ctx.Err() == nil {
+			s.errCh <- fmt.Errorf("%w: %s/%s: %w", errUtils.ErrComponentExecutionFailed, stack, comp, err)
+		}
+	}()
 }

@@ -1,6 +1,6 @@
 package container
 
-//go:generate go run go.uber.org/mock/mockgen@latest -destination=mock_runtime_test.go -package=container github.com/cloudposse/atmos/pkg/container Runtime
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=mock_runtime_test.go -package=container github.com/cloudposse/atmos/pkg/container Runtime
 
 import (
 	"context"
@@ -271,12 +271,16 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	ports := r.spec.Ports()
+	command, err := r.spec.CommandArgs()
+	if err != nil {
+		return err
+	}
 	namedConfig := &ctr.NamedConfig{
 		Stack:         r.stack,
 		ComponentType: cfg.ContainerComponentType,
 		Component:     r.component,
 		Image:         image,
-		Command:       r.spec.CommandArgs(),
+		Command:       command,
 		Ports:         ports,
 		Mounts:        r.spec.Mounts(),
 		Env:           r.env,
@@ -500,7 +504,7 @@ func discover(ctx context.Context, info *schema.ConfigAndStacksInfo) (*discovere
 		return nil, err
 	}
 	if !found {
-		return nil, fmt.Errorf("%w: no running container found for %q (try `atmos container up`)", errUtils.ErrComponentExecutionFailed, r.component)
+		return nil, fmt.Errorf("%w for %q (try `atmos container up`)", errUtils.ErrNoRunningContainer, r.component)
 	}
 	return &discovered{r: r, runtime: runtime, in: in}, nil
 }

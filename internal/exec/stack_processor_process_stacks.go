@@ -930,7 +930,11 @@ func customComponentInheritsBases(componentMap map[string]any) ([]string, error)
 	}
 	bases := make([]string, 0, len(inherits))
 	for _, item := range inherits {
-		if name, ok := item.(string); ok && name != "" {
+		name, ok := item.(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: custom component metadata.%s must contain only strings", errUtils.ErrInvalidComponentMetadataInherits, cfg.InheritsSectionName)
+		}
+		if name != "" {
 			bases = append(bases, name)
 		}
 	}

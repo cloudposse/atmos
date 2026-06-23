@@ -19,9 +19,8 @@ func exampleProjectPath(t *testing.T) string {
 	require.NoError(t, err)
 	path, err := filepath.Abs(filepath.Join(wd, "..", "..", "examples", "container-component"))
 	require.NoError(t, err)
-	if _, statErr := os.Stat(filepath.Join(path, "atmos.yaml")); statErr != nil {
-		t.Skipf("example project not found at %s", path)
-	}
+	_, statErr := os.Stat(filepath.Join(path, "atmos.yaml"))
+	require.NoErrorf(t, statErr, "example project not found at %s", path)
 	return path
 }
 

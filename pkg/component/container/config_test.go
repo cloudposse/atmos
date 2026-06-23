@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -113,9 +114,23 @@ func TestContainerSpec_ToBuildConfig(t *testing.T) {
 }
 
 func TestContainerSpec_CommandArgs(t *testing.T) {
-	assert.Nil(t, (&ContainerSpec{}).CommandArgs())
-	spec := ContainerSpec{Run: &schema.ContainerRunStep{Command: "./api --port 8080"}}
-	assert.Equal(t, []string{"./api", "--port", "8080"}, spec.CommandArgs())
+	empty, err := (&ContainerSpec{}).CommandArgs()
+	require.NoError(t, err)
+	assert.Nil(t, empty)
+
+	args, err := (&ContainerSpec{Run: &schema.ContainerRunStep{Command: "./api --port 8080"}}).CommandArgs()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"./api", "--port", "8080"}, args)
+
+	// Quoted arguments must survive tokenization as a single argv element
+	// (strings.Fields would have split "echo hi" into two).
+	quoted, err := (&ContainerSpec{Run: &schema.ContainerRunStep{Command: `sh -c "echo hi"`}}).CommandArgs()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"sh", "-c", "echo hi"}, quoted)
+
+	// An unbalanced quote is a config error, not silently corrupted argv.
+	_, err = (&ContainerSpec{Run: &schema.ContainerRunStep{Command: `sh -c "echo`}}).CommandArgs()
+	require.ErrorIs(t, err, errUtils.ErrComponentConfigInvalid)
 }
 
 func TestContainerSpec_Mounts(t *testing.T) {

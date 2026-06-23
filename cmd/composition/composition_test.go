@@ -34,9 +34,25 @@ func TestCompositionCommandStructure(t *testing.T) {
 
 func TestValidateRequiresExactlyOneArg(t *testing.T) {
 	// validate <composition> takes exactly one positional argument.
-	require.Error(t, validateCmd.Args(validateCmd, []string{}))
-	require.NoError(t, validateCmd.Args(validateCmd, []string{"storefront"}))
-	require.Error(t, validateCmd.Args(validateCmd, []string{"a", "b"}))
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr bool
+	}{
+		{name: "no args", args: []string{}, wantErr: true},
+		{name: "exactly one arg", args: []string{"storefront"}, wantErr: false},
+		{name: "too many args", args: []string{"a", "b"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCmd.Args(validateCmd, tt.args)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestBuildConfigAndStacksInfo_ResolvesStack(t *testing.T) {

@@ -1,6 +1,7 @@
 package container
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -728,6 +729,9 @@ func TestAddExecOptions(t *testing.T) {
 }
 
 func TestBuildShellCommand(t *testing.T) {
+	// Shared stream instances so the expected ExecOptions can reference the exact
+	// same pointers that are propagated from ShellOptions.
+	inBuf, outBuf, errBuf := &bytes.Buffer{}, &bytes.Buffer{}, &bytes.Buffer{}
 	tests := []struct {
 		name            string
 		opts            *ShellOptions
@@ -811,6 +815,26 @@ func TestBuildShellCommand(t *testing.T) {
 				AttachStdout: true,
 				AttachStderr: true,
 				User:         "developer",
+			},
+		},
+		{
+			// Lock the contract that the Stdin/Stdout/Stderr streams from
+			// ShellOptions are propagated onto the returned ExecOptions.
+			name: "io streams propagate to exec options",
+			opts: &ShellOptions{
+				Stdin:  inBuf,
+				Stdout: outBuf,
+				Stderr: errBuf,
+			},
+			expectedCmd: []string{"/bin/bash"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+				Stdin:        inBuf,
+				Stdout:       outBuf,
+				Stderr:       errBuf,
 			},
 		},
 	}

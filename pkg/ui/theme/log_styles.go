@@ -105,6 +105,11 @@ func ComponentLabelStyle(index int) lipgloss.Style {
 	}
 
 	palette := componentLabelPalette(scheme)
+	// Normalize a negative index to a valid palette position so the modulo lookup
+	// below never indexes with a negative remainder (which would panic).
+	if index < 0 {
+		index = 0
+	}
 	bg := palette[index%len(palette)]
 	return badge.
 		Background(lipgloss.Color(bg)).

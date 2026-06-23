@@ -202,7 +202,7 @@ func TestDockerRuntime_Shell(t *testing.T) {
 			expectAttach: true,
 		},
 		{
-			name:         "empty AttachOptions uses defaults",
+			name:         "empty ShellOptions uses defaults",
 			opts:         &ShellOptions{},
 			expectShell:  "/bin/bash",
 			expectArgs:   nil,
