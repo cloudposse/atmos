@@ -13,6 +13,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 )
@@ -22,7 +23,7 @@ const (
 	statusCodeForbidden = 403
 	// AzureKeyVaultHyphen is the hyphen character used for Azure Key Vault secret name normalization.
 	AzureKeyVaultHyphen = "-"
-	// Format for a secret name included in error messages.
+	// Format string that turns a secret name into the identifier used in wrapped permission errors.
 	secretIDFormat = "secret %s"
 )
 
@@ -34,6 +35,10 @@ type AzureKeyVaultClient interface {
 	SetSecret(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error)
 	GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
 	DeleteSecret(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error)
+	// NewListSecretPropertiesVersionsPager lists the versions/properties of a single named secret
+	// without ever returning the secret value, so existence can be confirmed via the "list"
+	// permission instead of "get". Has() uses this to avoid retrieving the secret value.
+	NewListSecretPropertiesVersionsPager(name string, options *azsecrets.ListSecretPropertiesVersionsOptions) *runtime.Pager[azsecrets.ListSecretPropertiesVersionsResponse]
 }
 
 // AzureKeyVaultStore is an implementation of the Store interface for Azure Key Vault.
@@ -402,16 +407,50 @@ func (s *AzureKeyVaultStore) Delete(stack string, component string, key string) 
 	return nil
 }
 
-// Has reports whether a secret exists for the given stack, component, and key. It performs a
-// Get and maps a not-found result to false; any other error is propagated.
+// Has reports whether a secret exists for the given stack, component, and key.
+//
+// It uses the secret-versions listing API (NewListSecretPropertiesVersionsPager), which returns
+// only secret metadata/properties and never the secret value. Existence is therefore confirmed
+// without retrieving the value: a non-existent secret yields a 404 mapped to (false, nil), while
+// any other error (e.g. permission denied) is wrapped and returned. Note that Azure Key Vault
+// secrets have no separate "decrypt" permission distinct from "get"; the versions listing relies
+// on the "list" permission and is the lightest existence check that avoids reading the value.
 func (s *AzureKeyVaultStore) Has(stack string, component string, key string) (bool, error) {
-	_, err := s.Get(stack, component, key)
-	if err != nil {
-		if errors.Is(err, ErrResourceNotFound) {
-			return false, nil
-		}
+	if stack == "" {
+		return false, ErrEmptyStack
+	}
+	if component == "" {
+		return false, ErrEmptyComponent
+	}
+	if key == "" {
+		return false, ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
 		return false, err
 	}
+
+	secretName, err := s.getKey(stack, component, key)
+	if err != nil {
+		return false, fmt.Errorf(errWrapFormat, ErrGetKey, err)
+	}
+
+	// Fetch only the first page of secret versions. We never read page contents (the secret
+	// value is not part of this response); a successful fetch is sufficient to prove existence.
+	pager := s.client.NewListSecretPropertiesVersionsPager(secretName, nil)
+	if _, err := pager.NextPage(context.Background()); err != nil {
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) {
+			switch respErr.StatusCode {
+			case statusCodeNotFound:
+				return false, nil
+			case statusCodeForbidden:
+				return false, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf(secretIDFormat, secretName), err)
+			}
+		}
+		return false, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
+	}
+
 	return true, nil
 }
 

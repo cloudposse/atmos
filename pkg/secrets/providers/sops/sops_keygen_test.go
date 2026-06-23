@@ -1,4 +1,4 @@
-package providers
+package sops
 
 import (
 	"os"
@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/secrets/providers"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -230,7 +232,7 @@ func TestSopsKeygen_EndToEnd(t *testing.T) {
 	require.True(t, p.HasKey(), "key should exist after keygen")
 
 	// First write creates + encrypts the file using the .sops.yaml recipient.
-	coord := Coordinate{Stack: "dev", Component: "app", Key: "DB_PASSWORD"}
+	coord := providers.Coordinate{Stack: "dev", Component: "app", Key: "DB_PASSWORD"}
 	require.NoError(t, p.Set(coord, "hunter2"))
 
 	enc, err := os.ReadFile(filepath.Join(dir, "secrets", "dev.enc.yaml"))
@@ -260,7 +262,7 @@ func TestSopsKeygen_RejectsPinnedRecipients(t *testing.T) {
 
 // keygenOutputLocation returns the Location of the keygen output with the given label, failing the
 // test if absent.
-func keygenOutputLocation(t *testing.T, res *KeygenResult, label string) string {
+func keygenOutputLocation(t *testing.T, res *providers.KeygenResult, label string) string {
 	t.Helper()
 	for _, out := range res.Outputs {
 		if out.Label == label {
@@ -276,5 +278,5 @@ func TestSopsKeygen_RejectsNonAgeKind(t *testing.T) {
 	assert.True(t, p.HasKey(), "non-age kinds report key present (externally managed)")
 	_, err := p.GenerateKey(t.TempDir())
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrKeygenNotSupported)
+	assert.ErrorIs(t, err, providers.ErrKeygenNotSupported)
 }
