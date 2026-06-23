@@ -8,8 +8,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
-	"strconv"
-	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -45,9 +43,6 @@ const logKeyComponent = "component"
 // verifyPlanFlagName is the tri-state planfile-verify flag (--verify-plan,
 // --verify-plan=false).
 const verifyPlanFlagName = "verify-plan"
-
-// verifyPlanEnvVar is the environment variable that mirrors --verify-plan.
-const verifyPlanEnvVar = "ATMOS_TERRAFORM_VERIFY_PLAN"
 
 // ciHookConfigInitFailedMsg is the log message emitted when CI-hook config init fails.
 const ciHookConfigInitFailedMsg = "CI hook config init failed"
@@ -199,26 +194,19 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 // --verify-plan=false, empty when the flag was not set (defer to config / the CI
 // default).
 //
-// It uses cmd.Flags().Changed (true only when the user actually passed the flag)
-// and reads ATMOS_TERRAFORM_VERIFY_PLAN directly. We deliberately do NOT use
-// viper.IsSet here: the flag binding registers a default via viper.SetDefault,
-// which makes viper.IsSet(verify-plan) return true even when the flag was never
-// set — collapsing the unset case to off and disabling verification (a missing
-// stored plan would no longer block the deploy).
+// It delegates to deployParser.IsBoolFlagExplicitlySet which uses
+// cmd.Flags().Changed for CLI detection and os.LookupEnv over the flag's
+// registered env vars (from the flags registry) for environment detection.
+// We deliberately avoid viper.IsSet here: SetDefault registers a default that
+// makes IsSet return true even when neither the CLI flag nor the env var was
+// provided — collapsing the unset case to off and silently disabling
+// verification (a missing stored plan would no longer block the deploy).
 func resolveVerifyPlanMode(cmd *cobra.Command) schema.PlanfileVerifyMode {
-	// CLI flag wins; Changed is the reliable "explicitly set" signal.
-	if cmd != nil && cmd.Flags().Changed(verifyPlanFlagName) {
-		verify, _ := cmd.Flags().GetBool(verifyPlanFlagName)
-		return verifyPlanModeFromBool(verify)
+	set, verify := deployParser.IsBoolFlagExplicitlySet(cmd, verifyPlanFlagName)
+	if !set {
+		return ""
 	}
-	// Env-var fallback (ATMOS_TERRAFORM_VERIFY_PLAN). Read directly so an unset
-	// var stays unset rather than resolving to the bound default.
-	if raw, ok := os.LookupEnv(verifyPlanEnvVar); ok {
-		if verify, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
-			return verifyPlanModeFromBool(verify)
-		}
-	}
-	return ""
+	return verifyPlanModeFromBool(verify)
 }
 
 // verifyPlanModeFromBool maps the resolved --verify-plan boolean to its mode:
