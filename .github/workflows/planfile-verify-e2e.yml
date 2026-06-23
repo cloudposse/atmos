@@ -84,11 +84,13 @@ jobs:
         working-directory: tests/fixtures/scenarios/planfile-artifacts-e2e
         # Exercises the github/artifacts List() against the real runner API and
         # proves the upload landed, asserting the command's structured JSON output
-        # (not grepping log prose).
+        # (not grepping log prose). The command already filters by component+stack
+        # +SHA, so a non-empty array means the planfile is there; an absent one
+        # renders `null`, which `length > 0` fails on.
         run: |
           set -euo pipefail
-          atmos terraform planfile list mycomponent -s prod -f json \
-            | jq -e '.[] | select(.component=="mycomponent")' > /dev/null
+          atmos terraform planfile list mycomponent -s prod --format=json \
+            | jq -e 'length > 0' > /dev/null
 
   deploy-verify:
     name: deploy (auto verify + apply)
