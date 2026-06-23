@@ -483,6 +483,8 @@ func TestGetRunCommandWithRetry_NonRetryableError(t *testing.T) {
 	assert.Equal(t, 1, count, "expected 1 git invocation (non-retryable error, no retry)")
 }
 
+// TestIsRetryableGitOrAuthError covers the brokered-mode predicate: auth failures and
+// transient network errors are retryable, while genuinely terminal errors are not.
 func TestIsRetryableGitOrAuthError(t *testing.T) {
 	tests := []struct {
 		name     string

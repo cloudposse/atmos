@@ -103,14 +103,19 @@ func runEnabledBrokers(ctx context.Context, atmosConfig *schema.AtmosConfigurati
 			continue
 		}
 
-		if len(env) > 0 {
-			markBrokered()
-		}
-
+		// Mark brokered only after at least one variable is actually exported: if every
+		// os.Setenv failed there are no usable credentials in the process env, and enabling
+		// downstream auth-retry would be wrong.
+		exported := false
 		for key, value := range env {
 			if err := os.Setenv(key, value); err != nil {
 				log.Warn("Failed to export credential broker variable", "broker", p.Name(), "key", key, "error", err)
+				continue
 			}
+			exported = true
+		}
+		if exported {
+			markBrokered()
 		}
 	}
 }

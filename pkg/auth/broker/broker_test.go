@@ -118,6 +118,8 @@ func TestEnsureCredentials_NoProviders(t *testing.T) {
 	})
 }
 
+// TestHasBrokeredCredentials_TrueAfterNonEmptyProvision asserts that a broker which exports
+// a non-empty environment flips HasBrokeredCredentials to true.
 func TestHasBrokeredCredentials_TrueAfterNonEmptyProvision(t *testing.T) {
 	resetRegistry()
 	t.Cleanup(resetRegistry)
@@ -134,6 +136,8 @@ func TestHasBrokeredCredentials_TrueAfterNonEmptyProvision(t *testing.T) {
 	require.NoError(t, os.Unsetenv(key))
 }
 
+// TestHasBrokeredCredentials_FalseWhenEmptyOrErrored asserts that an empty-env or erroring
+// broker does not mark brokered credentials, so downstream auth-retry stays disabled.
 func TestHasBrokeredCredentials_FalseWhenEmptyOrErrored(t *testing.T) {
 	resetRegistry()
 	t.Cleanup(resetRegistry)
@@ -144,6 +148,21 @@ func TestHasBrokeredCredentials_FalseWhenEmptyOrErrored(t *testing.T) {
 	runEnabledBrokers(context.Background(), &schema.AtmosConfiguration{})
 
 	assert.False(t, HasBrokeredCredentials(), "no token was provisioned, so nothing is brokered")
+}
+
+// TestHasBrokeredCredentials_FalseWhenExportFails asserts that when every os.Setenv fails
+// (here via an invalid empty key), no credentials reach the process env and brokered state
+// is NOT marked — so downstream auth-retry is not enabled without usable credentials.
+func TestHasBrokeredCredentials_FalseWhenExportFails(t *testing.T) {
+	resetRegistry()
+	t.Cleanup(resetRegistry)
+
+	// An empty key is rejected by os.Setenv on all platforms, so the export loop fails for
+	// every entry.
+	Register(&fakeProvider{name: "unexportable", enabled: true, env: map[string]string{"": "value"}})
+	runEnabledBrokers(context.Background(), &schema.AtmosConfiguration{})
+
+	assert.False(t, HasBrokeredCredentials(), "no variable was exported, so nothing is brokered")
 }
 
 // TestEnsureCredentials_ConcurrentProvisionOnce proves the sync.Once happens-before barrier:
