@@ -2180,3 +2180,37 @@ func TestRuntimeUploader_ListArtifacts(t *testing.T) {
 		assert.Contains(t, err.Error(), "decode")
 	})
 }
+
+// TestRuntimeUploader_PostRuntimeJSON_Errors covers the early error branches of
+// postRuntimeJSON that the happy-path/server-error tests don't reach: a request
+// body that can't be marshalled, an un-parseable endpoint, and a transport
+// failure.
+func TestRuntimeUploader_PostRuntimeJSON_Errors(t *testing.T) {
+	t.Run("marshal error", func(t *testing.T) {
+		u := newRuntimeUploader("http://example.com", "tok")
+		// A channel cannot be JSON-marshalled.
+		err := u.postRuntimeJSON(context.Background(), "ListArtifacts", make(chan int), &struct{}{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "marshal")
+	})
+
+	t.Run("request build error", func(t *testing.T) {
+		// A control character in the base URL makes http.NewRequestWithContext fail.
+		u := newRuntimeUploader("http://\x7f-invalid", "tok")
+		err := u.postRuntimeJSON(context.Background(), "ListArtifacts", map[string]string{}, &struct{}{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "build")
+	})
+
+	t.Run("transport error", func(t *testing.T) {
+		// Close the server first so the request is refused at the transport layer.
+		server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
+		serverURL := server.URL
+		server.Close()
+
+		u := newRuntimeUploader(serverURL, "tok")
+		err := u.postRuntimeJSON(context.Background(), "ListArtifacts", map[string]string{}, &struct{}{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "call")
+	})
+}

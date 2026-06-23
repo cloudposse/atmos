@@ -328,7 +328,7 @@ components:
   <dd>Disable verification entirely; the stored plan is not downloaded and `deploy` performs a normal plan-and-apply.</dd>
 </dl>
 
-Per-run overrides: `--verify-plan` forces `fail`, `--no-verify-plan` forces `off`. Precedence is
+Per-run overrides: `--verify-plan` forces `fail`, `--verify-plan=false` forces `off`. Precedence is
 **CLI flag > config > CI default**. Verification runs only on `deploy` (not `apply`), and only under CI
 when planfile storage is configured.
 
@@ -360,7 +360,7 @@ When `required` is unset it **tracks `verify` strictness** — a stored plan is 
 verification resolves to `fail` (for example, under CI with planfile storage configured). So a
 fail-by-default CI deploy fails loudly on a missing plan rather than applying an unverified one, while
 local deploys (no CI, no storage) never require one. `required` only applies when verification is active:
-if `verify` resolves to `off` (including `--no-verify-plan`), nothing is downloaded, verified, or required.
+if `verify` resolves to `off` (including `--verify-plan=false`), nothing is downloaded, verified, or required.
 
 :::note GitHub Actions runtime token
 With the `github/artifacts` store, the automatic download uses the GitHub Artifacts runtime API, so the

@@ -78,7 +78,7 @@ func TestIsPlanRequired(t *testing.T) {
 
 		// verify=off short-circuits to not-required, even with required:true.
 		{"verify off short-circuits explicit true", cfgWithRequired(schema.PlanfileVerifyOff, boolPtr(true)), true, "", false},
-		{"no-verify-plan CLI override beats required true", cfgWithRequired(schema.PlanfileVerifyFail, boolPtr(true)), true, schema.PlanfileVerifyOff, false},
+		{"--verify-plan=false CLI override beats required true", cfgWithRequired(schema.PlanfileVerifyFail, boolPtr(true)), true, schema.PlanfileVerifyOff, false},
 
 		// Unset: tracks verify strictness (required only when verify resolves to fail).
 		{"unset tracks default fail under CI with storage", cfgWith("", true), true, "", true},

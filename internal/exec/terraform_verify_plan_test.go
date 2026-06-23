@@ -43,9 +43,11 @@ func TestVerifyPlanfile_StoredPlanFileExists_FailsOnStackProcessing(t *testing.T
 }
 
 func TestFinalizeVerification(t *testing.T) {
+	freshPlan := filepath.Join(t.TempDir(), "fresh.tfplan")
+
 	t.Run("drift + fail returns verification error", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{}
-		err := finalizeVerification(info, "/tmp/fresh.tfplan", "  ~ resource changed", true, schema.PlanfileVerifyFail)
+		err := finalizeVerification(info, freshPlan, "  ~ resource changed", true, schema.PlanfileVerifyFail)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 		assert.Contains(t, err.Error(), "resource changed")
@@ -56,17 +58,17 @@ func TestFinalizeVerification(t *testing.T) {
 
 	t.Run("drift + warn proceeds with the fresh plan", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{}
-		err := finalizeVerification(info, "/tmp/fresh.tfplan", "  ~ resource changed", true, schema.PlanfileVerifyWarn)
+		err := finalizeVerification(info, freshPlan, "  ~ resource changed", true, schema.PlanfileVerifyWarn)
 		require.NoError(t, err)
-		assert.Equal(t, "/tmp/fresh.tfplan", info.PlanFile)
+		assert.Equal(t, freshPlan, info.PlanFile)
 		assert.True(t, info.UseTerraformPlan)
 	})
 
 	t.Run("no drift selects the fresh plan", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{}
-		err := finalizeVerification(info, "/tmp/fresh.tfplan", "", false, schema.PlanfileVerifyFail)
+		err := finalizeVerification(info, freshPlan, "", false, schema.PlanfileVerifyFail)
 		require.NoError(t, err)
-		assert.Equal(t, "/tmp/fresh.tfplan", info.PlanFile)
+		assert.Equal(t, freshPlan, info.PlanFile)
 		assert.True(t, info.UseTerraformPlan)
 	})
 }

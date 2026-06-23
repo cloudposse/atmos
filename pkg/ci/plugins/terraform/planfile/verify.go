@@ -17,7 +17,7 @@ func StorageConfigured(pf *schema.PlanfilesConfig) bool {
 // ResolveVerifyMode resolves the effective planfile drift-verification mode for
 // `atmos terraform deploy`, applying precedence:
 //
-//	explicit CLI override (--verify-plan/--no-verify-plan)
+//	explicit CLI override (--verify-plan / --verify-plan=false)
 //	  > config (components.terraform.planfiles.verify)
 //	  > default: fail when CI is enabled and planfile storage is configured, else off.
 //
@@ -48,7 +48,7 @@ func ResolveVerifyMode(atmosConfig *schema.AtmosConfiguration, ciEnabled bool, c
 //
 //   - When verification resolves to off, nothing is downloaded or verified, so a
 //     stored plan is never required (this also short-circuits an explicit
-//     `required: true` paired with `--no-verify-plan`).
+//     `required: true` paired with `--verify-plan=false`).
 //   - An explicit components.terraform.planfiles.required wins.
 //   - Unset: required tracks verify strictness — true only when verification
 //     resolves to fail (e.g. under CI with storage configured). This makes a

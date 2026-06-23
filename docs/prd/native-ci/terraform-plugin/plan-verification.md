@@ -20,7 +20,7 @@
   guarantee. (Replaying the stored binary directly is still available via `--from-plan` / `--planfile`.)
 - **Automatic under CI when planfile storage is configured.** Configurable via
   `components.terraform.planfiles.verify` (`fail` | `warn` | `off`, default `fail` under CI), and
-  overridable per-run with `--verify-plan` (force `fail`) / `--no-verify-plan` (force `off`). Precedence:
+  overridable per-run with `--verify-plan` (force `fail`) / `--verify-plan=false` (force `off`). Precedence:
   CLI flag > config > CI default.
 
 **Why `deploy`, not `apply`?**

@@ -34,7 +34,7 @@ components:
           type: github/artifacts
 ```
 
-Override per run with `--verify-plan` / `--no-verify-plan` (CLI beats config beats the CI default). And because CI is auto-detected (`CI` / `GITHUB_ACTIONS`), the `--ci` flag is optional in a real pipeline — `atmos terraform deploy mycomponent -s prod` behaves natively and exits non-zero on drift or a missing plan, so your workflow asserts via exit codes instead of grepping logs.
+Override per run with `--verify-plan` / `--verify-plan=false` (CLI beats config beats the CI default). And because CI is auto-detected (`CI` / `GITHUB_ACTIONS`), the `--ci` flag is optional in a real pipeline — `atmos terraform deploy mycomponent -s prod` behaves natively and exits non-zero on drift or a missing plan, so your workflow asserts via exit codes instead of grepping logs.
 
 ## Why This Matters
 

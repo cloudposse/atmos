@@ -192,7 +192,7 @@ exist** to verify against. It defaults to tracking `verify` strictness (required
 resolves to `fail`), so a fail-by-default CI deploy fails loudly instead of silently applying an
 unverified fresh plan. See [Missing stored plan](/components/terraform/planfiles#missing-stored-plan).
 
-Per-run overrides: `--verify-plan` (force `fail`) and `--no-verify-plan` (force `off`); CLI flags beat
+Per-run overrides: `--verify-plan` (force `fail`) and `--verify-plan=false` (force `off`); the CLI flag beats
 config, which beats the CI default. See
 [`atmos terraform deploy`](/cli/commands/terraform/deploy#automatic-plan-verification-in-ci) and
 [Planfile drift verification](/components/terraform/planfiles#drift-verification).

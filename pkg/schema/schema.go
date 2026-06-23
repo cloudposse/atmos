@@ -1269,7 +1269,7 @@ type ConfigAndStacksInfo struct {
 	PlanFile                string
 	StoredPlanFile          string
 	// VerifyPlanMode carries the explicit CLI planfile-verify override for `deploy`
-	// (--verify-plan => fail, --no-verify-plan => off; empty when neither is set).
+	// (--verify-plan => fail, --verify-plan=false => off; empty when the flag is unset).
 	// It is resolved against config + CI mode via planfile.ResolveVerifyMode at the
 	// before.terraform.deploy hook (download decision) and the RunE verify gate.
 	VerifyPlanMode             PlanfileVerifyMode

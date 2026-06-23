@@ -38,8 +38,10 @@ type TerraformRunOptions struct {
 	PlanFile         string
 	PlanSkipPlanfile bool
 	DeployRunInit    bool
-	VerifyPlan       bool
-	NoVerifyPlan     bool
+	// VerifyPlan is the tri-state planfile-verify override from --verify-plan:
+	// nil when the flag was not set, &true for --verify-plan(=true), &false for
+	// --verify-plan=false. nil falls back to config / the CI default.
+	VerifyPlan *bool
 
 	// Multi-component flags.
 	Query      string
@@ -60,17 +62,16 @@ type TerraformRunOptions struct {
 }
 
 // VerifyPlanCLIOverride returns the explicit planfile-verify mode requested via
-// CLI flags: off for --no-verify-plan, fail for --verify-plan, empty if neither.
-// --no-verify-plan wins when both are set.
+// the --verify-plan flag: fail for --verify-plan(=true), off for --verify-plan=false,
+// empty when the flag was not set (defer to config / the CI default).
 func (o *TerraformRunOptions) VerifyPlanCLIOverride() schema.PlanfileVerifyMode {
-	switch {
-	case o.NoVerifyPlan:
-		return schema.PlanfileVerifyOff
-	case o.VerifyPlan:
-		return schema.PlanfileVerifyFail
-	default:
+	if o.VerifyPlan == nil {
 		return ""
 	}
+	if *o.VerifyPlan {
+		return schema.PlanfileVerifyFail
+	}
+	return schema.PlanfileVerifyOff
 }
 
 // ParseTerraformRunOptions parses and validates shared terraform flags from Viper.
@@ -89,8 +90,6 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		PlanFile:                v.GetString("planfile"),
 		PlanSkipPlanfile:        v.GetBool("skip-planfile"),
 		DeployRunInit:           v.GetBool("deploy-run-init"),
-		VerifyPlan:              v.GetBool("verify-plan"),
-		NoVerifyPlan:            v.GetBool("no-verify-plan"),
 		Query:                   v.GetString("query"),
 		Components:              v.GetStringSlice("components"),
 		All:                     v.GetBool("all"),
@@ -102,6 +101,12 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		PlanHideNoChanges:       terraformPlanHideContains(v.GetStringSlice("hide"), "no-changes"),
 		PlanSummaryFile:         v.GetString("execution-summary-file"),
 		UploadStatus:            v.GetBool("upload-status"),
+	}
+	// Tri-state --verify-plan: only record a value when the flag (or its env var)
+	// was explicitly set, so an unset flag defers to config / the CI default.
+	if v.IsSet("verify-plan") {
+		verifyPlan := v.GetBool("verify-plan")
+		opts.VerifyPlan = &verifyPlan
 	}
 	if err := validateTerraformRunOptions(opts); err != nil {
 		return nil, err

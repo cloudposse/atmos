@@ -40,6 +40,10 @@ const ciHookFailedMsg = "CI hook execution failed"
 // logKeyComponent is the structured-log key for a component name.
 const logKeyComponent = "component"
 
+// verifyPlanFlagName is the tri-state planfile-verify flag (--verify-plan,
+// --verify-plan=false) read from Cobra and Viper.
+const verifyPlanFlagName = "verify-plan"
+
 // ciHookConfigInitFailedMsg is the log message emitted when CI-hook config init fails.
 const ciHookConfigInitFailedMsg = "CI hook config init failed"
 
@@ -162,26 +166,11 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		forceCIMode = viper.GetBool("ci")
 	}
 
-	// Read the verify-plan flags early (same pattern as --ci above). PreRunE runs
+	// Read the verify-plan flag early (same pattern as --ci above). PreRunE runs
 	// before RunE, so info is not yet populated by applyOptionsToInfo(). The
 	// before.terraform.deploy hook reads the resulting CLI override to decide
 	// whether to download the stored planfile (skipped when verification is off).
-	verifyPlan, _ := cmd_.Flags().GetBool("verify-plan")
-	if !verifyPlan {
-		verifyPlan = viper.GetBool("verify-plan")
-	}
-	noVerifyPlan, _ := cmd_.Flags().GetBool("no-verify-plan")
-	if !noVerifyPlan {
-		noVerifyPlan = viper.GetBool("no-verify-plan")
-	}
-	switch {
-	case noVerifyPlan:
-		info.VerifyPlanMode = schema.PlanfileVerifyOff
-	case verifyPlan:
-		info.VerifyPlanMode = schema.PlanfileVerifyFail
-	default:
-		info.VerifyPlanMode = ""
-	}
+	info.VerifyPlanMode = resolveVerifyPlanMode(cmd_, viper.GetViper())
 
 	// Run CI hooks based on component provider bindings.
 	// This is separate from user-defined hooks and runs automatically when CI is enabled.
@@ -198,6 +187,33 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	}
 
 	return nil
+}
+
+// resolveVerifyPlanMode resolves the explicit planfile-verify override from the
+// tri-state --verify-plan flag: fail for --verify-plan(=true), off for
+// --verify-plan=false, empty when the flag was not set (defer to config / the CI
+// default). It reads the Cobra flag first (CLI value) and falls back to Viper for
+// env-var support (ATMOS_TERRAFORM_VERIFY_PLAN), matching the --identity/--pager
+// tri-state pattern. During PreRunE the pflag is not yet bound to Viper, so
+// cmd.Flags().Changed covers the CLI and Viper covers env vars only.
+func resolveVerifyPlanMode(cmd *cobra.Command, v *viper.Viper) schema.PlanfileVerifyMode {
+	var set bool
+	var verify bool
+	switch {
+	case cmd != nil && cmd.Flags().Changed(verifyPlanFlagName):
+		set = true
+		verify, _ = cmd.Flags().GetBool(verifyPlanFlagName)
+	case v != nil && v.IsSet(verifyPlanFlagName):
+		set = true
+		verify = v.GetBool(verifyPlanFlagName)
+	}
+	if !set {
+		return ""
+	}
+	if verify {
+		return schema.PlanfileVerifyFail
+	}
+	return schema.PlanfileVerifyOff
 }
 
 // injectHookStoreAuthResolver wires the resolved auth manager from info into
