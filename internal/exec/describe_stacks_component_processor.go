@@ -2,7 +2,6 @@
 package exec
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -198,21 +197,11 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 	return result, nil
 }
 
-// componentAuthCacheKey keys the per-component auth cache by the parent chain plus a deterministic
-// JSON fingerprint of the auth section. Because identities are defined globally and only referenced
-// by components, "same auth section" is a safe, provable proxy for "same identity" — it never merges
-// components whose sections differ. Returns cacheable=false when the section can't be serialized
-// (e.g. non-string map keys), so the caller resolves without caching.
+// componentAuthCacheKey delegates to the shared buildComponentAuthCacheKey so the describe-stacks
+// processor and the nested terraform.state path key per-component AuthManagers identically and cannot
+// drift. See buildComponentAuthCacheKey in terraform_nested_auth_helper.go.
 func (p *describeStacksProcessor) componentAuthCacheKey(authSection map[string]any) (string, bool) {
-	fingerprint, err := json.Marshal(authSection)
-	if err != nil {
-		return "", false
-	}
-	var parentChain string
-	if p.authManager != nil {
-		parentChain = strings.Join(p.authManager.GetChain(), ">")
-	}
-	return parentChain + "\x00" + string(fingerprint), true
+	return buildComponentAuthCacheKey(p.authManager, authSection)
 }
 
 // cacheComponentAuthManager stores a resolved manager, lazily creating the map so struct-literal
@@ -449,7 +438,15 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 
 	// Process YAML functions.
 	if p.processYamlFunctions {
-		componentSection, err = processComponentSectionYAMLFunctions(p.atmosConfig, &info, componentSection, p.skip)
+		// A component disabled via metadata.enabled has no deployed state, so its
+		// !terraform.state / !terraform.output must not be resolved — the backend read would
+		// fail with "state not provisioned". Gate on metadata.enabled only, independent of
+		// vars.enabled. See docs/fixes/2026-06-22-describe-respect-metadata-enabled.md.
+		skip := p.skip
+		if !isComponentEnabled(secs.metadata, componentName) {
+			skip = disabledComponentTerraformSkip(p.skip)
+		}
+		componentSection, err = processComponentSectionYAMLFunctions(p.atmosConfig, &info, componentSection, skip)
 		if err != nil {
 			return err
 		}
@@ -469,6 +466,18 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 // ---------------------------------------------------------------------------
 // Pure helper functions – independently unit-testable
 // ---------------------------------------------------------------------------
+
+// disabledComponentTerraformSkip returns baseSkip plus the terraform state/output YAML functions so a
+// component disabled via metadata.enabled keeps its !terraform.* values unresolved (no backend read).
+// The names are bare (no leading "!") to match skipFunc, which trims the tag prefix before comparing.
+// baseSkip is cloned so the processor's shared skip slice is never mutated.
+func disabledComponentTerraformSkip(baseSkip []string) []string {
+	return append(
+		slices.Clone(baseSkip),
+		strings.TrimPrefix(u.AtmosYamlFuncTerraformState, "!"),
+		strings.TrimPrefix(u.AtmosYamlFuncTerraformOutput, "!"),
+	)
+}
 
 // extractDescribeComponentSections returns all standard Atmos sections from a component map,
 // using empty maps (or empty string) as defaults when a section is absent.
