@@ -2,7 +2,6 @@
 package exec
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -198,21 +197,11 @@ func (p *describeStacksProcessor) resolveComponentAuthManager(
 	return result, nil
 }
 
-// componentAuthCacheKey keys the per-component auth cache by the parent chain plus a deterministic
-// JSON fingerprint of the auth section. Because identities are defined globally and only referenced
-// by components, "same auth section" is a safe, provable proxy for "same identity" — it never merges
-// components whose sections differ. Returns cacheable=false when the section can't be serialized
-// (e.g. non-string map keys), so the caller resolves without caching.
+// componentAuthCacheKey delegates to the shared buildComponentAuthCacheKey so the describe-stacks
+// processor and the nested terraform.state path key per-component AuthManagers identically and cannot
+// drift. See buildComponentAuthCacheKey in terraform_nested_auth_helper.go.
 func (p *describeStacksProcessor) componentAuthCacheKey(authSection map[string]any) (string, bool) {
-	fingerprint, err := json.Marshal(authSection)
-	if err != nil {
-		return "", false
-	}
-	var parentChain string
-	if p.authManager != nil {
-		parentChain = strings.Join(p.authManager.GetChain(), ">")
-	}
-	return parentChain + "\x00" + string(fingerprint), true
+	return buildComponentAuthCacheKey(p.authManager, authSection)
 }
 
 // cacheComponentAuthManager stores a resolved manager, lazily creating the map so struct-literal
