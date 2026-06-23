@@ -25,14 +25,16 @@ type NamedConfig struct {
 	Component     string
 
 	// Container spec.
-	Image   string
-	Command []string
-	Ports   []PortBinding
-	Mounts  []Mount
-	Env     map[string]string
-	User    string
-	Labels  map[string]string // extra labels, merged over the canonical instance labels
-	RunArgs []string
+	Image       string
+	Command     []string
+	Ports       []PortBinding
+	Mounts      []Mount
+	Env         map[string]string
+	User        string
+	Labels      map[string]string // extra labels, merged over the canonical instance labels
+	RunArgs     []string
+	Restart     *RestartPolicy // restart policy (nil = runtime default)
+	HealthCheck *HealthCheck   // health check (nil = inherit image healthcheck)
 
 	// Runtime selection and behavior.
 	RuntimeName      string   // preferred runtime: "docker" | "podman" | "" (auto-detect)
@@ -183,15 +185,17 @@ func buildNamedCreateConfig(config *NamedConfig, name string) *CreateConfig {
 	}
 
 	return &CreateConfig{
-		Name:    name,
-		Image:   config.Image,
-		Command: config.Command,
-		Mounts:  config.Mounts,
-		Ports:   config.Ports,
-		Env:     config.Env,
-		User:    config.User,
-		Labels:  labels,
-		RunArgs: config.RunArgs,
+		Name:        name,
+		Image:       config.Image,
+		Command:     config.Command,
+		Mounts:      config.Mounts,
+		Ports:       config.Ports,
+		Env:         config.Env,
+		User:        config.User,
+		Labels:      labels,
+		RunArgs:     config.RunArgs,
+		Restart:     config.Restart,
+		HealthCheck: config.HealthCheck,
 	}
 }
 

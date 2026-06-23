@@ -134,7 +134,7 @@ func noteFollowStopped() {
 }
 
 // logsInfoFor returns a per-target copy of info scoped to a single component.
-func logsInfoFor(info *schema.ConfigAndStacksInfo, t instanceRow) schema.ConfigAndStacksInfo {
+func logsInfoFor(info *schema.ConfigAndStacksInfo, t *instanceRow) schema.ConfigAndStacksInfo {
 	itemInfo := *info
 	itemInfo.ComponentFromArg = t.component
 	itemInfo.Component = t.component
@@ -148,7 +148,7 @@ func logsInfoFor(info *schema.ConfigAndStacksInfo, t instanceRow) schema.ConfigA
 func streamLogsSequential(ctx context.Context, info *schema.ConfigAndStacksInfo, opts logsOptions, targets []instanceRow) error {
 	var errs []error
 	for _, t := range targets {
-		itemInfo := logsInfoFor(info, t)
+		itemInfo := logsInfoFor(info, &t)
 		ui.Infof("==> %s/%s <==", t.stack, t.component)
 		if err := streamSingleLogs(ctx, &itemInfo, opts); err != nil {
 			ui.Errorf("%s/%s: logs failed: %v", t.stack, t.component, err)
@@ -204,7 +204,7 @@ func streamLogsConcurrent(ctx context.Context, info *schema.ConfigAndStacksInfo,
 	width := maxComponentNameLen(targets)
 
 	for i, t := range targets {
-		itemInfo := logsInfoFor(info, t)
+		itemInfo := logsInfoFor(info, &t)
 		d, err := discover(ctx, &itemInfo)
 		if err != nil {
 			// A component that has no running container is skipped, not fatal.

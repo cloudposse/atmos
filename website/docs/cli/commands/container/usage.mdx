@@ -144,6 +144,64 @@ Notes:
 Authenticate to each registry first (e.g. via `--identity` for cloud registries, or the runtime's own
 `docker/podman login`).
 
+### Health checks and restart policies
+
+`run.restart` and `run.healthcheck` are **first-class settings** that mirror Docker Compose, so you no
+longer need to hand-write `run.run_args`:
+
+```yaml
+components:
+  container:
+    api:
+      image: nginx:alpine
+      run:
+        # Restart policy → docker/podman --restart
+        restart:
+          policy: unless-stopped        # no | always | on-failure | unless-stopped
+          max_retries: 5                # only used with the `on-failure` policy
+        # Health check → docker/podman --health-* (mirrors Compose `healthcheck`)
+        healthcheck:
+          test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+          interval: 30s
+          timeout: 5s
+          retries: 3
+          start_period: 10s
+          start_interval: 5s
+```
+
+**`test`** follows Compose semantics — a string, or a list whose **first element** selects the form:
+
+<dl>
+  <dt>`["CMD", "executable", "arg", …]`</dt>
+  <dd>Run the command directly. (The CLI runs `--health-cmd` through the container's shell, so the args
+  are joined into a shell command; for true exec-form, bake a `HEALTHCHECK` into the image.)</dd>
+
+  <dt>`["CMD-SHELL", "full shell command"]` or a bare string</dt>
+  <dd>Run the string with the container's default shell (`/bin/sh -c`). `test: "curl -f http://localhost || exit 1"`
+  is shorthand for `test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]`.</dd>
+
+  <dt>`["NONE"]` (or `disable: true`)</dt>
+  <dd>Disable any health check inherited from the image (`--no-healthcheck`).</dd>
+</dl>
+
+Field-to-flag mapping:
+
+| Field | Flag |
+|-------|------|
+| `restart.policy` (+ `max_retries`) | `--restart=<policy>[:<max_retries>]` |
+| `healthcheck.test` | `--health-cmd` (or `--no-healthcheck`) |
+| `healthcheck.interval` | `--health-interval` |
+| `healthcheck.timeout` | `--health-timeout` |
+| `healthcheck.retries` | `--health-retries` |
+| `healthcheck.start_period` | `--health-start-period` |
+| `healthcheck.start_interval` | `--health-start-interval` |
+
+Once a health check is configured, `atmos container ps` and `atmos container list` show the resulting
+state in a **`HEALTH`** column (`healthy` / `unhealthy` / `starting`, or `-` when no check is defined).
+Atmos validates the restart policy and health-check durations up front, so a typo surfaces as a clear
+error instead of an opaque runtime failure. For anything not modeled here, `run.run_args` remains the
+raw passthrough to `docker/podman create`.
+
 ### Runtime selection
 
 The container runtime is auto-detected (Docker first, then Podman). Override it globally in `atmos.yaml`:
@@ -198,7 +256,9 @@ Both connect you to a running container, but they are not the same:
 ## Running state
 
 `atmos container list` shows the running state of every container component — a green ● dot on a TTY,
-and `running`/`stopped`/`unknown` text otherwise. When no container runtime is available, rows are
+and `running`/`stopped`/`unknown` text otherwise. A **`HEALTH`** column reports each container's health
+(`healthy` / `unhealthy` / `starting`, or `-` when the component defines no
+[health check](#health-checks-and-restart-policies)). When no container runtime is available, rows are
 reported as `unknown` rather than failing the listing. (Container running state lives here, not in the
 generic `atmos list components`, which treats all component kinds uniformly.)
 

@@ -152,9 +152,9 @@ func (p *PodmanRuntime) Remove(ctx context.Context, containerID string, force bo
 
 // findContainerByIDOrName searches for a container in the given list by ID or name.
 func findContainerByIDOrName(containers []Info, searchID string) (*Info, error) {
-	for _, container := range containers {
-		if container.ID == searchID || container.Name == searchID {
-			return &container, nil
+	for i := range containers {
+		if containers[i].ID == searchID || containers[i].Name == searchID {
+			return &containers[i], nil
 		}
 	}
 	return nil, fmt.Errorf("%w: %s", errUtils.ErrContainerNotFound, searchID)
@@ -233,6 +233,7 @@ func parsePodmanContainer(containerJSON map[string]interface{}) Info {
 		Name:   name,
 		Image:  getString(containerJSON, "Image"),
 		Status: getString(containerJSON, "State"),
+		Health: podmanHealth(containerJSON),
 	}
 
 	if labels, ok := containerJSON["Labels"].(map[string]interface{}); ok {
@@ -240,6 +241,16 @@ func parsePodmanContainer(containerJSON map[string]interface{}) Info {
 	}
 
 	return info
+}
+
+// podmanHealth extracts the health state from a podman ps record. Podman embeds
+// the health token in the human `.Status` string (like docker) and, on newer
+// versions, exposes a machine-readable `.Health` field; both are checked.
+func podmanHealth(containerJSON map[string]interface{}) string {
+	if h := parseHealth(getString(containerJSON, "Status")); h != "" {
+		return h
+	}
+	return normalizeHealth(getString(containerJSON, "Health"))
 }
 
 func extractPodmanName(containerJSON map[string]interface{}) string {

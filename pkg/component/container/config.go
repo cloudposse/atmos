@@ -3,6 +3,7 @@ package container
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/mitchellh/mapstructure"
 
@@ -195,6 +196,123 @@ func (s *ContainerSpec) Ports() []ctr.PortBinding {
 		})
 	}
 	return ports
+}
+
+// RestartPolicy maps the run restart spec onto a runtime RestartPolicy, or nil
+// when none is configured (the runtime then uses its default of `no`).
+func (s *ContainerSpec) RestartPolicy() *ctr.RestartPolicy {
+	defer perf.Track(nil, "container.ContainerSpec.RestartPolicy")()
+
+	if s.Run == nil || s.Run.Restart == nil || s.Run.Restart.Policy == "" {
+		return nil
+	}
+	return &ctr.RestartPolicy{
+		Policy:     s.Run.Restart.Policy,
+		MaxRetries: s.Run.Restart.MaxRetries,
+	}
+}
+
+// HealthCheck maps the run healthcheck spec onto a runtime HealthCheck, resolving
+// the Compose `test` form (a bare string or a list whose first element is `NONE`,
+// `CMD`, or `CMD-SHELL`) into a single shell command. Returns nil when no
+// healthcheck is configured (the container then inherits any image healthcheck).
+func (s *ContainerSpec) HealthCheck() *ctr.HealthCheck {
+	defer perf.Track(nil, "container.ContainerSpec.HealthCheck")()
+
+	if s.Run == nil || s.Run.HealthCheck == nil {
+		return nil
+	}
+	hc := s.Run.HealthCheck
+	cmd, disable := resolveHealthTest(hc.Test)
+	if hc.Disable {
+		disable = true
+	}
+	if disable {
+		return &ctr.HealthCheck{Disable: true}
+	}
+	return &ctr.HealthCheck{
+		Cmd:           cmd,
+		Interval:      hc.Interval,
+		Timeout:       hc.Timeout,
+		Retries:       hc.Retries,
+		StartPeriod:   hc.StartPeriod,
+		StartInterval: hc.StartInterval,
+	}
+}
+
+// resolveHealthTest resolves a Compose `test` value into a single shell command
+// for `--health-cmd`. The leading `NONE`/`CMD`/`CMD-SHELL` token is interpreted
+// per Compose: `NONE` disables the check; `CMD` and `CMD-SHELL` strip the prefix;
+// an unprefixed value (or bare string) is treated as `CMD-SHELL`. The CLI runs
+// `--health-cmd` via the shell, so `CMD` exec-form args are joined with spaces.
+func resolveHealthTest(test []string) (cmd string, disable bool) {
+	if len(test) == 0 {
+		return "", false
+	}
+	switch {
+	case strings.EqualFold(test[0], "NONE"):
+		return "", true
+	case strings.EqualFold(test[0], "CMD"), strings.EqualFold(test[0], "CMD-SHELL"):
+		return strings.Join(test[1:], " "), false
+	default:
+		return strings.Join(test, " "), false
+	}
+}
+
+// validRestartPolicies is the set of restart policies accepted by docker/podman.
+var validRestartPolicies = map[string]struct{}{
+	"no":             {},
+	"always":         {},
+	"on-failure":     {},
+	"unless-stopped": {},
+}
+
+// ValidateRun checks the run restart/healthcheck settings up front so a
+// misconfiguration surfaces as a friendly Atmos error instead of an opaque
+// docker/podman failure at create time. It is a no-op when `run` is unset.
+func (s *ContainerSpec) ValidateRun() error {
+	defer perf.Track(nil, "container.ContainerSpec.ValidateRun")()
+
+	if s.Run == nil {
+		return nil
+	}
+	if r := s.Run.Restart; r != nil && r.Policy != "" {
+		if _, ok := validRestartPolicies[r.Policy]; !ok {
+			return fmt.Errorf("%w: %q (want one of: no, always, on-failure, unless-stopped)",
+				errUtils.ErrInvalidContainerRestartPolicy, r.Policy)
+		}
+		if r.MaxRetries < 0 {
+			return fmt.Errorf("%w: max_retries must not be negative", errUtils.ErrInvalidContainerRestartPolicy)
+		}
+	}
+	return s.validateHealthCheck()
+}
+
+// validateHealthCheck validates the healthcheck durations and retry count.
+func (s *ContainerSpec) validateHealthCheck() error {
+	hc := s.Run.HealthCheck
+	if hc == nil {
+		return nil
+	}
+	if hc.Retries < 0 {
+		return fmt.Errorf("%w: retries must not be negative", errUtils.ErrInvalidContainerHealthCheck)
+	}
+	durations := map[string]string{
+		"interval":       hc.Interval,
+		"timeout":        hc.Timeout,
+		"start_period":   hc.StartPeriod,
+		"start_interval": hc.StartInterval,
+	}
+	for field, value := range durations {
+		if value == "" {
+			continue
+		}
+		if _, err := time.ParseDuration(value); err != nil {
+			return fmt.Errorf("%w: %s %q is not a valid duration (e.g. 30s, 1m30s): %w",
+				errUtils.ErrInvalidContainerHealthCheck, field, value, err)
+		}
+	}
+	return nil
 }
 
 // Mounts maps the run mount specs onto runtime Mounts.

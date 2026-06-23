@@ -25,6 +25,19 @@ components:
       image: nginx:alpine
       env:
         NGINX_ENTRYPOINT_QUIET_LOGS: "1"
+      run:
+        # Keep the container running across failures (Docker Compose `restart`).
+        restart:
+          policy: unless-stopped
+        # First-class health check, mirroring the Docker Compose `healthcheck`
+        # shape. nginx:alpine ships busybox `wget`, so this probes the web root.
+        # `atmos container ps`/`list` surface the resulting HEALTH state.
+        healthcheck:
+          test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+          interval: 30s
+          timeout: 5s
+          retries: 3
+          start_period: 10s
 
     # A background worker built from the local Dockerfile. `build` produces the
     # image referenced by `image`; `run.command` keeps it alive.

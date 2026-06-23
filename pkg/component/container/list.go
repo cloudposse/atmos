@@ -36,6 +36,7 @@ type instanceRow struct {
 	component string
 	image     string
 	status    string // running | stopped | unknown
+	health    string // healthy | unhealthy | starting | "" (no healthcheck)
 	running   bool
 }
 
@@ -165,6 +166,10 @@ func annotateRunningState(ctx context.Context, runtime ctr.Runtime, rows []insta
 		case found && ctr.IsContainerRunning(in.Status):
 			rows[i].status = statusRunning
 			rows[i].running = true
+			rows[i].health = in.Health
+		case found:
+			rows[i].status = statusStopped
+			rows[i].health = in.Health
 		default:
 			rows[i].status = statusStopped
 		}
@@ -183,9 +188,9 @@ func renderInstanceTable(rows []instanceRow) error {
 
 	var buf bytes.Buffer
 	w := tabwriter.NewWriter(&buf, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "STACK\tCOMPONENT\tIMAGE\tSTATUS")
+	fmt.Fprintln(w, "STACK\tCOMPONENT\tIMAGE\tSTATUS\tHEALTH")
 	for _, row := range rows {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", row.stack, row.component, row.image, row.status)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", row.stack, row.component, row.image, row.status, healthCell(row.health))
 	}
 	if err := w.Flush(); err != nil {
 		return err
@@ -206,6 +211,37 @@ func renderInstanceTable(rows []instanceRow) error {
 		}
 	}
 	return data.Write(out.String())
+}
+
+// healthCell renders the HEALTH column value, showing a dash when the container
+// has no health check so the column stays aligned and machine-readable.
+func healthCell(health string) string {
+	if health == "" {
+		return "-"
+	}
+	return health
+}
+
+// ExecutePs reports the running state of a single component's container,
+// including its health when a health check is configured. The no-argument
+// listing is handled by ExecuteList.
+func ExecutePs(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "container.ExecutePs")()
+
+	r, runtime, err := r2(ctx, info)
+	if err != nil {
+		return err
+	}
+	in, found, err := ctr.FindInstance(ctx, runtime, r.stack, cfg.ContainerComponentType, r.component)
+	if err != nil {
+		return err
+	}
+	if !found {
+		ui.Infof("%s is not running", r.component)
+		return nil
+	}
+	ui.Writef("%s\t%s\t%s\t%s\t%s\n", in.Name, in.Image, in.Status, healthCell(in.Health), in.ID)
+	return nil
 }
 
 // statusDot returns a colored dot for a TTY (green=running, gray otherwise) or a

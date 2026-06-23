@@ -118,11 +118,34 @@ type CreateConfig struct {
 
 	// Runtime configuration
 	RunArgs         []string
-	OverrideCommand bool     // Whether to override default command with sleep infinity
-	Init            bool     // Whether to use init process
-	Privileged      bool     // Run in privileged mode
-	CapAdd          []string // Linux capabilities to add
-	SecurityOpt     []string // Security options
+	OverrideCommand bool           // Whether to override default command with sleep infinity
+	Init            bool           // Whether to use init process
+	Privileged      bool           // Run in privileged mode
+	CapAdd          []string       // Linux capabilities to add
+	SecurityOpt     []string       // Security options
+	Restart         *RestartPolicy // Restart policy (nil = runtime default)
+	HealthCheck     *HealthCheck   // Health check (nil = inherit image healthcheck)
+}
+
+// RestartPolicy is the resolved restart policy for a long-lived container.
+// It maps to the docker/podman `--restart` flag (`<policy>[:<max_retries>]`).
+type RestartPolicy struct {
+	Policy     string // no, always, on-failure, unless-stopped.
+	MaxRetries int    // on-failure only.
+}
+
+// HealthCheck is the resolved health check for a container. Cmd is the shell
+// command run by `--health-cmd`; when Disable is set the container is created
+// with `--no-healthcheck` and the remaining fields are ignored. Duration fields
+// are Go duration strings forwarded verbatim to the runtime.
+type HealthCheck struct {
+	Cmd           string // shell command for --health-cmd ("" when Disable).
+	Interval      string
+	Timeout       string
+	Retries       int
+	StartPeriod   string
+	StartInterval string
+	Disable       bool
 }
 
 // Mount represents a volume mount.
@@ -146,6 +169,7 @@ type Info struct {
 	Name    string
 	Image   string
 	Status  string // running, stopped, exited, etc.
+	Health  string // healthy, unhealthy, starting, or "" when no healthcheck.
 	Created time.Time
 	Ports   []PortBinding
 	Labels  map[string]string

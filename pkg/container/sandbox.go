@@ -218,7 +218,8 @@ func cleanupStaleWorkflowSandboxes(ctx context.Context, runtime Runtime, config 
 	if err != nil {
 		return
 	}
-	for _, info := range containers {
+	for i := range containers {
+		info := &containers[i]
 		if !matchesSandboxLabels(info.Labels, config) || isContainerRunning(info.Status) {
 			continue
 		}

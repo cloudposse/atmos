@@ -441,8 +441,47 @@
             },
             "run": {
               "type": "object",
-              "description": "Container run configuration (command, ports, mounts, user, etc.).",
-              "additionalProperties": true
+              "description": "Container run configuration (command, ports, mounts, user, restart, healthcheck, etc.).",
+              "additionalProperties": true,
+              "properties": {
+                "restart": {
+                  "type": "object",
+                  "description": "Restart policy (maps to docker/podman --restart).",
+                  "additionalProperties": false,
+                  "properties": {
+                    "policy": {
+                      "type": "string",
+                      "description": "Restart policy.",
+                      "enum": ["no", "always", "on-failure", "unless-stopped"]
+                    },
+                    "max_retries": {
+                      "type": "integer",
+                      "description": "Maximum restart attempts (only used with the `on-failure` policy).",
+                      "minimum": 0
+                    }
+                  }
+                },
+                "healthcheck": {
+                  "type": "object",
+                  "description": "Health check, mirroring the Docker Compose `healthcheck` shape (maps to docker/podman --health-* flags).",
+                  "additionalProperties": false,
+                  "properties": {
+                    "test": {
+                      "description": "Health command. A string (run via the shell, equivalent to CMD-SHELL) or a list whose first element is NONE, CMD, or CMD-SHELL.",
+                      "oneOf": [
+                        { "type": "string" },
+                        { "type": "array", "items": { "type": "string" } }
+                      ]
+                    },
+                    "interval": { "type": "string", "description": "Time between checks (e.g. 30s, 1m30s)." },
+                    "timeout": { "type": "string", "description": "Time a check may take before it is considered failed (e.g. 10s)." },
+                    "retries": { "type": "integer", "description": "Consecutive failures before the container is marked unhealthy.", "minimum": 0 },
+                    "start_period": { "type": "string", "description": "Grace period before failures are counted (e.g. 40s)." },
+                    "start_interval": { "type": "string", "description": "Time between checks during the start period (e.g. 5s)." },
+                    "disable": { "type": "boolean", "description": "Disable any health check baked into the image." }
+                  }
+                }
+              }
             },
             "env": {
               "$ref": "#/definitions/env"

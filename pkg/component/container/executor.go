@@ -86,6 +86,11 @@ func prepare(info *schema.ConfigAndStacksInfo) (*resolved, error) {
 		return nil, err
 	}
 
+	// Surface invalid restart/healthcheck settings up front as friendly errors.
+	if err := spec.ValidateRun(); err != nil {
+		return nil, err
+	}
+
 	env := envListToMap(info.ComponentEnvList)
 	return &resolved{
 		atmosConfig: atmosConfig,
@@ -276,6 +281,8 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		Mounts:        r.spec.Mounts(),
 		Env:           r.env,
 		User:          r.runUser(),
+		Restart:       r.spec.RestartPolicy(),
+		HealthCheck:   r.spec.HealthCheck(),
 	}
 	if r.dryRun {
 		ui.Infof("[dry-run] up %s as %s", image, ctr.RuntimeName(r.stack, cfg.ContainerComponentType, r.component))
@@ -319,26 +326,6 @@ func ExecuteDown(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		fmt.Sprintf("%s is down", r.component),
 		func() error { return ctr.Down(ctx, runtime, r.stack, cfg.ContainerComponentType, r.component) },
 	)
-}
-
-// ExecutePs reports the running state of the component's container.
-func ExecutePs(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
-	defer perf.Track(nil, "container.ExecutePs")()
-
-	r, runtime, err := r2(ctx, info)
-	if err != nil {
-		return err
-	}
-	in, found, err := ctr.FindInstance(ctx, runtime, r.stack, cfg.ContainerComponentType, r.component)
-	if err != nil {
-		return err
-	}
-	if !found {
-		ui.Infof("%s is not running", r.component)
-		return nil
-	}
-	ui.Writef("%s\t%s\t%s\t%s\n", in.Name, in.Image, in.Status, in.ID)
-	return nil
 }
 
 // ExecuteLogs streams logs from a single component's container (no follow, all

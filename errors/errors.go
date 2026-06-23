@@ -906,6 +906,10 @@ var (
 	ErrNoContainerComponentSelected = errors.New("no container component selected")
 	ErrContainerComponentWithAll    = errors.New("cannot combine a component argument with --all")
 
+	// Container run configuration errors.
+	ErrInvalidContainerRestartPolicy = errors.New("invalid container restart policy")
+	ErrInvalidContainerHealthCheck   = errors.New("invalid container healthcheck")
+
 	// Logout errors.
 	ErrLogoutFailed                         = errors.New("logout failed")
 	ErrPartialLogout                        = errors.New("partial logout")

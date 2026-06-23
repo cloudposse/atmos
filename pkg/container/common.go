@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -32,10 +33,59 @@ func buildCreateArgs(config *CreateConfig) []string {
 	args := []string{"create", "--name", config.Name, "-it"}
 
 	args = addRuntimeFlags(args, config)
+	args = addHealthAndRestart(args, config)
 	args = addMetadata(args, config)
 	args = addResourceBindings(args, config)
 	args = addImageAndCommand(args, config)
 
+	return args
+}
+
+// addHealthAndRestart emits the `--restart` and health-check flags. It is a no-op
+// when neither is configured, so containers without these settings keep their
+// previous argument layout. Shared between Docker and Podman, which accept the
+// same `--restart` / `--health-*` / `--no-healthcheck` syntax.
+func addHealthAndRestart(args []string, config *CreateConfig) []string {
+	args = addRestartFlag(args, config.Restart)
+	return addHealthFlags(args, config.HealthCheck)
+}
+
+// addRestartFlag emits `--restart=<policy>[:<max_retries>]` (max_retries applies
+// only to the `on-failure` policy).
+func addRestartFlag(args []string, rp *RestartPolicy) []string {
+	if rp == nil || rp.Policy == "" {
+		return args
+	}
+	value := rp.Policy
+	if rp.Policy == "on-failure" && rp.MaxRetries > 0 {
+		value = fmt.Sprintf("on-failure:%d", rp.MaxRetries)
+	}
+	return append(args, "--restart", value)
+}
+
+// addHealthFlags emits `--no-healthcheck` (when disabled) or the set of
+// `--health-*` flags for the configured fields.
+func addHealthFlags(args []string, hc *HealthCheck) []string {
+	if hc == nil {
+		return args
+	}
+	if hc.Disable {
+		return append(args, "--no-healthcheck")
+	}
+	for _, f := range []struct{ flag, value string }{
+		{"--health-cmd", hc.Cmd},
+		{"--health-interval", hc.Interval},
+		{"--health-timeout", hc.Timeout},
+		{"--health-start-period", hc.StartPeriod},
+		{"--health-start-interval", hc.StartInterval},
+	} {
+		if f.value != "" {
+			args = append(args, f.flag, f.value)
+		}
+	}
+	if hc.Retries > 0 {
+		args = append(args, "--health-retries", strconv.Itoa(hc.Retries))
+	}
 	return args
 }
 
@@ -117,6 +167,41 @@ func addImageAndCommand(args []string, config *CreateConfig) []string {
 	}
 
 	return args
+}
+
+// parseHealth extracts a container's health state from a human-readable status
+// string (the `docker ps` / `podman ps` `.Status` form, e.g. "Up 2 hours
+// (healthy)" or "Up 3s (health: starting)"). It returns "healthy", "unhealthy",
+// "starting", or "" when the container has no health check. Free to call — the
+// status string is already fetched during List, so it adds no runtime call.
+func parseHealth(status string) string {
+	s := strings.ToLower(status)
+	switch {
+	case strings.Contains(s, "(unhealthy)"):
+		return "unhealthy"
+	case strings.Contains(s, "(healthy)"):
+		return "healthy"
+	case strings.Contains(s, "health: starting"), strings.Contains(s, "(starting)"):
+		return "starting"
+	default:
+		return ""
+	}
+}
+
+// normalizeHealth maps a machine-readable health value (the inspect
+// `.State.Health.Status` form, e.g. "healthy"/"none") to the canonical Atmos
+// health token, returning "" for "none" or anything unrecognized.
+func normalizeHealth(health string) string {
+	switch strings.ToLower(strings.TrimSpace(health)) {
+	case "healthy":
+		return "healthy"
+	case "unhealthy":
+		return "unhealthy"
+	case "starting":
+		return "starting"
+	default:
+		return ""
+	}
 }
 
 // buildExecArgs builds the common arguments for container exec.
