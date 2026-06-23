@@ -66,12 +66,14 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/hashicorp/go-version"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Constants for git operations.
@@ -292,16 +294,67 @@ func getRunCommand(cmd *exec.Cmd) error {
 	return fmt.Errorf("%w: %s: %s", errUtils.ErrGitCommandFailed, cmd.Path, buf.String())
 }
 
+// Bounded retry policy for brokered git operations. A just-minted GitHub App installation
+// token can briefly 401 before GitHub propagates it across its git frontends; the atmos-pro
+// server self-heals its own API calls on 401, and these give the CLI git path the same
+// tolerance — bounded to the propagation window, not minutes.
+const (
+	// The total time cap for retrying transient auth failures.
+	stsAuthRetryWindow = 30 * time.Second
+	// The first backoff delay.
+	stsAuthRetryInitialDelay = 1 * time.Second
+	// The per-attempt backoff delay cap.
+	stsAuthRetryMaxDelay = 8 * time.Second
+	// The exponential backoff growth factor.
+	stsAuthRetryMultiplier = 2.0
+	// The jitter fraction that randomizes delays to avoid synchronized retries.
+	stsAuthRetryJitter = 0.2
+)
+
+// defaultBrokeredAuthRetryConfig is the retry policy used for brokered git operations when
+// the source has no explicit `retry:` config. It is bounded by elapsed time (not just an
+// attempt count) with exponential backoff and jitter so we keep retrying across the short
+// post-mint propagation window without hammering GitHub.
+func defaultBrokeredAuthRetryConfig() *schema.RetryConfig {
+	initialDelay := stsAuthRetryInitialDelay
+	maxDelay := stsAuthRetryMaxDelay
+	maxElapsed := stsAuthRetryWindow
+	jitter := stsAuthRetryJitter
+	multiplier := stsAuthRetryMultiplier
+	return &schema.RetryConfig{
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+		MaxElapsedTime:  &maxElapsed,
+		RandomJitter:    &jitter,
+		Multiplier:      &multiplier,
+		// MaxAttempts left nil => unlimited attempts, bounded by MaxElapsedTime.
+	}
+}
+
 // getRunCommandWithRetry wraps getRunCommand with retry logic for transient errors.
 func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.Cmd) error {
+	cfg := g.RetryConfig
+	shouldRetry := isRetryableGitError
+
+	if g.RetryAuthErrors {
+		// Atmos brokered a fresh token this process: also tolerate the brief post-mint
+		// window where GitHub may 401 a valid token. Fall back to a bounded default policy
+		// when the source did not configure its own `retry:`.
+		shouldRetry = isRetryableGitOrAuthError
+		if cfg == nil {
+			cfg = defaultBrokeredAuthRetryConfig()
+		}
+	}
+
 	// Skip retry if no config, or if MaxAttempts is explicitly set to 1 (single attempt).
 	// nil MaxAttempts means unlimited retries, so we should proceed with retry logic.
-	if g.RetryConfig == nil || (g.RetryConfig.MaxAttempts != nil && *g.RetryConfig.MaxAttempts == 1) {
+	if cfg == nil || (cfg.MaxAttempts != nil && *cfg.MaxAttempts == 1) {
 		return getRunCommand(cmd)
 	}
 
 	attempt := 0
-	return retry.WithPredicate(ctx, g.RetryConfig, func() error {
+	err := retry.WithPredicate(ctx, cfg, func() error {
 		attempt++
 		// exec.Cmd can only run once, so we need to recreate it for retries.
 		if attempt > 1 {
@@ -314,7 +367,15 @@ func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.
 			return getRunCommand(newCmd)
 		}
 		return getRunCommand(cmd)
-	}, isRetryableGitError)
+	}, shouldRetry)
+
+	if err != nil && g.RetryAuthErrors && matchesAuthFailure(err) {
+		// We brokered the token and still got rejected after the bounded window: this is no
+		// longer "not propagated yet" — most likely the STS trust policy does not grant this
+		// repo, or the token was revoked. Surface it instead of leaving a bare git error.
+		log.Error("GitHub token still rejected after the brokered-auth retry window; verify the STS trust policy grants this repository and that the token was not revoked", "error", err)
+	}
+	return err
 }
 
 // isRetryableGitError determines if a git error should trigger a retry.
@@ -350,6 +411,49 @@ func isRetryableGitError(err error) bool {
 			log.Warn("Retryable git error detected", "error", err)
 			return true
 		}
+	}
+	return false
+}
+
+// authFailurePatterns are git stderr substrings that indicate the remote rejected the
+// credentials. These are terminal by default (see isRetryableGitError) and only become
+// retryable when Atmos brokered a fresh token this process (isRetryableGitOrAuthError),
+// because a just-minted GitHub token can momentarily 401 before it propagates.
+var authFailurePatterns = []string{
+	"authentication failed",
+	"could not read username",
+	"could not read password",
+	"terminal prompts disabled",
+	"invalid username or password",
+}
+
+// matchesAuthFailure reports whether err looks like a git credential rejection. It does not
+// log, so it is safe to call both inside a retry predicate and afterward for reporting.
+func matchesAuthFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+	for _, pattern := range authFailurePatterns {
+		if strings.Contains(errStr, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// isRetryableGitOrAuthError extends isRetryableGitError to also treat authentication
+// failures as retryable. It is used ONLY when Atmos brokered a fresh token this process:
+// the token is valid but may not have propagated across GitHub's git frontends yet, so a
+// bounded retry (see defaultBrokeredAuthRetryConfig) clears the window. For ordinary static
+// credentials the default predicate keeps auth failures terminal so they fail fast.
+func isRetryableGitOrAuthError(err error) bool {
+	if isRetryableGitError(err) {
+		return true
+	}
+	if matchesAuthFailure(err) {
+		log.Warn("Transient auth failure on a brokered GitHub token; retrying (the freshly minted token may not have propagated yet)", "error", err)
+		return true
 	}
 	return false
 }
