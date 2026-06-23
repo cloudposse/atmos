@@ -28,8 +28,9 @@ var enumerateScopesFn = enumerateSecretScopes
 
 // enumerateSecretScopes lists every (stack, component) instance that declares secrets, narrowed by
 // the given facets (an empty Stack/Component means "all"). It resolves the stack manifests once via
-// describe-stacks with `!secret` resolution skipped — declarations and their derived scope are
-// available without retrieving any secret values.
+// describe-stacks with auth disabled and all credentialed read functions skipped (see
+// credentialFreeSkip) — declarations and their derived scope are available without retrieving any
+// secret values or reading any remote backend.
 func enumerateSecretScopes(facet secretScope) ([]scopeEntry, *schema.AtmosConfiguration, error) {
 	defer perf.Track(nil, "secret.enumerateSecretScopes")()
 
@@ -47,9 +48,14 @@ func enumerateSecretScopes(facet secretScope) ([]scopeEntry, *schema.AtmosConfig
 	// secrets.ExtractDeclarations); it never retrieves a secret value, so per-component auth is
 	// pure overhead. Disable it explicitly so a 72-component stack doesn't run 72 auth cycles
 	// (credentials-file rewrite + keyring rebuild) just to enumerate declarations.
+	//
+	// With auth disabled, every credentialed read function must also be skipped: an evaluated
+	// `!terraform.state`/`!terraform.output`/`!store` would fall back to the default AWS chain and
+	// fail (e.g. an unreachable EC2 IMDS endpoint) even though enumeration never needs the resolved
+	// value. See credentialFreeSkip.
 	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
 		&atmosConfig, facet.Stack, components, nil, nil,
-		false, true, true, false, []string{"secret"}, nil, true,
+		false, true, true, false, credentialFreeSkip(), nil, true,
 	)
 	if err != nil {
 		return nil, nil, err
