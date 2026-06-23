@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -38,10 +37,6 @@ type TerraformRunOptions struct {
 	PlanFile         string
 	PlanSkipPlanfile bool
 	DeployRunInit    bool
-	// VerifyPlan is the tri-state planfile-verify override from --verify-plan:
-	// nil when the flag was not set, &true for --verify-plan(=true), &false for
-	// --verify-plan=false. nil falls back to config / the CI default.
-	VerifyPlan *bool
 
 	// Multi-component flags.
 	Query      string
@@ -59,19 +54,6 @@ type TerraformRunOptions struct {
 
 	// Status upload flag.
 	UploadStatus bool
-}
-
-// VerifyPlanCLIOverride returns the explicit planfile-verify mode requested via
-// the --verify-plan flag: fail for --verify-plan(=true), off for --verify-plan=false,
-// empty when the flag was not set (defer to config / the CI default).
-func (o *TerraformRunOptions) VerifyPlanCLIOverride() schema.PlanfileVerifyMode {
-	if o.VerifyPlan == nil {
-		return ""
-	}
-	if *o.VerifyPlan {
-		return schema.PlanfileVerifyFail
-	}
-	return schema.PlanfileVerifyOff
 }
 
 // ParseTerraformRunOptions parses and validates shared terraform flags from Viper.
@@ -101,12 +83,6 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		PlanHideNoChanges:       terraformPlanHideContains(v.GetStringSlice("hide"), "no-changes"),
 		PlanSummaryFile:         v.GetString("execution-summary-file"),
 		UploadStatus:            v.GetBool("upload-status"),
-	}
-	// Tri-state --verify-plan: only record a value when the flag (or its env var)
-	// was explicitly set, so an unset flag defers to config / the CI default.
-	if v.IsSet("verify-plan") {
-		verifyPlan := v.GetBool("verify-plan")
-		opts.VerifyPlan = &verifyPlan
 	}
 	if err := validateTerraformRunOptions(opts); err != nil {
 		return nil, err

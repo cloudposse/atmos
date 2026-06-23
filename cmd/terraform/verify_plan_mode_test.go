@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -26,46 +25,49 @@ func newVerifyPlanCmd() *cobra.Command {
 }
 
 func TestResolveVerifyPlanMode(t *testing.T) {
-	t.Run("flag unset and viper unset defers to default", func(t *testing.T) {
-		assert.Equal(t, schema.PlanfileVerifyMode(""), resolveVerifyPlanMode(newVerifyPlanCmd(), viper.New()))
+	t.Run("flag unset and env unset defers to default", func(t *testing.T) {
+		// A bound bool flag registers a viper default, so the unset case MUST stay
+		// empty (not off) — otherwise verification would be disabled by default.
+		assert.Equal(t, schema.PlanfileVerifyMode(""), resolveVerifyPlanMode(newVerifyPlanCmd()))
 	})
 
 	t.Run("--verify-plan forces fail", func(t *testing.T) {
 		cmd := newVerifyPlanCmd()
 		require.NoError(t, cmd.Flags().Set("verify-plan", "true"))
-		assert.Equal(t, schema.PlanfileVerifyFail, resolveVerifyPlanMode(cmd, viper.New()))
+		assert.Equal(t, schema.PlanfileVerifyFail, resolveVerifyPlanMode(cmd))
 	})
 
 	t.Run("--verify-plan=false forces off", func(t *testing.T) {
 		cmd := newVerifyPlanCmd()
 		require.NoError(t, cmd.Flags().Set("verify-plan", "false"))
-		assert.Equal(t, schema.PlanfileVerifyOff, resolveVerifyPlanMode(cmd, viper.New()))
+		assert.Equal(t, schema.PlanfileVerifyOff, resolveVerifyPlanMode(cmd))
 	})
 
-	t.Run("env var via viper forces fail when flag unchanged", func(t *testing.T) {
-		v := viper.New()
-		v.Set("verify-plan", true)
-		assert.Equal(t, schema.PlanfileVerifyFail, resolveVerifyPlanMode(newVerifyPlanCmd(), v))
+	t.Run("env var forces fail when flag unchanged", func(t *testing.T) {
+		t.Setenv("ATMOS_TERRAFORM_VERIFY_PLAN", "true")
+		assert.Equal(t, schema.PlanfileVerifyFail, resolveVerifyPlanMode(newVerifyPlanCmd()))
 	})
 
-	t.Run("env var false via viper forces off when flag unchanged", func(t *testing.T) {
-		v := viper.New()
-		v.Set("verify-plan", false)
-		assert.Equal(t, schema.PlanfileVerifyOff, resolveVerifyPlanMode(newVerifyPlanCmd(), v))
+	t.Run("env var false forces off when flag unchanged", func(t *testing.T) {
+		t.Setenv("ATMOS_TERRAFORM_VERIFY_PLAN", "false")
+		assert.Equal(t, schema.PlanfileVerifyOff, resolveVerifyPlanMode(newVerifyPlanCmd()))
 	})
 
-	t.Run("CLI flag wins over viper env var", func(t *testing.T) {
+	t.Run("CLI flag wins over env var", func(t *testing.T) {
+		t.Setenv("ATMOS_TERRAFORM_VERIFY_PLAN", "true")
 		cmd := newVerifyPlanCmd()
 		require.NoError(t, cmd.Flags().Set("verify-plan", "false"))
-		v := viper.New()
-		v.Set("verify-plan", true)
-		assert.Equal(t, schema.PlanfileVerifyOff, resolveVerifyPlanMode(cmd, v))
+		assert.Equal(t, schema.PlanfileVerifyOff, resolveVerifyPlanMode(cmd))
 	})
 
-	t.Run("nil command falls back to viper", func(t *testing.T) {
-		v := viper.New()
-		v.Set("verify-plan", true)
-		assert.Equal(t, schema.PlanfileVerifyFail, resolveVerifyPlanMode(nil, v))
+	t.Run("nil command falls back to env var", func(t *testing.T) {
+		t.Setenv("ATMOS_TERRAFORM_VERIFY_PLAN", "true")
+		assert.Equal(t, schema.PlanfileVerifyFail, resolveVerifyPlanMode(nil))
+	})
+
+	t.Run("unparseable env var is ignored", func(t *testing.T) {
+		t.Setenv("ATMOS_TERRAFORM_VERIFY_PLAN", "notabool")
+		assert.Equal(t, schema.PlanfileVerifyMode(""), resolveVerifyPlanMode(newVerifyPlanCmd()))
 	})
 }
 

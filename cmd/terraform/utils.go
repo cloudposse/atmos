@@ -8,6 +8,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -41,8 +43,11 @@ const ciHookFailedMsg = "CI hook execution failed"
 const logKeyComponent = "component"
 
 // verifyPlanFlagName is the tri-state planfile-verify flag (--verify-plan,
-// --verify-plan=false) read from Cobra and Viper.
+// --verify-plan=false).
 const verifyPlanFlagName = "verify-plan"
+
+// verifyPlanEnvVar is the environment variable that mirrors --verify-plan.
+const verifyPlanEnvVar = "ATMOS_TERRAFORM_VERIFY_PLAN"
 
 // ciHookConfigInitFailedMsg is the log message emitted when CI-hook config init fails.
 const ciHookConfigInitFailedMsg = "CI hook config init failed"
@@ -170,7 +175,7 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	// before RunE, so info is not yet populated by applyOptionsToInfo(). The
 	// before.terraform.deploy hook reads the resulting CLI override to decide
 	// whether to download the stored planfile (skipped when verification is off).
-	info.VerifyPlanMode = resolveVerifyPlanMode(cmd_, viper.GetViper())
+	info.VerifyPlanMode = resolveVerifyPlanMode(cmd_)
 
 	// Run CI hooks based on component provider bindings.
 	// This is separate from user-defined hooks and runs automatically when CI is enabled.
@@ -192,24 +197,33 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 // resolveVerifyPlanMode resolves the explicit planfile-verify override from the
 // tri-state --verify-plan flag: fail for --verify-plan(=true), off for
 // --verify-plan=false, empty when the flag was not set (defer to config / the CI
-// default). It reads the Cobra flag first (CLI value) and falls back to Viper for
-// env-var support (ATMOS_TERRAFORM_VERIFY_PLAN), matching the --identity/--pager
-// tri-state pattern. During PreRunE the pflag is not yet bound to Viper, so
-// cmd.Flags().Changed covers the CLI and Viper covers env vars only.
-func resolveVerifyPlanMode(cmd *cobra.Command, v *viper.Viper) schema.PlanfileVerifyMode {
-	var set bool
-	var verify bool
-	switch {
-	case cmd != nil && cmd.Flags().Changed(verifyPlanFlagName):
-		set = true
-		verify, _ = cmd.Flags().GetBool(verifyPlanFlagName)
-	case v != nil && v.IsSet(verifyPlanFlagName):
-		set = true
-		verify = v.GetBool(verifyPlanFlagName)
+// default).
+//
+// It uses cmd.Flags().Changed (true only when the user actually passed the flag)
+// and reads ATMOS_TERRAFORM_VERIFY_PLAN directly. We deliberately do NOT use
+// viper.IsSet here: the flag binding registers a default via viper.SetDefault,
+// which makes viper.IsSet(verify-plan) return true even when the flag was never
+// set — collapsing the unset case to off and disabling verification (a missing
+// stored plan would no longer block the deploy).
+func resolveVerifyPlanMode(cmd *cobra.Command) schema.PlanfileVerifyMode {
+	// CLI flag wins; Changed is the reliable "explicitly set" signal.
+	if cmd != nil && cmd.Flags().Changed(verifyPlanFlagName) {
+		verify, _ := cmd.Flags().GetBool(verifyPlanFlagName)
+		return verifyPlanModeFromBool(verify)
 	}
-	if !set {
-		return ""
+	// Env-var fallback (ATMOS_TERRAFORM_VERIFY_PLAN). Read directly so an unset
+	// var stays unset rather than resolving to the bound default.
+	if raw, ok := os.LookupEnv(verifyPlanEnvVar); ok {
+		if verify, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			return verifyPlanModeFromBool(verify)
+		}
 	}
+	return ""
+}
+
+// verifyPlanModeFromBool maps the resolved --verify-plan boolean to its mode:
+// true forces fail, false forces off.
+func verifyPlanModeFromBool(verify bool) schema.PlanfileVerifyMode {
 	if verify {
 		return schema.PlanfileVerifyFail
 	}
@@ -606,7 +620,6 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	if opts.DeployRunInit {
 		info.DeployRunInit = "true"
 	}
-	info.VerifyPlanMode = opts.VerifyPlanCLIOverride()
 }
 
 // terraformRunWithOptions is the shared execution logic for terraform subcommands.
@@ -632,6 +645,11 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
 	// This fixes issue #1945: --all flag must be set before resolveAndPromptForArgs checks it.
 	applyOptionsToInfo(&info, opts)
+
+	// Resolve the tri-state --verify-plan override from the command (reliable
+	// Changed/env detection) rather than from opts, which cannot tell an unset
+	// flag from --verify-plan=false through Viper. Drives the RunE verify gate.
+	info.VerifyPlanMode = resolveVerifyPlanMode(actualCmd)
 
 	// Resolve paths and prompt for missing component/stack interactively.
 	if err := resolveAndPromptForArgs(&info, actualCmd); err != nil {
