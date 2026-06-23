@@ -4,7 +4,7 @@ Atmos supports 25+ step types across five categories: Command, Interactive, UI M
 
 | Category | Step Types | Description |
 |----------|------------|-------------|
-| **Command** | `atmos`, `shell`, `webhook` | Execute Atmos/shell commands or call an HTTP endpoint |
+| **Command** | `atmos`, `shell`, `http` | Execute Atmos/shell commands or call an HTTP endpoint |
 | **Interactive** | `input`, `confirm`, `choose`, `filter`, `file`, `write` | Collect user input |
 | **UI Messages** | `success`, `info`, `warn`, `error`, `markdown` | Display formatted messages |
 | **Output** | `spin`, `table`, `pager`, `format`, `join`, `style` | Format and display output |
@@ -12,17 +12,22 @@ Atmos supports 25+ step types across five categories: Command, Interactive, UI M
 
 ### Command Step Types
 
-#### webhook
+#### http
 
 Performs an HTTP request to call an external endpoint — notify a service, trigger a CI job,
-hit a deployment webhook, or poll a health endpoint. The `webhook` step supports any HTTP
+hit a deployment webhook, or poll a health endpoint. The `http` step supports any HTTP
 verb, query-string parameters, headers, a request body (raw or form/JSON), per-attempt
 timeouts, and retries that compose with the step's [`retry`](/workflows#retry-configuration) policy.
+
+:::note Alias
+`webhook` is an accepted alias for `http` — `type: webhook` behaves identically and reads
+naturally for the fire-a-notification use case.
+:::
 
 ```yaml
 steps:
   - name: notify
-    type: webhook
+    type: http
     url: "https://ci.example.com/hook/{{ .env.JOB_ID }}"
     method: POST
     query:
@@ -50,7 +55,7 @@ header to send it as a JSON object instead:
 ```yaml
 steps:
   - name: notify-slack
-    type: webhook
+    type: http
     url: "{{ .env.SLACK_WEBHOOK_URL }}"
     method: POST
     headers:
@@ -108,7 +113,7 @@ The response is captured as the step's value and metadata:
 </dl>
 
 :::tip
-The `webhook` step also works in [custom commands](/cli/configuration/commands) — any step that supports `type:` can use it.
+The `http` step also works in [custom commands](/cli/configuration/commands) — any step that supports `type:` can use it.
 :::
 
 ### Interactive Step Types

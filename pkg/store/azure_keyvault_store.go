@@ -22,6 +22,8 @@ const (
 	statusCodeForbidden = 403
 	// AzureKeyVaultHyphen is the hyphen character used for Azure Key Vault secret name normalization.
 	AzureKeyVaultHyphen = "-"
+	// Format for a secret name included in error messages.
+	secretIDFormat = "secret %s"
 )
 
 // Azure Key Vault secret names must match the pattern: ^[0-9a-zA-Z-]+$.
@@ -307,7 +309,7 @@ func (s *AzureKeyVaultStore) Set(stack string, component string, key string, val
 	if err != nil {
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) && respErr.StatusCode == statusCodeForbidden {
-			return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
+			return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf(secretIDFormat, secretName), err)
 		}
 		return fmt.Errorf(errWrapFormat, ErrSetParameter, err)
 	}
@@ -343,7 +345,7 @@ func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (in
 			case statusCodeNotFound:
 				return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretName, err)
 			case statusCodeForbidden:
-				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
+				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf(secretIDFormat, secretName), err)
 			}
 		}
 		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
@@ -391,7 +393,7 @@ func (s *AzureKeyVaultStore) Delete(stack string, component string, key string) 
 			case statusCodeNotFound:
 				return fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretName, err)
 			case statusCodeForbidden:
-				return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
+				return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf(secretIDFormat, secretName), err)
 			}
 		}
 		return fmt.Errorf(errWrapFormatWithID, ErrDeleteSecret, secretName, err)
@@ -433,7 +435,7 @@ func (s *AzureKeyVaultStore) GetKey(key string) (interface{}, error) {
 			case statusCodeNotFound:
 				return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretName, err)
 			case statusCodeForbidden:
-				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
+				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf(secretIDFormat, secretName), err)
 			}
 		}
 		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)

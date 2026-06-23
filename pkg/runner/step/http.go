@@ -24,10 +24,10 @@ import (
 )
 
 const (
-	webhookDefaultTimeout = 30 * time.Second
-	webhookDialTimeout    = 10 * time.Second
-	webhookIdleTimeout    = 30 * time.Second
-	webhookRespHdrTimeout = 0 // No separate response-header timeout; the per-attempt context governs the whole request.
+	httpDefaultTimeout = 30 * time.Second
+	httpDialTimeout    = 10 * time.Second
+	httpIdleTimeout    = 30 * time.Second
+	httpRespHdrTimeout = 0 // No separate response-header timeout; the per-attempt context governs the whole request.
 
 	contentTypeHeader = "Content-Type"
 	contentTypeForm   = "application/x-www-form-urlencoded"
@@ -39,10 +39,10 @@ const (
 
 	// Bound how much of a response body is read into memory to protect against
 	// large/error endpoint responses spiking memory.
-	webhookMaxResponseBodyBytes int64 = 4 << 20 // 4 MiB.
+	httpMaxResponseBodyBytes int64 = 4 << 20 // 4 MiB.
 )
 
-// Webhook step result metadata keys.
+// HTTP step result metadata keys.
 const (
 	metaStatusCode      = "status_code"
 	metaStatus          = "status"
@@ -51,8 +51,8 @@ const (
 	metaAttempts        = "attempts"
 )
 
-// webhookMethods lists the HTTP verbs the webhook step accepts.
-var webhookMethods = map[string]bool{
+// httpMethods lists the HTTP verbs the http step accepts.
+var httpMethods = map[string]bool{
 	http.MethodGet:     true,
 	http.MethodPost:    true,
 	http.MethodPut:     true,
@@ -62,29 +62,31 @@ var webhookMethods = map[string]bool{
 	http.MethodOptions: true,
 }
 
-// WebhookHandler executes an HTTP request (GET, POST, and other verbs) with query, body,
+// HTTPHandler executes an HTTP request (GET, POST, and other verbs) with query, body,
 // headers, timeouts, and retries. It composes with the step's `retry:` configuration.
-type WebhookHandler struct {
+type HTTPHandler struct {
 	BaseHandler
 }
 
 func init() {
-	Register(&WebhookHandler{
-		BaseHandler: NewBaseHandler("webhook", CategoryCommand, false),
+	// Registered as "http"; "webhook" is kept as an alias for the common
+	// fire-a-notification use case.
+	Register(&HTTPHandler{
+		BaseHandler: NewBaseHandler("http", CategoryCommand, false, "webhook"),
 	})
 }
 
-// webhookRequest is the fully resolved request spec, rebuilt into an *http.Request on
+// httpRequest is the fully resolved request spec, rebuilt into an *http.Request on
 // every attempt so the body reader is fresh for retries.
-type webhookRequest struct {
+type httpRequest struct {
 	method  string
 	url     string
 	headers map[string]string
 	body    []byte
 }
 
-// webhookExpect holds compiled success criteria.
-type webhookExpect struct {
+// httpExpect holds compiled success criteria.
+type httpExpect struct {
 	statuses  []int
 	responses []*regexp.Regexp
 }
@@ -98,9 +100,9 @@ const (
 	reasonResponse
 )
 
-// webhookHTTPError carries the outcome of a single attempt so the retry predicate and
+// httpError carries the outcome of a single attempt so the retry predicate and
 // the final error builder can classify it.
-type webhookHTTPError struct {
+type httpError struct {
 	transport  bool // True when no response was received (network/transport failure).
 	statusCode int
 	status     string
@@ -109,32 +111,32 @@ type webhookHTTPError struct {
 	cause      error
 }
 
-func (e *webhookHTTPError) Error() string { //nolint:lintroller // Trivial error-interface method; perf.Track overhead is unwarranted.
+func (e *httpError) Error() string { //nolint:lintroller // Trivial error-interface method; perf.Track overhead is unwarranted.
 	if e.transport {
-		return fmt.Sprintf("webhook transport error: %v", e.cause)
+		return fmt.Sprintf("http transport error: %v", e.cause)
 	}
-	return fmt.Sprintf("webhook returned %s", e.status)
+	return fmt.Sprintf("http request returned %s", e.status)
 }
 
-func (e *webhookHTTPError) Unwrap() error { //nolint:lintroller // Trivial error-interface method; perf.Track overhead is unwarranted.
+func (e *httpError) Unwrap() error { //nolint:lintroller // Trivial error-interface method; perf.Track overhead is unwarranted.
 	return e.cause
 }
 
-// Validate checks the webhook step configuration before execution.
-func (h *WebhookHandler) Validate(step *schema.WorkflowStep) error {
-	defer perf.Track(nil, "step.WebhookHandler.Validate")()
+// Validate checks the http step configuration before execution.
+func (h *HTTPHandler) Validate(step *schema.WorkflowStep) error {
+	defer perf.Track(nil, "step.HTTPHandler.Validate")()
 
 	if strings.TrimSpace(step.URL) == "" {
-		return errUtils.Build(errUtils.ErrWebhookURLRequired).
+		return errUtils.Build(errUtils.ErrHTTPStepURLRequired).
 			WithContext("step", step.Name).
-			WithHint("Set 'url' to the endpoint the webhook step should call").
+			WithHint("Set 'url' to the endpoint the http step should call").
 			Err()
 	}
 
 	if step.Method != "" {
 		method := strings.ToUpper(strings.TrimSpace(step.Method))
-		if !webhookMethods[method] {
-			return errUtils.Build(errUtils.ErrWebhookInvalidMethod).
+		if !httpMethods[method] {
+			return errUtils.Build(errUtils.ErrHTTPStepInvalidMethod).
 				WithContext("step", step.Name).
 				WithContext("method", step.Method).
 				WithHintf("Use one of: %s", strings.Join(sortedMethods(), ", ")).
@@ -143,7 +145,7 @@ func (h *WebhookHandler) Validate(step *schema.WorkflowStep) error {
 	}
 
 	if step.Body != "" && len(step.Form) > 0 {
-		return errUtils.Build(errUtils.ErrWebhookBodyFormConflict).
+		return errUtils.Build(errUtils.ErrHTTPStepBodyFormConflict).
 			WithContext("step", step.Name).
 			WithHint("Set 'body' for a raw payload OR 'form' for key-value params, not both").
 			Err()
@@ -152,7 +154,7 @@ func (h *WebhookHandler) Validate(step *schema.WorkflowStep) error {
 	if step.Expect != nil {
 		for _, pattern := range step.Expect.Response {
 			if _, err := regexp.Compile(stripRegexSlashes(pattern)); err != nil {
-				return errUtils.Build(errUtils.ErrWebhookInvalidExpectPattern).
+				return errUtils.Build(errUtils.ErrHTTPStepInvalidExpectPattern).
 					WithCause(err).
 					WithContext("step", step.Name).
 					WithContext("pattern", pattern).
@@ -166,25 +168,25 @@ func (h *WebhookHandler) Validate(step *schema.WorkflowStep) error {
 }
 
 // Execute performs the HTTP request, applying per-attempt timeouts and retry.
-func (h *WebhookHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
-	defer perf.Track(nil, "step.WebhookHandler.Execute")()
+func (h *HTTPHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
+	defer perf.Track(nil, "step.HTTPHandler.Execute")()
 
-	req, err := buildWebhookRequest(step, vars)
+	req, err := buildHTTPRequest(step, vars)
 	if err != nil {
 		return nil, err
 	}
 
-	expect, err := compileWebhookExpect(step.Expect)
+	expect, err := compileHTTPExpect(step.Expect)
 	if err != nil {
 		return nil, err
 	}
 
-	perAttempt, err := resolveWebhookTimeout(step, vars)
+	perAttempt, err := resolveHTTPTimeout(step, vars)
 	if err != nil {
 		return nil, err
 	}
 
-	client := newWebhookHTTPClient()
+	client := newHTTPClient()
 
 	var lastResult *StepResult
 	attempts := 0
@@ -195,16 +197,16 @@ func (h *WebhookHandler) Execute(ctx context.Context, step *schema.WorkflowStep,
 		attemptCtx, cancel := context.WithTimeout(ctx, perAttempt)
 		defer cancel()
 
-		log.Debug("Executing webhook step", "step", step.Name, "method", req.method, "url", req.url, "attempt", attempts)
+		log.Debug("Executing http step", "step", step.Name, "method", req.method, "url", req.url, "attempt", attempts)
 
-		result, reqErr := performWebhookRequest(attemptCtx, client, req, expect)
+		result, reqErr := performHTTPRequest(attemptCtx, client, req, expect)
 		if result != nil {
 			lastResult = result
 		}
 		return reqErr
 	}
 
-	retryErr := retry.WithPredicate(ctx, step.Retry, doRequest, shouldRetryWebhook(step.Retry))
+	retryErr := retry.WithPredicate(ctx, step.Retry, doRequest, shouldRetryHTTP(step.Retry))
 
 	if lastResult != nil {
 		lastResult.WithMetadata(metaAttempts, attempts).
@@ -212,14 +214,14 @@ func (h *WebhookHandler) Execute(ctx context.Context, step *schema.WorkflowStep,
 	}
 
 	if retryErr != nil {
-		return lastResult, buildWebhookError(step, req, retryErr)
+		return lastResult, buildHTTPError(step, req, retryErr)
 	}
 
 	return lastResult, nil
 }
 
-// performWebhookRequest executes a single attempt and evaluates success criteria.
-func performWebhookRequest(ctx context.Context, client *http.Client, req *webhookRequest, expect *webhookExpect) (*StepResult, error) {
+// performHTTPRequest executes a single attempt and evaluates success criteria.
+func performHTTPRequest(ctx context.Context, client *http.Client, req *httpRequest, expect *httpExpect) (*StepResult, error) {
 	var bodyReader io.Reader
 	if len(req.body) > 0 {
 		bodyReader = bytes.NewReader(req.body)
@@ -227,7 +229,7 @@ func performWebhookRequest(ctx context.Context, client *http.Client, req *webhoo
 
 	httpReq, err := http.NewRequestWithContext(ctx, req.method, req.url, bodyReader)
 	if err != nil {
-		return nil, &webhookHTTPError{transport: true, cause: err}
+		return nil, &httpError{transport: true, cause: err}
 	}
 	for key, value := range req.headers {
 		httpReq.Header.Set(key, value)
@@ -235,13 +237,13 @@ func performWebhookRequest(ctx context.Context, client *http.Client, req *webhoo
 
 	resp, err := client.Do(httpReq) //nolint:gosec // G704: the URL is operator-provided workflow configuration; calling it is the step's purpose.
 	if err != nil {
-		return nil, &webhookHTTPError{transport: true, cause: err}
+		return nil, &httpError{transport: true, cause: err}
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, webhookMaxResponseBodyBytes))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, httpMaxResponseBodyBytes))
 	if err != nil {
-		return nil, &webhookHTTPError{transport: true, cause: err}
+		return nil, &httpError{transport: true, cause: err}
 	}
 
 	result := NewStepResult(string(respBody)).
@@ -250,7 +252,7 @@ func performWebhookRequest(ctx context.Context, client *http.Client, req *webhoo
 		WithMetadata(metaResponseHeaders, flattenHeaders(resp.Header))
 
 	if reason := expect.check(resp.StatusCode, string(respBody)); reason != reasonNone {
-		return result, &webhookHTTPError{
+		return result, &httpError{
 			statusCode: resp.StatusCode,
 			status:     resp.Status,
 			body:       string(respBody),
@@ -262,7 +264,7 @@ func performWebhookRequest(ctx context.Context, client *http.Client, req *webhoo
 }
 
 // check returns the reason a response failed the success criteria, or reasonNone on success.
-func (e *webhookExpect) check(statusCode int, body string) failureReason {
+func (e *httpExpect) check(statusCode int, body string) failureReason {
 	statusOK := statusCode >= httpSuccessMin && statusCode <= httpSuccessMax
 	if len(e.statuses) > 0 {
 		statusOK = false
@@ -289,11 +291,11 @@ func (e *webhookExpect) check(statusCode int, body string) failureReason {
 	return reasonNone
 }
 
-// shouldRetryWebhook builds the retry predicate: retry on transport errors, 5xx, 429,
+// shouldRetryHTTP builds the retry predicate: retry on transport errors, 5xx, 429,
 // or anything matching the configured retry.conditions regexes; never on other failures.
-func shouldRetryWebhook(cfg *schema.RetryConfig) func(error) bool {
+func shouldRetryHTTP(cfg *schema.RetryConfig) func(error) bool {
 	return func(err error) bool {
-		var httpErr *webhookHTTPError
+		var httpErr *httpError
 		if !errors.As(err, &httpErr) {
 			return false
 		}
@@ -309,7 +311,7 @@ func shouldRetryWebhook(cfg *schema.RetryConfig) func(error) bool {
 
 // matchesRetryConditions reports whether the response matches any retry.conditions regex.
 // The patterns are matched against "<status-code> <body>".
-func matchesRetryConditions(cfg *schema.RetryConfig, httpErr *webhookHTTPError) bool {
+func matchesRetryConditions(cfg *schema.RetryConfig, httpErr *httpError) bool {
 	if cfg == nil || len(cfg.Conditions) == 0 {
 		return false
 	}
@@ -326,15 +328,15 @@ func matchesRetryConditions(cfg *schema.RetryConfig, httpErr *webhookHTTPError) 
 	return false
 }
 
-// buildWebhookError converts the retry loop's final error into a user-facing error.
-func buildWebhookError(step *schema.WorkflowStep, req *webhookRequest, retryErr error) error {
-	var httpErr *webhookHTTPError
+// buildHTTPError converts the retry loop's final error into a user-facing error.
+func buildHTTPError(step *schema.WorkflowStep, req *httpRequest, retryErr error) error {
+	var httpErr *httpError
 	if !errors.As(retryErr, &httpErr) {
 		return retryErr
 	}
 
 	if httpErr.transport {
-		return errUtils.Build(errUtils.ErrWebhookRequestFailed).
+		return errUtils.Build(errUtils.ErrHTTPStepRequestFailed).
 			WithCause(httpErr.cause).
 			WithContext("step", step.Name).
 			WithContext("url", req.url).
@@ -343,7 +345,7 @@ func buildWebhookError(step *schema.WorkflowStep, req *webhookRequest, retryErr 
 	}
 
 	if httpErr.reason == reasonResponse {
-		return errUtils.Build(errUtils.ErrWebhookUnexpectedResponse).
+		return errUtils.Build(errUtils.ErrHTTPStepUnexpectedResponse).
 			WithContext("step", step.Name).
 			WithContext("url", req.url).
 			WithContext("status", httpErr.status).
@@ -351,7 +353,7 @@ func buildWebhookError(step *schema.WorkflowStep, req *webhookRequest, retryErr 
 			Err()
 	}
 
-	return errUtils.Build(errUtils.ErrWebhookUnexpectedStatus).
+	return errUtils.Build(errUtils.ErrHTTPStepUnexpectedStatus).
 		WithContext("step", step.Name).
 		WithContext("url", req.url).
 		WithContext("status", httpErr.status).
@@ -359,8 +361,8 @@ func buildWebhookError(step *schema.WorkflowStep, req *webhookRequest, retryErr 
 		Err()
 }
 
-// buildWebhookRequest resolves templates and assembles the request spec.
-func buildWebhookRequest(step *schema.WorkflowStep, vars *Variables) (*webhookRequest, error) {
+// buildHTTPRequest resolves templates and assembles the request spec.
+func buildHTTPRequest(step *schema.WorkflowStep, vars *Variables) (*httpRequest, error) {
 	rawURL, err := resolveField(vars, step.Name, "url", step.URL)
 	if err != nil {
 		return nil, err
@@ -368,7 +370,7 @@ func buildWebhookRequest(step *schema.WorkflowStep, vars *Variables) (*webhookRe
 
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return nil, errUtils.Build(errUtils.ErrWebhookRequestFailed).
+		return nil, errUtils.Build(errUtils.ErrHTTPStepRequestFailed).
 			WithCause(err).
 			WithContext("step", step.Name).
 			WithContext("url", rawURL).
@@ -379,7 +381,7 @@ func buildWebhookRequest(step *schema.WorkflowStep, vars *Variables) (*webhookRe
 	// url.Parse accepts relative URLs; reject them here so they fail fast with clear
 	// config feedback instead of surfacing later as retryable transport errors.
 	if parsedURL.Scheme == "" || parsedURL.Host == "" {
-		return nil, errUtils.Build(errUtils.ErrWebhookRequestFailed).
+		return nil, errUtils.Build(errUtils.ErrHTTPStepRequestFailed).
 			WithContext("step", step.Name).
 			WithContext("url", rawURL).
 			WithHint("Provide a valid absolute URL (e.g. https://example.com/hook)").
@@ -402,7 +404,7 @@ func buildWebhookRequest(step *schema.WorkflowStep, vars *Variables) (*webhookRe
 		headers = make(map[string]string)
 	}
 
-	body, err := buildWebhookBody(step, vars, headers)
+	body, err := buildHTTPBody(step, vars, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -412,7 +414,7 @@ func buildWebhookRequest(step *schema.WorkflowStep, vars *Variables) (*webhookRe
 		method = strings.ToUpper(strings.TrimSpace(step.Method))
 	}
 
-	return &webhookRequest{
+	return &httpRequest{
 		method:  method,
 		url:     parsedURL.String(),
 		headers: headers,
@@ -442,9 +444,9 @@ func applyQueryParams(parsedURL *url.URL, step *schema.WorkflowStep, vars *Varia
 	return nil
 }
 
-// buildWebhookBody resolves the raw body or form params, setting a default Content-Type
+// buildHTTPBody resolves the raw body or form params, setting a default Content-Type
 // header for form payloads when none was provided.
-func buildWebhookBody(step *schema.WorkflowStep, vars *Variables, headers map[string]string) ([]byte, error) {
+func buildHTTPBody(step *schema.WorkflowStep, vars *Variables, headers map[string]string) ([]byte, error) {
 	if step.Body != "" {
 		resolved, err := vars.Resolve(step.Body)
 		if err != nil {
@@ -474,7 +476,7 @@ func buildWebhookBody(step *schema.WorkflowStep, vars *Variables, headers map[st
 	if strings.Contains(strings.ToLower(existingCT), contentTypeJSON) {
 		encoded, err := json.Marshal(resolvedForm)
 		if err != nil {
-			return nil, errUtils.Build(errUtils.ErrWebhookRequestFailed).
+			return nil, errUtils.Build(errUtils.ErrHTTPStepRequestFailed).
 				WithCause(err).
 				WithContext("step", step.Name).
 				WithContext("field", "form").
@@ -493,10 +495,10 @@ func buildWebhookBody(step *schema.WorkflowStep, vars *Variables, headers map[st
 	return []byte(values.Encode()), nil
 }
 
-// compileWebhookExpect compiles the success criteria. Patterns are validated in Validate,
+// compileHTTPExpect compiles the success criteria. Patterns are validated in Validate,
 // so a compile error here is unexpected but still surfaced.
-func compileWebhookExpect(expect *schema.WebhookExpect) (*webhookExpect, error) {
-	compiled := &webhookExpect{}
+func compileHTTPExpect(expect *schema.HTTPExpect) (*httpExpect, error) {
+	compiled := &httpExpect{}
 	if expect == nil {
 		return compiled, nil
 	}
@@ -504,7 +506,7 @@ func compileWebhookExpect(expect *schema.WebhookExpect) (*webhookExpect, error) 
 	for _, pattern := range expect.Response {
 		re, err := regexp.Compile(stripRegexSlashes(pattern))
 		if err != nil {
-			return nil, errUtils.Build(errUtils.ErrWebhookInvalidExpectPattern).
+			return nil, errUtils.Build(errUtils.ErrHTTPStepInvalidExpectPattern).
 				WithCause(err).
 				WithContext("pattern", pattern).
 				Err()
@@ -514,10 +516,10 @@ func compileWebhookExpect(expect *schema.WebhookExpect) (*webhookExpect, error) 
 	return compiled, nil
 }
 
-// resolveWebhookTimeout resolves the per-attempt timeout from the step's timeout field.
-func resolveWebhookTimeout(step *schema.WorkflowStep, vars *Variables) (time.Duration, error) {
+// resolveHTTPTimeout resolves the per-attempt timeout from the step's timeout field.
+func resolveHTTPTimeout(step *schema.WorkflowStep, vars *Variables) (time.Duration, error) {
 	if step.Timeout == "" {
-		return webhookDefaultTimeout, nil
+		return httpDefaultTimeout, nil
 	}
 	resolved, err := vars.Resolve(step.Timeout)
 	if err != nil {
@@ -538,17 +540,17 @@ func resolveWebhookTimeout(step *schema.WorkflowStep, vars *Variables) (time.Dur
 	return parsed, nil
 }
 
-// newWebhookHTTPClient builds an HTTP client with hardened transport timeouts. The
+// newHTTPClient builds an HTTP client with hardened transport timeouts. The
 // per-request deadline is enforced via context, so the client itself has no overall
 // Timeout (which would otherwise race the context).
-func newWebhookHTTPClient() *http.Client {
+func newHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
 			DialContext: (&net.Dialer{
-				Timeout: webhookDialTimeout,
+				Timeout: httpDialTimeout,
 			}).DialContext,
-			IdleConnTimeout:       webhookIdleTimeout,
-			ResponseHeaderTimeout: webhookRespHdrTimeout,
+			IdleConnTimeout:       httpIdleTimeout,
+			ResponseHeaderTimeout: httpRespHdrTimeout,
 		},
 	}
 }
@@ -596,8 +598,8 @@ func stripRegexSlashes(pattern string) string {
 
 // sortedMethods returns the accepted HTTP methods in a stable order for error hints.
 func sortedMethods() []string {
-	methods := make([]string, 0, len(webhookMethods))
-	for method := range webhookMethods {
+	methods := make([]string, 0, len(httpMethods))
+	for method := range httpMethods {
 		methods = append(methods, method)
 	}
 	sort.Strings(methods)

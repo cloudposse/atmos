@@ -16,19 +16,19 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func webhookIntPtr(i int) *int { return &i }
+func httpIntPtr(i int) *int { return &i }
 
-// mustGetWebhookHandler looks up the registered webhook handler and fails the test
+// mustGetHTTPHandler looks up the registered http handler and fails the test
 // with a clear cause if registration is missing, rather than panicking later.
-func mustGetWebhookHandler(t *testing.T) StepHandler {
+func mustGetHTTPHandler(t *testing.T) StepHandler {
 	t.Helper()
-	h, ok := Get("webhook")
-	require.True(t, ok, "webhook handler must be registered")
+	h, ok := Get("http")
+	require.True(t, ok, "http handler must be registered")
 	require.NotNil(t, h)
 	return h
 }
 
-func webhookDurPtr(t *testing.T, s string) *time.Duration {
+func httpDurPtr(t *testing.T, s string) *time.Duration {
 	t.Helper()
 	d, err := time.ParseDuration(s)
 	require.NoError(t, err)
@@ -39,15 +39,15 @@ func webhookDurPtr(t *testing.T, s string) *time.Duration {
 func fastRetry(t *testing.T, maxAttempts int, conditions ...string) *schema.RetryConfig {
 	t.Helper()
 	return &schema.RetryConfig{
-		MaxAttempts:     webhookIntPtr(maxAttempts),
+		MaxAttempts:     httpIntPtr(maxAttempts),
 		BackoffStrategy: schema.BackoffConstant,
-		InitialDelay:    webhookDurPtr(t, "1ms"),
+		InitialDelay:    httpDurPtr(t, "1ms"),
 		Conditions:      conditions,
 	}
 }
 
-func TestWebhookHandler_Validate(t *testing.T) {
-	handler, ok := Get("webhook")
+func TestHTTPHandler_Validate(t *testing.T) {
+	handler, ok := Get("http")
 	require.True(t, ok)
 
 	tests := []struct {
@@ -57,35 +57,35 @@ func TestWebhookHandler_Validate(t *testing.T) {
 	}{
 		{
 			name:    "missing url",
-			step:    &schema.WorkflowStep{Name: "wh", Type: "webhook"},
-			wantErr: errUtils.ErrWebhookURLRequired,
+			step:    &schema.WorkflowStep{Name: "wh", Type: "http"},
+			wantErr: errUtils.ErrHTTPStepURLRequired,
 		},
 		{
 			name:    "invalid method",
-			step:    &schema.WorkflowStep{Name: "wh", Type: "webhook", URL: "https://example.com", Method: "FETCH"},
-			wantErr: errUtils.ErrWebhookInvalidMethod,
+			step:    &schema.WorkflowStep{Name: "wh", Type: "http", URL: "https://example.com", Method: "FETCH"},
+			wantErr: errUtils.ErrHTTPStepInvalidMethod,
 		},
 		{
 			name: "body and form conflict",
 			step: &schema.WorkflowStep{
-				Name: "wh", Type: "webhook", URL: "https://example.com",
+				Name: "wh", Type: "http", URL: "https://example.com",
 				Body: "raw", Form: map[string]string{"a": "b"},
 			},
-			wantErr: errUtils.ErrWebhookBodyFormConflict,
+			wantErr: errUtils.ErrHTTPStepBodyFormConflict,
 		},
 		{
 			name: "invalid expect regex",
 			step: &schema.WorkflowStep{
-				Name: "wh", Type: "webhook", URL: "https://example.com",
-				Expect: &schema.WebhookExpect{Response: []string{"("}},
+				Name: "wh", Type: "http", URL: "https://example.com",
+				Expect: &schema.HTTPExpect{Response: []string{"("}},
 			},
-			wantErr: errUtils.ErrWebhookInvalidExpectPattern,
+			wantErr: errUtils.ErrHTTPStepInvalidExpectPattern,
 		},
 		{
 			name: "valid",
 			step: &schema.WorkflowStep{
-				Name: "wh", Type: "webhook", URL: "https://example.com", Method: "post",
-				Expect: &schema.WebhookExpect{Status: []int{200}, Response: []string{"/ok/"}},
+				Name: "wh", Type: "http", URL: "https://example.com", Method: "post",
+				Expect: &schema.HTTPExpect{Status: []int{200}, Response: []string{"/ok/"}},
 			},
 			wantErr: nil,
 		},
@@ -104,8 +104,8 @@ func TestWebhookHandler_Validate(t *testing.T) {
 	}
 }
 
-// TestWebhookHandler_GetWithQuery runs an end-to-end GET against a real local server.
-func TestWebhookHandler_GetWithQuery(t *testing.T) {
+// TestHTTPHandler_GetWithQuery runs an end-to-end GET against a real local server.
+func TestHTTPHandler_GetWithQuery(t *testing.T) {
 	var gotMethod, gotQuery, gotHeader string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
@@ -115,10 +115,10 @@ func TestWebhookHandler_GetWithQuery(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
 		Name:    "ping",
-		Type:    "webhook",
+		Type:    "http",
 		URL:     srv.URL,
 		Method:  "GET",
 		Query:   map[string]string{"ref": "abc123"},
@@ -137,8 +137,8 @@ func TestWebhookHandler_GetWithQuery(t *testing.T) {
 	assert.Equal(t, 1, result.Metadata[metaAttempts])
 }
 
-// TestWebhookHandler_PostRawBody verifies raw body POST end-to-end.
-func TestWebhookHandler_PostRawBody(t *testing.T) {
+// TestHTTPHandler_PostRawBody verifies raw body POST end-to-end.
+func TestHTTPHandler_PostRawBody(t *testing.T) {
 	var gotBody, gotCT string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
@@ -149,10 +149,10 @@ func TestWebhookHandler_PostRawBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
 		Name:    "post",
-		Type:    "webhook",
+		Type:    "http",
 		URL:     srv.URL,
 		Method:  "POST",
 		Headers: map[string]string{"Content-Type": "application/json"},
@@ -168,8 +168,8 @@ func TestWebhookHandler_PostRawBody(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, result.Metadata[metaStatusCode])
 }
 
-// TestWebhookHandler_PostFormURLEncoded verifies form params default to urlencoded.
-func TestWebhookHandler_PostFormURLEncoded(t *testing.T) {
+// TestHTTPHandler_PostFormURLEncoded verifies form params default to urlencoded.
+func TestHTTPHandler_PostFormURLEncoded(t *testing.T) {
 	var gotCT, gotStatus, gotEnv string
 	var parseErr error
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -186,10 +186,10 @@ func TestWebhookHandler_PostFormURLEncoded(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
 		Name:   "form",
-		Type:   "webhook",
+		Type:   "http",
 		URL:    srv.URL,
 		Method: "POST",
 		Form:   map[string]string{"status": "deployed", "env": "prod"},
@@ -204,8 +204,8 @@ func TestWebhookHandler_PostFormURLEncoded(t *testing.T) {
 	assert.Equal(t, "prod", gotEnv)
 }
 
-// TestWebhookHandler_PostFormJSON verifies form params are JSON-encoded when Content-Type is JSON.
-func TestWebhookHandler_PostFormJSON(t *testing.T) {
+// TestHTTPHandler_PostFormJSON verifies form params are JSON-encoded when Content-Type is JSON.
+func TestHTTPHandler_PostFormJSON(t *testing.T) {
 	var gotBody, gotCT string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
@@ -215,10 +215,10 @@ func TestWebhookHandler_PostFormJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
 		Name:    "formjson",
-		Type:    "webhook",
+		Type:    "http",
 		URL:     srv.URL,
 		Method:  "POST",
 		Headers: map[string]string{"Content-Type": "application/json"},
@@ -232,19 +232,19 @@ func TestWebhookHandler_PostFormJSON(t *testing.T) {
 	assert.JSONEq(t, `{"status":"deployed"}`, gotBody)
 }
 
-// TestWebhookHandler_ExpectStatusOverride confirms a non-2xx success code is accepted.
-func TestWebhookHandler_ExpectStatusOverride(t *testing.T) {
+// TestHTTPHandler_ExpectStatusOverride confirms a non-2xx success code is accepted.
+func TestHTTPHandler_ExpectStatusOverride(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted) // 202.
 	}))
 	defer srv.Close()
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
 		Name:   "expect",
-		Type:   "webhook",
+		Type:   "http",
 		URL:    srv.URL,
-		Expect: &schema.WebhookExpect{Status: []int{202}},
+		Expect: &schema.HTTPExpect{Status: []int{202}},
 	}
 	require.NoError(t, handler.Validate(step))
 
@@ -253,15 +253,15 @@ func TestWebhookHandler_ExpectStatusOverride(t *testing.T) {
 	assert.Equal(t, http.StatusAccepted, result.Metadata[metaStatusCode])
 }
 
-// TestWebhookHandler_ExpectResponseRegex covers both matching and non-matching bodies.
-func TestWebhookHandler_ExpectResponseRegex(t *testing.T) {
+// TestHTTPHandler_ExpectResponseRegex covers both matching and non-matching bodies.
+func TestHTTPHandler_ExpectResponseRegex(t *testing.T) {
 	tests := []struct {
 		name    string
 		body    string
 		wantErr error
 	}{
 		{name: "matches", body: `{"status":"deployed"}`, wantErr: nil},
-		{name: "no match", body: `{"status":"pending"}`, wantErr: errUtils.ErrWebhookUnexpectedResponse},
+		{name: "no match", body: `{"status":"pending"}`, wantErr: errUtils.ErrHTTPStepUnexpectedResponse},
 	}
 
 	for _, tt := range tests {
@@ -271,12 +271,12 @@ func TestWebhookHandler_ExpectResponseRegex(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			handler := mustGetWebhookHandler(t)
+			handler := mustGetHTTPHandler(t)
 			step := &schema.WorkflowStep{
 				Name:   "regex",
-				Type:   "webhook",
+				Type:   "http",
 				URL:    srv.URL,
-				Expect: &schema.WebhookExpect{Response: []string{`/"status"\s*:\s*"deployed"/`}},
+				Expect: &schema.HTTPExpect{Response: []string{`/"status"\s*:\s*"deployed"/`}},
 			}
 			require.NoError(t, handler.Validate(step))
 
@@ -291,8 +291,8 @@ func TestWebhookHandler_ExpectResponseRegex(t *testing.T) {
 	}
 }
 
-// TestWebhookHandler_RetryOn5xx verifies the step retries server errors and then succeeds.
-func TestWebhookHandler_RetryOn5xx(t *testing.T) {
+// TestHTTPHandler_RetryOn5xx verifies the step retries server errors and then succeeds.
+func TestHTTPHandler_RetryOn5xx(t *testing.T) {
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -304,10 +304,10 @@ func TestWebhookHandler_RetryOn5xx(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
 		Name:  "retry5xx",
-		Type:  "webhook",
+		Type:  "http",
 		URL:   srv.URL,
 		Retry: fastRetry(t, 5),
 	}
@@ -320,8 +320,8 @@ func TestWebhookHandler_RetryOn5xx(t *testing.T) {
 	assert.Equal(t, 3, result.Metadata[metaAttempts])
 }
 
-// TestWebhookHandler_RetryOn429 verifies 429 Too Many Requests is retried.
-func TestWebhookHandler_RetryOn429(t *testing.T) {
+// TestHTTPHandler_RetryOn429 verifies 429 Too Many Requests is retried.
+func TestHTTPHandler_RetryOn429(t *testing.T) {
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -333,10 +333,10 @@ func TestWebhookHandler_RetryOn429(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
 		Name:  "retry429",
-		Type:  "webhook",
+		Type:  "http",
 		URL:   srv.URL,
 		Retry: fastRetry(t, 3),
 	}
@@ -347,8 +347,8 @@ func TestWebhookHandler_RetryOn429(t *testing.T) {
 	assert.Equal(t, 2, calls)
 }
 
-// TestWebhookHandler_NoRetryOn4xx is the negative path: 404 must fail fast, not retry.
-func TestWebhookHandler_NoRetryOn4xx(t *testing.T) {
+// TestHTTPHandler_NoRetryOn4xx is the negative path: 404 must fail fast, not retry.
+func TestHTTPHandler_NoRetryOn4xx(t *testing.T) {
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -356,10 +356,10 @@ func TestWebhookHandler_NoRetryOn4xx(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
 		Name:  "no-retry",
-		Type:  "webhook",
+		Type:  "http",
 		URL:   srv.URL,
 		Retry: fastRetry(t, 5),
 	}
@@ -367,13 +367,13 @@ func TestWebhookHandler_NoRetryOn4xx(t *testing.T) {
 
 	_, err := handler.Execute(context.Background(), step, NewVariables())
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrWebhookUnexpectedStatus)
+	assert.ErrorIs(t, err, errUtils.ErrHTTPStepUnexpectedStatus)
 	assert.Equal(t, 1, calls, "404 must not be retried")
 }
 
-// TestWebhookHandler_RetryConditions verifies retry.conditions can force retry of an
+// TestHTTPHandler_RetryConditions verifies retry.conditions can force retry of an
 // otherwise non-retryable status (e.g. 400).
-func TestWebhookHandler_RetryConditions(t *testing.T) {
+func TestHTTPHandler_RetryConditions(t *testing.T) {
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -385,10 +385,10 @@ func TestWebhookHandler_RetryConditions(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
 		Name:  "conditions",
-		Type:  "webhook",
+		Type:  "http",
 		URL:   srv.URL,
 		Retry: fastRetry(t, 3, `^400 `),
 	}
@@ -399,8 +399,8 @@ func TestWebhookHandler_RetryConditions(t *testing.T) {
 	assert.Equal(t, 2, calls)
 }
 
-// TestWebhookHandler_TemplateResolution verifies url/headers/body resolve from env vars.
-func TestWebhookHandler_TemplateResolution(t *testing.T) {
+// TestHTTPHandler_TemplateResolution verifies url/headers/body resolve from env vars.
+func TestHTTPHandler_TemplateResolution(t *testing.T) {
 	var gotPath, gotAuth, gotBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
@@ -416,10 +416,10 @@ func TestWebhookHandler_TemplateResolution(t *testing.T) {
 	vars.SetEnv("TOKEN", "t0ken")
 	vars.SetEnv("SHA", "deadbeef")
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
 		Name:    "tmpl",
-		Type:    "webhook",
+		Type:    "http",
 		URL:     srv.URL + "/hook/{{ .env.JOB_ID }}",
 		Method:  "POST",
 		Headers: map[string]string{"Authorization": "Bearer {{ .env.TOKEN }}"},
@@ -434,12 +434,12 @@ func TestWebhookHandler_TemplateResolution(t *testing.T) {
 	assert.JSONEq(t, `{"sha":"deadbeef"}`, gotBody)
 }
 
-// TestWebhookHandler_TransportError verifies an unreachable endpoint fails (no panic).
-func TestWebhookHandler_TransportError(t *testing.T) {
-	handler := mustGetWebhookHandler(t)
+// TestHTTPHandler_TransportError verifies an unreachable endpoint fails (no panic).
+func TestHTTPHandler_TransportError(t *testing.T) {
+	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
 		Name:    "down",
-		Type:    "webhook",
+		Type:    "http",
 		URL:     "http://127.0.0.1:1", // Port 1 should refuse connections.
 		Timeout: "200ms",
 	}
@@ -447,17 +447,42 @@ func TestWebhookHandler_TransportError(t *testing.T) {
 
 	_, err := handler.Execute(context.Background(), step, NewVariables())
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrWebhookRequestFailed)
+	assert.ErrorIs(t, err, errUtils.ErrHTTPStepRequestFailed)
+}
+
+// TestHTTPHandler_WebhookAlias verifies the "webhook" alias resolves to the http
+// handler and that a step declared with type: webhook validates and executes.
+func TestHTTPHandler_WebhookAlias(t *testing.T) {
+	aliased, ok := Get("webhook")
+	require.True(t, ok, "webhook alias must resolve")
+	canonical := mustGetHTTPHandler(t)
+	assert.Same(t, canonical, aliased, "webhook alias must resolve to the http handler")
+
+	// The alias must not appear as a separate entry in the registry listing.
+	_, listed := List()["webhook"]
+	assert.False(t, listed, "webhook alias must not be listed as a distinct step type")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer srv.Close()
+
+	step := &schema.WorkflowStep{Name: "wh", Type: "webhook", URL: srv.URL}
+	require.NoError(t, aliased.Validate(step))
+
+	result, err := aliased.Execute(context.Background(), step, NewVariables())
+	require.NoError(t, err)
+	assert.Equal(t, "ok", result.Value)
 }
 
 // badTemplate is a template string that fails to parse, used to exercise
 // template-resolution error paths.
 const badTemplate = "{{ range .steps }}{{ . }}"
 
-// TestWebhookHandler_BuildRequestErrors covers the resolution/validation error paths in
-// buildWebhookRequest: bad URL templates, relative URLs, and bad header/query/body/form
+// TestHTTPHandler_BuildRequestErrors covers the resolution/validation error paths in
+// buildHTTPRequest: bad URL templates, relative URLs, and bad header/query/body/form
 // templates. None of these reach the network, so no test server is needed.
-func TestWebhookHandler_BuildRequestErrors(t *testing.T) {
+func TestHTTPHandler_BuildRequestErrors(t *testing.T) {
 	tests := []struct {
 		name    string
 		step    *schema.WorkflowStep
@@ -465,18 +490,18 @@ func TestWebhookHandler_BuildRequestErrors(t *testing.T) {
 	}{
 		{
 			name:    "url template error",
-			step:    &schema.WorkflowStep{Name: "wh", Type: "webhook", URL: badTemplate},
+			step:    &schema.WorkflowStep{Name: "wh", Type: "http", URL: badTemplate},
 			wantErr: errUtils.ErrTemplateEvaluation,
 		},
 		{
 			name:    "relative url rejected",
-			step:    &schema.WorkflowStep{Name: "wh", Type: "webhook", URL: "example.com/hook"},
-			wantErr: errUtils.ErrWebhookRequestFailed,
+			step:    &schema.WorkflowStep{Name: "wh", Type: "http", URL: "example.com/hook"},
+			wantErr: errUtils.ErrHTTPStepRequestFailed,
 		},
 		{
 			name: "query template error",
 			step: &schema.WorkflowStep{
-				Name: "wh", Type: "webhook", URL: "https://example.com",
+				Name: "wh", Type: "http", URL: "https://example.com",
 				Query: map[string]string{"ref": badTemplate},
 			},
 			wantErr: errUtils.ErrTemplateEvaluation,
@@ -484,7 +509,7 @@ func TestWebhookHandler_BuildRequestErrors(t *testing.T) {
 		{
 			name: "header template error",
 			step: &schema.WorkflowStep{
-				Name: "wh", Type: "webhook", URL: "https://example.com",
+				Name: "wh", Type: "http", URL: "https://example.com",
 				Headers: map[string]string{"X-Token": badTemplate},
 			},
 			wantErr: errUtils.ErrTemplateEvaluation,
@@ -492,7 +517,7 @@ func TestWebhookHandler_BuildRequestErrors(t *testing.T) {
 		{
 			name: "body template error",
 			step: &schema.WorkflowStep{
-				Name: "wh", Type: "webhook", URL: "https://example.com", Method: "POST",
+				Name: "wh", Type: "http", URL: "https://example.com", Method: "POST",
 				Body: badTemplate,
 			},
 			wantErr: errUtils.ErrTemplateEvaluation,
@@ -500,14 +525,14 @@ func TestWebhookHandler_BuildRequestErrors(t *testing.T) {
 		{
 			name: "form template error",
 			step: &schema.WorkflowStep{
-				Name: "wh", Type: "webhook", URL: "https://example.com", Method: "POST",
+				Name: "wh", Type: "http", URL: "https://example.com", Method: "POST",
 				Form: map[string]string{"status": badTemplate},
 			},
 			wantErr: errUtils.ErrTemplateEvaluation,
 		},
 	}
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := handler.Execute(context.Background(), tt.step, NewVariables())
@@ -517,17 +542,17 @@ func TestWebhookHandler_BuildRequestErrors(t *testing.T) {
 	}
 }
 
-// TestWebhookHandler_CustomTimeout verifies a valid per-attempt timeout is honored
-// end-to-end (the success path through resolveWebhookTimeout with a non-empty value).
-func TestWebhookHandler_CustomTimeout(t *testing.T) {
+// TestHTTPHandler_CustomTimeout verifies a valid per-attempt timeout is honored
+// end-to-end (the success path through resolveHTTPTimeout with a non-empty value).
+func TestHTTPHandler_CustomTimeout(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "ok")
 	}))
 	defer srv.Close()
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
-		Name: "timeout", Type: "webhook", URL: srv.URL, Timeout: "5s",
+		Name: "timeout", Type: "http", URL: srv.URL, Timeout: "5s",
 	}
 	require.NoError(t, handler.Validate(step))
 
@@ -536,8 +561,8 @@ func TestWebhookHandler_CustomTimeout(t *testing.T) {
 	assert.Equal(t, "ok", result.Value)
 }
 
-// TestWebhookHandler_TimeoutErrors covers the error paths in resolveWebhookTimeout.
-func TestWebhookHandler_TimeoutErrors(t *testing.T) {
+// TestHTTPHandler_TimeoutErrors covers the error paths in resolveHTTPTimeout.
+func TestHTTPHandler_TimeoutErrors(t *testing.T) {
 	tests := []struct {
 		name    string
 		timeout string
@@ -547,11 +572,11 @@ func TestWebhookHandler_TimeoutErrors(t *testing.T) {
 		{name: "template error", timeout: badTemplate, wantErr: errUtils.ErrTemplateEvaluation},
 	}
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			step := &schema.WorkflowStep{
-				Name: "wh", Type: "webhook", URL: "https://example.com", Timeout: tt.timeout,
+				Name: "wh", Type: "http", URL: "https://example.com", Timeout: tt.timeout,
 			}
 			_, err := handler.Execute(context.Background(), step, NewVariables())
 			require.Error(t, err)
@@ -560,29 +585,29 @@ func TestWebhookHandler_TimeoutErrors(t *testing.T) {
 	}
 }
 
-// TestWebhookHandler_ExpectStatusMismatch verifies an out-of-list status fails fast
-// with ErrWebhookUnexpectedStatus (no retry configured).
-func TestWebhookHandler_ExpectStatusMismatch(t *testing.T) {
+// TestHTTPHandler_ExpectStatusMismatch verifies an out-of-list status fails fast
+// with ErrHTTPStepUnexpectedStatus (no retry configured).
+func TestHTTPHandler_ExpectStatusMismatch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
-		Name: "expect-mismatch", Type: "webhook", URL: srv.URL,
-		Expect: &schema.WebhookExpect{Status: []int{201}},
+		Name: "expect-mismatch", Type: "http", URL: srv.URL,
+		Expect: &schema.HTTPExpect{Status: []int{201}},
 	}
 	require.NoError(t, handler.Validate(step))
 
 	_, err := handler.Execute(context.Background(), step, NewVariables())
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrWebhookUnexpectedStatus)
+	assert.ErrorIs(t, err, errUtils.ErrHTTPStepUnexpectedStatus)
 }
 
-// TestWebhookHandler_InvalidRetryConditionSkipped verifies an unparseable retry
+// TestHTTPHandler_InvalidRetryConditionSkipped verifies an unparseable retry
 // condition is skipped (not panicked on); the 400 then fails fast since nothing matches.
-func TestWebhookHandler_InvalidRetryConditionSkipped(t *testing.T) {
+func TestHTTPHandler_InvalidRetryConditionSkipped(t *testing.T) {
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -590,21 +615,21 @@ func TestWebhookHandler_InvalidRetryConditionSkipped(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	handler := mustGetWebhookHandler(t)
+	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
-		Name: "bad-condition", Type: "webhook", URL: srv.URL,
+		Name: "bad-condition", Type: "http", URL: srv.URL,
 		Retry: fastRetry(t, 3, "("), // Invalid regex; skipped, so 400 is not retried.
 	}
 	require.NoError(t, handler.Validate(step))
 
 	_, err := handler.Execute(context.Background(), step, NewVariables())
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrWebhookUnexpectedStatus)
+	assert.ErrorIs(t, err, errUtils.ErrHTTPStepUnexpectedStatus)
 	assert.Equal(t, 1, calls, "invalid condition must not cause a retry")
 }
 
-// TestWebhookHandler_HeadMethod verifies a non-body verb round-trips successfully.
-func TestWebhookHandler_HeadMethod(t *testing.T) {
+// TestHTTPHandler_HeadMethod verifies a non-body verb round-trips successfully.
+func TestHTTPHandler_HeadMethod(t *testing.T) {
 	var gotMethod string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
@@ -612,8 +637,8 @@ func TestWebhookHandler_HeadMethod(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	handler := mustGetWebhookHandler(t)
-	step := &schema.WorkflowStep{Name: "head", Type: "webhook", URL: srv.URL, Method: "HEAD"}
+	handler := mustGetHTTPHandler(t)
+	step := &schema.WorkflowStep{Name: "head", Type: "http", URL: srv.URL, Method: "HEAD"}
 	require.NoError(t, handler.Validate(step))
 
 	_, err := handler.Execute(context.Background(), step, NewVariables())
@@ -621,43 +646,43 @@ func TestWebhookHandler_HeadMethod(t *testing.T) {
 	assert.Equal(t, http.MethodHead, gotMethod)
 }
 
-func TestWebhookHTTPError(t *testing.T) {
-	cause := errUtils.ErrWebhookRequestFailed
-	transportErr := &webhookHTTPError{transport: true, cause: cause}
+func TestHTTPError(t *testing.T) {
+	cause := errUtils.ErrHTTPStepRequestFailed
+	transportErr := &httpError{transport: true, cause: cause}
 	assert.Contains(t, transportErr.Error(), "transport error")
 	assert.ErrorIs(t, transportErr.Unwrap(), cause)
 
-	statusErr := &webhookHTTPError{status: "503 Service Unavailable", statusCode: 503}
+	statusErr := &httpError{status: "503 Service Unavailable", statusCode: 503}
 	assert.Contains(t, statusErr.Error(), "503 Service Unavailable")
 	assert.NoError(t, statusErr.Unwrap())
 }
 
-func TestResolveWebhookTimeoutDefault(t *testing.T) {
-	d, err := resolveWebhookTimeout(&schema.WorkflowStep{Name: "wh"}, NewVariables())
+func TestResolveHTTPTimeoutDefault(t *testing.T) {
+	d, err := resolveHTTPTimeout(&schema.WorkflowStep{Name: "wh"}, NewVariables())
 	require.NoError(t, err)
-	assert.Equal(t, webhookDefaultTimeout, d)
+	assert.Equal(t, httpDefaultTimeout, d)
 }
 
-func TestWebhookExpectCheck(t *testing.T) {
+func TestHTTPExpectCheck(t *testing.T) {
 	tests := []struct {
 		name       string
-		expect     *webhookExpect
+		expect     *httpExpect
 		statusCode int
 		body       string
 		want       failureReason
 	}{
-		{name: "default 2xx ok", expect: &webhookExpect{}, statusCode: 204, want: reasonNone},
-		{name: "default non-2xx", expect: &webhookExpect{}, statusCode: 500, want: reasonStatus},
-		{name: "status list match", expect: &webhookExpect{statuses: []int{418}}, statusCode: 418, want: reasonNone},
-		{name: "status list miss", expect: &webhookExpect{statuses: []int{200}}, statusCode: 201, want: reasonStatus},
+		{name: "default 2xx ok", expect: &httpExpect{}, statusCode: 204, want: reasonNone},
+		{name: "default non-2xx", expect: &httpExpect{}, statusCode: 500, want: reasonStatus},
+		{name: "status list match", expect: &httpExpect{statuses: []int{418}}, statusCode: 418, want: reasonNone},
+		{name: "status list miss", expect: &httpExpect{statuses: []int{200}}, statusCode: 201, want: reasonStatus},
 		{
 			name:       "response match",
-			expect:     &webhookExpect{responses: []*regexp.Regexp{regexp.MustCompile("ok")}},
+			expect:     &httpExpect{responses: []*regexp.Regexp{regexp.MustCompile("ok")}},
 			statusCode: 200, body: "all ok", want: reasonNone,
 		},
 		{
 			name:       "response miss",
-			expect:     &webhookExpect{responses: []*regexp.Regexp{regexp.MustCompile("ok")}},
+			expect:     &httpExpect{responses: []*regexp.Regexp{regexp.MustCompile("ok")}},
 			statusCode: 200, body: "nope", want: reasonResponse,
 		},
 	}
@@ -668,7 +693,7 @@ func TestWebhookExpectCheck(t *testing.T) {
 	}
 }
 
-func TestWebhookHelpers(t *testing.T) {
+func TestHTTPHelpers(t *testing.T) {
 	t.Run("findHeader case-insensitive", func(t *testing.T) {
 		headers := map[string]string{"content-type": "application/json"}
 		assert.Equal(t, "application/json", findHeader(headers, "Content-Type"))
@@ -690,7 +715,7 @@ func TestWebhookHelpers(t *testing.T) {
 
 	t.Run("sortedMethods is stable and complete", func(t *testing.T) {
 		methods := sortedMethods()
-		assert.Equal(t, len(webhookMethods), len(methods))
+		assert.Equal(t, len(httpMethods), len(methods))
 		assert.Equal(t, []string{
 			http.MethodDelete, http.MethodGet, http.MethodHead,
 			http.MethodOptions, http.MethodPatch, http.MethodPost, http.MethodPut,

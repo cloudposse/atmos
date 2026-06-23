@@ -5,10 +5,11 @@ workflows:
       failures (5xx/429/network) with exponential backoff. Set WEBHOOK_URL to a
       reachable endpoint before running:
 
-        WEBHOOK_URL=https://example.com/hook atmos workflow notify -f webhook
+        WEBHOOK_URL=https://example.com/hook atmos workflow notify -f http
     steps:
       - name: trigger
-        type: webhook
+        # `webhook` is an accepted alias for `http`.
+        type: http
         url: "{{ .env.WEBHOOK_URL }}"
         method: POST
         query:
@@ -36,7 +37,7 @@ workflows:
       response matches. Set HEALTH_URL before running.
     steps:
       - name: health
-        type: webhook
+        type: http
         url: "{{ .env.HEALTH_URL }}"
         method: GET
         expect:

@@ -1,11 +1,11 @@
 ---
-slug: webhook-step-type
-title: "Webhook Step Type: Call HTTP Endpoints from Workflows and Custom Commands"
+slug: http-step-type
+title: "HTTP Step Type: Call HTTP Endpoints from Workflows and Custom Commands"
 authors: [osterman]
 tags: [feature]
 ---
 
-Workflows and custom commands now support a native `webhook` step type that performs an HTTP request — any verb, query-string parameters, headers, and a request body (raw or form/JSON) — with per-attempt timeouts and retries that compose with the existing `retry:` policy. No more shelling out to `curl`.
+Workflows and custom commands now support a native `http` step type that performs an HTTP request — any verb, query-string parameters, headers, and a request body (raw or form/JSON) — with per-attempt timeouts and retries that compose with the existing `retry:` policy. No more shelling out to `curl`. (Prefer `type: webhook`? It's an accepted alias.)
 
 <!--truncate-->
 
@@ -26,14 +26,14 @@ That works until it doesn't: `curl` isn't guaranteed to be on the box (especiall
 
 ## The Solution
 
-The `webhook` step makes HTTP a first-class citizen:
+The `http` step makes HTTP a first-class citizen:
 
 ```yaml
 workflows:
   notify:
     steps:
       - name: trigger
-        type: webhook
+        type: http
         url: "https://ci.example.com/hook/{{ .env.JOB_ID }}"
         method: POST
         query:
@@ -55,7 +55,7 @@ workflows:
 
       - name: report
         type: info
-        content: "Webhook returned HTTP {{ .steps.trigger.metadata.status_code }}"
+        content: "Endpoint returned HTTP {{ .steps.trigger.metadata.status_code }}"
 ```
 
 Everything templates, including the URL, headers, query params, and body — so you can thread values from earlier steps or the environment straight into the request.
@@ -71,7 +71,7 @@ You asked for full parameter support, and it's all here:
 ```yaml
 steps:
   - name: notify-slack
-    type: webhook
+    type: http
     url: "{{ .env.SLACK_WEBHOOK_URL }}"
     method: POST
     headers:
@@ -82,7 +82,7 @@ steps:
 
 ## Timeouts and Retries That Compose
 
-`timeout` is the per-attempt deadline. `retry` is the same retry block you already use on `shell` and `atmos` steps — and the webhook step is HTTP-aware about what's worth retrying:
+`timeout` is the per-attempt deadline. `retry` is the same retry block you already use on `shell` and `atmos` steps — and the http step is HTTP-aware about what's worth retrying:
 
 - **Retried by default:** transport/network errors, `5xx`, and `429 Too Many Requests`.
 - **Fail fast:** other `4xx` responses (a `404` won't burn through five attempts).
@@ -93,7 +93,7 @@ This makes the step a natural fit for polling, too — `GET` a health endpoint a
 ```yaml
 steps:
   - name: health
-    type: webhook
+    type: http
     url: "{{ .env.HEALTH_URL }}"
     expect:
       status: [200]
@@ -114,8 +114,8 @@ The response body becomes the step's value, and useful details land in metadata:
 - `{{ .steps.<name>.metadata.status }}` — the status text (e.g., `200 OK`)
 - `{{ .steps.<name>.metadata.response_headers }}` — response headers
 
-Because it's a regular step type, `webhook` works in [custom commands](/cli/configuration/commands) exactly as it does in [workflows](/workflows).
+Because it's a regular step type, `http` works in [custom commands](/cli/configuration/commands) exactly as it does in [workflows](/workflows).
 
 ## Get Involved
 
-See the [workflow step types](/workflows) and [custom commands](/cli/configuration/commands) docs for the full reference, and the `examples/workflow-webhook` example to try it out. Questions or ideas? Join us in the [Cloud Posse community Slack](https://cloudposse.com/slack).
+See the [workflow step types](/workflows) and [custom commands](/cli/configuration/commands) docs for the full reference, and the `examples/http-webhooks` example to try it out. Questions or ideas? Join us in the [Cloud Posse community Slack](https://cloudposse.com/slack).

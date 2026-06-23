@@ -1287,11 +1287,11 @@
                       },
                       "timeout": {
                         "type": "string",
-                        "description": "Step timeout duration (e.g., '30s', '1m'). For the webhook step type this is the per-attempt timeout."
+                        "description": "Step timeout duration (e.g., '30s', '1m'). For the http step type this is the per-attempt timeout."
                       },
                       "url": {
                         "type": "string",
-                        "description": "Request URL for the webhook step type (supports templates)"
+                        "description": "Request URL for the http step type (supports templates)"
                       },
                       "method": {
                         "type": "string",
@@ -1304,37 +1304,37 @@
                           "HEAD",
                           "OPTIONS"
                         ],
-                        "description": "HTTP method/verb for the webhook step type (default: GET)"
+                        "description": "HTTP method/verb for the http step type (default: GET)"
                       },
                       "headers": {
                         "type": "object",
                         "additionalProperties": {
                           "type": "string"
                         },
-                        "description": "HTTP request headers for the webhook step type (supports templates)"
+                        "description": "HTTP request headers for the http step type (supports templates)"
                       },
                       "query": {
                         "type": "object",
                         "additionalProperties": {
                           "type": "string"
                         },
-                        "description": "Query-string parameters for the webhook step type (supports templates)"
+                        "description": "Query-string parameters for the http step type (supports templates)"
                       },
                       "body": {
                         "type": "string",
-                        "description": "Raw request body for the webhook step type (supports templates); mutually exclusive with form"
+                        "description": "Raw request body for the http step type (supports templates); mutually exclusive with form"
                       },
                       "form": {
                         "type": "object",
                         "additionalProperties": {
                           "type": "string"
                         },
-                        "description": "Form/JSON body parameters for the webhook step type; mutually exclusive with body"
+                        "description": "Form/JSON body parameters for the http step type; mutually exclusive with body"
                       },
                       "expect": {
                         "type": "object",
                         "additionalProperties": false,
-                        "description": "Success criteria for the webhook step type; defaults to any 2xx response",
+                        "description": "Success criteria for the http step type; defaults to any 2xx response",
                         "properties": {
                           "status": {
                             "type": "array",
@@ -1361,7 +1361,10 @@
                           ],
                           "properties": {
                             "type": {
-                              "const": "webhook"
+                              "enum": [
+                                "http",
+                                "webhook"
+                              ]
                             }
                           }
                         },

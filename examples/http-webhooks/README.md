@@ -1,9 +1,12 @@
-# Webhook Step Type
+# HTTP Step Type
 
-This example demonstrates the `webhook` workflow step type, which performs an HTTP
+This example demonstrates the `http` workflow step type, which performs an HTTP
 request with a configurable method/verb, query-string parameters, headers, and a request
 body (raw or form/JSON). Requests get per-attempt timeouts and retries that compose with
 the step's `retry:` policy.
+
+> `webhook` is an accepted alias for `http` — `type: webhook` behaves identically and is
+> handy for the fire-a-notification use case.
 
 ## Workflows
 
@@ -18,10 +21,10 @@ Point the workflows at any reachable endpoint via environment variables:
 
 ```shell
 # Notify an endpoint (use your own URL, or a request-bin style service).
-WEBHOOK_URL=https://example.com/hook atmos workflow notify -f webhook
+WEBHOOK_URL=https://example.com/hook atmos workflow notify -f http
 
 # Poll a health endpoint until it reports healthy.
-HEALTH_URL=https://example.com/healthz atmos workflow poll-health -f webhook
+HEALTH_URL=https://example.com/healthz atmos workflow poll-health -f http
 ```
 
 ## Key Fields
@@ -29,7 +32,7 @@ HEALTH_URL=https://example.com/healthz atmos workflow poll-health -f webhook
 | Field           | Description                                                                 |
 |-----------------|-----------------------------------------------------------------------------|
 | `url`           | Request URL (required, supports templates).                                 |
-| `method`        | HTTP verb: `GET` (default), `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`.       |
+| `method`        | HTTP verb: `GET` (default), `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`. |
 | `query`         | Query-string parameters.                                                    |
 | `headers`       | Request headers.                                                            |
 | `body` / `form` | Raw body, or key-value params (urlencoded, or JSON when `Content-Type` is JSON). Mutually exclusive. |
