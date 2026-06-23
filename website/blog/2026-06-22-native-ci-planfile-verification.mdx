@@ -56,7 +56,7 @@ That's the real-world problem: rigid checks make a plan go *invalid* long before
 
 Atmos's verification is **semantic**, not naive. It parses both plans to JSON, normalizes the noise (sorted keys, masked secrets, computed-hash attributes, data-source reads), and compares what matters. So it flags a resource added, removed, or substantively changed — while letting the incidental variation slide. That's what makes plan-then-deploy practical.
 
-Verification lives on `deploy`, not `apply`, by construction: `deploy` re-runs `plan` as part of the command, so there's a fresh plan to diff the stored one against. `apply` never re-plans, so it stays a thin, predictable wrapper around `terraform apply`.
+Verification lives on `deploy`, not `apply`, by construction: `deploy` runs a discrete `plan` step as part of the command, capturing a fresh plan to diff the stored one against. `apply` doesn't capture that separate planfile — it applies a plan you pass, or plans-and-applies in one step like `terraform apply` — so it stays a thin, predictable wrapper.
 
 ## How to Use It
 

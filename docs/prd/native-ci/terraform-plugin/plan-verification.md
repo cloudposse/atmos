@@ -25,10 +25,11 @@
 
 **Why `deploy`, not `apply`?**
 - **It's where the fresh plan exists.** Drift detection requires comparing the stored planfile against a
-  *current* plan. `deploy` already re-runs `terraform plan` (then applies), so the fresh plan to diff
-  against is produced as part of the command. `apply` does **not** re-plan — it applies an existing plan
-  or config directly — so there is nothing to diff a stored plan against. Verification therefore belongs
-  on `deploy` by construction.
+  *current* plan. `deploy` runs a discrete `terraform plan` step (then applies), so a fresh planfile to
+  diff against is captured as part of the command. `apply` does **not** run that separate plan step — it
+  applies a planfile passed with `--planfile`, or plans-and-applies in one step like `terraform apply` —
+  so Atmos has no separately-captured fresh plan to diff against. Verification therefore belongs on
+  `deploy` by construction.
 - `apply` is a thin wrapper around `terraform apply` — it should not interact with planfile storage.
 - `deploy` is the opinionated CI command designed for automation; clean separation keeps `apply` simple.
 
