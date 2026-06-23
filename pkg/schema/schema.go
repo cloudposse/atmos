@@ -113,6 +113,7 @@ type AtmosConfiguration struct {
 	Import          []string                  `yaml:"import" json:"import" mapstructure:"import"`
 	Docs            Docs                      `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Auth            AuthConfig                `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	Container       ContainerConfig           `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
 	Env             map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
 	CaseMaps        *casemap.CaseMaps         `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
 	Profiler        profiler.Config           `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`

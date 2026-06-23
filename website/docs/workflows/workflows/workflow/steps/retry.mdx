@@ -1,0 +1,49 @@
+---
+title: retry
+sidebar_label: retry
+sidebar_position: 3
+slug: /workflows/steps/retry
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The step-level `retry` field automatically re-runs a failed step using a configurable backoff strategy, making workflows resilient to transient failures.
+</Intro>
+
+```yaml
+steps:
+  - command: terraform apply vpc -auto-approve
+    retry:
+      max_attempts: 3
+      backoff_strategy: exponential
+      initial_delay: 5s
+      max_delay: 60s
+```
+
+## Fields
+
+<dl>
+  <dt>`max_attempts`</dt>
+  <dd>Maximum number of attempts. Omit for unlimited attempts.</dd>
+
+  <dt>`max_elapsed_time`</dt>
+  <dd>Total time budget for all attempts and backoff delays combined.</dd>
+
+  <dt>`backoff_strategy`</dt>
+  <dd>Delay strategy: `constant`, `linear`, or `exponential`. Defaults to `constant`.</dd>
+
+  <dt>`initial_delay`</dt>
+  <dd>Delay before the first retry.</dd>
+
+  <dt>`max_delay`</dt>
+  <dd>Maximum delay between retries.</dd>
+
+  <dt>`multiplier`</dt>
+  <dd>Multiplier for `linear` or `exponential` backoff.</dd>
+
+  <dt>`random_jitter`</dt>
+  <dd>Jitter factor from `0.0` to `1.0` added to delays.</dd>
+</dl>
+
+Omitting a parameter disables that limit or uses the default behavior. Explicit zero values are invalid where a positive duration or count is required.

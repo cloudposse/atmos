@@ -6,6 +6,61 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestExtractContainerID(t *testing.T) {
+	// The "real docker create with inline pull" case reproduces the CI failure where
+	// `docker create alpine:latest` pulls the image first and the whole blob was previously
+	// returned as the container ID, breaking the subsequent `docker start`.
+	tests := []struct {
+		name     string
+		output   string
+		expected string
+	}{
+		{
+			name:     "container ID only",
+			output:   "78cd31fb92191347df7b4cb8b0e7a6fcf2633080720af5f81a0c2f2def2b5550",
+			expected: "78cd31fb92191347df7b4cb8b0e7a6fcf2633080720af5f81a0c2f2def2b5550",
+		},
+		{
+			name: "container ID with inline pull output (real docker behavior)",
+			output: "Unable to find image 'alpine:latest' locally\n" +
+				"latest: Pulling from library/alpine\n" +
+				"55afa1ecc21d: Pulling fs layer\n" +
+				"55afa1ecc21d: Download complete\n" +
+				"55afa1ecc21d: Pull complete\n" +
+				"Digest: sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b\n" +
+				"Status: Downloaded newer image for alpine:latest\n" +
+				"78cd31fb92191347df7b4cb8b0e7a6fcf2633080720af5f81a0c2f2def2b5550\n",
+			expected: "78cd31fb92191347df7b4cb8b0e7a6fcf2633080720af5f81a0c2f2def2b5550",
+		},
+		{
+			name:     "container ID with trailing newline",
+			output:   "abc123\n",
+			expected: "abc123",
+		},
+		{
+			name:     "container ID with multiple trailing newlines",
+			output:   "abc123\n\n\n",
+			expected: "abc123",
+		},
+		{
+			name:     "empty output",
+			output:   "",
+			expected: "",
+		},
+		{
+			name:     "whitespace-only output",
+			output:   "  \n\t\n  ",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, extractContainerID([]byte(tt.output)))
+		})
+	}
+}
+
 func TestBuildCreateArgs(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -114,6 +169,7 @@ func TestBuildCreateArgs(t *testing.T) {
 			},
 			expected: []string{
 				"create", "--name", "test-container", "-it",
+				"--stop-signal", "SIGKILL",
 				"--entrypoint", "/bin/sh",
 				"ubuntu:22.04",
 				"-c", "sleep infinity",
@@ -162,6 +218,7 @@ func TestBuildCreateArgs(t *testing.T) {
 				"--user", "node",
 				"-w", "/workspace",
 				"--network=bridge",
+				"--stop-signal", "SIGKILL",
 				"--entrypoint", "/bin/sh",
 				"node:18",
 				"-c", "sleep infinity",
@@ -465,6 +522,7 @@ func TestAddImageAndCommand(t *testing.T) {
 				OverrideCommand: true,
 			},
 			expected: []string{
+				"--stop-signal", "SIGKILL",
 				"--entrypoint", "/bin/sh",
 				"ubuntu:22.04",
 				"-c", "sleep infinity",
@@ -479,6 +537,7 @@ func TestAddImageAndCommand(t *testing.T) {
 			},
 			expected: []string{
 				"--rm",
+				"--stop-signal", "SIGKILL",
 				"--entrypoint", "/bin/sh",
 				"ubuntu:22.04",
 				"-c", "sleep infinity",
@@ -840,6 +899,48 @@ func TestBuildBuildArgs(t *testing.T) {
 				"-f", "Dockerfile.dev", "/path/to/context",
 			},
 		},
+		{
+			name: "buildx build",
+			config: &BuildConfig{
+				Engine:     "buildx",
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Tags:       []string{"myapp:latest"},
+			},
+			expected: []string{"buildx", "build", "-t", "myapp:latest", "-f", "Dockerfile", "."},
+		},
+		{
+			name: "buildx bake",
+			config: &BuildConfig{
+				NoCache: true,
+				Pull:    true,
+				Bake: &BakeConfig{
+					File:    "docker-bake.hcl",
+					Files:   []string{"docker-bake.override.hcl"},
+					Target:  "app",
+					Targets: []string{"worker"},
+					Set:     []string{"*.platform=linux/amd64"},
+					Vars:    map[string]string{"VERSION": "1.0.0"},
+					Load:    true,
+					Push:    true,
+					Print:   true,
+				},
+			},
+			expected: []string{
+				"buildx", "bake",
+				"--file", "docker-bake.hcl",
+				"--file", "docker-bake.override.hcl",
+				"--no-cache",
+				"--pull",
+				"--load",
+				"--push",
+				"--print",
+				"--var", "VERSION=1.0.0",
+				"--set", "*.platform=linux/amd64",
+				"app",
+				"worker",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1038,4 +1139,12 @@ func TestType_String(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestBuildImageInspectArgs(t *testing.T) {
+	assert.Equal(
+		t,
+		[]string{"image", "inspect", "--format", "{{json .}}", "alpine:latest"},
+		buildImageInspectArgs("alpine:latest"),
+	)
 }
