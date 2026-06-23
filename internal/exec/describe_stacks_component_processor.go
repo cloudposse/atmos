@@ -449,7 +449,15 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 
 	// Process YAML functions.
 	if p.processYamlFunctions {
-		componentSection, err = processComponentSectionYAMLFunctions(p.atmosConfig, &info, componentSection, p.skip)
+		// A component disabled via metadata.enabled has no deployed state, so its
+		// !terraform.state / !terraform.output must not be resolved — the backend read would
+		// fail with "state not provisioned". Gate on metadata.enabled only, independent of
+		// vars.enabled. See docs/fixes/2026-06-22-describe-respect-metadata-enabled.md.
+		skip := p.skip
+		if !isComponentEnabled(secs.metadata, componentName) {
+			skip = disabledComponentTerraformSkip(p.skip)
+		}
+		componentSection, err = processComponentSectionYAMLFunctions(p.atmosConfig, &info, componentSection, skip)
 		if err != nil {
 			return err
 		}
@@ -469,6 +477,18 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 // ---------------------------------------------------------------------------
 // Pure helper functions – independently unit-testable
 // ---------------------------------------------------------------------------
+
+// disabledComponentTerraformSkip returns baseSkip plus the terraform state/output YAML functions so a
+// component disabled via metadata.enabled keeps its !terraform.* values unresolved (no backend read).
+// The names are bare (no leading "!") to match skipFunc, which trims the tag prefix before comparing.
+// baseSkip is cloned so the processor's shared skip slice is never mutated.
+func disabledComponentTerraformSkip(baseSkip []string) []string {
+	return append(
+		slices.Clone(baseSkip),
+		strings.TrimPrefix(u.AtmosYamlFuncTerraformState, "!"),
+		strings.TrimPrefix(u.AtmosYamlFuncTerraformOutput, "!"),
+	)
+}
 
 // extractDescribeComponentSections returns all standard Atmos sections from a component map,
 // using empty maps (or empty string) as defaults when a section is absent.
