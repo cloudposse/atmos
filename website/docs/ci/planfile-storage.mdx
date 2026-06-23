@@ -187,10 +187,10 @@ components:
 - **`warn`**: log the drift but proceed with the fresh plan.
 - **`off`**: skip verification (and the stored-plan download).
 
-A companion setting, `components.terraform.planfiles.on_missing` (`fail` | `warn` | `off`), governs the
-case where **no stored plan was found** to verify against. It defaults to the resolved `verify` mode, so a
-fail-by-default CI deploy fails loudly instead of silently applying an unverified fresh plan. See
-[Missing stored plan](/components/terraform/planfiles#missing-stored-plan).
+A companion boolean, `components.terraform.planfiles.required`, governs whether a stored plan **must
+exist** to verify against. It defaults to tracking `verify` strictness (required when verification
+resolves to `fail`), so a fail-by-default CI deploy fails loudly instead of silently applying an
+unverified fresh plan. See [Missing stored plan](/components/terraform/planfiles#missing-stored-plan).
 
 Per-run overrides: `--verify-plan` (force `fail`) and `--no-verify-plan` (force `off`); CLI flags beat
 config, which beats the CI default. See

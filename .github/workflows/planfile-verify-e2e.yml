@@ -115,9 +115,9 @@ jobs:
         working-directory: tests/fixtures/scenarios/planfile-artifacts-e2e
         # No drift: the deploy re-plans the unchanged component, the plan-diff matches
         # the stored plan, and the verified plan is applied. No --ci, no log grep: a
-        # green deploy *proves* verification ran, because a missing/undownloadable
-        # stored plan now fails loudly (planfiles.on_missing defaults to the verify
-        # mode, which is fail under CI).
+        # green deploy *proves* verification ran, because a missing stored plan now
+        # fails loudly (planfiles.required defaults to tracking the verify mode,
+        # which is fail under CI).
         run: atmos terraform deploy mycomponent -s prod
 
   deploy-drift:

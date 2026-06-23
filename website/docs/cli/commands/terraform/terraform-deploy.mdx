@@ -235,11 +235,11 @@ the verified plan — failing on drift by default. Control this with
 [`components.terraform.planfiles.verify`](/components/terraform/planfiles#drift-verification)
 (`fail` | `warn` | `off`) or the `--verify-plan` / `--no-verify-plan` flags (CLI overrides config).
 
-If **no stored plan is found** (the `plan` job never uploaded one, or the download failed),
-[`components.terraform.planfiles.on_missing`](/components/terraform/planfiles#missing-stored-plan) decides
-what happens. It defaults to the resolved `verify` mode, so a fail-by-default CI deploy fails loudly
+If **no stored plan is found** (the `plan` job never uploaded one),
+[`components.terraform.planfiles.required`](/components/terraform/planfiles#missing-stored-plan) decides
+what happens. It defaults to tracking `verify` strictness, so a fail-by-default CI deploy fails loudly
 rather than silently applying an unverified fresh plan — a green `deploy` therefore proves verification
-ran. Set `on_missing: warn` or `off` to allow a fresh apply when the stored plan is absent.
+ran. Set `required: false` to allow a fresh apply when the stored plan is absent.
 
 With the `github/artifacts` store, the automatic download talks to the GitHub Artifacts runtime API, so
 the workflow must surface the runner's `ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL` with the

@@ -707,7 +707,7 @@ func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksIn
 	storedPlanPath := filepath.Join(filepath.Dir(canonicalPlanPath), planfile.StoredPlanPrefix+planfile.PlanFilename)
 	if _, statErr := os.Stat(storedPlanPath); statErr != nil {
 		// No stored planfile was downloaded. Whether that blocks the deploy is
-		// configurable via components.terraform.planfiles.on_missing (default:
+		// configurable via components.terraform.planfiles.required (default:
 		// tracks the verify mode, so a fail-by-default CI deploy fails loudly
 		// instead of silently applying an unverified fresh plan).
 		return handleMissingStoredPlan(&verifyAtmosConfig, info)
@@ -723,23 +723,19 @@ func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksIn
 }
 
 // handleMissingStoredPlan applies the configured behavior when a deploy found no
-// stored planfile to verify against. Under fail it errors (a reviewed stored plan
-// was expected); under warn it logs and proceeds with a fresh apply; under off it
-// proceeds silently. The mode is resolved with real CI detection because, unlike
+// stored planfile to verify against. When a stored plan is required it errors (a
+// reviewed plan was expected); otherwise it logs and proceeds with a fresh apply.
+// Whether a plan is required is resolved with real CI detection because, unlike
 // the drift path, the absence of a stored plan does not imply the download hook ran.
 func handleMissingStoredPlan(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
-	mode := planfile.ResolveMissingMode(atmosConfig, ci.IsCI(), info.VerifyPlanMode)
-	switch mode {
-	case schema.PlanfileVerifyFail:
+	if planfile.IsPlanRequired(atmosConfig, ci.IsCI(), info.VerifyPlanMode) {
 		return fmt.Errorf("%w: expected a stored planfile for component %q in stack %q but none was found",
 			errUtils.ErrStoredPlanfileMissing, info.ComponentFromArg, info.Stack)
-	case schema.PlanfileVerifyWarn:
-		log.Warn("No stored planfile found to verify; applying a fresh plan without verification",
-			logKeyComponent, info.ComponentFromArg, "stack", info.Stack)
-		return nil
-	default:
-		return nil
 	}
+
+	log.Warn("No stored planfile found to verify; applying a fresh plan without verification",
+		logKeyComponent, info.ComponentFromArg, "stack", info.Stack)
+	return nil
 }
 
 func terraformSignalContext(actualCmd *cobra.Command) (context.Context, context.CancelFunc) {

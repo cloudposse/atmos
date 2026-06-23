@@ -42,33 +42,34 @@ func ResolveVerifyMode(atmosConfig *schema.AtmosConfiguration, ciEnabled bool, c
 	return schema.PlanfileVerifyOff
 }
 
-// ResolveMissingMode resolves what `atmos terraform deploy` does when no stored
-// planfile was found to verify against (as opposed to ResolveVerifyMode, which
-// governs the drift comparison once a stored plan exists). Precedence:
+// IsPlanRequired reports whether `atmos terraform deploy` must find a stored
+// planfile to verify against (as opposed to ResolveVerifyMode, which governs the
+// drift comparison once a stored plan exists). Resolution:
 //
-//	explicit CLI override (--verify-plan/--no-verify-plan)
-//	  > config (components.terraform.planfiles.on_missing)
-//	  > default: tracks the resolved verify mode.
-//
-// Tracking the verify mode by default means a fail-by-default CI deploy fails
-// loudly when the expected stored plan is absent, instead of silently applying
-// an unverified fresh plan; local deploys (no CI, no storage) resolve to off.
+//   - When verification resolves to off, nothing is downloaded or verified, so a
+//     stored plan is never required (this also short-circuits an explicit
+//     `required: true` paired with `--no-verify-plan`).
+//   - An explicit components.terraform.planfiles.required wins.
+//   - Unset: required tracks verify strictness — true only when verification
+//     resolves to fail (e.g. under CI with storage configured). This makes a
+//     fail-by-default deploy fail loudly on a missing plan instead of silently
+//     applying an unverified fresh plan; local deploys (no CI, no storage)
+//     resolve to off and are never required.
 //
 // The cliOverride is empty when neither flag was set.
-func ResolveMissingMode(atmosConfig *schema.AtmosConfiguration, ciEnabled bool, cliOverride schema.PlanfileVerifyMode) schema.PlanfileVerifyMode {
-	defer perf.Track(atmosConfig, "planfile.ResolveMissingMode")()
+func IsPlanRequired(atmosConfig *schema.AtmosConfiguration, ciEnabled bool, cliOverride schema.PlanfileVerifyMode) bool {
+	defer perf.Track(atmosConfig, "planfile.IsPlanRequired")()
 
-	if cliOverride != "" {
-		return cliOverride
+	verifyMode := ResolveVerifyMode(atmosConfig, ciEnabled, cliOverride)
+	if verifyMode == schema.PlanfileVerifyOff {
+		return false
 	}
-	if atmosConfig == nil {
-		return schema.PlanfileVerifyOff
+	if atmosConfig != nil {
+		if required := atmosConfig.Components.Terraform.Planfiles.Required; required != nil {
+			return *required
+		}
 	}
 
-	if onMissing := atmosConfig.Components.Terraform.Planfiles.OnMissing; onMissing != "" {
-		return onMissing
-	}
-
-	// Unset: track the verify mode so missing-plan strictness mirrors drift strictness.
-	return ResolveVerifyMode(atmosConfig, ciEnabled, cliOverride)
+	// Unset: require a stored plan only when verification is strict.
+	return verifyMode == schema.PlanfileVerifyFail
 }

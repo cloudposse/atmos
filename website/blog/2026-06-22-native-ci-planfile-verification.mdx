@@ -18,7 +18,7 @@ Two pieces landed together:
   - **`fail`** (default under CI): blocks the deploy on drift,
   - **`warn`**: logs the drift but proceeds,
   - **`off`**: skips verification entirely.
-- **A defined answer for "no stored plan found."** `verify` covers the case where a stored plan *exists* but differs. A companion `on_missing` setting covers the case where there is **no** stored plan to verify against — previously a silent fresh apply. It defaults to the resolved `verify` mode, so a fail-by-default CI deploy now fails loudly instead of quietly applying something unverified. That means a green `deploy` actually *proves* verification ran — no log-scraping required.
+- **A defined answer for "no stored plan found."** `verify` covers the case where a stored plan *exists* but differs. A companion `required` boolean covers whether a stored plan **must** exist to verify against — previously a silent fresh apply. It defaults to tracking `verify` strictness, so a fail-by-default CI deploy now fails loudly instead of quietly applying something unverified. That means a green `deploy` actually *proves* verification ran — no log-scraping required.
 
 Configure it once:
 
@@ -27,7 +27,7 @@ components:
   terraform:
     planfiles:
       verify: fail        # drift: stored plan exists but differs (fail | warn | off)
-      on_missing: fail    # no stored plan was found (defaults to tracking `verify`)
+      required: true      # must a reviewed stored plan exist? (defaults to tracking `verify`)
       priority: [github]
       stores:
         github:

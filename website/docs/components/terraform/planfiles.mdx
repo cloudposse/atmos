@@ -334,34 +334,33 @@ when planfile storage is configured.
 
 ### Missing stored plan
 
-`verify` governs the comparison when a stored plan **exists**. A separate setting,
-`components.terraform.planfiles.on_missing`, governs what happens when **no stored plan was found** to
-verify against (for example, the `plan` job never uploaded one, or the download failed). This is the
-difference between "the plan drifted" and "there is no reviewed plan to apply" — without it, a `deploy`
-would silently apply an unverified fresh plan, so a green run would not actually prove verification ran.
+`verify` governs the comparison when a stored plan **exists**. A separate boolean,
+`components.terraform.planfiles.required`, governs whether a stored plan **must exist** to verify against
+(for example, when the `plan` job never uploaded one). This is the difference between "the plan drifted"
+and "there is no reviewed plan to apply" — without it, a `deploy` would silently apply an unverified fresh
+plan, so a green run would not actually prove verification ran.
 
 ```yaml
 components:
   terraform:
     planfiles:
       verify: fail        # drift behavior when a stored plan exists
-      on_missing: fail    # behavior when no stored plan was found (default: tracks `verify`)
+      required: true      # must a reviewed stored plan exist? (default: tracks `verify`)
 ```
 
 <dl>
-  <dt>`fail`</dt>
-  <dd>Fail the deploy: a reviewed stored plan was expected but none was found.</dd>
+  <dt>`true`</dt>
+  <dd>Fail the deploy when no stored plan is found: a reviewed plan was expected.</dd>
 
-  <dt>`warn`</dt>
-  <dd>Log a warning and apply a freshly generated plan without verification.</dd>
-
-  <dt>`off`</dt>
-  <dd>Silently apply a freshly generated plan (the pre-existing behavior).</dd>
+  <dt>`false`</dt>
+  <dd>Apply a freshly generated plan when no stored plan is found (you opted out of requiring one); a warning is logged.</dd>
 </dl>
 
-When `on_missing` is unset it **tracks the resolved `verify` mode**, so a fail-by-default CI deploy also
-fails loudly on a missing plan rather than applying an unverified one. Local deploys (no CI, no storage)
-resolve to `off` and are unaffected. Precedence mirrors `verify`: **CLI flag > config > tracks `verify`**.
+When `required` is unset it **tracks `verify` strictness** — a stored plan is required only when
+verification resolves to `fail` (for example, under CI with planfile storage configured). So a
+fail-by-default CI deploy fails loudly on a missing plan rather than applying an unverified one, while
+local deploys (no CI, no storage) never require one. `required` only applies when verification is active:
+if `verify` resolves to `off` (including `--no-verify-plan`), nothing is downloaded, verified, or required.
 
 :::note GitHub Actions runtime token
 With the `github/artifacts` store, the automatic download uses the GitHub Artifacts runtime API, so the

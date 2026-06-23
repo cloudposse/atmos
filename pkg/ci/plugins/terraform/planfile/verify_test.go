@@ -18,13 +18,15 @@ func cfgWith(verify schema.PlanfileVerifyMode, storage bool) *schema.AtmosConfig
 	return c
 }
 
-// cfgWithMissing builds a storage-configured config setting both verify and
-// on_missing for the missing-plan resolution tests.
-func cfgWithMissing(verify, onMissing schema.PlanfileVerifyMode) *schema.AtmosConfiguration {
+// cfgWithRequired builds a storage-configured config setting both verify and an
+// explicit required pointer for the IsPlanRequired tests.
+func cfgWithRequired(verify schema.PlanfileVerifyMode, required *bool) *schema.AtmosConfiguration {
 	c := cfgWith(verify, true)
-	c.Components.Terraform.Planfiles.OnMissing = onMissing
+	c.Components.Terraform.Planfiles.Required = required
 	return c
 }
+
+func boolPtr(b bool) *bool { return &b }
 
 func TestResolveVerifyMode(t *testing.T) {
 	tests := []struct {
@@ -61,38 +63,39 @@ func TestResolveVerifyMode(t *testing.T) {
 	}
 }
 
-func TestResolveMissingMode(t *testing.T) {
+func TestIsPlanRequired(t *testing.T) {
 	tests := []struct {
 		name        string
 		atmosConfig *schema.AtmosConfiguration
 		ciEnabled   bool
 		cliOverride schema.PlanfileVerifyMode
-		want        schema.PlanfileVerifyMode
+		want        bool
 	}{
-		// CLI override wins over everything.
-		{"cli fail beats config off", cfgWithMissing(schema.PlanfileVerifyOff, schema.PlanfileVerifyOff), true, schema.PlanfileVerifyFail, schema.PlanfileVerifyFail},
+		// Explicit required wins when verification is active.
+		{"explicit true under CI", cfgWithRequired(schema.PlanfileVerifyFail, boolPtr(true)), true, "", true},
+		{"explicit false while verify fails", cfgWithRequired(schema.PlanfileVerifyFail, boolPtr(false)), true, "", false},
+		{"explicit true while verify warns", cfgWithRequired(schema.PlanfileVerifyWarn, boolPtr(true)), true, "", true},
 
-		// Explicit on_missing config wins over the verify-tracking default.
-		{"on_missing off while verify fails", cfgWithMissing(schema.PlanfileVerifyFail, schema.PlanfileVerifyOff), true, "", schema.PlanfileVerifyOff},
-		{"on_missing warn while verify fails", cfgWithMissing(schema.PlanfileVerifyFail, schema.PlanfileVerifyWarn), true, "", schema.PlanfileVerifyWarn},
-		{"on_missing fail while verify off", cfgWithMissing(schema.PlanfileVerifyOff, schema.PlanfileVerifyFail), true, "", schema.PlanfileVerifyFail},
+		// verify=off short-circuits to not-required, even with required:true.
+		{"verify off short-circuits explicit true", cfgWithRequired(schema.PlanfileVerifyOff, boolPtr(true)), true, "", false},
+		{"no-verify-plan CLI override beats required true", cfgWithRequired(schema.PlanfileVerifyFail, boolPtr(true)), true, schema.PlanfileVerifyOff, false},
 
-		// Unset on_missing tracks the resolved verify mode.
-		{"tracks default fail under CI with storage", cfgWith("", true), true, "", schema.PlanfileVerifyFail},
-		{"tracks config warn", cfgWith(schema.PlanfileVerifyWarn, true), true, "", schema.PlanfileVerifyWarn},
-		{"tracks config off", cfgWith(schema.PlanfileVerifyOff, true), true, "", schema.PlanfileVerifyOff},
+		// Unset: tracks verify strictness (required only when verify resolves to fail).
+		{"unset tracks default fail under CI with storage", cfgWith("", true), true, "", true},
+		{"unset not required under warn", cfgWith(schema.PlanfileVerifyWarn, true), true, "", false},
+		{"unset not required under off", cfgWith(schema.PlanfileVerifyOff, true), true, "", false},
 
-		// Negative path: never fail a local (non-CI) deploy by default.
-		{"off without CI even with storage", cfgWith("", true), false, "", schema.PlanfileVerifyOff},
-		{"off under CI without storage", cfgWith("", false), true, "", schema.PlanfileVerifyOff},
+		// Negative path: never require a stored plan on a local (non-CI) deploy by default.
+		{"unset not required without CI", cfgWith("", true), false, "", false},
+		{"unset not required under CI without storage", cfgWith("", false), true, "", false},
 
-		// Nil config is off.
-		{"nil config", nil, true, "", schema.PlanfileVerifyOff},
+		// Nil config is not required.
+		{"nil config", nil, true, "", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ResolveMissingMode(tt.atmosConfig, tt.ciEnabled, tt.cliOverride)
+			got := IsPlanRequired(tt.atmosConfig, tt.ciEnabled, tt.cliOverride)
 			assert.Equal(t, tt.want, got)
 		})
 	}
