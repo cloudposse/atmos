@@ -223,7 +223,7 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
 
 When planfile storage is configured and `deploy` runs in CI mode, Atmos automatically downloads the
 planfile that `atmos terraform plan --ci` uploaded, generates a fresh plan, compares them, and applies
-the verified plan — failing on drift by default. Control this with
+the fresh plan after verification — failing on drift by default. Control this with
 [`components.terraform.planfiles.verify`](/components/terraform/planfiles#drift-verification)
 (`fail` | `warn` | `off`) or the `--verify-plan` flag (`--verify-plan` forces `fail`, `--verify-plan=false` forces `off`; CLI overrides config).
 
