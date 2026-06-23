@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os/exec"
-	"runtime"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
@@ -145,10 +144,12 @@ func (h *SpinHandler) runCommand(ctx context.Context, opts *spinExecOptions, std
 	if opts.command == "" {
 		return errUtils.ErrStepEmptyCommand
 	}
+	if executionOptionsFromContext(ctx).DryRun {
+		return nil
+	}
 
 	// Use platform-specific shell to interpret the command string.
-	shell, shellArg := getShellCommand()
-	cmd := exec.CommandContext(ctx, shell, shellArg, opts.command)
+	cmd := process.NewShellCommand(ctx, opts.command)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
@@ -159,15 +160,7 @@ func (h *SpinHandler) runCommand(ctx context.Context, opts *spinExecOptions, std
 	// Use prepared environment from Variables.
 	cmd.Env = opts.envVars
 
-	return cmd.Run()
-}
-
-// getShellCommand returns the platform-specific shell and argument for command execution.
-func getShellCommand() (shell string, arg string) {
-	if runtime.GOOS == "windows" {
-		return "cmd", "/C"
-	}
-	return "sh", "-c"
+	return process.RunManaged(cmd)
 }
 
 // safeEnvCapacity computes a safe capacity for environment variable slices.

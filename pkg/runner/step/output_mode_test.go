@@ -22,8 +22,9 @@ func TestNewOutputModeWriter(t *testing.T) {
 func TestGetOutputModeNilWorkflow(t *testing.T) {
 	step := &schema.WorkflowStep{}
 
+	// Plain shell/atmos steps default to undecorated raw output.
 	mode := GetOutputMode(step, nil)
-	assert.Equal(t, OutputModeLog, mode)
+	assert.Equal(t, OutputModeRaw, mode)
 }
 
 func TestGetViewportConfigNilWorkflow(t *testing.T) {

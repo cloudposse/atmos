@@ -160,10 +160,10 @@ func runSessionAttached(cmd *exec.Cmd, spec *ShellSessionSpec) error {
 		cmd.Stdin = os.Stdin
 	}
 
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessStartFailed, err)
+	if err := RunManaged(cmd); err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessWaitFailed, err)
 	}
-	return cmd.Wait()
+	return nil
 }
 
 // sessionExitError normalizes session errors: non-zero exits become

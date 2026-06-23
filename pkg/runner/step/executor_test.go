@@ -110,9 +110,9 @@ func TestIsExtendedStepType(t *testing.T) {
 		stepType   string
 		isExtended bool
 	}{
-		// Legacy types - not extended.
-		{"atmos", false},
-		{"shell", false},
+		// Command types now route through registered handlers.
+		{"atmos", true},
+		{"shell", true},
 		{"", false},
 
 		// Extended types.

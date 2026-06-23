@@ -78,6 +78,7 @@ func ExecWithPTY(ctx context.Context, cmd *exec.Cmd, opts *Options) error {
 
 	// Apply defaults and start PTY.
 	opts = applyDefaults(opts)
+	configureCommandGroup(cmd)
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to start PTY: %w", err)
@@ -216,9 +217,7 @@ func waitForCompletion(ctx context.Context, cmd *exec.Cmd, ptmx *os.File, wg *sy
 
 	select {
 	case <-ctx.Done():
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
+		_ = killCommandGroup(cmd)
 		waitOutputDrained(ptmx, wg)
 		return ctx.Err()
 	case err := <-cmdDone:

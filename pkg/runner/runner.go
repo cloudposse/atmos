@@ -107,9 +107,21 @@ func Run(ctx context.Context, task *Task, runner CommandRunner, opts Options) er
 	// These are the fundamental execution types.
 	switch taskType {
 	case schema.TaskTypeShell:
-		return runShellTask(ctx, task, runner, &opts, dir)
+		_ = runner
+		return runRegisteredTask(ctx, task, &opts, registeredTaskConfig{
+			dir:      dir,
+			taskType: schema.TaskTypeShell,
+		})
 	case schema.TaskTypeAtmos:
-		return runAtmosTask(ctx, task, runner, opts, dir)
+		finalStack := task.Stack
+		if opts.Stack != "" {
+			finalStack = opts.Stack
+		}
+		return runRegisteredTask(ctx, task, &opts, registeredTaskConfig{
+			dir:           dir,
+			taskType:      schema.TaskTypeAtmos,
+			stackOverride: finalStack,
+		})
 	case schema.TaskTypeExec:
 		// Replace the Atmos process with the command (shell exec semantics).
 		// Validated by RunAll to be the final task.
@@ -128,6 +140,42 @@ func Run(ctx context.Context, task *Task, runner CommandRunner, opts Options) er
 	}
 
 	return fmt.Errorf("%w: %s", ErrUnknownTaskType, taskType)
+}
+
+type registeredTaskConfig struct {
+	dir           string
+	taskType      string
+	stackOverride string
+}
+
+func runRegisteredTask(ctx context.Context, task *Task, opts *Options, cfg registeredTaskConfig) error {
+	vars := opts.StepVars
+	if vars == nil {
+		vars = step.NewVariables()
+	}
+	for _, envVar := range opts.Env {
+		parts := strings.SplitN(envVar, "=", 2)
+		if len(parts) == 2 {
+			vars.SetEnv(parts[0], parts[1])
+		}
+	}
+
+	workflowStep := task.ToWorkflowStep()
+	workflowStep.Type = cfg.taskType
+	if workflowStep.WorkingDirectory == "" {
+		workflowStep.WorkingDirectory = cfg.dir
+	}
+	if cfg.taskType == schema.TaskTypeAtmos {
+		workflowStep.Stack = ""
+	}
+
+	executor := step.NewStepExecutorWithVars(vars)
+	execCtx := step.WithExecutionOptions(ctx, step.ExecutionOptions{
+		DryRun:             opts.DryRun,
+		AtmosStackOverride: cfg.stackOverride,
+	})
+	_, err := executor.Execute(execCtx, &workflowStep)
+	return err
 }
 
 // runStepHandler executes an extended step type via the step handler registry.

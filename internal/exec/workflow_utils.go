@@ -6,14 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 	"github.com/samber/lo"
-	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -412,25 +410,22 @@ func ExecuteWorkflow(
 			progressRenderer.RenderPermanent(label)
 		}
 
+		execCtx := stepPkg.WithExecutionOptions(context.Background(), stepPkg.ExecutionOptions{DryRun: dryRun})
+
 		switch commandType {
 		case "shell":
 			// Render command before execution if show.command is enabled.
 			// Steps with tty/interactive attach the user's terminal; plain
-			// steps keep the existing masked shell-interpreter behavior.
+			// steps run through the step handler registry.
 			stepPkg.RenderCommand(&step, workflowDefinition, command)
-			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
 			err = retry.Do(context.Background(), step.Retry, func() error {
-				return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
-					Command:     command,
-					Name:        commandName,
-					Dir:         ".",
-					Env:         stepEnv,
-					TTY:         step.Tty,
-					Interactive: step.Interactive,
-					DryRun:      dryRun,
-				}, func() error {
-					return ExecuteShell(command, commandName, ".", stepEnv, dryRun)
-				})
+				workflowStep := steps[stepIdx]
+				workflowStep.Command = command
+				workflowStep.Type = "shell"
+				if workflowStep.WorkingDirectory == "" {
+					workflowStep.WorkingDirectory = "."
+				}
+				return executeExtendedStep(execCtx, &workflowStep, workflowDefinition, stepEnv)
 			})
 		case schema.TaskTypeExec:
 			// Replace the Atmos process with the command (shell exec semantics).
@@ -445,14 +440,6 @@ func ExecuteWorkflow(
 				DryRun:  dryRun,
 			})
 		case "atmos":
-			// Parse command using shell.Fields for proper quote handling.
-			// This correctly handles arguments like -var="foo=bar" by stripping quotes.
-			args, parseErr := shell.Fields(command, nil)
-			if parseErr != nil {
-				log.Debug("Shell parsing failed, falling back to strings.Fields", "error", parseErr, "command", command)
-				args = strings.Fields(command)
-			}
-
 			workflowStack := strings.TrimSpace(workflowDefinition.Stack)
 			stepStack := strings.TrimSpace(step.Stack)
 
@@ -471,15 +458,6 @@ func ExecuteWorkflow(
 			}
 
 			if finalStack != "" {
-				if idx := slices.Index(args, "--"); idx != -1 {
-					// Insert before the "--"
-					// Take everything up to idx, then add "-s", finalStack, then tack on the rest
-					args = append(args[:idx], append([]string{"-s", finalStack}, args[idx:]...)...)
-				} else {
-					// just append at the end
-					args = append(args, []string{"-s", finalStack}...)
-				}
-
 				log.Debug("Using stack", "stack", finalStack)
 			}
 
@@ -493,7 +471,18 @@ func ExecuteWorkflow(
 
 			ui.Infof("Executing command: `atmos %s`", command)
 			err = retry.Do(context.Background(), step.Retry, func() error {
-				return ExecuteShellCommand(atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
+				workflowStep := steps[stepIdx]
+				workflowStep.Command = command
+				workflowStep.Type = "atmos"
+				workflowStep.Stack = ""
+				if workflowStep.WorkingDirectory == "" {
+					workflowStep.WorkingDirectory = "."
+				}
+				atmosCtx := stepPkg.WithExecutionOptions(execCtx, stepPkg.ExecutionOptions{
+					DryRun:             dryRun,
+					AtmosStackOverride: finalStack,
+				})
+				return executeExtendedStep(atmosCtx, &workflowStep, workflowDefinition, stepEnv)
 			})
 		default:
 			// Check if this is an extended step type (input, confirm, choose, etc.).
@@ -505,7 +494,7 @@ func ExecuteWorkflow(
 					WithExitCode(1).
 					Err()
 			}
-			err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv)
+			err = executeExtendedStep(execCtx, &steps[stepIdx], workflowDefinition, stepEnv)
 		}
 
 		if err != nil {

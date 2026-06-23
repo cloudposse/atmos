@@ -168,23 +168,23 @@ func TestAtmosHandler_ResolveEnvVars(t *testing.T) {
 		expectError bool
 	}{
 		{
-			name: "nil env returns nil",
+			name: "nil env returns executor env",
 			step: &schema.WorkflowStep{
 				Name: "test",
 				Env:  nil,
 			},
 			vars:        NewVariables(),
-			expectNil:   true,
+			expectNil:   false,
 			expectError: false,
 		},
 		{
-			name: "empty env returns nil",
+			name: "empty env returns executor env",
 			step: &schema.WorkflowStep{
 				Name: "test",
 				Env:  map[string]string{},
 			},
 			vars:        NewVariables(),
-			expectNil:   true,
+			expectNil:   false,
 			expectError: false,
 		},
 		{
@@ -266,7 +266,7 @@ func TestAtmosHandler_PrepareExecution(t *testing.T) {
 		assert.Equal(t, "terraform plan vpc", opts.command)
 		assert.Empty(t, opts.stack)
 		assert.Empty(t, opts.workDir)
-		assert.Nil(t, opts.envVars)
+		assert.NotEmpty(t, opts.envVars)
 	})
 
 	t.Run("full preparation", func(t *testing.T) {
