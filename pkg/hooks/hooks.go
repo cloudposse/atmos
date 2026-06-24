@@ -292,7 +292,9 @@ func (h *Hooks) executionStackInfo(info *schema.ConfigAndStacksInfo) *schema.Con
 // `exit_code`, `error`). The copy avoids mutating the captured sections shared
 // across lifecycle events. A nil section yields a map with just the outcome keys.
 func withOutcomeTemplateData(section map[string]any, outcome Outcome) map[string]any {
-	augmented := make(map[string]any, len(section)+3)
+	// Size the map from a single len() — CodeQL's allocation-size-overflow rule
+	// flags `len(section)+N`. The map grows as needed for the outcome keys.
+	augmented := make(map[string]any, len(section))
 	for k, v := range section {
 		augmented[k] = v
 	}
