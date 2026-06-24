@@ -18,10 +18,39 @@ func TestYAMLFunctionsInLists(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/yaml-functions-in-lists")
 
 	t.Setenv("TEST_ENV_VAR", "test-env-value")
+	// Set AWS_REGION to test the auth env region export feature
+	// This simulates what 'atmos auth env' would export when region is configured
+	t.Setenv("AWS_REGION", "us-west-2")
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 	require.NotNil(t, atmosConfig)
+
+	t.Run("stack config with AWS_REGION env reference loads successfully", func(t *testing.T) {
+		// This test verifies that stack configurations can reference AWS_REGION
+		// using !env AWS_REGION without causing parsing errors.
+		// Note: !env functions are resolved at execution time (terraform apply),
+		// not during describe. This test ensures the stack with !env AWS_REGION loads.
+		componentName := "test-yaml-functions-in-lists"
+		stack := "test"
+
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component: componentName,
+				Stack:     stack,
+			},
+		)
+
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		// Verify aws_region key exists in the stack config
+		// The value will be !env AWS_REGION (deferred until execution)
+		assert.Contains(t, vars, "aws_region", "aws_region should be present in vars")
+	})
 
 	t.Run("loads stack with yaml functions in lists", func(t *testing.T) {
 		// Test that we can describe a component that uses YAML functions in lists

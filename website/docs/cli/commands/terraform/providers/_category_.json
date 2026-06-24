@@ -1,0 +1,8 @@
+{
+  "label": "providers",
+  "className": "command",
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/terraform/providers/providers"
+  }
+}

@@ -129,6 +129,7 @@ export ATMOS_COMPONENTS_TERRAFORM_WORKSPACES_ENABLED=true
 atmos terraform shell top-level-component1 -s tenant1-ue2-dev
 atmos terraform shell infra/vpc -s tenant1-ue2-staging
 atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
+atmos terraform shell infra/vpc -s tenant1-ue2-dev --identity dev-role
 ```
 
 ## Arguments
@@ -146,6 +147,15 @@ atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
     <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
     <dd>
         Atmos stack.
+    </dd>
+
+    <dt>`--identity` <em>(alias `-i`)</em> <em>(optional)</em></dt>
+    <dd>
+        Identity to use for authentication. Overrides the component's default identity.
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --identity dev-role
+        ```
     </dd>
 
     <dt>`--dry-run` <em>(optional)</em></dt>
@@ -188,6 +198,43 @@ atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
         ```shell
         atmos terraform shell <component> -s <stack> --skip=eval --skip=include
         atmos terraform shell <component> -s <stack> --skip=terraform.output,include
+        ```
+    </dd>
+
+    <dt>`--with-secrets` <em>(optional)</em></dt>
+    <dd>
+        Export the component's secret-bearing variables into the interactive shell as
+        `TF_VAR_<name>` environment variables. **Disabled by default** so secrets are not
+        exposed in the shell environment.
+
+        Resolved secrets are never written to the on-disk varfile. By default they are also
+        withheld from the shell, so `terraform` commands run inside the shell will not see them
+        (variables that require a secret will prompt or fail). Pass `--with-secrets` when you
+        need those commands to work with the real values.
+
+        Can also be set via the `ATMOS_WITH_SECRETS` environment variable.
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --with-secrets
+        ```
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before launching the shell. By default Atmos runs
+        `terraform init` (and selects/creates the workspace) so you enter an initialized
+        component, matching the behavior described above. Use this to enter the shell faster
+        when the component is already initialized.
+
+        Workspace selection is unaffected by this flag — it stays governed by the
+        [`workspaces_enabled`](/cli/configuration/components/terraform) setting. For a shell that
+        neither initializes nor switches workspaces, combine `--skip-init` with
+        `workspaces_enabled: false`.
+
+        Can also be set via the `ATMOS_SKIP_INIT` environment variable.
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --skip-init
         ```
     </dd>
 </dl>

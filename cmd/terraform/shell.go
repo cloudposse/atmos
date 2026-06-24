@@ -67,6 +67,11 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 		processFunctions := v.GetBool("process-functions")
 		skip := v.GetStringSlice("skip")
 		dryRun := v.GetBool("dry-run")
+		identity := v.GetString("identity")
+		withSecrets := v.GetBool("with-secrets")
+		// --skip-init is a shared terraform persistent flag (inherited from terraformCmd);
+		// honor it so users can enter the shell without running `terraform init`.
+		skipInit := v.GetBool("skip-init")
 
 		// Prompt for stack if missing.
 		if stack == "" {
@@ -100,9 +105,12 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 		}
 
 		opts := &e.ShellOptions{
-			Component: component,
-			Stack:     stack,
-			DryRun:    dryRun,
+			Component:   component,
+			Stack:       stack,
+			DryRun:      dryRun,
+			Identity:    identity,
+			WithSecrets: withSecrets,
+			SkipInit:    skipInit,
 			ProcessingOptions: e.ProcessingOptions{
 				ProcessTemplates: processTemplates,
 				ProcessFunctions: processFunctions,
@@ -119,9 +127,11 @@ func init() {
 		flags.WithBoolFlag("process-templates", "", true, "Enable Go template processing in Atmos stack manifests"),
 		flags.WithBoolFlag("process-functions", "", true, "Enable YAML functions processing in Atmos stack manifests"),
 		flags.WithStringSliceFlag("skip", "", []string{}, "Skip processing specific Atmos YAML functions"),
+		flags.WithBoolFlag("with-secrets", "", false, "Export secret-bearing variables into the shell as TF_VAR_* environment variables (off by default so secrets are not exposed)"),
 		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
 		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
 		flags.WithEnvVars("skip", "ATMOS_SKIP"),
+		flags.WithEnvVars("with-secrets", "ATMOS_WITH_SECRETS"),
 	)
 
 	// Register flags with the command.

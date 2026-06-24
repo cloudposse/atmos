@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -122,9 +122,12 @@ func TestTasks_UnmarshalYAML_WithRetry(t *testing.T) {
 
 	assert.Len(t, tasks, 1)
 	require.NotNil(t, tasks[0].Retry)
-	assert.Equal(t, 3, tasks[0].Retry.MaxAttempts)
-	assert.Equal(t, time.Second, tasks[0].Retry.InitialDelay)
-	assert.Equal(t, 10*time.Second, tasks[0].Retry.MaxDelay)
+	require.NotNil(t, tasks[0].Retry.MaxAttempts)
+	assert.Equal(t, 3, *tasks[0].Retry.MaxAttempts)
+	require.NotNil(t, tasks[0].Retry.InitialDelay)
+	assert.Equal(t, time.Second, *tasks[0].Retry.InitialDelay)
+	require.NotNil(t, tasks[0].Retry.MaxDelay)
+	assert.Equal(t, 10*time.Second, *tasks[0].Retry.MaxDelay)
 }
 
 func TestTasks_UnmarshalYAML_WithWorkingDirectory(t *testing.T) {
@@ -154,6 +157,54 @@ func TestTasks_UnmarshalYAML_WithIdentity(t *testing.T) {
 
 	assert.Len(t, tasks, 1)
 	assert.Equal(t, "production-deployer", tasks[0].Identity)
+}
+
+func TestTasks_UnmarshalYAML_WithInteractiveAndTty(t *testing.T) {
+	input := `
+- command: aws ssm start-session --target i-1234567890
+  interactive: true
+  tty: true
+- command: echo plain
+`
+	var tasks Tasks
+	err := yaml.Unmarshal([]byte(input), &tasks)
+	require.NoError(t, err)
+
+	require.Len(t, tasks, 2)
+	assert.Equal(t, "aws ssm start-session --target i-1234567890", tasks[0].Command)
+	assert.True(t, tasks[0].Interactive)
+	assert.True(t, tasks[0].Tty)
+	// Defaults are false for both fields.
+	assert.Equal(t, "echo plain", tasks[1].Command)
+	assert.False(t, tasks[1].Interactive)
+	assert.False(t, tasks[1].Tty)
+}
+
+func TestTasksDecodeHook_InteractiveAndTtyWeaklyTyped(t *testing.T) {
+	input := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"command":     "top",
+				"interactive": "true",
+				"tty":         "true",
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	err = decoder.Decode(input)
+	require.NoError(t, err)
+
+	require.Len(t, result.Steps, 1)
+	assert.True(t, result.Steps[0].Interactive)
+	assert.True(t, result.Steps[0].Tty)
 }
 
 func TestTasks_UnmarshalYAML_EmptyList(t *testing.T) {
@@ -197,6 +248,7 @@ func TestTasks_UnmarshalYAML_InvalidStructuredDecode(t *testing.T) {
 }
 
 func TestTask_ToWorkflowStep(t *testing.T) {
+	maxAttempts := 3
 	task := Task{
 		Name:             "test-task",
 		Command:          "echo hello",
@@ -204,8 +256,10 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 		Stack:            "dev",
 		WorkingDirectory: "/app",
 		Identity:         "test-identity",
+		Interactive:      true,
+		Tty:              true,
 		Retry: &RetryConfig{
-			MaxAttempts: 3,
+			MaxAttempts: &maxAttempts,
 		},
 		Timeout: 30 * time.Second,
 	}
@@ -218,11 +272,14 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 	assert.Equal(t, task.Stack, step.Stack)
 	assert.Equal(t, task.WorkingDirectory, step.WorkingDirectory)
 	assert.Equal(t, task.Identity, step.Identity)
+	assert.Equal(t, task.Interactive, step.Interactive)
+	assert.Equal(t, task.Tty, step.Tty)
 	assert.Equal(t, task.Retry, step.Retry)
 	// Note: Timeout is not in WorkflowStep.
 }
 
 func TestTaskFromWorkflowStep(t *testing.T) {
+	maxAttempts := 5
 	step := WorkflowStep{
 		Name:             "workflow-step",
 		Command:          "terraform apply",
@@ -230,8 +287,10 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 		Stack:            "prod",
 		WorkingDirectory: "/infra",
 		Identity:         "prod-identity",
+		Interactive:      true,
+		Tty:              true,
 		Retry: &RetryConfig{
-			MaxAttempts: 5,
+			MaxAttempts: &maxAttempts,
 		},
 	}
 
@@ -243,6 +302,8 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 	assert.Equal(t, step.Stack, task.Stack)
 	assert.Equal(t, step.WorkingDirectory, task.WorkingDirectory)
 	assert.Equal(t, step.Identity, task.Identity)
+	assert.Equal(t, step.Interactive, task.Interactive)
+	assert.Equal(t, step.Tty, task.Tty)
 	assert.Equal(t, step.Retry, task.Retry)
 	assert.Zero(t, task.Timeout) // WorkflowStep doesn't have Timeout.
 }
@@ -473,9 +534,12 @@ func TestDecodeTaskFromMap_WithRetry(t *testing.T) {
 	task, err := decodeTaskFromMap(m, 0)
 	require.NoError(t, err)
 	require.NotNil(t, task.Retry)
-	assert.Equal(t, 3, task.Retry.MaxAttempts)
-	assert.Equal(t, time.Second, task.Retry.InitialDelay)
-	assert.Equal(t, 10*time.Second, task.Retry.MaxDelay)
+	require.NotNil(t, task.Retry.MaxAttempts)
+	assert.Equal(t, 3, *task.Retry.MaxAttempts)
+	require.NotNil(t, task.Retry.InitialDelay)
+	assert.Equal(t, time.Second, *task.Retry.InitialDelay)
+	require.NotNil(t, task.Retry.MaxDelay)
+	assert.Equal(t, 10*time.Second, *task.Retry.MaxDelay)
 }
 
 func TestDecodeTaskFromMap_InvalidTimeout(t *testing.T) {

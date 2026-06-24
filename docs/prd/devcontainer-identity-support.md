@@ -799,5 +799,5 @@ atmos devcontainer shell geodesic -s ue2-prod
 
 - [Auth Context Multi-Identity PRD](./auth-context-multi-identity.md)
 - [Devcontainer Command PRD](./devcontainer-command.md)
-- [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
+- [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/basedir-spec-latest.html)
 - [Development Containers Specification](https://containers.dev/)

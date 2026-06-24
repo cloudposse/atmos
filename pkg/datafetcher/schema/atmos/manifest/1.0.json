@@ -38,6 +38,9 @@
     "components": {
       "$ref": "#/definitions/components"
     },
+    "secrets": {
+      "$ref": "#/definitions/component_secrets"
+    },
     "overrides": {
       "$ref": "#/definitions/overrides"
     },
@@ -146,6 +149,17 @@
                   },
                   "skip_if_missing": {
                     "type": "boolean"
+                  },
+                  "nested_imports": {
+                    "type": "string",
+                    "enum": [
+                      "local",
+                      "remote"
+                    ]
+                  },
+                  "ttl": {
+                    "type": "string",
+                    "description": "Cache duration for the cloned source repo of a remote (git) import. When set, the clone is reused across Atmos invocations until it expires (e.g. with a warm CI cache). Within a single invocation a source repo is cloned at most once regardless of TTL. Examples: '0s', '5m', '1h', '7d', 'daily'."
                   },
                   "context": {
                     "type": "object",
@@ -309,6 +323,12 @@
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
             }
           },
           "required": []
@@ -401,6 +421,12 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
             }
           },
           "required": []
@@ -493,6 +519,12 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
             }
           },
           "required": []
@@ -539,6 +571,10 @@
             "component": {
               "type": "string",
               "description": "Terraform/OpenTofu/Helmfile component"
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable component description"
             },
             "inherits": {
               "oneOf": [
@@ -1168,6 +1204,83 @@
                       },
                       "type": {
                         "type": "string"
+                      },
+                      "retry": {
+                        "title": "retry",
+                        "description": "Retry configuration for workflow step execution",
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^!include"
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "max_attempts": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "description": "Maximum number of retry attempts"
+                              },
+                              "initial_delay": {
+                                "type": "string",
+                                "description": "Initial delay between retries (e.g., '1s', '500ms')"
+                              },
+                              "max_delay": {
+                                "type": "string",
+                                "description": "Maximum delay between retries (e.g., '30s', '1m')"
+                              },
+                              "backoff_strategy": {
+                                "type": "string",
+                                "enum": [
+                                  "constant",
+                                  "linear",
+                                  "exponential"
+                                ],
+                                "description": "Strategy for increasing delay between retries"
+                              },
+                              "multiplier": {
+                                "type": "number",
+                                "minimum": 1,
+                                "description": "Multiplier for exponential/linear backoff"
+                              },
+                              "random_jitter": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1,
+                                "description": "Random jitter factor (0-1) to add to delays"
+                              },
+                              "max_elapsed_time": {
+                                "type": "string",
+                                "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+                              }
+                            },
+                            "required": []
+                          }
+                        ]
+                      },
+                      "working_directory": {
+                        "type": "string",
+                        "description": "Working directory for the workflow step"
+                      },
+                      "identity": {
+                        "type": "string",
+                        "description": "Identity to use for the workflow step"
+                      },
+                      "interactive": {
+                        "type": "boolean",
+                        "description": "Attach host stdin to the step and let the step handle Ctrl-C (like docker -i)"
+                      },
+                      "tty": {
+                        "type": "boolean",
+                        "description": "Allocate a pseudo-terminal for the step (like docker -t); combine with interactive for full terminal sessions"
+                      },
+                      "env": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "Environment variables for the workflow step"
                       }
                     },
                     "required": [
@@ -1223,6 +1336,430 @@
         {
           "type": "object",
           "additionalProperties": true
+        }
+      ]
+    },
+    "component_secrets": {
+      "title": "component_secrets",
+      "description": "Secrets configuration. Declares secrets resolved at runtime via the `!secret` YAML function, and (at the stack/global level) the non-store secret providers (e.g. SOPS) that back them. Store-backed secrets reference a `secret: true` store under `stores`.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "providers": {
+              "$ref": "#/definitions/secret_providers"
+            },
+            "vars": {
+              "$ref": "#/definitions/secret_vars"
+            }
+          }
+        }
+      ]
+    },
+    "secret_providers": {
+      "title": "secret_providers",
+      "description": "Non-store secret providers (e.g. SOPS) that do not fit the key-value store interface. Keys are provider names, values are provider configurations.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[a-zA-Z0-9/_-]+$": {
+              "$ref": "#/definitions/secret_provider"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "secret_provider": {
+      "title": "secret_provider",
+      "description": "A single non-store secret provider configuration (e.g. a SOPS backend).",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Provider implementation (e.g. 'sops/age', 'sops/aws-kms', 'sops/gcp-kms', 'sops/gpg')."
+            },
+            "identity": {
+              "type": "string",
+              "description": "Optional auth identity (resolved via auth) used by KMS-backed SOPS kinds (sops/aws-kms, sops/gcp-kms). Local-key kinds (sops/age, sops/gpg) ignore it."
+            },
+            "spec": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Provider-specific options (e.g. file, age_recipients, kms arn)."
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "secret_vars": {
+      "title": "secret_vars",
+      "description": "Declared secrets for a component. Keys are secret names, values are secret declarations. A secret must be declared before it can be set, read via `!secret`, or pulled/pushed.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            ".+": {
+              "$ref": "#/definitions/secret_declaration"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "secret_declaration": {
+      "title": "secret_declaration",
+      "description": "A single declared secret. Exactly one backend reference (store or sops) is set.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of the secret."
+            },
+            "store": {
+              "type": "string",
+              "description": "Names a `secret: true` store (under `stores`) this secret resolves from."
+            },
+            "sops": {
+              "type": "string",
+              "description": "Names a `secrets.providers` SOPS provider this secret resolves from."
+            },
+            "reference": {
+              "type": "string",
+              "description": "Optional backend-specific address for the secret. Reference-based backends (e.g. a 1Password store) resolve it directly instead of composing a key from the secret name; it may contain Go-template vars ({{ .atmos_stack }}, {{ .atmos_component }}). Example: \"op://Production/{{ .atmos_component }}/password\". Name-keyed backends ignore it."
+            },
+            "required": {
+              "type": "boolean",
+              "description": "Marks the secret as required; validation fails if it is not initialized."
+            },
+            "scope": {
+              "type": "string",
+              "enum": ["instance", "stack", "global"],
+              "description": "Storage scope. Normally derived from declaration position (top-level `secrets:` => stack, shared by every component instance; `components.<c>.secrets:` => instance). If set explicitly it must match the position — a conflict (e.g. `scope: stack` under a component) is an error — except `global`, which is honored at either position. Instance-scoped secrets are stored per component; stack-scoped secrets are stored once per stack; global secrets are stored once per backend store and shared by every stack and component that resolves through it."
+            }
+          },
+          "oneOf": [
+            {
+              "required": ["store"],
+              "not": { "required": ["sops"] }
+            },
+            {
+              "required": ["sops"],
+              "not": { "required": ["store"] }
+            }
+          ]
+        }
+      ]
+    },
+    "component_auth": {
+      "title": "component_auth",
+      "description": "Component-level authentication configuration. Allows overriding or extending global auth providers and identities for specific components.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "realm": {
+              "type": "string",
+              "description": "Credential isolation realm. Different realms provide isolated credentials even for identities with the same name."
+            },
+            "providers": {
+              "$ref": "#/definitions/auth_providers"
+            },
+            "identities": {
+              "$ref": "#/definitions/auth_identities"
+            },
+            "integrations": {
+              "type": "object",
+              "description": "Client-only credential materializations (e.g., ECR, EKS).",
+              "additionalProperties": true
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "auth_providers": {
+      "title": "auth_providers",
+      "description": "Authentication providers configuration. Keys are provider names, values are provider configurations.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[a-zA-Z0-9/_-]+$": {
+              "$ref": "#/definitions/auth_provider"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "auth_provider": {
+      "title": "auth_provider",
+      "description": "Authentication provider configuration.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Provider type (e.g., 'aws/iam-identity-center', 'aws/credentials')"
+            },
+            "start_url": {
+              "type": "string",
+              "description": "SSO start URL for AWS IAM Identity Center"
+            },
+            "url": {
+              "type": "string",
+              "description": "Provider URL"
+            },
+            "region": {
+              "type": "string",
+              "description": "AWS region for the provider"
+            },
+            "default": {
+              "type": "boolean",
+              "description": "Whether this is the default provider"
+            },
+            "session": {
+              "$ref": "#/definitions/auth_session"
+            },
+            "console": {
+              "$ref": "#/definitions/auth_console"
+            },
+            "auto_provision_identities": {
+              "type": "boolean",
+              "description": "Whether to auto-provision identities when authenticating with this provider"
+            },
+            "spec": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Provider-specific configuration"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "auth_identities": {
+      "title": "auth_identities",
+      "description": "Authentication identities configuration. Keys are identity names, values are identity configurations.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[a-zA-Z0-9/_-]+$": {
+              "$ref": "#/definitions/auth_identity"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "auth_identity": {
+      "title": "auth_identity",
+      "description": "Authentication identity configuration.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Identity type (e.g., 'aws/permission-set', 'aws/assume-role')"
+            },
+            "default": {
+              "type": "boolean",
+              "description": "Whether this is the default identity"
+            },
+            "required": {
+              "type": "boolean",
+              "description": "Whether this identity is automatically authenticated without prompting. Required identities are authenticated before commands run."
+            },
+            "provider": {
+              "type": "string",
+              "description": "Provider name for direct provider association"
+            },
+            "via": {
+              "$ref": "#/definitions/auth_identity_via"
+            },
+            "principal": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Principal information (role name, account, etc.)",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Principal name (e.g., permission set name, role name)"
+                },
+                "account": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Account name"
+                    },
+                    "id": {
+                      "type": "string",
+                      "description": "Account ID"
+                    }
+                  }
+                }
+              }
+            },
+            "credentials": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Static credentials configuration"
+            },
+            "alias": {
+              "type": "string",
+              "description": "Alias for the identity"
+            },
+            "env": {
+              "type": "array",
+              "description": "Environment variables to set when using this identity",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key",
+                  "value"
+                ]
+              }
+            },
+            "session": {
+              "$ref": "#/definitions/auth_session"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "auth_identity_via": {
+      "title": "auth_identity_via",
+      "description": "Specifies how an identity connects to a provider or chains from another identity.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "type": "string",
+              "description": "Provider name to authenticate through"
+            },
+            "identity": {
+              "type": "string",
+              "description": "Identity name to chain from (for role chaining)"
+            }
+          }
+        }
+      ]
+    },
+    "auth_session": {
+      "title": "auth_session",
+      "description": "Session configuration for authentication.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "duration": {
+              "type": "string",
+              "description": "Session duration (e.g., '1h', '12h')"
+            }
+          }
+        }
+      ]
+    },
+    "auth_console": {
+      "title": "auth_console",
+      "description": "Web console access configuration.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "session_duration": {
+              "type": "string",
+              "description": "Console session duration (e.g., '12h'). Max: 12h for AWS."
+            }
+          }
         }
       ]
     }

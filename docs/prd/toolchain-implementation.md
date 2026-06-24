@@ -7,7 +7,7 @@ The Atmos Toolchain provides a unified CLI tool management system that allows At
 ## Status: Shipped
 
 **Current Version**: v1.0 (Core Implementation Complete)
-**Last Updated**: 2025-11-09
+**Last Updated**: 2026-02-17
 
 **Related PRDs**:
 - [Registry Search and Discovery](./toolchain-registry-search.md)
@@ -226,29 +226,44 @@ Implemented in `toolchain/exec.go`:
 - Version-specific execution
 - Environment passthrough
 
-#### 8. Atmos Self-Management
+#### 8. Atmos Self-Management (Version Switching)
 
-**Status**: ✅ **Configured in tools.yaml**
+**Status**: ✅ **Fully Implemented**
 
-The Atmos tool is defined in the default `tools.yaml`:
-```yaml
-cloudposse/atmos:
-  type: github_release
-  repo_owner: cloudposse
-  repo_name: atmos
-  binary_name: atmos
-```
+Atmos manages its own version through the re-exec pattern in `pkg/version/reexec.go`. When a different version is requested, Atmos installs it and replaces the current process via `syscall.Exec`.
 
-**How It Should Work** (Implementation Status: 🚧 **Partially Implemented**):
+**Version specification** (precedence order, highest first):
+1. `--use-version` CLI flag (sets `ATMOS_VERSION_USE` env var)
+2. `ATMOS_VERSION_USE` environment variable
+3. `ATMOS_VERSION` environment variable
+4. `version.use` in `atmos.yaml`
 
-1. User runs `atmos` command
-2. Atmos checks `.tool-versions` for required version
-3. If current version doesn't match:
-   - Install required version to `.tools/cloudposse/atmos/X.Y.Z/`
-   - Execute via `syscall.Exec` to replace current process
-4. Required version executes the actual command
+**Version formats**:
+- **Semver**: `1.199.0`, `v1.199.0` — installs from toolchain registry
+- **PR number**: `pr:2040` or just `2040` (auto-detected) — installs from GitHub Actions artifact
+- **Commit SHA**: `sha:ceb7526` or `ceb7526be` (auto-detected, 7-40 hex chars) — installs from GitHub Actions artifact
 
-**Current Gap**: The self-exec wrapper logic is not implemented in the main `atmos` binary entry point. The toolchain has all the pieces (`exec`, `install`, `version resolution`) but they're not wired up to the main CLI entry.
+**Architecture** (`pkg/version/reexec.go`):
+- `ReexecConfig` struct with dependency injection for testability (VersionFinder, VersionInstaller, ExecFunc, GetEnv, SetEnv)
+- `CheckAndReexecWithConfig` — main entry point called after config/profiles loaded
+- `resolveRequestedVersion` — resolves version from env vars and config
+- `shouldSkipReexec` — guard against re-exec loops, version match check
+- `executeVersionSwitch` — finds/installs binary and calls `syscall.Exec`
+- `findOrInstallVersionWithConfig` — dispatches to semver, PR, or SHA install paths
+- `ParseVersionSpec` in `pkg/toolchain/version_spec.go` — classifies version as PR, SHA, or semver
+
+**PR/SHA artifact installation** (`pkg/toolchain/pr_artifact.go`, `sha_artifact.go`):
+- Downloads platform-specific binaries from GitHub Actions workflow artifacts
+- PR versions use TTL-based cache (1 min) with SHA change detection
+- SHA versions use permanent cache (commits are immutable)
+- Requires GitHub authentication: `ATMOS_GITHUB_TOKEN`, `GITHUB_TOKEN`, or `gh auth token`
+- Supported platforms: linux/amd64, darwin/arm64, windows/amd64
+- Binaries cached in `${XDG_DATA_HOME}/atmos/toolchain/bin/cloudposse/atmos/pr-NNNN/` or `sha-XXXXXXX/`
+
+**GitHub API integration** (`pkg/github/artifacts.go`):
+- Interface-based DI with `PullRequestService` and `ActionsService` for testability
+- `ArtifactFetcher` struct with mock-based unit tests
+- Token detection chain with `gh` CLI fallback
 
 ---
 
@@ -916,15 +931,17 @@ settings:
 - [x] Cross-platform support
 - [x] Command registry pattern
 
-### Phase 2: Self-Management (Next)
+### Phase 2: Self-Management (Completed)
 
-- [ ] Atmos self-exec wrapper in main CLI
-- [ ] Version detection in Execute()
-- [ ] Auto-install missing Atmos versions
-- [ ] Process replacement logic
-- [ ] Testing with multiple Atmos versions
-
-**Priority**: HIGH - This is a key differentiator
+- [x] Atmos self-exec wrapper in main CLI (`pkg/version/reexec.go`)
+- [x] Version detection via `--use-version`, `ATMOS_VERSION_USE`, `ATMOS_VERSION`, `version.use`
+- [x] Auto-install missing Atmos versions (semver, PR artifacts, SHA artifacts)
+- [x] Process replacement via `syscall.Exec`
+- [x] PR artifact installation from GitHub Actions (`pkg/toolchain/pr_artifact.go`)
+- [x] SHA artifact installation from GitHub Actions (`pkg/toolchain/sha_artifact.go`)
+- [x] TTL-based cache for PR versions, permanent cache for SHA versions
+- [x] Interface-based DI with `ReexecConfig` for testability
+- [x] Mock-based unit tests for `pkg/version`, `pkg/toolchain`, `pkg/github`
 
 ### Phase 3: Component Dependencies (Critical)
 
@@ -1088,48 +1105,56 @@ settings:
 
 ## Testing Strategy
 
-### Current Coverage: 76.3%
+### Coverage by Package
 
-**Target**: 80-90%
+| Package | Coverage | Notes |
+|---------|----------|-------|
+| `pkg/version` | 82.5% | Above 80% target |
+| `pkg/toolchain` | 74.1% | Network-dependent functions limit coverage |
+| `pkg/github` | 64.6% | Mock-based tests for `ArtifactFetcher` |
 
-**Recent Improvements** (2025-10-23):
-- Added comprehensive tests for `WhichExec` command
-- Improved `LookupToolVersion` from 33.3% to 100% coverage
-- Fixed `--help` flag handling in `exec` command
-- Overall coverage increased from 67.5% to 76.3%
+**Target**: 80%+
+
+**Recent Improvements** (2026-02-17):
+- Added mock-based unit tests for PR/SHA artifact installation
+- Added `ReexecConfig` DI tests for version switching paths
+- Added `ArtifactFetcher` tests with mock GitHub API services
+- `pkg/version` reached 82.5% coverage (above target)
 
 ### Test Categories
 
-1. **Unit Tests** (`toolchain/*_test.go`)
+1. **Unit Tests** (`toolchain/*_test.go`, `version/*_test.go`, `github/*_test.go`)
    - Tool resolution logic
    - Version constraint parsing
    - Registry querying
    - File operations
+   - Version spec parsing (PR, SHA, semver)
+   - Re-exec guard logic
+   - Artifact fetching with mock GitHub API
 
 2. **Integration Tests**
    - End-to-end tool installation
    - Multi-version scenarios
    - Registry fallback behavior
-   - Component dependency resolution (future)
 
 3. **Cross-Platform Tests**
    - Linux, macOS, Windows
    - Different architectures (amd64, arm64)
-   - Path handling differences
+   - Path handling via `filepath.Join()`
 
 4. **Mock Infrastructure**
    - Mock HTTP client for registry calls
    - Mock file system for installation
-   - Mock GitHub API responses
+   - Mock GitHub API responses (`PullRequestService`, `ActionsService`)
+   - `ReexecConfig` with mock `VersionFinder`, `VersionInstaller`, `ExecFunc`
 
-### Coverage Gaps (Functions at 0%)
+### Coverage Gaps
 
-Priority fixes for test coverage:
-- `LookupToolVersionOrLatest`
-- `AddToolToVersionsAsDefault`
-- `getVersionsToUninstall`
-- `uninstallAllVersionsOfTool`
-- `LookupToolVersionOrLatest`
+Remaining uncovered code is primarily network-dependent:
+- `InstallFromPR`, `InstallFromSHA` (require live GitHub API)
+- `downloadPRArtifact`, `downloadSHAArtifact` (HTTP download + extraction)
+- `os.Exit` paths in `executeVersionSwitch`
+- Platform-specific branches in `getArtifactNameForPlatform`
 
 ---
 

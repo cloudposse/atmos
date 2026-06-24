@@ -1,12 +1,13 @@
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 # Incorrect Usage
 
-**Error:** The command atmos terraform requires a subcommand
+**Error:** atmos terraform requires a subcommand.
 
 Valid subcommands are:
 
   • apply
   • backend
+  • cache
   • clean
   • console
   • deploy
@@ -26,6 +27,7 @@ Valid subcommands are:
   • output
   • plan
   • plan-diff
+  • planfile
   • providers
   • refresh
   • shell
@@ -41,6 +43,11 @@ Valid subcommands are:
   • workdir
   • workspace
   • write
+
+## Usage
+
+ atmos terraform [flags]
+ atmos terraform [sub-command] [flags]
 
 ## Usage Examples:
 

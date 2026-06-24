@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-github/v59/github"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	httpClient "github.com/cloudposse/atmos/pkg/http"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -75,12 +76,25 @@ func GetReleases(opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
 		if remaining < githubAPIMinRateLimitThreshold {
 			resetTime := rateLimits.Core.Reset.Time
 			waitDuration := time.Until(resetTime)
-			return nil, fmt.Errorf("%w: only %d requests remaining, resets at %s (in %s). Consider setting ATMOS_GITHUB_TOKEN or GITHUB_TOKEN for higher limits",
-				errUtils.ErrGitHubRateLimitExceeded,
-				remaining,
-				resetTime.Format(time.RFC3339),
-				waitDuration.Round(time.Second),
-			)
+
+			builder := errUtils.Build(errUtils.ErrGitHubRateLimitExceeded).
+				WithExplanation(fmt.Sprintf("Only %d requests remaining, resets at %s (in %s)",
+					remaining,
+					resetTime.Format(time.RFC3339),
+					waitDuration.Round(time.Second)))
+
+			if httpClient.GetGitHubTokenFromEnv() != "" {
+				builder.
+					WithHint("Your GitHub token may be invalid or expired").
+					WithHint("Verify your token: `gh auth status`").
+					WithHint("Try re-authenticating: `gh auth login`")
+			} else {
+				builder.
+					WithHint("Authenticate with GitHub CLI: `gh auth login`").
+					WithHint("Or set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variable")
+			}
+
+			return nil, builder.Err()
 		}
 	}
 

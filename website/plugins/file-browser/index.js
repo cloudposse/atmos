@@ -38,14 +38,21 @@ const TAGS_MAP = {
   'demo-library': ['Components'],
   'demo-workflows': ['Automation'],
   'demo-atlantis': ['Automation'],
+  'custom-commands': ['Automation'],
+  'interactive-workflows': ['Automation'],
   'demo-custom-command': ['Automation'],
+  'custom-components': ['Components'],
   'generate-files': ['Automation'],
   toolchain: ['DX'],
   devcontainer: ['DX'],
   'devcontainer-build': ['DX'],
-  'demo-localstack': ['DX'],
+  'demo-floci': ['DX'],
   'demo-helmfile': ['DX'],
   'stack-names': ['Stacks'],
+  'demo-ansible': ['Automation'],
+  'mcp-with-aws': ['DX', 'Automation'],
+  'aws-ami-packer-github-actions': ['Automation'],
+  'sops-secrets': ['Stacks'],
 };
 
 // Documentation pages mapping for examples.
@@ -95,8 +102,17 @@ const DOCS_MAP = {
   'demo-atlantis': [
     { label: 'Atlantis Integration', url: '/cli/configuration/integrations/atlantis' },
   ],
-  'demo-custom-command': [
+  'custom-commands': [
     { label: 'Custom Commands', url: '/cli/configuration/commands' },
+  ],
+  'custom-components': [
+    { label: 'Custom Component Types', url: '/components/custom' },
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Custom Component Types Reference', url: '/cli/configuration/commands/component#custom-component-types' },
+  ],
+  'interactive-workflows': [
+    { label: 'Workflows', url: '/workflows' },
+    { label: 'CLI Configuration', url: '/cli/configuration/workflows' },
   ],
   'generate-files': [
     { label: 'Generate Files', url: '/cli/commands/terraform/generate/files' },
@@ -105,7 +121,9 @@ const DOCS_MAP = {
     { label: 'CLI Configuration', url: '/cli/configuration' },
   ],
   toolchain: [
-    { label: 'Getting Started', url: '/quick-start' },
+    { label: 'Toolchain Configuration', url: '/cli/configuration/toolchain' },
+    { label: 'Toolchain Registries', url: '/cli/configuration/toolchain/registries' },
+    { label: 'Toolchain Commands', url: '/cli/commands/toolchain/usage' },
   ],
   devcontainer: [
     { label: 'Devcontainer Configuration', url: '/cli/configuration/devcontainer' },
@@ -118,6 +136,20 @@ const DOCS_MAP = {
   ],
   'stack-names': [
     { label: 'Stack Names', url: '/stacks/name' },
+  ],
+  'demo-ansible': [
+    { label: 'Ansible Playbook', url: '/cli/commands/ansible/playbook' },
+  ],
+  'mcp-with-aws': [
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Authentication', url: '/stacks/auth' },
+    { label: 'Toolchain', url: '/cli/configuration/toolchain' },
+  ],
+  'aws-ami-packer-github-actions': [
+    { label: 'Packer Build', url: '/cli/commands/packer/build' },
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Go Templates', url: '/templates' },
+    { label: 'GitHub Actions', url: '/integrations/github-actions/setup-atmos' },
   ],
 };
 
@@ -487,6 +519,7 @@ module.exports = function fileBrowserPlugin(context, options) {
     githubRepo = '',
     githubBranch = 'main',
     githubPath = '',
+    disclaimer = '',
     excludePatterns = [],
     maxFileSize = 100 * 1024, // 100KB default.
   } = options;
@@ -524,6 +557,7 @@ module.exports = function fileBrowserPlugin(context, options) {
           githubRepo,
           githubBranch,
           githubPath,
+          disclaimer,
         },
       };
     },

@@ -5,13 +5,23 @@ vars:
 
 components:
   terraform:
-    myapp:
+    # LOCAL source
+    weather:
       source:
-        uri: "github.com/cloudposse/terraform-null-label"
-        version: "0.24.1"
+        uri: "../demo-library/weather"
       provision:
         workdir:
           enabled: true
       vars:
-        enabled: true
-        environment: "prod"
+        location: "Los Angeles"
+
+    # REMOTE source
+    ipinfo:
+      source:
+        uri: "github.com/cloudposse/atmos//examples/demo-library/ipinfo"
+        version: "main"
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        ip_address: "1.1.1.1"

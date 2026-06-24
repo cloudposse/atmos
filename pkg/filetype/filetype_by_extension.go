@@ -12,6 +12,7 @@ import (
 // - .json → JSON parsing.
 // - .yaml, .yml → YAML parsing.
 // - .hcl, .tf, .tfvars → HCL parsing.
+// - .env, .env.*, *.env → dotenv parsing.
 // - All others (including .txt or no extension) → raw string.
 func ParseFileByExtension(readFileFunc func(string) ([]byte, error), filename string) (any, error) {
 	// Extract clean filename from potential URL.
@@ -47,6 +48,8 @@ func ParseByExtension(data []byte, ext string, filename string) (any, error) {
 		return parseYAML(data)
 	case ".hcl", ".tf", ".tfvars":
 		return parseHCL(data, filename)
+	case ".env":
+		return parseDotenv(data)
 	default:
 		// Return as raw string for unknown extensions.
 		return string(data), nil
@@ -94,6 +97,11 @@ func GetFileExtension(filename string) string {
 		return ""
 	}
 
+	lowerFilename := strings.ToLower(filename)
+	if strings.HasPrefix(lowerFilename, ".env.") {
+		return ".env"
+	}
+
 	ext := filepath.Ext(filename)
 
 	// If the extension is the whole filename (e.g., ".env"), check if it looks like a known extension.
@@ -103,7 +111,7 @@ func GetFileExtension(filename string) string {
 			// It looks like an extension file (e.g., ".json", ".yaml").
 			// Check if it's a known extension.
 			lowerExt := strings.ToLower(ext)
-			knownExts := []string{".json", ".yaml", ".yml", ".hcl", ".tf", ".tfvars", ".txt", ".md"}
+			knownExts := []string{".json", ".yaml", ".yml", ".hcl", ".tf", ".tfvars", ".env", ".txt", ".md"}
 			for _, known := range knownExts {
 				if lowerExt == known {
 					return lowerExt

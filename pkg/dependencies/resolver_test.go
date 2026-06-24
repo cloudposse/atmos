@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 func TestResolveWorkflowDependencies(t *testing.T) {
@@ -372,7 +372,7 @@ func TestExtractDependenciesFromConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := extractDependenciesFromConfig(tt.config)
+			got := ExtractDependenciesFromConfig(tt.config)
 			assert.Equal(t, tt.want, got)
 		})
 	}

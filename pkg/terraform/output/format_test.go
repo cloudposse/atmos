@@ -1190,7 +1190,7 @@ func TestTransformKeys(t *testing.T) {
 	assert.Equal(t, "subnet-456", result["SUBNET_ID"])
 }
 
-// TestFlattenMap tests the flattenMap function.
+// TestFlattenMap tests the FlattenMap function.
 func TestFlattenMap(t *testing.T) {
 	m := map[string]any{
 		"simple": "value",
@@ -1199,24 +1199,24 @@ func TestFlattenMap(t *testing.T) {
 		},
 	}
 
-	result := flattenMap(m, "", "_")
+	result := FlattenMap(m, "", "_")
 
 	assert.Equal(t, "value", result["simple"])
 	assert.Equal(t, "deepvalue", result["nested_deep"])
 }
 
-// TestFlattenMap_WithPrefix tests flattenMap with a prefix.
+// TestFlattenMap_WithPrefix tests FlattenMap with a prefix.
 func TestFlattenMap_WithPrefix(t *testing.T) {
 	m := map[string]any{
 		"key": "value",
 	}
 
-	result := flattenMap(m, "prefix", "_")
+	result := FlattenMap(m, "prefix", "_")
 
 	assert.Equal(t, "value", result["prefix_key"])
 }
 
-// TestFlattenMap_WithCustomSeparator tests flattenMap with different separators.
+// TestFlattenMap_WithCustomSeparator tests FlattenMap with different separators.
 func TestFlattenMap_WithCustomSeparator(t *testing.T) {
 	m := map[string]any{
 		"outer": map[string]any{
@@ -1225,11 +1225,11 @@ func TestFlattenMap_WithCustomSeparator(t *testing.T) {
 	}
 
 	// Test with double underscore separator.
-	result := flattenMap(m, "", "__")
+	result := FlattenMap(m, "", "__")
 	assert.Equal(t, "value", result["outer__inner"])
 
 	// Test with dot separator.
-	result = flattenMap(m, "", ".")
+	result = FlattenMap(m, "", ".")
 	assert.Equal(t, "value", result["outer.inner"])
 }
 

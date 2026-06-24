@@ -7,7 +7,10 @@ import Screengrab from '@site/src/components/Screengrab'
 import TypingAnimation from '@site/src/components/TypingAnimation'
 import { FeaturedDemoCarousel } from '@site/src/components/FeaturedDemoCarousel'
 import ScrollFadeIn from '@site/src/components/ScrollFadeIn'
-import { RiLockLine, RiBox3Line, RiFlashlightLine, RiStackLine } from 'react-icons/ri';
+import { RiLockLine, RiBox3Line, RiFlashlightLine, RiShieldKeyholeLine } from 'react-icons/ri';
+import { SiAmazonwebservices, SiGooglecloud } from 'react-icons/si';
+import { VscAzure } from 'react-icons/vsc';
+import AISection from '@site/src/components/AISection'
 import '../css/landing-page.css';
 
 function Home() {
@@ -27,17 +30,32 @@ function Home() {
               <h1>
                 <span className="hero__title-line">One Tool to Orchestrate</span>
                 <span className="typing-container" aria-hidden="true">
-                  <TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'Devcontainers']} />
+                  <TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'Ansible', 'Devcontainers']} />
                 </span>
-                <span className="visually-hidden">Terraform, OpenTofu, Packer, Helmfile, Devcontainers</span>
+                <span className="visually-hidden">Terraform, OpenTofu, Packer, Helmfile, Ansible, and Devcontainers</span>
               </h1>
             <p className="hero__description">Treat environments as configuration and eliminate code duplication, custom bash scripts, and complicated tooling with one tool to rule them all</p>
+            <Link to="/multi-cloud" className="hero__cloud-logos">
+              <div className="hero__cloud-logo">
+                <SiAmazonwebservices />
+                <span>AWS</span>
+              </div>
+              <div className="hero__cloud-logo">
+                <VscAzure />
+                <span>Azure</span>
+              </div>
+              <div className="hero__cloud-logo">
+                <SiGooglecloud />
+                <span>GCP</span>
+              </div>
+            </Link>
             <div className="hero__cta">
               <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
               <Link to="/intro" className="hero__link">Learn More</Link>
             </div>
           </div>
         </header>
+        <AISection />
         <section className="hero-demo">
           <motion.div
             className="hero-demo-intro"
@@ -103,10 +121,10 @@ function Home() {
             >
               <div className="feature-card">
                 <div className="feature-header">
-                  <div className="feature-icon"><RiStackLine /></div>
-                  <h3>Smart Scaffolding</h3>
+                  <div className="feature-icon"><RiShieldKeyholeLine /></div>
+                  <h3>Secrets Management</h3>
                 </div>
-                <p>Configuration inheritance and composable stacks that scale</p>
+                <p>Declare secrets per environment and mask them everywhere</p>
               </div>
             </motion.div>
           </section>
@@ -145,9 +163,9 @@ function Home() {
             </div>
           </section>
         </main>
-        <footer>
+        <footer className="cta-footer">
             <h2>What are you waiting for? <strong className="atmos__text">It's FREE and Open Source</strong></h2>
-            <h3><strong className="underline">Your team can succeed</strong> with Terraform/OpenTofu and Packer today.</h3>
+            <h3><strong className="underline">Your team can succeed</strong> with Terraform/OpenTofu, Packer, Ansible, and more today.</h3>
             <section className="cta-section">
               <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
             </section>

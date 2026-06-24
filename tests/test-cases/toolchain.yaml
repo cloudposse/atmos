@@ -94,6 +94,9 @@ tests:
         "v?[0-9]+\\.[0-9]+\\.[0-9]+": "X.X.X"
         # Sanitize dates (e.g., 2025-12-17)
         "[0-9]{4}-[0-9]{2}-[0-9]{2}": "YYYY-MM-DD"
+      diff:
+        # Ignore table data rows - release titles change when upstream repos publish new versions.
+        - "YYYY-MM-DD"
       exit_code: 0
 
   - name: "atmos toolchain info http type tool"
@@ -140,6 +143,11 @@ tests:
       sanitize:
         "v?[0-9]+\\.[0-9]+\\.[0-9]+": "X.X.X"
         "[0-9]{4}-[0-9]{2}-[0-9]{2}": "YYYY-MM-DD"
+      diff:
+        # Ignore table data rows and continuation lines - release titles change
+        # when upstream repos publish new versions.
+        - "YYYY-MM-DD"
+        - "^\\s{20,}\\S"
       exit_code: 0
 
   - name: "atmos toolchain info raw format tool"
@@ -164,6 +172,9 @@ tests:
         # jq uses jq-X.X.X format for versions
         "jq-[0-9]+\\.[0-9]+(\\.[0-9]+)?": "jq-X.X"
         "[0-9]{4}-[0-9]{2}-[0-9]{2}": "YYYY-MM-DD"
+      diff:
+        # Ignore table data rows - release titles change when upstream repos publish new versions.
+        - "YYYY-MM-DD"
       exit_code: 0
 
   - name: "atmos toolchain info yaml output"

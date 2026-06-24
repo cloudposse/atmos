@@ -1,0 +1,537 @@
+package github
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"runtime"
+	"time"
+
+	"github.com/google/go-github/v59/github"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+// Artifact-related errors.
+var (
+	// ErrPRNotFound indicates the PR does not exist.
+	ErrPRNotFound = errors.New("pull request not found")
+
+	// ErrNoWorkflowRunFound indicates no workflow run was found for the PR.
+	ErrNoWorkflowRunFound = errors.New("no workflow run found")
+
+	// ErrNoArtifactFound indicates the requested artifact was not found.
+	ErrNoArtifactFound = errors.New("artifact not found")
+
+	// ErrNoArtifactForPlatform indicates no artifact exists for the current platform.
+	ErrNoArtifactForPlatform = errors.New("no artifact available for current platform")
+
+	// ErrRefNotFound indicates the git ref (branch or tag) does not exist.
+	ErrRefNotFound = errors.New("git ref not found")
+)
+
+const (
+	// workflowName must match the "name:" field in .github/workflows/test.yml.
+	// PR/SHA artifact installation depends on this to find successful CI runs.
+	workflowName = "Tests"
+
+	// GitHub API pagination size.
+	perPage = 100
+
+	// HTTP status code for not found.
+	statusNotFound = 404
+)
+
+// PRArtifactInfo contains information about a PR's build artifact.
+type PRArtifactInfo struct {
+	// PR number.
+	PRNumber int
+	// Head SHA of the PR.
+	HeadSHA string
+	// Workflow run ID that produced the artifact.
+	RunID int64
+	// Artifact ID.
+	ArtifactID int64
+	// Artifact name (e.g., "build-artifacts-macos").
+	ArtifactName string
+	// Size in bytes.
+	SizeInBytes int64
+	// Download URL. Downloads from public repositories work without authentication
+	// (subject to rate limits); private repositories require a token.
+	DownloadURL string
+	// RunStartedAt is when the workflow run started.
+	RunStartedAt time.Time
+}
+
+// SHAArtifactInfo contains information about a SHA's build artifact.
+type SHAArtifactInfo struct {
+	// Head SHA of the commit.
+	HeadSHA string
+	// Workflow run ID that produced the artifact.
+	RunID int64
+	// Artifact ID.
+	ArtifactID int64
+	// Artifact name (e.g., "build-artifacts-macos").
+	ArtifactName string
+	// Size in bytes.
+	SizeInBytes int64
+	// Download URL. Downloads from public repositories work without authentication
+	// (subject to rate limits); private repositories require a token.
+	DownloadURL string
+	// RunStartedAt is when the workflow run started.
+	RunStartedAt time.Time
+}
+
+// workflowRunInfo contains metadata about a successful workflow run.
+type workflowRunInfo struct {
+	ID           int64
+	RunStartedAt time.Time
+}
+
+// PullRequestService defines the interface for pull request operations.
+// This allows for mocking in tests.
+//
+//go:generate go run go.uber.org/mock/mockgen@latest -source=artifacts.go -destination=mock_artifacts_test.go -package=github
+type PullRequestService interface {
+	Get(ctx context.Context, owner string, repo string, number int) (*github.PullRequest, *github.Response, error)
+}
+
+// ActionsService defines the interface for GitHub Actions operations.
+// This allows for mocking in tests.
+type ActionsService interface {
+	ListRepositoryWorkflowRuns(ctx context.Context, owner, repo string, opts *github.ListWorkflowRunsOptions) (*github.WorkflowRuns, *github.Response, error)
+	ListWorkflowRunArtifacts(ctx context.Context, owner, repo string, runID int64, opts *github.ListOptions) (*github.ArtifactList, *github.Response, error)
+	GetArtifact(ctx context.Context, owner, repo string, artifactID int64) (*github.Artifact, *github.Response, error)
+}
+
+// RepositoriesService defines the interface for repository operations.
+// This allows for mocking in tests.
+type RepositoriesService interface {
+	GetCommitSHA1(ctx context.Context, owner, repo, ref, lastSHA string) (string, *github.Response, error)
+}
+
+// ArtifactFetcher wraps the artifact fetching logic with injectable services.
+// Use NewArtifactFetcher to create an instance with custom services for testing.
+type ArtifactFetcher struct {
+	pullRequests PullRequestService
+	actions      ActionsService
+	repositories RepositoriesService
+}
+
+// NewArtifactFetcher creates an ArtifactFetcher with custom services.
+// This is primarily used for testing with mock services.
+func NewArtifactFetcher(prs PullRequestService, actions ActionsService) *ArtifactFetcher {
+	defer perf.Track(nil, "github.NewArtifactFetcher")()
+
+	return &ArtifactFetcher{pullRequests: prs, actions: actions}
+}
+
+// defaultArtifactFetcher returns a fetcher using the real GitHub client.
+func defaultArtifactFetcher(ctx context.Context) *ArtifactFetcher {
+	client := newGitHubClient(ctx)
+	return &ArtifactFetcher{
+		pullRequests: client.PullRequests,
+		actions:      client.Actions,
+		repositories: client.Repositories,
+	}
+}
+
+// defaultArtifactFetcherWithToken returns a fetcher using a GitHub client with an explicit token.
+func defaultArtifactFetcherWithToken(ctx context.Context, token string) *ArtifactFetcher {
+	client := newGitHubClientWithToken(ctx, token)
+	return &ArtifactFetcher{
+		pullRequests: client.PullRequests,
+		actions:      client.Actions,
+		repositories: client.Repositories,
+	}
+}
+
+// GetPRArtifactInfo retrieves build artifact information for a PR.
+// This finds the latest successful workflow run for the PR and locates
+// the artifact matching the current platform.
+// Works without authentication for public repositories (subject to rate limits).
+func GetPRArtifactInfo(ctx context.Context, owner, repo string, prNumber int) (*PRArtifactInfo, error) {
+	defer perf.Track(nil, "github.GetPRArtifactInfo")()
+
+	fetcher := defaultArtifactFetcher(ctx)
+	return fetcher.getPRArtifactInfo(ctx, owner, repo, prNumber)
+}
+
+// GetPRArtifactInfo retrieves build artifact info for a PR using custom services.
+func (f *ArtifactFetcher) GetPRArtifactInfo(ctx context.Context, owner, repo string, prNumber int) (*PRArtifactInfo, error) {
+	defer perf.Track(nil, "github.ArtifactFetcher.GetPRArtifactInfo")()
+
+	return f.getPRArtifactInfo(ctx, owner, repo, prNumber)
+}
+
+// getPRArtifactInfo contains the core logic for retrieving PR artifact information.
+func (f *ArtifactFetcher) getPRArtifactInfo(ctx context.Context, owner, repo string, prNumber int) (*PRArtifactInfo, error) {
+	log.Debug("Fetching PR artifact info", logFieldOwner, owner, logFieldRepo, repo, "pr", prNumber)
+
+	// Determine artifact name for current platform.
+	artifactName, err := getArtifactNameForPlatform()
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 1: Get PR info to find the head SHA.
+	headSHA, err := getPRHeadSHA(ctx, f.pullRequests, owner, repo, prNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug("Found PR head SHA", "sha", headSHA)
+
+	// Step 2: Find the latest workflow run for this SHA that has the platform artifact.
+	runInfo, artifact, err := findRunWithArtifact(ctx, f.actions, owner, repo, headSHA, artifactName)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug("Found workflow run", "runID", runInfo.ID, "startedAt", runInfo.RunStartedAt)
+	log.Debug("Found artifact", "name", artifact.GetName(), "size", artifact.GetSizeInBytes())
+
+	return &PRArtifactInfo{
+		PRNumber:     prNumber,
+		HeadSHA:      headSHA,
+		RunID:        runInfo.ID,
+		ArtifactID:   artifact.GetID(),
+		ArtifactName: artifact.GetName(),
+		SizeInBytes:  artifact.GetSizeInBytes(),
+		DownloadURL:  artifact.GetArchiveDownloadURL(),
+		RunStartedAt: runInfo.RunStartedAt,
+	}, nil
+}
+
+// GetArtifactDownloadURL returns the download URL for a specific artifact.
+// Downloads from public repositories work without authentication (subject to
+// rate limits); private repositories require a token.
+func GetArtifactDownloadURL(ctx context.Context, owner, repo string, artifactID int64) (string, error) {
+	defer perf.Track(nil, "github.GetArtifactDownloadURL")()
+
+	fetcher := defaultArtifactFetcher(ctx)
+	return fetcher.getArtifactDownloadURL(ctx, owner, repo, artifactID)
+}
+
+// GetArtifactDownloadURL returns the download URL using custom services.
+func (f *ArtifactFetcher) GetArtifactDownloadURL(ctx context.Context, owner, repo string, artifactID int64) (string, error) {
+	defer perf.Track(nil, "github.ArtifactFetcher.GetArtifactDownloadURL")()
+
+	return f.getArtifactDownloadURL(ctx, owner, repo, artifactID)
+}
+
+// getArtifactDownloadURL contains the core logic for retrieving an artifact download URL.
+func (f *ArtifactFetcher) getArtifactDownloadURL(ctx context.Context, owner, repo string, artifactID int64) (string, error) {
+	// Get the artifact to retrieve its download URL.
+	artifact, resp, err := f.actions.GetArtifact(ctx, owner, repo, artifactID)
+	if err != nil {
+		return "", handleGitHubAPIError(err, resp)
+	}
+
+	if artifact == nil {
+		return "", fmt.Errorf("%w: API returned nil artifact for ID %d", ErrNoArtifactFound, artifactID)
+	}
+
+	return artifact.GetArchiveDownloadURL(), nil
+}
+
+// getArtifactNameForPlatform returns the artifact name for the current OS/arch.
+// Current CI builds:
+//   - linux/amd64 -> build-artifacts-linux
+//   - darwin/arm64 -> build-artifacts-macos
+//   - windows/amd64 -> build-artifacts-windows
+func getArtifactNameForPlatform() (string, error) {
+	defer perf.Track(nil, "github.getArtifactNameForPlatform")()
+
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+
+	switch goos {
+	case "linux":
+		if goarch == "amd64" {
+			return "build-artifacts-linux", nil
+		}
+		return "", fmt.Errorf("%w: linux/%s (only linux/amd64 is built in CI)", ErrNoArtifactForPlatform, goarch)
+	case "darwin":
+		if goarch == "arm64" {
+			return "build-artifacts-macos", nil
+		}
+		return "", fmt.Errorf("%w: darwin/%s (only darwin/arm64 is built in CI)", ErrNoArtifactForPlatform, goarch)
+	case "windows":
+		if goarch == "amd64" {
+			return "build-artifacts-windows", nil
+		}
+		return "", fmt.Errorf("%w: windows/%s (only windows/amd64 is built in CI)", ErrNoArtifactForPlatform, goarch)
+	default:
+		return "", fmt.Errorf("%w: %s/%s", errUtils.ErrUnsupportedPlatform, goos, goarch)
+	}
+}
+
+// getPRHeadSHA retrieves the head commit SHA for a pull request.
+func getPRHeadSHA(ctx context.Context, prs PullRequestService, owner, repo string, prNumber int) (string, error) {
+	defer perf.Track(nil, "github.getPRHeadSHA")()
+
+	pr, resp, err := prs.Get(ctx, owner, repo, prNumber)
+	if err != nil {
+		if resp != nil && resp.StatusCode == statusNotFound {
+			return "", fmt.Errorf("%w: #%d in %s/%s", ErrPRNotFound, prNumber, owner, repo)
+		}
+		return "", handleGitHubAPIError(err, resp)
+	}
+
+	if pr.Head == nil || pr.Head.SHA == nil {
+		return "", fmt.Errorf("%w: PR #%d has no head SHA", ErrPRNotFound, prNumber)
+	}
+
+	return *pr.Head.SHA, nil
+}
+
+// findRunWithArtifact finds the most recent "Tests" workflow run for a commit SHA
+// that already has the requested platform artifact available, and returns both the
+// run metadata and the artifact.
+//
+// It intentionally does NOT filter on Status: "completed". GitHub only marks a run
+// "completed" once every job finishes, so requiring completion would force callers to
+// wait for slow jobs (e.g., the multi-platform acceptance-test matrix) even though the
+// Build job already uploaded the binary. By gating on artifact availability instead, a
+// PR/SHA/ref build becomes installable the moment its Build job finishes uploading.
+//
+// We accept any conclusion (success, failure, in-progress) because the build artifact
+// may exist even when unrelated jobs in the run failed. Iterating newest-first and
+// checking artifact presence also handles re-runs: a fresh in-progress re-run whose
+// Build has not uploaded yet falls back to the prior run that still has the artifact.
+//
+//nolint:revive // All parameters are necessary for this GitHub API function.
+func findRunWithArtifact(ctx context.Context, actions ActionsService, owner, repo, headSHA, artifactName string) (*workflowRunInfo, *github.Artifact, error) {
+	defer perf.Track(nil, "github.findRunWithArtifact")()
+
+	// List workflow runs for the commit SHA. No Status filter: include in-progress
+	// runs so the build artifact can be used as soon as the Build job uploads it.
+	opts := &github.ListWorkflowRunsOptions{
+		HeadSHA: headSHA,
+		ListOptions: github.ListOptions{
+			PerPage: perPage,
+		},
+	}
+
+	runs, resp, err := actions.ListRepositoryWorkflowRuns(ctx, owner, repo, opts)
+	if err != nil {
+		return nil, nil, handleGitHubAPIError(err, resp)
+	}
+
+	// Guard against nil response or empty workflow runs.
+	if runs == nil || len(runs.WorkflowRuns) == 0 {
+		return nil, nil, fmt.Errorf("%w: no '%s' workflow run for SHA %s", ErrNoWorkflowRunFound, workflowName, headSHA)
+	}
+
+	// Walk runs newest-first, returning the first "Tests" run that has the artifact.
+	var sawRun bool
+	var noArtifactErr error
+	for _, run := range runs.WorkflowRuns {
+		if run.GetName() != workflowName {
+			continue
+		}
+		sawRun = true
+
+		info := &workflowRunInfo{
+			ID:           run.GetID(),
+			RunStartedAt: run.GetRunStartedAt().Time,
+		}
+
+		artifact, artErr := findArtifactByName(ctx, actions, owner, repo, info.ID, artifactName)
+		if artErr == nil {
+			return info, artifact, nil
+		}
+		if !errors.Is(artErr, ErrNoArtifactFound) {
+			// A real API error (auth, rate limit, etc.) — surface it immediately.
+			return nil, nil, artErr
+		}
+		// Artifact not uploaded in this run yet (Build still running or skipped);
+		// remember the reason and try the next (older) run.
+		noArtifactErr = artErr
+	}
+
+	if !sawRun {
+		return nil, nil, fmt.Errorf("%w: no '%s' workflow run for SHA %s", ErrNoWorkflowRunFound, workflowName, headSHA)
+	}
+
+	// Runs exist but none has the platform artifact yet.
+	return nil, nil, noArtifactErr
+}
+
+// findArtifactByName finds an artifact by name within a workflow run.
+//
+//nolint:revive // All parameters are necessary for this GitHub API function.
+func findArtifactByName(ctx context.Context, actions ActionsService, owner, repo string, runID int64, artifactName string) (*github.Artifact, error) {
+	defer perf.Track(nil, "github.findArtifactByName")()
+
+	opts := &github.ListOptions{
+		PerPage: perPage,
+	}
+
+	artifacts, resp, err := actions.ListWorkflowRunArtifacts(ctx, owner, repo, runID, opts)
+	if err != nil {
+		return nil, handleGitHubAPIError(err, resp)
+	}
+
+	// Guard against nil response.
+	if artifacts == nil || artifacts.Artifacts == nil {
+		return nil, fmt.Errorf("%w: '%s' not found in workflow run %d (available: none)",
+			ErrNoArtifactFound, artifactName, runID)
+	}
+
+	for _, artifact := range artifacts.Artifacts {
+		if artifact.GetName() == artifactName {
+			return artifact, nil
+		}
+	}
+
+	// Build list of available artifacts for error message.
+	available := make([]string, 0, len(artifacts.Artifacts))
+	for _, a := range artifacts.Artifacts {
+		available = append(available, a.GetName())
+	}
+
+	return nil, fmt.Errorf("%w: '%s' not found in workflow run %d (available: %v)",
+		ErrNoArtifactFound, artifactName, runID, available)
+}
+
+// SupportedPRPlatforms returns a list of platforms supported by PR artifact downloads.
+func SupportedPRPlatforms() []string {
+	defer perf.Track(nil, "github.SupportedPRPlatforms")()
+
+	return []string{
+		"linux/amd64",
+		"darwin/arm64",
+		"windows/amd64",
+	}
+}
+
+// GetPRHeadSHA retrieves the current head commit SHA for a pull request.
+// This is used for cache validation to check if the PR has new commits.
+// The token parameter is used for API authentication if available; empty string for unauthenticated access.
+func GetPRHeadSHA(ctx context.Context, owner, repo string, prNumber int, token string) (string, error) {
+	defer perf.Track(nil, "github.GetPRHeadSHA")()
+
+	fetcher := defaultArtifactFetcherWithToken(ctx, token)
+	return getPRHeadSHA(ctx, fetcher.pullRequests, owner, repo, prNumber)
+}
+
+// GetPRHeadSHA retrieves the head SHA for a PR using custom services.
+func (f *ArtifactFetcher) GetPRHeadSHA(ctx context.Context, owner, repo string, prNumber int) (string, error) {
+	defer perf.Track(nil, "github.ArtifactFetcher.GetPRHeadSHA")()
+
+	return getPRHeadSHA(ctx, f.pullRequests, owner, repo, prNumber)
+}
+
+// GetSHAArtifactInfo retrieves build artifact information for a commit SHA.
+// This finds the latest successful workflow run for the SHA and locates
+// the artifact matching the current platform.
+// Works without authentication for public repositories (subject to rate limits).
+func GetSHAArtifactInfo(ctx context.Context, owner, repo, sha string) (*SHAArtifactInfo, error) {
+	defer perf.Track(nil, "github.GetSHAArtifactInfo")()
+
+	fetcher := defaultArtifactFetcher(ctx)
+	return fetcher.getSHAArtifactInfo(ctx, owner, repo, sha)
+}
+
+// GetSHAArtifactInfo retrieves build artifact info for a SHA using custom services.
+func (f *ArtifactFetcher) GetSHAArtifactInfo(ctx context.Context, owner, repo, sha string) (*SHAArtifactInfo, error) {
+	defer perf.Track(nil, "github.ArtifactFetcher.GetSHAArtifactInfo")()
+
+	return f.getSHAArtifactInfo(ctx, owner, repo, sha)
+}
+
+// getSHAArtifactInfo contains the core logic for retrieving SHA artifact information.
+func (f *ArtifactFetcher) getSHAArtifactInfo(ctx context.Context, owner, repo, sha string) (*SHAArtifactInfo, error) {
+	log.Debug("Fetching SHA artifact info", logFieldOwner, owner, logFieldRepo, repo, "sha", sha)
+
+	// Determine artifact name for current platform.
+	artifactName, err := getArtifactNameForPlatform()
+	if err != nil {
+		return nil, err
+	}
+
+	// Find the latest workflow run for this SHA that has the platform artifact.
+	runInfo, artifact, err := findRunWithArtifact(ctx, f.actions, owner, repo, sha, artifactName)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug("Found workflow run", "runID", runInfo.ID, "startedAt", runInfo.RunStartedAt)
+	log.Debug("Found artifact", "name", artifact.GetName(), "size", artifact.GetSizeInBytes())
+
+	return &SHAArtifactInfo{
+		HeadSHA:      sha,
+		RunID:        runInfo.ID,
+		ArtifactID:   artifact.GetID(),
+		ArtifactName: artifact.GetName(),
+		SizeInBytes:  artifact.GetSizeInBytes(),
+		DownloadURL:  artifact.GetArchiveDownloadURL(),
+		RunStartedAt: runInfo.RunStartedAt,
+	}, nil
+}
+
+// GetRefSHA resolves a git ref (branch or tag name) to its full commit SHA.
+// It accepts bare names ("main", "v1.2.3") as well as qualified refs
+// ("heads/main", "tags/v1.2.3") for disambiguation. The returned SHA is the
+// full 40-character commit SHA, which is what the artifact lookup requires.
+// Works without authentication for public repositories (subject to rate limits).
+func GetRefSHA(ctx context.Context, owner, repo, ref string) (string, error) {
+	defer perf.Track(nil, "github.GetRefSHA")()
+
+	fetcher := defaultArtifactFetcher(ctx)
+	return fetcher.getRefSHA(ctx, owner, repo, ref)
+}
+
+// GetRefSHA resolves a git ref to its full commit SHA using custom services.
+func (f *ArtifactFetcher) GetRefSHA(ctx context.Context, owner, repo, ref string) (string, error) {
+	defer perf.Track(nil, "github.ArtifactFetcher.GetRefSHA")()
+
+	return f.getRefSHA(ctx, owner, repo, ref)
+}
+
+// getRefSHA contains the core logic for resolving a ref to a commit SHA.
+func (f *ArtifactFetcher) getRefSHA(ctx context.Context, owner, repo, ref string) (string, error) {
+	log.Debug("Resolving git ref to SHA", logFieldOwner, owner, logFieldRepo, repo, "ref", ref)
+
+	// lastSHA is empty: we always want the current SHA, not a conditional request.
+	sha, resp, err := f.repositories.GetCommitSHA1(ctx, owner, repo, ref, "")
+	if err != nil {
+		if resp != nil && resp.StatusCode == statusNotFound {
+			return "", fmt.Errorf("%w: '%s' in %s/%s", ErrRefNotFound, ref, owner, repo)
+		}
+		return "", handleGitHubAPIError(err, resp)
+	}
+
+	if sha == "" {
+		return "", fmt.Errorf("%w: '%s' resolved to an empty SHA in %s/%s", ErrRefNotFound, ref, owner, repo)
+	}
+
+	log.Debug("Resolved git ref", "ref", ref, "sha", sha)
+	return sha, nil
+}
+
+// Error predicate functions are trivial one-liners — perf.Track omitted per guidelines.
+
+// IsNotFoundError checks if the error is a "not found" type error.
+func IsNotFoundError(err error) bool {
+	return errors.Is(err, ErrPRNotFound)
+}
+
+// IsNoWorkflowError checks if the error is a "no workflow run" error.
+func IsNoWorkflowError(err error) bool {
+	return errors.Is(err, ErrNoWorkflowRunFound)
+}
+
+// IsNoArtifactError checks if the error is a "no artifact" error.
+func IsNoArtifactError(err error) bool {
+	return errors.Is(err, ErrNoArtifactFound)
+}
+
+// IsPlatformError checks if the error is a platform-related error.
+func IsPlatformError(err error) bool {
+	return errors.Is(err, ErrNoArtifactForPlatform) || errors.Is(err, errUtils.ErrUnsupportedPlatform)
+}

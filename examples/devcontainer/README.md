@@ -73,26 +73,6 @@ devcontainers:
     forwardPorts: [9000, 9001]
 ```
 
-## Supported Fields
-
-- ✅ `name` - Container display name
-- ✅ `image` - Pre-built container image
-- ✅ `build` - Build configuration (dockerfile, context, args)
-- ✅ `workspaceFolder` - Working directory inside container
-- ✅ `workspaceMount` - Primary workspace volume mount
-- ✅ `mounts` - Additional volume mounts
-- ✅ **`forwardPorts`** - Port forwarding (critical for dev workflows)
-- ✅ **`portsAttributes`** - Port metadata (labels, protocols)
-- ✅ `containerEnv` - Environment variables
-- ✅ `runArgs` - Additional docker/podman arguments
-- ✅ `remoteUser` - User to run as
-
-## Unsupported Fields (Ignored)
-
-- ❌ `features` - Use Dockerfile instead
-- ❌ `customizations` - Use VS Code extension instead
-- ❌ `postCreateCommand` / lifecycle scripts - Use Dockerfile ENTRYPOINT/CMD
-
 ## Port Forwarding Examples
 
 ### Simple Port Mapping
@@ -150,12 +130,3 @@ atmos devcontainer remove <name>
 # Show configuration
 atmos devcontainer config <name>
 ```
-
-## Container Naming
-
-Containers are named: `atmos-devcontainer-{name}-{instance}`
-
-Examples:
-- `atmos-devcontainer-default-default`
-- `atmos-devcontainer-terraform-alice`
-- `atmos-devcontainer-python-bob`

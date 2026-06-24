@@ -1,0 +1,52 @@
+# Network stack for us-east-1
+# Hub region with Transit Gateway hub for cross-region connectivity
+
+import:
+  - mixins/region/us-east-1
+  - mixins/stage/network
+
+components:
+  terraform:
+
+    vpc:
+      metadata:
+        component: vpc
+      vars:
+        vpc_cidr: "10.1.0.0/16"
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
+        nat_gateway_enabled: true
+        tags:
+          Environment: "network"
+          Region: "us-east-1"
+
+    tgw/hub:
+      metadata:
+        component: tgw/hub
+      vars:
+        amazon_side_asn: 64512
+        auto_accept_shared_attachments: true
+        tags:
+          Environment: "network"
+          Region: "us-east-1"
+      settings:
+        depends_on:
+          1:
+            component: vpc
+            stack: "{{ .vars.environment }}-{{ .vars.stage }}"
+
+    tgw/attachment:
+      metadata:
+        component: tgw/attachment
+      vars:
+        tags:
+          Environment: "network"
+          Region: "us-east-1"
+      settings:
+        depends_on:
+          1:
+            component: vpc
+          2:
+            component: tgw/hub

@@ -1,0 +1,304 @@
+/* AI Section - placed between hero and demo */
+.ai-section {
+  width: 100%;
+  max-width: 1200px;
+  margin: -20vh auto 0 auto;
+  padding: 4rem 2rem 6rem 2rem;
+  position: relative;
+  z-index: 2;
+}
+
+.ai-section-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Main content: text left, badge right */
+.ai-section-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4rem;
+  width: 100%;
+  margin-bottom: 4rem;
+}
+
+.ai-section-left {
+  flex: 1;
+  max-width: 600px;
+}
+
+.ai-section-right {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Eyebrow */
+.ai-section-eyebrow {
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  font-weight: 400;
+  color: #666;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+html[data-theme="dark"] .ai-section-eyebrow {
+  color: #999;
+}
+
+/* Title */
+.ai-section-left h2 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  line-height: 1.2;
+}
+
+html[data-theme="dark"] .ai-section-left h2 {
+  color: transparent;
+  background-image: linear-gradient(to right bottom, #fff 30%, rgba(255, 255, 255, 0.5));
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+/* Description */
+.ai-section-left p {
+  font-size: 1.25rem;
+  line-height: 1.6;
+  color: #4a5568;
+  margin-bottom: 1.5rem;
+}
+
+html[data-theme="dark"] .ai-section-left p {
+  color: #ccc;
+}
+
+/* CTA */
+.ai-section-cta {
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.ai-section-cta .button {
+  margin: 0;
+  padding-bottom: 0.8em;
+}
+
+/* ======================== */
+/* AI BADGE                 */
+/* ======================== */
+a.ai-badge-wrapper,
+a.ai-badge-wrapper:hover {
+  text-decoration: none;
+  color: inherit;
+}
+
+.ai-badge-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* Glow effect */
+.ai-badge-glow {
+  position: absolute;
+  inset: -80px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(88, 60, 231, 0.15) 0%,
+    rgba(46, 200, 255, 0.08) 40%,
+    transparent 70%
+  );
+  filter: blur(40px);
+  pointer-events: none;
+}
+
+html[data-theme="light"] .ai-badge-glow {
+  background: radial-gradient(
+    circle,
+    rgba(88, 60, 231, 0.1) 0%,
+    rgba(46, 200, 255, 0.05) 40%,
+    transparent 70%
+  );
+}
+
+/* Badge rectangle */
+.ai-badge {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2.5rem 3.5rem;
+  border-radius: 28px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
+}
+
+html[data-theme="light"] .ai-badge {
+  border-color: rgba(88, 60, 231, 0.3);
+}
+
+/* "AI" text with Atmos Pro gradient */
+.ai-badge-text {
+  font-size: 5rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  color: transparent;
+  background: linear-gradient(-45deg, #eb1a1a, #583ce7, #2ec8ff, #23d5ab);
+  background-size: 300% 300%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradient 15s ease infinite;
+}
+
+html[data-theme="light"] .ai-badge-text {
+  background: linear-gradient(-45deg, #583ce7, #2554a0, #3578e5);
+  background-size: 300% 300%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradient 15s ease infinite;
+}
+
+/* "Assisted" subtitle */
+.ai-badge-subtitle {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+html[data-theme="light"] .ai-badge-subtitle {
+  color: rgba(88, 60, 231, 0.6);
+}
+
+/* ======================== */
+/* CAPABILITY CARDS         */
+/* ======================== */
+.ai-capabilities {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.ai-capability-card {
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  padding: 1.75rem;
+  transition: all 0.3s ease;
+}
+
+html[data-theme="dark"] .ai-capability-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ai-capability-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="dark"] .ai-capability-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 20px rgba(88, 60, 231, 0.15);
+}
+
+.ai-capability-icon {
+  font-size: 2rem;
+  margin-bottom: 0.75rem;
+  display: inline-flex;
+  color: transparent;
+  background: linear-gradient(-45deg, #583ce7, #2ec8ff);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+html[data-theme="light"] .ai-capability-icon {
+  color: #583ce7;
+  background: none;
+  -webkit-text-fill-color: #583ce7;
+}
+
+.ai-capability-card h3 {
+  font-size: 1.3rem;
+  margin: 0 0 0.5rem 0;
+  text-align: left;
+}
+
+html[data-theme="dark"] .ai-capability-card h3 {
+  color: #fff;
+}
+
+.ai-capability-card p {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #4a5568;
+  margin: 0;
+  text-align: left;
+}
+
+html[data-theme="dark"] .ai-capability-card p {
+  color: #ccc;
+}
+
+/* ======================== */
+/* RESPONSIVE               */
+/* ======================== */
+@media screen and (max-width: 996px) {
+  .ai-section-content {
+    flex-direction: column-reverse;
+    gap: 2rem;
+    text-align: center;
+  }
+
+  .ai-section-left {
+    max-width: 100%;
+  }
+
+  .ai-section-left h2 {
+    text-align: center;
+  }
+
+  .ai-section-left p {
+    text-align: center;
+  }
+
+  .ai-section-cta {
+    display: flex;
+    justify-content: center;
+  }
+
+  .ai-capabilities {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .ai-section {
+    padding: 3rem 1rem 4rem 1rem;
+  }
+
+  .ai-badge-text {
+    font-size: 4rem;
+  }
+
+  .ai-badge {
+    padding: 2rem 3rem;
+  }
+}

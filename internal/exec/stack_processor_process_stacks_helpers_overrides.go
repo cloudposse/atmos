@@ -21,6 +21,7 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 	result.ComponentOverridesAuth = make(map[string]any, componentOverridesCapacity)
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.ComponentOverridesProviders = make(map[string]any, componentOverridesCapacity)
+		result.ComponentOverridesRequiredProviders = make(map[string]any, componentOverridesCapacity)
 		result.ComponentOverridesHooks = make(map[string]any, componentOverridesCapacity)
 		result.ComponentOverridesGenerate = make(map[string]any, componentOverridesCapacity)
 	}
@@ -64,6 +65,15 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 		result.ComponentOverridesEnv = componentOverridesEnv
 	}
 
+	// Extract secrets overrides (instance-scoped, like the rest of the component-level layers).
+	if i, ok := componentOverrides[cfg.SecretsSectionName]; ok {
+		componentOverridesSecrets, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.overrides.secrets' in the manifest '%s'", errUtils.ErrInvalidComponentSecrets, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentOverridesSecrets = componentOverridesSecrets
+	}
+
 	// Extract auth overrides.
 	if i, ok := componentOverrides[cfg.AuthSectionName]; ok {
 		componentOverridesAuth, ok := i.(map[string]any)
@@ -93,6 +103,28 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 		}
 	}
 
+	// Terraform-specific: extract required_providers overrides (DEV-3124).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := componentOverrides[cfg.RequiredProvidersSectionName]; ok {
+			componentOverridesRequiredProviders, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.overrides.required_providers' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesRequiredProviders, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentOverridesRequiredProviders = componentOverridesRequiredProviders
+		}
+	}
+
+	// Terraform-specific: extract required_version overrides (DEV-3124).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := componentOverrides[cfg.RequiredVersionSectionName]; ok {
+			componentOverridesRequiredVersion, ok := i.(string)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.overrides.required_version' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesRequiredVersion, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentOverridesRequiredVersion = componentOverridesRequiredVersion
+		}
+	}
+
 	// Terraform-specific: extract hooks overrides.
 	if opts.ComponentType == cfg.TerraformComponentType {
 		if i, ok := componentOverrides[cfg.HooksSectionName]; ok {
@@ -113,6 +145,15 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 			}
 			result.ComponentOverridesGenerate = componentOverridesGenerate
 		}
+	}
+
+	// Extract retry overrides — applied last, wins over concrete and base retry config.
+	if i, ok := componentOverrides[cfg.RetrySectionName]; ok {
+		componentOverridesRetry, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.overrides.retry' in the manifest '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentOverridesRetry = componentOverridesRetry
 	}
 
 	return nil

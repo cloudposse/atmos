@@ -37,34 +37,9 @@ Atmos discovers profiles from multiple locations in the following precedence ord
 3. **XDG user directory**: `~/.config/atmos/profiles/` (or `$XDG_CONFIG_HOME/atmos/profiles/`)
 4. **Project directory**: `profiles/` in your project root
 
-Each profile can be either:
-- An inline definition in `atmos.yaml`
-- A separate directory containing `atmos.yaml` and other configuration files
+Each profile is a directory containing `atmos.yaml` and other configuration files.
 
 ## Profile Structure
-
-### Inline Profiles (in atmos.yaml)
-
-```yaml
-# atmos.yaml
-profiles:
-  developer:
-    logs:
-      level: Debug
-    settings:
-      terminal:
-        max_width: 120
-
-  ci:
-    logs:
-      level: Info
-    settings:
-      terminal:
-        color: false
-        pager: false
-```
-
-### Directory-Based Profiles
 
 ```
 profiles/

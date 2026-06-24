@@ -8,7 +8,7 @@ components:
         init_run_reconfigure: true
         auto_generate_backend_file: false
         auto_generate_files: false
-        command: ""
+        command: tofu
         shell:
             prompt: ""
         init:
@@ -16,15 +16,22 @@ components:
         plan:
             skip_planfile: false
         plugin_cache: true
+        auto_provision_workdir_for_outputs: true
     helmfile:
         base_path: ""
         use_eks: true
         kubeconfig_path: ""
         helm_aws_profile_pattern: ""
         cluster_name_pattern: ""
+        cluster_name_template: ""
+        cluster_name: ""
         command: ""
         auto_generate_files: false
     packer:
+        base_path: ""
+        command: ""
+        auto_generate_files: false
+    ansible:
         base_path: ""
         command: ""
         auto_generate_files: false
@@ -74,6 +81,7 @@ includeStackAbsolutePaths:
 terraformDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation/components/terraform
 helmfileDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 packerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
+ansibleDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 default: false
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 import: []
@@ -83,4 +91,8 @@ docs:
     generate:
         readme:
             output: ./README.md
+auth:
+    realm: <hash>
+    providers: {}
+    identities: {}
 

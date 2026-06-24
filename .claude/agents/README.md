@@ -25,6 +25,12 @@ Expert in the tools/director demo system. Handles VHS demo rendering, command va
 
 **Philosophy:** When `--test` fails, investigate the root cause - fix atmos core, fixtures, or config rather than dumbing down the tape.
 
+### example-creator
+
+Expert in creating Atmos examples with proper structure, documentation, mock components, and CI testing integration.
+
+**Use when:** Creating new examples/demos, adding mock components, writing test cases for examples, or updating documentation with EmbedFile components.
+
 ## Strategic Approach
 
 As Atmos grows, we create focused agents for each major subsystem. This scales development velocity through specialized

@@ -1,0 +1,4 @@
+# Region mixin for us-west-2
+vars:
+  region: us-west-2
+  environment: uw2

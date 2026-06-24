@@ -1,8 +1,10 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,6 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -104,6 +107,29 @@ func TestIsKnownWorkflowError(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestExecuteExtendedStepInitializesExecutorAndLoadsEnv(t *testing.T) {
+	ResetStepExecutorState()
+	t.Cleanup(ResetStepExecutorState)
+
+	step := &schema.WorkflowStep{
+		Name:  "blank",
+		Type:  "linebreak",
+		Count: 1,
+	}
+	err := executeExtendedStep(
+		context.Background(),
+		step,
+		&schema.WorkflowDefinition{Output: "none"},
+		[]string{"ATMOS_TEST_EXTENDED_ENV=loaded", "malformed"},
+		true,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, stepExecutorState)
+	assert.Equal(t, "loaded", stepExecutorState.Variables().Env["ATMOS_TEST_EXTENDED_ENV"])
+	_, ok := stepExecutorState.GetResult("blank")
+	assert.True(t, ok)
 }
 
 // TestCheckAndMergeDefaultIdentity tests the checkAndMergeDefaultIdentity function.
@@ -831,17 +857,19 @@ func TestCheckAndGenerateWorkflowStepNames_Coverage(t *testing.T) {
 
 // TestPrepareStepEnvironment tests the prepareStepEnvironment function.
 func TestPrepareStepEnvironment_NoIdentity(t *testing.T) {
-	// When no identity is specified, should return base environment (system + global env).
-	env, err := prepareStepEnvironment("", "step1", nil, nil)
+	// When no identity is specified, should return base environment with workflow/step env merged.
+	baseEnv := []string{"BASE_VAR=base-value"}
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil)
 
 	assert.NoError(t, err)
-	// Should return at least the system environment variables.
-	assert.NotEmpty(t, env)
+	// Should return the base environment.
+	assert.Contains(t, env, "BASE_VAR=base-value")
 }
 
 // TestPrepareStepEnvironment_NilAuthManager tests prepareStepEnvironment with nil auth manager.
 func TestPrepareStepEnvironment_NilAuthManager(t *testing.T) {
-	env, err := prepareStepEnvironment("some-identity", "step1", nil, nil)
+	baseEnv := []string{"BASE_VAR=base-value"}
+	env, err := prepareStepEnvironment(baseEnv, "some-identity", "step1", nil, nil, nil)
 
 	assert.ErrorIs(t, err, errUtils.ErrAuthManager)
 	assert.Nil(t, env)
@@ -936,43 +964,108 @@ func TestErrNonTTYWorkflowSelection(t *testing.T) {
 	assert.Contains(t, ErrNonTTYWorkflowSelection.Error(), "TTY")
 }
 
-// TestPrepareStepEnvironment_WithGlobalEnv tests prepareStepEnvironment with global env variables.
-func TestPrepareStepEnvironment_WithGlobalEnv(t *testing.T) {
-	globalEnv := map[string]string{
-		"GLOBAL_VAR_1": "value1",
-		"GLOBAL_VAR_2": "value2",
+// TestPrepareStepEnvironment_WithBaseEnv tests prepareStepEnvironment with base env variables.
+// Note: The caller (ExecuteWorkflow) is now responsible for merging global env into baseEnv.
+func TestPrepareStepEnvironment_WithBaseEnv(t *testing.T) {
+	// Simulate baseEnv that already includes global env (as caller would construct).
+	baseEnv := []string{
+		"GLOBAL_VAR_1=value1",
+		"GLOBAL_VAR_2=value2",
 	}
 
-	// When no identity is specified, should return base environment including global env.
-	env, err := prepareStepEnvironment("", "step1", nil, globalEnv)
+	// When no identity is specified, should return base environment.
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil)
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, env)
 
-	// Check that global env vars are included.
-	foundVar1 := false
-	foundVar2 := false
-	for _, e := range env {
-		if e == "GLOBAL_VAR_1=value1" {
-			foundVar1 = true
-		}
-		if e == "GLOBAL_VAR_2=value2" {
-			foundVar2 = true
-		}
-	}
-	assert.True(t, foundVar1, "GLOBAL_VAR_1 should be in environment")
-	assert.True(t, foundVar2, "GLOBAL_VAR_2 should be in environment")
+	// Check that base env vars are included.
+	assert.Contains(t, env, "GLOBAL_VAR_1=value1")
+	assert.Contains(t, env, "GLOBAL_VAR_2=value2")
 }
 
-// TestPrepareStepEnvironment_EmptyGlobalEnv tests prepareStepEnvironment with empty global env.
-func TestPrepareStepEnvironment_EmptyGlobalEnv(t *testing.T) {
-	globalEnv := map[string]string{}
+// TestPrepareStepEnvironment_EmptyBaseEnv tests prepareStepEnvironment with empty base env.
+func TestPrepareStepEnvironment_EmptyBaseEnv(t *testing.T) {
+	baseEnv := []string{}
 
-	env, err := prepareStepEnvironment("", "step1", nil, globalEnv)
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, nil)
 
 	assert.NoError(t, err)
-	// Should return system environment at minimum.
+	// With empty baseEnv and no workflow/step env, should return empty.
+	assert.Empty(t, env)
+}
+
+// TestPrepareStepEnvironment_WithWorkflowEnv tests prepareStepEnvironment with workflow-level env.
+func TestPrepareStepEnvironment_WithWorkflowEnv(t *testing.T) {
+	baseEnv := []string{"BASE_VAR=base-value"}
+	workflowEnv := map[string]string{
+		"WORKFLOW_VAR": "workflow-value",
+	}
+
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, nil)
+
+	assert.NoError(t, err)
 	assert.NotEmpty(t, env)
+
+	// Check that base env and workflow env vars are included.
+	assert.Contains(t, env, "BASE_VAR=base-value")
+	assert.Contains(t, env, "WORKFLOW_VAR=workflow-value")
+}
+
+// TestPrepareStepEnvironment_WithStepEnv tests prepareStepEnvironment with step-level env.
+func TestPrepareStepEnvironment_WithStepEnv(t *testing.T) {
+	baseEnv := []string{"BASE_VAR=base-value"}
+	stepEnv := map[string]string{
+		"STEP_VAR": "step-value",
+	}
+
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, nil, stepEnv)
+
+	assert.NoError(t, err)
+	assert.NotEmpty(t, env)
+
+	// Check that base env and step env vars are included.
+	assert.Contains(t, env, "BASE_VAR=base-value")
+	assert.Contains(t, env, "STEP_VAR=step-value")
+}
+
+// TestPrepareStepEnvironment_StepOverridesWorkflow tests that step env overrides workflow env.
+func TestPrepareStepEnvironment_StepOverridesWorkflow(t *testing.T) {
+	baseEnv := []string{"BASE_VAR=base-value"}
+	workflowEnv := map[string]string{
+		"MY_VAR": "workflow-value",
+	}
+	stepEnv := map[string]string{
+		"MY_VAR": "step-value",
+	}
+
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, stepEnv)
+
+	assert.NoError(t, err)
+
+	// Check that step value is present (not workflow value).
+	assert.Contains(t, env, "MY_VAR=step-value")
+	assert.NotContains(t, env, "MY_VAR=workflow-value")
+}
+
+// TestPrepareStepEnvironment_MergesWorkflowAndStep tests that different keys are merged.
+func TestPrepareStepEnvironment_MergesWorkflowAndStep(t *testing.T) {
+	baseEnv := []string{"BASE_VAR=base-value"}
+	workflowEnv := map[string]string{
+		"WORKFLOW_VAR": "workflow-value",
+	}
+	stepEnv := map[string]string{
+		"STEP_VAR": "step-value",
+	}
+
+	env, err := prepareStepEnvironment(baseEnv, "", "step1", nil, workflowEnv, stepEnv)
+
+	assert.NoError(t, err)
+
+	// Check that base, workflow, and step vars are all present.
+	assert.Contains(t, env, "BASE_VAR=base-value")
+	assert.Contains(t, env, "WORKFLOW_VAR=workflow-value")
+	assert.Contains(t, env, "STEP_VAR=step-value")
 }
 
 // TestShellFieldsParsing tests that shell.Fields correctly parses various command patterns.
@@ -1063,6 +1156,10 @@ func TestShellFieldsParseErrors(t *testing.T) {
 // TestExecuteWorkflow_ShellFieldsFallback tests that ExecuteWorkflow falls back to
 // strings.Fields when shell.Fields fails to parse the command.
 func TestExecuteWorkflow_ShellFieldsFallback(t *testing.T) {
+	if _, err := exec.LookPath("atmos"); err != nil {
+		t.Skip("skipping: atmos binary not found in PATH (required to execute atmos workflow steps)")
+	}
+
 	stacksPath := "../../tests/fixtures/scenarios/workflows"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
@@ -1333,6 +1430,9 @@ func TestExecuteWorkflow_MultipleStepsWithMixedTypes(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
+	if _, err := exec.LookPath("atmos"); err != nil {
+		t.Skip("skipping: atmos binary not found in PATH (required to execute atmos workflow steps)")
+	}
 
 	stacksPath := "../../tests/fixtures/scenarios/workflows"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
@@ -1435,8 +1535,8 @@ func TestExecuteWorkflow_AutoGeneratedStepNames(t *testing.T) {
 	assert.Equal(t, "step3", workflowDef.Steps[2].Name)
 }
 
-// TestEnsureWorkflowToolchainDependencies_NoDependencies tests with no dependencies.
-func TestEnsureWorkflowToolchainDependencies_NoDependencies(t *testing.T) {
+// TestForWorkflow_NoDependencies tests with no dependencies.
+func TestForWorkflow_NoDependencies(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Chdir(tempDir) // Change to temp dir to avoid picking up project .tool-versions.
@@ -1460,51 +1560,13 @@ func TestEnsureWorkflowToolchainDependencies_NoDependencies(t *testing.T) {
 	}
 
 	// Should succeed with empty PATH when no dependencies.
-	path, err := ensureWorkflowToolchainDependencies(atmosConfig, workflowDef)
+	tenv, err := dependencies.ForWorkflow(atmosConfig, workflowDef)
 	assert.NoError(t, err)
-	assert.Empty(t, path)
+	assert.Empty(t, tenv.PATH())
 }
 
-// TestEnsureWorkflowToolchainDependencies_WithWorkflowDeps tests with workflow-level dependencies.
-func TestEnsureWorkflowToolchainDependencies_WithWorkflowDeps(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-	t.Chdir(tempDir) // Isolate from project .tool-versions.
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Toolchain: schema.Toolchain{
-			InstallPath: filepath.Join(tempDir, ".atmos", "tools"),
-		},
-	}
-
-	workflowDef := &schema.WorkflowDefinition{
-		Description: "Test workflow with dependencies",
-		Dependencies: &schema.Dependencies{
-			Tools: map[string]string{
-				"terraform": "1.11.4",
-			},
-		},
-		Steps: []schema.WorkflowStep{
-			{
-				Name:    "step1",
-				Command: "terraform version",
-				Type:    "shell",
-			},
-		},
-	}
-
-	// Should succeed (may fail to install if network is unavailable, but that's expected).
-	path, err := ensureWorkflowToolchainDependencies(atmosConfig, workflowDef)
-	// If installation succeeded, path should be non-empty.
-	if err == nil {
-		assert.NotEmpty(t, path, "expected non-empty PATH when tools are installed")
-	}
-	// Error is acceptable in CI without network - code path is exercised either way.
-}
-
-// TestEnsureWorkflowToolchainDependencies_NilWorkflowDef tests with nil workflow definition.
-func TestEnsureWorkflowToolchainDependencies_NilWorkflowDef(t *testing.T) {
+// TestForWorkflow_NilWorkflowDef tests with nil workflow definition.
+func TestForWorkflow_NilWorkflowDef(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Chdir(tempDir) // Change to temp dir to avoid picking up project .tool-versions.
@@ -1517,13 +1579,13 @@ func TestEnsureWorkflowToolchainDependencies_NilWorkflowDef(t *testing.T) {
 	}
 
 	// Should succeed with empty PATH when workflow def is nil.
-	path, err := ensureWorkflowToolchainDependencies(atmosConfig, nil)
+	tenv, err := dependencies.ForWorkflow(atmosConfig, nil)
 	assert.NoError(t, err)
-	assert.Empty(t, path)
+	assert.Empty(t, tenv.PATH())
 }
 
-// TestEnsureWorkflowToolchainDependencies_EmptyWorkflowDef tests with empty workflow definition.
-func TestEnsureWorkflowToolchainDependencies_EmptyWorkflowDef(t *testing.T) {
+// TestForWorkflow_EmptyWorkflowDef tests with empty workflow definition.
+func TestForWorkflow_EmptyWorkflowDef(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Chdir(tempDir) // Change to temp dir to avoid picking up project .tool-versions.
@@ -1538,9 +1600,9 @@ func TestEnsureWorkflowToolchainDependencies_EmptyWorkflowDef(t *testing.T) {
 	workflowDef := &schema.WorkflowDefinition{}
 
 	// Should succeed with empty PATH when no dependencies specified.
-	path, err := ensureWorkflowToolchainDependencies(atmosConfig, workflowDef)
+	tenv, err := dependencies.ForWorkflow(atmosConfig, workflowDef)
 	assert.NoError(t, err)
-	assert.Empty(t, path)
+	assert.Empty(t, tenv.PATH())
 }
 
 // TestDoubleHyphenStackInsertion tests the stack insertion logic with double-hyphen separator.
@@ -1657,41 +1719,60 @@ func TestDoubleHyphenIssue1967(t *testing.T) {
 	assert.Equal(t, "-consolidate-warnings=false", args[6], "seventh arg should be -consolidate-warnings=false")
 }
 
-// TestEnsureWorkflowToolchainDependencies_WithToolVersionsFile tests with .tool-versions file present.
-func TestEnsureWorkflowToolchainDependencies_WithToolVersionsFile(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-	t.Chdir(tempDir) // Ensure we read the test's .tool-versions, not the project's.
+func TestExecuteWorkflowExecStep_ValidationViaSchema(t *testing.T) {
+	// The workflow runner validates exec steps before executing anything.
+	err := schema.ValidateExecWorkflowSteps([]schema.WorkflowStep{
+		{Type: schema.TaskTypeExec, Command: "psql"},
+		{Type: schema.TaskTypeShell, Command: "echo never runs"},
+	})
+	require.ErrorIs(t, err, schema.ErrExecStepNotLast)
 
-	// Create a .tool-versions file.
-	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-	content := "terraform 1.11.4\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
+	err = schema.ValidateExecWorkflowSteps([]schema.WorkflowStep{
+		{Type: schema.TaskTypeShell, Command: "echo first"},
+		{Type: schema.TaskTypeExec, Command: "psql"},
+	})
+	assert.NoError(t, err)
+}
+
+func TestExecuteWorkflow_ExecStepDryRun(t *testing.T) {
+	testDir := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	require.NoError(t, err)
 
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Toolchain: schema.Toolchain{
-			InstallPath: filepath.Join(tempDir, ".atmos", "tools"),
-		},
-	}
-
-	workflowDef := &schema.WorkflowDefinition{
-		Description: "Test workflow with .tool-versions",
+	workflowDefinition := &schema.WorkflowDefinition{
+		Description: "Exec step as the final step",
 		Steps: []schema.WorkflowStep{
-			{
-				Name:    "step1",
-				Command: "terraform version",
-				Type:    "shell",
-			},
+			{Name: "prep", Type: "shell", Command: "echo preparing"},
+			{Name: "session", Type: schema.TaskTypeExec, Command: "echo session"},
 		},
 	}
 
-	// Should try to install tools from .tool-versions.
-	path, err := ensureWorkflowToolchainDependencies(atmosConfig, workflowDef)
-	// If installation succeeded, path should be non-empty.
-	if err == nil {
-		assert.NotEmpty(t, path, "expected non-empty PATH when tools are installed")
+	// Dry-run exercises validation and the exec routing without replacing the process.
+	err = ExecuteWorkflow(atmosConfig, "exec-dry-run", "test.yaml", workflowDefinition, true, "", "", "")
+	require.NoError(t, err)
+}
+
+func TestExecuteWorkflow_ExecStepNotLastFails(t *testing.T) {
+	testDir := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDefinition := &schema.WorkflowDefinition{
+		Description: "Exec step in the wrong position",
+		Steps: []schema.WorkflowStep{
+			{Name: "session", Type: schema.TaskTypeExec, Command: "echo session"},
+			{Name: "after", Type: "shell", Command: "echo never runs"},
+		},
 	}
-	// Error is acceptable in CI without network - code path is exercised either way.
+
+	// Validation must fail before any step executes, even in dry-run.
+	err = ExecuteWorkflow(atmosConfig, "exec-not-last", "test.yaml", workflowDefinition, true, "", "", "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, schema.ErrExecStepNotLast)
 }

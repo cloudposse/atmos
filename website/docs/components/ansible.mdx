@@ -1,0 +1,83 @@
+---
+title: Using Ansible
+sidebar_position: 6
+sidebar_label: Ansible
+id: ansible
+description: Run Ansible playbooks with the same stack-based configuration used for Terraform and Helmfile. Stack variables are automatically passed via --extra-vars.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos natively supports opinionated workflows for [Ansible](https://docs.ansible.com/ansible/latest/index.html). Ansible provides agentless automation for configuration management, application deployment, and infrastructure orchestration.
+</Intro>
+
+For a complete list of supported commands, please see the Atmos [ansible](/cli/commands/ansible/usage) documentation.
+
+## Stack Configuration
+
+The schema for configuring Ansible components in Atmos stacks:
+
+```yaml
+components:
+  ansible:
+    <component_name>:
+      vars: {}
+      env: {}
+      settings:
+        ansible:
+          playbook: <playbook_file>
+          inventory: <inventory_source>
+      metadata: {}
+      command: ansible  # Base command (playbook subcommand always uses ansible-playbook)
+      hooks: {}
+```
+
+## Variable Handling
+
+Atmos generates a YAML variables file from the `vars` section and passes it to `ansible-playbook` using `--extra-vars @<filename>`. This makes all stack variables available in your playbooks.
+
+```yaml
+# Stack manifest
+components:
+  ansible:
+    webserver:
+      vars:
+        app_name: myapp
+        app_port: 8080
+```
+
+```yaml
+# Playbook can reference these directly
+- name: Deploy app
+  hosts: webservers
+  tasks:
+    - name: Show config
+      ansible.builtin.debug:
+        msg: "Deploying {{ app_name }} on port {{ app_port }}"
+```
+
+## Playbook and Inventory
+
+Configure the playbook and inventory in the stack manifest or via command line flags:
+
+```yaml
+components:
+  ansible:
+    webserver:
+      settings:
+        ansible:
+          playbook: site.yml
+          inventory: inventory/production
+```
+
+Command-line flags take precedence over stack manifest settings:
+
+```bash
+atmos ansible playbook webserver -s prod --playbook deploy.yml -i inventory/staging
+```
+
+## Related
+
+- [Ansible Components in Stacks](/stacks/components/ansible) — Full configuration reference
+- [Ansible CLI Configuration](/cli/configuration/components/ansible) — `atmos.yaml` settings
+- [atmos ansible playbook](/cli/commands/ansible/playbook) — Command reference

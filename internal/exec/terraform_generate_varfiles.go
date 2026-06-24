@@ -4,25 +4,21 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
-
-// ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command.
-// Deprecated: Use ExecuteTerraformGenerateVarfiles with typed parameters instead.
-func ExecuteTerraformGenerateVarfilesCmd(cmd interface{}, args []string) error {
-	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfilesCmd")()
-
-	return errUtils.ErrDeprecatedCmdNotCallable
-}
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks.
 func ExecuteTerraformGenerateVarfiles(
@@ -69,8 +65,7 @@ func ExecuteTerraformGenerateVarfiles(
 
 			// Check if `components` filter is provided
 			if len(components) == 0 ||
-				u.SliceContainsString(components, componentName) {
-
+				slices.Contains(components, componentName) {
 				// Component vars
 				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[string]any); !ok {
 					continue
@@ -167,7 +162,7 @@ func ExecuteTerraformGenerateVarfiles(
 				// Stack name
 				var stackName string
 				if atmosConfig.Stacks.NameTemplate != "" {
-					stackName, err = ProcessTmpl(atmosConfig, "terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+					stackName, err = ProcessTmpl(atmosConfig, "terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 					if err != nil {
 						return err
 					}
@@ -202,7 +197,7 @@ func ExecuteTerraformGenerateVarfiles(
 				componentSection["atmos_manifest"] = stackFileName
 
 				// Process `Go` templates
-				componentSectionStr, err := u.ConvertToYAML(componentSection)
+				componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 				if err != nil {
 					return err
 				}
@@ -253,11 +248,10 @@ func ExecuteTerraformGenerateVarfiles(
 				if len(stacks) == 0 ||
 					// `stacks` filter can contain the names of the top-level stack config files:
 					// atmos terraform generate varfiles --stacks=orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2
-					u.SliceContainsString(stacks, stackFileName) ||
+					slices.Contains(stacks, stackFileName) ||
 					// `stacks` filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
-					u.SliceContainsString(stacks, stackName) {
-
+					slices.Contains(stacks, stackName) {
 					// Replace the tokens in the file template
 					// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
 					fileName := cfg.ReplaceContextTokens(context, fileTemplate)
@@ -272,19 +266,29 @@ func ExecuteTerraformGenerateVarfiles(
 						return err
 					}
 
+					// Keep resolved secrets out of generated varfiles so plaintext secrets
+					// never hit disk. Batch generation has no env-injection target, so
+					// secret-bearing variables are omitted (use the singular
+					// `generate varfile --with-secrets` to export them deliberately).
+					varsToWrite, secretVars := tfvars.Partition(varsSection, atmosio.ContainsSecret)
+					if len(secretVars) > 0 {
+						log.Warn("Omitting secret-bearing variables from the generated varfile",
+							"file", fileName, "count", len(secretVars))
+					}
+
 					// Write the varfile
 					if format == "yaml" {
-						err = u.WriteToFileAsYAML(fileAbsolutePath, varsSection, 0o644)
+						err = u.WriteToFileAsYAML(fileAbsolutePath, varsToWrite, filePermissions)
 						if err != nil {
 							return err
 						}
 					} else if format == "json" {
-						err = u.WriteToFileAsJSON(fileAbsolutePath, varsSection, 0o644)
+						err = u.WriteToFileAsJSON(fileAbsolutePath, varsToWrite, filePermissions)
 						if err != nil {
 							return err
 						}
 					} else if format == "hcl" {
-						err = u.WriteToFileAsHcl(fileAbsolutePath, varsSection, 0o644)
+						err = u.WriteToFileAsHcl(fileAbsolutePath, varsToWrite, filePermissions)
 						if err != nil {
 							return err
 						}

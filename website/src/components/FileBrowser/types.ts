@@ -80,6 +80,7 @@ export interface FileBrowserOptions {
   githubRepo: string;
   githubBranch: string;
   githubPath: string;
+  disclaimer?: string;
 }
 
 /**

@@ -141,7 +141,7 @@ import (
 	"context"
 
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // ToolVersionsFileManager manages .tool-versions file.
@@ -237,7 +237,7 @@ import (
 	"runtime"
 
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/toolchain/lockfile"
+	"github.com/cloudposse/atmos/pkg/toolchain/lockfile"
 )
 
 // LockFileManager manages toolchain.lock.yaml file.

@@ -1,5 +1,5 @@
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-ℹ Executing command: atmos terraform plan mock -s idontexist
+▶ Executing command: atmos terraform plan mock -s idontexist
 # Error
 
 **Error:** invalid component
@@ -14,11 +14,13 @@ component and stack names correct? Did you forget an import?
 **Error:** workflow step execution failed: max attempts (1) exceeded, last
 error: subcommand exited with code 1
 
-## Hints
+## Explanation
 
-💡 The following command failed to execute:
+The following command failed to execute:
 
  atmos terraform plan mock -s idontexist
+
+## Hints
 
 💡 To resume the workflow from this step, run:
 

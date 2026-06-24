@@ -10,7 +10,7 @@
         "init_run_reconfigure": false,
         "auto_generate_backend_file": false,
         "auto_generate_files": false,
-        "command": "",
+        "command": "tofu",
         "shell": {
           "prompt": ""
         },
@@ -20,7 +20,13 @@
         "plan": {
           "skip_planfile": false
         },
-        "plugin_cache": true
+        "planfiles": {
+          "default": ""
+        },
+        "plugin_cache": true,
+        "auto_provision_workdir_for_outputs": true,
+        "ci": {},
+        "workspace": {}
       },
       "helmfile": {
         "base_path": "",
@@ -28,10 +34,17 @@
         "kubeconfig_path": "",
         "helm_aws_profile_pattern": "",
         "cluster_name_pattern": "",
+        "cluster_name_template": "",
+        "cluster_name": "",
         "command": "",
         "auto_generate_files": false
       },
       "packer": {
+        "base_path": "",
+        "command": "",
+        "auto_generate_files": false
+      },
+      "ansible": {
         "base_path": "",
         "command": "",
         "auto_generate_files": false
@@ -77,7 +90,7 @@
     "describe",
     "component"
   ],
-  "command": "terraform",
+  "command": "tofu",
   "component": "vpc",
   "component_info": {
     "component_path": "/absolute/path/to/repo/tests/fixtures/scenarios/stack-manifest-name/components/terraform/vpc",
@@ -106,6 +119,8 @@
   "provision": {},
   "remote_state_backend": {},
   "remote_state_backend_type": "",
+  "required_providers": {},
+  "required_version": "",
   "settings": {},
   "source": {},
   "sources": {

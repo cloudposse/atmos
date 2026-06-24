@@ -1,0 +1,20 @@
+# Regression fixture for issue #2457: A and B cross-reference each other via
+# !terraform.state. The YAML-function resolver must detect the cycle and
+# return ErrCircularDependency instead of recursing until the runtime stack
+# overflows.
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    component-a:
+      metadata:
+        component: yaml-functions
+      vars:
+        string_var: !terraform.state component-b test string_var
+    component-b:
+      metadata:
+        component: yaml-functions
+      vars:
+        string_var: !terraform.state component-a test string_var

@@ -17,9 +17,22 @@ on:
 
   workflow_dispatch:
 
+# Grant `packages: read` so jobs that pull OCI images from ghcr.io
+# (e.g. vendor pulls in mock/acceptance tests) can authenticate with
+# the auto-generated GITHUB_TOKEN. The default PR-event scope is
+# `contents: read` only, which causes ghcr.io to reject the token with
+# `DENIED: denied` whenever credentials are sent (as happens on Windows
+# runners that have no usable Docker keychain entry for ghcr.io). Reviewdog
+# gets job-level checks write access for tflint annotations.
+permissions:
+  checks: read
+  contents: read
+  packages: read
+  pull-requests: read
+
 env:
-  TERRAFORM_VERSION: "1.9.7"
-  OPEN_TOFU_VERSION: "1.9.1"
+  TERRAFORM_VERSION: "1.15.6"
+  OPEN_TOFU_VERSION: "1.12.2"
   HELM_VERSION: "v3.19.2"
   HELMFILE_VERSION: "v1.1.0"
   PACKER_VERSION: "1.14.2"
@@ -28,7 +41,13 @@ jobs:
   # ensure the code builds...
   build:
     name: Build (${{ matrix.target }})
-    timeout-minutes: 15
+    # windows-latest is the slowest target: it compiles this large dependency
+    # tree far slower than the Linux (self-hosted, s3-cache) and macOS runners,
+    # and on top of that the post-job Go cache save (tar + zstd of
+    # GOMODCACHE/GOCACHE) takes several minutes. A cold cache after dependency
+    # changes plus that save pushes the job past a tight limit and the run gets
+    # cancelled. Give the slowest target enough headroom for build + cache save.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -41,7 +60,7 @@ jobs:
             target: macos
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: runs-on/action@v1
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
         if: matrix.target == 'linux'
 
       - name: Build
@@ -54,11 +73,14 @@ jobs:
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/setup-go@v5
+        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: "go.mod"
         id: go
@@ -79,7 +101,7 @@ jobs:
           make version-${{ matrix.target }}
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           name: build-artifacts-${{ matrix.target }}
@@ -97,22 +119,24 @@ jobs:
           - { os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false", target: linux }
           - { os: "windows-latest", target: windows }
           - { os: "macos-latest", target: macos }
-    timeout-minutes: 45
+    timeout-minutes: 60
     runs-on: ${{ matrix.flavor.os }}
     steps:
-      - uses: runs-on/action@v1
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
         if: matrix.flavor.target == 'linux'
 
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
@@ -135,14 +159,14 @@ jobs:
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
@@ -150,21 +174,34 @@ jobs:
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
-        uses: hashicorp/setup-packer@main
+        uses: hashicorp/setup-packer@3286471d6cc6756d056a0b199fea5e0becdbc189 # main
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           version: ${{ env.PACKER_VERSION }}
 
-      # https://github.com/helmfile/helmfile-action
-      - name: Install Helmfile
-        uses: helmfile/helmfile-action@v2.0.5
+      # Dogfood `atmos ci cache`: cache the configured Atmos cache root via the
+      # recommended composite action. Do not export ATMOS_XDG_CACHE_HOME or
+      # TF_PLUGIN_CACHE_DIR for the full acceptance job: many tests assert XDG
+      # defaults and Terraform's plugin cache is not safe for shared concurrent
+      # use. This cache step restores/saves toolchain bits only; it must stay a
+      # pure accelerator.
+      - name: Cache Atmos toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        with:
-          helm-version: ${{ env.HELM_VERSION }}
-          helmfile-version: ${{ env.HELMFILE_VERSION }}
-          helmfile-args: version
-          helmfile-auto-init: "false"
-          helm-plugins: ""
+        continue-on-error: true
+        uses: ./actions/cache
+
+      - name: Install Helm and Helmfile
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: |
+          atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
+          atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
+          atmos toolchain env --format=github
+
+      - name: Verify Helm and Helmfile
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: |
+          helm version --short
+          helmfile version
 
       - name: Install helm-diff plugin
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -181,7 +218,8 @@ jobs:
           atmos version
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           go-version-file: "go.mod"
@@ -191,6 +229,17 @@ jobs:
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
           make deps
+
+      - name: Terraform registry cache acceptance test
+        timeout-minutes: 10
+        if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          ATMOS_TEST_TERRAFORM_REGISTRY_CACHE: 1
+          CGO_ENABLED: 0
+        run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
 
       # Enable this after merging test-cases
       # Only seems to work with remote schema files
@@ -205,37 +254,80 @@ jobs:
       #        ]
       #       }
 
-      - name: Acceptance tests
+      - name: Acceptance tests with coverage
         timeout-minutes: 45
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: matrix.flavor.target == 'linux'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Use the GitHub token for downloading the Packer plugins
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          # Enable Playwright integration tests to validate browser driver download
+          RUN_PLAYWRIGHT_INTEGRATION: 1
         run: make testacc-cover
 
+      - name: Acceptance tests
+        timeout-minutes: 45
+        if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use the GitHub token for downloading the Packer plugins
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Skip precondition checks in CI to ensure tests run and maintain coverage
+          ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          # Enable Playwright integration tests to validate browser driver download
+          RUN_PLAYWRIGHT_INTEGRATION: 1
+        run: make testacc
+
       - name: Upload coverage report to Codecov
-        if: matrix.flavor.target == 'linux' && (success() || failure())
-        uses: codecov/codecov-action@v5
+        if: matrix.flavor.target == 'linux' && hashFiles('coverage.out') != ''
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
           files: coverage.out
-          fail_ci_if_error: true
+          # Codecov's uploader downloads its CLI and verifies the binary's GPG
+          # signature. Transient Codecov-side issues (e.g. an empty public-key
+          # import: "gpg: no valid OpenPGP data found" / "Can't check signature:
+          # No public key") make verification exit 1, which would hard-fail this
+          # job even when every test passed. Don't let a coverage-upload/infra
+          # flake fail a green test run — the 80% coverage gate is still enforced
+          # by Codecov's own PR status check, independent of this step's exit code.
+          fail_ci_if_error: false
           flags: unittests
           verbose: true
+          # Install the Codecov CLI from PyPI instead of cli.codecov.io. The
+          # default path fetches Codecov's GPG public key from Keybase
+          # (https://keybase.io/codecovsecurity/pgp_keys.asc) to verify the CLI
+          # binary; that URL is currently returning 404 ("SELF-SIGNED PUBLIC KEY
+          # NOT FOUND"), so the import yields "no valid OpenPGP data found" and
+          # the run fails with "Could not verify signature". The PyPI path avoids
+          # the broken keyserver fetch. See codecov/codecov-action#1955. Safe to
+          # remove once Codecov restores the Keybase key.
+          use_pypi: true
 
   docker:
     name: "[lint] Dockerfile"
     needs: build
     runs-on: ubuntu-latest
+    # The workflow-level `permissions:` block above (added in #2487 for
+    # `packages: read` on ghcr.io pulls) REPLACES — not extends — the default
+    # token scope for every job. That stripped the implicit
+    # `security-events: write` this job relied on for SARIF upload, breaking
+    # the post-merge run on main. Job-level `permissions:` also fully
+    # overrides the workflow-level set, so `contents: read` is re-listed here
+    # for actions/checkout.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
-      - uses: hadolint/hadolint-action@v3.1.0
+      - uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
         id: hadolint
         with:
           dockerfile: Dockerfile
@@ -247,7 +339,7 @@ jobs:
           ignore: DL3008
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
         if: always()
         with:
           # Path to SARIF file relative to the root of the repository
@@ -256,40 +348,33 @@ jobs:
           category: hadolint
           wait-for-processing: true
 
-  # run localstack demo tests
-  localstack:
-    name: "[localstack] ${{ matrix.demo-folder }}"
+  # Run the AWS-emulator demo tests against Floci (a free, LocalStack-compatible emulator;
+  # LocalStack Community Edition was EOL'd in March 2026).
+  # NOTE: "[floci] demo-floci" must be kept in sync with the required status checks in
+  # branch protection on main (previously "[localstack] demo-localstack").
+  floci:
+    name: "[floci] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
 
     services:
-      localstack:
-        image: public.ecr.aws/localstack/localstack:1.4.0
+      floci:
+        # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
+        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2 # 1.5.23
         ports:
           - 4566:4566
-          - 4510-4559:4510-4559
-        env:
-          SERVICES: s3, iam, lambda, dynamodb, sts, account, ec2
-          DEBUG: 0
-          DOCKER_HOST: unix:///var/run/docker.sock
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_REGION: us-east-1
-        volumes:
-          - /var/run/docker.sock:/var/run/docker.sock
 
     strategy:
       fail-fast: false
       matrix:
         demo-folder:
-          - demo-localstack
+          - demo-floci
 
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: build-artifacts-linux
           path: /usr/local/bin
@@ -298,30 +383,101 @@ jobs:
         run: chmod +x /usr/local/bin/atmos
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
 
-      # https://github.com/hashicorp/setup-packer
-      - name: Install Packer
-        uses: hashicorp/setup-packer@main
-        with:
-          version: ${{ env.PACKER_VERSION }}
-
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
           cd examples/${{ matrix.demo-folder }}
-          atmos test
+          timeout 25m atmos test || {
+            status=$?
+            echo "atmos test failed or timed out with status ${status}"
+            exit "${status}"
+          }
+
+  # Run Go E2E tests against Floci. These cover store/secrets workflows that are
+  # easier to assert directly from Go than through the demo `atmos test` runner.
+  floci-go:
+    name: "[floci] go e2e"
+    needs: build
+    runs-on: ubuntu-latest
+
+    services:
+      floci:
+        # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
+        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2 # 1.5.23
+        ports:
+          - 4566:4566
+      floci-gcp:
+        # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
+        image: floci/floci-gcp@sha256:a6420f308ad721fa4a203b70658563eab9c8fbc8d091feca2d95016239f5854a # latest
+        ports:
+          - 4588:4588
+      floci-az:
+        # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
+        image: floci/floci-az@sha256:1e514c57db14dc41938f7925bbc1aca0293aa4da272c7014d98f1fba378cedb2 # latest
+        ports:
+          - 4577:4577
+
+    timeout-minutes: 30
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: build-artifacts-linux
+          path: /usr/local/bin
+
+      - name: Set execute permissions on atmos
+        run: chmod +x /usr/local/bin/atmos
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: "go.mod"
+          cache: false
+
+      - name: Install OpenTofu with Atmos toolchain
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain env --format=github
+
+      - name: Verify OpenTofu
+        run: tofu version
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
+
+      - name: Run Floci Go E2E tests
+        env:
+          ATMOS_TEST_FLOCI: "true"
+          FLOCI_ENDPOINT_URL: "http://localhost:4566"
+          FLOCI_GCP_ENDPOINT: "http://localhost:4588"
+          FLOCI_AZURE_ENDPOINT: "http://localhost:4577"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: go test ./tests -run 'Test(AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E' -count=1 -timeout 15m -v
 
   # run k3s demo tests
   k3s:
@@ -339,7 +495,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Start Docker Compose
         working-directory: examples/${{ matrix.demo-folder }}
@@ -355,7 +513,7 @@ jobs:
           kubectl get pods --all-namespaces
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: build-artifacts-linux
           path: /usr/local/bin
@@ -370,7 +528,7 @@ jobs:
         run: sudo apt-get -y install kubectl helmfile
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -425,7 +583,9 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Add GNU tar to flavor.target (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -433,7 +593,7 @@ jobs:
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: build-artifacts-${{ matrix.flavor.target }}
           path: ${{ github.workspace }}
@@ -452,23 +612,17 @@ jobs:
 
       - name: Install Terraform
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
-
-      # https://github.com/hashicorp/setup-packer
-      - name: Install Packer
-        uses: hashicorp/setup-packer@main
-        with:
-          version: ${{ env.PACKER_VERSION }}
 
       - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
         working-directory: ${{ matrix.demo-folder }}
@@ -502,6 +656,10 @@ jobs:
     name: "[lint] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
@@ -511,7 +669,7 @@ jobs:
           # - demo-custom-command
           # - demo-json-validation
           # - demo-library
-          # - demo-localstack
+          # - demo-floci
           # - demo-opa-validation
           # - demo-opentofu
           # - demo-project
@@ -529,30 +687,26 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
         with:
           tofu_version: ${{ env.OPEN_TOFU_VERSION }}
           tofu_wrapper: false
 
-      # https://github.com/hashicorp/setup-packer
-      - name: Install Packer
-        uses: hashicorp/setup-packer@main
-        with:
-          version: ${{ env.PACKER_VERSION }}
-
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
-        uses: reviewdog/action-tflint@v1
+        uses: reviewdog/action-tflint@54a5e5aed57dcfbb4662ec548de876df33d6288d # v1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ github.token }}
           working_directory: examples/${{ matrix.demo-folder }}/components/terraform
           flags: >-
             --enable-rule=terraform_unused_declarations
@@ -572,7 +726,7 @@ jobs:
       matrix:
         demo-folder:
           - demo-context
-          - demo-localstack
+          - demo-floci
           - demo-stacks
           - demo-helmfile
           - quick-start-advanced
@@ -581,24 +735,92 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # The example stacks pin their `# yaml-language-server: $schema` modeline to the
+      # published schema at atmos.tools, which only updates after a PR merges and the site
+      # deploys. yaml-language-server gives the inline modeline absolute precedence over the
+      # `schemaMapping` below, so without this step the examples would always validate against
+      # the live (stale) schema — and a PR could never add a schema field and use it in an
+      # example at the same time. Rewrite the modeline URL to the in-repo schema (ephemeral,
+      # CI checkout only) so examples are validated against the schema this PR actually ships.
+      # The committed files keep the public URL for users who copy them.
+      - name: Use in-repo schema for validation
+        run: |
+          find "examples/${{ matrix.demo-folder }}/stacks" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 \
+            | xargs -0 --no-run-if-empty sed -i \
+              "s#https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#file://${GITHUB_WORKSPACE}/website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#g"
 
       - name: Validate YAML Schema for Stacks
-        uses: InoUno/yaml-ls-check@v1.4.0
+        uses: InoUno/yaml-ls-check@2c229b85b877b2853b40bd0fbdcfccff5ff735c7 # v1.4.0
         with:
           root: "examples/${{ matrix.demo-folder }}/stacks"
           schemaMapping: |
             {
-              "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
+              "file://${{ github.workspace }}/website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
                 "examples/${{ matrix.demo-folder }}/stacks/**/*.yaml",
                 "examples/${{ matrix.demo-folder }}/stacks/**/*.yml"
               ]
             }
 
+  # run container step tests against a local registry (build -> push -> run)
+  # Docker is available directly on the runner (see the k3s job), and a
+  # registry:2 service container provides a hermetic push/pull target on
+  # localhost:5000 so the full build -> push -> run cycle is exercised without
+  # GitHub Container Registry, leftover packages, or fork-PR token limits.
+  container-step:
+    name: "[container-step] example"
+    needs: build
+    runs-on: ubuntu-latest
+
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+
+    timeout-minutes: 15
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: build-artifacts-linux
+          path: /usr/local/bin
+
+      - name: Set execute permissions on atmos
+        run: chmod +x /usr/local/bin/atmos
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run container steps (run, build, bake, push, workspace, env)
+        working-directory: examples/container-step
+        run: |
+          set -euo pipefail
+          atmos workflow hello -f container-step
+          atmos workflow build-run -f container-step
+          atmos workflow bake-build-run -f container-step
+          atmos workflow push-local-registry -f container-step
+          atmos workflow workspace -f container-step
+          atmos workflow env -f container-step
+
+      - name: Verify a failing container step propagates a non-zero exit code
+        working-directory: examples/container-step
+        run: |
+          if atmos workflow failing-check -f container-step; then
+            echo "expected the 'failing-check' workflow to fail, but it succeeded"
+            exit 1
+          fi
+          echo "failing-check correctly returned a non-zero exit code"
+
   release:
-    needs: [test, lint, mock, k3s, localstack, docker, validate]
+    needs: [test, lint, mock, k3s, floci, floci-go, docker, validate, container-step]
     if: github.event_name == 'push'
-    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
     with:
       publish: false
       format: binary

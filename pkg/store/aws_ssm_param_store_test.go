@@ -8,12 +8,14 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/tests"
 )
@@ -37,6 +39,14 @@ func (m *MockSSMClient) GetParameter(ctx context.Context, params *ssm.GetParamet
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*ssm.GetParameterOutput), args.Error(1)
+}
+
+func (m *MockSSMClient) DeleteParameter(ctx context.Context, params *ssm.DeleteParameterInput, optFns ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error) {
+	args := m.Called(ctx, params)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ssm.DeleteParameterOutput), args.Error(1)
 }
 
 // MockSTSClient is a mock implementation of the STSClient interface.
@@ -154,22 +164,36 @@ func TestSSMStore_Set(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:      "empty_stack",
-			stack:     "",
-			component: "service",
-			key:       "config-key",
-			value:     "test-value",
-			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {},
-			wantErr:   true,
-		},
-		{
-			name:      "empty_component",
+			// A stack-scoped secret coordinate omits the component segment.
+			name:      "stack_scoped_set_omits_component",
 			stack:     "dev/usw2/app",
 			component: "",
 			key:       "config-key",
 			value:     "test-value",
-			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {},
-			wantErr:   true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+					Name:      aws.String("/test-prefix/dev/usw2/app/config-key"),
+					Value:     aws.String(`"test-value"`),
+					Type:      types.ParameterTypeString,
+					Overwrite: aws.Bool(true),
+				}).Return(&ssm.PutParameterOutput{}, nil)
+			},
+		},
+		{
+			// A global secret coordinate omits both the stack and component segments.
+			name:      "global_scoped_set_omits_stack_and_component",
+			stack:     "",
+			component: "",
+			key:       "config-key",
+			value:     "test-value",
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("PutParameter", mock.Anything, &ssm.PutParameterInput{
+					Name:      aws.String("/test-prefix/config-key"),
+					Value:     aws.String(`"test-value"`),
+					Type:      types.ParameterTypeString,
+					Overwrite: aws.Bool(true),
+				}).Return(&ssm.PutParameterOutput{}, nil)
+			},
 		},
 		{
 			name:      "empty_key",
@@ -276,6 +300,130 @@ func TestSSMStore_Set(t *testing.T) {
 	}
 }
 
+// TestSSMStore_Has_NoDecryption proves the existence check never decrypts: GetParameter is
+// called with WithDecryption=false (so kms:Decrypt is not required), a present parameter reports
+// true, and a ParameterNotFound reports false.
+func TestSSMStore_Has_NoDecryption(t *testing.T) {
+	stackDelimiter := "/"
+	param := "/test-prefix/dev/usw2/app/service/config-key"
+
+	t.Run("present_without_decryption", func(t *testing.T) {
+		mockSSM := new(MockSSMClient)
+		store := &SSMStore{client: mockSSM, prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
+		mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+			Name:           aws.String(param),
+			WithDecryption: aws.Bool(false),
+		}).Return(&ssm.GetParameterOutput{Parameter: &types.Parameter{Value: aws.String("ignored")}}, nil)
+
+		ok, err := store.Has("dev/usw2/app", "service", "config-key")
+		require.NoError(t, err)
+		assert.True(t, ok)
+		mockSSM.AssertExpectations(t) // fails if a WithDecryption=true call was made instead.
+	})
+
+	t.Run("absent_returns_false", func(t *testing.T) {
+		mockSSM := new(MockSSMClient)
+		store := &SSMStore{client: mockSSM, prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
+		mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+			Name:           aws.String(param),
+			WithDecryption: aws.Bool(false),
+		}).Return((*ssm.GetParameterOutput)(nil), &types.ParameterNotFound{})
+
+		ok, err := store.Has("dev/usw2/app", "service", "config-key")
+		require.NoError(t, err)
+		assert.False(t, ok)
+		mockSSM.AssertExpectations(t) // fails if GetParameter stops being called.
+	})
+}
+
+// TestSSMStore_Has_ReadRole proves Has assumes the configured read role and runs the
+// (decryption-free) existence check against the assumed-role client.
+func TestSSMStore_Has_ReadRole(t *testing.T) {
+	stackDelimiter := "/"
+	mockSSM := new(MockSSMClient)
+	mockSTS := new(MockSTSClient)
+	mockAssumedSSM := new(MockSSMClient)
+
+	store := &SSMStore{
+		client:         mockSSM,
+		prefix:         "/test-prefix",
+		stackDelimiter: &stackDelimiter,
+		awsConfig:      &aws.Config{Region: "us-west-2"},
+		readRoleArn:    aws.String("arn:aws:iam::123456789012:role/read-role"),
+		newSTSClient:   func(cfg aws.Config) STSClient { return mockSTS },
+		newSSMClient:   func(cfg aws.Config) SSMClient { return mockAssumedSSM },
+	}
+
+	mockSTS.On("AssumeRole", mock.Anything, &sts.AssumeRoleInput{
+		RoleArn:         aws.String("arn:aws:iam::123456789012:role/read-role"),
+		RoleSessionName: aws.String("atmos-ssm-session"),
+	}).Return(&sts.AssumeRoleOutput{
+		Credentials: &ststypes.Credentials{
+			AccessKeyId:     aws.String("AKIATEST"),
+			SecretAccessKey: aws.String("secret"),
+			SessionToken:    aws.String("token"),
+		},
+	}, nil)
+	mockAssumedSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+		Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+		WithDecryption: aws.Bool(false),
+	}).Return(&ssm.GetParameterOutput{Parameter: &types.Parameter{Value: aws.String("ignored")}}, nil)
+
+	ok, err := store.Has("dev/usw2/app", "service", "config-key")
+	require.NoError(t, err)
+	assert.True(t, ok)
+	mockSTS.AssertExpectations(t)
+	mockAssumedSSM.AssertExpectations(t) // existence check ran against the assumed-role client.
+}
+
+// TestSSMStore_Has_ErrorPaths covers Has's non-success branches: empty key, getKey failure,
+// read-role assumption failure, and a non-not-found GetParameter error.
+func TestSSMStore_Has_ErrorPaths(t *testing.T) {
+	stackDelimiter := "/"
+
+	t.Run("empty_key", func(t *testing.T) {
+		store := &SSMStore{client: new(MockSSMClient), prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
+		_, err := store.Has("dev/usw2/app", "service", "")
+		require.ErrorIs(t, err, ErrEmptyKey)
+	})
+
+	t.Run("get_key_error_nil_delimiter", func(t *testing.T) {
+		// A nil stack delimiter makes getKey fail before any client call.
+		store := &SSMStore{client: new(MockSSMClient), prefix: "/test-prefix", stackDelimiter: nil}
+		_, err := store.Has("dev/usw2/app", "service", "config-key")
+		require.ErrorIs(t, err, ErrGetKey)
+	})
+
+	t.Run("assume_read_role_fails", func(t *testing.T) {
+		mockSTS := new(MockSTSClient)
+		store := &SSMStore{
+			client:         new(MockSSMClient),
+			prefix:         "/test-prefix",
+			stackDelimiter: &stackDelimiter,
+			awsConfig:      &aws.Config{Region: "us-west-2"},
+			readRoleArn:    aws.String("arn:aws:iam::123456789012:role/read-role"),
+			newSTSClient:   func(cfg aws.Config) STSClient { return mockSTS },
+			newSSMClient:   func(cfg aws.Config) SSMClient { return new(MockSSMClient) },
+		}
+		mockSTS.On("AssumeRole", mock.Anything, mock.Anything).Return(nil, fmt.Errorf("boom"))
+
+		_, err := store.Has("dev/usw2/app", "service", "config-key")
+		require.ErrorIs(t, err, ErrAssumeRole)
+	})
+
+	t.Run("other_get_parameter_error_is_wrapped", func(t *testing.T) {
+		mockSSM := new(MockSSMClient)
+		store := &SSMStore{client: mockSSM, prefix: "/test-prefix", stackDelimiter: &stackDelimiter}
+		mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+			Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+			WithDecryption: aws.Bool(false),
+		}).Return((*ssm.GetParameterOutput)(nil), errors.New("access denied"))
+
+		_, err := store.Has("dev/usw2/app", "service", "config-key")
+		require.ErrorIs(t, err, ErrGetParameter)
+	})
+}
+
 func TestSSMStore_Get(t *testing.T) {
 	mockSSM := new(MockSSMClient)
 	mockSTS := new(MockSTSClient)
@@ -313,7 +461,8 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "config-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String(`"test-value"`),
@@ -329,7 +478,8 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "slice-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/slice-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/slice-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String(`["value1","value2","value3"]`),
@@ -345,7 +495,8 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "map-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/map-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/map-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String(`{"key1":"value1","key2":42}`),
@@ -367,20 +518,40 @@ func TestSSMStore_Get(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:      "empty_stack",
-			stack:     "",
-			component: "service",
-			key:       "config-key",
-			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {},
-			wantErr:   true,
-		},
-		{
-			name:      "empty_component",
+			// A stack-scoped secret coordinate omits the component segment.
+			name:      "stack_scoped_get_omits_component",
 			stack:     "dev/usw2/app",
 			component: "",
 			key:       "config-key",
-			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {},
-			wantErr:   true,
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/dev/usw2/app/config-key"),
+					WithDecryption: aws.Bool(true),
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`"test-value"`),
+					},
+				}, nil)
+			},
+			want: "test-value",
+		},
+		{
+			// A global secret coordinate omits both the stack and component segments.
+			name:      "global_scoped_get_omits_stack_and_component",
+			stack:     "",
+			component: "",
+			key:       "config-key",
+			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
+				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
+					Name:           aws.String("/test-prefix/config-key"),
+					WithDecryption: aws.Bool(true),
+				}).Return(&ssm.GetParameterOutput{
+					Parameter: &types.Parameter{
+						Value: aws.String(`"test-value"`),
+					},
+				}, nil)
+			},
+			want: "test-value",
 		},
 		{
 			name:      "empty_key",
@@ -409,7 +580,8 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "plain-text-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/plain-text-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/plain-text-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String("plain text value"),
@@ -426,7 +598,8 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "malformed-json-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/malformed-json-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/malformed-json-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String("}invalid json{"),
@@ -443,7 +616,8 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "integer-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/integer-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/integer-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String(`42`),
@@ -459,7 +633,8 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "float-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/float-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/float-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String(`3.14159`),
@@ -475,7 +650,8 @@ func TestSSMStore_Get(t *testing.T) {
 			key:       "numeric-string-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/numeric-string-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/numeric-string-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String(`"42"`),
@@ -503,7 +679,8 @@ func TestSSMStore_Get(t *testing.T) {
 				}, nil)
 
 				mockAssumedSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String(`"test-value"`),
@@ -593,7 +770,7 @@ func TestNewSSMStore(t *testing.T) {
 			// Clear AWS_PROFILE to prevent conflicts with local AWS configuration.
 			t.Setenv("AWS_PROFILE", "")
 
-			store, err := NewSSMStore(tt.options)
+			store, err := NewSSMStore(tt.options, "")
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, store)
@@ -616,12 +793,180 @@ func TestNewSSMStore(t *testing.T) {
 					assert.Equal(t, "-", *ssmStore.stackDelimiter)
 				}
 
-				assert.Equal(t, tt.options.Region, ssmStore.awsConfig.Region)
+				assert.Equal(t, tt.options.Region, ssmStore.region)
 				assert.Equal(t, tt.options.ReadRoleArn, ssmStore.readRoleArn)
 				assert.Equal(t, tt.options.WriteRoleArn, ssmStore.writeRoleArn)
 			}
 		})
 	}
+}
+
+func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
+	tests := []struct {
+		name          string
+		region        string
+		storeEndpoint string
+		authContext   *AWSAuthConfig
+		wantLen       int
+		// Expected applied effects after the built options are evaluated against a
+		// config.LoadOptions. These assert precedence behavior, not just option count.
+		wantRegion     string
+		wantEndpoint   string
+		wantProfile    string
+		wantCredsFiles []string
+		wantCfgFiles   []string
+	}{
+		{
+			name:   "all fields populated",
+			region: "us-east-1",
+			authContext: &AWSAuthConfig{
+				CredentialsFile: "/path/to/creds",
+				ConfigFile:      "/path/to/config",
+				Profile:         "prod",
+				Region:          "eu-west-1",
+				EndpointURL:     "http://localhost:4566",
+			},
+			wantLen:        5,                       // creds + config + profile + store region + endpoint
+			wantRegion:     "us-east-1",             // store region wins over auth context region
+			wantEndpoint:   "http://localhost:4566", // store endpoint empty, so auth endpoint used
+			wantProfile:    "prod",
+			wantCredsFiles: []string{"/path/to/creds"},
+			wantCfgFiles:   []string{"/path/to/config"},
+		},
+		{
+			name:          "store endpoint used when auth context endpoint empty",
+			region:        "us-east-1",
+			storeEndpoint: "http://store-endpoint",
+			authContext:   &AWSAuthConfig{},
+			wantLen:       2, // store region + store endpoint
+			wantRegion:    "us-east-1",
+			wantEndpoint:  "http://store-endpoint",
+		},
+		{
+			name:          "store endpoint takes precedence over auth context endpoint",
+			region:        "us-east-1",
+			storeEndpoint: "http://store-endpoint",
+			authContext: &AWSAuthConfig{
+				EndpointURL: "http://auth-endpoint",
+			},
+			wantLen:      2, // store region + store endpoint (auth endpoint ignored)
+			wantRegion:   "us-east-1",
+			wantEndpoint: "http://store-endpoint", // store endpoint wins over auth endpoint
+		},
+		{
+			name:   "empty credentials file",
+			region: "us-east-1",
+			authContext: &AWSAuthConfig{
+				ConfigFile: "/path/to/config",
+				Profile:    "prod",
+			},
+			wantLen:      3, // config + profile + region
+			wantRegion:   "us-east-1",
+			wantProfile:  "prod",
+			wantCfgFiles: []string{"/path/to/config"},
+		},
+		{
+			name:   "region fallback from auth context",
+			region: "",
+			authContext: &AWSAuthConfig{
+				CredentialsFile: "/path/to/creds",
+				Region:          "eu-west-1",
+			},
+			wantLen:        2,           // creds + auth region
+			wantRegion:     "eu-west-1", // store region empty, so auth context region used
+			wantCredsFiles: []string{"/path/to/creds"},
+		},
+		{
+			name:        "all empty auth context with store region",
+			region:      "us-east-1",
+			authContext: &AWSAuthConfig{},
+			wantLen:     1, // just store region
+			wantRegion:  "us-east-1",
+		},
+		{
+			name:        "both regions empty",
+			region:      "",
+			authContext: &AWSAuthConfig{},
+			wantLen:     0,
+		},
+		{
+			name:   "only profile set",
+			region: "",
+			authContext: &AWSAuthConfig{
+				Profile: "prod-admin",
+			},
+			wantLen:     1, // just profile
+			wantProfile: "prod-admin",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &SSMStore{region: tt.region, endpoint: tt.storeEndpoint}
+			opts := store.buildAuthConfigOpts(tt.authContext)
+			assert.Len(t, opts, tt.wantLen)
+
+			// Apply the built options and assert their effect, so endpoint/region/profile
+			// precedence cannot regress while still passing the length check.
+			var lo config.LoadOptions
+			for _, opt := range opts {
+				require.NoError(t, opt(&lo))
+			}
+			assert.Equal(t, tt.wantRegion, lo.Region)
+			assert.Equal(t, tt.wantEndpoint, lo.BaseEndpoint)
+			assert.Equal(t, tt.wantProfile, lo.SharedConfigProfile)
+			assert.Equal(t, tt.wantCredsFiles, lo.SharedCredentialsFiles)
+			assert.Equal(t, tt.wantCfgFiles, lo.SharedConfigFiles)
+		})
+	}
+}
+
+func TestNewSSMStore_EndpointFallback(t *testing.T) {
+	ptr := func(s string) *string { return &s }
+
+	tests := []struct {
+		name         string
+		endpoint     *string
+		endpointURL  *string
+		wantEndpoint string
+	}{
+		{
+			name:         "no endpoint configured",
+			wantEndpoint: "",
+		},
+		{
+			name:         "endpoint takes precedence over endpoint_url",
+			endpoint:     ptr("http://endpoint"),
+			endpointURL:  ptr("http://endpoint-url"),
+			wantEndpoint: "http://endpoint",
+		},
+		{
+			name:         "endpoint_url used when endpoint nil",
+			endpointURL:  ptr("http://endpoint-url"),
+			wantEndpoint: "http://endpoint-url",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := NewSSMStore(SSMStoreOptions{
+				Region:      "us-east-1",
+				Endpoint:    tt.endpoint,
+				EndpointURL: tt.endpointURL,
+			}, "")
+			require.NoError(t, err)
+			ssmStore, ok := s.(*SSMStore)
+			require.True(t, ok)
+			assert.Equal(t, tt.wantEndpoint, ssmStore.endpoint)
+		})
+	}
+}
+
+func TestSSMStore_InitDefaultClient_WithEndpoint(t *testing.T) {
+	store := &SSMStore{region: "us-east-1", endpoint: "http://localhost:4566"}
+
+	require.NoError(t, store.initDefaultClient())
+	assert.NotNil(t, store.client)
 }
 
 func TestSSMStore_getKey(t *testing.T) {
@@ -719,7 +1064,8 @@ func TestSSMStore_GetKey(t *testing.T) {
 			key:  "dev/usw2/app/service/config-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String(`"test-value"`),
@@ -733,7 +1079,8 @@ func TestSSMStore_GetKey(t *testing.T) {
 			key:  "dev/usw2/app/service/slice-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/slice-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/slice-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String(`["value1","value2","value3"]`),
@@ -747,7 +1094,8 @@ func TestSSMStore_GetKey(t *testing.T) {
 			key:  "dev/usw2/app/service/map-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/map-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/map-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String(`{"key1":"value1","key2":42}`),
@@ -787,7 +1135,8 @@ func TestSSMStore_GetKey(t *testing.T) {
 			key:  "dev/usw2/app/service/plain-text-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/plain-text-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/plain-text-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String("plain text value"),
@@ -802,7 +1151,8 @@ func TestSSMStore_GetKey(t *testing.T) {
 			key:  "dev/usw2/app/service/malformed-json-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/malformed-json-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/malformed-json-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String("}invalid json{"),
@@ -817,7 +1167,8 @@ func TestSSMStore_GetKey(t *testing.T) {
 			key:  "dev/usw2/app/service/integer-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/integer-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/integer-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String(`42`),
@@ -831,7 +1182,8 @@ func TestSSMStore_GetKey(t *testing.T) {
 			key:  "dev/usw2/app/service/float-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/float-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/float-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String(`3.14159`),
@@ -845,7 +1197,8 @@ func TestSSMStore_GetKey(t *testing.T) {
 			key:  "dev/usw2/app/service/numeric-string-key",
 			mockSetup: func(mockSSM *MockSSMClient, mockAssumedSSM *MockSSMClient, mockSTS *MockSTSClient) {
 				mockSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/numeric-string-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/numeric-string-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String(`"42"`),
@@ -871,7 +1224,8 @@ func TestSSMStore_GetKey(t *testing.T) {
 				}, nil)
 
 				mockAssumedSSM.On("GetParameter", mock.Anything, &ssm.GetParameterInput{
-					Name: aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+					Name:           aws.String("/test-prefix/dev/usw2/app/service/config-key"),
+					WithDecryption: aws.Bool(true),
 				}).Return(&ssm.GetParameterOutput{
 					Parameter: &types.Parameter{
 						Value: aws.String(`"test-value"`),

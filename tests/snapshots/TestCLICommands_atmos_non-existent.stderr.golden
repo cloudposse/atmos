@@ -5,20 +5,27 @@
 Valid subcommands are:
 
   • about
+  • ai
+  • ansible
   • atlantis
   • auth
   • aws
+  • ci
   • completion
   • describe
   • devcontainer
   • docs
   • env
+  • git
   • helmfile
   • help
   • list
+  • lsp
+  • mcp
   • packer
   • pro
   • profile
+  • secret
   • show
   • support
   • terraform
@@ -30,6 +37,11 @@ Valid subcommands are:
   • vendor
   • version
   • workflow
+
+## Usage
+
+ atmos [flags]
+ atmos [sub-command] [flags]
 
 ## Hints
 

@@ -6,8 +6,8 @@ Learn more about [Describe Config](https://atmos.tools/cli/commands/describe/con
 
 ## What You'll See
 
-- [Context providers](https://atmos.tools/core-concepts/stacks/templates/#context) for dynamic values
-- [Name templates](https://atmos.tools/core-concepts/stacks/naming/) using context values
+- [Context providers](https://atmos.tools/stacks/templates#context) for dynamic values
+- [Name templates](https://atmos.tools/stacks/naming) using context values
 - Configuration merging from imports and mixins
 
 ## Try It

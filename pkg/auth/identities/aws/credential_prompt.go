@@ -7,7 +7,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
-	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	authUtils "github.com/cloudposse/atmos/pkg/auth/utils"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -138,14 +137,9 @@ func promptForAWSCredentials(identityName string, mfaArn string) (*types.AWSCred
 		SessionDuration: values[FieldSessionDuration],
 	}
 
-	// Store credentials in keyring.
-	store := credentials.NewCredentialStore()
-	if err := store.Store(identityName, creds); err != nil {
-		return nil, fmt.Errorf("%w: failed to store credentials: %w", errUtils.ErrAwsAuth, err)
-	}
-
-	ui.Success("Credentials saved to keyring: " + identityName)
-	ui.Writeln("")
+	// Note: Credentials are stored by the auth manager after authentication succeeds.
+	// The manager uses the proper realm for credential isolation.
+	// We just return the credentials here - storage is handled at a higher level.
 
 	return creds, nil
 }

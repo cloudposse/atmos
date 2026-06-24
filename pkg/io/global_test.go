@@ -669,3 +669,29 @@ func TestInitialize_ConcurrentCalls(t *testing.T) {
 		t.Error("globalContext is nil after concurrent Initialize() calls")
 	}
 }
+
+func TestGlobalContainsSecret(t *testing.T) {
+	resetGlobals()
+	Initialize()
+
+	secret := "global-contains-secret-xyz"
+	RegisterSecret(secret)
+
+	if !ContainsSecret("conn=" + secret) {
+		t.Error("expected ContainsSecret to detect registered secret")
+	}
+	if ContainsSecret("no secret here") {
+		t.Error("did not expect ContainsSecret to match unrelated value")
+	}
+	if ContainsSecret("") {
+		t.Error("empty value must not match")
+	}
+}
+
+func TestGlobalContainsSecret_NoContext(t *testing.T) {
+	resetGlobals()
+	// Without Initialize(), there is no global context; must fail safe to false.
+	if ContainsSecret("anything") {
+		t.Error("expected false when I/O context is not initialized")
+	}
+}

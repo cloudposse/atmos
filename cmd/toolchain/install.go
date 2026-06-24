@@ -6,8 +6,8 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/toolchain"
 )
 
 var installParser *flags.StandardParser

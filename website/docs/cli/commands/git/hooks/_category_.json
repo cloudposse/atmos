@@ -1,0 +1,10 @@
+{
+  "label": "hooks",
+  "className": "command",
+  "collapsible": true,
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/git/hooks/index"
+  }
+}

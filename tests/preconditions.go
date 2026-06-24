@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,6 +32,22 @@ const (
 	// EnvAWSProfile is the environment variable for AWS profile.
 	envAWSProfile = "AWS_PROFILE"
 )
+
+var testToolPathLocks sync.Map
+
+type cachedTestTool struct {
+	Repo    string
+	Version string
+	Binary  string
+}
+
+var cachedTestTools = []cachedTestTool{
+	{Repo: "opentofu/opentofu", Version: "1.12.2", Binary: "tofu"},
+	{Repo: "hashicorp/terraform", Version: "1.15.6", Binary: "terraform"},
+	{Repo: "hashicorp/packer", Version: "1.14.2", Binary: "packer"},
+	{Repo: "helmfile/helmfile", Version: "v1.1.0", Binary: "helmfile"},
+	{Repo: "helm/helm", Version: "v3.19.2", Binary: "helm"},
+}
 
 // ShouldCheckPreconditions returns true if precondition checks should be performed.
 // Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to bypass all precondition checks.
@@ -328,9 +346,50 @@ func RequireExecutable(t *testing.T, name string, purpose string) {
 
 	_, err := exec.LookPath(name)
 	if err != nil {
+		prependCachedTestTool(name)
+	}
+
+	_, err = exec.LookPath(name)
+	if err != nil {
 		t.Skipf("'%s' not found in PATH: required for %s. Install the tool or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
 			name, purpose)
 	}
+}
+
+func prependCachedTestTool(binary string) {
+	tool, ok := cachedTestToolForBinary(binary)
+	if !ok {
+		return
+	}
+
+	lockValue, _ := testToolPathLocks.LoadOrStore(binary, &sync.Once{})
+	lockValue.(*sync.Once).Do(func() {
+		cacheDir, err := os.UserCacheDir()
+		if err != nil {
+			return
+		}
+		binDir := filepath.Join(cacheDir, "atmos", "test-toolchain", "bin", filepath.FromSlash(tool.Repo), tool.Version)
+		binaryPath := filepath.Join(binDir, tool.Binary)
+		if _, err := os.Stat(binaryPath); err != nil {
+			return
+		}
+
+		path := os.Getenv("PATH")
+		if path == "" {
+			os.Setenv("PATH", binDir)
+			return
+		}
+		os.Setenv("PATH", binDir+string(os.PathListSeparator)+path)
+	})
+}
+
+func cachedTestToolForBinary(binary string) (cachedTestTool, bool) {
+	for _, tool := range cachedTestTools {
+		if tool.Binary == binary {
+			return tool, true
+		}
+	}
+	return cachedTestTool{}, false
 }
 
 // RequireEnvVar checks if an environment variable is set.
@@ -383,6 +442,30 @@ func RequireTerraform(t *testing.T) {
 	RequireExecutable(t, "terraform", "terraform operations")
 }
 
+// RequireTofu checks if tofu (OpenTofu) is installed and available in PATH.
+// The CLI test suite standardizes on OpenTofu (see ATMOS_COMPONENTS_TERRAFORM_COMMAND
+// in cli_test.go), so terraform-invoking tests gate on this rather than terraform.
+func RequireTofu(t *testing.T) {
+	t.Helper()
+	RequireExecutable(t, "tofu", "OpenTofu operations")
+}
+
+// RequireTerraformOrTofu checks if terraform or tofu is installed and available in PATH.
+// Use this for tests whose fixture atmos.yaml sets command: tofu, or that work with either binary.
+func RequireTerraformOrTofu(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	_, terraformErr := exec.LookPath("terraform")
+	_, tofuErr := exec.LookPath("tofu")
+	if terraformErr != nil && tofuErr != nil {
+		t.Skipf("Neither 'terraform' nor 'tofu' found in PATH: required for terraform operations. Install one or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+}
+
 // RequirePacker checks if packer is installed and available in PATH.
 // This is a convenience function that uses RequireExecutable specifically for packer.
 func RequirePacker(t *testing.T) {
@@ -415,6 +498,26 @@ func RequireOCIAuthentication(t *testing.T) {
 
 	if githubToken == "" {
 		t.Skipf("GitHub token not configured: required for GitHub API access (OCI images, cloning repos, avoiding rate limits). Set GITHUB_TOKEN or ATMOS_GITHUB_TOKEN environment variable, or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	// Token exists — probe ghcr.io to verify this specific token can actually pull images.
+	// A bot token may exist but not have access to the ghcr.io registry used by tests.
+	client := &http.Client{Timeout: httpTimeout}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://ghcr.io/v2/", nil)
+	if err != nil {
+		t.Logf("Warning: Could not create ghcr.io request: %v", err)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+githubToken)
+		resp, reqErr := client.Do(req) //nolint:gosec // URL is a hardcoded constant (ghcr.io), not user input.
+		if reqErr != nil {
+			t.Skipf("Cannot reach ghcr.io: %v. OCI registry access required. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to skip.", reqErr)
+		}
+		resp.Body.Close()
+		// 401 = unauthorized (wrong/expired token); 403 = forbidden (no read:packages scope).
+		// Both indicate the token cannot pull OCI images from ghcr.io.
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			t.Skipf("GitHub token exists but is not authorized for ghcr.io (HTTP %d). OCI integration test requires a token with 'read:packages' scope.", resp.StatusCode)
+		}
 	}
 
 	// Token exists, log that authentication is available
@@ -471,84 +574,4 @@ func SkipOnDarwinARM64(t *testing.T, reason string) {
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
 		t.Skipf("Skipping on darwin/arm64: %s. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to override", reason)
 	}
-}
-
-const (
-	// Container runtime names.
-	containerRuntimeDocker = "docker"
-	containerRuntimePodman = "podman"
-)
-
-// RequireContainerRuntime checks if a container runtime (Docker or Podman) is available.
-// It prefers Docker but will accept Podman if Docker is not available.
-// Returns the name of the available runtime ("docker" or "podman").
-func RequireContainerRuntime(t *testing.T) string {
-	t.Helper()
-
-	if !ShouldCheckPreconditions() {
-		return containerRuntimeDocker // Default assumption when checks are disabled
-	}
-
-	// Try Docker first
-	if cmd := exec.Command(containerRuntimeDocker, "version"); cmd.Run() == nil {
-		t.Logf("Container runtime available: Docker")
-		return containerRuntimeDocker
-	}
-
-	// Try Podman as fallback
-	if cmd := exec.Command(containerRuntimePodman, "version"); cmd.Run() == nil {
-		t.Logf("Container runtime available: Podman")
-		return containerRuntimePodman
-	}
-
-	t.Skipf("No container runtime available. Install Docker (https://docs.docker.com/get-docker/) or Podman (https://podman.io/getting-started/installation), or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
-	return ""
-}
-
-// RequireDocker checks if Docker is available and running.
-// Use this for tests that specifically require Docker (not Podman).
-func RequireDocker(t *testing.T) {
-	t.Helper()
-
-	if !ShouldCheckPreconditions() {
-		return
-	}
-
-	// Check if docker command exists
-	_, err := exec.LookPath(containerRuntimeDocker)
-	if err != nil {
-		t.Skipf("Docker not found in PATH. Install Docker (https://docs.docker.com/get-docker/) or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
-	}
-
-	// Check if Docker daemon is running
-	cmd := exec.Command(containerRuntimeDocker, "info")
-	if err := cmd.Run(); err != nil {
-		t.Skipf("Docker daemon not running. Start Docker or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
-	}
-
-	t.Logf("Docker is available and running")
-}
-
-// RequirePodman checks if Podman is available and running.
-// Use this for tests that specifically require Podman (not Docker).
-func RequirePodman(t *testing.T) {
-	t.Helper()
-
-	if !ShouldCheckPreconditions() {
-		return
-	}
-
-	// Check if podman command exists
-	_, err := exec.LookPath(containerRuntimePodman)
-	if err != nil {
-		t.Skipf("Podman not found in PATH. Install Podman (https://podman.io/getting-started/installation) or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
-	}
-
-	// Check if Podman is working
-	cmd := exec.Command(containerRuntimePodman, "info")
-	if err := cmd.Run(); err != nil {
-		t.Skipf("Podman not working properly. Check Podman installation or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
-	}
-
-	t.Logf("Podman is available and working")
 }

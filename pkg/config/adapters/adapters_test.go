@@ -32,7 +32,7 @@ func TestGoGetterAdapter_DownloadError(t *testing.T) {
 	adapter := &GoGetterAdapter{}
 	ctx := context.Background()
 
-	_, err := adapter.Resolve(ctx, "https://nonexistent.invalid/config.yaml", tempDir, tempDir, 1, 10)
+	_, err := adapter.Resolve(ctx, "https://nonexistent.invalid/config.yaml", tempDir, tempDir, 1, 10, nil)
 	assert.Error(t, err) // Download should fail
 }
 
@@ -68,7 +68,7 @@ func TestLocalAdapter_EmptyImportPath(t *testing.T) {
 	adapter := &LocalAdapter{}
 	ctx := context.Background()
 
-	_, err := adapter.Resolve(ctx, "", tempDir, tempDir, 1, 10)
+	_, err := adapter.Resolve(ctx, "", tempDir, tempDir, 1, 10, nil)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrImportPathRequired)
 }
@@ -82,7 +82,7 @@ func TestLocalAdapter_SearchConfigError(t *testing.T) {
 	adapter := &LocalAdapter{}
 	ctx := context.Background()
 
-	_, err := adapter.Resolve(ctx, nonExistentPath, tempDir, tempDir, 1, 10)
+	_, err := adapter.Resolve(ctx, nonExistentPath, tempDir, tempDir, 1, 10, nil)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrResolveLocal)
 }
@@ -100,7 +100,7 @@ func TestLocalAdapter_ReadConfigError(t *testing.T) {
 	adapter := &LocalAdapter{}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "invalid.yaml", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "invalid.yaml", tempDir, tempDir, 1, 10, nil)
 	// Should not error but should skip files that fail to load.
 	assert.NoError(t, err)
 	_ = paths
@@ -121,7 +121,7 @@ func TestLocalAdapter_ValidFile(t *testing.T) {
 	adapter := &LocalAdapter{}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "valid.yaml", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "valid.yaml", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, paths)
 	assert.Equal(t, validPath, paths[0].FilePath)
@@ -142,7 +142,7 @@ func TestMockAdapter_Empty(t *testing.T) {
 	adapter := &MockAdapter{}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "mock://empty", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "mock://empty", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.Len(t, paths, 1)
 	assert.Equal(t, config.ADAPTER, paths[0].ImportType)
@@ -154,7 +154,7 @@ func TestMockAdapter_Error(t *testing.T) {
 	adapter := &MockAdapter{}
 	ctx := context.Background()
 
-	_, err := adapter.Resolve(ctx, "mock://error", tempDir, tempDir, 1, 10)
+	_, err := adapter.Resolve(ctx, "mock://error", tempDir, tempDir, 1, 10, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "mock error")
 }
@@ -169,7 +169,7 @@ func TestMockAdapter_CustomData(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "mock://custom/path", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "mock://custom/path", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.Len(t, paths, 1)
 
@@ -185,7 +185,7 @@ func TestMockAdapter_DefaultPath(t *testing.T) {
 	adapter := &MockAdapter{}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "mock://some/path", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "mock://some/path", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.Len(t, paths, 1)
 
@@ -259,7 +259,7 @@ func TestLocalAdapter_AbsolutePath(t *testing.T) {
 	ctx := context.Background()
 
 	// Use the absolute path directly.
-	paths, err := adapter.Resolve(ctx, validPath, tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, validPath, tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, paths)
 	assert.Equal(t, validPath, paths[0].FilePath)
@@ -281,7 +281,7 @@ func TestLocalAdapter_OutsideBasePath(t *testing.T) {
 	ctx := context.Background()
 
 	// Import from subdir pointing to parent.
-	paths, err := adapter.Resolve(ctx, "../parent.yaml", subDir, parentDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "../parent.yaml", subDir, parentDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, paths)
 	assert.Equal(t, parentConfig, paths[0].FilePath)
@@ -316,7 +316,7 @@ settings:
 	adapter := &LocalAdapter{}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "main.yaml", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "main.yaml", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(paths), 1) // At least the main file.
 }
@@ -354,7 +354,7 @@ settings:
 	adapter := &LocalAdapter{}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "main.yaml", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "main.yaml", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, paths)
 }
@@ -377,7 +377,7 @@ func TestLocalAdapter_NoNestedImports(t *testing.T) {
 	adapter := &LocalAdapter{}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "config.yaml", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "config.yaml", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.Len(t, paths, 1)
 }
@@ -404,23 +404,13 @@ func TestGoGetterAdapter_AllSchemes(t *testing.T) {
 	}
 }
 
-// TestDownloadRemoteConfig_NilContext tests downloadRemoteConfig with nil context.
-func TestDownloadRemoteConfig_NilContext(t *testing.T) {
+// TestDownloadRemoteConfig_InvalidURL verifies downloadRemoteConfig returns an error
+// (and does not panic) when the remote source is unreachable. A nil atmosConfig is valid
+// and exercises the default token resolution / no-broker path.
+func TestDownloadRemoteConfig_InvalidURL(t *testing.T) {
 	tempDir := t.TempDir()
 
-	// Test with TODO context - should work with default timeout.
-	// Use an invalid URL to trigger error (we're testing the context handling).
-	_, err := downloadRemoteConfig(context.TODO(), "https://nonexistent.invalid/config.yaml", tempDir)
-	assert.Error(t, err) // Should fail but not panic.
-}
-
-// TestDownloadRemoteConfig_ValidContext tests downloadRemoteConfig with valid context.
-func TestDownloadRemoteConfig_ValidContext(t *testing.T) {
-	tempDir := t.TempDir()
-	ctx := context.Background()
-
-	// Use an invalid URL to trigger error.
-	_, err := downloadRemoteConfig(ctx, "https://nonexistent.invalid/config.yaml", tempDir)
+	_, err := downloadRemoteConfig("https://nonexistent.invalid/config.yaml", tempDir, nil)
 	assert.Error(t, err)
 }
 
@@ -447,18 +437,21 @@ settings:
 
 	ctx := context.Background()
 
-	paths, err := mockAdapter.Resolve(ctx, "mock://parent", tempDir, tempDir, 1, 10)
+	paths, err := mockAdapter.Resolve(ctx, "mock://parent", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, paths)
 }
 
-// TestMockAdapter_WriteError tests mock adapter when temp directory doesn't exist.
+// TestMockAdapter_WriteError tests mock adapter when the temp directory doesn't exist.
 func TestMockAdapter_WriteError(t *testing.T) {
 	adapter := &MockAdapter{}
 	ctx := context.Background()
 
-	// Use non-existent temp directory.
-	_, err := adapter.Resolve(ctx, "mock://test", "/nonexistent/temp/dir", "/base", 1, 10)
+	// Build a missing path under the test's temp dir (uncreated) so the write fails
+	// the same way on Linux/macOS/Windows. writeConfig joins this tempDir with the
+	// output filename, and os.WriteFile fails because the parent directory is absent.
+	missingTempDir := filepath.Join(t.TempDir(), "nonexistent", "temp", "dir")
+	_, err := adapter.Resolve(ctx, "mock://test", t.TempDir(), missingTempDir, 1, 10, nil)
 	assert.Error(t, err)
 }
 
@@ -483,7 +476,7 @@ func TestGoGetterAdapter_ResolveWithLocalFile(t *testing.T) {
 
 	// Use file:// URL to download local file.
 	fileURL := "file://" + validPath
-	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, paths)
 	assert.Equal(t, config.REMOTE, paths[0].ImportType)
@@ -504,7 +497,7 @@ func TestGoGetterAdapter_ResolveWithInvalidYAML(t *testing.T) {
 
 	// Use file:// URL to download the invalid file.
 	fileURL := "file://" + invalidPath
-	_, err = adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	_, err = adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10, nil)
 	assert.Error(t, err) // Should fail when reading invalid YAML.
 }
 
@@ -539,7 +532,7 @@ settings:
 
 	// Use file:// URL to download parent file.
 	fileURL := "file://" + parentPath
-	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(paths), 1) // At least the parent file.
 }
@@ -579,7 +572,7 @@ settings:
 
 	// Use file:// URL to download parent file.
 	fileURL := "file://" + parentPath
-	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, paths)
 }
@@ -607,7 +600,7 @@ components:
 	ctx := context.Background()
 
 	fileURL := "file://" + configPath
-	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.Len(t, paths, 1) // Only the downloaded file.
 	assert.Equal(t, config.REMOTE, paths[0].ImportType)
@@ -624,11 +617,10 @@ func TestDownloadRemoteConfig_LocalFile(t *testing.T) {
 	err := os.WriteFile(sourcePath, []byte(content), 0o644)
 	assert.NoError(t, err)
 
-	ctx := context.Background()
 	fileURL := "file://" + sourcePath
 
 	// Download the file.
-	resultPath, err := downloadRemoteConfig(ctx, fileURL, destDir)
+	resultPath, err := downloadRemoteConfig(fileURL, destDir, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, resultPath)
 

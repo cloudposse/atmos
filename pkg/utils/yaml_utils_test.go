@@ -270,7 +270,8 @@ nested:
 
 			// All goroutines parse the same file with the same content
 			result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](
-				atmosConfig, input, "concurrent-test.yaml")
+				atmosConfig, input, "concurrent-test.yaml",
+			)
 			if err != nil {
 				errors <- err
 				return
@@ -356,7 +357,8 @@ func TestUnmarshalYAMLFromFileWithPositions_ConcurrentAccessDifferentFiles(t *te
 				<-start
 
 				result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](
-					atmosConfig, content, name)
+					atmosConfig, content, name,
+				)
 				if err != nil {
 					errors <- err
 					return
@@ -758,19 +760,33 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 	// Validate that atmosYamlTagsMap contains all tags from AtmosYamlTags slice.
 	expectedTags := []string{
 		AtmosYamlFuncExec,
+		AtmosYamlFuncSecret,
 		AtmosYamlFuncStore,
 		AtmosYamlFuncStoreGet,
 		AtmosYamlFuncTemplate,
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncGitRoot,
+		AtmosYamlFuncGitRootAlias,
+		AtmosYamlFuncGitSha,
+		AtmosYamlFuncGitBranch,
+		AtmosYamlFuncGitRef,
+		AtmosYamlFuncGitRepository,
+		AtmosYamlFuncGitOwner,
+		AtmosYamlFuncGitName,
+		AtmosYamlFuncGitHost,
+		AtmosYamlFuncGitUrl,
+		AtmosYamlFuncAppend,
 		AtmosYamlFuncCwd,
+		AtmosYamlFuncUnset,
 		AtmosYamlFuncRandom,
 		AtmosYamlFuncLiteral,
 		AtmosYamlFuncAwsAccountID,
 		AtmosYamlFuncAwsCallerIdentityArn,
 		AtmosYamlFuncAwsCallerIdentityUserID,
 		AtmosYamlFuncAwsRegion,
+		AtmosYamlFuncAwsOrganizationID,
 	}
 
 	for _, tag := range expectedTags {
@@ -798,6 +814,16 @@ func TestAtmosYamlTagsMap_O1Lookup(t *testing.T) {
 		{AtmosYamlFuncTerraformOutput, true},
 		{AtmosYamlFuncTerraformState, true},
 		{AtmosYamlFuncEnv, true},
+		{AtmosYamlFuncGitRoot, true},
+		{AtmosYamlFuncGitRootAlias, true},
+		{AtmosYamlFuncGitSha, true},
+		{AtmosYamlFuncGitBranch, true},
+		{AtmosYamlFuncGitRef, true},
+		{AtmosYamlFuncGitRepository, true},
+		{AtmosYamlFuncGitOwner, true},
+		{AtmosYamlFuncGitName, true},
+		{AtmosYamlFuncGitHost, true},
+		{AtmosYamlFuncGitUrl, true},
 		{AtmosYamlFuncRandom, true},
 		{"!unknown", false},
 		{"!invalid", false},
@@ -958,40 +984,6 @@ root:
 	assert.Equal(t, "value", level3_2["deep"], "Deep nested value should not be affected by modification")
 }
 
-// TestPrintParsedYAMLCacheStats_NoDivideByZero tests that PrintParsedYAMLCacheStats
-// doesn't panic with divide-by-zero when uniqueFiles or uniqueHashes is 0.
-func TestPrintParsedYAMLCacheStats_NoDivideByZero(t *testing.T) {
-	// Save current stats
-	parsedYAMLCacheStats.Lock()
-	savedHits := parsedYAMLCacheStats.hits
-	savedMisses := parsedYAMLCacheStats.misses
-	savedTotalCalls := parsedYAMLCacheStats.totalCalls
-	savedFiles := parsedYAMLCacheStats.uniqueFiles
-	savedHashes := parsedYAMLCacheStats.uniqueHashes
-
-	// Reset stats to zero to trigger divide-by-zero scenario
-	parsedYAMLCacheStats.hits = 0
-	parsedYAMLCacheStats.misses = 0
-	parsedYAMLCacheStats.totalCalls = 0
-	parsedYAMLCacheStats.uniqueFiles = make(map[string]int)
-	parsedYAMLCacheStats.uniqueHashes = make(map[string]int)
-	parsedYAMLCacheStats.Unlock()
-
-	// This should not panic with divide-by-zero
-	assert.NotPanics(t, func() {
-		PrintParsedYAMLCacheStats()
-	}, "PrintParsedYAMLCacheStats should not panic with zero uniqueFiles/uniqueHashes")
-
-	// Restore stats
-	parsedYAMLCacheStats.Lock()
-	parsedYAMLCacheStats.hits = savedHits
-	parsedYAMLCacheStats.misses = savedMisses
-	parsedYAMLCacheStats.totalCalls = savedTotalCalls
-	parsedYAMLCacheStats.uniqueFiles = savedFiles
-	parsedYAMLCacheStats.uniqueHashes = savedHashes
-	parsedYAMLCacheStats.Unlock()
-}
-
 // TestLiteralTag_PreservesTemplateSyntax tests that !literal preserves template-like syntax.
 // This is the primary use case: passing {{...}} to downstream tools without Atmos processing.
 func TestLiteralTag_PreservesTemplateSyntax(t *testing.T) {
@@ -1149,145 +1141,6 @@ db_users: [!literal "{{external.email}}", !literal "{{external.admin}}", regular
 	assert.Equal(t, "{{external.email}}", users[0])
 	assert.Equal(t, "{{external.admin}}", users[1])
 	assert.Equal(t, "regular_user", users[2])
-}
-
-// TestGetUserHomeDir tests that GetUserHomeDir returns a valid home directory.
-func TestGetUserHomeDir(t *testing.T) {
-	homeDir := GetUserHomeDir()
-
-	// Should return a non-empty string on all platforms.
-	assert.NotEmpty(t, homeDir, "GetUserHomeDir should return non-empty home directory")
-
-	// The returned path should be an absolute path.
-	assert.True(t, filepath.IsAbs(homeDir), "Home directory should be an absolute path")
-
-	// The directory should exist.
-	info, err := os.Stat(homeDir)
-	require.NoError(t, err, "Home directory should exist")
-	assert.True(t, info.IsDir(), "Home directory should be a directory")
-}
-
-// TestObfuscateSensitivePaths_Map tests obfuscation of paths in maps.
-func TestObfuscateSensitivePaths_Map(t *testing.T) {
-	homeDir := "/Users/testuser"
-
-	data := map[string]any{
-		"path":       "/Users/testuser/projects/atmos",
-		"other":      "some value",
-		"number":     42,
-		"nested_dir": "/Users/testuser/.config/atmos.yaml",
-	}
-
-	result := ObfuscateSensitivePaths(data, homeDir)
-
-	resultMap, ok := result.(map[string]any)
-	require.True(t, ok, "Result should be a map")
-
-	assert.Equal(t, "~/projects/atmos", resultMap["path"], "Path should be obfuscated with ~")
-	assert.Equal(t, "some value", resultMap["other"], "Non-path values should be unchanged")
-	assert.Equal(t, 42, resultMap["number"], "Number values should be unchanged")
-	assert.Equal(t, "~/.config/atmos.yaml", resultMap["nested_dir"], "Nested dir path should be obfuscated")
-}
-
-// TestObfuscateSensitivePaths_Slice tests obfuscation of paths in slices.
-func TestObfuscateSensitivePaths_Slice(t *testing.T) {
-	homeDir := "/home/user"
-
-	data := []any{
-		"/home/user/file1.txt",
-		"/home/user/dir/file2.txt",
-		"not a path",
-		123,
-		"/other/path",
-	}
-
-	result := ObfuscateSensitivePaths(data, homeDir)
-
-	resultSlice, ok := result.([]any)
-	require.True(t, ok, "Result should be a slice")
-
-	assert.Equal(t, "~/file1.txt", resultSlice[0], "First path should be obfuscated")
-	assert.Equal(t, "~/dir/file2.txt", resultSlice[1], "Second path should be obfuscated")
-	assert.Equal(t, "not a path", resultSlice[2], "Non-path strings should be unchanged")
-	assert.Equal(t, 123, resultSlice[3], "Numbers should be unchanged")
-	assert.Equal(t, "/other/path", resultSlice[4], "Paths not starting with homeDir should be unchanged")
-}
-
-// TestObfuscateSensitivePaths_Nested tests obfuscation of paths in nested structures.
-func TestObfuscateSensitivePaths_Nested(t *testing.T) {
-	homeDir := "/Users/dev"
-
-	data := map[string]any{
-		"config": map[string]any{
-			"base_path": "/Users/dev/atmos",
-			"files": []any{
-				"/Users/dev/stack1.yaml",
-				"/Users/dev/stack2.yaml",
-			},
-		},
-		"metadata": map[string]any{
-			"author":  "John Doe",
-			"version": 1,
-			"paths": map[string]any{
-				"source": "/Users/dev/src",
-				"build":  "/tmp/build",
-			},
-		},
-	}
-
-	result := ObfuscateSensitivePaths(data, homeDir)
-
-	resultMap, ok := result.(map[string]any)
-	require.True(t, ok)
-
-	config := resultMap["config"].(map[string]any)
-	assert.Equal(t, "~/atmos", config["base_path"])
-
-	files := config["files"].([]any)
-	assert.Equal(t, "~/stack1.yaml", files[0])
-	assert.Equal(t, "~/stack2.yaml", files[1])
-
-	metadata := resultMap["metadata"].(map[string]any)
-	assert.Equal(t, "John Doe", metadata["author"])
-	assert.Equal(t, 1, metadata["version"])
-
-	paths := metadata["paths"].(map[string]any)
-	assert.Equal(t, "~/src", paths["source"])
-	assert.Equal(t, "/tmp/build", paths["build"], "Non-matching paths should be unchanged")
-}
-
-// TestObfuscateSensitivePaths_EmptyHomeDir tests that empty homeDir returns data unchanged.
-func TestObfuscateSensitivePaths_EmptyHomeDir(t *testing.T) {
-	data := map[string]any{
-		"path": "/Users/testuser/projects",
-	}
-
-	result := ObfuscateSensitivePaths(data, "")
-
-	resultMap, ok := result.(map[string]any)
-	require.True(t, ok)
-
-	// With empty homeDir, paths should not be changed.
-	assert.Equal(t, "/Users/testuser/projects", resultMap["path"], "Path should be unchanged when homeDir is empty")
-}
-
-// TestObfuscateSensitivePaths_NilData tests that nil data is handled gracefully.
-func TestObfuscateSensitivePaths_NilData(t *testing.T) {
-	result := ObfuscateSensitivePaths(nil, "/Users/test")
-	assert.Nil(t, result, "Nil input should return nil")
-}
-
-// TestObfuscateSensitivePaths_StringInput tests direct string input.
-func TestObfuscateSensitivePaths_StringInput(t *testing.T) {
-	homeDir := "/Users/testuser"
-
-	// String that starts with homeDir.
-	result1 := ObfuscateSensitivePaths("/Users/testuser/file.txt", homeDir)
-	assert.Equal(t, "~/file.txt", result1)
-
-	// String that doesn't start with homeDir.
-	result2 := ObfuscateSensitivePaths("/other/path/file.txt", homeDir)
-	assert.Equal(t, "/other/path/file.txt", result2)
 }
 
 // TestWriteToFileAsYAML tests writing YAML to a file.
@@ -1472,20 +1325,9 @@ nested:
   key: value`
 	fileName := "test-provenance-reparse.yaml"
 
-	// Capture old cache state and restore after test.
-	parsedYAMLCacheMu.Lock()
-	oldCache := parsedYAMLCache
-	parsedYAMLCacheMu.Unlock()
-	t.Cleanup(func() {
-		parsedYAMLCacheMu.Lock()
-		parsedYAMLCache = oldCache
-		parsedYAMLCacheMu.Unlock()
-	})
-
-	// Clear cache to ensure clean state.
-	parsedYAMLCacheMu.Lock()
-	parsedYAMLCache = make(map[string]*parsedYAMLCacheEntry)
-	parsedYAMLCacheMu.Unlock()
+	// Clear cache before and after test for isolation.
+	clearParsedYAMLCache()
+	t.Cleanup(clearParsedYAMLCache)
 
 	// First parse WITHOUT provenance tracking.
 	configNoProvenance := &schema.AtmosConfiguration{
@@ -1534,20 +1376,9 @@ func TestUnmarshalYAMLFromFileWithPositions_NilConfigReturnsError(t *testing.T) 
 // TestHandleCacheMiss_NilConfigSafe tests that handleCacheMiss handles nil atmosConfig safely.
 // This tests the nil checks we added to prevent panics.
 func TestHandleCacheMiss_NilConfigSafe(t *testing.T) {
-	// Capture old cache state and restore after test.
-	parsedYAMLCacheMu.Lock()
-	oldCache := parsedYAMLCache
-	parsedYAMLCacheMu.Unlock()
-	t.Cleanup(func() {
-		parsedYAMLCacheMu.Lock()
-		parsedYAMLCache = oldCache
-		parsedYAMLCacheMu.Unlock()
-	})
-
-	// Clear cache to ensure clean state.
-	parsedYAMLCacheMu.Lock()
-	parsedYAMLCache = make(map[string]*parsedYAMLCacheEntry)
-	parsedYAMLCacheMu.Unlock()
+	// Clear cache before and after test for isolation.
+	clearParsedYAMLCache()
+	t.Cleanup(clearParsedYAMLCache)
 
 	yamlContent := `name: test`
 
@@ -1568,19 +1399,13 @@ func TestUnmarshalYAMLFromFileWithPositions_CacheHitWithProvenance(t *testing.T)
 value: 123`
 	fileName := "test-cache-hit-provenance.yaml"
 
-	// Capture old cache state and restore after test.
-	// Note: Only capture values, not the struct containing the mutex.
-	parsedYAMLCacheMu.Lock()
-	oldCache := parsedYAMLCache
-	parsedYAMLCacheMu.Unlock()
+	// Save stats and restore after test.
 	parsedYAMLCacheStats.Lock()
 	oldHits := parsedYAMLCacheStats.hits
 	oldMisses := parsedYAMLCacheStats.misses
 	parsedYAMLCacheStats.Unlock()
 	t.Cleanup(func() {
-		parsedYAMLCacheMu.Lock()
-		parsedYAMLCache = oldCache
-		parsedYAMLCacheMu.Unlock()
+		clearParsedYAMLCache()
 		parsedYAMLCacheStats.Lock()
 		parsedYAMLCacheStats.hits = oldHits
 		parsedYAMLCacheStats.misses = oldMisses
@@ -1588,9 +1413,7 @@ value: 123`
 	})
 
 	// Clear cache to ensure clean state.
-	parsedYAMLCacheMu.Lock()
-	parsedYAMLCache = make(map[string]*parsedYAMLCacheEntry)
-	parsedYAMLCacheMu.Unlock()
+	clearParsedYAMLCache()
 
 	// Reset stats.
 	parsedYAMLCacheStats.Lock()

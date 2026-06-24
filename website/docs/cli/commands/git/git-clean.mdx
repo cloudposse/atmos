@@ -1,0 +1,83 @@
+---
+title: atmos git clean
+sidebar_label: clean
+sidebar_class_name: command
+id: clean
+description: Remove managed Git repository workdirs safely.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Remove workdirs for repositories configured under `git.repositories`. Clean only accepts configured repository names, verifies the target is a Git worktree whose `origin` matches the configured repository URI, and refuses dangerous filesystem targets such as roots, the current project, parent directories, symlinks, and invalid XDG cache roots. Clean workdirs do not require `--force`; dirty workdirs require `--force` before local changes are discarded.
+</Intro>
+
+<Screengrab title="atmos git clean --help" slug="atmos-git-clean--help" />
+
+## Usage
+
+```shell
+atmos git clean [name] [flags]
+```
+
+Clean a named managed repository:
+
+```shell
+atmos git clean deploy --dry-run
+atmos git clean deploy
+```
+
+When exactly one repository is configured, the name can be omitted:
+
+```shell
+atmos git clean --dry-run
+atmos git clean
+```
+
+Clean every configured repository workdir:
+
+```shell
+atmos git clean --all
+```
+
+## Safety
+
+`atmos git clean` treats `git.repositories.<name>.workdir` as a managed clone location, not as arbitrary deletion input. Before deleting, Atmos:
+
+- Resolves the configured or automatic XDG workdir.
+- Refuses filesystem roots, volume roots, the current project directory, and parent directories of the current project.
+- Refuses symlinks and non-directory targets.
+- Requires the target to be a Git worktree.
+- Requires `remote.origin.url` to match the configured repository `uri`.
+- For automatic XDG workdirs, rejects dangerous cache roots from `ATMOS_XDG_CACHE_HOME` or `XDG_CACHE_HOME`, including relative paths and project/root directories.
+- Requires `--force` when the workdir has uncommitted changes.
+
+Missing workdirs are treated as already clean.
+
+## Flags
+
+<dl>
+    <dt>`--all` <em>(optional)</em></dt>
+    <dd>
+        Clean every repository configured under `git.repositories`. Mutually exclusive with a positional repository name.
+        Environment variable: `ATMOS_GIT_CLEAN_ALL`
+    </dd>
+
+    <dt>`--force` / `-f` <em>(optional)</em></dt>
+    <dd>
+        Delete a dirty workdir after safety checks pass. Clean workdirs do not require `--force`.
+        Environment variable: `ATMOS_GIT_CLEAN_FORCE`
+    </dd>
+
+    <dt>`--dry-run` / `-n` <em>(optional)</em></dt>
+    <dd>
+        Report what would be deleted without deleting it.
+        Environment variable: `ATMOS_GIT_DRY_RUN`
+    </dd>
+</dl>
+
+## Related
+
+- [`atmos git clone`](/cli/commands/git/clone) — clone or reconcile managed repositories
+- [`atmos git status`](/cli/commands/git/status) — inspect managed repository status
+- [`atmos git list`](/cli/commands/git/list) — list configured repositories and their workdirs

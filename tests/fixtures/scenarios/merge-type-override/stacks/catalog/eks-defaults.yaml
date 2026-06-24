@@ -1,0 +1,37 @@
+# Base EKS defaults — defines lists that overlays may override with different types.
+components:
+  terraform:
+    eks-cluster:
+      vars:
+        enabled: true
+        name: eks
+
+        # List of maps — sandbox overrides this with {} (empty map).
+        allowed_accounts:
+          - tenant: core
+            stage: auto
+          - tenant: core
+            stage: network
+
+        # List of maps — sandbox overrides this with [] (empty list, same type - should work).
+        rbac_roles:
+          - role: admin
+            groups:
+              - system:masters
+          - role: observer
+            groups:
+              - idp:observer
+
+        # Map of maps with nested lists — deep merge target.
+        node_groups:
+          main:
+            instance_types:
+              - c6a.large
+            desired_size: 2
+            max_size: 3
+            min_size: 2
+            kubernetes_labels: {}
+            kubernetes_taints: []
+
+        tags:
+          Environment: base

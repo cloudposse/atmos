@@ -1,0 +1,44 @@
+---
+slug: browser-based-auth-aws-user
+title: "Browser-Based Authentication for AWS IAM Users"
+authors: [Benbentwo]
+tags: [feature]
+---
+
+Atmos now supports browser-based OAuth2 authentication as an automatic fallback for `aws/user` identities. When no static credentials or keychain entries are available, Atmos opens your browser for interactive sign-in using the same AWS console flow you already know.
+
+<!--truncate-->
+
+## What Changed
+
+The `aws/user` identity type gains a new third-tier authentication fallback. When YAML credentials and keychain credentials are both unavailable, Atmos automatically initiates an OAuth2 PKCE flow via the AWS sign-in service. This provides the same convenient web-based authentication that SSO users already enjoy, without requiring static access keys.
+
+The flow supports both interactive terminals (browser opens automatically with a spinner) and non-interactive environments (displays a URL for manual authentication).
+
+## How It Works
+
+No configuration is required. Browser authentication is enabled by default for all `aws/user` identities. When triggered, Atmos:
+
+1. Starts a local callback server on an ephemeral port
+2. Opens your browser to the AWS sign-in authorization endpoint
+3. Exchanges the authorization code for temporary credentials using PKCE
+4. Caches a refresh token for 12-hour session reuse
+
+Subsequent authentications within the 12-hour window reuse the cached refresh token, avoiding repeated browser prompts. Credentials refresh automatically every 15 minutes.
+
+```yaml
+# No changes needed - browser auth is enabled by default
+identities:
+  my-user:
+    kind: aws/user
+    # credentials:
+    #   webflow_enabled: false  # Set to false to disable browser auth
+```
+
+## Why This Matters
+
+Many teams are moving away from static IAM access keys for security reasons. Browser-based authentication eliminates the need to generate, store, and rotate long-lived credentials. Users authenticate with their existing AWS console credentials, and Atmos handles the rest.
+
+## Get Involved
+
+Have feedback on the browser authentication flow? Open an issue on [GitHub](https://github.com/cloudposse/atmos).

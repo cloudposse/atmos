@@ -31,6 +31,7 @@ func ProcessStackConfig(
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
 	packerComponentsBasePath string,
+	ansibleComponentsBasePath string,
 	stack string,
 	config map[string]any,
 	processStackDeps bool,
@@ -45,7 +46,8 @@ func ProcessStackConfig(
 	stackName := strings.TrimSuffix(
 		strings.TrimSuffix(
 			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
-			u.DefaultStackConfigFileExtension),
+			u.DefaultStackConfigFileExtension,
+		),
 		".yml",
 	)
 
@@ -65,8 +67,10 @@ func ProcessStackConfig(
 	globalTerraformSection := map[string]any{}
 	globalHelmfileSection := map[string]any{}
 	globalPackerSection := map[string]any{}
+	globalAnsibleSection := map[string]any{}
 	globalComponentsSection := map[string]any{}
 	globalAuthSection := map[string]any{}
+	globalSecretsSection := map[string]any{}
 
 	terraformVars := map[string]any{}
 	terraformSettings := map[string]any{}
@@ -76,22 +80,33 @@ func ProcessStackConfig(
 	terraformHooks := map[string]any{}
 	terraformGenerate := map[string]any{}
 	terraformAuth := map[string]any{}
+	terraformDependencies := map[string]any{}
 
 	helmfileVars := map[string]any{}
 	helmfileSettings := map[string]any{}
 	helmfileEnv := map[string]any{}
 	helmfileCommand := ""
 	helmfileAuth := map[string]any{}
+	helmfileDependencies := map[string]any{}
 
 	packerVars := map[string]any{}
 	packerSettings := map[string]any{}
 	packerEnv := map[string]any{}
 	packerCommand := ""
 	packerAuth := map[string]any{}
+	packerDependencies := map[string]any{}
+
+	ansibleVars := map[string]any{}
+	ansibleSettings := map[string]any{}
+	ansibleEnv := map[string]any{}
+	ansibleCommand := ""
+	ansibleAuth := map[string]any{}
+	ansibleDependencies := map[string]any{}
 
 	terraformComponents := map[string]any{}
 	helmfileComponents := map[string]any{}
 	packerComponents := map[string]any{}
+	ansibleComponents := map[string]any{}
 	allComponents := map[string]any{}
 
 	// Global sections.
@@ -151,6 +166,13 @@ func ProcessStackConfig(
 		}
 	}
 
+	if i, ok := config[cfg.AnsibleSectionName]; ok {
+		globalAnsibleSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleSection, stackName)
+		}
+	}
+
 	if i, ok := config[cfg.ComponentsSectionName]; ok {
 		globalComponentsSection, ok = i.(map[string]any)
 		if !ok {
@@ -162,6 +184,15 @@ func ProcessStackConfig(
 		globalAuthSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
+		}
+	}
+
+	// Stack-level (global) secrets declarations/providers; merged into every component's
+	// secrets section so providers and declarations can be defined once per stack.
+	if i, ok := config[cfg.SecretsSectionName]; ok {
+		globalSecretsSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentSecrets, stackName)
 		}
 	}
 
@@ -310,6 +341,29 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Global dependencies section (Scope 1).
+	globalDependenciesSection := map[string]any{}
+
+	if i, ok := config[cfg.DependenciesSectionName]; ok {
+		globalDependenciesSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidDependenciesSection, stackName)
+		}
+	}
+
+	// Terraform dependencies section (Scope 2).
+	if i, ok := globalTerraformSection[cfg.DependenciesSectionName]; ok {
+		terraformDependencies, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformDependencies, stackName)
+		}
+	}
+
+	globalAndTerraformDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, terraformDependencies})
+	if err != nil {
+		return nil, err
+	}
+
 	// Helmfile section.
 	if i, ok := globalHelmfileSection[cfg.CommandSectionName]; ok {
 		helmfileCommand, ok = i.(string)
@@ -363,6 +417,19 @@ func ProcessStackConfig(
 	}
 
 	globalAndHelmfileAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, helmfileAuth})
+	if err != nil {
+		return nil, err
+	}
+
+	// Helmfile dependencies section (Scope 2).
+	if i, ok := globalHelmfileSection[cfg.DependenciesSectionName]; ok {
+		helmfileDependencies, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileDependencies, stackName)
+		}
+	}
+
+	globalAndHelmfileDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, helmfileDependencies})
 	if err != nil {
 		return nil, err
 	}
@@ -424,6 +491,89 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
+	// Packer dependencies section (Scope 2).
+	if i, ok := globalPackerSection[cfg.DependenciesSectionName]; ok {
+		packerDependencies, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerDependencies, stackName)
+		}
+	}
+
+	globalAndPackerDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, packerDependencies})
+	if err != nil {
+		return nil, err
+	}
+
+	// Ansible section.
+	if i, ok := globalAnsibleSection[cfg.CommandSectionName]; ok {
+		ansibleCommand, ok = i.(string)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleCommand, stackName)
+		}
+	}
+
+	if i, ok := globalAnsibleSection[cfg.VarsSectionName]; ok {
+		ansibleVars, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleVars, stackName)
+		}
+	}
+
+	globalAndAnsibleVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, ansibleVars})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalAnsibleSection[cfg.SettingsSectionName]; ok {
+		ansibleSettings, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleSettings, stackName)
+		}
+	}
+
+	globalAndAnsibleSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, ansibleSettings})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalAnsibleSection[cfg.EnvSectionName]; ok {
+		ansibleEnv, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleEnv, stackName)
+		}
+	}
+
+	// Include atmos.yaml global env as lowest priority in the merge chain.
+	globalAndAnsibleEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, ansibleEnv})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalAnsibleSection[cfg.AuthSectionName]; ok {
+		ansibleAuth, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleAuth, stackName)
+		}
+	}
+
+	globalAndAnsibleAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, ansibleAuth})
+	if err != nil {
+		return nil, err
+	}
+
+	// Ansible dependencies section (Scope 2).
+	if i, ok := globalAnsibleSection[cfg.DependenciesSectionName]; ok {
+		ansibleDependencies, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleDependencies, stackName)
+		}
+	}
+
+	globalAndAnsibleDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, ansibleDependencies})
+	if err != nil {
+		return nil, err
+	}
+
 	// Convert atmosConfig.Auth struct to map[string]any once before parallel processing.
 	// This prevents race conditions when processAuthConfig is called from multiple goroutines.
 	// Use JSON marshaling for deep conversion of nested structs to maps.
@@ -463,6 +613,8 @@ func ProcessStackConfig(
 					GlobalSettings:                  globalAndTerraformSettings,
 					GlobalEnv:                       globalAndTerraformEnv,
 					GlobalAuth:                      globalAndTerraformAuth,
+					GlobalSecrets:                   globalSecretsSection,
+					GlobalDependencies:              globalAndTerraformDependencies,
 					GlobalCommand:                   terraformCommand,
 					AtmosGlobalAuthMap:              atmosAuthConfig,
 					TerraformProviders:              terraformProviders,
@@ -509,6 +661,8 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndHelmfileSettings,
 					GlobalEnv:                globalAndHelmfileEnv,
 					GlobalAuth:               globalAndHelmfileAuth,
+					GlobalSecrets:            globalSecretsSection,
+					GlobalDependencies:       globalAndHelmfileDependencies,
 					GlobalCommand:            helmfileCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
@@ -546,6 +700,8 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndPackerSettings,
 					GlobalEnv:                globalAndPackerEnv,
 					GlobalAuth:               globalAndPackerAuth,
+					GlobalSecrets:            globalSecretsSection,
+					GlobalDependencies:       globalAndPackerDependencies,
 					GlobalCommand:            packerCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
@@ -560,9 +716,123 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Process all Ansible components in parallel.
+	if componentTypeFilter == "" || componentTypeFilter == cfg.AnsibleComponentType {
+		if allAnsibleComponents, ok := globalComponentsSection[cfg.AnsibleComponentType]; ok {
+			allAnsibleComponentsMap, ok := allAnsibleComponents.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentsAnsible, stackName)
+			}
+
+			// Build options for each Ansible component.
+			buildAnsibleOpts := func(component string, componentMap map[string]any) (*ComponentProcessorOptions, error) {
+				return &ComponentProcessorOptions{
+					ComponentType:            cfg.AnsibleComponentType,
+					Component:                component,
+					Stack:                    stack,
+					StackName:                stackName,
+					ComponentMap:             componentMap,
+					AllComponentsMap:         allAnsibleComponentsMap,
+					ComponentsBasePath:       ansibleComponentsBasePath,
+					CheckBaseComponentExists: checkBaseComponentExists,
+					GlobalVars:               globalAndAnsibleVars,
+					GlobalSettings:           globalAndAnsibleSettings,
+					GlobalEnv:                globalAndAnsibleEnv,
+					GlobalAuth:               globalAndAnsibleAuth,
+					GlobalSecrets:            globalSecretsSection,
+					GlobalDependencies:       globalAndAnsibleDependencies,
+					GlobalCommand:            ansibleCommand,
+					AtmosGlobalAuthMap:       atmosAuthConfig,
+					AtmosConfig:              atmosConfig,
+				}, nil
+			}
+
+			var err error
+			ansibleComponents, err = processComponentsInParallel(atmosConfig, allAnsibleComponentsMap, buildAnsibleOpts)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	allComponents[cfg.TerraformComponentType] = terraformComponents
 	allComponents[cfg.HelmfileComponentType] = helmfileComponents
 	allComponents[cfg.PackerComponentType] = packerComponents
+	allComponents[cfg.AnsibleComponentType] = ansibleComponents
+
+	// Include custom component types (non-terraform, non-helmfile, non-packer).
+	// Custom components don't need the same processing as built-in types - they just
+	// pass through with global vars/settings merged. This enables custom commands to
+	// access component configuration via {{ .Component.* }} templates.
+	builtInTypes := map[string]bool{
+		cfg.TerraformComponentType: true,
+		cfg.HelmfileComponentType:  true,
+		cfg.PackerComponentType:    true,
+	}
+	for componentType, components := range globalComponentsSection {
+		if builtInTypes[componentType] {
+			continue // Already processed above.
+		}
+		// Skip if filter is set and doesn't match this custom type.
+		if componentTypeFilter != "" && componentTypeFilter != componentType {
+			continue
+		}
+		componentsMap, ok := components.(map[string]any)
+		if !ok {
+			continue
+		}
+		// For each custom component, merge global vars/settings into component section.
+		processedComponents := make(map[string]any)
+		for componentName, componentConfig := range componentsMap {
+			componentMap, ok := componentConfig.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("%w: custom component '%s' in type '%s' must be a map, got %T in stack '%s'",
+					errUtils.ErrInvalidComponentMapType, componentName, componentType, componentConfig, stackName)
+			}
+			// Merge global vars into component vars.
+			componentVars := map[string]any{}
+			for k, v := range globalVarsSection {
+				componentVars[k] = v
+			}
+			if vars, ok := componentMap[cfg.VarsSectionName].(map[string]any); ok {
+				for k, v := range vars {
+					componentVars[k] = v
+				}
+			}
+			componentMap[cfg.VarsSectionName] = componentVars
+			// Merge global settings into component settings.
+			componentSettings := map[string]any{}
+			for k, v := range globalSettingsSection {
+				componentSettings[k] = v
+			}
+			if settings, ok := componentMap[cfg.SettingsSectionName].(map[string]any); ok {
+				for k, v := range settings {
+					componentSettings[k] = v
+				}
+			}
+			if len(componentSettings) > 0 {
+				componentMap[cfg.SettingsSectionName] = componentSettings
+			}
+			// Merge global env into component env.
+			componentEnv := map[string]any{}
+			for k, v := range globalEnvSection {
+				componentEnv[k] = v
+			}
+			if envMap, ok := componentMap[cfg.EnvSectionName].(map[string]any); ok {
+				for k, v := range envMap {
+					componentEnv[k] = v
+				}
+			}
+			if len(componentEnv) > 0 {
+				componentMap[cfg.EnvSectionName] = componentEnv
+			}
+			// Add metadata fields expected by the template system.
+			componentMap["component"] = componentName
+			componentMap[cfg.ComponentTypeSectionName] = componentType
+			processedComponents[componentName] = componentMap
+		}
+		allComponents[componentType] = processedComponents
+	}
 
 	result := map[string]any{
 		cfg.ComponentsSectionName: allComponents,

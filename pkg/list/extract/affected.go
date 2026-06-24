@@ -66,6 +66,8 @@ func affectedToMap(a *schema.Affected, isDependent bool, depth int) map[string]a
 		"locked":           locked,
 		"status":           status,
 		"status_text":      statusText,
+		"deleted":          a.Deleted,
+		"deletion_type":    a.DeletionType,
 	}
 
 	return item

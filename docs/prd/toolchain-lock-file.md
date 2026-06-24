@@ -505,7 +505,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Atmos
         run: |
@@ -679,6 +679,6 @@ toolchain:
 
 - [Go Modules and go.sum](https://go.dev/ref/mod#go-sum-files)
 - [Terraform Lock Files](https://developer.hashicorp.com/terraform/language/files/dependency-lock)
-- [NPM package-lock.json](https://docs.npmjs.com/cli/v10/configuring-npm/package-lock-json)
+- [NPM package-lock.json](https://docs.npmjs.com/cli/v10/configuring-npm/package-lock-json/)
 - [Cargo.lock](https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html)
 - [ASDF .tool-versions](https://asdf-vm.com/manage/configuration.html#tool-versions)

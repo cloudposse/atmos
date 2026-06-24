@@ -281,6 +281,9 @@ tests:
       stdout:
         - "Info: This is a basic message"
         - "Verbose: Additional details enabled"
+      diff:
+        # Ignore platform-specific quote escaping in debug output (Unix uses \" vs Windows uses /")
+        - 'DEBU  Executing command="echo.*"'
 
   - name: deploy component help shows stack flag
     enabled: true

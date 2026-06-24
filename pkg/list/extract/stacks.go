@@ -102,7 +102,7 @@ func findVarsFromComponents(stackMap map[string]any) map[string]any {
 }
 
 // getComponentTypes returns all component types to check.
-// Includes built-in types (terraform, helmfile, packer) plus any
+// Includes built-in types (terraform, helmfile, packer, ansible) plus any
 // additional types registered in the component registry.
 func getComponentTypes() []string {
 	defer perf.Track(nil, "extract.getComponentTypes")()
@@ -113,6 +113,7 @@ func getComponentTypes() []string {
 		config.TerraformComponentType: {},
 		config.HelmfileComponentType:  {},
 		config.PackerComponentType:    {},
+		config.AnsibleComponentType:   {},
 	}
 
 	// Add any additional types from the component registry.

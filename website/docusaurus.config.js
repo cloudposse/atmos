@@ -47,6 +47,10 @@ const config = {
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
                     {
+                        from: '/brandkit',
+                        to: '/media-kit'
+                    },
+                    {
                         from: '/blog',
                         to: '/changelog'
                     },
@@ -63,10 +67,23 @@ const config = {
                     // Redirects for integrations pages moved to cli/configuration
                     {from: '/integrations/atlantis', to: '/cli/configuration/integrations/atlantis'},
                     {from: '/integrations/integrations', to: '/cli/configuration/integrations'},
+                    // Legacy GitHub Actions redirected to native CI (deprecated)
+                    {from: '/integrations/github-actions', to: '/ci'},
+                    {from: '/integrations/github-actions/affected-stacks', to: '/ci'},
+                    {from: '/integrations/github-actions/atmos-terraform-plan', to: '/ci'},
+                    {from: '/integrations/github-actions/atmos-terraform-apply', to: '/ci'},
+                    {from: '/integrations/github-actions/atmos-terraform-drift-detection', to: '/ci'},
+                    {from: '/integrations/github-actions/atmos-terraform-drift-remediation', to: '/ci'},
                     {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'
                     },
+                    // Core concepts main pages moved to top level
+                    {from: '/core-concepts/stacks', to: '/stacks'},
+                    {from: '/core-concepts/components', to: '/components'},
+                    {from: '/core-concepts/components/terraform', to: '/components/terraform'},
+                    {from: '/core-concepts/components/library', to: '/components'},
+                    {from: '/core-concepts/custom-commands', to: '/cli/configuration/commands'},
                     // Backend documentation reorganization
                     {
                         from: '/core-concepts/components/terraform/state-backend',
@@ -75,6 +92,10 @@ const config = {
                     {
                         from: '/core-concepts/components/terraform/remote-state',
                         to: '/components/terraform/remote-state'
+                    },
+                    {
+                        from: '/components/terraform/backend-provisioning',
+                        to: '/stacks/components/provision/backend'
                     },
                     // Component Catalog redirects for reorganization
                     {
@@ -185,7 +206,7 @@ const config = {
                     },
                     {
                         from: '/core-concepts/stacks/dependencies',
-                        to: '/stacks/settings/depends_on'
+                        to: '/stacks/dependencies/components'
                     },
                     {
                         from: '/core-concepts/stacks/hooks',
@@ -200,14 +221,14 @@ const config = {
                         to: '/howto/catalogs'
                     },
                     // Redirects for workflow pages moved to top level
-//                     {
-//                         from: '/core-concepts/workflows',
-//                         to: '/workflows/workflows'
-//                     },
-//                     {
-//                         from: '/core-concepts/workflows/workflows',
-//                         to: '/workflows/workflows'
-//                     },
+                    {
+                        from: '/core-concepts/workflows',
+                        to: '/workflows'
+                    },
+                    {
+                        from: '/core-concepts/workflows/workflows',
+                        to: '/workflows'
+                    },
                     // Redirects for vendoring pages moved to top level
                     {
                         from: '/core-concepts/vendor',
@@ -227,11 +248,11 @@ const config = {
                     },
                     {
                         from: '/core-concepts/vendor/vendor-package',
-                        to: '/vendor/component-manifest/'
+                        to: '/vendor/component-manifest'
                     },
                     {
                         from: '/vendoring/component-manifest',
-                        to: '/vendor/component-manifest/'
+                        to: '/vendor/component-manifest'
                     },
                     {
                         from: '/core-concepts/vendor/vendor-lock',
@@ -279,6 +300,13 @@ const config = {
                         from: '/core-concepts/stacks/templates/datasources',
                         to: '/templates/datasources'
                     },
+                    // Additional core-concepts redirects for documentation links
+                    {from: '/core-concepts/components/helmfile', to: '/components/helmfile'},
+                    {from: '/core-concepts/stacks/naming', to: '/stacks/name'},
+                    {from: '/core-concepts/stacks/templates', to: '/templates'},
+                    {from: '/core-concepts/workflows/workflow-manifest', to: '/workflows'},
+                    {from: '/core-concepts/vendoring', to: '/vendor/'},
+                    {from: '/core-concepts/vendoring/vendor-manifest', to: '/vendor/vendor-config'},
                     // Redirects for directory renames: core-concepts → learn
                     {from: '/core-concepts/why-atmos', to: '/learn/why-atmos'},
                     {from: '/core-concepts/concepts-overview', to: '/learn/concepts-overview'},
@@ -299,15 +327,45 @@ const config = {
                     // Terraform generate command reorganization
                     {from: '/cli/commands/terraform/terraform-generate-backend', to: '/cli/commands/terraform/generate/backend'},
                     {from: '/cli/commands/terraform/terraform-generate-backends', to: '/cli/commands/terraform/generate/backends'},
-                    {from: '/cli/commands/terraform/terraform-generate-planfile', to: '/cli/commands/terraform/generate/planfile'},
                     {from: '/cli/commands/terraform/terraform-generate-varfile', to: '/cli/commands/terraform/generate/varfile'},
                     {from: '/cli/commands/terraform/terraform-generate-varfiles', to: '/cli/commands/terraform/generate/varfiles'},
                     // Legacy generate command paths (without terraform- prefix)
                     {from: '/cli/commands/terraform/generate-backend', to: '/cli/commands/terraform/generate/backend'},
                     {from: '/cli/commands/terraform/generate-backends', to: '/cli/commands/terraform/generate/backends'},
-                    {from: '/cli/commands/terraform/generate-planfile', to: '/cli/commands/terraform/generate/planfile'},
                     {from: '/cli/commands/terraform/generate-varfile', to: '/cli/commands/terraform/generate/varfile'},
                     {from: '/cli/commands/terraform/generate-varfiles', to: '/cli/commands/terraform/generate/varfiles'},
+                    // Broken URLs referenced by LLMs — screenshot-confirmed 404s
+                    {from: '/core-concepts/components/vendoring', to: '/vendor/'},
+                    {from: '/core-concepts/vendor/component-management', to: '/vendor/vendor-config'},
+                    {from: '/core-concepts/stacks/provisioning', to: '/stacks/components/provision/backend'},
+                    {from: '/reference/schemas', to: '/cli/configuration/schemas'},
+                    // Projects section moved to /projects/ and /cli/configuration/
+                    {from: '/core-concepts/projects', to: '/projects/layout'},
+                    {from: '/core-concepts/projects/configuration', to: '/cli/configuration-overview'},
+                    {from: '/core-concepts/projects/configuration/terraform', to: '/cli/configuration/components/terraform'},
+                    {from: '/core-concepts/projects/configuration/helmfile', to: '/cli/configuration/components/helmfile'},
+                    {from: '/core-concepts/projects/configuration/packer', to: '/cli/configuration/components/packer'},
+                    {from: '/core-concepts/projects/configuration/stores', to: '/cli/configuration/stores'},
+                    {from: '/core-concepts/projects/setup-editor', to: '/projects/setup-editor'},
+                    // Additional core-concepts/stacks sub-pages
+                    {from: '/core-concepts/stacks/define-components', to: '/stacks/components'},
+                    {from: '/core-concepts/stacks/settings', to: '/stacks/settings'},
+                    {from: '/core-concepts/stacks/components', to: '/stacks/components'},
+                    {from: '/core-concepts/stacks/backend', to: '/stacks/backend'},
+                    {from: '/core-concepts/stacks/vars', to: '/stacks/vars'},
+                    {from: '/core-concepts/stacks/env', to: '/stacks/env'},
+                    {from: '/core-concepts/stacks/providers', to: '/stacks/providers'},
+                    // Share data / remote state
+                    {from: '/core-concepts/share-data', to: '/stacks/share-data'},
+                    {from: '/core-concepts/share-data/remote-state', to: '/stacks/remote-state'},
+                    // Additional vendor sub-pages
+                    {from: '/core-concepts/vendor/component-manifest', to: '/vendor/component-manifest'},
+                    {from: '/core-concepts/vendor/vendor-manifest', to: '/vendor/vendor-config'},
+                    // Describe pages
+                    {from: '/core-concepts/describe/component', to: '/cli/commands/describe/usage'},
+                    // Additional component sub-pages
+                    {from: '/core-concepts/components/packer', to: '/components/packer'},
+                    {from: '/core-concepts/components/ansible', to: '/components/ansible'},
                 ],
             },
         ],
@@ -357,6 +415,7 @@ const config = {
             {
                 generateLlmsTxt: true,
                 generateLlmsFullTxt: true,
+                generatePerPageMarkdown: true,
                 llmsTxtFilename: 'llms.txt',
                 llmsFullTxtFilename: 'llms-full.txt',
                 docsDir: 'docs',
@@ -386,6 +445,20 @@ const config = {
                 githubPath: 'examples',
             },
         ],
+        [
+            path.resolve(__dirname, 'plugins', 'file-browser'),
+            {
+                id: 'gists',
+                sourceDir: '../gists',
+                routeBasePath: '/gists',
+                title: 'Gists',
+                description: 'Gists are examples that demonstrate a concept, but are not actively maintained and may not work in your environment or current versions of Atmos without adaptations.',
+                githubRepo: 'cloudposse/atmos',
+                githubBranch: 'main',
+                githubPath: 'gists',
+                disclaimer: 'Gists are examples that demonstrate a concept, but are not actively maintained and may not work in your environment or current versions of Atmos without adaptations.',
+            },
+        ],
     ],
 
     presets: [
@@ -396,6 +469,26 @@ const config = {
                 docs: {
                     routeBasePath: '/',
                     sidebarPath: require.resolve('./sidebars.js'),
+                    async sidebarItemsGenerator({defaultSidebarItemsGenerator, ...args}) {
+                        const items = await defaultSidebarItemsGenerator(args);
+                        // Sort all sidebar items alphabetically by label,
+                        // treating categories and docs equally so they interleave correctly.
+                        const sortItems = (sidebarItems) => {
+                            return sidebarItems
+                                .map((item) => {
+                                    if (item.type === 'category' && item.items) {
+                                        return {...item, items: sortItems(item.items)};
+                                    }
+                                    return item;
+                                })
+                                .sort((a, b) => {
+                                    const labelA = (a.label || '').toLowerCase();
+                                    const labelB = (b.label || '').toLowerCase();
+                                    return labelA.localeCompare(labelB);
+                                });
+                        };
+                        return sortItems(items);
+                    },
                     editUrl: ({versionDocsDirPath, docPath, locale}) => {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
@@ -446,12 +539,9 @@ const config = {
                     height: 36
                 },
                 items: [
-                    {
-                        label: `Latest Release`,
-                        href: `https://github.com/cloudposse/atmos/releases/latest`,
-                        position: 'left',
-                        className: 'latest-release-link'  // Add a class to identify this link
-                    },
+                    // Secondary links (Latest Release, Community, Roadmap)
+                    // moved to the site-wide footer to declutter the navbar.
+                    // See src/theme/Footer/.
                     {
                         type: 'doc',
                         docId: 'intro/index',
@@ -473,21 +563,6 @@ const config = {
                         position: 'left',
                         label: 'Examples'
                     },
-                    {
-                        label: 'Community',
-                        position: 'left',
-                        to: '/community'
-                    },
-                    {
-                        label: 'Changelog',
-                        position: 'left',
-                        to: '/changelog'
-                    },
-                    {
-                        label: 'Roadmap',
-                        position: 'left',
-                        to: '/roadmap'
-                    },
                     // GitHub stars badge
                     {
                         type: 'custom-github-stars',
@@ -505,8 +580,13 @@ const config = {
                         'aria-label': 'GitHub repository',
                     },
                     {
-                        to: 'https://cloudposse.com/services/support/',
-                        label: 'Get Help',
+                        label: 'Changelog',
+                        position: 'right',
+                        to: '/changelog'
+                    },
+                    {
+                        to: '/pro',
+                        label: 'Pro',
                         position: 'right',
                         className: 'button button--primary navbar-cta-button'
                     }
@@ -541,14 +621,6 @@ const config = {
                         dark: 'rgb(50, 50, 50)'
                     }
                 }
-            },
-            announcementBar: {
-                id: 'refarch-announcement',
-                content:
-                  'Try Cloud Posse\'s <a href="https://docs.cloudposse.com">Reference Architecture for AWS, Datadog & GitHub Actions</a> using Atmos',
-                backgroundColor: 'var(--announcement-bar-background)',
-                textColor: 'var(--announcement-bar-text-color)',
-                isCloseable: true,
             },
             colorMode: {
                 // "light" | "dark"

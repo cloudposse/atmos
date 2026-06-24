@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -16,6 +16,9 @@ const (
 	TaskTypeShell = "shell"
 	// TaskTypeAtmos is the task type for atmos commands.
 	TaskTypeAtmos = "atmos"
+	// TaskTypeExec is the task type for commands that replace the Atmos
+	// process entirely (shell exec semantics). Must be the final step.
+	TaskTypeExec = "exec"
 )
 
 // Sentinel errors for task validation.
@@ -30,11 +33,11 @@ var (
 // This type unifies workflow steps and custom command steps,
 // supporting both simple string syntax and structured syntax.
 type Task struct {
-	// Name is an optional identifier for the task.
+	// Core fields.
 	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 	// Command is the command to execute.
-	Command string `yaml:"command" json:"command" mapstructure:"command"`
-	// Type specifies the command type: TaskTypeShell or TaskTypeAtmos. Defaults to TaskTypeShell.
+	Command string `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
+	// Type specifies the command type: TaskTypeShell, TaskTypeAtmos, or TaskTypeExec. Defaults to TaskTypeShell.
 	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 	// Timeout specifies the maximum duration for the task. Zero means no timeout.
 	Timeout time.Duration `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
@@ -46,6 +49,95 @@ type Task struct {
 	Retry *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 	// Identity specifies the authentication identity to use.
 	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
+	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
+	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
+	Tty bool `yaml:"tty,omitempty" json:"tty,omitempty" mapstructure:"tty"`
+
+	// Interactive step fields.
+	Prompt      string   `yaml:"prompt,omitempty" json:"prompt,omitempty" mapstructure:"prompt"`                // Prompt text for interactive types.
+	Options     []string `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`             // Options for choose/filter.
+	Default     string   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`             // Default value.
+	Placeholder string   `yaml:"placeholder,omitempty" json:"placeholder,omitempty" mapstructure:"placeholder"` // Input placeholder.
+	Password    bool     `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`          // Mask input.
+	Multiple    bool     `yaml:"multiple,omitempty" json:"multiple,omitempty" mapstructure:"multiple"`          // Allow multiple selection.
+	Limit       int      `yaml:"limit,omitempty" json:"limit,omitempty" mapstructure:"limit"`                   // Selection limit.
+
+	// Output/UI step fields.
+	Content   string           `yaml:"content,omitempty" json:"content,omitempty" mapstructure:"content"`       // Content for output types (supports templates).
+	Title     string           `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`             // Title for spin/pager.
+	Data      []map[string]any `yaml:"data,omitempty" json:"data,omitempty" mapstructure:"data"`                // Data for table type.
+	Columns   []string         `yaml:"columns,omitempty" json:"columns,omitempty" mapstructure:"columns"`       // Columns for table.
+	Separator string           `yaml:"separator,omitempty" json:"separator,omitempty" mapstructure:"separator"` // Separator for join type (default: newline).
+
+	// File picker fields.
+	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker.
+	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
+
+	// Display configuration.
+	Output   string          `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
+	Height   int             `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
+	Viewport *ViewportConfig `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Viewport settings for output mode.
+	Count    int             `yaml:"count,omitempty" json:"count,omitempty" mapstructure:"count"`          // Count for linebreak type.
+
+	// Style step fields (like gum style).
+	Foreground       string `yaml:"foreground,omitempty" json:"foreground,omitempty" mapstructure:"foreground"`                      // Foreground color.
+	Background       string `yaml:"background,omitempty" json:"background,omitempty" mapstructure:"background"`                      // Background color.
+	Border           string `yaml:"border,omitempty" json:"border,omitempty" mapstructure:"border"`                                  // Border style: none, hidden, normal, rounded, thick, double.
+	BorderForeground string `yaml:"border_foreground,omitempty" json:"border_foreground,omitempty" mapstructure:"border_foreground"` // Border foreground color.
+	BorderBackground string `yaml:"border_background,omitempty" json:"border_background,omitempty" mapstructure:"border_background"` // Border background color.
+	Padding          string `yaml:"padding,omitempty" json:"padding,omitempty" mapstructure:"padding"`                               // Padding: "1" or "1 2" or "1 2 1 2" (top, right, bottom, left).
+	Margin           string `yaml:"margin,omitempty" json:"margin,omitempty" mapstructure:"margin"`                                  // Margin: "1" or "1 2" or "1 2 1 2" (top, right, bottom, left).
+	Width            int    `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`                                     // Fixed width.
+	Align            string `yaml:"align,omitempty" json:"align,omitempty" mapstructure:"align"`                                     // Text alignment: left, center, right.
+	Bold             bool   `yaml:"bold,omitempty" json:"bold,omitempty" mapstructure:"bold"`                                        // Bold text.
+	Italic           bool   `yaml:"italic,omitempty" json:"italic,omitempty" mapstructure:"italic"`                                  // Italic text.
+	Underline        bool   `yaml:"underline,omitempty" json:"underline,omitempty" mapstructure:"underline"`                         // Underline text.
+	Strikethrough    bool   `yaml:"strikethrough,omitempty" json:"strikethrough,omitempty" mapstructure:"strikethrough"`             // Strikethrough text.
+	Faint            bool   `yaml:"faint,omitempty" json:"faint,omitempty" mapstructure:"faint"`                                     // Faint/dim text.
+	Markdown         bool   `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`                            // Render content as markdown.
+
+	// Log step fields.
+	Level  string            `yaml:"level,omitempty" json:"level,omitempty" mapstructure:"level"`    // Log level: trace, debug, info, warn, error.
+	Fields map[string]string `yaml:"fields,omitempty" json:"fields,omitempty" mapstructure:"fields"` // Structured log fields (key-value pairs).
+
+	// Environment variables (supports templates).
+	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+
+	// Env step type fields.
+	Vars map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"` // Variables to set for env step type.
+
+	// Exit step type fields.
+	Code int `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"` // Exit code for exit step type.
+
+	// Container step fields.
+	Action            string                `yaml:"action,omitempty" json:"action,omitempty" mapstructure:"action"` // build, push, run, inspect.
+	Build             *ContainerBuildStep   `yaml:"build,omitempty" json:"build,omitempty" mapstructure:"build"`
+	Push              *ContainerPushStep    `yaml:"push,omitempty" json:"push,omitempty" mapstructure:"push"`
+	Run               *ContainerRunStep     `yaml:"run,omitempty" json:"run,omitempty" mapstructure:"run"`
+	Inspect           *ContainerInspectStep `yaml:"inspect,omitempty" json:"inspect,omitempty" mapstructure:"inspect"`
+	RuntimeAutoStart  bool                  `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	Image             string                `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`                                           // Container image to run.
+	Shell             string                `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                                           // Shell used to execute command in container.
+	Provider          string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`                                  // docker, podman, or empty for auto-detect.
+	Pull              string                `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`                                              // missing, always, never.
+	Workspace         string                `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`                               // Container workspace path.
+	WorkspaceReadOnly bool                  `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"` // Mount workspace read-only.
+	Cleanup           string                `yaml:"cleanup,omitempty" json:"cleanup,omitempty" mapstructure:"cleanup"`                                     // always, on_success, never.
+	User              string                `yaml:"user,omitempty" json:"user,omitempty" mapstructure:"user"`                                              // Container user.
+	RunArgs           []string              `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`                                  // Runtime-specific create args.
+	Mounts            []ContainerMount      `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`                                        // Extra container mounts.
+	Ports             []ContainerPort       `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`                                           // Port mappings.
+	Container         *WorkflowContainer    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`                               // Workflow container override or false to run on host.
+
+	// Outputs declares named outputs derived from the step result.
+	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
+
+	// Show configuration for this step (overrides workflow-level show settings).
+	Show *ShowConfig `yaml:"show,omitempty" json:"show,omitempty" mapstructure:"show"`
+
+	// DryRun is set by executors and is not read from user configuration.
+	DryRun bool `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // Tasks is a slice of Task that supports flexible YAML unmarshaling.
@@ -108,7 +200,14 @@ func (t *Tasks) UnmarshalYAML(value *yaml.Node) error {
 
 // ToWorkflowStep converts a Task to a WorkflowStep for backward compatibility.
 func (task *Task) ToWorkflowStep() WorkflowStep {
+	// Convert time.Duration to string for WorkflowStep.
+	var timeoutStr string
+	if task.Timeout > 0 {
+		timeoutStr = task.Timeout.String()
+	}
+
 	return WorkflowStep{
+		// Core fields.
 		Name:             task.Name,
 		Command:          task.Command,
 		Type:             task.Type,
@@ -116,12 +215,107 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		WorkingDirectory: task.WorkingDirectory,
 		Retry:            task.Retry,
 		Identity:         task.Identity,
+		Interactive:      task.Interactive,
+		Tty:              task.Tty,
+
+		// Interactive step fields.
+		Prompt:      task.Prompt,
+		Options:     task.Options,
+		Default:     task.Default,
+		Placeholder: task.Placeholder,
+		Password:    task.Password,
+		Multiple:    task.Multiple,
+		Limit:       task.Limit,
+
+		// Output/UI step fields.
+		Content:   task.Content,
+		Title:     task.Title,
+		Data:      task.Data,
+		Columns:   task.Columns,
+		Separator: task.Separator,
+
+		// File picker fields.
+		Path:       task.Path,
+		Extensions: task.Extensions,
+
+		// Display configuration.
+		Output:   task.Output,
+		Height:   task.Height,
+		Viewport: task.Viewport,
+		Timeout:  timeoutStr,
+		Count:    task.Count,
+
+		// Style step fields.
+		Foreground:       task.Foreground,
+		Background:       task.Background,
+		Border:           task.Border,
+		BorderForeground: task.BorderForeground,
+		BorderBackground: task.BorderBackground,
+		Padding:          task.Padding,
+		Margin:           task.Margin,
+		Width:            task.Width,
+		Align:            task.Align,
+		Bold:             task.Bold,
+		Italic:           task.Italic,
+		Underline:        task.Underline,
+		Strikethrough:    task.Strikethrough,
+		Faint:            task.Faint,
+		Markdown:         task.Markdown,
+
+		// Log step fields.
+		Level:  task.Level,
+		Fields: task.Fields,
+
+		// Environment variables.
+		Env: task.Env,
+
+		// Env step type fields.
+		Vars: task.Vars,
+
+		// Exit step type fields.
+		Code: task.Code,
+
+		// Container step fields.
+		Action:            task.Action,
+		Build:             task.Build,
+		Push:              task.Push,
+		Run:               task.Run,
+		Inspect:           task.Inspect,
+		RuntimeAutoStart:  task.RuntimeAutoStart,
+		Image:             task.Image,
+		Shell:             task.Shell,
+		Provider:          task.Provider,
+		Pull:              task.Pull,
+		Workspace:         task.Workspace,
+		WorkspaceReadOnly: task.WorkspaceReadOnly,
+		Cleanup:           task.Cleanup,
+		User:              task.User,
+		RunArgs:           task.RunArgs,
+		Mounts:            task.Mounts,
+		Ports:             task.Ports,
+		Container:         task.Container,
+
+		Outputs: task.Outputs,
+
+		// Show configuration.
+		Show: task.Show,
+
+		DryRun: task.DryRun,
 	}
 }
 
 // TaskFromWorkflowStep creates a Task from a WorkflowStep.
 func TaskFromWorkflowStep(step *WorkflowStep) Task {
+	// Parse timeout string to time.Duration.
+	var timeout time.Duration
+	if step.Timeout != "" {
+		if parsed, err := time.ParseDuration(step.Timeout); err == nil {
+			timeout = parsed
+		}
+	}
+
 	return Task{
+		// Core fields.
 		Name:             step.Name,
 		Command:          step.Command,
 		Type:             step.Type,
@@ -129,7 +323,92 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		WorkingDirectory: step.WorkingDirectory,
 		Retry:            step.Retry,
 		Identity:         step.Identity,
-		// Note: WorkflowStep doesn't have Timeout, so it remains zero.
+		Interactive:      step.Interactive,
+		Tty:              step.Tty,
+		Timeout:          timeout,
+
+		// Interactive step fields.
+		Prompt:      step.Prompt,
+		Options:     step.Options,
+		Default:     step.Default,
+		Placeholder: step.Placeholder,
+		Password:    step.Password,
+		Multiple:    step.Multiple,
+		Limit:       step.Limit,
+
+		// Output/UI step fields.
+		Content:   step.Content,
+		Title:     step.Title,
+		Data:      step.Data,
+		Columns:   step.Columns,
+		Separator: step.Separator,
+
+		// File picker fields.
+		Path:       step.Path,
+		Extensions: step.Extensions,
+
+		// Display configuration.
+		Output:   step.Output,
+		Height:   step.Height,
+		Viewport: step.Viewport,
+		Count:    step.Count,
+
+		// Style step fields.
+		Foreground:       step.Foreground,
+		Background:       step.Background,
+		Border:           step.Border,
+		BorderForeground: step.BorderForeground,
+		BorderBackground: step.BorderBackground,
+		Padding:          step.Padding,
+		Margin:           step.Margin,
+		Width:            step.Width,
+		Align:            step.Align,
+		Bold:             step.Bold,
+		Italic:           step.Italic,
+		Underline:        step.Underline,
+		Strikethrough:    step.Strikethrough,
+		Faint:            step.Faint,
+		Markdown:         step.Markdown,
+
+		// Log step fields.
+		Level:  step.Level,
+		Fields: step.Fields,
+
+		// Environment variables.
+		Env: step.Env,
+
+		// Env step type fields.
+		Vars: step.Vars,
+
+		// Exit step type fields.
+		Code: step.Code,
+
+		// Container step fields.
+		Action:            step.Action,
+		Build:             step.Build,
+		Push:              step.Push,
+		Run:               step.Run,
+		Inspect:           step.Inspect,
+		RuntimeAutoStart:  step.RuntimeAutoStart,
+		Image:             step.Image,
+		Shell:             step.Shell,
+		Provider:          step.Provider,
+		Pull:              step.Pull,
+		Workspace:         step.Workspace,
+		WorkspaceReadOnly: step.WorkspaceReadOnly,
+		Cleanup:           step.Cleanup,
+		User:              step.User,
+		RunArgs:           step.RunArgs,
+		Mounts:            step.Mounts,
+		Ports:             step.Ports,
+		Container:         step.Container,
+
+		Outputs: step.Outputs,
+
+		// Show configuration.
+		Show: step.Show,
+
+		DryRun: step.DryRun,
 	}
 }
 

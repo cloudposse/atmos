@@ -1,0 +1,60 @@
+---
+title: atmos ansible version
+sidebar_label: version
+sidebar_class_name: command
+id: version
+---
+
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to display the currently installed Ansible version and configuration information.
+</Intro>
+
+<Screengrab title="atmos ansible version --help" slug="atmos-ansible-version--help" />
+
+## Usage
+
+Execute the `ansible version` command like this:
+
+```shell
+atmos ansible version
+```
+
+This command runs `ansible --version` and displays:
+- Ansible version
+- Configuration file location
+- Configured module search path
+- Python version and location
+
+## Arguments
+
+This command takes no arguments.
+
+## Flags
+
+<dl>
+  <dt>`--help`</dt>
+  <dd>Display help for the command.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos ansible version
+```
+
+Output:
+
+```
+ansible [core 2.15.0]
+  config file = /etc/ansible/ansible.cfg
+  configured module search path = ['/home/user/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+  ansible python module location = /usr/lib/python3/dist-packages/ansible
+  ansible collection location = /home/user/.ansible/collections:/usr/share/ansible/collections
+  executable location = /usr/bin/ansible
+  python version = 3.11.2 (main, Mar 13 2023, 12:18:29) [GCC 12.2.0]
+  jinja version = 3.1.2
+  libyaml = True
+```

@@ -1,0 +1,36 @@
+---
+title: atmos ci
+sidebar_label: ci
+sidebar_class_name: command
+sidebar_position: 1
+id: ci
+description: CI/CD integration commands for GitHub Actions and other CI providers.
+---
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+The `atmos ci` command group provides tools for working with CI/CD systems. Use these commands to check CI status, manage check runs, and integrate with GitHub Actions.
+</Intro>
+
+<Experimental/>
+
+<ActionCard title="Configure CI Integration">
+    Learn how to configure CI/CD integration in your `atmos.yaml`, including setting up providers (like GitHub Actions), managing workflows, environment variables, and secrets for automated infrastructure pipelines.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci">CI Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Subcommands
+
+<DocCardList />
+
+## Related
+
+- [CI Configuration](/cli/configuration/ci) - Configure CI integration in `atmos.yaml`
+- [Profiles](/cli/configuration/profiles) - Configure CI-specific profiles
+- [Auth](/stacks/auth) - Configure OIDC authentication for CI

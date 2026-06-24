@@ -28,8 +28,11 @@ func NewContext(opts ...ContextOption) (Context, error) {
 	// Create masker
 	masker := newMasker(cfg)
 
-	// Register common secrets and patterns for automatic masking
+	// Register common secrets and patterns for automatic masking.
 	registerCommonSecrets(masker)
+
+	// Register custom patterns and literals from atmos.yaml config.
+	registerCustomMaskPatterns(masker, cfg)
 
 	// Create streams with masking
 	streams := newStreams(masker, cfg)
@@ -62,7 +65,13 @@ func (c *context) Write(stream Stream, content string) error {
 	case DataStream:
 		writer = c.streams.RawOutput() // Use raw since we already masked
 	case UIStream:
-		writer = c.streams.RawError() // Use raw since we already masked
+		// A scoped override (e.g. SuppressUI for a full-screen TUI) takes precedence
+		// over the live stderr stream, but only for UI output.
+		if override := uiWriterOverride(); override != nil {
+			writer = override
+		} else {
+			writer = c.streams.RawError() // Use raw since we already masked
+		}
 	default:
 		return fmt.Errorf("%w: %v", errUtils.ErrUnknownStream, stream)
 	}

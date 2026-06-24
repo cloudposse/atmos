@@ -1,7 +1,4 @@
 # Mock component for locals demo.
-#
-# This component outputs the variables it receives, allowing you to see
-# how locals are resolved and passed to components.
 
 variable "name" {
   type        = string
@@ -24,22 +21,30 @@ variable "tags" {
   default     = {}
 }
 
-output "name" {
-  description = "Application name"
-  value       = var.name
+variable "deploy_target" {
+  type        = string
+  description = "Deployment target (computed from conditional locals)"
+  default     = "stable"
 }
 
-output "environment" {
-  description = "Environment name"
-  value       = var.environment
+variable "managed_by" {
+  type        = string
+  description = "Tool that manages this resource"
+  default     = "atmos"
+}
+
+output "name" {
+  value = var.name
 }
 
 output "full_name" {
-  description = "Full application name"
-  value       = var.full_name
+  value = var.full_name
+}
+
+output "deploy_target" {
+  value = var.deploy_target
 }
 
 output "tags" {
-  description = "Resource tags"
-  value       = var.tags
+  value = var.tags
 }

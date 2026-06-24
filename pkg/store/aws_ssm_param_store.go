@@ -3,8 +3,10 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -22,8 +24,20 @@ type SSMStore struct {
 	awsConfig      *aws.Config
 	readRoleArn    *string
 	writeRoleArn   *string
+	endpoint       string
 	newSTSClient   func(cfg aws.Config) STSClient
 	newSSMClient   func(cfg aws.Config) SSMClient
+
+	// Identity-based authentication fields.
+	identityName string
+	authResolver AuthContextResolver
+	region       string
+	initOnce     sync.Once
+	initErr      error
+
+	// secret indicates this store is used as a secret backend; when true, writes use the
+	// SecureString (KMS-encrypted) parameter type and reads request decryption.
+	secret bool
 }
 
 type SSMStoreOptions struct {
@@ -32,15 +46,24 @@ type SSMStoreOptions struct {
 	StackDelimiter *string `mapstructure:"stack_delimiter"`
 	ReadRoleArn    *string `mapstructure:"read_role_arn"`
 	WriteRoleArn   *string `mapstructure:"write_role_arn"`
+	Endpoint       *string `mapstructure:"endpoint"`
+	EndpointURL    *string `mapstructure:"endpoint_url"`
 }
 
-// Ensure SSMStore implements the store.Store interface.
-var _ Store = (*SSMStore)(nil)
+// Ensure SSMStore implements the store.Store and related interfaces.
+var (
+	_ Store              = (*SSMStore)(nil)
+	_ IdentityAwareStore = (*SSMStore)(nil)
+	_ DeletableStore     = (*SSMStore)(nil)
+	_ StatusStore        = (*SSMStore)(nil)
+	_ SecretAwareStore   = (*SSMStore)(nil)
+)
 
 // SSMClient interface allows us to mock the AWS SSM client.
 type SSMClient interface {
 	PutParameter(ctx context.Context, params *ssm.PutParameterInput, optFns ...func(*ssm.Options)) (*ssm.PutParameterOutput, error)
 	GetParameter(ctx context.Context, params *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
+	DeleteParameter(ctx context.Context, params *ssm.DeleteParameterInput, optFns ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error)
 }
 
 // STSClient interface allows us to mock the AWS STS client.
@@ -49,25 +72,17 @@ type STSClient interface {
 }
 
 // NewSSMStore initializes a new SSMStore.
-func NewSSMStore(options SSMStoreOptions) (Store, error) {
-	ctx := context.TODO()
-
-	// Load AWS configuration (can be customized using options)
-	awsConfig, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, ErrLoadAWSConfig, err)
-	}
-
+// Client initialization is deferred until first use so callers can inject an auth resolver
+// after config load and before the first backend operation.
+func NewSSMStore(options SSMStoreOptions, identityName string) (Store, error) {
 	if options.Region == "" {
 		return nil, ErrRegionRequired
 	}
 
-	awsConfig.Region = options.Region
-
-	// Create the SSM client
-	client := ssm.NewFromConfig(awsConfig)
 	store := &SSMStore{
-		client: client,
+		region:       options.Region,
+		identityName: identityName,
+		endpoint:     firstNonEmptyStringPtr(options.Endpoint, options.EndpointURL),
 		newSTSClient: func(cfg aws.Config) STSClient {
 			return sts.NewFromConfig(cfg)
 		},
@@ -78,8 +93,6 @@ func NewSSMStore(options SSMStoreOptions) (Store, error) {
 
 	if options.Prefix != nil {
 		store.prefix = *options.Prefix
-	} else {
-		store.prefix = ""
 	}
 
 	if options.StackDelimiter != nil {
@@ -88,7 +101,6 @@ func NewSSMStore(options SSMStoreOptions) (Store, error) {
 		store.stackDelimiter = aws.String("-")
 	}
 
-	store.awsConfig = &awsConfig
 	if options.ReadRoleArn != nil {
 		store.readRoleArn = options.ReadRoleArn
 	}
@@ -97,6 +109,127 @@ func NewSSMStore(options SSMStoreOptions) (Store, error) {
 	}
 
 	return store, nil
+}
+
+// SetAuthContext implements IdentityAwareStore.
+// If identityName is non-empty, it overrides the store's identity. Otherwise, the existing identity is preserved.
+func (s *SSMStore) SetAuthContext(resolver AuthContextResolver, identityName string) {
+	s.authResolver = resolver
+	if identityName != "" && s.identityName != identityName {
+		s.identityName = identityName
+		s.client = nil
+		s.awsConfig = nil
+		s.initOnce = sync.Once{}
+		s.initErr = nil
+	}
+}
+
+// SetSecret implements SecretAwareStore. When true, writes use the SecureString type.
+func (s *SSMStore) SetSecret(secret bool) {
+	s.secret = secret
+}
+
+// paramType returns the SSM parameter type to use for writes based on the secret flag.
+func (s *SSMStore) paramType() types.ParameterType {
+	if s.secret {
+		return types.ParameterTypeSecureString
+	}
+	return types.ParameterTypeString
+}
+
+// initDefaultClient initializes the AWS client using the default credential chain.
+func (s *SSMStore) initDefaultClient() error {
+	ctx := context.TODO()
+	cfgOpts := []func(*config.LoadOptions) error{config.WithRegion(s.region)}
+	if s.endpoint != "" {
+		cfgOpts = append(cfgOpts, config.WithBaseEndpoint(s.endpoint))
+	}
+	awsConfig, err := config.LoadDefaultConfig(ctx, cfgOpts...)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrLoadAWSConfig, err)
+	}
+
+	s.awsConfig = &awsConfig
+	s.client = ssm.NewFromConfig(awsConfig)
+
+	return nil
+}
+
+// initIdentityClient initializes the AWS client using identity-based credentials.
+func (s *SSMStore) initIdentityClient() error {
+	if s.authResolver == nil {
+		return fmt.Errorf("%w: store requires identity %q but no auth resolver was injected", ErrIdentityNotConfigured, s.identityName)
+	}
+
+	ctx := context.TODO()
+	authContext, err := s.authResolver.ResolveAWSAuthContext(ctx, s.identityName)
+	if err != nil {
+		return fmt.Errorf("%w: failed to resolve AWS auth context for identity %q: %w", ErrAuthContextNotAvailable, s.identityName, err)
+	}
+
+	// Build AWS config options from the auth context credentials.
+	cfgOpts := s.buildAuthConfigOpts(authContext)
+
+	awsConfig, err := config.LoadDefaultConfig(ctx, cfgOpts...)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrLoadAWSConfig, err)
+	}
+
+	s.awsConfig = &awsConfig
+	s.client = ssm.NewFromConfig(awsConfig)
+
+	return nil
+}
+
+// buildAuthConfigOpts constructs AWS SDK config options from the auth context.
+func (s *SSMStore) buildAuthConfigOpts(authContext *AWSAuthConfig) []func(*config.LoadOptions) error {
+	var cfgOpts []func(*config.LoadOptions) error
+	if authContext.CredentialsFile != "" {
+		cfgOpts = append(cfgOpts, config.WithSharedCredentialsFiles([]string{authContext.CredentialsFile}))
+	}
+	if authContext.ConfigFile != "" {
+		cfgOpts = append(cfgOpts, config.WithSharedConfigFiles([]string{authContext.ConfigFile}))
+	}
+	if authContext.Profile != "" {
+		cfgOpts = append(cfgOpts, config.WithSharedConfigProfile(authContext.Profile))
+	}
+
+	// Use region from auth context if the store doesn't specify one.
+	region := s.region
+	if region == "" && authContext.Region != "" {
+		region = authContext.Region
+	}
+	if region != "" {
+		cfgOpts = append(cfgOpts, config.WithRegion(region))
+	}
+	endpoint := s.endpoint
+	if endpoint == "" {
+		endpoint = authContext.EndpointURL
+	}
+	if endpoint != "" {
+		cfgOpts = append(cfgOpts, config.WithBaseEndpoint(endpoint))
+	}
+
+	return cfgOpts
+}
+
+// ensureClient lazily initializes the AWS client if it hasn't been initialized yet.
+// For identity-based stores, this resolves credentials via the auth resolver.
+// The client-nil check is inside initOnce.Do to avoid a data race between the
+// unsynchronized read and the write that happens inside Do on another goroutine.
+func (s *SSMStore) ensureClient() error {
+	s.initOnce.Do(func() {
+		if s.client != nil {
+			return // Already initialized (eager init path).
+		}
+		if s.identityName == "" {
+			s.initErr = s.initDefaultClient()
+		} else {
+			s.initErr = s.initIdentityClient()
+		}
+	})
+
+	return s.initErr
 }
 
 func (s *SSMStore) getKey(stack string, component string, key string) (string, error) {
@@ -125,7 +258,7 @@ func (s *SSMStore) assumeRole(ctx context.Context, roleArn *string) (*aws.Config
 		RoleSessionName: aws.String("atmos-ssm-session"),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to assume role %s: %w", *roleArn, err)
+		return nil, fmt.Errorf("%w %s: %w", ErrAssumeRole, *roleArn, err)
 	}
 
 	cfg := s.awsConfig.Copy()
@@ -137,19 +270,18 @@ func (s *SSMStore) assumeRole(ctx context.Context, roleArn *string) (*aws.Config
 	return &cfg, nil
 }
 
-// Set stores a key-value pair in AWS SSM Parameter Store.
+// Set stores a key-value pair in AWS SSM Parameter Store. An empty stack and/or component is
+// permitted: scoped secret coordinates (stack/global scope) omit those path segments.
 func (s *SSMStore) Set(stack string, component string, key string, value any) error {
-	if stack == "" {
-		return ErrEmptyStack
-	}
-	if component == "" {
-		return ErrEmptyComponent
-	}
 	if key == "" {
 		return ErrEmptyKey
 	}
 	if value == nil {
 		return fmt.Errorf("%w for key %s in stack %s component %s", ErrNilValue, key, stack, component)
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return err
 	}
 
 	ctx := context.TODO()
@@ -170,7 +302,7 @@ func (s *SSMStore) Set(stack string, component string, key string, value any) er
 	// Assume write role if specified
 	cfg, err := s.assumeRole(ctx, s.writeRoleArn)
 	if err != nil {
-		return fmt.Errorf("failed to assume write role: %w", err)
+		return fmt.Errorf(errWrapFormat, ErrAssumeRole, err)
 	}
 
 	// Use the same client if no role was assumed
@@ -188,7 +320,7 @@ func (s *SSMStore) Set(stack string, component string, key string, value any) er
 	_, err = client.PutParameter(ctx, &ssm.PutParameterInput{
 		Name:      aws.String(paramName),
 		Value:     aws.String(strValue),
-		Type:      types.ParameterTypeString,
+		Type:      s.paramType(),
 		Overwrite: aws.Bool(true), // Allow overwriting existing keys
 	})
 	if err != nil {
@@ -199,15 +331,15 @@ func (s *SSMStore) Set(stack string, component string, key string, value any) er
 }
 
 // Get retrieves a value by key for an Atmos component in a stack from AWS SSM Parameter Store.
+// An empty stack and/or component is permitted: scoped secret coordinates (stack/global scope)
+// omit those path segments.
 func (s *SSMStore) Get(stack string, component string, key string) (any, error) {
-	if stack == "" {
-		return nil, ErrEmptyStack
-	}
-	if component == "" {
-		return nil, ErrEmptyComponent
-	}
 	if key == "" {
 		return nil, ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return nil, err
 	}
 
 	ctx := context.TODO()
@@ -221,7 +353,7 @@ func (s *SSMStore) Get(stack string, component string, key string) (any, error) 
 	// Assume the read role if specified
 	cfg, err := s.assumeRole(ctx, s.readRoleArn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to assume read role: %w", err)
+		return nil, fmt.Errorf(errWrapFormat, ErrAssumeRole, err)
 	}
 
 	// Use the same client if no role was assumed
@@ -237,7 +369,8 @@ func (s *SSMStore) Get(stack string, component string, key string) (any, error) 
 
 	// Get the parameter from SSM Parameter Store
 	output, err := client.GetParameter(ctx, &ssm.GetParameterInput{
-		Name: aws.String(paramName),
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFormatWithID, ErrGetParameter, paramName, err)
@@ -260,6 +393,10 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 		return nil, ErrEmptyKey
 	}
 
+	if err := s.ensureClient(); err != nil {
+		return nil, err
+	}
+
 	ctx := context.TODO()
 
 	// Use the key directly as the parameter name
@@ -278,7 +415,7 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 	// Assume the read role if specified
 	cfg, err := s.assumeRole(ctx, s.readRoleArn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to assume read role: %w", err)
+		return nil, fmt.Errorf(errWrapFormat, ErrAssumeRole, err)
 	}
 
 	// Use the same client if no role was assumed
@@ -294,7 +431,8 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 
 	// Get the parameter from SSM Parameter Store
 	output, err := client.GetParameter(ctx, &ssm.GetParameterInput{
-		Name: aws.String(paramName),
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFormatWithID, ErrGetParameter, paramName, err)
@@ -309,4 +447,101 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 	}
 
 	return result, nil
+}
+
+// Delete removes a parameter for an Atmos component in a stack from AWS SSM Parameter Store.
+// An empty stack and/or component is permitted: scoped secret coordinates (stack/global scope)
+// omit those path segments.
+func (s *SSMStore) Delete(stack string, component string, key string) error {
+	if key == "" {
+		return ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return err
+	}
+
+	ctx := context.TODO()
+
+	paramName, err := s.getKey(stack, component, key)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
+	}
+
+	cfg, err := s.assumeRole(ctx, s.writeRoleArn)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrAssumeRole, err)
+	}
+
+	client := s.client
+	if s.writeRoleArn != nil {
+		if s.newSSMClient != nil {
+			client = s.newSSMClient(*cfg)
+		} else {
+			client = ssm.NewFromConfig(*cfg)
+		}
+	}
+
+	_, err = client.DeleteParameter(ctx, &ssm.DeleteParameterInput{
+		Name: aws.String(paramName),
+	})
+	if err != nil {
+		return fmt.Errorf(errWrapFormatWithID, ErrDeleteParameter, paramName, err)
+	}
+
+	return nil
+}
+
+// Has reports whether a parameter exists for an Atmos component in a stack. It performs an
+// existence check WITHOUT decryption: GetParameter is called with WithDecryption=false, so it
+// returns whether the parameter exists without requiring kms:Decrypt and without retrieving the
+// plaintext value. A not-found error is treated as a non-existent (uninitialized) value.
+func (s *SSMStore) Has(stack string, component string, key string) (bool, error) {
+	if key == "" {
+		return false, ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return false, err
+	}
+
+	ctx := context.TODO()
+
+	paramName, err := s.getKey(stack, component, key)
+	if err != nil {
+		return false, fmt.Errorf(errWrapFormat, ErrGetKey, err)
+	}
+
+	// Assume the read role if specified (existence still needs a read identity, just not decrypt).
+	cfg, err := s.assumeRole(ctx, s.readRoleArn)
+	if err != nil {
+		return false, fmt.Errorf(errWrapFormat, ErrAssumeRole, err)
+	}
+
+	client := s.client
+	if s.readRoleArn != nil {
+		if s.newSSMClient != nil {
+			client = s.newSSMClient(*cfg)
+		} else {
+			client = ssm.NewFromConfig(*cfg)
+		}
+	}
+
+	_, err = client.GetParameter(ctx, &ssm.GetParameterInput{
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(false), // existence check only — never decrypt the value.
+	})
+	if err != nil {
+		if isParameterNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf(errWrapFormatWithID, ErrGetParameter, paramName, err)
+	}
+	return true, nil
+}
+
+// isParameterNotFound reports whether the error indicates a missing SSM parameter.
+func isParameterNotFound(err error) bool {
+	var notFound *types.ParameterNotFound
+	return errors.As(err, &notFound)
 }

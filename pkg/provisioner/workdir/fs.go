@@ -8,10 +8,20 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	cp "github.com/otiai10/copy"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+const (
+	// Terraform and OpenTofu both use .terraform as the default TF_DATA_DIR.
+	terraformDataDir           = ".terraform"
+	terraformWorkspaceStateDir = "terraform.tfstate.d"
+	// Suffix shared by the canonical .terraform.lock.hcl and the per-instance
+	// .<stack>-<component>.terraform.lock.hcl that Atmos manages.
+	terraformLockFileSuffix = ".terraform.lock.hcl"
 )
 
 // copyDir recursively copies a directory from src to dst.
@@ -72,6 +82,181 @@ func (f *DefaultFileSystem) CopyDir(src, dst string) error {
 	return copyDir(src, dst)
 }
 
+// SyncDir performs a true sync: copies changed files, adds new files, deletes removed files.
+// Returns true if any changes were made, false if directories were already in sync.
+// Skips runtime metadata/cache directories that should not be copied from source
+// components or deleted from workdirs.
+func (f *DefaultFileSystem) SyncDir(src, dst string, hasher Hasher) (bool, error) {
+	defer perf.Track(nil, "workdir.DefaultFileSystem.SyncDir")()
+
+	srcFiles, changed, err := syncSourceToDest(src, dst, hasher)
+	if err != nil {
+		return changed, err
+	}
+
+	deletedFiles, err := deleteRemovedFiles(dst, srcFiles)
+	return changed || deletedFiles, err
+}
+
+// syncSourceToDest copies new/changed files from src to dst.
+// Returns a map of relative paths for deletion detection, and whether any changes were made.
+// Skips runtime metadata/cache directories.
+func syncSourceToDest(src, dst string, hasher Hasher) (map[string]bool, bool, error) {
+	srcFiles := make(map[string]bool)
+	anyChanged := false
+
+	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() && shouldSkipSyncDir(relPath) {
+			return filepath.SkipDir
+		}
+
+		dstPath := filepath.Join(dst, relPath)
+
+		if d.IsDir() {
+			return os.MkdirAll(dstPath, DirPermissions)
+		}
+
+		// Lock files are managed by the providers-lock restore/persist lifecycle, not by
+		// the source→workdir sync: do not copy a source lock into the workdir (and, via the
+		// matching skip in deleteRemovedFiles, do not let the workdir's own lock be deleted).
+		if shouldSkipSyncFile(relPath) {
+			return nil
+		}
+
+		srcFiles[relPath] = true
+
+		if fileNeedsCopy(path, dstPath, hasher) {
+			anyChanged = true
+			return copyFile(path, dstPath)
+		}
+		return nil
+	})
+
+	return srcFiles, anyChanged, err
+}
+
+// fileNeedsCopy checks if a source file needs to be copied to destination.
+// Compares both content hash and file permissions to detect all types of changes.
+func fileNeedsCopy(srcPath, dstPath string, hasher Hasher) bool {
+	// Check file permissions first (cheaper than hashing).
+	srcInfo, err := os.Stat(srcPath)
+	if err != nil {
+		return true // Error reading source, try to copy.
+	}
+	dstInfo, err := os.Stat(dstPath)
+	if err != nil {
+		return true // Destination doesn't exist or can't be read.
+	}
+	// Check if permission bits differ (e.g., executable bit changed).
+	if srcInfo.Mode().Perm() != dstInfo.Mode().Perm() {
+		return true
+	}
+
+	// Check content hash.
+	srcHash, err := hasher.HashFile(srcPath)
+	if err != nil {
+		return true // Error reading source, try to copy.
+	}
+
+	dstHash, err := hasher.HashFile(dstPath)
+	if err != nil {
+		return true // Destination doesn't exist or can't be read.
+	}
+
+	return srcHash != dstHash
+}
+
+// deleteRemovedFiles removes files in dst that no longer exist in src.
+// Skips runtime metadata/cache directories.
+func deleteRemovedFiles(dst string, srcFiles map[string]bool) (bool, error) {
+	anyDeleted := false
+
+	err := filepath.WalkDir(dst, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(dst, path)
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() && shouldSkipSyncDir(relPath) {
+			return filepath.SkipDir
+		}
+
+		if d.IsDir() || srcFiles[relPath] {
+			return nil
+		}
+
+		// Preserve the workdir's managed lock files (canonical + per-instance) across
+		// re-sync; they are not part of the source tree and must not be deleted.
+		if shouldSkipSyncFile(relPath) {
+			return nil
+		}
+
+		anyDeleted = true
+		return os.Remove(path)
+	})
+
+	return anyDeleted, err
+}
+
+// shouldSkipSyncDir reports whether relPath is runtime state excluded from sync.
+func shouldSkipSyncDir(relPath string) bool {
+	switch filepath.Base(filepath.Clean(relPath)) {
+	case AtmosDir, terraformDataDir, terraformWorkspaceStateDir:
+		return true
+	default:
+		return false
+	}
+}
+
+// shouldSkipSyncFile reports whether relPath is a Terraform dependency lock file
+// (canonical .terraform.lock.hcl or a per-instance .<stack>-<component>.terraform.lock.hcl).
+// Lock files are owned by the providers-lock restore/persist lifecycle, so the source→workdir
+// sync must neither copy them in nor delete the workdir's own.
+func shouldSkipSyncFile(relPath string) bool {
+	return strings.HasSuffix(filepath.Base(relPath), terraformLockFileSuffix)
+}
+
+// copyFile copies a single file from src to dst.
+func copyFile(src, dst string) error {
+	// Ensure parent directory exists.
+	if err := os.MkdirAll(filepath.Dir(dst), DirPermissions); err != nil {
+		return err
+	}
+
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	srcInfo, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, srcInfo.Mode())
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	return err
+}
+
 // Walk walks the file tree rooted at root, calling fn for each file or directory.
 func (f *DefaultFileSystem) Walk(root string, fn fs.WalkDirFunc) error {
 	defer perf.Track(nil, "workdir.DefaultFileSystem.Walk")()
@@ -108,6 +293,13 @@ func (h *DefaultHasher) HashDir(path string) (string, error) {
 	err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		relPath, relErr := filepath.Rel(path, p)
+		if relErr != nil {
+			return relErr
+		}
+		if d.IsDir() && shouldSkipSyncDir(relPath) {
+			return filepath.SkipDir
 		}
 		if !d.IsDir() {
 			files = append(files, p)

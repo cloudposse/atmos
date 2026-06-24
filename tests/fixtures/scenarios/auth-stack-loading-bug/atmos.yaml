@@ -1,0 +1,44 @@
+# Test fixture for issue #2072: Loading unrelated stack files for auth defaults.
+# When running a command scoped to a specific stack (e.g., -s staging),
+# only that stack's auth defaults should be loaded, not all stacks.
+
+base_path: "./"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths: []
+  name_pattern: "{stage}"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+auth:
+  providers:
+    aws:
+      kind: aws/iam-identity-center
+      region: us-east-2
+      start_url: https://test.awsapps.com/start
+  identities:
+    organization:
+      kind: aws/permission-set
+      via:
+        provider: aws
+      principal:
+        account:
+          id: "111111111111"
+        name: developer
+    staging:
+      kind: aws/permission-set
+      via:
+        provider: aws
+      principal:
+        account:
+          id: "222222222222"
+        name: developer

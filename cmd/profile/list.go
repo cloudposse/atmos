@@ -80,8 +80,12 @@ func executeProfileListCommand(cmd *cobra.Command, args []string) error {
 		return buildProfileDiscoveryError(err, &atmosConfig)
 	}
 
+	// Determine which profiles are currently active so the table renderer
+	// can flag them with a status indicator.
+	activeProfiles := buildActiveProfileSet(cfg.GetActiveProfiles(&atmosConfig))
+
 	// Render output based on format.
-	output, err := renderProfileListOutput(&atmosConfig, profiles, format)
+	output, err := renderProfileListOutput(&atmosConfig, profiles, activeProfiles, format)
 	if err != nil {
 		return err
 	}
@@ -89,6 +93,18 @@ func executeProfileListCommand(cmd *cobra.Command, args []string) error {
 	fmt.Print(output)
 
 	return nil
+}
+
+// buildActiveProfileSet converts a slice of active profile names to a lookup set.
+func buildActiveProfileSet(names []string) map[string]bool {
+	if len(names) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(names))
+	for _, n := range names {
+		set[n] = true
+	}
+	return set
 }
 
 // renderProfilesJSON renders profiles as JSON.
@@ -144,7 +160,7 @@ func buildProfileDiscoveryError(err error, atmosConfig *schema.AtmosConfiguratio
 }
 
 // renderProfileListOutput renders profiles in the requested format.
-func renderProfileListOutput(atmosConfig *schema.AtmosConfiguration, profiles []profile.ProfileInfo, format string) (string, error) {
+func renderProfileListOutput(atmosConfig *schema.AtmosConfiguration, profiles []profile.ProfileInfo, activeProfiles map[string]bool, format string) (string, error) {
 	defer perf.Track(atmosConfig, "profile.renderProfileListOutput")()
 
 	var output string
@@ -156,7 +172,7 @@ func renderProfileListOutput(atmosConfig *schema.AtmosConfiguration, profiles []
 	case "yaml":
 		output, err = renderProfilesYAML(profiles)
 	case "table":
-		output, err = profileList.RenderTable(profiles)
+		output, err = profileList.RenderTable(profiles, activeProfiles)
 	default:
 		return "", errUtils.Build(errUtils.ErrInvalidFormat).
 			WithExplanationf("The format `%s` is not supported for this command", format).
