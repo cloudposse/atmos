@@ -369,7 +369,6 @@ module.exports = {
                             collapsed: false,
                             link: {type: 'doc', id: 'workflows/workflows/workflow/steps/index'},
                             items: [
-                                {type: 'doc', id: 'workflows/workflows/workflow/steps/step', label: 'step'},
                                 {
                                     type: 'category',
                                     label: 'type',
