@@ -153,7 +153,7 @@ func createEphemeralContainer(ctx context.Context, runtime Runtime, config *Ephe
 	// Only the missing-image case is recoverable by pulling. Any other create
 	// failure (bad mount, invalid arg, daemon error) must surface as-is — pulling
 	// then would mask the real cause behind a misleading registry/pull error.
-	if err == nil || config.PullPolicy != PullMissing || !isImageMissingError(err) {
+	if err == nil || config.PullPolicy != PullMissing || !IsImageMissingError(err) {
 		return containerID, err
 	}
 
@@ -169,10 +169,12 @@ func createEphemeralContainer(ctx context.Context, runtime Runtime, config *Ephe
 	return runtime.Create(ctx, createConfig)
 }
 
-// isImageMissingError reports whether a create error indicates the image is not
-// present locally (and is therefore recoverable by pulling), as opposed to an
-// unrelated create failure that pulling cannot fix.
-func isImageMissingError(err error) bool {
+// IsImageMissingError reports whether an error indicates the image is not
+// present locally (and is therefore recoverable by pulling or building), as
+// opposed to an unrelated failure (transport, auth, daemon) that neither fixes.
+func IsImageMissingError(err error) bool {
+	defer perf.Track(nil, "container.IsImageMissingError")()
+
 	if err == nil {
 		return false
 	}

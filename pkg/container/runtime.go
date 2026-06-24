@@ -26,6 +26,13 @@ type Runtime interface {
 
 	// Execution - IO streams configured via options structs
 	Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions) error
+	// Shell opens an interactive shell in a running container (a new shell
+	// process via `exec`). Used to "shell into" a container.
+	Shell(ctx context.Context, containerID string, opts *ShellOptions) error
+	// Attach connects local stdin/stdout/stderr to a running container's main
+	// process (PID 1) via `docker/podman attach`. Unlike Shell, it does not
+	// start a new process — it attaches to the existing one (Docker/Compose
+	// `attach` semantics).
 	Attach(ctx context.Context, containerID string, opts *AttachOptions) error
 
 	// Image operations
@@ -101,6 +108,7 @@ type PushResult struct {
 type CreateConfig struct {
 	Name            string
 	Image           string
+	Command         []string // Command/args to run; appended after the image. Ignored when OverrideCommand is set.
 	WorkspaceFolder string
 	Mounts          []Mount
 	Ports           []PortBinding
@@ -110,11 +118,34 @@ type CreateConfig struct {
 
 	// Runtime configuration
 	RunArgs         []string
-	OverrideCommand bool     // Whether to override default command with sleep infinity
-	Init            bool     // Whether to use init process
-	Privileged      bool     // Run in privileged mode
-	CapAdd          []string // Linux capabilities to add
-	SecurityOpt     []string // Security options
+	OverrideCommand bool           // Whether to override default command with sleep infinity
+	Init            bool           // Whether to use init process
+	Privileged      bool           // Run in privileged mode
+	CapAdd          []string       // Linux capabilities to add
+	SecurityOpt     []string       // Security options
+	Restart         *RestartPolicy // Restart policy (nil = runtime default)
+	HealthCheck     *HealthCheck   // Health check (nil = inherit image healthcheck)
+}
+
+// RestartPolicy is the resolved restart policy for a long-lived container.
+// It maps to the docker/podman `--restart` flag (`<policy>[:<max_retries>]`).
+type RestartPolicy struct {
+	Policy     string // no, always, on-failure, unless-stopped.
+	MaxRetries int    // on-failure only.
+}
+
+// HealthCheck is the resolved health check for a container. Cmd is the shell
+// command run by `--health-cmd`; when Disable is set the container is created
+// with `--no-healthcheck` and the remaining fields are ignored. Duration fields
+// are Go duration strings forwarded verbatim to the runtime.
+type HealthCheck struct {
+	Cmd           string // shell command for --health-cmd ("" when Disable).
+	Interval      string
+	Timeout       string
+	Retries       int
+	StartPeriod   string
+	StartInterval string
+	Disable       bool
 }
 
 // Mount represents a volume mount.
@@ -138,6 +169,7 @@ type Info struct {
 	Name    string
 	Image   string
 	Status  string // running, stopped, exited, etc.
+	Health  string // healthy, unhealthy, starting, or "" when no healthcheck.
 	Created time.Time
 	Ports   []PortBinding
 	Labels  map[string]string
@@ -159,11 +191,29 @@ type ExecOptions struct {
 	Stderr io.Writer
 }
 
-// AttachOptions represents options for attaching to containers.
-type AttachOptions struct {
+// ShellOptions represents options for opening an interactive shell in a
+// container (via `exec`). Shell/ShellArgs select the shell program and its
+// arguments; an empty Shell defaults to /bin/bash.
+type ShellOptions struct {
 	Shell     string
 	ShellArgs []string
 	User      string
+
+	// IO streams for input/output. If nil, defaults to os.Stdin and iolib.Data/UI.
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// AttachOptions represents options for attaching to a container's main process
+// (PID 1) via `docker/podman attach`.
+type AttachOptions struct {
+	// NoStdin attaches output only, leaving the container's stdin unconnected
+	// (maps to `--no-stdin`).
+	NoStdin bool
+	// DetachKeys overrides the key sequence that detaches without stopping the
+	// container (maps to `--detach-keys`; runtime default is ctrl-p,ctrl-q).
+	DetachKeys string
 
 	// IO streams for input/output. If nil, defaults to os.Stdin and iolib.Data/UI.
 	Stdin  io.Reader
