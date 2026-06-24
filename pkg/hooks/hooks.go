@@ -136,8 +136,10 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 	// dependencies up front and verify every hook's binary resolves before
 	// any terraform action runs. Failures here surface BEFORE terraform —
 	// users find out their hook is misconfigured before plan/apply takes
-	// time, not after.
-	if err := h.preflight(atmosConfig, info, skipPredicate); err != nil {
+	// time, not after. The outcome status is threaded through so a hook that
+	// won't run for this outcome (e.g. a success-only hook on the failure
+	// path) doesn't fail preflight and block the hooks that should run.
+	if err := h.preflight(atmosConfig, info, skipPredicate, outcome.Status); err != nil {
 		return err
 	}
 
@@ -479,7 +481,7 @@ func newSkipPredicate(raw string) func(string) bool {
 // per Hooks instance — subsequent lifecycle events reuse the cached PATH.
 // Failures use the error builder so the user sees a friendly message and
 // a hint pointing at dependencies.tools.
-func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, skipPredicate func(string) bool) error {
+func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, skipPredicate func(string) bool, status RunStatus) error {
 	defer perf.Track(atmosConfig, "hooks.Hooks.preflight")()
 
 	if h.preflightDone {
@@ -501,7 +503,7 @@ func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.C
 	if err := h.installDeps(atmosConfig, info, deps); err != nil {
 		return err
 	}
-	return h.verifyAllBinaries(skipPredicate)
+	return h.verifyAllBinaries(skipPredicate, status)
 }
 
 func (h *Hooks) hasUnskippedHooks(skipPredicate func(string) bool) bool {
@@ -578,44 +580,58 @@ func (h *Hooks) installDeps(atmosConfig *schema.AtmosConfiguration, info *schema
 
 // verifyAllBinaries checks every hook's command resolves on the
 // toolchain-augmented PATH so failures surface before terraform runs.
-// Store-kind hooks have no Command and are skipped naturally.
-func (h *Hooks) verifyAllBinaries(skipPredicate func(string) bool) error {
+// Store-kind hooks have no Command and are skipped naturally. Hooks that
+// won't run for the current outcome status (per their `when`) are skipped so
+// an unrelated hook's misconfiguration cannot block the hooks that do run
+// (e.g. a success-only hook with a missing binary must not fail the failure path).
+func (h *Hooks) verifyAllBinaries(skipPredicate func(string) bool, status RunStatus) error {
 	for name := range h.items {
 		if skipPredicate != nil && skipPredicate(name) {
 			continue
 		}
 		hook := h.items[name]
-		if isDeprecatedCIKind(hook.Kind) {
+		if !hook.RunsOnStatus(status) {
 			continue
 		}
-		kind, ok := GetKind(hook.Kind)
-		if !ok {
-			continue
+		if err := h.verifyHookBinary(name, &hook); err != nil {
+			return err
 		}
-		// Step-kind hooks have no Command to resolve on PATH; instead verify
-		// the named step type is registered so a typo fails before terraform
-		// runs rather than mid-lifecycle.
-		if hook.Kind == stepKindName {
-			if err := verifyStepHookType(name, hook.Type); err != nil {
-				return err
-			}
-			continue
-		}
-		resolved := kind.ResolveDefaults(&hook)
-		if resolved.Command == "" {
-			continue
-		}
-		if err := verifyCommandAvailable(resolved.Command, h.toolchainPATH); err != nil {
-			return errUtils.Build(errUtils.ErrCommandNotFound).
-				WithCause(err).
-				WithExplanationf("Hook %q (kind %s) requires %q, which is not installed and not on PATH", name, hook.Kind, resolved.Command).
-				WithHintf("Declare it in dependencies.tools (e.g. `%s: \"<version>\"`) to auto-install before terraform runs", resolved.Command).
-				WithHint("Or install it manually so it appears on PATH").
-				WithContext("hook", name).
-				WithContext("kind", hook.Kind).
-				WithContext("command", resolved.Command).
-				Err()
-		}
+	}
+	return nil
+}
+
+// verifyHookBinary verifies a single hook's runtime requirement: step-kind
+// hooks need a registered step type; command-backed kinds need their command on
+// PATH. Returns nil for hooks with nothing to verify (deprecated CI kinds,
+// unknown kinds, no command).
+func (h *Hooks) verifyHookBinary(name string, hook *Hook) error {
+	if isDeprecatedCIKind(hook.Kind) {
+		return nil
+	}
+	kind, ok := GetKind(hook.Kind)
+	if !ok {
+		return nil
+	}
+	// Step-kind hooks have no Command to resolve on PATH; instead verify the
+	// named step type is registered so a typo fails before terraform runs
+	// rather than mid-lifecycle.
+	if hook.Kind == stepKindName {
+		return verifyStepHookType(name, hook.Type)
+	}
+	resolved := kind.ResolveDefaults(hook)
+	if resolved.Command == "" {
+		return nil
+	}
+	if err := verifyCommandAvailable(resolved.Command, h.toolchainPATH); err != nil {
+		return errUtils.Build(errUtils.ErrCommandNotFound).
+			WithCause(err).
+			WithExplanationf("Hook %q (kind %s) requires %q, which is not installed and not on PATH", name, hook.Kind, resolved.Command).
+			WithHintf("Declare it in dependencies.tools (e.g. `%s: \"<version>\"`) to auto-install before terraform runs", resolved.Command).
+			WithHint("Or install it manually so it appears on PATH").
+			WithContext("hook", name).
+			WithContext("kind", hook.Kind).
+			WithContext("command", resolved.Command).
+			Err()
 	}
 	return nil
 }

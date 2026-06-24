@@ -1225,6 +1225,12 @@
         {
           "type": "object",
           "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^!include"
+              },
+              {
             "type": "object",
             "description": "A single hook.",
             "properties": {
@@ -1328,6 +1334,8 @@
               }
             },
             "additionalProperties": true
+              }
+            ]
           }
         }
       ]

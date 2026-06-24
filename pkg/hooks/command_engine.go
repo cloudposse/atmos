@@ -269,6 +269,8 @@ func renderTerminal(ctx *ExecContext, out *Output) {
 // same standard variables (ATMOS_STACK, ATMOS_COMPONENT, ATMOS_COMPONENT_PATH,
 // …) to the work they run.
 func BuildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]string {
+	defer perf.Track(nil, "hooks.BuildAtmosEnv")()
+
 	return buildAtmosEnv(ctx, outputFile, outputDir)
 }
 
