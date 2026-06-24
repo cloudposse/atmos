@@ -234,6 +234,51 @@ stores:
 ```
 </File>
 
+### Floci Local Endpoints
+
+For local Floci-backed store tests, configure the AWS auth identity endpoint
+under `auth.identities.*.spec.endpoint_url` and configure GCP/Azure emulator
+endpoints on the store options:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    floci-superuser:
+      kind: aws/user
+      credentials:
+        access_key_id: test
+        secret_access_key: test
+        region: us-east-1
+      spec:
+        endpoint_url: "http://localhost:4566"
+
+stores:
+  local/ssm:
+    kind: aws/ssm
+    identity: floci-superuser
+    options:
+      region: us-east-1
+      endpoint: "http://localhost:4566"
+
+  local/gsm:
+    kind: gcp/secretmanager
+    options:
+      project_id: local-project
+      endpoint: "http://localhost:4588"
+      endpoint_insecure: true
+      without_authentication: true
+
+  local/keyvault:
+    kind: azure/keyvault
+    options:
+      endpoint: "http://localhost:4577/devstoreaccount1-keyvault"
+      endpoint_insecure: true
+      without_authentication: true
+      disable_challenge_resource_verification: true
+```
+</File>
+
 ### Redis
 
 <File title="atmos.yaml">

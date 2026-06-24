@@ -1,6 +1,8 @@
 package hooks
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +12,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -36,6 +39,8 @@ const (
 	metadataKeyStack     = "stack"
 	metadataKeyComponent = "component"
 )
+
+const nonBlockingSecuritySeverity = "0.0"
 
 // executableBits is the standard "any execute" Unix permission mask.
 // A binary on PATH must have at least one of owner/group/other execute
@@ -97,6 +102,9 @@ func (e *CommandEngine) Run(ctx *ExecContext) (*Output, error) {
 
 	out := captureOutput(ctx, outputFile)
 	renderTerminal(ctx, out)
+	renderCISummary(ctx, out)
+	emitCIAnnotations(ctx, out)
+	publishCIResults(ctx, out)
 
 	if runErr != nil {
 		return out, applyOnFailure(ctx, runErr)
@@ -227,8 +235,8 @@ func captureOutput(ctx *ExecContext, outputFile string) *Output {
 		}
 	}
 
-	if ctx.Kind.ResultHandler != nil {
-		summary, hErr := ctx.Kind.ResultHandler(ctx)
+	if handler := resolveResultHandler(ctx); handler != nil {
+		summary, hErr := handler(ctx)
 		if hErr != nil {
 			log.Warn(
 				"Hook ResultHandler failed",
@@ -261,6 +269,270 @@ func renderTerminal(ctx *ExecContext, out *Output) {
 		ui.Writeln("")
 		ui.MarkdownMessage(string(out.Artifact.Body))
 	}
+}
+
+// renderCISummary appends the hook's markdown summary to the active CI
+// provider's job step summary (e.g. GitHub Actions' $GITHUB_STEP_SUMMARY) so
+// scanner findings are visible in the pipeline run, not just the log stream.
+// It is a no-op outside CI. Writing to the step summary is best-effort: a
+// failure here must never fail the hook (the findings already rendered to the
+// terminal), so the error is logged at debug and swallowed.
+func renderCISummary(ctx *ExecContext, out *Output) {
+	if out == nil || out.Summary == nil || out.Summary.Body == "" {
+		return
+	}
+	if !ciSummaryEnabled(ctx) {
+		return
+	}
+	// The step summary is append-only and shared: a prior step or hook may
+	// have left content without a trailing blank line. Each summary body
+	// starts with a `## <tool>` heading, and GitHub-flavored Markdown only
+	// renders an ATX heading as a heading when a blank line precedes it. So
+	// prefix a newline to guarantee separation — every appended summary lands
+	// as its own cleanly-delimited chapter. Mirrors renderTerminal's leading
+	// ui.Writeln("").
+	if err := ci.WriteStepSummary("\n" + out.Summary.Body); err != nil {
+		log.Debug("Failed to write hook summary to CI step summary", "error", err)
+	}
+}
+
+// emitCIAnnotations renders the hook's findings as inline CI annotations
+// (GitHub: `::error`/`::warning` on the PR diff) when `ci.annotations` is
+// enabled. Best-effort: the findings already rendered to the terminal/summary,
+// so a failure here logs at debug and never fails the hook. The active provider
+// decides whether/how to render — outside CI it no-ops.
+func emitCIAnnotations(ctx *ExecContext, out *Output) {
+	if out == nil || out.Summary == nil || len(out.Summary.Findings) == 0 {
+		return
+	}
+	if !ciAnnotationsEnabled(ctx) {
+		return
+	}
+	annotations := make([]ci.Annotation, 0, len(out.Summary.Findings))
+	for _, f := range out.Summary.Findings {
+		annotations = append(annotations, ci.Annotation{
+			Path:      f.Path,
+			StartLine: f.Line,
+			Level:     annotationLevelForHook(ctx, f.Severity),
+			Title:     f.RuleID,
+			Message:   f.Message,
+		})
+	}
+	if err := ci.Annotate(annotations); err != nil {
+		log.Debug("Failed to emit CI annotations", logKeyKind, ctx.Hook.Kind, "error", err)
+	}
+}
+
+// publishCIResults uploads the hook's raw SARIF to the CI provider's
+// security-findings store (GitHub Code Scanning) when `ci.results` is enabled.
+// The analysis category is auto-derived from the scan target. Best-effort:
+// a failure logs at debug and never fails the hook; outside CI it no-ops.
+func publishCIResults(ctx *ExecContext, out *Output) {
+	if out == nil || out.Summary == nil || len(out.Summary.SARIF) == 0 {
+		return
+	}
+	if !ciResultsEnabled(ctx) {
+		return
+	}
+	body := out.Summary.SARIF
+	if reportsAsWarning(ctx) {
+		body = normalizeSARIFLevels(body, "warning")
+	}
+	report := ci.SARIFReport{Body: body, Category: deriveSARIFCategory(ctx, body)}
+	if err := ci.ReportSARIF(context.Background(), report); err != nil {
+		log.Debug("Failed to publish SARIF results to CI provider", logKeyKind, ctx.Hook.Kind, "error", err)
+	}
+}
+
+func annotationLevelForHook(ctx *ExecContext, severity string) ci.AnnotationLevel {
+	if reportsAsWarning(ctx) {
+		return ci.AnnotationWarning
+	}
+	return annotationLevelForSeverity(severity)
+}
+
+// annotationLevelForSeverity maps a normalized scanner severity to the CI
+// annotation level. Critical/High surface as errors; everything else as
+// warnings (matching the scanner default of not blocking the plan).
+func annotationLevelForSeverity(severity string) ci.AnnotationLevel {
+	switch severity {
+	case "critical", "high":
+		return ci.AnnotationError
+	default:
+		return ci.AnnotationWarning
+	}
+}
+
+func reportsAsWarning(ctx *ExecContext) bool {
+	return ctx != nil && ctx.Hook != nil && ctx.Hook.OnFailure != OnFailureFail
+}
+
+func normalizeSARIFLevels(sarif []byte, level string) []byte {
+	if len(sarif) == 0 || level == "" {
+		return sarif
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(sarif, &doc); err != nil {
+		return sarif
+	}
+	runs, ok := doc["runs"].([]any)
+	if !ok {
+		return sarif
+	}
+	for _, rawRun := range runs {
+		run, ok := rawRun.(map[string]any)
+		if !ok {
+			continue
+		}
+		normalizeRunResultLevels(run, level)
+		normalizeRunRuleLevels(run, level)
+	}
+	out, err := json.Marshal(doc)
+	if err != nil {
+		return sarif
+	}
+	return out
+}
+
+func normalizeRunResultLevels(run map[string]any, level string) {
+	results, ok := run["results"].([]any)
+	if !ok {
+		return
+	}
+	for _, rawResult := range results {
+		result, ok := rawResult.(map[string]any)
+		if ok {
+			result["level"] = level
+			normalizeSecuritySeverity(result)
+		}
+	}
+}
+
+func normalizeRunRuleLevels(run map[string]any, level string) {
+	tool, ok := run["tool"].(map[string]any)
+	if !ok {
+		return
+	}
+	driver, ok := tool["driver"].(map[string]any)
+	if !ok {
+		return
+	}
+	rules, ok := driver["rules"].([]any)
+	if !ok {
+		return
+	}
+	for _, rawRule := range rules {
+		rule, ok := rawRule.(map[string]any)
+		if !ok {
+			continue
+		}
+		defaultConfig, ok := rule["defaultConfiguration"].(map[string]any)
+		if !ok {
+			defaultConfig = map[string]any{}
+			rule["defaultConfiguration"] = defaultConfig
+		}
+		defaultConfig["level"] = level
+		normalizeSecuritySeverity(rule)
+	}
+}
+
+func normalizeSecuritySeverity(item map[string]any) {
+	properties, ok := item["properties"].(map[string]any)
+	if !ok {
+		return
+	}
+	if _, ok := properties["security-severity"]; ok {
+		properties["security-severity"] = nonBlockingSecuritySeverity
+	}
+}
+
+// deriveSARIFCategory builds the Code Scanning analysis category from the
+// scanner tool identity. The same component source can appear in many stacks,
+// so stack/component are intentionally not part of the category.
+func deriveSARIFCategory(ctx *ExecContext, sarif []byte) string {
+	if toolName := firstSARIFToolName(sarif); toolName != "" {
+		return toolName
+	}
+	if ctx == nil || ctx.Hook == nil {
+		return ""
+	}
+	if ctx.Hook.Kind == "command" && ctx.Hook.Command != "" {
+		return ctx.Hook.Command
+	}
+	if ctx.Hook.Kind != "" {
+		return ctx.Hook.Kind
+	}
+	return ctx.Hook.Command
+}
+
+func firstSARIFToolName(sarif []byte) string {
+	if len(sarif) == 0 {
+		return ""
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(sarif, &doc); err != nil {
+		return ""
+	}
+	runs, ok := doc["runs"].([]any)
+	if !ok {
+		return ""
+	}
+	for _, rawRun := range runs {
+		run, ok := rawRun.(map[string]any)
+		if !ok {
+			continue
+		}
+		tool, ok := run["tool"].(map[string]any)
+		if !ok {
+			continue
+		}
+		driver, ok := tool["driver"].(map[string]any)
+		if !ok {
+			continue
+		}
+		name, ok := driver["name"].(string)
+		if ok && strings.TrimSpace(name) != "" {
+			return strings.TrimSpace(name)
+		}
+	}
+	return ""
+}
+
+// ciEnabled reports whether CI integration is enabled in config — the master
+// switch all CI reporting outputs (summary/annotations/results) require.
+func ciEnabled(ctx *ExecContext) bool {
+	return ctx != nil && ctx.AtmosConfig != nil && ctx.AtmosConfig.CI.Enabled
+}
+
+// ciSummaryEnabled reports whether the job step summary should be written.
+// Defaults to true (nil) when ci.enabled, matching ci.summary's default.
+func ciSummaryEnabled(ctx *ExecContext) bool {
+	if !ciEnabled(ctx) {
+		return false
+	}
+	e := ctx.AtmosConfig.CI.Summary.Enabled
+	return e == nil || *e
+}
+
+// ciAnnotationsEnabled reports whether inline annotations should be emitted.
+// Defaults to true (nil) when ci.enabled.
+func ciAnnotationsEnabled(ctx *ExecContext) bool {
+	if !ciEnabled(ctx) {
+		return false
+	}
+	e := ctx.AtmosConfig.CI.Annotations.Enabled
+	return e == nil || *e
+}
+
+// ciResultsEnabled reports whether SARIF should be uploaded to the provider's
+// findings store. Defaults to false (nil) — opt-in, since it has side effects
+// and extra requirements (GitHub Advanced Security, security-events: write).
+func ciResultsEnabled(ctx *ExecContext) bool {
+	if !ciEnabled(ctx) {
+		return false
+	}
+	e := ctx.AtmosConfig.CI.Results.Enabled
+	return e != nil && *e
 }
 
 // buildAtmosEnv builds the ATMOS_* env-var map for the subprocess.
