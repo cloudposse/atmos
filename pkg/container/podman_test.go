@@ -789,3 +789,13 @@ RUN echo "test build"
 
 	require.NoError(t, err, "Build should succeed")
 }
+
+func TestPodmanRuntime_BuildBakeUnsupported(t *testing.T) {
+	runtime := NewPodmanRuntime()
+	err := runtime.Build(context.Background(), &BuildConfig{
+		Bake: &BakeConfig{File: "docker-bake.hcl"},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Docker Buildx requires Docker")
+}

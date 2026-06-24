@@ -257,8 +257,17 @@ func ExecuteWorkflow(
 	commandLineStack string,
 	fromStep string,
 	commandLineIdentity string,
-) error {
+) (retErr error) {
 	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflow")()
+	var activeContainer *workflowPkg.ContainerSession
+	defer func() {
+		if activeContainer == nil {
+			return
+		}
+		if cleanupErr := activeContainer.Cleanup(retErr == nil); cleanupErr != nil && retErr == nil {
+			retErr = cleanupErr
+		}
+	}()
 
 	// Reset step executor state at the start of each workflow to ensure clean variable scope.
 	ResetStepExecutorState()
@@ -404,6 +413,10 @@ func ExecuteWorkflow(
 		if err != nil {
 			return err
 		}
+		workDir := workflowPkg.CalculateWorkingDirectory(workflowDefinition, &step, atmosConfig.BasePath)
+		if workDir == "" {
+			workDir = "."
+		}
 
 		// Clear progress line and re-render as permanent record before step execution.
 		// This ensures progress line appears as header, then step output below it.
@@ -419,19 +432,60 @@ func ExecuteWorkflow(
 			// steps keep the existing masked shell-interpreter behavior.
 			stepPkg.RenderCommand(&step, workflowDefinition, command)
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			err = retry.Do(context.Background(), step.Retry, func() error {
-				return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
-					Command:     command,
-					Name:        commandName,
-					Dir:         ".",
-					Env:         stepEnv,
-					TTY:         step.Tty,
-					Interactive: step.Interactive,
-					DryRun:      dryRun,
-				}, func() error {
-					return ExecuteShell(command, commandName, ".", stepEnv, dryRun)
+			switch {
+			case workflowPkg.StepContainerOverride(&step):
+				err = retry.Do(context.Background(), step.Retry, func() error {
+					return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
+						Workflow:     workflow,
+						WorkflowPath: workflowPath,
+						BasePath:     atmosConfig.BasePath,
+						WorkflowDef:  workflowDefinition,
+						Step:         &step,
+						HostWorkDir:  workDir,
+						Command:      command,
+						StepEnv:      stepEnv,
+						RuntimeEnv:   stepEnv,
+						DryRun:       dryRun,
+					})
 				})
-			})
+			case workflowDefinition.Container != nil && workflowDefinition.Container.IsEnabled() && !workflowPkg.StepContainerDisabled(&step):
+				if activeContainer == nil {
+					activeContainer, err = workflowPkg.StartWorkflowContainer(context.Background(), &workflowPkg.ContainerStepParams{
+						Workflow:     workflow,
+						WorkflowPath: workflowPath,
+						BasePath:     atmosConfig.BasePath,
+						WorkflowDef:  workflowDefinition,
+						RuntimeEnv:   stepEnv,
+						DryRun:       dryRun,
+					})
+					if err != nil {
+						break
+					}
+				}
+				err = retry.Do(context.Background(), step.Retry, func() error {
+					return activeContainer.ExecShell(context.Background(), &workflowPkg.ContainerStepParams{
+						Step:        &step,
+						WorkflowDef: workflowDefinition,
+						HostWorkDir: workDir,
+						Command:     command,
+						StepEnv:     stepEnv,
+					})
+				})
+			default:
+				err = retry.Do(context.Background(), step.Retry, func() error {
+					return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+						Command:     command,
+						Name:        commandName,
+						Dir:         workDir,
+						Env:         stepEnv,
+						TTY:         step.Tty,
+						Interactive: step.Interactive,
+						DryRun:      dryRun,
+					}, func() error {
+						return ExecuteShell(command, commandName, workDir, stepEnv, dryRun)
+					})
+				})
+			}
 		case schema.TaskTypeExec:
 			// Replace the Atmos process with the command (shell exec semantics).
 			// Validated earlier to be the final step; no retry wrapper (the
@@ -505,7 +559,7 @@ func ExecuteWorkflow(
 					WithExitCode(1).
 					Err()
 			}
-			err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv)
+			err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, dryRun)
 		}
 
 		if err != nil {
@@ -545,7 +599,7 @@ func ExecuteWorkflow(
 var stepExecutorState *stepPkg.StepExecutor
 
 // executeExtendedStep runs an extended step type (input, confirm, choose, etc.).
-func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep, workflow *schema.WorkflowDefinition, envVars []string) error {
+func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep, workflow *schema.WorkflowDefinition, envVars []string, dryRun bool) error {
 	// Initialize or reuse step executor.
 	if stepExecutorState == nil {
 		stepExecutorState = stepPkg.NewStepExecutor()
@@ -563,7 +617,9 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 	}
 
 	// Execute the step.
-	_, err := stepExecutorState.Execute(ctx, workflowStep)
+	stepCopy := *workflowStep
+	stepCopy.DryRun = dryRun
+	_, err := stepExecutorState.Execute(ctx, &stepCopy)
 	return err
 }
 

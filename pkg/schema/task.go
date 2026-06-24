@@ -110,8 +110,34 @@ type Task struct {
 	// Exit step type fields.
 	Code int `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"` // Exit code for exit step type.
 
+	// Container step fields.
+	Action            string                `yaml:"action,omitempty" json:"action,omitempty" mapstructure:"action"` // build, push, run, inspect.
+	Build             *ContainerBuildStep   `yaml:"build,omitempty" json:"build,omitempty" mapstructure:"build"`
+	Push              *ContainerPushStep    `yaml:"push,omitempty" json:"push,omitempty" mapstructure:"push"`
+	Run               *ContainerRunStep     `yaml:"run,omitempty" json:"run,omitempty" mapstructure:"run"`
+	Inspect           *ContainerInspectStep `yaml:"inspect,omitempty" json:"inspect,omitempty" mapstructure:"inspect"`
+	RuntimeAutoStart  bool                  `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	Image             string                `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`                                           // Container image to run.
+	Shell             string                `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                                           // Shell used to execute command in container.
+	Provider          string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`                                  // docker, podman, or empty for auto-detect.
+	Pull              string                `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`                                              // missing, always, never.
+	Workspace         string                `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`                               // Container workspace path.
+	WorkspaceReadOnly bool                  `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"` // Mount workspace read-only.
+	Cleanup           string                `yaml:"cleanup,omitempty" json:"cleanup,omitempty" mapstructure:"cleanup"`                                     // always, on_success, never.
+	User              string                `yaml:"user,omitempty" json:"user,omitempty" mapstructure:"user"`                                              // Container user.
+	RunArgs           []string              `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`                                  // Runtime-specific create args.
+	Mounts            []ContainerMount      `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`                                        // Extra container mounts.
+	Ports             []ContainerPort       `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`                                           // Port mappings.
+	Container         *WorkflowContainer    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`                               // Workflow container override or false to run on host.
+
+	// Outputs declares named outputs derived from the step result.
+	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
+
 	// Show configuration for this step (overrides workflow-level show settings).
 	Show *ShowConfig `yaml:"show,omitempty" json:"show,omitempty" mapstructure:"show"`
+
+	// DryRun is set by executors and is not read from user configuration.
+	DryRun bool `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // Tasks is a slice of Task that supports flexible YAML unmarshaling.
@@ -249,8 +275,32 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		// Exit step type fields.
 		Code: task.Code,
 
+		// Container step fields.
+		Action:            task.Action,
+		Build:             task.Build,
+		Push:              task.Push,
+		Run:               task.Run,
+		Inspect:           task.Inspect,
+		RuntimeAutoStart:  task.RuntimeAutoStart,
+		Image:             task.Image,
+		Shell:             task.Shell,
+		Provider:          task.Provider,
+		Pull:              task.Pull,
+		Workspace:         task.Workspace,
+		WorkspaceReadOnly: task.WorkspaceReadOnly,
+		Cleanup:           task.Cleanup,
+		User:              task.User,
+		RunArgs:           task.RunArgs,
+		Mounts:            task.Mounts,
+		Ports:             task.Ports,
+		Container:         task.Container,
+
+		Outputs: task.Outputs,
+
 		// Show configuration.
 		Show: task.Show,
+
+		DryRun: task.DryRun,
 	}
 }
 
@@ -333,8 +383,32 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		// Exit step type fields.
 		Code: step.Code,
 
+		// Container step fields.
+		Action:            step.Action,
+		Build:             step.Build,
+		Push:              step.Push,
+		Run:               step.Run,
+		Inspect:           step.Inspect,
+		RuntimeAutoStart:  step.RuntimeAutoStart,
+		Image:             step.Image,
+		Shell:             step.Shell,
+		Provider:          step.Provider,
+		Pull:              step.Pull,
+		Workspace:         step.Workspace,
+		WorkspaceReadOnly: step.WorkspaceReadOnly,
+		Cleanup:           step.Cleanup,
+		User:              step.User,
+		RunArgs:           step.RunArgs,
+		Mounts:            step.Mounts,
+		Ports:             step.Ports,
+		Container:         step.Container,
+
+		Outputs: step.Outputs,
+
 		// Show configuration.
 		Show: step.Show,
+
+		DryRun: step.DryRun,
 	}
 }
 
