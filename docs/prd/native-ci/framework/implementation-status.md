@@ -169,6 +169,7 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 5. Deploy RunE: `VerifyPlanfile()` generates fresh plan, compares stored vs fresh via JSON plan-diff — Done
 6. Fail deploy if drift detected, apply fresh planfile if match — Done
 7. Planfile download moved from `onBeforeApply()` to `onBeforeDeploy()`; `onBeforeApply()` now only creates check run — Done
+8. Configurable + automatic: verification is auto-on under CI when planfile storage is configured, via `components.terraform.planfiles.verify` (`fail` | `warn` | `off`, default `fail`); `--verify-plan` / `--verify-plan=false` override (CLI > config > CI default); `warn` proceeds on drift, `off` skips the download. `planfile.ResolveVerifyMode()` resolves the mode at the download hook and the RunE gate — Done
 
 ---
 

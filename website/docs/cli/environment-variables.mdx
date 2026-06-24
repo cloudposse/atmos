@@ -601,6 +601,11 @@ These environment variables configure Atmos behavior and can override settings i
   <dd>
     Override the `init_run_reconfigure` setting from `atmos.yaml`.
   </dd>
+
+  <dt>`ATMOS_TERRAFORM_VERIFY_PLAN`</dt>
+  <dd>
+    Set to `true` to force planfile drift verification (fail on drift) on `atmos terraform deploy`, equivalent to `--verify-plan`. Set to `false` to disable verification (equivalent to `--verify-plan=false`), overriding config and the CI default. See [Planfile drift verification](/components/terraform/planfiles#drift-verification).
+  </dd>
 </dl>
 
 ## Atmos Pro

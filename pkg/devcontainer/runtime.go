@@ -23,31 +23,28 @@ func DetectRuntime(runtimeSetting string) (container.Runtime, error) {
 
 	ctx := context.Background()
 
-	// If runtime is explicitly specified in settings, use it.
-	if runtimeSetting != "" {
-		switch runtimeSetting {
-		case "docker":
-			os.Setenv("ATMOS_CONTAINER_RUNTIME", "docker")
-		case "podman":
-			os.Setenv("ATMOS_CONTAINER_RUNTIME", "podman")
-		default:
-			return nil, errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
-				WithExplanationf("Invalid runtime setting `%s`", runtimeSetting).
-				WithHint("Runtime must be either `docker` or `podman`").
-				WithHint("Update the devcontainer configuration in `atmos.yaml` to use a valid runtime").
-				WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
-				WithExample(`components:
+	runtime, err := container.DetectRuntimeWithPreference(ctx, runtimeSetting)
+	if err == nil {
+		return runtime, nil
+	}
+
+	if runtimeSetting != "" && runtimeSetting != string(container.TypeDocker) && runtimeSetting != string(container.TypePodman) {
+		return nil, errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
+			WithExplanationf("Invalid runtime setting `%s`", runtimeSetting).
+			WithHint("Runtime must be either `docker` or `podman`").
+			WithHint("Update the devcontainer configuration in `atmos.yaml` to use a valid runtime").
+			WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
+			WithExample(`components:
   devcontainer:
     my-dev:
       settings:
         runtime: docker  # or podman`).
-				WithContext("runtime_setting", runtimeSetting).
-				WithExitCode(2).
-				Err()
-		}
+			WithContext("runtime_setting", runtimeSetting).
+			WithExitCode(2).
+			Err()
 	}
 
-	return container.DetectRuntime(ctx)
+	return nil, err
 }
 
 // ToCreateConfig converts a devcontainer config to container.CreateConfig.

@@ -30,6 +30,9 @@ type Runtime interface {
 
 	// Image operations
 	Pull(ctx context.Context, image string) error
+	Tag(ctx context.Context, source, target string) error
+	Push(ctx context.Context, image string) (*PushResult, error)
+	ImageInspect(ctx context.Context, image string) (*ImageInfo, error)
 
 	// Logs - methods that produce user-facing output accept io.Writer
 	Logs(ctx context.Context, containerID string, follow bool, tail string, stdout, stderr io.Writer) error
@@ -38,12 +41,60 @@ type Runtime interface {
 	Info(ctx context.Context) (*RuntimeInfo, error)
 }
 
+// EnvSetter is implemented by runtimes whose CLI subprocesses can be launched
+// with a specific environment. The container step uses this to forward the
+// identity-resolved environment (e.g. the DOCKER_CONFIG materialized by the
+// aws/ecr auth integration, or AWS_* credentials) so build/push/run can reach
+// private registries. Runtimes that do not implement it inherit os.Environ().
+type EnvSetter interface {
+	SetEnv(env []string)
+}
+
 // BuildConfig represents container image build configuration.
 type BuildConfig struct {
 	Dockerfile string
 	Context    string
+	Engine     string
 	Args       map[string]string
 	Tags       []string
+	Target     string
+	NoCache    bool
+	Pull       bool
+	Bake       *BakeConfig
+}
+
+// BakeConfig represents Docker Buildx Bake configuration.
+type BakeConfig struct {
+	File    string
+	Files   []string
+	Target  string
+	Targets []string
+	Set     []string
+	Vars    map[string]string
+	Load    bool
+	Push    bool
+	Print   bool
+}
+
+// ImageInfo contains metadata about a local container image.
+type ImageInfo struct {
+	ID           string
+	RepoTags     []string
+	RepoDigests  []string
+	Size         int64
+	Created      string
+	Architecture string
+	Os           string
+	Author       string
+	Labels       map[string]string
+	Layers       int
+}
+
+// PushResult contains metadata returned by a container image push.
+type PushResult struct {
+	Image  string
+	Digest string
+	Output string
 }
 
 // CreateConfig represents container creation configuration.

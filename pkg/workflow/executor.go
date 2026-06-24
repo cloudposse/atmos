@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/samber/lo"
 	"mvdan.cc/sh/v3/shell"
@@ -16,6 +18,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/retry"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -45,10 +48,12 @@ func mergeWorkflowEnv(workflowEnv, stepEnv map[string]string) map[string]string 
 
 // Executor handles workflow execution with dependency injection for testing.
 type Executor struct {
-	runner       CommandRunner
-	authProvider AuthProvider
-	ui           UIProvider
-	depProvider  DependencyProvider
+	runner           CommandRunner
+	authProvider     AuthProvider
+	ui               UIProvider
+	depProvider      DependencyProvider
+	stepVars         *stepPkg.Variables
+	containerSession *ContainerSession
 }
 
 // NewExecutor creates a new Executor with the given dependencies.
@@ -70,49 +75,38 @@ func (e *Executor) WithDependencyProvider(provider DependencyProvider) *Executor
 	return e
 }
 
+func (e *Executor) cleanupWorkflowContainer(success bool) error {
+	if e.containerSession == nil {
+		return nil
+	}
+	session := e.containerSession
+	e.containerSession = nil
+	return session.Cleanup(success)
+}
+
 // Execute runs a workflow with the given options.
 // This is the main entry point for workflow execution.
-func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
+func (e *Executor) Execute(params *WorkflowParams) (result *ExecutionResult, err error) {
 	if params == nil || params.AtmosConfig == nil {
 		return nil, errUtils.ErrNilParam
 	}
 	defer perf.Track(params.AtmosConfig, "workflow.Executor.Execute")()
 
-	result := &ExecutionResult{
+	result = &ExecutionResult{
 		WorkflowName: params.Workflow,
 		Steps:        make([]StepResult, 0),
 		Success:      true,
 	}
+	defer func() {
+		if cleanupErr := e.cleanupWorkflowContainer(result.Success); cleanupErr != nil && result.Success {
+			result.Success = false
+			result.Error = cleanupErr
+			err = cleanupErr
+		}
+	}()
 
-	steps := params.WorkflowDefinition.Steps
-
-	// Validate workflow has steps.
-	if len(steps) == 0 {
-		err := errUtils.Build(errUtils.ErrWorkflowNoSteps).
-			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", params.Workflow).
-			Err()
-		e.printError(err)
-		result.Success = false
-		result.Error = err
-		return result, err
-	}
-
-	// Generate step names if not provided.
-	CheckAndGenerateWorkflowStepNames(params.WorkflowDefinition)
-
-	log.Debug("Executing workflow", "workflow", params.Workflow, "path", params.WorkflowPath)
-
-	// Handle --from-step flag.
-	steps, err := e.handleFromStep(steps, params.WorkflowDefinition, params.Workflow, params.Opts.FromStep, result)
+	steps, err := e.prepareSteps(params, result)
 	if err != nil {
-		return result, err
-	}
-
-	// Ensure toolchain dependencies are installed and PATH is updated.
-	if err := e.ensureToolchainDependencies(params); err != nil {
-		e.printError(err)
-		result.Success = false
-		result.Error = err
 		return result, err
 	}
 
@@ -123,22 +117,70 @@ func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
 	flags := e.buildFlagsMap(params)
 
 	// Initialize progress renderer if enabled.
-	totalSteps := len(steps)
-	progressRenderer := NewProgressRenderer(params.WorkflowDefinition, totalSteps)
+	progressRenderer := NewProgressRenderer(params.WorkflowDefinition, len(steps))
 
 	// Render header before first step (if enabled).
 	showRenderer.RenderHeaderIfNeeded(params.WorkflowDefinition, params.Workflow, flags)
 
 	// Execute each step.
-	for stepIdx, step := range steps {
+	if stepErr := e.runSteps(params, steps, progressRenderer, result); stepErr != nil {
+		return result, stepErr
+	}
 
+	return result, nil
+}
+
+// prepareSteps validates the workflow, generates step names, applies --from-step,
+// and ensures toolchain dependencies are installed before execution.
+func (e *Executor) prepareSteps(params *WorkflowParams, result *ExecutionResult) ([]schema.WorkflowStep, error) {
+	steps := params.WorkflowDefinition.Steps
+
+	// Validate workflow has steps.
+	if len(steps) == 0 {
+		err := errUtils.Build(errUtils.ErrWorkflowNoSteps).
+			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", params.Workflow).
+			Err()
+		e.printError(err)
+		result.Success = false
+		result.Error = err
+		return nil, err
+	}
+
+	// Generate step names if not provided.
+	CheckAndGenerateWorkflowStepNames(params.WorkflowDefinition)
+	e.stepVars = stepPkg.NewVariables()
+
+	log.Debug("Executing workflow", "workflow", params.Workflow, "path", params.WorkflowPath)
+
+	// Handle --from-step flag.
+	steps, err := e.handleFromStep(steps, params.WorkflowDefinition, params.Workflow, params.Opts.FromStep, result)
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure toolchain dependencies are installed and PATH is updated.
+	if err := e.ensureToolchainDependencies(params); err != nil {
+		e.printError(err)
+		result.Success = false
+		result.Error = err
+		return nil, err
+	}
+
+	return steps, nil
+}
+
+// runSteps executes each workflow step in order, updating result. It returns the
+// first failing step's error (if any) and marks progress as done.
+func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep, progressRenderer *ProgressRenderer, result *ExecutionResult) error {
+	for stepIdx := range steps {
+		step := &steps[stepIdx]
 		// Update and render progress (if enabled).
 		if progressRenderer.IsEnabled() {
 			progressRenderer.Update(stepIdx+1, step.Name)
 			progressRenderer.Render()
 		}
 
-		stepResult := e.executeStep(params, &step, stepIdx)
+		stepResult := e.executeStep(params, step, stepIdx)
 		result.Steps = append(result.Steps, stepResult.StepResult)
 
 		if !stepResult.Success {
@@ -148,7 +190,7 @@ func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
 			if progressRenderer.IsEnabled() {
 				progressRenderer.Done()
 			}
-			return result, stepResult.Error
+			return stepResult.Error
 		}
 	}
 
@@ -157,7 +199,7 @@ func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
 		progressRenderer.Done()
 	}
 
-	return result, nil
+	return nil
 }
 
 // buildFlagsMap builds a map of flags for display in the header.
@@ -279,9 +321,15 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 		stepEnv:          stepEnv,
 		workingDirectory: workDir,
 	}
-	err = e.runCommand(params, cmdParams)
+	if stepPkg.IsExtendedStepType(commandType) {
+		return e.executeRegisteredStep(params, step, cmdParams)
+	}
+	err = e.runCommand(params, step, cmdParams)
 	if err != nil {
 		return e.handleStepError(params, step.Name, cmdParams, err)
+	}
+	if e.stepVars != nil {
+		_ = e.stepVars.SetWithOutputs(step.Name, stepPkg.NewStepResult("").WithMetadata("exit_code", 0), step.Outputs)
 	}
 
 	return stepResultInternal{
@@ -292,6 +340,122 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 		},
 		finalStack: finalStack,
 	}
+}
+
+// executeRegisteredStep executes non-legacy workflow step types via the shared step registry.
+func (e *Executor) executeRegisteredStep(params *WorkflowParams, step *schema.WorkflowStep, cmdParams *runCommandParams) stepResultInternal {
+	handler, ok := stepPkg.Get(cmdParams.commandType)
+	if !ok {
+		err := errUtils.Build(errUtils.ErrUnknownStepType).
+			WithContext("step", step.Name).
+			WithContext("type", cmdParams.commandType).
+			Err()
+		return e.handleStepError(params, step.Name, cmdParams, err)
+	}
+
+	stepCopy := *step
+	stepCopy.WorkingDirectory = cmdParams.workingDirectory
+	stepCopy.Env = envSliceToMap(cmdParams.stepEnv)
+	stepCopy.DryRun = params.Opts.DryRun
+	stepCopy.Stack = cmdParams.finalStack
+
+	if err := handler.Validate(&stepCopy); err != nil {
+		return e.handleStepError(params, step.Name, cmdParams, err)
+	}
+
+	if e.stepVars == nil {
+		e.stepVars = stepPkg.NewVariables()
+	}
+
+	stepCtx, cancel, err := resolveStepContext(params.Ctx, stepCopy.Timeout)
+	if err != nil {
+		return e.handleStepError(params, step.Name, cmdParams, err)
+	}
+	if cancel != nil {
+		defer cancel()
+	}
+
+	if _, err := e.runStepWithRetry(stepCtx, handler, &stepCopy, params.WorkflowDefinition); err != nil {
+		return e.handleStepError(params, step.Name, cmdParams, err)
+	}
+
+	return stepResultInternal{
+		StepResult: StepResult{
+			StepName: step.Name,
+			Command:  cmdParams.command,
+			Success:  true,
+		},
+		finalStack: cmdParams.finalStack,
+	}
+}
+
+// resolveStepContext derives the execution context for a step, applying an
+// optional timeout. The returned cancel func is nil when no timeout applies.
+func resolveStepContext(ctx context.Context, timeoutSpec string) (context.Context, context.CancelFunc, error) {
+	if timeoutSpec == "" {
+		return ctx, nil, nil
+	}
+	timeout, parseErr := time.ParseDuration(timeoutSpec)
+	if parseErr != nil {
+		return nil, nil, parseErr
+	}
+	stepCtx, cancel := context.WithTimeout(ctx, timeout)
+	return stepCtx, cancel, nil
+}
+
+// runStepWithRetry executes a step handler, honoring its retry policy, and
+// records the step outputs into the executor's variable scope.
+func (e *Executor) runStepWithRetry(stepCtx context.Context, handler stepPkg.StepHandler, stepCopy *schema.WorkflowStep, workflow *schema.WorkflowDefinition) (*stepPkg.StepResult, error) {
+	var result *stepPkg.StepResult
+	execute := func() error {
+		var execErr error
+		result, execErr = executeStepHandlerWithWorkflow(stepCtx, handler, stepCopy, e.stepVars, workflow)
+		return execErr
+	}
+
+	var err error
+	if stepCopy.Retry != nil {
+		err = retry.Do(stepCtx, stepCopy.Retry, execute)
+	} else {
+		err = execute()
+	}
+	if result != nil {
+		if outputErr := e.stepVars.SetWithOutputs(stepCopy.Name, result, stepCopy.Outputs); outputErr != nil && err == nil {
+			err = outputErr
+		}
+	}
+	return result, err
+}
+
+func executeStepHandlerWithWorkflow(
+	ctx context.Context,
+	handler stepPkg.StepHandler,
+	step *schema.WorkflowStep,
+	vars *stepPkg.Variables,
+	workflow *schema.WorkflowDefinition,
+) (*stepPkg.StepResult, error) {
+	type workflowAwareHandler interface {
+		ExecuteWithWorkflow(context.Context, *schema.WorkflowStep, *stepPkg.Variables, *schema.WorkflowDefinition) (*stepPkg.StepResult, error)
+	}
+	if wah, ok := handler.(workflowAwareHandler); ok {
+		return wah.ExecuteWithWorkflow(ctx, step, vars, workflow)
+	}
+	return handler.Execute(ctx, step, vars)
+}
+
+func envSliceToMap(env []string) map[string]string {
+	if len(env) == 0 {
+		return nil
+	}
+	result := make(map[string]string, len(env))
+	for _, entry := range env {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		result[key] = value
+	}
+	return result
 }
 
 // renderStepCommand renders the command before execution if show.command is enabled.
@@ -398,7 +562,7 @@ type runCommandParams struct {
 }
 
 // runCommand executes the appropriate command type.
-func (e *Executor) runCommand(params *WorkflowParams, cmdParams *runCommandParams) error {
+func (e *Executor) runCommand(params *WorkflowParams, step *schema.WorkflowStep, cmdParams *runCommandParams) error {
 	// Use working directory if set, otherwise default to current directory.
 	workDir := cmdParams.workingDirectory
 	if workDir == "" {
@@ -407,9 +571,13 @@ func (e *Executor) runCommand(params *WorkflowParams, cmdParams *runCommandParam
 
 	switch cmdParams.commandType {
 	case "shell":
-		commandName := fmt.Sprintf("%s-step-%d", params.Workflow, cmdParams.stepIdx)
-		return e.runner.RunShell(cmdParams.command, commandName, workDir, cmdParams.stepEnv, params.Opts.DryRun)
+		return e.runShellStep(params, step, cmdParams, workDir)
 	case "atmos":
+		if StepContainerOverride(step) {
+			return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
+				WithExplanation("Step-level `container` overrides support shell steps in v1. Set `container: false` or use `type: shell`.").
+				Err()
+		}
 		return e.executeAtmosCommand(params, cmdParams.command, cmdParams.finalStack, cmdParams.stepEnv, workDir)
 	default:
 		// Return error without printing - handleStepError will print it with resume context.
@@ -418,6 +586,59 @@ func (e *Executor) runCommand(params *WorkflowParams, cmdParams *runCommandParam
 			WithHintf("Available types:\n%s", u.FormatList([]string{"atmos", "shell"})).
 			Err()
 	}
+}
+
+// runShellStep executes a shell-type step, dispatching to a step-level container
+// override, the workflow-level container, or the host shell runner.
+func (e *Executor) runShellStep(params *WorkflowParams, step *schema.WorkflowStep, cmdParams *runCommandParams, workDir string) error {
+	if StepContainerOverride(step) {
+		return RunStepContainerOverride(params.Ctx, &ContainerStepParams{
+			Workflow:     params.Workflow,
+			WorkflowPath: params.WorkflowPath,
+			BasePath:     params.AtmosConfig.BasePath,
+			WorkflowDef:  params.WorkflowDefinition,
+			Step:         step,
+			HostWorkDir:  cmdParams.workingDirectory,
+			Command:      cmdParams.command,
+			StepEnv:      cmdParams.stepEnv,
+			RuntimeEnv:   append(os.Environ(), cmdParams.stepEnv...),
+			DryRun:       params.Opts.DryRun,
+		})
+	}
+	if params.WorkflowDefinition.Container != nil && params.WorkflowDefinition.Container.IsEnabled() && !StepContainerDisabled(step) {
+		session, err := e.ensureWorkflowContainer(params, cmdParams.stepEnv)
+		if err != nil {
+			return err
+		}
+		return session.ExecShell(params.Ctx, &ContainerStepParams{
+			Step:        step,
+			WorkflowDef: params.WorkflowDefinition,
+			HostWorkDir: cmdParams.workingDirectory,
+			Command:     cmdParams.command,
+			StepEnv:     cmdParams.stepEnv,
+		})
+	}
+	commandName := fmt.Sprintf("%s-step-%d", params.Workflow, cmdParams.stepIdx)
+	return e.runner.RunShell(cmdParams.command, commandName, workDir, cmdParams.stepEnv, params.Opts.DryRun)
+}
+
+func (e *Executor) ensureWorkflowContainer(params *WorkflowParams, runtimeEnv []string) (*ContainerSession, error) {
+	if e.containerSession != nil {
+		return e.containerSession, nil
+	}
+	session, err := StartWorkflowContainer(params.Ctx, &ContainerStepParams{
+		Workflow:     params.Workflow,
+		WorkflowPath: params.WorkflowPath,
+		BasePath:     params.AtmosConfig.BasePath,
+		WorkflowDef:  params.WorkflowDefinition,
+		RuntimeEnv:   append(os.Environ(), runtimeEnv...),
+		DryRun:       params.Opts.DryRun,
+	})
+	if err != nil {
+		return nil, err
+	}
+	e.containerSession = session
+	return session, nil
 }
 
 // handleStepError handles a step execution error and returns the appropriate result.
@@ -558,30 +779,10 @@ func (e *Executor) calculateFinalStack(workflowDef *schema.WorkflowDefinition, s
 // Step-level working_directory overrides workflow-level.
 // Relative paths are resolved against base_path.
 func (e *Executor) calculateWorkingDirectory(workflowDef *schema.WorkflowDefinition, step *schema.WorkflowStep, basePath string) string {
-	// Step-level overrides workflow-level.
-	workDir := strings.TrimSpace(workflowDef.WorkingDirectory)
-	if stepWorkDir := strings.TrimSpace(step.WorkingDirectory); stepWorkDir != "" {
-		workDir = stepWorkDir
+	workDir := CalculateWorkingDirectory(workflowDef, step, basePath)
+	if workDir != "" {
+		log.Debug("Using working directory for workflow step", "working_directory", workDir)
 	}
-
-	if workDir == "" {
-		return ""
-	}
-
-	// Resolve relative paths against base_path.
-	// Guard against empty basePath to avoid accidentally relative paths.
-	if !filepath.IsAbs(workDir) {
-		resolvedBasePath := basePath
-		if strings.TrimSpace(resolvedBasePath) == "" {
-			resolvedBasePath = "."
-		}
-		workDir = filepath.Join(resolvedBasePath, workDir)
-	}
-
-	// Note: Directory validation happens at execution time in the adapters.
-	// This allows YAML functions like !repo-root to be resolved first during config loading.
-	log.Debug("Using working directory for workflow step", "working_directory", workDir)
-
 	return workDir
 }
 

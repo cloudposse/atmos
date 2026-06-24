@@ -113,6 +113,9 @@ var (
 	// ErrPlanVerificationFailed is returned when a stored planfile differs from the current state during --verify-plan.
 	ErrPlanVerificationFailed = errors.New("plan verification failed: stored plan differs from current state")
 
+	// ErrStoredPlanfileMissing is returned when a deploy expected a stored planfile to verify against but none was found.
+	ErrStoredPlanfileMissing = errors.New("plan verification failed: no stored planfile was found to verify against")
+
 	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
 	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the component argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")

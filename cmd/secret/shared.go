@@ -2,6 +2,7 @@ package secret
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -16,7 +17,33 @@ import (
 	"github.com/cloudposse/atmos/pkg/secrets"
 	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// credentialFreeSkip lists the YAML functions that must NOT be evaluated during credential-free
+// secret operations (enumeration and `secret list` without `--verify`). Listing only needs the
+// static `secrets.vars` declarations (see secrets.ExtractDeclarations); it never needs a resolved
+// value. These functions all perform an authenticated backend read, so with auth disabled they
+// fall back to the default AWS credential chain and fail (e.g. the S3 backend assumes a role with
+// no base credentials and the SDK ultimately dials the EC2 IMDS endpoint, which is unreachable on
+// a workstation). Skipping them keeps listing genuinely credential-free: a skipped function leaves
+// its raw string in place, which the declaration extractor ignores. `!secret` is included because
+// retrieving secret values is a separate, explicit step.
+func credentialFreeSkip() []string {
+	// skipFunc compares against the tag with the leading "!" trimmed, so the skip tokens are bare.
+	tags := []string{
+		u.AtmosYamlFuncSecret,
+		u.AtmosYamlFuncStore,
+		u.AtmosYamlFuncStoreGet,
+		u.AtmosYamlFuncTerraformOutput,
+		u.AtmosYamlFuncTerraformState,
+	}
+	skip := make([]string, len(tags))
+	for i, tag := range tags {
+		skip[i] = strings.TrimPrefix(tag, "!")
+	}
+	return skip
+}
 
 // secretScope holds the parsed common flags for a secret subcommand.
 type secretScope struct {
@@ -168,9 +195,11 @@ func loadServiceForList(scope secretScope, verify bool) (*secrets.Service, error
 		ComponentType:        scope.ComponentType,
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
-		Skip:                 []string{"secret"}, // resolve includes etc., but never retrieve secrets here.
-		AuthManager:          nil,
-		AuthDisabled:         true, // listing reads declarations only — no identity, no decryption.
+		// Auth is disabled here, so any credentialed read function (e.g. !terraform.state) would
+		// fall back to the default AWS chain and fail. Skip them all — listing reads declarations only.
+		Skip:         credentialFreeSkip(),
+		AuthManager:  nil,
+		AuthDisabled: true, // listing reads declarations only — no identity, no decryption.
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to load component config: %w", err)

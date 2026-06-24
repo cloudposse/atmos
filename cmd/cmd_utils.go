@@ -724,7 +724,7 @@ func executeCustomCommand(
 	// Determine working directory for command execution.
 	workDir, err := resolveWorkingDirectory(commandConfig.WorkingDirectory, atmosConfig.BasePath, currentDirPath)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "Invalid working_directory", "https://atmos.tools/cli/configuration/commands#working-directory")
+		errUtils.CheckErrorPrintAndExit(err, "Invalid working_directory", "https://atmos.tools/cli/configuration/commands/working-directory")
 	}
 	if commandConfig.WorkingDirectory != "" {
 		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
@@ -734,7 +734,7 @@ func executeCustomCommand(
 	// the Atmos process, so it must be the final step and must not set
 	// supervisor-only fields (tty, interactive, retry, timeout, output).
 	if err := schema.ValidateExecTasks(commandConfig.Steps); err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "https://atmos.tools/cli/configuration/commands#interactive-and-tty-steps")
+		errUtils.CheckErrorPrintAndExit(err, "", "https://atmos.tools/cli/configuration/commands/steps#interactive-and-tty-steps")
 	}
 
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
@@ -897,6 +897,14 @@ func executeCustomCommand(
 		}
 
 		// Execute the step based on type.
+		//
+		// shell/exec/atmos use the legacy, cross-platform, child-reaping paths
+		// below; only genuinely-extended step types (container, input, confirm,
+		// …) route through the registered step handlers via the default case.
+		// Routing shell/atmos through the handlers regressed Windows (handlers
+		// hardcode `sh -c` → exit 126) and leaked orphaned `atmos` child
+		// processes on Linux (no process-group cleanup), so they stay on the
+		// legacy paths.
 		switch stepType {
 		case "shell":
 			// Execute shell command (backward compatible).
@@ -937,6 +945,20 @@ func executeCustomCommand(
 				workflowStep := step.ToWorkflowStep()
 				// Update command with template-resolved value.
 				workflowStep.Command = commandToRun
+				// Carry env onto the step so handlers that read step.Env (e.g. the
+				// container handler's in-container env) see it. The step's own
+				// declared `env:` had its map keys lowercased by Viper, so restore
+				// the original case from the shared env case map, then merge it over
+				// the resolved command/process env (step vars win on collisions).
+				stepOwnEnv := workflowStep.Env
+				if atmosConfig.CaseMaps != nil {
+					stepOwnEnv = atmosConfig.CaseMaps.ApplyCase("env", stepOwnEnv)
+				}
+				mergedStepEnv := envSliceToMap(env)
+				for key, value := range stepOwnEnv {
+					mergedStepEnv[key] = value
+				}
+				workflowStep.Env = mergedStepEnv
 				// Propagate working directory to extended step if not already set.
 				if workflowStep.WorkingDirectory == "" {
 					workflowStep.WorkingDirectory = workDir
@@ -973,6 +995,21 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	}
 
 	return &clone, nil
+}
+
+func envSliceToMap(env []string) map[string]string {
+	if len(env) == 0 {
+		return nil
+	}
+	result := make(map[string]string, len(env))
+	for _, entry := range env {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		result[key] = value
+	}
+	return result
 }
 
 // findTypedValue finds the value of an argument or flag with the specified semantic type.

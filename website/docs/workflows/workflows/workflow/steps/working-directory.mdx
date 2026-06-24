@@ -1,0 +1,28 @@
+---
+title: working_directory
+sidebar_label: working_directory
+sidebar_position: 6
+slug: /workflows/steps/working-directory
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The step-level `working_directory` field overrides the workflow-level [working directory](/workflows/working-directory) for a single step.
+</Intro>
+
+```yaml
+workflows:
+  download-and-install:
+    working_directory: !repo-root
+    steps:
+      - command: wget https://example.com/archive.tar.gz
+        working_directory: /tmp
+        type: shell
+      - command: make install
+        type: shell
+```
+
+Use step-level `working_directory` for commands that need a different current directory from the rest of the workflow.
+
+When a workflow-level container sandbox is active, Atmos resolves the path on the host and maps it into the container workspace before execution.
