@@ -240,8 +240,15 @@ func (s *Service) Reset() (bool, error) {
 }
 
 // Status reports whether each declared secret is initialized in its backend. It never
-// registers values with the masker (uses the backend status check, not Get).
-func (s *Service) Status() []Status {
+// registers values with the masker (uses the backend status check, not Get) and never decrypts.
+//
+// Listing is credential-free by default. A provider whose existence check is local (no network,
+// no auth, no decryption — e.g. SOPS, which reads cleartext key names) is always checked. A
+// non-local provider (a remote store) is checked only when verify is true; otherwise its status
+// is reported as Unknown so that `atmos secret list` needs no authenticated identity. Callers
+// that require an authoritative answer for remote backends (e.g. `secret validate`, or
+// `secret list --verify`) pass verify=true and must have wired the store auth resolver.
+func (s *Service) Status(verify bool) []Status {
 	defer perf.Track(s.atmosConfig, "secrets.Service.Status")()
 
 	decls := s.Declarations()
@@ -262,12 +269,26 @@ func (s *Service) Status() []Status {
 			out = append(out, st)
 			continue
 		}
+		// Skip the existence check for non-local backends unless verification was requested:
+		// contacting a remote store needs network + credentials, which listing avoids by default.
+		if !verify && !providerStatusIsLocal(provider) {
+			st.Unknown = true
+			out = append(out, st)
+			continue
+		}
 		initialized, err := provider.Status(st.Coordinate)
 		st.Initialized = initialized
 		st.Err = err
 		out = append(out, st)
 	}
 	return out
+}
+
+// providerStatusIsLocal reports whether the provider's existence check is credential-free
+// (LocalStatus capability). Providers that do not implement the capability are treated as remote.
+func providerStatusIsLocal(provider providers.Provider) bool {
+	ls, ok := provider.(providers.LocalStatus)
+	return ok && ls.LocalStatusCheck()
 }
 
 // FileDependencies returns the distinct backing files this scope's file-based declared secrets

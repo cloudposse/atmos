@@ -1,0 +1,14 @@
+vars:
+  stage: dev
+
+components:
+  terraform:
+    app:
+      secrets:
+        vars:
+          API_KEY:
+            description: Instance-scoped API key stored in a SOPS aws-kms encrypted file.
+            sops: sops-kms
+            required: true
+      vars:
+        api_key: !secret API_KEY

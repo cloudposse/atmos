@@ -328,7 +328,3 @@ func initControlTestIO(t *testing.T) {
 	data.InitWriter(ioCtx)
 	ui.InitFormatter(ioCtx)
 }
-
-func boolPtr(v bool) *bool {
-	return &v
-}

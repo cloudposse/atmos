@@ -86,6 +86,18 @@ func (p *storeProvider) Delete(coord Coordinate) error {
 	return ds.Delete(coord.Stack, coord.Component, coord.Key)
 }
 
+// LocalStatusCheck reports whether this store's existence check is credential-free. It forwards
+// the underlying store's locality (store.LocalStore) — true only for stores that need no network
+// or auth (e.g. the OS keychain); remote stores (SSM, Secrets Manager, Key Vault, GCP, Vault,
+// 1Password) report false and are checked by `atmos secret list` only under `--verify`.
+// Implements the LocalStatus capability.
+func (p *storeProvider) LocalStatusCheck() bool {
+	defer perf.Track(nil, "providers.storeProvider.LocalStatusCheck")()
+
+	ls, ok := p.store.(store.LocalStore)
+	return ok && ls.IsLocal()
+}
+
 func (p *storeProvider) Status(coord Coordinate) (bool, error) {
 	defer perf.Track(nil, "providers.storeProvider.Status")()
 

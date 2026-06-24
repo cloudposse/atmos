@@ -39,10 +39,11 @@ Think of each demo folder as representing an example of a standalone repository.
 8.  ├── demo-component-versions/  # Discover how to manage and use multiple versions of components effectively.
 9.  ├── demo-context/             # Simplify resource naming and tagging with our Terraform context provider.
 10. ├── demo-workflows/           # Automate repetitive tasks with streamlined workflows.
-11. ├── secrets-masking/          # Configure custom patterns and literals for automatic secrets masking in output.
-12. ├── stack-names/              # Demonstrate imperative stack naming with explicit 'name' field.
-13. ├── remote-stack-imports/     # Import stack configurations from remote URLs (HTTP, Git, S3, GCS).
-14. └── gitops/                   # Manage Git repositories as Atmos artifacts for GitOps workflows.
+11. ├── container-sandbox/        # Run workflow shell steps inside a shared container sandbox.
+12. ├── secrets-masking/          # Configure custom patterns and literals for automatic secrets masking in output.
+13. ├── stack-names/              # Demonstrate imperative stack naming with explicit 'name' field.
+14. ├── remote-stack-imports/     # Import stack configurations from remote URLs (HTTP, Git, S3, GCS).
+15. └── gitops/                   # Manage Git repositories as Atmos artifacts for GitOps workflows.
 ```
 
 ## Playground

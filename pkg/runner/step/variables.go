@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -52,6 +53,51 @@ func (v *Variables) Set(name string, result *StepResult) {
 	defer perf.Track(nil, "step.Variables.Set")()
 
 	v.Steps[name] = result
+}
+
+// SetWithOutputs evaluates declared outputs and stores a step result by name.
+func (v *Variables) SetWithOutputs(name string, result *StepResult, outputs map[string]string) error {
+	defer perf.Track(nil, "step.Variables.SetWithOutputs")()
+
+	if result == nil {
+		return nil
+	}
+	if len(outputs) > 0 {
+		evaluated, err := v.ResolveOutputs(outputs, result)
+		if err != nil {
+			return err
+		}
+		if result.Outputs == nil {
+			result.Outputs = make(map[string]string)
+		}
+		for k, val := range evaluated {
+			result.Outputs[k] = val
+		}
+	}
+	v.Set(name, result)
+	return nil
+}
+
+// EnvSlice returns the variable environment as a sorted slice of "KEY=VALUE"
+// entries, suitable for use as a subprocess environment. The slice is the
+// complete environment (it includes the inherited OS environment loaded by
+// NewVariables plus any workflow/step/identity-resolved entries), so callers can
+// hand it to a container runtime via container.EnvSetter to carry credentials
+// materialized by auth integrations (e.g. DOCKER_CONFIG for ECR login).
+func (v *Variables) EnvSlice() []string {
+	defer perf.Track(nil, "step.Variables.EnvSlice")()
+
+	keys := make([]string, 0, len(v.Env))
+	for k := range v.Env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	env := make([]string, 0, len(keys))
+	for _, k := range keys {
+		env = append(env, k+"="+v.Env[k])
+	}
+	return env
 }
 
 // GetValue returns a step's primary value.
@@ -114,13 +160,18 @@ func (v *Variables) GetStageIndex() int {
 func (v *Variables) templateData() map[string]any {
 	steps := make(map[string]any, len(v.Steps))
 	for name, result := range v.Steps {
-		steps[name] = map[string]any{
+		stepData := map[string]any{
 			"value":    result.Value,
 			"values":   result.Values,
 			"metadata": result.Metadata,
+			"outputs":  result.Outputs,
 			"skipped":  result.Skipped,
 			"error":    result.Error,
 		}
+		for key, value := range result.Metadata {
+			stepData[key] = value
+		}
+		steps[name] = stepData
 	}
 	return map[string]any{
 		"steps": steps,
@@ -133,6 +184,40 @@ func (v *Variables) TemplateData() map[string]any {
 	defer perf.Track(nil, "step.Variables.TemplateData")()
 
 	return v.templateData()
+}
+
+func (v *Variables) outputTemplateData(result *StepResult) map[string]any {
+	data := v.templateData()
+	data["value"] = result.Value
+	data["values"] = result.Values
+	data["metadata"] = result.Metadata
+	data["outputs"] = result.Outputs
+	data["skipped"] = result.Skipped
+	data["error"] = result.Error
+	for key, value := range result.Metadata {
+		data[key] = value
+	}
+	return data
+}
+
+// ResolveOutputs resolves a step's declared outputs against the current result
+// and all previously stored step results.
+func (v *Variables) ResolveOutputs(outputs map[string]string, result *StepResult) (map[string]string, error) {
+	defer perf.Track(nil, "step.Variables.ResolveOutputs")()
+
+	resolved := make(map[string]string, len(outputs))
+	for key, value := range outputs {
+		tmpl, err := template.New("step-output").Parse(value)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse output %s: %w", key, err)
+		}
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, v.outputTemplateData(result)); err != nil {
+			return nil, fmt.Errorf("failed to execute output %s: %w", key, err)
+		}
+		resolved[key] = buf.String()
+	}
+	return resolved, nil
 }
 
 // Resolve resolves Go templates in the given string using variable data.

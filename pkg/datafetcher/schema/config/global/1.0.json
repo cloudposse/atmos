@@ -36,6 +36,9 @@
     },
     "workflows": {
       "$ref": "#/definitions/workflows"
+    },
+    "container": {
+      "$ref": "#/definitions/container"
     }
   },
   "additionalProperties": true,
@@ -109,6 +112,29 @@
     }
   ],
   "definitions": {
+    "container": {
+      "title": "container",
+      "description": "Global container runtime defaults (the top-level `container:` namespace).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "type": "string",
+              "description": "Container runtime provider: docker, podman, or empty for auto-detect.",
+              "enum": ["", "docker", "podman"]
+            },
+            "auto_start": {
+              "type": "boolean",
+              "description": "Auto-init/start the Podman machine when no running runtime is found."
+            }
+          }
+        }
+      }
+    },
     "import": {
       "title": "import",
       "description": "Import section",

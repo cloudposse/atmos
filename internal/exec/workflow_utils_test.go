@@ -111,6 +111,29 @@ func TestIsKnownWorkflowError(t *testing.T) {
 	}
 }
 
+func TestExecuteExtendedStepInitializesExecutorAndLoadsEnv(t *testing.T) {
+	ResetStepExecutorState()
+	t.Cleanup(ResetStepExecutorState)
+
+	step := &schema.WorkflowStep{
+		Name:  "blank",
+		Type:  "linebreak",
+		Count: 1,
+	}
+	err := executeExtendedStep(
+		context.Background(),
+		step,
+		&schema.WorkflowDefinition{Output: "none"},
+		[]string{"ATMOS_TEST_EXTENDED_ENV=loaded", "malformed"},
+		true,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, stepExecutorState)
+	assert.Equal(t, "loaded", stepExecutorState.Variables().Env["ATMOS_TEST_EXTENDED_ENV"])
+	_, ok := stepExecutorState.GetResult("blank")
+	assert.True(t, ok)
+}
+
 // TestCheckAndMergeDefaultIdentity tests the checkAndMergeDefaultIdentity function.
 func TestCheckAndMergeDefaultIdentity(t *testing.T) {
 	tests := []struct {
