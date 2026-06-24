@@ -163,12 +163,19 @@
           "additionalProperties": false,
           "properties": {
             "all": {
-              "type": "array",
               "description": "All conditions must evaluate to true.",
-              "items": {
-                "$ref": "#/definitions/step_condition"
-              },
-              "minItems": 1
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/step_condition"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/step_condition"
+                  },
+                  "minItems": 1
+                }
+              ]
             },
             "any": {
               "type": "array",
@@ -222,12 +229,19 @@
           "additionalProperties": false,
           "properties": {
             "all": {
-              "type": "array",
               "description": "All conditions must evaluate to true.",
-              "items": {
-                "$ref": "#/definitions/condition"
-              },
-              "minItems": 1
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/condition"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/condition"
+                  },
+                  "minItems": 1
+                }
+              ]
             },
             "any": {
               "type": "array",

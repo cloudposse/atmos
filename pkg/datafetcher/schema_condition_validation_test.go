@@ -19,11 +19,12 @@ func TestManifestSchema_WorkflowWhenConditionForms(t *testing.T) {
 	}
 
 	validConditions := map[string]any{
-		"scalar": "ci",
-		"list":   []any{"ci", "success"},
-		"all":    map[string]any{"all": []any{"ci", "success"}},
-		"any":    map[string]any{"any": []any{"ci", "local"}},
-		"not":    map[string]any{"not": "ci"},
+		"scalar":     "ci",
+		"list":       []any{"ci", "success"},
+		"all":        map[string]any{"all": []any{"ci", "success"}},
+		"all-scalar": map[string]any{"all": "ci"},
+		"any":        map[string]any{"any": []any{"ci", "local"}},
+		"not":        map[string]any{"not": "ci"},
 	}
 
 	for schemaName, schemaData := range schemas {
@@ -52,12 +53,13 @@ func TestManifestSchema_HookWhenConditionForms(t *testing.T) {
 	}
 
 	validConditions := map[string]any{
-		"success":   "success",
-		"failure":   "failure",
-		"always":    "always",
-		"ci":        "ci",
-		"ci-always": []any{"ci", "always"},
-		"compound":  map[string]any{"all": []any{"ci", map[string]any{"not": "never"}}},
+		"success":    "success",
+		"failure":    "failure",
+		"always":     "always",
+		"ci":         "ci",
+		"ci-always":  []any{"ci", "always"},
+		"all-scalar": map[string]any{"all": "ci"},
+		"compound":   map[string]any{"all": []any{"ci", map[string]any{"not": "never"}}},
 	}
 
 	for schemaName, schemaData := range schemas {

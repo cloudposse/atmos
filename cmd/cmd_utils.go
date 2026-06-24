@@ -616,6 +616,23 @@ func executeCustomCommand(
 		finalArgs = args
 	}
 
+	conditionContext := customCommandConditionContext()
+	hasRunnableStep := false
+	for i := range commandConfig.Steps {
+		step := &commandConfig.Steps[i]
+		if err := schema.ValidateStepCondition(step.When); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+		if step.When.Evaluate(conditionContext) {
+			hasRunnableStep = true
+			break
+		}
+	}
+	if !hasRunnableStep {
+		log.Debug("Skipping custom command, no steps matched `when` conditions", customCommandKeyCommand, commandConfig.Name)
+		return
+	}
+
 	// Resolve and install command dependencies.
 	// First, load tools from .tool-versions (project-wide defaults).
 	// Then merge with command-specific dependencies (command deps override .tool-versions).
@@ -688,19 +705,6 @@ func executeCustomCommand(
 	if commandIdentity == "" {
 		// Fall back to identity from command config
 		commandIdentity = strings.TrimSpace(commandConfig.Identity)
-	}
-
-	conditionContext := customCommandConditionContext()
-	hasRunnableStep := false
-	for i := range commandConfig.Steps {
-		step := &commandConfig.Steps[i]
-		if err := schema.ValidateStepCondition(step.When); err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
-		}
-		if step.When.Evaluate(conditionContext) {
-			hasRunnableStep = true
-			break
-		}
 	}
 
 	authManager := prepareCustomCommandAuth(&atmosConfig, commandIdentity, commandConfig.Name, hasRunnableStep)
