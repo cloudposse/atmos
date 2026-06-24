@@ -6,7 +6,12 @@ permissions:
   id-token: write
 jobs:
   autofix:
-    if: github.actor != 'atmos-pro[bot]'
+    # Skip on fork PRs: GitHub withholds id-token (OIDC) and repo vars/secrets
+    # from fork-originated pull_request runs, so `atmos pro commit` cannot
+    # authenticate or push and the job always fails for external contributors.
+    if: >-
+      github.actor != 'atmos-pro[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on:
       - runs-on=${{github.run_id}}
       - runner=terraform
