@@ -160,6 +160,8 @@ auth:
         secret_access_key: !env EMERGENCY_AWS_SECRET_ACCESS_KEY
         region: us-east-1
         mfa_arn: arn:aws:iam::123456789012:mfa/username  # Optional
+      spec:
+        endpoint_url: "http://localhost:4566"             # Optional for Floci/LocalStack-compatible endpoints
 ```
 </File>
 
@@ -181,6 +183,9 @@ auth:
 
   <dt>`credentials.webflow_enabled`</dt>
   <dd>Optional. Defaults to `true`. Set to `false` to disable browser-based authentication fallback.</dd>
+
+  <dt>`spec.endpoint_url`</dt>
+  <dd>Optional. AWS-compatible base endpoint URL for SDK calls, useful for Floci, LocalStack, and other test endpoints.</dd>
 </dl>
 
 :::tip

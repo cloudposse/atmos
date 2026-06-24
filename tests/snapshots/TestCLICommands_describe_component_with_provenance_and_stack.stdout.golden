@@ -16,19 +16,19 @@ import:                                           # ○ [3] orgs/acme/plat/_defa
   - orgs/acme/_defaults                           # ○ [3] orgs/acme/plat/_defaults.yaml:2
   - orgs/acme/plat/_defaults                      # ○ [2] orgs/acme/plat/dev/_defaults.yaml:2
   - orgs/acme/plat/dev/_defaults                  # ● [1] orgs/acme/plat/dev/us-east-2.yaml:2
-settings:                                         # ○ [4] catalog/vpc/defaults.yaml:10
+settings:                                         # ○ [4] catalog/vpc/defaults.yaml:9
   templates:                                      # ○ [4] orgs/acme/_defaults.yaml:7
     settings:                                     # ○ [4] orgs/acme/_defaults.yaml:9
       gomplate:                                   # ○ [4] orgs/acme/_defaults.yaml:12
         datasources: {}                           # ○ [4] orgs/acme/_defaults.yaml:14
         timeout: 5                                # ○ [4] orgs/acme/_defaults.yaml:12
       sprig: {}                                   # ○ [4] orgs/acme/_defaults.yaml:9
-vars:                                             # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:9
-  enabled: true                                   # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:9
+vars:                                             # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:8
+  enabled: true                                   # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:8
   environment: ue2                                # ○ [2] mixins/region/us-east-2.yaml:9
-  force_destroy: true                             # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:12
-  lifecycle_rule_enabled: false                   # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:13
-  name: vpc-flow-logs                             # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:10
+  force_destroy: true                             # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:11
+  lifecycle_rule_enabled: false                   # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:12
+  name: vpc-flow-logs                             # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:9
   namespace: acme                                 # ○ [4] orgs/acme/_defaults.yaml:2
   region: us-east-2                               # ○ [2] mixins/region/us-east-2.yaml:8
   stage: dev                                      # ○ [3] mixins/stage/dev.yaml:2
@@ -42,5 +42,5 @@ vars:                                             # ○ [3] catalog/vpc-flow-log
     terraform_component: vpc-flow-logs-bucket     # ○ [4] orgs/acme/_defaults.yaml:24
     terraform_workspace: plat-ue2-dev             # ○ [4] orgs/acme/_defaults.yaml:23
   tenant: plat                                    # ○ [4] mixins/tenant/plat.yaml:2
-  traffic_type: ALL                               # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:11
+  traffic_type: ALL                               # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:10
 

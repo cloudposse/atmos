@@ -34,6 +34,8 @@ auth:
       kind: aws/iam-identity-center
       region: us-east-1
       start_url: https://company.awsapps.com/start
+      spec:
+        endpoint_url: "http://localhost:4566"  # Optional for Floci/LocalStack-compatible endpoints
 
       # Automatically discover all accounts and permission sets
       auto_provision_identities: true
@@ -65,6 +67,9 @@ auth:
 
   <dt>`console.session_duration`</dt>
   <dd>Optional. Web console session duration. Maximum 12 hours for AWS.</dd>
+
+  <dt>`spec.endpoint_url`</dt>
+  <dd>Optional. AWS-compatible base endpoint URL for SDK calls, useful for Floci, LocalStack, and other test endpoints.</dd>
 </dl>
 
 ### IAM Permissions for Identity Provisioning

@@ -38,35 +38,78 @@ func NewResultHandler(opts HandlerOptions) hooks.ResultHandler {
 		data, err := os.ReadFile(path)
 		if os.IsNotExist(err) {
 			// Tool didn't produce a SARIF file (clean run, no findings).
+			label := labelOrDefault(opts.Kind, "")
 			return &hooks.Summary{
-				Kind:   opts.Kind,
+				Kind:   label,
 				Status: hooks.StatusSuccess,
 				Title:  "no findings",
-				Body:   fmt.Sprintf("## %s\n\n✅ no findings\n", opts.Kind),
+				Body:   fmt.Sprintf("## %s\n\n✅ no findings\n", label),
 			}, nil
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%s: read SARIF: %w: %w", opts.Kind, errUtils.ErrReadFile, err)
+			return nil, fmt.Errorf("%s: read SARIF: %w: %w", labelOrDefault(opts.Kind, ""), errUtils.ErrReadFile, err)
 		}
 
+		data = normalizeArtifactURIs(data, ctx)
 		findings, err := Parse(data)
 		if err != nil {
-			return nil, fmt.Errorf("%s: parse SARIF: %w: %w", opts.Kind, errUtils.ErrParseFile, err)
+			return nil, fmt.Errorf("%s: parse SARIF: %w: %w", labelOrDefault(opts.Kind, ""), errUtils.ErrParseFile, err)
 		}
 
+		// When Kind is empty (a generic `kind: command` hook using
+		// `format: sarif`), fall back to the SARIF's own tool driver name
+		// (e.g. "tfsec") so the report is labeled by the actual tool.
+		label := labelOrDefault(opts.Kind, findings.Tool)
 		body := RenderMarkdown(findings, RenderMarkdownOptions{
-			Tool:        opts.Kind,
+			Tool:        label,
 			MaxFindings: opts.MaxFindings,
 		})
 
 		return &hooks.Summary{
-			Kind:   opts.Kind,
-			Status: statusForFindings(findings),
-			Title:  titleForFindings(findings),
-			Counts: findings.CountsBySeverity(),
-			Body:   body,
+			Kind:     label,
+			Status:   statusForFindings(findings),
+			Title:    titleForFindings(findings),
+			Counts:   findings.CountsBySeverity(),
+			Body:     body,
+			Findings: toHookFindings(findings),
+			// Preserve the tool's SARIF fidelity while normalizing artifact
+			// paths so annotations and Code Scanning can anchor to PR files.
+			SARIF: data,
 		}, nil
 	}
+}
+
+// labelOrDefault resolves the report label: the configured kind, else the
+// SARIF tool driver name, else "scan".
+func labelOrDefault(kind, toolName string) string {
+	if kind != "" {
+		return kind
+	}
+	if toolName != "" {
+		return toolName
+	}
+	return "scan"
+}
+
+// toHookFindings maps the parsed SARIF findings into the provider-neutral
+// hooks.Finding shape the engine translates to CI annotations. Keeping the
+// mapping here (rather than handing sarif.Finding to the engine) avoids
+// pkg/hooks importing this subpackage, which would be an import cycle.
+func toHookFindings(f *Findings) []hooks.Finding {
+	if f == nil || len(f.Findings) == 0 {
+		return nil
+	}
+	out := make([]hooks.Finding, 0, len(f.Findings))
+	for _, fd := range f.Findings {
+		out = append(out, hooks.Finding{
+			Path:     fd.File,
+			Line:     fd.Line,
+			Severity: fd.Severity.String(),
+			RuleID:   fd.RuleID,
+			Message:  fd.Message,
+		})
+	}
+	return out
 }
 
 // statusForFindings maps the highest finding severity to a Summary status.

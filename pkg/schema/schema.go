@@ -710,13 +710,15 @@ type TerraformPlanCIResult struct {
 // CIConfig contains CI/CD integration configuration.
 // Uses provider-agnostic naming to support GitHub Actions, GitLab CI, and other providers.
 type CIConfig struct {
-	Enabled   bool              `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	Output    CIOutputConfig    `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
-	Summary   CISummaryConfig   `yaml:"summary,omitempty" json:"summary,omitempty" mapstructure:"summary"`
-	Checks    CIChecksConfig    `yaml:"checks,omitempty" json:"checks,omitempty" mapstructure:"checks"`
-	Comments  CICommentsConfig  `yaml:"comments,omitempty" json:"comments,omitempty" mapstructure:"comments"`
-	Templates CITemplatesConfig `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
-	Cache     CICacheConfig     `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+	Enabled     bool                `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Output      CIOutputConfig      `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
+	Summary     CISummaryConfig     `yaml:"summary,omitempty" json:"summary,omitempty" mapstructure:"summary"`
+	Annotations CIAnnotationsConfig `yaml:"annotations,omitempty" json:"annotations,omitempty" mapstructure:"annotations"`
+	Results     CIResultsConfig     `yaml:"results,omitempty" json:"results,omitempty" mapstructure:"results"`
+	Checks      CIChecksConfig      `yaml:"checks,omitempty" json:"checks,omitempty" mapstructure:"checks"`
+	Comments    CICommentsConfig    `yaml:"comments,omitempty" json:"comments,omitempty" mapstructure:"comments"`
+	Templates   CITemplatesConfig   `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
+	Cache       CICacheConfig       `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
 }
 
 // CICacheConfig configures the CI build cache, which restores a well-known
@@ -774,6 +776,29 @@ type CISummaryConfig struct {
 	// When explicitly set to false, summaries are disabled.
 	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
+}
+
+// CIAnnotationsConfig configures inline annotations for scanner-hook findings.
+// GitHub: workflow `::error`/`::warning` commands shown inline on the PR diff.
+// This is the "non-CodeQL" path — it needs no GitHub Advanced Security.
+//
+// Enabled is *bool so callers can distinguish "unset" (nil, default applies)
+// from explicit false. Default is true when omitted; effective only when the
+// global ci.enabled is true.
+type CIAnnotationsConfig struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+}
+
+// CIResultsConfig configures uploading scanner-hook findings (SARIF) to the
+// CI provider's security-findings store. GitHub: Code Scanning / the Security
+// tab, which requires GitHub Advanced Security on private repos and a token
+// with the `security_events` write scope.
+//
+// Enabled is *bool so callers can distinguish "unset" (nil, default applies)
+// from explicit false. Default is false when omitted (opt-in, since it has
+// side effects and extra requirements); effective only when ci.enabled is true.
+type CIResultsConfig struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 }
 
 // CIChecksConfig configures CI commit status checks.
