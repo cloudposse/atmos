@@ -40,6 +40,10 @@ const ciHookFailedMsg = "CI hook execution failed"
 // logKeyComponent is the structured-log key for a component name.
 const logKeyComponent = "component"
 
+// verifyPlanFlagName is the tri-state planfile-verify flag (--verify-plan,
+// --verify-plan=false).
+const verifyPlanFlagName = "verify-plan"
+
 // ciHookConfigInitFailedMsg is the log message emitted when CI-hook config init fails.
 const ciHookConfigInitFailedMsg = "CI hook config init failed"
 
@@ -186,14 +190,11 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		forceCIMode = viper.GetBool("ci")
 	}
 
-	// Read --verify-plan flag early (same pattern as --ci above).
-	// PreRunE runs before RunE, so info.VerifyPlan is not yet set by applyOptionsToInfo().
-	// The CI hook handler needs it to decide whether to download with stored prefix.
-	verifyPlan, _ := cmd_.Flags().GetBool("verify-plan")
-	if !verifyPlan {
-		verifyPlan = viper.GetBool("verify-plan")
-	}
-	hctx.info.VerifyPlan = verifyPlan
+	// Read the verify-plan flag early (same pattern as --ci above). PreRunE runs
+	// before RunE, so info is not yet populated by applyOptionsToInfo(). The
+	// before.terraform.deploy hook reads the resulting CLI override to decide
+	// whether to download the stored planfile (skipped when verification is off).
+	hctx.info.VerifyPlanMode = resolveVerifyPlanMode(cmd_)
 
 	// Run CI hooks based on component provider bindings.
 	// This is separate from user-defined hooks and runs automatically when CI is enabled.
@@ -210,6 +211,35 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	}
 
 	return nil
+}
+
+// resolveVerifyPlanMode resolves the explicit planfile-verify override from the
+// tri-state --verify-plan flag: fail for --verify-plan(=true), off for
+// --verify-plan=false, empty when the flag was not set (defer to config / the CI
+// default).
+//
+// It delegates to deployParser.IsBoolFlagExplicitlySet which uses
+// cmd.Flags().Changed for CLI detection and os.LookupEnv over the flag's
+// registered env vars (from the flags registry) for environment detection.
+// We deliberately avoid viper.IsSet here: SetDefault registers a default that
+// makes IsSet return true even when neither the CLI flag nor the env var was
+// provided — collapsing the unset case to off and silently disabling
+// verification (a missing stored plan would no longer block the deploy).
+func resolveVerifyPlanMode(cmd *cobra.Command) schema.PlanfileVerifyMode {
+	set, verify := deployParser.IsBoolFlagExplicitlySet(cmd, verifyPlanFlagName)
+	if !set {
+		return ""
+	}
+	return verifyPlanModeFromBool(verify)
+}
+
+// verifyPlanModeFromBool maps the resolved --verify-plan boolean to its mode:
+// true forces fail, false forces off.
+func verifyPlanModeFromBool(verify bool) schema.PlanfileVerifyMode {
+	if verify {
+		return schema.PlanfileVerifyFail
+	}
+	return schema.PlanfileVerifyOff
 }
 
 // injectHookStoreAuthResolver wires the resolved auth manager from info into
@@ -602,7 +632,6 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	if opts.DeployRunInit {
 		info.DeployRunInit = "true"
 	}
-	info.VerifyPlan = opts.VerifyPlan
 }
 
 // terraformRunWithOptions is the shared execution logic for terraform subcommands.
@@ -628,6 +657,11 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
 	// This fixes issue #1945: --all flag must be set before resolveAndPromptForArgs checks it.
 	applyOptionsToInfo(&info, opts)
+
+	// Resolve the tri-state --verify-plan override from the command (reliable
+	// Changed/env detection) rather than from opts, which cannot tell an unset
+	// flag from --verify-plan=false through Viper. Drives the RunE verify gate.
+	info.VerifyPlanMode = resolveVerifyPlanMode(actualCmd)
 
 	// Resolve paths and prompt for missing component/stack interactively.
 	if err := resolveAndPromptForArgs(&info, actualCmd); err != nil {
@@ -687,23 +721,76 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	}
 	wasMultiComponentExecution = false
 
-	// Verify stored planfile matches current state before deploying.
-	if subCommand == "deploy" && info.VerifyPlan {
-		verifyAtmosConfig, configErr := cfg.InitCliConfig(info, true)
-		if configErr == nil {
-			canonicalPlanPath := e.ConstructTerraformComponentPlanfilePath(&verifyAtmosConfig, &info)
-			componentDir := filepath.Dir(canonicalPlanPath)
-			storedPlanPath := filepath.Join(componentDir, planfile.StoredPlanPrefix+planfile.PlanFilename)
-
-			if _, statErr := os.Stat(storedPlanPath); statErr == nil {
-				if verifyErr := e.VerifyPlanfile(&info, storedPlanPath); verifyErr != nil {
-					return verifyErr
-				}
-			}
-		}
+	// Verify the stored planfile matches current state before deploying.
+	if verifyErr := verifyStoredPlanForDeploy(subCommand, &info); verifyErr != nil {
+		return verifyErr
 	}
 
 	return executeSingleComponent(&info, shellOpts...)
+}
+
+// verifyStoredPlanForDeploy runs planfile drift verification before a deploy
+// apply. It is a no-op for non-deploy commands, when planfile storage is not
+// configured, when planfile verification is off, or when no stored planfile was
+// downloaded (the stored planfile only exists when the before.terraform.deploy
+// hook fetched it under CI). On a match, or under warn, it points info at the
+// freshly generated plan for apply.
+func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksInfo) error {
+	if subCommand != "deploy" {
+		return nil
+	}
+
+	verifyAtmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		// Config errors surface on the normal execution path; nothing to verify here.
+		return nil //nolint:nilerr // intentionally deferring config errors to the main path.
+	}
+
+	if v := verifyAtmosConfig.Components.Terraform.Planfiles.Verify; !v.IsValid() {
+		return fmt.Errorf("%w: components.terraform.planfiles.verify %q is invalid (want fail|warn|off)", errUtils.ErrInvalidConfig, v)
+	}
+
+	// Planfile verification is opt-in via planfile storage. Without it there is no
+	// stored plan to download, verify, or require, so deploy proceeds untouched
+	// (mirrors the before.terraform.deploy download hook's storage gate). This also
+	// keeps plain `deploy` (no planfile config) free of verification warnings.
+	if !planfile.StorageConfigured(&verifyAtmosConfig.Components.Terraform.Planfiles) {
+		return nil
+	}
+
+	canonicalPlanPath := e.ConstructTerraformComponentPlanfilePath(&verifyAtmosConfig, info)
+	storedPlanPath := filepath.Join(filepath.Dir(canonicalPlanPath), planfile.StoredPlanPrefix+planfile.PlanFilename)
+	if _, statErr := os.Stat(storedPlanPath); statErr != nil {
+		// No stored planfile was downloaded. Whether that blocks the deploy is
+		// configurable via components.terraform.planfiles.required (default:
+		// tracks the verify mode, so a fail-by-default CI deploy fails loudly
+		// instead of silently applying an unverified fresh plan).
+		return handleMissingStoredPlan(&verifyAtmosConfig, info)
+	}
+
+	// A stored planfile implies the CI download hook ran, so resolve with ciEnabled=true.
+	mode := planfile.ResolveVerifyMode(&verifyAtmosConfig, true, info.VerifyPlanMode)
+	if mode == schema.PlanfileVerifyOff {
+		return nil
+	}
+
+	return e.VerifyPlanfile(info, storedPlanPath, mode)
+}
+
+// handleMissingStoredPlan applies the configured behavior when a deploy found no
+// stored planfile to verify against. When a stored plan is required it errors (a
+// reviewed plan was expected); otherwise it logs and proceeds with a fresh apply.
+// Whether a plan is required is resolved with real CI detection because, unlike
+// the drift path, the absence of a stored plan does not imply the download hook ran.
+func handleMissingStoredPlan(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if planfile.IsPlanRequired(atmosConfig, ci.IsCI(), info.VerifyPlanMode) {
+		return fmt.Errorf("%w: expected a stored planfile for component %q in stack %q but none was found",
+			errUtils.ErrStoredPlanfileMissing, info.ComponentFromArg, info.Stack)
+	}
+
+	log.Warn("No stored planfile found to verify; applying a fresh plan without verification",
+		logKeyComponent, info.ComponentFromArg, "stack", info.Stack)
+	return nil
 }
 
 func terraformSignalContext(actualCmd *cobra.Command) (context.Context, context.CancelFunc) {

@@ -25,6 +25,9 @@ uploads planfiles to storage, and `atmos terraform deploy` downloads and verifie
 components:
   terraform:
     planfiles:
+      # Drift verification on `deploy`: fail (default under CI) | warn | off
+      verify: fail
+
       # Stores are tried in priority order
       priority:
         - "github"
@@ -65,6 +68,62 @@ If `components.terraform.planfiles` is not configured, planfile storage operatio
 skipped. CI summaries and status checks still work without planfile storage.
 :::
 
+## Using GitHub Artifacts in GitHub Actions
+
+The `github/artifacts` backend talks to the **GitHub Actions Artifacts API directly** — Atmos is
+the native client, not a wrapper around `actions/upload-artifact`. To do that it needs the runner's
+runtime credentials, `ACTIONS_RUNTIME_TOKEN` and `ACTIONS_RESULTS_URL`.
+
+GitHub injects those into **action steps** (`uses:`) but **withholds them from `run:` steps** — a
+deliberate least-privilege decision. So when Atmos's own commands do the upload from a `run:` step,
+they will fail with:
+
+```
+GitHub Artifacts upload requires running within GitHub Actions
+(ACTIONS_RUNTIME_TOKEN and ACTIONS_RESULTS_URL must be set)
+```
+
+Surface the credentials with the Atmos [`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime)
+action. With `mode: env` it exports the credentials to `$GITHUB_ENV` once, and GitHub then injects
+them automatically into every later `run:` step — Atmos's commands pick them up from the environment
+with no per-step wiring:
+
+<File title=".github/workflows/atmos.yaml">
+```yaml
+steps:
+  - uses: cloudposse/atmos/actions/github-runtime@v1   # pin to a release or SHA
+    with:
+      mode: env
+
+  # Credentials are now in the environment of every later run step.
+  - run: atmos terraform plan mycomponent -s prod --ci    # uploads the planfile to github/artifacts
+  - run: atmos terraform deploy mycomponent -s prod --ci  # downloads, verifies, then applies
+```
+</File>
+
+To keep the credentials out of unrelated steps, use the default `mode: output` instead: the action
+emits masked step outputs that you thread, via `env:`, only into the steps that store planfiles. This
+is the same `github-runtime` mechanism the `atmos ci cache` backend uses — see the
+[cache configuration docs](/cli/configuration/ci/cache) for the full security tradeoff between
+scoped (`mode: output`) and ambient (`mode: env`) credentials.
+
+<File title="Least-privilege alternative (mode: output)">
+```yaml
+steps:
+  - uses: cloudposse/atmos/actions/github-runtime@v1
+    id: ghr
+  - run: atmos terraform plan mycomponent -s prod --ci
+    env:
+      ACTIONS_RUNTIME_TOKEN: ${{ steps.ghr.outputs.runtime-token }}
+      ACTIONS_RESULTS_URL:   ${{ steps.ghr.outputs.results-url }}
+```
+</File>
+
+:::note
+You only need this when **Atmos** performs the upload from a `run:` step. The credentials are already
+present inside `uses:` action steps, and the `local/dir` and `aws/s3` backends don't use them at all.
+:::
+
 ## How It Works
 
 ### Plan Phase
@@ -78,25 +137,65 @@ When `atmos terraform plan` runs in CI mode with planfile storage configured:
 
 ### Deploy Phase
 
-When `atmos terraform deploy` runs:
+When `atmos terraform deploy` runs in CI mode with planfile storage configured, verification is
+**automatic**:
 
 1. Downloads the stored planfile bundle from storage
 2. Verifies SHA256 integrity checksums
 3. Generates a fresh plan against current infrastructure
-4. Performs semantic comparison between stored and fresh plans
-5. **If plans match:** Applies the verified plan
-6. **If plans differ:** Fails with a drift detection error
+4. Performs JSON-structural comparison between stored and fresh plans
+5. **If plans match:** Applies the **fresh** plan (generated with the apply-time identity and state)
+6. **If plans drift:** Fails the deploy (mode `fail`) or warns and proceeds (mode `warn`)
 
-This ensures that exactly what was reviewed during the plan phase gets applied, with no
-silent infrastructure drift.
+Atmos reconciles rather than replays: it applies the freshly generated plan once the diff confirms it
+matches what was reviewed, so the deploy uses the apply-time state and credentials while still
+guaranteeing no material drift. This avoids the brittleness of a saved plan — which goes stale when the
+state moves, and whose base credentials come from the apply environment, not the plan (so a plan built
+on a PR can fail to apply on merge). (To replay the stored binary directly, use `--from-plan` /
+`--planfile`.) Verification runs on `deploy` only — `apply` stays a thin wrapper.
+
+:::note GitHub Actions runtime token
+With the `github/artifacts` store, the automatic download (like the upload) talks to the GitHub
+Artifacts runtime API, so `deploy` must also run after the
+[`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action
+surfaces `ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL` — see
+[Using GitHub Artifacts in GitHub Actions](#using-github-artifacts-in-github-actions) above.
+:::
 
 ## Plan Verification
 
-The deploy command uses semantic plan comparison — not naive text diff. It compares the
-JSON plan structures to detect meaningful differences while ignoring cosmetic changes.
+Verification compares the **JSON plan structures** (`terraform show -json`) of the stored and fresh
+plans — not a naive text diff — detecting meaningful changes while ignoring cosmetic noise (sorted keys,
+masked sensitive values, skipped computed-hash attributes and data sources).
 
-If drift is detected, the deploy fails with a clear error showing what changed since the
-plan was created.
+This semantic comparison is deliberate. A plan legitimately contains values that vary between review and
+apply — attributes "known after apply," computed fields, hashes, ordering, timestamps. A byte-for-byte
+check (or Terraform's own saved-plan apply, which any state-lineage change invalidates) would reject a
+plan that is still perfectly valid. Verification needs **wiggle room**: tolerate benign variation while
+still catching substantive drift — a resource added, removed, or actually changed.
+
+It is configurable via `components.terraform.planfiles.verify`:
+
+```yaml
+components:
+  terraform:
+    planfiles:
+      verify: fail   # fail (default under CI) | warn | off
+```
+
+- **`fail`** (default under CI): fail the deploy on drift.
+- **`warn`**: log the drift but proceed with the fresh plan.
+- **`off`**: skip verification (and the stored-plan download).
+
+A companion boolean, `components.terraform.planfiles.required`, governs whether a stored plan **must
+exist** to verify against. It defaults to tracking `verify` strictness (required when verification
+resolves to `fail`), so a fail-by-default CI deploy fails loudly instead of silently applying an
+unverified fresh plan. See [Missing stored plan](/components/terraform/planfiles#missing-stored-plan).
+
+Per-run overrides: `--verify-plan` (force `fail`) and `--verify-plan=false` (force `off`); the CLI flag beats
+config, which beats the CI default. See
+[`atmos terraform deploy`](/cli/commands/terraform/deploy#automatic-plan-verification-in-ci) and
+[Planfile drift verification](/components/terraform/planfiles#drift-verification).
 
 ## CLI Commands
 
@@ -110,6 +209,6 @@ plan was created.
 ## Related
 
 - [Native CI Overview](/ci) - Feature overview
-- [Native CI Overview](/ci) - Feature overview
+- [CI Cache Configuration](/cli/configuration/ci/cache) - The same `github-runtime` credential mechanism, in depth
 - [CI Configuration](/cli/configuration/ci) - Full configuration reference
 - [`atmos terraform planfile`](/cli/commands/terraform/planfile) - CLI commands
