@@ -174,7 +174,7 @@ func TestIsImageMissingError(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, isImageMissingError(tc.err))
+			assert.Equal(t, tc.want, IsImageMissingError(tc.err))
 		})
 	}
 }

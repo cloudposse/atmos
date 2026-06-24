@@ -1881,6 +1881,71 @@ func TestFormatExperimentalBadge_NoColorSupport(t *testing.T) {
 	}
 }
 
+func TestFormatComponentLabel_FormatterNotInitialized(t *testing.T) {
+	formatterMu.Lock()
+	oldFormatter, oldFormat, oldTerminal := globalFormatter, Format, globalTerminal
+	globalFormatter, Format, globalTerminal = nil, nil, nil
+	formatterMu.Unlock()
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter, Format, globalTerminal = oldFormatter, oldFormat, oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// Degrades to a plain [name] label when the formatter is not initialized.
+	if got := FormatComponentLabel("api", 0); got != "[api]" {
+		t.Errorf("FormatComponentLabel() fallback = %q, want %q", got, "[api]")
+	}
+}
+
+func TestFormatComponentLabel_NoColorSupport(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	formatterMu.Lock()
+	oldFormatter, oldFormat, oldTerminal := globalFormatter, Format, globalTerminal
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+	Format = globalFormatter
+	globalTerminal = term
+	formatterMu.Unlock()
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter, Format, globalTerminal = oldFormatter, oldFormat, oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// No color support => plain [name], no ANSI escapes.
+	got := FormatComponentLabel("worker", 2)
+	if got != "[worker]" {
+		t.Errorf("FormatComponentLabel() no-color = %q, want %q", got, "[worker]")
+	}
+}
+
+func TestFormatComponentLabel_WithColor(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorTrue)
+	formatterMu.Lock()
+	oldFormatter, oldFormat, oldTerminal := globalFormatter, Format, globalTerminal
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+	Format = globalFormatter
+	globalTerminal = term
+	formatterMu.Unlock()
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter, Format, globalTerminal = oldFormatter, oldFormat, oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// With color support the name is present and styled (contains ANSI escapes),
+	// not the plain bracketed fallback.
+	got := FormatComponentLabel("api", 0)
+	if !strings.Contains(got, "api") {
+		t.Errorf("FormatComponentLabel() = %q, want it to contain %q", got, "api")
+	}
+	if got == "[api]" {
+		t.Errorf("FormatComponentLabel() with color should be styled, got plain %q", got)
+	}
+}
+
 func TestClearLine_TerminalNotInitialized(t *testing.T) {
 	// Save original state.
 	formatterMu.Lock()

@@ -268,6 +268,7 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 		{cfg.HelmfileSectionName, processComponentTypeOpts{}},
 		{cfg.PackerSectionName, processComponentTypeOpts{}},
 		{cfg.AnsibleSectionName, processComponentTypeOpts{}},
+		{cfg.ContainerSectionName, processComponentTypeOpts{}},
 	}
 
 	for _, te := range typeEntries {
@@ -886,6 +887,7 @@ func hasStackExplicitComponents(stackSection map[string]any) bool {
 		cfg.HelmfileSectionName,
 		cfg.PackerSectionName,
 		cfg.AnsibleSectionName,
+		cfg.ContainerSectionName,
 	} {
 		if typeMap, ok := comps[typeName].(map[string]any); ok && len(typeMap) > 0 {
 			return true
