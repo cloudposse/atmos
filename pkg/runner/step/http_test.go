@@ -3,6 +3,7 @@ package step
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -436,16 +437,23 @@ func TestHTTPHandler_TemplateResolution(t *testing.T) {
 
 // TestHTTPHandler_TransportError verifies an unreachable endpoint fails (no panic).
 func TestHTTPHandler_TransportError(t *testing.T) {
+	// Bind an ephemeral port, then close it so the address deterministically refuses
+	// connections (relying on a fixed low port like :1 is not portable across runners).
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	closedAddr := ln.Addr().String()
+	require.NoError(t, ln.Close())
+
 	handler := mustGetHTTPHandler(t)
 	step := &schema.WorkflowStep{
 		Name:    "down",
 		Type:    "http",
-		URL:     "http://127.0.0.1:1", // Port 1 should refuse connections.
+		URL:     "http://" + closedAddr, // Just-released port: refuses connections.
 		Timeout: "200ms",
 	}
 	require.NoError(t, handler.Validate(step))
 
-	_, err := handler.Execute(context.Background(), step, NewVariables())
+	_, err = handler.Execute(context.Background(), step, NewVariables())
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrHTTPStepRequestFailed)
 }
