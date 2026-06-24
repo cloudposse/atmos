@@ -111,21 +111,46 @@ type ContainerInspectStep struct {
 	Image            string `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`
 }
 
+// ContainerRestart configures the runtime restart policy for a long-lived
+// container component. It maps to the docker/podman `--restart` flag
+// (`<policy>[:<max_retries>]`). MaxRetries is only meaningful for `on-failure`.
+type ContainerRestart struct {
+	Policy     string `yaml:"policy,omitempty" json:"policy,omitempty" mapstructure:"policy"`                // no, always, on-failure, unless-stopped.
+	MaxRetries int    `yaml:"max_retries,omitempty" json:"max_retries,omitempty" mapstructure:"max_retries"` // on-failure only.
+}
+
+// ContainerHealthCheck configures a container health check, mirroring the Docker
+// Compose `healthcheck` shape. It maps to the docker/podman `--health-*` flags
+// (or `--no-healthcheck` when disabled). Test may be a bare string or a list whose
+// first element is `NONE`, `CMD`, or `CMD-SHELL`; a bare string / unprefixed list
+// is treated as `CMD-SHELL`. Duration fields accept Go duration strings (e.g. `30s`).
+type ContainerHealthCheck struct {
+	Test          []string `yaml:"test,omitempty" json:"test,omitempty" mapstructure:"test"`                               // string or [NONE|CMD|CMD-SHELL, ...].
+	Interval      string   `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`                   // e.g. 30s.
+	Timeout       string   `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`                      // e.g. 10s.
+	Retries       int      `yaml:"retries,omitempty" json:"retries,omitempty" mapstructure:"retries"`                      // consecutive failures before unhealthy.
+	StartPeriod   string   `yaml:"start_period,omitempty" json:"start_period,omitempty" mapstructure:"start_period"`       // grace period before failures count.
+	StartInterval string   `yaml:"start_interval,omitempty" json:"start_interval,omitempty" mapstructure:"start_interval"` // probe interval during the start period.
+	Disable       bool     `yaml:"disable,omitempty" json:"disable,omitempty" mapstructure:"disable"`                      // disable any image healthcheck.
+}
+
 // ContainerRunStep configures a one-shot container run action.
 type ContainerRunStep struct {
-	Image             string           `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`
-	Command           string           `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
-	Shell             string           `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`
-	Provider          string           `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
-	RuntimeAutoStart  bool             `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
-	Pull              string           `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`
-	Workspace         string           `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
-	WorkspaceReadOnly bool             `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"`
-	Cleanup           string           `yaml:"cleanup,omitempty" json:"cleanup,omitempty" mapstructure:"cleanup"`
-	User              string           `yaml:"user,omitempty" json:"user,omitempty" mapstructure:"user"`
-	RunArgs           []string         `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`
-	Mounts            []ContainerMount `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`
-	Ports             []ContainerPort  `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`
+	Image             string                `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`
+	Command           string                `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
+	Shell             string                `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`
+	Provider          string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
+	RuntimeAutoStart  bool                  `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	Pull              string                `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`
+	Workspace         string                `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
+	WorkspaceReadOnly bool                  `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"`
+	Cleanup           string                `yaml:"cleanup,omitempty" json:"cleanup,omitempty" mapstructure:"cleanup"`
+	User              string                `yaml:"user,omitempty" json:"user,omitempty" mapstructure:"user"`
+	RunArgs           []string              `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`
+	Mounts            []ContainerMount      `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`
+	Ports             []ContainerPort       `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`
+	Restart           *ContainerRestart     `yaml:"restart,omitempty" json:"restart,omitempty" mapstructure:"restart"`
+	HealthCheck       *ContainerHealthCheck `yaml:"healthcheck,omitempty" json:"healthcheck,omitempty" mapstructure:"healthcheck"`
 }
 
 // WorkflowContainer configures a workflow-level container-backed sandbox or a
@@ -239,6 +264,11 @@ type WorkflowStep struct {
 	// Log step fields.
 	Level  string            `yaml:"level,omitempty" json:"level,omitempty" mapstructure:"level"`    // Log level: trace, debug, info, warn, error.
 	Fields map[string]string `yaml:"fields,omitempty" json:"fields,omitempty" mapstructure:"fields"` // Structured log fields (key-value pairs).
+
+	// Say step fields.
+	Voice []string `yaml:"voice,omitempty" json:"voice,omitempty" mapstructure:"voice"` // Ordered voice candidates; first one installed on the host wins (CSS font-family style).
+	Rate  string   `yaml:"rate,omitempty" json:"rate,omitempty" mapstructure:"rate"`    // Speech rate: slow, normal, fast.
+	Print string   `yaml:"print,omitempty" json:"print,omitempty" mapstructure:"print"` // Print policy: fallback (default), always, never.
 
 	// Environment variables (supports templates).
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`

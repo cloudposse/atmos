@@ -272,8 +272,8 @@ func TestSetAuthContext_PopulatesAuthContext(t *testing.T) {
 	assert.Empty(t, authContext.AWS.EndpointURL)
 }
 
-func TestSetAuthContext_WithIdentityResolverEndpoint(t *testing.T) {
-	// The identity resolver endpoint is keyed by lowercase identity name. The
+func TestSetAuthContext_WithIdentitySpecEndpoint(t *testing.T) {
+	// The identity endpoint is keyed by lowercase identity name. The
 	// "lowercase fallback" case exercises the strings.ToLower lookup in
 	// endpointURLFromManager when the caller passes a mixed-case identity name.
 	tests := []struct {
@@ -296,12 +296,8 @@ func TestSetAuthContext_WithIdentityResolverEndpoint(t *testing.T) {
 			mockManager := types.NewMockAuthManager(ctrl)
 			mockManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 				"test-identity": {
-					Credentials: map[string]interface{}{
-						"aws": map[string]interface{}{
-							"resolver": map[string]interface{}{
-								"url": "http://identity.localstack:4566",
-							},
-						},
+					Spec: map[string]interface{}{
+						"endpoint_url": "http://identity.localstack:4566",
 					},
 				},
 			})
@@ -323,7 +319,7 @@ func TestSetAuthContext_WithIdentityResolverEndpoint(t *testing.T) {
 	}
 }
 
-func TestSetAuthContext_WithProviderResolverFallback(t *testing.T) {
+func TestSetAuthContext_WithProviderSpecEndpointFallback(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	homedir.Reset()
@@ -334,18 +330,12 @@ func TestSetAuthContext_WithProviderResolverFallback(t *testing.T) {
 	mockManager := types.NewMockAuthManager(ctrl)
 	mockManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 		"test-identity": {
-			Credentials: map[string]interface{}{
-				"aws": map[string]interface{}{},
-			},
+			Spec: map[string]interface{}{},
 		},
 	})
 	mockManager.EXPECT().ResolveProviderConfig("test-identity").Return(&schema.Provider{
 		Spec: map[string]interface{}{
-			"aws": map[string]interface{}{
-				"resolver": map[string]interface{}{
-					"url": "http://provider.localstack:4566",
-				},
-			},
+			"endpoint_url": "http://provider.localstack:4566",
 		},
 	}, true)
 
@@ -364,7 +354,7 @@ func TestSetAuthContext_WithProviderResolverFallback(t *testing.T) {
 	assert.Equal(t, "http://provider.localstack:4566", authContext.AWS.EndpointURL)
 }
 
-func TestSetAuthContext_NoResolverEndpoint(t *testing.T) {
+func TestSetAuthContext_NoEndpoint(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	homedir.Reset()

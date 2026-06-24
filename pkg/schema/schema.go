@@ -114,6 +114,7 @@ type AtmosConfiguration struct {
 	Docs            Docs                      `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Auth            AuthConfig                `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
 	Container       ContainerConfig           `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
+	Compositions    map[string]Composition    `yaml:"compositions,omitempty" json:"compositions,omitempty" mapstructure:"compositions"`
 	Env             map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
 	CaseMaps        *casemap.CaseMaps         `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
 	Profiler        profiler.Config           `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
@@ -626,6 +627,42 @@ type PlanfilesConfig struct {
 	Priority   []string                     `yaml:"priority,omitempty" json:"priority,omitempty" mapstructure:"priority"`
 	KeyPattern string                       `yaml:"key_pattern,omitempty" json:"key_pattern,omitempty" mapstructure:"key_pattern"`
 	Stores     map[string]PlanfileStoreSpec `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
+	// Verify controls drift verification of the stored planfile on `deploy`.
+	// One of: fail | warn | off. Empty means unset (defaults to fail under CI
+	// when planfile storage is configured, otherwise off).
+	Verify PlanfileVerifyMode `yaml:"verify,omitempty" json:"verify,omitempty" mapstructure:"verify"`
+	// Required controls whether a stored planfile must exist to verify against on
+	// `deploy` (distinct from Verify, which governs the drift comparison when a
+	// stored plan exists). A nil pointer means unset: required tracks verify
+	// strictness (true when verification resolves to fail, e.g. under CI with
+	// storage configured), so a fail-by-default deploy fails loudly rather than
+	// silently applying an unverified fresh plan. true requires a stored plan;
+	// false applies a fresh plan when none is found. It only applies when
+	// verification is active (verify is not off).
+	Required *bool `yaml:"required,omitempty" json:"required,omitempty" mapstructure:"required"`
+}
+
+// PlanfileVerifyMode controls how `atmos terraform deploy` reacts when the
+// stored planfile drifts from a freshly generated plan.
+type PlanfileVerifyMode string
+
+const (
+	// PlanfileVerifyFail fails the deploy when the stored plan drifts from a fresh plan.
+	PlanfileVerifyFail PlanfileVerifyMode = "fail"
+	// PlanfileVerifyWarn logs a warning on drift but proceeds with the deploy.
+	PlanfileVerifyWarn PlanfileVerifyMode = "warn"
+	// PlanfileVerifyOff disables verification (and skips the stored-plan download).
+	PlanfileVerifyOff PlanfileVerifyMode = "off"
+)
+
+// IsValid reports whether the mode is empty (unset) or one of the known values.
+func (m PlanfileVerifyMode) IsValid() bool {
+	switch m {
+	case "", PlanfileVerifyFail, PlanfileVerifyWarn, PlanfileVerifyOff:
+		return true
+	default:
+		return false
+	}
 }
 
 // PlanfileStoreSpec defines a planfile storage backend.
@@ -673,13 +710,15 @@ type TerraformPlanCIResult struct {
 // CIConfig contains CI/CD integration configuration.
 // Uses provider-agnostic naming to support GitHub Actions, GitLab CI, and other providers.
 type CIConfig struct {
-	Enabled   bool              `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	Output    CIOutputConfig    `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
-	Summary   CISummaryConfig   `yaml:"summary,omitempty" json:"summary,omitempty" mapstructure:"summary"`
-	Checks    CIChecksConfig    `yaml:"checks,omitempty" json:"checks,omitempty" mapstructure:"checks"`
-	Comments  CICommentsConfig  `yaml:"comments,omitempty" json:"comments,omitempty" mapstructure:"comments"`
-	Templates CITemplatesConfig `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
-	Cache     CICacheConfig     `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+	Enabled     bool                `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Output      CIOutputConfig      `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
+	Summary     CISummaryConfig     `yaml:"summary,omitempty" json:"summary,omitempty" mapstructure:"summary"`
+	Annotations CIAnnotationsConfig `yaml:"annotations,omitempty" json:"annotations,omitempty" mapstructure:"annotations"`
+	Results     CIResultsConfig     `yaml:"results,omitempty" json:"results,omitempty" mapstructure:"results"`
+	Checks      CIChecksConfig      `yaml:"checks,omitempty" json:"checks,omitempty" mapstructure:"checks"`
+	Comments    CICommentsConfig    `yaml:"comments,omitempty" json:"comments,omitempty" mapstructure:"comments"`
+	Templates   CITemplatesConfig   `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
+	Cache       CICacheConfig       `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
 }
 
 // CICacheConfig configures the CI build cache, which restores a well-known
@@ -737,6 +776,29 @@ type CISummaryConfig struct {
 	// When explicitly set to false, summaries are disabled.
 	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
+}
+
+// CIAnnotationsConfig configures inline annotations for scanner-hook findings.
+// GitHub: workflow `::error`/`::warning` commands shown inline on the PR diff.
+// This is the "non-CodeQL" path — it needs no GitHub Advanced Security.
+//
+// Enabled is *bool so callers can distinguish "unset" (nil, default applies)
+// from explicit false. Default is true when omitted; effective only when the
+// global ci.enabled is true.
+type CIAnnotationsConfig struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+}
+
+// CIResultsConfig configures uploading scanner-hook findings (SARIF) to the
+// CI provider's security-findings store. GitHub: Code Scanning / the Security
+// tab, which requires GitHub Advanced Security on private repos and a token
+// with the `security_events` write scope.
+//
+// Enabled is *bool so callers can distinguish "unset" (nil, default applies)
+// from explicit false. Default is false when omitted (opt-in, since it has
+// side effects and extra requirements); effective only when ci.enabled is true.
+type CIResultsConfig struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 }
 
 // CIChecksConfig configures CI commit status checks.
@@ -1207,33 +1269,37 @@ type ConfigAndStacksInfo struct {
 	// RequiredProviders maps provider names to their configuration.
 	// Example: {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}}.
 	// This is extracted from terraform.required_providers or components.terraform.<name>.required_providers.
-	RequiredProviders          map[string]map[string]any
-	AdditionalArgsAndFlags     []string
-	GlobalOptions              []string
-	BasePath                   string
-	VendorBasePathFlag         string
-	TerraformCommand           string
-	TerraformDir               string
-	HelmfileCommand            string
-	HelmfileDir                string
-	PackerCommand              string
-	PackerDir                  string
-	AnsibleCommand             string
-	AnsibleDir                 string
-	ConfigDir                  string
-	StacksDir                  string
-	WorkflowsDir               string
-	Context                    Context
-	ContextPrefix              string
-	DeployRunInit              string
-	InitRunReconfigure         string
-	InitPassVars               string
-	PlanSkipPlanfile           string
-	AutoGenerateBackendFile    string
-	UseTerraformPlan           bool
-	PlanFile                   string
-	StoredPlanFile             string
-	VerifyPlan                 bool
+	RequiredProviders       map[string]map[string]any
+	AdditionalArgsAndFlags  []string
+	GlobalOptions           []string
+	BasePath                string
+	VendorBasePathFlag      string
+	TerraformCommand        string
+	TerraformDir            string
+	HelmfileCommand         string
+	HelmfileDir             string
+	PackerCommand           string
+	PackerDir               string
+	AnsibleCommand          string
+	AnsibleDir              string
+	ConfigDir               string
+	StacksDir               string
+	WorkflowsDir            string
+	Context                 Context
+	ContextPrefix           string
+	DeployRunInit           string
+	InitRunReconfigure      string
+	InitPassVars            string
+	PlanSkipPlanfile        string
+	AutoGenerateBackendFile string
+	UseTerraformPlan        bool
+	PlanFile                string
+	StoredPlanFile          string
+	// VerifyPlanMode carries the explicit CLI planfile-verify override for `deploy`
+	// (--verify-plan => fail, --verify-plan=false => off; empty when the flag is unset).
+	// It is resolved against config + CI mode via planfile.ResolveVerifyMode at the
+	// before.terraform.deploy hook (download decision) and the RunE verify gate.
+	VerifyPlanMode             PlanfileVerifyMode
 	DryRun                     bool
 	SkipInit                   bool
 	UploadStatus               bool

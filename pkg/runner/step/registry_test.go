@@ -17,7 +17,7 @@ func TestRegistryGet(t *testing.T) {
 		"file", "write", "toast", "alert", "title", "clear",
 		"linebreak", "markdown", "spin", "table", "pager",
 		"format", "join", "style", "log", "env", "exit",
-		"stage", "sleep",
+		"stage", "sleep", "say",
 	}
 
 	for _, name := range existingHandlers {
