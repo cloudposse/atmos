@@ -163,8 +163,8 @@ func (h *ContainerHandler) buildRunConfig(ctx context.Context, step *schema.Work
 		TTY:               step.Tty,
 		Interactive:       step.Interactive,
 		Labels: map[string]string{
-			"com.atmos.step.type": containerStepType,
-			"com.atmos.step.name": step.Name,
+			"tools.atmos.step.type": containerStepType,
+			"tools.atmos.step.name": step.Name,
 		},
 	}, run, nil
 }

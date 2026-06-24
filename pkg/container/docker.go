@@ -20,6 +20,9 @@ const (
 	logKeyID     = "id"
 	logKeyImage  = "image"
 	logKeyStatus = "status"
+
+	// JSON key for a container's status in `docker ps` / `docker inspect` output.
+	fieldStatus = "Status"
 )
 
 // DockerRuntime implements the Runtime interface for Docker.
@@ -178,6 +181,7 @@ func (d *DockerRuntime) parseInspectData(data map[string]interface{}) *Info {
 
 	// Use .State.Status when available (machine-readable), fall back to .Status (human-readable).
 	info.Status = getStatusFromInspect(data)
+	info.Health = getHealthFromInspect(data)
 
 	// Parse created timestamp.
 	if created := getString(data, "Created"); created != "" {
@@ -195,11 +199,25 @@ func (d *DockerRuntime) parseInspectData(data map[string]interface{}) *Info {
 // getStatusFromInspect extracts status from inspect data, preferring .State.Status.
 func getStatusFromInspect(data map[string]interface{}) string {
 	if state, ok := data["State"].(map[string]interface{}); ok {
-		if status := getString(state, "Status"); status != "" {
+		if status := getString(state, fieldStatus); status != "" {
 			return status
 		}
 	}
-	return getString(data, "Status")
+	return getString(data, fieldStatus)
+}
+
+// getHealthFromInspect extracts the health state from inspect `.State.Health.Status`,
+// returning "" when the container has no health check.
+func getHealthFromInspect(data map[string]interface{}) string {
+	state, ok := data["State"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	health, ok := state["Health"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	return normalizeHealth(getString(health, fieldStatus))
 }
 
 // getLabelsFromInspect extracts labels from inspect data.
@@ -257,9 +275,12 @@ func (d *DockerRuntime) List(ctx context.Context, filters map[string]string) ([]
 		}
 
 		// Use .State when available (machine-readable), fall back to .Status (human-readable).
+		// The human .Status carries the health token (e.g. "Up 2h (healthy)"), so it
+		// is the source for Health even when .State drives Status.
+		humanStatus := getString(containerJSON, fieldStatus)
 		status := getString(containerJSON, "State")
 		if status == "" {
-			status = getString(containerJSON, "Status")
+			status = humanStatus
 		}
 
 		info := Info{
@@ -267,6 +288,7 @@ func (d *DockerRuntime) List(ctx context.Context, filters map[string]string) ([]
 			Name:   strings.TrimPrefix(getString(containerJSON, "Names"), "/"),
 			Image:  getString(containerJSON, "Image"),
 			Status: status,
+			Health: parseHealth(humanStatus),
 		}
 
 		// Parse labels if present.
@@ -311,12 +333,20 @@ func (d *DockerRuntime) Exec(ctx context.Context, containerID string, cmd []stri
 	return runExecCommand(d.command(ctx, buildExecArgs(containerID, cmd, opts)...), dockerCmd, opts)
 }
 
-// Attach attaches to a running container with an interactive shell.
+// Shell opens an interactive shell in a running container (a new shell process via `exec`).
+func (d *DockerRuntime) Shell(ctx context.Context, containerID string, opts *ShellOptions) error {
+	defer perf.Track(nil, "container.DockerRuntime.Shell")()
+
+	cmd, execOpts := buildShellCommand(opts)
+	return d.Exec(ctx, containerID, cmd, execOpts)
+}
+
+// Attach connects to a running container's main process (PID 1) via `docker attach`.
 func (d *DockerRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions) error {
 	defer perf.Track(nil, "container.DockerRuntime.Attach")()
 
-	cmd, execOpts := buildAttachCommand(opts)
-	return d.Exec(ctx, containerID, cmd, execOpts)
+	args, execOpts := buildAttachArgs(containerID, opts)
+	return runExecCommand(d.command(ctx, args...), dockerCmd, execOpts)
 }
 
 // Pull pulls a container image.
