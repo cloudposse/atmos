@@ -232,6 +232,17 @@ func buildAuthManager(atmosConfig *schema.AtmosConfiguration, scope secretScope)
 	if err != nil {
 		return nil, err
 	}
+
+	// The secret/store path authenticates without a stack-scoped manager, but
+	// emulator identities need the target stack to resolve the running emulator's
+	// endpoint when populating the in-process AWS auth context. Thread it through
+	// so the store bridge (which re-authenticates per key) can reach the emulator.
+	// CreateAndAuthenticateManager returns nil when no identity/auth is configured.
+	if authManager != nil {
+		if si := authManager.GetStackInfo(); si != nil {
+			si.Stack = scope.Stack
+		}
+	}
 	return authManager, nil
 }
 

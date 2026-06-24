@@ -844,15 +844,37 @@ func TestCreateAuthManagerInstance(t *testing.T) {
 		},
 	}
 
-	manager, err := createAuthManagerInstance(authConfig, "")
+	manager, err := createAuthManagerInstance(authConfig, "", "")
 
 	require.NoError(t, err, "should successfully create manager")
 	require.NotNil(t, manager, "manager should not be nil")
 }
 
+// TestCreateAuthManagerInstance_ThreadsStack verifies the target stack is seeded into the
+// manager's stackInfo at construction. Stack-scoped identities (e.g. kind: <target>/emulator)
+// receive it via SetStack before authentication so their PostAuthenticate hook can populate the
+// in-process auth context (AuthContext.AWS, including the emulator endpoint) read by
+// `!terraform.state`, `!store`, and store hooks. Without this the stack is empty at auth time and
+// those consumers fall back to the default credential chain.
+func TestCreateAuthManagerInstance_ThreadsStack(t *testing.T) {
+	authConfig := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"local-aws": {Kind: "aws/emulator", Emulator: "aws"},
+		},
+	}
+
+	manager, err := createAuthManagerInstance(authConfig, "", "plat-ue2-dev")
+
+	require.NoError(t, err)
+	require.NotNil(t, manager)
+	si := manager.GetStackInfo()
+	require.NotNil(t, si, "manager should carry stack info")
+	assert.Equal(t, "plat-ue2-dev", si.Stack, "target stack must be threaded into the manager at construction")
+}
+
 func TestCreateAuthManagerInstance_NilConfig(t *testing.T) {
 	// Creating manager with nil config should fail validation.
-	manager, err := createAuthManagerInstance(nil, "")
+	manager, err := createAuthManagerInstance(nil, "", "")
 
 	// The NewAuthManager constructor should handle nil gracefully or error.
 	// In this case, we expect an error since nil config is invalid.
@@ -1137,7 +1159,7 @@ func TestAuthenticateWithIdentity_SelectValue(t *testing.T) {
 	}
 
 	// Create manager
-	manager, err := createAuthManagerInstance(authConfig, "")
+	manager, err := createAuthManagerInstance(authConfig, "", "")
 	require.NoError(t, err)
 
 	// Call with identity matching select value - triggers forceSelect branch

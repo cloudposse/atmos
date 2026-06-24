@@ -33,6 +33,7 @@ type NamedConfig struct {
 	User        string
 	Labels      map[string]string // extra labels, merged over the canonical instance labels
 	RunArgs     []string
+	Privileged  bool           // run the container in privileged mode
 	Restart     *RestartPolicy // restart policy (nil = runtime default)
 	HealthCheck *HealthCheck   // health check (nil = inherit image healthcheck)
 
@@ -197,6 +198,7 @@ func buildNamedCreateConfig(config *NamedConfig, name string) *CreateConfig {
 		User:        config.User,
 		Labels:      labels,
 		RunArgs:     config.RunArgs,
+		Privileged:  config.Privileged,
 		Restart:     config.Restart,
 		HealthCheck: config.HealthCheck,
 	}

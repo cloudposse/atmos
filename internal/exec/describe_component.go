@@ -470,6 +470,7 @@ func detectComponentType(
 		cfg.PackerComponentType,
 		cfg.AnsibleComponentType,
 		cfg.ContainerComponentType,
+		cfg.EmulatorComponentType,
 	}
 
 	var result schema.ConfigAndStacksInfo

@@ -1,0 +1,66 @@
+---
+slug: emulator-persistence
+title: "Emulators Now Persist State by Default"
+authors: [osterman]
+tags: [feature, enhancement]
+date: 2026-06-22
+---
+
+Atmos emulators — the long-running, containerized stand-ins for AWS, GCP, Azure, Kubernetes, and an OCI
+registry — now **persist their state by default**. Bring an emulator up, create resources, take it down,
+bring it back up, and everything is still there. A new `atmos emulator reset` command wipes that state
+when you want a clean slate.
+
+<!--truncate-->
+
+## What Changed
+
+Previously every `atmos emulator up` started from scratch: stop the container and all state was gone.
+That is fine for a quick smoke test, but it gets in the way when you are iterating — re-seeding buckets,
+re-pushing images, or rebuilding a local cluster on every restart.
+
+Now Atmos bind-mounts a per-instance host directory under the XDG cache onto each emulator's data
+directory, so state survives `down`/`up`:
+
+```bash
+atmos emulator up registry -s local      # start the registry
+# ... push images ...
+atmos emulator down registry -s local    # stop it — state is kept
+atmos emulator up registry -s local      # back up — your images are still there
+```
+
+## Resetting and Opting Out
+
+`down` keeps state; `reset` wipes it. Use `reset` when you want a fresh instance:
+
+```bash
+atmos emulator reset registry -s local --force
+```
+
+For a throwaway instance that never persists, pass `--ephemeral` (or set `ephemeral: true` on the
+component):
+
+```bash
+atmos emulator up registry -s local --ephemeral
+```
+
+## Where State Lives
+
+Persisted state is stored under the XDG cache at
+`$XDG_CACHE_HOME/atmos/emulator/<instance>` (for example `~/.cache/atmos/emulator/…`), keyed by the
+emulator's canonical instance name so instances never collide. Point `ATMOS_XDG_CACHE_HOME` somewhere
+else to relocate it.
+
+Persistence applies to every emulator — Floci for AWS/GCP/Azure, LocalStack, the OCI registry, and
+k3s persist their data directories directly. OpenBao/Vault run a file-storage backend that Atmos
+auto-initializes and unseals on start, recording the unseal key and generated root token under the
+data dir, so secrets persist across restarts too (and `reset` wipes them).
+
+## How to Use It
+
+- Nothing to enable — persistence is on by default.
+- `atmos emulator reset <component> -s <stack>` to wipe persisted state.
+- `--ephemeral` (or `ephemeral: true`) for a throwaway instance.
+
+See the [emulator component reference](/stacks/components/emulator#persistence) and the
+[`atmos emulator reset`](/cli/commands/emulator/reset) command docs for details.
