@@ -1553,6 +1553,13 @@
                               "max_elapsed_time": {
                                 "type": "string",
                                 "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+                              },
+                              "conditions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "description": "Regular expressions; an error/response matching any pattern is treated as retryable"
                               }
                             },
                             "required": []
@@ -1589,10 +1596,101 @@
                           "type": "string"
                         },
                         "description": "Environment variables for the workflow step"
+                      },
+                      "timeout": {
+                        "type": "string",
+                        "description": "Step timeout duration (e.g., '30s', '1m'). For the http step type this is the per-attempt timeout."
+                      },
+                      "url": {
+                        "type": "string",
+                        "description": "Request URL for the http step type (supports templates)"
+                      },
+                      "method": {
+                        "type": "string",
+                        "enum": [
+                          "GET",
+                          "POST",
+                          "PUT",
+                          "PATCH",
+                          "DELETE",
+                          "HEAD",
+                          "OPTIONS"
+                        ],
+                        "description": "HTTP method/verb for the http step type (default: GET)"
+                      },
+                      "headers": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "HTTP request headers for the http step type (supports templates)"
+                      },
+                      "query": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "Query-string parameters for the http step type (supports templates)"
+                      },
+                      "body": {
+                        "type": "string",
+                        "description": "Raw request body for the http step type (supports templates); mutually exclusive with form"
+                      },
+                      "form": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "Form/JSON body parameters for the http step type; mutually exclusive with body"
+                      },
+                      "expect": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "description": "Success criteria for the http step type; defaults to any 2xx response",
+                        "properties": {
+                          "status": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer"
+                            },
+                            "description": "Acceptable HTTP status codes"
+                          },
+                          "response": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "Regular expressions; the response body must match at least one (/.../ literals or bare regex strings)"
+                          }
+                        }
                       }
                     },
-                    "required": [
-                      "command"
+                    "allOf": [
+                      {
+                        "if": {
+                          "required": [
+                            "type"
+                          ],
+                          "properties": {
+                            "type": {
+                              "enum": [
+                                "http",
+                                "webhook"
+                              ]
+                            }
+                          }
+                        },
+                        "then": {
+                          "required": [
+                            "url"
+                          ]
+                        },
+                        "else": {
+                          "required": [
+                            "command"
+                          ]
+                        }
+                      }
                     ]
                   }
                 }
