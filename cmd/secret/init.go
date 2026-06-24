@@ -139,7 +139,9 @@ func reportInit(count int, dryRun bool) {
 // unless --force rotates them all. In dry-run mode it only reports. When seen is non-nil (whole-
 // stack mode), stack-scoped secrets are processed once per (stack, name). Returns the count handled.
 func rotateDeclaredSecrets(svc secretService, stackName string, force, dryRun bool, seen map[string]bool) (int, error) {
-	statuses := svc.Status()
+	// init provisions secrets, so it needs an authoritative initialized/not-initialized answer
+	// from every backend (verify=true). Local backends (e.g. SOPS) stay credential-free.
+	statuses := svc.Status(true)
 	count := 0
 	for i := range statuses {
 		st := &statuses[i]

@@ -91,7 +91,9 @@ func (e *StepExecutor) Execute(ctx context.Context, step *schema.WorkflowStep) (
 	}
 
 	// Store result for variable access.
-	e.vars.Set(step.Name, result)
+	if err := e.vars.SetWithOutputs(step.Name, result, step.Outputs); err != nil {
+		return result, err
+	}
 
 	return result, nil
 }

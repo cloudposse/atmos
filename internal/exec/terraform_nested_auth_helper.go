@@ -1,12 +1,16 @@
 package exec
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
+	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -14,6 +18,78 @@ const (
 	logKeyComponent = "component"
 	logKeyStack     = "stack"
 )
+
+// nestedAuthManagerCache memoizes per-component AuthManagers resolved for nested terraform.state /
+// terraform.output references during one process. Many components in a stack reference other
+// components that share a single identity; without this cache each distinct target re-runs the full
+// auth cycle (credential writes, file locks, keyring rebuilds) inside resolveAuthManagerForNestedComponent.
+// Keyed by parent chain + auth-section fingerprint (see buildComponentAuthCacheKey), a provably-safe
+// proxy for "same identity" because identities are global and only referenced by components. Reset via
+// ResetNestedAuthManagerCache (also cleared by ResetStateCache); never reset in production.
+// See docs/fixes/2026-06-22-dedupe-nested-component-auth.md.
+var nestedAuthManagerCache sync.Map
+
+// ResetNestedAuthManagerCache clears the nested-component AuthManager cache.
+// Exported for tests to guarantee isolation between test functions; never called in production.
+func ResetNestedAuthManagerCache() {
+	defer perf.Track(nil, "exec.ResetNestedAuthManagerCache")()
+
+	nestedAuthManagerCache.Range(func(key, _ any) bool {
+		nestedAuthManagerCache.Delete(key)
+		return true
+	})
+}
+
+// buildComponentAuthCacheKey keys a per-component AuthManager by the parent auth chain plus a
+// deterministic JSON fingerprint of the component's auth section. Because identities are defined
+// globally and only referenced by components, "same auth section" is a safe, provable proxy for
+// "same identity" — it never merges components whose sections differ. The parent chain disambiguates
+// an inherited identity from an auto-detected one. Returns cacheable=false when the section cannot be
+// serialized (e.g. a channel/func value), so callers resolve without caching. Shared by
+// describeStacksProcessor and the nested terraform.state path so the two cannot drift.
+func buildComponentAuthCacheKey(parent auth.AuthManager, authSection map[string]any) (string, bool) {
+	fingerprint, err := json.Marshal(authSection)
+	if err != nil {
+		return "", false
+	}
+	var parentChain string
+	if parent != nil {
+		parentChain = strings.Join(parent.GetChain(), ">")
+	}
+	return parentChain + "\x00" + string(fingerprint), true
+}
+
+// resolveCachedComponentAuthManager returns a memoized AuthManager for authSection when one was
+// already resolved this process, otherwise it calls resolve and caches a successful, non-nil result.
+// resolve is injected so tests can substitute a counting fake; production passes createComponentAuthManager.
+func resolveCachedComponentAuthManager(
+	atmosConfig *schema.AtmosConfiguration,
+	componentConfig map[string]any,
+	component, stack string,
+	parentAuthManager auth.AuthManager,
+	authSection map[string]any,
+	resolve componentAuthManagerResolver,
+) (auth.AuthManager, error) {
+	cacheKey, cacheable := buildComponentAuthCacheKey(parentAuthManager, authSection)
+	if cacheable {
+		if cached, ok := nestedAuthManagerCache.Load(cacheKey); ok {
+			log.Debug("Reusing cached component-specific AuthManager",
+				logKeyComponent, component,
+				logKeyStack, stack,
+			)
+			return cached.(auth.AuthManager), nil
+		}
+	}
+
+	resolved, err := resolve(atmosConfig, componentConfig, component, stack, parentAuthManager)
+	if err != nil {
+		return resolved, err
+	}
+	if cacheable && resolved != nil {
+		nestedAuthManagerCache.Store(cacheKey, resolved)
+	}
+	return resolved, nil
+}
 
 // hasDefaultIdentity checks if the auth section contains at least one identity with default: true.
 func hasDefaultIdentity(authSection map[string]any) bool {
@@ -100,13 +176,15 @@ func resolveAuthManagerForNestedComponent(
 		return parentAuthManager, nil
 	}
 
-	// Component has auth config with default identity, create component-specific AuthManager.
+	// Component has auth config with default identity, create (or reuse) a component-specific AuthManager.
 	log.Debug("Component has auth config with default identity, creating component-specific AuthManager",
 		logKeyComponent, component,
 		logKeyStack, stack,
 	)
 
-	return createComponentAuthManager(atmosConfig, componentConfig, component, stack, parentAuthManager)
+	return resolveCachedComponentAuthManager(
+		atmosConfig, componentConfig, component, stack, parentAuthManager, authSection, createComponentAuthManager,
+	)
 }
 
 // getComponentConfigForAuthResolution retrieves component configuration without processing

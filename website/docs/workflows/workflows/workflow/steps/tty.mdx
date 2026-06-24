@@ -1,0 +1,25 @@
+---
+title: tty
+sidebar_label: tty
+sidebar_position: 11
+slug: /workflows/steps/tty
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The step-level `tty` field allocates a pseudo-terminal for a `type: shell` step, which terminal-native tools need to run correctly.
+</Intro>
+
+```yaml
+steps:
+  - name: shell
+    type: shell
+    command: bash
+    tty: true
+    interactive: true
+```
+
+Use `tty` for commands that take over the terminal, such as SSH sessions, database consoles, `aws ssm start-session`, or editors.
+
+TTY steps hand terminal control to the child process. Secret masking is preserved, but normal output capture modes do not apply and the step does not produce capturable output.

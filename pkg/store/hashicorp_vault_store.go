@@ -45,6 +45,11 @@ type VaultKVClient interface {
 	Put(ctx context.Context, path string, data map[string]any) error
 	Get(ctx context.Context, path string) (map[string]any, error)
 	Delete(ctx context.Context, path string) error
+	// HasMetadata reports whether a secret exists at the path by reading the KV v2 metadata
+	// endpoint (secret/metadata/<path>), which returns no secret values. A missing secret must
+	// surface as a not-found error (vault.ErrSecretNotFound or a 404 ResponseError) so callers
+	// can map it to absence via isVaultNotFound.
+	HasMetadata(ctx context.Context, path string) error
 }
 
 // Ensure VaultStore implements the expected interfaces.
@@ -78,6 +83,14 @@ func (c *vaultKVv2Client) Get(ctx context.Context, path string) (map[string]any,
 
 func (c *vaultKVv2Client) Delete(ctx context.Context, path string) error {
 	return c.kv.Delete(ctx, path)
+}
+
+// HasMetadata reads the KV v2 metadata endpoint (secret/metadata/<path>) to confirm existence
+// without reading or decrypting the secret data. GetMetadata returns vault.ErrSecretNotFound when
+// the path is absent, which isVaultNotFound recognizes.
+func (c *vaultKVv2Client) HasMetadata(ctx context.Context, path string) error {
+	_, err := c.kv.GetMetadata(ctx, path)
+	return err
 }
 
 // NewVaultStore initializes a new VaultStore using token authentication. The address may be
@@ -243,14 +256,30 @@ func (s *VaultStore) Delete(stack string, component string, key string) error {
 	return nil
 }
 
-// Has reports whether a secret exists at the computed path.
+// Has reports whether a secret exists at the computed path. It checks existence via the KV v2
+// metadata endpoint (secret/metadata/<path>) so the secret data is never read or decrypted.
 func (s *VaultStore) Has(stack string, component string, key string) (bool, error) {
-	_, err := s.Get(stack, component, key)
+	if stack == "" {
+		return false, ErrEmptyStack
+	}
+	if component == "" {
+		return false, ErrEmptyComponent
+	}
+	if key == "" {
+		return false, ErrEmptyKey
+	}
+
+	path, err := s.getKey(stack, component, key)
 	if err != nil {
+		return false, fmt.Errorf(errWrapFormat, ErrGetKey, err)
+	}
+
+	if err := s.client.HasMetadata(context.TODO(), path); err != nil {
+		// A missing secret (404 / ErrSecretNotFound) or empty metadata maps to absence.
 		if errors.Is(err, ErrVaultEmptyData) || isVaultNotFound(err) {
 			return false, nil
 		}
-		return false, err
+		return false, fmt.Errorf("%w '%s': %w", ErrVaultRead, path, err)
 	}
 	return true, nil
 }

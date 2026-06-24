@@ -24,6 +24,22 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+func TestEnvSliceToMap(t *testing.T) {
+	assert.Nil(t, envSliceToMap(nil))
+	assert.Nil(t, envSliceToMap([]string{}))
+	assert.Equal(t, map[string]string{
+		"A":     "override",
+		"B":     "2",
+		"EMPTY": "",
+	}, envSliceToMap([]string{
+		"A=1",
+		"malformed",
+		"B=2",
+		"EMPTY=",
+		"A=override",
+	}))
+}
+
 func TestVerifyInsideGitRepo(t *testing.T) {
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()

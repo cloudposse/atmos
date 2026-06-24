@@ -1,0 +1,329 @@
+---
+title: container
+sidebar_label: container
+slug: /workflows/steps/type/container
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `container` step type builds, pushes, runs, and inspects containers through Docker or Podman, bringing the full container lifecycle into your custom commands and workflows without leaving Atmos.
+</Intro>
+
+Set `action` to choose the operation, then provide the matching nested config block (`build`, `push`, `run`, or `inspect`). When `action` is omitted, Atmos defaults to `run`.
+
+```yaml
+steps:
+  - name: build
+    type: container
+    action: build
+    build:
+      context: .
+      dockerfile: Dockerfile
+      tags:
+        - app:local
+
+  - name: smoke
+    type: container
+    action: run
+    run:
+      image: app:local
+      command: uname -a
+```
+
+This step type is different from the step-level [`container`](/workflows/steps/container) field, which runs ordinary `type: shell` steps inside a shared sandbox.
+
+## Fields
+
+<dl>
+  <dt>`action`</dt>
+  <dd>Operation to perform: `build`, `push`, `run`, or `inspect`. Defaults to `run` when omitted.</dd>
+
+  <dt>`build`</dt>
+  <dd>Configuration for `action: build`. See [Build](#build).</dd>
+
+  <dt>`push`</dt>
+  <dd>Configuration for `action: push`. See [Push](#push).</dd>
+
+  <dt>`run`</dt>
+  <dd>Configuration for `action: run`. See [Run](#run).</dd>
+
+  <dt>`inspect`</dt>
+  <dd>Configuration for `action: inspect`. See [Inspect](#inspect).</dd>
+</dl>
+
+Every action block also accepts `provider` (`docker` or `podman`, auto-detected when omitted) and `runtime_auto_start` (start the Podman machine when no runtime is running).
+
+## Build
+
+`action: build` builds a container image from a Dockerfile, or from a Docker Bake definition.
+
+```yaml
+steps:
+  - name: build
+    type: container
+    action: build
+    build:
+      provider: docker          # docker | podman (auto-detected when omitted)
+      runtime_auto_start: true  # start the Podman machine if no runtime is running
+      engine: buildx            # buildx (Docker BuildKit) or omit for the default builder
+      context: .                # build context directory
+      dockerfile: Dockerfile    # path to the Dockerfile
+      tags:
+        - app:local
+        - app:1.0.0
+      build_args:               # values passed as --build-arg
+        VERSION: 1.0.0
+      target: runtime           # target stage in a multi-stage build
+      no_cache: false           # disable the build cache
+      pull: true                # always pull newer base images
+```
+
+<dl>
+  <dt>`context`</dt>
+  <dd>Build context directory. Required unless you use `bake`.</dd>
+
+  <dt>`dockerfile`</dt>
+  <dd>Path to the Dockerfile. Required unless you use `bake`.</dd>
+
+  <dt>`tags`</dt>
+  <dd>List of image tags to apply.</dd>
+
+  <dt>`build_args`</dt>
+  <dd>Map of build arguments passed as `--build-arg`.</dd>
+
+  <dt>`target`</dt>
+  <dd>Target stage in a multi-stage Dockerfile.</dd>
+
+  <dt>`no_cache`</dt>
+  <dd>Disable the build cache when set to `true`.</dd>
+
+  <dt>`pull`</dt>
+  <dd>Always attempt to pull newer base images when set to `true`.</dd>
+
+  <dt>`engine`</dt>
+  <dd>Build engine: `buildx` for Docker BuildKit, or omit for the default builder. Requires `provider: docker`.</dd>
+
+  <dt>`bake`</dt>
+  <dd>Build with Docker Bake instead of a single Dockerfile. See [Bake](#bake). Requires `provider: docker`.</dd>
+</dl>
+
+### Bake
+
+Set `build.bake` to build one or more targets from a `docker-bake.hcl` (or `.json`) definition:
+
+```yaml
+build:
+  provider: docker
+  bake:
+    file: docker-bake.hcl       # primary bake file
+    files:                      # additional bake files
+      - docker-bake.override.hcl
+    targets:                    # targets to build (use `target` for a single one)
+      - api
+      - worker
+    set:                        # overrides in target.key=value form
+      - api.platform=linux/amd64
+    vars:                       # bake variables
+      VERSION: 1.0.0
+    load: true                  # load the result into the local image store
+    push: false                 # push the result to the registry
+    print: false                # print the resolved definition and exit
+```
+
+<dl>
+  <dt>`file` / `files`</dt>
+  <dd>Primary bake file, and any additional bake files.</dd>
+
+  <dt>`target` / `targets`</dt>
+  <dd>A single target, or a list of targets to build.</dd>
+
+  <dt>`set`</dt>
+  <dd>List of overrides in `target.key=value` form.</dd>
+
+  <dt>`vars`</dt>
+  <dd>Map of bake variables.</dd>
+
+  <dt>`load`</dt>
+  <dd>Load the built image into the local image store.</dd>
+
+  <dt>`push`</dt>
+  <dd>Push the built image to the registry.</dd>
+
+  <dt>`print`</dt>
+  <dd>Print the resolved bake definition and exit without building.</dd>
+</dl>
+
+## Push
+
+`action: push` pushes an image and its tags to a registry.
+
+```yaml
+steps:
+  - name: publish
+    type: container
+    action: push
+    push:
+      provider: docker
+      image: app:local          # source image to push
+      tags:                     # target tags (omit to push all existing tags)
+        - registry.example.com/app:1.0.0
+        - registry.example.com/app:latest
+```
+
+<dl>
+  <dt>`image`</dt>
+  <dd>Source image to push.</dd>
+
+  <dt>`tags`</dt>
+  <dd>Target tags to push. When omitted, Atmos pushes all existing tags for the image.</dd>
+</dl>
+
+## Run
+
+`action: run` runs a one-shot container, and is the default when `action` is omitted.
+
+```yaml
+steps:
+  - name: smoke
+    type: container
+    action: run
+    env:                        # environment variables come from the step-level env
+      LOG_LEVEL: debug
+    run:
+      image: app:local          # required
+      command: ./run-tests.sh   # required
+      shell: /bin/sh            # shell used to run the command (default /bin/sh)
+      provider: docker
+      pull: missing             # missing (default) | always | never
+      workspace: /workspace     # where the working directory is mounted (default /workspace)
+      workspace_read_only: false
+      cleanup: always           # always (default) | on_success | never
+      user: "1000:1000"         # username or UID:GID
+      run_args:
+        - --network=host
+      mounts:
+        - type: bind
+          source: ~/.aws
+          target: /root/.aws
+          read_only: true
+      ports:
+        - host: 8080
+          container: 80
+          protocol: tcp
+```
+
+<dl>
+  <dt>`image`</dt>
+  <dd>Required. Container image to run.</dd>
+
+  <dt>`command`</dt>
+  <dd>Required. Command to run inside the container.</dd>
+
+  <dt>`shell`</dt>
+  <dd>Shell used to execute the command. Defaults to `/bin/sh`.</dd>
+
+  <dt>`pull`</dt>
+  <dd>Image pull policy: `missing` (default), `always`, or `never`.</dd>
+
+  <dt>`workspace`</dt>
+  <dd>Container path where the working directory is mounted. Defaults to `/workspace`.</dd>
+
+  <dt>`workspace_read_only`</dt>
+  <dd>Mounts the workspace read-only when set to `true`.</dd>
+
+  <dt>`cleanup`</dt>
+  <dd>Cleanup policy: `always` (default), `on_success`, or `never`.</dd>
+
+  <dt>`user`</dt>
+  <dd>User context for execution. Accepts a username or `UID:GID`.</dd>
+
+  <dt>`run_args`</dt>
+  <dd>List of additional arguments passed to the runtime's `run` command.</dd>
+
+  <dt>`mounts`</dt>
+  <dd>List of additional volume mounts. See [Mounts](#mounts).</dd>
+
+  <dt>`ports`</dt>
+  <dd>List of published port mappings. See [Ports](#ports).</dd>
+</dl>
+
+Environment variables for the container come from the step-level [`env`](/workflows/steps/env) field, not from a field under `run`.
+
+### Mounts
+
+`run.mounts` is a list of mount objects:
+
+```yaml
+run:
+  image: app:local
+  command: ls /cache
+  mounts:
+    - type: bind              # bind (default) | volume | tmpfs
+      source: ~/.aws          # host path (bind) or volume name (volume); `~` expands to home
+      target: /root/.aws
+      read_only: true
+    - type: volume
+      source: build-cache
+      target: /cache
+    - type: tmpfs
+      target: /tmp/scratch
+```
+
+<dl>
+  <dt>`type`</dt>
+  <dd>Mount type: `bind` (default), `volume`, or `tmpfs`.</dd>
+
+  <dt>`source`</dt>
+  <dd>Host path for `bind` mounts or the volume name for `volume` mounts. Not used for `tmpfs`. `~` expands to the host home directory.</dd>
+
+  <dt>`target`</dt>
+  <dd>Required. Path inside the container.</dd>
+
+  <dt>`read_only`</dt>
+  <dd>Mounts the source read-only when set to `true`. Defaults to `false`.</dd>
+</dl>
+
+### Ports
+
+`run.ports` is a list of port mappings:
+
+```yaml
+run:
+  image: nginx:latest
+  command: nginx -g 'daemon off;'
+  ports:
+    - host: 8080              # host port
+      container: 80           # container port
+      protocol: tcp           # tcp (default) | udp
+```
+
+<dl>
+  <dt>`host`</dt>
+  <dd>Host port number to publish.</dd>
+
+  <dt>`container`</dt>
+  <dd>Container port number to map to the host port.</dd>
+
+  <dt>`protocol`</dt>
+  <dd>Port protocol: `tcp` (default) or `udp`.</dd>
+</dl>
+
+## Inspect
+
+`action: inspect` displays curated metadata for an image.
+
+```yaml
+steps:
+  - name: inspect
+    type: container
+    action: inspect
+    inspect:
+      provider: docker
+      image: app:local          # image to inspect
+```
+
+<dl>
+  <dt>`image`</dt>
+  <dd>Required. Image to inspect.</dd>
+</dl>

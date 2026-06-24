@@ -27,6 +27,7 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/provisioner/source" // register source provisioner
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
@@ -142,6 +143,13 @@ func injectTerraformStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, in
 
 	resolver := authbridge.NewResolver(authManager, info)
 	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, storeDefaultIdentity(info.Identity))
+
+	// Also expose the resolver to cloud-KMS SOPS providers so `!secret` resolution during terraform
+	// authenticates KMS decrypt as the component's effective identity (issue #2637).
+	atmosConfig.SecretsAuth = &store.SecretsAuthContext{
+		Resolver:        resolver,
+		DefaultIdentity: storeDefaultIdentity(info.Identity),
+	}
 }
 
 func storeDefaultIdentity(identity string) string {
