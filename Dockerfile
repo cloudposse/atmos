@@ -1,5 +1,8 @@
-# Use a base image with platform specification
-FROM --platform=$BUILDPLATFORM debian:bookworm-slim
+# Use a base image with platform specification.
+# trixie (glibc 2.41) is required so PyInstaller-bundled tools installed via the
+# Atmos toolchain — notably Checkov, which needs GLIBC_2.38+ — can load their
+# frozen Python runtime. bookworm (glibc 2.36) fails with a missing-version error.
+FROM --platform=$BUILDPLATFORM debian:trixie-slim
 
 # Define the arguments for Atmos version and platforms
 ARG TARGETPLATFORM

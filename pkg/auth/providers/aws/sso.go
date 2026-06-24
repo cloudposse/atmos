@@ -211,7 +211,7 @@ func (p *ssoProvider) newOIDCClient(ctx context.Context) (*ssooidc.Client, error
 		config.WithCredentialsProvider(aws.AnonymousCredentials{}),
 	}
 
-	if resolverOpt := awsCloud.GetResolverConfigOption(nil, p.config); resolverOpt != nil {
+	if resolverOpt := awsCloud.GetBaseEndpointConfigOption(nil, p.config); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}
 
