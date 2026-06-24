@@ -799,6 +799,8 @@ var (
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
 	ErrChromeNotFound               = errors.New("chrome/chromium not found for isolated browser sessions")
+	ErrSayNotFound                  = errors.New("text-to-speech command not found")
+	ErrVoiceListUnsupported         = errors.New("voice enumeration not supported for backend")
 	ErrUserAborted                  = errors.New("user aborted")
 
 	// AWS SSO specific errors.
