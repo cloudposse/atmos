@@ -1,6 +1,6 @@
 # Say Something Demo
 
-This example demonstrates the `say` workflow step type, which speaks a message aloud using **text-to-speech (TTS)**. It's ideal for notifying you when a long-running workflow finishes or stalls — an audible cue for when you've switched to another window.
+This example demonstrates the `say` step type in both custom commands and workflows. Use this type of step to announce when things happen in your workflows, like when something completes or fails.
 
 `say` works across platforms by detecting an available speech engine (`say` on macOS, `spd-say`/`espeak`/`espeak-ng` on Linux, PowerShell's `System.Speech` on Windows). When no engine is available — or when running in CI or another headless environment — it degrades gracefully according to the `print` policy (by default, printing the message as a Markdown blockquote).
 
@@ -14,7 +14,10 @@ This example demonstrates the `say` workflow step type, which speaks a message a
 ```bash
 cd examples/say-something
 
-# Speak a completion message (prints it as a quote if speech is unavailable)
+# Custom command: explain when say steps are useful
+atmos say something
+
+# Workflow: the same say step type in a workflow
 atmos workflow notify -f say
 
 # Pick the first available voice from a cross-platform stack
@@ -29,6 +32,9 @@ atmos workflow print-modes -f say
 # Announce each milestone of a build pipeline
 atmos workflow pipeline -f say
 ```
+
+`atmos say something` is a nested custom command defined in `atmos.yaml`. The `atmos workflow ...`
+commands run workflow definitions from `stacks/workflows/say.yaml`.
 
 ## How `say` Works
 

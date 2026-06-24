@@ -5,3 +5,14 @@ workflows:
 
 logs:
   level: Info
+
+commands:
+  - name: say
+    description: Demonstrate the say step in custom commands
+    commands:
+      - name: something
+        description: Announce when things happen in your workflows
+        steps:
+          - name: done
+            type: say
+            content: "Use say steps to announce when things happen in your workflows, like when something completes or fails."

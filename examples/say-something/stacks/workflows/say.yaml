@@ -17,11 +17,11 @@ workflows:
   # The simplest notification: speak a message, or print it as a Markdown
   # blockquote when speech is unavailable (the default `print: fallback`).
   notify:
-    description: Speak a completion message (prints it instead in CI/headless)
+    description: Announce when things happen in your workflows
     steps:
       - name: done
         type: say
-        content: "Your deployment is complete"
+        content: "Use say steps to announce when things happen in your workflows, like when something completes or fails."
 
   # Voice selection works like a CSS font-family stack: list candidate voices
   # from any platform and the first one actually installed on the host wins.
