@@ -283,6 +283,8 @@
   "ci": {
     "output": {},
     "summary": {},
+    "annotations": {},
+    "results": {},
     "checks": {
       "statuses": {}
     },

@@ -56,9 +56,11 @@ and `atmos secret` remain the only secret access paths.
 
 Floci validation also exposed two adjacent auth-path regressions:
 
-- `auth.identities.*.credentials.aws.resolver.url: !env NAME` was not being
-  evaluated because the raw-YAML identity key preservation pass bypassed Atmos
-  YAML function processing.
+- AWS auth endpoint settings such as
+  `auth.identities.*.spec.endpoint_url: !env NAME` were not being evaluated
+  because the raw-YAML identity key preservation pass bypassed Atmos YAML
+  function processing. The legacy
+  `auth.identities.*.credentials.aws.resolver.url` path is still accepted.
 - `describe component` created an auth manager for YAML functions but then
   resolved component config through a fresh store registry without the auth
   resolver, so `!store` reads against an explicit-identity ASM store still
@@ -73,12 +75,12 @@ Floci validation also exposed two adjacent auth-path regressions:
   credential behavior in this PR.
 - SSM and AWS Secrets Manager stores now defer AWS client creation until first
   use, leaving time for auth resolver injection.
-- AWS identity resolver endpoints are carried into SSM and Secrets Manager
+- AWS identity endpoint URLs are carried into SSM and Secrets Manager
   store SDK clients, so Floci or custom AWS-compatible endpoints are used for
   the actual store API calls, not only during authentication.
 - AWS SSM and Secrets Manager also accept store-level `endpoint` or
   `endpoint_url` options. A store-level endpoint takes precedence over an
-  endpoint inherited from the AWS identity resolver.
+  endpoint inherited from the AWS identity.
 - Azure Key Vault accepts `endpoint` as an alias for `vault_url` and exposes
   `disable_challenge_resource_verification` for Key Vault-compatible local
   endpoints whose auth challenge resource does not match the endpoint host.
@@ -141,8 +143,9 @@ isolation:
 - Secrets Manager stores use explicit identity where Atmos auth is the intended
   credential source; stores that omit `identity` are left to ambient/default SDK
   credentials by design in this PR.
-- Store and secret fixtures use `!env` for the Floci endpoint and prefixes, so
-  auth identity YAML function processing is covered end to end.
+- Store and secret fixtures use `!env` for the Floci endpoint and prefixes,
+  including `auth.identities.*.spec.endpoint_url`, so auth identity YAML
+  function processing is covered end to end.
 
 Run the AWS cases with a running Floci endpoint:
 

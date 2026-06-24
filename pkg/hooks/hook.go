@@ -34,9 +34,18 @@ type Hook struct {
 	Command string            `yaml:"command,omitempty"`
 	Args    []string          `yaml:"args,omitempty"`
 	Env     map[string]string `yaml:"env,omitempty"`
-	// Format is the inline rendering hint for generic kinds. v1 accepts
-	// "markdown" or empty (= downloadable artifact, no inline render).
+	// Format is the inline rendering / parsing hint for generic kinds. Accepts
+	// "markdown" (render the artifact inline), "sarif" (parse the output as
+	// SARIF — giving a custom `kind: command` hook the same findings summary,
+	// CI annotations, and SARIF upload as the built-in scanner kinds), or
+	// empty (= downloadable artifact, no inline render).
 	Format string `yaml:"format,omitempty"`
+
+	// Results names the file a `format: sarif` command writes its SARIF to,
+	// relative to $ATMOS_OUTPUT_DIR, for tools that write a fixed filename
+	// into a directory rather than to $ATMOS_OUTPUT_FILE. When empty, the
+	// SARIF is read from $ATMOS_OUTPUT_FILE.
+	Results string `yaml:"results,omitempty"`
 
 	// OnFailure is the failure mode. "warn" (default for tool kinds),
 	// "fail" (propagate non-zero exit), or "ignore" (swallow).

@@ -37,11 +37,13 @@ type Hooks struct {
 	// populated by the time RunAll fires for terraform/helmfile callers.
 	sections map[string]any
 
-	// preflightDone is set after the first RunAll has installed component
-	// dependencies and verified that each hook's command resolves on the
-	// resulting PATH. Subsequent RunAll calls skip the preflight so we
-	// don't redo work for every lifecycle event in a single command.
+	// preflightDone preserves the legacy "already checked" marker for tests and
+	// callers that only run one event through a Hooks instance.
 	preflightDone bool
+	// preflightedEvents tracks event-scoped checks. Preflight only verifies
+	// hooks that can run for the current lifecycle event, so a Hooks instance
+	// reused across events must not skip checks for a different event.
+	preflightedEvents map[HookEvent]bool
 	// toolchainPATH is the PATH fragment containing toolchain-installed
 	// binary directories. Populated by preflight; consumed by CommandEngine.
 	toolchainPATH string
@@ -124,6 +126,8 @@ func (h *Hooks) SetOutcome(outcome Outcome) {
 }
 
 func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
+	defer perf.Track(atmosConfig, "hooks.Hooks.RunAll")()
+
 	outcome := h.outcome
 	if outcome.Status == "" {
 		outcome.Status = RunSuccess
@@ -139,7 +143,7 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 	// time, not after. The outcome status is threaded through so a hook that
 	// won't run for this outcome (e.g. a success-only hook on the failure
 	// path) doesn't fail preflight and block the hooks that should run.
-	if err := h.preflight(atmosConfig, info, skipPredicate, outcome.Status); err != nil {
+	if err := h.preflight(event, atmosConfig, info, skipPredicate, outcome.Status); err != nil {
 		return err
 	}
 
@@ -483,18 +487,19 @@ func newSkipPredicate(raw string) func(string) bool {
 // per Hooks instance — subsequent lifecycle events reuse the cached PATH.
 // Failures use the error builder so the user sees a friendly message and
 // a hint pointing at dependencies.tools.
-func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, skipPredicate func(string) bool, status RunStatus) error {
+func (h *Hooks) preflight(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, skipPredicate func(string) bool, status RunStatus) error {
 	defer perf.Track(atmosConfig, "hooks.Hooks.preflight")()
 
-	if h.preflightDone {
+	normalizedEvent := event.Normalize()
+	if h.preflightAlreadyDone(normalizedEvent) {
 		return nil
 	}
-	h.preflightDone = true
+	h.markPreflightDone(normalizedEvent)
 
 	if len(h.items) == 0 || atmosConfig == nil || info == nil {
 		return nil
 	}
-	if !h.hasUnskippedHooks(skipPredicate) {
+	if !h.hasUnskippedHooks(normalizedEvent, skipPredicate, status) {
 		return nil
 	}
 
@@ -505,11 +510,37 @@ func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.C
 	if err := h.installDeps(atmosConfig, info, deps); err != nil {
 		return err
 	}
-	return h.verifyAllBinaries(skipPredicate, status)
+	return h.verifyAllBinaries(normalizedEvent, skipPredicate, status)
 }
 
-func (h *Hooks) hasUnskippedHooks(skipPredicate func(string) bool) bool {
+// preflightAlreadyDone reports whether preflight checks already ran for this
+// event. The legacy preflightDone marker covers callers that only run one event
+// through a Hooks instance; preflightedEvents scopes checks per lifecycle event
+// so a Hooks instance reused across events still preflights each one.
+func (h *Hooks) preflightAlreadyDone(event HookEvent) bool {
+	if h.preflightDone && len(h.preflightedEvents) == 0 {
+		return true
+	}
+	return h.preflightedEvents != nil && h.preflightedEvents[event]
+}
+
+func (h *Hooks) markPreflightDone(event HookEvent) {
+	h.preflightDone = true
+	if h.preflightedEvents == nil {
+		h.preflightedEvents = make(map[HookEvent]bool)
+	}
+	h.preflightedEvents[event] = true
+}
+
+func (h *Hooks) hasUnskippedHooks(event HookEvent, skipPredicate func(string) bool, status RunStatus) bool {
 	for name := range h.items {
+		hook := h.items[name]
+		if !hook.MatchesEvent(event) {
+			continue
+		}
+		if !hook.RunsOnStatus(status) {
+			continue
+		}
 		if skipPredicate == nil || !skipPredicate(name) {
 			return true
 		}
@@ -586,12 +617,15 @@ func (h *Hooks) installDeps(atmosConfig *schema.AtmosConfiguration, info *schema
 // won't run for the current outcome status (per their `when`) are skipped so
 // an unrelated hook's misconfiguration cannot block the hooks that do run
 // (e.g. a success-only hook with a missing binary must not fail the failure path).
-func (h *Hooks) verifyAllBinaries(skipPredicate func(string) bool, status RunStatus) error {
+func (h *Hooks) verifyAllBinaries(event HookEvent, skipPredicate func(string) bool, status RunStatus) error {
 	for name := range h.items {
 		if skipPredicate != nil && skipPredicate(name) {
 			continue
 		}
 		hook := h.items[name]
+		if !hook.MatchesEvent(event) {
+			continue
+		}
 		if !hook.RunsOnStatus(status) {
 			continue
 		}
