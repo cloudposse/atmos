@@ -8,6 +8,18 @@ type ContainerConfig struct {
 	Runtime ContainerRuntimeConfig `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
 }
 
+// Composition declares a named multi-service system. Components join a
+// composition via their first-class `composition:` field. The `Services` list is
+// a closed contract for membership (declaring membership in an unlisted service
+// is an error) but open for fulfillment (a declared service with no component in
+// a given stack is allowed).
+type Composition struct {
+	// Description is a human-readable summary of the composition.
+	Description string `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
+	// Services is the closed set of service names that may claim membership.
+	Services []string `yaml:"services,omitempty" json:"services,omitempty" mapstructure:"services"`
+}
+
 // ContainerRuntimeConfig configures the container runtime provider (docker/podman).
 type ContainerRuntimeConfig struct {
 	// Provider selects the container runtime: "docker" | "podman" | "" (auto-detect:

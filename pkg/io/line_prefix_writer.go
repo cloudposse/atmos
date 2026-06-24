@@ -4,6 +4,8 @@ import (
 	stdio "io"
 	"strings"
 	"sync"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // LinePrefixWriter prefixes complete lines and serializes writes through a
@@ -16,14 +18,25 @@ type LinePrefixWriter struct {
 	buffer  []byte
 }
 
-// NewLinePrefixWriter creates a writer that prefixes every rendered line.
-// writeMu may be shared across writers targeting the same terminal.
+// NewLinePrefixWriter creates a writer that prefixes every rendered line with
+// "[prefix] ". A shared writeMu serializes writes across writers targeting the
+// same terminal.
 func NewLinePrefixWriter(prefix string, w stdio.Writer, writeMu *sync.Mutex) *LinePrefixWriter {
-	if writeMu == nil {
-		writeMu = &sync.Mutex{}
-	}
 	if prefix != "" {
 		prefix = "[" + prefix + "] "
+	}
+	return NewLinePrefixWriterRaw(prefix, w, writeMu)
+}
+
+// NewLinePrefixWriterRaw is like NewLinePrefixWriter but uses the prefix
+// verbatim (no surrounding brackets or spacing), letting callers supply a
+// pre-styled or colored label. A shared writeMu serializes writes across writers
+// targeting the same terminal.
+func NewLinePrefixWriterRaw(prefix string, w stdio.Writer, writeMu *sync.Mutex) *LinePrefixWriter {
+	defer perf.Track(nil, "io.NewLinePrefixWriterRaw")()
+
+	if writeMu == nil {
+		writeMu = &sync.Mutex{}
 	}
 	return &LinePrefixWriter{
 		writeMu: writeMu,

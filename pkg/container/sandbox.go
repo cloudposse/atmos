@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"regexp"
-	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -14,18 +12,16 @@ import (
 )
 
 const (
-	SandboxLabelType         = "com.atmos.type"
-	SandboxLabelWorkflow     = "com.atmos.workflow"
-	SandboxLabelWorkflowPath = "com.atmos.workflow.path"
-	SandboxLabelRunID        = "com.atmos.run.id"
-	SandboxLabelWorkspace    = "com.atmos.workspace"
+	SandboxLabelType         = "tools.atmos.type"
+	SandboxLabelWorkflow     = "tools.atmos.workflow"
+	SandboxLabelWorkflowPath = "tools.atmos.workflow.path"
+	SandboxLabelRunID        = "tools.atmos.run.id"
+	SandboxLabelWorkspace    = "tools.atmos.workspace"
 	SandboxTypeWorkflow      = "workflow-sandbox"
 )
 
 // maxSandboxNameLength bounds the sanitized container name length.
 const maxSandboxNameLength = 48
-
-var sandboxNamePattern = regexp.MustCompile(`[^a-zA-Z0-9_.-]+`)
 
 // SandboxConfig describes a long-lived workflow sandbox container.
 type SandboxConfig struct {
@@ -175,7 +171,7 @@ func createSandboxContainer(ctx context.Context, runtime Runtime, config *Sandbo
 	// Only the missing-image case is recoverable by pulling. Any other create
 	// failure (bad mount, invalid arg, daemon error) must surface as-is — pulling
 	// then would mask the real cause behind a misleading registry error.
-	if config.PullPolicy != PullMissing || !isImageMissingError(err) {
+	if config.PullPolicy != PullMissing || !IsImageMissingError(err) {
 		return "", fmt.Errorf("%w: create workflow sandbox: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 	createErr := err
@@ -222,7 +218,8 @@ func cleanupStaleWorkflowSandboxes(ctx context.Context, runtime Runtime, config 
 	if err != nil {
 		return
 	}
-	for _, info := range containers {
+	for i := range containers {
+		info := &containers[i]
 		if !matchesSandboxLabels(info.Labels, config) || isContainerRunning(info.Status) {
 			continue
 		}
@@ -253,19 +250,11 @@ func matchesSandboxLabels(labels map[string]string, config *SandboxConfig) bool 
 }
 
 func isContainerRunning(status string) bool {
-	status = strings.ToLower(status)
-	return strings.Contains(status, "running") || strings.HasPrefix(status, "up ")
+	return IsContainerRunning(status)
 }
 
 func sanitizeSandboxName(value string) string {
-	value = strings.Trim(sandboxNamePattern.ReplaceAllString(value, "-"), "-.")
-	if value == "" {
-		return "workflow"
-	}
-	if len(value) > maxSandboxNameLength {
-		return value[:maxSandboxNameLength]
-	}
-	return value
+	return sanitizeName(value, "workflow", maxSandboxNameLength)
 }
 
 // ID returns the runtime container ID. In dry run it returns the generated name.

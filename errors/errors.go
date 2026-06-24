@@ -427,6 +427,7 @@ var (
 	ErrComponentListFailed                = errors.New("failed to list components")
 	ErrComponentValidationFailed          = errors.New("component validation failed")
 	ErrComponentExecutionFailed           = errors.New("component execution failed")
+	ErrNoRunningContainer                 = errors.New("no running container found")
 	ErrComponentArtifactGeneration        = errors.New("component artifact generation failed")
 	ErrComponentProviderRegistration      = errors.New("failed to register component provider")
 	ErrInvalidTerraformBackend            = errors.New("invalid terraform.backend section")
@@ -452,6 +453,8 @@ var (
 	ErrEmptyTargetComponentName     = errors.New("target component name cannot be empty")
 	ErrComponentsSectionNotFound    = errors.New("components section not found in stack")
 	ErrComponentNotFoundInSections  = errors.New("component not found in terraform or helmfile sections")
+	ErrUnknownComposition           = errors.New("component references an undeclared composition")
+	ErrUnknownCompositionMembership = errors.New("component claims membership in a service not declared by the composition")
 	ErrQueryFailed                  = errors.New("query execution failed")
 	ErrScalarExtractionNotSupported = errors.New("scalar extraction queries are not supported")
 	ErrQueryUnexpectedResultType    = errors.New("query returned unexpected result type")
@@ -902,6 +905,14 @@ var (
 	ErrDevcontainerNameInvalid   = errors.New("devcontainer name contains invalid characters")
 	ErrDevcontainerNameTooLong   = errors.New("devcontainer name is too long")
 	ErrPTYNotSupported           = errors.New("PTY not supported on this platform")
+
+	// Container bulk-operation errors.
+	ErrNoContainerComponentSelected = errors.New("no container component selected")
+	ErrContainerComponentWithAll    = errors.New("cannot combine a component argument with --all")
+
+	// Container run configuration errors.
+	ErrInvalidContainerRestartPolicy = errors.New("invalid container restart policy")
+	ErrInvalidContainerHealthCheck   = errors.New("invalid container healthcheck")
 
 	// Logout errors.
 	ErrLogoutFailed                         = errors.New("logout failed")

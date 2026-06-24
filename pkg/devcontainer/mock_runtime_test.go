@@ -217,6 +217,20 @@ func (mr *MockRuntimeMockRecorder) Remove(ctx, containerID, force any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockRuntime)(nil).Remove), ctx, containerID, force)
 }
 
+// Shell mocks base method.
+func (m *MockRuntime) Shell(ctx context.Context, containerID string, opts *container.ShellOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Shell", ctx, containerID, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Shell indicates an expected call of Shell.
+func (mr *MockRuntimeMockRecorder) Shell(ctx, containerID, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Shell", reflect.TypeOf((*MockRuntime)(nil).Shell), ctx, containerID, opts)
+}
+
 // Start mocks base method.
 func (m *MockRuntime) Start(ctx context.Context, containerID string) error {
 	m.ctrl.T.Helper()
