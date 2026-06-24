@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  - name: "native ci e2e fixture validates"
+    enabled: true
+    snapshot: false
+    description: "Ensures the native CI E2E fixture is parseable without running the Floci-backed Terraform workflow."
+    workdir: "fixtures/scenarios/native-ci-e2e"
+    command: "atmos"
+    args:
+      - "validate"
+      - "stacks"
+    expect:
+      exit_code: 0
+

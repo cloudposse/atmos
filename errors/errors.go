@@ -1051,6 +1051,8 @@ var (
 	ErrCIStatusFetchFailed     = errors.New("failed to fetch CI status")
 	ErrCIOutputWriteFailed     = errors.New("failed to write CI output")
 	ErrCISummaryWriteFailed    = errors.New("failed to write CI summary")
+	ErrCIAnnotationFailed      = errors.New("failed to emit CI annotations")
+	ErrCISARIFUploadFailed     = errors.New("failed to upload SARIF to CI provider")
 	ErrCICommentPostFailed     = errors.New("failed to post PR comment")
 	ErrCICommentListFailed     = errors.New("failed to list PR comments")
 	ErrCICommentUpdateFailed   = errors.New("failed to update PR comment")
