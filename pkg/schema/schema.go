@@ -626,6 +626,42 @@ type PlanfilesConfig struct {
 	Priority   []string                     `yaml:"priority,omitempty" json:"priority,omitempty" mapstructure:"priority"`
 	KeyPattern string                       `yaml:"key_pattern,omitempty" json:"key_pattern,omitempty" mapstructure:"key_pattern"`
 	Stores     map[string]PlanfileStoreSpec `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
+	// Verify controls drift verification of the stored planfile on `deploy`.
+	// One of: fail | warn | off. Empty means unset (defaults to fail under CI
+	// when planfile storage is configured, otherwise off).
+	Verify PlanfileVerifyMode `yaml:"verify,omitempty" json:"verify,omitempty" mapstructure:"verify"`
+	// Required controls whether a stored planfile must exist to verify against on
+	// `deploy` (distinct from Verify, which governs the drift comparison when a
+	// stored plan exists). A nil pointer means unset: required tracks verify
+	// strictness (true when verification resolves to fail, e.g. under CI with
+	// storage configured), so a fail-by-default deploy fails loudly rather than
+	// silently applying an unverified fresh plan. true requires a stored plan;
+	// false applies a fresh plan when none is found. It only applies when
+	// verification is active (verify is not off).
+	Required *bool `yaml:"required,omitempty" json:"required,omitempty" mapstructure:"required"`
+}
+
+// PlanfileVerifyMode controls how `atmos terraform deploy` reacts when the
+// stored planfile drifts from a freshly generated plan.
+type PlanfileVerifyMode string
+
+const (
+	// PlanfileVerifyFail fails the deploy when the stored plan drifts from a fresh plan.
+	PlanfileVerifyFail PlanfileVerifyMode = "fail"
+	// PlanfileVerifyWarn logs a warning on drift but proceeds with the deploy.
+	PlanfileVerifyWarn PlanfileVerifyMode = "warn"
+	// PlanfileVerifyOff disables verification (and skips the stored-plan download).
+	PlanfileVerifyOff PlanfileVerifyMode = "off"
+)
+
+// IsValid reports whether the mode is empty (unset) or one of the known values.
+func (m PlanfileVerifyMode) IsValid() bool {
+	switch m {
+	case "", PlanfileVerifyFail, PlanfileVerifyWarn, PlanfileVerifyOff:
+		return true
+	default:
+		return false
+	}
 }
 
 // PlanfileStoreSpec defines a planfile storage backend.
@@ -1207,33 +1243,37 @@ type ConfigAndStacksInfo struct {
 	// RequiredProviders maps provider names to their configuration.
 	// Example: {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}}.
 	// This is extracted from terraform.required_providers or components.terraform.<name>.required_providers.
-	RequiredProviders          map[string]map[string]any
-	AdditionalArgsAndFlags     []string
-	GlobalOptions              []string
-	BasePath                   string
-	VendorBasePathFlag         string
-	TerraformCommand           string
-	TerraformDir               string
-	HelmfileCommand            string
-	HelmfileDir                string
-	PackerCommand              string
-	PackerDir                  string
-	AnsibleCommand             string
-	AnsibleDir                 string
-	ConfigDir                  string
-	StacksDir                  string
-	WorkflowsDir               string
-	Context                    Context
-	ContextPrefix              string
-	DeployRunInit              string
-	InitRunReconfigure         string
-	InitPassVars               string
-	PlanSkipPlanfile           string
-	AutoGenerateBackendFile    string
-	UseTerraformPlan           bool
-	PlanFile                   string
-	StoredPlanFile             string
-	VerifyPlan                 bool
+	RequiredProviders       map[string]map[string]any
+	AdditionalArgsAndFlags  []string
+	GlobalOptions           []string
+	BasePath                string
+	VendorBasePathFlag      string
+	TerraformCommand        string
+	TerraformDir            string
+	HelmfileCommand         string
+	HelmfileDir             string
+	PackerCommand           string
+	PackerDir               string
+	AnsibleCommand          string
+	AnsibleDir              string
+	ConfigDir               string
+	StacksDir               string
+	WorkflowsDir            string
+	Context                 Context
+	ContextPrefix           string
+	DeployRunInit           string
+	InitRunReconfigure      string
+	InitPassVars            string
+	PlanSkipPlanfile        string
+	AutoGenerateBackendFile string
+	UseTerraformPlan        bool
+	PlanFile                string
+	StoredPlanFile          string
+	// VerifyPlanMode carries the explicit CLI planfile-verify override for `deploy`
+	// (--verify-plan => fail, --verify-plan=false => off; empty when the flag is unset).
+	// It is resolved against config + CI mode via planfile.ResolveVerifyMode at the
+	// before.terraform.deploy hook (download decision) and the RunE verify gate.
+	VerifyPlanMode             PlanfileVerifyMode
 	DryRun                     bool
 	SkipInit                   bool
 	UploadStatus               bool
