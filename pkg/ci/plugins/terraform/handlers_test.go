@@ -3,6 +3,7 @@ package terraform
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -429,6 +430,61 @@ func TestParseOutputWithError(t *testing.T) {
 		assert.Equal(t, 1, result.ExitCode)
 		assert.Equal(t, []string{"authentication failed"}, result.Errors)
 	})
+}
+
+// TestOnBeforeDeploy_DownloadGatedByVerifyMode verifies that the stored-plan
+// download runs only when verification is active: it is skipped when planfile
+// storage is not configured and when verification resolves to off, and attempted
+// for fail/warn. The injected CreatePlanfileStore factory is the observable — it
+// is reached only when downloadPlanfileForVerification actually runs. The download
+// is warn-only, so onBeforeDeploy returns nil in every case.
+func TestOnBeforeDeploy_DownloadGatedByVerifyMode(t *testing.T) {
+	storageEnabled := func() *schema.AtmosConfiguration {
+		c := &schema.AtmosConfiguration{}
+		c.Components.Terraform.Planfiles = schema.PlanfilesConfig{Priority: []string{"github"}}
+		return c
+	}
+
+	tests := []struct {
+		name             string
+		config           *schema.AtmosConfiguration
+		verifyMode       schema.PlanfileVerifyMode
+		wantStoreCreated bool
+	}{
+		{"storage disabled skips download", &schema.AtmosConfiguration{}, schema.PlanfileVerifyFail, false},
+		{"verify off skips download", storageEnabled(), schema.PlanfileVerifyOff, false},
+		{"verify fail attempts download", storageEnabled(), schema.PlanfileVerifyFail, true},
+		{"verify warn attempts download", storageEnabled(), schema.PlanfileVerifyWarn, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Plugin{}
+			storeCreated := false
+			ctx := &plugin.HookContext{
+				Config:   tt.config,
+				Provider: newMockProvider(),
+				Command:  "deploy",
+				CICtx:    &provider.Context{SHA: "abc123", Branch: "main"},
+				Info: &schema.ConfigAndStacksInfo{
+					Stack:            "dev",
+					ComponentFromArg: "vpc",
+					PlanFile:         filepath.Join(t.TempDir(), "plan.tfplan"),
+					VerifyPlanMode:   tt.verifyMode,
+				},
+				// Fail the store creation: download is warn-only, so onBeforeDeploy
+				// still returns nil; the flag records whether download was reached.
+				CreatePlanfileStore: func() (any, error) {
+					storeCreated = true
+					return nil, assert.AnError
+				},
+			}
+
+			err := p.onBeforeDeploy(ctx)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStoreCreated, storeCreated)
+		})
+	}
 }
 
 func TestOnBeforePlan_CheckDisabled(t *testing.T) {
