@@ -420,7 +420,7 @@ hooks:
   <dd>The step's parameters. These are rendered with the standard hook template context and YAML functions (so `{{ .atmos_component }}` and `!store ...` work inside `with:`), then handed to the step. The step's own validation is the gate — the schema keeps `with:` open.</dd>
 
   <dt>`when` (default `success`)</dt>
-  <dd>`success` | `failure` | `always` — run this hook based on the operation outcome. See [Reacting to success or failure](#reacting-to-success-or-failure).</dd>
+  <dd>Declarative condition controlling whether this hook runs. See [Reacting to success or failure](#reacting-to-success-or-failure).</dd>
 
   <dt>`retry`</dt>
   <dd>Optional. Wraps the step execution in Atmos's retry policy — same schema as a [workflow step's `retry`](/workflows/steps/retry). Applied by the hook runner, not the step.</dd>
@@ -441,16 +441,57 @@ hook's.
 
 By default an `after-*` hook runs **only when the operation succeeds** — a
 `store` hook must not write outputs after a failed apply. Set `when:` to change
-that:
+that. Hooks support the same declarative predicates as workflow and custom
+command steps, plus the hook-specific lifecycle status predicates:
 
 <dl>
   <dt>`when: success` (default)</dt>
   <dd>Run only when the operation succeeded.</dd>
+
   <dt>`when: failure`</dt>
   <dd>Run only when the operation failed.</dd>
+
   <dt>`when: always`</dt>
   <dd>Run on both outcomes.</dd>
+
+  <dt>`when: ci`</dt>
+  <dd>Run in CI after a successful operation. Hooks apply `success` implicitly when the condition does not mention `success`, `failure`, or `always`.</dd>
+
+  <dt>`when: [ci, always]`</dt>
+  <dd>Run in CI after both successful and failed operations.</dd>
 </dl>
+
+Built-in predicates are `ci`, `local`, `always`, `never`, `success`, and
+`failure`. Compose them with list shorthand, `all`, `any`, and `not`:
+
+```yaml
+hooks:
+  ci-summary:
+    kind: command
+    events: [after-terraform-plan]
+    command: ./scripts/write-ci-summary.sh
+    when: [ci, always]
+
+  local-cleanup:
+    kind: command
+    events: [after-terraform-apply]
+    command: ./scripts/cleanup.sh
+    when:
+      all:
+        - local
+        - failure
+
+  skip-in-ci:
+    kind: command
+    events: [after-terraform-plan]
+    command: ./scripts/local-report.sh
+    when:
+      not: ci
+```
+
+Condition filtering also applies during hook preflight. For example,
+`when: ci` hooks are skipped outside CI before Atmos validates or installs the
+hook's tools.
 
 The outcome is available to the step both as **template context** and as
 **environment variables**, alongside the component and stack — so a hook can
@@ -805,7 +846,7 @@ Stores](/stacks/sharing-state/stores).
   <dd>`warn` (default), `fail`, or `ignore`. Applies to the hook's own outcome, not the terraform operation's.</dd>
 
   <dt>`hooks.<name>.when`</dt>
-  <dd>`success` (default), `failure`, or `always` — run the hook based on the terraform operation's outcome. See [Reacting to success or failure](#reacting-to-success-or-failure).</dd>
+  <dd>Declarative condition controlling whether the hook runs. Omitted means `success`; if the condition does not mention `success`, `failure`, or `always`, Atmos applies `success` implicitly. See [Reacting to success or failure](#reacting-to-success-or-failure).</dd>
 
   <dt>`hooks.<name>.name` / `hooks.<name>.outputs`</dt>
   <dd>Store-kind specific. See [store function reference](/stacks/sharing-state/stores).</dd>

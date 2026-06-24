@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -135,6 +136,12 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 
 	log.Debug("Running hooks", "count", len(h.items), "status", outcome.Status)
 	skipPredicate := newSkipPredicate(resolveSkipHooks(cmd))
+	filter := hookFilter{
+		event:         event.Normalize(),
+		skipPredicate: skipPredicate,
+		status:        outcome.Status,
+		isCI:          telemetry.IsCI(),
+	}
 
 	// Preflight runs once per command lifecycle: install component
 	// dependencies up front and verify every hook's binary resolves before
@@ -143,12 +150,12 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 	// time, not after. The outcome status is threaded through so a hook that
 	// won't run for this outcome (e.g. a success-only hook on the failure
 	// path) doesn't fail preflight and block the hooks that should run.
-	if err := h.preflight(event, atmosConfig, info, skipPredicate, outcome.Status); err != nil {
+	if err := h.preflight(atmosConfig, info, filter); err != nil {
 		return err
 	}
 
 	for name, hook := range h.items {
-		if !hook.MatchesEvent(event) {
+		if !hook.MatchesEvent(filter.event) {
 			log.Debug("Skipping hook, event not in hook events list", "hook", name, "event", event, "hook_events", hook.Events)
 			continue
 		}
@@ -161,7 +168,7 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 		// Filter by the operation outcome. Default (when: success) runs only on
 		// success, so existing hooks keep their behavior; when: failure / always
 		// opt into running after a failed operation.
-		if !hook.RunsOnStatus(outcome.Status) {
+		if !hook.RunsWhen(outcome.Status, filter.isCI) {
 			log.Debug("Skipping hook, status does not match `when`", "hook", name, "when", hook.When, "status", outcome.Status)
 			continue
 		}
@@ -482,24 +489,30 @@ func newSkipPredicate(raw string) func(string) bool {
 	}
 }
 
+type hookFilter struct {
+	event         HookEvent
+	skipPredicate func(string) bool
+	status        RunStatus
+	isCI          bool
+}
+
 // preflight installs the component's declared tool dependencies and
 // verifies every hook's command resolves on the resulting PATH. Runs once
 // per Hooks instance — subsequent lifecycle events reuse the cached PATH.
 // Failures use the error builder so the user sees a friendly message and
 // a hint pointing at dependencies.tools.
-func (h *Hooks) preflight(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, skipPredicate func(string) bool, status RunStatus) error {
+func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, filter hookFilter) error {
 	defer perf.Track(atmosConfig, "hooks.Hooks.preflight")()
 
-	normalizedEvent := event.Normalize()
-	if h.preflightAlreadyDone(normalizedEvent) {
+	if h.preflightAlreadyDone(filter.event) {
 		return nil
 	}
-	h.markPreflightDone(normalizedEvent)
+	h.markPreflightDone(filter.event)
 
 	if len(h.items) == 0 || atmosConfig == nil || info == nil {
 		return nil
 	}
-	if !h.hasUnskippedHooks(normalizedEvent, skipPredicate, status) {
+	if !h.hasUnskippedHooks(filter) {
 		return nil
 	}
 
@@ -510,7 +523,7 @@ func (h *Hooks) preflight(event HookEvent, atmosConfig *schema.AtmosConfiguratio
 	if err := h.installDeps(atmosConfig, info, deps); err != nil {
 		return err
 	}
-	return h.verifyAllBinaries(normalizedEvent, skipPredicate, status)
+	return h.verifyAllBinaries(filter)
 }
 
 // preflightAlreadyDone reports whether preflight checks already ran for this
@@ -532,16 +545,16 @@ func (h *Hooks) markPreflightDone(event HookEvent) {
 	h.preflightedEvents[event] = true
 }
 
-func (h *Hooks) hasUnskippedHooks(event HookEvent, skipPredicate func(string) bool, status RunStatus) bool {
+func (h *Hooks) hasUnskippedHooks(filter hookFilter) bool {
 	for name := range h.items {
 		hook := h.items[name]
-		if !hook.MatchesEvent(event) {
+		if !hook.MatchesEvent(filter.event) {
 			continue
 		}
-		if !hook.RunsOnStatus(status) {
+		if !hook.RunsWhen(filter.status, filter.isCI) {
 			continue
 		}
-		if skipPredicate == nil || !skipPredicate(name) {
+		if filter.skipPredicate == nil || !filter.skipPredicate(name) {
 			return true
 		}
 	}
@@ -617,16 +630,16 @@ func (h *Hooks) installDeps(atmosConfig *schema.AtmosConfiguration, info *schema
 // won't run for the current outcome status (per their `when`) are skipped so
 // an unrelated hook's misconfiguration cannot block the hooks that do run
 // (e.g. a success-only hook with a missing binary must not fail the failure path).
-func (h *Hooks) verifyAllBinaries(event HookEvent, skipPredicate func(string) bool, status RunStatus) error {
+func (h *Hooks) verifyAllBinaries(filter hookFilter) error {
 	for name := range h.items {
-		if skipPredicate != nil && skipPredicate(name) {
+		if filter.skipPredicate != nil && filter.skipPredicate(name) {
 			continue
 		}
 		hook := h.items[name]
-		if !hook.MatchesEvent(event) {
+		if !hook.MatchesEvent(filter.event) {
 			continue
 		}
-		if !hook.RunsOnStatus(status) {
+		if !hook.RunsWhen(filter.status, filter.isCI) {
 			continue
 		}
 		if err := h.verifyHookBinary(name, &hook); err != nil {

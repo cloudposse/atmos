@@ -46,6 +46,29 @@ A structured step is the same object documented for workflows. See the
 [step reference](/workflows/steps/step) for the common step fields (`name`, `type`, `command`,
 `output`, and more).
 
+## Conditional steps
+
+Structured custom command steps support the same `when` condition syntax as
+workflow steps. Omitted `when` means run; a false condition skips the step
+without failing the command.
+
+```yaml
+commands:
+  - name: release
+    description: Run release checks
+    steps:
+      - type: shell
+        command: ./scripts/ci-release-checks.sh
+        when: ci
+      - type: shell
+        command: ./scripts/local-summary.sh
+        when:
+          not: ci
+```
+
+String shorthand steps remain plain shell commands and always run. Use the
+structured form when a custom command step needs a condition.
+
 ## Step types
 
 Custom commands and workflows share one step-type registry, so every step type works the same in

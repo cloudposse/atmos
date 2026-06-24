@@ -1,0 +1,147 @@
+package datafetcher
+
+import (
+	"encoding/json"
+	"os"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/xeipuuv/gojsonschema"
+)
+
+func TestManifestSchema_WorkflowWhenConditionForms(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded": loadEmbeddedSchemaBytes(t),
+		"website":  loadWebsiteSchemaBytes(t),
+	}
+
+	validConditions := map[string]any{
+		"scalar": "ci",
+		"list":   []any{"ci", "success"},
+		"all":    map[string]any{"all": []any{"ci", "success"}},
+		"any":    map[string]any{"any": []any{"ci", "local"}},
+		"not":    map[string]any{"not": "ci"},
+	}
+
+	for schemaName, schemaData := range schemas {
+		for name, condition := range validConditions {
+			t.Run(schemaName+"/"+name, func(t *testing.T) {
+				assertSchemaValid(t, schemaData, workflowManifestWithWhen(condition))
+			})
+		}
+
+		t.Run(schemaName+"/rejects unknown predicate", func(t *testing.T) {
+			assertSchemaInvalid(t, schemaData, workflowManifestWithWhen("expr"))
+		})
+	}
+}
+
+func TestManifestSchema_HookWhenConditionForms(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded":      loadEmbeddedSchemaBytes(t),
+		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
+	}
+
+	validConditions := map[string]any{
+		"success":   "success",
+		"failure":   "failure",
+		"always":    "always",
+		"ci":        "ci",
+		"ci-always": []any{"ci", "always"},
+		"compound":  map[string]any{"all": []any{"ci", map[string]any{"not": "never"}}},
+	}
+
+	for schemaName, schemaData := range schemas {
+		for name, condition := range validConditions {
+			t.Run(schemaName+"/"+name, func(t *testing.T) {
+				assertSchemaValid(t, schemaData, hookManifestWithWhen(condition))
+			})
+		}
+
+		t.Run(schemaName+"/rejects unknown predicate", func(t *testing.T) {
+			assertSchemaInvalid(t, schemaData, hookManifestWithWhen("expr"))
+		})
+	}
+}
+
+func workflowManifestWithWhen(condition any) map[string]any {
+	return map[string]any{
+		"workflows": map[string]any{
+			"test": map[string]any{
+				"steps": []any{
+					map[string]any{
+						"command": "echo ok",
+						"when":    condition,
+					},
+				},
+			},
+		},
+	}
+}
+
+func hookManifestWithWhen(condition any) map[string]any {
+	return map[string]any{
+		"hooks": map[string]any{
+			"test": map[string]any{
+				"kind":    "command",
+				"command": "echo",
+				"when":    condition,
+			},
+		},
+	}
+}
+
+func loadEmbeddedSchemaBytes(t *testing.T) []byte {
+	t.Helper()
+
+	data, err := (&atmosFetcher{}).FetchData("atmos://schema/atmos/manifest/1.0")
+	require.NoError(t, err)
+	return data
+}
+
+func loadWebsiteSchemaBytes(t *testing.T) []byte {
+	t.Helper()
+	return loadSchemaFile(t, "../../website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json")
+}
+
+func loadSchemaFile(t *testing.T, path string) []byte {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return data
+}
+
+func assertSchemaValid(t *testing.T, schemaData []byte, manifest map[string]any) {
+	t.Helper()
+
+	result := validateManifestAgainstSchema(t, schemaData, manifest)
+	if !result.Valid() {
+		for _, desc := range result.Errors() {
+			t.Logf("validation error: %s", desc)
+		}
+	}
+	assert.True(t, result.Valid(), "expected valid manifest")
+}
+
+func assertSchemaInvalid(t *testing.T, schemaData []byte, manifest map[string]any) {
+	t.Helper()
+
+	result := validateManifestAgainstSchema(t, schemaData, manifest)
+	assert.False(t, result.Valid(), "expected invalid manifest")
+}
+
+func validateManifestAgainstSchema(t *testing.T, schemaData []byte, manifest map[string]any) *gojsonschema.Result {
+	t.Helper()
+
+	docJSON, err := json.Marshal(manifest)
+	require.NoError(t, err)
+
+	result, err := gojsonschema.Validate(
+		gojsonschema.NewBytesLoader(schemaData),
+		gojsonschema.NewBytesLoader(docJSON),
+	)
+	require.NoError(t, err, "schema validation should not error")
+	return result
+}

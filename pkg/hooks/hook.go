@@ -19,12 +19,10 @@ type Hook struct {
 
 	Events []string `yaml:"events,omitempty"`
 
-	// When selects whether this hook runs based on the lifecycle operation's
-	// outcome: "success" (default), "failure", or "always". Default is
-	// success-only, preserving the original behavior where after-* hooks fired
-	// only when the operation succeeded (e.g. a store hook must not run after a
-	// failed apply).
-	When string `yaml:"when,omitempty"`
+	// When selects whether this hook runs. Empty defaults to success-only,
+	// preserving the original behavior where after-* hooks fired only when the
+	// operation succeeded.
+	When schema.Condition `yaml:"when,omitempty"`
 
 	// Generic command-kind fields. Used by the command engine and by named
 	// tool kinds via their defaults.
@@ -127,21 +125,21 @@ const (
 	WhenAlways  = "always"
 )
 
+// RunsWhen reports whether this hook should run given lifecycle status and CI
+// state. An empty When defaults to success-only, preserving the pre-When
+// behavior where after-* hooks fired only on success.
+func (h *Hook) RunsWhen(status RunStatus, isCI bool) bool {
+	return h.When.EvaluateWithImplicitSuccess(schema.ConditionContext{
+		CI:     isCI,
+		Status: string(status),
+	})
+}
+
 // RunsOnStatus reports whether this hook should run given the lifecycle
-// operation's status. An empty When defaults to success-only, preserving the
-// pre-When behavior where after-* hooks fired only on success.
+// operation's status. It is retained for tests and callers that do not need CI
+// conditions.
 func (h *Hook) RunsOnStatus(status RunStatus) bool {
-	switch h.When {
-	case WhenAlways:
-		return true
-	case WhenFailure:
-		return status == RunFailure
-	case WhenSuccess, "":
-		return status == RunSuccess
-	default:
-		// Unknown value is treated as the safe default (success-only).
-		return status == RunSuccess
-	}
+	return h.RunsWhen(status, false)
 }
 
 // MatchesEvent reports whether this hook should run for the given event.

@@ -35,6 +35,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/reexec"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -742,6 +743,11 @@ func executeCustomCommand(
 
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
+		if !step.When.Evaluate(customCommandConditionContext()) {
+			log.Debug("Skipping custom command step, `when` condition did not match", "command", commandConfig.Name, "step", i)
+			continue
+		}
+
 		// Prepare template data for arguments
 		argumentsData := map[string]string{}
 		for ix, arg := range commandConfig.Arguments {
@@ -979,6 +985,13 @@ func executeCustomCommand(
 			}
 		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+}
+
+func customCommandConditionContext() schema.ConditionContext {
+	return schema.ConditionContext{
+		CI:     telemetry.IsCI(),
+		Status: schema.ConditionPredicateSuccess,
 	}
 }
 

@@ -173,26 +173,39 @@ func TestStepEngineSeedsAtmosEnv(t *testing.T) {
 
 func TestRunsOnStatus(t *testing.T) {
 	cases := []struct {
-		when   string
+		when   schema.Condition
 		status RunStatus
 		want   bool
 	}{
-		{"", RunSuccess, true},  // default: success-only.
-		{"", RunFailure, false}, // default: does not run on failure.
-		{WhenSuccess, RunSuccess, true},
-		{WhenSuccess, RunFailure, false},
-		{WhenFailure, RunFailure, true},
-		{WhenFailure, RunSuccess, false},
-		{WhenAlways, RunSuccess, true},
-		{WhenAlways, RunFailure, true},
-		{"bogus", RunSuccess, true}, // unknown falls back to success-only.
-		{"bogus", RunFailure, false},
+		{schema.Condition{}, RunSuccess, true},  // default: success-only.
+		{schema.Condition{}, RunFailure, false}, // default: does not run on failure.
+		{schema.MustCondition(WhenSuccess), RunSuccess, true},
+		{schema.MustCondition(WhenSuccess), RunFailure, false},
+		{schema.MustCondition(WhenFailure), RunFailure, true},
+		{schema.MustCondition(WhenFailure), RunSuccess, false},
+		{schema.MustCondition(WhenAlways), RunSuccess, true},
+		{schema.MustCondition(WhenAlways), RunFailure, true},
+		{schema.MustCondition("bogus"), RunSuccess, false},
+		{schema.MustCondition("bogus"), RunFailure, false},
+		{schema.MustCondition([]any{"ci", WhenSuccess}), RunSuccess, false},
 	}
 	for _, c := range cases {
 		hook := Hook{When: c.when}
 		got := hook.RunsOnStatus(c.status)
-		assert.Equalf(t, c.want, got, "when=%q status=%q", c.when, c.status)
+		assert.Equalf(t, c.want, got, "status=%q", c.status)
 	}
+
+	t.Run("ci-only condition still requires success unless always is explicit", func(t *testing.T) {
+		ciOnly := Hook{When: schema.MustCondition("ci")}
+		assert.True(t, ciOnly.RunsWhen(RunSuccess, true))
+		assert.False(t, ciOnly.RunsWhen(RunFailure, true))
+		assert.False(t, ciOnly.RunsWhen(RunSuccess, false))
+
+		ciAlways := Hook{When: schema.MustCondition([]any{"ci", WhenAlways})}
+		assert.True(t, ciAlways.RunsWhen(RunSuccess, true))
+		assert.True(t, ciAlways.RunsWhen(RunFailure, true))
+		assert.False(t, ciAlways.RunsWhen(RunFailure, false))
+	})
 }
 
 func TestWithOutcomeTemplateData(t *testing.T) {

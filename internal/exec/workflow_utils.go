@@ -376,6 +376,10 @@ func ExecuteWorkflow(
 	showRenderer.RenderHeaderIfNeeded(workflowDefinition, workflow, flags)
 
 	for stepIdx, step := range steps {
+		if !step.When.Evaluate(workflowConditionContext()) {
+			log.Debug("Skipping workflow step, `when` condition did not match", "step", step.Name)
+			continue
+		}
 		// Render step label with optional count prefix and progress bar.
 		// When progress is enabled, combine label + progress on a single line (no newline).
 		// When progress is disabled, only show the label if show.count is enabled; otherwise
@@ -592,6 +596,13 @@ func ExecuteWorkflow(
 	}
 
 	return nil
+}
+
+func workflowConditionContext() schema.ConditionContext {
+	return schema.ConditionContext{
+		CI:     telemetry.IsCI(),
+		Status: schema.ConditionPredicateSuccess,
+	}
 }
 
 // stepExecutorState holds persistent state for extended step execution within a workflow.

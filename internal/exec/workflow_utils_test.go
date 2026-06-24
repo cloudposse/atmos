@@ -1190,6 +1190,30 @@ func TestExecuteWorkflow_ShellFieldsFallback(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestExecuteWorkflow_SkipsStepWhenConditionIsFalse(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test when skip",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "skip",
+				Command: "exit 77",
+				Type:    "shell",
+				When:    schema.MustCondition("never"),
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-when-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	assert.NoError(t, err)
+}
+
 // TestExecuteWorkflow_ShellFieldsFallbackWithMalformedCommand tests the fallback path
 // with a command that shell.Fields cannot parse but strings.Fields can handle.
 func TestExecuteWorkflow_ShellFieldsFallbackWithMalformedCommand(t *testing.T) {

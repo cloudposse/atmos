@@ -928,7 +928,12 @@ func TestHooksPreflight_NoOpBranches(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.hooks.preflight(BeforeTerraformPlan, tt.cfg, tt.info, tt.skip, RunSuccess)
+			err := tt.hooks.preflight(tt.cfg, tt.info, hookFilter{
+				event:         BeforeTerraformPlan,
+				skipPredicate: tt.skip,
+				status:        RunSuccess,
+				isCI:          false,
+			})
 			require.NoError(t, err)
 			assert.True(t, tt.hooks.preflightDone)
 		})
@@ -944,7 +949,12 @@ func TestHooksVerifyAllBinaries(t *testing.T) {
 			"skipped":    {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
 		}}
 
-		err := h.verifyAllBinaries(BeforeTerraformPlan, func(name string) bool { return name == "skipped" }, RunSuccess)
+		err := h.verifyAllBinaries(hookFilter{
+			event:         BeforeTerraformPlan,
+			skipPredicate: func(name string) bool { return name == "skipped" },
+			status:        RunSuccess,
+			isCI:          false,
+		})
 		require.NoError(t, err)
 	})
 
@@ -957,7 +967,7 @@ func TestHooksVerifyAllBinaries(t *testing.T) {
 			},
 		}}
 
-		err := h.verifyAllBinaries(BeforeTerraformApply, nil, RunSuccess)
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformApply, status: RunSuccess})
 		require.NoError(t, err)
 	})
 
@@ -966,7 +976,7 @@ func TestHooksVerifyAllBinaries(t *testing.T) {
 			"missing": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
 		}}
 
-		err := h.verifyAllBinaries(BeforeTerraformPlan, nil, RunSuccess)
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
 	})
@@ -977,16 +987,28 @@ func TestHooksVerifyAllBinaries(t *testing.T) {
 		// success-only hook; the failure hook has no command.
 		h := Hooks{items: map[string]Hook{
 			"success-only": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
-			"on-failure":   {Kind: "store", When: WhenFailure},
+			"on-failure":   {Kind: "store", When: schema.MustCondition(WhenFailure)},
 		}}
 
 		// Failure path: the success-only hook is skipped, so its missing binary
 		// does not block the run.
-		require.NoError(t, h.verifyAllBinaries(BeforeTerraformPlan, nil, RunFailure))
+		require.NoError(t, h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunFailure}))
 
 		// Success path: the success-only hook IS verified and its missing binary
 		// is reported (proving the skip above was status-driven, not a no-op).
-		err := h.verifyAllBinaries(BeforeTerraformPlan, nil, RunSuccess)
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	})
+
+	t.Run("skips ci-only hooks outside ci during preflight", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"ci-only": {Kind: "command", Command: "definitely-not-on-path-atmos-test", When: schema.MustCondition("ci")},
+		}}
+
+		require.NoError(t, h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess}))
+
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess, isCI: true})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
 	})

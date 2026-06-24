@@ -121,6 +121,77 @@
     }
   ],
   "definitions": {
+    "condition_predicate": {
+      "type": "string",
+      "description": "Built-in condition predicate for step and hook execution.",
+      "enum": [
+        "ci",
+        "local",
+        "always",
+        "never",
+        "success",
+        "failure"
+      ]
+    },
+    "condition": {
+      "description": "Declarative condition controlling whether a step or hook runs. A string is a built-in predicate; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/condition_predicate"
+        },
+        {
+          "type": "array",
+          "description": "All-of shorthand. Every condition in the list must evaluate to true.",
+          "items": {
+            "$ref": "#/definitions/condition"
+          },
+          "minItems": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "all": {
+              "type": "array",
+              "description": "All conditions must evaluate to true.",
+              "items": {
+                "$ref": "#/definitions/condition"
+              },
+              "minItems": 1
+            },
+            "any": {
+              "type": "array",
+              "description": "At least one condition must evaluate to true.",
+              "items": {
+                "$ref": "#/definitions/condition"
+              },
+              "minItems": 1
+            },
+            "not": {
+              "description": "The nested condition must evaluate to false.",
+              "$ref": "#/definitions/condition"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "all"
+              ]
+            },
+            {
+              "required": [
+                "any"
+              ]
+            },
+            {
+              "required": [
+                "not"
+              ]
+            }
+          ]
+        }
+      ]
+    },
     "import": {
       "title": "import",
       "description": "Import section",
@@ -1295,6 +1366,14 @@
                       },
                       "retry": {
                         "$ref": "#/definitions/workflow_retry"
+                      },
+                      "when": {
+                        "description": "Condition controlling whether this workflow step runs. Omitted means run.",
+                        "allOf": [
+                          {
+                            "$ref": "#/definitions/condition"
+                          }
+                        ]
                       },
                       "working_directory": {
                         "type": "string",
