@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -263,6 +264,14 @@ func renderTerminal(ctx *ExecContext, out *Output) {
 	}
 }
 
+// BuildAtmosEnv exposes the ATMOS_* env-var map builder to engines outside the
+// CommandEngine (e.g. the step bridge in step_engine.go) so they expose the
+// same standard variables (ATMOS_STACK, ATMOS_COMPONENT, ATMOS_COMPONENT_PATH,
+// …) to the work they run.
+func BuildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]string {
+	return buildAtmosEnv(ctx, outputFile, outputDir)
+}
+
 // buildAtmosEnv builds the ATMOS_* env-var map for the subprocess.
 func buildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]string {
 	componentPath := componentPathFor(ctx)
@@ -277,6 +286,16 @@ func buildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]st
 	}
 	if planfile := planfileFor(ctx); planfile != "" {
 		env["ATMOS_PLANFILE"] = planfile
+	}
+	// Lifecycle outcome so hooks can report what happened (e.g. a `say` or
+	// `http` step on `when: failure`). Status mirrors the `{{ .status }}`
+	// template key; component/stack are already exported above.
+	if ctx.Outcome.Status != "" {
+		env["ATMOS_HOOK_STATUS"] = string(ctx.Outcome.Status)
+		env["ATMOS_HOOK_EXIT_CODE"] = strconv.Itoa(ctx.Outcome.ExitCode)
+	}
+	if ctx.Outcome.Err != nil {
+		env["ATMOS_HOOK_ERROR"] = ctx.Outcome.Err.Error()
 	}
 	return env
 }

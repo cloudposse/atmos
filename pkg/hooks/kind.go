@@ -41,6 +41,13 @@ type ExecContext struct {
 	// Args are the command-line args passed to Cmd.
 	Args []string
 
+	// Outcome is the lifecycle operation result this hook fires around
+	// (success/failure, exit code, error). Set by RunAll. Distinct from the
+	// ExitCode/CommandError fields below, which a command engine sets for its
+	// own subprocess. Engines expose this to their work (e.g. the step bridge
+	// sets ATMOS_HOOK_STATUS and injects `.status` into the template context).
+	Outcome Outcome
+
 	// ToolchainPATH is the PATH fragment containing directories for any
 	// dependencies.tools that were auto-installed for this component's
 	// hooks. Populated by Hooks.preflight; consumed by CommandEngine
@@ -58,6 +65,18 @@ type ExecContext struct {
 	ExitCode int
 	// CommandError is the subprocess error, if any.
 	CommandError error
+}
+
+// Outcome carries the result of the lifecycle operation a hook fires around
+// (e.g. terraform apply). RunAll builds it from the command error and exposes
+// it to engines so hooks can report what happened.
+type Outcome struct {
+	// Status is the operation outcome: success or failure.
+	Status RunStatus
+	// Err is the operation error on failure; nil on success.
+	Err error
+	// ExitCode is the operation exit code (0 on success).
+	ExitCode int
 }
 
 // Output is what one hook invocation produces. Engines that don't emit

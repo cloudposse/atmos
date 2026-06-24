@@ -45,6 +45,10 @@ type Hooks struct {
 	// toolchainPATH is the PATH fragment containing toolchain-installed
 	// binary directories. Populated by preflight; consumed by CommandEngine.
 	toolchainPATH string
+
+	// outcome is the lifecycle operation result (success/failure) for the next
+	// RunAll, set by SetOutcome. Zero value defaults to success.
+	outcome Outcome
 }
 
 func (h Hooks) HasHooks() bool {
@@ -110,8 +114,22 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 	return &hooks, nil
 }
 
+// SetOutcome records the lifecycle operation outcome (success/failure) for the
+// next RunAll. Hooks are filtered by their `when` against this status, and the
+// outcome is exposed to engines (env vars, template context). A zero value (or
+// not calling this) defaults to a successful outcome, preserving the original
+// behavior where after-* hooks fired only on success.
+func (h *Hooks) SetOutcome(outcome Outcome) {
+	h.outcome = outcome
+}
+
 func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
-	log.Debug("Running hooks", "count", len(h.items))
+	outcome := h.outcome
+	if outcome.Status == "" {
+		outcome.Status = RunSuccess
+	}
+
+	log.Debug("Running hooks", "count", len(h.items), "status", outcome.Status)
 	skipPredicate := newSkipPredicate(resolveSkipHooks(cmd))
 
 	// Preflight runs once per command lifecycle: install component
@@ -134,6 +152,14 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 			continue
 		}
 
+		// Filter by the operation outcome. Default (when: success) runs only on
+		// success, so existing hooks keep their behavior; when: failure / always
+		// opt into running after a failed operation.
+		if !hook.RunsOnStatus(outcome.Status) {
+			log.Debug("Skipping hook, status does not match `when`", "hook", name, "when", hook.When, "status", outcome.Status)
+			continue
+		}
+
 		// CI commands are deprecated — use RunCIHooks instead, which automatically
 		// triggers CI actions based on component provider bindings.
 		if isDeprecatedCIKind(hook.Kind) {
@@ -147,7 +173,7 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 			continue
 		}
 
-		executionHook, err := h.resolveHookForExecution(name, &hook, atmosConfig, info)
+		executionHook, err := h.resolveHookForExecution(name, &hook, atmosConfig, info, outcome)
 		if err != nil {
 			return err
 		}
@@ -161,6 +187,7 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 			Info:          info,
 			Cmd:           cmd,
 			Args:          args,
+			Outcome:       outcome,
 			ToolchainPATH: h.toolchainPATH,
 		}); err != nil {
 			return err
@@ -175,13 +202,17 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 // templates and `!`-prefixed YAML functions. This re-fetches the raw hook
 // section, processes its values, and unmarshals the result into a typed Hook.
 // If the raw section is unavailable it returns the original hook unchanged.
-func (h *Hooks) resolveHookForExecution(name string, hook *Hook, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hook, error) {
+func (h *Hooks) resolveHookForExecution(name string, hook *Hook, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, outcome Outcome) (*Hook, error) {
 	rawHook, ok := h.rawHookSection(name)
 	if !ok {
 		return hook, nil
 	}
 
 	stackInfo := h.executionStackInfo(info)
+	// Expose the operation outcome to the hook's templates (e.g. `{{ .status }}`
+	// in a step's `with:` message). Component/stack are already in the section
+	// (`{{ .atmos_component }}`, `{{ .stack }}`).
+	stackInfo.ComponentSection = withOutcomeTemplateData(stackInfo.ComponentSection, outcome)
 	processed, err := processHookExecutionValue(atmosConfig, rawHook, stackInfo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render hook %q: %w", name, err)
@@ -252,6 +283,25 @@ func (h *Hooks) executionStackInfo(info *schema.ConfigAndStacksInfo) *schema.Con
 		}
 	}
 	return &stackInfo
+}
+
+// withOutcomeTemplateData returns a shallow copy of the component section with
+// the lifecycle outcome injected as top-level template keys (`status`,
+// `exit_code`, `error`). The copy avoids mutating the captured sections shared
+// across lifecycle events. A nil section yields a map with just the outcome keys.
+func withOutcomeTemplateData(section map[string]any, outcome Outcome) map[string]any {
+	augmented := make(map[string]any, len(section)+3)
+	for k, v := range section {
+		augmented[k] = v
+	}
+	augmented["status"] = string(outcome.Status)
+	augmented["exit_code"] = outcome.ExitCode
+	if outcome.Err != nil {
+		augmented["error"] = outcome.Err.Error()
+	} else {
+		augmented["error"] = ""
+	}
+	return augmented
 }
 
 // processHookExecutionValue recursively renders a hook value, dispatching on its
@@ -540,6 +590,15 @@ func (h *Hooks) verifyAllBinaries(skipPredicate func(string) bool) error {
 		}
 		kind, ok := GetKind(hook.Kind)
 		if !ok {
+			continue
+		}
+		// Step-kind hooks have no Command to resolve on PATH; instead verify
+		// the named step type is registered so a typo fails before terraform
+		// runs rather than mid-lifecycle.
+		if hook.Kind == stepKindName {
+			if err := verifyStepHookType(name, hook.Type); err != nil {
+				return err
+			}
 			continue
 		}
 		resolved := kind.ResolveDefaults(&hook)

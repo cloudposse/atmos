@@ -322,7 +322,7 @@ func TestResolveHookForExecutionBranches(t *testing.T) {
 		original := &Hook{Kind: "store", Name: "static-store"}
 		hooks := &Hooks{}
 
-		resolved, err := hooks.resolveHookForExecution("missing", original, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{})
+		resolved, err := hooks.resolveHookForExecution("missing", original, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunSuccess})
 		require.NoError(t, err)
 		assert.Same(t, original, resolved)
 	})
@@ -351,7 +351,7 @@ func TestResolveHookForExecutionBranches(t *testing.T) {
 			},
 		}
 
-		resolved, err := hooks.resolveHookForExecution("store-outputs", &Hook{Kind: "store"}, &schema.AtmosConfiguration{}, nil)
+		resolved, err := hooks.resolveHookForExecution("store-outputs", &Hook{Kind: "store"}, &schema.AtmosConfiguration{}, nil, Outcome{Status: RunSuccess})
 		require.NoError(t, err)
 		assert.Equal(t, "store", resolved.Kind)
 		assert.Equal(t, "my-project", resolved.Name)
@@ -370,7 +370,7 @@ func TestResolveHookForExecutionBranches(t *testing.T) {
 			},
 		}
 
-		_, err := hooks.resolveHookForExecution("broken", &Hook{Kind: "store"}, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{})
+		_, err := hooks.resolveHookForExecution("broken", &Hook{Kind: "store"}, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunSuccess})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to render hook")
 	})
