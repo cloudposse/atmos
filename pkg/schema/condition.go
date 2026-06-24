@@ -12,14 +12,21 @@ import (
 )
 
 const (
-	ConditionPredicateCI      = "ci"
-	ConditionPredicateLocal   = "local"
-	ConditionPredicateAlways  = "always"
-	ConditionPredicateNever   = "never"
+	// ConditionPredicateCI matches when Atmos is running in a detected CI environment.
+	ConditionPredicateCI = "ci"
+	// ConditionPredicateLocal matches when Atmos is not running in a detected CI environment.
+	ConditionPredicateLocal = "local"
+	// ConditionPredicateAlways always matches.
+	ConditionPredicateAlways = "always"
+	// ConditionPredicateNever never matches.
+	ConditionPredicateNever = "never"
+	// ConditionPredicateSuccess matches a successful lifecycle status.
 	ConditionPredicateSuccess = "success"
+	// ConditionPredicateFailure matches a failed lifecycle status.
 	ConditionPredicateFailure = "failure"
 )
 
+// ErrInvalidWhenCondition is returned when a `when` value cannot be normalized or used in the current execution context.
 var ErrInvalidWhenCondition = errors.New("invalid when condition")
 
 // ConditionContext carries runtime facts used to evaluate a declarative `when`.
@@ -28,6 +35,7 @@ type ConditionContext struct {
 	Status string
 }
 
+// ConditionPredicateFunc evaluates a named condition predicate against runtime facts.
 type ConditionPredicateFunc func(ConditionContext) bool
 
 var (
@@ -294,6 +302,15 @@ func (c Condition) MentionsAny(names ...string) bool {
 		wanted[strings.ToLower(strings.TrimSpace(name))] = struct{}{}
 	}
 	return c.node.mentionsAny(wanted)
+}
+
+// ValidateStepCondition rejects predicates that workflow and custom command
+// steps cannot evaluate because they do not run against a failure lifecycle.
+func ValidateStepCondition(condition Condition) error {
+	if condition.MentionsAny(ConditionPredicateFailure) {
+		return fmt.Errorf("%w: step when cannot use %q", ErrInvalidWhenCondition, ConditionPredicateFailure)
+	}
+	return nil
 }
 
 func (n ConditionNode) Evaluate(ctx ConditionContext) bool {

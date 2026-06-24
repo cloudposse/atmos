@@ -38,13 +38,13 @@ type Hooks struct {
 	// populated by the time RunAll fires for terraform/helmfile callers.
 	sections map[string]any
 
-	// preflightDone preserves the legacy "already checked" marker for tests and
-	// callers that only run one event through a Hooks instance.
+	// preflightDone preserves the legacy "already checked" marker for tests.
 	preflightDone bool
-	// preflightedEvents tracks event-scoped checks. Preflight only verifies
-	// hooks that can run for the current lifecycle event, so a Hooks instance
-	// reused across events must not skip checks for a different event.
-	preflightedEvents map[HookEvent]bool
+	// preflightedKeys tracks the runnable hook filter used for each preflight.
+	// Preflight only verifies hooks that can run for the current event, status,
+	// and CI state, so a Hooks instance reused across different outcomes must
+	// not skip checks when the runnable hook set changes.
+	preflightedKeys map[hookPreflightKey]bool
 	// toolchainPATH is the PATH fragment containing toolchain-installed
 	// binary directories. Populated by preflight; consumed by CommandEngine.
 	toolchainPATH string
@@ -496,6 +496,20 @@ type hookFilter struct {
 	isCI          bool
 }
 
+type hookPreflightKey struct {
+	event  HookEvent
+	status RunStatus
+	isCI   bool
+}
+
+func (f hookFilter) preflightKey() hookPreflightKey {
+	return hookPreflightKey{
+		event:  f.event,
+		status: f.status,
+		isCI:   f.isCI,
+	}
+}
+
 // preflight installs the component's declared tool dependencies and
 // verifies every hook's command resolves on the resulting PATH. Runs once
 // per Hooks instance — subsequent lifecycle events reuse the cached PATH.
@@ -504,10 +518,10 @@ type hookFilter struct {
 func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, filter hookFilter) error {
 	defer perf.Track(atmosConfig, "hooks.Hooks.preflight")()
 
-	if h.preflightAlreadyDone(filter.event) {
+	if h.preflightAlreadyDone(filter) {
 		return nil
 	}
-	h.markPreflightDone(filter.event)
+	h.markPreflightDone(filter)
 
 	if len(h.items) == 0 || atmosConfig == nil || info == nil {
 		return nil
@@ -527,22 +541,21 @@ func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.C
 }
 
 // preflightAlreadyDone reports whether preflight checks already ran for this
-// event. The legacy preflightDone marker covers callers that only run one event
-// through a Hooks instance; preflightedEvents scopes checks per lifecycle event
-// so a Hooks instance reused across events still preflights each one.
-func (h *Hooks) preflightAlreadyDone(event HookEvent) bool {
-	if h.preflightDone && len(h.preflightedEvents) == 0 {
+// runnable hook filter. The legacy preflightDone marker covers tests that set
+// it directly; preflightedKeys scopes checks per event, status, and CI state.
+func (h *Hooks) preflightAlreadyDone(filter hookFilter) bool {
+	if h.preflightDone && len(h.preflightedKeys) == 0 {
 		return true
 	}
-	return h.preflightedEvents != nil && h.preflightedEvents[event]
+	return h.preflightedKeys != nil && h.preflightedKeys[filter.preflightKey()]
 }
 
-func (h *Hooks) markPreflightDone(event HookEvent) {
+func (h *Hooks) markPreflightDone(filter hookFilter) {
 	h.preflightDone = true
-	if h.preflightedEvents == nil {
-		h.preflightedEvents = make(map[HookEvent]bool)
+	if h.preflightedKeys == nil {
+		h.preflightedKeys = make(map[hookPreflightKey]bool)
 	}
-	h.preflightedEvents[event] = true
+	h.preflightedKeys[filter.preflightKey()] = true
 }
 
 func (h *Hooks) hasUnskippedHooks(filter hookFilter) bool {

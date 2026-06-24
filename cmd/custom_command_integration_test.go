@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -268,19 +269,19 @@ func TestCustomCommandIntegration_SkipsStepWhenConditionIsFalse(t *testing.T) {
 	skippedFile := filepath.Join(tmpDir, "skipped.txt")
 	ranFile := filepath.Join(tmpDir, "ran.txt")
 
-	writeCmd := func(path, value string) string {
-		if runtime.GOOS == "windows" {
-			return fmt.Sprintf("cmd /c echo %s > %q", value, path)
-		}
-		return fmt.Sprintf("printf %q > %q", value, path)
-	}
-
 	testCommand := schema.Command{
 		Name:        "test-when-skip",
 		Description: "Test when skip",
 		Steps: schema.Tasks{
-			{Command: writeCmd(skippedFile, "skipped"), Type: "shell", When: schema.MustCondition("never")},
-			{Command: writeCmd(ranFile, "ran"), Type: "shell"},
+			{
+				Command: customCommandWriteHelperCommand(t, skippedFile, "skipped"),
+				Type:    "shell",
+				When:    schema.MustCondition("never"),
+			},
+			{
+				Command: customCommandWriteHelperCommand(t, ranFile, "ran"),
+				Type:    "shell",
+			},
 		},
 	}
 	atmosConfig.Commands = []schema.Command{testCommand}
@@ -301,6 +302,38 @@ func TestCustomCommandIntegration_SkipsStepWhenConditionIsFalse(t *testing.T) {
 
 	assert.NoFileExists(t, skippedFile)
 	assert.FileExists(t, ranFile)
+}
+
+func customCommandWriteHelperCommand(t *testing.T, path, value string) string {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	encodedValue := base64.RawURLEncoding.EncodeToString([]byte(value))
+	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationWriteHelper -- %s %s", exe, encodedPath, encodedValue)
+}
+
+func TestCustomCommandIntegrationWriteHelper(t *testing.T) {
+	separator := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 2)
+	pathBytes, err := base64.RawURLEncoding.DecodeString(args[0])
+	require.NoError(t, err)
+	valueBytes, err := base64.RawURLEncoding.DecodeString(args[1])
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(string(pathBytes), valueBytes, 0o600))
+	os.Exit(0)
 }
 
 // TestCustomCommandIntegration_ComponentEnvExported verifies that a custom component's `env`

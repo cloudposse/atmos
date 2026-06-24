@@ -175,7 +175,13 @@ func (e *Executor) prepareSteps(params *WorkflowParams, result *ExecutionResult)
 func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep, progressRenderer *ProgressRenderer, result *ExecutionResult) error {
 	for stepIdx := range steps {
 		step := &steps[stepIdx]
-		if !step.When.Evaluate(workflowConditionContext()) {
+		conditionContext := workflowConditionContext()
+		if err := schema.ValidateStepCondition(step.When); err != nil {
+			result.Success = false
+			result.Error = err
+			return err
+		}
+		if !step.When.Evaluate(conditionContext) {
 			log.Debug("Skipping workflow step, `when` condition did not match", "step", step.Name)
 			result.Steps = append(result.Steps, StepResult{
 				StepName: step.Name,

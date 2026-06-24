@@ -258,6 +258,9 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 		Identity:         "test-identity",
 		Interactive:      true,
 		Tty:              true,
+		Voice:            []string{"Alex", "Samantha"},
+		Rate:             "fast",
+		Print:            "always",
 		Retry: &RetryConfig{
 			MaxAttempts: &maxAttempts,
 		},
@@ -274,6 +277,9 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 	assert.Equal(t, task.Identity, step.Identity)
 	assert.Equal(t, task.Interactive, step.Interactive)
 	assert.Equal(t, task.Tty, step.Tty)
+	assert.Equal(t, task.Voice, step.Voice)
+	assert.Equal(t, task.Rate, step.Rate)
+	assert.Equal(t, task.Print, step.Print)
 	assert.Equal(t, task.Retry, step.Retry)
 	// Note: Timeout is not in WorkflowStep.
 }
@@ -289,6 +295,9 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 		Identity:         "prod-identity",
 		Interactive:      true,
 		Tty:              true,
+		Voice:            []string{"Moira", "Alex"},
+		Rate:             "slow",
+		Print:            "fallback",
 		Retry: &RetryConfig{
 			MaxAttempts: &maxAttempts,
 		},
@@ -304,6 +313,9 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 	assert.Equal(t, step.Identity, task.Identity)
 	assert.Equal(t, step.Interactive, task.Interactive)
 	assert.Equal(t, step.Tty, task.Tty)
+	assert.Equal(t, step.Voice, task.Voice)
+	assert.Equal(t, step.Rate, task.Rate)
+	assert.Equal(t, step.Print, task.Print)
 	assert.Equal(t, step.Retry, task.Retry)
 	assert.Zero(t, task.Timeout) // WorkflowStep doesn't have Timeout.
 }

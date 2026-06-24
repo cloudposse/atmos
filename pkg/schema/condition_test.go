@@ -268,6 +268,20 @@ func TestConditionNewConditionRejectsMalformedDecodedShapes(t *testing.T) {
 }
 
 func TestRegisterConditionPredicate(t *testing.T) {
+	name := "custom-test-condition"
+	conditionPredicatesMu.Lock()
+	previous, hadPrevious := conditionPredicates[name]
+	conditionPredicatesMu.Unlock()
+	t.Cleanup(func() {
+		conditionPredicatesMu.Lock()
+		defer conditionPredicatesMu.Unlock()
+		if hadPrevious {
+			conditionPredicates[name] = previous
+			return
+		}
+		delete(conditionPredicates, name)
+	})
+
 	RegisterConditionPredicate("custom-test-condition", func(ctx ConditionContext) bool {
 		return ctx.Status == "custom"
 	})
@@ -275,6 +289,12 @@ func TestRegisterConditionPredicate(t *testing.T) {
 	condition := MustCondition("custom-test-condition")
 	assert.True(t, condition.Evaluate(ConditionContext{Status: "custom"}))
 	assert.False(t, condition.Evaluate(ConditionContext{Status: "other"}))
+}
+
+func TestValidateStepCondition(t *testing.T) {
+	require.NoError(t, ValidateStepCondition(MustCondition([]any{"ci", "success"})))
+	require.Error(t, ValidateStepCondition(MustCondition("failure")))
+	require.Error(t, ValidateStepCondition(MustCondition(map[string]any{"not": "failure"})))
 }
 
 func TestConditionJSONRoundTrip(t *testing.T) {

@@ -80,7 +80,7 @@ steps:
     when: local
 ```
 
-Built-in predicates are:
+Step predicates are:
 
 <dl>
   <dt>`ci`</dt>
@@ -96,11 +96,11 @@ Built-in predicates are:
   <dd>Never run.</dd>
 
   <dt>`success`</dt>
-  <dd>Run when the current lifecycle status is success. Workflow and custom command steps evaluate with success status.</dd>
-
-  <dt>`failure`</dt>
-  <dd>Run when the current lifecycle status is failure. This is mainly useful for hooks.</dd>
+  <dd>Run when the step condition is evaluated with success status.</dd>
 </dl>
+
+`failure` is supported for hooks, which evaluate against a lifecycle outcome,
+but not for workflow or custom command steps.
 
 Compose conditions with list shorthand, `all`, `any`, and `not`:
 

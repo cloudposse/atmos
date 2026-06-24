@@ -1212,6 +1212,22 @@ func TestExecuteWorkflow_SkipsStepWhenConditionIsFalse(t *testing.T) {
 
 	err = ExecuteWorkflow(atmosConfig, "test-when-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
 	assert.NoError(t, err)
+
+	workflowDefWithIdentity := &schema.WorkflowDefinition{
+		Description: "Test when skip with identity",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:     "skip-auth",
+				Command:  "exit 77",
+				Type:     "shell",
+				Identity: "missing-identity",
+				When:     schema.MustCondition("never"),
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-when-skip-auth", "/path/to/workflow.yaml", workflowDefWithIdentity, false, "", "", "")
+	assert.NoError(t, err)
 }
 
 // TestExecuteWorkflow_ShellFieldsFallbackWithMalformedCommand tests the fallback path

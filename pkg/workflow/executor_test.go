@@ -105,6 +105,29 @@ func TestExecutor_Execute_SkipsStepWhenConditionIsFalse(t *testing.T) {
 	assert.Equal(t, "run", result.Steps[1].StepName)
 }
 
+func TestExecutor_Execute_RejectsFailureStepCondition(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	executor := NewExecutor(NewMockCommandRunner(ctrl), nil, NewMockUIProvider(ctrl))
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "failure-only",
+				Command: "this-command-must-not-run",
+				Type:    "shell",
+				When:    schema.MustCondition("failure"),
+			},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, schema.ErrInvalidWhenCondition)
+	assert.False(t, result.Success)
+}
+
 // TestExecutor_Execute_BasicAtmosWorkflow tests executing a simple atmos workflow.
 func TestExecutor_Execute_BasicAtmosWorkflow(t *testing.T) {
 	ctrl := gomock.NewController(t)

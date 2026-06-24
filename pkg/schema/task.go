@@ -103,6 +103,11 @@ type Task struct {
 	Level  string            `yaml:"level,omitempty" json:"level,omitempty" mapstructure:"level"`    // Log level: trace, debug, info, warn, error.
 	Fields map[string]string `yaml:"fields,omitempty" json:"fields,omitempty" mapstructure:"fields"` // Structured log fields (key-value pairs).
 
+	// Say step fields.
+	Voice []string `yaml:"voice,omitempty" json:"voice,omitempty" mapstructure:"voice"` // Ordered voice candidates; first one installed on the host wins.
+	Rate  string   `yaml:"rate,omitempty" json:"rate,omitempty" mapstructure:"rate"`    // Speech rate: slow, normal, fast.
+	Print string   `yaml:"print,omitempty" json:"print,omitempty" mapstructure:"print"` // Print policy: fallback, always, never.
+
 	// Environment variables (supports templates).
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 
@@ -269,6 +274,11 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Level:  task.Level,
 		Fields: task.Fields,
 
+		// Say step fields.
+		Voice: task.Voice,
+		Rate:  task.Rate,
+		Print: task.Print,
+
 		// Environment variables.
 		Env: task.Env,
 
@@ -377,6 +387,11 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		// Log step fields.
 		Level:  step.Level,
 		Fields: step.Fields,
+
+		// Say step fields.
+		Voice: step.Voice,
+		Rate:  step.Rate,
+		Print: step.Print,
 
 		// Environment variables.
 		Env: step.Env,

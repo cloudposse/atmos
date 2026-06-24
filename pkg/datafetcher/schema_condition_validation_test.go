@@ -12,8 +12,10 @@ import (
 
 func TestManifestSchema_WorkflowWhenConditionForms(t *testing.T) {
 	schemas := map[string][]byte{
-		"embedded": loadEmbeddedSchemaBytes(t),
-		"website":  loadWebsiteSchemaBytes(t),
+		"embedded":      loadEmbeddedSchemaBytes(t),
+		"website":       loadWebsiteSchemaBytes(t),
+		"fixture":       loadFixtureSchemaBytes(t),
+		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
 	}
 
 	validConditions := map[string]any{
@@ -34,12 +36,18 @@ func TestManifestSchema_WorkflowWhenConditionForms(t *testing.T) {
 		t.Run(schemaName+"/rejects unknown predicate", func(t *testing.T) {
 			assertSchemaInvalid(t, schemaData, workflowManifestWithWhen("expr"))
 		})
+
+		t.Run(schemaName+"/rejects failure predicate", func(t *testing.T) {
+			assertSchemaInvalid(t, schemaData, workflowManifestWithWhen("failure"))
+		})
 	}
 }
 
 func TestManifestSchema_HookWhenConditionForms(t *testing.T) {
 	schemas := map[string][]byte{
 		"embedded":      loadEmbeddedSchemaBytes(t),
+		"website":       loadWebsiteSchemaBytes(t),
+		"fixture":       loadFixtureSchemaBytes(t),
 		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
 	}
 
@@ -61,6 +69,30 @@ func TestManifestSchema_HookWhenConditionForms(t *testing.T) {
 
 		t.Run(schemaName+"/rejects unknown predicate", func(t *testing.T) {
 			assertSchemaInvalid(t, schemaData, hookManifestWithWhen("expr"))
+		})
+	}
+}
+
+func TestManifestSchema_HookRetryUsesWorkflowRetrySchema(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded":      loadEmbeddedSchemaBytes(t),
+		"website":       loadWebsiteSchemaBytes(t),
+		"fixture":       loadFixtureSchemaBytes(t),
+		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/valid retry", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, hookManifestWithRetry(map[string]any{
+				"max_attempts":  2,
+				"initial_delay": "1s",
+			}))
+		})
+
+		t.Run(schemaName+"/rejects unknown retry field", func(t *testing.T) {
+			assertSchemaInvalid(t, schemaData, hookManifestWithRetry(map[string]any{
+				"unknown": true,
+			}))
 		})
 	}
 }
@@ -92,6 +124,12 @@ func hookManifestWithWhen(condition any) map[string]any {
 	}
 }
 
+func hookManifestWithRetry(retry any) map[string]any {
+	manifest := hookManifestWithWhen("always")
+	manifest["hooks"].(map[string]any)["test"].(map[string]any)["retry"] = retry
+	return manifest
+}
+
 func loadEmbeddedSchemaBytes(t *testing.T) []byte {
 	t.Helper()
 
@@ -103,6 +141,11 @@ func loadEmbeddedSchemaBytes(t *testing.T) []byte {
 func loadWebsiteSchemaBytes(t *testing.T) []byte {
 	t.Helper()
 	return loadSchemaFile(t, "../../website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json")
+}
+
+func loadFixtureSchemaBytes(t *testing.T) []byte {
+	t.Helper()
+	return loadSchemaFile(t, "../../tests/fixtures/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json")
 }
 
 func loadSchemaFile(t *testing.T, path string) []byte {

@@ -868,6 +868,64 @@ func TestRunAll_PreflightOnlyChecksMatchingEvent(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
 }
 
+func TestHooksPreflight_CacheIncludesStatusAndCI(t *testing.T) {
+	t.Run("ci state", func(t *testing.T) {
+		h := Hooks{
+			items: map[string]Hook{
+				"ci-only": {
+					Kind:    "command",
+					Command: "definitely-not-on-path-atmos-test",
+					When:    schema.MustCondition("ci"),
+				},
+			},
+		}
+		cfg := &schema.AtmosConfiguration{}
+		info := &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"}
+
+		err := h.preflight(cfg, info, hookFilter{
+			event:  BeforeTerraformPlan,
+			status: RunSuccess,
+			isCI:   false,
+		})
+		require.NoError(t, err)
+
+		err = h.preflight(cfg, info, hookFilter{
+			event:  BeforeTerraformPlan,
+			status: RunSuccess,
+			isCI:   true,
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	})
+
+	t.Run("status", func(t *testing.T) {
+		h := Hooks{
+			items: map[string]Hook{
+				"failure-only": {
+					Kind:    "command",
+					Command: "definitely-not-on-path-atmos-test",
+					When:    schema.MustCondition("failure"),
+				},
+			},
+		}
+		cfg := &schema.AtmosConfiguration{}
+		info := &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"}
+
+		err := h.preflight(cfg, info, hookFilter{
+			event:  BeforeTerraformPlan,
+			status: RunSuccess,
+		})
+		require.NoError(t, err)
+
+		err = h.preflight(cfg, info, hookFilter{
+			event:  BeforeTerraformPlan,
+			status: RunFailure,
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	})
+}
+
 func TestHooksPreflight_NoOpBranches(t *testing.T) {
 	skipNone := func(string) bool { return false }
 
