@@ -19,5 +19,5 @@ components:
       hooks:
         security:
           events:
-            - after-terraform-plan
+            - after.terraform.plan
           kind: trivy
