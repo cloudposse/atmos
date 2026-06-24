@@ -43,6 +43,11 @@ func (r *pushRuntime) Exec(context.Context, string, []string, *container.ExecOpt
 	return nil
 }
 
+func (r *pushRuntime) Shell(context.Context, string, *container.ShellOptions) error {
+	// Push never opens a shell; fail loudly if it is unexpectedly invoked.
+	return errors.New("unexpected Shell call")
+}
+
 func (r *pushRuntime) Attach(context.Context, string, *container.AttachOptions) error {
 	return nil
 }
