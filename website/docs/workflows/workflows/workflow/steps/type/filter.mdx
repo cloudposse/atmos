@@ -1,0 +1,41 @@
+---
+title: filter
+sidebar_label: filter
+slug: /workflows/steps/type/filter
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `filter` step type provides a searchable, optionally multi-select menu — the same fuzzy picker Atmos uses for interactive selection — so your custom commands and workflows can choose one or many values from long lists.
+</Intro>
+
+```yaml
+steps:
+  - name: components
+    type: filter
+    prompt: Select components
+    multiple: true
+    options:
+      - vpc
+      - eks
+      - rds
+```
+
+## Fields
+
+<dl>
+  <dt>`prompt`</dt>
+  <dd>Required. Prompt text shown to the user.</dd>
+
+  <dt>`options`</dt>
+  <dd>Required. List of choices.</dd>
+
+  <dt>`multiple`</dt>
+  <dd>Set to `true` to allow more than one selection.</dd>
+
+  <dt>`limit`</dt>
+  <dd>Optional maximum number of selections.</dd>
+</dl>
+
+Interactive steps require a TTY. Multiple selections are available through `{{ .steps.components.values }}`.
