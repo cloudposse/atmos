@@ -27,6 +27,13 @@ steps:
 | [`exec`](/workflows/steps/type/exec) | Replace the Atmos process with another executable. Must be the final step. | `command` |
 | [`container`](/workflows/steps/type/container) | Build, push, run, or inspect containers. | `action`, `build`, `push`, `run`, `inspect` |
 
+## Orchestration Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| [`parallel`](/workflows/steps/type/parallel) | Run child steps concurrently with dependencies and bounded concurrency. | `steps`, `max_concurrency`, `fail`, `output`, `needs` |
+| [`matrix`](/workflows/steps/type/matrix) | Expand axes into generated child steps and run them concurrently. | `matrix`, `steps`, `max_concurrency`, `fail`, `output` |
+
 ## Interactive Types
 
 | Type | Purpose | Primary fields |
