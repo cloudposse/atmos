@@ -121,6 +121,161 @@
     }
   ],
   "definitions": {
+    "condition_predicate": {
+      "type": "string",
+      "description": "Built-in condition predicate for step and hook execution.",
+      "enum": [
+        "ci",
+        "local",
+        "always",
+        "never",
+        "success",
+        "failure"
+      ]
+    },
+    "step_condition_predicate": {
+      "type": "string",
+      "description": "Built-in condition predicate for workflow and custom command step execution.",
+      "enum": [
+        "ci",
+        "local",
+        "always",
+        "never",
+        "success"
+      ]
+    },
+    "step_condition": {
+      "description": "Declarative condition controlling whether a workflow or custom command step runs. A string is a built-in predicate; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/step_condition_predicate"
+        },
+        {
+          "type": "array",
+          "description": "All-of shorthand. Every condition in the list must evaluate to true.",
+          "items": {
+            "$ref": "#/definitions/step_condition"
+          },
+          "minItems": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "all": {
+              "description": "All conditions must evaluate to true.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/step_condition"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/step_condition"
+                  },
+                  "minItems": 1
+                }
+              ]
+            },
+            "any": {
+              "type": "array",
+              "description": "At least one condition must evaluate to true.",
+              "items": {
+                "$ref": "#/definitions/step_condition"
+              },
+              "minItems": 1
+            },
+            "not": {
+              "description": "The nested condition must evaluate to false.",
+              "$ref": "#/definitions/step_condition"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "all"
+              ]
+            },
+            {
+              "required": [
+                "any"
+              ]
+            },
+            {
+              "required": [
+                "not"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "condition": {
+      "description": "Declarative condition controlling whether a step or hook runs. A string is a built-in predicate; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/condition_predicate"
+        },
+        {
+          "type": "array",
+          "description": "All-of shorthand. Every condition in the list must evaluate to true.",
+          "items": {
+            "$ref": "#/definitions/condition"
+          },
+          "minItems": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "all": {
+              "description": "All conditions must evaluate to true.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/condition"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/condition"
+                  },
+                  "minItems": 1
+                }
+              ]
+            },
+            "any": {
+              "type": "array",
+              "description": "At least one condition must evaluate to true.",
+              "items": {
+                "$ref": "#/definitions/condition"
+              },
+              "minItems": 1
+            },
+            "not": {
+              "description": "The nested condition must evaluate to false.",
+              "$ref": "#/definitions/condition"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "all"
+              ]
+            },
+            {
+              "required": [
+                "any"
+              ]
+            },
+            {
+              "required": [
+                "not"
+              ]
+            }
+          ]
+        }
+      ]
+    },
     "import": {
       "title": "import",
       "description": "Import section",
@@ -1296,6 +1451,14 @@
                       "retry": {
                         "$ref": "#/definitions/workflow_retry"
                       },
+                      "when": {
+                        "description": "Condition controlling whether this workflow step runs. Omitted means run.",
+                        "allOf": [
+                          {
+                            "$ref": "#/definitions/step_condition"
+                          }
+                        ]
+                      },
                       "working_directory": {
                         "type": "string",
                         "description": "Working directory for the workflow step"
@@ -1356,7 +1519,7 @@
     },
     "hooks": {
       "title": "hooks",
-      "description": "Hooks section",
+      "description": "Hooks section. Each key names a hook; the value sets its kind, the lifecycle events it fires on, and kind-specific settings.",
       "oneOf": [
         {
           "type": "string",
@@ -1364,7 +1527,116 @@
         },
         {
           "type": "object",
-          "additionalProperties": true
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^!include"
+              },
+              {
+            "type": "object",
+            "description": "A single hook.",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "description": "Selects the engine that runs this hook.",
+                "enum": [
+                  "store",
+                  "command",
+                  "infracost",
+                  "checkov",
+                  "kics",
+                  "trivy",
+                  "git",
+                  "step",
+                  "ci.check",
+                  "ci.output",
+                  "ci.summary",
+                  "ci.upload",
+                  "ci.download"
+                ]
+              },
+              "command": {
+                "type": "string",
+                "description": "Binary to execute (command kind); also the legacy alias for kind (e.g. 'command: store')."
+              },
+              "events": {
+                "type": "array",
+                "description": "Lifecycle events this hook fires on (e.g. after.terraform.apply). The legacy hyphenated form (e.g. after-terraform-apply) is also accepted. Empty matches all events.",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "on_failure": {
+                "type": "string",
+                "description": "Failure mode when the hook errors.",
+                "enum": [
+                  "warn",
+                  "fail",
+                  "ignore"
+                ]
+              },
+              "when": {
+                "description": "Condition controlling whether this hook runs. Omitted means success. If no success, failure, or always predicate is mentioned, success is applied implicitly.",
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/condition"
+                  }
+                ]
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "env": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "format": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "description": "Step type to run (step kind): any registered workflow/custom-command step type, e.g. container, http, toast, log."
+              },
+              "with": {
+                "type": "object",
+                "description": "Parameters for the step named by 'type' (step kind). Validated by the step handler at run time.",
+                "additionalProperties": true
+              },
+              "retry": {
+                "$ref": "#/definitions/workflow_retry"
+              },
+              "name": {
+                "type": "string",
+                "description": "Store backend name (store kind)."
+              },
+              "outputs": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "repository": {
+                "type": "string",
+                "description": "Managed repository name (git kind)."
+              },
+              "commit": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "push": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": true
+              }
+            ]
+          }
         }
       ]
     },

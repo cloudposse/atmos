@@ -334,13 +334,26 @@ func ExecuteWorkflow(
 		return err
 	}
 
-	// Create auth manager if any step has an identity or if command-line identity is specified.
+	conditionContext := workflowConditionContext()
+
+	// Create auth manager if any runnable step has an identity or if command-line identity is specified.
 	// We check once upfront to avoid repeated initialization.
 	var authManager auth.AuthManager
 	var authStackInfo *schema.ConfigAndStacksInfo
-	needsAuth := commandLineIdentity != "" || lo.SomeBy(steps, func(step schema.WorkflowStep) bool {
-		return strings.TrimSpace(step.Identity) != ""
-	})
+	needsAuth := false
+	for i := range steps {
+		step := &steps[i]
+		if err := schema.ValidateStepCondition(step.When); err != nil {
+			return err
+		}
+		if !step.When.Evaluate(conditionContext) {
+			continue
+		}
+		if commandLineIdentity != "" || strings.TrimSpace(step.Identity) != "" {
+			needsAuth = true
+			break
+		}
+	}
 	if needsAuth {
 		// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
 		// This enables YAML template functions to access authenticated credentials.
@@ -376,6 +389,10 @@ func ExecuteWorkflow(
 	showRenderer.RenderHeaderIfNeeded(workflowDefinition, workflow, flags)
 
 	for stepIdx, step := range steps {
+		if !step.When.Evaluate(conditionContext) {
+			log.Debug("Skipping workflow step, `when` condition did not match", "step", step.Name)
+			continue
+		}
 		// Render step label with optional count prefix and progress bar.
 		// When progress is enabled, combine label + progress on a single line (no newline).
 		// When progress is disabled, only show the label if show.count is enabled; otherwise
@@ -592,6 +609,13 @@ func ExecuteWorkflow(
 	}
 
 	return nil
+}
+
+func workflowConditionContext() schema.ConditionContext {
+	return schema.ConditionContext{
+		CI:     telemetry.IsCI(),
+		Status: schema.ConditionPredicateSuccess,
+	}
 }
 
 // stepExecutorState holds persistent state for extended step execution within a workflow.

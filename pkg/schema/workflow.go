@@ -196,6 +196,7 @@ type WorkflowStep struct {
 	WorkingDirectory string       `yaml:"working_directory,omitempty" json:"working_directory,omitempty" mapstructure:"working_directory"`
 	Retry            *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 	Identity         string       `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+	When             Condition    `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.

@@ -19,7 +19,7 @@ components:
       hooks:
         cost:
           events:
-            - after-terraform-plan
+            - after.terraform.plan
           kind: infracost
           # OS env vars propagate automatically. Forwarding explicitly here
           # makes the API-key requirement visible to anyone reading the YAML.
