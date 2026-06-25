@@ -253,6 +253,43 @@ func TestResolveHookRendersOutcomeInWith(t *testing.T) {
 	assert.Equal(t, "vpc in foobar: failure", resolved.With["message"])
 }
 
+func TestResolveHookRendersSayApplyOutcome(t *testing.T) {
+	hooks := &Hooks{
+		sections: map[string]any{
+			"atmos_component": "hello-world",
+			"stack":           "test",
+			"hooks": map[string]any{
+				"announce-apply": map[string]any{
+					"kind": stepKindName,
+					"type": "say",
+					"with": map[string]any{
+						"content": `{{ if eq .status "success" -}}
+Terraform apply for {{ .atmos_component }} in {{ .stack }} was successful.
+{{- else -}}
+Terraform apply for {{ .atmos_component }} in {{ .stack }} was not successful.
+{{- if .error }} {{ .error }}{{ end -}}
+{{- end }}`,
+					},
+				},
+			},
+		},
+	}
+
+	success, err := hooks.resolveHookForExecution(
+		"announce-apply", &Hook{Kind: stepKindName, Type: "say"},
+		&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunSuccess},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "Terraform apply for hello-world in test was successful.", success.With["content"])
+
+	failure, err := hooks.resolveHookForExecution(
+		"announce-apply", &Hook{Kind: stepKindName, Type: "say"},
+		&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunFailure, Err: errors.New("apply boom"), ExitCode: 1},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "Terraform apply for hello-world in test was not successful. apply boom", failure.With["content"])
+}
+
 func TestStepEngineSeedsOutcomeEnv(t *testing.T) {
 	var captured map[string]string
 	runnerstep.Register(&envCaptureHandler{

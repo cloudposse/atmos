@@ -502,13 +502,14 @@ announce exactly what happened:
 hooks:
   announce:
     kind: step
-    type: say                 # (or http/toast) — future step type
+    type: say
     events: [after.terraform.apply]
     when: always
     with:
-      message: >-
+      print: always
+      content: >-
         The {{ .atmos_component }} component in the {{ .stack }} stack
-        {{ if eq .status "failure" }}failed{{ else }}deployed{{ end }}
+        {{ if eq .status "failure" }}was not successful{{ else }}was successful{{ end }}
 ```
 
 <dl>
