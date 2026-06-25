@@ -44,6 +44,9 @@ steps:
 
   <dt>`random_jitter`</dt>
   <dd>Jitter factor from `0.0` to `1.0` added to delays.</dd>
+
+  <dt>`conditions`</dt>
+  <dd>List of regular expressions identifying which failures are retryable. For the [`http`](/workflows/steps/type/http) step type, patterns are matched against `"<status-code> <response-body>"`, letting you retry responses that would otherwise fail fast (e.g., a specific `4xx`). Omit to use each step type's default retry classification.</dd>
 </dl>
 
 Omitting a parameter disables that limit or uses the default behavior. Explicit zero values are invalid where a positive duration or count is required.
