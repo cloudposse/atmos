@@ -10,7 +10,7 @@ terraform {
 
 # Dummy AWS provider config — infracost prices resources from its own
 # database, no AWS API calls or real credentials needed. These flags make
-# `tofu plan` succeed offline so the after-terraform-plan hook fires.
+# `tofu plan` succeed offline so the after.terraform.plan hook fires.
 provider "aws" {
   region                      = "us-east-1"
   access_key                  = "fake"

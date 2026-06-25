@@ -1,6 +1,6 @@
 # `hooks-kics`
 
-Demonstrates the **`kics`** hook kind: a `before-terraform-plan` hook that
+Demonstrates the **`kics`** hook kind: an `after.terraform.plan` hook that
 runs `kics scan` against the component and renders the SARIF findings
 summary in the terminal.
 
