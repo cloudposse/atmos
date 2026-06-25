@@ -427,6 +427,7 @@ var (
 	ErrComponentListFailed                = errors.New("failed to list components")
 	ErrComponentValidationFailed          = errors.New("component validation failed")
 	ErrComponentExecutionFailed           = errors.New("component execution failed")
+	ErrNoRunningContainer                 = errors.New("no running container found")
 	ErrComponentArtifactGeneration        = errors.New("component artifact generation failed")
 	ErrComponentProviderRegistration      = errors.New("failed to register component provider")
 	ErrInvalidTerraformBackend            = errors.New("invalid terraform.backend section")
@@ -452,6 +453,8 @@ var (
 	ErrEmptyTargetComponentName     = errors.New("target component name cannot be empty")
 	ErrComponentsSectionNotFound    = errors.New("components section not found in stack")
 	ErrComponentNotFoundInSections  = errors.New("component not found in terraform or helmfile sections")
+	ErrUnknownComposition           = errors.New("component references an undeclared composition")
+	ErrUnknownCompositionMembership = errors.New("component claims membership in a service not declared by the composition")
 	ErrQueryFailed                  = errors.New("query execution failed")
 	ErrScalarExtractionNotSupported = errors.New("scalar extraction queries are not supported")
 	ErrQueryUnexpectedResultType    = errors.New("query returned unexpected result type")
@@ -654,6 +657,13 @@ var (
 	ErrStepNoFilesFound              = errors.New("no files found matching criteria")
 	ErrStepFieldRequired             = errors.New("required field missing for step")
 	ErrStepTTYRequired               = errors.New("interactive terminal required for step")
+	ErrHTTPStepURLRequired           = errors.New("url is required for http step")
+	ErrHTTPStepInvalidMethod         = errors.New("invalid HTTP method for http step")
+	ErrHTTPStepBodyFormConflict      = errors.New("http step cannot set both body and form")
+	ErrHTTPStepInvalidExpectPattern  = errors.New("invalid expect.response regex pattern for http step")
+	ErrHTTPStepRequestFailed         = errors.New("http request failed")
+	ErrHTTPStepUnexpectedStatus      = errors.New("http response did not match expected status")
+	ErrHTTPStepUnexpectedResponse    = errors.New("http response body did not match expected pattern")
 	ErrWorkingDirNotFound            = errors.New("working directory does not exist")
 	ErrWorkingDirNotDirectory        = errors.New("working directory path is not a directory")
 	ErrWorkingDirAccessFailed        = errors.New("failed to access working directory")
@@ -796,6 +806,8 @@ var (
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
 	ErrChromeNotFound               = errors.New("chrome/chromium not found for isolated browser sessions")
+	ErrSayNotFound                  = errors.New("text-to-speech command not found")
+	ErrVoiceListUnsupported         = errors.New("voice enumeration not supported for backend")
 	ErrUserAborted                  = errors.New("user aborted")
 
 	// AWS SSO specific errors.
@@ -902,6 +914,14 @@ var (
 	ErrDevcontainerNameInvalid   = errors.New("devcontainer name contains invalid characters")
 	ErrDevcontainerNameTooLong   = errors.New("devcontainer name is too long")
 	ErrPTYNotSupported           = errors.New("PTY not supported on this platform")
+
+	// Container bulk-operation errors.
+	ErrNoContainerComponentSelected = errors.New("no container component selected")
+	ErrContainerComponentWithAll    = errors.New("cannot combine a component argument with --all")
+
+	// Container run configuration errors.
+	ErrInvalidContainerRestartPolicy = errors.New("invalid container restart policy")
+	ErrInvalidContainerHealthCheck   = errors.New("invalid container healthcheck")
 
 	// Logout errors.
 	ErrLogoutFailed                         = errors.New("logout failed")
@@ -1040,6 +1060,8 @@ var (
 	ErrCIStatusFetchFailed     = errors.New("failed to fetch CI status")
 	ErrCIOutputWriteFailed     = errors.New("failed to write CI output")
 	ErrCISummaryWriteFailed    = errors.New("failed to write CI summary")
+	ErrCIAnnotationFailed      = errors.New("failed to emit CI annotations")
+	ErrCISARIFUploadFailed     = errors.New("failed to upload SARIF to CI provider")
 	ErrCICommentPostFailed     = errors.New("failed to post PR comment")
 	ErrCICommentListFailed     = errors.New("failed to list PR comments")
 	ErrCICommentUpdateFailed   = errors.New("failed to update PR comment")

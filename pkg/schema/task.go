@@ -110,6 +110,15 @@ type Task struct {
 	// Exit step type fields.
 	Code int `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"` // Exit code for exit step type.
 
+	// HTTP step type fields (type: http; also accepts the alias type: webhook).
+	URL     string            `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`             // Request URL (required, supports templates).
+	Method  string            `yaml:"method,omitempty" json:"method,omitempty" mapstructure:"method"`    // HTTP method/verb: GET (default), POST, PUT, PATCH, DELETE, HEAD, OPTIONS.
+	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty" mapstructure:"headers"` // Request headers (supports templates).
+	Query   map[string]string `yaml:"query,omitempty" json:"query,omitempty" mapstructure:"query"`       // Query-string parameters (supports templates).
+	Body    string            `yaml:"body,omitempty" json:"body,omitempty" mapstructure:"body"`          // Raw request body (supports templates); mutually exclusive with form.
+	Form    map[string]string `yaml:"form,omitempty" json:"form,omitempty" mapstructure:"form"`          // Form/JSON body params; mutually exclusive with body.
+	Expect  *HTTPExpect       `yaml:"expect,omitempty" json:"expect,omitempty" mapstructure:"expect"`    // Success criteria; defaults to any 2xx.
+
 	// Container step fields.
 	Action            string                `yaml:"action,omitempty" json:"action,omitempty" mapstructure:"action"` // build, push, run, inspect.
 	Build             *ContainerBuildStep   `yaml:"build,omitempty" json:"build,omitempty" mapstructure:"build"`
@@ -275,6 +284,15 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		// Exit step type fields.
 		Code: task.Code,
 
+		// HTTP step type fields.
+		URL:     task.URL,
+		Method:  task.Method,
+		Headers: task.Headers,
+		Query:   task.Query,
+		Body:    task.Body,
+		Form:    task.Form,
+		Expect:  task.Expect,
+
 		// Container step fields.
 		Action:            task.Action,
 		Build:             task.Build,
@@ -382,6 +400,15 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 
 		// Exit step type fields.
 		Code: step.Code,
+
+		// HTTP step type fields.
+		URL:     step.URL,
+		Method:  step.Method,
+		Headers: step.Headers,
+		Query:   step.Query,
+		Body:    step.Body,
+		Form:    step.Form,
+		Expect:  step.Expect,
 
 		// Container step fields.
 		Action:            step.Action,

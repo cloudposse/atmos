@@ -26,6 +26,7 @@ steps:
 | [`shell`](/workflows/steps/type/shell) | Run a shell command or script. | `command`, `working_directory`, `env`, `tty`, `interactive` |
 | [`exec`](/workflows/steps/type/exec) | Replace the Atmos process with another executable. Must be the final step. | `command` |
 | [`container`](/workflows/steps/type/container) | Build, push, run, or inspect containers. | `action`, `build`, `push`, `run`, `inspect` |
+| [`http`](/workflows/steps/type/http) | Call an HTTP endpoint (alias: `webhook`). | `url`, `method`, `body`/`form`, `expect`, `retry` |
 
 ## Interactive Types
 
@@ -57,6 +58,7 @@ steps:
 | Type | Purpose | Primary fields |
 | --- | --- | --- |
 | [`alert`](/workflows/steps/type/alert) | Ring the terminal bell and optionally print a message. | `content` |
+| [`say`](/workflows/steps/type/say) | Speak a message aloud via text-to-speech, with graceful fallback to printing. | `content`, `voice`, `rate`, `print` |
 | [`title`](/workflows/steps/type/title) | Set or restore the terminal title. | `content` |
 | [`clear`](/workflows/steps/type/clear) | Clear the current terminal line. | none |
 | [`linebreak`](/workflows/steps/type/linebreak) | Print blank lines. | `count` |

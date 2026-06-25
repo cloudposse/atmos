@@ -58,7 +58,7 @@ func TestManager_Attach(t *testing.T) {
 						Ports: []container.PortBinding{},
 					}, nil)
 				runtime.EXPECT().
-					Attach(gomock.Any(), "running-id", gomock.Any()).
+					Shell(gomock.Any(), "running-id", gomock.Any()).
 					Return(nil)
 			},
 			expectError: false,
@@ -97,7 +97,7 @@ func TestManager_Attach(t *testing.T) {
 						Ports: []container.PortBinding{},
 					}, nil)
 				runtime.EXPECT().
-					Attach(gomock.Any(), "stopped-id", gomock.Any()).
+					Shell(gomock.Any(), "stopped-id", gomock.Any()).
 					Return(nil)
 			},
 			expectError: false,
@@ -223,7 +223,7 @@ func TestManager_Attach(t *testing.T) {
 						Ports: []container.PortBinding{},
 					}, nil)
 				runtime.EXPECT().
-					Attach(gomock.Any(), "running-id", gomock.Any()).
+					Shell(gomock.Any(), "running-id", gomock.Any()).
 					Return(errors.New("attach failed"))
 			},
 			expectError: true,
@@ -566,7 +566,7 @@ func TestAttachToContainer_RegularMode(t *testing.T) {
 			userEnvProbe:   "",
 			setupMocks: func(runtime *MockRuntime) {
 				runtime.EXPECT().
-					Attach(gomock.Any(), "container-id", gomock.Any()).
+					Shell(gomock.Any(), "container-id", gomock.Any()).
 					Return(nil)
 			},
 			expectError: false,
@@ -578,7 +578,7 @@ func TestAttachToContainer_RegularMode(t *testing.T) {
 			userEnvProbe:   "",
 			setupMocks: func(runtime *MockRuntime) {
 				runtime.EXPECT().
-					Attach(gomock.Any(), "container-id", gomock.Any()).
+					Shell(gomock.Any(), "container-id", gomock.Any()).
 					Return(nil)
 			},
 			expectError: false,
@@ -590,8 +590,8 @@ func TestAttachToContainer_RegularMode(t *testing.T) {
 			userEnvProbe:   "loginShell",
 			setupMocks: func(runtime *MockRuntime) {
 				runtime.EXPECT().
-					Attach(gomock.Any(), "container-id", gomock.Any()).
-					Do(func(_ context.Context, _ string, opts *container.AttachOptions) {
+					Shell(gomock.Any(), "container-id", gomock.Any()).
+					Do(func(_ context.Context, _ string, opts *container.ShellOptions) {
 						assert.Equal(t, []string{"-l"}, opts.ShellArgs)
 					}).
 					Return(nil)
@@ -605,7 +605,7 @@ func TestAttachToContainer_RegularMode(t *testing.T) {
 			userEnvProbe:   "",
 			setupMocks: func(runtime *MockRuntime) {
 				runtime.EXPECT().
-					Attach(gomock.Any(), "container-id", gomock.Any()).
+					Shell(gomock.Any(), "container-id", gomock.Any()).
 					Return(errors.New("attach failed"))
 			},
 			expectError: true,

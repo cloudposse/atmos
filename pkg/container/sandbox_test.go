@@ -24,7 +24,7 @@ func TestStartSandbox_RemovesStoppedMatchingOrphansAndUsesUniqueName(t *testing.
 
 	gomock.InOrder(
 		runtime.EXPECT().
-			List(ctx, map[string]string{"label": "com.atmos.type=workflow-sandbox"}).
+			List(ctx, map[string]string{"label": "tools.atmos.type=workflow-sandbox"}).
 			Return([]Info{
 				{
 					ID:     "old-stopped",

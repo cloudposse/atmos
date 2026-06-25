@@ -1014,7 +1014,6 @@ imports:
 inheritance: []
 metadata:
   component: vpc
-  description: Virtual Private Cloud with subnets and NAT gateway
 overrides: {}
 providers: {}
 provision: {}
