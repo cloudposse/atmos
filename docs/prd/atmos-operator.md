@@ -34,6 +34,15 @@ runs the **Atmos stack processor in-cluster** to *compute* the full desired stat
 imports/inheritance, backend, providers, vars). You keep Atmos's DRY config model **and** gain
 pull-based reconciliation.
 
+**This is an Atmos solution, not a Terraform one.** tofu-controller is the precedent for the
+*controller mechanics* (a CRD-driven reconcile loop, ephemeral runner Pods, plan → approve →
+apply) — it is **not** the scope. The scope is **every Atmos component kind**: terraform,
+helmfile, packer, ansible, and container, via Atmos's existing component-kind registry
+(`pkg/component/registry.go`). The runner runs `atmos <kind>`, so the operator is kind-agnostic
+by construction. **Terraform is one use case among several.** Wherever this PRD shows a terraform
+example, any other kind applies equally — an `AtmosComponent` could just as well reconcile a
+Helmfile release, bake a Packer image, run an Ansible play, or manage a container.
+
 This is **day-2** infrastructure on top of an already-running platform. It does **not** replace
 how the foundational platform (accounts, networking, the cluster itself) is provisioned — that
 stays imperative `atmos terraform apply` via CI, because an operator cannot bootstrap the
@@ -304,7 +313,7 @@ spec:
   driftDetectionInterval: 1h   # re-plan to detect drift
   writeOutputsToSecret:
     name: vpc-outputs          # outputs persisted to a namespace-scoped Secret
-  destroyResourcesOnDeletion: true   # finalizer runs `atmos terraform destroy`
+  destroyResourcesOnDeletion: true   # finalizer runs `atmos <kind> destroy` (terraform shown; any kind)
   serviceAccountName: atmos-runner   # identity for the runner Pod (IRSA / Workload Identity)
 status:
   lastPlannedRevision: main@sha1:abc123...
