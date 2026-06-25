@@ -85,13 +85,13 @@ func TestValueForKey_KubeconfigMaterializes(t *testing.T) {
 	const body = "apiVersion: v1\nkind: Config\n"
 	profile := &Profile{Kubeconfig: []byte(body)}
 
-	got, err := valueForKey(&Endpoint{Target: TargetKubernetes}, profile, "k3s", "plat/dev", "kubeconfig")
+	got, err := valueForKey(&Endpoint{Target: TargetKubernetes}, profile, "k3s/local", "plat/dev", "kubeconfig")
 	require.NoError(t, err)
 
 	path, ok := got.(string)
 	require.True(t, ok)
-	// Stack separators are sanitized so the filename stays flat.
-	assert.Equal(t, "plat_dev-k3s.kubeconfig", filepath.Base(path))
+	// Stack and ref separators are sanitized so the filename stays flat.
+	assert.Equal(t, "plat_dev-k3s_local.kubeconfig", filepath.Base(path))
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)

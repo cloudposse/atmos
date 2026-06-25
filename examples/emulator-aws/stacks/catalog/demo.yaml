@@ -9,15 +9,4 @@ components:
       # No per-component identity binding: `local-aws` is the default identity
       # (auth.identities in atmos.yaml, `default: true`), so every component runs
       # against the local sandbox automatically.
-      providers:
-        aws:
-          access_key: test
-          endpoints:
-            - s3: http://localhost:4566
-          region: us-east-1
-          s3_use_path_style: true
-          secret_key: test
-          skip_credentials_validation: true
-          skip_metadata_api_check: true
-          skip_requesting_account_id: true
       vars: {}

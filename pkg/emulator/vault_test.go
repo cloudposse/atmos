@@ -53,6 +53,8 @@ func TestBootstrapVault_FreshInitUnsealEnable(t *testing.T) {
 			return "", nil
 		case cmdContains(cmd, "operator", "unseal"):
 			return "", nil
+		case cmdContains(cmd, "secrets", "list"):
+			return `{}`, nil
 		case cmdContains(cmd, "secrets", "enable"):
 			return "", nil
 		}
@@ -86,6 +88,8 @@ func TestBootstrapVault_InitializedSealedReunseals(t *testing.T) {
 		case cmdContains(cmd, "operator", "unseal"):
 			unsealedWith = cmd[len(cmd)-1]
 			return "", nil
+		case cmdContains(cmd, "secrets", "list"):
+			return `{"secret/":{"type":"kv"}}`, nil
 		}
 		return "", nil
 	}}
@@ -105,6 +109,10 @@ func TestBootstrapVault_InitializedUnsealedIsNoOp(t *testing.T) {
 			return "/usr/local/bin/bao", nil
 		case cmdContains(cmd, "status", "-format=json"):
 			return `{"initialized":true,"sealed":false}`, nil
+		case cmdContains(cmd, "cat"):
+			return `{"unseal_key":"KEY==","root_token":"s.rootabc"}`, nil
+		case cmdContains(cmd, "secrets", "list"):
+			return `{"secret/":{"type":"kv"}}`, nil
 		}
 		return "", nil
 	}}
@@ -112,7 +120,31 @@ func TestBootstrapVault_InitializedUnsealedIsNoOp(t *testing.T) {
 	require.NoError(t, bootstrapVault(context.Background(), exec, "cid"))
 	for _, c := range exec.calls {
 		assert.False(t, cmdContains(c, "operator"), "an unsealed server needs no init/unseal: %v", c)
+		assert.False(t, cmdContains(c, "secrets", "enable"), "existing secret/ engine must not be re-enabled: %v", c)
 	}
+}
+
+func TestBootstrapVault_InitializedUnsealedEnablesMissingKV(t *testing.T) {
+	var enabled bool
+	exec := &fakeExecer{respond: func(cmd []string) (string, error) {
+		switch {
+		case cmdContains(cmd, "command -v bao"):
+			return "/usr/local/bin/bao", nil
+		case cmdContains(cmd, "status", "-format=json"):
+			return `{"initialized":true,"sealed":false}`, nil
+		case cmdContains(cmd, "cat"):
+			return `{"unseal_key":"KEY==","root_token":"s.rootabc"}`, nil
+		case cmdContains(cmd, "secrets", "list"):
+			return `{}`, nil
+		case cmdContains(cmd, "secrets", "enable", "-path=secret", "kv-v2"):
+			enabled = true
+			return "", nil
+		}
+		return "", nil
+	}}
+
+	require.NoError(t, bootstrapVault(context.Background(), exec, "cid"))
+	assert.True(t, enabled, "initialized unsealed servers still get the secret/ KV engine")
 }
 
 func TestVaultRootToken_ParsesBootstrap(t *testing.T) {

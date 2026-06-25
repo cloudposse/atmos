@@ -133,8 +133,10 @@ func materializeKubeconfig(profile *Profile, ref, currentStack string) (any, err
 		return nil, fmt.Errorf("%w: resolve emulator kubeconfig cache dir: %w", errUtils.ErrEmulatorConfigInvalid, err)
 	}
 	// Stack-scoped name keeps concurrent stacks from clobbering each other.
-	safeStack := strings.NewReplacer("/", "_", string(os.PathSeparator), "_").Replace(currentStack)
-	path := filepath.Join(dir, safeStack+"-"+ref+".kubeconfig")
+	replacer := strings.NewReplacer("/", "_", string(os.PathSeparator), "_", "..", "__")
+	safeStack := replacer.Replace(currentStack)
+	safeRef := replacer.Replace(ref)
+	path := filepath.Join(dir, safeStack+"-"+safeRef+".kubeconfig")
 	if err := os.WriteFile(path, profile.Kubeconfig, permKubeconfigFile); err != nil {
 		return nil, fmt.Errorf("%w: write emulator kubeconfig: %w", errUtils.ErrEmulatorConfigInvalid, err)
 	}

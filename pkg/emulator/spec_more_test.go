@@ -78,6 +78,12 @@ func TestSpec_FromComponentSection_DecodesEphemeral(t *testing.T) {
 	assert.True(t, spec.PersistEnabled())
 }
 
+func TestSpec_FromComponentSection_RejectsInvalidEphemeral(t *testing.T) {
+	_, err := FromComponentSection(map[string]any{"driver": "floci/aws", "ephemeral": "true"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrEmulatorConfigInvalid)
+}
+
 func TestSpec_DataDir(t *testing.T) {
 	dir, err := (&Spec{Driver: persistDriverName}).DataDir()
 	require.NoError(t, err)
@@ -90,8 +96,21 @@ func TestSpec_DataDir(t *testing.T) {
 }
 
 func TestToStringSlice(t *testing.T) {
-	assert.Equal(t, []string{"a"}, toStringSlice("a"))
-	assert.Equal(t, []string{"a", "b"}, toStringSlice([]string{"a", "b"}))
-	assert.Equal(t, []string{"x", "z"}, toStringSlice([]any{"x", 1, "z"}), "non-strings dropped")
-	assert.Nil(t, toStringSlice(42), "unsupported type yields nil")
+	got, err := toStringSlice("a")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a"}, got)
+
+	got, err = toStringSlice([]string{"a", "b"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "b"}, got)
+
+	got, err = toStringSlice([]any{"x", "z"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"x", "z"}, got)
+
+	_, err = toStringSlice([]any{"x", 1, "z"})
+	require.Error(t, err)
+
+	_, err = toStringSlice(42)
+	require.Error(t, err)
 }

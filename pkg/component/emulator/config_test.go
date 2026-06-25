@@ -26,19 +26,14 @@ func TestParseConfig(t *testing.T) {
 			want: Config{BasePath: "custom/emulators"},
 		},
 		{
-			name: "empty map yields zero config",
+			name: "empty map yields default config",
 			raw:  map[string]any{},
-			want: Config{},
+			want: DefaultConfig(),
 		},
 		{
-			name: "nil yields zero config",
+			name: "nil yields default config",
 			raw:  nil,
-			want: Config{},
-		},
-		{
-			name: "weakly-typed input is coerced",
-			raw:  map[string]any{"base_path": 42},
-			want: Config{BasePath: "42"},
+			want: DefaultConfig(),
 		},
 	}
 	for _, tt := range tests {
@@ -53,6 +48,12 @@ func TestParseConfig(t *testing.T) {
 func TestParseConfig_DecodeError(t *testing.T) {
 	// A scalar (non-map) value cannot decode into a struct.
 	_, err := parseConfig("not-a-struct")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrComponentConfigInvalid)
+}
+
+func TestParseConfig_InvalidBasePathType(t *testing.T) {
+	_, err := parseConfig(map[string]any{"base_path": 42})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrComponentConfigInvalid)
 }

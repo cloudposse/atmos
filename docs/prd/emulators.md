@@ -279,7 +279,7 @@ env:
 
 Grammar: **`!emulator <ref> <key>`** — **space-separated positional arguments** (consistent with
 `!store <store> <key>` and `!terraform.output <component> <stack> <output>`), *not* dot-notation.
-This keeps the grammar unambiguous and lets `<ref>` contain a `/` for a full-address reference.
+This keeps the grammar unambiguous and lets `<ref>` contain `/` only for a full emulator address.
 
 - `<ref>` — the emulator reference, resolved against the stack the command runs in: the bare
   component name (`aws`, `k3s`), or a full `<stack>/emulator/<name>` address to target a specific
@@ -298,8 +298,8 @@ alongside `!store`/`!terraform.output`; resolves through `Manager.Resolve`.
   `emulator: <name>`.
 - Commands: `atmos emulator up|down|reset|ps|logs|exec` (+ `start`/`stop` aliases, `down --all`,
   `up --ephemeral`, `reset --force`). Persistence is on by default (`ephemeral: true` opts out).
-- YAML function: `!emulator <ref> <key>` (space-separated; `<ref>` may be `<name>`,
-  `<target>/<driver>`, or `<stack>/emulator/<name>`).
+- YAML function: `!emulator <ref> <key>` (space-separated; `<ref>` may be `<name>` or
+  `<stack>/emulator/<name>`).
 
 ## Implementation Notes
 

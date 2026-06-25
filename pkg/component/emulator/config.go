@@ -33,11 +33,10 @@ func DefaultConfig() Config {
 // parseConfig decodes a raw global-config value (from the Plugins map) into a
 // typed Config.
 func parseConfig(raw any) (Config, error) {
-	var config Config
+	config := DefaultConfig()
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		Result:           &config,
-		WeaklyTypedInput: true,
-		TagName:          "mapstructure",
+		Result:  &config,
+		TagName: "mapstructure",
 	})
 	if err != nil {
 		return Config{}, fmt.Errorf("%w: create config decoder: %w", errUtils.ErrComponentConfigInvalid, err)

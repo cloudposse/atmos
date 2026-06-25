@@ -55,6 +55,12 @@ func TestProvider_ValidateComponent(t *testing.T) {
 		assert.ErrorIs(t, err, errUtils.ErrComponentValidationFailed)
 	})
 
+	t.Run("rejects whitespace driver", func(t *testing.T) {
+		err := p.ValidateComponent(map[string]any{"driver": "   "})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrComponentValidationFailed)
+	})
+
 	t.Run("valid with driver", func(t *testing.T) {
 		require.NoError(t, p.ValidateComponent(map[string]any{"driver": "floci/aws"}))
 	})

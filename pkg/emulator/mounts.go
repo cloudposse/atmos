@@ -1,6 +1,7 @@
 package emulator
 
 import (
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -40,8 +41,9 @@ func convertEmulatorMounts(mounts []schema.ContainerMount) []container.Mount {
 // path, so an explicit user mount onto the data dir wins over the auto-injected
 // persistence mount.
 func mountsTargetPath(mounts []container.Mount, target string) bool {
+	cleanTarget := path.Clean(target)
 	for i := range mounts {
-		if mounts[i].Target == target {
+		if path.Clean(mounts[i].Target) == cleanTarget {
 			return true
 		}
 	}

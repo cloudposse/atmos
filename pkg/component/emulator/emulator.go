@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -84,7 +85,7 @@ func (p *EmulatorComponentProvider) ValidateComponent(config map[string]any) err
 	if isAbstractSection(config) {
 		return nil
 	}
-	if driver, ok := config["driver"].(string); !ok || driver == "" {
+	if driver, ok := config["driver"].(string); !ok || strings.TrimSpace(driver) == "" {
 		return fmt.Errorf("%w: emulator component requires a driver", errUtils.ErrComponentValidationFailed)
 	}
 	return nil

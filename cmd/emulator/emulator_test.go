@@ -1,6 +1,7 @@
 package emulator
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -21,7 +22,17 @@ func restoreViperKey(t *testing.T, key string) {
 	t.Helper()
 	v := viper.GetViper()
 	orig := v.Get(key)
-	t.Cleanup(func() { v.Set(key, orig) })
+	wasSet := v.IsSet(key)
+	t.Cleanup(func() {
+		if wasSet {
+			v.Set(key, orig)
+			return
+		}
+		viper.Reset()
+		require.NoError(t, emulatorParser.BindToViper(viper.GetViper()))
+		require.NoError(t, upParser.BindToViper(viper.GetViper()))
+		require.NoError(t, resetParser.BindToViper(viper.GetViper()))
+	})
 }
 
 func TestEmulatorCommandProvider(t *testing.T) {
@@ -43,7 +54,16 @@ func TestEmulatorCommandProvider(t *testing.T) {
 func TestEmulatorRootRunEShowsUsage(t *testing.T) {
 	// The root emulator command with no subcommand prints usage and returns nil.
 	require.NotNil(t, emulatorCmd.RunE)
+	var out bytes.Buffer
+	emulatorCmd.SetOut(&out)
+	emulatorCmd.SetErr(&out)
+	t.Cleanup(func() {
+		emulatorCmd.SetOut(nil)
+		emulatorCmd.SetErr(nil)
+	})
 	require.NoError(t, emulatorCmd.RunE(emulatorCmd, []string{}))
+	assert.Contains(t, out.String(), "Usage:")
+	assert.Contains(t, out.String(), "emulator [command]")
 }
 
 func TestEmulatorCommandStructure(t *testing.T) {

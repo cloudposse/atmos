@@ -53,10 +53,11 @@ resource "aws_ssm_parameter" "upstream_bucket" {
 # Writes the secret to a SecureString — proving the !secret value arrived off-disk
 # (as TF_VAR_app_secret) and the in-process secret store reached the emulator.
 resource "aws_ssm_parameter" "app_secret" {
-  name   = "${local.prefix}/app_secret"
-  type   = "SecureString"
-  value  = var.app_secret
-  key_id = var.kms_key_arn != "" ? var.kms_key_arn : null
+  name             = "${local.prefix}/app_secret"
+  type             = "SecureString"
+  value_wo         = var.app_secret
+  value_wo_version = 1
+  key_id           = var.kms_key_arn != "" ? var.kms_key_arn : null
 }
 
 output "received_bucket" {

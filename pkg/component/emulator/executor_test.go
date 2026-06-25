@@ -363,6 +363,16 @@ func TestExecuteExec_Success(t *testing.T) {
 	assert.Equal(t, []string{"sh", "-c", "echo hi"}, mgr.gotCommand)
 }
 
+func TestExecuteExec_DryRun(t *testing.T) {
+	mgr := &fakeManager{}
+	stubPrepare(t, validSection(), nil, mgr)
+	info := baseInfo()
+	info.DryRun = true
+
+	require.NoError(t, ExecuteExec(context.Background(), info, []string{"sh", "-c", "echo hi"}))
+	assert.Nil(t, mgr.gotCommand, "dry-run must not touch the manager")
+}
+
 func TestExecuteExec_Error(t *testing.T) {
 	mgr := &fakeManager{execErr: errBoom}
 	stubPrepare(t, validSection(), nil, mgr)

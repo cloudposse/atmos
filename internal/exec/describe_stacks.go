@@ -225,8 +225,10 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentKind 
 		// base path.
 		return "components/container"
 	case cfg.EmulatorSectionName:
-		// Emulator components, like container, use the Plugins map (no typed field).
-		return "components/emulator"
+		// Emulator components are stack-defined services, not filesystem-backed
+		// component source trees. Leave component_path unset until a real source
+		// path is configured.
+		return ""
 	default:
 		return ""
 	}

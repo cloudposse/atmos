@@ -41,14 +41,16 @@ these are provider *arguments*, not environment variables, so env injection alon
 // The returned fragment is keyed by provider name (e.g. "aws") and deep-merged into the
 // component's ProvidersSection. Returning (nil, nil) contributes nothing.
 type ProviderContributor interface {
+    Name() string
     Contribute(ctx context.Context, genCtx *generator.GeneratorContext) (map[string]any, error)
 }
 ```
 
 Contributors register at init (mirroring `pkg/store/registry.go` / the RC contributions model). The
-providers generator (`pkg/generator/providers/generator.go`) collects all contributions, **deep-merges
-them under** the explicit `genCtx.ProvidersSection` (explicit wins), and emits the result as
-`{"provider": merged}` → `providers_override.tf.json`.
+providers generator (`pkg/generator/providers/generator.go`) collects all contributions in
+deterministic lexical `Name()` order, **deep-merges them under** the explicit
+`genCtx.ProvidersSection` (explicit wins), and emits the result as `{"provider": merged}` →
+`providers_override.tf.json`.
 
 `GeneratorContext` (`pkg/generator/generator.go`) already carries `AtmosConfig`, `StackInfo`,
 `Component`, `Stack`, and `ProvidersSection`, so a contributor has everything it needs to decide
@@ -57,8 +59,8 @@ whether and what to contribute.
 ### §B Merge semantics
 
 - Deep-merge per provider key; explicit stack `providers:` values **override** contributed values.
-- Multiple contributors merge in a deterministic order; conflicts resolve last-writer among
-  contributors but never over explicit config.
+- Multiple contributors merge in deterministic lexical `Name()` order; conflicts resolve to the
+  earliest contributor in that order, and explicit config always wins over all contributors.
 - No contribution when no contributor applies → output is identical to today (back-compatible).
 
 ### §C First consumer — the emulator contributor

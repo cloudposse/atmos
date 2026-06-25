@@ -62,5 +62,5 @@ commands:
       - name: "reset"
         description: Delete all local state files
         steps:
-          - find . -type f -name "*.tfstate" -delete
+          - 'find . \( -name "*.tfstate" -o -name "*.tfstate.backup" -o -path "*/terraform.tfstate.d/*" -o -path "*/.terraform.tfstate/*" -o -path "*/.terraform.tfstate.backup/*" \) -delete'
           - echo "Deleted all state files"

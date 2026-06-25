@@ -27,8 +27,13 @@ var vaultServerCommand = []string{"server"}
 // a file storage backend (so state persists) and an all-interfaces TLS-disabled
 // listener (reachable through the published host port). Memory locking is disabled
 // because the file backend does not require it and it avoids a CAP_IPC_LOCK need.
-const vaultLocalConfig = `storage "file" { path = "` + vaultDataDir + `" }
-listener "tcp" { address = "0.0.0.0:8200" tls_disable = "true" }
+const vaultLocalConfig = `storage "file" {
+  path = "` + vaultDataDir + `"
+}
+listener "tcp" {
+  address     = "0.0.0.0:8200"
+  tls_disable = "true"
+}
 disable_mlock = true`
 
 // vaultEnv supplies the inline config under both the OpenBao and Vault env var

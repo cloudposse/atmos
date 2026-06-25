@@ -1,6 +1,7 @@
 package emulator
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/mitchellh/mapstructure"
@@ -9,6 +10,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+var (
+	errEmulatorServicesEntriesInvalid = errors.New("all services entries must be strings")
+	errEmulatorServicesTypeInvalid    = errors.New("expected string or list of strings")
 )
 
 // Spec is the resolved, per-instance emulator component configuration, parsed
@@ -42,33 +48,74 @@ type Spec struct {
 func FromComponentSection(section map[string]any) (Spec, error) {
 	defer perf.Track(nil, "emulator.FromComponentSection")()
 
-	var spec Spec
-	if v, ok := section["driver"].(string); ok {
-		spec.Driver = v
+	spec := Spec{
+		Driver:  stringField(section, "driver"),
+		Cloud:   stringField(section, "cloud"),
+		Region:  stringField(section, "region"),
+		Project: stringField(section, "project"),
 	}
-	if v, ok := section["cloud"].(string); ok {
-		spec.Cloud = v
+	servicesRaw, hasServices := section["services"]
+	if err := applyServices(&spec, servicesRaw, hasServices); err != nil {
+		return Spec{}, err
 	}
-	if v, ok := section["region"].(string); ok {
-		spec.Region = v
+	ephemeralRaw, hasEphemeral := section["ephemeral"]
+	if err := applyEphemeral(&spec, ephemeralRaw, hasEphemeral); err != nil {
+		return Spec{}, err
 	}
-	if v, ok := section["project"].(string); ok {
-		spec.Project = v
-	}
-	if raw, ok := section["services"]; ok {
-		spec.Services = toStringSlice(raw)
-	}
-	if v, ok := section["ephemeral"].(bool); ok {
-		spec.Ephemeral = &v
-	}
-	if raw, ok := section["container"]; ok {
-		var container schema.ContainerRunStep
-		if err := decodeYAMLSection(raw, &container); err != nil {
-			return Spec{}, fmt.Errorf("%w: decode emulator container: %w", errUtils.ErrEmulatorConfigInvalid, err)
-		}
-		spec.Container = &container
+	containerRaw, hasContainer := section["container"]
+	if err := applyContainer(&spec, containerRaw, hasContainer); err != nil {
+		return Spec{}, err
 	}
 	return spec, nil
+}
+
+func stringField(section map[string]any, key string) string {
+	v, _ := section[key].(string)
+	return v
+}
+
+func applyServices(spec *Spec, raw any, ok bool) error {
+	if !ok {
+		return nil
+	}
+	services, err := toStringSlice(raw)
+	if err != nil {
+		return fmt.Errorf("%w: invalid emulator services: %w", errUtils.ErrEmulatorConfigInvalid, err)
+	}
+	spec.Services = services
+	return nil
+}
+
+func applyEphemeral(spec *Spec, raw any, ok bool) error {
+	if !ok {
+		return nil
+	}
+	ephemeral, err := parseEphemeral(raw)
+	if err != nil {
+		return err
+	}
+	spec.Ephemeral = ephemeral
+	return nil
+}
+
+func applyContainer(spec *Spec, raw any, ok bool) error {
+	if !ok {
+		return nil
+	}
+	var container schema.ContainerRunStep
+	if err := decodeYAMLSection(raw, &container); err != nil {
+		return fmt.Errorf("%w: decode emulator container: %w", errUtils.ErrEmulatorConfigInvalid, err)
+	}
+	spec.Container = &container
+	return nil
+}
+
+func parseEphemeral(raw any) (*bool, error) {
+	v, ok := raw.(bool)
+	if !ok {
+		return nil, fmt.Errorf("%w: emulator ephemeral must be a boolean", errUtils.ErrEmulatorConfigInvalid)
+	}
+	return &v, nil
 }
 
 // Validate checks that the spec names a registered driver and that an explicit
@@ -278,23 +325,25 @@ func decodeYAMLSection(raw, result any) error {
 	return decoder.Decode(raw)
 }
 
-// toStringSlice coerces a YAML-decoded value into a []string (accepts a single
-// string or a list of strings).
-func toStringSlice(raw any) []string {
+// toStringSlice coerces a YAML-decoded value into a []string. It accepts a
+// single string or a list of strings and rejects malformed lists.
+func toStringSlice(raw any) ([]string, error) {
 	switch v := raw.(type) {
 	case string:
-		return []string{v}
+		return []string{v}, nil
 	case []string:
-		return v
+		return v, nil
 	case []any:
 		out := make([]string, 0, len(v))
 		for _, item := range v {
-			if s, ok := item.(string); ok {
-				out = append(out, s)
+			s, ok := item.(string)
+			if !ok {
+				return nil, errEmulatorServicesEntriesInvalid
 			}
+			out = append(out, s)
 		}
-		return out
+		return out, nil
 	default:
-		return nil
+		return nil, errEmulatorServicesTypeInvalid
 	}
 }

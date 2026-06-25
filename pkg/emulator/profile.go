@@ -33,8 +33,9 @@ func (e *Endpoint) HostPort(containerPort int) (int, bool) {
 	return port, ok
 }
 
-// PrimaryHostPort returns the lowest-numbered live host port — the conventional
-// "primary" endpoint for single-port emulators (e.g. Floci/LocalStack on 4566).
+// PrimaryHostPort returns the live host port bound to the lowest-numbered
+// container port — the conventional "primary" endpoint for single-port emulators
+// (e.g. Floci/LocalStack on 4566).
 func (e *Endpoint) PrimaryHostPort() (int, bool) {
 	defer perf.Track(nil, "emulator.Endpoint.PrimaryHostPort")()
 

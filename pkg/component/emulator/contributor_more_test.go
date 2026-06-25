@@ -54,6 +54,8 @@ func TestContribute_EmptyProviderContributesNothing(t *testing.T) {
 
 func TestContribute_PrepareError(t *testing.T) {
 	stubPrepare(t, validSection(), nil, &fakeManager{})
+	orig := initCliConfig
+	t.Cleanup(func() { initCliConfig = orig })
 	initCliConfig = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
 		return schema.AtmosConfiguration{}, errBoom
 	}

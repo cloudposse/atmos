@@ -275,6 +275,10 @@ func ExecuteExec(ctx context.Context, info *schema.ConfigAndStacksInfo, command 
 	if err != nil {
 		return err
 	}
+	if r.dryRun {
+		ui.Infof("[dry-run] would exec in emulator %s: %v", r.component, command)
+		return nil
+	}
 	if err := r.manager().Exec(ctx, r.stack, r.component, command); err != nil {
 		return fmt.Errorf("%w: exec %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
 	}

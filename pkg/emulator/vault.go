@@ -78,9 +78,17 @@ func bootstrapVault(ctx context.Context, runtime vaultExecer, containerID string
 		return initAndUnsealVault(ctx, runtime, containerID, bin)
 	}
 	if status.Sealed {
-		return unsealFromBootstrap(ctx, runtime, containerID, bin)
+		boot, err := unsealFromBootstrap(ctx, runtime, containerID, bin)
+		if err != nil {
+			return err
+		}
+		return ensureVaultKV2(ctx, runtime, containerID, bin, boot.RootToken)
 	}
-	return nil
+	boot, err := readVaultBootstrap(ctx, runtime, containerID)
+	if err != nil {
+		return err
+	}
+	return ensureVaultKV2(ctx, runtime, containerID, bin, boot.RootToken)
 }
 
 // vaultRootToken reads the persisted root token from the running container's
@@ -157,21 +165,43 @@ func initAndUnsealVault(ctx context.Context, runtime vaultExecer, containerID, b
 	if uErr := unsealVault(ctx, runtime, containerID, bin, boot.UnsealKey); uErr != nil {
 		return uErr
 	}
-	if _, eErr := execCapture(ctx, runtime, containerID, vaultTokenEnv(boot.RootToken),
-		[]string{bin, "secrets", "enable", "-path=secret", "kv-v2"}); eErr != nil {
-		return fmt.Errorf("%w: enable kv-v2 engine: %w", errUtils.ErrEmulatorConfigInvalid, eErr)
-	}
-	return nil
+	return ensureVaultKV2(ctx, runtime, containerID, bin, boot.RootToken)
 }
 
 // unsealFromBootstrap unseals an already-initialized server using the recorded
 // unseal key.
-func unsealFromBootstrap(ctx context.Context, runtime vaultExecer, containerID, bin string) error {
+func unsealFromBootstrap(ctx context.Context, runtime vaultExecer, containerID, bin string) (vaultBootstrap, error) {
 	boot, err := readVaultBootstrap(ctx, runtime, containerID)
 	if err != nil {
-		return err
+		return vaultBootstrap{}, err
 	}
-	return unsealVault(ctx, runtime, containerID, bin, boot.UnsealKey)
+	if err := unsealVault(ctx, runtime, containerID, bin, boot.UnsealKey); err != nil {
+		return vaultBootstrap{}, err
+	}
+	return boot, nil
+}
+
+// ensureVaultKV2 enables the secret/ KV v2 engine if it is not already present.
+func ensureVaultKV2(ctx context.Context, runtime vaultExecer, containerID, bin, token string) error {
+	if token == "" {
+		return fmt.Errorf("%w: vault bootstrap has no root token", errUtils.ErrEmulatorConfigInvalid)
+	}
+	out, err := execCapture(ctx, runtime, containerID, vaultTokenEnv(token), []string{bin, "secrets", "list", "-format=json"})
+	if err != nil {
+		return fmt.Errorf("%w: list vault secrets engines: %w", errUtils.ErrEmulatorConfigInvalid, err)
+	}
+	var mounts map[string]any
+	if jErr := json.Unmarshal([]byte(out), &mounts); jErr != nil {
+		return fmt.Errorf("%w: parse vault secrets engines: %w", errUtils.ErrEmulatorConfigInvalid, jErr)
+	}
+	if _, ok := mounts["secret/"]; ok {
+		return nil
+	}
+	if _, eErr := execCapture(ctx, runtime, containerID, vaultTokenEnv(token),
+		[]string{bin, "secrets", "enable", "-path=secret", "kv-v2"}); eErr != nil {
+		return fmt.Errorf("%w: enable kv-v2 engine: %w", errUtils.ErrEmulatorConfigInvalid, eErr)
+	}
+	return nil
 }
 
 func unsealVault(ctx context.Context, runtime vaultExecer, containerID, bin, key string) error {
