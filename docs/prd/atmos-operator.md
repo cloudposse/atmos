@@ -1,7 +1,7 @@
 # PRD: Atmos Operator (Kubernetes Controller for Day-2 Reconciliation)
 
 **Status:** Proposed
-**Version:** 0.3
+**Version:** 0.4
 **Last Updated:** 2026-06-25
 **Author:** Atmos Team
 
@@ -567,6 +567,60 @@ guards matter *more* here.
 
 ---
 
+## End-to-End Testing & Emulator Validation
+
+The operator can be validated **fully hermetically — no cloud credentials, no external services**
+— by combining three emulated backends that map 1:1 to the three planes:
+
+| Plane | Emulated by | Validates |
+|---|---|---|
+| **Config** | a bare Git server (most bare-bones) | `AtmosRepository` polling, revision-change → reconcile, egress-only pull |
+| **Execution** | **K3S** (the forthcoming K8s emulator; e.g. k3d) | a real API server **and Pod scheduling** for ephemeral runner Pods |
+| **Cloud target** | **Floci** (AWS/GCP/Azure emulator, already in `tests/`) | runner Pods run `atmos <kind> apply` against Floci → full plan → approve → apply → outputs → destroy |
+
+Topology: **bare-git → K3S (operator + CRs + runner Pods) → Floci.** This is also the air-gapped
+topology the *Positioning* section targets — the test environment *is* the isolated-cluster
+environment, so the E2E doubles as a fidelity check for that use case.
+
+### Git server: the most bare-bones backend
+
+The operator only ever **reads** a repo (clone/fetch at a revision; **it never pushes**). So the Git
+backend needs nothing more than a **bare repo served read-only over HTTP** — git's "dumb HTTP"
+protocol (`git update-server-info` in a bare repo + any static file server) or `git daemon` for the
+smart protocol. **No Gitea, no database, no UI, no API.** The harness simulates a commit landing by
+committing to the bare repo and re-running `git update-server-info`; the operator's next poll picks
+it up and reconciles.
+
+A heavier Git server (**Gitea / Forgejo**) is reserved for **one** scenario only: the **Branch
+Planner**, which needs a real **PR/MR API** (list PRs, post comments, `!replan`). That tier is
+optional and lands with Branch Planner (Phase 3); the core reconcile E2E needs only the bare server.
+
+### Why real K3S, not envtest
+
+controller-runtime's `envtest` (apiserver + etcd) has **no scheduler and no kubelet**, so it cannot
+actually run the ephemeral runner Pods that are the heart of the controller↔runner model. The E2E
+therefore needs a cluster that genuinely schedules Pods — **K3S / k3d** — which is exactly what the
+forthcoming K8s emulator provides. (envtest may still be used for fast unit-level reconciler tests
+that don't spawn runners.)
+
+### Reuse vs. net-new
+
+- **Reuse (already in this repo):** the testcontainers auto-start recipe
+  (`tests/floci_containers_test.go` → `maybeStartFloci`) + runtime autodetect
+  (`pkg/container/detector.go`); kubeconfig handling (`pkg/auth/cloud/kube/config.go`);
+  `k8s.io/client-go` (in `go.mod`). The **runner image is the `atmos` binary itself** — no new
+  artifact.
+- **Net-new:** `sigs.k8s.io/controller-runtime` + the three CRDs + reconcilers; auto-start for K3S
+  and the bare Git server (same recipe as Floci); pointing runner Pods at Floci endpoints.
+
+**Approach:** stand up K3S + bare-git via the **existing container auto-start plumbing today**, then
+graduate them to first-class **emulator flavors** as the emulator subsystem lands. The Phase-1 E2E:
+seed bare-git → apply `AtmosRepository` / `AtmosStack` / `AtmosComponent` to K3S → controller
+reconciles → runner Pod runs `atmos <kind> apply` against Floci → outputs land in a Secret →
+`approvePlan` gates apply → deletion triggers the destroy finalizer.
+
+---
+
 ## Future / Exploratory CRDs
 
 ### `AtmosWorkflow` (exploratory — not committed)
@@ -617,3 +671,8 @@ phase**, because of three honest caveats:
   `AssumeRoleWithWebIdentity`; `docs/prd/ambient-identity.md`.
 - [Argo CD reconciliation / jitter / rate limits](https://argo-cd.readthedocs.io/en/stable/operator-manual/high_availability/)
   — prior art for the polling guards.
+- [`tests/floci_containers_test.go`](../../tests/floci_containers_test.go) (`maybeStartFloci`) +
+  [`pkg/container/detector.go`](../../pkg/container/detector.go) — the testcontainers auto-start
+  pattern reused for the K3S + bare-Git E2E harness; Floci is the credential-free cloud target.
+- [`pkg/auth/cloud/kube/config.go`](../../pkg/auth/cloud/kube/config.go) — existing kubeconfig
+  handling reused by the operator CLI / out-of-cluster controller.
