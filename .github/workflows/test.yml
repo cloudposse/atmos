@@ -702,8 +702,14 @@ jobs:
           - emulator-aws
           - demo-stacks
           - demo-helmfile
-          - quick-start-advanced
           - quick-start-simple
+          # quick-start-advanced is intentionally NOT validated here. It now uses runtime
+          # Atmos YAML functions (`!terraform.state`, `!store`, `!secret`) that the static
+          # yaml-language-server cannot resolve (the InoUno/yaml-ls-check action hardcodes
+          # an empty customTags list, so unknown tags fail with "Unresolved tag"). Every
+          # other function-using example (custom-components, sops-secrets,
+          # onepassword-secrets, native-terraform) is likewise excluded from this matrix.
+          # The example is still exercised end-to-end by the floci and acceptance jobs.
 
     timeout-minutes: 20
     steps:
