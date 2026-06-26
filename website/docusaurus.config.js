@@ -107,8 +107,6 @@ const config = {
                         from: '/components/terraform/backend-provisioning',
                         to: '/stacks/components/provision/backend'
                     },
-                    {from: '/stacks/backend', to: '/stacks/terraform/backend'},
-                    {from: '/stacks/components/terraform/backend', to: '/stacks/terraform/backend'},
                     // Component Catalog redirects for reorganization
                     {
                         from: '/design-patterns/component-catalog-with-mixins',
@@ -363,7 +361,7 @@ const config = {
                     {from: '/core-concepts/stacks/define-components', to: '/stacks/components'},
                     {from: '/core-concepts/stacks/settings', to: '/stacks/settings'},
                     {from: '/core-concepts/stacks/components', to: '/stacks/components'},
-                    {from: '/core-concepts/stacks/backend', to: '/stacks/terraform/backend'},
+                    {from: '/core-concepts/stacks/backend', to: '/stacks/backend'},
                     {from: '/core-concepts/stacks/vars', to: '/stacks/vars'},
                     {from: '/core-concepts/stacks/env', to: '/stacks/env'},
                     {from: '/core-concepts/stacks/providers', to: '/stacks/providers'},
