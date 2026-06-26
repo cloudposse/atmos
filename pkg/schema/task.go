@@ -55,6 +55,8 @@ type Task struct {
 	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 	// Needs lists sibling task names that must complete before this task can run.
 	Needs []string `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
+	// When controls whether the task runs.
+	When Condition `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
@@ -107,6 +109,11 @@ type Task struct {
 	// Log step fields.
 	Level  string            `yaml:"level,omitempty" json:"level,omitempty" mapstructure:"level"`    // Log level: trace, debug, info, warn, error.
 	Fields map[string]string `yaml:"fields,omitempty" json:"fields,omitempty" mapstructure:"fields"` // Structured log fields (key-value pairs).
+
+	// Say step fields.
+	Voice []string `yaml:"voice,omitempty" json:"voice,omitempty" mapstructure:"voice"` // Ordered voice candidates; first one installed on the host wins.
+	Rate  string   `yaml:"rate,omitempty" json:"rate,omitempty" mapstructure:"rate"`    // Speech rate: slow, normal, fast.
+	Print string   `yaml:"print,omitempty" json:"print,omitempty" mapstructure:"print"` // Print policy: fallback, always, never.
 
 	// Environment variables (supports templates).
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
@@ -249,6 +256,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Retry:            task.Retry,
 		Identity:         task.Identity,
 		Needs:            task.Needs,
+		When:             task.When,
 		Interactive:      task.Interactive,
 		Tty:              task.Tty,
 
@@ -300,6 +308,11 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		// Log step fields.
 		Level:  task.Level,
 		Fields: task.Fields,
+
+		// Say step fields.
+		Voice: task.Voice,
+		Rate:  task.Rate,
+		Print: task.Print,
 
 		// Environment variables.
 		Env: task.Env,
@@ -374,6 +387,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Retry:            step.Retry,
 		Identity:         step.Identity,
 		Needs:            step.Needs,
+		When:             step.When,
 		Interactive:      step.Interactive,
 		Tty:              step.Tty,
 		Timeout:          timeout,
@@ -425,6 +439,11 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		// Log step fields.
 		Level:  step.Level,
 		Fields: step.Fields,
+
+		// Say step fields.
+		Voice: step.Voice,
+		Rate:  step.Rate,
+		Print: step.Print,
 
 		// Environment variables.
 		Env: step.Env,
@@ -542,7 +561,10 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 		Result:           &task,
 		TagName:          "mapstructure",
 		WeaklyTypedInput: true,
-		DecodeHook:       mapstructure.StringToTimeDurationHookFunc(),
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			ConditionDecodeHook(),
+		),
 	})
 	if err != nil {
 		return Task{}, fmt.Errorf("failed to create decoder for task at index %d: %w", index, err)

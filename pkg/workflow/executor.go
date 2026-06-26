@@ -21,6 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/retry"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -182,6 +183,22 @@ func (e *Executor) prepareSteps(params *WorkflowParams, result *ExecutionResult)
 func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep, progressRenderer *ProgressRenderer, result *ExecutionResult) error {
 	for stepIdx := range steps {
 		step := &steps[stepIdx]
+		conditionContext := workflowConditionContext()
+		if err := schema.ValidateStepCondition(step.When); err != nil {
+			result.Success = false
+			result.Error = err
+			return err
+		}
+		if !step.When.Evaluate(conditionContext) {
+			log.Debug("Skipping workflow step, `when` condition did not match", "step", step.Name)
+			result.Steps = append(result.Steps, StepResult{
+				StepName: step.Name,
+				Command:  step.Command,
+				Success:  true,
+				Skipped:  true,
+			})
+			continue
+		}
 		// Update and render progress (if enabled).
 		if progressRenderer.IsEnabled() {
 			progressRenderer.Update(stepIdx+1, step.Name)
@@ -208,6 +225,13 @@ func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep,
 	}
 
 	return nil
+}
+
+func workflowConditionContext() schema.ConditionContext {
+	return schema.ConditionContext{
+		CI:     telemetry.IsCI(),
+		Status: schema.ConditionPredicateSuccess,
+	}
 }
 
 // buildFlagsMap builds a map of flags for display in the header.

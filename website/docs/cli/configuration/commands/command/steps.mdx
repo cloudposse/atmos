@@ -46,6 +46,51 @@ A structured step is the same object documented for workflows. See the
 [step reference](/workflows/steps) for the common step fields (`name`, `type`, `command`,
 `output`, and more).
 
+## Conditional steps
+
+Structured custom command steps support the same `when` condition syntax as
+workflow steps. Omitted `when` means run; a false condition skips the step
+without failing the command.
+
+```yaml
+commands:
+  - name: release
+    description: Run release checks
+    steps:
+      - type: shell
+        command: ./scripts/ci-release-checks.sh
+        when: ci
+      - type: shell
+        command: ./scripts/local-summary.sh
+        when:
+          not: ci
+```
+
+String shorthand steps remain plain shell commands and always run. Use the
+structured form when a custom command step needs a condition.
+
+Step predicates are:
+
+<dl>
+  <dt>`ci`</dt>
+  <dd>Run only when Atmos detects CI using its standard CI detection.</dd>
+
+  <dt>`local`</dt>
+  <dd>Run only outside CI.</dd>
+
+  <dt>`always`</dt>
+  <dd>Always run.</dd>
+
+  <dt>`never`</dt>
+  <dd>Never run.</dd>
+
+  <dt>`success`</dt>
+  <dd>Run when the step condition is evaluated with success status.</dd>
+</dl>
+
+`failure` is supported for hooks, which evaluate against a lifecycle outcome,
+but not for workflow or custom command steps.
+
 ## Step types
 
 Custom commands and workflows share one step-type registry, so every step type works the same in

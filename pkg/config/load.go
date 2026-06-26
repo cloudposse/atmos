@@ -1622,6 +1622,7 @@ func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
+		schema.ConditionDecodeHook(),
 		schema.TasksDecodeHook(),
 	)
 }
