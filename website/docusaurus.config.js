@@ -7,7 +7,7 @@
 
 const path = require('path');
 
-const lightCodeTheme = require('prism-react-renderer').themes.vsDark;
+const lightCodeTheme = require('prism-react-renderer').themes.oneLight;
 const darkCodeTheme = require('prism-react-renderer').themes.nightOwl;
 const latestReleasePlugin = require('./plugins/fetch-latest-release');
 const rehypeDtIds = require('./plugins/rehype-dt-ids');
@@ -46,6 +46,16 @@ const config = {
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
+                    // Advanced Quick Start: "Configure Repository" + "Configure CLI"
+                    // were merged into a single "Configure the Project" step.
+                    {
+                        from: '/quick-start/advanced/configure-repository',
+                        to: '/quick-start/advanced/configure-project'
+                    },
+                    {
+                        from: '/quick-start/advanced/configure-cli',
+                        to: '/quick-start/advanced/configure-project'
+                    },
                     {
                         from: '/brandkit',
                         to: '/media-kit'
@@ -97,6 +107,8 @@ const config = {
                         from: '/components/terraform/backend-provisioning',
                         to: '/stacks/components/provision/backend'
                     },
+                    {from: '/stacks/backend', to: '/stacks/terraform/backend'},
+                    {from: '/stacks/components/terraform/backend', to: '/stacks/terraform/backend'},
                     // Component Catalog redirects for reorganization
                     {
                         from: '/design-patterns/component-catalog-with-mixins',
@@ -351,7 +363,7 @@ const config = {
                     {from: '/core-concepts/stacks/define-components', to: '/stacks/components'},
                     {from: '/core-concepts/stacks/settings', to: '/stacks/settings'},
                     {from: '/core-concepts/stacks/components', to: '/stacks/components'},
-                    {from: '/core-concepts/stacks/backend', to: '/stacks/backend'},
+                    {from: '/core-concepts/stacks/backend', to: '/stacks/terraform/backend'},
                     {from: '/core-concepts/stacks/vars', to: '/stacks/vars'},
                     {from: '/core-concepts/stacks/env', to: '/stacks/env'},
                     {from: '/core-concepts/stacks/providers', to: '/stacks/providers'},
@@ -470,7 +482,19 @@ const config = {
                     routeBasePath: '/',
                     sidebarPath: require.resolve('./sidebars.js'),
                     async sidebarItemsGenerator({defaultSidebarItemsGenerator, ...args}) {
+                        // The default generator returns items already ordered by
+                        // `sidebar_position` (then strips the position field).
                         const items = await defaultSidebarItemsGenerator(args);
+
+                        // The step-by-step quick-start tutorials are a deliberate
+                        // sequence, so honor `sidebar_position` for them by returning
+                        // the default (position-ordered) output unchanged. Every other
+                        // section keeps the established alphabetical-by-label ordering.
+                        const dirName = (args.item && args.item.dirName) || '';
+                        if (dirName.startsWith('quick-start/')) {
+                            return items;
+                        }
+
                         // Sort all sidebar items alphabetically by label,
                         // treating categories and docs equally so they interleave correctly.
                         const sortItems = (sidebarItems) => {
