@@ -1,0 +1,108 @@
+---
+title: Configure the Project
+sidebar_position: 1
+sidebar_label: Configure the Project
+slug: /quick-start/advanced/configure-project
+id: configure-project
+description: Lay out an Atmos monorepo and create a single atmos.yaml at the repo root that tells Atmos where your components and stacks live.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+# Configure the Project
+
+<Intro>
+First, you'll lay out the repository and create a single **`atmos.yaml`** at its root. This file tells Atmos where your components and stacks live — it's the one piece of configuration every later step builds on.
+</Intro>
+
+By the end of this step you'll have a repo skeleton and a working `atmos.yaml` that Atmos can load.
+
+:::tip Follow along in the example
+Use the **Example** tab on the right edge of this page to browse the finished quick-start project while you read. You can also [open the example drawer now](?example=1).
+:::
+
+## Lay out the repository
+
+Atmos uses a **monorepo**: one repository holds every component and every stack for the whole infrastructure. Create this skeleton:
+
+```plaintext
+.
+├── atmos.yaml                 # Atmos CLI config (lives at the repo root)
+├── components/
+│   └── terraform/             # your Terraform root modules (one dir per component)
+└── stacks/                    # stack configuration (catalogs, mixins, orgs)
+```
+
+That's the whole convention: **components** are plain Terraform root modules under `components/terraform/`, and **stacks** are the YAML that configures and composes them under `stacks/`. You'll fill both in over the next steps.
+
+## Create `atmos.yaml`
+
+Put `atmos.yaml` at the **root of the repo** and start with just the paths Atmos needs. We'll add a section to this file in most of the steps that follow.
+
+<File title="atmos.yaml">
+```yaml
+# "." means paths resolve relative to this atmos.yaml.
+# That keeps the tutorial self-contained: clone it anywhere
+# without setting environment variables.
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    # Settings for unattended tutorial commands.
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    # Generate backend.tf.json per component at apply time.
+    # The Deploy step explains the generated backend.
+    auto_generate_backend_file: true
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "orgs/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  # Stacks are found by name, not by filename.
+  # This maps plat-ue2-dev to tenant=plat,
+  # environment=ue2, and stage=dev.
+  name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
+
+workflows:
+  base_path: "stacks/workflows"
+
+logs:
+  level: Info
+```
+</File>
+
+The important fields:
+
+<dl>
+  <dt>`base_path`</dt>
+  <dd>Where components, stacks, and workflows live. Setting it to `"."` makes every other path **relative to `atmos.yaml`**, so the project is portable — clone it anywhere and it just works.</dd>
+
+  <dt>`components.terraform.base_path` / `stacks.base_path`</dt>
+  <dd>Where Atmos looks for your Terraform root modules and your stack YAML. These match the skeleton above.</dd>
+
+  <dt>`stacks.name_template`</dt>
+  <dd>How Atmos names stacks from their context. With `"{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"`, running `atmos terraform apply s3-bucket -s plat-ue2-dev` tells Atmos to find the stack where `tenant: plat`, `environment: ue2`, and `stage: dev` — **regardless of which file** defines it. File names and folders are free-form; the name template is what matters.</dd>
+</dl>
+
+:::note No `ATMOS_BASE_PATH`, no system paths
+You may see older guides put `atmos.yaml` in a system directory like `/usr/local/etc/atmos/` and set `ATMOS_BASE_PATH`. You don't need any of that. A repo-root `atmos.yaml` with `base_path: "."` is the modern, portable setup. (The system-path/`rootfs` pattern is only for baking config into a container image — see the example's `Dockerfile` if you go that route.)
+:::
+
+## Verify
+
+From the repo root, confirm Atmos finds its config:
+
+```bash
+atmos version
+```
+
+If that prints a version without a config error, Atmos has loaded your `atmos.yaml`.
+
+---
+
+**Next:** with the project laid out, let Atmos install the exact tools your stacks need → **[Install the Toolchain →](/quick-start/advanced/install-toolchain)**

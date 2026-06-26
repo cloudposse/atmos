@@ -1,0 +1,21 @@
+components:
+  terraform:
+    sqs-queue:
+      metadata:
+        component: sqs-queue
+        description: "SQS queue subscribed to the events topic."
+      # https://atmos.tools/stacks/dependencies/components
+      dependencies:
+        components:
+          - name: sns-topic
+      hooks:
+        publish-coordinates:
+          events:
+            - after-terraform-apply
+          kind: store
+          name: config/ssm
+          outputs:
+            queue_url: .queue_url
+      vars:
+        name: events
+        topic_arn: "arn:aws:sns:{{ .vars.region }}:000000000000:{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-events"

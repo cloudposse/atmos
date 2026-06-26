@@ -1,0 +1,36 @@
+components:
+  terraform:
+    app-config:
+      metadata:
+        component: app-config
+        description: "Publishes resolved app configuration and secrets to SSM Parameter Store."
+      # Component dependencies declare the apply order in the DAG (consumed by
+      # `atmos describe dependents`, `--affected` runs, and workflows). This is the
+      # current form; the legacy `settings.depends_on` map is deprecated.
+      # https://atmos.tools/stacks/dependencies/components
+      dependencies:
+        components:
+          - name: kms-key
+          - name: s3-bucket
+          - name: dynamodb-table
+          - name: sns-topic
+          - name: sqs-queue
+      secrets:
+        vars:
+          API_KEY:
+            description: "Third-party API key for the application."
+            store: secrets/ssm
+            required: true
+          DB_CONFIG:
+            description: "Structured database credentials (JSON) stored in Secrets Manager."
+            store: secrets/asm
+            required: true
+      vars:
+        name: app
+        kms_key_arn: "alias/{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-app"
+        bucket_id: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-assets"
+        table_name: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-state"
+        topic_arn: "arn:aws:sns:{{ .vars.region }}:000000000000:{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-events"
+        queue_url: "http://sqs.{{ .vars.region }}.localhost.localstack.cloud:4566/000000000000/{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-events"
+        api_key: !secret API_KEY
+        db_password: !secret DB_CONFIG | path ".password"
