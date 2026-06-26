@@ -83,7 +83,7 @@ func (p *CommandProvider) GetCompatibilityFlags() map[string]compat.Compatibilit
 }
 
 func (p *CommandProvider) IsExperimental() bool {
-	return false
+	return true
 }
 
 func newOperationCommand(name string, short string) *cobra.Command {
