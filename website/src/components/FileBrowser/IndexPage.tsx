@@ -21,14 +21,20 @@ const cardMarkdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
 };
 
-interface IndexPageProps {
+interface IndexPageContentProps {
   treeData: ExamplesTree;
   optionsData: FileBrowserOptions;
+  /** Hide the header (title/description) when embedded in another component. */
+  hideHeader?: boolean;
 }
 
-export default function IndexPage({ treeData, optionsData }: IndexPageProps): JSX.Element {
+/**
+ * IndexPageContent - The actual content without Layout wrapper.
+ * Use this when embedding in another component that already has Layout.
+ */
+export function IndexPageContent({ treeData, optionsData, hideHeader = false }: IndexPageContentProps): JSX.Element {
   const { examples, tags } = treeData;
-  const { routeBasePath, title, description } = optionsData;
+  const { routeBasePath } = optionsData;
   const [activeTag, setActiveTag] = useState<string | null>(null);
 
   const filteredExamples = activeTag
@@ -36,62 +42,81 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
     : examples;
 
   return (
-    <Layout title={title} description={description}>
-      <div className={styles.indexPage}>
+    <div className={styles.indexPage}>
+      {!hideHeader && (
         <header className={styles.indexHeader}>
-          <h1 className={styles.indexTitle}>{title}</h1>
-          <p className={styles.indexDescription}>{description}</p>
+          <h1 className={styles.indexTitle}>{optionsData.title}</h1>
+          <p className={styles.indexDescription}>{optionsData.description}</p>
         </header>
+      )}
 
-        <div className={styles.filterBar}>
+      <div className={styles.filterBar}>
+        <button
+          type="button"
+          className={`${styles.filterButton} ${activeTag === null ? styles.filterButtonActive : ''}`}
+          onClick={() => setActiveTag(null)}
+        >
+          All
+        </button>
+        {tags.map((tag) => (
           <button
+            key={tag}
             type="button"
-            className={`${styles.filterButton} ${activeTag === null ? styles.filterButtonActive : ''}`}
-            onClick={() => setActiveTag(null)}
+            className={`${styles.filterButton} ${activeTag === tag ? styles.filterButtonActive : ''}`}
+            onClick={() => setActiveTag(tag)}
           >
-            All
+            {tag}
           </button>
-          {tags.map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              className={`${styles.filterButton} ${activeTag === tag ? styles.filterButtonActive : ''}`}
-              onClick={() => setActiveTag(tag)}
-            >
-              {tag}
-            </button>
-          ))}
-        </div>
-
-        <div className={styles.examplesGrid}>
-          {filteredExamples.map((example) => (
-            <Link
-              key={example.name}
-              to={`${routeBasePath}/${example.name}`}
-              className={styles.exampleCard}
-            >
-              <div className={styles.exampleCardHeader}>
-                <div className={styles.exampleCardIcon}>
-                  <FontAwesomeIcon icon={faFolder} />
-                </div>
-                <h2 className={styles.exampleCardTitle}>{example.name}</h2>
-              </div>
-              <div className={styles.exampleCardDescription}>
-                <Markdown components={cardMarkdownComponents}>
-                  {example.description || 'Explore this example project'}
-                </Markdown>
-              </div>
-              <div className={styles.exampleCardFooter}>
-                <div className={styles.tagList}>
-                  {example.tags.map((tag) => (
-                    <span key={tag} className={styles.tagBadge}>{tag}</span>
-                  ))}
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+        ))}
       </div>
+
+      <div className={styles.examplesGrid}>
+        {filteredExamples.map((example) => (
+          <Link
+            key={example.name}
+            to={`${routeBasePath}/${example.name}`}
+            className={styles.exampleCard}
+          >
+            <div className={styles.exampleCardHeader}>
+              <div className={styles.exampleCardIcon}>
+                <FontAwesomeIcon icon={faFolder} />
+              </div>
+              <h2 className={styles.exampleCardTitle}>{example.name}</h2>
+            </div>
+            <div className={styles.exampleCardDescription}>
+              <Markdown components={cardMarkdownComponents}>
+                {example.description || 'Explore this example project'}
+              </Markdown>
+            </div>
+            <div className={styles.exampleCardFooter}>
+              <div className={styles.tagList}>
+                {example.tags.map((tag) => (
+                  <span key={tag} className={styles.tagBadge}>{tag}</span>
+                ))}
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface IndexPageProps {
+  treeData: ExamplesTree;
+  optionsData: FileBrowserOptions;
+}
+
+/**
+ * IndexPage - Standalone page with Layout wrapper.
+ * Use IndexPageContent for embedding without Layout.
+ */
+export default function IndexPage({ treeData, optionsData }: IndexPageProps): JSX.Element {
+  const { title, description } = optionsData;
+
+  return (
+    <Layout title={title} description={description}>
+      <IndexPageContent treeData={treeData} optionsData={optionsData} />
     </Layout>
   );
 }

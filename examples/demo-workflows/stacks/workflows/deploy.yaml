@@ -1,0 +1,23 @@
+name: Deploy
+description: Workflows for deploying the demo application
+
+workflows:
+  plan:
+    description: Plan all components in a stack
+    steps:
+      - name: Plan myapp
+        command: terraform plan myapp -s {{ .Stack }}
+
+  apply:
+    description: Apply all components in a stack
+    steps:
+      - name: Apply myapp
+        command: terraform apply myapp -s {{ .Stack }}
+
+  validate:
+    description: Validate stack configuration
+    steps:
+      - name: Validate stacks
+        command: validate stacks
+      - name: Describe myapp
+        command: describe component myapp -s {{ .Stack }}

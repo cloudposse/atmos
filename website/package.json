@@ -23,6 +23,7 @@
     "test:algolia:live": "ALGOLIA_LIVE_RELEVANCE_TESTS=1 node --test algolia/search-relevance.test.mjs"
   },
   "dependencies": {
+    "@cloudflare/stream-react": "^1.9.3",
     "@docsearch/react": "^4.2.0",
     "@docusaurus/core": "^3.9.2",
     "@docusaurus/plugin-client-redirects": "^3.9.2",

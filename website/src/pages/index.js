@@ -5,7 +5,7 @@ import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Link from '@docusaurus/Link';
 import Screengrab from '@site/src/components/Screengrab'
 import TypingAnimation from '@site/src/components/TypingAnimation'
-import LazyDemo from '@site/src/components/LazyDemo'
+import { FeaturedDemoCarousel } from '@site/src/components/FeaturedDemoCarousel'
 import ScrollFadeIn from '@site/src/components/ScrollFadeIn'
 import { RiLockLine, RiBox3Line, RiFlashlightLine, RiShieldKeyholeLine } from 'react-icons/ri';
 import { SiAmazonwebservices, SiGooglecloud } from 'react-icons/si';
@@ -67,7 +67,7 @@ function Home() {
             <h2>See Atmos in Action</h2>
             <p>Watch how Atmos simplifies infrastructure orchestration with an intuitive workflow</p>
           </motion.div>
-          <LazyDemo />
+          <FeaturedDemoCarousel />
         </section>
         <main>
           <section className="features-grid">

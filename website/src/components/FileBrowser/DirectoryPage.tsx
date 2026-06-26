@@ -8,6 +8,7 @@ import FileTree from './FileTree';
 import DirectoryListing from './DirectoryListing';
 import FileViewer from './FileViewer';
 import RelatedDocs from './RelatedDocs';
+import { DemoVideo } from '../Video';
 import { findExampleByName, getExampleNameFromPath } from './utils';
 import GistDisclaimer from '@site/src/components/GistDisclaimer';
 import type { ExamplesTree, FileBrowserOptions, DirectoryNode } from './types';
@@ -46,6 +47,10 @@ export default function DirectoryPage({
     ? `${exampleName} - ${sectionName}`
     : `${dirData.name} - ${exampleName}`;
 
+  // Only show demo video on the example root page.
+  const isExampleRoot = dirData.path === exampleName;
+  const showDemoVideo = isExampleRoot && example.demoId;
+
   return (
     <Layout title={pageTitle}>
       <div className={styles.pageLayout}>
@@ -59,6 +64,17 @@ export default function DirectoryPage({
 
           {optionsData.disclaimer && (
             <GistDisclaimer text={optionsData.disclaimer} />
+          )}
+
+          {/* Show demo video on example root page */}
+          {showDemoVideo && (
+            <div className={styles.demoVideoSection}>
+              <DemoVideo
+                id={example.demoId}
+                title={`${example.name} Demo`}
+                showCaption={false}
+              />
+            </div>
           )}
 
           {/* Show README if present */}

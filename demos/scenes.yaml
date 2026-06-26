@@ -1,0 +1,1708 @@
+# yaml-language-server: $schema=scenes-schema.json
+---
+version: "1.0"
+
+scenes:
+  # =============================================
+  # Demo Stacks Examples (existing)
+  # =============================================
+
+  - name: "demo-stacks-describe"
+    enabled: true
+    description: "Describe stacks in demo-stacks example"
+    tape: "scenes/demo-stacks/describe.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - describe
+    gallery:
+      category: "demo-stacks"
+      title: "Describe Stacks"
+      order: 1
+
+  - name: "demo-stacks-component"
+    enabled: true
+    description: "Describe component configuration across environments"
+    tape: "scenes/demo-stacks/component.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - describe
+    gallery:
+      category: "demo-stacks"
+      title: "Describe Component"
+      order: 2
+
+  - name: "demo-stacks-validate"
+    enabled: true
+    description: "Validate stack and component configurations"
+    tape: "scenes/demo-stacks/validate.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - validate
+    gallery:
+      category: "demo-stacks"
+      title: "Validate Stacks"
+      order: 3
+
+  - name: "demo-stacks-terraform-plan"
+    enabled: true
+    description: "Run terraform plan with demo-stacks"
+    tape: "scenes/demo-stacks/terraform-plan.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+      - terraform
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - terraform
+    gallery:
+      category: "demo-stacks"
+      title: "Terraform Plan"
+      order: 4
+
+  - name: "demo-stacks-list"
+    enabled: true
+    description: "List stacks and components"
+    tape: "scenes/demo-stacks/list.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - list
+    gallery:
+      category: "demo-stacks"
+      title: "List Stacks"
+      order: 5
+
+  # =============================================
+  # Acme Corp Demos (Website Gallery)
+  # =============================================
+
+  # --- Featured Demos (Hero Section) ---
+  # These 3 demos tell the "After Atmos" story
+
+  - name: "featured-unified-config"
+    enabled: true
+    description: "One Config, Every Environment"
+    tape: "scenes/featured/unified-config.tape"
+    workdir: "demos/fixtures/live"
+    requires:
+      - atmos
+      - terraform
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - featured
+    featured_order: 1
+    gallery:
+      category: "featured"
+      title: "One Config, Every Environment"
+      order: 1
+
+  - name: "featured-see-everything"
+    enabled: true
+    description: "See Everything"
+    tape: "scenes/featured/see-everything.tape"
+    workdir: "demos/fixtures/live"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - featured
+    featured_order: 2
+    gallery:
+      category: "featured"
+      title: "See Everything"
+      order: 2
+
+  - name: "featured-tools-just-work"
+    enabled: true
+    description: "Tools That Just Work"
+    tape: "scenes/featured/tools-just-work.tape"
+    workdir: "demos/fixtures/live"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - featured
+    featured_order: 3
+    gallery:
+      category: "featured"
+      title: "Tools That Just Work"
+      order: 3
+
+  # --- Terraform Commands ---
+
+  - name: "terraform-plan"
+    enabled: true
+    description: "Plan infrastructure changes before deploying"
+    tape: "scenes/terraform/plan.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+      - terraform
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - terraform
+    gallery:
+      category: "terraform"
+      title: "Terraform Plan"
+      order: 1
+
+  - name: "terraform-apply"
+    enabled: true
+    description: "Apply infrastructure changes with approval"
+    tape: "scenes/terraform/apply.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+      - terraform
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - terraform
+    gallery:
+      category: "terraform"
+      title: "Terraform Apply"
+      order: 2
+
+  - name: "terraform-affected"
+    enabled: true
+    description: "Find components affected by changes"
+    tape: "scenes/terraform/affected.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+      - terraform
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - terraform
+      - describe
+    gallery:
+      category: "terraform"
+      title: "Affected Components"
+      order: 3
+
+  - name: "terraform-describe"
+    enabled: true
+    description: "Describe component configuration"
+    tape: "scenes/terraform/describe.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - describe
+    gallery:
+      category: "terraform"
+      title: "Describe Component"
+      order: 4
+
+  # --- Terraform Commands (docs only, not in gallery) ---
+
+  - name: "terraform-init"
+    enabled: true
+    description: "Initialize terraform for a component"
+    tape: "scenes/terraform/init.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+      - terraform
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - terraform
+
+  - name: "terraform-destroy"
+    enabled: true
+    description: "Destroy terraform-managed infrastructure"
+    tape: "scenes/terraform/destroy.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+      - terraform
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - terraform
+
+  - name: "terraform-output"
+    enabled: true
+    description: "View terraform outputs in various formats"
+    tape: "scenes/terraform/output.tape"
+    workdir: "demos/fixtures/live"
+    requires:
+      - atmos
+      - terraform
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - terraform
+    gallery:
+      category: "terraform"
+      title: "Terraform Output"
+      order: 6
+
+  # --- List Commands ---
+
+  - name: "list-stacks"
+    enabled: true
+    description: "List and explore stacks"
+    tape: "scenes/list/stacks.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - list
+    gallery:
+      category: "list"
+      title: "List Stacks"
+      order: 1
+    validate:
+      must_not_match: []  # This scene intentionally shows error states
+
+  - name: "list-components"
+    enabled: true
+    description: "List available components"
+    tape: "scenes/list/components.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - list
+    gallery:
+      category: "list"
+      title: "List Components"
+      order: 2
+
+  - name: "list-vars"
+    enabled: true
+    description: "List component vars across stacks"
+    tape: "scenes/list/vars.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - list
+    setup:
+      - ".mock-states/setup.sh"
+    gallery:
+      category: "list"
+      title: "List Vars"
+      order: 3
+
+  # --- Workflow Commands ---
+
+  - name: "workflow-run"
+    enabled: true
+    description: "Run multi-step workflows"
+    tape: "scenes/workflow/run.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - workflow
+    gallery:
+      category: "workflows"
+      title: "Run Workflow"
+      order: 1
+
+  - name: "workflow-list"
+    enabled: true
+    description: "List available workflows"
+    tape: "scenes/workflow/list.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - workflow
+    gallery:
+      category: "workflows"
+      title: "List Workflows"
+      order: 2
+
+  # --- Vendor Commands ---
+
+  - name: "vendor-pull"
+    enabled: true
+    description: "Pull external components with vendoring"
+    tape: "scenes/vendor/pull.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - vendor
+    gallery:
+      category: "vendor"
+      title: "Vendor Pull"
+      order: 1
+    validate:
+      must_not_match:
+        - "no vendor configurations found"
+        - "there are no components in the vendor config file"
+
+  # --- Developer Experience ---
+
+  - name: "commands"
+    enabled: true
+    description: "Extend Atmos with custom commands"
+    tape: "scenes/commands.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - commands
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Custom Commands"
+      order: 1
+
+  - name: "aliases"
+    enabled: true
+    description: "Use shorthand aliases for common commands"
+    tape: "scenes/aliases.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - aliases
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Aliases"
+      order: 2
+
+  - name: "version"
+    enabled: true
+    description: "Check atmos version and updates"
+    tape: "scenes/version.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - version
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Version Check"
+      order: 3
+
+  - name: "completion"
+    enabled: true
+    description: "Generate shell completion scripts"
+    tape: "scenes/completion.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - completion
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Shell Completion"
+      order: 4
+
+  - name: "docs"
+    enabled: true
+    description: "Access documentation from CLI"
+    tape: "scenes/docs.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - docs
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Documentation"
+      order: 5
+
+  - name: "validate"
+    enabled: true
+    description: "Validate stack configurations"
+    tape: "scenes/validate.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - validate
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Validate Stacks"
+      order: 6
+
+  - name: "devcontainer"
+    enabled: true
+    description: "Isolated development environments with devcontainers"
+    tape: "scenes/devcontainer.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - devcontainer
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Devcontainers"
+      order: 7
+
+  # --- Command Scenes (docs only, not in gallery) ---
+
+  - name: "about"
+    enabled: true
+    description: "Show information about atmos"
+    tape: "scenes/about.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - about
+
+  - name: "theme"
+    enabled: true
+    description: "Configure terminal theme and colors"
+    tape: "scenes/theme.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - theme
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Theme"
+      order: 8
+
+  - name: "support"
+    enabled: true
+    description: "Get support information and resources"
+    tape: "scenes/support.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - support
+
+  - name: "profile"
+    enabled: true
+    description: "Manage atmos profiles"
+    tape: "scenes/profile.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - profile
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Profile"
+      order: 9
+
+  # --- Toolchain Management ---
+
+  - name: "toolchain-search"
+    enabled: true
+    description: "Search for tools in the Atmos registry with fuzzy matching"
+    tape: "scenes/toolchain-search.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - toolchain
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Toolchain Search"
+      order: 10
+
+  - name: "toolchain"
+    enabled: true
+    description: "Install and manage cloud infrastructure tools"
+    tape: "scenes/toolchain.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - toolchain
+    gallery:
+      category: "dx"
+      title: "Toolchain Management"
+      order: 11
+
+  - name: "toolchain-env"
+    enabled: true
+    description: "Integrate toolchain with your shell PATH"
+    tape: "scenes/toolchain-env.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - toolchain
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Shell Integration"
+      order: 12
+
+  - name: "toolchain-deps"
+    enabled: true
+    description: "Auto-install tools based on stack dependencies"
+    tape: "scenes/toolchain-deps.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - toolchain
+      - terraform
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Stack Dependencies"
+      order: 13
+
+  - name: "use-version"
+    enabled: true
+    description: "Switch Atmos versions on the fly with --use-version"
+    tape: "scenes/use-version.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - toolchain
+      - version
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Version Switching"
+      order: 14
+
+  # --- Authentication ---
+
+  - name: "auth-login"
+    enabled: true
+    description: "Authenticate with cloud providers"
+    tape: "scenes/auth/login.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - auth
+    status: draft
+    gallery:
+      category: "auth"
+      title: "Login"
+      order: 1
+
+  - name: "auth-terraform"
+    enabled: true
+    description: "Run terraform with team credentials"
+    tape: "scenes/auth/terraform.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+      - terraform
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - auth
+      - terraform
+    status: draft
+    gallery:
+      category: "auth"
+      title: "Authenticated Terraform"
+      order: 2
+
+  - name: "auth-exec"
+    enabled: true
+    description: "Execute commands with team credentials"
+    tape: "scenes/auth/exec.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - auth
+    status: draft
+    gallery:
+      category: "auth"
+      title: "Exec with Credentials"
+      order: 3
+
+  - name: "auth-console"
+    enabled: true
+    description: "Open cloud provider console in browser"
+    tape: "scenes/auth/console.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - auth
+    status: draft
+    gallery:
+      category: "auth"
+      title: "Web Console"
+      order: 4
+
+  - name: "auth-shell"
+    enabled: true
+    description: "Start interactive shell with credentials"
+    tape: "scenes/auth/shell.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - auth
+    status: draft
+    gallery:
+      category: "auth"
+      title: "Authenticated Shell"
+      order: 5
+
+  - name: "auth-list"
+    enabled: true
+    description: "Show configured identities and providers"
+    tape: "scenes/auth/list.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - auth
+    status: draft
+    gallery:
+      category: "auth"
+      title: "List Identities"
+      order: 6
+
+  - name: "auth-whoami"
+    enabled: true
+    description: "Show current authenticated identity"
+    tape: "scenes/auth/whoami.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - auth
+    status: draft
+    gallery:
+      category: "auth"
+      title: "Who Am I"
+      order: 7
+
+  - name: "auth-env"
+    enabled: true
+    description: "Export auth credentials as environment variables"
+    tape: "scenes/auth/env.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - auth
+    status: draft
+    gallery:
+      category: "auth"
+      title: "Auth Env"
+      order: 8
+
+  # --- Configuration & Validation ---
+
+  - name: "config-template-functions"
+    enabled: true
+    description: "Use template functions in stacks"
+    tape: "scenes/config/template-functions.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - describe
+    gallery:
+      category: "config"
+      title: "Template Functions"
+      order: 1
+
+  - name: "config-describe-affected"
+    enabled: true
+    description: "Find affected components from changes"
+    tape: "scenes/config/describe-affected.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - describe
+    gallery:
+      category: "config"
+      title: "Describe Affected"
+      order: 2
+
+  - name: "config-validate-stacks"
+    enabled: true
+    description: "Validate all stack configurations"
+    tape: "scenes/config/validate-stacks.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - validate
+    gallery:
+      category: "config"
+      title: "Validate Stacks"
+      order: 3
+
+  # --- Flagship Demos ---
+
+  - name: "flagship-tui"
+    enabled: true
+    description: "Interactive Atmos TUI for exploring commands, stacks, and components"
+    tape: "scenes/flagship/tui.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - tui
+    status: draft
+    gallery:
+      category: "flagship"
+      title: "Interactive TUI"
+      order: 1
+
+  - name: "flagship-deploy-workflow"
+    enabled: true
+    description: "Complete deployment workflow with Atmos"
+    tape: "scenes/flagship/deploy-workflow.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - workflow
+      - terraform
+    gallery:
+      category: "flagship"
+      title: "Deploy Workflow"
+      order: 2
+
+  - name: "flagship-onboarding"
+    enabled: true
+    description: "Getting started with Atmos"
+    tape: "scenes/flagship/onboarding.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - about
+    gallery:
+      category: "flagship"
+      title: "Getting Started"
+      order: 3
+
+  # =============================================
+  # Example Scenes (FileBrowser only, no gallery)
+  # These appear on individual example pages
+  # =============================================
+
+  - name: "example-demo-stacks"
+    enabled: true
+    description: "Stack inheritance across environments"
+    tape: "scenes/examples/demo-stacks.tape"
+    workdir: "examples/demo-stacks"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-vendoring"
+    enabled: true
+    description: "Pull Terraform modules from external sources"
+    tape: "scenes/examples/demo-vendoring.tape"
+    workdir: "examples/demo-vendoring"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-workflows"
+    enabled: true
+    description: "Run multiple commands in sequence"
+    tape: "scenes/examples/demo-workflows.tape"
+    workdir: "examples/demo-workflows"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-auth"
+    enabled: true
+    description: "Cloud provider authentication"
+    tape: "scenes/examples/demo-auth.tape"
+    workdir: "examples/demo-auth"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-helmfile"
+    enabled: true
+    description: "Kubernetes deployments with Helmfile"
+    tape: "scenes/examples/demo-helmfile.tape"
+    workdir: "examples/demo-helmfile"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-localstack"
+    enabled: true
+    description: "Test with LocalStack AWS emulator"
+    tape: "scenes/examples/demo-localstack.tape"
+    workdir: "examples/demo-localstack"
+    requires:
+      - atmos
+      - docker
+    setup:
+      - "atmos localstack up"
+    cleanup:
+      - "atmos localstack down"
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-custom-command"
+    enabled: true
+    description: "Extend Atmos with custom commands"
+    tape: "scenes/examples/demo-custom-command.tape"
+    workdir: "examples/demo-custom-command"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-component-versions"
+    enabled: true
+    description: "Pin components to specific versions"
+    tape: "scenes/examples/demo-component-versions.tape"
+    workdir: "examples/demo-component-versions"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-context"
+    enabled: true
+    description: "Inspect configuration resolution"
+    tape: "scenes/examples/demo-context.tape"
+    workdir: "examples/demo-context"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-schemas"
+    enabled: true
+    description: "JSON Schema validation"
+    tape: "scenes/examples/demo-schemas.tape"
+    workdir: "examples/demo-schemas"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-library"
+    enabled: true
+    description: "Distribute reusable components"
+    tape: "scenes/examples/demo-library.tape"
+    workdir: "examples/demo-library"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-env"
+    enabled: true
+    description: "Export environment variables"
+    tape: "scenes/examples/demo-env.tape"
+    workdir: "examples/demo-env"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-atlantis"
+    enabled: true
+    description: "Atlantis PR-based automation"
+    tape: "scenes/examples/demo-atlantis.tape"
+    workdir: "examples/demo-atlantis"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-quick-start-simple"
+    enabled: true
+    description: "Minimal Atmos setup"
+    tape: "scenes/examples/quick-start-simple.tape"
+    workdir: "examples/quick-start-simple"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-quick-start-advanced"
+    enabled: true
+    description: "Multi-environment setup"
+    tape: "scenes/examples/quick-start-advanced.tape"
+    workdir: "examples/quick-start-advanced"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-config-profiles"
+    enabled: true
+    description: "Environment-specific configurations"
+    tape: "scenes/examples/config-profiles.tape"
+    workdir: "examples/config-profiles"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-toolchain"
+    enabled: true
+    description: "Manage tool versions"
+    tape: "scenes/examples/toolchain.tape"
+    workdir: "examples/toolchain"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-devcontainer"
+    enabled: true
+    description: "Isolated development environments"
+    tape: "scenes/examples/devcontainer.tape"
+    workdir: "examples/devcontainer"
+    requires:
+      - atmos
+      - podman
+    setup:
+      - "podman machine start 2>/dev/null || true"
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-devcontainer-build"
+    enabled: true
+    description: "Custom Dockerfile devcontainers"
+    tape: "scenes/examples/devcontainer-build.tape"
+    workdir: "examples/devcontainer-build"
+    requires:
+      - atmos
+      - podman
+    setup:
+      - "podman machine start 2>/dev/null || true"
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-source-provisioning"
+    enabled: false
+    description: "Just-in-Time component vendoring"
+    tape: "scenes/examples/source-provisioning.tape"
+    workdir: "examples/source-provisioning"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples

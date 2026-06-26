@@ -353,8 +353,8 @@ func TestGetComponentColumns(t *testing.T) {
 				},
 			},
 			columnsFlag: []string{},
-			expectLen:   3, // Unique component fields: Component, Type, Stacks
-			expectName:  "Component",
+			expectLen:   4,   // status dot, Component, Type, Stacks
+			expectName:  " ", // status column has space as name
 		},
 		{
 			name: "Columns from flag",

@@ -1,0 +1,52 @@
+# list-vars scene - List component vars across stacks
+Output list-vars.gif
+Output list-vars.mp4
+Output list-vars.svg
+
+# VHS Configuration
+Source "../../scenes/_theme.tape"
+Set Width 1400
+Set Height 800
+
+# Enable TrueColor for proper color rendering in VHS
+Env COLORTERM "truecolor"
+
+# Fix prompt (VHS runs zsh with --no-rcs, use \033 for colors)
+Env PS1 "\033[38;2;90;86;224m> \033[0m"
+
+Hide
+Enter
+Ctrl+L
+Show
+
+# Dependencies
+Require atmos
+
+# Scene starts
+Type "# List component vars across all stacks"
+Enter
+Sleep 2s
+
+Type "atmos list vars vpc"
+Sleep 2s
+Enter
+Sleep 3s
+
+# Capture screenshot
+Screenshot list-vars.png
+
+Type "# Compare vars across environments"
+Enter
+Sleep 300ms
+
+Type "atmos list vars vpc --query .vars.vpc_cidr"
+Sleep 2s
+Enter
+Sleep 3s
+
+Type "# See all variable values at a glance"
+Enter
+Sleep 1s
+
+# Hold final frame
+Sleep 10s

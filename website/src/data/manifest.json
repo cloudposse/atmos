@@ -1,0 +1,1035 @@
+{
+  "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+  "scenes": [
+    {
+      "name": "demo-stacks-describe",
+      "description": "Describe stacks in demo-stacks example",
+      "tags": [
+        "describe"
+      ],
+      "category": "demo-stacks",
+      "title": "Describe Stacks",
+      "order": 1,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-describe.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-describe.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/4d365fab379387b3fe0c1d3d479fce58/watch",
+          "type": "stream",
+          "uid": "4d365fab379387b3fe0c1d3d479fce58",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "4d365fab379387b3fe0c1d3d479fce58"
+          ],
+          "duration": 7.76,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/4d365fab379387b3fe0c1d3d479fce58/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-describe.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-describe.svg",
+          "type": "r2",
+          "duration": 7.74,
+          "thumbnail_time": 7.5465
+        }
+      }
+    },
+    {
+      "name": "demo-stacks-component",
+      "description": "Describe component configuration across environments",
+      "tags": [
+        "describe"
+      ],
+      "category": "demo-stacks",
+      "title": "Describe Component",
+      "order": 2,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-component.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-component.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/0528c1e6ee31da7d3dbb4aaf4513bcb1/watch",
+          "type": "stream",
+          "uid": "0528c1e6ee31da7d3dbb4aaf4513bcb1",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "0528c1e6ee31da7d3dbb4aaf4513bcb1"
+          ],
+          "duration": 8.36,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/0528c1e6ee31da7d3dbb4aaf4513bcb1/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-component.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-component.svg",
+          "type": "r2",
+          "duration": 8.34,
+          "thumbnail_time": 8.174851485148515
+        }
+      }
+    },
+    {
+      "name": "demo-stacks-validate",
+      "description": "Validate stack and component configurations",
+      "tags": [
+        "validate"
+      ],
+      "category": "demo-stacks",
+      "title": "Validate Stacks",
+      "order": 3,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-validate.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-validate.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/d21eb091ee1b25009a354b4c62d9e982/watch",
+          "type": "stream",
+          "uid": "d21eb091ee1b25009a354b4c62d9e982",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "d21eb091ee1b25009a354b4c62d9e982"
+          ],
+          "duration": 7,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/d21eb091ee1b25009a354b4c62d9e982/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-validate.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-validate.svg",
+          "type": "r2",
+          "duration": 6.98,
+          "thumbnail_time": 6.686105263157895
+        }
+      }
+    },
+    {
+      "name": "demo-stacks-terraform-plan",
+      "description": "Run terraform plan with demo-stacks",
+      "tags": [
+        "terraform"
+      ],
+      "category": "demo-stacks",
+      "title": "Terraform Plan",
+      "order": 4,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-terraform-plan.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-terraform-plan.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/0065dfb93a75a57f6de90efe18e156ed/watch",
+          "type": "stream",
+          "uid": "0065dfb93a75a57f6de90efe18e156ed",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "0065dfb93a75a57f6de90efe18e156ed"
+          ],
+          "duration": 8.08,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/0065dfb93a75a57f6de90efe18e156ed/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-terraform-plan.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-terraform-plan.svg",
+          "type": "r2",
+          "duration": 8.06,
+          "thumbnail_time": 4.836
+        }
+      }
+    },
+    {
+      "name": "demo-stacks-list",
+      "description": "List stacks and components",
+      "tags": [
+        "list"
+      ],
+      "category": "demo-stacks",
+      "title": "List Stacks",
+      "order": 5,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-list.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-list.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/1a7566b75021313251c649654b97237e/watch",
+          "type": "stream",
+          "uid": "1a7566b75021313251c649654b97237e",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "1a7566b75021313251c649654b97237e"
+          ],
+          "duration": 7.32,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/1a7566b75021313251c649654b97237e/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-list.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-list.svg",
+          "type": "r2",
+          "duration": 7.3,
+          "thumbnail_time": 7.048275862068966
+        }
+      }
+    },
+    {
+      "name": "featured-unified-config",
+      "description": "One Config, Every Environment",
+      "tags": [
+        "featured"
+      ],
+      "category": "featured",
+      "title": "One Config, Every Environment",
+      "order": 1,
+      "featured_order": 1,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/featured/featured-unified-config.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/featured/featured-unified-config.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/2be3c17486ffdffad57d23f5aed6b888/watch",
+          "type": "stream",
+          "uid": "2be3c17486ffdffad57d23f5aed6b888",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "2be3c17486ffdffad57d23f5aed6b888"
+          ],
+          "duration": 34.84,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/2be3c17486ffdffad57d23f5aed6b888/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/featured/featured-unified-config.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/featured/featured-unified-config.svg",
+          "type": "r2",
+          "duration": 34.84,
+          "thumbnail_time": 18.602982689747005
+        }
+      }
+    },
+    {
+      "name": "featured-see-everything",
+      "description": "See Everything",
+      "tags": [
+        "featured"
+      ],
+      "category": "featured",
+      "title": "See Everything",
+      "order": 2,
+      "featured_order": 2,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/featured/featured-see-everything.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/featured/featured-see-everything.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/bb75fcfaf0134a6501cf4aef291445ef/watch",
+          "type": "stream",
+          "uid": "bb75fcfaf0134a6501cf4aef291445ef",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "bb75fcfaf0134a6501cf4aef291445ef"
+          ],
+          "duration": 28.92,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/bb75fcfaf0134a6501cf4aef291445ef/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/featured/featured-see-everything.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/featured/featured-see-everything.svg",
+          "type": "r2",
+          "duration": 28.92,
+          "thumbnail_time": 14.97545966228893
+        }
+      }
+    },
+    {
+      "name": "featured-tools-just-work",
+      "description": "Tools That Just Work",
+      "tags": [
+        "featured"
+      ],
+      "category": "featured",
+      "title": "Tools That Just Work",
+      "order": 3,
+      "featured_order": 3,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/featured/featured-tools-just-work.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/featured/featured-tools-just-work.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/79bf75b9b71847fc06df30ccd708b359/watch",
+          "type": "stream",
+          "uid": "79bf75b9b71847fc06df30ccd708b359",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "79bf75b9b71847fc06df30ccd708b359"
+          ],
+          "duration": 30.2,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/79bf75b9b71847fc06df30ccd708b359/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/featured/featured-tools-just-work.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/featured/featured-tools-just-work.svg",
+          "type": "r2",
+          "duration": 30.2,
+          "thumbnail_time": 13.451760563380281
+        }
+      }
+    },
+    {
+      "name": "terraform-plan",
+      "description": "Plan infrastructure changes before deploying",
+      "tags": [
+        "terraform"
+      ],
+      "category": "terraform",
+      "title": "Terraform Plan",
+      "order": 1,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-plan.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-plan.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/0e3fa57ddd7276233d46a87a3019b44f/watch",
+          "type": "stream",
+          "uid": "0e3fa57ddd7276233d46a87a3019b44f",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "0e3fa57ddd7276233d46a87a3019b44f"
+          ],
+          "duration": 8,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/0e3fa57ddd7276233d46a87a3019b44f/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-plan.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-plan.svg",
+          "type": "r2",
+          "duration": 8,
+          "thumbnail_time": 7.673469387755102
+        }
+      }
+    },
+    {
+      "name": "terraform-apply",
+      "description": "Apply infrastructure changes with approval",
+      "tags": [
+        "terraform"
+      ],
+      "category": "terraform",
+      "title": "Terraform Apply",
+      "order": 2,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-apply.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-apply.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/ffbf913e118960c4454e3d05f6ddc58a/watch",
+          "type": "stream",
+          "uid": "ffbf913e118960c4454e3d05f6ddc58a",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "ffbf913e118960c4454e3d05f6ddc58a"
+          ],
+          "duration": 9.2,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/ffbf913e118960c4454e3d05f6ddc58a/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-apply.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-apply.svg",
+          "type": "r2",
+          "duration": 9.18,
+          "thumbnail_time": 9.055102040816326
+        }
+      }
+    },
+    {
+      "name": "terraform-affected",
+      "description": "Find components affected by changes",
+      "tags": [
+        "terraform",
+        "describe"
+      ],
+      "category": "terraform",
+      "title": "Affected Components",
+      "order": 3,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-affected.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-affected.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/470f5b88d1b1cc7274e76bf323d7225d/watch",
+          "type": "stream",
+          "uid": "470f5b88d1b1cc7274e76bf323d7225d",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "470f5b88d1b1cc7274e76bf323d7225d"
+          ],
+          "duration": 12.08,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/470f5b88d1b1cc7274e76bf323d7225d/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-affected.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-affected.svg",
+          "type": "r2",
+          "duration": 12.08,
+          "thumbnail_time": 11.54817610062893
+        }
+      }
+    },
+    {
+      "name": "terraform-describe",
+      "description": "Describe component configuration",
+      "tags": [
+        "describe"
+      ],
+      "category": "terraform",
+      "title": "Describe Component",
+      "order": 4,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-describe.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-describe.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/e3be25151337d5bbce09e52bf473e258/watch",
+          "type": "stream",
+          "uid": "e3be25151337d5bbce09e52bf473e258",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "e3be25151337d5bbce09e52bf473e258"
+          ],
+          "duration": 10.08,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/e3be25151337d5bbce09e52bf473e258/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-describe.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-describe.svg",
+          "type": "r2",
+          "duration": 10.08,
+          "thumbnail_time": 9.886153846153846
+        }
+      }
+    },
+    {
+      "name": "terraform-output",
+      "description": "View terraform outputs in various formats",
+      "tags": [
+        "terraform"
+      ],
+      "category": "terraform",
+      "title": "Terraform Output",
+      "order": 6,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-output.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-output.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/85eadfec7d8d7057e946f4ea7fd8db81/watch",
+          "type": "stream",
+          "uid": "85eadfec7d8d7057e946f4ea7fd8db81",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "85eadfec7d8d7057e946f4ea7fd8db81"
+          ],
+          "duration": 20.48,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/85eadfec7d8d7057e946f4ea7fd8db81/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-output.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/terraform/terraform-output.svg",
+          "type": "r2",
+          "duration": 20.46,
+          "thumbnail_time": 16.277066666666666
+        }
+      }
+    },
+    {
+      "name": "list-stacks",
+      "description": "List and explore stacks",
+      "tags": [
+        "list"
+      ],
+      "category": "list",
+      "title": "List Stacks",
+      "order": 1,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/list/list-stacks.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/list/list-stacks.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/dc2d521e9446242aeacba8228e5e641a/watch",
+          "type": "stream",
+          "uid": "dc2d521e9446242aeacba8228e5e641a",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "dc2d521e9446242aeacba8228e5e641a"
+          ],
+          "duration": 22.36,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/dc2d521e9446242aeacba8228e5e641a/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/list/list-stacks.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/list/list-stacks.svg",
+          "type": "r2",
+          "duration": 22.34,
+          "thumbnail_time": 19.284529147982063
+        }
+      }
+    },
+    {
+      "name": "list-components",
+      "description": "List available components",
+      "tags": [
+        "list"
+      ],
+      "category": "list",
+      "title": "List Components",
+      "order": 2,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/list/list-components.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/list/list-components.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/61ab1164ba69b0fa1ef2285cd9fdf727/watch",
+          "type": "stream",
+          "uid": "61ab1164ba69b0fa1ef2285cd9fdf727",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "61ab1164ba69b0fa1ef2285cd9fdf727"
+          ],
+          "duration": 20.72,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/61ab1164ba69b0fa1ef2285cd9fdf727/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/list/list-components.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/list/list-components.svg",
+          "type": "r2",
+          "duration": 20.7,
+          "thumbnail_time": 15.524999999999999
+        }
+      }
+    },
+    {
+      "name": "list-vars",
+      "description": "List component vars across stacks",
+      "tags": [
+        "list"
+      ],
+      "category": "list",
+      "title": "List Vars",
+      "order": 3,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/list/list-vars.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/list/list-vars.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/bdc58672210d185b92e9967830fca707/watch",
+          "type": "stream",
+          "uid": "bdc58672210d185b92e9967830fca707",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "bdc58672210d185b92e9967830fca707"
+          ],
+          "duration": 8.64,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/bdc58672210d185b92e9967830fca707/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/list/list-vars.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/list/list-vars.svg",
+          "type": "r2",
+          "duration": 8.62,
+          "thumbnail_time": 8.209523809523809
+        }
+      }
+    },
+    {
+      "name": "workflow-run",
+      "description": "Run multi-step workflows",
+      "tags": [
+        "workflow"
+      ],
+      "category": "workflows",
+      "title": "Run Workflow",
+      "order": 1,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/workflows/workflow-run.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/workflows/workflow-run.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/bc3f8d843fb87425b59c909ddeecbda4/watch",
+          "type": "stream",
+          "uid": "bc3f8d843fb87425b59c909ddeecbda4",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "bc3f8d843fb87425b59c909ddeecbda4"
+          ],
+          "duration": 9.88,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/bc3f8d843fb87425b59c909ddeecbda4/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/workflows/workflow-run.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/workflows/workflow-run.svg",
+          "type": "r2",
+          "duration": 9.86,
+          "thumbnail_time": 5.729459459459458
+        }
+      }
+    },
+    {
+      "name": "workflow-list",
+      "description": "List available workflows",
+      "tags": [
+        "workflow"
+      ],
+      "category": "workflows",
+      "title": "List Workflows",
+      "order": 2,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/workflows/workflow-list.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/workflows/workflow-list.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/0cebbec3a23ac36bd8297954f6147672/watch",
+          "type": "stream",
+          "uid": "0cebbec3a23ac36bd8297954f6147672",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "0cebbec3a23ac36bd8297954f6147672"
+          ],
+          "duration": 7.84,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/0cebbec3a23ac36bd8297954f6147672/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/workflows/workflow-list.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/workflows/workflow-list.svg",
+          "type": "r2",
+          "duration": 7.82,
+          "thumbnail_time": 4.6000000000000005
+        }
+      }
+    },
+    {
+      "name": "vendor-pull",
+      "description": "Pull external components with vendoring",
+      "tags": [
+        "vendor"
+      ],
+      "category": "vendor",
+      "title": "Vendor Pull",
+      "order": 1,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/vendor/vendor-pull.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/vendor/vendor-pull.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/36d22b591b0072859572e457435124f5/watch",
+          "type": "stream",
+          "uid": "36d22b591b0072859572e457435124f5",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "36d22b591b0072859572e457435124f5"
+          ],
+          "duration": 13.52,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/36d22b591b0072859572e457435124f5/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/vendor/vendor-pull.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/vendor/vendor-pull.svg",
+          "type": "r2",
+          "duration": 13.52,
+          "thumbnail_time": 6.322786069651741
+        }
+      }
+    },
+    {
+      "name": "toolchain",
+      "description": "Install and manage cloud infrastructure tools",
+      "tags": [
+        "toolchain"
+      ],
+      "category": "dx",
+      "title": "Toolchain Management",
+      "order": 11,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/dx/toolchain.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/dx/toolchain.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/88e228c53b22db2aa5d7839d3028fd67/watch",
+          "type": "stream",
+          "uid": "88e228c53b22db2aa5d7839d3028fd67",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "88e228c53b22db2aa5d7839d3028fd67"
+          ],
+          "duration": 15.32,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/88e228c53b22db2aa5d7839d3028fd67/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/dx/toolchain.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/dx/toolchain.svg",
+          "type": "r2",
+          "duration": 15.3,
+          "thumbnail_time": 6.120000000000001
+        }
+      }
+    },
+    {
+      "name": "config-template-functions",
+      "description": "Use template functions in stacks",
+      "tags": [
+        "describe"
+      ],
+      "category": "config",
+      "title": "Template Functions",
+      "order": 1,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/config/config-template-functions.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/config/config-template-functions.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/dd29d8a1b25a7c471ca303765e22ef74/watch",
+          "type": "stream",
+          "uid": "dd29d8a1b25a7c471ca303765e22ef74",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "dd29d8a1b25a7c471ca303765e22ef74"
+          ],
+          "duration": 10.36,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/dd29d8a1b25a7c471ca303765e22ef74/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/config/config-template-functions.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/config/config-template-functions.svg",
+          "type": "r2",
+          "duration": 10.34,
+          "thumbnail_time": 9.776
+        }
+      }
+    },
+    {
+      "name": "config-describe-affected",
+      "description": "Find affected components from changes",
+      "tags": [
+        "describe"
+      ],
+      "category": "config",
+      "title": "Describe Affected",
+      "order": 2,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/config/config-describe-affected.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/config/config-describe-affected.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/2a45b7d105bb868c9c8add2f708667fe/watch",
+          "type": "stream",
+          "uid": "2a45b7d105bb868c9c8add2f708667fe",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "2a45b7d105bb868c9c8add2f708667fe"
+          ],
+          "duration": 12.08,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/2a45b7d105bb868c9c8add2f708667fe/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/config/config-describe-affected.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/config/config-describe-affected.svg",
+          "type": "r2",
+          "duration": 12.06,
+          "thumbnail_time": 6.280092165898617
+        }
+      }
+    },
+    {
+      "name": "config-validate-stacks",
+      "description": "Validate all stack configurations",
+      "tags": [
+        "validate"
+      ],
+      "category": "config",
+      "title": "Validate Stacks",
+      "order": 3,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/config/config-validate-stacks.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/config/config-validate-stacks.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5165b4628cc06746995e73d03b866c40/watch",
+          "type": "stream",
+          "uid": "5165b4628cc06746995e73d03b866c40",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "5165b4628cc06746995e73d03b866c40"
+          ],
+          "duration": 9.8,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5165b4628cc06746995e73d03b866c40/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/config/config-validate-stacks.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/config/config-validate-stacks.svg",
+          "type": "r2",
+          "duration": 9.78,
+          "thumbnail_time": 9.646938775510204
+        }
+      }
+    },
+    {
+      "name": "flagship-deploy-workflow",
+      "description": "Complete deployment workflow with Atmos",
+      "tags": [
+        "workflow",
+        "terraform"
+      ],
+      "category": "flagship",
+      "title": "Deploy Workflow",
+      "order": 2,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/flagship/flagship-deploy-workflow.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/flagship/flagship-deploy-workflow.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/56d1c1f78fb0bbe97364f2c6c8c2f909/watch",
+          "type": "stream",
+          "uid": "56d1c1f78fb0bbe97364f2c6c8c2f909",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "56d1c1f78fb0bbe97364f2c6c8c2f909"
+          ],
+          "duration": 12.08,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/56d1c1f78fb0bbe97364f2c6c8c2f909/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/flagship/flagship-deploy-workflow.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/flagship/flagship-deploy-workflow.svg",
+          "type": "r2",
+          "duration": 12.06,
+          "thumbnail_time": 10.273333333333333
+        }
+      }
+    },
+    {
+      "name": "flagship-onboarding",
+      "description": "Getting started with Atmos",
+      "tags": [
+        "about"
+      ],
+      "category": "flagship",
+      "title": "Getting Started",
+      "order": 3,
+      "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/flagship/flagship-onboarding.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/flagship/flagship-onboarding.mp3",
+          "type": "r2"
+        },
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/2e3d53082574c49597db90a13917adfc/watch",
+          "type": "stream",
+          "uid": "2e3d53082574c49597db90a13917adfc",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "2e3d53082574c49597db90a13917adfc"
+          ],
+          "duration": 11.2,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/2e3d53082574c49597db90a13917adfc/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/flagship/flagship-onboarding.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/flagship/flagship-onboarding.svg",
+          "type": "r2",
+          "duration": 11.2,
+          "thumbnail_time": 7.868354430379746
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+# VPC Component Catalog
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        type: real
+      vars:
+        enabled: true
+        name: "vpc"
+        cidr_block: "10.0.0.0/16"

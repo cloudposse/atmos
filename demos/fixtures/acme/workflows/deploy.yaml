@@ -1,0 +1,39 @@
+# Deploy Workflow
+# Full deployment pipeline for a stack
+
+name: deploy
+description: Deploy infrastructure in the correct order
+
+workflows:
+  deploy:
+    description: Deploy all components to a stack
+    steps:
+      - command: echo "Starting deployment to ${ATMOS_STACK}"
+      - command: terraform plan vpc -s ${ATMOS_STACK}
+      - command: terraform apply vpc -s ${ATMOS_STACK} --auto-approve
+      - command: terraform plan cluster -s ${ATMOS_STACK}
+      - command: terraform apply cluster -s ${ATMOS_STACK} --auto-approve
+      - command: terraform plan database -s ${ATMOS_STACK}
+      - command: terraform apply database -s ${ATMOS_STACK} --auto-approve
+      - command: terraform plan api -s ${ATMOS_STACK}
+      - command: terraform apply api -s ${ATMOS_STACK} --auto-approve
+      - command: echo "Deployment complete!"
+
+  deploy-networking:
+    description: Deploy only networking components
+    steps:
+      - command: terraform apply vpc -s ${ATMOS_STACK} --auto-approve
+      - command: terraform apply cdn -s ${ATMOS_STACK} --auto-approve
+
+  deploy-compute:
+    description: Deploy compute components (requires networking)
+    steps:
+      - command: terraform apply cluster -s ${ATMOS_STACK} --auto-approve
+      - command: terraform apply api -s ${ATMOS_STACK} --auto-approve
+      - command: terraform apply frontend -s ${ATMOS_STACK} --auto-approve
+
+  deploy-data:
+    description: Deploy data components (requires networking)
+    steps:
+      - command: terraform apply database -s ${ATMOS_STACK} --auto-approve
+      - command: terraform apply cache -s ${ATMOS_STACK} --auto-approve

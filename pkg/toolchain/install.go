@@ -108,32 +108,44 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint, showProg
 		return installFromToolVersions(GetToolVersionsFilePath(), reinstallFlag, showHint)
 	}
 
-	// Check if this is a PR version specifier (e.g., "pr:2038").
-	if prNumber, isPR := IsPRVersion(toolSpec); isPR {
-		_, err := InstallFromPR(prNumber, showProgressBar)
+	// Check if the spec is a PR (pr:NNNN) or SHA (sha:XXXX) version specifier.
+	if handled, err := tryInstallSpecialVersion(toolSpec, showProgressBar); handled {
 		return err
+	}
+
+	// Single tool: use original single-tool flow with full progress.
+	return installSingleToolSpec(toolSpec, setAsDefault, reinstallFlag, showHint, showProgressBar)
+}
+
+// tryInstallSpecialVersion handles the pr:NNNN and sha:XXXX special version
+// specifiers. It returns handled=true (and the install result in err) when spec
+// matched a special form, and handled=false when spec is an ordinary version.
+func tryInstallSpecialVersion(spec string, showProgressBar bool) (bool, error) {
+	// Check if this is a PR version specifier (e.g., "pr:2038").
+	if prNumber, isPR := IsPRVersion(spec); isPR {
+		_, err := InstallFromPR(prNumber, showProgressBar)
+		return true, err
 	}
 
 	// Check if this is a SHA version specifier (e.g., "sha:ceb7526").
-	if sha, isSHA := IsSHAVersion(toolSpec); isSHA {
+	if sha, isSHA := IsSHAVersion(spec); isSHA {
 		_, err := InstallFromSHA(sha, showProgressBar)
-		return err
+		return true, err
 	}
 
+	return false, nil
+}
+
+// installSingleToolSpec installs a single tool specification with full progress display.
+// Note: reinstallFlag is accepted for API consistency but handled by InstallSingleTool internally.
+func installSingleToolSpec(toolSpec string, setAsDefault, _ bool, showHint, showProgressBar bool) error {
 	tool, version, err := ParseToolVersionArg(toolSpec)
 	if err != nil {
 		return err
 	}
 
-	// Also check if the version is a PR specifier (e.g., "atmos@pr:2038").
-	if prNumber, isPR := IsPRVersion(version); isPR {
-		_, err := InstallFromPR(prNumber, showProgressBar)
-		return err
-	}
-
-	// Also check if the version is a SHA specifier (e.g., "atmos@sha:ceb7526").
-	if sha, isSHA := IsSHAVersion(version); isSHA {
-		_, err := InstallFromSHA(sha, showProgressBar)
+	// Also check if the version is a PR or SHA specifier (e.g., "atmos@pr:2038").
+	if handled, err := tryInstallSpecialVersion(version, showProgressBar); handled {
 		return err
 	}
 
@@ -330,6 +342,7 @@ func showProgress(
 		ui.Errorf("Install failed %s/%s@%s: %v", tool.owner, tool.repo, tool.version, state.err)
 	}
 
+	// Show animated progress bar on current line (EscResetLine overwrites each frame).
 	percent := float64(state.index+1) / float64(state.total)
 	bar := progressBar.ViewAs(percent)
 

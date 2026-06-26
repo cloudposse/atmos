@@ -1,0 +1,14 @@
+# Platform Team Defaults
+import:
+  - orgs/acme/_defaults
+
+vars:
+  tenant: plat
+  tags:
+    Team: Platform
+
+# Platform team uses OpenTofu
+terraform:
+  dependencies:
+    tools:
+      opentofu: "1.10.0"

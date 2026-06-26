@@ -1,0 +1,90 @@
+# completion scene - Demonstrate shell tab completion
+Output completion.gif
+Output completion.mp4
+Output completion.svg
+
+# VHS Configuration
+Source "_theme.tape"
+Set Shell zsh
+Set Width 1400
+Set Height 800
+
+# Enable TrueColor for proper color rendering in VHS
+Env COLORTERM "truecolor"
+
+# Fix prompt (VHS runs with --no-rcs)
+Env PS1 "\033[38;2;90;86;224m> \033[0m"
+
+# Source completion (hidden setup)
+Hide
+Enter
+Type "setopt INTERACTIVE_COMMENTS"
+Enter
+Type "autoload -U compinit && compinit"
+Enter
+Type "source <(atmos completion zsh)"
+Enter
+Ctrl+L
+Show
+
+# Dependencies
+Require atmos
+
+# Scene starts - show how to enable
+Type "# Enable tab completion for atmos"
+Enter
+Sleep 2s
+
+Type "# Add completion to your shell profile"
+Enter
+Sleep 1s
+
+Type "# Now let's see it in action!"
+Enter
+Sleep 2s
+
+# Demo tab completion - type partial command, hit Tab
+Type "atmos ter"
+Sleep 300ms
+Tab
+Sleep 2s
+
+Type " pla"
+Sleep 300ms
+Tab
+Sleep 2s
+
+Type " --"
+Sleep 300ms
+Tab
+Tab
+Sleep 1s
+
+# Clear and show another example
+Ctrl+C
+Sleep 300ms
+
+Type "atmos desc"
+Sleep 300ms
+Tab
+Sleep 2s
+
+Type " comp"
+Sleep 300ms
+Tab
+Sleep 2s
+
+Type " vpc -s "
+Sleep 300ms
+Tab
+Tab
+Sleep 1s
+
+# Capture screenshot
+Screenshot completion.png
+
+Sleep 1s
+
+
+# Hold final frame
+Sleep 10s

@@ -10,6 +10,23 @@ import (
 	perf "github.com/cloudposse/atmos/pkg/perf"
 )
 
+// computeComponentStatus computes status and status_text for a component.
+// It uses the already-extracted enabled/locked values from the component map.
+func computeComponentStatus(comp map[string]any) {
+	enabled := true
+	locked := false
+
+	if val, ok := comp[metadataEnabled].(bool); ok {
+		enabled = val
+	}
+	if val, ok := comp[metadataLocked].(bool); ok {
+		locked = val
+	}
+
+	comp["status"] = getStatusIndicator(enabled, locked)
+	comp["status_text"] = getStatusText(enabled, locked)
+}
+
 const (
 	// Component metadata field names.
 	metadataEnabled = "enabled"
@@ -76,13 +93,13 @@ func extractComponentType(stackName, componentType string, componentsMap map[str
 }
 
 // buildBaseComponent creates the base component map with required fields.
-func buildBaseComponent(componentName, stackName, componentType string) map[string]any {
+func buildBaseComponent(componentName, stackName, componentKind string) map[string]any {
 	defer perf.Track(nil, "list.extract.buildBaseComponent")()
 
 	return map[string]any{
 		fieldComponent: componentName,
 		"stack":        stackName,
-		"type":         componentType,
+		"type":         componentKind, // terraform, helmfile, packer
 	}
 }
 
@@ -95,6 +112,13 @@ func enrichComponentWithMetadata(comp map[string]any, componentData any) {
 		return
 	}
 
+	// Extract component_path from component_info if available.
+	if componentInfo, ok := compMap["component_info"].(map[string]any); ok {
+		if path, ok := componentInfo["component_path"].(string); ok {
+			comp["component_path"] = path
+		}
+	}
+
 	metadata, hasMetadata := compMap[fieldMetadata].(map[string]any)
 	if hasMetadata {
 		comp[fieldMetadata] = metadata
@@ -102,6 +126,9 @@ func enrichComponentWithMetadata(comp map[string]any, componentData any) {
 	} else {
 		setDefaultMetadataFields(comp)
 	}
+
+	// Compute status indicator after enabled/locked are set.
+	computeComponentStatus(comp)
 
 	// Extract vars to top level for easy template access ({{ .vars.tenant }}).
 	if vars, ok := compMap["vars"].(map[string]any); ok {
@@ -130,18 +157,9 @@ func enrichComponentWithMetadata(comp map[string]any, componentData any) {
 func extractMetadataFields(comp map[string]any, metadata map[string]any) {
 	defer perf.Track(nil, "list.extract.extractMetadataFields")()
 
-	enabled := getBoolWithDefault(metadata, metadataEnabled, true)
-	locked := getBoolWithDefault(metadata, metadataLocked, false)
-
-	comp[metadataEnabled] = enabled
-	comp[metadataLocked] = locked
-	comp["component_type"] = getStringWithDefault(metadata, "type", "real")
-
-	// Compute status indicators for display.
-	// status: Colored dot (●) for table display.
-	// status_text: Semantic text ("enabled", "disabled", "locked") for JSON/CSV/YAML.
-	comp["status"] = getStatusIndicator(enabled, locked)
-	comp["status_text"] = getStatusText(enabled, locked)
+	comp[metadataEnabled] = getBoolWithDefault(metadata, metadataEnabled, true)
+	comp[metadataLocked] = getBoolWithDefault(metadata, metadataLocked, false)
+	comp["component_type"] = getStringWithDefault(metadata, "type", "real") // real, abstract
 
 	// Extract component_folder from metadata.component (the terraform component path).
 	// This is the relative path to the component within the components directory.
@@ -159,11 +177,7 @@ func setDefaultMetadataFields(comp map[string]any) {
 
 	comp[metadataEnabled] = true
 	comp[metadataLocked] = false
-	comp["component_type"] = "real"
-
-	// Default status indicators for enabled, not locked state.
-	comp["status"] = getStatusIndicator(true, false)
-	comp["status_text"] = getStatusText(true, false)
+	comp["component_type"] = "real" // real, abstract
 
 	// Default component_folder to component name when no metadata.component is set.
 	if componentName, ok := comp[fieldComponent].(string); ok {

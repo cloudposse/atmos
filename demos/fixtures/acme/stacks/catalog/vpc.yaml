@@ -1,0 +1,15 @@
+# VPC Component Catalog
+# Network foundation for all infrastructure
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        type: real
+      vars:
+        enabled: true
+        name: "vpc"
+        ipv4_primary_cidr_block: "10.0.0.0/16"
+        default_security_group_deny_all: true
+        default_network_acl_deny_all: false
