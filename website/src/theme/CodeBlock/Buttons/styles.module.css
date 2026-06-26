@@ -33,3 +33,11 @@
 :global(.theme-code-block:hover) .buttonGroup button {
   opacity: 0.45;
 }
+
+/* Touch/coarse-pointer devices have no hover state, so reveal the actions
+   persistently instead of leaving them at opacity:0 and undiscoverable. */
+@media (hover: none), (pointer: coarse) {
+  .buttonGroup button {
+    opacity: 0.45;
+  }
+}

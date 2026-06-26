@@ -56,6 +56,14 @@
   border-radius: 999px;
 }
 
+/* In forced-colors / high-contrast mode, background colors are stripped and the
+   bullet would vanish; keep a visible marker using a system color. */
+@media (forced-colors: active) {
+  .key-takeaways-content li::before {
+    background: CanvasText;
+  }
+}
+
 .key-takeaways-content li:last-child {
   margin-bottom: 0;
 }

@@ -32,4 +32,9 @@ components:
       vars:
         name: assets
         versioning_enabled: true
-        kms_key_arn: "alias/{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-app"
+        # Demo convenience: allow `terraform destroy` to remove a non-empty bucket so
+        # the quick-start tears down cleanly. The module default is `false` (safe).
+        force_destroy: true
+        # Read the KMS key ARN straight from the kms-key component's Terraform state,
+        # so it always matches the key that was actually deployed.
+        kms_key_arn: !terraform.state kms-key key_arn

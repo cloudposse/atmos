@@ -37,6 +37,11 @@ variable "deletion_window_in_days" {
   type        = number
   description = "Number of days before the KMS key is deleted after destruction."
   default     = 7
+
+  validation {
+    condition     = var.deletion_window_in_days >= 7 && var.deletion_window_in_days <= 30
+    error_message = "deletion_window_in_days must be between 7 and 30 (AWS KMS limit)."
+  }
 }
 
 variable "enable_key_rotation" {

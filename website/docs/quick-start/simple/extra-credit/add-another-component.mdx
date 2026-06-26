@@ -60,7 +60,7 @@ components:
 
 In this example, we've included more information than necessary to demonstrate the concept. For instance, we explicitly added `inherits` to show how you can use multiple inheritance to merge multiple baseline configurations. We also specified the component path in both instances, even though it's already defined in the baseline configuration. This redundancy is just to emphasize that both are pointing to the same component.
 
-Then we can deploy both stations in the `dev` stack with the same bulk command you used in the main Quick Start:
+Then we can deploy every component in the `dev` stack — including both stations — with the same bulk command you used in the main Quick Start:
 
 ```shell
 atmos terraform deploy --all -s dev

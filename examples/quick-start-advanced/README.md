@@ -13,10 +13,11 @@ walkthrough of this repository.
 The components in [`components/terraform/`](components/terraform/) are **vanilla Terraform** — raw
 `aws_*` resources using only the official `hashicorp/aws` provider. There are **no Cloud Posse
 modules and no special wrappers**. Atmos is a **bring-your-own-Terraform** orchestrator: it never
-requires you to rewrite your Terraform or adopt proprietary components. The components carry **no
-`providers.tf` and no endpoint configuration** — the `local-aws` identity (`kind: aws/emulator`)
-injects the emulator endpoint and credentials at runtime, so the exact same code deploys unchanged
-against real AWS.
+requires you to rewrite your Terraform or adopt proprietary components. Each component carries only a
+**stock `providers.tf`** (`provider "aws" { region = var.region }`) with **no endpoint or credentials
+configuration** — the `local-aws` identity (`kind: aws/emulator`) generates a
+`providers_override.tf.json` that points the provider at the emulator at runtime, so the exact same
+code deploys unchanged against real AWS.
 
 | Component | What it is (plain Terraform) |
 |-----------|------------------------------|

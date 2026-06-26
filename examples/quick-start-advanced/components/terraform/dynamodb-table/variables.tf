@@ -41,8 +41,13 @@ variable "hash_key" {
 
 variable "billing_mode" {
   type        = string
-  description = "Controls how the table is charged for reads and writes (`PAY_PER_REQUEST` or `PROVISIONED`)."
+  description = "How the table is charged for reads and writes. This example module supports `PAY_PER_REQUEST` only."
   default     = "PAY_PER_REQUEST"
+
+  validation {
+    condition     = var.billing_mode == "PAY_PER_REQUEST"
+    error_message = "This example module currently supports only PAY_PER_REQUEST (no provisioned capacity inputs)."
+  }
 }
 
 variable "tags" {

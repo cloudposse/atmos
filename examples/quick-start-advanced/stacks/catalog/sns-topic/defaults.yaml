@@ -18,4 +18,5 @@ components:
             topic_arn: .topic_arn
       vars:
         name: events
-        kms_key_arn: "alias/{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-app"
+        # Read the KMS key ARN straight from the kms-key component's Terraform state.
+        kms_key_arn: !terraform.state kms-key key_arn

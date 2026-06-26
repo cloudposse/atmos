@@ -35,8 +35,7 @@ variable "name" {
 
 variable "kms_key_arn" {
   type        = string
-  description = "ARN of the KMS key used for server-side encryption. When empty, encryption is not configured."
-  default     = ""
+  description = "ARN of the KMS key used for server-side encryption (required)."
 }
 
 variable "versioning_enabled" {
@@ -48,7 +47,7 @@ variable "versioning_enabled" {
 variable "force_destroy" {
   type        = bool
   description = "Whether to allow the bucket to be destroyed while it still contains objects."
-  default     = true
+  default     = false
 }
 
 variable "tags" {

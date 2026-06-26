@@ -18,8 +18,6 @@ resource "aws_s3_bucket_versioning" "default" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "default" {
-  count = var.kms_key_arn != "" ? 1 : 0
-
   bucket = aws_s3_bucket.default.id
 
   rule {

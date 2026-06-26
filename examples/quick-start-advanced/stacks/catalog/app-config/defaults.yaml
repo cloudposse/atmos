@@ -27,10 +27,13 @@ components:
             required: true
       vars:
         name: app
-        kms_key_arn: "alias/{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-app"
-        bucket_id: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-assets"
-        table_name: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-state"
-        topic_arn: "arn:aws:sns:{{ .vars.region }}:000000000000:{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-events"
-        queue_url: "http://sqs.{{ .vars.region }}.localhost.localstack.cloud:4566/000000000000/{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-events"
+        # Every coordinate is read straight from the upstream component's Terraform
+        # state, so there are no hand-derived ARNs/names that can drift from what was
+        # actually deployed (and nothing AWS-account- or endpoint-specific is hardcoded).
+        kms_key_arn: !terraform.state kms-key key_arn
+        bucket_id: !terraform.state s3-bucket bucket_id
+        table_name: !terraform.state dynamodb-table table_name
+        topic_arn: !terraform.state sns-topic topic_arn
+        queue_url: !terraform.state sqs-queue queue_url
         api_key: !secret API_KEY
         db_password: !secret DB_CONFIG | path ".password"

@@ -16,6 +16,10 @@ resource "aws_sns_topic_subscription" "default" {
   topic_arn = var.topic_arn
   protocol  = "sqs"
   endpoint  = aws_sqs_queue.default.arn
+
+  # Attach the queue policy that lets SNS deliver before AWS validates the
+  # subscription, otherwise the first apply can be rejected as a race.
+  depends_on = [aws_sqs_queue_policy.default]
 }
 
 resource "aws_sqs_queue_policy" "default" {

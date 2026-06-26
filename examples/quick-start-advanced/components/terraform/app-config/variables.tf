@@ -35,26 +35,22 @@ variable "name" {
 
 variable "bucket_id" {
   type        = string
-  description = "Name of the S3 bucket coordinate injected from the s3-bucket component."
-  default     = ""
+  description = "Name of the S3 bucket coordinate injected from the s3-bucket component (required)."
 }
 
 variable "table_name" {
   type        = string
-  description = "Name of the DynamoDB table coordinate injected from the dynamodb-table component."
-  default     = ""
+  description = "Name of the DynamoDB table coordinate injected from the dynamodb-table component (required)."
 }
 
 variable "topic_arn" {
   type        = string
-  description = "ARN of the SNS topic coordinate injected from the sns-topic component."
-  default     = ""
+  description = "ARN of the SNS topic coordinate injected from the sns-topic component (required)."
 }
 
 variable "queue_url" {
   type        = string
-  description = "URL of the SQS queue coordinate injected from the sqs-queue component."
-  default     = ""
+  description = "URL of the SQS queue coordinate injected from the sqs-queue component (required)."
 }
 
 variable "kms_key_arn" {
