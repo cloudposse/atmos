@@ -38,9 +38,8 @@ auth:
         access_key_id: test
         secret_access_key: test
         region: us-east-1
-        aws:
-          resolver:
-            url: !env FLOCI_ENDPOINT_URL
+      spec:
+        endpoint_url: !env FLOCI_ENDPOINT_URL
       default: true
 
 logs:

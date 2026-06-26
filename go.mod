@@ -474,6 +474,8 @@ require github.com/testcontainers/testcontainers-go v0.42.0
 
 require github.com/aws/aws-sdk-go-v2/service/kms v1.51.1
 
+require github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
+
 require (
 	cloud.google.com/go/kms v1.31.0 // indirect
 	cloud.google.com/go/longrunning v1.0.0 // indirect
@@ -514,7 +516,6 @@ require (
 	github.com/go-openapi/swag/typeutils v0.25.4 // indirect
 	github.com/go-openapi/swag/yamlutils v0.25.4 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
-	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/goware/prefixer v0.0.0-20160118172347-395022866408 // indirect
 	github.com/hashicorp/logutils v1.0.0 // indirect
 	github.com/huaweicloud/huaweicloud-sdk-go-v3 v0.1.195 // indirect

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -248,6 +249,91 @@ func TestCustomCommandIntegration_MultipleSteps(t *testing.T) {
 	step1Identity := extractEnvVar(env1Vars, "ATMOS_IDENTITY")
 	step2Identity := extractEnvVar(env2Vars, "ATMOS_IDENTITY")
 	assert.Equal(t, step1Identity, step2Identity, "Both steps should use the same identity")
+}
+
+func TestCustomCommandIntegration_SkipsStepWhenConditionIsFalse(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	testDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	_ = NewTestKit(t)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	skippedFile := filepath.Join(tmpDir, "skipped.txt")
+	ranFile := filepath.Join(tmpDir, "ran.txt")
+
+	testCommand := schema.Command{
+		Name:        "test-when-skip",
+		Description: "Test when skip",
+		Steps: schema.Tasks{
+			{
+				Command: customCommandWriteHelperCommand(t, skippedFile, "skipped"),
+				Type:    "shell",
+				When:    schema.MustCondition("never"),
+			},
+			{
+				Command: customCommandWriteHelperCommand(t, ranFile, "ran"),
+				Type:    "shell",
+			},
+		},
+	}
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-when-skip" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
+
+	assert.NoFileExists(t, skippedFile)
+	assert.FileExists(t, ranFile)
+}
+
+func customCommandWriteHelperCommand(t *testing.T, path, value string) string {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	encodedValue := base64.RawURLEncoding.EncodeToString([]byte(value))
+	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationWriteHelper -- %s %s", exe, encodedPath, encodedValue)
+}
+
+func TestCustomCommandIntegrationWriteHelper(t *testing.T) {
+	separator := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 2)
+	pathBytes, err := base64.RawURLEncoding.DecodeString(args[0])
+	require.NoError(t, err)
+	valueBytes, err := base64.RawURLEncoding.DecodeString(args[1])
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(string(pathBytes), valueBytes, 0o600))
+	os.Exit(0)
 }
 
 // TestCustomCommandIntegration_ComponentEnvExported verifies that a custom component's `env`

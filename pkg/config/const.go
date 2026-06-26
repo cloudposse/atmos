@@ -76,6 +76,7 @@ const (
 	HelmfileComponentType   = "helmfile"
 	PackerComponentType     = "packer"
 	AnsibleComponentType    = "ansible"
+	ContainerComponentType  = "container"
 	KubernetesComponentType = "kubernetes"
 
 	ComponentVendorConfigFileName = "component.yaml"
@@ -109,6 +110,7 @@ const (
 	AnsibleSectionName                = "ansible"
 	KubernetesSectionName             = "kubernetes"
 	AnsiblePlaybookSectionName        = "playbook"
+	ContainerSectionName              = "container"
 	AnsibleInventorySectionName       = "inventory"
 	WorkspaceSectionName              = "workspace"
 	AuthSectionName                   = "auth"

@@ -1,0 +1,83 @@
+---
+title: type
+sidebar_label: type
+sidebar_position: 2
+slug: /workflows/steps/type
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The step `type` field selects how Atmos executes or renders a step. Step types expose the building blocks that power the Atmos CLI itself — command execution, interactive prompts, and rich terminal UI — so you can assemble [custom commands](/cli/configuration/commands) and [workflows](/workflows) from the same primitives Atmos uses internally. Step types are values of `steps[].type`; they are not sibling YAML sections.
+</Intro>
+
+```yaml
+steps:
+  - name: prompt
+    type: input
+    prompt: Enter deployment message
+```
+
+## Command Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| [`atmos`](/workflows/steps/type/atmos) | Run an Atmos CLI command. This is the default for command steps. | `command`, `stack`, `identity` |
+| [`shell`](/workflows/steps/type/shell) | Run a shell command or script. | `command`, `working_directory`, `env`, `tty`, `interactive` |
+| [`exec`](/workflows/steps/type/exec) | Replace the Atmos process with another executable. Must be the final step. | `command` |
+| [`container`](/workflows/steps/type/container) | Build, push, run, or inspect containers. | `action`, `build`, `push`, `run`, `inspect` |
+| [`http`](/workflows/steps/type/http) | Call an HTTP endpoint (alias: `webhook`). | `url`, `method`, `body`/`form`, `expect`, `retry` |
+
+## Interactive Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| [`input`](/workflows/steps/type/input) | Prompt for single-line text. | `prompt`, `placeholder`, `default`, `password` |
+| [`confirm`](/workflows/steps/type/confirm) | Prompt for yes/no confirmation. | `prompt`, `default` |
+| [`choose`](/workflows/steps/type/choose) | Select one option. | `prompt`, `options`, `default` |
+| [`filter`](/workflows/steps/type/filter) | Filter and select options, optionally multiple. | `prompt`, `options`, `multiple`, `limit` |
+| [`file`](/workflows/steps/type/file) | Select a file. | `prompt`, `path`, `extensions` |
+| [`write`](/workflows/steps/type/write) | Capture multi-line text. | `prompt`, `placeholder`, `height` |
+
+## UI and Output Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| [`toast`](/workflows/steps/type/toast) | Display a themed status message. | `content`, `level` |
+| [`markdown`](/workflows/steps/type/markdown) | Render Markdown content. | `content` |
+| [`spin`](/workflows/steps/type/spin) | Display a spinner while running a command. | `title`, `command`, `timeout` |
+| [`table`](/workflows/steps/type/table) | Display tabular data. | `title`, `columns`, `data` |
+| [`pager`](/workflows/steps/type/pager) | Display content in a pager. | `title`, `content`, `path`, `markdown` |
+| [`format`](/workflows/steps/type/format) | Render a Go template string. | `content` |
+| [`join`](/workflows/steps/type/join) | Join strings. | `options`, `separator`, `content` |
+| [`style`](/workflows/steps/type/style) | Apply terminal styling. | `content`, `foreground`, `background`, `border`, `padding` |
+| [`log`](/workflows/steps/type/log) | Emit a structured log message. | `level`, `content`, `fields` |
+
+## Terminal and Control Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| [`alert`](/workflows/steps/type/alert) | Ring the terminal bell and optionally print a message. | `content` |
+| [`say`](/workflows/steps/type/say) | Speak a message aloud via text-to-speech, with graceful fallback to printing. | `content`, `voice`, `rate`, `print` |
+| [`title`](/workflows/steps/type/title) | Set or restore the terminal title. | `content` |
+| [`clear`](/workflows/steps/type/clear) | Clear the current terminal line. | none |
+| [`linebreak`](/workflows/steps/type/linebreak) | Print blank lines. | `count` |
+| [`stage`](/workflows/steps/type/stage) | Print the current workflow stage position. | `title` |
+| [`sleep`](/workflows/steps/type/sleep) | Pause workflow execution. | `timeout` |
+| [`env`](/workflows/steps/type/env) | Set variables for subsequent workflow steps. | `vars` |
+| [`exit`](/workflows/steps/type/exit) | Exit the workflow immediately. | `code`, `content` |
+
+Use type-specific fields on the same step object:
+
+```yaml
+steps:
+  - name: environments
+    type: table
+    title: Available Environments
+    columns:
+      - name
+      - region
+    data:
+      - name: dev
+        region: us-east-1
+```

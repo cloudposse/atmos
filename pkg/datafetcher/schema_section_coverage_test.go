@@ -100,6 +100,7 @@ var nonManifestSections = map[string]struct{}{
 	"component_path":     {}, // Describe output.
 	"inherits":           {}, // metadata sub-field, not a top-level section.
 	"abstract":           {}, // metadata sub-field, not a top-level section.
+	"container":          {}, // Component-type key; container components are authored under `components.container.<name>` and modeled via the components schema, not as a standalone top-level section.
 }
 
 // knownSchemaGaps tracks sections that SHOULD be in a schema but currently are not. Each key is

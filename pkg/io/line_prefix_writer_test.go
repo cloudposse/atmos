@@ -27,6 +27,16 @@ func TestLinePrefixWriterBuffersPartialLines(t *testing.T) {
 	require.Equal(t, "[stack/component] hello world\n[stack/component] next", out.String())
 }
 
+func TestLinePrefixWriterRawUsesPrefixVerbatim(t *testing.T) {
+	var out bytes.Buffer
+	// Raw constructor: no surrounding brackets/spacing are added by the writer.
+	writer := NewLinePrefixWriterRaw("api | ", &out, &sync.Mutex{})
+
+	_, err := writer.Write([]byte("hello\nworld\n"))
+	require.NoError(t, err)
+	require.Equal(t, "api | hello\napi | world\n", out.String())
+}
+
 func TestLinePrefixWriterSerializesCompleteLines(t *testing.T) {
 	var out bytes.Buffer
 	writeMu := &sync.Mutex{}

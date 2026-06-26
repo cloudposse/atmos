@@ -93,6 +93,58 @@ func PromptForValue(name, title string, options []string) (string, error) {
 	return choice, nil
 }
 
+// PromptForMultipleValues shows an interactive Huh multi-select with the given
+// options, all pre-selected by default. Returns the selected values or an error.
+// Used when an operation can target many items at once (e.g. operating on several
+// container components in a stack).
+func PromptForMultipleValues(name, title string, options []string) ([]string, error) {
+	defer perf.Track(nil, "flags.PromptForMultipleValues")()
+
+	if !isInteractive() {
+		return nil, errUtils.ErrInteractiveModeNotAvailable
+	}
+
+	if len(options) == 0 {
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrNoOptionsAvailable, name)
+	}
+
+	// Pre-select every option so the default action targets all items.
+	choices := make([]string, len(options))
+	copy(choices, options)
+	selectOptions := make([]huh.Option[string], len(options))
+	for i, o := range options {
+		selectOptions[i] = huh.NewOption(o, o).Selected(true)
+	}
+
+	// Create custom keymap that adds ESC to quit keys.
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c", "esc"),
+		key.WithHelp("ctrl+c/esc", "quit"),
+	)
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title(title).
+				Description("Press ctrl+c or esc to cancel. Use space to toggle, enter to confirm.").
+				Options(selectOptions...).
+				Filterable(true).
+				Value(&choices),
+		),
+	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
+
+	if err := form.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			ui.Warning("Selection cancelled")
+			return nil, errUtils.ErrUserAborted
+		}
+		return nil, fmt.Errorf("prompt failed: %w", err)
+	}
+
+	return choices, nil
+}
+
 // PromptForMissingRequired prompts for a required flag that is missing.
 // This is Use Case 1: Missing Required Flags.
 //
