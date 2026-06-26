@@ -63,20 +63,24 @@ func runHooksOnError(event h.HookEvent, cmd_ *cobra.Command, args []string, cmdE
 	runHooksOnErrorWithOutput(event, cmd_, args, cmdErr, "")
 }
 
-// runHooksOnErrorWithOutput runs CI hooks with command error context and captured output.
-// Declared as a package-level var so tests can stub it to verify the RunE defer-guard
-// in deploy.go suppresses the global error hook in multi-component mode.
+// runHooksOnErrorWithOutput runs user hooks (with failure context) and CI hooks
+// after a failed command. Declared as a package-level var so tests can stub it
+// to verify the RunE defer-guard in deploy.go suppresses the global error hook
+// in multi-component mode.
 var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, args []string, cmdErr error, output string) {
-	finalArgs := append([]string{cmd_.Name()}, args...)
-
-	info, err := e.ProcessCommandLineArgs("terraform", cmd_, finalArgs, nil)
+	hctx, err := prepareHookContext(cmd_, args)
 	if err != nil {
 		return
 	}
 
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return
+	// Fire user-defined hooks with failure context (e.g. a `kind: step` hook on
+	// `when: failure` / `always` that announces "the <component> in <stack>
+	// failed"). Cobra skips PostRunE on error, so the success-path runHooks
+	// never runs — this is the only place user hooks see a failed operation.
+	// Errors here are advisory: never mask the original command error.
+	outcome := h.Outcome{Status: h.RunFailure, Err: cmdErr, ExitCode: errUtils.GetExitCode(cmdErr)}
+	if err := runUserHooks(&hctx, event, cmd_, args, outcome); err != nil {
+		log.Warn("hook failed on error path", "error", err)
 	}
 
 	forceCIMode, _ := cmd_.Flags().GetBool("ci")
@@ -89,8 +93,8 @@ var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, arg
 	// by default for non-nil errors with no attached code (e.g., auth failures).
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
 		Event:        event,
-		AtmosConfig:  &atmosConfig,
-		Info:         &info,
+		AtmosConfig:  &hctx.atmosConfig,
+		Info:         &hctx.info,
 		Output:       output,
 		ForceCIMode:  forceCIMode,
 		CommandError: cmdErr,
@@ -100,22 +104,27 @@ var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, arg
 	}
 }
 
-func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, output string) error {
-	// Build args for ProcessCommandLineArgs.
-	// Note: Double-dash processing is handled by AtmosFlagParser in terraformRun (RunE).
-	// Hooks run in PostRunE after terraformRun has already parsed and executed.
-	// Hooks only need component/stack info, not separated args for terraform.
+// hookContext bundles the fully-resolved component info and Atmos config shared
+// by user hooks and CI hooks, so helpers can pass it as one argument.
+type hookContext struct {
+	info        schema.ConfigAndStacksInfo
+	atmosConfig schema.AtmosConfiguration
+}
+
+// prepareHookContext builds the hook context: command-line parsing, auth-context
+// injection (so store hooks can read terraform outputs from backends requiring
+// role assumption), config validation/init, the store auth resolver, and
+// path resolution.
+func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error) {
+	// Note: Double-dash processing is handled by AtmosFlagParser in terraformRun
+	// (RunE); hooks run afterward and only need component/stack info.
 	finalArgs := append([]string{cmd_.Name()}, args...)
 
 	info, err := e.ProcessCommandLineArgs("terraform", cmd_, finalArgs, nil)
 	if err != nil {
-		return err
+		return hookContext{info: info}, err
 	}
 
-	// Inject the auth context from the most recent ExecuteTerraform call so
-	// store hooks can read terraform outputs from backends requiring role
-	// assumption. Without this, the hook's terraform output subprocess has
-	// no credentials and fails with "No valid credential sources found".
 	if authCtx, authMgr := e.GetLastAuthContext(); authCtx != nil {
 		info.AuthContext = authCtx
 		info.AuthManager = authMgr
@@ -124,36 +133,51 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	// Validate Atmos config first to provide specific error messages
 	// (e.g., stacks directory does not exist) before full initialization.
 	if err := internal.ValidateAtmosConfig(); err != nil {
-		return err
+		return hookContext{info: info}, err
 	}
 
-	// Initialize the CLI config.
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
-		return errors.Join(errUtils.ErrInitializeCLIConfig, err)
+		return hookContext{info: info, atmosConfig: atmosConfig}, errors.Join(errUtils.ErrInitializeCLIConfig, err)
 	}
 	injectHookStoreAuthResolver(&atmosConfig, &info)
 
-	// Resolve path-based component arguments before getting hooks.
-	// Path resolution must happen before GetHooks because GetHooks calls
+	// Resolve path-based component arguments before getting hooks. GetHooks calls
 	// ExecuteDescribeComponent which needs a valid component name, not a raw path.
 	if info.NeedsPathResolution && info.ComponentFromArg != "" {
 		if err := resolveComponentPath(&info, cfg.TerraformComponentType); err != nil {
-			return err
+			return hookContext{info: info, atmosConfig: atmosConfig}, err
 		}
 	}
 
-	// Run user-defined hooks from stack configuration.
-	hooks, err := h.GetHooks(&atmosConfig, &info)
+	return hookContext{info: info, atmosConfig: atmosConfig}, nil
+}
+
+// runUserHooks runs user-defined hooks from stack configuration for the given
+// event, attaching the operation outcome (success/failure) so hooks can filter
+// on `when` and report what happened.
+func runUserHooks(hctx *hookContext, event h.HookEvent, cmd_ *cobra.Command, args []string, outcome h.Outcome) error {
+	hooks, err := h.GetHooks(&hctx.atmosConfig, &hctx.info)
+	if err != nil {
+		return err
+	}
+	if hooks == nil || !hooks.HasHooks() {
+		return nil
+	}
+	hooks.SetOutcome(outcome)
+	log.Info("Running hooks", "event", event, "status", outcome.Status)
+	return hooks.RunAll(event, &hctx.atmosConfig, &hctx.info, cmd_, args)
+}
+
+func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, output string) error {
+	hctx, err := prepareHookContext(cmd_, args)
 	if err != nil {
 		return err
 	}
 
-	if hooks != nil && hooks.HasHooks() {
-		log.Info("Running hooks", "event", event)
-		if err := hooks.RunAll(event, &atmosConfig, &info, cmd_, args); err != nil {
-			return err
-		}
+	// Success path: user hooks see a successful outcome (when: success / always).
+	if err := runUserHooks(&hctx, event, cmd_, args, h.Outcome{Status: h.RunSuccess}); err != nil {
+		return err
 	}
 
 	// Check for --ci flag or CI environment variable.
@@ -170,15 +194,15 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	// before RunE, so info is not yet populated by applyOptionsToInfo(). The
 	// before.terraform.deploy hook reads the resulting CLI override to decide
 	// whether to download the stored planfile (skipped when verification is off).
-	info.VerifyPlanMode = resolveVerifyPlanMode(cmd_)
+	hctx.info.VerifyPlanMode = resolveVerifyPlanMode(cmd_)
 
 	// Run CI hooks based on component provider bindings.
 	// This is separate from user-defined hooks and runs automatically when CI is enabled.
 	// Success path: cmdErr is nil and exit code is 0.
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
 		Event:       event,
-		AtmosConfig: &atmosConfig,
-		Info:        &info,
+		AtmosConfig: &hctx.atmosConfig,
+		Info:        &hctx.info,
 		Output:      output,
 		ForceCIMode: forceCIMode,
 	}); err != nil {

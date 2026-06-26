@@ -35,6 +35,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/reexec"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -51,6 +52,11 @@ var missingConfigFoundMarkdown string
 
 // Define a constant for the dot string that appears multiple times.
 const currentDirPath = "."
+
+const (
+	customCommandKeyCommand  = "command"
+	customCommandKeyIdentity = "identity"
+)
 
 // FlagStack is the name of the stack flag used across commands.
 const FlagStack = "stack"
@@ -301,7 +307,7 @@ func preCustomCommand(
 	// no "steps" means a sub command should be specified
 	if len(commandConfig.Steps) == 0 {
 		if err := cmd.Help(); err != nil {
-			log.Trace("Failed to display command help", "error", err, "command", cmd.Name())
+			log.Trace("Failed to display command help", "error", err, customCommandKeyCommand, cmd.Name())
 		}
 		errUtils.Exit(0)
 	}
@@ -365,7 +371,7 @@ func createCustomCommand(
 	customCommand.PersistentFlags().Bool("", false, doubleDashHint)
 
 	// Add --identity flag to all custom commands to allow runtime override.
-	customCommand.PersistentFlags().String("identity", "", "Identity to use for authentication (overrides identity in command config)")
+	customCommand.PersistentFlags().String(customCommandKeyIdentity, "", "Identity to use for authentication (overrides identity in command config)")
 	AddIdentityCompletion(customCommand)
 
 	if err := validateCustomCommandFlags(commandConfig, parentCommand); err != nil {
@@ -404,7 +410,7 @@ func validateFlag(cmdName string, flag *schema.CommandFlag, seen map[string]bool
 		return errUtils.Build(errUtils.ErrDuplicateFlagRegistration).
 			WithExplanation(fmt.Sprintf("Custom command '%s' defines duplicate flag '--%s'", cmdName, flag.Name)).
 			WithHint("Remove or rename the duplicate flag in your atmos.yaml").
-			WithContext("command", cmdName).
+			WithContext(customCommandKeyCommand, cmdName).
 			WithContext("flag", flag.Name).
 			Err()
 	}
@@ -441,7 +447,7 @@ func validateFlagTypeConflict(cmdName string, flag *schema.CommandFlag, existing
 				cmdName, flag.Name, customFlagType, existingFlagType)).
 			WithHint("Check the 'commands' section in atmos.yaml").
 			WithHint("Either use the existing flag type, or rename your flag to avoid conflicts").
-			WithContext("command", cmdName).
+			WithContext(customCommandKeyCommand, cmdName).
 			WithContext("flag", flag.Name).
 			WithContext("declared_type", customFlagType).
 			WithContext("existing_type", existingFlagType).
@@ -461,7 +467,7 @@ func validateFlagShorthand(cmdName string, flag *schema.CommandFlag, seen map[st
 		return errUtils.Build(errUtils.ErrDuplicateFlagRegistration).
 			WithExplanation(fmt.Sprintf("Custom command '%s' defines invalid shorthand '-%s' for flag '--%s'", cmdName, flag.Shorthand, flag.Name)).
 			WithHint("Use exactly one character for shorthand flags").
-			WithContext("command", cmdName).
+			WithContext(customCommandKeyCommand, cmdName).
 			WithContext("flag", flag.Name).
 			WithContext("shorthand", flag.Shorthand).
 			Err()
@@ -471,7 +477,7 @@ func validateFlagShorthand(cmdName string, flag *schema.CommandFlag, seen map[st
 		return errUtils.Build(errUtils.ErrDuplicateFlagRegistration).
 			WithExplanation(fmt.Sprintf("Custom command '%s' defines duplicate flag shorthand '-%s'", cmdName, flag.Shorthand)).
 			WithHint("Remove or change the duplicate shorthand in your atmos.yaml").
-			WithContext("command", cmdName).
+			WithContext(customCommandKeyCommand, cmdName).
 			WithContext("shorthand", flag.Shorthand).
 			Err()
 	}
@@ -490,7 +496,7 @@ func validateFlagShorthand(cmdName string, flag *schema.CommandFlag, seen map[st
 				cmdName, flag.Shorthand, existingByShorthand.Name)).
 			WithHint("Check the 'commands' section in atmos.yaml").
 			WithHint("Change the shorthand to avoid conflicts").
-			WithContext("command", cmdName).
+			WithContext(customCommandKeyCommand, cmdName).
 			WithContext("shorthand", flag.Shorthand).
 			WithContext("existing_flag", existingByShorthand.Name).
 			WithContext("config_path", fmt.Sprintf("commands.%s.flags", cmdName)).
@@ -610,6 +616,23 @@ func executeCustomCommand(
 		finalArgs = args
 	}
 
+	conditionContext := customCommandConditionContext()
+	hasRunnableStep := false
+	for i := range commandConfig.Steps {
+		step := &commandConfig.Steps[i]
+		if err := schema.ValidateStepCondition(step.When); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+		if step.When.Evaluate(conditionContext) {
+			hasRunnableStep = true
+			break
+		}
+	}
+	if !hasRunnableStep {
+		log.Debug("Skipping custom command, no steps matched `when` conditions", customCommandKeyCommand, commandConfig.Name)
+		return
+	}
+
 	// Resolve and install command dependencies.
 	// First, load tools from .tool-versions (project-wide defaults).
 	// Then merge with command-specific dependencies (command deps override .tool-versions).
@@ -652,7 +675,7 @@ func executeCustomCommand(
 	}
 
 	if len(deps) > 0 {
-		log.Debug("Installing command dependencies", "command", commandConfig.Name, "tools", deps)
+		log.Debug("Installing command dependencies", customCommandKeyCommand, commandConfig.Name, "tools", deps)
 		installer := dependencies.NewInstaller(&atmosConfig)
 		if err := installer.EnsureTools(deps); err != nil {
 			err = errUtils.Build(errUtils.ErrToolInstall).
@@ -674,52 +697,17 @@ func executeCustomCommand(
 		}
 	}
 
-	// Create auth manager if identity is specified for this custom command.
+	// Create auth manager if identity is specified for this custom command and
+	// at least one step will run.
 	// Check for --identity flag first (it overrides the config).
-	var authManager auth.AuthManager
-	var authStackInfo *schema.ConfigAndStacksInfo
-	identityFlag, _ := cmd.Flags().GetString("identity")
+	identityFlag, _ := cmd.Flags().GetString(customCommandKeyIdentity)
 	commandIdentity := strings.TrimSpace(identityFlag)
 	if commandIdentity == "" {
 		// Fall back to identity from command config
 		commandIdentity = strings.TrimSpace(commandConfig.Identity)
 	}
 
-	if commandIdentity != "" {
-		// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
-		// This enables YAML template functions to access authenticated credentials.
-		authStackInfo = &schema.ConfigAndStacksInfo{
-			AuthContext: &schema.AuthContext{},
-		}
-
-		credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
-		validator := validation.NewValidator()
-		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
-		if err != nil {
-			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
-		}
-
-		ctx := context.Background()
-
-		// Try to use cached credentials first (passive check, no prompts).
-		// Only authenticate if cached credentials are not available or expired.
-		_, err = authManager.GetCachedCredentials(ctx, commandIdentity)
-		if err != nil {
-			log.Debug("No valid cached credentials found, authenticating", "identity", commandIdentity, "error", err)
-			// No valid cached credentials - perform full authentication.
-			_, err = authManager.Authenticate(ctx, commandIdentity)
-			if err != nil {
-				// Check for user cancellation - return clean error without wrapping.
-				if errors.Is(err, errUtils.ErrUserAborted) {
-					errUtils.CheckErrorPrintAndExit(errUtils.ErrUserAborted, "", "")
-				}
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w for identity %q in custom command %q: %w",
-					errUtils.ErrAuthenticationFailed, commandIdentity, commandConfig.Name, err), "", "")
-			}
-		}
-
-		log.Debug("Authenticated with identity for custom command", "identity", commandIdentity, "command", commandConfig.Name)
-	}
+	authManager := prepareCustomCommandAuth(&atmosConfig, commandIdentity, commandConfig.Name, hasRunnableStep)
 
 	// Determine working directory for command execution.
 	workDir, err := resolveWorkingDirectory(commandConfig.WorkingDirectory, atmosConfig.BasePath, currentDirPath)
@@ -727,7 +715,7 @@ func executeCustomCommand(
 		errUtils.CheckErrorPrintAndExit(err, "Invalid working_directory", "https://atmos.tools/cli/configuration/commands/working-directory")
 	}
 	if commandConfig.WorkingDirectory != "" {
-		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
+		log.Debug("Using working directory for custom command", customCommandKeyCommand, commandConfig.Name, "working_directory", workDir)
 	}
 
 	// Validate exec steps before executing anything: an exec step replaces
@@ -742,6 +730,11 @@ func executeCustomCommand(
 
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
+		if !step.When.Evaluate(conditionContext) {
+			log.Debug("Skipping custom command step, `when` condition did not match", customCommandKeyCommand, commandConfig.Name, "step", i)
+			continue
+		}
+
 		// Prepare template data for arguments
 		argumentsData := map[string]string{}
 		for ix, arg := range commandConfig.Arguments {
@@ -882,7 +875,7 @@ func executeCustomCommand(
 				errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to prepare shell environment for identity %q in custom command %q step %d: %w",
 					commandIdentity, commandConfig.Name, i, err), "", "")
 			}
-			log.Debug("Prepared environment with identity for custom command step", "identity", commandIdentity, "command", commandConfig.Name, "step", i)
+			log.Debug("Prepared environment with identity for custom command step", customCommandKeyIdentity, commandIdentity, customCommandKeyCommand, commandConfig.Name, "step", i)
 		}
 
 		// Process Go templates in the command's steps.
@@ -980,6 +973,47 @@ func executeCustomCommand(
 		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
+}
+
+func customCommandConditionContext() schema.ConditionContext {
+	return schema.ConditionContext{
+		CI:     telemetry.IsCI(),
+		Status: schema.ConditionPredicateSuccess,
+	}
+}
+
+func prepareCustomCommandAuth(atmosConfig *schema.AtmosConfiguration, commandIdentity, commandName string, hasRunnableStep bool) auth.AuthManager {
+	if commandIdentity == "" || !hasRunnableStep {
+		return nil
+	}
+
+	authStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{},
+	}
+	credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
+	validator := validation.NewValidator()
+	authManager, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
+	}
+
+	ctx := context.Background()
+	if _, err = authManager.GetCachedCredentials(ctx, commandIdentity); err == nil {
+		log.Debug("Authenticated with cached identity for custom command", customCommandKeyIdentity, commandIdentity, customCommandKeyCommand, commandName)
+		return authManager
+	}
+
+	log.Debug("No valid cached credentials found, authenticating", customCommandKeyIdentity, commandIdentity, "error", err)
+	if _, err = authManager.Authenticate(ctx, commandIdentity); err == nil {
+		log.Debug("Authenticated with identity for custom command", customCommandKeyIdentity, commandIdentity, customCommandKeyCommand, commandName)
+		return authManager
+	}
+	if errors.Is(err, errUtils.ErrUserAborted) {
+		errUtils.CheckErrorPrintAndExit(errUtils.ErrUserAborted, "", "")
+	}
+	errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w for identity %q in custom command %q: %w",
+		errUtils.ErrAuthenticationFailed, commandIdentity, commandName, err), "", "")
+	return authManager
 }
 
 // cloneCommand clones a custom command config into a new struct.
@@ -1661,8 +1695,8 @@ func identityFlagCompletion(cmd *cobra.Command, args []string, toComplete string
 
 // AddIdentityCompletion registers shell completion for the identity flag if present on the command.
 func AddIdentityCompletion(cmd *cobra.Command) {
-	if cmd.Flag("identity") != nil {
-		if err := cmd.RegisterFlagCompletionFunc("identity", identityFlagCompletion); err != nil {
+	if cmd.Flag(customCommandKeyIdentity) != nil {
+		if err := cmd.RegisterFlagCompletionFunc(customCommandKeyIdentity, identityFlagCompletion); err != nil {
 			log.Trace("Failed to register identity flag completion", "error", err)
 		}
 	}

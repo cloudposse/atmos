@@ -12,4 +12,3 @@ tests:
       - "stacks"
     expect:
       exit_code: 0
-
