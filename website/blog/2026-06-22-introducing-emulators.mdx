@@ -1,26 +1,63 @@
 ---
-slug: emulator-persistence
-title: "Emulators Now Persist State by Default"
+slug: introducing-emulators
+title: "Introducing Emulators: Run Real Cloud Infrastructure Locally"
 authors: [osterman]
-tags: [feature, enhancement]
+tags: [feature]
 date: 2026-06-22
 ---
 
-Atmos emulators — the long-running, containerized stand-ins for AWS, GCP, Azure, Kubernetes, and an OCI
-registry — now **persist their state by default**. Bring an emulator up, create resources, take it down,
-bring it back up, and everything is still there. A new `atmos emulator reset` command wipes that state
-when you want a clean slate.
+Atmos now has **first-class emulators** — long-running, containerized stand-ins for AWS, GCP, Azure,
+Kubernetes, and an OCI registry that you provision and manage as ordinary Atmos components. Bring one up
+and run the **full Atmos workflow — auth, secrets, vendoring, toolchain, and `terraform apply` — against
+cloud APIs on your laptop, with no cloud account and no credentials.**
 
 <!--truncate-->
 
-## What Changed
+## What's New
 
-Previously every `atmos emulator up` started from scratch: stop the container and all state was gone.
-That is fine for a quick smoke test, but it gets in the way when you are iterating — re-seeding buckets,
-re-pushing images, or rebuilding a local cluster on every restart.
+An emulator is a new Atmos component kind. You declare it in a stack and drive it with the new
+`atmos emulator` command:
 
-Now Atmos bind-mounts a per-instance host directory under the XDG cache onto each emulator's data
-directory, so state survives `down`/`up`:
+```bash
+atmos emulator up aws -s local              # start a local AWS emulator
+atmos terraform apply s3-bucket -s local    # apply real Terraform against it — no AWS account
+atmos emulator down aws -s local            # stop it (state is kept by default)
+```
+
+Atmos wires the emulator into the rest of the system automatically:
+
+- **No credentials.** Atmos binds a local identity to the emulator and points both in-process AWS calls
+  and the Terraform provider at the emulator endpoint — so the same stacks that target real AWS run
+  unmodified against the emulator.
+- **Multiple backends.** Built-in drivers cover AWS/GCP/Azure (via Floci or LocalStack), Kubernetes
+  (k3s), an OCI registry, and Vault/OpenBao.
+- **Persistent by default.** State survives `down`/`up`; `atmos emulator reset` wipes it, and
+  `--ephemeral` opts out per run.
+
+## Why This Matters
+
+Emulators give you the full Atmos workflow — the same auth, secrets, vendoring, toolchain, and
+`terraform apply` you run in CI — on a laptop with nothing to log into. That means:
+
+- **Fast, hermetic iteration.** Apply, destroy, and re-apply against a local cloud in seconds, without
+  touching a real account or spending money.
+- **Onboarding without a cloud account.** Contributors can run real tutorials and reproduce issues with
+  zero access to your infrastructure.
+- **The same stacks everywhere.** Because the emulator is bound through Atmos identity and provider
+  generation, your component code doesn't change between local and real cloud — laptop and CI run the
+  identical configuration.
+
+## Try It: the Advanced Quick Start
+
+The [advanced quick start](/quick-start/advanced) now deploys a **real event-driven AWS backend** — a KMS
+key, an encrypted S3 bucket, a DynamoDB table, an SNS topic, an SQS queue, and an SSM Parameter Store
+config — **entirely on your laptop, start to finish, with no AWS account and no credentials.**
+
+## Persistence and Reset
+
+Emulators persist their state by default. Atmos bind-mounts a per-instance host directory under the XDG
+cache (`$XDG_CACHE_HOME/atmos/emulator/<instance>`) onto each emulator's data directory, so resources,
+images, clusters, and secrets all survive a restart:
 
 ```bash
 atmos emulator up registry -s local      # start the registry
@@ -29,38 +66,19 @@ atmos emulator down registry -s local    # stop it — state is kept
 atmos emulator up registry -s local      # back up — your images are still there
 ```
 
-## Resetting and Opting Out
-
-`down` keeps state; `reset` wipes it. Use `reset` when you want a fresh instance:
+Use `reset` for a clean slate, or `--ephemeral` for a throwaway instance that never persists:
 
 ```bash
 atmos emulator reset registry -s local --force
-```
-
-For a throwaway instance that never persists, pass `--ephemeral` (or set `ephemeral: true` on the
-component):
-
-```bash
 atmos emulator up registry -s local --ephemeral
 ```
 
-## Where State Lives
-
-Persisted state is stored under the XDG cache at
-`$XDG_CACHE_HOME/atmos/emulator/<instance>` (for example `~/.cache/atmos/emulator/…`), keyed by the
-emulator's canonical instance name so instances never collide. Point `ATMOS_XDG_CACHE_HOME` somewhere
-else to relocate it.
-
-Persistence applies to every emulator — Floci for AWS/GCP/Azure, LocalStack, the OCI registry, and
-k3s persist their data directories directly. OpenBao/Vault run a file-storage backend that Atmos
-auto-initializes and unseals on start, recording the unseal key and generated root token under the
-data dir, so secrets persist across restarts too (and `reset` wipes them).
-
 ## How to Use It
 
-- Nothing to enable — persistence is on by default.
+- `atmos emulator up <component> -s <stack>` to start an emulator, then run your normal
+  `atmos terraform …` commands against it.
 - `atmos emulator reset <component> -s <stack>` to wipe persisted state.
-- `--ephemeral` (or `ephemeral: true`) for a throwaway instance.
+- `--ephemeral` (or `ephemeral: true` on the component) for a throwaway instance.
 
-See the [emulator component reference](/stacks/components/emulator#persistence) and the
-[`atmos emulator reset`](/cli/commands/emulator/reset) command docs for details.
+See the [emulator component reference](/stacks/components/emulator) and the
+[`atmos emulator`](/cli/commands/emulator/reset) command docs for details.
