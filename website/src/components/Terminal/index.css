@@ -153,6 +153,10 @@ html[data-theme="dark"] .terminal .window-title {
 }
 
 .terminal pre.screengrab {
+    /* Screengrabs are block-art ANSI captures (per-character spans, U+2588 blocks).
+       Pin the monospace stack the line-height/letter-spacing below were tuned for —
+       must NOT inherit the site-wide Geist Mono var, whose metrics break logo tiling. */
+    font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
     line-height: 0.95em;
     letter-spacing: -0.009em;
     padding: 0.3em;

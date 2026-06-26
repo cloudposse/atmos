@@ -18,7 +18,7 @@ const DEPLOYMENT_HOST = process.env.DEPLOYMENT_HOST || 'atmos.tools';
 /** @type {import('@docusaurus/types').Config} */
 const config = {
     title: 'atmos',
-    tagline: 'Universal tool for DevOps and Cloud Automation',
+    tagline: 'The runtime for infrastructure.',
     url: `https://${DEPLOYMENT_HOST}`,
     baseUrl: `${BASE_URL}/`,
     onBrokenLinks: 'throw',
@@ -37,6 +37,13 @@ const config = {
     },
 
     scripts: [
+    ],
+
+    stylesheets: [
+        {
+            href: 'https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap',
+            rel: 'stylesheet',
+        },
     ],
 
     plugins: [

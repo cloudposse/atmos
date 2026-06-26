@@ -22,6 +22,29 @@ const DEFAULT_EXCLUDE_PATTERNS = [
   '**/.envrc',
 ];
 
+// Curated ("featured") examples, in display order. This list is editorial — like the
+// roadmap's featured[] it is hand-maintained and never auto-promoted. These are pinned to the
+// top of the /examples index page so the gallery leads with the demos we want people to try
+// first. Edit deliberately.
+const FEATURED = [
+  'quick-start-simple',
+  'quick-start-advanced',
+  'sops-secrets',
+  'toolchain',
+  'custom-commands',
+  'demo-floci',
+];
+
+// Friendly display titles for examples (falls back to the directory name when absent).
+const TITLES_MAP = {
+  'quick-start-simple': 'Quick Start (Simple)',
+  'quick-start-advanced': 'Quick Start (Advanced)',
+  'sops-secrets': 'Stacks (SOPS Secrets)',
+  toolchain: 'Toolchain',
+  'custom-commands': 'Custom Commands',
+  'demo-floci': 'Floci (AWS Emulator)',
+};
+
 // Tags mapping for examples (an example can have multiple tags).
 const TAGS_MAP = {
   'quick-start-simple': ['Quickstart'],
@@ -409,9 +432,11 @@ function scanExamples(sourceDir, options) {
     examples.push({
       name: entry.name,
       path: entry.name,
+      title: TITLES_MAP[entry.name] || entry.name,
       description,
       hasReadme: !!tree.readme,
       hasAtmosYaml,
+      featured: FEATURED.includes(entry.name),
       tags: TAGS_MAP[entry.name] || [],
       docs: DOCS_MAP[entry.name] || [],
       root: tree,
@@ -427,8 +452,12 @@ function scanExamples(sourceDir, options) {
   const tagOrder = ['Quickstart', 'Stacks', 'Components', 'Automation', 'DX'];
   const tags = tagOrder.filter((tag) => examples.some((ex) => ex.tags.includes(tag)));
 
+  // Build the curated featured list in FEATURED order (skip any that don't resolve).
+  const featured = FEATURED.map((name) => examples.find((ex) => ex.name === name)).filter(Boolean);
+
   return {
     examples,
+    featured,
     tags,
     generatedAt: new Date().toISOString(),
     totalFiles,
