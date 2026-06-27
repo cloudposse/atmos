@@ -18,9 +18,13 @@ import (
 type fakeVaultKV struct {
 	data map[string]map[string]any
 
-	putErr error // returned by Put when set.
-	getErr error // returned by Get when set.
-	delErr error // returned by Delete when set.
+	putErr  error // returned by Put when set.
+	getErr  error // returned by Get when set.
+	delErr  error // returned by Delete when set.
+	metaErr error // returned by HasMetadata when set.
+
+	getCalls  int // number of secret-DATA reads (Get) performed.
+	metaCalls int // number of metadata reads (HasMetadata) performed.
 }
 
 func newFakeVaultKV() *fakeVaultKV {
@@ -36,6 +40,7 @@ func (f *fakeVaultKV) Put(_ context.Context, path string, data map[string]any) e
 }
 
 func (f *fakeVaultKV) Get(_ context.Context, path string) (map[string]any, error) {
+	f.getCalls++
 	if f.getErr != nil {
 		return nil, f.getErr
 	}
@@ -44,6 +49,19 @@ func (f *fakeVaultKV) Get(_ context.Context, path string) (map[string]any, error
 		return nil, nil
 	}
 	return v, nil
+}
+
+// HasMetadata mirrors the KV v2 metadata read: it reports existence without returning any secret
+// values. A missing path surfaces as vault.ErrSecretNotFound, matching the real client.
+func (f *fakeVaultKV) HasMetadata(_ context.Context, path string) error {
+	f.metaCalls++
+	if f.metaErr != nil {
+		return f.metaErr
+	}
+	if _, ok := f.data[path]; !ok {
+		return vault.ErrSecretNotFound
+	}
+	return nil
 }
 
 func (f *fakeVaultKV) Delete(_ context.Context, path string) error {
@@ -120,6 +138,25 @@ func TestVaultStore_HTTPKVv2Integration(t *testing.T) {
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
+	})
+	// Metadata endpoint backs Has(): it reports existence without returning any secret values.
+	mux.HandleFunc("/v1/secret/metadata/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/v1/secret/metadata/")
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if _, ok := data[path]; !ok {
+			writeVaultJSON(w, http.StatusNotFound, map[string]any{"errors": []string{"missing secret"}})
+			return
+		}
+		// Note: no secret data is included, only metadata.
+		writeVaultJSON(w, http.StatusOK, map[string]any{
+			"data": map[string]any{
+				"versions":        map[string]any{"1": map[string]any{}},
+				"current_version": 1,
+			},
+		})
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -309,12 +346,49 @@ func TestVaultStore_Has_EmptyDataMapsToFalse(t *testing.T) {
 
 func TestVaultStore_Has_TransportErrorPropagates(t *testing.T) {
 	fake := newFakeVaultKV()
-	fake.getErr = errors.New("connection refused")
+	fake.metaErr = errors.New("connection refused")
 	s := newTestVaultStore(fake)
 
 	_, err := s.Has("prod", "api", "k")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrVaultRead)
+}
+
+// TestVaultStore_Has_UsesMetadataNotData verifies Has checks existence via the metadata endpoint
+// and never reads (decrypts) the secret data, for both present and absent secrets.
+func TestVaultStore_Has_UsesMetadataNotData(t *testing.T) {
+	t.Run("existing secret returns true via metadata only", func(t *testing.T) {
+		fake := newFakeVaultKV()
+		s := newTestVaultStore(fake)
+		require.NoError(t, s.Set("prod", "api", "API_KEY", "secret-value"))
+
+		has, err := s.Has("prod", "api", "API_KEY")
+		require.NoError(t, err)
+		assert.True(t, has)
+		assert.Equal(t, 1, fake.metaCalls, "Has must read metadata")
+		assert.Equal(t, 0, fake.getCalls, "Has must NOT read the secret data")
+	})
+
+	t.Run("missing secret returns false via metadata only", func(t *testing.T) {
+		fake := newFakeVaultKV()
+		s := newTestVaultStore(fake)
+
+		has, err := s.Has("prod", "api", "missing")
+		require.NoError(t, err)
+		assert.False(t, has)
+		assert.Equal(t, 1, fake.metaCalls, "Has must read metadata")
+		assert.Equal(t, 0, fake.getCalls, "Has must NOT read the secret data")
+	})
+}
+
+func TestVaultStore_Has_Validation(t *testing.T) {
+	s := newTestVaultStore(newFakeVaultKV())
+	_, err := s.Has("", "api", "k")
+	assert.ErrorIs(t, err, ErrEmptyStack)
+	_, err = s.Has("prod", "", "k")
+	assert.ErrorIs(t, err, ErrEmptyComponent)
+	_, err = s.Has("prod", "api", "")
+	assert.ErrorIs(t, err, ErrEmptyKey)
 }
 
 func TestVaultStore_SetAuthContext(t *testing.T) {

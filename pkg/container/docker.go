@@ -20,10 +20,18 @@ const (
 	logKeyID     = "id"
 	logKeyImage  = "image"
 	logKeyStatus = "status"
+
+	// JSON key for a container's status in `docker ps` / `docker inspect` output.
+	fieldStatus = "Status"
 )
 
 // DockerRuntime implements the Runtime interface for Docker.
-type DockerRuntime struct{}
+type DockerRuntime struct {
+	// env is the complete environment for docker CLI subprocesses. When nil the
+	// commands inherit os.Environ(); when set (via SetEnv) it carries credentials
+	// materialized by auth integrations, e.g. DOCKER_CONFIG for ECR login.
+	env []string
+}
 
 // NewDockerRuntime creates a new Docker runtime.
 func NewDockerRuntime() *DockerRuntime {
@@ -32,13 +40,28 @@ func NewDockerRuntime() *DockerRuntime {
 	return &DockerRuntime{}
 }
 
+// SetEnv sets the environment for docker CLI subprocesses launched by this runtime.
+// See EnvSetter for the rationale.
+func (d *DockerRuntime) SetEnv(env []string) {
+	defer perf.Track(nil, "container.DockerRuntime.SetEnv")()
+
+	d.env = env
+}
+
+// command builds a docker CLI command with the runtime's configured environment applied.
+func (d *DockerRuntime) command(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, dockerCmd, args...)
+	applyCommandEnv(cmd, d.env)
+	return cmd
+}
+
 // Build builds a container image from a Dockerfile.
 func (d *DockerRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	defer perf.Track(nil, "container.DockerRuntime.Build")()
 
 	args := buildBuildArgs(config)
 
-	cmd := exec.CommandContext(ctx, dockerCmd, args...)
+	cmd := d.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: docker build failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
@@ -54,13 +77,19 @@ func (d *DockerRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 
 	args := buildCreateArgs(config)
 
-	cmd := exec.CommandContext(ctx, dockerCmd, args...)
+	cmd := d.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("%w: docker create failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
-	containerID := strings.TrimSpace(string(output))
+	// `docker create` pulls the image inline when it is missing locally, printing pull
+	// progress before the container ID, so the ID is the final non-empty line of output.
+	containerID := extractContainerID(output)
+	if containerID == "" {
+		return "", fmt.Errorf("%w: docker create returned no container ID", errUtils.ErrContainerRuntimeOperation)
+	}
+
 	log.Debug("Created docker container", logKeyID, containerID, "name", config.Name)
 
 	return containerID, nil
@@ -70,7 +99,7 @@ func (d *DockerRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 func (d *DockerRuntime) Start(ctx context.Context, containerID string) error {
 	defer perf.Track(nil, "container.DockerRuntime.Start")()
 
-	cmd := exec.CommandContext(ctx, dockerCmd, "start", containerID)
+	cmd := d.command(ctx, "start", containerID)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: docker start failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
@@ -87,7 +116,7 @@ func (d *DockerRuntime) Stop(ctx context.Context, containerID string, timeout ti
 	timeoutSecs := int(timeout.Seconds())
 	args := buildStopArgs(containerID, timeoutSecs)
 
-	cmd := exec.CommandContext(ctx, dockerCmd, args...)
+	cmd := d.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: docker stop failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
@@ -103,7 +132,7 @@ func (d *DockerRuntime) Remove(ctx context.Context, containerID string, force bo
 
 	args := buildRemoveArgs(containerID, force)
 
-	cmd := exec.CommandContext(ctx, dockerCmd, args...)
+	cmd := d.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: docker rm failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
@@ -128,7 +157,7 @@ func (d *DockerRuntime) Inspect(ctx context.Context, containerID string) (*Info,
 
 // runDockerInspect executes docker inspect and returns parsed JSON.
 func (d *DockerRuntime) runDockerInspect(ctx context.Context, containerID string) (map[string]interface{}, error) {
-	cmd := exec.CommandContext(ctx, dockerCmd, "inspect", "--format", "{{json .}}", containerID)
+	cmd := d.command(ctx, "inspect", "--format", "{{json .}}", containerID)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%w: docker inspect failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
@@ -152,6 +181,7 @@ func (d *DockerRuntime) parseInspectData(data map[string]interface{}) *Info {
 
 	// Use .State.Status when available (machine-readable), fall back to .Status (human-readable).
 	info.Status = getStatusFromInspect(data)
+	info.Health = getHealthFromInspect(data)
 
 	// Parse created timestamp.
 	if created := getString(data, "Created"); created != "" {
@@ -169,11 +199,25 @@ func (d *DockerRuntime) parseInspectData(data map[string]interface{}) *Info {
 // getStatusFromInspect extracts status from inspect data, preferring .State.Status.
 func getStatusFromInspect(data map[string]interface{}) string {
 	if state, ok := data["State"].(map[string]interface{}); ok {
-		if status := getString(state, "Status"); status != "" {
+		if status := getString(state, fieldStatus); status != "" {
 			return status
 		}
 	}
-	return getString(data, "Status")
+	return getString(data, fieldStatus)
+}
+
+// getHealthFromInspect extracts the health state from inspect `.State.Health.Status`,
+// returning "" when the container has no health check.
+func getHealthFromInspect(data map[string]interface{}) string {
+	state, ok := data["State"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	health, ok := state["Health"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	return normalizeHealth(getString(health, fieldStatus))
 }
 
 // getLabelsFromInspect extracts labels from inspect data.
@@ -208,7 +252,7 @@ func (d *DockerRuntime) List(ctx context.Context, filters map[string]string) ([]
 		args = append(args, "--filter", fmt.Sprintf("%s=%s", key, value))
 	}
 
-	cmd := exec.CommandContext(ctx, dockerCmd, args...)
+	cmd := d.command(ctx, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%w: docker ps failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
@@ -231,9 +275,12 @@ func (d *DockerRuntime) List(ctx context.Context, filters map[string]string) ([]
 		}
 
 		// Use .State when available (machine-readable), fall back to .Status (human-readable).
+		// The human .Status carries the health token (e.g. "Up 2h (healthy)"), so it
+		// is the source for Health even when .State drives Status.
+		humanStatus := getString(containerJSON, fieldStatus)
 		status := getString(containerJSON, "State")
 		if status == "" {
-			status = getString(containerJSON, "Status")
+			status = humanStatus
 		}
 
 		info := Info{
@@ -241,6 +288,7 @@ func (d *DockerRuntime) List(ctx context.Context, filters map[string]string) ([]
 			Name:   strings.TrimPrefix(getString(containerJSON, "Names"), "/"),
 			Image:  getString(containerJSON, "Image"),
 			Status: status,
+			Health: parseHealth(humanStatus),
 		}
 
 		// Parse labels if present.
@@ -282,28 +330,80 @@ func parseLabels(labelsStr string) map[string]string {
 func (d *DockerRuntime) Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions) error {
 	defer perf.Track(nil, "container.DockerRuntime.Exec")()
 
-	return execWithRuntime(ctx, dockerCmd, containerID, cmd, opts)
+	return runExecCommand(d.command(ctx, buildExecArgs(containerID, cmd, opts)...), dockerCmd, opts)
 }
 
-// Attach attaches to a running container with an interactive shell.
+// Shell opens an interactive shell in a running container (a new shell process via `exec`).
+func (d *DockerRuntime) Shell(ctx context.Context, containerID string, opts *ShellOptions) error {
+	defer perf.Track(nil, "container.DockerRuntime.Shell")()
+
+	cmd, execOpts := buildShellCommand(opts)
+	return d.Exec(ctx, containerID, cmd, execOpts)
+}
+
+// Attach connects to a running container's main process (PID 1) via `docker attach`.
 func (d *DockerRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions) error {
 	defer perf.Track(nil, "container.DockerRuntime.Attach")()
 
-	cmd, execOpts := buildAttachCommand(opts)
-	return d.Exec(ctx, containerID, cmd, execOpts)
+	args, execOpts := buildAttachArgs(containerID, opts)
+	return runExecCommand(d.command(ctx, args...), dockerCmd, execOpts)
 }
 
 // Pull pulls a container image.
 func (d *DockerRuntime) Pull(ctx context.Context, image string) error {
 	defer perf.Track(nil, "container.DockerRuntime.Pull")()
 
-	cmd := exec.CommandContext(ctx, dockerCmd, "pull", image)
+	cmd := d.command(ctx, "pull", image)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: docker pull failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
 
 	return nil
+}
+
+// Tag tags a container image.
+func (d *DockerRuntime) Tag(ctx context.Context, source, target string) error {
+	defer perf.Track(nil, "container.DockerRuntime.Tag")()
+
+	cmd := d.command(ctx, buildTagArgs(source, target)...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: docker tag failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+	}
+
+	return nil
+}
+
+// Push pushes a container image.
+func (d *DockerRuntime) Push(ctx context.Context, image string) (*PushResult, error) {
+	defer perf.Track(nil, "container.DockerRuntime.Push")()
+
+	cmd := d.command(ctx, buildPushArgs(image)...)
+	output, err := cmd.CombinedOutput()
+	result := &PushResult{
+		Image:  image,
+		Digest: parsePushDigest(string(output)),
+		Output: string(output),
+	}
+	if err != nil {
+		return result, fmt.Errorf("%w: docker push failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+	}
+
+	return result, nil
+}
+
+// ImageInspect returns metadata for a local container image.
+func (d *DockerRuntime) ImageInspect(ctx context.Context, image string) (*ImageInfo, error) {
+	defer perf.Track(nil, "container.DockerRuntime.ImageInspect")()
+
+	cmd := d.command(ctx, buildImageInspectArgs(image)...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%w: docker image inspect failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+	}
+
+	return parseImageInspectOutput(output)
 }
 
 // Logs shows logs from a container.
@@ -322,7 +422,7 @@ func (d *DockerRuntime) Logs(ctx context.Context, containerID string, follow boo
 
 	args := buildLogsArgs(containerID, follow, tail)
 
-	cmd := exec.CommandContext(ctx, dockerCmd, args...)
+	cmd := d.command(ctx, args...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
@@ -333,7 +433,7 @@ func (d *DockerRuntime) Logs(ctx context.Context, containerID string, follow boo
 func (d *DockerRuntime) Info(ctx context.Context) (*RuntimeInfo, error) {
 	defer perf.Track(nil, "container.DockerRuntime.Info")()
 
-	cmd := exec.CommandContext(ctx, dockerCmd, "version", "--format", "{{.Server.Version}}")
+	cmd := d.command(ctx, "version", "--format", "{{.Server.Version}}")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%w: docker version failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))

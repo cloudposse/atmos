@@ -468,18 +468,18 @@ func TestPodmanRuntime_Inspect(t *testing.T) {
 	}
 }
 
-// TestPodmanRuntime_Attach validates Podman's Attach() method logic for shell selection
+// TestPodmanRuntime_Shell validates Podman's Shell() method logic for shell selection
 // and argument handling. Tests verify that options are correctly interpreted and passed
-// to the underlying Exec() call by testing the buildAttachCommand builder function.
+// to the underlying Exec() call by testing the buildShellCommand builder function.
 //
 // Tests are intentionally duplicated to verify both implementations independently, ensuring
 // consistency across runtimes and allowing runtime-specific test evolution if needed.
 //
-//nolint:dupl // Docker and Podman implement identical Runtime interface with same Attach() behavior.
-func TestPodmanRuntime_Attach(t *testing.T) {
+//nolint:dupl // Docker and Podman implement identical Runtime interface with same Shell() behavior.
+func TestPodmanRuntime_Shell(t *testing.T) {
 	tests := []struct {
 		name         string
-		opts         *AttachOptions
+		opts         *ShellOptions
 		expectShell  string
 		expectArgs   []string
 		expectUser   string
@@ -496,8 +496,8 @@ func TestPodmanRuntime_Attach(t *testing.T) {
 			expectAttach: true,
 		},
 		{
-			name:         "empty AttachOptions uses defaults",
-			opts:         &AttachOptions{},
+			name:         "empty ShellOptions uses defaults",
+			opts:         &ShellOptions{},
 			expectShell:  "/bin/bash",
 			expectArgs:   nil,
 			expectUser:   "",
@@ -506,7 +506,7 @@ func TestPodmanRuntime_Attach(t *testing.T) {
 		},
 		{
 			name: "custom shell",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				Shell: "/bin/sh",
 			},
 			expectShell:  "/bin/sh",
@@ -517,7 +517,7 @@ func TestPodmanRuntime_Attach(t *testing.T) {
 		},
 		{
 			name: "shell with args",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				Shell:     "/bin/bash",
 				ShellArgs: []string{"-l", "-i"},
 			},
@@ -529,7 +529,7 @@ func TestPodmanRuntime_Attach(t *testing.T) {
 		},
 		{
 			name: "custom user preserved in exec options",
-			opts: &AttachOptions{
+			opts: &ShellOptions{
 				User: "node",
 			},
 			expectShell:  "/bin/bash",
@@ -543,7 +543,7 @@ func TestPodmanRuntime_Attach(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Call the builder function that constructs the command and exec options.
-			cmd, execOpts := buildAttachCommand(tt.opts)
+			cmd, execOpts := buildShellCommand(tt.opts)
 
 			// Verify command structure: first element is shell, rest are args.
 			require.NotEmpty(t, cmd, "command should not be empty")
@@ -788,4 +788,14 @@ RUN echo "test build"
 	}
 
 	require.NoError(t, err, "Build should succeed")
+}
+
+func TestPodmanRuntime_BuildBakeUnsupported(t *testing.T) {
+	runtime := NewPodmanRuntime()
+	err := runtime.Build(context.Background(), &BuildConfig{
+		Bake: &BakeConfig{File: "docker-bake.hcl"},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Docker Buildx requires Docker")
 }

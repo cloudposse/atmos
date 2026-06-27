@@ -47,6 +47,10 @@ const config = {
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
                     {
+                        from: '/brandkit',
+                        to: '/media-kit'
+                    },
+                    {
                         from: '/blog',
                         to: '/changelog'
                     },
@@ -314,6 +318,10 @@ const config = {
                     {from: '/core-concepts/organizing-stacks', to: '/learn/organizing-stacks'},
                     {from: '/core-concepts/connecting-components', to: '/learn/connecting-components'},
                     {from: '/core-concepts/next-steps', to: '/learn/next-steps'},
+                    // Bare command overview routes
+                    {from: '/cli/commands/auth', to: '/cli/commands/auth/usage'},
+                    {from: '/cli/commands/ai', to: '/cli/commands/ai/usage'},
+                    {from: '/cli/commands/toolchain', to: '/cli/commands/toolchain/usage'},
                     // Terraform source command reorganization
                     {from: '/cli/commands/terraform/terraform-source', to: '/cli/commands/terraform/source'},
                     {from: '/cli/commands/terraform/terraform-source-pull', to: '/cli/commands/terraform/source/pull'},
@@ -535,12 +543,9 @@ const config = {
                     height: 36
                 },
                 items: [
-                    {
-                        label: `Latest Release`,
-                        href: `https://github.com/cloudposse/atmos/releases/latest`,
-                        position: 'left',
-                        className: 'latest-release-link'  // Add a class to identify this link
-                    },
+                    // Secondary links (Latest Release, Community, Roadmap)
+                    // moved to the site-wide footer to declutter the navbar.
+                    // See src/theme/Footer/.
                     {
                         type: 'doc',
                         docId: 'intro/index',
@@ -556,26 +561,6 @@ const config = {
                         to: '/examples',
                         position: 'left',
                         label: 'Examples'
-                    },
-                    {
-                        to: '/pro',
-                        position: 'left',
-                        label: 'Pro'
-                    },
-                    {
-                        label: 'Community',
-                        position: 'left',
-                        to: '/community'
-                    },
-                    {
-                        label: 'Changelog',
-                        position: 'left',
-                        to: '/changelog'
-                    },
-                    {
-                        label: 'Roadmap',
-                        position: 'left',
-                        to: '/roadmap'
                     },
                     // GitHub stars badge
                     {
@@ -594,8 +579,13 @@ const config = {
                         'aria-label': 'GitHub repository',
                     },
                     {
-                        to: 'https://cloudposse.com/services/support/',
-                        label: 'Get Help',
+                        label: 'Changelog',
+                        position: 'right',
+                        to: '/changelog'
+                    },
+                    {
+                        to: '/pro',
+                        label: 'Pro',
                         position: 'right',
                         className: 'button button--primary navbar-cta-button'
                     }

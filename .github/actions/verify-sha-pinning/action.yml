@@ -29,7 +29,7 @@ runs:
   steps:
     - name: Verify SHA pins against upstream tags
       id: verify
-      uses: actions/github-script@v7
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         WORKFLOW_DIR: ${{ inputs.workflow-dir }}
       with:
@@ -273,7 +273,7 @@ runs:
 
     - name: Post or update PR comment
       if: always() && github.event_name == 'pull_request'
-      uses: actions/github-script@v7
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         RESULTS_JSON: ${{ steps.verify.outputs.results_json }}
         VERIFIED_COUNT: ${{ steps.verify.outputs.verified_count }}

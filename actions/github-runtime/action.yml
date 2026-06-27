@@ -2,8 +2,12 @@
 #
 # Exposes the GitHub Actions runtime credentials (ACTIONS_RUNTIME_TOKEN,
 # ACTIONS_RESULTS_URL, ...) that the runner injects only into *action* steps,
-# so a following `run:` step can use `atmos ci cache restore/save` (whose GitHub
-# backend reads them from the environment).
+# so a following `run:` step can use any Atmos command whose GitHub backend
+# reads them from the environment, namely:
+#   - `atmos ci cache restore/save` (GitHub Actions cache service)
+#   - `atmos terraform plan --ci` / `atmos terraform deploy` / `atmos terraform
+#     planfile upload|download` with the `github/artifacts` planfile store
+#     (GitHub Actions Artifacts service).
 #
 # Two modes (the runtime token is always masked with ::add-mask:: either way):
 #   - output (default): expose credentials as masked *step outputs*. You thread
@@ -13,7 +17,7 @@
 #
 # See actions/github-runtime/README.md for the security tradeoff and examples.
 name: 'Atmos GitHub Runtime'
-description: 'Expose GitHub Actions runtime credentials to run steps so `atmos ci cache` can reach the cache service.'
+description: 'Expose GitHub Actions runtime credentials to run steps so `atmos ci cache` and the `atmos terraform` github/artifacts planfile store can reach the runner cache & artifacts services.'
 author: 'Cloud Posse'
 branding:
   icon: 'unlock'
@@ -29,7 +33,7 @@ outputs:
   runtime-token:
     description: 'ACTIONS_RUNTIME_TOKEN (masked). Set ACTIONS_RUNTIME_TOKEN from this in the consuming step.'
   results-url:
-    description: 'ACTIONS_RESULTS_URL — the cache service v2 base URL used by save/restore.'
+    description: 'ACTIONS_RESULTS_URL — the cache & artifacts service v2 base URL used by cache save/restore and the github/artifacts planfile store.'
   cache-url:
     description: 'ACTIONS_CACHE_URL — legacy v1 cache URL, when present.'
   runtime-url:

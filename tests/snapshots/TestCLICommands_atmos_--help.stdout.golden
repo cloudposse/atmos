@@ -14,6 +14,7 @@ USAGE
 SUBCOMMAND ALIASES
 
       an               Alias of atmos ansible command
+      c                Alias of atmos container command
       hf               Alias of atmos helmfile command
       pk               Alias of atmos packer command
       tf               Alias of atmos terraform command
@@ -28,6 +29,8 @@ AVAILABLE COMMANDS
       aws [command]                          Run AWS-specific commands for interacting with cloud resources
       ci [command] [EXPERIMENTAL]            CI/CD integration commands
       completion [command]                   Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
+      composition [command]                  Inspect compositions that group component instances into systems
+      container [command]                    Manage persistent, stack-scoped container components
       describe [command]                     Show details about Atmos configurations and components
       devcontainer [command] [EXPERIMENTAL]  Manage development containers
       docs [command]                         Open Atmos documentation or display component-specific docs

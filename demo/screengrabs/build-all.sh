@@ -82,6 +82,8 @@ export CLICOLOR_FORCE=1
 export LESS=-X
 export ATMOS_PAGER=false
 
+SKIPPED_COMMANDS=()
+
 # Determine the correct sed syntax based on the operating system
 # Function to call sed with proper in-place editing syntax
 function sed_inplace() {
@@ -90,6 +92,28 @@ function sed_inplace() {
 	else
 		sed -i "$@"     # Linux does not require ''
 	fi
+}
+
+function is_atmos_command() {
+    [[ "$1" == atmos\ * || "$1" == "atmos" ]]
+}
+
+function is_unsupported_atmos_command() {
+    local file=$1
+
+    grep -Eiq \
+        'unknown command|unknown subcommand|unrecognized command|unsupported command|invalid command' \
+        "$file"
+}
+
+function skip_command() {
+    local command=$1
+    local output_ansi=$2
+    local output_html=$3
+
+    SKIPPED_COMMANDS+=("$command")
+    rm -f "$output_ansi" "$output_html"
+    echo "Skipping unavailable Atmos command: $command"
 }
 
 function record() {
@@ -105,21 +129,35 @@ function record() {
 
     echo "Screengrabbing $command → $output_html"
     mkdir -p "$output_dir"
-    rm -f $output_ansi
+    rm -f "$output_ansi"
 
     # Direct command execution with ATMOS_FORCE_COLOR (no need for script command)
+    set +e
     if [ "${extension}" = "sh" ]; then
-        $command > $output_ansi 2>&1
+        $command > "$output_ansi" 2>&1
     else
-        (cd $demo_path && $command > "$OLDPWD/$output_ansi" 2>&1)
+        (cd "$demo_path" && $command > "$OLDPWD/$output_ansi" 2>&1)
+    fi
+    local exit_status=$?
+    set -e
+
+    if [ "$exit_status" -ne 0 ]; then
+        if is_atmos_command "$command" && is_unsupported_atmos_command "$output_ansi"; then
+            skip_command "$command" "$output_ansi" "$output_html"
+            return 0
+        fi
+
+        echo "ERROR: Screengrab command failed: $command" >&2
+        cat "$output_ansi" >&2
+        return "$exit_status"
     fi
 
-    postprocess_ansi $output_ansi
-    aha --no-header < $output_ansi > $output_html
-    postprocess_html $output_html
-    rm -f $output_ansi
+    postprocess_ansi "$output_ansi"
+    aha --no-header < "$output_ansi" > "$output_html"
+    postprocess_html "$output_html"
+    rm -f "$output_ansi"
     if [ -n "$CI" ]; then
-        sed_inplace -e '1,1d' -e '$d' $output_html
+        sed_inplace -e '1,1d' -e '$d' "$output_html"
     fi
 }
 
@@ -179,3 +217,11 @@ done < <(grep -v '^#' "$manifest")
 for command in "${commands[@]}"; do
     record "$demo" "$command"
 done
+
+if [ "${#SKIPPED_COMMANDS[@]}" -gt 0 ]; then
+    echo ""
+    echo "Skipped ${#SKIPPED_COMMANDS[@]} unreleased Atmos commands:"
+    for command in "${SKIPPED_COMMANDS[@]}"; do
+        echo "  - $command"
+    done
+fi

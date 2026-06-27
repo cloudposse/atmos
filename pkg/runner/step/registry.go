@@ -28,14 +28,25 @@ type StepHandler interface {
 	RequiresTTY() bool
 }
 
+// aliasedHandler is implemented by handlers that respond to alternate type names
+// in addition to their canonical GetName(). Aliases resolve via Get() but are not
+// reported by List/ListByCategory/Count, so they never appear as duplicate entries.
+type aliasedHandler interface {
+	GetAliases() []string
+}
+
 // Registry manages step type handlers.
 type Registry struct {
 	mu       sync.RWMutex
-	handlers map[string]StepHandler
+	handlers map[string]StepHandler // Canonical type name -> handler.
+	aliases  map[string]StepHandler // Alias type name -> canonical handler.
 }
 
 // Global registry instance.
-var registry = &Registry{handlers: make(map[string]StepHandler)}
+var registry = &Registry{
+	handlers: make(map[string]StepHandler),
+	aliases:  make(map[string]StepHandler),
+}
 
 // Register adds a step handler to the registry.
 // Called from init() in each handler file.
@@ -46,15 +57,23 @@ func Register(handler StepHandler) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 	registry.handlers[handler.GetName()] = handler
+	if aliased, ok := handler.(aliasedHandler); ok {
+		for _, alias := range aliased.GetAliases() {
+			registry.aliases[alias] = handler
+		}
+	}
 }
 
-// Get returns a handler by type name.
+// Get returns a handler by type name, falling back to registered aliases.
 func Get(typeName string) (StepHandler, bool) {
 	defer perf.Track(nil, "step.Get")()
 
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
-	h, ok := registry.handlers[typeName]
+	if h, ok := registry.handlers[typeName]; ok {
+		return h, true
+	}
+	h, ok := registry.aliases[typeName]
 	return h, ok
 }
 

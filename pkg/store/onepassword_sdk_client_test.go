@@ -147,6 +147,66 @@ func TestSDKClient_Resolve(t *testing.T) {
 	})
 }
 
+func TestSDKClient_Exists(t *testing.T) {
+	t.Run("present by title without resolving", func(t *testing.T) {
+		fake := newFakeOPSDK()
+		fake.seedVaultItem(concealed("api_key", "dd-key"))
+		// Resolve must never be reached on the existence path.
+		fake.resolveErr = errors.New("Resolve must not be called during Exists")
+
+		ok, err := newTestSDKClient(fake).Exists(context.Background(), "op://Shared/Datadog/api_key")
+		require.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("present by field ID", func(t *testing.T) {
+		fake := newFakeOPSDK()
+		fake.seedVaultItem(onepassword.ItemField{ID: "field-id", Title: "other", Value: "by-id"})
+
+		ok, err := newTestSDKClient(fake).Exists(context.Background(), "op://Shared/Datadog/field-id")
+		require.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("field absent returns false", func(t *testing.T) {
+		fake := newFakeOPSDK()
+		fake.seedVaultItem(concealed("other", "x"))
+
+		ok, err := newTestSDKClient(fake).Exists(context.Background(), "op://Shared/Datadog/api_key")
+		require.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("item absent returns false", func(t *testing.T) {
+		fake := newFakeOPSDK()
+		fake.vaults = []onepassword.VaultOverview{{ID: "v1", Title: "Shared"}}
+
+		ok, err := newTestSDKClient(fake).Exists(context.Background(), "op://Shared/Datadog/api_key")
+		require.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("vault absent returns false", func(t *testing.T) {
+		ok, err := newTestSDKClient(newFakeOPSDK()).Exists(context.Background(), "op://Shared/Datadog/api_key")
+		require.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("invalid reference", func(t *testing.T) {
+		_, err := newTestSDKClient(newFakeOPSDK()).Exists(context.Background(), "op://Shared/Datadog")
+		assert.ErrorIs(t, err, ErrOnePasswordInvalidReference)
+	})
+
+	t.Run("transport error propagates", func(t *testing.T) {
+		fake := newFakeOPSDK()
+		fake.seedVaultItem(concealed("api_key", "dd-key"))
+		fake.getErr = errors.New("503 service unavailable")
+
+		_, err := newTestSDKClient(fake).Exists(context.Background(), "op://Shared/Datadog/api_key")
+		require.Error(t, err)
+	})
+}
+
 func TestSDKClient_Set_UpdatesExistingField(t *testing.T) {
 	fake := newFakeOPSDK()
 	fake.seedVaultItem(concealed("api_key", "old"))

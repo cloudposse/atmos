@@ -178,3 +178,34 @@ func TestNavigateToPath(t *testing.T) {
 	partial := navigateToPath(m, "auth.nonexistent")
 	assert.Nil(t, partial)
 }
+
+func TestCollectEnvKeysRecursive(t *testing.T) {
+	raw := []byte(`
+env:
+  TOP_LEVEL: x
+commands:
+  - name: example
+    env:
+      - key: COMMAND_LIST_ENV
+        value: y
+    commands:
+      - name: env
+        steps:
+          - name: env
+            type: container
+            env:
+              EXAMPLE_MESSAGE: hello
+`)
+
+	cm, err := CollectEnvKeysRecursive(raw)
+	require.NoError(t, err)
+
+	// Top-level and nested step-level env keys are collected with original case.
+	assert.Equal(t, "TOP_LEVEL", cm["top_level"])
+	assert.Equal(t, "EXAMPLE_MESSAGE", cm["example_message"])
+
+	// Command-level env written as a list of {key, value} pairs is already
+	// case-preserved by Viper, so it must NOT be collected here.
+	_, ok := cm["command_list_env"]
+	assert.False(t, ok)
+}

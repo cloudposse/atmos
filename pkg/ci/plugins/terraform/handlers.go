@@ -144,9 +144,17 @@ func (p *Plugin) onBeforeDeploy(ctx *plugin.HookContext) error {
 	}
 
 	// Download -- warn-only (deploy works without a stored planfile).
-	// Skip if planfile storage is not configured.
+	// Skip if planfile storage is not configured, or if verification resolves to
+	// off (the downloaded stored plan would never be used). This hook only runs
+	// under CI, so resolve with ciEnabled=true.
 	if isPlanfileStorageEnabled(ctx.Config) {
-		if err := p.downloadPlanfileForVerification(ctx); err != nil {
+		var cliOverride schema.PlanfileVerifyMode
+		if ctx.Info != nil {
+			cliOverride = ctx.Info.VerifyPlanMode
+		}
+		if planfile.ResolveVerifyMode(ctx.Config, true, cliOverride) == schema.PlanfileVerifyOff {
+			log.Debug("Planfile verification is off; skipping stored-plan download", "event", "before.terraform.deploy")
+		} else if err := p.downloadPlanfileForVerification(ctx); err != nil {
 			log.Warn("CI hook handler failed", "event", "before.terraform.deploy", "error", err)
 		}
 	}

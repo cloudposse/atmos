@@ -20,6 +20,11 @@ import (
 // flagFormat is the name of the output-format flag.
 const flagFormat = "format"
 
+// flagVerify is the name of the flag that opts into contacting remote backends to confirm
+// initialization status. Listing is credential-free by default (remote backends show "unknown");
+// --verify authenticates a read/describe identity and checks them for real.
+const flagVerify = "verify"
+
 var listParser *flags.StandardParser
 
 var listCmd = &cobra.Command{
@@ -33,6 +38,7 @@ var listCmd = &cobra.Command{
 func init() {
 	listParser = flags.NewStandardParser(
 		flags.WithBoolFlag("verbose", "v", false, "Show declaration descriptions"),
+		flags.WithBoolFlag(flagVerify, "", false, "Contact remote backends to confirm each secret's initialization status (requires credentials). Local backends (e.g. SOPS) are always checked; without --verify, remote-store secrets show an unknown status."),
 		flags.WithStringFlag(flagFormat, "f", "", "Output format: table, json, yaml, csv, tsv"),
 		flags.WithEnvVars(flagFormat, "ATMOS_SECRET_LIST_FORMAT"),
 		flags.WithValidValues(flagFormat, "table", "json", "yaml", "csv", "tsv"),
@@ -58,20 +64,28 @@ func runSecretList(cmd *cobra.Command, args []string) error {
 	}
 
 	verbose := v.GetBool("verbose")
+	verify := v.GetBool(flagVerify)
 	outputFormat := format.Format(v.GetString(flagFormat))
 
 	// Fully scoped (both facets) → fast single-scope path, honoring --identity.
 	if facet.Stack != "" && facet.Component != "" {
-		svc, err := loadServiceFn(facet)
+		svc, err := loadServiceForListFn(facet, verify)
 		if err != nil {
 			return err
 		}
-		rows := statusesToData(facet.Stack, facet.Component, svc.Status())
+		rows := statusesToData(facet.Stack, facet.Component, svc.Status(verify))
 		empty := fmt.Sprintf("No secrets declared for component %q in stack %q.", facet.Component, facet.Stack)
 		return renderSecretRows(rows, verbose, outputFormat, empty)
 	}
 
-	// Otherwise enumerate across every matching (stack, component) instance (best-effort status).
+	// --verify only applies to a single fully-scoped target; enumerating and authenticating every
+	// instance is exactly the expensive multi-auth pass listing is designed to avoid.
+	if verify {
+		ui.Warning("--verify requires both --stack and --component; remote-store status is shown as unknown. Target a specific component to verify it.")
+	}
+
+	// Otherwise enumerate across every matching (stack, component) instance. Enumeration is always
+	// credential-free (it never authenticates per component); remote-store status shows "unknown".
 	rows, err := enumeratedSecretRows(facet)
 	if err != nil {
 		return err
@@ -93,7 +107,9 @@ func enumeratedSecretRows(facet secretScope) ([]map[string]any, error) {
 	seenShared := make(map[string]bool)
 	for _, entry := range entries {
 		svc := secrets.NewService(atmosConfig, entry.Stack, entry.Component, entry.Section)
-		statuses := svc.Status()
+		// Enumeration is credential-free: it never authenticates, so remote-store status is
+		// reported as unknown (verify=false). Local backends (e.g. SOPS) are still checked.
+		statuses := svc.Status(false)
 		for i := range statuses {
 			st := &statuses[i]
 			switch st.Declaration.Scope {
@@ -221,6 +237,11 @@ func backendLabel(decl *secrets.Declaration) string {
 func statusLabel(st *secrets.Status) string {
 	if st.Err != nil {
 		return "error"
+	}
+	if st.Unknown {
+		// Not checked: the backend is remote and verification was not requested. Use --verify
+		// to contact the backend for an authoritative initialized/missing answer.
+		return "unknown"
 	}
 	if st.Initialized {
 		return "initialized"

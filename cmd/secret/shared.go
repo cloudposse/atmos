@@ -2,6 +2,7 @@ package secret
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -14,8 +15,35 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
+	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// credentialFreeSkip lists the YAML functions that must NOT be evaluated during credential-free
+// secret operations (enumeration and `secret list` without `--verify`). Listing only needs the
+// static `secrets.vars` declarations (see secrets.ExtractDeclarations); it never needs a resolved
+// value. These functions all perform an authenticated backend read, so with auth disabled they
+// fall back to the default AWS credential chain and fail (e.g. the S3 backend assumes a role with
+// no base credentials and the SDK ultimately dials the EC2 IMDS endpoint, which is unreachable on
+// a workstation). Skipping them keeps listing genuinely credential-free: a skipped function leaves
+// its raw string in place, which the declaration extractor ignores. `!secret` is included because
+// retrieving secret values is a separate, explicit step.
+func credentialFreeSkip() []string {
+	// skipFunc compares against the tag with the leading "!" trimmed, so the skip tokens are bare.
+	tags := []string{
+		u.AtmosYamlFuncSecret,
+		u.AtmosYamlFuncStore,
+		u.AtmosYamlFuncStoreGet,
+		u.AtmosYamlFuncTerraformOutput,
+		u.AtmosYamlFuncTerraformState,
+	}
+	skip := make([]string, len(tags))
+	for i, tag := range tags {
+		skip[i] = strings.TrimPrefix(tag, "!")
+	}
+	return skip
+}
 
 // secretScope holds the parsed common flags for a secret subcommand.
 type secretScope struct {
@@ -118,8 +146,9 @@ func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosCon
 		return nil, nil, err
 	}
 
-	// Bridge auth credentials into identity-aware secret stores (lazy resolution).
-	injectSecretStoreAuthResolver(&atmosConfig, authManager)
+	// Bridge auth credentials into identity-aware secret stores and cloud-KMS SOPS providers
+	// (lazy resolution).
+	injectSecretStoreAuthResolver(&atmosConfig, authManager, scope)
 
 	section, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
 		AtmosConfig:          &atmosConfig,
@@ -136,6 +165,47 @@ func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosCon
 	}
 
 	return secrets.NewService(&atmosConfig, scope.Stack, scope.Component, section), &atmosConfig, nil
+}
+
+// loadServiceForList loads a scoped secrets service for `secret list`. It is credential-free by
+// default: with verify=false it resolves the component config with auth disabled (no identity
+// authentication, no store auth resolver) and builds the service from the declarations alone —
+// SOPS status is still answered locally, remote-store status is reported as unknown. With
+// verify=true it delegates to loadService, which authenticates and wires the store resolver so
+// remote existence checks (Has) can run.
+func loadServiceForList(scope secretScope, verify bool) (*secrets.Service, error) {
+	defer perf.Track(nil, "secret.loadServiceForList")()
+
+	if verify {
+		return loadService(scope)
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+		ComponentFromArg: scope.Component,
+		Stack:            scope.Stack,
+	}, true)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitConfig, err)
+	}
+
+	section, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		AtmosConfig:          &atmosConfig,
+		Component:            scope.Component,
+		Stack:                scope.Stack,
+		ComponentType:        scope.ComponentType,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		// Auth is disabled here, so any credentialed read function (e.g. !terraform.state) would
+		// fall back to the default AWS chain and fail. Skip them all — listing reads declarations only.
+		Skip:         credentialFreeSkip(),
+		AuthManager:  nil,
+		AuthDisabled: true, // listing reads declarations only — no identity, no decryption.
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to load component config: %w", err)
+	}
+
+	return secrets.NewService(&atmosConfig, scope.Stack, scope.Component, section), nil
 }
 
 // buildAuthManager merges component auth and creates an authenticated manager for the scope.
@@ -165,14 +235,36 @@ func buildAuthManager(atmosConfig *schema.AtmosConfiguration, scope secretScope)
 	return authManager, nil
 }
 
-// injectSecretStoreAuthResolver wires the auth manager into atmosConfig as the
-// store auth-context resolver so secret stores can resolve credentials lazily
-// during `atmos secret` operations. It is a no-op when either argument is nil.
-func injectSecretStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) {
+// injectSecretStoreAuthResolver wires the auth manager into atmosConfig as the store auth-context
+// resolver (so secret stores resolve credentials lazily) and as the SecretsAuth context (so cloud-KMS
+// SOPS providers authenticate KMS calls as the effective identity instead of requiring ambient
+// credentials). It is a no-op when either argument is nil.
+func injectSecretStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager, scope secretScope) {
 	if atmosConfig == nil || authManager == nil {
 		return
 	}
 
 	resolver := authbridge.NewResolver(authManager, authManager.GetStackInfo())
 	atmosConfig.Stores.SetAuthContextResolver(resolver)
+	atmosConfig.SecretsAuth = &store.SecretsAuthContext{
+		Resolver:        resolver,
+		DefaultIdentity: secretsDefaultIdentity(scope, authManager),
+	}
+}
+
+// secretsDefaultIdentity resolves the effective identity for cloud-KMS SOPS providers: an explicit
+// `--identity`/`ATMOS_IDENTITY` (when not a select/disabled sentinel), otherwise the identity the
+// auth manager actually authenticated (the last link in its chain). A per-provider
+// `secrets.providers.<name>.identity` still takes precedence over this in the provider itself.
+func secretsDefaultIdentity(scope secretScope, authManager auth.AuthManager) string {
+	switch scope.Identity {
+	case "", cfg.IdentityFlagSelectValue, cfg.IdentityFlagDisabledValue:
+		// Fall back to the authenticated chain below.
+	default:
+		return scope.Identity
+	}
+	if chain := authManager.GetChain(); len(chain) > 0 {
+		return chain[len(chain)-1]
+	}
+	return ""
 }

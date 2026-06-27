@@ -467,7 +467,11 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-require github.com/testcontainers/testcontainers-go v0.42.0
+require (
+	github.com/aws/aws-sdk-go-v2/service/kms v1.51.1
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
+	github.com/testcontainers/testcontainers-go v0.42.0
+)
 
 require (
 	cloud.google.com/go/kms v1.31.0 // indirect
@@ -476,7 +480,6 @@ require (
 	filippo.io/hpke v0.4.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys v1.4.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
-	github.com/aws/aws-sdk-go-v2/service/kms v1.51.1 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/bytecodealliance/wasmtime-go/v43 v43.0.2 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
@@ -491,7 +494,6 @@ require (
 	github.com/extism/go-sdk v1.7.1 // indirect
 	github.com/getsops/gopgagent v0.0.0-20241224165529-7044f28e491e // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
-	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/goware/prefixer v0.0.0-20160118172347-395022866408 // indirect
 	github.com/hashicorp/logutils v1.0.0 // indirect
 	github.com/huaweicloud/huaweicloud-sdk-go-v3 v0.1.195 // indirect

@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: prod
+
+import:
+  - catalog/mock
+
+components:
+  terraform:
+    mycomponent:
+      vars:
+        foo: "foo prod override"
+        bar: "bar prod override"

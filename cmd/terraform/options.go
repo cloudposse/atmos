@@ -37,7 +37,6 @@ type TerraformRunOptions struct {
 	PlanFile         string
 	PlanSkipPlanfile bool
 	DeployRunInit    bool
-	VerifyPlan       bool
 
 	// Multi-component flags.
 	Query      string
@@ -73,7 +72,6 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		PlanFile:                v.GetString("planfile"),
 		PlanSkipPlanfile:        v.GetBool("skip-planfile"),
 		DeployRunInit:           v.GetBool("deploy-run-init"),
-		VerifyPlan:              v.GetBool("verify-plan"),
 		Query:                   v.GetString("query"),
 		Components:              v.GetStringSlice("components"),
 		All:                     v.GetBool("all"),
