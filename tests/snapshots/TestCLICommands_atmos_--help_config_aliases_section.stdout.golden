@@ -15,6 +15,7 @@ SUBCOMMAND ALIASES
 
       an               Alias of atmos ansible command
       c                Alias of atmos container command
+      emu              Alias of atmos emulator command
       hf               Alias of atmos helmfile command
       k8s              Alias of atmos kubernetes command
       pk               Alias of atmos packer command
@@ -35,6 +36,8 @@ AVAILABLE COMMANDS
       describe [command]                     Show details about Atmos configurations and components
       devcontainer [command] [EXPERIMENTAL]  Manage development containers
       docs [command]                         Open Atmos documentation or display component-specific docs
+      emulator [command] [EXPERIMENTAL]      Manage local emulators for AWS, GCP, Azure, Kubernetes, Vault, and OCI
+                                             registries
       env                                    Output environment variables configured in atmos.yaml
       git [command] [EXPERIMENTAL]           GitOps enablement: automate Git commits locally and in CI
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments

@@ -1,0 +1,5 @@
+components:
+  emulator:
+    aws:
+      driver: floci/aws
+      region: "{{ .vars.region }}"

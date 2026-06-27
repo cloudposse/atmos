@@ -7,7 +7,7 @@
  * `dismissCooldownMs` before the next announcement appears.
  *
  * Styling: announcements intentionally do NOT set per-entry colors. Every
- * announcement inherits the consistent brand-blue bar styling from the
+ * announcement inherits the consistent blue-slate neutral bar styling from the
  * `--announcement-bar-background` / `--announcement-bar-text-color` CSS
  * variables (see website/src/css/custom.css). Keep it that way -- a single
  * on-brand color reads as sophisticated on the dark site, whereas per-entry
@@ -66,7 +66,7 @@ export const announcements = [
   {
     id: 'atmos-backends',
     content:
-      'Dynamically generate and manage Terraform <a href="/stacks/components/terraform/backend">backend configurations</a> across all your environments',
+      'Dynamically generate and manage Terraform <a href="/stacks/terraform/backend">backend configurations</a> across all your environments',
   },
   {
     id: 'atmos-oidc',

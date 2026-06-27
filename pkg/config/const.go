@@ -77,6 +77,7 @@ const (
 	PackerComponentType     = "packer"
 	AnsibleComponentType    = "ansible"
 	ContainerComponentType  = "container"
+	EmulatorComponentType   = "emulator"
 	KubernetesComponentType = "kubernetes"
 
 	ComponentVendorConfigFileName = "component.yaml"
@@ -111,6 +112,7 @@ const (
 	KubernetesSectionName             = "kubernetes"
 	AnsiblePlaybookSectionName        = "playbook"
 	ContainerSectionName              = "container"
+	EmulatorSectionName               = "emulator"
 	AnsibleInventorySectionName       = "inventory"
 	WorkspaceSectionName              = "workspace"
 	AuthSectionName                   = "auth"
