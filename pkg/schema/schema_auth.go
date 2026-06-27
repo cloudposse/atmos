@@ -79,6 +79,10 @@ type Identity struct {
 	Alias       string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
 	Env         []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 	Session     *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+	// Emulator references an emulator component by name (resolved against the stack
+	// the command runs in). Used by emulator identity kinds (kind: <target>/emulator)
+	// to harvest the running emulator's connection profile (SDK env vars or kubeconfig).
+	Emulator string `yaml:"emulator,omitempty" json:"emulator,omitempty" mapstructure:"emulator"`
 }
 
 // IdentityVia defines how an identity connects to a provider or other identity.

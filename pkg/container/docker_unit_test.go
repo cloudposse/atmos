@@ -614,3 +614,43 @@ func TestDockerRuntime_parseLabels_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+func TestParseDockerPorts(t *testing.T) {
+	tests := []struct {
+		name     string
+		portsStr string
+		expected []PortBinding
+	}{
+		{
+			name:     "docker published port with ipv4 and ipv6 entries",
+			portsStr: "0.0.0.0:54321->4566/tcp, [::]:54321->4566/tcp",
+			expected: []PortBinding{{ContainerPort: 4566, HostPort: 54321, Protocol: "tcp"}},
+		},
+		{
+			name:     "loopback published udp port",
+			portsStr: "127.0.0.1:15353->53/udp",
+			expected: []PortBinding{{ContainerPort: 53, HostPort: 15353, Protocol: "udp"}},
+		},
+		{
+			name:     "unpublished container port ignored",
+			portsStr: "4566/tcp",
+			expected: nil,
+		},
+		{
+			name:     "port ranges ignored",
+			portsStr: "0.0.0.0:3000-3001->3000-3001/tcp",
+			expected: nil,
+		},
+		{
+			name:     "mixed published and unpublished ports",
+			portsStr: "80/tcp, 0.0.0.0:18080->8080/tcp",
+			expected: []PortBinding{{ContainerPort: 8080, HostPort: 18080, Protocol: "tcp"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, parseDockerPorts(tt.portsStr))
+		})
+	}
+}

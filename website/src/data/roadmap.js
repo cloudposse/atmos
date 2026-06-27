@@ -301,7 +301,7 @@ export const roadmapConfig = {
       tagline: 'Build, run, and compose app systems from the same Atmos config',
       description:
         'Application delivery increasingly spans container builds, local dependencies, Kubernetes workloads, secrets, and target-specific operations. Atmos is adding container actions, container components, and compositions so teams can build and operate the same system locally, in CI, and against real environments from declarative configuration.',
-      progress: 57,
+      progress: 63,
       status: 'in-progress',
       milestones: [
         { label: 'Container action steps for workflows and custom commands', status: 'shipped', quarter: 'q2-2026', prd: 'container-actions-and-step-outputs', changelog: 'native-container-steps', description: 'Add `type: container` steps with namespaced `build`, `push`, and `run` actions using Docker or Podman through the shared step library.', codeExample: 'type: container\naction: build\nbuild:\n  context: app\n  tags:\n    - "localhost:5001/app:{{ .git.sha }}"', benefits: 'Run containerized tools, build images, push to registries, and smoke-test images from the same workflows and custom commands used locally and in CI.' },
@@ -311,10 +311,12 @@ export const roadmapConfig = {
         { label: 'Atmos compositions as system boundaries', status: 'shipped', quarter: 'q2-2026', pr: 2645, prd: 'compositions', changelog: 'container-components', description: 'Add top-level `compositions:` that declare the services making up a system; components join via a first-class `composition` field, fulfilled per stack across kinds such as Kubernetes, Terraform, Helmfile, container, and compose. Includes `atmos composition validate` command.', codeExample: 'atmos composition validate storefront -s dev', benefits: 'Define a system once and operate it across local, CI, dev, and production stacks without per-environment duplication.' },
         { label: 'Local Kubernetes composition example', status: 'planned', quarter: 'q2-2026', pr: 2607, prd: 'compositions', description: 'Ship an example that brings up local k3s with Compose, builds and pushes an app image, then deploys the same app through Atmos-native Kubernetes components.', benefits: 'Develop and test the Kubernetes deployment path locally, then use the same composition model against real clusters.' },
         { label: 'Native Kubernetes components for deployment workflows', status: 'in-progress', quarter: 'q2-2026', pr: 2607, description: 'Add a first-class Kubernetes component type with render, diff, plan, apply, deploy, delete, stack semantics, identities, and GitOps provisioning targets.', benefits: 'Kubernetes workloads become Atmos components, so compositions and workflows can operate them alongside Terraform, Helmfile, and container components.' },
+        { label: 'Emulators — local cloud environments with no credentials required', status: 'shipped', quarter: 'q2-2026', pr: 2647, changelog: 'introducing-emulators', description: 'New `emulator` component kind with a pluggable driver registry (`pkg/emulator`). Built-in drivers cover AWS (Floci), GCP/Azure (Floci/LocalStack), Kubernetes (k3s), OCI registry, and Vault/OpenBao. `atmos emulator up/down/reset/list` manages the full lifecycle. Atmos binds a local identity to the emulator and points the in-process AWS SDK and Terraform provider at the emulator endpoint so the same stacks run unmodified locally. State persists by default via XDG cache bind-mounts; `atmos emulator reset` wipes it; `--ephemeral` opts out. The advanced quick-start tutorial was rewritten to deploy a real event-driven AWS backend entirely on a laptop.', benefits: 'Run the same Terraform stacks locally against real emulated cloud APIs with zero cloud account or credentials. No more "works in CI but not locally" gaps. Developers iterate instantly without incurring cloud costs or waiting for provisioned accounts.' },
       ],
       issues: [],
       prs: [
         { number: 2607, title: 'feat: native Kubernetes components with GitOps deployment-repo delivery' },
+        { number: 2647, title: 'feat: emulator component kind with AWS Floci driver and atmos emulator CLI' },
       ],
     },
     {

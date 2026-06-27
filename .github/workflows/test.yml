@@ -338,25 +338,18 @@ jobs:
 
   # Run the AWS-emulator demo tests against Floci (a free, LocalStack-compatible emulator;
   # LocalStack Community Edition was EOL'd in March 2026).
-  # NOTE: "[floci] demo-floci" must be kept in sync with the required status checks in
-  # branch protection on main (previously "[localstack] demo-localstack").
+  # NOTE: the "[floci] emulator-aws" status check must be kept in sync with the required
+  # status checks configured in branch protection on main.
   floci:
     name: "[floci] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
 
-    services:
-      floci:
-        # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
-        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2 # 1.5.23
-        ports:
-          - 4566:4566
-
     strategy:
       fail-fast: false
       matrix:
         demo-folder:
-          - demo-floci
+          - emulator-aws
 
     timeout-minutes: 30
     steps:
@@ -706,11 +699,17 @@ jobs:
       matrix:
         demo-folder:
           - demo-context
-          - demo-floci
+          - emulator-aws
           - demo-stacks
           - demo-helmfile
-          - quick-start-advanced
           - quick-start-simple
+          # quick-start-advanced is intentionally NOT validated here. It now uses runtime
+          # Atmos YAML functions (`!terraform.state`, `!store`, `!secret`) that the static
+          # yaml-language-server cannot resolve (the InoUno/yaml-ls-check action hardcodes
+          # an empty customTags list, so unknown tags fail with "Unresolved tag"). Every
+          # other function-using example (custom-components, sops-secrets,
+          # onepassword-secrets, native-terraform) is likewise excluded from this matrix.
+          # The example is still exercised end-to-end by the floci and acceptance jobs.
 
     timeout-minutes: 20
     steps:

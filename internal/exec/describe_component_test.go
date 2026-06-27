@@ -497,7 +497,7 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
-	component := "vpc-flow-logs-bucket"
+	component := "kms-key"
 	stack := "plat-ue2-dev"
 
 	// Initialize atmosConfig with provenance tracking enabled
@@ -562,7 +562,7 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	filtered := FilterComputedFields(result.ComponentSection)
 
 	// Verify filtered section only has stack-defined fields
-	allowedFields := []string{"vars", "settings", "env", "backend", "metadata", "overrides", "providers", "imports"}
+	allowedFields := []string{"vars", "settings", "env", "backend", "metadata", "overrides", "providers", "imports", "dependencies", "provision"}
 	for k := range filtered {
 		assert.Contains(t, allowedFields, k, "Filtered component section should only contain stack-defined fields")
 	}
@@ -581,7 +581,7 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	vars, ok := filtered["vars"].(map[string]any)
 	assert.True(t, ok, "vars should be a map")
 	assert.NotEmpty(t, vars, "vars should not be empty")
-	assert.Contains(t, vars, "enabled", "vars should contain 'enabled'")
+	assert.Contains(t, vars, "enable_key_rotation", "vars should contain 'enable_key_rotation'")
 	assert.Contains(t, vars, "name", "vars should contain 'name'")
 
 	// Verify we can convert to YAML without errors
@@ -592,7 +592,7 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	// Verify YAML contains expected content
 	yamlStr := yamlBytes
 	assert.Contains(t, yamlStr, "vars:", "YAML should contain vars")
-	assert.Contains(t, yamlStr, "enabled:", "YAML should contain enabled")
+	assert.Contains(t, yamlStr, "enable_key_rotation:", "YAML should contain enable_key_rotation")
 
 	// Verify YAML structure doesn't have unwanted top-level keys
 	// (We already verified this in the filtered map checks above, but double-check in YAML)

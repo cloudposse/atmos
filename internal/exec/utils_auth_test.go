@@ -701,7 +701,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_Success(t *testing.T) {
 	}
 
 	// Mock auth creator returns a mock manager.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return mockManager, nil
 	}
 
@@ -725,7 +725,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_InvalidComponentError(t *testi
 	}
 
 	// Mock auth creator - should not be called.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		t.Fatal("auth creator should not be called when component is invalid")
 		return nil, nil
 	}
@@ -749,7 +749,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_AuthCreatorError(t *testing.T)
 	}
 
 	// Mock auth creator returns an error.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return nil, errors.New("auth failed")
 	}
 
@@ -778,7 +778,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_OtherMergeError(t *testing.T) 
 	}
 
 	// Mock auth creator should still be called because getMergedAuthConfigWithFetcher handles errors gracefully.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return nil, nil
 	}
 
@@ -800,7 +800,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_NilAuthManager(t *testing.T) {
 	}
 
 	// Mock auth creator returns nil (no auth configured).
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return nil, nil
 	}
 
@@ -996,7 +996,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_PreservesExistingIdentity(t *t
 		return nil, nil
 	}
 
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return mockManager, nil
 	}
 

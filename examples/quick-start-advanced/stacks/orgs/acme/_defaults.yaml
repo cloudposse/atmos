@@ -1,6 +1,18 @@
 vars:
   namespace: acme
 
+# Pin the toolchain for every component in this org. The `tools` map is the current,
+# integrated way to declare required tooling (versions are installed/resolved by
+# `atmos toolchain` from the `toolchain:` config in atmos.yaml and recorded in
+# toolchain.lock.yaml). https://atmos.tools/cli/commands/toolchain
+dependencies:
+  tools:
+    opentofu: 1.10.10
+    # Checkov is installed the same way as OpenTofu and is invoked by the `security`
+    # hook below. (Trivy is an equally-supported `kind`, but its Aqua entry requires
+    # cosign verification that often isn't configured, so Checkov is the default here.)
+    checkov: "3.2.529"
+
 settings:
   # https://atmos.tools/core-concepts/stacks/templates
   templates:
@@ -14,6 +26,15 @@ settings:
         datasources: {}
 
 terraform:
+  # Security-scan every Terraform component after `plan` with the built-in `checkov`
+  # hook kind. Findings are parsed from SARIF and surfaced by Atmos; on_failure
+  # defaults to "warn" so scans are informative without blocking the run.
+  # Built-in scanner kinds: checkov, trivy, kics, infracost. https://atmos.tools/stacks/hooks
+  hooks:
+    security:
+      events:
+        - after-terraform-plan
+      kind: checkov
   vars:
     tags:
       # https://atmos.tools/core-concepts/stacks/templates
@@ -28,26 +49,42 @@ terraform:
       # https://docs.gomplate.ca/functions/strings
       atmos_component_description: "{{ strings.Title .atmos_component }} component {{ .vars.name | strings.Quote }} provisioned in the stack {{ .atmos_stack | strings.Quote }}"
 
-  # Terraform backend configuration
+  # S3 state backend, pointed at the AWS emulator.
   # https://atmos.tools/core-concepts/components/terraform/backends
-  # https://developer.hashicorp.com/terraform/language/settings/backends/configuration
-  #  backend_type: cloud  # s3, cloud
-  #  backend:
-  #    # AWS S3 backend
-  #    s3:
-  #      acl: "bucket-owner-full-control"
-  #      encrypt: true
-  #      bucket: "your-s3-bucket-name"
-  #      dynamodb_table: "your-dynamodb-table-name"
-  #      key: "terraform.tfstate"
-  #      region: "us-east-2"
-  #      role_arn: "arn:aws:iam::<your account ID>:role/<IAM Role with permissions to access the Terraform backend>"
-  #    # Terraform Cloud backend
-  #    # https://developer.hashicorp.com/terraform/cli/cloud/settings
-  #    cloud:
-  #      organization: "your-org"
-  #      hostname: "app.terraform.io"
-  #      workspaces:
-  #        # The token `{terraform_workspace}` will be automatically replaced with the
-  #        # Terraform workspace for each Atmos component
-  #        name: "{terraform_workspace}"
+  #
+  # `provision.backend.enabled` is Atmos's built-in backend provisioning: before the
+  # first run it creates the bucket (versioning, encryption, public-access block) using
+  # the component's identity — here `local-aws` (kind: aws/emulator), so the bucket is
+  # created inside the running emulator. No bootstrap component, no chicken-and-egg.
+  # https://atmos.tools/stacks/components/provision/backend
+  #
+  # `use_lockfile: true` is native S3 state locking (OpenTofu 1.10+) — DynamoDB lock
+  # tables are no longer needed. There is no endpoint in this config: the `local-aws`
+  # identity (kind: aws/emulator) injects `AWS_ENDPOINT_URL_S3` into the OpenTofu
+  # subprocess, which is what the S3 backend reads — so the same config works against
+  # the emulator locally and a real S3 backend in CI/prod. The skip flags + path-style
+  # + static creds are what an emulated S3 needs.
+  backend_type: s3
+  backend:
+    s3:
+      bucket: acme-plat-tfstate
+      key: terraform.tfstate
+      region: us-east-1
+      use_lockfile: true
+      use_path_style: true
+      skip_credentials_validation: true
+      skip_metadata_api_check: true
+      skip_region_validation: true
+      skip_requesting_account_id: true
+      access_key: test
+      secret_key: test
+
+  provision:
+    backend:
+      enabled: true
+    # Run every component in an isolated workdir (.workdir/terraform/<stack>-<component>/)
+    # instead of in-place in the component source. This keeps each component instance's
+    # `.terraform/`, lockfile, and generated varfiles separate, so concurrent applies
+    # (e.g. multiple stacks/regions at once) never collide. https://atmos.tools/cli/configuration/settings/provision
+    workdir:
+      enabled: true

@@ -15,6 +15,7 @@ SUBCOMMAND ALIASES
 
       an               Alias of atmos ansible command
       c                Alias of atmos container command
+      emu              Alias of atmos emulator command
       hf               Alias of atmos helmfile command
       pk               Alias of atmos packer command
       tf               Alias of atmos terraform command
@@ -31,9 +32,13 @@ AVAILABLE COMMANDS
       completion [command]                   Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
       composition [command]                  Inspect compositions that group component instances into systems
       container [command]                    Manage persistent, stack-scoped container components
+      deploy [command]                       Deploy commands with stack support
       describe [command]                     Show details about Atmos configurations and components
       devcontainer [command] [EXPERIMENTAL]  Manage development containers
       docs [command]                         Open Atmos documentation or display component-specific docs
+      echo [command]                         Echo commands with verbose support
+      emulator [command] [EXPERIMENTAL]      Manage local emulators for AWS, GCP, Azure, Kubernetes, Vault, and OCI
+                                             registries
       env                                    Output environment variables configured in atmos.yaml
       git [command] [EXPERIMENTAL]           GitOps enablement: automate Git commits locally and in CI
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments
@@ -48,7 +53,6 @@ AVAILABLE COMMANDS
       show [command]                         Execute 'show' commands
       support                                Show Atmos support options
       terraform [command]                    Execute Terraform commands using Atmos stack configurations
-      tf [command]                           Execute 'terraform' commands
       theme [command]                        Manage terminal themes for Atmos CLI
       toolchain [command] [EXPERIMENTAL]     Manage tool versions and installations
       validate [command]                     Validate configurations against OPA policies and JSON schemas

@@ -114,7 +114,7 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	// Create and authenticate the AuthManager using the same injectable creator as
 	// createAndAuthenticateAuthManagerWithDeps to keep injection points unified.
 	authManager, err := defaultAuthManagerCreator(
-		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig,
+		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, info.Stack,
 	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrUserAborted) {
@@ -126,6 +126,16 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 
 	// Store manager for nested YAML functions (e.g. !terraform.state).
 	info.AuthManager = authManager
+
+	// The manager is created with its own empty stackInfo; thread the target stack
+	// through so emulator identities can resolve the running emulator's endpoint
+	// when stores (`!store`, `!secret`, hooks) build their in-process auth context.
+	// authManager may be nil when no identity/auth is configured.
+	if authManager != nil {
+		if si := authManager.GetStackInfo(); si != nil && si.Stack == "" {
+			si.Stack = info.Stack
+		}
+	}
 
 	injectTerraformStoreAuthResolver(atmosConfig, info, authManager)
 
