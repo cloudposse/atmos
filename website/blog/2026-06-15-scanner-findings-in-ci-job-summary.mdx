@@ -1,0 +1,55 @@
+---
+slug: scanner-findings-in-ci-job-summary
+title: "Security Scanner Findings Now Surface in the CI Job Summary"
+authors: [osterman]
+tags: [enhancement, security, bugfix]
+---
+
+Security scanner hooks (Checkov, Trivy, KICS) now write their findings to the GitHub Actions job step summary automatically — so scan results show up in the pipeline run instead of being buried in the `atmos terraform plan` log stream. The official Atmos Docker image was also updated so Checkov runs without a glibc error.
+
+<!--truncate-->
+
+## The Problem
+
+When you wire a scanner into a component with the [`hooks`](/stacks/hooks) framework, Atmos already renders a clean markdown report of the findings:
+
+```yaml
+components:
+  terraform:
+    bucket:
+      hooks:
+        security:
+          events: [after-terraform-plan]
+          kind: checkov
+```
+
+That report printed to your terminal — and to the Atmos Pro run page when Pro is connected — but **nowhere a CI pipeline could show it**. In GitHub Actions, the findings were mixed into the multi-thousand-line plan log. There was no report in the checks, no job summary, nothing to glance at to see whether the scan was clean.
+
+A second, quieter problem: inside the official `cloudposse/atmos` Docker image, Checkov crashed before it could produce any findings:
+
+```
+[PYI-243:ERROR] Failed to load Python shared library 'libpython3.9.so.1.0':
+/lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.38' not found
+```
+
+Checkov ships as a PyInstaller bundle that needs GLIBC 2.38+, but the image was built on `debian:bookworm-slim` (glibc 2.36). Because scanner hooks default to `on_failure: warn`, the crash was silently downgraded to a warning and the scan reported "no findings" — when in reality it never ran.
+
+## The Solution
+
+Scanner summaries are now appended to the GitHub Actions job step summary whenever Atmos detects it is running in GitHub Actions (i.e. `GITHUB_STEP_SUMMARY` is set). It requires **no configuration** — the same markdown you already see in your terminal shows up in the run summary:
+
+- Your terminal
+- The GitHub Actions [job step summary](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#adding-a-job-summary)
+- The Atmos Pro run page (when Pro is connected)
+
+Write the markdown once, get it everywhere. Writing to the step summary is best-effort: if the summary file can't be written, it never fails the hook or the terraform command — the findings already rendered to the log.
+
+And the Docker image now builds on `debian:trixie-slim` (glibc 2.41), so Checkov — and any other PyInstaller-bundled tool installed via the Atmos toolchain — loads its frozen Python runtime and actually produces findings instead of crashing.
+
+## How to Use It
+
+Nothing to configure. Run your existing scanner hooks in a GitHub Actions workflow and open the job summary on the run — the findings table is there. See the [hooks documentation](/stacks/hooks#format-symmetry) for details on where summaries are rendered.
+
+## Get Involved
+
+Want findings surfaced somewhere else — Code Scanning / SARIF upload, PR annotations, JUnit results? [Open an issue](https://github.com/cloudposse/atmos/issues) or join us in the [Atmos community](https://cloudposse.com/slack).

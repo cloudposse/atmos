@@ -72,7 +72,7 @@ func TestSetupTerraformAuth_ErrInvalidComponent(t *testing.T) {
 func TestSetupTerraformAuth_AuthCreatorError_WrapsWithSentinel(t *testing.T) {
 	orig := defaultAuthManagerCreator
 	t.Cleanup(func() { defaultAuthManagerCreator = orig })
-	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return nil, errors.New("auth backend unavailable")
 	}
 
@@ -93,10 +93,13 @@ func TestSetupTerraformAuth_IdentityStoredAndManagerSet(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockMgr := mockTypes.NewMockAuthManager(ctrl)
 	mockMgr.EXPECT().GetChain().Return([]string{"base-role", "aws-dev"})
+	// setupTerraformAuth threads the target stack into the manager's stackInfo so
+	// emulator identities can resolve their endpoint; a nil stackInfo is a no-op.
+	mockMgr.EXPECT().GetStackInfo().Return(nil)
 
 	orig := defaultAuthManagerCreator
 	t.Cleanup(func() { defaultAuthManagerCreator = orig })
-	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return mockMgr, nil
 	}
 
@@ -117,7 +120,7 @@ func TestSetupTerraformAuth_IdentityStoredAndManagerSet(t *testing.T) {
 func TestSetupTerraformAuth_NilManager_NoAuthBridge(t *testing.T) {
 	orig := defaultAuthManagerCreator
 	t.Cleanup(func() { defaultAuthManagerCreator = orig })
-	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	defaultAuthManagerCreator = func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return nil, nil
 	}
 
@@ -202,7 +205,7 @@ func TestSetupTerraformAuth_IdentityFlagPropagatesToAuthCreator(t *testing.T) {
 	var capturedIdentity string
 	origCreator := defaultAuthManagerCreator
 	t.Cleanup(func() { defaultAuthManagerCreator = origCreator })
-	defaultAuthManagerCreator = func(identity string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	defaultAuthManagerCreator = func(identity string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		capturedIdentity = identity
 		// Return nil manager so we don't trip into authenticateWithIdentity logic.
 		return nil, nil
@@ -245,7 +248,7 @@ func TestSetupTerraformAuth_EmptyIdentity_AllowsAutoDetection(t *testing.T) {
 	var capturedIdentity string
 	origCreator := defaultAuthManagerCreator
 	t.Cleanup(func() { defaultAuthManagerCreator = origCreator })
-	defaultAuthManagerCreator = func(identity string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	defaultAuthManagerCreator = func(identity string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		capturedIdentity = identity
 		return nil, nil
 	}

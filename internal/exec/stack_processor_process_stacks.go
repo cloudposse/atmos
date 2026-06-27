@@ -789,6 +789,15 @@ func ProcessStackConfig(
 				return nil, fmt.Errorf("%w: custom component '%s' in type '%s' must be a map, got %T in stack '%s'",
 					errUtils.ErrInvalidComponentMapType, componentName, componentType, componentConfig, stackName)
 			}
+			// Resolve `metadata.inherits` and deep-merge base components so custom
+			// component types (e.g. container) honor catalog/abstract defaults the
+			// same way built-in types do. This deep-merges ALL top-level component
+			// keys (image/build/run/composition/vars/...), not just vars/settings/env.
+			resolvedMap, inheritErr := resolveCustomComponentInheritance(atmosConfig, componentMap, componentsMap, map[string]bool{})
+			if inheritErr != nil {
+				return nil, inheritErr
+			}
+			componentMap = resolvedMap
 			// Merge global vars into component vars.
 			componentVars := map[string]any{}
 			for k, v := range globalVarsSection {
@@ -844,6 +853,111 @@ func ProcessStackConfig(
 	}
 
 	return result, nil
+}
+
+// resolveCustomComponentInheritance resolves a custom component's
+// `metadata.inherits` chain and deep-merges the base components (in listed
+// order, later wins) beneath the component's own config (highest precedence).
+// It deep-merges ALL top-level keys, so custom component types honor catalog and
+// abstract defaults like built-in types do. `visited` tracks the current
+// resolution path to guard against inheritance cycles (backtracked per branch so
+// diamond inheritance still resolves). Components with no `metadata.inherits` are
+// returned unchanged.
+func resolveCustomComponentInheritance(
+	atmosConfig *schema.AtmosConfiguration,
+	componentMap map[string]any,
+	allComponents map[string]any,
+	visited map[string]bool,
+) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.resolveCustomComponentInheritance")()
+
+	bases, err := customComponentInheritsBases(componentMap)
+	if err != nil {
+		return nil, err
+	}
+	if len(bases) == 0 {
+		return componentMap, nil
+	}
+
+	merged := map[string]any{}
+	for _, baseName := range bases {
+		if visited[baseName] {
+			continue // cycle guard
+		}
+		baseConfig, ok := allComponents[baseName].(map[string]any)
+		if !ok {
+			continue // unknown base — lenient skip (mirrors describe's tolerance)
+		}
+
+		visited[baseName] = true
+		resolvedBase, err := resolveCustomComponentInheritance(atmosConfig, baseConfig, allComponents, visited)
+		delete(visited, baseName) // backtrack so siblings can reuse a shared ancestor
+		if err != nil {
+			return nil, err
+		}
+
+		sanitizedBase, err := sanitizeBaseForInheritance(resolvedBase)
+		if err != nil {
+			return nil, err
+		}
+		if merged, err = m.Merge(atmosConfig, []map[string]any{merged, sanitizedBase}); err != nil {
+			return nil, err
+		}
+	}
+
+	selfCopy, err := m.DeepCopyMap(componentMap)
+	if err != nil {
+		return nil, err
+	}
+	return m.Merge(atmosConfig, []map[string]any{merged, selfCopy})
+}
+
+// customComponentInheritsBases returns the ordered base component names from a
+// component's `metadata.inherits` list. A `metadata.inherits` that is present
+// but not a list is a config error and is reported rather than silently ignored.
+func customComponentInheritsBases(componentMap map[string]any) ([]string, error) {
+	metadata, ok := componentMap[cfg.MetadataSectionName].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	rawInherits, exists := metadata[cfg.InheritsSectionName]
+	if !exists {
+		return nil, nil
+	}
+	inherits, ok := rawInherits.([]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: custom component metadata.%s must be a list", errUtils.ErrInvalidComponentMetadataInherits, cfg.InheritsSectionName)
+	}
+	bases := make([]string, 0, len(inherits))
+	for _, item := range inherits {
+		name, ok := item.(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: custom component metadata.%s must contain only strings", errUtils.ErrInvalidComponentMetadataInherits, cfg.InheritsSectionName)
+		}
+		if name != "" {
+			bases = append(bases, name)
+		}
+	}
+	return bases, nil
+}
+
+// sanitizeBaseForInheritance deep-copies a base component and strips the
+// per-component metadata fields (`type`, `inherits`, `component`) so an abstract
+// base does not poison a concrete component (e.g. mark it abstract).
+func sanitizeBaseForInheritance(base map[string]any) (map[string]any, error) {
+	clone, err := m.DeepCopyMap(base)
+	if err != nil {
+		return nil, err
+	}
+	if metadata, ok := clone[cfg.MetadataSectionName].(map[string]any); ok {
+		delete(metadata, "type")
+		delete(metadata, cfg.InheritsSectionName)
+		delete(metadata, cfg.ComponentSectionName)
+		if len(metadata) == 0 {
+			delete(clone, cfg.MetadataSectionName)
+		}
+	}
+	return clone, nil
 }
 
 // componentProcessResult holds the result of processing a single component in parallel.

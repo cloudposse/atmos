@@ -73,7 +73,8 @@ func resolveCachedComponentAuthManager(
 	cacheKey, cacheable := buildComponentAuthCacheKey(parentAuthManager, authSection)
 	if cacheable {
 		if cached, ok := nestedAuthManagerCache.Load(cacheKey); ok {
-			log.Debug("Reusing cached component-specific AuthManager",
+			log.Debug(
+				"Reusing cached component-specific AuthManager",
 				logKeyComponent, component,
 				logKeyStack, stack,
 			)
@@ -145,7 +146,8 @@ func resolveAuthManagerForNestedComponent(
 	// Get component configuration WITHOUT processing templates/functions.
 	componentConfig, err := getComponentConfigForAuthResolution(component, stack)
 	if err != nil {
-		log.Debug("Could not get component config for auth resolution, using parent AuthManager",
+		log.Debug(
+			"Could not get component config for auth resolution, using parent AuthManager",
 			logKeyComponent, component,
 			logKeyStack, stack,
 			"error", err,
@@ -157,7 +159,8 @@ func resolveAuthManagerForNestedComponent(
 	authSection, hasAuthSection := componentConfig[cfg.AuthSectionName].(map[string]any)
 	if !hasAuthSection || authSection == nil {
 		// Component has no auth config, inherit parent's AuthManager.
-		log.Debug("Component has no auth config, inheriting parent AuthManager",
+		log.Debug(
+			"Component has no auth config, inheriting parent AuthManager",
 			logKeyComponent, component,
 			logKeyStack, stack,
 		)
@@ -169,7 +172,8 @@ func resolveAuthManagerForNestedComponent(
 	// This prevents interactive selector from showing for component auth overrides.
 	hasDefault := hasDefaultIdentity(authSection)
 	if !hasDefault {
-		log.Debug("Component auth config has no default identity, inheriting parent AuthManager",
+		log.Debug(
+			"Component auth config has no default identity, inheriting parent AuthManager",
 			logKeyComponent, component,
 			logKeyStack, stack,
 		)
@@ -177,7 +181,8 @@ func resolveAuthManagerForNestedComponent(
 	}
 
 	// Component has auth config with default identity, create (or reuse) a component-specific AuthManager.
-	log.Debug("Component has auth config with default identity, creating component-specific AuthManager",
+	log.Debug(
+		"Component has auth config with default identity, creating component-specific AuthManager",
 		logKeyComponent, component,
 		logKeyStack, stack,
 	)
@@ -220,7 +225,8 @@ func createComponentAuthManager(
 		cfg.AuthSectionName,
 	)
 	if err != nil {
-		log.Debug("Could not merge component auth config, using parent AuthManager",
+		log.Debug(
+			"Could not merge component auth config, using parent AuthManager",
 			logKeyComponent, component,
 			logKeyStack, stack,
 			"error", err,
@@ -237,7 +243,8 @@ func createComponentAuthManager(
 		if len(chain) > 0 {
 			// Last element in chain is the authenticated identity.
 			identityName = chain[len(chain)-1]
-			log.Debug("Inheriting identity from parent AuthManager for component",
+			log.Debug(
+				"Inheriting identity from parent AuthManager for component",
 				logKeyComponent, component,
 				logKeyStack, stack,
 				"inheritedIdentity", identityName,
@@ -248,15 +255,19 @@ func createComponentAuthManager(
 
 	// Create and authenticate new AuthManager with merged config.
 	// Use inherited identity from parent, or empty string to auto-detect from component's defaults.
-	// Use WithAtmosConfig variant to enable stack-level default identity loading.
-	componentAuthManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
+	// Use the stack-aware variant so the target component's stack is threaded into manager
+	// construction: stack-scoped identities (e.g. kind: <target>/emulator) need it to resolve
+	// their endpoint and populate the in-process auth context read by `!terraform.state`.
+	componentAuthManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfigForStack(
 		identityName,     // Inherited from parent, or empty to trigger auto-detection
 		mergedAuthConfig, // Merged component + global auth
 		cfg.IdentityFlagSelectValue,
 		atmosConfig, // Enable stack-level auth default loading
+		stack,       // Target component's stack, for stack-scoped (emulator) identities
 	)
 	if err != nil {
-		log.Debug("Auth does not exist for the component, using parent AuthManager",
+		log.Debug(
+			"Auth does not exist for the component, using parent AuthManager",
 			logKeyComponent, component,
 			logKeyStack, stack,
 			"error", err,
@@ -267,7 +278,8 @@ func createComponentAuthManager(
 	// Successfully created component-specific AuthManager.
 	if componentAuthManager != nil {
 		chain := componentAuthManager.GetChain()
-		log.Debug("Created component-specific AuthManager",
+		log.Debug(
+			"Created component-specific AuthManager",
 			logKeyComponent, component,
 			logKeyStack, stack,
 			"identityChain", chain,

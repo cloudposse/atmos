@@ -111,60 +111,14 @@ func TestUserIdentity_Environment_WithoutRegion(t *testing.T) {
 	assert.False(t, hasDefaultRegion, "AWS_DEFAULT_REGION should not be set when region is not explicitly configured")
 }
 
-func TestIsStandaloneAWSUserChain(t *testing.T) {
-	// Not standalone when multiple elements.
-	assert.False(t, IsStandaloneAWSUserChain([]string{"p", "dev"}, map[string]schema.Identity{"dev": {Kind: "aws/user"}}))
-
-	// Single element but wrong kind -> false.
-	assert.False(t, IsStandaloneAWSUserChain([]string{"dev"}, map[string]schema.Identity{"dev": {Kind: "aws/permission-set"}}))
-
-	// Single element and aws/user -> true.
-	assert.True(t, IsStandaloneAWSUserChain([]string{"dev"}, map[string]schema.Identity{"dev": {Kind: "aws/user"}}))
-}
-
-// stubUser satisfies types.Identity for testing AuthenticateStandaloneAWSUser.
-type stubUser struct{ creds types.ICredentials }
-
-func (s stubUser) Kind() string                     { return "aws/user" }
-func (s stubUser) GetProviderName() (string, error) { return "aws-user", nil }
-func (s stubUser) Authenticate(_ context.Context, _ types.ICredentials) (types.ICredentials, error) {
-	return s.creds, nil
-}
-func (s stubUser) Validate() error                         { return nil }
-func (s stubUser) Environment() (map[string]string, error) { return map[string]string{}, nil }
-func (s stubUser) Paths() ([]types.Path, error)            { return []types.Path{}, nil }
-func (s stubUser) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
-	return nil
-}
-
-func (s stubUser) Logout(_ context.Context) error {
-	return nil
-}
-
-func (s stubUser) CredentialsExist() (bool, error) {
-	return true, nil
-}
-
-func (s stubUser) LoadCredentials(_ context.Context) (types.ICredentials, error) {
-	return s.creds, nil
-}
-
-func (s stubUser) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
-	return environ, nil
-}
-func (s stubUser) SetRealm(_ string) {}
-
-func TestAuthenticateStandaloneAWSUser(t *testing.T) {
-	// Not found -> error.
-	_, err := AuthenticateStandaloneAWSUser(context.Background(), "missing", map[string]types.Identity{})
-	assert.Error(t, err)
-
-	// Found -> returns credentials from identity implementation.
-	out, err := AuthenticateStandaloneAWSUser(context.Background(), "dev", map[string]types.Identity{
-		"dev": stubUser{creds: &types.AWSCredentials{AccessKeyID: "AKIA", Region: "us-east-1"}},
-	})
+func TestUserIdentityIsStandalone(t *testing.T) {
+	identity, err := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user"})
 	require.NoError(t, err)
-	assert.Equal(t, "AKIA", out.(*types.AWSCredentials).AccessKeyID)
+
+	// aws/user identities authenticate without an upstream provider step.
+	standalone, ok := identity.(types.StandaloneIdentity)
+	require.True(t, ok, "aws/user identity must implement types.StandaloneIdentity")
+	assert.True(t, standalone.IsStandalone())
 }
 
 // Use in-memory keyring for this test package.
@@ -2228,72 +2182,6 @@ func TestUserIdentity_HandleSTSErrorWithRetry_EdgeCases(t *testing.T) {
 
 		_, err = userIdent.handleSTSErrorWithRetry(context.Background(), genericErr, nil, "us-east-1", false)
 		require.Error(t, err)
-	})
-}
-
-// TestUserIdentity_IsStandaloneAWSUserChain tests the IsStandaloneAWSUserChain function.
-func TestUserIdentity_IsStandaloneAWSUserChain(t *testing.T) {
-	tests := []struct {
-		name       string
-		chain      []string
-		identities map[string]schema.Identity
-		expected   bool
-	}{
-		{
-			name:       "empty chain",
-			chain:      []string{},
-			identities: map[string]schema.Identity{},
-			expected:   false,
-		},
-		{
-			name:  "single aws/user identity",
-			chain: []string{"my-user"},
-			identities: map[string]schema.Identity{
-				"my-user": {Kind: "aws/user"},
-			},
-			expected: true,
-		},
-		{
-			name:  "single non-user identity",
-			chain: []string{"my-role"},
-			identities: map[string]schema.Identity{
-				"my-role": {Kind: "aws/assume-role"},
-			},
-			expected: false,
-		},
-		{
-			name:  "multiple identities in chain",
-			chain: []string{"user", "role"},
-			identities: map[string]schema.Identity{
-				"user": {Kind: "aws/user"},
-				"role": {Kind: "aws/assume-role"},
-			},
-			expected: false,
-		},
-		{
-			name:       "identity not found",
-			chain:      []string{"missing"},
-			identities: map[string]schema.Identity{},
-			expected:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := IsStandaloneAWSUserChain(tt.chain, tt.identities)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-// TestUserIdentity_AuthenticateStandaloneAWSUser tests the AuthenticateStandaloneAWSUser function.
-func TestUserIdentity_AuthenticateStandaloneAWSUser(t *testing.T) {
-	t.Run("returns error when identity not found", func(t *testing.T) {
-		identities := make(map[string]types.Identity)
-
-		_, err := AuthenticateStandaloneAWSUser(context.Background(), "missing", identities)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "not found")
 	})
 }
 

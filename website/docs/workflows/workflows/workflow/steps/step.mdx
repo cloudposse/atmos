@@ -1,0 +1,124 @@
+---
+title: step
+sidebar_label: step
+sidebar_position: 1
+slug: /workflows/steps/step
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+A step is one entry in a workflow's `steps` array — the unit of work Atmos runs, whether it executes a command or renders interactive UI.
+</Intro>
+
+```yaml
+steps:
+  - name: plan
+    type: atmos
+    command: terraform plan vpc
+    stack: tenant1-ue2-dev
+    identity: developer
+```
+
+## Common Fields
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Optional step identifier. Atmos generates names like `step1` when omitted. Names are used by `--from-step` and by templates such as `{{ .steps.plan.value }}`.</dd>
+
+  <dt>`type`</dt>
+  <dd>Step behavior selector. Type `atmos` is the default for command steps. See [type](/workflows/steps/type).</dd>
+
+  <dt>`command`</dt>
+  <dd>Command text for command-running step types such as `atmos`, `shell`, `spin`, and `container` run actions.</dd>
+
+  <dt>`stack`</dt>
+  <dd>Step-level stack override for `type: atmos` steps.</dd>
+
+  <dt>`identity`</dt>
+  <dd>Step-level auth identity. See [identity](/workflows/steps/identity).</dd>
+
+  <dt>`when`</dt>
+  <dd>Optional condition controlling whether the step runs. Omitted means run. A false condition skips the step without failing the workflow.</dd>
+
+  <dt>`env`</dt>
+  <dd>Step-level environment variables. See [env](/workflows/steps/env).</dd>
+
+  <dt>`working_directory`</dt>
+  <dd>Step-level working directory override. See [working_directory](/workflows/steps/working-directory).</dd>
+
+  <dt>`retry`</dt>
+  <dd>Retry policy for the step. See [retry](/workflows/steps/retry).</dd>
+
+  <dt>`output`</dt>
+  <dd>Step-level output mode override. See [output](/workflows/steps/output).</dd>
+
+  <dt>`show`</dt>
+  <dd>Step-level display settings override. See [show](/workflows/steps/show).</dd>
+
+  <dt>`outputs`</dt>
+  <dd>Declared outputs derived from the step result. See [outputs](/workflows/steps/outputs).</dd>
+</dl>
+
+## Conditional Steps
+
+Use `when` to skip workflow steps declaratively. Skipped steps do not render
+templates, authenticate, retry, run dependencies owned by the step, or invoke
+the step handler.
+
+```yaml
+steps:
+  - name: ci-plan
+    type: atmos
+    command: terraform plan vpc
+    stack: tenant1-ue2-dev
+    when: ci
+
+  - name: local-preview
+    type: shell
+    command: ./scripts/preview.sh
+    when: local
+```
+
+Step predicates are:
+
+<dl>
+  <dt>`ci`</dt>
+  <dd>Run only when Atmos detects CI using its standard CI detection.</dd>
+
+  <dt>`local`</dt>
+  <dd>Run only outside CI.</dd>
+
+  <dt>`always`</dt>
+  <dd>Always run.</dd>
+
+  <dt>`never`</dt>
+  <dd>Never run.</dd>
+
+  <dt>`success`</dt>
+  <dd>Run when the step condition is evaluated with success status.</dd>
+</dl>
+
+`failure` is supported for hooks, which evaluate against a lifecycle outcome,
+but not for workflow or custom command steps.
+
+Compose conditions with list shorthand, `all`, `any`, and `not`:
+
+```yaml
+steps:
+  - name: ci-only-success
+    command: terraform plan vpc
+    when: [ci, success]
+
+  - name: local-or-ci
+    command: ./scripts/check.sh
+    when:
+      any: [ci, local]
+
+  - name: not-ci
+    command: ./scripts/local-only.sh
+    when:
+      not: ci
+```
+
+Type-specific fields are documented with [type](/workflows/steps/type).

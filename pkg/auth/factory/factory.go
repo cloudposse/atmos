@@ -48,6 +48,7 @@ func NewFactory() *Factory {
 	}
 	RegisterGCPProviders(f)
 	RegisterGCPIdentities(f)
+	RegisterEmulatorIdentities(f)
 	return f
 }
 

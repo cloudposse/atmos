@@ -407,6 +407,14 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		viper.GetViper().Set("profiles.base_path", atmosConfig.Profiles.BasePath)
 	}
 
+	// Bridge the first-class `container.runtime.auto_start` YAML setting to the env
+	// var that container runtime detection reads (pkg/container). PromoteAtmosEnv
+	// respects precedence: an explicitly-set ATMOS_CONTAINER_RUNTIME_AUTO_START
+	// always wins over config and is never overwritten.
+	if atmosConfig.Container.Runtime.AutoStart {
+		envpkg.PromoteAtmosEnv(map[string]string{"ATMOS_CONTAINER_RUNTIME_AUTO_START": "true"})
+	}
+
 	return atmosConfig, nil
 }
 
@@ -1564,7 +1572,26 @@ func mergeCaseMapsFromFile(configFile string, mergedCaseMaps *casemap.CaseMaps) 
 		mergedCaseMaps.Set(path, existingMap)
 	}
 
+	mergeRecursiveEnvCaseKeys(rawYAML, mergedCaseMaps)
 	mergeDotenvIncludeCaseMaps(configFile, rawYAML, mergedCaseMaps)
+}
+
+// mergeRecursiveEnvCaseKeys folds env-var key casing from nested `env:` blocks
+// (custom-command and step-level) into the shared "env" case map, so they restore
+// the same way the top-level `env:` section does.
+func mergeRecursiveEnvCaseKeys(rawYAML []byte, mergedCaseMaps *casemap.CaseMaps) {
+	envKeys, err := casemap.CollectEnvKeysRecursive(rawYAML)
+	if err != nil || len(envKeys) == 0 {
+		return
+	}
+	existingMap := mergedCaseMaps.Get(envKey)
+	if existingMap == nil {
+		existingMap = make(casemap.CaseMap)
+	}
+	for k, v := range envKeys {
+		existingMap[k] = v
+	}
+	mergedCaseMaps.Set(envKey, existingMap)
 }
 
 // populateLegacyIdentityCaseMap copies auth.identities case mappings to the legacy IdentityCaseMap field.
@@ -1595,6 +1622,7 @@ func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
+		schema.ConditionDecodeHook(),
 		schema.TasksDecodeHook(),
 	)
 }
