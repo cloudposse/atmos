@@ -13,8 +13,8 @@ const (
 	errFormat           = "%w: %v"
 	errWrapFormat       = "%w: %s"
 	errWrapFormatWithID = "%w '%s': %s"
-	// errParseFmt wraps an option-parsing error so callers can use errors.Is on
-	// both the sentinel and the underlying error.
+	// The errParseFmt format wraps an option-parsing error so callers can use
+	// errors.Is on both the sentinel and the underlying error.
 	errParseFmt = "%w: %w"
 )
 
