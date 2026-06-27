@@ -161,6 +161,13 @@ func runCloneNamed(ctx context.Context, name string, opts *cloneOptions) error {
 	depth := resolveIntPrecedence(opts.Depth, resolved.Clone.Depth)
 	filter := resolveStringPrecedence(opts.Filter, resolved.Clone.Filter)
 
+	// Named repositories are admin-declared in atmos.yaml, so a cross-repo URI
+	// is trusted; pass an empty URI so only a pull-request ref override (e.g.
+	// --branch refs/pull/N/merge) trips the gate, not the configured URI.
+	if err := guardForkCheckout(branch, "", opts); err != nil {
+		return err
+	}
+
 	cloneOpts := &atmosgit.CloneOptions{
 		RepoContext: atmosgit.RepoContext{
 			Workdir: workdir,
@@ -370,9 +377,16 @@ func guardForkCheckout(ref, uri string, opts *cloneOptions) error {
 
 	ciCtx, err := detected.Context()
 	if err != nil {
-		// Detection is best-effort; do not block clones on metadata errors.
-		log.Debug("Fork-checkout gate: unable to read CI context, skipping", "error", err)
-		return nil
+		// Fail closed: a detected CI provider whose trust context cannot be
+		// read leaves the event-elevation unknown, so refuse rather than risk
+		// cloning fork content with the job's secrets.
+		log.Debug("Fork-checkout gate: unable to read CI context, failing closed", "error", err)
+		return errUtils.Build(errUtils.ErrUnsafeForkCheckout).
+			WithCause(err).
+			WithExplanation("unable to read CI context for fork-checkout safety evaluation").
+			WithHint("Fix CI metadata detection, or pass --allow-unsafe-fork only if this workflow is intentionally trusted.").
+			WithExitCode(2).
+			Err()
 	}
 
 	verdict := ci.EvaluateForkCheckout(ciCtx, ci.CloneRequest{Ref: ref, URI: uri})

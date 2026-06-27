@@ -86,6 +86,26 @@ func TestGuardForkCheckout_OptInConfigDisablesGate(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestGuardForkCheckout_NamedClonePRRefOverrideIsRefused(t *testing.T) {
+	// Named clones pass an empty URI (configured URIs are admin-trusted), so
+	// only a pull-request ref override should trip the gate.
+	registerGitHubProviderOnly(t)
+	setForkPRTargetEnv(t)
+
+	err := guardForkCheckout("refs/pull/5/merge", "", &cloneOptions{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnsafeForkCheckout)
+}
+
+func TestGuardForkCheckout_NamedCloneBaseRefIsTrusted(t *testing.T) {
+	// Named clone with a normal branch and no URI must not be gated.
+	registerGitHubProviderOnly(t)
+	setForkPRTargetEnv(t)
+
+	err := guardForkCheckout("main", "", &cloneOptions{})
+	assert.NoError(t, err)
+}
+
 func TestGuardForkCheckout_NoCIProviderIsTrusted(t *testing.T) {
 	// Isolate to an empty registry: no provider detected.
 	restore := ci.SwapRegistryForTest()

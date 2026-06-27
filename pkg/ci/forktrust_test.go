@@ -71,6 +71,18 @@ func TestEvaluateForkCheckout(t *testing.T) {
 			wantUntrusted: true,
 		},
 		{
+			name:          "elevated event with same-slug different-host URI is untrusted",
+			ctx:           &Context{EventName: "pull_request_target", ElevatedEvent: true, Repository: baseRepo, ServerURL: "https://github.com", CloneURL: "https://github.com/acme/infra.git"},
+			req:           CloneRequest{URI: "https://evil.example.com/acme/infra.git"},
+			wantUntrusted: true,
+		},
+		{
+			name:          "elevated event with matching enterprise host and slug is trusted",
+			ctx:           &Context{EventName: "pull_request_target", ElevatedEvent: true, Repository: "acme/infra", ServerURL: "https://ghe.acme.com", CloneURL: "https://ghe.acme.com/acme/infra.git"},
+			req:           CloneRequest{URI: "https://ghe.acme.com/acme/infra.git"},
+			wantUntrusted: false,
+		},
+		{
 			name:          "elevated event with no ref and no URI is trusted",
 			ctx:           &Context{EventName: "pull_request_target", ElevatedEvent: true, Repository: baseRepo},
 			req:           CloneRequest{},
@@ -136,6 +148,28 @@ func TestRepoSlugFromURI(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.uri, func(t *testing.T) {
 			assert.Equal(t, tt.want, repoSlugFromURI(tt.uri))
+		})
+	}
+}
+
+func TestHostFromURI(t *testing.T) {
+	tests := []struct {
+		uri  string
+		want string
+	}{
+		{"https://github.com/acme/infra.git", "github.com"},
+		{"https://GitHub.com/acme/infra", "github.com"}, // lowercased.
+		{"git@github.com:acme/infra.git", "github.com"},
+		{"ssh://git@ghe.acme.com/acme/infra.git", "ghe.acme.com"},
+		{"ssh://git@ghe.acme.com:22/acme/infra.git", "ghe.acme.com"}, // port stripped.
+		{"git::https://ghe.acme.com/acme/infra.git", "ghe.acme.com"},
+		{"https://user@example.com/acme/infra.git", "example.com"},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.uri, func(t *testing.T) {
+			assert.Equal(t, tt.want, hostFromURI(tt.uri))
 		})
 	}
 }

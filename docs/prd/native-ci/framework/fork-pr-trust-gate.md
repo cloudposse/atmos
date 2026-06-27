@@ -70,18 +70,21 @@ existing CI `Context` (which already populates `EventName`, `Ref`, `Repository`,
 **Dangerous combination** = elevated event **AND** fork-targeting clone:
 
 - **Elevated event**: `GITHUB_EVENT_NAME ∈ {pull_request_target, workflow_run}`.
-- **Fork-targeting clone** (any one of):
+- **Fork-targeting clone** — the *requested clone* points at fork content (either one of):
   1. A `--branch`/ref override that is a PR merge or head ref (e.g. `refs/pull/<N>/merge`,
      `refs/pull/<N>/head`).
-  2. An ad-hoc clone URI or repository whose `owner/repo` differs from the base
-     `GITHUB_REPOSITORY`.
-  3. When the event payload is available (`$GITHUB_EVENT_PATH`):
-     `event.pull_request.head.repo.fork == true`, or
-     `head.repo.full_name != base.repo.full_name`.
+  2. An ad-hoc clone URI whose host **or** `owner/repo` differs from the base
+     (`GITHUB_SERVER_URL` + `GITHUB_REPOSITORY`).
+
+The signal is keyed off the **requested clone target**, not merely the event payload. A
+forked PR under `pull_request_target` is *not* by itself fork-targeting: the safe no-arg
+checkout (base repository at its base ref) stays trusted. Payload fields such as
+`event.pull_request.head.repo.fork` may *corroborate* a cross-repo URI but never gate the
+default base checkout on their own.
 
 **Behavior**:
 - Detection is provider-supplied so non-GitHub providers can contribute their own signals.
-- Absence of a payload must not weaken the gate — signals (1) and (2) are derivable from the
+- Absence of a payload must not weaken the gate — both signals are derivable from the
   command invocation and env alone.
 
 **Validation**:
@@ -147,7 +150,7 @@ and static analysis (the v7 design intent behind `allow-unsafe-pr-checkout`).
 | `pull_request_target` | no-arg (base repo, base ref) | — | clone (trusted) |
 | `pull_request_target` | `--branch refs/pull/<N>/merge` | no | **refuse** |
 | `pull_request_target` | `--branch refs/pull/<N>/merge` | yes | clone (warn) |
-| `pull_request_target` | fork URI (`owner ≠ base`) | no | **refuse** |
+| `pull_request_target` | fork URI (host or `owner/repo` ≠ base) | no | **refuse** |
 | `workflow_run` | fork ref / fork URI | no | **refuse** |
 | `workflow_run` | fork ref / fork URI | yes | clone (warn) |
 | `pull_request` | any | — | clone (low-privilege event) |
@@ -155,9 +158,11 @@ and static analysis (the v7 design intent behind `allow-unsafe-pr-checkout`).
 
 ## Out of Scope / Future
 
-- Go implementation, JSON schema updates (`pkg/datafetcher/schema`), and tests — a follow-up
-  implementation PR consumes this PRD.
-- Non-GitHub providers (GitLab MR pipelines, etc.). The gate belongs in the provider-agnostic
+- JSON schema modeling of the `ci:` block in `pkg/datafetcher/schema` — that block is not
+  schematized today (not even `ci.enabled`/`ci.cache`), so the new
+  `ci.allow_unsafe_fork_execution` key is added to the Go config struct only, deferred to a
+  broader `ci:`-schema effort.
+- Non-GitHub providers (GitLab MR pipelines, etc.). The gate lives in the provider-agnostic
   clone path (`cmd/git`) and consumes a provider-supplied trust signal; each provider adds its
   own fork-detection over time (see the [provider registry](../providers/README.md)).
 - Hardening of execution paths *other* than clone (e.g. a contributor with write access to the

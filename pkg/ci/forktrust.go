@@ -69,14 +69,33 @@ func EvaluateForkCheckout(ciCtx *Context, req CloneRequest) ForkVerdict {
 		}
 	}
 
-	if req.URI != "" && ciCtx.Repository != "" {
-		target := repoSlugFromURI(req.URI)
-		base := normalizeRepoSlug(ciCtx.Repository)
-		if target != "" && base != "" && target != base {
-			return ForkVerdict{
-				Untrusted: true,
-				Reason:    fmt.Sprintf("clone target %q differs from the base repository %q", target, base),
-			}
+	return evaluateCloneTarget(ciCtx, req.URI)
+}
+
+// evaluateCloneTarget reports whether a clone URI points at a different remote
+// than the base CI repository — by host or by owner/repo. A different host is
+// untrusted even when the owner/repo slug matches, so
+// "https://evil.example.com/acme/infra.git" cannot pass as the base "acme/infra".
+func evaluateCloneTarget(ciCtx *Context, uri string) ForkVerdict {
+	if uri == "" || ciCtx.Repository == "" {
+		return ForkVerdict{}
+	}
+
+	baseHost := baseHostFromContext(ciCtx)
+	targetHost := hostFromURI(uri)
+	if baseHost != "" && targetHost != "" && !strings.EqualFold(targetHost, baseHost) {
+		return ForkVerdict{
+			Untrusted: true,
+			Reason:    fmt.Sprintf("clone target host %q differs from the base repository host %q", targetHost, baseHost),
+		}
+	}
+
+	targetSlug := repoSlugFromURI(uri)
+	baseSlug := normalizeRepoSlug(ciCtx.Repository)
+	if targetSlug != "" && baseSlug != "" && targetSlug != baseSlug {
+		return ForkVerdict{
+			Untrusted: true,
+			Reason:    fmt.Sprintf("clone target %q differs from the base repository %q", targetSlug, baseSlug),
 		}
 	}
 
@@ -115,6 +134,38 @@ func repoSlugFromURI(raw string) string {
 		return ""
 	}
 	return normalizeRepoSlug(u.Path)
+}
+
+// baseHostFromContext returns the lowercased host of the base CI repository,
+// preferring ServerURL and falling back to CloneURL. Empty when neither is set.
+func baseHostFromContext(ciCtx *Context) string {
+	if h := hostFromURI(ciCtx.ServerURL); h != "" {
+		return h
+	}
+	return hostFromURI(ciCtx.CloneURL)
+}
+
+// hostFromURI extracts the lowercased host from a git clone URI, handling
+// go-getter, https/ssh/git, and SCP-style (git@host:owner/repo) forms. Returns
+// an empty string when a host cannot be derived.
+func hostFromURI(raw string) string {
+	stripped := strings.TrimPrefix(strings.TrimSpace(raw), gitGetterPrefix)
+	if stripped == "" {
+		return ""
+	}
+
+	// SCP-style: git@host:owner/repo(.git) — net/url cannot parse this form.
+	if at := strings.Index(stripped, "@"); at >= 0 {
+		if colon := strings.Index(stripped, ":"); colon > at && !strings.HasPrefix(stripped[colon+1:], "//") {
+			return strings.ToLower(stripped[at+1 : colon])
+		}
+	}
+
+	u, err := url.Parse(stripped)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
 }
 
 // normalizeRepoSlug reduces a path or "owner/repo" string to a lowercased
