@@ -28,6 +28,7 @@ type cmdStateSnapshot struct {
 	flags          map[string]flagSnapshot
 	chdirProcessed bool
 	colorProfile   termenv.Profile // Lipgloss color profile
+	openDocsURL    func(string) error
 }
 
 // snapshotRootCmdState captures the current state of RootCmd including all flag values and I/O streams.
@@ -40,6 +41,7 @@ func snapshotRootCmdState() *cmdStateSnapshot {
 		flags:          make(map[string]flagSnapshot),
 		chdirProcessed: chdirProcessed,
 		colorProfile:   lipgloss.ColorProfile(),
+		openDocsURL:    openDocsURL,
 	}
 
 	// Copy args.
@@ -134,4 +136,7 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 	// This prevents test pollution from color settings.
 	lipgloss.SetColorProfile(snapshot.colorProfile)
 	theme.InvalidateStyleCache()
+
+	// Restore package-level test seams.
+	openDocsURL = snapshot.openDocsURL
 }

@@ -17,6 +17,7 @@ The `metadata` section configures how Atmos interprets and manages a component. 
 ## Use Cases
 
 - **Component Mapping:** Specify which Terraform root module a component uses.
+- **Human-Readable Descriptions:** Document what a component is for.
 - **Inheritance:** Define which components a component inherits from.
 - **Abstract Components:** Mark components as templates that cannot be deployed directly.
 - **Component Control:** Enable, disable, or lock components.
@@ -49,11 +50,27 @@ components:
     vpc-prod:
       metadata:
         component: vpc # Uses components/terraform/vpc
+        description: Production VPC
       vars:
         environment: prod
 ```
 
 This allows multiple stack components to share the same Terraform root module with different configurations.
+
+### `description`
+
+Provides a human-readable description of the component:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        description: "Virtual Private Cloud with public and private subnets"
+```
+
+Atmos preserves `description` as component metadata. It does not change how the component is processed, planned, or applied.
 
 ### `name`
 
@@ -237,6 +254,7 @@ components:
     vpc-main:
       metadata:
         component: vpc
+        description: Main VPC
       vars:
         vpc_cidr: "10.0.0.0/16"
         name: main
@@ -244,12 +262,13 @@ components:
     vpc-isolated:
       metadata:
         component: vpc
+        description: Isolated VPC without an internet gateway
       vars:
         vpc_cidr: "10.1.0.0/16"
         name: isolated
         enable_internet_gateway: false
 
-````
+```
 </File>
 
 Both `vpc-main` and `vpc-isolated` use the same `components/terraform/vpc` root module but with different configurations.
@@ -269,7 +288,7 @@ components:
         enable_dns_support: true
         enable_nat_gateway: true
         single_nat_gateway: false
-````
+```
 
 </File>
 
@@ -290,7 +309,7 @@ components:
           - us-east-1a
           - us-east-1b
           - us-east-1c
-````
+```
 </File>
 
 ### Environment-Specific Component Control
@@ -304,7 +323,7 @@ components:
         enabled: false  # Disabled in dev to save costs
       vars:
         # ...
-````
+```
 
 </File>
 

@@ -30,6 +30,43 @@ func serviceTestConfig(s store.Store) (*schema.AtmosConfiguration, map[string]an
 	return cfg, section
 }
 
+// TestService_Status_RemoteGatedByVerify proves that a remote (non-local) store-backed secret is
+// reported as Unknown without verification — its backend is never contacted — and is checked only
+// when verify=true. This is what makes `atmos secret list` credential-free by default.
+func TestService_Status_RemoteGatedByVerify(t *testing.T) {
+	t.Run("verify_false_reports_unknown_without_contacting_backend", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		// No EXPECT on Has: gomock fails the test if the backend is contacted.
+		mockStatus := store.NewMockStatusStore(ctrl)
+		cfg, section := serviceTestConfig(mockStatus)
+		svc := NewService(cfg, "prod", "api", section)
+
+		statuses := svc.Status(false)
+		require.Len(t, statuses, 1)
+		assert.True(t, statuses[0].Unknown, "remote store status must be unknown without --verify")
+		assert.False(t, statuses[0].Initialized)
+		require.NoError(t, statuses[0].Err)
+	})
+
+	t.Run("verify_true_contacts_backend", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockStatus := store.NewMockStatusStore(ctrl)
+		mockStatus.EXPECT().Has("prod", "api", "API_KEY").Return(true, nil)
+		cfg, section := serviceTestConfig(mockStatus)
+		svc := NewService(cfg, "prod", "api", section)
+
+		statuses := svc.Status(true)
+		require.Len(t, statuses, 1)
+		assert.False(t, statuses[0].Unknown)
+		assert.True(t, statuses[0].Initialized)
+		require.NoError(t, statuses[0].Err)
+	})
+}
+
 func TestService_SetGetDelete(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -44,6 +81,43 @@ func TestService_SetGetDelete(t *testing.T) {
 	require.NoError(t, svc.Set("API_KEY", "v1"))
 
 	got, err := svc.Get("API_KEY", ResolveOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "v1", got)
+}
+
+func TestService_StoreReferenceOverridesSecretName(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := store.NewMockStore(ctrl)
+	mockStore.EXPECT().
+		Set("prod", "api", "op://{{ .atmos_stack }}/{{ .atmos_component }}/password", "v1").
+		Return(nil)
+	mockStore.EXPECT().
+		Get("prod", "api", "op://{{ .atmos_stack }}/{{ .atmos_component }}/password").
+		Return("v1", nil)
+
+	cfg := &schema.AtmosConfiguration{
+		StoresConfig: store.StoresConfig{
+			"op": store.StoreConfig{Type: "onepassword", Secret: true},
+		},
+		Stores: store.StoreRegistry{"op": mockStore},
+	}
+	section := map[string]any{
+		"secrets": map[string]any{
+			"vars": map[string]any{
+				"DB_PASSWORD": map[string]any{
+					"store":     "op",
+					"reference": "op://{{ .atmos_stack }}/{{ .atmos_component }}/password",
+				},
+			},
+		},
+	}
+	svc := NewService(cfg, "prod", "api", section)
+
+	require.NoError(t, svc.Set("DB_PASSWORD", "v1"))
+
+	got, err := svc.Get("DB_PASSWORD", ResolveOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, "v1", got)
 }
@@ -144,7 +218,9 @@ func TestService_GlobalScope_StatusCoordinate(t *testing.T) {
 	cfg, section := globalServiceTestConfig(mockStore)
 	svc := NewService(cfg, "prod", "api", section)
 
-	statuses := svc.Status()
+	// verify=true: contact the backend so a remote store reports a real initialized/missing
+	// status (credential-free listing would otherwise mark it Unknown).
+	statuses := svc.Status(true)
 	require.Len(t, statuses, 1)
 	st := statuses[0]
 	require.NoError(t, st.Err)

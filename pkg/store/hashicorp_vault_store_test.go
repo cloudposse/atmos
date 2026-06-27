@@ -2,7 +2,11 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	vault "github.com/hashicorp/vault/api"
@@ -14,9 +18,13 @@ import (
 type fakeVaultKV struct {
 	data map[string]map[string]any
 
-	putErr error // returned by Put when set.
-	getErr error // returned by Get when set.
-	delErr error // returned by Delete when set.
+	putErr  error // returned by Put when set.
+	getErr  error // returned by Get when set.
+	delErr  error // returned by Delete when set.
+	metaErr error // returned by HasMetadata when set.
+
+	getCalls  int // number of secret-DATA reads (Get) performed.
+	metaCalls int // number of metadata reads (HasMetadata) performed.
 }
 
 func newFakeVaultKV() *fakeVaultKV {
@@ -32,6 +40,7 @@ func (f *fakeVaultKV) Put(_ context.Context, path string, data map[string]any) e
 }
 
 func (f *fakeVaultKV) Get(_ context.Context, path string) (map[string]any, error) {
+	f.getCalls++
 	if f.getErr != nil {
 		return nil, f.getErr
 	}
@@ -40,6 +49,19 @@ func (f *fakeVaultKV) Get(_ context.Context, path string) (map[string]any, error
 		return nil, nil
 	}
 	return v, nil
+}
+
+// HasMetadata mirrors the KV v2 metadata read: it reports existence without returning any secret
+// values. A missing path surfaces as vault.ErrSecretNotFound, matching the real client.
+func (f *fakeVaultKV) HasMetadata(_ context.Context, path string) error {
+	f.metaCalls++
+	if f.metaErr != nil {
+		return f.metaErr
+	}
+	if _, ok := f.data[path]; !ok {
+		return vault.ErrSecretNotFound
+	}
+	return nil
 }
 
 func (f *fakeVaultKV) Delete(_ context.Context, path string) error {
@@ -79,6 +101,129 @@ func TestVaultStore_SetGetDeleteHas(t *testing.T) {
 	has, err = s.Has("prod", "api", "API_KEY")
 	require.NoError(t, err)
 	assert.False(t, has)
+}
+
+func TestVaultStore_HTTPKVv2Integration(t *testing.T) {
+	data := map[string]map[string]any{}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/secret/data/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/v1/secret/data/")
+		switch r.Method {
+		case http.MethodPut, http.MethodPost:
+			var body struct {
+				Data map[string]any `json:"data"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				writeVaultJSON(w, http.StatusBadRequest, map[string]any{"errors": []string{"invalid json"}})
+				return
+			}
+			data[path] = body.Data
+			writeVaultJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"version": 1}})
+		case http.MethodGet:
+			value, ok := data[path]
+			if !ok {
+				writeVaultJSON(w, http.StatusNotFound, map[string]any{"errors": []string{"missing secret"}})
+				return
+			}
+			writeVaultJSON(w, http.StatusOK, map[string]any{
+				"data": map[string]any{
+					"data":     value,
+					"metadata": map[string]any{"version": 1},
+				},
+			})
+		case http.MethodDelete:
+			delete(data, path)
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+	// Metadata endpoint backs Has(): it reports existence without returning any secret values.
+	mux.HandleFunc("/v1/secret/metadata/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/v1/secret/metadata/")
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if _, ok := data[path]; !ok {
+			writeVaultJSON(w, http.StatusNotFound, map[string]any{"errors": []string{"missing secret"}})
+			return
+		}
+		// Note: no secret data is included, only metadata.
+		writeVaultJSON(w, http.StatusOK, map[string]any{
+			"data": map[string]any{
+				"versions":        map[string]any{"1": map[string]any{}},
+				"current_version": 1,
+			},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	t.Setenv("VAULT_ADDR", "")
+	t.Setenv("VAULT_TOKEN", "")
+
+	prefix := "atmos"
+	delim := "-"
+	raw, err := NewVaultStore(&VaultStoreOptions{
+		Address:        srv.URL,
+		Token:          "test-token",
+		Mount:          "secret",
+		Prefix:         &prefix,
+		StackDelimiter: &delim,
+	}, "")
+	require.NoError(t, err)
+	s := raw.(*VaultStore)
+
+	require.NoError(t, s.Set("plat-prod", "api", "API_KEY", "secret-value"))
+	assert.Equal(t, map[string]any{vaultValueKey: "secret-value"}, data["atmos/plat/prod/api/API_KEY"])
+
+	got, err := s.Get("plat-prod", "api", "API_KEY")
+	require.NoError(t, err)
+	assert.Equal(t, "secret-value", got)
+
+	data["atmos/shared/token"] = map[string]any{vaultValueKey: "shared-token"}
+	got, err = s.GetKey("shared/token")
+	require.NoError(t, err)
+	assert.Equal(t, "shared-token", got)
+
+	has, err := s.Has("plat-prod", "api", "API_KEY")
+	require.NoError(t, err)
+	assert.True(t, has)
+
+	require.NoError(t, s.Delete("plat-prod", "api", "API_KEY"))
+	_, ok := data["atmos/plat/prod/api/API_KEY"]
+	assert.False(t, ok)
+
+	has, err = s.Has("plat-prod", "api", "API_KEY")
+	require.NoError(t, err)
+	assert.False(t, has)
+}
+
+func TestVaultStore_HTTPKVv2Integration_ServerErrorWrapped(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/secret/data/prod/api/API_KEY", func(w http.ResponseWriter, _ *http.Request) {
+		writeVaultJSON(w, http.StatusInternalServerError, map[string]any{"errors": []string{"boom"}})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	t.Setenv("VAULT_ADDR", "")
+	t.Setenv("VAULT_TOKEN", "")
+
+	raw, err := NewVaultStore(&VaultStoreOptions{Address: srv.URL, Token: "test-token", Mount: "secret"}, "")
+	require.NoError(t, err)
+
+	_, err = raw.Get("prod", "api", "API_KEY")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrVaultRead)
+}
+
+func writeVaultJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func TestVaultStore_Set_Validation(t *testing.T) {
@@ -201,12 +346,49 @@ func TestVaultStore_Has_EmptyDataMapsToFalse(t *testing.T) {
 
 func TestVaultStore_Has_TransportErrorPropagates(t *testing.T) {
 	fake := newFakeVaultKV()
-	fake.getErr = errors.New("connection refused")
+	fake.metaErr = errors.New("connection refused")
 	s := newTestVaultStore(fake)
 
 	_, err := s.Has("prod", "api", "k")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrVaultRead)
+}
+
+// TestVaultStore_Has_UsesMetadataNotData verifies Has checks existence via the metadata endpoint
+// and never reads (decrypts) the secret data, for both present and absent secrets.
+func TestVaultStore_Has_UsesMetadataNotData(t *testing.T) {
+	t.Run("existing secret returns true via metadata only", func(t *testing.T) {
+		fake := newFakeVaultKV()
+		s := newTestVaultStore(fake)
+		require.NoError(t, s.Set("prod", "api", "API_KEY", "secret-value"))
+
+		has, err := s.Has("prod", "api", "API_KEY")
+		require.NoError(t, err)
+		assert.True(t, has)
+		assert.Equal(t, 1, fake.metaCalls, "Has must read metadata")
+		assert.Equal(t, 0, fake.getCalls, "Has must NOT read the secret data")
+	})
+
+	t.Run("missing secret returns false via metadata only", func(t *testing.T) {
+		fake := newFakeVaultKV()
+		s := newTestVaultStore(fake)
+
+		has, err := s.Has("prod", "api", "missing")
+		require.NoError(t, err)
+		assert.False(t, has)
+		assert.Equal(t, 1, fake.metaCalls, "Has must read metadata")
+		assert.Equal(t, 0, fake.getCalls, "Has must NOT read the secret data")
+	})
+}
+
+func TestVaultStore_Has_Validation(t *testing.T) {
+	s := newTestVaultStore(newFakeVaultKV())
+	_, err := s.Has("", "api", "k")
+	assert.ErrorIs(t, err, ErrEmptyStack)
+	_, err = s.Has("prod", "", "k")
+	assert.ErrorIs(t, err, ErrEmptyComponent)
+	_, err = s.Has("prod", "api", "")
+	assert.ErrorIs(t, err, ErrEmptyKey)
 }
 
 func TestVaultStore_SetAuthContext(t *testing.T) {
@@ -219,6 +401,7 @@ func TestVaultStore_SetAuthContext(t *testing.T) {
 }
 
 func TestIsVaultNotFound(t *testing.T) {
+	assert.True(t, isVaultNotFound(vault.ErrSecretNotFound))
 	assert.True(t, isVaultNotFound(&vault.ResponseError{StatusCode: vaultHTTPNotFound}))
 	assert.False(t, isVaultNotFound(&vault.ResponseError{StatusCode: 500}))
 	assert.False(t, isVaultNotFound(errors.New("plain error")))

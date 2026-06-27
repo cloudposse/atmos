@@ -254,6 +254,9 @@
     "providers": null,
     "identities": null
   },
+  "container": {
+    "runtime": {}
+  },
   "profiler": {
     "enabled": false,
     "port": 0,
@@ -291,6 +294,8 @@
   "ci": {
     "output": {},
     "summary": {},
+    "annotations": {},
+    "results": {},
     "checks": {
       "statuses": {}
     },

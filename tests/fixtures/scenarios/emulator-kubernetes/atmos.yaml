@@ -1,0 +1,14 @@
+# Minimal scenario proving the Kubernetes emulator (k3s) comes up via the emulator-component
+# path: `atmos emulator up kubernetes` (atmos manages the privileged container). Used by
+# TestEmulatorKubernetesLifecycle (opt-in, runtime-gated).
+base_path: "./"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info

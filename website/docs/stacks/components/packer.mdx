@@ -125,7 +125,7 @@ default = {}
 description = "Tags to apply to the AMI"
 }
 
-````
+```
 </File>
 
 <File title="components/packer/ami-ubuntu/template.pkr.hcl">
@@ -173,7 +173,7 @@ build {
     ]
   }
 }
-````
+```
 
 </File>
 
@@ -256,7 +256,7 @@ components:
         tag: "{{ .stage }}-{{ timestamp }}"
         base_image: "ubuntu:22.04"
 
-````
+```
 </File>
 
 ## Template Configuration
@@ -276,7 +276,7 @@ components:
       # Packer loads all *.pkr.hcl files from the component directory
       vars:
         region: us-east-1
-````
+```
 
 This allows you to organize your Packer component with multiple files:
 

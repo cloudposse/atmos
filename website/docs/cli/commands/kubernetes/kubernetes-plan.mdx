@@ -35,7 +35,10 @@ atmos kubernetes plan --affected --base origin/main
 In v1, `plan` is an alias of
 [`atmos kubernetes diff`](/cli/commands/kubernetes/diff). It renders the final
 manifests, validates them with Kubernetes server-side dry-run apply, reads live
-objects, and reports create, change, and no-change results.
+objects, and reports create, change, and no-change results — including the per-object unified
+diff in the terminal and, in CI, a collapsible **Kubernetes Diff** block in the job summary
+(`Secret` objects are omitted). See [`atmos kubernetes diff`](/cli/commands/kubernetes/diff) for
+example output.
 
 This gives Kubernetes components a Terraform-shaped preview command while keeping the implementation simple. Future versions can extend `plan` with structured plan files or approval artifacts without changing `diff`.
 

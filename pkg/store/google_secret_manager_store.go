@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -29,18 +28,22 @@ type GSMClient interface {
 	CreateSecret(ctx context.Context, req *secretmanagerpb.CreateSecretRequest, opts ...gax.CallOption) (*secretmanagerpb.Secret, error)
 	AddSecretVersion(ctx context.Context, req *secretmanagerpb.AddSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error)
 	AccessSecretVersion(ctx context.Context, req *secretmanagerpb.AccessSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.AccessSecretVersionResponse, error)
+	GetSecretVersion(ctx context.Context, req *secretmanagerpb.GetSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error)
 	DeleteSecret(ctx context.Context, req *secretmanagerpb.DeleteSecretRequest, opts ...gax.CallOption) error
 	Close() error
 }
 
 // GSMStore is an implementation of the Store interface for Google Secret Manager.
 type GSMStore struct {
-	client         GSMClient
-	projectID      string
-	prefix         string
-	stackDelimiter *string
-	replication    *secretmanagerpb.Replication
-	credentials    *string // Store-level credentials (from options).
+	client                GSMClient
+	projectID             string
+	prefix                string
+	stackDelimiter        *string
+	replication           *secretmanagerpb.Replication
+	credentials           *string // Store-level credentials (from options).
+	endpoint              string
+	endpointInsecure      bool
+	withoutAuthentication bool
 
 	// Identity-based authentication fields.
 	identityName string
@@ -51,11 +54,15 @@ type GSMStore struct {
 
 // GSMStoreOptions defines the configuration options for Google Secret Manager store.
 type GSMStoreOptions struct {
-	Prefix         *string   `mapstructure:"prefix"`
-	ProjectID      string    `mapstructure:"project_id"`
-	StackDelimiter *string   `mapstructure:"stack_delimiter"`
-	Credentials    *string   `mapstructure:"credentials"` // Optional JSON credentials
-	Locations      *[]string `mapstructure:"locations"`   // Optional replication locations
+	Prefix                *string   `mapstructure:"prefix"`
+	ProjectID             string    `mapstructure:"project_id"`
+	StackDelimiter        *string   `mapstructure:"stack_delimiter"`
+	Credentials           *string   `mapstructure:"credentials"` // Optional JSON credentials
+	Locations             *[]string `mapstructure:"locations"`   // Optional replication locations
+	Endpoint              *string   `mapstructure:"endpoint"`
+	EndpointURL           *string   `mapstructure:"endpoint_url"`
+	EndpointInsecure      bool      `mapstructure:"endpoint_insecure"`
+	WithoutAuthentication bool      `mapstructure:"without_authentication"`
 }
 
 // Verify that GSMStore implements the Store, IdentityAwareStore, DeletableStore, and
@@ -77,9 +84,12 @@ func NewGSMStore(options GSMStoreOptions, identityName string) (Store, error) {
 	}
 
 	store := &GSMStore{
-		projectID:    options.ProjectID,
-		credentials:  options.Credentials,
-		identityName: identityName,
+		projectID:             options.ProjectID,
+		credentials:           options.Credentials,
+		endpoint:              firstNonEmptyStringPtr(options.Endpoint, options.EndpointURL),
+		endpointInsecure:      options.EndpointInsecure,
+		withoutAuthentication: options.WithoutAuthentication,
+		identityName:          identityName,
 	}
 
 	if options.Prefix != nil {
@@ -119,9 +129,7 @@ func (s *GSMStore) SetAuthContext(resolver AuthContextResolver, identityName str
 func (s *GSMStore) initDefaultClient() error {
 	ctx := context.Background()
 
-	clientOpts := gcp.GetClientOptions(gcp.AuthOptions{
-		Credentials: gcp.GetCredentialsFromStore(s.credentials),
-	})
+	clientOpts := gcp.GetClientOptions(s.defaultAuthOptions())
 
 	client, err := secretmanager.NewClient(ctx, clientOpts...)
 	if err != nil {
@@ -168,9 +176,7 @@ func (s *GSMStore) initIdentityClient() error {
 }
 
 func (s *GSMStore) identityAuthOptions(authContext *GCPAuthConfig) gcp.AuthOptions {
-	opts := gcp.AuthOptions{
-		Credentials: gcp.GetCredentialsFromStore(s.credentials),
-	}
+	opts := s.defaultAuthOptions()
 	if authContext == nil {
 		return opts
 	}
@@ -184,6 +190,17 @@ func (s *GSMStore) identityAuthOptions(authContext *GCPAuthConfig) gcp.AuthOptio
 		opts.Credentials = authContext.CredentialsFile
 	}
 	return opts
+}
+
+// defaultAuthOptions builds the GCP AuthOptions for this store from its configured
+// credentials, endpoint, insecure-endpoint flag, and without-authentication flag.
+func (s *GSMStore) defaultAuthOptions() gcp.AuthOptions {
+	return gcp.AuthOptions{
+		Credentials:           gcp.GetCredentialsFromStore(s.credentials),
+		Endpoint:              s.endpoint,
+		EndpointInsecure:      s.endpointInsecure,
+		WithoutAuthentication: s.withoutAuthentication,
+	}
 }
 
 // ensureClient lazily initializes the GCP client if it hasn't been initialized yet.
@@ -435,16 +452,48 @@ func (s *GSMStore) Delete(stack string, component string, key string) error {
 	return nil
 }
 
-// Has reports whether a secret exists for the given stack, component, and key. It performs a
-// Get and maps a not-found result to false; any other error is propagated.
+// Has reports whether a secret exists for the given stack, component, and key. It queries the
+// latest version's metadata via GetSecretVersion, which does NOT access or decrypt the secret
+// payload. A not-found result maps to false; any other error is propagated.
 func (s *GSMStore) Has(stack string, component string, key string) (bool, error) {
-	_, err := s.Get(stack, component, key)
-	if err != nil {
-		if errors.Is(err, ErrResourceNotFound) {
-			return false, nil
-		}
+	if key == "" {
+		return false, ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
 		return false, err
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
+	defer cancel()
+
+	// Get the secret ID using getKey.
+	secretID, err := s.getKey(stack, component, key)
+	if err != nil {
+		return false, fmt.Errorf(errWrapFormat, ErrGetKey, err)
+	}
+
+	// Build the resource name for the latest version, matching Get's naming scheme.
+	name := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", s.projectID, secretID)
+
+	// Fetch only the version metadata; this avoids accessing/decrypting the payload.
+	_, err = s.client.GetSecretVersion(ctx, &secretmanagerpb.GetSecretVersionRequest{
+		Name: name,
+	})
+	if err != nil {
+		st, ok := status.FromError(err)
+		if ok {
+			switch st.Code() {
+			case codes.NotFound:
+				return false, nil
+			case codes.PermissionDenied:
+				return false, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretID), err)
+			}
+		}
+		return false, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
+	}
+
+	// The existence of the version means the secret is initialized.
 	return true, nil
 }
 

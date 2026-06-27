@@ -16,13 +16,17 @@ import (
 type fakeSecretsManager struct {
 	data map[string]string
 
-	createErr error // returned by CreateSecret when set.
-	putErr    error // returned by PutSecretValue (overrides the not-found-on-missing default).
-	getErr    error // returned by GetSecretValue when set.
-	delErr    error // returned by DeleteSecret when set.
+	createErr   error // returned by CreateSecret when set.
+	putErr      error // returned by PutSecretValue (overrides the not-found-on-missing default).
+	getErr      error // returned by GetSecretValue when set.
+	describeErr error // returned by DescribeSecret when set.
+	delErr      error // returned by DeleteSecret when set.
 
 	// nilStringOnGet makes GetSecretValue return an output with a nil SecretString.
 	nilStringOnGet bool
+
+	// getCalls counts GetSecretValue invocations so tests can assert Has does not decrypt.
+	getCalls int
 }
 
 func newFakeSecretsManager() *fakeSecretsManager {
@@ -50,6 +54,7 @@ func (f *fakeSecretsManager) PutSecretValue(_ context.Context, in *secretsmanage
 }
 
 func (f *fakeSecretsManager) GetSecretValue(_ context.Context, in *secretsmanager.GetSecretValueInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error) {
+	f.getCalls++
 	if f.getErr != nil {
 		return nil, f.getErr
 	}
@@ -62,6 +67,18 @@ func (f *fakeSecretsManager) GetSecretValue(_ context.Context, in *secretsmanage
 		return &secretsmanager.GetSecretValueOutput{}, nil
 	}
 	return &secretsmanager.GetSecretValueOutput{SecretString: aws.String(v)}, nil
+}
+
+// DescribeSecret returns metadata only (no SecretString), so it never decrypts the value.
+func (f *fakeSecretsManager) DescribeSecret(_ context.Context, in *secretsmanager.DescribeSecretInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.DescribeSecretOutput, error) {
+	if f.describeErr != nil {
+		return nil, f.describeErr
+	}
+	id := aws.ToString(in.SecretId)
+	if _, ok := f.data[id]; !ok {
+		return nil, &smtypes.ResourceNotFoundException{}
+	}
+	return &secretsmanager.DescribeSecretOutput{Name: aws.String(id)}, nil
 }
 
 func (f *fakeSecretsManager) DeleteSecret(_ context.Context, in *secretsmanager.DeleteSecretInput, _ ...func(*secretsmanager.Options)) (*secretsmanager.DeleteSecretOutput, error) {
@@ -99,21 +116,38 @@ func TestSecretsManagerStore_SetCreatesThenUpdates(t *testing.T) {
 	assert.Equal(t, "v2", got)
 }
 
+func TestSecretsManagerStore_SetPreservesStructuredJSONString(t *testing.T) {
+	fake := newFakeSecretsManager()
+	s := newTestASMStore(fake)
+
+	require.NoError(t, s.Set("prod", "api", "DB_CONFIG", `{"username":"demo","password":"secret"}`))
+
+	got, err := s.Get("prod", "api", "DB_CONFIG")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"username": "demo", "password": "secret"}, got)
+}
+
 func TestSecretsManagerStore_DeleteAndHas(t *testing.T) {
 	fake := newFakeSecretsManager()
 	s := newTestASMStore(fake)
 
 	require.NoError(t, s.Set("prod", "api", "API_KEY", "v1"))
 
+	// Has uses DescribeSecret (present -> true) without retrieving/decrypting the value.
+	fake.getCalls = 0
 	has, err := s.Has("prod", "api", "API_KEY")
 	require.NoError(t, err)
 	assert.True(t, has)
+	assert.Zero(t, fake.getCalls, "Has must not call GetSecretValue (no decrypt) for an existing secret")
 
 	require.NoError(t, s.Delete("prod", "api", "API_KEY"))
 
+	// After delete, DescribeSecret returns ResourceNotFound -> Has reports false, still no decrypt.
+	fake.getCalls = 0
 	has, err = s.Has("prod", "api", "API_KEY")
 	require.NoError(t, err)
 	assert.False(t, has)
+	assert.Zero(t, fake.getCalls, "Has must not call GetSecretValue (no decrypt) for a missing secret")
 }
 
 func TestSecretsManagerStore_ImplementsInterfaces(t *testing.T) {
@@ -147,6 +181,19 @@ func TestNewSecretsManagerStore_DefersClientForIdentity(t *testing.T) {
 	assert.Equal(t, "_", *asm.stackDelimiter)
 	assert.Equal(t, "aws/admin", asm.identityName)
 	assert.Nil(t, asm.client, "identity-based store must defer client creation")
+}
+
+func TestNewSecretsManagerStore_DefersClientWithoutIdentity(t *testing.T) {
+	s, err := NewSecretsManagerStore(SecretsManagerStoreOptions{
+		Region: "us-west-2",
+	}, "")
+	require.NoError(t, err)
+
+	asm, ok := s.(*SecretsManagerStore)
+	require.True(t, ok)
+	assert.Equal(t, "us-west-2", asm.region)
+	assert.Empty(t, asm.identityName)
+	assert.Nil(t, asm.client, "default-credential store must defer client creation")
 }
 
 func TestNewSecretsManagerStore_DefaultStackDelimiter(t *testing.T) {
@@ -300,12 +347,19 @@ func TestSecretsManagerStore_Delete_ErrorWrapped(t *testing.T) {
 
 func TestSecretsManagerStore_Has_OtherErrorPropagates(t *testing.T) {
 	fake := newFakeSecretsManager()
-	fake.getErr = errors.New("throttled")
+	fake.describeErr = errors.New("throttled")
 	s := newTestASMStore(fake)
 
 	_, err := s.Has("prod", "api", "K")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrGetSecret)
+	assert.Zero(t, fake.getCalls, "Has must not call GetSecretValue (no decrypt) even on a non-not-found error")
+}
+
+func TestSecretsManagerStore_Has_EmptyKey(t *testing.T) {
+	s := newTestASMStore(newFakeSecretsManager())
+	_, err := s.Has("prod", "api", "")
+	assert.ErrorIs(t, err, ErrEmptyKey)
 }
 
 func TestSecretsManagerStore_SetAuthContext(t *testing.T) {

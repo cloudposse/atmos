@@ -82,11 +82,19 @@ humans reading the CI run, not for downstream workflow conditionals.
 For Kubernetes commands, Atmos writes:
 
 - `render`: rendered object count and object list
-- `plan` / `diff`: created, changed, and no-change object counts
+- `plan` / `diff`: created, changed, and no-change object counts, plus a collapsible
+  **Kubernetes Diff** block with the per-object unified diff (GitHub renders the `+`/`-` lines
+  in green/red)
 - `apply` / `deploy`: applied or delivered object counts
 - `delete`: deleted and not-found object counts
 - `validate`: valid and invalid object counts
 - failures: an error section with the command failure
+
+The `plan`/`diff` diff is computed from the server-side dry-run against live cluster state, with
+server-managed noise (`managedFields`, `resourceVersion`, `status`, …) stripped. `Secret`
+objects are **omitted** from the diff so their data is never written to the (unmasked) job
+summary; they still appear in the object list with their action. Large diffs are truncated to
+their tail to stay within the platform job-summary size limit.
 
 Kubernetes CI summaries do not emit `$GITHUB_OUTPUT` variables, commit statuses, PR comments, or
 stored artifacts in v1.

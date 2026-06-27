@@ -1,3 +1,4 @@
+//nolint:revive // Legacy config loading file exceeds the standard file length limit.
 package config
 
 import (
@@ -15,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	goyaml "go.yaml.in/yaml/v3"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -403,6 +405,14 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// it. Either drop this sync at that point or guard with IsSet().
 	if atmosConfig.Profiles.BasePath != "" {
 		viper.GetViper().Set("profiles.base_path", atmosConfig.Profiles.BasePath)
+	}
+
+	// Bridge the first-class `container.runtime.auto_start` YAML setting to the env
+	// var that container runtime detection reads (pkg/container). PromoteAtmosEnv
+	// respects precedence: an explicitly-set ATMOS_CONTAINER_RUNTIME_AUTO_START
+	// always wins over config and is never overwritten.
+	if atmosConfig.Container.Runtime.AutoStart {
+		envpkg.PromoteAtmosEnv(map[string]string{"ATMOS_CONTAINER_RUNTIME_AUTO_START": "true"})
 	}
 
 	return atmosConfig, nil
@@ -1562,7 +1572,26 @@ func mergeCaseMapsFromFile(configFile string, mergedCaseMaps *casemap.CaseMaps) 
 		mergedCaseMaps.Set(path, existingMap)
 	}
 
+	mergeRecursiveEnvCaseKeys(rawYAML, mergedCaseMaps)
 	mergeDotenvIncludeCaseMaps(configFile, rawYAML, mergedCaseMaps)
+}
+
+// mergeRecursiveEnvCaseKeys folds env-var key casing from nested `env:` blocks
+// (custom-command and step-level) into the shared "env" case map, so they restore
+// the same way the top-level `env:` section does.
+func mergeRecursiveEnvCaseKeys(rawYAML []byte, mergedCaseMaps *casemap.CaseMaps) {
+	envKeys, err := casemap.CollectEnvKeysRecursive(rawYAML)
+	if err != nil || len(envKeys) == 0 {
+		return
+	}
+	existingMap := mergedCaseMaps.Get(envKey)
+	if existingMap == nil {
+		existingMap = make(casemap.CaseMap)
+	}
+	for k, v := range envKeys {
+		existingMap[k] = v
+	}
+	mergedCaseMaps.Set(envKey, existingMap)
 }
 
 // populateLegacyIdentityCaseMap copies auth.identities case mappings to the legacy IdentityCaseMap field.
@@ -1593,6 +1622,7 @@ func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
+		schema.ConditionDecodeHook(),
 		schema.TasksDecodeHook(),
 	)
 }
@@ -1829,26 +1859,27 @@ func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) e
 			continue
 		}
 
-		// Parse raw YAML to get auth.identities without Viper's dot-splitting.
-		var rawConfig map[string]interface{}
-		if err := yaml.Unmarshal(rawYAML, &rawConfig); err != nil {
+		// Parse raw YAML as nodes to get auth.identities without Viper's dot-splitting
+		// while preserving Atmos YAML function tags inside identity credentials.
+		var rawNode goyaml.Node
+		if err := goyaml.Unmarshal(rawYAML, &rawNode); err != nil {
 			log.Trace("Failed to parse YAML for identity extraction", "file", configFile, "error", err)
 			continue
 		}
 
-		// Navigate to auth.identities.
-		auth, ok := rawConfig["auth"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		identitiesRaw, ok := auth["identities"].(map[string]interface{})
-		if !ok {
+		identitiesNode := findYAMLMappingPath(&rawNode, "auth", "identities")
+		if identitiesNode == nil || identitiesNode.Kind != goyaml.MappingNode {
 			continue
 		}
 
 		// Convert each identity to schema.Identity and merge with existing.
-		for identityName, identityDataRaw := range identitiesRaw {
+		for i := 0; i < len(identitiesNode.Content); i += 2 {
+			identityName := identitiesNode.Content[i].Value
+			identityDataRaw, err := decodeNodeWithYamlFunctions(identitiesNode.Content[i+1])
+			if err != nil {
+				log.Trace("Failed to process YAML functions for identity", "name", identityName, "error", err)
+				continue
+			}
 			identityData, ok := identityDataRaw.(map[string]interface{})
 			if !ok {
 				log.Trace("Skipping invalid identity", "name", identityName, "file", configFile)
@@ -1885,5 +1916,33 @@ func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) e
 		atmosConfig.Auth.Identities = mergedIdentities
 	}
 
+	return nil
+}
+
+// findYAMLMappingPath walks a YAML document or mapping node to the node reached by
+// following the given sequence of mapping keys, returning nil if any key along the
+// path is missing or a non-mapping node is encountered before the path is consumed.
+func findYAMLMappingPath(node *goyaml.Node, path ...string) *goyaml.Node {
+	if node == nil {
+		return nil
+	}
+	if node.Kind == goyaml.DocumentNode {
+		if len(node.Content) == 0 {
+			return nil
+		}
+		return findYAMLMappingPath(node.Content[0], path...)
+	}
+	if len(path) == 0 {
+		return node
+	}
+	if node.Kind != goyaml.MappingNode {
+		return nil
+	}
+	head, tail := path[0], path[1:]
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == head {
+			return findYAMLMappingPath(node.Content[i+1], tail...)
+		}
+	}
 	return nil
 }

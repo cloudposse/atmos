@@ -67,13 +67,41 @@ func TestVariablesTemplateData(t *testing.T) {
 	vars.Set("step1", NewStepResult("value1").
 		WithValues([]string{"a", "b"}).
 		WithMetadata("key", "meta_value").
+		WithOutput("alias", "declared").
 		WithSkipped())
 	vars.SetEnv("ENV_VAR", "env_value")
 
 	// Access templateData indirectly through Resolve.
-	result, err := vars.Resolve("{{ .steps.step1.value }}-{{ .steps.step1.skipped }}-{{ .env.ENV_VAR }}")
+	result, err := vars.Resolve("{{ .steps.step1.value }}-{{ .steps.step1.outputs.alias }}-{{ .steps.step1.key }}-{{ .steps.step1.skipped }}-{{ .env.ENV_VAR }}")
 	require.NoError(t, err)
-	assert.Equal(t, "value1-true-env_value", result)
+	assert.Equal(t, "value1-declared-meta_value-true-env_value", result)
+}
+
+func TestVariablesSetWithOutputs(t *testing.T) {
+	vars := NewVariables()
+	vars.Set("build", NewStepResult("app:local").WithMetadata("image", "app:local").WithOutput("image", "app:local"))
+
+	result := NewStepResult("pushed").
+		WithMetadata("stdout", "ok").
+		WithMetadata("stderr", "").
+		WithMetadata("exit_code", 0).
+		WithMetadata("image", "registry.example.com/app:local").
+		WithMetadata("digest", "sha256:abc")
+
+	err := vars.SetWithOutputs("push", result, map[string]string{
+		"image":        "{{ .metadata.image }}",
+		"digest":       "{{ .digest }}",
+		"build_image":  "{{ .steps.build.outputs.image }}",
+		"command_code": "{{ .exit_code }}",
+	})
+	require.NoError(t, err)
+
+	stored := vars.Steps["push"]
+	require.NotNil(t, stored)
+	assert.Equal(t, "registry.example.com/app:local", stored.Outputs["image"])
+	assert.Equal(t, "sha256:abc", stored.Outputs["digest"])
+	assert.Equal(t, "app:local", stored.Outputs["build_image"])
+	assert.Equal(t, "0", stored.Outputs["command_code"])
 }
 
 func TestVariablesResolveExecutionError(t *testing.T) {

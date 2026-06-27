@@ -13,6 +13,20 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+var (
+	_ = schema.KubernetesCIResult{
+		Command:   "",
+		Stack:     "",
+		Component: "",
+		ExitCode:  0,
+		Error:     "",
+	}
+	_ = schema.ConfigAndStacksInfo{
+		Stack:            "",
+		ComponentFromArg: "",
+	}
+)
+
 func TestPluginHookBindings(t *testing.T) {
 	p := &Plugin{}
 	var events []string
@@ -21,9 +35,11 @@ func TestPluginHookBindings(t *testing.T) {
 	}
 
 	assert.Contains(t, events, "after.kubernetes.plan")
+	assert.Contains(t, events, "after.kubernetes.diff")
 	assert.Contains(t, events, "after.kubernetes.apply")
 	assert.Contains(t, events, "after.kubernetes.deploy")
 	assert.Contains(t, events, "after.kubernetes.delete")
+	assert.Contains(t, events, "after.kubernetes.render")
 	assert.Contains(t, events, "after.kubernetes.validate")
 }
 
@@ -96,6 +112,78 @@ func TestSummaryStatus(t *testing.T) {
 			assert.Equal(t, tt.want, summaryStatus(tt.result))
 		})
 	}
+}
+
+func TestAggregateDiffConcatenatesHeadersAndOmitsEmpty(t *testing.T) {
+	result := &schema.KubernetesCIResult{
+		Actions: []schema.KubernetesObjectCIResult{
+			{Action: "changed", Resource: "v1/ConfigMap", Namespace: "default", Name: "settings", Diff: "--- a\n+++ b\n-old\n+new\n"},
+			{Action: "changed", Resource: "v1/Secret", Namespace: "default", Name: "creds"}, // omitted: empty diff.
+			{Action: "create", Resource: "rbac.authorization.k8s.io/v1/ClusterRole", Name: "viewer", Diff: "+kind: ClusterRole\n"},
+		},
+	}
+
+	diff := aggregateDiff(result)
+
+	assert.Contains(t, diff, "# v1/ConfigMap default/settings")
+	assert.Contains(t, diff, "# rbac.authorization.k8s.io/v1/ClusterRole viewer") // cluster-scoped: no namespace.
+	assert.Contains(t, diff, "+new")
+	assert.NotContains(t, diff, "creds") // Secret omitted entirely.
+}
+
+func TestAggregateDiffEmptyWhenNoObjectHasDiff(t *testing.T) {
+	result := &schema.KubernetesCIResult{
+		Actions: []schema.KubernetesObjectCIResult{
+			{Action: "no-change", Resource: "v1/ConfigMap", Namespace: "default", Name: "settings"},
+		},
+	}
+	assert.Empty(t, aggregateDiff(result))
+}
+
+func TestRenderSummaryEmitsDiffBlock(t *testing.T) {
+	p := &Plugin{}
+	rendered, err := p.renderSummary(&plugin.HookContext{
+		Command:        "diff",
+		TemplateLoader: templates.NewLoader(nil),
+		Aggregate: &schema.KubernetesCIResult{
+			Stack:        "dev",
+			Component:    "api",
+			Command:      "diff",
+			ObjectsTotal: 1,
+			ActionCounts: map[string]int{"changed": 1},
+			Actions: []schema.KubernetesObjectCIResult{
+				{Action: "changed", Resource: "v1/ConfigMap", Namespace: "default", Name: "settings", Diff: "-  key: old\n+  key: new\n"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Contains(t, rendered, "<details><summary>Kubernetes Diff</summary>")
+	assert.Contains(t, rendered, "```diff")
+	assert.Contains(t, rendered, "# v1/ConfigMap default/settings")
+	assert.Contains(t, rendered, "+  key: new")
+}
+
+func TestRenderSummaryOmitsDiffBlockWhenNoDiff(t *testing.T) {
+	p := &Plugin{}
+	rendered, err := p.renderSummary(&plugin.HookContext{
+		Command:        "diff",
+		TemplateLoader: templates.NewLoader(nil),
+		Aggregate: &schema.KubernetesCIResult{
+			Stack:        "dev",
+			Component:    "api",
+			Command:      "diff",
+			ObjectsTotal: 1,
+			ActionCounts: map[string]int{"no-change": 1},
+			Actions: []schema.KubernetesObjectCIResult{
+				{Action: "no-change", Resource: "v1/ConfigMap", Namespace: "default", Name: "settings"},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	assert.NotContains(t, rendered, "Kubernetes Diff")
+	assert.NotContains(t, rendered, "```diff")
 }
 
 func TestRenderSummaryDoesNotEmitOutputsContract(t *testing.T) {

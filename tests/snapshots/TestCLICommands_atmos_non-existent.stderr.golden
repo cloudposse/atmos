@@ -12,9 +12,12 @@ Valid subcommands are:
   • aws
   • ci
   • completion
+  • composition
+  • container
   • describe
   • devcontainer
   • docs
+  • emulator
   • env
   • git
   • helm

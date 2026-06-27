@@ -27,9 +27,11 @@
 # Demo binaries and large audio files
 tools/director/director
 demos/audio/
+demo/screengrabs/.bin/
 
 # Module directory
 .terraform
+**/.workdir/
 **/.idea
 **/*.iml
 

@@ -179,7 +179,7 @@ auth:
 
 stores:
   ssm/dev:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: us-east-1
       identity: dev-admin

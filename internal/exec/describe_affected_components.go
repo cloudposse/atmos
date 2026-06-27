@@ -580,16 +580,18 @@ func addKubernetesSectionAffected(
 	// These sections include the Kubernetes-specific paths/manifests/render, which are
 	// not part of the shared componentSectionChecks table; comparison reuses the shared
 	// isSectionValueEqual primitive via remoteComponentLocator.
-	sections := []sectionCheck{
+	sections := append([]sectionCheck{}, []sectionCheck{
 		{sectionNameVars, affectedReasonStackVars},
 		{sectionNameEnv, affectedReasonStackEnv},
 		{sectionNameSource, affectedReasonStackSource},
 		{sectionNameProvision, affectedReasonStackProvision},
 		{sectionNameGenerate, affectedReasonStackGenerate},
+		{cfg.ProviderSectionName, fmt.Sprintf("stack.%s", cfg.ProviderSectionName)},
 		{sectionNamePaths, affectedReasonStackPaths},
 		{sectionNameManifests, affectedReasonStackManifests},
 		{sectionNameRender, affectedReasonStackRender},
-	}
+	}...)
+	sections = appendSectionChecks(sections, resolveComponentSectionChecks(atmosConfig)...)
 
 	locator := remoteComponentLocator{
 		remoteStacks:  remoteStacks,
@@ -753,6 +755,21 @@ func isComponentSectionEqual(
 		}
 	}
 	return false
+}
+
+func appendSectionChecks(base []sectionCheck, extras ...sectionCheck) []sectionCheck {
+	seen := make(map[string]struct{}, len(base)+len(extras))
+	for _, section := range base {
+		seen[section.section] = struct{}{}
+	}
+	for _, section := range extras {
+		if _, ok := seen[section.section]; ok {
+			continue
+		}
+		base = append(base, section)
+		seen[section.section] = struct{}{}
+	}
+	return base
 }
 
 // checkSettingsAndDependenciesIndexed checks settings using indexed files.

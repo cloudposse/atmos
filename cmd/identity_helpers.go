@@ -136,10 +136,14 @@ func CreateAuthManagerFromIdentityWithAtmosConfig(
 	identityName string,
 	authConfig *schema.AuthConfig,
 	atmosConfig *schema.AtmosConfiguration,
+	stack string,
 ) (auth.AuthManager, error) {
 	defer perf.Track(nil, "cmd.CreateAuthManagerFromIdentityWithAtmosConfig")()
 
-	return auth.CreateAndAuthenticateManagerWithAtmosConfig(identityName, authConfig, cfg.IdentityFlagSelectValue, atmosConfig)
+	// Thread the target stack so stack-scoped identities (e.g. kind: <target>/emulator)
+	// receive it via SetStack before authentication and can populate the in-process auth
+	// context that identity-aware stores (`!store`) resolve through.
+	return auth.CreateAndAuthenticateManagerWithAtmosConfigForStack(identityName, authConfig, cfg.IdentityFlagSelectValue, atmosConfig, stack)
 }
 
 // CreateAuthManagerFromIdentityWithStackScan creates and authenticates an AuthManager, first

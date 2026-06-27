@@ -178,7 +178,7 @@ function Home() {
             </div>
           </section>
         </main>
-        <footer>
+        <footer className="cta-footer">
             <h2>What are you waiting for? <strong className="atmos__text">It's FREE and Open Source</strong></h2>
             <h3>
               <strong className="underline">Your team can succeed</strong> with

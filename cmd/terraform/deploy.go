@@ -121,7 +121,7 @@ func init() {
 		flags.WithBoolFlag("affected", "", false, "Deploy the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Deploy all components in all stacks"),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
-		flags.WithBoolFlag("verify-plan", "", false, "Verify stored planfile matches current state before applying"),
+		flags.WithBoolFlag("verify-plan", "", false, "Force planfile drift verification before applying, overriding config (use --verify-plan=false to disable)"),
 		flags.WithEnvVars("deploy-run-init", "ATMOS_TERRAFORM_DEPLOY_RUN_INIT"),
 		flags.WithEnvVars("from-plan", "ATMOS_TERRAFORM_DEPLOY_FROM_PLAN"),
 		flags.WithEnvVars("planfile", "ATMOS_TERRAFORM_DEPLOY_PLANFILE"),

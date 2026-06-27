@@ -416,6 +416,7 @@ func TestProcessBaseComponentConfigInternal_KubernetesFields(t *testing.T) {
 		require.True(t, ok, "BaseComponentPaths must be a slice")
 		require.Len(t, paths, 1)
 		assert.Equal(t, "base/deployment.yaml", paths[0])
+		assert.Equal(t, "base/deployment.yaml", paths[len(paths)-1])
 		manifests, ok := baseComponentConfig.BaseComponentManifests.(map[string]any)
 		require.True(t, ok, "BaseComponentManifests must be a map")
 		assert.Equal(t, "base/d.yaml", manifests["deployment"])

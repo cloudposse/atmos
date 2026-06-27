@@ -296,6 +296,7 @@ func TestEnvtestApplyIdempotentDiffNoChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, diff, 1)
 	assert.Equal(t, "no-change", diff[0].Action)
+	assert.Empty(t, diff[0].Diff, "no-change objects carry no diff")
 }
 
 func TestEnvtestDiffReportsCreateAndChanged(t *testing.T) {
@@ -310,6 +311,7 @@ func TestEnvtestDiffReportsCreateAndChanged(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, diff, 1)
 	assert.Equal(t, "create", diff[0].Action)
+	assert.Contains(t, diff[0].Diff, "+  v: first", "create diff is all additions")
 
 	// Apply it, then a differing version diffs as changed.
 	applyObjects(t, client, fresh)
@@ -319,6 +321,8 @@ func TestEnvtestDiffReportsCreateAndChanged(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, diff, 1)
 	assert.Equal(t, "changed", diff[0].Action)
+	assert.Contains(t, diff[0].Diff, "-  v: first")
+	assert.Contains(t, diff[0].Diff, "+  v: second")
 }
 
 func TestEnvtestDeleteExistingAndMissing(t *testing.T) {

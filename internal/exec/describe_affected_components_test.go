@@ -158,6 +158,7 @@ func TestAddKubernetesSectionAffected(t *testing.T) {
 		{"source", sectionNameSource, map[string]any{"uri": "a"}, map[string]any{"uri": "b"}, affectedReasonStackSource},
 		{"provision", sectionNameProvision, map[string]any{"workdir": "a"}, map[string]any{"workdir": "b"}, affectedReasonStackProvision},
 		{"generate", sectionNameGenerate, map[string]any{"backend": map[string]any{"enabled": true}}, map[string]any{"backend": map[string]any{"enabled": false}}, affectedReasonStackGenerate},
+		{"provider", cfg.ProviderSectionName, "kubectl", "kustomize", "stack.provider"},
 		{"paths", sectionNamePaths, []any{"a/b.yaml"}, []any{"c/d.yaml"}, affectedReasonStackPaths},
 		{"manifests", sectionNameManifests, map[string]any{"deployment": "a.yaml"}, map[string]any{"deployment": "b.yaml"}, affectedReasonStackManifests},
 		{"render", sectionNameRender, map[string]any{"engine": "kustomize"}, map[string]any{"engine": "kubectl"}, affectedReasonStackRender},
@@ -183,6 +184,25 @@ func TestAddKubernetesSectionAffected(t *testing.T) {
 			assert.Contains(t, affected[0].AffectedAll, tt.wantReason)
 		})
 	}
+}
+
+func TestAddKubernetesSectionAffected_SectionsOverrideAddsCustomSection(t *testing.T) {
+	componentSection := map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "checkov"}}}
+	remoteStacks := k8sRemoteStacksWith(map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "trivy"}}})
+	atmosConfig := k8sAtmosConfig()
+	atmosConfig.Describe.Affected.Sections = []string{"hooks"}
+
+	var affected []schema.Affected
+	err := addKubernetesSectionAffected(
+		&affected, atmosConfig, k8sTestComponent, k8sTestStack,
+		&componentSection, &remoteStacks, &remoteStacks,
+		false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, "stack.hooks", affected[0].Affected)
+	assert.Contains(t, affected[0].AffectedAll, "stack.hooks")
 }
 
 // TestAddKubernetesSectionAffected_NoFalsePositives proves identical kubernetes sections do

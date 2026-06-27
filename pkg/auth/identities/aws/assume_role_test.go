@@ -610,8 +610,8 @@ func TestAssumeRoleIdentity_Authenticate_ValidationErrors(t *testing.T) {
 	}
 }
 
-func TestAssumeRoleIdentity_WithCustomResolver(t *testing.T) {
-	// Test assume role identity with custom resolver configuration.
+func TestAssumeRoleIdentity_WithCustomEndpoint(t *testing.T) {
+	// Test assume role identity with custom endpoint configuration.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Provider: "test-provider"},
@@ -619,12 +619,8 @@ func TestAssumeRoleIdentity_WithCustomResolver(t *testing.T) {
 			"assume_role": "arn:aws:iam::123456789012:role/TestRole",
 			"region":      "us-east-1",
 		},
-		Credentials: map[string]interface{}{
-			"aws": map[string]interface{}{
-				"resolver": map[string]interface{}{
-					"url": "http://localhost:4566",
-				},
-			},
+		Spec: map[string]interface{}{
+			"endpoint_url": "http://localhost:4566",
 		},
 	}
 
@@ -637,16 +633,14 @@ func TestAssumeRoleIdentity_WithCustomResolver(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "test-role", ari.name)
 	assert.NotNil(t, ari.config)
-	assert.NotNil(t, ari.config.Credentials)
+	assert.NotNil(t, ari.config.Spec)
 
-	// Verify resolver config exists.
-	awsCreds, ok := ari.config.Credentials["aws"]
-	assert.True(t, ok)
-	assert.NotNil(t, awsCreds)
+	// Verify endpoint config exists.
+	assert.Equal(t, "http://localhost:4566", ari.config.Spec["endpoint_url"])
 }
 
-func TestAssumeRoleIdentity_WithoutCustomResolver(t *testing.T) {
-	// Test assume role identity without custom resolver configuration.
+func TestAssumeRoleIdentity_WithoutCustomEndpoint(t *testing.T) {
+	// Test assume role identity without custom endpoint configuration.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Provider: "test-provider"},
@@ -660,15 +654,15 @@ func TestAssumeRoleIdentity_WithoutCustomResolver(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, identity)
 
-	// Verify it works without resolver config.
+	// Verify it works without endpoint config.
 	assert.NoError(t, identity.Validate())
 }
 
-func TestAssumeRoleIdentity_newSTSClient_WithResolver(t *testing.T) {
+func TestAssumeRoleIdentity_newSTSClient_WithEndpoint(t *testing.T) {
 	// This test requires AWS credentials to create an STS client.
 	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
 
-	// Test newSTSClient with custom resolver.
+	// Test newSTSClient with custom endpoint.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Provider: "test-provider"},
@@ -676,12 +670,8 @@ func TestAssumeRoleIdentity_newSTSClient_WithResolver(t *testing.T) {
 			"assume_role": "arn:aws:iam::123456789012:role/TestRole",
 			"region":      "us-east-1",
 		},
-		Credentials: map[string]interface{}{
-			"aws": map[string]interface{}{
-				"resolver": map[string]interface{}{
-					"url": "http://localhost:4566",
-				},
-			},
+		Spec: map[string]interface{}{
+			"endpoint_url": "http://localhost:4566",
 		},
 	}
 
@@ -699,17 +689,17 @@ func TestAssumeRoleIdentity_newSTSClient_WithResolver(t *testing.T) {
 		Region:          "us-east-1",
 	}
 
-	// Call newSTSClient - this should not error even with custom resolver.
+	// Call newSTSClient - this should not error even with custom endpoint.
 	client, err := ari.newSTSClient(context.Background(), baseCreds)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 }
 
-func TestAssumeRoleIdentity_newSTSClient_WithoutResolver(t *testing.T) {
+func TestAssumeRoleIdentity_newSTSClient_WithoutEndpoint(t *testing.T) {
 	// This test requires AWS credentials to create an STS client.
 	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
 
-	// Test newSTSClient without custom resolver.
+	// Test newSTSClient without custom endpoint.
 	config := &schema.Identity{
 		Kind: "aws/assume-role",
 		Via:  &schema.IdentityVia{Provider: "test-provider"},

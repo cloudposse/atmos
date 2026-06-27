@@ -27,6 +27,7 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/provisioner/source" // register source provisioner
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
@@ -113,7 +114,7 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	// Create and authenticate the AuthManager using the same injectable creator as
 	// createAndAuthenticateAuthManagerWithDeps to keep injection points unified.
 	authManager, err := defaultAuthManagerCreator(
-		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig,
+		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, info.Stack,
 	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrUserAborted) {
@@ -125,6 +126,16 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 
 	// Store manager for nested YAML functions (e.g. !terraform.state).
 	info.AuthManager = authManager
+
+	// The manager is created with its own empty stackInfo; thread the target stack
+	// through so emulator identities can resolve the running emulator's endpoint
+	// when stores (`!store`, `!secret`, hooks) build their in-process auth context.
+	// authManager may be nil when no identity/auth is configured.
+	if authManager != nil {
+		if si := authManager.GetStackInfo(); si != nil && si.Stack == "" {
+			si.Stack = info.Stack
+		}
+	}
 
 	injectTerraformStoreAuthResolver(atmosConfig, info, authManager)
 
@@ -142,6 +153,13 @@ func injectTerraformStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, in
 
 	resolver := authbridge.NewResolver(authManager, info)
 	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, storeDefaultIdentity(info.Identity))
+
+	// Also expose the resolver to cloud-KMS SOPS providers so `!secret` resolution during terraform
+	// authenticates KMS decrypt as the component's effective identity (issue #2637).
+	atmosConfig.SecretsAuth = &store.SecretsAuthContext{
+		Resolver:        resolver,
+		DefaultIdentity: storeDefaultIdentity(info.Identity),
+	}
 }
 
 func storeDefaultIdentity(identity string) string {

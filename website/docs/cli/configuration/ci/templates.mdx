@@ -157,6 +157,44 @@ Helmfile summary templates also receive captured command output:
 
 `sync` and `deploy` use the `apply` template.
 
+### Kubernetes Summary Template Variables
+
+Native [Kubernetes components](/cli/commands/kubernetes/usage) render a single summary
+template (default name `summary`) for every command (`render`, `plan`, `diff`, `apply`,
+`deploy`, `delete`, `validate`). For `plan`/`diff`, the `.Diff` variable holds the aggregated
+unified diff of all changed objects (rendered as a collapsible diff block using GitHub's `diff`
+fenced code syntax). `Secret` objects are deliberately omitted from `.Diff` so their data never
+reaches the job summary.
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `.Component` | string | Component name |
+| `.Stack` | string | Stack name |
+| `.Command` | string | Kubernetes command (`plan`, `diff`, `apply`, …) |
+| `.Status` | string | `failed`, `changed`, `no changes`, or `succeeded` |
+| `.ObjectsTotal` | int | Number of objects processed |
+| `.Counts` | []object | Action counts, each with `.Action` and `.Count` |
+| `.Actions` | []object | Per-object rows: `.Action`, `.Resource`, `.Namespace`, `.Name`, `.Diff` |
+| `.Diff` | string | Aggregated unified diff across changed objects (Secrets omitted, truncated) |
+| `.Error` | string | Command error message, if any |
+
+## Customizing the Kubernetes Summary
+
+Kubernetes summaries resolve by the base-path convention rather than the `terraform`/`helmfile`
+override maps. Place a file at `<base_path>/kubernetes/summary.md` to override the embedded
+default, or set [`ci.summary.template`](/cli/configuration/ci/summary) to load a different
+template name from `<base_path>/kubernetes/<name>.md`.
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  templates:
+    base_path: ".atmos/ci/templates"   # kubernetes summary read from kubernetes/summary.md
+  summary:
+    template: "summary"                 # optional: load kubernetes/<template>.md instead
+```
+</File>
+
 ## Example Custom Template
 
 <File title=".atmos/ci/templates/plan.md">
@@ -182,6 +220,7 @@ The default templates are embedded in the Atmos binary:
 - Terraform: `pkg/ci/plugins/terraform/templates/`
 - Helm: `pkg/ci/plugins/helm/templates/`
 - Helmfile: `pkg/ci/plugins/helmfile/templates/`
+- Kubernetes: `pkg/ci/plugins/kubernetes/templates/`
 
 You can use these as a starting point for customization.
 
