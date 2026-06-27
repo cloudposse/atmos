@@ -1,6 +1,10 @@
 package hooks
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+)
 
 // Hook is the structure for a hook configured in stack YAML.
 // Each hook has a Kind that determines what engine runs it.
@@ -14,6 +18,11 @@ type Hook struct {
 	Kind string `yaml:"kind,omitempty"`
 
 	Events []string `yaml:"events,omitempty"`
+
+	// When selects whether this hook runs. Empty defaults to success-only,
+	// preserving the original behavior where after-* hooks fired only when the
+	// operation succeeded.
+	When schema.Condition `yaml:"when,omitempty"`
 
 	// Generic command-kind fields. Used by the command engine and by named
 	// tool kinds via their defaults.
@@ -53,6 +62,19 @@ type Hook struct {
 	Commit *GitCommitSpec `yaml:"commit,omitempty"`
 	// Push pushes the created commit to the remote when true.
 	Push bool `yaml:"push,omitempty"`
+
+	// Step-kind specific (kind: step; see pkg/hooks/step_engine.go).
+	//
+	// Type names the step-registry step type to run (e.g. "container",
+	// "toast", "http"). Required for kind: step.
+	Type string `yaml:"type,omitempty"`
+	// With holds the step's own parameters, decoded into a WorkflowStep at
+	// run time. Rendered (templates + YAML functions) by
+	// resolveHookForExecution before the step sees it.
+	With map[string]any `yaml:"with,omitempty"`
+	// Retry wraps the step execution in retry.Do. Same schema as a
+	// workflow step's retry block; interpreted by the bridge, not the step.
+	Retry *schema.RetryConfig `yaml:"retry,omitempty"`
 }
 
 // GitCommitSpec is the `commit` block of a git-kind hook. Message supports
@@ -85,6 +107,39 @@ func (h *Hook) UnmarshalYAML(unmarshal func(any) error) error {
 		h.Command = ""
 	}
 	return nil
+}
+
+// RunStatus is the outcome of the lifecycle operation a hook fires around.
+type RunStatus string
+
+// Lifecycle operation outcomes reported to hooks.
+const (
+	RunSuccess RunStatus = "success"
+	RunFailure RunStatus = "failure"
+)
+
+// When values for Hook.When.
+const (
+	WhenSuccess = "success"
+	WhenFailure = "failure"
+	WhenAlways  = "always"
+)
+
+// RunsWhen reports whether this hook should run given lifecycle status and CI
+// state. An empty When defaults to success-only, preserving the pre-When
+// behavior where after-* hooks fired only on success.
+func (h *Hook) RunsWhen(status RunStatus, isCI bool) bool {
+	return h.When.EvaluateWithImplicitSuccess(schema.ConditionContext{
+		CI:     isCI,
+		Status: string(status),
+	})
+}
+
+// RunsOnStatus reports whether this hook should run given the lifecycle
+// operation's status. It is retained for tests and callers that do not need CI
+// conditions.
+func (h *Hook) RunsOnStatus(status RunStatus) bool {
+	return h.RunsWhen(status, false)
 }
 
 // MatchesEvent reports whether this hook should run for the given event.

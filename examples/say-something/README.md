@@ -1,6 +1,8 @@
 # Say Something Demo
 
-This example demonstrates the `say` step type in both custom commands and workflows. Use this type of step to announce when things happen in your workflows, like when something completes or fails.
+This example demonstrates the `say` step type in custom commands, workflows,
+and Terraform lifecycle hooks. Use this type of step to announce when things
+happen in your workflows, like when something completes or fails.
 
 `say` works across platforms by detecting an available speech engine (`say` on macOS, `spd-say`/`espeak`/`espeak-ng` on Linux, PowerShell's `System.Speech` on Windows). When no engine is available — or when running in CI or another headless environment — it degrades gracefully according to the `print` policy (by default, printing the message as a Markdown blockquote).
 
@@ -31,10 +33,16 @@ atmos workflow print-modes -f say
 
 # Announce each milestone of a build pipeline
 atmos workflow pipeline -f say
+
+# Terraform hook: announce whether apply was successful or not successful
+ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=true atmos terraform apply hello-world -s test
 ```
 
 `atmos say something` is a nested custom command defined in `atmos.yaml`. The `atmos workflow ...`
-commands run workflow definitions from `stacks/workflows/say.yaml`.
+commands run workflow definitions from `stacks/workflows/say.yaml`. The Terraform
+example runs `components/terraform/hello-world` and fires an
+`after.terraform.apply` hook with `when: always`, so the message is shown for
+both successful and failed applies.
 
 ## How `say` Works
 
@@ -47,6 +55,32 @@ steps:
     rate: normal                                # slow | normal | fast
     print: fallback                             # fallback | always | never
 ```
+
+## Terraform Apply Hook
+
+The `hello-world` component demonstrates `say` as a lifecycle hook:
+
+```yaml
+hooks:
+  announce-apply:
+    kind: step
+    type: say
+    events:
+      - after.terraform.apply
+    when: always
+    with:
+      print: always
+      content: >-
+        {{ if eq .status "success" -}}
+        Terraform apply for {{ .atmos_component }} in {{ .stack }} was successful.
+        {{- else -}}
+        Terraform apply for {{ .atmos_component }} in {{ .stack }} was not successful.
+        {{- end }}
+```
+
+Use `print: always` so the message is visible in logs even when text-to-speech
+is available. The hook receives the apply outcome as `{{ .status }}` and runs
+for both success and failure because `when: always` is set.
 
 ### Cross-platform voices (`voice`)
 

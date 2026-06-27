@@ -40,7 +40,15 @@ function CardContainer({className, href, children}) {
     </Link>
   );
 }
-function CardLayout({className, href, icon, title, description}) {
+function CardIcon({kind}) {
+  return (
+    <span
+      className={clsx(styles.cardIcon, styles[`cardIcon${kind}`])}
+      aria-hidden="true"
+    />
+  );
+}
+function CardLayout({className, href, kind, title, description}) {
   return (
     <CardContainer href={href} className={className}>
       {/* Swizzled to render the card title as a <div>, not an <h2>. Card titles
@@ -50,7 +58,8 @@ function CardLayout({className, href, icon, title, description}) {
       <div
         className={clsx('text--truncate', styles.cardTitle)}
         title={title}>
-        {icon} {title}
+        <CardIcon kind={kind} />
+        <span>{title}</span>
       </div>
       {description && (
         <p
@@ -73,20 +82,20 @@ function CardCategory({item}) {
     <CardLayout
       className={item.className}
       href={href}
-      icon="🗃️"
+      kind="Category"
       title={item.label}
       description={item.description ?? categoryItemsPlural(item.items.length)}
     />
   );
 }
 function CardLink({item}) {
-  const icon = isInternalUrl(item.href) ? '📄️' : '🔗';
+  const kind = isInternalUrl(item.href) ? 'Link' : 'External';
   const doc = useDocById(item.docId ?? undefined);
   return (
     <CardLayout
       className={item.className}
       href={item.href}
-      icon={icon}
+      kind={kind}
       title={item.label}
       description={item.description ?? doc?.description}
     />

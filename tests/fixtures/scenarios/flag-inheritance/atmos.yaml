@@ -47,3 +47,48 @@ commands:
         steps:
           - 'echo "Deploying component: {{ .Arguments.component }}"'
           - 'echo "To stack: {{ .Flags.stack }}"'
+
+  # Test 3: Custom subcommand under the built-in terraform command.
+  - name: terraform
+    description: Execute Terraform commands with custom extensions
+    commands:
+      - name: provision
+        description: This command provisions terraform components
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+        steps:
+          - 'echo "Provisioning component: {{ .Arguments.component }}"'
+          - 'echo "In stack: {{ .Flags.stack }}"'
+
+  # Test 4: Custom command using component_config with --stack.
+  - name: show
+    description: Execute 'show' commands
+    commands:
+      - name: component
+        description: Execute 'show component' command
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+        component_config:
+          component: "{{ .Arguments.component }}"
+          stack: "{{ .Flags.stack }}"
+        env:
+          - key: ATMOS_COMPONENT
+            value: "{{ .Arguments.component }}"
+        steps:
+          - 'echo "Atmos component from argument: {{ .Arguments.component }}"'
+          - 'echo "ATMOS_COMPONENT: $ATMOS_COMPONENT"'
+          - 'echo "Atmos stack: {{ .Flags.stack }}"'
+          - 'echo "Terraform component: {{ .ComponentConfig.component }}"'
+          - 'echo "Stage: {{ .ComponentConfig.vars.stage }}"'

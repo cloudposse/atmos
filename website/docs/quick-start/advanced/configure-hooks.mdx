@@ -1,0 +1,119 @@
+---
+title: Configure Hooks
+sidebar_position: 5
+sidebar_label: Configure Hooks
+slug: /quick-start/advanced/configure-hooks
+id: configure-hooks
+description: Run automated actions at component lifecycle events — security scans after a plan, output publishing after an apply — with Atmos hooks.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+# Configure Hooks
+
+<Intro>
+[Hooks](/stacks/hooks) run an automated action at a specific point in a component's lifecycle — after a `terraform plan`, after an `apply`, and so on. Atmos ships built-in **kinds** for the jobs teams reach for most (security scanning, cost estimates, publishing outputs) plus a generic `command` kind for anything else.
+</Intro>
+
+By the end of this step, every `plan` will be security-scanned, and every `apply` will publish its component's outputs to a store.
+
+## How a hook works
+
+A hook binds a **kind** (the action) to one or more **events** (when it runs):
+
+```yaml
+hooks:
+  <name>:
+    events: [after-terraform-plan]   # when to run
+    kind: trivy                       # what to run
+```
+
+Common events are `after-terraform-plan` and `after-terraform-apply`. The built-in kinds cover the usual cases — no wiring required:
+
+<dl>
+  <dt>`checkov`, `trivy`, `kics`</dt>
+  <dd>Security and policy scanners. The tool auto-installs through the [toolchain](/quick-start/advanced/install-toolchain), and findings render in your terminal (and on Atmos Pro).</dd>
+
+  <dt>`infracost`</dt>
+  <dd>Cost estimate of the planned change.</dd>
+
+  <dt>`store`</dt>
+  <dd>Publishes selected component outputs to a [store](/cli/configuration/stores) so other components can read them by name.</dd>
+
+  <dt>`command`</dt>
+  <dd>Runs any binary — your escape hatch for anything the named kinds don't cover.</dd>
+</dl>
+
+## Scan every plan
+
+The most common hook is a scanner that runs after each plan. Declare it once in your org defaults and it applies to every component:
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+terraform:
+  hooks:
+    security:
+      events:
+        - after-terraform-plan
+      kind: checkov   # or: trivy, kics
+```
+</File>
+
+Because `checkov` is declared in `dependencies.tools`, the [toolchain](/quick-start/advanced/install-toolchain) installs it the first time the hook fires — you don't install or wire up anything.
+
+## Publish outputs on apply
+
+Hooks also publish component coordinates for operators and downstream consumers: the `store` kind writes selected outputs after a component applies, so another component or tool can read them with [`!store`](/functions/yaml/store) without reaching into Terraform state.
+
+First, add the store to your `atmos.yaml`. The `config/ssm` store uses AWS SSM Parameter Store (running in your sandbox via the `local-aws` identity) for non-secret service discovery:
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  config/ssm:
+    kind: aws/ssm
+    identity: local-aws
+    options:
+      region: us-east-1
+      prefix: /atmos/quickstart/config
+```
+</File>
+
+Then add a `store` hook to a component. Here `s3-bucket` publishes its `bucket_id` after every apply:
+
+<File title="stacks/catalog/s3-bucket/defaults.yaml">
+```yaml
+components:
+  terraform:
+    s3-bucket:
+      hooks:
+        publish-coordinates:
+          events:
+            - after-terraform-apply   # run automatically after every apply
+          kind: store
+          name: config/ssm            # the store to write to
+          outputs:
+            bucket_id: .bucket_id      # store key: Terraform output
+```
+</File>
+
+## Use the published value
+
+A downstream component can read it by name with `!store <store> <component> <key>`. In this quick start, `app-config` uses stack-derived coordinates so the
+first `terraform deploy --all` can build the graph before any store values exist. In a larger stack, the same published coordinates can be consumed like this:
+
+```yaml
+# stacks/catalog/app-config/defaults.yaml
+vars:
+  bucket_id: !store config/ssm s3-bucket bucket_id
+  topic_arn: !store config/ssm sns-topic topic_arn
+  queue_url: !store config/ssm sqs-queue queue_url
+```
+
+:::tip Notice how nothing in your Terraform changed
+Scanning, cost analysis, and output publishing are all attached at the **stack** level, on lifecycle events — your component code stays plain Terraform. Publishing via a store is just one kind; reach for [`!terraform.state`](/functions/yaml/terraform.state) when a consumer can read a producer's already-created state directly. See [Hooks](/stacks/hooks) for the full list of kinds and events.
+:::
+
+---
+
+**Next:** stores hold secrets too — keep them off disk → **[Manage Secrets →](/quick-start/advanced/configure-secrets)**

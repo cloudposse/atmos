@@ -10,7 +10,7 @@ components:
       hooks:
         store-to-ssm:
           events:
-            - after-terraform-apply
+            - after.terraform.apply
           kind: store
           name: outputs/ssm
           outputs:
@@ -19,7 +19,7 @@ components:
             secret_like_value: .secret_like_value
         store-to-secrets-manager:
           events:
-            - after-terraform-apply
+            - after.terraform.apply
           kind: store
           name: outputs/asm
           outputs:
