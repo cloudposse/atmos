@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -295,6 +296,9 @@ func (d *DockerRuntime) List(ctx context.Context, filters map[string]string) ([]
 		if labelsStr := getString(containerJSON, "Labels"); labelsStr != "" {
 			info.Labels = parseLabels(labelsStr)
 		}
+		if portsStr := getString(containerJSON, "Ports"); portsStr != "" {
+			info.Ports = parseDockerPorts(portsStr)
+		}
 
 		containers = append(containers, info)
 	}
@@ -324,6 +328,66 @@ func parseLabels(labelsStr string) map[string]string {
 		}
 	}
 	return labels
+}
+
+func parseDockerPorts(portsStr string) []PortBinding {
+	var ports []PortBinding
+	seen := map[PortBinding]struct{}{}
+	for _, part := range strings.Split(portsStr, ",") {
+		binding, ok := parseDockerPort(strings.TrimSpace(part))
+		if !ok {
+			continue
+		}
+		if _, exists := seen[binding]; exists {
+			continue
+		}
+		seen[binding] = struct{}{}
+		ports = append(ports, binding)
+	}
+	return ports
+}
+
+func parseDockerPort(portStr string) (PortBinding, bool) {
+	left, right, ok := strings.Cut(portStr, "->")
+	if !ok {
+		return PortBinding{}, false
+	}
+	containerPort, protocol, ok := parseDockerContainerPort(right)
+	if !ok {
+		return PortBinding{}, false
+	}
+	hostPort, ok := parseDockerHostPort(left)
+	if !ok {
+		return PortBinding{}, false
+	}
+	return PortBinding{ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, true
+}
+
+func parseDockerContainerPort(portStr string) (int, string, bool) {
+	portPart, protocol, ok := strings.Cut(strings.TrimSpace(portStr), "/")
+	if !ok || strings.Contains(portPart, "-") {
+		return 0, "", false
+	}
+	port, err := strconv.Atoi(portPart)
+	if err != nil || port == 0 {
+		return 0, "", false
+	}
+	return port, protocol, true
+}
+
+func parseDockerHostPort(portStr string) (int, bool) {
+	hostPortPart := strings.TrimSpace(portStr)
+	if strings.Contains(hostPortPart, "-") {
+		return 0, false
+	}
+	if idx := strings.LastIndex(hostPortPart, ":"); idx >= 0 {
+		hostPortPart = hostPortPart[idx+1:]
+	}
+	port, err := strconv.Atoi(hostPortPart)
+	if err != nil || port == 0 {
+		return 0, false
+	}
+	return port, true
 }
 
 // Exec executes a command in a running container.

@@ -170,6 +170,15 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 }
 
 func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	// Let registered provider-config contributors (e.g. an emulator binding) deep-merge
+	// provider fragments UNDER the explicit `providers:` section before generation.
+	genCtx := generator.NewGeneratorContext(atmosConfig, info, workingDir)
+	if merged, err := generator.ApplyProviderContributors(context.Background(), genCtx); err != nil {
+		return err
+	} else if merged != nil {
+		info.ComponentProvidersSection = merged
+	}
+
 	// Generate `providers_override.tf.json` file if the `providers` section is configured.
 	if len(info.ComponentProvidersSection) > 0 {
 		providerOverrideFileName := filepath.Join(workingDir, "providers_override.tf.json")

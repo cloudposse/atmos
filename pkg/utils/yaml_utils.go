@@ -49,6 +49,7 @@ const (
 	AtmosYamlFuncAwsCallerIdentityUserID = "!aws.caller_identity_user_id"
 	AtmosYamlFuncAwsRegion               = "!aws.region"
 	AtmosYamlFuncAwsOrganizationID       = "!aws.organization_id"
+	AtmosYamlFuncEmulator                = "!emulator"
 
 	DefaultYAMLIndent = 2
 )
@@ -83,6 +84,7 @@ var (
 		AtmosYamlFuncAwsCallerIdentityUserID,
 		AtmosYamlFuncAwsRegion,
 		AtmosYamlFuncAwsOrganizationID,
+		AtmosYamlFuncEmulator,
 	}
 
 	// AtmosYamlTagsMap provides O(1) lookup for custom tag checking.
@@ -117,6 +119,7 @@ var (
 		AtmosYamlFuncAwsCallerIdentityUserID: true,
 		AtmosYamlFuncAwsRegion:               true,
 		AtmosYamlFuncAwsOrganizationID:       true,
+		AtmosYamlFuncEmulator:                true,
 	}
 
 	// ParsedYAML cache stores parsed yaml.Node objects and their position
