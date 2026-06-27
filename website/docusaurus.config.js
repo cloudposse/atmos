@@ -328,6 +328,10 @@ const config = {
                     {from: '/core-concepts/organizing-stacks', to: '/learn/organizing-stacks'},
                     {from: '/core-concepts/connecting-components', to: '/learn/connecting-components'},
                     {from: '/core-concepts/next-steps', to: '/learn/next-steps'},
+                    // Bare command overview routes
+                    {from: '/cli/commands/auth', to: '/cli/commands/auth/usage'},
+                    {from: '/cli/commands/ai', to: '/cli/commands/ai/usage'},
+                    {from: '/cli/commands/toolchain', to: '/cli/commands/toolchain/usage'},
                     // Terraform source command reorganization
                     {from: '/cli/commands/terraform/terraform-source', to: '/cli/commands/terraform/source'},
                     {from: '/cli/commands/terraform/terraform-source-pull', to: '/cli/commands/terraform/source/pull'},
