@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	"github.com/cloudposse/atmos/pkg/background"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
@@ -289,6 +290,28 @@ func ExecuteWorkflow(
 	// Check if the workflow steps have the `name` attribute
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
+	// Background container services started by `background: true` steps are tracked in
+	// a run-scoped registry. runCtx propagates cancellation (Ctrl-C / step failure) to
+	// readiness waits and teardown. Any service still running when the workflow ends —
+	// or when it exits early on error — is auto-torn-down here (implicit, since a service
+	// never exits on its own); an explicit `cancel` step removes it from the registry first.
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	bgRegistry := background.NewRegistry()
+	bgStack := commandLineStack
+	if bgStack == "" {
+		bgStack = strings.TrimSpace(workflowDefinition.Stack)
+	}
+	if bgStack == "" {
+		bgStack = workflow
+	}
+	bgRunner := &workflowPkg.ContainerRunner{Stack: bgStack, DryRun: dryRun}
+	defer func() {
+		if stopErr := bgRegistry.StopAll(runCtx); stopErr != nil && retErr == nil {
+			retErr = stopErr
+		}
+	}()
+
 	// Validate exec steps before executing anything: an exec step replaces
 	// the Atmos process, so it must be the final step and must not set
 	// supervisor-only fields (tty, interactive, retry, timeout, output).
@@ -442,8 +465,28 @@ func ExecuteWorkflow(
 			progressRenderer.RenderPermanent(label)
 		}
 
-		switch commandType {
-		case schema.TaskTypeParallel, schema.TaskTypeMatrix:
+		// Background steps (start/wait/wait-all/cancel) are coordinated by the
+		// run-scoped registry; everything else falls through to the normal switch.
+		handled := true
+		switch {
+		case step.BackgroundAsync:
+			// Start the container service detached and apply the implicit readiness
+			// gate (blocks until healthy when a `with.healthcheck` is configured).
+			err = workflowPkg.StartBackground(runCtx, bgRegistry, bgRunner, &steps[stepIdx], stepEnv)
+		case commandType == schema.TaskTypeWait:
+			err = workflowPkg.WaitBackground(runCtx, bgRegistry, step.For)
+		case commandType == schema.TaskTypeWaitAll:
+			err = workflowPkg.WaitAllBackground(runCtx, bgRegistry)
+		case commandType == schema.TaskTypeCancel:
+			err = workflowPkg.CancelBackground(runCtx, bgRegistry, step.For)
+		default:
+			handled = false
+		}
+
+		switch {
+		case handled:
+			// already executed above
+		case commandType == schema.TaskTypeParallel, commandType == schema.TaskTypeMatrix:
 			err = executeWorkflowControlStep(context.Background(), &workflowControlContext{
 				atmosConfig:         atmosConfig,
 				workflowDefinition:  workflowDefinition,
@@ -453,7 +496,7 @@ func ExecuteWorkflow(
 				baseEnv:             baseEnv,
 				authManager:         authManager,
 			}, &steps[stepIdx])
-		case "shell":
+		case commandType == "shell":
 			// Render command before execution if show.command is enabled.
 			// Steps with tty/interactive attach the user's terminal; plain
 			// steps keep the existing masked shell-interpreter behavior.
@@ -513,7 +556,7 @@ func ExecuteWorkflow(
 					})
 				})
 			}
-		case schema.TaskTypeExec:
+		case commandType == schema.TaskTypeExec:
 			// Replace the Atmos process with the command (shell exec semantics).
 			// Validated earlier to be the final step; no retry wrapper (the
 			// process is replaced, so a retry could never run).
@@ -525,7 +568,7 @@ func ExecuteWorkflow(
 				Env:     stepEnv,
 				DryRun:  dryRun,
 			})
-		case "atmos":
+		case commandType == "atmos":
 			// Parse command using shell.Fields for proper quote handling.
 			// This correctly handles arguments like -var="foo=bar" by stripping quotes.
 			args, parseErr := shell.Fields(command, nil)

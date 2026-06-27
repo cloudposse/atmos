@@ -167,9 +167,8 @@ func TestEffectiveBuildStep(t *testing.T) {
 func TestValidateInspectAction(t *testing.T) {
 	h := &ContainerHandler{}
 
-	// Valid via the inspect block and via the flat image shorthand.
+	// Valid via the inspect block.
 	require.NoError(t, h.validateInspectAction(&schema.WorkflowStep{Inspect: &schema.ContainerInspectStep{Image: "alpine"}}))
-	require.NoError(t, h.validateInspectAction(&schema.WorkflowStep{Image: "alpine"}))
 
 	// Missing image.
 	require.Error(t, h.validateInspectAction(&schema.WorkflowStep{}))
@@ -210,22 +209,23 @@ func TestResolveWorkDir(t *testing.T) {
 }
 
 func TestEffectiveRunStepMergesShorthand(t *testing.T) {
-	// Flat shorthand fields are folded into the run config.
+	// Run parameters live under `with:` (step.Run) and are returned as-is.
 	run := effectiveRunStep(&schema.WorkflowStep{
-		Image:   "alpine",
-		Command: "echo hi",
-		Shell:   "/bin/bash",
-		Mounts:  []schema.ContainerMount{{Source: "/h", Target: "/c"}},
+		Run: &schema.ContainerRunStep{
+			Image:   "alpine",
+			Command: "echo hi",
+			Shell:   "/bin/bash",
+			Mounts:  []schema.ContainerMount{{Source: "/h", Target: "/c"}},
+		},
 	})
 	assert.Equal(t, "alpine", run.Image)
 	assert.Equal(t, "echo hi", run.Command)
 	assert.Equal(t, "/bin/bash", run.Shell)
 	require.Len(t, run.Mounts, 1)
 
-	// An explicit run block wins over the shorthand.
+	// The run block's image is preserved.
 	run = effectiveRunStep(&schema.WorkflowStep{
-		Image: "flat",
-		Run:   &schema.ContainerRunStep{Image: "explicit"},
+		Run: &schema.ContainerRunStep{Image: "explicit"},
 	})
 	assert.Equal(t, "explicit", run.Image)
 }
@@ -241,7 +241,7 @@ func TestConvertContainerPorts(t *testing.T) {
 }
 
 func TestEffectiveInspectStepRuntimeShorthand(t *testing.T) {
-	got := effectiveInspectStep(&schema.WorkflowStep{Image: "alpine", Provider: "podman", RuntimeAutoStart: true})
+	got := effectiveInspectStep(&schema.WorkflowStep{Inspect: &schema.ContainerInspectStep{Image: "alpine"}, Provider: "podman", RuntimeAutoStart: true})
 	assert.Equal(t, "alpine", got.Image)
 	assert.Equal(t, "podman", got.Provider)
 	assert.True(t, got.RuntimeAutoStart)

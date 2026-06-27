@@ -69,12 +69,78 @@ func ValidateExecWorkflowSteps(steps []WorkflowStep) error {
 	return validateExecSteps(views)
 }
 
+// containerStepType is the step type that supports background services in v1.
+const containerStepType = "container"
+
 // ValidateWorkflowSteps validates top-level workflow steps and any control-step children.
 func ValidateWorkflowSteps(steps []WorkflowStep) error {
 	if err := ValidateExecWorkflowSteps(steps); err != nil {
 		return err
 	}
+	if err := validateBackgroundSteps(steps); err != nil {
+		return err
+	}
 	return validateControlSteps(steps, false, "")
+}
+
+// validateBackgroundSteps enforces the background-step rules over the top-level
+// workflow step list:
+//   - `background: true` is supported only for `type: container` in v1, and a
+//     background step must be non-interactive.
+//   - a `wait`/`cancel` step's `for:` targets must reference a background step
+//     declared earlier in the workflow (and not already cancelled).
+func validateBackgroundSteps(steps []WorkflowStep) error {
+	live := make(map[string]bool)
+	for i := range steps {
+		step := &steps[i]
+		stepType := effectiveWorkflowStepType(step.Type)
+		if step.BackgroundAsync {
+			if err := validateBackgroundStep(step, i, stepType); err != nil {
+				return err
+			}
+			live[workflowStepName(step, i)] = true
+		}
+		switch stepType {
+		case TaskTypeWait, TaskTypeCancel:
+			if err := validateBackgroundTargets(step, i, stepType, live); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// validateBackgroundStep checks a single `background: true` step.
+func validateBackgroundStep(step *WorkflowStep, index int, stepType string) error {
+	if stepType != containerStepType {
+		return fmt.Errorf("%w: %s sets `background: true` but is type %q; v1 supports background only for `type: container` (shell/atmos background is planned)",
+			ErrWorkflowControlStepInvalid, workflowStepLabel(step, index), stepType)
+	}
+	if step.Tty || step.Interactive {
+		return fmt.Errorf("%w: background %s cannot set tty or interactive", ErrWorkflowControlStepInvalid, workflowStepLabel(step, index))
+	}
+	return nil
+}
+
+// validateBackgroundTargets checks a wait/cancel step's `for:` references and, for
+// cancel, retires the targets so they cannot be cancelled or waited again.
+func validateBackgroundTargets(step *WorkflowStep, index int, stepType string, live map[string]bool) error {
+	if len(step.For) == 0 {
+		return fmt.Errorf("%w: %s %s requires `for:` naming the background step(s) to %s",
+			ErrWorkflowControlStepInvalid, stepType, workflowStepLabel(step, index), stepType)
+	}
+	for _, target := range step.For {
+		if !live[target] {
+			return fmt.Errorf("%w: %s %s references unknown or already-stopped background step %q in `for:`",
+				ErrWorkflowControlStepInvalid, stepType, workflowStepLabel(step, index), target)
+		}
+	}
+	if stepType == TaskTypeCancel {
+		for _, target := range step.For {
+			delete(live, target)
+		}
+	}
+	return nil
 }
 
 // validateExecSteps enforces the exec step rules over the projected views.

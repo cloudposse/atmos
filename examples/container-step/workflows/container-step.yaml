@@ -42,7 +42,7 @@ workflows:
       - name: hello
         type: container
         action: run
-        run:
+        with:
           image: alpine:latest
           command: echo "hello from a workflow container"
 
@@ -52,7 +52,7 @@ workflows:
       - name: build
         type: container
         action: build
-        build:
+        with:
           context: .
           dockerfile: Dockerfile
           tags:
@@ -63,7 +63,7 @@ workflows:
       - name: run
         type: container
         action: run
-        run:
+        with:
           image: "{{ .steps.build.outputs.image }}"
           command: |
             /usr/local/bin/example
@@ -75,8 +75,8 @@ workflows:
       - name: build
         type: container
         action: build
-        build:
-          provider: docker
+        provider: docker
+        with:
           engine: buildx
           tags:
             - atmos-container-step:bake
@@ -92,7 +92,7 @@ workflows:
       - name: run
         type: container
         action: run
-        run:
+        with:
           image: "{{ .steps.build.outputs.image }}"
           command: /usr/local/bin/example
 
@@ -102,7 +102,7 @@ workflows:
       - name: build
         type: container
         action: build
-        build:
+        with:
           context: .
           dockerfile: Dockerfile
           tags:
@@ -113,7 +113,7 @@ workflows:
       - name: push
         type: container
         action: push
-        push:
+        with:
           image: "{{ .steps.build.outputs.image }}"
           tags:
             - localhost:5000/atmos-container-step:local
@@ -124,7 +124,7 @@ workflows:
       - name: run
         type: container
         action: run
-        run:
+        with:
           image: "{{ .steps.push.outputs.image }}"
           command: |
             /usr/local/bin/example
@@ -141,7 +141,7 @@ workflows:
         type: container
         action: build
         identity: dev-admin
-        build:
+        with:
           context: .
           dockerfile: Dockerfile
           tags:
@@ -153,7 +153,7 @@ workflows:
         type: container
         action: push
         identity: dev-admin
-        push:
+        with:
           image: "{{ .steps.build.outputs.image }}"
         outputs:
           image: "{{ .metadata.image }}"
@@ -165,7 +165,7 @@ workflows:
       - name: workspace
         type: container
         action: run
-        run:
+        with:
           image: alpine:latest
           command: |
             uname -a
@@ -184,7 +184,7 @@ workflows:
         env:
           STEP_MESSAGE: "hello from step env"
         action: run
-        run:
+        with:
           image: alpine:latest
           command: |
             echo "$WORKFLOW_MESSAGE"
@@ -196,7 +196,7 @@ workflows:
       - name: check
         type: container
         action: run
-        run:
+        with:
           image: alpine:latest
           command: |
             echo "simulated check failed" >&2
@@ -210,6 +210,6 @@ workflows:
         tty: true
         interactive: true
         action: run
-        run:
+        with:
           image: alpine:latest
           command: /bin/sh
