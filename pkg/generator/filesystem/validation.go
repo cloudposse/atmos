@@ -38,33 +38,24 @@ func validateExistingDirectory(targetPath string, force, update bool) error {
 			Err()
 	}
 
-	// Filter out hidden files and directories.
-	visibleEntries := filterVisibleEntries(entries)
+	entryNames := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		entryNames = append(entryNames, entry.Name())
+	}
 
-	// If force or update is enabled, or no visible files exist, allow the operation.
-	if force || update || len(visibleEntries) == 0 {
+	// If force or update is enabled, or no files exist, allow the operation.
+	if force || update || len(entryNames) == 0 {
 		return nil
 	}
 
 	return errUtils.Build(errUtils.ErrTargetDirectoryNotEmpty).
 		WithExplanationf("Directory `%s` already contains files", targetPath).
-		WithExplanationf("Files: `%s`", strings.Join(visibleEntries, ", ")).
+		WithExplanationf("Files: `%s`", strings.Join(entryNames, ", ")).
 		WithHint("Use `--force` to overwrite existing files").
 		WithHint("Or choose a different target directory").
 		WithContext("target_dir", targetPath).
-		WithContext("file_count", len(visibleEntries)).
-		WithContext("files", strings.Join(visibleEntries, ", ")).
+		WithContext("file_count", len(entryNames)).
+		WithContext("files", strings.Join(entryNames, ", ")).
 		WithExitCode(2).
 		Err()
-}
-
-// filterVisibleEntries returns only non-hidden directory entries.
-func filterVisibleEntries(entries []os.DirEntry) []string {
-	var visible []string
-	for _, entry := range entries {
-		if !strings.HasPrefix(entry.Name(), ".") {
-			visible = append(visible, entry.Name())
-		}
-	}
-	return visible
 }

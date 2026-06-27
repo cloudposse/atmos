@@ -118,30 +118,43 @@ func (m *TextMerger) calculateChangePercentage(base, ours, theirs string) int {
 	return int(float64(totalChanged) / float64(baseSize) * 100.0)
 }
 
-// countDifferentLines counts how many lines differ between two sets of lines.
+// countDifferentLines counts how many lines from base are absent in changed
+// using an LCS-based approach.  Positional (index-by-index) comparison is
+// intentionally avoided: a single insertion near the top shifts every
+// downstream line and inflates the count far beyond the real edit size.  LCS
+// finds the longest common subsequence and reports only the lines that were
+// deleted from base (i.e., len(base) - lcsLength).  Insertions in changed
+// are not counted here to avoid double-counting when oursChanged and
+// theirsChanged are summed in calculateChangePercentage.
 func countDifferentLines(base, changed []string) int {
-	// Simple line-by-line comparison.
-	maxLen := len(base)
-	if len(changed) > maxLen {
-		maxLen = len(changed)
+	m := len(base)
+	n := len(changed)
+
+	// dp[i][j] = length of LCS of base[:i] and changed[:j].
+	// Allocate a (m+1) x (n+1) table.
+	dp := make([][]int, m+1)
+	for i := range dp {
+		dp[i] = make([]int, n+1)
 	}
 
-	differentCount := 0
-	for i := 0; i < maxLen; i++ {
-		baseLine := ""
-		changedLine := ""
-		if i < len(base) {
-			baseLine = base[i]
-		}
-		if i < len(changed) {
-			changedLine = changed[i]
-		}
-		if baseLine != changedLine {
-			differentCount++
+	for i := 1; i <= m; i++ {
+		for j := 1; j <= n; j++ {
+			if base[i-1] == changed[j-1] {
+				dp[i][j] = dp[i-1][j-1] + 1
+			} else {
+				if dp[i-1][j] > dp[i][j-1] {
+					dp[i][j] = dp[i-1][j]
+				} else {
+					dp[i][j] = dp[i][j-1]
+				}
+			}
 		}
 	}
 
-	return differentCount
+	lcsLen := dp[m][n]
+	// Count only the lines deleted from base; insertions are already implicitly
+	// covered by theirsChanged when the two sides are summed.
+	return m - lcsLen
 }
 
 // HasConflictMarkers checks if the content contains diff3 conflict markers.

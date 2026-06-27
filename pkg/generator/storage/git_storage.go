@@ -108,12 +108,12 @@ func (s *GitBaseStorage) ValidateBaseRef() error {
 			"%w: base ref %q not found in git repository\n"+
 				"This usually means:\n"+
 				"  - The tag/branch was deleted\n"+
-				"  - Wrong ref specified in .atmos/init/metadata.yaml\n"+
+				"  - Wrong ref specified in the metadata file\n"+
 				"\n"+
 				"Solutions:\n"+
-				"  1. Run: atmos init --force (regenerate from template)\n"+
-				"  2. Update .atmos/init/metadata.yaml with correct base_ref\n"+
-				"  3. Specify manually: atmos init --update --base-ref=main",
+				"  1. Re-run the command with --force to regenerate from the template\n"+
+				"  2. Update the metadata file with the correct base_ref\n"+
+				"  3. Specify the ref manually with --update --base-ref=main",
 			errUtils.ErrGitRefNotFound,
 			s.baseRef,
 		)
@@ -151,7 +151,7 @@ func (s *GitBaseStorage) GetMergeBase(ref1, ref2 string) (string, error) {
 		return "", fmt.Errorf("%w: failed to get commit for %q: %w", errUtils.ErrGitRefNotFound, ref2, err)
 	}
 
-	// Find common ancestors
+	// Find common ancestors.
 	ancestors, err := commit1.MergeBase(commit2)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to find merge base: %w", errUtils.ErrNoCommonAncestor, err)
@@ -163,8 +163,17 @@ func (s *GitBaseStorage) GetMergeBase(ref1, ref2 string) (string, error) {
 			Err()
 	}
 
-	// Return the first (most recent) common ancestor
-	return ancestors[0].Hash.String(), nil
+	// MergeBase may return multiple valid bases when the history is criss-cross.
+	// Select the candidate with the most recent committer date, which is the
+	// closest equivalent to what `git merge-base` returns by default.
+	best := ancestors[0]
+	for _, candidate := range ancestors[1:] {
+		if candidate.Committer.When.After(best.Committer.When) {
+			best = candidate
+		}
+	}
+
+	return best.Hash.String(), nil
 }
 
 // SetBaseRef updates the base reference for this storage.

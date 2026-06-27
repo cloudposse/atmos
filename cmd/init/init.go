@@ -1,4 +1,4 @@
-package init
+package initcmd
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/generator/ui"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -33,6 +34,10 @@ best-practice configurations and directory structures.
 Available templates:
 - simple: Basic Atmos project structure
 - atmos: Complete atmos.yaml configuration only
+- aws/sandbox: Bare-bones AWS project that runs on the Floci emulator
+- aws/landing-zone: Full AWS foundation (backend, secrets, workflows, validation)
+
+Run "atmos scaffold list" to see all templates, including remote ones.
 
 If no template is specified, an interactive selection will be shown.
 If no target directory is specified, you will be prompted for one.`,
@@ -55,14 +60,17 @@ If no target directory is specified, you will be prompted for one.`,
 
 		// Get flag values with proper precedence: flag > env > config > default.
 		force := v.GetBool("force")
+		sourceOverride := v.GetString("source-override")
 
 		// Interactive prompting requires both an interactive-capable flag
-		// value AND a real terminal: in CI or piped contexts prompts are
-		// skipped automatically and defaults + --set values are used.
-		interactive := v.GetBool("interactive") && term.IsTTYSupportForStdout()
+		// value AND a real terminal on both stdin and stdout: in CI or
+		// piped contexts prompts are skipped automatically and defaults +
+		// --set values are used.
+		interactive := v.GetBool("interactive") && term.IsTTYSupportForStdout() && term.IsTTYSupportForStdin()
 
 		// Get template values from --set flags.
-		setFlags, _ := cmd.Flags().GetStringSlice("set")
+		// Use viper so env vars (ATMOS_INIT_SET) and config-backed values are honoured.
+		setFlags := v.GetStringSlice("set")
 		templateValues := make(map[string]interface{})
 		for _, flag := range setFlags {
 			key, value, err := parseSetFlag(flag)
@@ -73,11 +81,12 @@ If no target directory is specified, you will be prompted for one.`,
 		}
 
 		return executeInit(cmd.Context(), initOptions{
-			templateName: template,
-			targetDir:    target,
-			interactive:  interactive,
-			force:        force,
-			templateVars: templateValues,
+			templateName:   template,
+			targetDir:      target,
+			interactive:    interactive,
+			force:          force,
+			templateVars:   templateValues,
+			sourceOverride: sourceOverride,
 		})
 	},
 }
@@ -90,9 +99,11 @@ func init() {
 		flags.WithBoolFlag("force", "f", false, "Overwrite existing files"),
 		flags.WithBoolFlag("interactive", "i", true, "Interactive mode for template selection and configuration (disabled automatically without a terminal)"),
 		flags.WithStringSliceFlag("set", "", []string{}, "Set template values (can be used multiple times: --set key=value)"),
+		flags.WithStringFlag("source-override", "", "", "Resolve catalog templates from this local base directory instead of their remote source (mainly for testing)"),
 		flags.WithEnvVars("force", "ATMOS_INIT_FORCE"),
 		flags.WithEnvVars("interactive", "ATMOS_INIT_INTERACTIVE"),
 		flags.WithEnvVars("set", "ATMOS_INIT_SET"),
+		flags.WithEnvVars("source-override", "ATMOS_INIT_SOURCE_OVERRIDE", "ATMOS_SCAFFOLD_SOURCE_OVERRIDE"),
 	)
 
 	// Register flags on the command.
@@ -171,11 +182,12 @@ func parseSetFlag(flag string) (string, string, error) {
 
 // initOptions holds configuration for the init operation.
 type initOptions struct {
-	templateName string
-	targetDir    string
-	interactive  bool
-	force        bool
-	templateVars map[string]interface{}
+	templateName   string
+	targetDir      string
+	interactive    bool
+	force          bool
+	templateVars   map[string]interface{}
+	sourceOverride string
 }
 
 // executeInit initializes a new Atmos project from a template.
@@ -196,11 +208,31 @@ func executeInit(_ context.Context, opts initOptions) error {
 		return fmt.Errorf("%w: failed to get available configurations: %w", errUtils.ErrInitialization, err)
 	}
 
+	// Merge distributable catalog templates (e.g. aws/sandbox, aws/landing-zone).
+	// They are advertised as stubs and fetched from their source on selection.
+	if stubs, stubErr := templates.CatalogStubs(opts.sourceOverride); stubErr == nil {
+		for name := range stubs {
+			if _, exists := configs[name]; !exists {
+				configs[name] = stubs[name]
+			}
+		}
+	} else {
+		log.Debug("Failed to load scaffold catalog", "error", stubErr)
+	}
+
 	// Select the template.
 	selectedConfig, err := selectTemplate(opts.templateName, opts.interactive, initUI, configs)
 	if err != nil {
 		return err
 	}
+
+	// Hydrate catalog/remote stubs into a full template before generating.
+	// cleanup removes any temporary download directory after generation.
+	cleanup, err := source.Hydrate(&selectedConfig, opts.sourceOverride)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrInitialization, err)
+	}
+	defer cleanup()
 
 	// Execute with the selected template.
 	return runInitExecution(initUI, &selectedConfig, opts)
@@ -235,7 +267,7 @@ func selectTemplate(templateName string, interactive bool, initUI *ui.InitUI, co
 	if templateName != "" {
 		config, exists := configs[templateName]
 		if !exists {
-			return templates.Configuration{}, fmt.Errorf("%w: template '%s' not found", errUtils.ErrScaffoldNotFound, templateName)
+			return templates.Configuration{}, fmt.Errorf("%w: template '%s' not found", errUtils.ErrInitTemplateNotFound, templateName)
 		}
 		return config, nil
 	}

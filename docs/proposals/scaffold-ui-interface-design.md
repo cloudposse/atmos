@@ -51,6 +51,7 @@ type DryRunFile struct {
     Exists      bool
     WouldCreate bool
     WouldUpdate bool
+    MergeStatus FileStatus // Populated by 3-way merge; defaults to FileStatusCreated/FileStatusUpdated
 }
 
 // FileStatus represents the status of a file operation.
@@ -326,7 +327,14 @@ func (ui *ProductionUI) RenderTemplateList(configs map[string]templates.Configur
     header := []string{"Name", "Description", "Source", "Version"}
     rows := [][]string{}
 
-    for name, config := range configs {
+    names := make([]string, 0, len(configs))
+    for name := range configs {
+        names = append(names, name)
+    }
+    sort.Strings(names)
+
+    for _, name := range names {
+        config := configs[name]
         source := "embedded"
         if config.Source != "" {
             source = config.Source
@@ -429,12 +437,22 @@ func (ui *ProductionUI) RenderDryRunPreview(
     }
 
     for _, file := range files {
-        status := "CREATE"
-        icon := "+"
-
-        if file.Exists {
-            status = "UPDATE"
-            icon = "~"
+        var status, icon string
+        switch file.MergeStatus {
+        case FileStatusSkipped:
+            status = "SKIP"
+            icon = "-"
+        case FileStatusConflict:
+            status = "CONFLICT"
+            icon = "!"
+        default:
+            if file.Exists {
+                status = "UPDATE"
+                icon = "~"
+            } else {
+                status = "CREATE"
+                icon = "+"
+            }
         }
 
         if err := atmosui.Writef("  %s %s %s\n", icon, status, file.Path); err != nil {
@@ -703,7 +721,12 @@ func (ui *ProductionUI) PromptForValue(prompt PromptConfig, defaultValue interfa
         return ui.initUI.PromptForInput(prompt.Description, fmt.Sprintf("%v", defaultValue))
     case "confirm":
         return ui.initUI.PromptForConfirmation(prompt.Description)
-    // ... other types
+    case "select":
+        options := make([]string, 0, len(prompt.Options))
+        for _, opt := range prompt.Options {
+            options = append(options, fmt.Sprintf("%v", opt))
+        }
+        return ui.initUI.PromptForSelection(prompt.Description, options)
     default:
         return nil, fmt.Errorf("unsupported prompt type: %s", prompt.Type)
     }

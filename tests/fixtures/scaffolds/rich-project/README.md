@@ -10,7 +10,6 @@
 - **Cloud Provider**: {{ .Config.cloud_provider | upper }}
 - **Environment**: {{ .Config.environment | title }}
 - **Terraform Version**: {{ .Config.terraform_version | default "latest" }}
-- **Created**: {{ now | date "2006-01-02 15:04:05" }}
 
 {{ if .Config.regions }}
 ## AWS Regions

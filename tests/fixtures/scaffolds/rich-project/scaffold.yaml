@@ -48,14 +48,11 @@ spec:
     - name: cloud_provider
       type: select
       label: Cloud Provider
-      description: Primary cloud provider for this project
+      description: Primary cloud provider for this project (only AWS is supported by this template)
       default: aws
       required: true
       options:
         - aws
-        - gcp
-        - azure
-        - multi-cloud
     - name: regions
       type: multiselect
       label: AWS Regions

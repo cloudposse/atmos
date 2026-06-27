@@ -1,3 +1,4 @@
+<!-- atmos:template -->
 # {{.Config.project_name}}
 
 Simple Atmos project created with `atmos init simple`.

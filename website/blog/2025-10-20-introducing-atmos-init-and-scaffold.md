@@ -261,7 +261,7 @@ These commands represent significant architectural improvements:
 
 4. **Comprehensive Testing**: Over 80% test coverage with unit and integration tests for all template processing logic
 
-See the [PRD document](https://github.com/cloudposse/atmos/blob/main/docs/prd/atmos-init-and-scaffold-commands.md) for complete technical details.
+See the [PRD documents](https://github.com/cloudposse/atmos/blob/main/docs/prd/atmos-init.md) for complete technical details.
 
 ## What's Next
 
@@ -294,6 +294,7 @@ We'd love to hear your feedback! Join the discussion in our [GitHub Discussions]
 - [atmos init command reference](/cli/commands/init)
 - [atmos scaffold command reference](/cli/commands/scaffold)
 - [Creating Custom Scaffold Templates](/cli/commands/scaffold/generate)
-- [PRD: Init and Scaffold Commands](https://github.com/cloudposse/atmos/blob/main/docs/prd/atmos-init-and-scaffold-commands.md)
+- [PRD: Init Command](https://github.com/cloudposse/atmos/blob/main/docs/prd/atmos-init.md)
+- [PRD: Scaffold Command](https://github.com/cloudposse/atmos/blob/main/docs/prd/atmos-scaffold.md)
 
 🚀 Generated with [Atmos](https://atmos.tools)

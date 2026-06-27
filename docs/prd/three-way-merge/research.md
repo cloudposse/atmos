@@ -557,8 +557,8 @@ git config merge.conflictStyle diff3
 
 | Library | Stars | Contributors | Last Commit | License | Active? | Recommendation |
 |---------|-------|--------------|-------------|---------|---------|----------------|
-| **epiclabs-io/diff3** | 15 | 3 | 2024-11-15 (5 days ago!) | MIT | ✅ **Most Active** | ⭐ **PRIMARY** |
-| **nasdf/diff3** | 23 | 1 | 2024-02-04 (9 months) | MIT | ✅ Recent | ⭐ **ALTERNATIVE** |
+| **epiclabs-io/diff3** | 15 | 3 | 2024-11-15 | MIT | ✅ **Most Active** | ⭐ **PRIMARY** |
+| **nasdf/diff3** | 23 | 1 | 2024-02-04 | MIT | ✅ Recent | ⭐ **ALTERNATIVE** |
 | **charlesvdv/go-three-way-merge** | 3 | 1 | 2018-05-23 (6+ years) | MIT | ❌ Abandoned | ❌ Avoid |
 
 ### Option 1: nasdf/diff3 (PRIMARY RECOMMENDATION)
@@ -567,7 +567,7 @@ git config merge.conflictStyle diff3
 **Language**: Pure Go (no CGO)
 **License**: MIT
 **Stars**: 15 | **Contributors**: 3
-**Last Updated**: November 15, 2024 **(5 days ago!)**
+**Last Updated**: November 15, 2024
 **Open Issues**: 0
 
 #### API

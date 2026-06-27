@@ -10,9 +10,9 @@ $ atmos scaffold list
 $ atmos scaffold list
 Available Scaffold Templates:
 
-Name                    Source                                      Description
-────────────────        ─────────────────────────────────────────   ─────────────────────────────────────
-simple                  ./templates/simple                          Simple project template
-react-app               https://github.com/user/react-template.git  React application template
-microservice            ./templates/microservice                    Microservice template with k8s
+Template        Source          Version  Description
+────────────────────────────────────────────────────────────────────
+atmos           embedded        -        Complete Atmos project with best-practice configuration
+simple          embedded        -        Basic Atmos project structure
+my-component    atmos.yaml      1.0.0    Custom component scaffold
 ```

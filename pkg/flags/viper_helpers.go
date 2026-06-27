@@ -82,14 +82,10 @@ func ParseStringMap(v *viper.Viper, key string) map[string]string {
 		addCommaSeparatedPairs(result, val)
 	case map[string]string:
 		// From defaults set via viper.SetDefault: {foo: bar, baz: qux}.
-		for k, v := range val {
-			result[k] = v
-		}
+		addStringMapPairs(result, val)
 	case map[string]interface{}:
 		// From config file: {foo: bar, baz: qux}.
-		for k, v := range val {
-			result[k] = fmt.Sprintf("%v", v)
-		}
+		addAnyMapPairs(result, val)
 	case []interface{}:
 		// From config file as array: ["foo=bar", "baz=qux"].
 		addAnySlicePairs(result, val)
@@ -114,6 +110,27 @@ func addCommaSeparatedPairs(result map[string]string, s string) {
 		k, v := parseKeyValuePair(strings.TrimSpace(pair))
 		if k != "" {
 			result[k] = v
+		}
+	}
+}
+
+// addStringMapPairs copies a string-keyed string map into result, skipping
+// keys that are empty or whitespace-only after trimming.
+func addStringMapPairs(result map[string]string, pairs map[string]string) {
+	for k, v := range pairs {
+		if strings.TrimSpace(k) != "" {
+			result[strings.TrimSpace(k)] = v
+		}
+	}
+}
+
+// addAnyMapPairs copies a string-keyed interface map into result, formatting
+// each value with %v and skipping keys that are empty or whitespace-only after
+// trimming.
+func addAnyMapPairs(result map[string]string, pairs map[string]interface{}) {
+	for k, v := range pairs {
+		if strings.TrimSpace(k) != "" {
+			result[strings.TrimSpace(k)] = fmt.Sprintf("%v", v)
 		}
 	}
 }

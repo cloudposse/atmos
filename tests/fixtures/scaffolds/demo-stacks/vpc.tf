@@ -49,8 +49,15 @@ resource "aws_vpc" "main" {
   })
 }
 
+locals {
+  # Guard against availability_zones being shorter than either subnet list.
+  # Use min() so count never exceeds the number of AZs available.
+  public_subnet_count  = min(length(var.public_subnets), length(var.availability_zones))
+  private_subnet_count = min(length(var.private_subnets), length(var.availability_zones))
+}
+
 resource "aws_subnet" "public" {
-  count             = length(var.public_subnets)
+  count             = local.public_subnet_count
   vpc_id            = aws_vpc.main.id
   cidr_block        = var.public_subnets[count.index]
   availability_zone = var.availability_zones[count.index]
@@ -62,7 +69,7 @@ resource "aws_subnet" "public" {
 }
 
 resource "aws_subnet" "private" {
-  count             = length(var.private_subnets)
+  count             = local.private_subnet_count
   vpc_id            = aws_vpc.main.id
   cidr_block        = var.private_subnets[count.index]
   availability_zone = var.availability_zones[count.index]

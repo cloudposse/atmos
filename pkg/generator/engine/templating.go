@@ -471,8 +471,8 @@ func (p *Processor) writeNewFile(file File, fullPath, targetPath string, scaffol
 func (p *Processor) processFileContent(file File, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) (string, error) {
 	content := file.Content
 
-	// Only process if user values provided or file is marked as template
-	if userValues == nil && !file.IsTemplate {
+	// Non-template files must be copied verbatim.
+	if !file.IsTemplate {
 		return content, nil
 	}
 
@@ -507,6 +507,14 @@ func (p *Processor) processFileContent(file File, targetPath string, scaffoldCon
 	return processedContent, nil
 }
 
+// isSkippableSegment reports whether a single path segment signals that the
+// file should not be generated. This covers the empty string (produced by
+// leading/trailing/doubled separators) and the sentinel values that Go
+// templates emit when a variable is missing or evaluates to a falsy value.
+func isSkippableSegment(s string) bool {
+	return s == "" || s == "false" || s == "null" || s == "<no value>"
+}
+
 // ShouldSkipFile determines if a file should be skipped based on its rendered path.
 //
 // Files are skipped in the following cases:
@@ -519,26 +527,25 @@ func (p *Processor) processFileContent(file File, targetPath string, scaffoldCon
 func (p *Processor) ShouldSkipFile(renderedPath string) bool {
 	defer perf.Track(nil, "engine.Processor.ShouldSkipFile")()
 
-	// Skip if the path is empty, "false", "null", or "<no value>"
-	if renderedPath == "" || renderedPath == "false" || renderedPath == "null" || renderedPath == "<no value>" {
+	// Skip if the whole path is a sentinel value.
+	if isSkippableSegment(renderedPath) {
 		return true
 	}
 
 	// Skip if the path contains empty segments (e.g., "foo//bar" or "/foo" or "foo/")
-	// Check for double slashes which indicate empty segments
+	// Check for double slashes which indicate empty segments.
 	if strings.Contains(renderedPath, "//") {
 		return true
 	}
 
-	// Skip if the path starts or ends with a slash (empty segment)
+	// Skip if the path starts or ends with a slash (empty segment).
 	if strings.HasPrefix(renderedPath, "/") || strings.HasSuffix(renderedPath, "/") {
 		return true
 	}
 
-	// Split by path separator and check for empty segments
-	segments := strings.Split(renderedPath, string(os.PathSeparator))
-	for _, segment := range segments {
-		if segment == "" {
+	// Split by path separator and check for empty or sentinel segments.
+	for _, segment := range strings.Split(renderedPath, string(os.PathSeparator)) {
+		if isSkippableSegment(segment) {
 			return true
 		}
 	}

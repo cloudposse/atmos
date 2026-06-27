@@ -197,17 +197,11 @@ func TestWriteFileErrors(t *testing.T) {
 		Permissions: 0o644,
 	}
 
-	// Use platform-appropriate non-existent path.
-	var invalidDir string
-	if runtime.GOOS == "windows" {
-		// Use a non-existent drive letter on Windows.
-		invalidDir = `Z:\nonexistent\directory\that\does\not\exist`
-	} else {
-		invalidDir = "/nonexistent/directory/that/does/not/exist"
-	}
+	tempDir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(tempDir, "test.txt"), 0o755))
 
-	// Non-existent directory should fail.
-	err := processor.ProcessFile(file, invalidDir, false, false, nil, nil)
+	// Writing a file where a directory already exists should fail everywhere.
+	err := processor.ProcessFile(file, tempDir, false, false, nil, nil)
 	assert.Error(t, err, "Expected error for non-existent directory")
 }
 

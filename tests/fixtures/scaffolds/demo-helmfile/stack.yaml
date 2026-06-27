@@ -6,7 +6,7 @@ vars:
   tenant: tenant
   environment: dev
   region: us-east-2
-  cluster_name: "{{ .vars.stage }}-{{ .vars.tenant }}"
+  cluster_name: "{{`{{ .vars.stage }}`}}-{{`{{ .vars.tenant }}`}}"
 
 components:
   helmfile:

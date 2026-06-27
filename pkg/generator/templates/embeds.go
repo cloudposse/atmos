@@ -205,7 +205,7 @@ func loadConfiguration(fsys fs.FS, templatePath, defaultName, source string) (*C
 //   - <!-- atmos:template --> (HTML, XML, Markdown)
 //
 // The magic comment must appear within the first 10 lines of the file and is case-insensitive.
-var templateMagicCommentPattern = regexp.MustCompile(`(?i)(?:^|//|#|/\*|<!--)\s*atmos:template\s*(?:\*/|-->)?`)
+var templateMagicCommentPattern = regexp.MustCompile(`(?i)(?://|#|/\*|<!--)\s*atmos:template\s*(?:\*/|-->)?`)
 
 // hasTemplateMagicComment checks if the content contains an atmos:template magic comment
 // in the first magicCommentMaxLines lines of the file.
@@ -224,31 +224,46 @@ func hasTemplateMagicComment(content string) bool {
 	return false
 }
 
+// cleanMagicCommentLine processes a single line that matched the magic-comment
+// pattern. It returns the cleaned line and keep=true when the line still
+// contains meaningful content after removing the marker, or keep=false when
+// the line should be dropped entirely.
+func cleanMagicCommentLine(line string) (cleaned string, keep bool) {
+	// Remove the magic comment token from the original line.
+	cleaned = templateMagicCommentPattern.ReplaceAllString(line, "")
+	// Check what remains after stripping the token.
+	trimmedCleaned := strings.TrimSpace(cleaned)
+	// Drop lines that consist only of comment delimiters or whitespace.
+	switch trimmedCleaned {
+	case "", "//", "#", "/*", "*/", "<!--", "-->":
+		return "", false
+	}
+	// Preserve leading indentation; strip trailing whitespace added by removal.
+	return strings.TrimRight(cleaned, " \t"), true
+}
+
 // stripTemplateMagicComment removes the atmos:template magic comment from the content.
 // This ensures the magic comment doesn't appear in the generated output.
 func stripTemplateMagicComment(content string) string {
 	lines := strings.Split(content, "\n")
 	var filtered []string
 
-	for _, line := range lines {
+	for i, line := range lines {
+		if i >= magicCommentMaxLines {
+			filtered = append(filtered, lines[i:]...)
+			break
+		}
+
 		trimmed := strings.TrimSpace(line)
-		// Skip lines that contain only the magic comment
-		if templateMagicCommentPattern.MatchString(trimmed) {
-			// Remove the magic comment from the original line (not just the trimmed copy)
-			cleaned := templateMagicCommentPattern.ReplaceAllString(line, "")
-			// Create a trimmed copy for emptiness checks
-			trimmedCleaned := strings.TrimSpace(cleaned)
-			// If nothing remains after removing the magic comment, skip this line
-			if trimmedCleaned == "" || trimmedCleaned == "//" || trimmedCleaned == "#" || trimmedCleaned == "/*" || trimmedCleaned == "*/" || trimmedCleaned == "<!--" || trimmedCleaned == "-->" {
-				continue
-			}
-			// Preserve leading indentation but remove trailing whitespace after magic comment removal
-			cleaned = strings.TrimRight(cleaned, " \t")
-			// Append the cleaned line with leading indentation preserved
-			filtered = append(filtered, cleaned)
+		if !templateMagicCommentPattern.MatchString(trimmed) {
+			filtered = append(filtered, line)
 			continue
 		}
-		filtered = append(filtered, line)
+
+		// Line contains the magic comment; clean it.
+		if cleaned, keep := cleanMagicCommentLine(line); keep {
+			filtered = append(filtered, cleaned)
+		}
 	}
 
 	return strings.Join(filtered, "\n")

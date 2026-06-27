@@ -853,8 +853,16 @@ line3`
 		t.Error("Expected conflict resolution marker")
 	}
 
+	// Both sides of the conflict block must be present: the "ours" side (line2)
+	// and the "theirs" side (line2b).  A check for "line2" alone passes even
+	// when only line2b survives (it is a substring of "line2b"), so assert
+	// each value independently to catch the separator-reset bug where clearing
+	// conflictBuffer at ======= discards the ours side.
 	if !strings.Contains(result, "line2") {
-		t.Error("Expected to preserve conflict content")
+		t.Error("Expected to preserve ours-side conflict content (line2)")
+	}
+	if !strings.Contains(result, "line2b") {
+		t.Error("Expected to preserve theirs-side conflict content (line2b)")
 	}
 }
 

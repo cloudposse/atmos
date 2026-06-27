@@ -17,16 +17,15 @@ This example demonstrates how to use Atmos with LocalStack for local AWS develop
 
 2. **Configure AWS CLI for LocalStack** (optional):
    ```bash
-   aws configure set aws_access_key_id test
-   aws configure set aws_secret_access_key test
-   aws configure set default.region us-east-1
-   aws configure set default.output json
+   aws configure set --profile localstack aws_access_key_id test
+   aws configure set --profile localstack aws_secret_access_key test
+   aws configure set --profile localstack region us-east-1
+   aws configure set --profile localstack output json
    ```
 
 3. **Set environment variables**:
    ```bash
-   export AWS_ACCESS_KEY_ID=test
-   export AWS_SECRET_ACCESS_KEY=test
+   export AWS_PROFILE=localstack
    export AWS_DEFAULT_REGION=us-east-1
    export TF_VAR_aws_endpoint=http://localhost:4566
    ```

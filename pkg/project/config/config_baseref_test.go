@@ -123,15 +123,12 @@ func TestLoadProjectRecord_NonexistentFile(t *testing.T) {
 }
 
 func TestSaveProjectRecord_NilTemplateConfig(t *testing.T) {
-	// A record can be written without a template manifest; it still must be
-	// a valid AtmosScaffoldConfig... except metadata.name is then empty,
-	// which fails schema validation on load. Verify the save succeeds and
-	// the load reports a helpful validation error.
+	// SaveProjectRecord rejects nil templateConfig immediately so that callers
+	// cannot write a record that LoadProjectRecord would subsequently refuse to
+	// reload (a nil config produces an empty metadata.name which fails schema
+	// validation on load, leaving the project permanently broken).
 	tmpDir := t.TempDir()
 
 	err := SaveProjectRecord(tmpDir, nil, "", "", map[string]interface{}{"k": "v"})
-	require.NoError(t, err)
-
-	_, err = LoadProjectRecord(tmpDir)
-	require.Error(t, err)
+	require.Error(t, err, "nil templateConfig must be rejected before writing")
 }

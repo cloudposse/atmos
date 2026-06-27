@@ -429,7 +429,7 @@ function scanExamples(sourceDir, options) {
   examples.sort((a, b) => a.name.localeCompare(b.name));
 
   // Collect unique tags in display order.
-  const tagOrder = ['Quickstart', 'Stacks', 'Components', 'Automation', 'DX'];
+  const tagOrder = ['Quickstart', 'Stacks', 'Components', 'Automation', 'DX', 'Scaffold', 'Init'];
   const tags = tagOrder.filter((tag) => examples.some((ex) => ex.tags.includes(tag)));
 
   return {

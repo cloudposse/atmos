@@ -59,8 +59,15 @@ func (m *ThreeWayMerger) Merge(existingContent, newContent, fileName string) (st
 			Err()
 	}
 
-	// Apply the diff to create a merged result.
-	mergedContent := dmp.DiffText2(diffs)
+	// Apply the diff as patches to existingContent so that only the specific
+	// changes from newContent are incorporated. PatchApply attempts each patch
+	// hunk independently: if a hunk cannot match the surrounding context it is
+	// skipped and the original text is kept for that region.  This preserves
+	// any local edits that do not conflict with the incoming changes, unlike
+	// DiffText2 which unconditionally returns newContent.
+	patches := dmp.PatchMake(existingContent, diffs)
+	mergedContentStr, _ := dmp.PatchApply(patches, existingContent)
+	mergedContent := mergedContentStr
 
 	// Check for conflicts by looking for diff markers.
 	if strings.Contains(mergedContent, "<<<<<<<") || strings.Contains(mergedContent, "=======") || strings.Contains(mergedContent, ">>>>>>>") {
@@ -86,8 +93,9 @@ func (m *ThreeWayMerger) resolveConflicts(content, fileName string) string {
 		}
 
 		if strings.HasPrefix(line, "=======") {
-			// Middle of conflict - switch to "theirs" side.
-			conflictBuffer = []string{}
+			// Middle of conflict - separator between ours and theirs sides.
+			// Keep conflictBuffer intact so the full conflict block (both sides)
+			// is passed to resolveConflictBlock for intelligent resolution.
 			continue
 		}
 

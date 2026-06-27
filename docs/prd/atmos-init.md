@@ -555,7 +555,7 @@ test_init_update_conflicts.sh         # Conflict handling (Phase 2)
 
 ### Website Documentation
 
-Location: `website/docs/cli/commands/atmos-init.mdx`
+Location: `website/docs/cli/commands/init.mdx`
 
 **Sections**:
 1. **Overview** - What the command does

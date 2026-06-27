@@ -1,4 +1,4 @@
-package init
+package initcmd
 
 import (
 	"context"

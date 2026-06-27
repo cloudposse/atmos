@@ -732,7 +732,7 @@ test_scaffold_update.sh                    # Update mode (Phase 2)
 
 ### Website Documentation
 
-Location: `website/docs/cli/commands/atmos-scaffold.mdx`
+Location: `website/docs/cli/commands/scaffold.mdx`
 
 **Sections**:
 1. **Overview** - What the command does

@@ -28,8 +28,8 @@ const testKind = "AtmosTestConfig"
 
 func registerTestKind(t *testing.T) {
 	t.Helper()
-	Reset()
-	t.Cleanup(Reset)
+	resetRegistry()
+	t.Cleanup(resetRegistry)
 	require.NoError(t, Register(testKind, DefaultAPIVersion, &testSpec{}))
 }
 
@@ -68,8 +68,8 @@ func TestRegister(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			Reset()
-			t.Cleanup(Reset)
+			resetRegistry()
+			t.Cleanup(resetRegistry)
 
 			err := Register(tt.kind, tt.apiVersion, tt.prototype)
 			if tt.wantErr != nil {
@@ -89,8 +89,8 @@ func TestRegister(t *testing.T) {
 }
 
 func TestMustRegisterPanicsOnError(t *testing.T) {
-	Reset()
-	t.Cleanup(Reset)
+	resetRegistry()
+	t.Cleanup(resetRegistry)
 
 	assert.Panics(t, func() {
 		MustRegister("", "", &testSpec{})
@@ -98,8 +98,8 @@ func TestMustRegisterPanicsOnError(t *testing.T) {
 }
 
 func TestKindsSorted(t *testing.T) {
-	Reset()
-	t.Cleanup(Reset)
+	resetRegistry()
+	t.Cleanup(resetRegistry)
 
 	require.NoError(t, Register("ZetaKind", "", &testSpec{}))
 	require.NoError(t, Register("AlphaKind", "", &testSpec{}))

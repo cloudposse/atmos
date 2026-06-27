@@ -53,6 +53,9 @@ var missingConfigFoundMarkdown string
 // Define a constant for the dot string that appears multiple times.
 const currentDirPath = "."
 
+// equalsSign separates a flag name from its inline value (e.g. `--flag=value`).
+const equalsSign = "="
+
 const (
 	customCommandKeyCommand  = "command"
 	customCommandKeyIdentity = "identity"
@@ -1269,28 +1272,37 @@ func isVersionCommandWithArgs(args []string) bool {
 		if arg == "--" {
 			return false
 		}
-		if isRootBoolFlag(arg) {
-			continue
-		}
-		if isRootValueFlag(arg) {
-			if !strings.Contains(arg, "=") {
-				i++
-			}
-			continue
-		}
-		if strings.HasPrefix(arg, "-C") && arg != "-C" {
-			continue
-		}
-		if strings.HasPrefix(arg, "-") {
+		skip, consumesValue := isSkippableRootFlag(arg)
+		if !skip {
+			// A real command token (or an unrecognized flag) ends the scan.
 			return false
 		}
-		return false
+		if consumesValue {
+			i++ // The flag's value is the next arg.
+		}
 	}
 	return false
 }
 
+// isSkippableRootFlag reports whether arg is a root-level flag that should be
+// skipped while scanning for a version request. The consumesValue result is
+// true when the flag takes a separate value argument (i.e. a value flag without
+// an inline `=value`).
+func isSkippableRootFlag(arg string) (skip, consumesValue bool) {
+	if isRootBoolFlag(arg) {
+		return true, false
+	}
+	if isRootValueFlag(arg) {
+		return true, !strings.Contains(arg, equalsSign)
+	}
+	if strings.HasPrefix(arg, "-C") && arg != "-C" {
+		return true, false
+	}
+	return false, false
+}
+
 func isRootBoolFlag(arg string) bool {
-	flagName := strings.SplitN(arg, "=", 2)[0]
+	flagName := strings.SplitN(arg, equalsSign, 2)[0]
 	switch flagName {
 	case "--ai",
 		"--force-color",
@@ -1311,7 +1323,7 @@ func isRootBoolFlag(arg string) bool {
 }
 
 func isRootValueFlag(arg string) bool {
-	flagName := strings.SplitN(arg, "=", 2)[0]
+	flagName := strings.SplitN(arg, equalsSign, 2)[0]
 	switch flagName {
 	case "--base-path",
 		"--chdir",

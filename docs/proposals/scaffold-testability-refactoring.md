@@ -183,8 +183,18 @@ type GenerateOptions struct {
 
 // Generate executes the template generation with the given options.
 func (g *ScaffoldGenerator) Generate(opts GenerateOptions) error {
+	// Prompt for target directory if not provided.
+	targetDir := opts.TargetDir
+	if targetDir == "" {
+		prompted, err := g.ui.PromptForTargetDirectory(".")
+		if err != nil {
+			return err
+		}
+		targetDir = prompted
+	}
+
 	// Convert to absolute path
-	absTargetDir, err := g.resolveTargetDirectory(opts.TargetDir)
+	absTargetDir, err := g.resolveTargetDirectory(targetDir)
 	if err != nil {
 		return err
 	}
@@ -288,10 +298,12 @@ func (g *ScaffoldGenerator) renderDryRunPreview(
 		}
 
 		renderedPath := renderFilePath(file.Path, mergedValues)
+		targetFilePath := filepath.Join(targetDir, renderedPath)
+		_, statErr := os.Stat(targetFilePath)
 		files = append(files, DryRunFile{
 			Path:    renderedPath,
 			Content: file.Content,
-			Exists:  false, // TODO: Check if file exists
+			Exists:  statErr == nil,
 		})
 	}
 

@@ -20,12 +20,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
+	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/project/config"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
 var scaffoldGenerateParser *flags.StandardParser
@@ -83,7 +85,6 @@ var scaffoldGenerateCmd = &cobra.Command{
 Templates can be:
 - Built-in templates embedded in Atmos
 - Custom templates defined in your atmos.yaml
-- Remote templates from Git repositories
 
 If no template is specified, an interactive selection will be shown.
 If no target directory is specified, you will be prompted for one.`,
@@ -107,11 +108,13 @@ If no target directory is specified, you will be prompted for one.`,
 		// Get flag values with proper precedence: flag > env > config > default
 		force := v.GetBool("force")
 		dryRun := v.GetBool("dry-run")
+		sourceOverride := v.GetString("scaffold-source-override")
 
 		// Interactive prompting requires both an interactive-capable flag
-		// value AND a real terminal: in CI or piped contexts the form is
-		// skipped automatically and defaults + --set values are used.
-		interactive := v.GetBool("interactive") && term.IsTTYSupportForStdout()
+		// value AND a real terminal on both stdin and stdout: in CI or
+		// piped contexts the form is skipped automatically and defaults +
+		// --set values are used.
+		interactive := v.GetBool("interactive") && term.IsTTYSupportForStdout() && term.IsTTYSupportForStdin()
 		useDefaults := dryRun || v.GetBool("defaults") || !interactive
 
 		// Parse string map from --set flags
@@ -142,6 +145,7 @@ If no target directory is specified, you will be prompted for one.`,
 			interactive:    interactive,
 			useDefaults:    useDefaults,
 			templateValues: templateValues,
+			sourceOverride: sourceOverride,
 		})
 	},
 }
@@ -155,6 +159,7 @@ type scaffoldGenerateOptions struct {
 	interactive    bool
 	useDefaults    bool
 	templateValues map[string]interface{}
+	sourceOverride string
 }
 
 // scaffoldListCmd represents the scaffold list subcommand.
@@ -198,11 +203,13 @@ func init() {
 		flags.WithBoolFlag("interactive", "i", true, "Prompt for field values (disabled automatically without a terminal)"),
 		flags.WithBoolFlag("defaults", "", false, "Use field defaults and --set values without prompting"),
 		flags.WithStringMapFlag("set", "", map[string]string{}, "Set template values (can be used multiple times: --set key=value)"),
+		flags.WithStringFlag("scaffold-source-override", "", "", "Resolve catalog templates from this local base directory instead of their remote source (mainly for testing)"),
 		flags.WithEnvVars("force", "ATMOS_SCAFFOLD_FORCE"),
 		flags.WithEnvVars("dry-run", "ATMOS_SCAFFOLD_DRY_RUN"),
 		flags.WithEnvVars("interactive", "ATMOS_SCAFFOLD_INTERACTIVE"),
 		flags.WithEnvVars("defaults", "ATMOS_SCAFFOLD_DEFAULTS"),
 		flags.WithEnvVars("set", "ATMOS_SCAFFOLD_SET"),
+		flags.WithEnvVars("scaffold-source-override", "ATMOS_SCAFFOLD_SOURCE_OVERRIDE"),
 	)
 
 	// Register flags to generate subcommand.
@@ -278,7 +285,7 @@ func executeScaffoldGenerate(opts scaffoldGenerateOptions) error {
 	}
 
 	// Load all available templates
-	configs, _, scaffoldUI, err := loadScaffoldTemplates()
+	configs, _, scaffoldUI, err := loadScaffoldTemplates(opts.sourceOverride)
 	if err != nil {
 		return err
 	}
@@ -288,6 +295,15 @@ func executeScaffoldGenerate(opts scaffoldGenerateOptions) error {
 	if err != nil {
 		return err
 	}
+
+	// Catalog/remote templates are advertised as stubs without files; fetch the
+	// selected one into a full template before generating. cleanup removes any
+	// temporary download directory once generation completes.
+	cleanup, err := source.Hydrate(&selectedConfig, opts.sourceOverride)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 
 	// If dry-run mode, render preview and return without writing files.
 	if opts.dryRun {
@@ -347,7 +363,7 @@ func resolveTargetDirectory(targetDir string) (string, error) {
 
 // loadScaffoldTemplates loads all available scaffold templates from embedded and atmos.yaml.
 // Returns configs, origins (map[name]source where source is "embedded" or "atmos.yaml"), UI, and error.
-func loadScaffoldTemplates() (map[string]templates.Configuration, map[string]string, *generatorUI.InitUI, error) {
+func loadScaffoldTemplates(sourceOverride string) (map[string]templates.Configuration, map[string]string, *generatorUI.InitUI, error) {
 	// Create generator context
 	genCtx, err := setup.NewGeneratorContext()
 	if err != nil {
@@ -377,7 +393,20 @@ func loadScaffoldTemplates() (map[string]templates.Configuration, map[string]str
 		origins[name] = "embedded"
 	}
 
-	// Merge with configured templates from atmos.yaml
+	// Merge distributable catalog templates (advertised as stubs, fetched on
+	// selection). Embedded templates take precedence over catalog entries.
+	if stubs, cerr := templates.CatalogStubs(sourceOverride); cerr == nil {
+		for name := range stubs {
+			if _, exists := configs[name]; !exists {
+				configs[name] = stubs[name]
+				origins[name] = "catalog"
+			}
+		}
+	} else {
+		log.Debug("Failed to load scaffold catalog", "error", cerr)
+	}
+
+	// Merge with configured templates from atmos.yaml (these override the above).
 	if err := mergeConfiguredTemplates(configs, origins); err != nil {
 		return nil, nil, nil, err
 	}
@@ -650,8 +679,8 @@ func executeTemplateWithoutTargetDir(
 // executeScaffoldList lists all available scaffold templates (embedded and configured).
 // This logic was moved from internal/exec/scaffold.go to keep command logic in cmd/.
 func executeScaffoldList(_ *cobra.Command) error {
-	// Load all available templates (embedded + atmos.yaml).
-	configs, origins, scaffoldUI, err := loadScaffoldTemplates()
+	// Load all available templates (embedded + catalog + atmos.yaml).
+	configs, origins, scaffoldUI, err := loadScaffoldTemplates("")
 	if err != nil {
 		return err
 	}
@@ -799,7 +828,8 @@ func findScaffoldFiles(path string) ([]string, error) {
 
 // validateSingleScaffoldFile validates a single scaffold.yaml file.
 func validateSingleScaffoldFile(path string, scaffoldPaths []string) ([]string, error) {
-	if strings.HasSuffix(path, "scaffold.yaml") || strings.HasSuffix(path, "scaffold.yml") {
+	base := filepath.Base(path)
+	if base == "scaffold.yaml" || base == "scaffold.yml" {
 		scaffoldPaths = append(scaffoldPaths, path)
 		return scaffoldPaths, nil
 	}
@@ -896,16 +926,15 @@ func convertScaffoldTemplateToConfiguration(name string, templateData interface{
 			Err()
 	}
 
-	// Remote templates (git::, http://, etc.) are not yet supported.
-	if strings.HasPrefix(source, "git::") || strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") {
-		return templates.Configuration{}, errUtils.Build(errUtils.ErrInvalidTemplateData).
-			WithExplanationf("Remote template source is not yet supported: `%s`", source).
-			WithHint("Use a local path for the template source instead").
-			WithHint("Remote Git templates will be supported in a future release").
-			WithContext("template_name", name).
-			WithContext("source", source).
-			WithExitCode(2).
-			Err()
+	// Remote sources (git/https/s3) are advertised as stubs and fetched lazily
+	// at generation time by the source package; local sources load eagerly so
+	// `atmos scaffold list` can show their version and description.
+	if !vendor.IsLocalPath(source) && !vendor.IsFileURI(source) {
+		stub := templates.Configuration{Name: name, Source: source}
+		if desc, ok := templateMap["description"].(string); ok && desc != "" {
+			stub.Description = desc
+		}
+		return stub, nil
 	}
 
 	// Load the template files from the local source directory. The path is

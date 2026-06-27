@@ -20,8 +20,9 @@ $ atmos scaffold validate ./templates/react-app
 
 ```
 $ atmos scaffold validate ./templates/simple
-✓ Scaffold configuration is valid
-✓ All required fields are defined
-✓ Field types are correct
-✓ Default values match field types
+ℹ Validating ./templates/simple/scaffold.yaml
+✓ ./templates/simple/scaffold.yaml: valid
+
+Validation Summary:
+✓ Valid files: 1
 ```

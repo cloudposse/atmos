@@ -1,0 +1,29 @@
+# Atmos scaffold catalog.
+#
+# Advertises the distributable, emulator-validated project scaffolds ("scaffolded
+# landing zones") that `atmos init <name>` and `atmos scaffold generate <name>`
+# can produce. Entries are listed cheaply (no download); the template is only
+# fetched from `source` when one is selected.
+#
+# The content lives in this repository under examples/scaffolds/<cloud>/<tier>/
+# and is fetched remotely via a go-getter git-subdir URL. CI resolves these from
+# the working tree instead of the network by setting
+# ATMOS_SCAFFOLD_SOURCE_OVERRIDE=<repo>/examples/scaffolds.
+#
+# `ref` should be bumped to the release tag by release automation; `main` keeps
+# the catalog functional between releases.
+apiVersion: atmos/v1
+kind: AtmosScaffoldCatalog
+templates:
+  - name: aws/sandbox
+    cloud: aws
+    tier: sandbox
+    version: v1.0.0
+    description: Bare-bones AWS project that plans and applies one component on the Floci emulator.
+    source: github.com/cloudposse/atmos.git//examples/scaffolds/aws/sandbox?ref=main
+  - name: aws/landing-zone
+    cloud: aws
+    tier: landing-zone
+    version: v1.0.0
+    description: Full AWS foundation — native S3 backend, SSM/Secrets Manager, custom commands, workflows, validation, dev/staging/prod.
+    source: github.com/cloudposse/atmos.git//examples/scaffolds/aws/landing-zone?ref=main

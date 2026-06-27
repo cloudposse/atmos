@@ -174,7 +174,17 @@ func (m *YAMLMerger) mergeNodes(base, ours, theirs *yaml.Node, path string, conf
 		return ours, nil
 	}
 
-	// Handle based on node type
+	// Guard against kind divergence: if ours or theirs changed to a different
+	// node kind than base, dispatching on base.Kind would call the wrong merge
+	// helper and produce a node of the wrong shape (e.g., calling mergeScalars
+	// when ours is a MappingNode).  Record a conflict and preserve the user's
+	// version whenever kinds diverge.
+	if ours.Kind != base.Kind || theirs.Kind != base.Kind {
+		conflicts.addConflict(path)
+		return ours, nil
+	}
+
+	// Handle based on node type.
 	switch base.Kind {
 	case yaml.DocumentNode:
 		return m.mergeDocuments(base, ours, theirs, path, conflicts)
@@ -185,7 +195,7 @@ func (m *YAMLMerger) mergeNodes(base, ours, theirs *yaml.Node, path string, conf
 	case yaml.ScalarNode:
 		return m.mergeScalars(base, ours, theirs, path, conflicts)
 	default:
-		// For other node types, prefer ours if different
+		// For other node types, prefer ours if different.
 		return ours, nil
 	}
 }
@@ -200,6 +210,17 @@ func (m *YAMLMerger) mergeDocuments(base, ours, theirs *yaml.Node, path string, 
 	switch {
 	case len(base.Content) > 0 && len(ours.Content) > 0 && len(theirs.Content) > 0:
 		merged, err := m.mergeNodes(base.Content[0], ours.Content[0], theirs.Content[0], path, conflicts)
+		if err != nil {
+			return nil, err
+		}
+		result.Content = []*yaml.Node{merged}
+	case len(ours.Content) > 0 && len(theirs.Content) > 0:
+		// Base is empty but both sides have content: concurrent additions to a
+		// new file.  Use an empty placeholder as the common ancestor so the
+		// normal merge logic can handle or record the conflict rather than
+		// silently discarding theirs.
+		emptyBase := createEmptyNodeOfKind(ours.Content[0])
+		merged, err := m.mergeNodes(emptyBase, ours.Content[0], theirs.Content[0], path, conflicts)
 		if err != nil {
 			return nil, err
 		}

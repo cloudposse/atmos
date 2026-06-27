@@ -3,6 +3,7 @@ package manifest
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"gopkg.in/yaml.v3"
@@ -32,8 +33,37 @@ func Detect(data []byte) (kind, apiVersion string, err error) {
 // The document is validated against the JSON Schema generated at
 // registration time before being decoded into the typed envelope, so a
 // successful return guarantees a schema-valid manifest.
+//
+// The type parameter S must match the spec type registered for kind; a
+// mismatch is rejected before decoding to prevent silently returning a
+// zeroed or partially decoded Spec.
 func Load[S any](kind string, data []byte) (*Manifest[S], error) {
 	defer perf.Track(nil, "manifest.Load")()
+
+	// Verify that the caller's spec type S matches the registered prototype
+	// type so that a wrong-spec call fails loudly rather than decoding silently
+	// into a zero value (unknown YAML fields are ignored by yaml.Unmarshal).
+	def, ok := GetDefinition(kind)
+	if ok && def.SpecType() != nil {
+		var zero S
+		callerType := reflect.TypeOf(zero)
+		// Unwrap pointer if the caller used *T.
+		if callerType != nil && callerType.Kind() == reflect.Ptr {
+			callerType = callerType.Elem()
+		}
+		if callerType != nil && callerType != def.SpecType() {
+			return nil, errUtils.Build(errUtils.ErrManifestKindMismatch).
+				WithExplanationf(
+					"Load[%s] was called for kind `%s` but the registered spec type is `%s`",
+					callerType.Name(), kind, def.SpecType().Name(),
+				).
+				WithHint("Use the spec type that matches the registered kind").
+				WithContext("kind", kind).
+				WithContext("caller_type", callerType.Name()).
+				WithContext("registered_type", def.SpecType().Name()).
+				Err()
+		}
+	}
 
 	if err := Validate(kind, data); err != nil {
 		return nil, err

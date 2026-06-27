@@ -414,13 +414,19 @@ func TestConvertScaffoldTemplateToConfiguration(t *testing.T) {
 			expectError: true, // A source directory is required.
 		},
 		{
-			name:         "template with remote source (rejected)",
+			name:         "template with remote source (lazy stub)",
 			templateName: "remote-template",
 			templateData: map[string]interface{}{
 				"description": "Remote scaffold",
 				"source":      "https://github.com/example/template.git",
 			},
-			expectError: true, // Remote templates are not yet supported.
+			expectError: false, // Remote templates resolve to a stub fetched lazily at generation time.
+			validate: func(t *testing.T, config templates.Configuration) {
+				assert.Equal(t, "remote-template", config.Name)
+				assert.Equal(t, "Remote scaffold", config.Description)
+				assert.Equal(t, "https://github.com/example/template.git", config.Source)
+				assert.Empty(t, config.Files, "remote stub must defer file loading until hydration")
+			},
 		},
 		{
 			name:         "template with nonexistent local source rejected",
@@ -793,7 +799,13 @@ func TestFindScaffoldFiles_WalkError(t *testing.T) {
 }
 
 func TestMergeConfiguredTemplates_NoTemplatesKey(t *testing.T) {
-	// Test when scaffold section exists but no templates key
+	// Isolate from the real atmos.yaml in the repo by switching to an
+	// empty temp directory.  ReadAtmosScaffoldSection("." ) returns an empty
+	// map when no atmos.yaml is present, exercising the "no templates key"
+	// code path.
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
 	configs := map[string]templates.Configuration{
 		"existing": {Name: "existing", Description: "Existing template"},
 	}
@@ -801,24 +813,29 @@ func TestMergeConfiguredTemplates_NoTemplatesKey(t *testing.T) {
 		"existing": "embedded",
 	}
 
-	// This should not error, just skip silently
+	// No atmos.yaml → no templates section → should not error.
 	err := mergeConfiguredTemplates(configs, origins)
 	assert.NoError(t, err)
-	assert.Len(t, configs, 1) // Original template still there
+	assert.Len(t, configs, 1) // Original template still there.
 }
 
 func TestMergeConfiguredTemplates_InvalidTemplatesFormat(t *testing.T) {
-	// Test when templates is not a map
+	// Write a fixture atmos.yaml where `scaffold.templates` is a scalar
+	// (not a map) to trigger the invalid-format branch.
+	tmpDir := t.TempDir()
+	fixture := `scaffold:
+  templates: "not-a-map"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(fixture), 0o644))
+	t.Chdir(tmpDir)
+
 	configs := map[string]templates.Configuration{}
 	origins := map[string]string{}
 
-	// This test would require mocking config.ReadAtmosScaffoldSection
-	// For now, we just verify the function exists and handles errors
 	err := mergeConfiguredTemplates(configs, origins)
-	// May error from ReadAtmosScaffoldSection when atmos.yaml doesn't exist
-	// or succeed if there's a valid atmos.yaml but no templates section
-	_ = err
-	assert.NotNil(t, configs) // Verify configs map still exists
+	// Scalar templates value is rejected with ErrInvalidScaffoldConfig.
+	require.Error(t, err)
+	assert.NotNil(t, configs) // Configs map is untouched on error.
 }
 
 func TestSelectTemplateByName_NotFound(t *testing.T) {
@@ -1027,45 +1044,53 @@ func TestParseSetFlag_AllBranches(t *testing.T) {
 }
 
 func TestMergeConfiguredTemplates_AllBranches(t *testing.T) {
-	// This function requires atmos.yaml to exist and be readable
-	// We test what we can without extensive mocking
-
 	tests := []struct {
 		name          string
+		fixture       string // atmos.yaml content; empty = no file
 		initialConfig map[string]templates.Configuration
-		setup         func(t *testing.T) string
-		cleanup       func(t *testing.T, dir string)
+		wantErr       bool
 	}{
 		{
-			name: "with existing configs",
+			name:    "no atmos.yaml preserves existing configs",
+			fixture: "", // No atmos.yaml in temp dir.
 			initialConfig: map[string]templates.Configuration{
 				"existing": {Name: "existing", Description: "Existing template"},
 			},
-			setup: func(t *testing.T) string {
-				return t.TempDir()
-			},
+			wantErr: false,
+		},
+		{
+			name: "scaffold section with no templates key is a no-op",
+			fixture: `scaffold:
+  some_other_key: value
+`,
+			initialConfig: map[string]templates.Configuration{},
+			wantErr:       false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.setup != nil {
-				dir := tt.setup(t)
-				if tt.cleanup != nil {
-					defer tt.cleanup(t, dir)
-				}
+			tmpDir := t.TempDir()
+			if tt.fixture != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(tt.fixture), 0o644))
 			}
+			t.Chdir(tmpDir)
 
-			configs := tt.initialConfig
+			configs := make(map[string]templates.Configuration)
+			for k, v := range tt.initialConfig {
+				configs[k] = v
+			}
 			origins := make(map[string]string)
 			for name := range configs {
 				origins[name] = "embedded"
 			}
-			err := mergeConfiguredTemplates(configs, origins)
 
-			// May error or succeed depending on atmos.yaml existence
-			// We're just exercising the code path
-			_ = err
+			err := mergeConfiguredTemplates(configs, origins)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
 			assert.NotNil(t, configs)
 		})
 	}
@@ -1095,7 +1120,7 @@ func TestResolveTargetDirectory_ErrorPath(t *testing.T) {
 
 func TestLoadScaffoldTemplates_Coverage(t *testing.T) {
 	// Test the function executes without errors
-	configs, origins, ui, err := loadScaffoldTemplates()
+	configs, origins, ui, err := loadScaffoldTemplates("")
 	require.NoError(t, err)
 	assert.NotNil(t, configs)
 	assert.NotNil(t, origins)

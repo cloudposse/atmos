@@ -52,7 +52,7 @@ stacks:
   # Stack file name pattern
   name_pattern: "{environment}-{stage}.yaml"
   # Default stack name template
-  name_template: "{{.environment}}-{{.stage}}"
+  name_template: '{{`{{.environment}}-{{.stage}}`}}'
 
 # JSON Schema configuration for validation
 schemas:

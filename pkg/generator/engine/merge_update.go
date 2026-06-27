@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -44,8 +45,17 @@ func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
 		EnableDotGitCommonDir: true,
 	})
 	if err != nil {
-		// Not in a git repo - this is OK, just means we can't use git-based merging
-		return nil
+		if errors.Is(err, git.ErrRepositoryNotExists) {
+			// Not in a git repo - this is OK, just means we can't use git-based merging.
+			return nil
+		}
+		return errUtils.Build(errUtils.ErrThreeWayMerge).
+			WithCause(err).
+			WithExplanationf("Failed to open git repository at: `%s`", targetPath).
+			WithHint("Check that the path is accessible and the repository is not corrupted").
+			WithContext("target_path", targetPath).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Create git storage with base ref

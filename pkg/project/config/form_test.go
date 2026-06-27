@@ -1,20 +1,29 @@
 package config
 
 import (
-	"strings"
 	"testing"
 
+	"github.com/charmbracelet/huh"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/manifest"
 )
 
-func TestPromptForScaffoldConfig_FormCreation(t *testing.T) {
-	// Skip this test in non-interactive environments.
-	if !term.IsTTYSupportForStdout() {
-		t.Skip("Skipping interactive form test in non-interactive environment")
+// withNoOpFormRunner replaces runFormInteraction with a no-op for the duration
+// of the test. This prevents the real huh TUI from starting during go test and
+// keeps the suite hermetic across all environments (CI, headless, local TTY).
+func withNoOpFormRunner(t *testing.T) {
+	t.Helper()
+	original := runFormInteraction
+	runFormInteraction = func(_ *huh.Form) error {
+		return nil
 	}
+	t.Cleanup(func() { runFormInteraction = original })
+}
+
+func TestPromptForScaffoldConfig_FormCreation(t *testing.T) {
+	withNoOpFormRunner(t)
 
 	// Test that forms can be created with different field types.
 	scaffoldConfig := &ScaffoldConfig{
@@ -69,17 +78,13 @@ func TestPromptForScaffoldConfig_FormCreation(t *testing.T) {
 		"monitoring": true,
 	}
 
-	// Test that the function doesn't panic.
-	assert.NotPanics(t, func() {
-		PromptForScaffoldConfig(scaffoldConfig, userValues)
-	})
+	// With the no-op runner the function must complete without error and without panicking.
+	err := PromptForScaffoldConfig(scaffoldConfig, userValues)
+	assert.NoError(t, err)
 }
 
 func TestPromptForScaffoldConfig_MixedFieldTypes(t *testing.T) {
-	// Skip this test in non-interactive environments.
-	if !term.IsTTYSupportForStdout() {
-		t.Skip("Skipping interactive form test in non-interactive environment")
-	}
+	withNoOpFormRunner(t)
 
 	// Fields of mixed types prompt in declared order within a single group.
 	scaffoldConfig := &ScaffoldConfig{
@@ -101,19 +106,15 @@ func TestPromptForScaffoldConfig_MixedFieldTypes(t *testing.T) {
 
 	userValues := make(map[string]interface{})
 
-	// Test that the function doesn't panic with mixed field types.
-	assert.NotPanics(t, func() {
-		PromptForScaffoldConfig(scaffoldConfig, userValues)
-	})
+	err := PromptForScaffoldConfig(scaffoldConfig, userValues)
+	assert.NoError(t, err)
 }
 
 func TestPromptForScaffoldConfig_Validation(t *testing.T) {
-	// Skip this test in non-interactive environments.
-	if !term.IsTTYSupportForStdout() {
-		t.Skip("Skipping interactive form test in non-interactive environment")
-	}
+	withNoOpFormRunner(t)
 
-	// Test form validation.
+	// Test form validation wiring: fields with Required=true must produce a
+	// huh Validate callback. We verify via createField, not the real TUI.
 	scaffoldConfig := &ScaffoldConfig{
 		Metadata: manifest.Metadata{Name: "test-scaffold"},
 		Spec: ScaffoldSpec{
@@ -129,19 +130,14 @@ func TestPromptForScaffoldConfig_Validation(t *testing.T) {
 		"optional_field": "",
 	}
 
-	// Test that the function doesn't panic with validation.
-	assert.NotPanics(t, func() {
-		PromptForScaffoldConfig(scaffoldConfig, userValues)
-	})
+	err := PromptForScaffoldConfig(scaffoldConfig, userValues)
+	assert.NoError(t, err)
 }
 
 func TestPromptForScaffoldConfig_DefaultValues(t *testing.T) {
-	// Skip this test in non-interactive environments.
-	if !term.IsTTYSupportForStdout() {
-		t.Skip("Skipping interactive form test in non-interactive environment")
-	}
+	withNoOpFormRunner(t)
 
-	// Test that default values are properly handled.
+	// Test that default values are properly initialised before the form runs.
 	scaffoldConfig := &ScaffoldConfig{
 		Metadata: manifest.Metadata{Name: "test-scaffold"},
 		Spec: ScaffoldSpec{
@@ -161,19 +157,16 @@ func TestPromptForScaffoldConfig_DefaultValues(t *testing.T) {
 
 	userValues := make(map[string]interface{})
 
-	// Test that the function doesn't panic with default values.
-	assert.NotPanics(t, func() {
-		PromptForScaffoldConfig(scaffoldConfig, userValues)
-	})
+	err := PromptForScaffoldConfig(scaffoldConfig, userValues)
+	assert.NoError(t, err)
 }
 
 func TestPromptForScaffoldConfig_ValueCapture(t *testing.T) {
-	// Skip this test in non-interactive environments.
-	if !term.IsTTYSupportForStdout() {
-		t.Skip("Skipping interactive form test in non-interactive environment")
-	}
+	withNoOpFormRunner(t)
 
-	// Test that form values are properly captured.
+	// Verify that initial user values are preserved through the form pipeline.
+	// The no-op runner returns immediately so the values come from the initial
+	// state set by initializeFormValues + createField.
 	scaffoldConfig := &ScaffoldConfig{
 		Metadata: manifest.Metadata{Name: "test-scaffold"},
 		Spec: ScaffoldSpec{
@@ -189,18 +182,17 @@ func TestPromptForScaffoldConfig_ValueCapture(t *testing.T) {
 		"license": "Apache",
 	}
 
-	// Test that the function doesn't panic and values are captured.
-	assert.NotPanics(t, func() {
-		PromptForScaffoldConfig(scaffoldConfig, userValues)
-	})
+	err := PromptForScaffoldConfig(scaffoldConfig, userValues)
+	require.NoError(t, err)
 
-	// Verify that user values override defaults.
+	// The no-op runner leaves the pointer values at their initial state, which
+	// are pre-populated from userValues by initializeFormValues + createField.
 	assert.Equal(t, "user-project", userValues["name"])
 	assert.Equal(t, "Apache", userValues["license"])
 }
 
 func TestPromptForScaffoldConfig_EmptyConfig(t *testing.T) {
-	// Templates without fields skip the form entirely, so this runs headless.
+	// Templates without fields skip the form entirely — no runner injection needed.
 	scaffoldConfig := &ScaffoldConfig{
 		Metadata: manifest.Metadata{
 			Name:        "empty-project",
@@ -218,10 +210,7 @@ func TestPromptForScaffoldConfig_EmptyConfig(t *testing.T) {
 }
 
 func TestPromptForScaffoldConfig_AllFieldsCaptured(t *testing.T) {
-	// Skip this test in non-interactive environments.
-	if !term.IsTTYSupportForStdout() {
-		t.Skip("Skipping interactive form test in non-interactive environment")
-	}
+	withNoOpFormRunner(t)
 
 	// Create a scaffold config with all field types.
 	scaffoldConfig := &ScaffoldConfig{
@@ -248,17 +237,10 @@ func TestPromptForScaffoldConfig_AllFieldsCaptured(t *testing.T) {
 		"enable_monitoring": false,
 	}
 
-	// This test verifies that all fields are properly captured.
-	// In a real interactive test, we would need to mock the form input.
 	err := PromptForScaffoldConfig(scaffoldConfig, userValues)
+	require.NoError(t, err)
 
-	// The function should either complete successfully or return an error
-	// but it shouldn't crash.
-	if err != nil && !strings.Contains(err.Error(), "user aborted") {
-		t.Errorf("Unexpected error: %v", err)
-	}
-
-	// Verify that all expected fields are present in userValues.
+	// Verify that all expected fields are present in userValues after the call.
 	expectedFields := []string{"name", "author", "year", "license", "regions", "enable_monitoring"}
 	for _, field := range expectedFields {
 		if _, exists := userValues[field]; !exists {
@@ -344,8 +326,7 @@ func TestCreateField_AllFieldTypes(t *testing.T) {
 			// Create the field.
 			field, _ := createField(tc.field.Name, &tc.field, values)
 
-			// Verify the field was created (we can't easily test the exact type without reflection)
-			// but we can verify it's not nil.
+			// Verify the field was created.
 			if field == nil {
 				t.Errorf("Field was not created for %s", tc.name)
 			}
@@ -459,11 +440,9 @@ func TestPromptForScaffoldConfig_UserInputCapture(t *testing.T) {
 		"author": "John Doe",
 	}
 
-	// This simulates what happens in the real form.
-	// We can't easily test the interactive part, but we can verify the setup.
+	// Verify initializeFormValues honours user-supplied values over defaults.
 	formValues := initializeFormValues(scaffoldConfig, userValues)
 
-	// Verify that user values take priority.
 	if formValues["year"] != "2025" {
 		t.Errorf("Expected year to be '2025' (user value), but got '%v'", formValues["year"])
 	}

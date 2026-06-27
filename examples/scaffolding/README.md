@@ -17,10 +17,10 @@ Learn more in the [Scaffold Command Documentation](https://atmos.tools/cli/comma
 atmos scaffold list
 
 # Generate a new project from a template
-atmos scaffold generate simple ./my-project
+atmos scaffold generate example ./my-project
 
 # Generate with custom values
-atmos scaffold generate simple ./my-project --vars project_name=my-app
+atmos scaffold generate example ./my-project --set project_name=my-app
 ```
 
 ## Key Files

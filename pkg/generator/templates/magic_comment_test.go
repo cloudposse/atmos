@@ -232,7 +232,7 @@ func TestTemplateMagicCommentPattern(t *testing.T) {
 		{
 			name:     "no comment marker",
 			line:     "atmos:template",
-			expected: true,
+			expected: false,
 		},
 		{
 			name:     "wrong separator",

@@ -1,0 +1,48 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  # Display name only. The template is invoked by its catalog key `aws/landing-zone`.
+  name: aws-landing-zone
+  description: Full AWS Atmos foundation — native backend provisioning, SSM/Secrets Manager, custom commands, workflows, validation, and dev/staging/prod stacks, all runnable on the Floci emulator.
+  author: Cloud Posse
+  version: 1.0.0
+spec:
+  fields:
+    - name: project_name
+      label: Project name
+      description: Name of the project, also used as the directory slug.
+      type: input
+      default: my-landing-zone
+      required: true
+      validation:
+        pattern: "^[a-z][a-z0-9-]{1,30}$"
+        message: Use lowercase letters, digits, and hyphens (2-31 characters).
+    - name: namespace
+      label: Namespace
+      description: Org or namespace short code used in resource names.
+      type: input
+      default: acme
+      required: true
+      validation:
+        pattern: "^[a-z0-9]{2,10}$"
+        message: Use 2-10 lowercase alphanumeric characters.
+    - name: region
+      label: Primary AWS region
+      description: Default AWS region for the project.
+      type: select
+      default: us-east-1
+      required: true
+      options:
+        - us-east-1
+        - us-west-2
+        - eu-west-1
+        - ap-southeast-1
+    - name: terraform_command
+      label: Terraform binary
+      description: Which binary Atmos invokes for Terraform operations.
+      type: select
+      default: terraform
+      required: true
+      options:
+        - terraform
+        - tofu

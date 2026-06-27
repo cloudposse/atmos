@@ -1,3 +1,4 @@
+<!-- atmos:template -->
 # {{.Config.project_name}}
 
 Complete Atmos project created with `atmos init atmos`.

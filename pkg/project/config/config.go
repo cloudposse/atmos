@@ -92,17 +92,26 @@ type ScaffoldSpec struct {
 	Values map[string]any `yaml:"values,omitempty" json:"values,omitempty" jsonschema:"description=Field values (answers) keyed by field name"`
 }
 
+// FieldValidation constrains the allowed values for a FieldDefinition.
+type FieldValidation struct {
+	// Pattern is a regular expression the value must match (for input fields).
+	Pattern string `yaml:"pattern,omitempty" json:"pattern,omitempty" jsonschema:"description=Regular expression the value must match"`
+	// Message is the error message shown when validation fails.
+	Message string `yaml:"message,omitempty" json:"message,omitempty" jsonschema:"description=Error message shown when validation fails"`
+}
+
 // FieldDefinition defines a single questionnaire field: its name, prompt
 // type, presentation, validation, and default value.
 type FieldDefinition struct {
-	Name        string   `yaml:"name" json:"name" jsonschema:"description=Field name used as the template variable"`
-	Type        string   `yaml:"type,omitempty" json:"type,omitempty" jsonschema:"description=Prompt type,enum=input,enum=text,enum=string,enum=select,enum=multiselect,enum=confirm,enum=bool,enum=boolean"`
-	Label       string   `yaml:"label,omitempty" json:"label,omitempty" jsonschema:"description=Short prompt label"`
-	Description string   `yaml:"description,omitempty" json:"description,omitempty" jsonschema:"description=Longer help text shown with the prompt"`
-	Required    bool     `yaml:"required,omitempty" json:"required,omitempty" jsonschema:"description=Whether a value must be provided"`
-	Default     any      `yaml:"default,omitempty" json:"default,omitempty" jsonschema:"description=Default value"`
-	Options     []string `yaml:"options,omitempty" json:"options,omitempty" jsonschema:"description=Choices for select and multiselect fields"`
-	Placeholder string   `yaml:"placeholder,omitempty" json:"placeholder,omitempty" jsonschema:"description=Placeholder text for input fields"`
+	Name        string           `yaml:"name" json:"name" jsonschema:"description=Field name used as the template variable"`
+	Type        string           `yaml:"type,omitempty" json:"type,omitempty" jsonschema:"description=Prompt type,enum=input,enum=text,enum=string,enum=select,enum=multiselect,enum=confirm,enum=bool,enum=boolean"`
+	Label       string           `yaml:"label,omitempty" json:"label,omitempty" jsonschema:"description=Short prompt label"`
+	Description string           `yaml:"description,omitempty" json:"description,omitempty" jsonschema:"description=Longer help text shown with the prompt"`
+	Required    bool             `yaml:"required,omitempty" json:"required,omitempty" jsonschema:"description=Whether a value must be provided"`
+	Default     any              `yaml:"default,omitempty" json:"default,omitempty" jsonschema:"description=Default value"`
+	Options     []string         `yaml:"options,omitempty" json:"options,omitempty" jsonschema:"description=Choices for select and multiselect fields"`
+	Placeholder string           `yaml:"placeholder,omitempty" json:"placeholder,omitempty" jsonschema:"description=Placeholder text for input fields"`
+	Validation  *FieldValidation `yaml:"validation,omitempty" json:"validation,omitempty" jsonschema:"description=Optional validation constraints for this field"`
 }
 
 // Config represents the user's configuration values as a generic map to support dynamic fields from scaffold.yaml.
@@ -186,6 +195,13 @@ func LoadUserValues(targetPath string) (map[string]interface{}, error) {
 func SaveProjectRecord(targetPath string, templateConfig *ScaffoldConfig, source, baseRef string, values map[string]interface{}) error {
 	defer perf.Track(nil, "config.SaveProjectRecord")()
 
+	// Reject nil configs and configs without a name: LoadProjectRecord will
+	// fail to reload a record written without metadata.name, leaving the project
+	// in a permanently broken state.
+	if templateConfig == nil || templateConfig.Metadata.Name == "" {
+		return errUtils.ErrTemplateConfigNameRequired
+	}
+
 	record := ScaffoldConfig{
 		APIVersion: manifest.DefaultAPIVersion,
 		Kind:       ScaffoldKind,
@@ -246,6 +262,22 @@ func DeepMerge(scaffoldConfig *ScaffoldConfig, userValues map[string]interface{}
 	return merged
 }
 
+// isMissingValue reports whether value is considered absent for required-field
+// validation: nil, empty string (after trimming), empty []string, or empty
+// []interface{} all count as missing.
+func isMissingValue(value interface{}) bool {
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v) == ""
+	case []string:
+		return len(v) == 0
+	case []interface{}:
+		return len(v) == 0
+	default:
+		return false
+	}
+}
+
 // MissingRequiredValues returns the names of required fields that have no
 // usable (non-nil, non-empty-string) value in the provided values map. Used
 // to fail fast in non-interactive mode instead of generating a broken
@@ -260,11 +292,7 @@ func MissingRequiredValues(scaffoldConfig *ScaffoldConfig, values map[string]int
 			continue
 		}
 		value, exists := values[field.Name]
-		if !exists || value == nil {
-			missing = append(missing, field.Name)
-			continue
-		}
-		if str, ok := value.(string); ok && str == "" {
+		if !exists || value == nil || isMissingValue(value) {
 			missing = append(missing, field.Name)
 		}
 	}
@@ -359,8 +387,9 @@ func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]inter
 	return huhForm, valueGetters
 }
 
-// runFormInteraction runs the form and handles user interaction.
-func runFormInteraction(huhForm *huh.Form) error {
+// runFormInteraction is the seam used to execute a huh form.
+// Tests replace this variable with a no-op to avoid launching a real TUI.
+var runFormInteraction = func(huhForm *huh.Form) error {
 	err := huhForm.Run()
 	if err != nil {
 		return fmt.Errorf("user aborted the configuration: %w", err)
@@ -556,58 +585,70 @@ func GetConfigurationSummary(scaffoldConfig *ScaffoldConfig, mergedValues map[st
 }
 
 // ReadScaffoldConfig reads scaffold configuration from atmos.yaml at the provided targetPath; returns an empty map and nil error when the file does not exist; returns a wrapped error when reading or parsing fails.
+//
+// Use yaml.v3 directly instead of Viper to preserve the original key casing.
+// Viper's AllSettings() lowercases all keys, which mangles mixed-case fields such
+// as projectName → projectname.
 func ReadScaffoldConfig(targetPath string) (map[string]interface{}, error) {
 	defer perf.Track(nil, "config.ReadScaffoldConfig")()
 
 	configPath := filepath.Join(targetPath, "atmos.yaml")
 
-	// Check if atmos.yaml exists
+	// Return empty config if file doesn't exist.
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		// Return empty config if file doesn't exist
 		return make(map[string]interface{}), nil
 	}
 
-	// Read the configuration file
-	v := viper.New()
-	v.SetConfigFile(configPath)
-
-	if err := v.ReadInConfig(); err != nil {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
 		return nil, fmt.Errorf("failed to read atmos.yaml: %w", err)
 	}
 
-	// Get all settings as a map
-	config := v.AllSettings()
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse atmos.yaml: %w", err)
+	}
+	if config == nil {
+		return make(map[string]interface{}), nil
+	}
 	return config, nil
 }
 
-// ReadAtmosScaffoldSection reads only the scaffold section from atmos.yaml
+// ReadAtmosScaffoldSection reads only the scaffold section from atmos.yaml.
 //
 // NOTE: This is a temporary shim for the init experiment. In the full atmos CLI,
 // this functionality will be integrated into the main atmos configuration handling
 // system which has robust support for reading and validating atmos.yaml files.
+//
+// Use yaml.v3 directly instead of Viper to preserve the original key casing.
+// Viper's AllSettings() lowercases all keys, which mangles mixed-case fields such
+// as projectName → projectname.
 func ReadAtmosScaffoldSection(targetPath string) (map[string]interface{}, error) {
 	defer perf.Track(nil, "config.ReadAtmosScaffoldSection")()
 
 	configPath := filepath.Join(targetPath, "atmos.yaml")
 
-	// Check if atmos.yaml exists
+	// Return empty config if file doesn't exist.
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		// Return empty config if file doesn't exist
 		return make(map[string]interface{}), nil
 	}
 
-	// Read the configuration file
-	v := viper.New()
-	v.SetConfigFile(configPath)
-
-	if err := v.ReadInConfig(); err != nil {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
 		return nil, fmt.Errorf("failed to read atmos.yaml: %w", err)
 	}
 
-	// Get only the scaffold section
-	scaffoldSection := v.Get("scaffold")
-	if scaffoldSection == nil {
-		// Return empty map if no scaffold section
+	var fullConfig map[string]interface{}
+	if err := yaml.Unmarshal(data, &fullConfig); err != nil {
+		return nil, fmt.Errorf("failed to parse atmos.yaml: %w", err)
+	}
+	if fullConfig == nil {
+		return make(map[string]interface{}), nil
+	}
+
+	// Extract only the scaffold section.
+	scaffoldSection, exists := fullConfig["scaffold"]
+	if !exists || scaffoldSection == nil {
 		return make(map[string]interface{}), nil
 	}
 

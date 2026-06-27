@@ -110,6 +110,13 @@ func (s *MetadataStorage) Save(metadata *GenerationMetadata) error {
 		return fmt.Errorf("%w: failed to write metadata file %s: %w", errUtils.ErrMetadataSave, s.metadataPath, err)
 	}
 
+	// os.WriteFile only applies the mode bits when creating a new file;
+	// an existing file retains its previous permissions.  Re-apply 0600
+	// unconditionally so that updates never leave a more-permissive mode.
+	if err := os.Chmod(s.metadataPath, filePermissions); err != nil {
+		return fmt.Errorf("%w: failed to set permissions on metadata file %s: %w", errUtils.ErrMetadataSave, s.metadataPath, err)
+	}
+
 	return nil
 }
 

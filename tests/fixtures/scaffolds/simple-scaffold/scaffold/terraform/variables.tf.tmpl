@@ -3,17 +3,17 @@
 variable "environment" {
   description = "Environment name"
   type        = string
-  default     = "{{ .Config.environment }}"
+  default     = "{{ .Config.environment | replace `"` `\"` | replace `${` `$${` }}"
 }
 
 variable "project_name" {
   description = "Project name"
   type        = string
-  default     = "{{ .Config.project_name }}"
+  default     = "{{ .Config.project_name | replace `"` `\"` | replace `${` `$${` }}"
 }
 
 variable "author" {
   description = "Author name"
   type        = string
-  default     = "{{ .Config.author }}"
+  default     = "{{ .Config.author | replace `"` `\"` | replace `${` `$${` }}"
 }

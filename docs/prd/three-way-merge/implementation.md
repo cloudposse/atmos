@@ -497,8 +497,12 @@ func (m *YAMLMerger) Merge(base, ours, theirs string) (string, error) {
     if err := yaml.Unmarshal([]byte(base), &baseNode); err != nil {
         return m.textMerger.Merge(base, ours, theirs) // Fallback
     }
-    yaml.Unmarshal([]byte(ours), &oursNode)
-    yaml.Unmarshal([]byte(theirs), &theirsNode)
+    if err := yaml.Unmarshal([]byte(ours), &oursNode); err != nil {
+        return m.textMerger.Merge(base, ours, theirs) // Fallback
+    }
+    if err := yaml.Unmarshal([]byte(theirs), &theirsNode); err != nil {
+        return m.textMerger.Merge(base, ours, theirs) // Fallback
+    }
 
     // 2. Recursively merge nodes
     merged, conflicts, err := m.mergeNodes(&baseNode, &oursNode, &theirsNode)

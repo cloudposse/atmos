@@ -128,11 +128,18 @@ func buildScaffoldTemplateOptions(templates interface{}) ([]huh.Option[string], 
 		return nil, nil
 	}
 
+	// Collect and sort names for deterministic ordering.
+	sortedNames := make([]string, 0, len(templatesMap))
+	for templateName := range templatesMap {
+		sortedNames = append(sortedNames, templateName)
+	}
+	sort.Strings(sortedNames)
+
 	var options []huh.Option[string]
 	var templateNames []string
 
-	for templateName, templateConfig := range templatesMap {
-		displayText, valid := buildScaffoldDisplayText(templateName, templateConfig)
+	for _, templateName := range sortedNames {
+		displayText, valid := buildScaffoldDisplayText(templateName, templatesMap[templateName])
 		if !valid {
 			continue
 		}
@@ -315,13 +322,13 @@ func (ui *InitUI) ExecuteWithDelimiters(embedsConfig *tmpl.Configuration, target
 		return ui.executeWithSetup(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues, delimiters)
 	}
 
-	// For templates without scaffold.yaml, use command-line values if provided
+	// For templates without scaffold.yaml, use command-line values if provided.
 	if len(cmdTemplateValues) > 0 {
-		return ui.executeWithCommandValues(embedsConfig, targetPath, force, update, cmdTemplateValues)
+		return ui.executeWithCommandValues(embedsConfig, targetPath, force, update, cmdTemplateValues, delimiters)
 	}
 
-	// For templates without scaffold.yaml and no command values, use empty values
-	return ui.executeWithCommandValues(embedsConfig, targetPath, force, update, make(map[string]interface{}))
+	// For templates without scaffold.yaml and no command values, use empty values.
+	return ui.executeWithCommandValues(embedsConfig, targetPath, force, update, make(map[string]interface{}), delimiters)
 }
 
 // ExecuteWithInteractiveFlow provides a unified flow for both init and scaffold commands.
@@ -348,11 +355,29 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRef(
 	cmdTemplateValues map[string]interface{},
 ) error {
 	// If no target path was provided (interactive mode), prompt for it after setup.
+	// For scaffold templates, promptForTargetPath also returns the values the user
+	// already entered so we can avoid running the setup form a second time.
 	if targetPath == "" {
+		var preCollectedValues map[string]interface{}
 		var err error
-		targetPath, err = ui.promptForTargetPath(embedsConfig, useDefaults, cmdTemplateValues)
+		targetPath, preCollectedValues, err = ui.promptForTargetPath(embedsConfig, useDefaults, cmdTemplateValues)
 		if err != nil {
 			return err
+		}
+		// If the form was already run to derive the target path, merge the
+		// pre-collected values into cmdTemplateValues and use --use-defaults so
+		// executeWithSetup skips showing the form again.
+		if preCollectedValues != nil {
+			merged := make(map[string]interface{}, len(preCollectedValues)+len(cmdTemplateValues))
+			for k, v := range preCollectedValues {
+				merged[k] = v
+			}
+			// Caller-supplied flags take highest priority and overwrite.
+			for k, v := range cmdTemplateValues {
+				merged[k] = v
+			}
+			cmdTemplateValues = merged
+			useDefaults = true
 		}
 	}
 
@@ -361,10 +386,13 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRef(
 }
 
 // promptForTargetPath handles interactive target path prompting with scaffold config support.
-func (ui *InitUI) promptForTargetPath(embedsConfig *tmpl.Configuration, useDefaults bool, cmdTemplateValues map[string]interface{}) (string, error) {
+// It returns the target path, any pre-collected template values (non-nil only for scaffold
+// templates whose setup form was already run), and any error.
+func (ui *InitUI) promptForTargetPath(embedsConfig *tmpl.Configuration, useDefaults bool, cmdTemplateValues map[string]interface{}) (string, map[string]interface{}, error) {
 	// For simple templates without scaffold config, prompt directly.
 	if !tmpl.HasScaffoldConfig(embedsConfig.Files) {
-		return ui.PromptForTargetDirectory(embedsConfig, nil)
+		targetPath, err := ui.PromptForTargetDirectory(embedsConfig, nil)
+		return targetPath, nil, err
 	}
 
 	// For templates with scaffold configuration, we need to run setup first to get proper values.
@@ -372,28 +400,36 @@ func (ui *InitUI) promptForTargetPath(embedsConfig *tmpl.Configuration, useDefau
 }
 
 // promptForTargetPathWithScaffoldSetup runs scaffold setup and prompts for target directory.
-func (ui *InitUI) promptForTargetPathWithScaffoldSetup(embedsConfig *tmpl.Configuration, useDefaults bool, cmdTemplateValues map[string]interface{}) (string, error) {
+// It returns the target path, the merged values collected from the setup form, and any error.
+// Callers can pass the returned values as cmdTemplateValues on the subsequent Execute call
+// to prevent the setup form from appearing a second time.
+func (ui *InitUI) promptForTargetPathWithScaffoldSetup(embedsConfig *tmpl.Configuration, useDefaults bool, cmdTemplateValues map[string]interface{}) (string, map[string]interface{}, error) {
 	// Create a temporary directory for setup.
 	tempDir, err := os.MkdirTemp("", "atmos-setup-*")
 	if err != nil {
-		return "", fmt.Errorf("failed to create temporary directory: %w", err)
+		return "", nil, fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 	defer os.RemoveAll(tempDir)
 
 	// Find and load the scaffold configuration.
 	scaffoldConfig, err := ui.loadScaffoldConfigFromEmbeds(embedsConfig)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	// Run setup to get configuration values.
 	mergedValues, _, err := ui.RunSetupForm(scaffoldConfig, tempDir, useDefaults, cmdTemplateValues)
 	if err != nil {
-		return "", fmt.Errorf("failed to run setup form: %w", err)
+		return "", nil, fmt.Errorf("failed to run setup form: %w", err)
 	}
 
 	// Prompt for target directory with evaluated template.
-	return ui.PromptForTargetDirectory(embedsConfig, mergedValues)
+	targetPath, err := ui.PromptForTargetDirectory(embedsConfig, mergedValues)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return targetPath, mergedValues, nil
 }
 
 // loadScaffoldConfigFromEmbeds finds and loads scaffold configuration from embedded files.
@@ -439,11 +475,21 @@ func (ui *InitUI) generateSuggestedDirectoryWithValues(config *tmpl.Configuratio
 // executeWithCommandValues processes files using command-line template values.
 //
 //nolint:revive // function-length: file processing loop with error handling
-func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, targetPath string, force, update bool, cmdTemplateValues map[string]interface{}) error {
+func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, targetPath string, force, update bool, cmdTemplateValues map[string]interface{}, delimiters []string) error {
+	// Resolve delimiters, falling back to defaults when none are provided.
+	activeDelimiters := resolveDelimiters(delimiters, nil)
+
 	// For now, use the existing processFile method but this should be refactored
 	// to use the templating processor properly
 	var successCount, errorCount int
 	for _, file := range embedsConfig.Files {
+		// Skip directory entries. The engine creates parent directories when
+		// writing each file, so explicit directory entries are redundant and
+		// would otherwise be written as empty files, breaking nested paths.
+		if file.IsDirectory {
+			continue
+		}
+
 		// Process the file using the templating processor
 		// Convert tmpl.File to engine.File
 		templatingFile := engine.File{
@@ -496,9 +542,9 @@ func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, tar
 	// Flush all output before rendering README
 	ui.flushOutput()
 
-	// Only render README if all files were successful
+	// Only render README if all files were successful.
 	if embedsConfig.README != "" {
-		if err := ui.renderREADME(embedsConfig.README, targetPath); err != nil {
+		if err := ui.renderREADME(embedsConfig.README, targetPath, activeDelimiters); err != nil {
 			return err
 		}
 	}
@@ -610,16 +656,10 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		return fmt.Errorf("failed to load scaffold configuration: %w", err)
 	}
 
-	// Run the setup form to collect configuration values
+	// Run the setup form to collect configuration values.
 	mergedValues, _, err := ui.RunSetupForm(scaffoldConfig, targetPath, useDefaults, cmdTemplateValues)
 	if err != nil {
 		return fmt.Errorf("failed to run setup form: %w", err)
-	}
-
-	// Write the project record: the template manifest with the user's
-	// answers and provenance merged in.
-	if err := config.SaveProjectRecord(targetPath, scaffoldConfig, embedsConfig.Source, baseRef, mergedValues); err != nil {
-		return fmt.Errorf("failed to save project record: %w", err)
 	}
 
 	// Process each file with rich configuration
@@ -628,6 +668,13 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	for _, file := range embedsConfig.Files {
 		// Skip the scaffold.yaml as it's only used for schema definition
 		if file.Path == config.ScaffoldConfigFileName {
+			continue
+		}
+
+		// Skip directory entries. The engine creates parent directories when
+		// writing each file, so explicit directory entries are redundant and
+		// would otherwise be written as empty files, breaking nested paths.
+		if file.IsDirectory {
 			continue
 		}
 
@@ -696,11 +743,11 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		}
 	}
 
-	// Print summary
+	// Print summary.
 	ui.writeOutput(newlineStr)
 	if errorCount > 0 {
 		ui.writeOutput("Generated %d files. Failed to generate %d files.\n", successCount, errorCount)
-		// Don't render README if there were errors - flush output and return error immediately
+		// Don't render README if there were errors - flush output and return error immediately.
 		ui.flushOutput()
 		return errUtils.Build(errUtils.ErrScaffoldGeneration).
 			WithExplanationf("Failed to generate files: %s", strings.Join(failedFiles, ", ")).
@@ -709,7 +756,14 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		ui.writeOutput("Generated %d files.\n", successCount)
 	}
 
-	// Flush all output before rendering README
+	// Write the project record only after all files have been generated
+	// successfully so a partial run does not leave the directory looking
+	// fully initialised.
+	if err := config.SaveProjectRecord(targetPath, scaffoldConfig, embedsConfig.Source, baseRef, mergedValues); err != nil {
+		return fmt.Errorf("failed to save project record: %w", err)
+	}
+
+	// Flush all output before rendering README.
 	ui.flushOutput()
 
 	// Only render README if all files were successful.
@@ -758,14 +812,19 @@ func (ui *InitUI) renderMarkdown(markdownContent string) error {
 }
 
 // renderREADME renders the README content using glamour.
-func (ui *InitUI) renderREADME(readmeContent string, targetPath string) error {
-	// Process README template with default delimiters
-	processedContent, err := ui.processor.ProcessTemplateWithDelimiters(readmeContent, targetPath, nil, nil, []string{"{{", "}}"})
+// The provided delimiters control template rendering so callers that supply
+// custom delimiters (e.g. via ExecuteWithDelimiters) are honoured correctly.
+func (ui *InitUI) renderREADME(readmeContent string, targetPath string, delimiters []string) error {
+	// Resolve delimiters, falling back to defaults.
+	activeDelimiters := resolveDelimiters(delimiters, nil)
+
+	// Process README template with the active delimiters.
+	processedContent, err := ui.processor.ProcessTemplateWithDelimiters(readmeContent, targetPath, nil, nil, activeDelimiters)
 	if err != nil {
 		return fmt.Errorf("failed to process README template: %w", err)
 	}
 
-	// Render the processed content as markdown
+	// Render the processed content as markdown.
 	return ui.renderMarkdown(processedContent)
 }
 
@@ -1088,27 +1147,35 @@ func (ui *InitUI) generateSuggestedDirectoryWithTemplateInfo(templateInfo interf
 
 // DisplayScaffoldTemplateTable displays scaffold templates in a table format.
 func (ui *InitUI) DisplayScaffoldTemplateTable(templatesMap map[string]interface{}) {
-	// Extract template data for table display
+	// Collect sorted template names for deterministic row order.
+	sortedNames := make([]string, 0, len(templatesMap))
+	for templateName := range templatesMap {
+		sortedNames = append(sortedNames, templateName)
+	}
+	sort.Strings(sortedNames)
+
+	// Extract template data for table display in sorted order.
 	var rows [][]string
-	for templateName, templateConfig := range templatesMap {
+	for _, templateName := range sortedNames {
+		templateConfig := templatesMap[templateName]
 		templateMap, ok := templateConfig.(map[string]interface{})
 		if !ok {
 			continue
 		}
 
-		// Get template source
+		// Get template source.
 		source, _ := templateMap["source"].(string)
 		if source == "" {
 			source = "unknown"
 		}
 
-		// Get template description (if available)
+		// Get template description (if available).
 		description := ""
 		if desc, ok := templateMap["description"].(string); ok {
 			description = desc
 		}
 
-		// Get template ref (if available)
+		// Get template ref (if available).
 		ref := ""
 		if r, ok := templateMap["ref"].(string); ok {
 			ref = r

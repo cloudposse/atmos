@@ -129,18 +129,6 @@ export const roadmapConfig = {
       experimental: true,
       demoId: 'toolchain',
     },
-    {
-      id: 'init-scaffold',
-      icon: 'RiMagicLine',
-      title: 'Project Scaffolding',
-      tagline: 'Initialize and generate from templates',
-      description: 'Create new Atmos projects and generate code from templates with interactive prompts, 3-way merge updates, and both built-in and custom template support.',
-      benefits: 'New projects are set up correctly from the start. Templates encode best practices and team standards. Updates preserve local customizations.',
-      status: 'shipped',
-      quarter: 'q4-2025',
-      docs: '/cli/commands/init',
-      prd: 'init-scaffold-commands',
-    },
   ],
 
   initiatives: [
