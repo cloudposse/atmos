@@ -249,3 +249,29 @@ func TestEffectiveInspectStepRuntimeShorthand(t *testing.T) {
 	// Ensure the BakeConfig type is referenced so a field rename fails the build.
 	_ = container.BakeConfig{}
 }
+
+// TestEffectiveBuildStepProviderFallthrough guards the fix for the bake-build-run
+// example: provider/runtime_auto_start are top-level cross-cutting modifiers that
+// must fall through into the build/push config (bake requires `provider: docker`).
+func TestEffectiveBuildStepProviderFallthrough(t *testing.T) {
+	build := effectiveBuildStep(&schema.WorkflowStep{
+		Build:            &schema.ContainerBuildStep{Engine: "buildx", Bake: &schema.ContainerBuildBakeStep{File: "docker-bake.hcl"}},
+		Provider:         "docker",
+		RuntimeAutoStart: true,
+	})
+	assert.Equal(t, "docker", build.Provider)
+	assert.True(t, build.RuntimeAutoStart)
+
+	// An explicit provider under `with:` still wins over the top-level fallthrough.
+	build = effectiveBuildStep(&schema.WorkflowStep{
+		Build:    &schema.ContainerBuildStep{Provider: "podman"},
+		Provider: "docker",
+	})
+	assert.Equal(t, "podman", build.Provider)
+
+	push := effectivePushStep(&schema.WorkflowStep{
+		Push:     &schema.ContainerPushStep{Image: "app:local"},
+		Provider: "docker",
+	})
+	assert.Equal(t, "docker", push.Provider)
+}
