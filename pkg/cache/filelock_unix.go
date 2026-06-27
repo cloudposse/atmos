@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -22,8 +23,17 @@ const (
 )
 
 // flockFileLock implements FileLock using flock on Unix systems.
+//
+// The flock syscall coordinates exclusion across processes, but goroutines within
+// the same process contend on it through independent file descriptors with no
+// fairness guarantee: the non-blocking TryLock polling in WithLock can starve an
+// unlucky goroutine until its bounded retry budget is exhausted. The in-process mu
+// serializes goroutines fairly (Go's RWMutex prevents writer starvation) before
+// any of them touch the cross-process flock, so flock is never contended from
+// within this process. Cross-process coordination still flows through flock.
 type flockFileLock struct {
 	lockPath string
+	mu       sync.RWMutex
 }
 
 // NewFileLock creates a new FileLock for the given path.
@@ -39,6 +49,12 @@ func NewFileLock(path string) FileLock {
 // WithLock executes fn while holding an exclusive lock.
 func (f *flockFileLock) WithLock(fn func() error) error {
 	defer perf.Track(nil, "cache.flockFileLock.WithLock")()
+
+	// Serialize in-process goroutines fairly before contending on the cross-process
+	// flock, so the bounded TryLock retry below never has to compete with our own
+	// goroutines (which would otherwise risk starvation under load).
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
 	lock := flock.New(f.lockPath)
 
@@ -78,6 +94,11 @@ func (f *flockFileLock) WithLock(fn func() error) error {
 func (f *flockFileLock) WithLockContext(ctx context.Context, fn func() error) error {
 	defer perf.Track(nil, "cache.flockFileLock.WithLockContext")()
 
+	// Serialize in-process goroutines fairly before contending on the cross-process
+	// flock (see WithLock for rationale).
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	lock := flock.New(f.lockPath)
 
 	locked, err := lock.TryLockContext(ctx, lockRetryDelay)
@@ -101,6 +122,11 @@ func (f *flockFileLock) WithLockContext(ctx context.Context, fn func() error) er
 // WithRLock executes fn while holding a shared read lock.
 func (f *flockFileLock) WithRLock(fn func() error) error {
 	defer perf.Track(nil, "cache.flockFileLock.WithRLock")()
+
+	// Hold the in-process read lock so concurrent readers run together while still
+	// excluding in-process writers (see WithLock for rationale).
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 
 	lock := flock.New(f.lockPath)
 
