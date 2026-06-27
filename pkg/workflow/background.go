@@ -11,10 +11,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// StartBackground launches a background step through the runner, registers its
-// handle, and applies the implicit readiness gate: when the step declares a health
-// check, WaitReady blocks until it is healthy before the workflow continues; with
-// no health check WaitReady is a no-op (started == ready).
+// StartBackground launches a background step through the runner and registers its
+// handle. Start is non-blocking: it does not wait on readiness, so consecutive
+// background steps come up concurrently. The implicit readiness gate is applied by
+// the workflow executor before the next foreground step (and by `wait`/`wait-all`),
+// reusing the step's health check via Handle.WaitReady.
 func StartBackground(
 	ctx context.Context,
 	reg *background.Registry,
@@ -29,7 +30,7 @@ func StartBackground(
 		return err
 	}
 	reg.Register(handle)
-	return handle.WaitReady(ctx)
+	return nil
 }
 
 // WaitBackground blocks until every named background step is ready (a service's
@@ -59,6 +60,31 @@ func WaitAllBackground(ctx context.Context, reg *background.Registry) error {
 	return WaitBackground(ctx, reg, reg.Names())
 }
 
+// GatePendingBackground applies the implicit readiness gate run before each foreground
+// step: it blocks until every registered background step that has not already passed its
+// gate is ready, then records those names in gated so later foreground steps don't
+// re-probe them. A nil/empty registry (or all-gated) is a no-op.
+func GatePendingBackground(ctx context.Context, reg *background.Registry, gated map[string]bool) error {
+	defer perf.Track(nil, "workflow.GatePendingBackground")()
+
+	var pending []string
+	for _, name := range reg.Names() {
+		if !gated[name] {
+			pending = append(pending, name)
+		}
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+	if err := WaitBackground(ctx, reg, pending); err != nil {
+		return err
+	}
+	for _, name := range pending {
+		gated[name] = true
+	}
+	return nil
+}
+
 // CancelBackground gracefully tears down the named background steps and removes
 // them from the registry so the end-of-scope auto-teardown does not stop them again.
 func CancelBackground(ctx context.Context, reg *background.Registry, names []string) error {
@@ -73,6 +99,8 @@ func CancelBackground(ctx context.Context, reg *background.Registry, names []str
 		}
 		if err := handle.Stop(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("%w: cancel background step %q: %w", errUtils.ErrContainerRuntimeOperation, name, err))
+			// Keep the handle registered so the deferred StopAll at workflow exit retries teardown.
+			continue
 		}
 		reg.Remove(name)
 	}

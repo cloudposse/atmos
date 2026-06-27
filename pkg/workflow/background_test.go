@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/background"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -15,13 +16,14 @@ import (
 type fakeHandle struct {
 	name       string
 	readyErr   error
+	stopErr    error
 	readyCalls int
 	stopCalls  int
 }
 
 func (h *fakeHandle) Name() string                      { return h.name }
 func (h *fakeHandle) WaitReady(_ context.Context) error { h.readyCalls++; return h.readyErr }
-func (h *fakeHandle) Stop(_ context.Context) error      { h.stopCalls++; return nil }
+func (h *fakeHandle) Stop(_ context.Context) error      { h.stopCalls++; return h.stopErr }
 
 type fakeRunner struct {
 	handles   map[string]*fakeHandle
@@ -43,17 +45,18 @@ func (r *fakeRunner) Start(_ context.Context, step *schema.WorkflowStep, env []s
 	return h, nil
 }
 
-func TestStartBackground_RegistersAndAppliesReadinessGate(t *testing.T) {
+func TestStartBackground_RegistersWithoutGating(t *testing.T) {
 	reg := background.NewRegistry()
 	runner := &fakeRunner{}
 	step := &schema.WorkflowStep{Name: "emulator", Type: "container", BackgroundAsync: true}
 
 	require.NoError(t, StartBackground(context.Background(), reg, runner, step, []string{"K=V"}))
 
-	// Registered and the implicit readiness gate fired once.
+	// Start is non-blocking: the handle is registered but readiness is NOT yet
+	// checked (the implicit gate fires before the next foreground step).
 	h, ok := reg.Get("emulator")
 	require.True(t, ok)
-	assert.Equal(t, 1, h.(*fakeHandle).readyCalls)
+	assert.Equal(t, 0, h.(*fakeHandle).readyCalls)
 	assert.Equal(t, []string{"K=V"}, runner.lastEnv)
 }
 
@@ -103,9 +106,52 @@ func TestWaitAllBackground_ReadiesEveryRegistered(t *testing.T) {
 	for _, name := range []string{"a", "b", "c"} {
 		require.NoError(t, StartBackground(context.Background(), reg, runner, &schema.WorkflowStep{Name: name}, nil))
 	}
-	// StartBackground already readied each once (implicit gate); wait-all readies again.
+	// Start is non-blocking, so wait-all is what readies each (exactly once).
 	require.NoError(t, WaitAllBackground(context.Background(), reg))
 	for _, name := range []string{"a", "b", "c"} {
-		assert.Equal(t, 2, runner.handles[name].readyCalls)
+		assert.Equal(t, 1, runner.handles[name].readyCalls)
 	}
+}
+
+func TestCancelBackground_KeepsHandleRegisteredOnFailedStop(t *testing.T) {
+	// Negative path: a failed Stop must NOT remove the handle, so the deferred
+	// StopAll at workflow exit can retry teardown.
+	reg := background.NewRegistry()
+	reg.Register(&fakeHandle{name: "emulator", stopErr: errors.New("down failed")})
+
+	err := CancelBackground(context.Background(), reg, []string{"emulator"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+	assert.Equal(t, []string{"emulator"}, reg.Names(), "failed stop keeps the handle for StopAll retry")
+}
+
+func TestGatePendingBackground_GatesOnceThenSkips(t *testing.T) {
+	reg := background.NewRegistry()
+	runner := &fakeRunner{}
+	for _, name := range []string{"a", "b"} {
+		require.NoError(t, StartBackground(context.Background(), reg, runner, &schema.WorkflowStep{Name: name}, nil))
+	}
+
+	gated := map[string]bool{}
+	// First gate readies both and records them.
+	require.NoError(t, GatePendingBackground(context.Background(), reg, gated))
+	assert.Equal(t, 1, runner.handles["a"].readyCalls)
+	assert.Equal(t, 1, runner.handles["b"].readyCalls)
+	assert.True(t, gated["a"] && gated["b"])
+
+	// Second gate is a no-op for already-gated services (no re-probe).
+	require.NoError(t, GatePendingBackground(context.Background(), reg, gated))
+	assert.Equal(t, 1, runner.handles["a"].readyCalls)
+	assert.Equal(t, 1, runner.handles["b"].readyCalls)
+}
+
+func TestGatePendingBackground_SurfacesUnhealthyAndLeavesUngated(t *testing.T) {
+	reg := background.NewRegistry()
+	reg.Register(&fakeHandle{name: "bad", readyErr: errors.New("unhealthy")})
+
+	gated := map[string]bool{}
+	err := GatePendingBackground(context.Background(), reg, gated)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unhealthy")
+	assert.False(t, gated["bad"], "a failed gate must not mark the service ready")
 }

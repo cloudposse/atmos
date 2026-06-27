@@ -123,7 +123,12 @@ func (h *containerHandle) Stop(ctx context.Context) error {
 	if h.dryRun || h.runtime == nil {
 		return nil
 	}
-	return container.Down(ctx, h.runtime, h.inst.Stack, h.inst.ComponentType, h.inst.Component)
+	if err := container.Down(ctx, h.runtime, h.inst.Stack, h.inst.ComponentType, h.inst.Component); err != nil {
+		// Wrap at the handle boundary so implicit StopAll teardown preserves the
+		// static sentinel and step-name context that Start adds on the startup path.
+		return fmt.Errorf("%w: stop background container %q: %w", errUtils.ErrContainerRuntimeOperation, h.name, err)
+	}
+	return nil
 }
 
 // firstNonEmpty returns the first non-empty string.

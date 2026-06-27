@@ -1344,9 +1344,8 @@
                         "description": "Identity to use for the step."
                       },
                       "retry": {
-                        "type": "object",
                         "description": "Retry policy wrapping step execution.",
-                        "additionalProperties": true
+                        "$ref": "#/definitions/workflow_retry"
                       },
                       "timeout": {
                         "type": "string",

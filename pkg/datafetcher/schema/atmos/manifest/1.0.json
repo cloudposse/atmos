@@ -1701,7 +1701,7 @@
                         "description": "Maximum duration the step may run (e.g. '30s', '5m')."
                       },
                       "background": {
-                        "description": "Run the step in the background. true/false, or a string name used to reference the background step from wait/wait-all/cancel steps.",
+                        "description": "Run the step asynchronously in the background (boolean; v1 supports this only for container steps). A string value instead sets the step's background style color.",
                         "oneOf": [
                           { "type": "boolean" },
                           { "type": "string" }

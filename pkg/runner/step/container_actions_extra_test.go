@@ -222,6 +222,7 @@ func TestEffectiveRunStepMergesShorthand(t *testing.T) {
 	assert.Equal(t, "echo hi", run.Command)
 	assert.Equal(t, "/bin/bash", run.Shell)
 	require.Len(t, run.Mounts, 1)
+	assert.Equal(t, schema.ContainerMount{Source: "/h", Target: "/c"}, run.Mounts[0])
 
 	// The run block's image is preserved.
 	run = effectiveRunStep(&schema.WorkflowStep{

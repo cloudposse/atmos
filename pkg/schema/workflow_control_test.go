@@ -265,3 +265,40 @@ steps:
 	var step WorkflowStep
 	require.Error(t, yaml.Unmarshal([]byte(input), &step))
 }
+
+// TestWorkflowStep_UnmarshalYAML_ResetsReusedReceiver verifies that decoding into a
+// reused WorkflowStep clears fields omitted from the second document (Decode merges
+// into the destination, so without a reset the first step's fields would leak).
+func TestWorkflowStep_UnmarshalYAML_ResetsReusedReceiver(t *testing.T) {
+	var step WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte("name: first\ncommand: echo hi\ntype: shell\n"), &step))
+	assert.Equal(t, "echo hi", step.Command)
+	assert.Equal(t, "shell", step.Type)
+
+	// Second decode into the SAME value omits command/type.
+	require.NoError(t, yaml.Unmarshal([]byte("name: second\n"), &step))
+	assert.Equal(t, "second", step.Name)
+	assert.Empty(t, step.Command, "omitted command must be cleared, not retained from the first decode")
+	assert.Empty(t, step.Type, "omitted type must be cleared, not retained from the first decode")
+}
+
+// TestWorkflowStep_UnmarshalYAML_ForRejectsNonStringScalar verifies `for:` accepts
+// string scalars / sequences but rejects coerced scalars like booleans and numbers.
+func TestWorkflowStep_UnmarshalYAML_ForRejectsNonStringScalar(t *testing.T) {
+	// Valid: unquoted identifier resolves to !!str.
+	var ok WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte("type: cancel\nfor: cache\n"), &ok))
+	assert.Equal(t, []string{"cache"}, ok.For)
+
+	// Valid: sequence of strings.
+	var okList WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte("type: cancel\nfor: [redis, web]\n"), &okList))
+	assert.Equal(t, []string{"redis", "web"}, okList.For)
+
+	for _, bad := range []string{"type: cancel\nfor: true\n", "type: cancel\nfor: 1\n"} {
+		var step WorkflowStep
+		err := yaml.Unmarshal([]byte(bad), &step)
+		require.Error(t, err, "input %q must be rejected", bad)
+		assert.ErrorIs(t, err, ErrWorkflowControlStepInvalid)
+	}
+}

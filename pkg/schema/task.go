@@ -174,8 +174,9 @@ type Task struct {
 	Matrix         map[string][]string `yaml:"matrix,omitempty" json:"matrix,omitempty" mapstructure:"matrix"`
 	Fail           *ParallelFailConfig `yaml:"fail,omitempty" json:"fail,omitempty" mapstructure:"fail"`
 
-	// BackgroundAsync marks a command step to run asynchronously (decoded from a
+	// BackgroundAsync marks a container step to run asynchronously (decoded from a
 	// boolean-valued `background:` key); a string-valued `background:` sets the style color.
+	// In v1 the validator accepts `background: true` only on `type: container` steps.
 	BackgroundAsync bool `yaml:"-" json:"background_async,omitempty" mapstructure:"background_async"`
 	// For lists the background step name(s) a `wait`/`cancel` action step targets.
 	For []string `yaml:"-" json:"for,omitempty" mapstructure:"for"`
@@ -191,10 +192,14 @@ type Task struct {
 //   - `for`        : scalar or sequence of target step names (wait/cancel).
 func (task *Task) UnmarshalYAML(value *yaml.Node) error {
 	type plain Task
+	// Decode into a zero-value temp first so a reused receiver does not retain
+	// fields omitted from this YAML node (Decode merges into the destination).
+	var fresh plain
 	nodes, sanitized := splitStepPolymorphicNodes(value)
-	if err := sanitized.Decode((*plain)(task)); err != nil {
+	if err := sanitized.Decode(&fresh); err != nil {
 		return err
 	}
+	*task = Task(fresh)
 	return applyStepPolymorphicNodes(nodes, task.Action, stepPolyTargets{
 		output:    &task.Output,
 		parallel:  &task.ParallelOutput,

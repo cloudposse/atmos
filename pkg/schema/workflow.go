@@ -322,10 +322,11 @@ type WorkflowStep struct {
 	Matrix         map[string][]string `yaml:"matrix,omitempty" json:"matrix,omitempty" mapstructure:"matrix"`
 	Fail           *ParallelFailConfig `yaml:"fail,omitempty" json:"fail,omitempty" mapstructure:"fail"`
 
-	// Background marks a command step to run asynchronously: the step starts and the
+	// BackgroundAsync marks a container step to run asynchronously: the step starts and the
 	// workflow continues to the next step while Atmos supervises it. Decoded from a
 	// boolean-valued `background:` key (see UnmarshalYAML); a string-valued `background:`
-	// sets the style color instead.
+	// sets the style color instead. In v1 the validator accepts `background: true` only
+	// on `type: container` steps.
 	BackgroundAsync bool `yaml:"-" json:"background_async,omitempty" mapstructure:"background_async"`
 	// For lists the background step name(s) a `wait`/`cancel` action step targets.
 	// Accepts a scalar or a sequence in YAML.
@@ -342,10 +343,14 @@ type WorkflowStep struct {
 //   - `for`        : scalar or sequence of target step names (wait/cancel).
 func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 	type plain WorkflowStep
+	// Decode into a zero-value temp first so a reused receiver does not retain
+	// fields omitted from this YAML node (Decode merges into the destination).
+	var fresh plain
 	nodes, sanitized := splitStepPolymorphicNodes(value)
-	if err := sanitized.Decode((*plain)(step)); err != nil {
+	if err := sanitized.Decode(&fresh); err != nil {
 		return err
 	}
+	*step = WorkflowStep(fresh)
 	return applyStepPolymorphicNodes(nodes, step.Action, stepPolyTargets{
 		output:    &step.Output,
 		parallel:  &step.ParallelOutput,
@@ -423,6 +428,12 @@ func decodeStringOrSlice(node *yaml.Node, out *[]string) error {
 		return nil
 	}
 	if node.Kind == yaml.ScalarNode {
+		// Only genuine strings name a step; reject coerced scalars like
+		// `for: true` (!!bool) or `for: 1` (!!int). Unquoted identifiers
+		// (e.g. `for: cache`) resolve to !!str and still pass.
+		if node.Tag != "!!str" {
+			return fmt.Errorf("%w: `for` must be a string or list of strings, got %s", ErrWorkflowControlStepInvalid, node.Tag)
+		}
 		*out = []string{node.Value}
 		return nil
 	}

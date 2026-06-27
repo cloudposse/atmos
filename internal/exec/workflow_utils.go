@@ -12,6 +12,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"mvdan.cc/sh/v3/shell"
 
@@ -40,6 +41,10 @@ import (
 
 // Workflow error title for formatted output.
 const WorkflowErrTitle = "Workflow Error"
+
+// bgRunIDLen is the length of the short per-run id used to scope background container
+// instance names when no explicit `--stack` is given.
+const bgRunIDLen = 8
 
 // Local errors not in shared package (workflow-specific internal errors).
 var (
@@ -298,17 +303,21 @@ func ExecuteWorkflow(
 	runCtx, cancelRun := context.WithCancel(context.Background())
 	defer cancelRun()
 	bgRegistry := background.NewRegistry()
+	// bgGated records background steps that have already passed their readiness gate,
+	// so the implicit gate before each foreground step does not re-probe them.
+	bgGated := map[string]bool{}
+	// Scope background container instance names per run. An explicit `--stack` is honored
+	// verbatim (override path); otherwise use a run-specific id rather than the shared
+	// workflow/stack name, so concurrent executions of the same workflow do not collide
+	// on the same container.
 	bgStack := commandLineStack
 	if bgStack == "" {
-		bgStack = strings.TrimSpace(workflowDefinition.Stack)
-	}
-	if bgStack == "" {
-		bgStack = workflow
+		bgStack = "run-" + uuid.NewString()[:bgRunIDLen]
 	}
 	bgRunner := &workflowPkg.ContainerRunner{Stack: bgStack, DryRun: dryRun}
 	defer func() {
-		if stopErr := bgRegistry.StopAll(runCtx); stopErr != nil && retErr == nil {
-			retErr = stopErr
+		if stopErr := bgRegistry.StopAll(runCtx); stopErr != nil {
+			retErr = errors.Join(retErr, stopErr)
 		}
 	}()
 
@@ -470,22 +479,45 @@ func ExecuteWorkflow(
 		handled := true
 		switch {
 		case step.BackgroundAsync:
-			// Start the container service detached and apply the implicit readiness
-			// gate (blocks until healthy when a `with.healthcheck` is configured).
+			// Start the container service detached (non-blocking): consecutive background
+			// steps come up concurrently. Readiness is enforced by the implicit gate before
+			// the next foreground step (and by `wait`/`wait-all`).
 			err = workflowPkg.StartBackground(runCtx, bgRegistry, bgRunner, &steps[stepIdx], stepEnv)
 		case commandType == schema.TaskTypeWait:
 			err = workflowPkg.WaitBackground(runCtx, bgRegistry, step.For)
+			if err == nil {
+				for _, name := range step.For {
+					bgGated[name] = true
+				}
+			}
 		case commandType == schema.TaskTypeWaitAll:
 			err = workflowPkg.WaitAllBackground(runCtx, bgRegistry)
+			if err == nil {
+				for _, name := range bgRegistry.Names() {
+					bgGated[name] = true
+				}
+			}
 		case commandType == schema.TaskTypeCancel:
 			err = workflowPkg.CancelBackground(runCtx, bgRegistry, step.For)
+			for _, name := range step.For {
+				delete(bgGated, name)
+			}
 		default:
 			handled = false
+		}
+
+		// Implicit readiness gate: before running a foreground step, block until every
+		// background service started so far is healthy. Already-gated services are skipped.
+		if !handled && err == nil {
+			err = workflowPkg.GatePendingBackground(runCtx, bgRegistry, bgGated)
 		}
 
 		switch {
 		case handled:
 			// already executed above
+		case err != nil:
+			// A failed readiness gate skips this step's foreground work; the error
+			// handler below reports it.
 		case commandType == schema.TaskTypeParallel, commandType == schema.TaskTypeMatrix:
 			err = executeWorkflowControlStep(context.Background(), &workflowControlContext{
 				atmosConfig:         atmosConfig,

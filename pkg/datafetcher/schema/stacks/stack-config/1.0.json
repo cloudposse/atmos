@@ -1405,7 +1405,7 @@
                         "description": "Allocate a pseudo-terminal for the step (like docker -t); combine with interactive for full terminal sessions"
                       },
                       "background": {
-                        "description": "Run the step in the background. true/false, or a string name used to reference the background step from wait/wait-all/cancel steps.",
+                        "description": "Run the step asynchronously in the background (boolean; v1 supports this only for container steps). A string value instead sets the step's background style color.",
                         "oneOf": [
                           { "type": "boolean" },
                           { "type": "string" }
@@ -1442,7 +1442,11 @@
                         "description": "Parameters for the step named by 'type' (and 'action' where applicable). Validated by the step handler at run time. For container steps this holds image, command, ports, mounts, build context, etc.",
                         "additionalProperties": true
                       }
-                    }
+                    },
+                    "anyOf": [
+                      { "required": ["type"] },
+                      { "required": ["command"] }
+                    ]
                   }
                 }
               ]
