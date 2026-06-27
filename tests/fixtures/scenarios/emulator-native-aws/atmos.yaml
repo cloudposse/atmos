@@ -1,0 +1,48 @@
+# Minimal scenario exercising the NATIVE emulator path end to end:
+# `atmos emulator up` (atmos manages the container) + an aws/emulator identity +
+# the provider-config contributor (no providers.tf) + stores/secrets backed by the
+# emulator. Used by TestEmulatorNativeAWSLifecycle (opt-in, runtime-gated).
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+    apply_auto_approve: true
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+
+# A single aws/emulator identity binds every component to the emulator. The
+# provider contributor injects the AWS provider behaviour flags; the identity
+# injects the live endpoint + dummy credentials. No providers.tf, no endpoints.
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: aws
+      default: true
+
+# Stores authenticate to the emulator through the same identity (in-process SDK
+# clients), exercising the AuthContext.AWS the emulator identity now populates.
+stores:
+  config/ssm:
+    kind: aws/ssm
+    identity: local-aws
+    options:
+      region: us-east-1
+      prefix: /emu-native/config
+  secrets/ssm:
+    kind: aws/ssm
+    identity: local-aws
+    secret: true
+    options:
+      region: us-east-1
+      prefix: /emu-native/secrets
+
+logs:
+  file: "/dev/stderr"
+  level: Info

@@ -1,0 +1,78 @@
+---
+slug: native-ci-planfile-verification
+title: "Plan-then-Deploy in CI: Planfile Storage and Automatic Drift Verification"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos native CI now supports the full plan-then-deploy workflow with planfiles: `atmos terraform plan --ci` uploads the planfile to durable storage, and `atmos terraform deploy --ci` automatically downloads it, generates a **fresh** plan, reconciles it against the reviewed plan, and applies the fresh plan — only if they match, failing on drift by default.
+
+<!--truncate-->
+
+## What Changed
+
+Two pieces landed together:
+
+- **Planfile storage that works in GitHub Actions.** The `github/artifacts` store talks to the GitHub Actions Artifacts API directly — including the runtime download path, so a planfile uploaded by a **plan** job can be consumed by a separate **deploy** job in the same run. (S3 and local stores work too.)
+- **Automatic, configurable drift verification on `deploy`.** When planfile storage is configured and you run `atmos terraform deploy --ci`, Atmos downloads the stored plan, generates a fresh plan against current state, compares them with a JSON-structural plan-diff, and:
+  - **`fail`** (default under CI): blocks the deploy on drift,
+  - **`warn`**: logs the drift but proceeds,
+  - **`off`**: skips verification entirely.
+- **A defined answer for "no stored plan found."** `verify` covers the case where a stored plan *exists* but differs. A companion `required` boolean covers whether a stored plan **must** exist to verify against — previously a silent fresh apply. It defaults to tracking `verify` strictness, so a fail-by-default CI deploy now fails loudly instead of quietly applying something unverified. That means a green `deploy` actually *proves* verification ran — no log-scraping required.
+
+Configure it once:
+
+```yaml
+components:
+  terraform:
+    planfiles:
+      verify: fail        # drift: stored plan exists but differs (fail | warn | off)
+      required: true      # must a reviewed stored plan exist? (defaults to tracking `verify`)
+      priority: [github]
+      stores:
+        github:
+          type: github/artifacts
+```
+
+Override per run with `--verify-plan` / `--verify-plan=false` (CLI beats config beats the CI default). And because CI is auto-detected (`CI` / `GITHUB_ACTIONS`), the `--ci` flag is optional in a real pipeline — `atmos terraform deploy mycomponent -s prod` behaves natively and exits non-zero on drift or a missing plan, so your workflow asserts via exit codes instead of grepping logs.
+
+## Why This Matters
+
+The gap between "the plan you reviewed" and "what actually gets applied" is where infrastructure surprises live.
+
+### Reconcile, don't replay
+
+By default `deploy` doesn't replay the stored planfile. It re-plans, checks the fresh plan against the one you reviewed, and applies the fresh plan only if they match.
+
+Why not just apply the stored plan directly? A saved plan is brittle. It goes stale the moment the state changes — which, between a PR and its merge, it usually has. And while Terraform bakes the assumed role into the plan, the **base credentials** that authenticate (and assume that role) come from the apply environment, not the plan — so a plan built on the PR can fail to apply on merge. Re-planning at apply time uses the current state and the apply-time credentials; the diff still proves nothing changed since review.
+
+Want byte-for-byte replay anyway? Use `deploy --from-plan` (or `apply --planfile`).
+
+### Why a naive diff doesn't work
+
+A planfile is a frozen snapshot — but the plan it represents never really is. Between review and apply the details shift: values "known after apply," computed fields, hashes, ordering, timestamps. You adjust course as you go without changing *what* you set out to do. A byte-for-byte comparison can't tell the difference — it flags every shift as drift, so a plan that's still doing exactly what you reviewed gets rejected. Terraform's own saved-plan apply is stricter still: any movement in state lineage invalidates the snapshot outright, even when the substance hasn't changed.
+
+That's the real-world problem: rigid checks make a plan go *invalid* long before it goes *wrong*. Useful verification needs **wiggle room** — tolerate the benign shifts, catch the real ones.
+
+Atmos's verification is **semantic**, not naive. It parses both plans to JSON, normalizes the noise (sorted keys, masked secrets, computed-hash attributes, data-source reads), and compares what matters. So it flags a resource added, removed, or substantively changed — while letting the incidental variation slide. That's what makes plan-then-deploy practical.
+
+Verification lives on `deploy`, not `apply`, by construction: `deploy` runs a discrete `plan` step as part of the command, capturing a fresh plan to diff the stored one against. `apply` doesn't capture that separate planfile — it applies a plan you pass, or plans-and-applies in one step like `terraform apply` — so it stays a thin, predictable wrapper.
+
+## How to Use It
+
+Inside GitHub Actions, the `github/artifacts` store needs the runner's runtime credentials (`ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL`), which GitHub withholds from `run:` steps. Surface them once with the in-repo [`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action:
+
+```yaml
+steps:
+  - uses: cloudposse/atmos/actions/github-runtime@v1
+    with:
+      mode: env
+  - run: atmos terraform plan mycomponent -s prod --ci    # uploads the planfile
+  - run: atmos terraform deploy mycomponent -s prod --ci   # downloads, verifies, applies
+```
+
+See [Planfile Storage](/ci/planfile-storage), [Planfile drift verification](/components/terraform/planfiles#drift-verification), and [`atmos terraform deploy`](/cli/commands/terraform/deploy#automatic-plan-verification-in-ci).
+
+## Get Involved
+
+Planfile storage is evolving — try it in your pipelines and tell us how the `fail` / `warn` / `off` semantics fit your workflow. Open an issue or discussion on [GitHub](https://github.com/cloudposse/atmos).

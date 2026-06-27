@@ -386,7 +386,7 @@ func (i *userIdentity) callGetSessionToken(ctx context.Context, longLivedCreds *
 			longLivedCreds.AccessKeyID, longLivedCreds.SecretAccessKey, "",
 		)),
 	}
-	if resolverOpt := awsCloud.GetResolverConfigOption(i.config, nil); resolverOpt != nil {
+	if resolverOpt := awsCloud.GetBaseEndpointConfigOption(i.config, nil); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}
 
@@ -803,37 +803,25 @@ func (i *userIdentity) PrepareEnvironment(ctx context.Context, environ map[strin
 	return awsCloud.PrepareEnvironment(environ, i.name, credentialsFile, configFile, region), nil
 }
 
-// IsStandaloneAWSUserChain checks if the authentication chain represents a standalone AWS user identity.
-func IsStandaloneAWSUserChain(chain []string, identities map[string]schema.Identity) bool {
-	if len(chain) != 1 {
-		return false
-	}
+// IsStandalone reports that aws/user identities authenticate without an upstream
+// provider step. Part of the types.StandaloneIdentity interface the chain manager
+// dispatches through.
+func (i *userIdentity) IsStandalone() bool { return true }
 
-	identityName := chain[0]
-	if identity, exists := identities[identityName]; exists {
-		return identity.Kind == "aws/user"
-	}
+// AuthenticateStandalone authenticates a standalone aws/user identity directly, without
+// upstream provider credentials. Part of the types.StandaloneIdentity interface.
+func (i *userIdentity) AuthenticateStandalone(ctx context.Context) (types.ICredentials, error) {
+	defer perf.Track(nil, "aws.userIdentity.AuthenticateStandalone")()
 
-	return false
-}
-
-// AuthenticateStandaloneAWSUser handles authentication for standalone AWS user identities.
-func AuthenticateStandaloneAWSUser(ctx context.Context, identityName string, identities map[string]types.Identity) (types.ICredentials, error) {
-	log.Debug("Authenticating AWS user identity directly", logKeyIdentity, identityName)
-
-	// Get the identity instance.
-	userIdentity, exists := identities[identityName]
-	if !exists {
-		return nil, fmt.Errorf("%w: AWS user identity %q not found", errUtils.ErrInvalidAuthConfig, identityName)
-	}
+	log.Debug("Authenticating AWS user identity directly", logKeyIdentity, i.name)
 
 	// AWS user identities authenticate directly without provider credentials.
-	credentials, err := userIdentity.Authenticate(ctx, nil)
+	credentials, err := i.Authenticate(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: AWS user identity %q authentication failed: %w", errUtils.ErrAuthenticationFailed, identityName, err)
+		return nil, fmt.Errorf("%w: AWS user identity %q authentication failed: %w", errUtils.ErrAuthenticationFailed, i.name, err)
 	}
 
-	log.Debug("AWS user identity authenticated successfully", "identity", identityName)
+	log.Debug("AWS user identity authenticated successfully", logKeyIdentity, i.name)
 	return credentials, nil
 }
 

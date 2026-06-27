@@ -31,7 +31,6 @@ permissions:
   pull-requests: read
 
 env:
-  TERRAFORM_VERSION: "1.15.6"
   OPEN_TOFU_VERSION: "1.12.2"
   HELM_VERSION: "v3.19.2"
   HELMFILE_VERSION: "v1.1.0"
@@ -80,7 +79,7 @@ jobs:
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: "go.mod"
           # Disable setup-go's module cache to avoid restoring or saving mutable
@@ -105,7 +104,7 @@ jobs:
           make version-${{ matrix.target }}
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           name: build-artifacts-${{ matrix.target }}
@@ -162,13 +161,6 @@ jobs:
           }
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
-      - name: Install Terraform
-        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-          terraform_wrapper: false
-
       - name: Install OpenTofu
         uses: opentofu/setup-opentofu@fc711fa910b93cba0f3fbecaafc9f42fd0c411cb # v2.0.0
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -197,6 +189,7 @@ jobs:
       - name: Install Helm and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
+          atmos toolchain install hashicorp/terraform
           atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
           atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
           atmos toolchain env --format=github
@@ -223,7 +216,7 @@ jobs:
 
       - name: Set up Go
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           go-version-file: "go.mod"
@@ -252,15 +245,10 @@ jobs:
       # Enable this after merging test-cases
       # Only seems to work with remote schema files
       #- name: Validate YAML Schema for Test Cases
-      #  uses: InoUno/yaml-ls-check@v1.4.0
-      #  with:
-      #    root: "tests/test-cases"
-      #    schemaMapping: |
-      #      {
-      #        "schema.json": [
-      #          "**/*.yaml"
-      #        ]
-      #       }
+      #  run: |
+      #    npx --yes yaml-ls-check@1.5.1 schema \
+      #      "schema.json" \
+      #      "tests/test-cases/**/*.yaml"
 
       - name: Acceptance tests with coverage
         timeout-minutes: 45
@@ -358,25 +346,18 @@ jobs:
 
   # Run the AWS-emulator demo tests against Floci (a free, LocalStack-compatible emulator;
   # LocalStack Community Edition was EOL'd in March 2026).
-  # NOTE: "[floci] demo-floci" must be kept in sync with the required status checks in
-  # branch protection on main (previously "[localstack] demo-localstack").
+  # NOTE: the "[floci] emulator-aws" status check must be kept in sync with the required
+  # status checks configured in branch protection on main.
   floci:
     name: "[floci] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
 
-    services:
-      floci:
-        # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
-        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2 # 1.5.23
-        ports:
-          - 4566:4566
-
     strategy:
       fail-fast: false
       matrix:
         demo-folder:
-          - demo-floci
+          - emulator-aws
 
     timeout-minutes: 30
     steps:
@@ -395,11 +376,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Terraform
-        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-          terraform_wrapper: false
+      - name: Add Terraform from Atmos toolchain to PATH
+        run: |
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain env --format=github
 
       - name: Install OpenTofu
         uses: opentofu/setup-opentofu@fc711fa910b93cba0f3fbecaafc9f42fd0c411cb # v2.0.0
@@ -458,7 +438,7 @@ jobs:
 
       - name: Set up Go
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: "go.mod"
           cache: false
@@ -536,7 +516,7 @@ jobs:
         run: sudo apt-get -y install kubectl helmfile
 
       - name: Install Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -618,12 +598,11 @@ jobs:
         run: |
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
-      - name: Install Terraform
+      - name: Add Terraform from Atmos toolchain to PATH
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-          terraform_wrapper: false
+        run: |
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain env --format=github
 
       - name: Install OpenTofu
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
@@ -699,12 +678,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Terraform
-        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-          terraform_wrapper: false
-
       - name: Install OpenTofu
         uses: opentofu/setup-opentofu@fc711fa910b93cba0f3fbecaafc9f42fd0c411cb # v2.0.0
         with:
@@ -734,11 +707,17 @@ jobs:
       matrix:
         demo-folder:
           - demo-context
-          - demo-floci
+          - emulator-aws
           - demo-stacks
           - demo-helmfile
-          - quick-start-advanced
           - quick-start-simple
+          # quick-start-advanced is intentionally NOT validated here. It now uses runtime
+          # Atmos YAML functions (`!terraform.state`, `!store`, `!secret`) that the static
+          # yaml-language-server cannot resolve (the InoUno/yaml-ls-check action hardcodes
+          # an empty customTags list, so unknown tags fail with "Unresolved tag"). Every
+          # other function-using example (custom-components, sops-secrets,
+          # onepassword-secrets, native-terraform) is likewise excluded from this matrix.
+          # The example is still exercised end-to-end by the floci and acceptance jobs.
 
     timeout-minutes: 20
     steps:
@@ -773,8 +752,60 @@ jobs:
               ]
             }
 
+  # run container step tests against a local registry (build -> push -> run)
+  # Docker is available directly on the runner (see the k3s job), and a
+  # registry:2 service container provides a hermetic push/pull target on
+  # localhost:5000 so the full build -> push -> run cycle is exercised without
+  # GitHub Container Registry, leftover packages, or fork-PR token limits.
+  container-step:
+    name: "[container-step] example"
+    needs: build
+    runs-on: ubuntu-latest
+
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+
+    timeout-minutes: 15
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: build-artifacts-linux
+          path: /usr/local/bin
+
+      - name: Set execute permissions on atmos
+        run: chmod +x /usr/local/bin/atmos
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run container steps (run, build, bake, push, workspace, env)
+        working-directory: examples/container-step
+        run: |
+          set -euo pipefail
+          atmos workflow hello -f container-step
+          atmos workflow build-run -f container-step
+          atmos workflow bake-build-run -f container-step
+          atmos workflow push-local-registry -f container-step
+          atmos workflow workspace -f container-step
+          atmos workflow env -f container-step
+
+      - name: Verify a failing container step propagates a non-zero exit code
+        working-directory: examples/container-step
+        run: |
+          if atmos workflow failing-check -f container-step; then
+            echo "expected the 'failing-check' workflow to fail, but it succeeded"
+            exit 1
+          fi
+          echo "failing-check correctly returned a non-zero exit code"
+
   release:
-    needs: [test, lint, mock, k3s, floci, floci-go, docker, validate]
+    needs: [test, lint, mock, k3s, floci, floci-go, docker, validate, container-step]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
     with:

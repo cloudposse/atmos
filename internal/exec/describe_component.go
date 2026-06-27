@@ -460,50 +460,39 @@ func detectComponentType(
 		return tryProcessWithComponentType(&baseParams)
 	}
 
-	// Try Terraform.
-	baseParams.componentType = cfg.TerraformComponentType
-	result, err := tryProcessWithComponentType(&baseParams)
-	if err != nil {
-		// If this is NOT a "component not found" type error, don't try other component types.
-		// For example, if the component has invalid HCL syntax, we should report that error
-		// rather than trying Helmfile/Packer and ultimately returning "component not found".
-		// This fixes https://github.com/cloudposse/atmos/issues/1864
+	// Auto-detect the component type by trying each in order; the first type whose
+	// section contains the component wins. A non "component not found" error (e.g.
+	// invalid HCL) is reported immediately rather than masked as "component not
+	// found" by trying the remaining types (see issue #1864).
+	componentTypes := []string{
+		cfg.TerraformComponentType,
+		cfg.HelmfileComponentType,
+		cfg.PackerComponentType,
+		cfg.AnsibleComponentType,
+		cfg.ContainerComponentType,
+		cfg.EmulatorComponentType,
+	}
+
+	var result schema.ConfigAndStacksInfo
+	var err error
+	for _, componentType := range componentTypes {
+		baseParams.componentType = componentType
+		result, err = tryProcessWithComponentType(&baseParams)
+		if err == nil {
+			return result, nil
+		}
 		if !errors.Is(err, errUtils.ErrInvalidComponent) {
 			return result, err
 		}
-
-		// Try Helmfile.
+		// Component not found for this type — carry the result forward and try the next.
 		baseParams.configAndStacksInfo = result
-		baseParams.componentType = cfg.HelmfileComponentType
-		result, err = tryProcessWithComponentType(&baseParams)
-		if err != nil {
-			// Same check for Helmfile errors.
-			if !errors.Is(err, errUtils.ErrInvalidComponent) {
-				return result, err
-			}
-
-			// Try Packer.
-			baseParams.configAndStacksInfo = result
-			baseParams.componentType = cfg.PackerComponentType
-			result, err = tryProcessWithComponentType(&baseParams)
-			if err != nil {
-				// Same check for Packer errors.
-				if !errors.Is(err, errUtils.ErrInvalidComponent) {
-					return result, err
-				}
-
-				// Try Ansible.
-				baseParams.configAndStacksInfo = result
-				baseParams.componentType = cfg.AnsibleComponentType
-				result, err = tryProcessWithComponentType(&baseParams)
-				if err != nil {
-					result.ComponentSection[cfg.ComponentTypeSectionName] = ""
-					return result, err
-				}
-			}
-		}
 	}
-	return result, nil
+
+	// Exhausted all types: the component was not found in any of them.
+	if result.ComponentSection != nil {
+		result.ComponentSection[cfg.ComponentTypeSectionName] = ""
+	}
+	return result, err
 }
 
 // ExecuteDescribeComponentWithContext describes component config and returns the merge context.
