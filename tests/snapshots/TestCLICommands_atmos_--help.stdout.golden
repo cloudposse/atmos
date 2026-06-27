@@ -34,7 +34,7 @@ AVAILABLE COMMANDS
       docs [command]                         Open Atmos documentation or display component-specific docs
       env                                    Output environment variables configured in atmos.yaml
       git [command] [EXPERIMENTAL]           GitOps enablement: automate Git commits locally and in CI
-      helm [command]                         Manage native Helm components
+      helm [command] [EXPERIMENTAL]          Manage native Helm components
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments
       help                                   Help about any command
       kubernetes [command]                   Manage Kubernetes-native components

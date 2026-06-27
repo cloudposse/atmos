@@ -67,7 +67,7 @@ func (p *CommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilde
 
 func (p *CommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag { return nil }
 
-func (p *CommandProvider) IsExperimental() bool { return false }
+func (p *CommandProvider) IsExperimental() bool { return true }
 
 func newOperationCommand(name, short string) *cobra.Command {
 	cmd := &cobra.Command{

@@ -18,7 +18,7 @@ func TestCommandProviderMetadata(t *testing.T) {
 	assert.Nil(t, provider.GetFlagsBuilder())
 	assert.Nil(t, provider.GetPositionalArgsBuilder())
 	assert.Nil(t, provider.GetCompatibilityFlags())
-	assert.False(t, provider.IsExperimental())
+	assert.True(t, provider.IsExperimental())
 
 	var subcommands []string
 	for _, cmd := range provider.GetCommand().Commands() {
