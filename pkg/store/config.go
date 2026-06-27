@@ -1,7 +1,5 @@
 package store
 
-import "github.com/go-viper/mapstructure/v2"
-
 type StoreConfig struct {
 	// Type is the legacy backend selector (e.g. "aws-ssm-parameter-store").
 	Type string `yaml:"type"`
@@ -18,7 +16,3 @@ type StoreConfig struct {
 }
 
 type StoresConfig = map[string]StoreConfig
-
-func parseOptions(options map[string]interface{}, target interface{}) error {
-	return mapstructure.Decode(options, target)
-}

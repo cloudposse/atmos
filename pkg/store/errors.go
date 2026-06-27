@@ -2,16 +2,6 @@ package store
 
 import "errors"
 
-// Error format constants.
-const (
-	errFormat           = "%w: %v"
-	errWrapFormat       = "%w: %s"
-	errWrapFormatWithID = "%w '%s': %s"
-	// The errParseFmt format wraps an option-parsing error so callers can use errors.Is on
-	// both the sentinel and the underlying error.
-	errParseFmt = "%w: %w"
-)
-
 // Common errors shared across store implementations.
 var (
 	// Common validation errors.

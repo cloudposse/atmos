@@ -2,10 +2,12 @@ package store
 
 import (
 	"fmt"
+	"sync"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
+// StoreRegistry is a map of store name to a live store implementation.
 type StoreRegistry map[string]Store
 
 // Backend kind constants (cloud/thing vocabulary, shared with the secrets subsystem).
@@ -99,143 +101,98 @@ func resolveKind(storeConfig StoreConfig) string {
 	return mapLegacyType(storeConfig.Type)
 }
 
+// StoreFactory builds a store backend from its configuration. Provider packages
+// register a factory for each backend kind they implement via Register, typically
+// from an init() function. The name is the configured store's key and is used
+// only for diagnostics (e.g. warnings).
+type StoreFactory func(name string, config StoreConfig) (Store, error)
+
+// storeFactories holds the registered factory for each backend kind. It is
+// populated at init time by provider packages and read at registry-build time.
+// The storeFactoriesMu mutex guards it because Register is exported and may be
+// called concurrently with NewStoreRegistry (e.g. late registration from tests
+// or optional providers).
+var (
+	storeFactoriesMu sync.RWMutex
+	storeFactories   = map[string]StoreFactory{}
+)
+
+// Register associates a backend kind (e.g. KindRedis) with the factory that
+// builds it. Provider packages call this from their init() functions, so
+// importing a provider package — typically via a blank import of
+// pkg/store/providers — makes its store kinds available to NewStoreRegistry.
+// Register under the canonical kind; legacy `type` values are mapped to a kind
+// by resolveKind before the factory is looked up.
+//
+// It panics if the same kind is registered twice, which indicates a programming
+// error (two factories claiming the same kind).
+func Register(kind string, factory StoreFactory) {
+	storeFactoriesMu.Lock()
+	defer storeFactoriesMu.Unlock()
+
+	if _, exists := storeFactories[kind]; exists {
+		panic(fmt.Sprintf("store: factory already registered for kind %q", kind))
+	}
+
+	storeFactories[kind] = factory
+}
+
+// Reset clears all registered store factories.
+//
+// WARNING: This function is for TESTING ONLY. It should never be called in
+// production code. It lets tests start from a clean registry state.
+func Reset() {
+	storeFactoriesMu.Lock()
+	defer storeFactoriesMu.Unlock()
+
+	storeFactories = map[string]StoreFactory{}
+}
+
+// NewStoreRegistry builds a registry of live stores from the provided config,
+// resolving each configured store to a canonical kind and looking it up in the
+// factories registered by the provider packages. Import the provider package
+// (e.g. with a blank import of pkg/store/providers) so the built-in backends are
+// registered before this runs.
 func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 	registry := make(StoreRegistry)
-	for key, storeConfig := range *config {
-		s, err := newStore(key, storeConfig)
+	for name, storeConfig := range *config {
+		kind := resolveKind(storeConfig)
+
+		// Fail fast on a misconfiguration: marking a backend that cannot encrypt at rest as
+		// `secret: true` is rejected before the store is ever constructed.
+		if storeConfig.Secret && isSecretIncapableKind(kind) {
+			return nil, fmt.Errorf("%w: store %q uses backend %q", ErrSecretBackendNotEncrypted, name, kind)
+		}
+
+		storeFactoriesMu.RLock()
+		factory, ok := storeFactories[kind]
+		storeFactoriesMu.RUnlock()
+		if !ok {
+			return nil, fmt.Errorf("%w: %s", ErrStoreTypeNotFound, kind)
+		}
+
+		s, err := factory(name, storeConfig)
 		if err != nil {
 			return nil, err
 		}
+
 		// A `secret: true` store writes the sensitive at-rest variant when supported.
 		if storeConfig.Secret {
-			if kind := resolveKind(storeConfig); isSecretIncapableKind(kind) {
-				return nil, fmt.Errorf("%w: store %q uses backend %q", ErrSecretBackendNotEncrypted, key, kind)
-			}
 			if sas, ok := s.(SecretAwareStore); ok {
 				sas.SetSecret(true)
 			}
 		}
-		registry[key] = s
+
+		registry[name] = s
 	}
 
 	return registry, nil
 }
 
-// storeBuilder constructs a store from its configuration.
-type storeBuilder func(key string, storeConfig StoreConfig) (Store, error)
-
-// storeBuilders maps each normalized backend kind to its constructor. Using a table keeps the
-// factory flat and extensible (and avoids a high-complexity switch).
-var storeBuilders = map[string]storeBuilder{
-	KindArtifactory:    buildArtifactoryStore,
-	KindAzureKeyVault:  buildAzureKeyVaultStore,
-	KindAWSSSM:         buildSSMStore,
-	KindAWSASM:         buildSecretsManagerStore,
-	KindGCPSecret:      buildGSMStore,
-	KindHashicorpVault: buildVaultStore,
-	KindRedis:          buildRedisStore,
-	KindOnePassword:    buildOnePasswordStore,
-	KindKeychain:       buildKeychainStore,
-	KindGitHubActions:  buildGitHubActionsStore,
-}
-
-// newStore constructs a single store from its configuration, dispatching on the normalized kind.
-func newStore(key string, storeConfig StoreConfig) (Store, error) {
-	builder, ok := storeBuilders[resolveKind(storeConfig)]
-	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrStoreTypeNotFound, storeConfig.Type)
-	}
-	return builder(key, storeConfig)
-}
-
-func buildArtifactoryStore(key string, storeConfig StoreConfig) (Store, error) {
-	var opts ArtifactoryStoreOptions
-	if err := parseOptions(storeConfig.Options, &opts); err != nil {
-		return nil, fmt.Errorf(errParseFmt, ErrParseArtifactoryOptions, err)
-	}
-	warnIdentityIgnored(key, storeConfig, "Artifactory")
-	return NewArtifactoryStore(opts)
-}
-
-func buildAzureKeyVaultStore(_ string, storeConfig StoreConfig) (Store, error) {
-	var opts AzureKeyVaultStoreOptions
-	if err := parseOptions(storeConfig.Options, &opts); err != nil {
-		return nil, fmt.Errorf(errParseFmt, ErrParseAzureKeyVaultOptions, err)
-	}
-	return NewAzureKeyVaultStore(opts, storeConfig.Identity)
-}
-
-func buildSSMStore(_ string, storeConfig StoreConfig) (Store, error) {
-	var opts SSMStoreOptions
-	if err := parseOptions(storeConfig.Options, &opts); err != nil {
-		return nil, fmt.Errorf(errParseFmt, ErrParseSSMOptions, err)
-	}
-	return NewSSMStore(opts, storeConfig.Identity)
-}
-
-func buildSecretsManagerStore(_ string, storeConfig StoreConfig) (Store, error) {
-	var opts SecretsManagerStoreOptions
-	if err := parseOptions(storeConfig.Options, &opts); err != nil {
-		return nil, fmt.Errorf(errParseFmt, ErrParseSecretsManagerOptions, err)
-	}
-	return NewSecretsManagerStore(opts, storeConfig.Identity)
-}
-
-func buildGSMStore(_ string, storeConfig StoreConfig) (Store, error) {
-	var opts GSMStoreOptions
-	if err := parseOptions(storeConfig.Options, &opts); err != nil {
-		return nil, fmt.Errorf(errParseFmt, ErrParseGSMOptions, err)
-	}
-	return NewGSMStore(opts, storeConfig.Identity)
-}
-
-func buildVaultStore(_ string, storeConfig StoreConfig) (Store, error) {
-	var opts VaultStoreOptions
-	if err := parseOptions(storeConfig.Options, &opts); err != nil {
-		return nil, fmt.Errorf(errParseFmt, ErrParseVaultOptions, err)
-	}
-	return NewVaultStore(&opts, storeConfig.Identity)
-}
-
-func buildOnePasswordStore(key string, storeConfig StoreConfig) (Store, error) {
-	var opts OnePasswordStoreOptions
-	if err := parseOptions(storeConfig.Options, &opts); err != nil {
-		return nil, fmt.Errorf(errParseFmt, ErrParseOnePasswordOptions, err)
-	}
-	warnIdentityIgnored(key, storeConfig, "1Password")
-	return NewOnePasswordStore(&opts)
-}
-
-func buildKeychainStore(key string, storeConfig StoreConfig) (Store, error) {
-	var opts KeychainStoreOptions
-	if err := parseOptions(storeConfig.Options, &opts); err != nil {
-		return nil, fmt.Errorf(errParseFmt, ErrParseKeychainOptions, err)
-	}
-	warnIdentityIgnored(key, storeConfig, "Keychain")
-	return NewKeychainStore(&opts)
-}
-
-func buildGitHubActionsStore(key string, storeConfig StoreConfig) (Store, error) {
-	var opts GitHubActionsStoreOptions
-	if err := parseOptions(storeConfig.Options, &opts); err != nil {
-		return nil, fmt.Errorf(errParseFmt, ErrParseGitHubActionsOptions, err)
-	}
-	warnIdentityIgnored(key, storeConfig, "GitHub Actions")
-	return NewGitHubActionsStore(&opts)
-}
-
-func buildRedisStore(key string, storeConfig StoreConfig) (Store, error) {
-	var opts RedisStoreOptions
-	if err := parseOptions(storeConfig.Options, &opts); err != nil {
-		return nil, fmt.Errorf(errParseFmt, ErrParseRedisOptions, err)
-	}
-	warnIdentityIgnored(key, storeConfig, "Redis")
-	return NewRedisStore(opts)
-}
-
-// warnIdentityIgnored logs a warning when an identity is configured for a store type that does
-// not support identity-based authentication.
-func warnIdentityIgnored(key string, storeConfig StoreConfig, storeType string) {
+// WarnIdentityIgnored logs a warning when an identity is configured for a store type that does
+// not support identity-based authentication. Provider factories call it for non-identity-aware
+// backends so a misconfigured `identity` is surfaced rather than silently ignored.
+func WarnIdentityIgnored(key string, storeConfig StoreConfig, storeType string) {
 	if storeConfig.Identity != "" {
 		log.Warn("Identity-based authentication is not supported for this store type, identity will be ignored",
 			"store", key, "type", storeType, "identity", storeConfig.Identity)
@@ -273,19 +230,14 @@ func defaultIdentityForStore(s Store, defaultIdentity string) string {
 		return ""
 	}
 
-	switch typed := s.(type) {
-	case *SSMStore:
-		if typed.identityName == "" {
-			return defaultIdentity
-		}
-	case *AzureKeyVaultStore:
-		if typed.identityName == "" {
-			return defaultIdentity
-		}
-	case *GSMStore:
-		if typed.identityName == "" {
-			return defaultIdentity
-		}
+	identified, ok := s.(interface {
+		IdentityName() string
+	})
+	if !ok {
+		return ""
+	}
+	if identified.IdentityName() == "" {
+		return defaultIdentity
 	}
 
 	return ""

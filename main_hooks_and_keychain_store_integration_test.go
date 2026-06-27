@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/store"
+	"github.com/cloudposse/atmos/pkg/store/providers"
 )
 
 // TestMainHooksAndKeychainStoreIntegration proves end-to-end, with no cloud credentials and no
@@ -63,7 +63,7 @@ func TestMainHooksAndKeychainStoreIntegration(t *testing.T) {
 
 	// Round-trip: read the value back through a keychain store constructed with the same options.
 	// This asserts the hook persisted the exact content, not merely that a deploy succeeded.
-	s, err := store.NewKeychainStore(&store.KeychainStoreOptions{Backend: "file"})
+	s, err := providers.NewKeychainStore(&providers.KeychainStoreOptions{Backend: "file"})
 	require.NoError(t, err)
 	got, err := s.Get("test", "component1", "random_id")
 	require.NoError(t, err)
