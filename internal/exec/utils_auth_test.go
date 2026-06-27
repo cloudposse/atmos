@@ -448,7 +448,7 @@ func TestHookStoreDefaultIdentity(t *testing.T) {
 		nilManager       bool
 		initialIdentity  string
 		expectedReturn   string
-		expectedIdentity string // info.Identity after the call (auto-detect may populate it)
+		expectedIdentity string // info.Identity after the call (auto-detect may populate it).
 	}{
 		{
 			name:             "nil manager returns empty (ambient/default credentials preserved)",
@@ -482,7 +482,7 @@ func TestHookStoreDefaultIdentity(t *testing.T) {
 		{
 			name:             "explicit identity is preserved without consulting the chain",
 			initialIdentity:  "cli-admin",
-			setupMock:        mockTypes.NewMockAuthManager, // GetChain must NOT be called
+			setupMock:        mockTypes.NewMockAuthManager, // GetChain must NOT be called.
 			expectedReturn:   "cli-admin",
 			expectedIdentity: "cli-admin",
 		},
@@ -500,7 +500,7 @@ func TestHookStoreDefaultIdentity(t *testing.T) {
 		{
 			name:             "disabled sentinel yields no inheritance",
 			initialIdentity:  cfg.IdentityFlagDisabledValue,
-			setupMock:        mockTypes.NewMockAuthManager, // GetChain must NOT be called
+			setupMock:        mockTypes.NewMockAuthManager, // GetChain must NOT be called.
 			expectedReturn:   "",
 			expectedIdentity: cfg.IdentityFlagDisabledValue,
 		},

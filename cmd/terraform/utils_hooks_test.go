@@ -775,7 +775,7 @@ func TestRunHooksWithOutput_InjectsLastAuthContext(t *testing.T) {
 // the chain.
 //
 // Note: the per-store identity argument to SetAuthContext is computed by the store registry via
-// defaultIdentityForStore, which only applies the default to the concrete SSM/AKV/GSM store types
+// defaultIdentityForStore, which only applies the default to the concrete SSM/ASM/AKV/GSM store types
 // (a MockIdentityAwareStore receives ""). This test therefore asserts the seam behavior — chain
 // auto-detection (GetChain), info.Identity population, and resolver wiring. That identity-less
 // concrete stores actually receive the default is covered by pkg/store
@@ -785,8 +785,8 @@ func TestInjectHookStoreAuthResolver_InheritsDefaultIdentity(t *testing.T) {
 	tests := []struct {
 		name             string
 		identity         string
-		chain            []string // nil => GetChain must NOT be called
-		expectedIdentity string   // info.Identity after the call
+		chain            []string // nil => GetChain must NOT be called.
+		expectedIdentity string   // info.Identity after the call.
 	}{
 		{
 			name:             "no explicit identity auto-detects the chain leaf",

@@ -46,5 +46,4 @@ auth:
       default: true
 
 logs:
-  file: /dev/stderr
   level: Info
