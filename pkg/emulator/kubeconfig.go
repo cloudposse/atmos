@@ -50,7 +50,11 @@ func (m *Manager) Kubeconfig(ctx context.Context, stack, name string) ([]byte, e
 
 		// Only the readiness race (container up, kubeconfig not yet written) is worth
 		// polling. A missing container or an unbound port is terminal — fail fast.
-		if !retryable || time.Now().After(deadline) {
+		// Use >= (reached-or-passed) rather than strictly-after so a zero timeout makes
+		// exactly one attempt on every platform: on coarse-granularity clocks (Windows)
+		// `time.Now()` can still equal the deadline after the first attempt, and a
+		// strict After() would spuriously poll again.
+		if !retryable || !time.Now().Before(deadline) {
 			return nil, lastErr
 		}
 		select {

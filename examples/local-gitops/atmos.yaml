@@ -21,6 +21,13 @@ git:
       # demo is self-contained and each fresh `gitserver` lines up with a fresh
       # workdir. `atmos teardown` removes it; the .gitignore keeps it out of git.
       workdir: .atmos/git/deployments
+      commit:
+        # Pin the committer identity so the provisioner's `git commit` works on a CI
+        # runner with no global git user configured (otherwise: "Please tell me who
+        # you are", exit 128). Passed as `git -c user.name -c user.email`.
+        author:
+          name: Atmos GitOps
+          email: atmos-gitops@localhost
 
 stacks:
   base_path: "stacks"

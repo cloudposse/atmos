@@ -33,8 +33,12 @@ const (
 func gitOpsE2EEnv(workdir string) map[string]string {
 	return map[string]string{
 		"ATMOS_CLI_CONFIG_PATH": workdir,
-		// Don't let a developer's global git identity sign or rewrite demo commits.
-		"GIT_TERMINAL_PROMPT": "0",
+		"GIT_TERMINAL_PROMPT":   "0",
+		// Reproduce a CI runner: no global/system git identity. The provisioner's
+		// commit must succeed via the repo's configured commit.author, not an ambient
+		// developer identity. os.DevNull is cross-platform ("/dev/null" or "NUL").
+		"GIT_CONFIG_GLOBAL": os.DevNull,
+		"GIT_CONFIG_SYSTEM": os.DevNull,
 	}
 }
 
