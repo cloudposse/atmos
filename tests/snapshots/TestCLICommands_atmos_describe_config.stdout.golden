@@ -62,8 +62,8 @@
     "excluded_paths": [
       "**/_defaults.yaml"
     ],
-    "name_pattern": "{stage}",
-    "name_template": "",
+    "name_pattern": "",
+    "name_template": "{{ .vars.stage }}",
     "list": {
       "format": "",
       "columns": null
@@ -89,6 +89,168 @@
       "dsn": ""
     }
   },
+  "commands": [
+    {
+      "name": "platform",
+      "description": "Platform team shortcuts for stack discovery and day-two commands.",
+      "env": null,
+      "arguments": null,
+      "flags": null,
+      "component_config": {
+        "component": "",
+        "stack": ""
+      },
+      "steps": null,
+      "commands": [
+        {
+          "name": "agent-ready",
+          "description": "Show the Atmos capabilities an agent can safely compose.",
+          "env": null,
+          "arguments": null,
+          "flags": [
+            {
+              "name": "stack",
+              "shorthand": "s",
+              "type": "",
+              "description": "Target stack.",
+              "usage": "",
+              "required": true,
+              "default": null
+            }
+          ],
+          "component_config": {
+            "component": "",
+            "stack": ""
+          },
+          "steps": [
+            {
+              "type": "stage",
+              "when": null,
+              "title": "Agent runbook for {{ .Flags.stack }}"
+            },
+            {
+              "type": "table",
+              "when": null,
+              "title": "Agent-ready Atmos surface",
+              "data": [
+                {
+                  "capability": "Model",
+                  "command": "atmos list stacks --format tree",
+                  "why agents use it": "discover environments and architecture"
+                },
+                {
+                  "capability": "Inventory",
+                  "command": "atmos list components -s {{ .Flags.stack }}",
+                  "why agents use it": "choose valid components without guessing"
+                },
+                {
+                  "capability": "Identity",
+                  "command": "atmos auth list",
+                  "why agents use it": "authenticate through declared identities"
+                },
+                {
+                  "capability": "CI-safe plan",
+                  "command": "atmos terraform plan --affected --ci",
+                  "why agents use it": "operate only on changed infrastructure"
+                },
+                {
+                  "capability": "Secrets",
+                  "command": "atmos secret exec -s {{ .Flags.stack }}",
+                  "why agents use it": "inject declared secrets at runtime"
+                }
+              ],
+              "columns": [
+                "capability",
+                "command",
+                "why agents use it"
+              ]
+            },
+            {
+              "type": "stage",
+              "when": null,
+              "title": "Valid targets in {{ .Flags.stack }}"
+            },
+            {
+              "command": "atmos list components -s {{ .Flags.stack }}",
+              "type": "shell",
+              "when": null
+            }
+          ],
+          "commands": null,
+          "verbose": false
+        },
+        {
+          "name": "status",
+          "description": "Show stacks, components, and common next actions for one stack.",
+          "env": null,
+          "arguments": null,
+          "flags": [
+            {
+              "name": "stack",
+              "shorthand": "s",
+              "type": "",
+              "description": "Target stack.",
+              "usage": "",
+              "required": true,
+              "default": null
+            }
+          ],
+          "component_config": {
+            "component": "",
+            "stack": ""
+          },
+          "steps": [
+            {
+              "type": "stage",
+              "when": null,
+              "title": "Stack inventory"
+            },
+            {
+              "command": "atmos list stacks",
+              "type": "shell",
+              "when": null
+            },
+            {
+              "type": "stage",
+              "when": null,
+              "title": "Components in {{ .Flags.stack }}"
+            },
+            {
+              "command": "atmos list components -s {{ .Flags.stack }}",
+              "type": "shell",
+              "when": null
+            },
+            {
+              "type": "table",
+              "when": null,
+              "title": "Platform commands",
+              "data": [
+                {
+                  "command": "atmos list vars myapp -s {{ .Flags.stack }}",
+                  "task": "Show variables"
+                },
+                {
+                  "command": "atmos terraform plan --affected",
+                  "task": "Plan affected"
+                },
+                {
+                  "command": "atmos terraform workspace list myapp",
+                  "task": "Open workspace"
+                }
+              ],
+              "columns": [
+                "task",
+                "command"
+              ]
+            }
+          ],
+          "commands": null,
+          "verbose": false
+        }
+      ],
+      "verbose": false
+    }
+  ],
   "integrations": {
     "atlantis": {}
   },

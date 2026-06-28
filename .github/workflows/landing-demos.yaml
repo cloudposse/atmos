@@ -28,6 +28,12 @@ jobs:
       ATMOS_PAGER: "false"
       # Container runtime for the emulator-backed tapes (ubuntu runners have Docker).
       ATMOS_CONTAINER_RUNTIME: docker
+      # Publish to the SAME origin bucket / OIDC role the docs site already uses
+      # (see website-deploy-prod.yml) — not a separate demo bucket/role.
+      AWS_REGION: us-east-2
+      IAM_ROLE_ARN: arn:aws:iam::557075604627:role/cplive-plat-ue2-prod-atmos-docs-gha
+      IAM_ROLE_SESSION_NAME: cloudposse-atmos-ci-deploy-demos
+      S3_BUCKET_NAME: cplive-plat-ue2-prod-atmos-docs-origin
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -84,19 +90,23 @@ jobs:
           path: website/static/img/demos/
           if-no-files-found: error
 
-      # Publish to S3/CDN when the demo bucket + OIDC role are configured.
-      # Set repo var ATMOS_DEMOS_S3_URI (e.g. s3://atmos-website-demos/demos) and
-      # secret AWS_DEMOS_PUBLISH_ROLE to enable.
+      # Publish the rendered demos to the same origin bucket the docs site is served
+      # from, under the /img/demos path the site references (website/static/img/demos/
+      # → /img/demos/). Reuses the existing prod docs OIDC role — no separate bucket,
+      # role, or secret. Gated to manual dispatch so PR-label render runs stay
+      # preview-only (the artifact above), exactly like prod website deploys are not
+      # driven by PRs.
       - name: Configure AWS credentials
-        if: vars.ATMOS_DEMOS_S3_URI != '' && secrets.AWS_DEMOS_PUBLISH_ROLE != ''
-        uses: aws-actions/configure-aws-credentials@v4
+        if: github.event_name == 'workflow_dispatch'
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
         with:
-          role-to-assume: ${{ secrets.AWS_DEMOS_PUBLISH_ROLE }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.IAM_ROLE_ARN }}
+          role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
 
       - name: Publish demos to S3
-        if: vars.ATMOS_DEMOS_S3_URI != '' && secrets.AWS_DEMOS_PUBLISH_ROLE != ''
+        if: github.event_name == 'workflow_dispatch'
         working-directory: demo/landing
         env:
-          ATMOS_DEMOS_S3_URI: ${{ vars.ATMOS_DEMOS_S3_URI }}
+          ATMOS_DEMOS_S3_URI: s3://${{ env.S3_BUCKET_NAME }}/img/demos
         run: atmos demo publish

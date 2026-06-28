@@ -45,6 +45,7 @@ AVAILABLE COMMANDS
       lsp [command] [EXPERIMENTAL]           Language Server Protocol commands
       mcp [command] [EXPERIMENTAL]           Manage MCP servers and external server connections
       packer [command]                       Manage packer-based machine images for multiple platforms
+      platform [command]                     Platform team shortcuts for stack discovery and day-two commands.
       pro [command]                          Access premium features integrated with atmos-pro.com
       profile [command]                      Manage configuration profiles
       secret [command] [EXPERIMENTAL]        Manage declarative secrets across stacks and components.
