@@ -195,10 +195,11 @@ func formatStyledPaths(headers []string, rows [][]string) string {
 	}
 
 	styles := styledPathStyles()
+	widths := styledPathWidths(rows, indexes)
 	var lines []string
 	currentFile := ""
 	for _, row := range rows {
-		nextLines, nextFile, ok := appendStyledPathLine(lines, currentFile, row, indexes, &styles)
+		nextLines, nextFile, ok := appendStyledPathLine(lines, currentFile, row, indexes, widths, &styles)
 		if !ok {
 			continue
 		}
@@ -229,6 +230,11 @@ type pathStyles struct {
 	meta lipgloss.Style
 }
 
+type pathColumnWidths struct {
+	path int
+	typ  int
+}
+
 func styledPathStyles() pathStyles {
 	styles := theme.GetCurrentStyles()
 	fileStyle := lipgloss.NewStyle().Bold(true)
@@ -242,7 +248,20 @@ func styledPathStyles() pathStyles {
 	return pathStyles{file: fileStyle, path: pathStyle, meta: metaStyle}
 }
 
-func appendStyledPathLine(lines []string, currentFile string, row []string, indexes pathColumnIndexes, styles *pathStyles) ([]string, string, bool) {
+func styledPathWidths(rows [][]string, indexes pathColumnIndexes) pathColumnWidths {
+	widths := pathColumnWidths{}
+	for _, row := range rows {
+		if indexes.path < len(row) {
+			widths.path = max(widths.path, lipgloss.Width(row[indexes.path]))
+		}
+		if indexes.typ >= 0 && indexes.typ < len(row) {
+			widths.typ = max(widths.typ, lipgloss.Width(row[indexes.typ]))
+		}
+	}
+	return widths
+}
+
+func appendStyledPathLine(lines []string, currentFile string, row []string, indexes pathColumnIndexes, widths pathColumnWidths, styles *pathStyles) ([]string, string, bool) {
 	if indexes.file >= len(row) || indexes.path >= len(row) {
 		return lines, currentFile, false
 	}
@@ -256,23 +275,35 @@ func appendStyledPathLine(lines []string, currentFile string, row []string, inde
 		currentFile = file
 	}
 
-	line := "  " + styles.path.Render(row[indexes.path])
-	meta := pathRowMeta(row, indexes.typ, indexes.value)
-	if meta != "" {
-		line += "  " + styles.meta.Render(meta)
+	line := "  " + styles.path.Render(padCell(row[indexes.path], widths.path))
+	if indexes.typ >= 0 && indexes.typ < len(row) {
+		line += "  " + styles.meta.Render(padCell(row[indexes.typ], widths.typ))
+	}
+	if indexes.value >= 0 && indexes.value < len(row) && row[indexes.value] != "" {
+		line += "  " + styles.meta.Render(previewRendererCell(row[indexes.value]))
 	}
 	return append(lines, line), currentFile, true
 }
 
-func pathRowMeta(row []string, typeIndex, valueIndex int) string {
-	var parts []string
-	if typeIndex >= 0 && typeIndex < len(row) && row[typeIndex] != "" {
-		parts = append(parts, row[typeIndex])
+func padCell(value string, width int) string {
+	padding := width - lipgloss.Width(value)
+	if padding <= 0 {
+		return value
 	}
-	if valueIndex >= 0 && valueIndex < len(row) && row[valueIndex] != "" {
-		parts = append(parts, row[valueIndex])
+	return value + strings.Repeat(" ", padding)
+}
+
+func previewRendererCell(value string) string {
+	normalized := strings.ReplaceAll(value, "\r\n", rendererLineEnding)
+	normalized = strings.ReplaceAll(normalized, "\r", rendererLineEnding)
+	if !strings.Contains(normalized, rendererLineEnding) {
+		return normalized
 	}
-	return strings.Join(parts, " ")
+	lines := strings.Split(strings.TrimSuffix(normalized, rendererLineEnding), rendererLineEnding)
+	if len(lines) <= 1 {
+		return lines[0]
+	}
+	return fmt.Sprintf("%s ... (%d lines)", lines[0], len(lines))
 }
 
 func columnIndex(headers []string, name string) int {

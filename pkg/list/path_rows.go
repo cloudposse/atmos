@@ -1,6 +1,8 @@
 package list
 
 import (
+	"fmt"
+	"strings"
 	"text/template"
 
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -8,6 +10,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listsort "github.com/cloudposse/atmos/pkg/list/sort"
 )
+
+const pathRowLineEnding = "\n"
 
 // PathRow is the common row shape used by config discovery commands.
 type PathRow struct {
@@ -42,7 +46,7 @@ func RenderPathRows(rows []PathRow, outputFormat string, delimiter string) (stri
 			"file":  row.File,
 			"path":  row.Path,
 			"type":  row.Type,
-			"value": row.Value,
+			"value": previewPathRowValue(row.Value),
 		})
 	}
 
@@ -57,4 +61,17 @@ func RenderPathRows(rows []PathRow, outputFormat string, delimiter string) (stri
 		delimiter,
 	)
 	return r.RenderToString(data)
+}
+
+func previewPathRowValue(value string) string {
+	normalized := strings.ReplaceAll(value, "\r\n", pathRowLineEnding)
+	normalized = strings.ReplaceAll(normalized, "\r", pathRowLineEnding)
+	if !strings.Contains(normalized, pathRowLineEnding) {
+		return normalized
+	}
+	lines := strings.Split(strings.TrimSuffix(normalized, pathRowLineEnding), pathRowLineEnding)
+	if len(lines) <= 1 {
+		return lines[0]
+	}
+	return fmt.Sprintf("%s ... (%d lines)", lines[0], len(lines))
 }
