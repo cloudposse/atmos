@@ -132,9 +132,9 @@ commands:
             data:
               - command: atmos list vars myapp -s {{ .Flags.stack }}
                 task: Show variables
-              - command: atmos terraform plan --affected
+              - command: atmos terraform plan myapp -s {{ .Flags.stack }} --affected
                 task: Plan affected
-              - command: atmos terraform workspace list myapp
+              - command: atmos terraform workspace list myapp -s {{ .Flags.stack }}
                 task: Open workspace
             columns:
               - task
