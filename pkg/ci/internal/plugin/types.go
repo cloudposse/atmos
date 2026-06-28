@@ -159,6 +159,37 @@ type TerraformOutputData struct {
 	Warnings []string
 }
 
+// TerraformTestOutputData contains terraform test-specific output data
+// parsed from `terraform test` stdout.
+type TerraformTestOutputData struct {
+	// Total is the number of run blocks executed.
+	Total int
+
+	// Pass is the number of run blocks that passed.
+	Pass int
+
+	// Fail is the number of run blocks that failed.
+	Fail int
+
+	// Skip is the number of run blocks that were skipped.
+	Skip int
+
+	// Runs contains the per-run results in execution order.
+	Runs []TerraformTestRun
+}
+
+// TerraformTestRun represents the result of a single `terraform test` run block.
+type TerraformTestRun struct {
+	// Name is the run block name (the identifier in `run "<name>" { ... }`).
+	Name string
+
+	// Status is the run outcome: "pass", "fail", or "skip".
+	Status string
+
+	// Error contains failure detail when Status is "fail" (best-effort; may be empty).
+	Error string
+}
+
 // TerraformOutput represents a single terraform output value.
 type TerraformOutput struct {
 	// Value is the output value (string, number, bool, list, map).

@@ -375,6 +375,114 @@ func TestParsePodmanContainer(t *testing.T) {
 	}
 }
 
+func TestParsePodmanPorts(t *testing.T) {
+	tests := []struct {
+		name          string
+		containerJSON map[string]interface{}
+		expected      []PortBinding
+	}{
+		{
+			// Shape emitted by `podman ps --format json`: numbers decode to float64.
+			name: "single published port",
+			containerJSON: map[string]interface{}{
+				"Ports": []interface{}{
+					map[string]interface{}{
+						"host_ip":        "0.0.0.0",
+						"container_port": float64(4566),
+						"host_port":      float64(35853),
+						"range":          float64(1),
+						"protocol":       "tcp",
+					},
+				},
+			},
+			expected: []PortBinding{
+				{ContainerPort: 4566, HostPort: 35853, Protocol: "tcp"},
+			},
+		},
+		{
+			name: "missing protocol defaults to tcp",
+			containerJSON: map[string]interface{}{
+				"Ports": []interface{}{
+					map[string]interface{}{
+						"container_port": float64(8080),
+						"host_port":      float64(18080),
+					},
+				},
+			},
+			expected: []PortBinding{
+				{ContainerPort: 8080, HostPort: 18080, Protocol: "tcp"},
+			},
+		},
+		{
+			name: "range expands to consecutive bindings",
+			containerJSON: map[string]interface{}{
+				"Ports": []interface{}{
+					map[string]interface{}{
+						"container_port": float64(4566),
+						"host_port":      float64(35853),
+						"range":          float64(2),
+						"protocol":       "tcp",
+					},
+				},
+			},
+			expected: []PortBinding{
+				{ContainerPort: 4566, HostPort: 35853, Protocol: "tcp"},
+				{ContainerPort: 4567, HostPort: 35854, Protocol: "tcp"},
+			},
+		},
+		{
+			name: "unpublished port (host_port 0) is skipped",
+			containerJSON: map[string]interface{}{
+				"Ports": []interface{}{
+					map[string]interface{}{
+						"container_port": float64(4566),
+						"host_port":      float64(0),
+						"protocol":       "tcp",
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name:          "no Ports key",
+			containerJSON: map[string]interface{}{"Id": "abc"},
+			expected:      nil,
+		},
+		{
+			name:          "Ports wrong type ignored",
+			containerJSON: map[string]interface{}{"Ports": "not-an-array"},
+			expected:      nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, parsePodmanPorts(tt.containerJSON))
+		})
+	}
+}
+
+// TestParsePodmanContainer_PopulatesPorts guards the regression where
+// parsePodmanContainer dropped the Ports array, leaving Info.Ports empty and
+// breaking auto-assigned host-port read-back (e.g. emulator endpoint resolution).
+func TestParsePodmanContainer_PopulatesPorts(t *testing.T) {
+	info := parsePodmanContainer(map[string]interface{}{
+		"Id":    "abc123",
+		"Names": []interface{}{"atmos-local-emulator-aws"},
+		"Image": "floci/floci:latest",
+		"State": "running",
+		"Ports": []interface{}{
+			map[string]interface{}{
+				"container_port": float64(4566),
+				"host_port":      float64(35853),
+				"protocol":       "tcp",
+			},
+		},
+	})
+
+	assert.Equal(t, []PortBinding{{ContainerPort: 4566, HostPort: 35853, Protocol: "tcp"}}, info.Ports)
+}
+
 func TestParsePodmanContainers(t *testing.T) {
 	tests := []struct {
 		name              string

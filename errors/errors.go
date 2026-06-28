@@ -665,6 +665,7 @@ var (
 	ErrStepEmptyCommand              = errors.New("empty command for step")
 	ErrStepNoFilesFound              = errors.New("no files found matching criteria")
 	ErrStepFieldRequired             = errors.New("required field missing for step")
+	ErrStepExecutionFailed           = errors.New("step execution failed")
 	ErrStepTTYRequired               = errors.New("interactive terminal required for step")
 	ErrHTTPStepURLRequired           = errors.New("url is required for http step")
 	ErrHTTPStepInvalidMethod         = errors.New("invalid HTTP method for http step")

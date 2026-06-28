@@ -570,6 +570,68 @@ func TestOnAfterApply_WritesOutputs(t *testing.T) {
 	assert.Equal(t, "true", mp.writer.outputs["has_changes"])
 }
 
+func TestOnAfterTest_WritesOutputs(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(true)},
+			},
+		},
+		Provider: mp,
+		Command:  "test",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "local",
+			ComponentFromArg: "app",
+		},
+		Output: "  run \"a\"... pass\n  run \"b\"... pass\n\nSuccess! 2 passed, 0 failed.\n",
+	}
+
+	err := p.onAfterTest(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, "local", mp.writer.outputs["stack"])
+	assert.Equal(t, "app", mp.writer.outputs["component"])
+	assert.Equal(t, "test", mp.writer.outputs["command"])
+	assert.Equal(t, "2", mp.writer.outputs["tests_total"])
+	assert.Equal(t, "2", mp.writer.outputs["tests_passed"])
+	assert.Equal(t, "0", mp.writer.outputs["tests_failed"])
+	assert.Equal(t, "true", mp.writer.outputs["success"])
+}
+
+func TestOnAfterTest_FailureSetsErrorOutputs(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(true)},
+			},
+		},
+		Provider: mp,
+		Command:  "test",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "local",
+			ComponentFromArg: "app",
+		},
+		// A failing test run exits non-zero; the exit code is authoritative.
+		ExitCode: 1,
+		Output:   "  run \"a\"... pass\n  run \"b\"... fail\n\nError: Test assertion failed\n\nFailure! 1 passed, 1 failed.\n",
+	}
+
+	err := p.onAfterTest(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, "false", mp.writer.outputs["success"])
+	assert.Equal(t, "true", mp.writer.outputs["has_errors"])
+	assert.Equal(t, "1", mp.writer.outputs["tests_failed"])
+}
+
 func TestOnAfterApply_BothSummaryAndOutputDisabled(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()

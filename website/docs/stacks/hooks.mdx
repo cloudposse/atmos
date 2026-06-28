@@ -11,7 +11,7 @@ import File from '@site/src/components/File'
 
 <Intro>
 Atmos hooks run automated actions at specific points in a component's
-lifecycle — before/after `terraform plan`, `apply`, `deploy`, or `init`.
+lifecycle — before/after `terraform plan`, `apply`, `test`, `deploy`, or `init`.
 Built-in kinds cover the common cases (cost analysis, security scanning,
 storing outputs) and the generic `command` kind plugs in any binary you
 need. Tools auto-install through the Atmos toolchain and their output
@@ -63,6 +63,8 @@ each level merges into the final result so you can keep configuration
 | `after.terraform.plan` | After `atmos terraform plan` finishes |
 | `before.terraform.apply` | Before `atmos terraform apply` runs |
 | `after.terraform.apply` | After `atmos terraform apply` finishes |
+| `before.terraform.test` | Before `atmos terraform test` runs |
+| `after.terraform.test` | After `atmos terraform test` finishes (fires on success and failure) |
 | `before.terraform.deploy` | Alias of `before.terraform.apply` (deploy is apply with `-auto-approve`) |
 | `after.terraform.deploy` | Alias of `after.terraform.apply` |
 
@@ -411,6 +413,26 @@ hooks:
       build:
         context: .
         tags: [example:latest]
+```
+
+A common pairing is the [`emulator` step type](/workflows/steps/type/emulator) on the
+`terraform test` events: bring a local cloud [emulator](/stacks/components/emulator) up before the tests
+and tear it down after (`when: always` guarantees teardown even when a test fails), so
+`atmos terraform test` runs against a local sandbox with no cloud account:
+
+```yaml
+hooks:
+  start-emulator:
+    kind: step
+    type: emulator
+    events: [before.terraform.test]
+    with: { component: aws, action: up }
+  stop-emulator:
+    kind: step
+    type: emulator
+    events: [after.terraform.test]
+    when: always
+    with: { component: aws, action: down }
 ```
 
 <dl>

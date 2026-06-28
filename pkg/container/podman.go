@@ -240,7 +240,59 @@ func parsePodmanContainer(containerJSON map[string]interface{}) Info {
 		info.Labels = parseLabelsMap(labels)
 	}
 
+	info.Ports = parsePodmanPorts(containerJSON)
+
 	return info
+}
+
+// parsePodmanPorts extracts published port bindings from a podman
+// `ps --format json` record. Unlike docker's `.Ports` string, podman represents
+// ports as a structured array of objects ({container_port, host_port, protocol,
+// range}). Without this, Info.Ports is empty and any consumer that reads back an
+// auto-assigned host port (e.g. the emulator endpoint resolver) sees no port and
+// falls through to the real cloud endpoint.
+//
+// Only bindings with a published host port are returned. A `range` greater than 1
+// (consecutive ports published in one mapping) is expanded into individual
+// container/host port pairs.
+func parsePodmanPorts(containerJSON map[string]interface{}) []PortBinding {
+	raw, ok := containerJSON["Ports"].([]interface{})
+	if !ok {
+		return nil
+	}
+
+	var ports []PortBinding
+	for _, item := range raw {
+		entry, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		hostPort := int(getInt64(entry, "host_port"))
+		containerPort := int(getInt64(entry, "container_port"))
+		if hostPort == 0 || containerPort == 0 {
+			continue
+		}
+
+		protocol := getString(entry, "protocol")
+		if protocol == "" {
+			protocol = "tcp"
+		}
+
+		count := int(getInt64(entry, "range"))
+		if count < 1 {
+			count = 1
+		}
+		for i := 0; i < count; i++ {
+			ports = append(ports, PortBinding{
+				ContainerPort: containerPort + i,
+				HostPort:      hostPort + i,
+				Protocol:      protocol,
+			})
+		}
+	}
+
+	return ports
 }
 
 // podmanHealth extracts the health state from a podman ps record. Podman embeds

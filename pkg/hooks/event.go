@@ -13,6 +13,8 @@ const (
 	AfterTerraformPlan             HookEvent = "after.terraform.plan"
 	AfterTerraformPlanAggregate    HookEvent = "after.terraform.plan.aggregate"
 	BeforeTerraformPlan            HookEvent = "before.terraform.plan"
+	BeforeTerraformTest            HookEvent = "before.terraform.test"
+	AfterTerraformTest             HookEvent = "after.terraform.test"
 	BeforeTerraformDeploy          HookEvent = "before.terraform.deploy"
 	AfterTerraformDeploy           HookEvent = "after.terraform.deploy"
 	AfterTerraformDestroyAggregate HookEvent = "after.terraform.destroy.aggregate"

@@ -65,6 +65,18 @@ var (
 	// Matches simple output lines: 'key = "value"' or 'key = value'.
 	// Captures key and raw value (including quotes).
 	outputLineRe = regexp.MustCompile(`^(\w+)\s*=\s*(.+)$`)
+
+	// Matches per-run result lines in `terraform test` stdout:
+	//   run "bucket_name_is_namespaced"... pass
+	//   run "provisions_resources"... fail
+	//   run "skipped_case"... skip
+	testRunRe = regexp.MustCompile(`(?m)^\s*run "([^"]+)"\.\.\.\s*(pass|fail|skip)\s*$`)
+
+	// Matches the `terraform test` summary line, e.g.:
+	//   Success! 3 passed, 0 failed.
+	//   Failure! 2 passed, 1 failed.
+	// Used as a fallback when per-run lines were not captured.
+	testSummaryRe = regexp.MustCompile(`(?m)^(?:Success|Failure)!\s*(\d+)\s+passed,\s*(\d+)\s+failed`)
 )
 
 // ParsePlanJSON parses terraform plan JSON from `terraform show -json <planfile>`.
@@ -570,6 +582,54 @@ func extractApplyOutputs(output string) map[string]plugin.TerraformOutput {
 	return outputs
 }
 
+// ParseTestOutput parses terraform test stdout into per-run results and counts.
+// Terraform test does not emit structured JSON by default, so this parses the
+// human-readable output (keeping the terminal output untouched).
+func ParseTestOutput(output string) *plugin.OutputResult {
+	defer perf.Track(nil, "terraform.ParseTestOutput")()
+
+	data := &plugin.TerraformTestOutputData{
+		Runs: []plugin.TerraformTestRun{},
+	}
+	result := &plugin.OutputResult{Data: data}
+
+	for _, match := range testRunRe.FindAllStringSubmatch(output, -1) {
+		run := plugin.TerraformTestRun{Name: match[1], Status: match[2]}
+		switch match[2] {
+		case "pass":
+			data.Pass++
+		case "fail":
+			data.Fail++
+		case "skip":
+			data.Skip++
+		}
+		data.Runs = append(data.Runs, run)
+	}
+	data.Total = len(data.Runs)
+
+	// Fall back to the summary line when per-run lines were not captured (e.g.
+	// output buffering differences); per-run lines are preferred since they also
+	// surface skips.
+	if data.Total == 0 {
+		if match := testSummaryRe.FindStringSubmatch(output); len(match) == 3 {
+			data.Pass = parseIntOrZero(match[1])
+			data.Fail = parseIntOrZero(match[2])
+			data.Total = data.Pass + data.Fail
+		}
+	}
+
+	// Surface terraform's "Error:" blocks (assertion failures, provider errors).
+	if errs := ExtractErrors(output); len(errs) > 0 {
+		result.HasErrors = true
+		result.Errors = ExtractErrorBlocks(output)
+	}
+	if data.Fail > 0 {
+		result.HasErrors = true
+	}
+
+	return result
+}
+
 // ParseOutput parses terraform output for a given command (fallback when JSON not available).
 // Prefer ParsePlanJSON + ParseOutputJSON for structured data.
 func ParseOutput(output string, command string) *plugin.OutputResult {
@@ -582,6 +642,8 @@ func ParseOutput(output string, command string) *plugin.OutputResult {
 		return ParseApplyOutput(output)
 	case "destroy":
 		return ParseDestroyOutput(output)
+	case "test":
+		return ParseTestOutput(output)
 	default:
 		// For unknown commands, return minimal result.
 		return &plugin.OutputResult{

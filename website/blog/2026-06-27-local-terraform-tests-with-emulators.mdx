@@ -1,0 +1,97 @@
+---
+slug: local-terraform-tests-with-emulators
+title: "Run Terraform Tests Locally Against Cloud Emulators"
+authors: [osterman]
+tags: [feature, dx]
+date: 2026-06-27
+---
+
+Terraform's native testing framework (`*.tftest.hcl`) is great — until you hit a `run` block with
+`command = apply`. Those blocks create **real** infrastructure, so running them means a cloud account,
+credentials, and spend. Atmos now lets you point `terraform test` at a **local emulator**, so the same
+apply-backed tests run for free and hermetically on your laptop.
+
+<!--truncate-->
+
+## The Problem
+
+A meaningful Terraform test applies resources and asserts on the result:
+
+```hcl
+run "provisions_resources_against_emulator" {
+  command = apply
+
+  assert {
+    condition     = output.bucket_id == "atmos-demo-test"
+    error_message = "The S3 bucket was not created"
+  }
+}
+```
+
+Because `command = apply` provisions for real, this almost never runs locally. It needs cloud credentials,
+it costs money, and it leaves residue you have to clean up. So the most valuable tests — the ones that
+actually create infrastructure — rarely run until CI, against a real account.
+
+## The Solution
+
+Atmos [emulators](/stacks/components/emulator) provide a local, containerized stand-in for AWS (and GCP,
+Azure, and more). Bind a component to an `aws/emulator` identity and Atmos wires the AWS provider —
+endpoint, dummy credentials, path-style S3, skip-flags — into **every** Terraform run, including
+`terraform test`. Your component code doesn't change between local and real cloud:
+
+```shell
+atmos terraform test app -s local
+```
+
+That's it. The `apply` run blocks create the bucket and table in the emulator, the assertions run against
+them, and everything is torn down — no AWS account, no credentials, no `providers.tf`.
+
+## Lifecycle Hooks Bring the Sandbox Up and Down
+
+You don't even start the emulator yourself. The component declares two lifecycle hooks using the new
+`emulator` step type, bound to the new `before.terraform.test` and `after.terraform.test` events:
+
+```yaml
+components:
+  terraform:
+    app:
+      hooks:
+        start-emulator:
+          kind: step
+          type: emulator
+          events: [before.terraform.test]
+          with: { component: aws, action: up }
+        stop-emulator:
+          kind: step
+          type: emulator
+          events: [after.terraform.test]
+          when: always                       # tear down even if a test fails
+          with: { component: aws, action: down }
+```
+
+`atmos terraform test` fires these hooks around the run: the emulator comes up before the tests and is
+torn down after — and `when: always` guarantees teardown even when a test fails. The `emulator` step
+composes anywhere steps run, so you can use it in workflows and custom commands too.
+
+## In CI: Test Summaries
+
+`terraform test` now plugs into Atmos's native-CI reporting, the same path as `plan` and `apply`. In a
+GitHub Actions job, a passing or failing **step summary** is written to the job summary — per-run pass /
+fail / skip results, with the failing assertions inlined — so you see what broke without digging through
+logs.
+
+## Why This Matters
+
+- **Run the valuable tests locally.** Apply-backed assertions — the ones that actually create
+  infrastructure — run on a laptop in seconds, for free.
+- **Hermetic and repeatable.** No shared account, no drift, no cleanup. Every run starts from a clean
+  sandbox.
+- **Identical config everywhere.** Because the emulator is bound through Atmos identity and provider
+  generation, the component is byte-for-byte the same locally and in CI.
+
+## Get Involved
+
+Try the [`terraform-tests` example](https://github.com/cloudposse/atmos/tree/main/examples/terraform-tests),
+read the [emulator component reference](/stacks/components/emulator), and see the original
+[emulators announcement](/changelog/introducing-emulators) for the bigger picture. A container runtime (Docker
+or Podman) is the only prerequisite.

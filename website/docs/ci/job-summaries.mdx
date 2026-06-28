@@ -1,7 +1,7 @@
 ---
 title: Job Summaries
 sidebar_label: Job Summaries
-description: Rich Markdown job summaries for Terraform plan and apply operations
+description: Rich Markdown job summaries for Terraform plan, apply, and test operations
 id: job-summaries
 slug: /ci/job-summaries
 ---
@@ -72,6 +72,14 @@ when every component completed with no changes.
 
 Apply summaries show the result of the apply operation, including resource counts and any
 terraform outputs that were produced.
+
+## Test Summary
+
+`atmos terraform test` emits a pass/fail summary for the Terraform test framework
+(`*.tftest.hcl`). The summary shows total / passed / failed / skipped badges, a per-run results
+table (✅ pass, ❌ fail, ⏭️ skip), and inlines the failing assertions. This pairs naturally with
+[emulators](/stacks/components/emulator): point `terraform test` at a local emulator and the
+apply-backed `run` blocks execute — and report — entirely in CI without a cloud account.
 
 ## Configuration
 

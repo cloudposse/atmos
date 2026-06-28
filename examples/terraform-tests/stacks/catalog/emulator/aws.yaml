@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# The emulator is a stack-scoped component. The `local-aws` identity in
+# atmos.yaml resolves its live endpoint and the provider-config contributor
+# wires Terraform to it. The `app` component's lifecycle hooks bring this
+# emulator up before `terraform test` and down after.
+components:
+  emulator:
+    aws:
+      driver: floci/aws
+      region: us-east-1

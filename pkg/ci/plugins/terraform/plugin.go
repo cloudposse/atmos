@@ -71,6 +71,14 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 			Handler: p.onAfterTerraformAggregate,
 		},
 		{
+			Event:   "before.terraform.test",
+			Handler: p.onBeforeTest,
+		},
+		{
+			Event:   "after.terraform.test",
+			Handler: p.onAfterTest,
+		},
+		{
 			Event:   "before.terraform.deploy",
 			Handler: p.onBeforeDeploy,
 		},
@@ -118,14 +126,20 @@ func (p *Plugin) buildTemplateContext(
 		Custom:        make(map[string]any),
 	}
 
-	// Extract terraform-specific data.
+	// Extract terraform-specific data. The data shape depends on the command:
+	// plan/apply/destroy carry *TerraformOutputData; test carries
+	// *TerraformTestOutputData.
 	var tfData *plugin.TerraformOutputData
+	var testData *plugin.TerraformTestOutputData
 	if result != nil && result.Data != nil {
 		tfData, _ = result.Data.(*plugin.TerraformOutputData)
+		testData, _ = result.Data.(*plugin.TerraformTestOutputData)
 	}
 
 	// Return extended context with terraform-specific fields.
-	return NewTemplateContext(baseCtx, tfData), nil
+	tfCtx := NewTemplateContext(baseCtx, tfData)
+	tfCtx.TestResult = testData
+	return tfCtx, nil
 }
 
 // getOutputVariables returns CI output variables for a command.
@@ -144,8 +158,8 @@ func (p *Plugin) getOutputVariables(result *plugin.OutputResult, command string)
 	vars["has_errors"] = strconv.FormatBool(result.HasErrors)
 	vars["exit_code"] = strconv.Itoa(result.ExitCode)
 
-	// Add success indicator for apply commands.
-	if command == "apply" {
+	// Add success indicator for apply and test commands.
+	if command == "apply" || command == "test" {
 		vars["success"] = strconv.FormatBool(!result.HasErrors)
 	}
 
@@ -156,6 +170,12 @@ func (p *Plugin) getOutputVariables(result *plugin.OutputResult, command string)
 			vars["resources_to_change"] = strconv.Itoa(data.ResourceCounts.Change)
 			vars["resources_to_replace"] = strconv.Itoa(data.ResourceCounts.Replace)
 			vars["resources_to_destroy"] = strconv.Itoa(data.ResourceCounts.Destroy)
+		}
+		if data, ok := result.Data.(*plugin.TerraformTestOutputData); ok {
+			vars["tests_total"] = strconv.Itoa(data.Total)
+			vars["tests_passed"] = strconv.Itoa(data.Pass)
+			vars["tests_failed"] = strconv.Itoa(data.Fail)
+			vars["tests_skipped"] = strconv.Itoa(data.Skip)
 		}
 	}
 
@@ -219,10 +239,16 @@ var multiBlankLinesRe = regexp.MustCompile(`\n{3,}`)
 // For plan: strips data source reads and state refreshes, returns empty for no-changes.
 // For apply: strips preamble and progress lines, keeps plan diffs and apply result.
 func cleanOutput(output, command string) string {
-	if command == "apply" || command == "destroy" {
+	switch command {
+	case "apply", "destroy":
 		return cleanApplyOutput(output)
+	case "test":
+		// terraform test output is already compact (per-run lines + summary);
+		// keep it verbatim so the run results render in the summary.
+		return strings.TrimSpace(output)
+	default:
+		return cleanPlanOutput(output)
 	}
-	return cleanPlanOutput(output)
 }
 
 // cleanPlanOutput strips noisy preamble (data source reads, state refreshes)

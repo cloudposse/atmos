@@ -129,6 +129,54 @@ func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 	return nil
 }
 
+// onBeforeTest handles the before.terraform.test event.
+// Creates a check run with in_progress status.
+func (p *Plugin) onBeforeTest(ctx *plugin.HookContext) error {
+	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeTest")()
+
+	if isCheckEnabled(ctx.Config) {
+		if err := p.createCheckRun(ctx); err != nil {
+			logCheckRunError("CI check run creation skipped", err)
+		}
+	}
+	return nil
+}
+
+// onAfterTest handles the after.terraform.test event.
+// Writes the pass/fail summary, outputs, and updates the check run. There is no
+// planfile to upload and no PR comment for tests.
+func (p *Plugin) onAfterTest(ctx *plugin.HookContext) error {
+	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterTest")()
+
+	result := p.parseOutputWithError(ctx)
+
+	// Summary -- warn-only.
+	var renderedSummary string
+	if isSummaryEnabled(ctx.Config) {
+		var err error
+		renderedSummary, err = p.writeSummary(ctx, result)
+		if err != nil {
+			log.Warn("CI summary failed", "error", err)
+		}
+	}
+
+	// Output -- warn-only.
+	if isOutputEnabled(ctx.Config) {
+		if err := p.writeOutputs(ctx, result, renderedSummary); err != nil {
+			log.Warn("CI output failed", "error", err)
+		}
+	}
+
+	// Check -- warn-only.
+	if isCheckEnabled(ctx.Config) {
+		if err := p.updateCheckRun(ctx, result); err != nil {
+			logCheckRunError("CI check run update skipped", err)
+		}
+	}
+
+	return nil
+}
+
 // onBeforeDeploy handles the before.terraform.deploy event.
 // Downloads planfile from storage with stored prefix for verification.
 // Download is warn-only: deploy can proceed without a stored planfile.
@@ -861,6 +909,14 @@ func resolveCheckResult(ctx *plugin.HookContext) (provider.CheckRunState, string
 func buildStatusDescription(command string, result *plugin.OutputResult) string {
 	if result == nil {
 		return "No changes"
+	}
+
+	// Terraform test reports pass/fail counts rather than resource changes.
+	if testData, ok := result.Data.(*plugin.TerraformTestOutputData); ok {
+		if result.HasErrors {
+			return fmt.Sprintf("%d passed, %d failed", testData.Pass, testData.Fail)
+		}
+		return fmt.Sprintf("%d passed", testData.Pass)
 	}
 
 	if result.HasErrors {

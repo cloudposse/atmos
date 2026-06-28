@@ -293,6 +293,10 @@ type WorkflowStep struct {
 	Ports             []ContainerPort       `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`                                           // Port mappings.
 	Container         *WorkflowContainer    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`                               // Workflow container override or false to run on host.
 
+	// Emulator step fields.
+	Component string `yaml:"component,omitempty" json:"component,omitempty" mapstructure:"component"` // Emulator component name to operate on (emulator step type).
+	Ephemeral bool   `yaml:"ephemeral,omitempty" json:"ephemeral,omitempty" mapstructure:"ephemeral"` // Run the emulator without persistence for this step (emulator step type).
+
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
 

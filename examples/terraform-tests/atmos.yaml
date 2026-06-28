@@ -1,0 +1,63 @@
+base_path: "./"
+
+schemas:
+  atmos:
+    manifest: "schemas/atmos-manifest.json"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# A single aws/emulator identity binds every component to the local sandbox.
+# The provider-config contributor and this identity wire Terraform (including
+# `terraform test`) to it — no providers.tf, no endpoint configuration.
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: aws
+      default: true
+
+# Enable the native-CI pass/fail step summary for `terraform test`. In a CI job
+# (where $GITHUB_STEP_SUMMARY is set and CI is auto-detected) the test results
+# render in the job summary, the same native-CI path as plan/apply.
+ci:
+  summary:
+    enabled: true
+  output:
+    enabled: true
+
+# Custom CLI commands.
+commands:
+  - name: "test"
+    description: "Run the Terraform tests for the app component against the local AWS emulator"
+    # The emulator lifecycle is declarative: component hooks on
+    # before/after.terraform.test bring the sandbox up and down (see
+    # stacks/catalog/app.yaml), so this command is just validate + test.
+    steps:
+      - atmos validate stacks
+      - atmos terraform test app -s local
+
+  - name: "terraform"
+    commands:
+      - name: "reset"
+        description: Delete all local state files
+        steps:
+          - 'find . \( -name "*.tfstate" -o -name "*.tfstate.backup" -o -path "*/terraform.tfstate.d/*" -o -path "*/.terraform.tfstate/*" -o -path "*/.terraform.tfstate.backup/*" \) -delete'
+          - echo "Deleted all state files"

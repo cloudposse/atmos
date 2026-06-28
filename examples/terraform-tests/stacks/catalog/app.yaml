@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+components:
+  terraform:
+    app:
+      metadata:
+        type: abstract
+        component: app
+      # Declarative emulator lifecycle: these `kind: step` hooks use the
+      # `emulator` step type to bring the local AWS sandbox up before the
+      # Terraform tests run and tear it down after — even if a test fails
+      # (when: always). No manual `atmos emulator up/down`.
+      hooks:
+        start-emulator:
+          kind: step
+          type: emulator
+          events:
+            - before.terraform.test
+          with:
+            component: aws
+            action: up
+        stop-emulator:
+          kind: step
+          type: emulator
+          events:
+            - after.terraform.test
+          when: always
+          with:
+            component: aws
+            action: down
+      vars:
+        name: atmos-demo

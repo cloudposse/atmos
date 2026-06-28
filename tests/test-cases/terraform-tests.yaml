@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=schema.json
+# Tests for the terraform-tests example (local Terraform tests against the AWS emulator).
+# See examples/terraform-tests/ for the example code.
+#
+# Note: `atmos terraform test` brings up the Floci emulator (via component lifecycle
+# hooks) and runs real apply blocks, which is only available in the CI floci workflow job.
+# These tests cover what can be validated offline: that the example's stack manifests
+# (including the emulator lifecycle hooks) are well-formed.
+tests:
+  - name: terraform-tests validate stacks
+    enabled: true
+    snapshot: false
+    description: "Verify the terraform-tests example's stack manifests are valid (offline; no emulator required)."
+    workdir: "../examples/terraform-tests"
+    command: "atmos"
+    args:
+      - "validate"
+      - "stacks"
+    expect:
+      exit_code: 0
+      stderr:
+        - "validated successfully"
