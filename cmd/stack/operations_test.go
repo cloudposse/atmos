@@ -10,6 +10,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	listpkg "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -109,6 +111,36 @@ func TestResolveTargetByProvenance_VerifyMissingPath(t *testing.T) {
 		true,
 	)
 	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+func TestBuildStackConfigRowsFromDescribe(t *testing.T) {
+	mctx := merge.NewMergeContext()
+	mctx.EnableProvenance()
+	mctx.RecordProvenance("components.terraform.vpc.vars", merge.ProvenanceEntry{File: "deploy/prod.yaml", Line: 4})
+	mctx.RecordProvenance("components.terraform.vpc.vars.region", merge.ProvenanceEntry{File: "deploy/prod.yaml", Line: 5})
+	mctx.RecordProvenance("components.terraform.vpc.settings.enabled", merge.ProvenanceEntry{File: "deploy/settings.yaml", Line: 8})
+
+	rows, err := buildStackConfigRowsFromDescribe(
+		&schema.AtmosConfiguration{StacksBaseAbsolutePath: "/repo/stacks"},
+		&exec.DescribeComponentResult{
+			ComponentSection: map[string]any{
+				cfg.ComponentTypeSectionName: "terraform",
+				"vars": map[string]any{
+					"region": "us-east-1",
+				},
+				"settings": map[string]any{
+					"enabled": true,
+				},
+			},
+			MergeContext: mctx,
+		},
+		"vpc",
+	)
+	require.NoError(t, err)
+	require.Contains(t, rows, listpkg.PathRow{File: "deploy/prod.yaml", Path: "vars", Type: "object"})
+	require.Contains(t, rows, listpkg.PathRow{File: "deploy/prod.yaml", Path: "vars.region", Type: "string"})
+	require.Contains(t, rows, listpkg.PathRow{File: "deploy/settings.yaml", Path: "settings.enabled", Type: "bool"})
+	require.NotContains(t, rows, listpkg.PathRow{File: "deploy/prod.yaml", Path: cfg.ComponentTypeSectionName, Type: "string"})
 }
 
 func TestCommandProvider(t *testing.T) {

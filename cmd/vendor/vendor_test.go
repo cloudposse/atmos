@@ -16,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	listpkg "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
@@ -188,6 +189,37 @@ func TestResolveVendorFileWithOverride_MissingDefault(t *testing.T) {
 
 	_, err = resolveVendorFileWithOverride("")
 	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+func TestBuildVendorConfigPathRows(t *testing.T) {
+	dir := t.TempDir()
+	rootFile := filepath.Join(dir, DefaultVendorManifest)
+	importFile := filepath.Join(dir, "imports", "common.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(importFile), 0o755))
+	require.NoError(t, os.WriteFile(rootFile, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  imports:
+    - imports/common.yaml
+  sources:
+    - component: vpc
+      version: v0.1.0
+`), 0o644))
+	require.NoError(t, os.WriteFile(importFile, []byte(`spec:
+  sources:
+    - component: eks
+      version: v0.2.0
+`), 0o644))
+
+	rows, err := buildVendorConfigPathRows(rootFile)
+	require.NoError(t, err)
+	require.Contains(t, rows, listpkg.PathRow{File: "vendor.yaml", Path: "spec.sources[0].version", Type: "string"})
+	require.Contains(t, rows, listpkg.PathRow{File: "imports/common.yaml", Path: "spec.sources[0].component", Type: "string"})
+
+	output, err := listpkg.RenderPathRows(rows, "paths", "")
+	require.NoError(t, err)
+	require.Contains(t, output, "imports/common.yaml\n  spec\n  spec.sources\n")
+	require.Contains(t, output, "vendor.yaml\n  apiVersion\n")
 }
 
 func TestVendorDiffCommandValidationAndManifestErrors(t *testing.T) {
