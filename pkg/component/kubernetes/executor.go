@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -84,12 +83,11 @@ func Execute(ctx *component.ExecutionContext, operation Operation) error {
 		return err
 	}
 
-	tenv, err := dependenciesForComponent(&atmosConfig, cfg.KubernetesComponentType, info.StackSection, info.ComponentSection)
+	restoreEnv, err := prepareComponentEnvironment(&atmosConfig, &info)
 	if err != nil {
 		return err
 	}
-	envRestore := applyEnvironment(info.ComponentEnvSection, tenv.EnvVars())
-	defer envRestore()
+	defer restoreEnv()
 
 	return runWithHooks(ctx, &atmosConfig, &info, operation, source)
 }
@@ -480,40 +478,5 @@ func runKubernetesCIHook(
 		Aggregate:    result,
 	}); err != nil {
 		log.Warn("Kubernetes CI summary skipped", "event", event, "error", err)
-	}
-}
-
-func applyEnvironment(componentEnv map[string]any, toolchainEnv []string) func() {
-	original := make(map[string]*string)
-	setEnv := func(key, value string) {
-		if _, ok := original[key]; !ok {
-			if existing, exists := os.LookupEnv(key); exists {
-				existingCopy := existing
-				original[key] = &existingCopy
-			} else {
-				original[key] = nil
-			}
-		}
-		_ = os.Setenv(key, value)
-	}
-
-	for key, value := range componentEnv {
-		setEnv(key, fmt.Sprintf("%v", value))
-	}
-	for _, item := range toolchainEnv {
-		key, value, ok := strings.Cut(item, "=")
-		if ok {
-			setEnv(key, value)
-		}
-	}
-
-	return func() {
-		for key, value := range original {
-			if value == nil {
-				_ = os.Unsetenv(key)
-			} else {
-				_ = os.Setenv(key, *value)
-			}
-		}
 	}
 }

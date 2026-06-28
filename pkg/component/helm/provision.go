@@ -14,6 +14,10 @@ import (
 // deliveryTimeout bounds an external target delivery (clone + commit + push).
 const deliveryTimeout = 10 * time.Minute
 
+// targetKey is the shared key for the `--target` flag and the summary entry that
+// records the resolved provision target.
+const targetKey = "target"
+
 // deliverApply resolves the selected provision target for an apply/deploy and
 // delivers to it. The implicit/selected "kubernetes" (cluster) kind installs or
 // upgrades the Helm release directly; any other kind (e.g. "git") receives the
@@ -28,15 +32,15 @@ func deliverApply(
 
 	summary := map[string]any{}
 	provisionSection, _ := info.ComponentSection["provision"].(map[string]any)
-	flagTarget, _ := flags["target"].(string)
+	flagTarget, _ := flags[targetKey].(string)
 
 	selected, err := target.SelectTarget(provisionSection, flagTarget)
 	if err != nil {
 		return summary, err
 	}
-	summary["target"] = selected.Name
-	if summary["target"] == "" {
-		summary["target"] = selected.Kind
+	summary[targetKey] = selected.Name
+	if summary[targetKey] == "" {
+		summary[targetKey] = selected.Kind
 	}
 
 	// Cluster delivery installs/upgrades the Helm release directly.
@@ -49,6 +53,19 @@ func deliverApply(
 		return summary, err
 	}
 
+	return deliverToExternalTarget(atmosConfig, info, selected, spec, summary)
+}
+
+// deliverToExternalTarget renders the Helm release to manifests and delivers them
+// to a non-cluster provision target (e.g. a Git deployment repository) as a
+// producer-agnostic ProvisionArtifact via the target registry.
+func deliverToExternalTarget(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	selected *target.SelectedTarget,
+	spec *chartSpec,
+	summary map[string]any,
+) (map[string]any, error) {
 	objects, err := renderObjects(spec)
 	if err != nil {
 		return summary, err
@@ -58,11 +75,7 @@ func deliverApply(
 	if err != nil {
 		return summary, err
 	}
-	totalBytes := 0
-	for _, data := range files {
-		totalBytes += len(data)
-	}
-	summary["manifest_bytes"] = totalBytes
+	summary["manifest_bytes"] = totalManifestBytes(files)
 
 	artifact := target.ProvisionArtifact{
 		Kind:   target.ArtifactKindKubernetesManifests,
@@ -85,6 +98,15 @@ func deliverApply(
 		Artifact:     artifact,
 		EnvProvider:  authManagerFor(info),
 	})
+}
+
+// totalManifestBytes sums the byte length of all rendered manifest files.
+func totalManifestBytes(files map[string][]byte) int {
+	total := 0
+	for _, data := range files {
+		total += len(data)
+	}
+	return total
 }
 
 // authManagerFor returns the Atmos Auth manager as an identity-environment

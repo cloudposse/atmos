@@ -54,6 +54,7 @@ type EphemeralConfig struct {
 	CleanupPolicy     string
 	TTY               bool
 	Interactive       bool
+	Host              bool // grant access to the host container runtime (Docker-out-of-Docker)
 }
 
 // EphemeralResult is the result of a one-shot container execution.
@@ -216,6 +217,7 @@ func buildEphemeralCreateConfig(config *EphemeralConfig) *CreateConfig {
 		Labels:          config.Labels,
 		RunArgs:         config.RunArgs,
 		OverrideCommand: true,
+		Host:            config.Host,
 	}
 }
 

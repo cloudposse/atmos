@@ -1090,7 +1090,6 @@ func ProcessStackConfig(
 	}
 
 	// Process all Helm components in parallel.
-	//nolint:dupl // Mirrors the per-type parallel processing blocks (terraform/helmfile/packer/kubernetes).
 	if componentTypeFilter == "" || componentTypeFilter == cfg.HelmComponentType {
 		if allHelmComponents, ok := globalComponentsSection[cfg.HelmComponentType]; ok {
 			allHelmComponentsMap, ok := allHelmComponents.(map[string]any)

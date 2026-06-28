@@ -154,6 +154,7 @@ func stripCIFlag(args []string) (bool, []string) {
 }
 
 func ciEnvEnabled(key string) bool {
+	//nolint:forbidigo // Standard CI env vars (ATMOS_CI/CI), read directly for CI auto-detection.
 	return ciValueEnabled(os.Getenv(key))
 }
 

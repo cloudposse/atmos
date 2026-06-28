@@ -1,0 +1,3 @@
+# The upstream Flux install manifest is vendored, not committed (it is large and
+# version-pinned in ../../../../vendor.yaml). `atmos vendor pull` fetches it here.
+install.yaml

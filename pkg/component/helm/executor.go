@@ -154,7 +154,14 @@ func runWithHooks(
 	}
 
 	summary, opErr := runOperation(ctx, atmosConfig, info, operation, spec)
-	runHelmCIHook(ctx, atmosConfig, info, after, summary, opErr)
+	runHelmCIHook(helmCIHookParams{
+		ctx:         ctx,
+		atmosConfig: atmosConfig,
+		info:        info,
+		event:       after,
+		summary:     summary,
+		commandErr:  opErr,
+	})
 	if opErr != nil {
 		return opErr
 	}
@@ -416,8 +423,7 @@ func maybeAutoGenerateFiles(atmosConfig *schema.AtmosConfiguration, info *schema
 }
 
 func eventsFor(command string, operation Operation) (hooks.HookEvent, hooks.HookEvent) {
-	switch command {
-	case "deploy":
+	if command == "deploy" {
 		return hooks.BeforeHelmDeploy, hooks.AfterHelmDeploy
 	}
 	switch operation {
@@ -434,30 +440,34 @@ func eventsFor(command string, operation Operation) (hooks.HookEvent, hooks.Hook
 	}
 }
 
-func runHelmCIHook(
-	ctx *component.ExecutionContext,
-	atmosConfig *schema.AtmosConfiguration,
-	info *schema.ConfigAndStacksInfo,
-	event hooks.HookEvent,
-	summary map[string]any,
-	commandErr error,
-) {
-	if event == "" {
+// helmCIHookParams bundles the inputs for running a CI hook around a Helm operation.
+type helmCIHookParams struct {
+	ctx         *component.ExecutionContext
+	atmosConfig *schema.AtmosConfiguration
+	info        *schema.ConfigAndStacksInfo
+	event       hooks.HookEvent
+	summary     map[string]any
+	commandErr  error
+}
+
+func runHelmCIHook(p helmCIHookParams) {
+	if p.event == "" {
 		return
 	}
+	summary := p.summary
 	if summary == nil {
 		summary = map[string]any{}
 	}
 	if err := runCIHooks(&hooks.RunCIHooksOptions{
-		Event:        event,
-		AtmosConfig:  atmosConfig,
-		Info:         info,
-		ForceCIMode:  helmCIModeEnabled(ctx.Flags),
-		CommandError: commandErr,
-		ExitCode:     errUtils.GetExitCode(commandErr),
+		Event:        p.event,
+		AtmosConfig:  p.atmosConfig,
+		Info:         p.info,
+		ForceCIMode:  helmCIModeEnabled(p.ctx.Flags),
+		CommandError: p.commandErr,
+		ExitCode:     errUtils.GetExitCode(p.commandErr),
 		Aggregate:    summary,
 	}); err != nil {
-		log.Warn("CI hook execution failed", "component", info.ComponentFromArg, "error", err)
+		log.Warn("CI hook execution failed", "component", p.info.ComponentFromArg, "error", err)
 	}
 }
 
@@ -513,6 +523,7 @@ func helmCIModeEnabled(flags map[string]any) bool {
 }
 
 func ciEnvEnabled(key string) bool {
+	//nolint:forbidigo // Standard CI env vars (ATMOS_CI/CI), read directly for CI auto-detection.
 	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
 	return value != "" && value != "false" && value != "0" && value != "no"
 }

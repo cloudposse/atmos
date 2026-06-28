@@ -34,6 +34,7 @@ type NamedConfig struct {
 	Labels      map[string]string // extra labels, merged over the canonical instance labels
 	RunArgs     []string
 	Privileged  bool           // run the container in privileged mode
+	Host        bool           // grant access to the host container runtime (Docker-out-of-Docker)
 	Restart     *RestartPolicy // restart policy (nil = runtime default)
 	HealthCheck *HealthCheck   // health check (nil = inherit image healthcheck)
 
@@ -199,6 +200,7 @@ func buildNamedCreateConfig(config *NamedConfig, name string) *CreateConfig {
 		Labels:      labels,
 		RunArgs:     config.RunArgs,
 		Privileged:  config.Privileged,
+		Host:        config.Host,
 		Restart:     config.Restart,
 		HealthCheck: config.HealthCheck,
 	}

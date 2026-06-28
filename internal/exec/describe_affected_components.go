@@ -497,7 +497,7 @@ func processPackerComponentsIndexed(
 
 // processKubernetesComponentsIndexed processes Kubernetes components using the files index.
 //
-//nolint:funlen // Similar structure to Helmfile/Packer with Kubernetes-specific sections
+//nolint:funlen,dupl // Mirrors the per-type indexed processors (Terraform/Helmfile/Packer/Helm) with Kubernetes-specific sections.
 func processKubernetesComponentsIndexed(
 	stackName string,
 	kubernetesSection map[string]any,

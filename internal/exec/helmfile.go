@@ -423,9 +423,13 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		shellOpts = append(shellOpts, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
 	}
 
+	// Resolve the helmfile binary through the toolchain environment so a
+	// toolchain-installed helmfile (under the install path, not the system PATH)
+	// is found — mirroring the `version` subcommand above. Falls back to the bare
+	// command name when no toolchain dependency provides it.
 	err = ExecuteShellCommand(
 		atmosConfig,
-		info.Command,
+		tenv.Resolve(info.Command),
 		allArgsAndFlags,
 		componentPath,
 		envVars,

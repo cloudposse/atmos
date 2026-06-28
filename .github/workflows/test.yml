@@ -457,7 +457,7 @@ jobs:
           FLOCI_GCP_ENDPOINT: "http://localhost:4588"
           FLOCI_AZURE_ENDPOINT: "http://localhost:4577"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: go test ./tests -run 'Test(AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E' -count=1 -timeout 15m -v
+        run: go test ./tests -run 'Test((AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E|LocalGitOpsPushE2E)' -count=1 -timeout 15m -v
 
   # run k3s demo tests
   k3s:
@@ -465,7 +465,6 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     env:
-      KUBECONFIG: ${{github.workspace}}/examples/${{ matrix.demo-folder }}/kubeconfig.yaml
       ATMOS_LOGS_LEVEL: Debug
     strategy:
       matrix:
@@ -479,18 +478,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Start Docker Compose
-        working-directory: examples/${{ matrix.demo-folder }}
-        run: docker compose up -d --wait
-
-      - name: Wait for k3s to start
-        working-directory: examples/${{ matrix.demo-folder }}
-        run: |
-          until kubectl get pods --all-namespaces >/dev/null 2>&1; do
-            echo "Retrying..."
-            sleep 1
-          done
-          kubectl get pods --all-namespaces
+      # The local k3s cluster is no longer started via docker-compose: `atmos test`
+      # brings it up through the native Kubernetes emulator (`atmos emulator up
+      # kubernetes`), which runs the privileged k3s container itself on the runner's
+      # Docker, and the helmfile component harvests its kubeconfig via `!emulator`.
 
       - name: Download build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -746,7 +737,6 @@ jobs:
           - demo-context
           - emulator-aws
           - demo-stacks
-          - demo-helmfile
           - quick-start-simple
           # quick-start-advanced is intentionally NOT validated here. It now uses runtime
           # Atmos YAML functions (`!terraform.state`, `!store`, `!secret`) that the static
@@ -754,7 +744,9 @@ jobs:
           # an empty customTags list, so unknown tags fail with "Unresolved tag"). Every
           # other function-using example (custom-components, sops-secrets,
           # onepassword-secrets, native-terraform) is likewise excluded from this matrix.
-          # The example is still exercised end-to-end by the floci and acceptance jobs.
+          # demo-helmfile is also excluded: it now uses `!emulator` to harvest the local
+          # k3s emulator's kubeconfig. Its stacks are still validated by `atmos validate
+          # stacks` inside the `[k3s] demo-helmfile` job (atmos understands the function).
 
     timeout-minutes: 20
     steps:

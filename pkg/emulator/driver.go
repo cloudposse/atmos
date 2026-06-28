@@ -30,6 +30,7 @@ const (
 	TargetKubernetes = "kubernetes"
 	TargetVault      = "vault"
 	TargetRegistry   = "registry"
+	TargetGit        = "git"
 )
 
 // ContainerDefaults are the built-in container defaults a driver supplies. Every

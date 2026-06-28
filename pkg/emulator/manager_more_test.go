@@ -263,6 +263,12 @@ func TestManager_Resolve_KubernetesHarvestsKubeconfig(t *testing.T) {
 }
 
 func TestManager_Resolve_KubernetesKubeconfigError(t *testing.T) {
+	// The kubeconfig harvest retries the readiness race; pin the timeout to 0 so a
+	// persistent exec error fails after a single attempt (matching the mock counts).
+	origTimeout := kubeconfigReadyTimeout
+	defer func() { kubeconfigReadyTimeout = origTimeout }()
+	kubeconfigReadyTimeout = 0
+
 	ctrl := gomock.NewController(t)
 	runtime := NewMockRuntime(ctrl)
 	info := kubeRunningInfo(16443)

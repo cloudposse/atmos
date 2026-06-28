@@ -1,0 +1,2 @@
+# The managed deployments clone the git provision target reconciles into.
+.atmos/
