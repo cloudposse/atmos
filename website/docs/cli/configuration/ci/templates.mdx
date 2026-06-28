@@ -144,6 +144,7 @@ Native Helm summary templates also receive Helm metadata when available:
 | `.ObjectCount` | int | Number of rendered or applied Kubernetes objects |
 | `.Kinds` | map | Rendered or applied Kubernetes object counts by kind |
 | `.ManifestBytes` | int | Rendered manifest size in bytes |
+| `.Diff` | string | Unified diff produced by `diff`/`plan` (rendered as a collapsible diff block; Secret values redacted) |
 
 `render` uses the `template` template, `plan` uses `diff`, `deploy` uses `apply`, and `destroy` uses `delete`.
 

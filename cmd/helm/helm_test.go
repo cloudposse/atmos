@@ -40,6 +40,29 @@ func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 
 	// template does not get --target; apply/deploy do.
 	assert.Nil(t, templateCmd.Flag("target"))
+
+	// diff/plan get the baseline-selection flags; other operations do not.
+	for _, opName := range []string{"diff", "plan"} {
+		opCmd := newOperationCommand(opName, opName)
+		for _, name := range []string{"against", "from-manifest", "context"} {
+			assert.NotNil(t, opCmd.Flag(name), "expected %q flag on %q", name, opName)
+		}
+	}
+	assert.Nil(t, applyCmd.Flag("against"))
+	assert.Nil(t, templateCmd.Flag("from-manifest"))
+}
+
+func TestGetOperationFlagsIncludesDiffFlags(t *testing.T) {
+	cmd := configuredOperationCommand(t, "diff", map[string]string{
+		"against":       "target:prod",
+		"from-manifest": "old.yaml",
+		"context":       "7",
+	})
+
+	flags := getOperationFlags(cmd)
+	assert.Equal(t, "target:prod", flags["against"])
+	assert.Equal(t, "old.yaml", flags["from-manifest"])
+	assert.Equal(t, 7, flags["context"])
 }
 
 func configuredOperationCommand(t *testing.T, name string, flags map[string]string) *cobra.Command {

@@ -224,6 +224,7 @@ var (
 	ErrGitWorkdirNotInitialized    = errors.New("git repository not cloned or initialized")
 	ErrGitTargetPathInvalid        = errors.New("git target path must not be empty or the repository root")
 	ErrGitArtifactWrite            = errors.New("failed to write provision artifact")
+	ErrGitArtifactRead             = errors.New("failed to read provision artifact")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")
@@ -959,6 +960,7 @@ var (
 	ErrProvisionTargetNotFound    = errors.New("provision target not found")
 	ErrProvisionTargetKindUnknown = errors.New("provision target kind is not registered")
 	ErrProvisionTargetKindMissing = errors.New("provision target is missing a kind")
+	ErrProvisionTargetNoFetch     = errors.New("provision target kind does not support reading current state")
 	ErrGitPullRequestNotSupported = errors.New("git pull request publishing is not supported by the cli provider")
 
 	// Backend provisioning errors.
@@ -1306,6 +1308,8 @@ var (
 	ErrHelmChartNotConfigured        = errors.New("helm component is missing a 'chart' reference")
 	ErrHelmRenderFailed              = errors.New("failed to render helm chart")
 	ErrHelmReleaseNameRequired       = errors.New("helm component is missing a release name")
+	ErrHelmDiffFailed                = errors.New("failed to compute helm diff")
+	ErrHelmBaselineRead              = errors.New("failed to read helm diff baseline")
 )
 
 // Stack dependency (`depends_on`) resolution errors.

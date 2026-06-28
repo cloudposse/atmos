@@ -141,7 +141,7 @@ atmos helm deploy monitoring -s plat-ue2-dev --target deployment-repo
   <dd>Render the chart to Kubernetes manifests (stdout, files, or a provision target).</dd>
 
   <dt>[`diff`](/cli/commands/helm/diff) / [`plan`](/cli/commands/helm/plan)</dt>
-  <dd>Preview the changes an apply would make (server-side dry run).</dd>
+  <dd>Show a unified diff against a baseline — the deployed release, a local manifest, or a GitOps deployment repository.</dd>
 
   <dt>[`apply`](/cli/commands/helm/apply) / [`deploy`](/cli/commands/helm/deploy)</dt>
   <dd>Install or upgrade the release, or deliver rendered manifests to a target.</dd>
@@ -150,5 +150,5 @@ atmos helm deploy monitoring -s plat-ue2-dev --target deployment-repo
   <dd>Uninstall the release.</dd>
 
   <dt>[`plugin`](/cli/commands/helm/plugin)</dt>
-  <dd>Install and list Helm CLI plugins (e.g. `helm-diff`, `helm-secrets`) used by helm and helmfile components.</dd>
+  <dd>Install and list Helm CLI plugins (e.g. `helm-secrets`) used by `helmfile` components.</dd>
 </dl>

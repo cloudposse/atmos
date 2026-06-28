@@ -131,6 +131,32 @@ func resolveUpgradeChartRef(client *action.Upgrade, spec *chartSpec) string {
 	return spec.Chart
 }
 
+// getDeployedManifest returns the manifest of the currently deployed release so
+// it can serve as the baseline for a live diff. A release that does not exist
+// yet yields an empty manifest (every object is reported as added) rather than an
+// error. This is the only diff path that requires cluster access.
+func getDeployedManifest(releaseName, namespace string) (string, error) {
+	defer perf.Track(nil, "helm.getDeployedManifest")()
+
+	actx, err := newActionContext(namespace)
+	if err != nil {
+		return "", err
+	}
+
+	rel, err := action.NewGet(actx.cfg).Run(releaseName)
+	if err != nil {
+		if errors.Is(err, driver.ErrReleaseNotFound) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to get deployed Helm release %q: %w", releaseName, err)
+	}
+	deployed, ok := rel.(*release.Release)
+	if !ok {
+		return "", fmt.Errorf("%w: unexpected release type %T", errUtils.ErrHelmRenderFailed, rel)
+	}
+	return deployed.Manifest, nil
+}
+
 // deleteRelease uninstalls the release.
 func deleteRelease(releaseName, namespace string) error {
 	defer perf.Track(nil, "helm.deleteRelease")()

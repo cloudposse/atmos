@@ -10,13 +10,26 @@
 | Chart | `{{ .Chart }}` |
 | Release | `{{ .ReleaseName }}` |
 | Namespace | `{{ .Namespace }}` |
-| Manifest bytes | `{{ .ManifestBytes }}` |
 
 To reproduce locally:
 
 ```shell
 atmos helm diff {{ .Component }} -s {{ .Stack }}
 ```
+
+{{- if .Diff }}
+
+<details><summary>Helm Diff</summary>
+
+```diff
+{{ .Diff }}
+```
+
+</details>
+{{- else if not .Result.HasErrors }}
+
+No changes. The rendered chart matches the baseline.
+{{- end }}
 
 {{- if .Result.HasErrors }}
 

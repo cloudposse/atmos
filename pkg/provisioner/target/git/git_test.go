@@ -102,6 +102,32 @@ func TestWriteArtifactReplacesManagedSubtree(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(workdir, "clusters", "dev", "argocd", "deployment.yaml"))
 }
 
+func TestReadManagedTreeRoundTrip(t *testing.T) {
+	workdir := t.TempDir()
+	path := "clusters/dev/argocd"
+
+	written := target.ProvisionArtifact{Files: map[string][]byte{
+		"namespace.yaml":      []byte("kind: Namespace\n"),
+		"app/deployment.yaml": []byte("kind: Deployment\n"),
+	}}
+	require.NoError(t, writeArtifact(workdir, path, &written))
+
+	got, err := readManagedTree(workdir, path)
+	require.NoError(t, err)
+	assert.Equal(t, "kind: Namespace\n", string(got["namespace.yaml"]))
+	// Nested files use forward-slash keys regardless of OS.
+	assert.Equal(t, "kind: Deployment\n", string(got["app/deployment.yaml"]))
+	assert.Len(t, got, 2)
+}
+
+func TestReadManagedTreeMissingPathIsEmpty(t *testing.T) {
+	workdir := t.TempDir()
+
+	got, err := readManagedTree(workdir, filepath.Join("clusters", "absent"))
+	require.NoError(t, err)
+	assert.Empty(t, got, "an unpublished path must be an empty baseline, not an error")
+}
+
 func TestWriteArtifactRejectsPathEscape(t *testing.T) {
 	workdir := t.TempDir()
 	err := writeArtifact(workdir, "../escape", &target.ProvisionArtifact{Files: map[string][]byte{"x.yaml": []byte("x")}})

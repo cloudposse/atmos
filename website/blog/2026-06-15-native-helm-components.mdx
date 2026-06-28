@@ -90,6 +90,31 @@ components:
 atmos helm deploy monitoring -s plat-ue2-dev --target deployment-repo
 ```
 
+### Real diffs — no plugin required
+
+`atmos helm diff` (alias `plan`) shows a true unified diff, not just a dry-run
+dump. Atmos renders the chart client-side and compares it with the
+[helm-diff](https://github.com/databus23/helm-diff) engine embedded directly in the
+binary — so you get the familiar `+`/`-` output **without installing the
+`helm-diff` CLI plugin**. Secret values are redacted automatically.
+
+It diffs against whichever baseline fits your workflow:
+
+```shell
+# Against the deployed release (requires cluster access).
+atmos helm diff monitoring -s plat-ue2-dev
+
+# Against a local baseline manifest — fully offline.
+atmos helm diff monitoring -s plat-ue2-dev --from-manifest=current.yaml
+
+# Against the GitOps deployment repository — the producer-side
+# "what will this change in the repo?" diff, offline (git access only).
+atmos helm diff monitoring -s plat-ue2-dev --against=target
+```
+
+In CI, the diff is published to the job summary as a collapsible block (Secrets
+omitted), matching the native Kubernetes component.
+
 Already on Helmfile? Render and publish without migrating:
 
 ```shell

@@ -88,10 +88,13 @@ with `@version` (or `@latest`). Built-in aliases: `diff`, `secrets`, `git`,
 `s3`, `unittest`.
 
 :::note
-The native [`helm`](/cli/commands/helm/usage) component renders and deploys
-charts with the Helm Go SDK and does not invoke Helm CLI plugins. Declaring
-`plugins` on a `helm` component is accepted for parity but only affects
-helm-binary passthrough; plugins are primarily consumed by `helmfile` components.
+The native [`helm`](/cli/commands/helm/usage) component renders and deploys charts
+with the Helm Go SDK, which does **not** run Helm CLI subcommand plugins such as
+`helm-secrets`. (It does not need the `helm-diff` plugin either —
+[`atmos helm diff`](/cli/commands/helm/diff) embeds the helm-diff library directly.)
+Declare `plugins` on a [`helmfile`](/cli/commands/helmfile/usage) component, which
+shells out to the `helm` binary so Atmos installs the plugins and exposes them to
+`helmfile diff` / `helmfile apply`.
 :::
 
 :::caution

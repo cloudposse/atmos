@@ -14,15 +14,26 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+)
+
+// Diff flag keys (as stored in ExecutionContext.Flags) and the special baseline
+// selector value for the live deployed release.
+const (
+	flagAgainst      = "against"
+	flagFromManifest = "from-manifest"
+	flagContext      = "context"
+	againstRelease   = "release"
 )
 
 // Seams for testing.
@@ -170,8 +181,8 @@ func runOperation(
 		addObjectsToSummary(summary, objects)
 		return summary, err
 	case OperationDiff:
-		rendered, err := runDiff(spec)
-		summary["manifest_bytes"] = len(rendered)
+		diffText, err := runDiff(atmosConfig, info, ctx.Flags, spec)
+		summary["diff"] = diffText
 		return summary, err
 	case OperationApply:
 		applySummary, err := deliverApply(atmosConfig, info, ctx.Flags, spec)
@@ -197,15 +208,136 @@ func runTemplate(ctx *component.ExecutionContext, info *schema.ConfigAndStacksIn
 	return objects, nil
 }
 
-// runDiff renders the chart server-side (dry run) and prints the manifest that
-// would be applied. Requires cluster access.
-func runDiff(spec *chartSpec) (string, error) {
-	rendered, err := applyHelmRelease(context.Background(), spec, true)
+// runDiff renders the chart client-side (no cluster) and computes a unified diff
+// against a baseline. The baseline source is selected by flags: a local file
+// (--from-manifest), the git deployment-repo provision target (--against=target),
+// or the currently deployed release (default; the only path that needs a cluster).
+// The diff is written to the data channel (secrets are redacted) and returned for
+// the CI job summary.
+func runDiff(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	flags map[string]any,
+	spec *chartSpec,
+) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), renderTimeout)
+	defer cancel()
+
+	desired, err := renderChartManifest(ctx, spec)
 	if err != nil {
 		return "", err
 	}
-	fmt.Fprintln(os.Stdout, strings.TrimSpace(rendered))
-	return rendered, nil
+
+	baseline, err := resolveDiffBaseline(atmosConfig, info, flags, spec)
+	if err != nil {
+		return "", err
+	}
+
+	diffText, _, err := unifiedDiff(baseline, desired, spec.Namespace, diffContextFromFlags(flags))
+	if err != nil {
+		return "", err
+	}
+
+	if strings.TrimSpace(diffText) == "" {
+		_ = data.Writeln("No changes. The rendered chart matches the baseline.")
+	} else {
+		_ = data.Write(diffText)
+	}
+	return diffText, nil
+}
+
+// resolveDiffBaseline resolves the "current" manifest to diff against based on the
+// flags, in precedence order: --from-manifest (file), --against=target (GitOps),
+// otherwise the deployed release.
+func resolveDiffBaseline(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	flags map[string]any,
+	spec *chartSpec,
+) (string, error) {
+	if path := flagString(flags, flagFromManifest); path != "" {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("%w: %w", errUtils.ErrHelmBaselineRead, err)
+		}
+		return string(content), nil
+	}
+
+	against := flagString(flags, flagAgainst)
+	if against != "" && against != againstRelease {
+		return fetchTargetBaseline(atmosConfig, info, against)
+	}
+
+	return getDeployedManifest(spec.ReleaseName, spec.Namespace)
+}
+
+// fetchTargetBaseline reads the current manifests from a non-cluster provision
+// target (e.g. the git deployment repository) so a render can be diffed against
+// the live GitOps state offline. The value is "target" (the default/selected
+// target) or "target:<name>".
+func fetchTargetBaseline(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, against string) (string, error) {
+	targetName := ""
+	if _, name, ok := strings.Cut(against, ":"); ok {
+		targetName = name
+	}
+
+	provisionSection, _ := info.ComponentSection["provision"].(map[string]any)
+	selected, err := target.SelectTarget(provisionSection, targetName)
+	if err != nil {
+		return "", err
+	}
+	if selected.Kind == target.KindKubernetes {
+		return "", fmt.Errorf("%w: --against=target requires a non-cluster provision target such as a git deployment repository", errUtils.ErrHelmDiffFailed)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), deliveryTimeout)
+	defer cancel()
+
+	artifact, err := target.Fetch(ctx, selected.Kind, &target.FetchInput{
+		AtmosConfig:  atmosConfig,
+		TargetName:   selected.Name,
+		TargetConfig: selected.Config,
+		EnvProvider:  authManagerFor(info),
+	})
+	if err != nil {
+		return "", err
+	}
+	return joinManifests(artifact.Files), nil
+}
+
+// joinManifests concatenates artifact file contents (sorted by path) into a single
+// multi-document manifest string suitable for diffing.
+func joinManifests(files map[string][]byte) string {
+	keys := make([]string, 0, len(files))
+	for key := range files {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	var b strings.Builder
+	for _, key := range keys {
+		content := strings.TrimSpace(string(files[key]))
+		if content == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteString("\n---\n")
+		}
+		b.WriteString(content)
+	}
+	return b.String()
+}
+
+func flagString(flags map[string]any, key string) string {
+	value, _ := flags[key].(string)
+	return value
+}
+
+func diffContextFromFlags(flags map[string]any) int {
+	if n, ok := flags[flagContext].(int); ok {
+		return n
+	}
+	return 0
 }
 
 // renderObjects renders the chart to manifest objects (client-side, no cluster).

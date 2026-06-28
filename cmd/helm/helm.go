@@ -1,6 +1,8 @@
 package helm
 
 import (
+	"strconv"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -101,6 +103,12 @@ func newOperationCommand(name, short string) *cobra.Command {
 		cmd.Flags().String("target", "", "Provision target to deliver to (e.g. a git deployment repository). Defaults to provision.default, otherwise the cluster.")
 	}
 
+	if name == "diff" || name == "plan" {
+		cmd.Flags().String("against", "", "Baseline to diff against: 'release' (the deployed release, default), or 'target[:<name>]' for the git deployment-repo provision target (offline).")
+		cmd.Flags().String("from-manifest", "", "Diff against a local baseline manifest file instead of the cluster (offline).")
+		cmd.Flags().Int("context", 3, "Number of unchanged context lines to show around each change.")
+	}
+
 	return cmd
 }
 
@@ -156,9 +164,14 @@ func getOperationFlags(cmd *cobra.Command) map[string]any {
 			result[name] = flag.Value.String() == valueTrue
 		}
 	}
-	for _, name := range []string{"repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "target"} {
+	for _, name := range []string{"repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "target", "against", "from-manifest"} {
 		if flag := cmd.Flag(name); flag != nil {
 			result[name] = flag.Value.String()
+		}
+	}
+	if contextFlag := cmd.Flag("context"); contextFlag != nil {
+		if n, err := strconv.Atoi(contextFlag.Value.String()); err == nil {
+			result["context"] = n
 		}
 	}
 	if outputFlag := cmd.Flag(flagOutput); outputFlag != nil {

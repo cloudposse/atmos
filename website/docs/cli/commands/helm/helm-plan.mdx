@@ -9,15 +9,23 @@ import Intro from "@site/src/components/Intro";
 
 <Intro>
   Preview the changes a Helm apply would make. `plan` is an alias for
-  [`diff`](/cli/commands/helm/diff): it performs a server-side dry run and prints
-  the rendered manifests. Requires cluster access.
+  [`diff`](/cli/commands/helm/diff): it renders the chart client-side and shows a
+  unified diff against a baseline (the deployed release, a local manifest file, or
+  a GitOps deployment repository). See [`diff`](/cli/commands/helm/diff) for the
+  full description of baselines and flags.
 </Intro>
 
 ## Usage
 
 ```shell
 atmos helm plan <component> --stack <stack> [options]
+
+# Diff against the deployed release (requires cluster access).
 atmos helm plan monitoring -s plat-ue2-dev
+
+# Diff offline against a local manifest or the GitOps deployment repository.
+atmos helm plan monitoring -s plat-ue2-dev --from-manifest=current.yaml
+atmos helm plan monitoring -s plat-ue2-dev --against=target
 ```
 
 ## Flags
@@ -25,6 +33,9 @@ atmos helm plan monitoring -s plat-ue2-dev
 <dl>
   <dt>`--stack`, `-s` <em>(required)</em></dt>
   <dd>Atmos stack.</dd>
+
+  <dt>`--against=<source>` / `--from-manifest=<path>` / `--context=<n>` <em>(optional)</em></dt>
+  <dd>Select and tune the diff baseline. See [`diff`](/cli/commands/helm/diff#flags).</dd>
 
   <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
   <dd>Process multiple Helm components in dependency order.</dd>

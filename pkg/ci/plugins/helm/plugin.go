@@ -119,6 +119,7 @@ func (p *Plugin) buildTemplateContext(ctx *plugin.HookContext) *TemplateContext 
 		ObjectKinds:     data.ObjectKinds,
 		ManifestBytes:   data.ManifestBytes,
 		Message:         data.Message,
+		Diff:            plugin.TruncateDetail(data.Diff),
 	}
 }
 
@@ -135,6 +136,8 @@ type TemplateContext struct {
 	ObjectKinds   []string
 	ManifestBytes int
 	Message       string
+	// Diff is the unified diff produced by `helm diff`/`plan` (empty otherwise).
+	Diff string
 }
 
 // Summary is the structured payload native Helm execution passes to the CI plugin.
@@ -150,6 +153,8 @@ type Summary struct {
 	ObjectKinds   []string
 	ManifestBytes int
 	Message       string
+	// Diff is the unified diff produced by `helm diff`/`plan` (empty otherwise).
+	Diff string
 }
 
 func normalizeSummary(value any) Summary {
@@ -181,6 +186,7 @@ func summaryFromMap(m map[string]any) Summary {
 		ObjectKinds:   stringSliceValue(m["object_kinds"]),
 		ManifestBytes: intValue(m["manifest_bytes"]),
 		Message:       stringValue(m["message"]),
+		Diff:          stringValue(m["diff"]),
 	}
 	sort.Strings(s.ObjectKinds)
 	return s

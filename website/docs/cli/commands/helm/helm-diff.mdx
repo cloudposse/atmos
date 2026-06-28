@@ -8,17 +8,43 @@ id: diff
 import Intro from "@site/src/components/Intro";
 
 <Intro>
-  Preview the manifests a Helm apply would send to the cluster. `diff` performs a
-  server-side dry run of the install/upgrade and prints the rendered manifests,
-  so you can review changes before applying. Requires cluster access.
+  Show a real unified diff between the chart Atmos would render and a baseline —
+  the currently deployed release, a local manifest file, or the manifests in your
+  GitOps deployment repository. The chart is rendered client-side with the Helm Go
+  SDK and compared with the [helm-diff](https://github.com/databus23/helm-diff)
+  engine, so changes read as familiar `+`/`-` lines. Secret values are redacted.
 </Intro>
 
 ## Usage
 
 ```shell
 atmos helm diff <component> --stack <stack> [options]
+
+# Diff against the deployed release (requires cluster access).
 atmos helm diff monitoring -s plat-ue2-dev
+
+# Diff against a local baseline manifest (offline, no cluster).
+atmos helm diff monitoring -s plat-ue2-dev --from-manifest=current.yaml
+
+# Diff against the GitOps deployment repository (offline, git access only).
+atmos helm diff monitoring -s plat-ue2-dev --against=target
 ```
+
+## Baselines
+
+`diff` compares the freshly rendered chart against one baseline, selected by flag
+precedence (`--from-manifest` → `--against` → deployed release):
+
+<dl>
+  <dt>Deployed release <em>(default)</em></dt>
+  <dd>The manifest of the currently installed release, read from the cluster. A release that does not exist yet shows every object as added. This is the only mode that needs cluster access.</dd>
+
+  <dt>`--from-manifest=<path>`</dt>
+  <dd>A local baseline manifest file. Fully offline — no cluster, no git.</dd>
+
+  <dt>`--against=target[:<name>]`</dt>
+  <dd>The manifests currently published in a non-cluster <a href="/cli/commands/helm/apply">provision target</a> (e.g. a git deployment repository). Reads the target's current state and diffs against it — the producer side of a GitOps workflow. Offline (git access only). Without <code>:&lt;name&gt;</code> the <code>provision.default</code> target is used.</dd>
+</dl>
 
 ## Flags
 
@@ -26,11 +52,22 @@ atmos helm diff monitoring -s plat-ue2-dev
   <dt>`--stack`, `-s` <em>(required)</em></dt>
   <dd>Atmos stack.</dd>
 
+  <dt>`--against=<source>` <em>(optional)</em></dt>
+  <dd>Baseline to diff against: <code>release</code> (the deployed release, default) or <code>target[:&lt;name&gt;]</code> for a git deployment-repo provision target.</dd>
+
+  <dt>`--from-manifest=<path>` <em>(optional)</em></dt>
+  <dd>Diff against a local baseline manifest file instead of the cluster (offline).</dd>
+
+  <dt>`--context=<n>` <em>(optional)</em></dt>
+  <dd>Number of unchanged context lines shown around each change. Defaults to <code>3</code>.</dd>
+
   <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
   <dd>Process multiple Helm components in dependency order.</dd>
 </dl>
 
 :::note
-To preview without cluster access, use [`atmos helm template`](/cli/commands/helm/template),
-which renders the chart client-side.
+[`atmos helm plan`](/cli/commands/helm/plan) is an alias for `diff`. To render the
+chart without comparing, use [`atmos helm template`](/cli/commands/helm/template).
+The diff uses the helm-diff library directly — you do **not** need to install the
+`helm-diff` CLI plugin.
 :::
