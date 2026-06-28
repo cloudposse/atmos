@@ -1,0 +1,40 @@
+---
+title: atmos config get
+sidebar_label: get
+sidebar_class_name: command
+id: config-get
+description: Read a value from atmos.yaml by dot-notation path.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Read a value from your `atmos.yaml` configuration using a dot-notation path.
+</Intro>
+
+## Usage
+
+```shell
+atmos config get <path>
+```
+
+## Examples
+
+```shell
+atmos config get logs.level
+atmos config get components.terraform.base_path
+atmos config get logs.level --config ./atmos.yaml
+```
+
+## Arguments
+
+<dl>
+  <dt>`<path>` (required)</dt>
+  <dd>Dot-notation path to the value (e.g. `logs.level`, `components.terraform.base_path`). Array elements use bracket indices (e.g. `import[0]`).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--config` (string, inherited)</dt>
+  <dd>Target a specific `atmos.yaml` file instead of the one discovered in the current directory or git root.</dd>
+</dl>

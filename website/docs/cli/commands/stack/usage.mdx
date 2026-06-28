@@ -1,0 +1,53 @@
+---
+title: atmos stack
+sidebar_label: stack
+sidebar_class_name: command
+id: usage
+description: Read and edit component values in stack manifests using provenance to find the file that defines each value, preserving comments, anchors, YAML functions, and templates.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `atmos stack` commands read and edit component-relative values (e.g. `vars.region`)
+for a component in a stack. Because stack configuration is assembled by deep-merging
+many manifests, Atmos uses [provenance](/stacks/imports) to find the
+manifest file that actually defines the effective value, then edits that file in place —
+preserving comments, anchors/aliases, Atmos YAML functions, and Go templates.
+</Intro>
+
+## Usage
+
+```shell
+atmos stack get <path> -s <stack> -c <component>
+atmos stack set <path> <value> -s <stack> -c <component> [--type <type>] [--file <manifest>]
+atmos stack delete <path> -s <stack> -c <component> [--file <manifest>]
+```
+
+Paths are component-relative (e.g. `vars.region`, `settings.spacelift.workspace_enabled`).
+
+## Subcommands
+
+- [`atmos stack get`](/cli/commands/stack/stack-get) — read a value and show where it resolves from.
+- [`atmos stack set`](/cli/commands/stack/stack-set) — set a value in the manifest that defines it.
+- [`atmos stack delete`](/cli/commands/stack/stack-delete) — delete a value from the manifest that defines it.
+
+## Examples
+
+```shell
+# Read a value and see which manifest defines it.
+atmos stack get vars.region -s plat-ue2-prod -c vpc
+
+# Set the value in the file that currently provides it.
+atmos stack set vars.region us-west-2 -s plat-ue2-prod -c vpc
+
+# Target a specific manifest explicitly (also used to create new keys).
+atmos stack set vars.new_flag true --type=bool -s plat-ue2-prod -c vpc --file stacks/deploy/prod.yaml
+```
+
+## How file resolution works
+
+For `set` and `delete`, Atmos describes the component with provenance tracking and
+looks up the source file of the effective (post-merge) value. When a value is not
+defined anywhere, or is inherited from a base component under a different key, the
+command reports where the value resolves and asks you to pass `--file` to choose the
+manifest explicitly.
