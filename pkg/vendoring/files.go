@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	goyaml "gopkg.in/yaml.v3"
+	goyaml "go.yaml.in/yaml/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -76,9 +76,7 @@ func FindSource(files []string, component string) (*schema.AtmosVendorSource, st
 }
 
 // minimalVendorConfig captures only the fields update/diff need from a vendor
-// manifest. It deliberately omits `targets` (whose custom string-or-object
-// unmarshaler is not triggered by a plain decode) since version checking does
-// not use them.
+// manifest.
 type minimalVendorConfig struct {
 	Spec struct {
 		Imports []string              `yaml:"imports"`
@@ -90,6 +88,7 @@ type minimalVendorSource struct {
 	Component   string                    `yaml:"component"`
 	Source      string                    `yaml:"source"`
 	Version     string                    `yaml:"version"`
+	Targets     schema.AtmosVendorTargets `yaml:"targets"`
 	Tags        []string                  `yaml:"tags"`
 	Constraints *schema.VendorConstraints `yaml:"constraints"`
 }
@@ -109,8 +108,7 @@ func decodeVendorManifest(file string) (*minimalVendorConfig, error) {
 }
 
 // readVendorSources returns the sources declared directly in a manifest file
-// (not merged across imports), as schema.AtmosVendorSource values carrying only
-// the fields update/diff use.
+// (not merged across imports), as schema.AtmosVendorSource values.
 func readVendorSources(file string) ([]schema.AtmosVendorSource, error) {
 	cfg, err := decodeVendorManifest(file)
 	if err != nil {
@@ -122,6 +120,7 @@ func readVendorSources(file string) ([]schema.AtmosVendorSource, error) {
 			Component:   s.Component,
 			Source:      s.Source,
 			Version:     s.Version,
+			Targets:     s.Targets,
 			Tags:        s.Tags,
 			Constraints: s.Constraints,
 		})

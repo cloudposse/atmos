@@ -4,12 +4,16 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
+
+var vendorUpdateParser *flags.StandardParser
 
 // vendorUpdateCmd checks Git sources for newer allowed versions and updates the
 // version fields in the vendor manifest(s), preserving formatting.
@@ -24,7 +28,12 @@ comments, anchors, and templates. Use --check for a dry run.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "vendor.updateRunE")()
 
-		file, err := resolveVendorFile()
+		v := viper.GetViper()
+		if err := vendorUpdateParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		file, err := resolveVendorFileWithOverride(v.GetString("file"))
 		if err != nil {
 			return err
 		}
@@ -33,24 +42,29 @@ comments, anchors, and templates. Use --check for a dry run.`,
 			return err
 		}
 
-		check, _ := cmd.Flags().GetBool("check")
-		component, _ := cmd.Flags().GetString("component")
-		tagsCSV, _ := cmd.Flags().GetString("tags")
-		outdated, _ := cmd.Flags().GetBool("outdated")
+		check := v.GetBool("check")
+		component := v.GetString("component")
+		updateType := ""
+		if cmd.Flags().Changed("type") {
+			updateType = v.GetString("type")
+		}
 
 		report, err := vendoring.Update(nil, &vendoring.UpdateParams{
 			VendorFiles: files,
 			Component:   component,
-			Tags:        splitTags(tagsCSV),
+			Tags:        splitTags(v.GetString("tags")),
+			Type:        updateType,
 			DryRun:      check,
 		})
+
+		if report != nil {
+			renderUpdateReport(report, check, v.GetBool("outdated"))
+		}
 		if err != nil {
 			return err
 		}
 
-		renderUpdateReport(report, check, outdated)
-
-		if pull, _ := cmd.Flags().GetBool("pull"); pull && !check && report.UpdatedCount() > 0 {
+		if v.GetBool("pull") && !check && report.UpdatedCount() > 0 {
 			return runVendorPull(cmd, args, component)
 		}
 		return nil
@@ -58,39 +72,55 @@ comments, anchors, and templates. Use --check for a dry run.`,
 }
 
 func init() {
-	vendorUpdateCmd.Flags().StringP("component", "c", "", "Update only this component")
-	vendorUpdateCmd.Flags().StringP("type", "t", "terraform", "Component type (terraform or helmfile)")
-	vendorUpdateCmd.Flags().String("tags", "", "Update only components with any of these comma-separated tags")
-	vendorUpdateCmd.Flags().Bool("check", false, "Dry run: show available updates without modifying files")
-	vendorUpdateCmd.Flags().Bool("pull", false, "After updating versions, run 'atmos vendor pull'")
-	vendorUpdateCmd.Flags().Bool("outdated", false, "Show only sources with an available update")
-	vendorUpdateCmd.Flags().StringVar(&vendorFileFlag, "file", "", "Vendor manifest file (default: ./vendor.yaml)")
-	// Flags consumed by 'vendor pull' when --pull is set.
-	vendorUpdateCmd.Flags().StringP("stack", "s", "", "Only pull the specified stack (used with --pull)")
-	vendorUpdateCmd.Flags().Bool("everything", false, "Pull all components (used with --pull)")
-	vendorUpdateCmd.Flags().Bool("dry-run", false, "Simulate the pull (used with --pull)")
+	vendorUpdateParser = flags.NewStandardParser(
+		flags.WithStringFlag("component", "c", "", "Update only this component"),
+		flags.WithStringFlag("type", "t", "terraform", "Component type (terraform or helmfile)"),
+		flags.WithStringFlag("tags", "", "", "Update only components with any of these comma-separated tags"),
+		flags.WithBoolFlag("check", "", false, "Dry run: show available updates without modifying files"),
+		flags.WithBoolFlag("pull", "", false, "After updating versions, run 'atmos vendor pull'"),
+		flags.WithBoolFlag("outdated", "", false, "Show only sources with an available update"),
+		flags.WithStringFlag("file", "", "", "Vendor manifest file (default: ./vendor.yaml)"),
+		// Flags consumed by 'vendor pull' when --pull is set.
+		flags.WithStringFlag("stack", "s", "", "Only pull the specified stack (used with --pull)"),
+		flags.WithBoolFlag("everything", "", false, "Pull all components (used with --pull)"),
+		flags.WithBoolFlag("dry-run", "", false, "Simulate the pull (used with --pull)"),
+	)
+	vendorUpdateParser.RegisterFlags(vendorUpdateCmd)
+	if err := vendorUpdateParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
 	vendorCmd.AddCommand(vendorUpdateCmd)
 }
 
 // renderUpdateReport prints the per-source results and a summary.
 func renderUpdateReport(report *vendoring.UpdateReport, dryRun, outdated bool) {
-	for _, r := range report.Results {
-		switch r.Status {
-		case vendoring.StatusUpdated:
-			ui.Successf("%s (%s → %s)", r.Component, r.CurrentVersion, r.LatestVersion)
-		case vendoring.StatusUpToDate:
-			if !outdated {
-				ui.Infof("%s (%s - up to date)", r.Component, r.CurrentVersion)
-			}
-		case vendoring.StatusSkipped:
-			if !outdated {
-				ui.Warningf("%s (skipped - %s)", r.Component, r.Reason)
-			}
+	for i := range report.Results {
+		renderUpdateResult(&report.Results[i], outdated)
+	}
+	renderUpdateSummary(report.UpdatedCount(), dryRun)
+}
+
+func renderUpdateResult(r *vendoring.SourceUpdateResult, outdated bool) {
+	switch r.Status {
+	case vendoring.StatusUpdated:
+		ui.Successf("%s (%s → %s)", r.Component, r.CurrentVersion, r.LatestVersion)
+	case vendoring.StatusUpToDate:
+		if !outdated {
+			ui.Infof("%s (%s - up to date)", r.Component, r.CurrentVersion)
+		}
+	case vendoring.StatusSkipped:
+		if !outdated {
+			ui.Warningf("%s (skipped - %s)", r.Component, r.Reason)
+		}
+	case vendoring.StatusFailed:
+		if !outdated {
+			ui.Warningf("%s (failed - %s)", r.Component, r.Reason)
 		}
 	}
+}
 
-	n := report.UpdatedCount()
+func renderUpdateSummary(n int, dryRun bool) {
 	switch {
 	case n == 0:
 		ui.Info("No updates available.")

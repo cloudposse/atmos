@@ -76,8 +76,12 @@ func init() {
 // resolveVendorFile picks the vendor manifest to operate on: the --file override,
 // otherwise ./vendor.yaml in the current directory.
 func resolveVendorFile() (string, error) {
-	if vendorFileFlag != "" {
-		return vendorFileFlag, nil
+	return resolveVendorFileWithOverride(vendorFileFlag)
+}
+
+func resolveVendorFileWithOverride(file string) (string, error) {
+	if file != "" {
+		return file, nil
 	}
 	if _, err := os.Stat(DefaultVendorManifest); err == nil {
 		return DefaultVendorManifest, nil

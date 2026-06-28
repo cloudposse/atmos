@@ -102,5 +102,6 @@ func TestSetComponentVersion_InvalidYAML(t *testing.T) {
 
 	err := SetComponentVersion(file, "vpc", "v9")
 	require.Error(t, err)
+	assert.ErrorIs(t, err, atmosyaml.ErrInvalidYAMLExpression)
 	assert.NotErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound, "invalid YAML must not be reported as component-not-found")
 }

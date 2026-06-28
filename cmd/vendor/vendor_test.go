@@ -1,10 +1,17 @@
 package vendor
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/vendoring"
 )
 
 // TestVendorPullCmd_ExecutorError tests that vendor pull executor handles unexpected args.
@@ -55,4 +62,129 @@ func TestVendorCommandProvider(t *testing.T) {
 	t.Run("IsExperimental returns false", func(t *testing.T) {
 		assert.False(t, provider.IsExperimental())
 	})
+}
+
+func writeCommandVendorManifest(t *testing.T, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	file := filepath.Join(dir, DefaultVendorManifest)
+	require.NoError(t, os.WriteFile(file, []byte(content), 0o644))
+	return file
+}
+
+func TestVendorGetSetCommands_UseFileOverride(t *testing.T) {
+	file := writeCommandVendorManifest(t, `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/vpc"]
+`)
+
+	oldFileFlag := vendorFileFlag
+	vendorFileFlag = file
+	t.Cleanup(func() {
+		vendorFileFlag = oldFileFlag
+		data.Reset()
+	})
+
+	require.NoError(t, vendorSetCmd.RunE(vendorSetCmd, []string{"vpc", "v0.2.0"}))
+	got, err := vendoring.GetComponentVersion(file, "vpc")
+	require.NoError(t, err)
+	assert.Equal(t, "v0.2.0", got)
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	require.NoError(t, vendorGetCmd.RunE(vendorGetCmd, []string{"vpc"}))
+}
+
+func TestResolveVendorFileWithOverrideAndDefault(t *testing.T) {
+	override := filepath.Join(t.TempDir(), "custom.yaml")
+	got, err := resolveVendorFileWithOverride(override)
+	require.NoError(t, err)
+	assert.Equal(t, override, got)
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, DefaultVendorManifest), []byte("spec: {}\n"), 0o644))
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+	})
+	require.NoError(t, os.Chdir(dir))
+	got, err = resolveVendorFileWithOverride("")
+	require.NoError(t, err)
+	assert.Equal(t, DefaultVendorManifest, got)
+}
+
+func TestResolveVendorFileWithOverride_MissingDefault(t *testing.T) {
+	dir := t.TempDir()
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+	})
+	require.NoError(t, os.Chdir(dir))
+
+	_, err = resolveVendorFileWithOverride("")
+	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
+func TestVendorDiffCommandValidationAndManifestErrors(t *testing.T) {
+	require.NoError(t, vendorDiffCmd.Flags().Set("component", ""))
+	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
+	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+
+	file := writeCommandVendorManifest(t, `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/vpc"]
+`)
+	require.NoError(t, vendorDiffCmd.Flags().Set("component", "vpc"))
+	require.NoError(t, vendorDiffCmd.Flags().Set("file", file))
+	require.NoError(t, vendorDiffCmd.Flags().Set("from", "v0.1.0"))
+	require.NoError(t, vendorDiffCmd.Flags().Set("to", "v0.2.0"))
+
+	err = vendorDiffCmd.RunE(vendorDiffCmd, nil)
+	require.ErrorIs(t, err, errUtils.ErrVendorSourceNotGit)
+}
+
+func TestVendorUpdateCommandSkipsNonGitSources(t *testing.T) {
+	file := writeCommandVendorManifest(t, `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: mock
+      source: oci://ghcr.io/cloudposse/mock:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/mock"]
+`)
+	require.NoError(t, vendorUpdateCmd.Flags().Set("file", file))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("check", "true"))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("component", ""))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("tags", ""))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("pull", "false"))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("outdated", "false"))
+
+	require.NoError(t, vendorUpdateCmd.RunE(vendorUpdateCmd, nil))
+}
+
+func TestRenderUpdateReport_AllStatuses(t *testing.T) {
+	report := &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{
+		{Component: "updated", Status: vendoring.StatusUpdated, CurrentVersion: "1.0.0", LatestVersion: "1.1.0"},
+		{Component: "current", Status: vendoring.StatusUpToDate, CurrentVersion: "1.0.0"},
+		{Component: "skipped", Status: vendoring.StatusSkipped, Reason: "not git"},
+		{Component: "failed", Status: vendoring.StatusFailed, Reason: "remote failed"},
+	}}
+
+	renderUpdateReport(report, false, false)
+	renderUpdateReport(report, true, false)
+	renderUpdateReport(report, false, true)
 }

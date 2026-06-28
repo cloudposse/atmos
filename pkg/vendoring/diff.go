@@ -162,7 +162,10 @@ func selectFileSections(full, file string) string {
 	var keep bool
 	for _, line := range strings.Split(full, "\n") {
 		if strings.HasPrefix(line, "diff --git ") {
-			keep = strings.Contains(line, file)
+			fields := strings.Fields(line)
+			keep = len(fields) >= 4 &&
+				(strings.TrimPrefix(fields[2], "a/") == file ||
+					strings.TrimPrefix(fields[3], "b/") == file)
 		}
 		if keep {
 			out = append(out, line)
