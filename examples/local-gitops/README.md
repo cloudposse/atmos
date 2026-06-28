@@ -31,10 +31,10 @@ not needed here — only the container runtime. Then:
 cd examples/local-gitops
 
 # The whole loop in one command:
-atmos gitops
+atmos gitops up
 ```
 
-`atmos gitops` runs these steps (run them by hand to watch each stage):
+`atmos gitops up` runs these steps (run them by hand to watch each stage):
 
 ```shell
 # 0. Vendor the pinned Flux install manifest into the flux component's files/
@@ -79,11 +79,11 @@ atmos kubernetes apply demo-app -s local --target deployments
 Tear it all down:
 
 ```shell
-atmos teardown          # stop + remove both emulators AND the managed clone
+atmos gitops down       # stop + remove both emulators AND the managed clone
 # atmos emulator reset kubernetes -s local   # also wipe cluster state
 ```
 
-> Re-running `atmos gitops` after a teardown starts from a fresh `gitserver` (it is
+> Re-running `atmos gitops up` after a `down` starts from a fresh `gitserver` (it is
 > ephemeral) and a fresh managed clone, so they always line up. Within one session
 > the `gitserver` stays up, so editing and re-applying `demo-app` simply
 > fast-forwards the repository.
@@ -101,7 +101,7 @@ Both point at the same Gitea server — one from outside, one from inside.
 
 | File | Purpose |
 |------|---------|
-| `atmos.yaml` | `git.repositories.deployments` (local Gitea), the `local-k3s` identity, and the `atmos gitops` / `atmos teardown` commands |
+| `atmos.yaml` | `git.repositories.deployments` (local Gitea), the `local-k3s` identity, and the `atmos gitops up` / `atmos gitops down` commands |
 | `stacks/catalog/emulator/gitea.yaml` | The Git server emulator (`driver: gitea`) |
 | `stacks/catalog/emulator/kubernetes.yaml` | The Kubernetes emulator (`driver: k3s`) |
 | `stacks/catalog/flux.yaml` | `flux` (controllers) + `flux-sync` (GitRepository/Kustomization/Secret pointing at Gitea) |

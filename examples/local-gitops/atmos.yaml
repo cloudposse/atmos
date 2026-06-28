@@ -53,23 +53,26 @@ auth:
       kind: kubernetes/emulator
       emulator: kubernetes
 
-# One-command round trips. `atmos gitops` brings up both emulators, installs Flux,
-# pushes the demo app to Gitea, and lets Flux reconcile it into the cluster.
+# The whole loop behind one symmetric command: `atmos gitops up` stands everything
+# up (emulators + Flux + a Git round trip), `atmos gitops down` tears it back down.
 commands:
   - name: "gitops"
-    description: "Stand up the full local GitOps loop: emulators + Flux + a Git round trip"
-    steps:
-      - atmos vendor pull
-      - atmos emulator up gitserver -s local
-      - atmos emulator up kubernetes -s local
-      - atmos kubernetes apply flux -s local --identity local-k3s
-      - atmos kubernetes apply flux-sync -s local --identity local-k3s
-      - atmos kubernetes apply demo-app -s local --target deployments
-  - name: "teardown"
-    description: "Stop and remove both local emulators and the managed clone"
-    steps:
-      - atmos emulator down kubernetes -s local
-      - atmos emulator down gitserver -s local
-      # Remove the managed deployments clone so a later `atmos gitops` starts from a
-      # fresh workdir that matches a fresh `gitserver` repository.
-      - rm -rf .atmos/git/deployments
+    description: "Run the local GitOps loop (use the up/down subcommands)"
+    commands:
+      - name: "up"
+        description: "Stand up the full local GitOps loop: emulators + Flux + a Git round trip"
+        steps:
+          - atmos vendor pull
+          - atmos emulator up gitserver -s local
+          - atmos emulator up kubernetes -s local
+          - atmos kubernetes apply flux -s local --identity local-k3s
+          - atmos kubernetes apply flux-sync -s local --identity local-k3s
+          - atmos kubernetes apply demo-app -s local --target deployments
+      - name: "down"
+        description: "Stop and remove both local emulators and the managed clone"
+        steps:
+          - atmos emulator down kubernetes -s local
+          - atmos emulator down gitserver -s local
+          # Remove the managed deployments clone so a later `atmos gitops up` starts
+          # from a fresh workdir that matches a fresh `gitserver` repository.
+          - rm -rf .atmos/git/deployments
