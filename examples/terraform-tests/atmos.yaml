@@ -14,8 +14,12 @@ components:
 
 stacks:
   base_path: "stacks"
+  # Only `deploy/` manifests are deployable stacks. Catalog manifests are imported,
+  # not stacks themselves — including them here would make `describe stacks` (and the
+  # interactive component/stack pickers that depend on it) evaluate `name_template`
+  # against catalog files that have no `vars.stage`, which fails.
   included_paths:
-    - "**/*"
+    - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{ .vars.stage }}"

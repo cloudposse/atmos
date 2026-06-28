@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -20,9 +21,31 @@ import (
 
 // Package-level variables for dependency injection (enables testing).
 var (
-	initCliConfig         = cfg.InitCliConfig
-	executeDescribeStacks = e.ExecuteDescribeStacks
-	promptForMissing      = flags.PromptForMissingRequired
+	initCliConfig = cfg.InitCliConfig
+	// The executeDescribeStacks seam enumerates stacks/components to populate the
+	// interactive component/stack pickers. It runs with auth DISABLED: listing must be
+	// credential-free and must never authenticate (e.g. resolve an emulator identity
+	// that requires a running container) just to build a selector. Without this, a
+	// stack whose default identity can't resolve makes the picker come back empty,
+	// and the prompt silently falls through to a "stack is required" error.
+	executeDescribeStacks = func(
+		atmosConfig *schema.AtmosConfiguration,
+		filterByStack string,
+		components, componentTypes, sections []string,
+		ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks bool,
+		skip []string,
+		authManager auth.AuthManager,
+	) (map[string]any, error) {
+		return e.ExecuteDescribeStacksWithAuthDisabled(
+			atmosConfig, filterByStack, components, componentTypes, sections,
+			ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks,
+			skip, authManager, true,
+		)
+	}
+	// The isInteractiveFn and selectFromOptions seams let tests drive the
+	// interactive component/stack selection without a real TTY.
+	isInteractiveFn   = flags.IsInteractive
+	selectFromOptions = flags.PromptForValue
 )
 
 // buildConfigAndStacksInfo creates a ConfigAndStacksInfo populated with global CLI flags.
@@ -43,37 +66,70 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 
 // PromptForComponent shows an interactive selector for component selection.
 // If stack is provided, filters components to only those in that stack.
+//
+// Unlike the generic flags prompts, this loads the option list with explicit error
+// handling so that a failure to enumerate components (e.g. `describe stacks` errored)
+// surfaces the real cause, and an empty list yields a clear "no components" message —
+// instead of silently falling through to a misleading "component is required" error.
 func PromptForComponent(cmd *cobra.Command, stack string) (string, error) {
-	// Create a completion function that respects the stack filter.
-	completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return componentsArgCompletionWithStack(cmd, args, toComplete, stack)
+	if !isInteractiveFn() {
+		return "", nil // Non-interactive: let the caller's required-arg validation handle it.
 	}
 
-	return flags.PromptForPositionalArg(
-		"component",
-		"Choose a component",
-		completionFunc,
-		cmd,
-		nil,
-	)
+	components, err := listTerraformComponentsForStack(cmd, stack)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrLoadSelectionOptions).
+			WithCause(err).
+			WithExplanation("Could not load the list of components to choose from").
+			WithHint("Run `atmos list components` to see the underlying error").
+			Err()
+	}
+	if len(components) == 0 {
+		return "", errUtils.Build(errUtils.ErrNoComponentsToSelect).
+			WithExplanation(noComponentsExplanation(stack)).
+			WithHint("Define a terraform component in a stack, or pass one on the command line").
+			Err()
+	}
+
+	return selectFromOptions("component", "Choose a component", components)
+}
+
+// noComponentsExplanation tailors the empty-component message to whether a stack filter applied.
+func noComponentsExplanation(stack string) string {
+	if stack != "" {
+		return fmt.Sprintf("No deployable terraform components were found in stack `%s`", stack)
+	}
+	return "No deployable terraform components were found in any stack"
 }
 
 // PromptForStack shows an interactive selector for stack selection.
 // If component is provided, filters stacks to only those containing the component.
 // The selected stack is written back to the cmd "stack" flag so PostRunE hooks
 // (which re-parse args via ProcessCommandLineArgs) observe the selected value.
+//
+// Like PromptForComponent, it surfaces load errors and an explicit "no stacks"
+// message instead of silently returning empty.
 func PromptForStack(cmd *cobra.Command, component string) (string, error) {
-	var args []string
-	if component != "" {
-		args = []string{component}
+	if !isInteractiveFn() {
+		return "", nil // Non-interactive: let the caller's required-arg validation handle it.
 	}
-	stack, err := promptForMissing(
-		"stack",
-		"Choose a stack",
-		StackFlagCompletion,
-		cmd,
-		args,
-	)
+
+	stacks, err := stacksForSelection(cmd, component)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrLoadSelectionOptions).
+			WithCause(err).
+			WithExplanation("Could not load the list of stacks to choose from").
+			WithHint("Run `atmos list stacks` to see the underlying error").
+			Err()
+	}
+	if len(stacks) == 0 {
+		return "", errUtils.Build(errUtils.ErrNoStacksToSelect).
+			WithExplanation(noStacksExplanation(component)).
+			WithHint("Define a stack under your stacks base path, or pass one with `--stack`").
+			Err()
+	}
+
+	stack, err := selectFromOptions("stack", "Choose a stack", stacks)
 	if err != nil {
 		return stack, err
 	}
@@ -88,6 +144,23 @@ func PromptForStack(cmd *cobra.Command, component string) (string, error) {
 		}
 	}
 	return stack, nil
+}
+
+// stacksForSelection returns the candidate stacks for the picker, filtered to the
+// given component when one was already chosen.
+func stacksForSelection(cmd *cobra.Command, component string) ([]string, error) {
+	if component != "" {
+		return listStacksForComponent(cmd, component)
+	}
+	return listAllStacks(cmd)
+}
+
+// noStacksExplanation tailors the empty-stack message to whether a component filter applied.
+func noStacksExplanation(component string) string {
+	if component != "" {
+		return fmt.Sprintf("No stacks contain the component `%s`", component)
+	}
+	return "No stacks were found in the configuration"
 }
 
 // HandlePromptError processes errors from interactive prompts.

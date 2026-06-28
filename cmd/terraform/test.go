@@ -34,7 +34,7 @@ For complete Terraform/OpenTofu documentation, see:
 		// Fire before.terraform.test. This runs both user-defined component hooks
 		// (e.g. a `kind: step` / `type: emulator` hook that starts a local sandbox)
 		// and any CI provider bindings.
-		return runHooks(h.BeforeTerraformTest, cmd, args)
+		return runBeforeHooks(h.BeforeTerraformTest, cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		// Reset the captured output before any early return so the deferred hook and

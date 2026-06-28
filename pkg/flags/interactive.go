@@ -38,6 +38,16 @@ func isInteractive() bool {
 	return atmosterm.IsTTYSupportForStdin() && !telemetry.IsCI()
 }
 
+// IsInteractive reports whether interactive prompts should be shown (interactive
+// mode enabled, stdin is a TTY, and not running in CI). Callers that load their
+// own options before prompting use this to gate that work and to surface a clear
+// error instead of silently falling through when options can't be loaded.
+func IsInteractive() bool {
+	defer perf.Track(nil, "flags.IsInteractive")()
+
+	return isInteractive()
+}
+
 // PromptForValue shows an interactive Huh selector with the given options.
 // Returns the selected value or an error.
 //
