@@ -10,8 +10,10 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
+	tfci "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"
 	"github.com/cloudposse/atmos/pkg/flags"
 	h "github.com/cloudposse/atmos/pkg/hooks"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // testParser handles flag parsing for the test command.
@@ -80,24 +82,37 @@ For complete Terraform/OpenTofu documentation, see:
 			ciMode = ci.IsCI()
 		}
 
+		// In CI, run `terraform/tofu test -json` for structured, tool-agnostic
+		// results (both tools support it) and capture stdout WITHOUT teeing — the
+		// raw JSON stream is suppressed and we render a clean human summary below.
+		// `-json` is injected via opts.AppendArgs so it lands in
+		// info.AdditionalArgsAndFlags and reaches terraform directly, rather than
+		// being mis-parsed as a positional stack argument.
 		var shellOpts []e.ShellCommandOption
 		var stdoutBuf, stderrBuf bytes.Buffer
 		if ciMode {
-			shellOpts = append(shellOpts, e.WithStdoutCapture(&stdoutBuf))
+			opts.AppendArgs = appendJSONFlag(opts.AppendArgs)
+			shellOpts = append(shellOpts, e.WithStdoutOverride(&stdoutBuf))
 			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
 		}
 
 		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 
-		// Strip ANSI escape codes so CI templates get clean text. Combine stdout and
-		// stderr so that failure messages (which terraform writes to stderr) are
-		// available to the CI summary parser.
 		if ciMode {
-			combined := stdoutBuf.String()
+			jsonOut := stdoutBuf.String()
+			// Feed the JSON stream to the CI hooks (ParseOutput sniffs JSON);
+			// append stderr so pre-terraform failures (e.g. auth) are still parseable.
+			capturedTestOutput = ansi.Strip(jsonOut)
 			if errOut := stderrBuf.String(); errOut != "" {
-				combined = combined + "\n" + errOut
+				capturedTestOutput = capturedTestOutput + "\n" + ansi.Strip(errOut)
 			}
-			capturedTestOutput = ansi.Strip(combined)
+			// Render a clean human-readable summary to the terminal/log; fall back to
+			// stderr when no test results were produced (e.g. an early failure).
+			if text := tfci.RenderTestText([]byte(jsonOut)); text != "" {
+				ui.Write(text)
+			} else if errOut := stderrBuf.String(); errOut != "" {
+				ui.Write(errOut)
+			}
 		}
 
 		return err
@@ -108,6 +123,21 @@ For complete Terraform/OpenTofu documentation, see:
 		// the CI plugin (via RunCIHooks — the pass/fail step summary).
 		return runHooksWithOutput(h.AfterTerraformTest, cmd, args, capturedTestOutput)
 	},
+}
+
+// appendJSONFlag adds `-json` to the terraform test pass-through flags unless it
+// is already present, so CI runs emit the machine-readable event stream. Both
+// Terraform and OpenTofu support `test -json`, so this is tool-agnostic and does
+// not depend on the binary name (which may be aliased).
+func appendJSONFlag(extra []string) []string {
+	for _, a := range extra {
+		if a == "-json" || a == "--json" {
+			return extra
+		}
+	}
+	out := make([]string, len(extra), len(extra)+1)
+	copy(out, extra)
+	return append(out, "-json")
 }
 
 func init() {

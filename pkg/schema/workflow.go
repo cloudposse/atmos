@@ -297,6 +297,9 @@ type WorkflowStep struct {
 	Component string `yaml:"component,omitempty" json:"component,omitempty" mapstructure:"component"` // Emulator component name to operate on (emulator step type).
 	Ephemeral bool   `yaml:"ephemeral,omitempty" json:"ephemeral,omitempty" mapstructure:"ephemeral"` // Run the emulator without persistence for this step (emulator step type).
 
+	// JUnit step fields.
+	Files []string `yaml:"files,omitempty" json:"files,omitempty" mapstructure:"files"` // Glob(s) of JUnit XML files to summarize/annotate (junit step type).
+
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
 

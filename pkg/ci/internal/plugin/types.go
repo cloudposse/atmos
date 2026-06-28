@@ -183,11 +183,21 @@ type TerraformTestRun struct {
 	// Name is the run block name (the identifier in `run "<name>" { ... }`).
 	Name string
 
-	// Status is the run outcome: "pass", "fail", or "skip".
+	// File is the .tftest.hcl file the run belongs to (the JUnit testsuite).
+	File string
+
+	// Status is the run outcome: "pass", "fail", "error", or "skip".
 	Status string
 
-	// Error contains failure detail when Status is "fail" (best-effort; may be empty).
+	// Error contains failure detail when Status is "fail"/"error" (best-effort; may be empty).
 	Error string
+
+	// Line is the 1-based source line of the failing assertion (0 = unknown).
+	// Populated from `terraform test -json` diagnostic ranges.
+	Line int
+
+	// Duration is the run's wall-clock time in seconds (0 = unknown).
+	Duration float64
 }
 
 // TerraformOutput represents a single terraform output value.

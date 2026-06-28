@@ -160,11 +160,17 @@ func (p *Plugin) onAfterTest(ctx *plugin.HookContext) error {
 		}
 	}
 
-	// Output -- warn-only.
+	// Output -- warn-only. Also write a JUnit report (file + `junit_report` path).
 	if isOutputEnabled(ctx.Config) {
 		if err := p.writeOutputs(ctx, result, renderedSummary); err != nil {
 			log.Warn("CI output failed", "error", err)
 		}
+		p.writeJUnitReport(ctx, result)
+	}
+
+	// Annotations -- warn-only. Inline `::error file:line` per failing assertion.
+	if isAnnotationsEnabled(ctx.Config) {
+		p.emitTestAnnotations(ctx, result)
 	}
 
 	// Check -- warn-only.
@@ -831,6 +837,18 @@ func isOutputEnabled(cfg *schema.AtmosConfiguration) bool {
 		return true
 	}
 	return *cfg.CI.Output.Enabled
+}
+
+// isAnnotationsEnabled checks if inline CI annotations are enabled. Defaults to
+// true (nil) under ci.enabled, mirroring the scanner-hook behavior.
+func isAnnotationsEnabled(cfg *schema.AtmosConfiguration) bool {
+	if cfg == nil {
+		return true
+	}
+	if cfg.CI.Annotations.Enabled == nil {
+		return true
+	}
+	return *cfg.CI.Annotations.Enabled
 }
 
 // isPlanfileStorageEnabled checks if planfile storage is configured.

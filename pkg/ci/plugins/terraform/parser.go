@@ -2,6 +2,8 @@
 package terraform
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -14,6 +16,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// testJSONMaxLine is the max bufio token size for a `test -json` line (a
+// diagnostic with a long detail can be large).
+const testJSONMaxLine = 4 * 1024 * 1024
+
+// millisecondsPerSecond converts the `elapsed` field (milliseconds in the
+// `test -json` stream) to the seconds used by JUnit `time` attributes.
+const millisecondsPerSecond = 1000.0
 
 // Regular expressions for parsing terraform stdout (errors/warnings only).
 // These are compiled at package initialization and are safe for concurrent use
@@ -630,6 +640,249 @@ func ParseTestOutput(output string) *plugin.OutputResult {
 	return result
 }
 
+// isJSONStream reports whether output looks like a `test -json` stream (the
+// first non-whitespace byte is `{`).
+func isJSONStream(output string) bool {
+	trimmed := strings.TrimLeft(output, " \t\r\n")
+	return strings.HasPrefix(trimmed, "{")
+}
+
+// testJSONEvent is the envelope shared by all `terraform test -json` messages.
+type testJSONEvent struct {
+	Level    string          `json:"@level"`
+	Type     string          `json:"type"`
+	TestFile string          `json:"@testfile"`
+	TestRun  string          `json:"@testrun"`
+	TestRunP json.RawMessage `json:"test_run"`
+	Summary  json.RawMessage `json:"test_summary"`
+	Diag     json.RawMessage `json:"diagnostic"`
+}
+
+// testJSONRun is the `test_run` payload.
+type testJSONRun struct {
+	Path     string `json:"path"`
+	Run      string `json:"run"`
+	Progress string `json:"progress"`
+	Status   string `json:"status"`
+	Elapsed  int64  `json:"elapsed"` // milliseconds
+}
+
+// testJSONSummary is the `test_summary` payload.
+type testJSONSummary struct {
+	Status  string `json:"status"`
+	Passed  int    `json:"passed"`
+	Failed  int    `json:"failed"`
+	Errored int    `json:"errored"`
+	Skipped int    `json:"skipped"`
+}
+
+// testJSONDiag is the `diagnostic` payload (mirrors `terraform validate`).
+type testJSONDiag struct {
+	Summary string `json:"summary"`
+	Detail  string `json:"detail"`
+	Range   struct {
+		Filename string `json:"filename"`
+		Start    struct {
+			Line int `json:"line"`
+		} `json:"start"`
+	} `json:"range"`
+}
+
+// testRunKey identifies a run by its file + name (used to attach diagnostics).
+type testRunKey struct {
+	file string
+	run  string
+}
+
+// pendingDiag holds the first error diagnostic seen for a run, attached when the
+// run's `complete` event arrives (diagnostics precede the complete event).
+type pendingDiag struct {
+	message string
+	file    string
+	line    int
+}
+
+// ParseTestJSON parses a `terraform/tofu test -json` event stream into per-run
+// results enriched with failure messages and source file:line (from diagnostic
+// ranges). Tool-agnostic: both Terraform and OpenTofu emit this format.
+func ParseTestJSON(stream []byte) *plugin.OutputResult {
+	defer perf.Track(nil, "terraform.ParseTestJSON")()
+
+	data := &plugin.TerraformTestOutputData{Runs: []plugin.TerraformTestRun{}}
+	result := &plugin.OutputResult{Data: data}
+
+	diagByRun := map[testRunKey]pendingDiag{}
+	var summary *testJSONSummary
+
+	scanner := bufio.NewScanner(bytes.NewReader(stream))
+	scanner.Buffer(make([]byte, 0, 64*1024), testJSONMaxLine)
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 || line[0] != '{' {
+			continue
+		}
+		var ev testJSONEvent
+		if err := json.Unmarshal(line, &ev); err != nil {
+			continue
+		}
+
+		switch ev.Type {
+		case "diagnostic":
+			recordDiagnostic(&ev, diagByRun)
+		case "test_run":
+			if run, ok := completedTestRun(&ev, diagByRun); ok {
+				data.Runs = append(data.Runs, run)
+			}
+		case "test_summary":
+			if s := parseTestSummary(&ev); s != nil {
+				summary = s
+			}
+		}
+	}
+
+	finalizeTestJSON(data, result, summary)
+	return result
+}
+
+// recordDiagnostic remembers the first error diagnostic for a run keyed by
+// file+run, so it can be attached when that run's complete event arrives later.
+func recordDiagnostic(ev *testJSONEvent, diagByRun map[testRunKey]pendingDiag) {
+	if ev.Level != "error" || ev.TestRun == "" {
+		return
+	}
+	var d testJSONDiag
+	_ = json.Unmarshal(ev.Diag, &d)
+	key := testRunKey{file: ev.TestFile, run: ev.TestRun}
+	if _, exists := diagByRun[key]; !exists {
+		diagByRun[key] = pendingDiag{message: diagMessage(d), file: d.Range.Filename, line: d.Range.Start.Line}
+	}
+}
+
+// completedTestRun decodes a test_run event and returns the assembled run only
+// when the run has completed (intermediate progress events are ignored).
+func completedTestRun(ev *testJSONEvent, diagByRun map[testRunKey]pendingDiag) (plugin.TerraformTestRun, bool) {
+	var tr testJSONRun
+	_ = json.Unmarshal(ev.TestRunP, &tr)
+	if tr.Progress != "complete" {
+		return plugin.TerraformTestRun{}, false
+	}
+	return buildTestRun(ev, tr, diagByRun), true
+}
+
+// parseTestSummary decodes a test_summary event, returning nil on malformed input.
+func parseTestSummary(ev *testJSONEvent) *testJSONSummary {
+	var s testJSONSummary
+	if json.Unmarshal(ev.Summary, &s) == nil {
+		return &s
+	}
+	return nil
+}
+
+// buildTestRun assembles one run from its complete event, attaching any pending
+// diagnostic (file/line/message) recorded earlier in the stream.
+func buildTestRun(ev *testJSONEvent, tr testJSONRun, diagByRun map[testRunKey]pendingDiag) plugin.TerraformTestRun {
+	file := firstNonEmpty(tr.Path, ev.TestFile)
+	name := firstNonEmpty(tr.Run, ev.TestRun)
+	run := plugin.TerraformTestRun{
+		Name:     name,
+		File:     file,
+		Status:   tr.Status,
+		Duration: float64(tr.Elapsed) / millisecondsPerSecond,
+	}
+	if dg, ok := diagByRun[testRunKey{file: ev.TestFile, run: name}]; ok {
+		run.Error = dg.message
+		if dg.line > 0 {
+			run.Line = dg.line
+		}
+		if dg.file != "" {
+			run.File = dg.file
+		}
+	}
+	return run
+}
+
+// finalizeTestJSON sets totals/counts and HasErrors from the parsed runs and the
+// authoritative test_summary (when present).
+func finalizeTestJSON(data *plugin.TerraformTestOutputData, result *plugin.OutputResult, summary *testJSONSummary) {
+	data.Total = len(data.Runs)
+	for _, r := range data.Runs {
+		switch r.Status {
+		case "pass":
+			data.Pass++
+		case "skip":
+			data.Skip++
+		case "fail", "error":
+			data.Fail++
+		}
+		if r.Error != "" {
+			result.Errors = append(result.Errors, r.Error)
+		}
+	}
+	if summary != nil {
+		data.Pass = summary.Passed
+		data.Fail = summary.Failed + summary.Errored
+		data.Skip = summary.Skipped
+		if data.Total == 0 {
+			data.Total = summary.Passed + summary.Failed + summary.Errored + summary.Skipped
+		}
+	}
+	if data.Fail > 0 || len(result.Errors) > 0 {
+		result.HasErrors = true
+	}
+}
+
+// diagMessage joins a diagnostic summary and detail into a single message.
+func diagMessage(d testJSONDiag) string {
+	if d.Detail != "" && d.Summary != "" {
+		return d.Summary + ": " + d.Detail
+	}
+	return firstNonEmpty(d.Summary, d.Detail)
+}
+
+// firstNonEmpty returns the first non-empty string.
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// RenderTestText renders a concise, human-readable summary of a
+// `terraform/tofu test -json` stream — used to keep the terminal/CI log readable
+// when the raw JSON stream is suppressed. Returns "" when the stream has no runs
+// (the caller can fall back to surfacing stderr).
+func RenderTestText(jsonStream []byte) string {
+	defer perf.Track(nil, "terraform.RenderTestText")()
+
+	data, ok := ParseTestJSON(jsonStream).Data.(*plugin.TerraformTestOutputData)
+	if !ok || data == nil || data.Total == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	for _, run := range data.Runs {
+		icon := "✓"
+		switch run.Status {
+		case "fail", "error":
+			icon = "✗"
+		case "skip":
+			icon = "⏭"
+		}
+		fmt.Fprintf(&b, "  %s run %q... %s\n", icon, run.Name, run.Status)
+		if run.Error != "" {
+			fmt.Fprintf(&b, "      %s\n", run.Error)
+		}
+	}
+	headline := "Success!"
+	if data.Fail > 0 {
+		headline = "Failure!"
+	}
+	fmt.Fprintf(&b, "%s %d passed, %d failed, %d skipped.\n", headline, data.Pass, data.Fail, data.Skip)
+	return b.String()
+}
+
 // ParseOutput parses terraform output for a given command (fallback when JSON not available).
 // Prefer ParsePlanJSON + ParseOutputJSON for structured data.
 func ParseOutput(output string, command string) *plugin.OutputResult {
@@ -643,6 +896,11 @@ func ParseOutput(output string, command string) *plugin.OutputResult {
 	case "destroy":
 		return ParseDestroyOutput(output)
 	case "test":
+		// `terraform/tofu test -json` (CI mode) emits line-delimited JSON; the
+		// human runner emits text. Sniff the first non-blank char to choose.
+		if isJSONStream(output) {
+			return ParseTestJSON([]byte(output))
+		}
 		return ParseTestOutput(output)
 	default:
 		// For unknown commands, return minimal result.

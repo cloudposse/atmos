@@ -3,6 +3,7 @@ package terraform
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -48,9 +49,16 @@ type mockProvider struct {
 	checkRunCalls  []*provider.CreateCheckRunOptions
 	updateRunCalls []*provider.UpdateCheckRunOptions
 	commentCalls   []*provider.PostCommentOptions
+	annotateCalls  [][]provider.Annotation
 	commentErr     error
 	commentResult  *provider.Comment
 	nextID         int64
+}
+
+// Annotate implements provider.Annotator, capturing the emitted annotations.
+func (m *mockProvider) Annotate(annotations []provider.Annotation) error {
+	m.annotateCalls = append(m.annotateCalls, annotations)
+	return nil
 }
 
 func newMockProvider() *mockProvider {
@@ -571,6 +579,10 @@ func TestOnAfterApply_WritesOutputs(t *testing.T) {
 }
 
 func TestOnAfterTest_WritesOutputs(t *testing.T) {
+	// Output is enabled, so onAfterTest writes a JUnit report; isolate CWD so the
+	// `<component>.junit.xml` file lands in a temp dir, not the package directory.
+	t.Chdir(t.TempDir())
+
 	p := &Plugin{}
 	mp := newMockProvider()
 
@@ -603,6 +615,10 @@ func TestOnAfterTest_WritesOutputs(t *testing.T) {
 }
 
 func TestOnAfterTest_FailureSetsErrorOutputs(t *testing.T) {
+	// Output is enabled, so onAfterTest writes a JUnit report; isolate CWD so the
+	// `<component>.junit.xml` file lands in a temp dir, not the package directory.
+	t.Chdir(t.TempDir())
+
 	p := &Plugin{}
 	mp := newMockProvider()
 
@@ -745,6 +761,51 @@ func TestOnAfterTest_UpdatesCheckRunWhenEnabled(t *testing.T) {
 	require.NoError(t, p.onAfterTest(ctx))
 	require.Len(t, mp.updateRunCalls, 1, "the check run should be updated after the test")
 	assert.Equal(t, "1 passed", mp.updateRunCalls[0].Title)
+}
+
+func TestOnAfterTest_EmitsJUnitAndAnnotations(t *testing.T) {
+	// Write the JUnit file into an isolated CWD (resolveArtifactPath returns "" with
+	// no stack, so junitReportDir falls back to the working directory).
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	p := &Plugin{}
+	mp := newMockProvider()
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary:     schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:      schema.CIOutputConfig{Enabled: boolPtr(true)},
+				Annotations: schema.CIAnnotationsConfig{Enabled: boolPtr(true)},
+				Checks:      schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: mp,
+		Command:  "test",
+		ExitCode: 1,
+		Info:     &schema.ConfigAndStacksInfo{ComponentFromArg: "app"},
+		Output:   sampleTestJSON,
+	}
+
+	require.NoError(t, p.onAfterTest(ctx))
+
+	// JUnit file written + path exposed.
+	junitPath := mp.writer.outputs["junit_report"]
+	require.NotEmpty(t, junitPath, "junit_report path should be exposed")
+	assert.Equal(t, filepath.Join(dir, "app.junit.xml"), junitPath)
+	body, err := os.ReadFile(junitPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), `<testsuite name="tests/app.tftest.hcl"`)
+	assert.Contains(t, string(body), `<failure message="Test assertion failed: bucket not created"`)
+
+	// One annotation for the single failing run, with file:line.
+	require.Len(t, mp.annotateCalls, 1)
+	require.Len(t, mp.annotateCalls[0], 1)
+	ann := mp.annotateCalls[0][0]
+	assert.Equal(t, "tests/app.tftest.hcl", ann.Path)
+	assert.Equal(t, 30, ann.StartLine)
+	assert.Equal(t, provider.AnnotationError, ann.Level)
+	assert.Contains(t, ann.Message, "bucket not created")
 }
 
 func TestOnAfterApply_BothSummaryAndOutputDisabled(t *testing.T) {

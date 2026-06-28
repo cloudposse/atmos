@@ -685,6 +685,13 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	info.TerraformPlanHideNoChanges = opts.PlanHideNoChanges
 	info.TerraformPlanSummaryFile = opts.PlanSummaryFile
 
+	// Caller-injected terraform pass-through flags (e.g. `-json` for `terraform
+	// test` in CI). Appended to AdditionalArgsAndFlags so they reach the terraform
+	// command directly without going through Cobra positional-arg parsing.
+	if len(opts.AppendArgs) > 0 {
+		info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, opts.AppendArgs...)
+	}
+
 	// Backend execution flags (only apply if set via CLI).
 	if opts.AutoGenerateBackendFile != "" {
 		info.AutoGenerateBackendFile = opts.AutoGenerateBackendFile
