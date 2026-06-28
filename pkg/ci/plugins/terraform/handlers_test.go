@@ -632,6 +632,121 @@ func TestOnAfterTest_FailureSetsErrorOutputs(t *testing.T) {
 	assert.Equal(t, "1", mp.writer.outputs["tests_failed"])
 }
 
+func TestOnAfterTest_RendersPassingSummary(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider:       mp,
+		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
+		Command:        "test",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "local",
+			ComponentFromArg: "app",
+		},
+		Output: "  run \"a\"... pass\n  run \"b\"... pass\n\nSuccess! 2 passed, 0 failed.\n",
+	}
+
+	require.NoError(t, p.onAfterTest(ctx))
+
+	require.Len(t, mp.writer.summaries, 1, "test summary should have been rendered")
+	rendered := mp.writer.summaries[0]
+	assert.Contains(t, rendered, "Tests Passed for `app` in `local`")
+	assert.Contains(t, rendered, "PASSED-2")
+	assert.NotContains(t, rendered, "Tests Failed")
+}
+
+func TestOnAfterTest_RendersFailingSummary(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider:       mp,
+		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
+		Command:        "test",
+		ExitCode:       1,
+		Info:           &schema.ConfigAndStacksInfo{Stack: "local", ComponentFromArg: "app"},
+		Output:         "  run \"a\"... pass\n  run \"b\"... fail\n\nError: assertion failed\n\nFailure! 1 passed, 1 failed.\n",
+	}
+
+	require.NoError(t, p.onAfterTest(ctx))
+
+	require.Len(t, mp.writer.summaries, 1)
+	assert.Contains(t, mp.writer.summaries[0], "Tests Failed for `app` in `local`")
+	assert.Contains(t, mp.writer.summaries[0], "FAILED-1")
+}
+
+func TestOnBeforeTest_CreatesCheckRunWhenEnabled(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
+		},
+		Provider: mp,
+		Command:  "test",
+		CICtx:    &provider.Context{RepoOwner: "owner", RepoName: "repo", SHA: "abc123"},
+		Info:     &schema.ConfigAndStacksInfo{Stack: "local", ComponentFromArg: "app"},
+	}
+
+	require.NoError(t, p.onBeforeTest(ctx))
+	assert.Len(t, mp.checkRunCalls, 1, "a check run should be created when checks are enabled")
+}
+
+func TestOnBeforeTest_NoCheckRunWhenDisabled(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(false)}}},
+		Provider: mp,
+		Command:  "test",
+		Info:     &schema.ConfigAndStacksInfo{Stack: "local", ComponentFromArg: "app"},
+	}
+
+	require.NoError(t, p.onBeforeTest(ctx))
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+func TestOnAfterTest_UpdatesCheckRunWhenEnabled(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(true)},
+			},
+		},
+		Provider: mp,
+		Command:  "test",
+		CICtx:    &provider.Context{RepoOwner: "owner", RepoName: "repo", SHA: "abc123"},
+		Info:     &schema.ConfigAndStacksInfo{Stack: "local", ComponentFromArg: "app"},
+		Output:   "  run \"a\"... pass\n\nSuccess! 1 passed, 0 failed.\n",
+	}
+
+	require.NoError(t, p.onAfterTest(ctx))
+	require.Len(t, mp.updateRunCalls, 1, "the check run should be updated after the test")
+	assert.Equal(t, "1 passed", mp.updateRunCalls[0].Title)
+}
+
 func TestOnAfterApply_BothSummaryAndOutputDisabled(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()

@@ -142,6 +142,28 @@ func TestEmulatorHandler_Validate(t *testing.T) {
 	}
 }
 
+func TestEmulatorHandler_ComponentResolveError(t *testing.T) {
+	withEmulatorRunner(t, &fakeEmulatorRunner{})
+
+	h := &EmulatorHandler{BaseHandler: NewBaseHandler(emulatorStepType, CategoryCommand, false)}
+	// A malformed template in `component` fails to resolve.
+	step := &schema.WorkflowStep{Name: "start", Type: "emulator", Component: "{{ .nope"}
+	_, err := h.Execute(context.Background(), step, NewVariables())
+
+	require.Error(t, err)
+}
+
+func TestEmulatorHandler_StackResolveError(t *testing.T) {
+	withEmulatorRunner(t, &fakeEmulatorRunner{})
+
+	h := &EmulatorHandler{BaseHandler: NewBaseHandler(emulatorStepType, CategoryCommand, false)}
+	// A malformed template in an explicit `stack` fails to resolve.
+	step := &schema.WorkflowStep{Name: "start", Type: "emulator", Component: "aws", Stack: "{{ .nope"}
+	_, err := h.Execute(context.Background(), step, NewVariables())
+
+	require.Error(t, err)
+}
+
 func TestEmulatorHandler_NoRunnerRegistered(t *testing.T) {
 	withEmulatorRunner(t, nil)
 

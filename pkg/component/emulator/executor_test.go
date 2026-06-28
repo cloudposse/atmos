@@ -34,21 +34,25 @@ type fakeManager struct {
 	resProfile emu.Profile
 	resErr     error
 
-	upCalls    int
-	downCalls  int
-	resetCalls int
-	logsCalls  int
-	resCalls   int
-	gotStack   string
-	gotName    string
-	gotEnv     map[string]string
-	gotCommand []string
-	gotFollow  bool
+	upCalls      int
+	downCalls    int
+	resetCalls   int
+	gotEphemeral *bool
+	logsCalls    int
+	resCalls     int
+	gotStack     string
+	gotName      string
+	gotEnv       map[string]string
+	gotCommand   []string
+	gotFollow    bool
 }
 
-func (f *fakeManager) Up(_ context.Context, _ *emu.Spec, stack, name string, env map[string]string) (emu.Endpoint, error) {
+func (f *fakeManager) Up(_ context.Context, spec *emu.Spec, stack, name string, env map[string]string) (emu.Endpoint, error) {
 	f.upCalls++
 	f.gotStack, f.gotName, f.gotEnv = stack, name, env
+	if spec != nil {
+		f.gotEphemeral = spec.Ephemeral
+	}
 	return f.upEndpoint, f.upErr
 }
 
@@ -197,6 +201,16 @@ func TestExecuteUp_SuccessNoURL(t *testing.T) {
 
 	require.NoError(t, ExecuteUp(context.Background(), baseInfo()))
 	assert.Equal(t, 1, mgr.upCalls)
+}
+
+func TestExecuteUpEphemeral_OverridesPersistence(t *testing.T) {
+	mgr := &fakeManager{upEndpoint: emu.Endpoint{Host: "localhost", Ports: map[int]int{4566: 54321}}}
+	stubPrepare(t, validSection(), nil, mgr)
+
+	require.NoError(t, ExecuteUpEphemeral(context.Background(), baseInfo()))
+	assert.Equal(t, 1, mgr.upCalls)
+	require.NotNil(t, mgr.gotEphemeral, "ExecuteUpEphemeral must set spec.Ephemeral")
+	assert.True(t, *mgr.gotEphemeral, "ExecuteUpEphemeral must force ephemeral=true")
 }
 
 func TestExecuteUp_DryRun(t *testing.T) {

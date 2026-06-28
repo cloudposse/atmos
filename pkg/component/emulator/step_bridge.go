@@ -18,6 +18,15 @@ func init() {
 	step.RegisterEmulatorRunner(stepRunner{})
 }
 
+// Executor seams — the real executors require a container runtime and stack
+// processing, so tests replace these to assert the step's action routing.
+var (
+	stepUp          = ExecuteUp
+	stepUpEphemeral = ExecuteUpEphemeral
+	stepDown        = ExecuteDown
+	stepReset       = ExecuteReset
+)
+
 // stepRunner adapts the component-emulator executors to the step.EmulatorRunner
 // seam, building the minimal ConfigAndStacksInfo each action needs from the
 // component name and stack supplied by the step.
@@ -28,15 +37,15 @@ func (stepRunner) Up(ctx context.Context, component, stack string, ephemeral boo
 
 	info := stepInfo(component, stack)
 	if ephemeral {
-		return ExecuteUpEphemeral(ctx, info)
+		return stepUpEphemeral(ctx, info)
 	}
-	return ExecuteUp(ctx, info)
+	return stepUp(ctx, info)
 }
 
 func (stepRunner) Down(ctx context.Context, component, stack string) error {
 	defer perf.Track(nil, "emulator.stepRunner.Down")()
 
-	return ExecuteDown(ctx, stepInfo(component, stack))
+	return stepDown(ctx, stepInfo(component, stack))
 }
 
 func (stepRunner) Reset(ctx context.Context, component, stack string) error {
@@ -44,7 +53,7 @@ func (stepRunner) Reset(ctx context.Context, component, stack string) error {
 
 	// Step-driven resets are non-interactive (force=true): there is no operator
 	// prompt mid-hook.
-	return ExecuteReset(ctx, stepInfo(component, stack), true)
+	return stepReset(ctx, stepInfo(component, stack), true)
 }
 
 // stepInfo builds the ConfigAndStacksInfo the executors resolve from.
