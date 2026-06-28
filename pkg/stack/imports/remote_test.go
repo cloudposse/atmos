@@ -41,11 +41,12 @@ func newTestRemoteImporter(t *testing.T, atmosConfig *schema.AtmosConfiguration)
 }
 
 // useTestGlobalImporter swaps the package-global remote importer for one backed by an
-// isolated temp cache dir, and restores it on cleanup. It must prime globalImporterOnce
-// (not just assign globalImporter): getGlobalImporter() calls globalImporterOnce.Do, so a
-// freshly-reset Once would otherwise run and overwrite the injection with a real-cache
-// importer that writes to the shared user cache dir — which flakes on CI runners
-// (notably Windows: "The system cannot find the path specified").
+// isolated temp cache dir, and resets the singleton (Once, importer, and error) to its
+// zero state on cleanup — it does not restore any prior importer, so stacked use is not
+// safe. It must prime globalImporterOnce (not just assign globalImporter): getGlobalImporter()
+// calls globalImporterOnce.Do, so a freshly-reset Once would otherwise run and overwrite the
+// injection with a real-cache importer that writes to the shared user cache dir — which flakes
+// on CI runners (notably Windows: "The system cannot find the path specified").
 func useTestGlobalImporter(t *testing.T, atmosConfig *schema.AtmosConfiguration) {
 	t.Helper()
 	importer := newTestRemoteImporter(t, atmosConfig)
