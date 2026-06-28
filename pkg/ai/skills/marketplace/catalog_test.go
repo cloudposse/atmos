@@ -3,6 +3,7 @@ package marketplace
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -11,6 +12,24 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
+
+// newBundledTestInstaller sets up an isolated HOME with a reset homedir cache and
+// returns an installer rooted at that temp HOME. It centralizes the temp-dir +
+// homedir.Reset boilerplate shared by the bundled-catalog tests below.
+func newBundledTestInstaller(t *testing.T) *Installer {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("USERPROFILE", tempDir)
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	return installer
+}
 
 // Compile-time sentinel: fails the build if any AvailableSkill field is renamed,
 // so the catalog tests below cannot silently reference stale fields.
@@ -128,4 +147,145 @@ func TestInstall_BundledUnknownNameFallsThroughToSourceError(t *testing.T) {
 	// And nothing was registered.
 	_, getErr := installer.Get("definitely-not-a-bundled-skill")
 	assert.Error(t, getErr)
+}
+
+// TestInstall_BundledWithCustomName covers the --as path of installBundledSkill:
+// the on-disk install name differs from the canonical embedded name, while the
+// recorded Source still points at the upstream skill.
+func TestInstall_BundledWithCustomName(t *testing.T) {
+	installer := newBundledTestInstaller(t)
+
+	opts := InstallOptions{SkipConfirm: true, CustomName: "my-tf"}
+	require.NoError(t, installer.Install(context.Background(), "atmos-terraform", opts))
+
+	// Registered under the custom name, not the canonical one.
+	installed, err := installer.Get("my-tf")
+	require.NoError(t, err)
+	assert.Equal(t, "my-tf", installed.Name)
+	assert.Equal(t, "1.0.0", installed.Version)
+	assert.Equal(t, "github.com/cloudposse/atmos//agent-skills/skills/atmos-terraform", installed.Source)
+	assert.False(t, installed.IsBuiltIn)
+	assert.True(t, installed.Enabled)
+
+	// The canonical name is NOT registered.
+	_, err = installer.Get("atmos-terraform")
+	assert.Error(t, err)
+
+	// Files materialized under the custom directory name.
+	skillsDir, err := GetSkillsDir()
+	require.NoError(t, err)
+	installPath := filepath.Join(skillsDir, "my-tf")
+	assert.FileExists(t, filepath.Join(installPath, "SKILL.md"))
+}
+
+// TestInstall_BundledForceReplacesOnDiskDir covers the --force branch of
+// prepareInstallPath: an existing on-disk directory (with stale content that is
+// not in the registry) is removed and replaced rather than rejected.
+func TestInstall_BundledForceReplacesOnDiskDir(t *testing.T) {
+	installer := newBundledTestInstaller(t)
+
+	skillsDir, err := GetSkillsDir()
+	require.NoError(t, err)
+	installPath := filepath.Join(skillsDir, "atmos-terraform")
+
+	// Pre-create a stale install dir on disk (not in the registry) with a file
+	// that must be gone after a forced reinstall.
+	require.NoError(t, os.MkdirAll(installPath, 0o755))
+	staleFile := filepath.Join(installPath, "stale.txt")
+	require.NoError(t, os.WriteFile(staleFile, []byte("old"), 0o600))
+
+	// Without --force, an existing on-disk dir is rejected.
+	err = installer.Install(context.Background(), "atmos-terraform", InstallOptions{SkipConfirm: true})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrSkillAlreadyInstalled))
+
+	// With --force, the stale dir is removed and the bundled skill installed.
+	require.NoError(t, installer.Install(context.Background(), "atmos-terraform", InstallOptions{SkipConfirm: true, Force: true}))
+	assert.NoFileExists(t, staleFile)
+	assert.FileExists(t, filepath.Join(installPath, "SKILL.md"))
+
+	// And it is now registered.
+	installed, err := installer.Get("atmos-terraform")
+	require.NoError(t, err)
+	assert.Equal(t, "atmos-terraform", installed.Name)
+}
+
+// TestInstall_BundledAlreadyInRegistry covers the registry pre-check in
+// installBundledSkill (distinct from the on-disk check in prepareInstallPath):
+// a name already present in the local registry is rejected without --force.
+func TestInstall_BundledAlreadyInRegistry(t *testing.T) {
+	installer := newBundledTestInstaller(t)
+
+	require.NoError(t, installer.Install(context.Background(), "atmos-terraform", InstallOptions{SkipConfirm: true}))
+
+	// Second install with the same name and no --force is rejected.
+	err := installer.Install(context.Background(), "atmos-terraform", InstallOptions{SkipConfirm: true})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrSkillAlreadyInstalled))
+}
+
+// TestInstall_BundledThenListMerges verifies that after installing a bundled
+// skill, LoadInstalledSkills returns it alongside the rest, exercising the
+// installed half of the available-vs-installed view.
+func TestInstall_BundledThenListMerges(t *testing.T) {
+	installer := newBundledTestInstaller(t)
+
+	require.NoError(t, installer.Install(context.Background(), "atmos-terraform", InstallOptions{SkipConfirm: true}))
+	require.NoError(t, installer.Install(context.Background(), "atmos-helmfile", InstallOptions{SkipConfirm: true}))
+
+	installed := installer.List()
+	require.Len(t, installed, 2)
+
+	names := make(map[string]bool, len(installed))
+	for _, s := range installed {
+		names[s.Name] = true
+	}
+	assert.True(t, names["atmos-terraform"], "expected installed atmos-terraform in list")
+	assert.True(t, names["atmos-helmfile"], "expected installed atmos-helmfile in list")
+
+	// Every catalog entry that is not installed is still discoverable via the
+	// bundled catalog, confirming available and installed are independent views.
+	catalog, err := Catalog()
+	require.NoError(t, err)
+	require.NotEmpty(t, catalog)
+	_, ok := LookupBundledSkill("atmos-stacks")
+	assert.True(t, ok, "a non-installed catalog skill remains available")
+}
+
+// TestReadBundledMetadata covers readBundledMetadata for both a present and an
+// absent bundled skill.
+func TestReadBundledMetadata(t *testing.T) {
+	t.Run("known skill parses", func(t *testing.T) {
+		md, err := readBundledMetadata("atmos-terraform")
+		require.NoError(t, err)
+		require.NotNil(t, md)
+		assert.NotEmpty(t, md.Description)
+		assert.Equal(t, "1.0.0", md.GetVersion())
+	})
+
+	t.Run("unknown skill errors", func(t *testing.T) {
+		_, err := readBundledMetadata("does-not-exist")
+		require.Error(t, err)
+	})
+}
+
+// TestCopyFS_FromBundledSkill exercises copyFS directly against an embedded
+// skill subtree, asserting the complete tree (SKILL.md plus nested references)
+// is written to disk and contents are preserved.
+func TestCopyFS_FromBundledSkill(t *testing.T) {
+	skillFS, err := bundledSkillFS("atmos-terraform")
+	require.NoError(t, err)
+
+	dst := t.TempDir()
+	require.NoError(t, copyFS(skillFS, dst))
+
+	// Top-level SKILL.md copied with real content.
+	skillMD := filepath.Join(dst, "SKILL.md")
+	require.FileExists(t, skillMD)
+	data, err := os.ReadFile(skillMD)
+	require.NoError(t, err)
+	assert.NotEmpty(t, data)
+
+	// Nested reference file under references/ was recreated.
+	assert.FileExists(t, filepath.Join(dst, "references", "commands-reference.md"))
 }

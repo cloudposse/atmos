@@ -2573,6 +2573,86 @@ func TestProcessCustomCommandTemplateNoInjection(t *testing.T) {
 	}
 }
 
+// TestProcessCustomCommandWorkflowStepTemplates verifies that a step's Title,
+// Content, Stack, WorkingDirectory, and string table cells are all rendered with
+// the provided data (e.g. command-line flags via {{ .Flags.<name> }}), while
+// non-string Data values are left untouched.
+func TestProcessCustomCommandWorkflowStepTemplates(t *testing.T) {
+	data := map[string]any{
+		"Arguments":    map[string]string{},
+		"Flags":        map[string]any{"stack": "plat-ue2-dev"},
+		"TrailingArgs": []string{},
+	}
+
+	step := &schema.WorkflowStep{
+		Title:            "Components in {{ .Flags.stack }}",
+		Content:          "Plan {{ .Flags.stack }}",
+		Stack:            "{{ .Flags.stack }}",
+		WorkingDirectory: "/work/{{ .Flags.stack }}",
+		Data: []map[string]any{
+			{
+				"command": "atmos list components -s {{ .Flags.stack }}",
+				"count":   3, // non-string value must survive unchanged
+			},
+		},
+	}
+
+	processCustomCommandWorkflowStepTemplates(nil, step, data, 0)
+
+	assert.Equal(t, "Components in plat-ue2-dev", step.Title)
+	assert.Equal(t, "Plan plat-ue2-dev", step.Content)
+	assert.Equal(t, "plat-ue2-dev", step.Stack)
+	assert.Equal(t, "/work/plat-ue2-dev", step.WorkingDirectory)
+	assert.Equal(t, "atmos list components -s plat-ue2-dev", step.Data[0]["command"])
+	assert.Equal(t, 3, step.Data[0]["count"], "non-string table values are untouched")
+}
+
+// TestProcessCustomCommandWorkflowStepTemplates_PlainStrings covers a step with
+// no templates and no table data — every field passes through unchanged.
+func TestProcessCustomCommandWorkflowStepTemplates_PlainStrings(t *testing.T) {
+	data := map[string]any{
+		"Arguments":    map[string]string{},
+		"Flags":        map[string]any{},
+		"TrailingArgs": []string{},
+	}
+	step := &schema.WorkflowStep{Title: "Static title", Stack: "dev"}
+
+	processCustomCommandWorkflowStepTemplates(nil, step, data, 1)
+
+	assert.Equal(t, "Static title", step.Title)
+	assert.Equal(t, "dev", step.Stack)
+	assert.Nil(t, step.Data)
+}
+
+// TestEscapeUserTemplateMarkers verifies user-supplied runtime strings have their
+// "{{" escaped (so a later render pass can't re-evaluate them), non-string flag
+// values are preserved, and config-owned keys are copied verbatim.
+func TestEscapeUserTemplateMarkers(t *testing.T) {
+	data := map[string]any{
+		"Arguments":    map[string]string{"msg": "{{ .evil }}"},
+		"Flags":        map[string]any{"target": "{{ .x }}", "verbose": true},
+		"TrailingArgs": []string{"{{ .y }}"},
+		"Other":        "untouched",
+	}
+
+	out := escapeUserTemplateMarkers(data)
+
+	args, ok := out["Arguments"].(map[string]string)
+	require.True(t, ok)
+	assert.NotContains(t, args["msg"], "{{", "user argument markers are escaped")
+
+	flags, ok := out["Flags"].(map[string]any)
+	require.True(t, ok)
+	assert.NotContains(t, flags["target"].(string), "{{", "user flag markers are escaped")
+	assert.Equal(t, true, flags["verbose"], "non-string flag values are preserved")
+
+	trailing, ok := out["TrailingArgs"].([]string)
+	require.True(t, ok)
+	assert.NotContains(t, trailing[0], "{{", "trailing-arg markers are escaped")
+
+	assert.Equal(t, "untouched", out["Other"], "config-owned keys are copied verbatim")
+}
+
 // TestAppendComponentEnvVars_CommandEnvOverrides verifies the documented precedence: a value set by
 // the component `env` section can be overridden by a later command-level `env:` entry, since both
 // use UpdateEnvVar semantics (last write wins on key collision).

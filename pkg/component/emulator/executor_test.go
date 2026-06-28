@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	emu "github.com/cloudposse/atmos/pkg/emulator"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // errBoom is a sentinel used to assert error propagation from the seams.
@@ -403,6 +405,61 @@ func TestShortImage(t *testing.T) {
 func TestShortID(t *testing.T) {
 	assert.Equal(t, "628b3ae8a73c", shortID("628b3ae8a73c92b361b8b5a9fe584cd"))
 	assert.Equal(t, "abc", shortID("abc"))
+}
+
+func TestStatusDot(t *testing.T) {
+	styles := theme.GetCurrentStyles()
+	const dot = "●"
+	tests := []struct {
+		name   string
+		status string
+		want   string
+	}{
+		{name: "running is success", status: "running", want: styles.Success.Render(dot)},
+		{name: "up is success", status: "Up 3 minutes", want: styles.Success.Render(dot)},
+		{name: "healthy is success", status: "Up (healthy)", want: styles.Success.Render(dot)},
+		// "unhealthy" must NOT match the "healthy" substring -> muted.
+		{name: "unhealthy is muted", status: "Up (unhealthy)", want: styles.Muted.Render(dot)},
+		{name: "exited is muted", status: "Exited (0)", want: styles.Muted.Render(dot)},
+		{name: "dead is muted", status: "Dead", want: styles.Muted.Render(dot)},
+		{name: "unknown is muted", status: "created", want: styles.Muted.Render(dot)},
+		{name: "empty is muted", status: "", want: styles.Muted.Render(dot)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := statusDot(tt.status, styles)
+			assert.Contains(t, got, dot, "always renders the dot rune")
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestExecuteList_TTYStyledTable(t *testing.T) {
+	// Force the TTY branch of renderEmulatorList so the styled-table + statusDot
+	// path (not just the plain tab-separated path) is exercised.
+	orig := viper.Get("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", orig) })
+
+	mgr := &fakeManager{psStatuses: []emu.Status{
+		{Name: "aws", Stack: "dev", Image: "docker.io/floci/floci@sha256:abcdef", Status: "running", ID: "628b3ae8a73c92b361"},
+		{Name: "gcp", Stack: "dev", Image: "floci/gcp:latest", Status: "exited", ID: "deadbeef0001"},
+	}}
+	stubListSeams(t, mgr)
+
+	require.NoError(t, ExecuteList(context.Background(), baseInfo()))
+	assert.Equal(t, "dev", mgr.gotStack)
+}
+
+func TestExecuteList_TTYEmptyWithStack(t *testing.T) {
+	// TTY branch is irrelevant when empty, but exercise the stack-scoped empty message.
+	orig := viper.Get("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", orig) })
+
+	mgr := &fakeManager{psStatuses: nil}
+	stubListSeams(t, mgr)
+	require.NoError(t, ExecuteList(context.Background(), baseInfo()))
 }
 
 func TestExecuteLogs_Success(t *testing.T) {
