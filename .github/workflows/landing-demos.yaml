@@ -93,11 +93,11 @@ jobs:
       # Publish the rendered demos to the same origin bucket the docs site is served
       # from, under the /img/demos path the site references (website/static/img/demos/
       # → /img/demos/). Reuses the existing prod docs OIDC role — no separate bucket,
-      # role, or secret. Gated to manual dispatch so PR-label render runs stay
-      # preview-only (the artifact above), exactly like prod website deploys are not
-      # driven by PRs.
+      # role, or secret. These steps run whenever the job runs, i.e. on the
+      # `landing-demos` PR label AND on manual dispatch (see the job-level `if`).
+      # The site deploy excludes img/demos/* from its --delete sync, so the videos
+      # published here survive subsequent website deploys.
       - name: Configure AWS credentials
-        if: github.event_name == 'workflow_dispatch'
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
         with:
           aws-region: ${{ env.AWS_REGION }}
@@ -105,7 +105,6 @@ jobs:
           role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
 
       - name: Publish demos to S3
-        if: github.event_name == 'workflow_dispatch'
         working-directory: demo/landing
         env:
           ATMOS_DEMOS_S3_URI: s3://${{ env.S3_BUCKET_NAME }}/img/demos

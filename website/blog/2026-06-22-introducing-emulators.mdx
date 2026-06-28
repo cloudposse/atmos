@@ -133,3 +133,8 @@ atmos emulator up registry -s local --ephemeral
 
 See the [emulator component reference](/stacks/components/emulator) and the
 [`atmos emulator`](/cli/commands/emulator/usage) command docs for details.
+
+## What's New
+
+- **`atmos emulator list`** renders every emulator across your stacks in a clean table — a status dot, the image, and the container ID — so you can see what's running at a glance. Scope it to a single stack with `--stack`, or omit it to list everything. See the [`atmos emulator list`](/cli/commands/emulator/list) reference.
+- **Ready-to-run examples.** Two new examples let you try emulators without assembling a stack yourself: [`examples/emulator-aws`](https://github.com/cloudposse/atmos/tree/main/examples/emulator-aws) brings up a local AWS environment, and [`examples/emulator-k8s`](https://github.com/cloudposse/atmos/tree/main/examples/emulator-k8s) brings up a local Kubernetes (k3s) cluster and deploys into it.
