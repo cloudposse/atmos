@@ -79,9 +79,24 @@ func (p *PodmanRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	return nil
 }
 
+// EnsureNetwork idempotently creates a user-defined podman network. It implements
+// NetworkEnsurer so emulators in a stack can share a network and resolve each
+// other by component name.
+func (p *PodmanRuntime) EnsureNetwork(ctx context.Context, name string) error {
+	defer perf.Track(nil, "container.PodmanRuntime.EnsureNetwork")()
+
+	cmd := p.command(ctx, "network", "create", name)
+	output, err := cmd.CombinedOutput()
+	return networkCreateResult(err, string(output))
+}
+
 // Create creates a new container.
 func (p *PodmanRuntime) Create(ctx context.Context, config *CreateConfig) (string, error) {
 	defer perf.Track(nil, "container.PodmanRuntime.Create")()
+
+	if err := prepareHostRuntime(ctx, p, config); err != nil {
+		return "", err
+	}
 
 	args := buildCreateArgs(config)
 
@@ -240,7 +255,59 @@ func parsePodmanContainer(containerJSON map[string]interface{}) Info {
 		info.Labels = parseLabelsMap(labels)
 	}
 
+	info.Ports = parsePodmanPorts(containerJSON)
+
 	return info
+}
+
+// parsePodmanPorts extracts published port bindings from a `podman ps --format
+// json` record. Each entry carries `container_port`, `host_port`, and `protocol`
+// (numbers decode as float64 through the generic map). Exposed-but-unpublished
+// ports (host_port == 0, e.g. the Gitea image's 22/tcp) are skipped so callers see
+// only live host bindings — mirroring the Docker List path, which is the only
+// reason emulator endpoint resolution works there.
+func parsePodmanPorts(containerJSON map[string]interface{}) []PortBinding {
+	raw, ok := containerJSON["Ports"].([]interface{})
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	bindings := make([]PortBinding, 0, len(raw))
+	for _, item := range raw {
+		mapping, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		hostPort := toInt(mapping["host_port"])
+		if hostPort == 0 {
+			continue
+		}
+		protocol, _ := mapping["protocol"].(string)
+		if protocol == "" {
+			protocol = "tcp"
+		}
+		bindings = append(bindings, PortBinding{
+			ContainerPort: toInt(mapping["container_port"]),
+			HostPort:      hostPort,
+			Protocol:      protocol,
+		})
+	}
+	return bindings
+}
+
+// toInt converts a JSON-decoded numeric value (float64, json.Number, or int) to an
+// int, returning 0 for anything else.
+func toInt(v interface{}) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case json.Number:
+		i, _ := n.Int64()
+		return int(i)
+	default:
+		return 0
+	}
 }
 
 // podmanHealth extracts the health state from a podman ps record. Podman embeds

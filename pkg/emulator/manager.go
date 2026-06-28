@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/container"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -63,6 +65,9 @@ func (m *Manager) Up(ctx context.Context, spec *Spec, stack, name string, env ma
 	if err != nil {
 		return Endpoint{}, err
 	}
+	// Join the per-stack shared network so emulators can resolve each other by
+	// component name (e.g. a GitOps controller in k3s reaching the Gitea emulator).
+	m.attachSharedNetwork(ctx, runtime, namedConfig, stack, name)
 	if _, err := container.UpWithRuntime(ctx, runtime, namedConfig); err != nil {
 		return Endpoint{}, err
 	}
@@ -75,6 +80,11 @@ func (m *Manager) Up(ctx context.Context, spec *Spec, stack, name string, env ma
 	// unseal, and enable KV v2 (or re-unseal from the persisted bootstrap) before the
 	// endpoint is considered ready.
 	if err := m.bootstrapVaultIfNeeded(ctx, runtime, spec, stack, name); err != nil {
+		return Endpoint{}, err
+	}
+	// A fresh Gitea server boots installed-but-empty; create the admin user and the
+	// deployment repository so the GitOps loop has something to push to and clone.
+	if err := m.bootstrapGitIfNeeded(ctx, runtime, spec, stack, name); err != nil {
 		return Endpoint{}, err
 	}
 	return m.endpoint(ctx, runtime, spec, stack, name)
@@ -117,6 +127,36 @@ func (m *Manager) bootstrapVaultIfNeeded(ctx context.Context, runtime container.
 		return fmt.Errorf("%w: %s/emulator/%s did not start", errUtils.ErrEmulatorNotRunning, stack, name)
 	}
 	return bootstrapVault(ctx, runtime, info.ID)
+}
+
+// bootstrapGitIfNeeded creates the Gitea admin user and deployment repository when
+// the spec's target is git; it is a no-op for every other target. The repository
+// is created over the live HTTP endpoint, so the host port is read back from the
+// running container the same way endpoint() does.
+func (m *Manager) bootstrapGitIfNeeded(ctx context.Context, runtime container.Runtime, spec *Spec, stack, name string) error {
+	target, err := spec.Target()
+	if err != nil {
+		return err
+	}
+	if target != TargetGit {
+		return nil
+	}
+	info, found, err := container.FindInstance(ctx, runtime, stack, cfg.EmulatorComponentType, name)
+	if err != nil {
+		return err
+	}
+	if !found || !container.IsContainerRunning(info.Status) {
+		return fmt.Errorf("%w: %s/emulator/%s did not start", errUtils.ErrEmulatorNotRunning, stack, name)
+	}
+	endpoint, err := m.endpoint(ctx, runtime, spec, stack, name)
+	if err != nil {
+		return err
+	}
+	baseURL := endpoint.URL("http")
+	if baseURL == "" {
+		return fmt.Errorf("%w: %s/emulator/%s has no published HTTP port", errUtils.ErrEmulatorNotRunning, stack, name)
+	}
+	return bootstrapGitea(ctx, runtime, info.ID, baseURL)
 }
 
 func (m *Manager) namedConfig(spec *Spec, stack, name string, env map[string]string, rootless bool) (*container.NamedConfig, error) {
@@ -173,12 +213,59 @@ func (m *Manager) namedConfig(spec *Spec, stack, name string, env map[string]str
 		Env:              mergeEnv(defaultEnv, env),
 		Mounts:           mounts,
 		Privileged:       privileged,
+		Host:             spec.HostRuntime(),
 		Restart:          restart,
 		HealthCheck:      healthCheck,
 		PullPolicy:       container.PullMissing,
 		RuntimeName:      m.runtimePref,
 		RuntimeAutoStart: m.autoStart,
 	}, nil
+}
+
+// emulatorNetworkName is the per-stack user network emulators join so containers
+// in the same stack resolve each other by component name (container DNS). Derived
+// from the stack alone and sanitized to a valid network name.
+func emulatorNetworkName(stack string) string {
+	return "atmos-emulator-" + sanitizeNetworkToken(stack)
+}
+
+// sanitizeNetworkToken reduces a stack name to characters valid in a docker/podman
+// network name ([a-zA-Z0-9_.-]); any other rune becomes '-'.
+func sanitizeNetworkToken(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '.', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	if b.Len() == 0 {
+		return "default"
+	}
+	return b.String()
+}
+
+// attachSharedNetwork best-effort joins the emulator container to the per-stack
+// shared network with its component name as a network alias, so peers resolve it
+// by name. It is a no-op when the runtime cannot create networks (e.g. a test
+// mock) or network creation fails — single-emulator use still works over the
+// default bridge, only cross-container name resolution is lost.
+func (m *Manager) attachSharedNetwork(ctx context.Context, runtime container.Runtime, namedConfig *container.NamedConfig, stack, name string) {
+	defer perf.Track(nil, "emulator.Manager.attachSharedNetwork")()
+
+	ensurer, ok := runtime.(container.NetworkEnsurer)
+	if !ok {
+		return
+	}
+	network := emulatorNetworkName(stack)
+	if err := ensurer.EnsureNetwork(ctx, network); err != nil {
+		log.Debug("emulator shared network unavailable; containers will not resolve each other by name",
+			"network", network, "error", err)
+		return
+	}
+	namedConfig.RunArgs = append(namedConfig.RunArgs, "--network", network, "--network-alias", name)
 }
 
 // resolveRootlessRun applies the driver's rootless override under a rootless

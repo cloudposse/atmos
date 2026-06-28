@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Flux, installed into the k3s emulator as two Kubernetes components:
+#
+#   flux       — the Flux controllers + CRDs (the upstream install manifest,
+#                vendored by `atmos vendor pull` into components/kubernetes/flux/files).
+#   flux-sync  — the GitRepository + Kustomization + basic-auth Secret that point
+#                Flux at the local Gitea `deployments` repository. Split out (and
+#                dependent on `flux`) so the CRDs exist before these custom
+#                resources are applied.
+#
+# Flux pulls over the shared emulator network at http://gitserver:3000 (the Gitea
+# emulator's network alias), watches clusters/<stage>, and reconciles whatever
+# Atmos has pushed there into the cluster.
+components:
+  kubernetes:
+    flux/defaults:
+      metadata:
+        type: abstract
+        component: flux
+      provider: kubectl
+      # Render every manifest vendored under the component's files/ directory (the
+      # upstream Flux install: namespace, CRDs, RBAC, and controllers).
+      paths:
+        - files
+
+    flux-sync/defaults:
+      metadata:
+        type: abstract
+        component: flux-sync
+      provider: kubectl
+      vars:
+        # Gitea is reachable inside the cluster by its emulator network alias.
+        git_url: http://gitserver:3000/atmos/deployments.git
+        git_username: atmos
+        git_password: atmos
+        interval: 30s
+      dependencies:
+        components:
+          - name: flux
+      manifests:
+        - |
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: gitea-auth
+            namespace: flux-system
+          type: Opaque
+          stringData:
+            username: "{{ .vars.git_username }}"
+            password: "{{ .vars.git_password }}"
+        - |
+          apiVersion: source.toolkit.fluxcd.io/v1
+          kind: GitRepository
+          metadata:
+            name: deployments
+            namespace: flux-system
+          spec:
+            interval: {{ .vars.interval }}
+            url: {{ .vars.git_url }}
+            ref:
+              branch: main
+            secretRef:
+              name: gitea-auth
+        - |
+          apiVersion: kustomize.toolkit.fluxcd.io/v1
+          kind: Kustomization
+          metadata:
+            name: apps
+            namespace: flux-system
+          spec:
+            interval: {{ .vars.interval }}
+            sourceRef:
+              kind: GitRepository
+              name: deployments
+            path: ./clusters/{{ .vars.stage }}
+            prune: true
+            timeout: 2m
