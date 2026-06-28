@@ -41,7 +41,10 @@ auth:
 # Enable the native-CI pass/fail step summary for `terraform test`. In a CI job
 # (where $GITHUB_STEP_SUMMARY is set and CI is auto-detected) the test results
 # render in the job summary, the same native-CI path as plan/apply.
+# `ci.enabled` is the master switch — without it, the per-feature `summary`/`output`
+# toggles do nothing (RunCIHooks short-circuits when ci.enabled is false).
 ci:
+  enabled: true
   summary:
     enabled: true
   output:

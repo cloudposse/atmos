@@ -84,9 +84,17 @@ apply-backed `run` blocks execute — and report — entirely in CI without a cl
 ## Configuration
 
 <dl>
+  <dt>`ci.enabled`</dt>
+  <dd>
+    Master switch for all native-CI integration (summaries, outputs, checks). It must be
+    `true` for any of them to run — the per-feature toggles below have no effect on their own.
+
+    **Default:** `false`
+  </dd>
+
   <dt>`ci.summary.enabled`</dt>
   <dd>
-    Enable or disable job summaries.
+    Enable or disable job summaries (requires `ci.enabled: true`).
 
     **Default:** `true`
   </dd>
