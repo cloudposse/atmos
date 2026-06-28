@@ -124,17 +124,19 @@ spec:
   {
     id: 'toolchain',
     label: 'Toolchain',
-    file: 'atmos.yaml',
-    // Tooling is config: pin versions and resolve binaries from a registry.
-    yaml: `toolchain:
-  install_path: .tools            # project-local, version-pinned binaries
-  aliases:
-    tf: hashicorp/terraform       # short names for .tool-versions
-    jq: jqlang/jq
-  registries:
-    - name: aqua-public           # 1000+ tools, nothing to install by hand
-      type: aqua
-      priority: 10
+    file: 'stacks/catalog/vpc/defaults.yaml',
+    // Tooling is config too: pin the exact tool versions a component depends on,
+    // right in the stack — Atmos resolves and installs them before it runs.
+    yaml: `components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: 1.10.3       # exact version
+          tflint: ^0.54.0         # semver constraint
+          checkov: latest         # always newest
+      vars:
+        cidr_block: 10.0.0.0/16
 `,
   },
   {
