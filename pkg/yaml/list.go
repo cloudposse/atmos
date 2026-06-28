@@ -11,8 +11,9 @@ import (
 // PathEntry describes an addressable YAML value discovered while flattening a
 // document into Atmos dot-notation paths.
 type PathEntry struct {
-	Path string
-	Type string
+	Path  string
+	Type  string
+	Value string
 }
 
 // ListPathEntries parses a YAML document and returns all addressable child
@@ -45,25 +46,32 @@ func collectPathEntries(node *goyaml.Node, path string, entries *[]PathEntry) {
 		return
 	}
 
-	if path != "" {
-		*entries = append(*entries, PathEntry{Path: path, Type: yamlPathType(node)})
+	effectiveNode := node
+	if node.Kind == goyaml.AliasNode && node.Alias != nil {
+		effectiveNode = node.Alias
 	}
 
-	switch node.Kind {
+	if path != "" {
+		*entries = append(*entries, PathEntry{
+			Path:  path,
+			Type:  yamlPathType(effectiveNode),
+			Value: yamlPathValue(effectiveNode),
+		})
+	}
+
+	switch effectiveNode.Kind {
 	case goyaml.MappingNode:
-		for i := 0; i+1 < len(node.Content); i += 2 {
-			key := node.Content[i]
-			value := node.Content[i+1]
+		for i := 0; i+1 < len(effectiveNode.Content); i += 2 {
+			key := effectiveNode.Content[i]
+			value := effectiveNode.Content[i+1]
 			childPath := joinPathSegment(path, QuotePathSegment(key.Value))
 			collectPathEntries(value, childPath, entries)
 		}
 	case goyaml.SequenceNode:
-		for i, child := range node.Content {
+		for i, child := range effectiveNode.Content {
 			childPath := fmt.Sprintf("%s[%d]", path, i)
 			collectPathEntries(child, childPath, entries)
 		}
-	case goyaml.AliasNode:
-		collectPathEntries(node.Alias, path, entries)
 	}
 }
 
@@ -93,5 +101,21 @@ func yamlPathType(node *goyaml.Node) string {
 		}
 	default:
 		return "string"
+	}
+}
+
+func yamlPathValue(node *goyaml.Node) string {
+	switch node.Kind {
+	case goyaml.MappingNode:
+		return fmt.Sprintf("{%d keys}", len(node.Content)/2)
+	case goyaml.SequenceNode:
+		return fmt.Sprintf("[%d items]", len(node.Content))
+	case goyaml.ScalarNode:
+		if node.Tag == "!!null" {
+			return "null"
+		}
+		return node.Value
+	default:
+		return ""
 	}
 }

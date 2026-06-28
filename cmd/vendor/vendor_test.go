@@ -213,8 +213,8 @@ spec:
 
 	rows, err := buildVendorConfigPathRows(rootFile)
 	require.NoError(t, err)
-	require.Contains(t, rows, listpkg.PathRow{File: "vendor.yaml", Path: "spec.sources[0].version", Type: "string"})
-	require.Contains(t, rows, listpkg.PathRow{File: "imports/common.yaml", Path: "spec.sources[0].component", Type: "string"})
+	require.Contains(t, rows, listpkg.PathRow{File: "vendor.yaml", Path: "spec.sources[0].version", Type: "string", Value: "v0.1.0"})
+	require.Contains(t, rows, listpkg.PathRow{File: "imports/common.yaml", Path: "spec.sources[0].component", Type: "string", Value: "eks"})
 
 	output, err := listpkg.RenderPathRows(rows, "paths", "")
 	require.NoError(t, err)

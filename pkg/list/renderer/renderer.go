@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -14,7 +15,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/output"
 	"github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
+
+const rendererLineEnding = "\n"
 
 // Renderer orchestrates the complete list rendering pipeline.
 // Pipeline: data → filter → column selection → sort → format → output.
@@ -142,6 +146,14 @@ func (r *Renderer) formatTable(headers []string, rows [][]string) (string, error
 
 // formatPaths groups rows by their file column and prints indented path values.
 func formatPaths(headers []string, rows [][]string) string {
+	term := terminal.New()
+	if term.IsTTY(terminal.Stdout) {
+		return formatStyledPaths(headers, rows)
+	}
+	return formatPlainPaths(headers, rows)
+}
+
+func formatPlainPaths(headers []string, rows [][]string) string {
 	fileIndex := columnIndex(headers, "file")
 	pathIndex := columnIndex(headers, "path")
 	if fileIndex < 0 || pathIndex < 0 {
@@ -168,7 +180,99 @@ func formatPaths(headers []string, rows [][]string) string {
 	if len(lines) == 0 {
 		return ""
 	}
-	return strings.Join(lines, "\n") + "\n"
+	return strings.Join(lines, rendererLineEnding) + rendererLineEnding
+}
+
+func formatStyledPaths(headers []string, rows [][]string) string {
+	indexes := pathColumnIndexes{
+		file:  columnIndex(headers, "file"),
+		path:  columnIndex(headers, "path"),
+		typ:   columnIndex(headers, "type"),
+		value: columnIndex(headers, "value"),
+	}
+	if !indexes.valid() {
+		return ""
+	}
+
+	styles := styledPathStyles()
+	var lines []string
+	currentFile := ""
+	for _, row := range rows {
+		nextLines, nextFile, ok := appendStyledPathLine(lines, currentFile, row, indexes, &styles)
+		if !ok {
+			continue
+		}
+		lines = nextLines
+		currentFile = nextFile
+	}
+
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, rendererLineEnding) + rendererLineEnding
+}
+
+type pathColumnIndexes struct {
+	file  int
+	path  int
+	typ   int
+	value int
+}
+
+func (i pathColumnIndexes) valid() bool {
+	return i.file >= 0 && i.path >= 0
+}
+
+type pathStyles struct {
+	file lipgloss.Style
+	path lipgloss.Style
+	meta lipgloss.Style
+}
+
+func styledPathStyles() pathStyles {
+	styles := theme.GetCurrentStyles()
+	fileStyle := lipgloss.NewStyle().Bold(true)
+	pathStyle := lipgloss.NewStyle()
+	metaStyle := lipgloss.NewStyle().Faint(true)
+	if styles != nil {
+		fileStyle = fileStyle.Inherit(styles.TableHeader)
+		pathStyle = pathStyle.Inherit(styles.TableRow)
+		metaStyle = metaStyle.Inherit(styles.Muted)
+	}
+	return pathStyles{file: fileStyle, path: pathStyle, meta: metaStyle}
+}
+
+func appendStyledPathLine(lines []string, currentFile string, row []string, indexes pathColumnIndexes, styles *pathStyles) ([]string, string, bool) {
+	if indexes.file >= len(row) || indexes.path >= len(row) {
+		return lines, currentFile, false
+	}
+
+	file := row[indexes.file]
+	if file != currentFile {
+		if len(lines) > 0 {
+			lines = append(lines, "")
+		}
+		lines = append(lines, styles.file.Render(file))
+		currentFile = file
+	}
+
+	line := "  " + styles.path.Render(row[indexes.path])
+	meta := pathRowMeta(row, indexes.typ, indexes.value)
+	if meta != "" {
+		line += "  " + styles.meta.Render(meta)
+	}
+	return append(lines, line), currentFile, true
+}
+
+func pathRowMeta(row []string, typeIndex, valueIndex int) string {
+	var parts []string
+	if typeIndex >= 0 && typeIndex < len(row) && row[typeIndex] != "" {
+		parts = append(parts, row[typeIndex])
+	}
+	if valueIndex >= 0 && valueIndex < len(row) && row[valueIndex] != "" {
+		parts = append(parts, row[valueIndex])
+	}
+	return strings.Join(parts, " ")
 }
 
 func columnIndex(headers []string, name string) int {
@@ -268,5 +372,5 @@ func formatPlainList(headers []string, rows [][]string) string {
 		}
 	}
 
-	return strings.Join(lines, "\n") + "\n"
+	return strings.Join(lines, rendererLineEnding) + rendererLineEnding
 }

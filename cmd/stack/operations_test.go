@@ -137,10 +137,10 @@ func TestBuildStackConfigRowsFromDescribe(t *testing.T) {
 		"vpc",
 	)
 	require.NoError(t, err)
-	require.Contains(t, rows, listpkg.PathRow{File: "deploy/prod.yaml", Path: "vars", Type: "object"})
-	require.Contains(t, rows, listpkg.PathRow{File: "deploy/prod.yaml", Path: "vars.region", Type: "string"})
-	require.Contains(t, rows, listpkg.PathRow{File: "deploy/settings.yaml", Path: "settings.enabled", Type: "bool"})
-	require.NotContains(t, rows, listpkg.PathRow{File: "deploy/prod.yaml", Path: cfg.ComponentTypeSectionName, Type: "string"})
+	require.Contains(t, rows, listpkg.PathRow{File: "deploy/prod.yaml", Path: "vars", Type: "object", Value: "{1 keys}"})
+	require.Contains(t, rows, listpkg.PathRow{File: "deploy/prod.yaml", Path: "vars.region", Type: "string", Value: "us-east-1"})
+	require.Contains(t, rows, listpkg.PathRow{File: "deploy/settings.yaml", Path: "settings.enabled", Type: "bool", Value: "true"})
+	require.NotContains(t, rows, listpkg.PathRow{File: "deploy/prod.yaml", Path: cfg.ComponentTypeSectionName, Type: "string", Value: "terraform"})
 }
 
 func TestCommandProvider(t *testing.T) {

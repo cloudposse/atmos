@@ -128,9 +128,10 @@ func buildStackConfigRowsFromDescribe(atmosConfig *schema.AtmosConfiguration, re
 			continue
 		}
 		rows = append(rows, listpkg.PathRow{
-			File: file,
-			Path: entry.Path,
-			Type: entry.Type,
+			File:  file,
+			Path:  entry.Path,
+			Type:  entry.Type,
+			Value: entry.Value,
 		})
 	}
 	return rows, nil
@@ -162,9 +163,10 @@ func buildStackConfigRowsFromFile(file string, basePath string) ([]listpkg.PathR
 	rows := make([]listpkg.PathRow, 0, len(entries))
 	for _, entry := range entries {
 		rows = append(rows, listpkg.PathRow{
-			File: displayFile,
-			Path: entry.Path,
-			Type: entry.Type,
+			File:  displayFile,
+			Path:  entry.Path,
+			Type:  entry.Type,
+			Value: entry.Value,
 		})
 	}
 	return rows, nil

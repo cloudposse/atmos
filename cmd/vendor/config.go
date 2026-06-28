@@ -157,9 +157,10 @@ func buildVendorConfigPathRows(rootFile string) ([]listpkg.PathRow, error) {
 		displayFile := relativeVendorPathForDisplay(file, basePath)
 		for _, entry := range entries {
 			rows = append(rows, listpkg.PathRow{
-				File: displayFile,
-				Path: entry.Path,
-				Type: entry.Type,
+				File:  displayFile,
+				Path:  entry.Path,
+				Type:  entry.Type,
+				Value: entry.Value,
 			})
 		}
 	}
