@@ -240,10 +240,12 @@ func printEntrySummaries(entries []listEntry) {
 	printInstallHint()
 }
 
-// countEntries returns the number of available (catalog) and installed entries.
+// countEntries returns the number of available (uninstalled catalog) and installed entries.
+// The available count includes only catalog entries that are not yet installed,
+// so the header legend matches the hollow-dot rows shown in the listing.
 func countEntries(entries []listEntry) (available, installed int) {
 	for _, e := range entries {
-		if e.available {
+		if e.available && !e.installed {
 			available++
 		}
 		if e.installed {

@@ -18,6 +18,9 @@ import (
 )
 
 // captureStdout runs fn and returns everything it wrote to os.Stdout.
+// A defer restores os.Stdout and closes the pipe so that an aborting fn()
+// (e.g. require.*, panic, t.FailNow) cannot leave the process-global
+// os.Stdout redirected or leak file descriptors.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 
@@ -25,11 +28,15 @@ func captureStdout(t *testing.T, fn func()) string {
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
 	os.Stdout = w
+	defer func() {
+		os.Stdout = old
+		_ = w.Close()
+		_ = r.Close()
+	}()
 
 	fn()
 
-	w.Close()
-	os.Stdout = old
+	require.NoError(t, w.Close())
 
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, r)
@@ -340,12 +347,14 @@ func TestListCmd_CorruptedRegistry(t *testing.T) {
 
 func TestCountEntries(t *testing.T) {
 	entries := []listEntry{
-		{name: "a", available: true, installed: true},
-		{name: "b", available: true, installed: false},
-		{name: "c", available: false, installed: true}, // Community install.
+		{name: "a", available: true, installed: true},  // Catalog skill that is already installed.
+		{name: "b", available: true, installed: false}, // Catalog skill not yet installed.
+		{name: "c", available: false, installed: true}, // Community install (not in catalog).
 	}
 	available, installed := countEntries(entries)
-	assert.Equal(t, 2, available)
+	// "available" counts only uninstalled catalog rows (hollow-dot entries).
+	// Entry a is already installed so it does NOT count as available.
+	assert.Equal(t, 1, available)
 	assert.Equal(t, 2, installed)
 }
 

@@ -390,9 +390,9 @@ func (e *Executor) executeRegisteredStep(params *WorkflowParams, step *schema.Wo
 	if e.stepVars == nil {
 		e.stepVars = stepPkg.NewVariables()
 	}
-	if cmdParams.finalStack != "" {
-		e.stepVars.SetFlag("stack", cmdParams.finalStack)
-	}
+	// Always set (or clear) the stack flag so a stackless step does not
+	// inherit a stale value from a prior step in the same workflow.
+	e.stepVars.SetFlag("stack", cmdParams.finalStack)
 
 	stepCtx, cancel, err := resolveStepContext(params.Ctx, stepCopy.Timeout)
 	if err != nil {

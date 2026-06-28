@@ -83,8 +83,10 @@ func buildDependencyEntryNode(entry *DepTreeEntry) *tree.Tree {
 	}
 
 	// Single direction: attach children directly (no group label).
+	// Use len == 0 so that an empty-but-initialized DependsOn slice also
+	// falls back to RequiredBy, matching the behaviour of nil.
 	children := entry.DependsOn
-	if children == nil {
+	if len(children) == 0 {
 		children = entry.RequiredBy
 	}
 	if len(children) == 0 {

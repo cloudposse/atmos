@@ -163,5 +163,6 @@ TESTABILITY_CHANGES_SUMMARY.md
 *_summary.txt
 reply_to_*.sh
 *.ansi
+*.ascii
 .claude-plan.md
 .claude/plans/

@@ -990,22 +990,90 @@ func customCommandConditionContext() schema.ConditionContext {
 	}
 }
 
+// tmplOpen is a placeholder substituted for "{{" in user-supplied runtime values
+// (Arguments, Flags, TrailingArgs) before template rendering.  After rendering
+// the placeholder is replaced back to "{{" so the user sees the literal string.
+// The sequence uses ASCII null bytes that cannot appear in normal YAML or
+// shell strings, preventing any accidental collision.
+const (
+	tmplOpen = "\x00ATMOS_TMPL_OPEN\x00"
+
+	// Template opening delimiter that user-supplied runtime values are escaped
+	// against before rendering.
+	tmplOpenDelim = "{{"
+)
+
+// escapeUserTemplateMarkers returns a shallow copy of data with "{{" replaced by
+// tmplOpen in every user-supplied runtime string (Arguments values, string Flags
+// values, and TrailingArgs elements).  Config-owned keys (ComponentConfig,
+// Component, etc.) are referenced by pointer so they are not copied.
+func escapeUserTemplateMarkers(data map[string]any) map[string]any {
+	out := make(map[string]any, len(data))
+	for k, v := range data {
+		out[k] = v
+	}
+
+	// Escape Arguments (map[string]string).
+	if args, ok := data["Arguments"].(map[string]string); ok {
+		escaped := make(map[string]string, len(args))
+		for k, v := range args {
+			escaped[k] = strings.ReplaceAll(v, tmplOpenDelim, tmplOpen)
+		}
+		out["Arguments"] = escaped
+	}
+
+	// Escape string values inside Flags (map[string]any).
+	if flags, ok := data["Flags"].(map[string]any); ok {
+		escaped := make(map[string]any, len(flags))
+		for k, v := range flags {
+			if s, ok := v.(string); ok {
+				escaped[k] = strings.ReplaceAll(s, tmplOpenDelim, tmplOpen)
+			} else {
+				escaped[k] = v
+			}
+		}
+		out["Flags"] = escaped
+	}
+
+	// Escape TrailingArgs ([]string).
+	if trailing, ok := data["TrailingArgs"].([]string); ok {
+		escaped := make([]string, len(trailing))
+		for i, v := range trailing {
+			escaped[i] = strings.ReplaceAll(v, tmplOpenDelim, tmplOpen)
+		}
+		out["TrailingArgs"] = escaped
+	}
+
+	return out
+}
+
+// processCustomCommandTemplate renders value as a Go template using data.
+// Multi-pass rendering is used to resolve nested references such as
+// {{ .ComponentConfig.xxx }} that themselves expand to another template.
+// User-supplied runtime values (Arguments, Flags, TrailingArgs) are escaped
+// before the first pass so that "{{" literals in user input are never
+// re-evaluated as template directives on subsequent passes.
 func processCustomCommandTemplate(atmosConfig *schema.AtmosConfiguration, name, value string, data map[string]any) (string, error) {
+	// Sanitize user-supplied values to prevent template injection.
+	safeData := escapeUserTemplateMarkers(data)
+
 	result := value
 	for pass := 0; pass < 3; pass++ {
-		if !strings.Contains(result, "{{") {
-			return result, nil
+		if !strings.Contains(result, tmplOpenDelim) {
+			break
 		}
-		processed, err := e.ProcessTmpl(atmosConfig, fmt.Sprintf("%s-pass-%d", name, pass+1), result, data, false)
+		processed, err := e.ProcessTmpl(atmosConfig, fmt.Sprintf("%s-pass-%d", name, pass+1), result, safeData, false)
 		if err != nil {
 			return "", err
 		}
 		if processed == result {
-			return processed, nil
+			break
 		}
 		result = processed
 	}
-	return result, nil
+
+	// Restore escaped template markers so the caller receives the literal "{{".
+	return strings.ReplaceAll(result, tmplOpen, tmplOpenDelim), nil
 }
 
 func processCustomCommandWorkflowStepTemplates(atmosConfig *schema.AtmosConfiguration, step *schema.WorkflowStep, data map[string]any, stepIndex int) {

@@ -401,12 +401,31 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
+// resolveDefaultIdentity resolves the default identity. A lookup failure is fatal
+// only when the caller explicitly requested the select-default path; for an
+// implicit empty identity the requested value is returned so execution can
+// continue without identity.
+func resolveDefaultIdentity(authManager auth.AuthManager, requested string) (string, error) {
+	defaultIdentity, err := authManager.GetDefaultIdentity(false)
+	if err == nil {
+		return defaultIdentity, nil
+	}
+	if requested == cfg.IdentityFlagSelectValue {
+		return "", fmt.Errorf("%w: resolve default identity: %w", errUtils.ErrAuthenticationFailed, err)
+	}
+	return requested, nil
+}
+
 func prepareHelmfileAuthEnvironment(authManager auth.AuthManager, identity string, envVars []string) ([]string, error) {
 	if authManager == nil {
 		return envVars, nil
 	}
 	if identity == "" || identity == cfg.IdentityFlagSelectValue {
-		identity, _ = authManager.GetDefaultIdentity(false)
+		resolved, err := resolveDefaultIdentity(authManager, identity)
+		if err != nil {
+			return nil, err
+		}
+		identity = resolved
 	}
 	if identity == "" || identity == cfg.IdentityFlagDisabledValue {
 		return envVars, nil

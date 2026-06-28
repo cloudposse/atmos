@@ -644,9 +644,9 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 			stepExecutorState.SetEnv(parts[0], parts[1])
 		}
 	}
-	if opts.FinalStack != "" {
-		stepExecutorState.SetFlag("stack", opts.FinalStack)
-	}
+	// Always set (or clear) the stack flag so a stackless step does not
+	// inherit a stale value from a prior step in the same workflow.
+	stepExecutorState.SetFlag("stack", opts.FinalStack)
 
 	// Execute the step.
 	stepCopy := *workflowStep

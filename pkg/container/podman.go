@@ -261,37 +261,54 @@ func parsePodmanPorts(raw interface{}) []PortBinding {
 	var ports []PortBinding
 	seen := make(map[PortBinding]struct{})
 	for _, entry := range entries {
-		binding, ok := parsePodmanPort(entry)
+		binding, span, ok := parsePodmanPort(entry)
 		if !ok {
 			continue
 		}
-		if _, dup := seen[binding]; dup {
-			continue
+		if span <= 0 {
+			span = 1
 		}
-		seen[binding] = struct{}{}
-		ports = append(ports, binding)
+		// Expand consecutive host/container ports within the range.
+		for i := 0; i < span; i++ {
+			expanded := PortBinding{
+				ContainerPort: binding.ContainerPort + i,
+				HostPort:      binding.HostPort + i,
+				Protocol:      binding.Protocol,
+			}
+			if _, dup := seen[expanded]; dup {
+				continue
+			}
+			seen[expanded] = struct{}{}
+			ports = append(ports, expanded)
+		}
 	}
 
 	return ports
 }
 
-// parsePodmanPort converts one podman port entry into a PortBinding. Unpublished
-// ports (host_port 0) are skipped; a missing protocol defaults to tcp.
-func parsePodmanPort(entry interface{}) (PortBinding, bool) {
+// parsePodmanPort converts one podman port entry into a PortBinding and the
+// port range span. Unpublished ports (host_port 0) are skipped; a missing
+// protocol defaults to tcp. The span field reflects Podman's `range` key for
+// consecutive port ranges; callers must expand [base, base+span) themselves.
+func parsePodmanPort(entry interface{}) (PortBinding, int, bool) {
 	m, ok := entry.(map[string]interface{})
 	if !ok {
-		return PortBinding{}, false
+		return PortBinding{}, 0, false
 	}
 	hostPort := jsonFieldInt(m["host_port"])
 	containerPort := jsonFieldInt(m["container_port"])
 	if hostPort == 0 || containerPort == 0 {
-		return PortBinding{}, false
+		return PortBinding{}, 0, false
 	}
 	protocol, _ := m["protocol"].(string)
 	if protocol == "" {
 		protocol = "tcp"
 	}
-	return PortBinding{ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, true
+	span := jsonFieldInt(m["range"])
+	if span <= 0 {
+		span = 1
+	}
+	return PortBinding{ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, span, true
 }
 
 // JsonFieldInt coerces a JSON-decoded numeric field to an int. The json.Unmarshal

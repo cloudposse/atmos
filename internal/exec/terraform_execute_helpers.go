@@ -180,6 +180,9 @@ func storeDefaultIdentity(identity string) string {
 // disabled), this returns "" — stores then use the AWS/GCP/Azure default
 // credential chain exactly as before (back-compat for ambient real-cloud creds).
 func resolveStoreDefaultIdentity(identity string, authManager auth.AuthManager) string {
+	if identity == cfg.IdentityFlagDisabledValue {
+		return ""
+	}
 	if explicit := storeDefaultIdentity(identity); explicit != "" {
 		return explicit
 	}

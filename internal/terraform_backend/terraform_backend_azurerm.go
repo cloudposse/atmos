@@ -156,7 +156,13 @@ func newAzureBlobClient(
 	clientOptions *azblob.ClientOptions,
 ) (*azblob.Client, error) {
 	if connectionString != "" {
-		client, err := azblob.NewClientFromConnectionString(connectionString, clientOptions)
+		// Azurite's default connection string uses http:// endpoints. The Azure SDK
+		// rejects authenticated requests over plain HTTP by default, so we must opt in
+		// to authenticated HTTP for the local emulator path only. This flag is scoped
+		// to a copy of the options so the caller's struct is never mutated.
+		emulatorOptions := *clientOptions
+		emulatorOptions.InsecureAllowCredentialWithHTTP = true
+		client, err := azblob.NewClientFromConnectionString(connectionString, &emulatorOptions)
 		if err != nil {
 			return nil, fmt.Errorf(errWrapFormat, errUtils.ErrCreateAzureClient, err)
 		}

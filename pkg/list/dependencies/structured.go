@@ -18,13 +18,16 @@ type componentRef struct {
 }
 
 // dependencyEntry is the structured (JSON/YAML) representation of one component
-// and its direct dependency relationships. DependsOn/RequiredBy are omitted when
-// the requested direction does not include them.
+// and its direct dependency relationships. DependsOn/RequiredBy are nil-pointers
+// (omitted) when the requested direction does not include them, and non-nil
+// pointers to potentially-empty slices when the direction is included. This
+// distinguishes a leaf/root node (empty array []) from an excluded direction
+// (field absent), preserving the contract described in this file.
 type dependencyEntry struct {
-	Component  string         `json:"component" yaml:"component"`
-	Stack      string         `json:"stack" yaml:"stack"`
-	DependsOn  []componentRef `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
-	RequiredBy []componentRef `json:"required_by,omitempty" yaml:"required_by,omitempty"`
+	Component  string          `json:"component" yaml:"component"`
+	Stack      string          `json:"stack" yaml:"stack"`
+	DependsOn  *[]componentRef `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	RequiredBy *[]componentRef `json:"required_by,omitempty" yaml:"required_by,omitempty"`
 }
 
 // renderStructured produces JSON or YAML output listing each top-level component
@@ -36,10 +39,12 @@ func renderStructured(graph *dependency.Graph, tops []*dependency.Node, opts Opt
 	for _, node := range tops {
 		entry := dependencyEntry{Component: node.Component, Stack: node.Stack}
 		if opts.Direction == DirectionForward || opts.Direction == DirectionBoth {
-			entry.DependsOn = refsFor(graph, node.Dependencies)
+			refs := refsFor(graph, node.Dependencies)
+			entry.DependsOn = &refs
 		}
 		if opts.Direction == DirectionReverse || opts.Direction == DirectionBoth {
-			entry.RequiredBy = refsFor(graph, node.Dependents)
+			refs := refsFor(graph, node.Dependents)
+			entry.RequiredBy = &refs
 		}
 		entries = append(entries, entry)
 	}
@@ -55,7 +60,9 @@ func renderStructured(graph *dependency.Graph, tops []*dependency.Node, opts Opt
 }
 
 // refsFor resolves a list of node IDs to sorted componentRefs, skipping IDs that
-// are not present in the graph.
+// are not present in the graph. It always returns a non-nil slice so that an
+// empty result serialises as [] rather than null, allowing callers to distinguish
+// a leaf/root node (empty array) from an excluded direction (nil pointer field).
 func refsFor(graph *dependency.Graph, ids []string) []componentRef {
 	refs := make([]componentRef, 0, len(ids))
 	for _, id := range ids {
@@ -71,8 +78,5 @@ func refsFor(graph *dependency.Graph, ids []string) []componentRef {
 		}
 		return refs[i].Component < refs[j].Component
 	})
-	if len(refs) == 0 {
-		return nil
-	}
 	return refs
 }

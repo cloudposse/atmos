@@ -5,6 +5,8 @@ import (
 	"io/fs"
 	"sort"
 
+	log "github.com/charmbracelet/log"
+
 	agentskills "github.com/cloudposse/atmos/agent-skills"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -65,16 +67,34 @@ func Catalog() ([]AvailableSkill, error) {
 // LookupBundledSkill returns the catalog entry for a bundled skill by name and
 // whether it exists. The name maps directly to a directory in the embedded FS,
 // which is how `install <name>` resolves to the offline source.
+//
+// The second return value is false only when the skill directory is absent.
+// A parse failure returns (zero, false) and also logs an error so that a
+// broken bundled SKILL.md is surfaced loudly rather than silently dropped.
 func LookupBundledSkill(name string) (AvailableSkill, bool) {
 	defer perf.Track(nil, "marketplace.LookupBundledSkill")()
 
-	metadata, err := readBundledMetadata(name)
-	if err != nil {
+	// Probe the directory first so we can distinguish "not present" from
+	// "present but invalid".
+	skillMDPath := fmt.Sprintf("%s/%s/%s", bundledSkillsRoot, name, skillFileName)
+	_, statErr := fs.Stat(agentskills.Skills, skillMDPath)
+	if statErr != nil {
+		// Skill directory / SKILL.md does not exist — genuinely absent.
 		return AvailableSkill{}, false
 	}
 
+	metadata, err := readBundledMetadata(name)
+	if err != nil {
+		// SKILL.md exists but is malformed — surface the error loudly so a
+		// broken release artifact is not silently treated as "not found".
+		log.Error("bundled skill has an invalid SKILL.md and will be unavailable", "skill", name, "error", err)
+		return AvailableSkill{}, false
+	}
+
+	// Use the embedded directory name (not frontmatter metadata.Name) as the
+	// stable skill ID so that list/install/Source are always consistent.
 	return AvailableSkill{
-		Name:        metadata.Name,
+		Name:        name,
 		DisplayName: metadata.GetDisplayName(),
 		Description: metadata.Description,
 		Version:     metadata.GetVersion(),

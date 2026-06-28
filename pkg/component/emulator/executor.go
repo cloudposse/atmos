@@ -318,6 +318,10 @@ func renderEmulatorList(statuses []emu.Status, stack string) {
 func statusDot(status string, styles *theme.StyleSet) string {
 	const dot = "●"
 	s := strings.ToLower(status)
+	// Check negative states first so "unhealthy" is not matched by the "healthy" substring below.
+	if strings.Contains(s, "unhealthy") || strings.Contains(s, "exited") || strings.Contains(s, "dead") {
+		return styles.Muted.Render(dot)
+	}
 	if strings.Contains(s, "up") || strings.Contains(s, "running") || strings.Contains(s, "healthy") {
 		return styles.Success.Render(dot)
 	}

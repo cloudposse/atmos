@@ -16,14 +16,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// nodeIDFormat is the format for node IDs (component-stack). It matches the
-// format used by the execution dependency graph in internal/exec so node IDs are
-// consistent across Atmos.
-const nodeIDFormat = "%s-%s"
-
-// NodeID returns the canonical node ID for a component in a stack.
+// NodeID returns the canonical, collision-safe node ID for a component in a
+// stack. It uses a length-prefixed encoding so that component/stack names
+// containing the delimiter character never produce the same ID for distinct
+// (component, stack) pairs (e.g. "app-prod"+"us" vs "app"+"prod-us").
 func NodeID(component, stack string) string {
-	return fmt.Sprintf(nodeIDFormat, component, stack)
+	return fmt.Sprintf("%d:%s/%d:%s", len(component), component, len(stack), stack)
 }
 
 // BuildGraph constructs a cycle-tolerant dependency graph from the described
@@ -127,35 +125,43 @@ func shouldSkipComponent(componentSection map[string]any) bool {
 
 // extractComponentDependencies returns the component-to-component dependencies
 // declared by a component, reading from `dependencies.components` first
-// (preferred) and falling back to legacy `settings.depends_on`. File and folder
-// dependencies are intentionally excluded — they are not component edges. This
-// mirrors getComponentDependencies in internal/exec/describe_dependents.go so
+// (preferred) and falling back to legacy `settings.depends_on` only when the
+// `dependencies.components` key is entirely absent. An explicitly empty
+// `dependencies.components: []` is treated as authoritative and clears all
+// edges (no fallback to settings). File and folder dependencies are
+// intentionally excluded — they are not component edges. This mirrors
+// getComponentDependencies in internal/exec/describe_dependents.go so
 // `list dependencies` and `describe dependents` agree on the relationships.
 func extractComponentDependencies(componentSection map[string]any) []schema.ComponentDependency {
-	if deps := dependenciesFromComponentsSection(componentSection); len(deps) > 0 {
+	if deps, found := dependenciesFromComponentsSection(componentSection); found {
 		return deps
 	}
 	return dependenciesFromSettings(componentSection)
 }
 
 // dependenciesFromComponentsSection reads the preferred `dependencies.components`
-// surface and returns only its component-to-component entries.
-func dependenciesFromComponentsSection(componentSection map[string]any) []schema.ComponentDependency {
+// surface and returns its component-to-component entries plus a boolean
+// indicating whether the `components` key was present at all. When found is
+// false the caller may fall back to legacy settings. When found is true but the
+// returned slice is empty, the explicit empty list is the authoritative answer.
+func dependenciesFromComponentsSection(componentSection map[string]any) ([]schema.ComponentDependency, bool) {
 	depsSection, ok := componentSection[cfg.DependenciesSectionName].(map[string]any)
 	if !ok {
-		return nil
+		return nil, false
 	}
 	if _, hasComponents := depsSection["components"]; !hasComponents {
-		return nil
+		return nil, false
 	}
 	var deps schema.Dependencies
 	if err := mapstructure.Decode(depsSection, &deps); err != nil {
-		return nil
+		// Decode error with the key present: treat as found (authoritative)
+		// so we do not silently fall back to stale settings.
+		return nil, true
 	}
 	if normErr := deps.Normalize(); normErr != nil {
 		log.Warn("invalid dependencies section; entries may be silently ignored", "error", normErr)
 	}
-	return filterComponentDependencies(deps.Components)
+	return filterComponentDependencies(deps.Components), true
 }
 
 // dependenciesFromSettings reads the legacy `settings.depends_on` surface.

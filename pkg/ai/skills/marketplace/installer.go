@@ -3,6 +3,7 @@ package marketplace
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -209,8 +210,15 @@ func printInstallSuccess(displayName, version, installPath string) {
 func (i *Installer) installBundledSkill(available *AvailableSkill, opts InstallOptions) error {
 	defer perf.Track(nil, "marketplace.Installer.installBundledSkill")()
 
+	// Resolve the install name: honor --as when set, otherwise use the
+	// canonical embedded-directory name so list/install/Source stay consistent.
+	installName := available.Name
+	if opts.CustomName != "" {
+		installName = opts.CustomName
+	}
+
 	if !opts.Force {
-		if _, err := i.localRegistry.Get(available.Name); err == nil {
+		if _, err := i.localRegistry.Get(installName); err == nil {
 			return fmt.Errorf("%w: use --force to reinstall", ErrSkillAlreadyInstalled)
 		}
 	}
@@ -227,12 +235,12 @@ func (i *Installer) installBundledSkill(available *AvailableSkill, opts InstallO
 		}
 	}
 
-	installPath, err := i.materializeBundledSkill(available.Name, opts.Force)
+	installPath, err := i.materializeBundledSkill(available.Name, installName, opts.Force)
 	if err != nil {
 		return err
 	}
 
-	if err := i.registerBundledSkill(available, installPath); err != nil {
+	if err := i.registerBundledSkill(available, installName, installPath); err != nil {
 		return err
 	}
 
@@ -241,10 +249,12 @@ func (i *Installer) installBundledSkill(available *AvailableSkill, opts InstallO
 	return nil
 }
 
-// materializeBundledSkill copies a bundled skill's files from the embedded FS to
-// its install path, handling --force replacement, and returns the install path.
-func (i *Installer) materializeBundledSkill(name string, force bool) (string, error) {
-	skillFS, err := bundledSkillFS(name)
+// materializeBundledSkill copies a bundled skill's files from the embedded FS
+// to its install path, handling --force replacement, and returns the install
+// path. The sourceName arg is the embedded directory name, and installName is
+// the on-disk name (may differ when --as is set).
+func (i *Installer) materializeBundledSkill(sourceName, installName string, force bool) (string, error) {
+	skillFS, err := bundledSkillFS(sourceName)
 	if err != nil {
 		return "", err
 	}
@@ -253,13 +263,10 @@ func (i *Installer) materializeBundledSkill(name string, force bool) (string, er
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve skills directory: %w", err)
 	}
-	installPath := filepath.Join(skillsDir, name)
+	installPath := filepath.Join(skillsDir, installName)
 
-	if force {
-		if err := os.RemoveAll(installPath); err != nil {
-			log.Warnf("Failed to remove existing installation: %v", err)
-		}
-		_ = i.localRegistry.Remove(name) // Ignore error if not exists.
+	if err := i.prepareInstallPath(installPath, installName, force); err != nil {
+		return "", err
 	}
 
 	if err := os.MkdirAll(installPath, dirPermissions); err != nil {
@@ -273,10 +280,37 @@ func (i *Installer) materializeBundledSkill(name string, force bool) (string, er
 	return installPath, nil
 }
 
+// prepareInstallPath clears or validates the install directory before a bundled
+// skill is materialized. With --force a failed removal is a hard error, since
+// copying into a partially-removed directory risks a corrupted install. Without
+// --force an existing directory is rejected to avoid merging into stale content.
+func (i *Installer) prepareInstallPath(installPath, installName string, force bool) error {
+	defer perf.Track(nil, "marketplace.Installer.prepareInstallPath")()
+
+	if force {
+		if err := os.RemoveAll(installPath); err != nil {
+			return fmt.Errorf("failed to remove existing installation: %w", err)
+		}
+		_ = i.localRegistry.Remove(installName) // Ignore error if not exists.
+		return nil
+	}
+
+	_, statErr := os.Stat(installPath)
+	if statErr == nil {
+		return fmt.Errorf("%w: use --force to reinstall", ErrSkillAlreadyInstalled)
+	}
+	if !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("failed to check install directory: %w", statErr)
+	}
+	return nil
+}
+
 // registerBundledSkill records an installed bundled skill in the local registry.
-func (i *Installer) registerBundledSkill(available *AvailableSkill, installPath string) error {
+// The installName is the name under which the skill is registered (it may differ
+// from available.Name when the skill was installed with --as).
+func (i *Installer) registerBundledSkill(available *AvailableSkill, installName, installPath string) error {
 	installedSkill := &InstalledSkill{
-		Name:        available.Name,
+		Name:        installName,
 		DisplayName: available.DisplayName,
 		Source:      available.Source,
 		Version:     available.Version,

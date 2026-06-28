@@ -2484,6 +2484,95 @@ func TestAppendComponentEnvVars(t *testing.T) {
 	}
 }
 
+// TestProcessCustomCommandTemplateNoInjection verifies that user-supplied runtime
+// values containing "{{...}}" are never re-evaluated as template directives on
+// subsequent render passes (template injection guard).
+func TestProcessCustomCommandTemplateNoInjection(t *testing.T) {
+	tests := []struct {
+		name         string
+		template     string
+		data         map[string]any
+		wantContains string // substring that must appear in the result
+		wantAbsent   string // substring that must NOT appear in the result
+	}{
+		{
+			name:     "argument value with {{ stays literal",
+			template: "echo {{ .Arguments.msg }}",
+			data: map[string]any{
+				"Arguments": map[string]string{
+					"msg": "{{ .ComponentConfig.something }}",
+				},
+				"Flags":        map[string]any{},
+				"TrailingArgs": []string{},
+			},
+			// The rendered command should contain the raw string, not expand it.
+			wantContains: "{{ .ComponentConfig.something }}",
+		},
+		{
+			name:     "flag string value with {{ stays literal",
+			template: "run --target {{ .Flags.target }}",
+			data: map[string]any{
+				"Arguments": map[string]string{},
+				"Flags": map[string]any{
+					"target": "{{ .ComponentConfig.injected }}",
+				},
+				"TrailingArgs": []string{},
+			},
+			wantContains: "{{ .ComponentConfig.injected }}",
+		},
+		{
+			name:     "trailing arg with {{ stays literal",
+			template: "cmd {{ index .TrailingArgs 0 }}",
+			data: map[string]any{
+				"Arguments": map[string]string{},
+				"Flags":     map[string]any{},
+				"TrailingArgs": []string{
+					"{{ .ComponentConfig.evil }}",
+				},
+			},
+			wantContains: "{{ .ComponentConfig.evil }}",
+		},
+		{
+			name:     "config-owned template still expands",
+			template: "echo {{ .Arguments.component }} in {{ .Arguments.stack }}",
+			data: map[string]any{
+				"Arguments": map[string]string{
+					"component": "myapp",
+					"stack":     "dev",
+				},
+				"Flags":        map[string]any{},
+				"TrailingArgs": []string{},
+			},
+			wantContains: "echo myapp in dev",
+		},
+		{
+			name:     "bool flag is not escaped",
+			template: "run --verbose={{ .Flags.verbose }}",
+			data: map[string]any{
+				"Arguments": map[string]string{},
+				"Flags": map[string]any{
+					"verbose": true,
+				},
+				"TrailingArgs": []string{},
+			},
+			wantContains: "run --verbose=true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := processCustomCommandTemplate(nil, "test", tt.template, tt.data)
+			require.NoError(t, err)
+			if tt.wantContains != "" {
+				assert.Contains(t, result, tt.wantContains)
+			}
+			if tt.wantAbsent != "" {
+				assert.NotContains(t, result, tt.wantAbsent)
+			}
+		})
+	}
+}
+
 // TestAppendComponentEnvVars_CommandEnvOverrides verifies the documented precedence: a value set by
 // the component `env` section can be overridden by a later command-level `env:` entry, since both
 // use UpdateEnvVar semantics (last write wins on key collision).

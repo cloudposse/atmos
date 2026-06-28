@@ -52,7 +52,7 @@ func isTTYForPromptInput() bool {
 
 	enabled, err := strconv.ParseBool(forceTTY)
 	if err != nil {
-		return forceTTY != ""
+		return false
 	}
 	return enabled
 }

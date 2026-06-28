@@ -32,7 +32,15 @@ func (m *Manager) Kubeconfig(ctx context.Context, stack, name string) ([]byte, e
 	deadline := time.Now().Add(kubeconfigReadyTimeout)
 	var lastErr error
 	for {
-		kubeconfig, err := m.tryKubeconfig(ctx, stack, name)
+		// Bound each attempt by the earlier of the caller deadline and the readiness deadline,
+		// so a stalled runtime.List/runtime.Exec cannot block past kubeconfigReadyTimeout.
+		attemptDeadline := deadline
+		if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(attemptDeadline) {
+			attemptDeadline = ctxDeadline
+		}
+		attemptCtx, cancel := context.WithDeadline(ctx, attemptDeadline)
+		kubeconfig, err := m.tryKubeconfig(attemptCtx, stack, name)
+		cancel()
 		if err == nil {
 			return kubeconfig, nil
 		}
@@ -43,10 +51,18 @@ func (m *Manager) Kubeconfig(ctx context.Context, stack, name string) ([]byte, e
 		if time.Now().After(deadline) {
 			return nil, lastErr
 		}
+		// Sleep for min(remaining time until deadline, pollInterval) to avoid
+		// overshooting the deadline by a full poll interval.
+		wait := time.Until(deadline)
+		if wait > kubeconfigPollInterval {
+			wait = kubeconfigPollInterval
+		}
+		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return nil, ctx.Err()
-		case <-time.After(kubeconfigPollInterval):
+		case <-timer.C:
 		}
 	}
 }

@@ -32,9 +32,14 @@ func (i *Identity) setAzureAuthContext(ctx context.Context, params *types.PostAu
 		return nil
 	}
 
+	connStr, ok := env[envAzureStorageConnectionString]
+	if !ok || connStr == "" {
+		return nil
+	}
+
 	params.AuthContext.Azure = &schema.AzureAuthContext{
 		Profile:                 params.IdentityName,
-		StorageConnectionString: env[envAzureStorageConnectionString],
+		StorageConnectionString: connStr,
 	}
 	return nil
 }

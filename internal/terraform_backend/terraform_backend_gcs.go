@@ -189,10 +189,19 @@ func createGCSClient(ctx context.Context, backend *map[string]any, authContext *
 		// serves, the storage client is HTTP and needs the full URL (scheme kept), so we
 		// set the option directly rather than via that gRPC-oriented helper. The emulator
 		// does not validate credentials, so skip authentication.
-		opts = append(opts, option.WithEndpoint(endpoint))
-		if authContext.GCP.WithoutAuthentication {
-			opts = append(opts, option.WithoutAuthentication())
+		//
+		// Normalize host-only values like "localhost:9000" to "http://localhost:9000"
+		// so option.WithEndpoint receives a valid URL. Real GCS uses HTTPS, but emulators
+		// typically listen on plain HTTP.
+		normalizedEndpoint := endpoint
+		if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+			normalizedEndpoint = "http://" + endpoint
 		}
+		opts = append(opts, option.WithEndpoint(normalizedEndpoint))
+		// Always disable ADC for the emulator branch — the emulator does not validate
+		// credentials, and falling back to ADC on a machine with GCP creds configured
+		// would silently target real GCS instead.
+		opts = append(opts, option.WithoutAuthentication())
 	} else {
 		// Use unified GCP authentication.
 		opts = gcp.GetClientOptions(gcp.AuthOptions{Credentials: credentials})
