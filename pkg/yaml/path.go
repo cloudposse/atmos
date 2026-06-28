@@ -81,48 +81,101 @@ type pathSegment struct {
 	isIndex bool
 }
 
+// dotPathScanner holds the mutable state used while tokenizing a dot-path.
+type dotPathScanner struct {
+	runes    []rune
+	path     string
+	segments []pathSegment
+	cur      strings.Builder
+	// sawContent tracks whether a key or index has been consumed since the last
+	// dot separator; lastWasDot tracks whether a dot was the final structural
+	// token (to catch a trailing dot after the loop).
+	sawContent bool
+	lastWasDot bool
+}
+
+// flushKey appends the accumulated key buffer as a segment, if non-empty.
+func (s *dotPathScanner) flushKey() {
+	if s.cur.Len() > 0 {
+		s.segments = append(s.segments, pathSegment{key: s.cur.String()})
+		s.cur.Reset()
+	}
+}
+
+// step processes the rune at index i and returns the index of the last rune it
+// consumed (so the caller can advance past multi-rune quoted/index segments).
+func (s *dotPathScanner) step(i int) (int, error) {
+	switch s.runes[i] {
+	case '.':
+		if !s.sawContent {
+			return 0, fmt.Errorf("%w: empty path segment in %q", ErrInvalidYAMLExpression, s.path)
+		}
+		s.flushKey()
+		s.sawContent = false
+		s.lastWasDot = true
+	case '"':
+		next, text, err := scanQuotedSegment(s.runes, i, s.path)
+		if err != nil {
+			return 0, err
+		}
+		s.cur.WriteString(text)
+		i = next
+		s.sawContent = true
+		s.lastWasDot = false
+	case '[':
+		s.flushKey()
+		next, index, err := scanIndexSegment(s.runes, i, s.path)
+		if err != nil {
+			return 0, err
+		}
+		s.segments = append(s.segments, pathSegment{index: index, isIndex: true})
+		i = next
+		s.sawContent = true
+		s.lastWasDot = false
+	default:
+		s.cur.WriteRune(s.runes[i])
+		s.sawContent = true
+		s.lastWasDot = false
+	}
+	return i, nil
+}
+
 // splitDotPath tokenizes a dot-notation path into key and index segments,
-// honoring `key[0]` bracket indices and `"quoted.key"` segments.
+// honoring `key[0]` bracket indices and `"quoted.key"` segments. A dot
+// separator that produces an empty key segment (e.g. `a..b` or a trailing `a.`)
+// is rejected so a typo cannot silently target a different key. The empty buffer
+// that legitimately follows a `[N]` index (e.g. `sources[0].version`) is allowed.
 func splitDotPath(path string) ([]pathSegment, error) {
-	runes := []rune(path)
-	var segments []pathSegment
-	var cur strings.Builder
-	flushKey := func() {
-		if cur.Len() > 0 {
-			segments = append(segments, pathSegment{key: cur.String()})
-			cur.Reset()
+	s := &dotPathScanner{runes: []rune(path), path: path}
+	for i := 0; i < len(s.runes); i++ {
+		next, err := s.step(i)
+		if err != nil {
+			return nil, err
 		}
+		i = next
 	}
-
-	for i := 0; i < len(runes); i++ {
-		switch runes[i] {
-		case '.':
-			flushKey()
-		case '"':
-			next, text, err := scanQuotedSegment(runes, i, path)
-			if err != nil {
-				return nil, err
-			}
-			cur.WriteString(text)
-			i = next
-		case '[':
-			flushKey()
-			next, index, err := scanIndexSegment(runes, i, path)
-			if err != nil {
-				return nil, err
-			}
-			segments = append(segments, pathSegment{index: index, isIndex: true})
-			i = next
-		default:
-			cur.WriteRune(runes[i])
-		}
+	if s.lastWasDot {
+		return nil, fmt.Errorf("%w: trailing '.' in path %q", ErrInvalidYAMLExpression, path)
 	}
-	flushKey()
+	s.flushKey()
 
-	if len(segments) == 0 {
+	if len(s.segments) == 0 {
 		return nil, fmt.Errorf("%w: path %q produced no segments", ErrInvalidYAMLExpression, path)
 	}
-	return segments, nil
+	return s.segments, nil
+}
+
+// QuotePathSegment renders a literal map key as a dot-path segment, quoting it as
+// "key" when it is not a simple identifier so embedded dots and brackets are
+// parsed literally (e.g. a component named "vpc.prod" or "foo[0]") instead of as
+// nested path syntax. Simple identifiers are returned unchanged.
+func QuotePathSegment(key string) string {
+	defer perf.Track(nil, "yaml.QuotePathSegment")()
+
+	if isSimpleKey(key) {
+		return key
+	}
+	return doubleQuote + key + doubleQuote
 }
 
 // scanQuotedSegment reads a `"quoted"` key starting at the opening quote (start),

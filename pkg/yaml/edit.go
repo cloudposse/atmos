@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -89,8 +89,14 @@ func Query(content []byte, expr string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// An empty pre-trimmed result means yq produced no output at all (no match).
+	// A legitimate empty scalar prints as a blank line ("\n"), which trims to ""
+	// but must still be returned as a valid value.
+	if result == "" {
+		return "", fmt.Errorf("%w: %s", ErrYAMLPathNotFound, expr)
+	}
 	trimmed := strings.TrimRight(result, "\n")
-	if trimmed == "null" || trimmed == "" {
+	if trimmed == "null" {
 		return "", fmt.Errorf("%w: %s", ErrYAMLPathNotFound, expr)
 	}
 	return trimmed, nil
@@ -295,36 +301,17 @@ func mutateFile(filePath string, fn func([]byte) ([]byte, error)) error {
 	return atomicWrite(filePath, out)
 }
 
-// atomicWrite writes data to filePath via a temp file in the same directory
-// followed by a rename, preserving the destination's existing permissions when
-// it already exists.
+// atomicWrite writes data to filePath via the shared cross-platform atomic
+// writer (temp file + rename on Unix, ReplaceFile semantics on Windows so an
+// existing file can be replaced), preserving the destination's existing
+// permissions when it already exists.
 func atomicWrite(filePath string, data []byte) error {
 	mode := defaultFileMode
 	if info, statErr := os.Stat(filePath); statErr == nil {
 		mode = info.Mode().Perm()
 	}
 
-	dir := filepath.Dir(filePath)
-	tmp, err := os.CreateTemp(dir, ".atmos-yaml-*.tmp")
-	if err != nil {
-		return fmt.Errorf(errWrapFmt, ErrWriteFile, err)
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName) // No-op if the rename below succeeds.
-
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return fmt.Errorf(errWrapFmt, ErrWriteFile, err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf(errWrapFmt, ErrWriteFile, err)
-	}
-	//nolint:gosec // filePath is the user-specified file being edited; writing to it is the intended behavior.
-	if err := os.Chmod(tmpName, mode); err != nil {
-		return fmt.Errorf(errWrapFmt, ErrWriteFile, err)
-	}
-	//nolint:gosec // filePath is the user-specified file being edited; the atomic rename targets it intentionally.
-	if err := os.Rename(tmpName, filePath); err != nil {
+	if err := filesystem.NewOSFileSystem().WriteFileAtomic(filePath, data, mode); err != nil {
 		return fmt.Errorf(errWrapFmt, ErrWriteFile, err)
 	}
 	return nil

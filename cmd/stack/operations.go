@@ -30,7 +30,8 @@ var (
 // effective merged value and where it currently resolves from.
 type editTarget struct {
 	file       string // manifest file to edit
-	inFilePath string // dot-path within that file (components.<type>.<name>.<rel>)
+	inFilePath string // raw dot-path used as the provenance lookup key (components.<type>.<name>.<rel>)
+	yqPath     string // escaped dot-path used to address the YAML node safely
 	value      string // effective merged value of the path
 	provFile   string // file provenance attributes the value to
 	provLine   int    // line within provFile
@@ -45,7 +46,7 @@ var stackGetCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "stack.getRunE")()
 
-		tgt, err := resolveEditTarget(args[0])
+		tgt, err := resolveEditTarget(args[0], false)
 		if err != nil {
 			return err
 		}
@@ -68,11 +69,11 @@ a specific manifest.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "stack.setRunE")()
 
-		tgt, err := resolveEditTarget(args[0])
+		tgt, err := resolveEditTarget(args[0], true)
 		if err != nil {
 			return err
 		}
-		if err := atmosyaml.SetFileWithType(tgt.file, tgt.inFilePath, args[1], flagType); err != nil {
+		if err := atmosyaml.SetFileWithType(tgt.file, tgt.yqPath, args[1], flagType); err != nil {
 			return err
 		}
 		ui.Successf("Updated %s for %s in %s", args[0], flagComponent, tgt.file)
@@ -89,11 +90,11 @@ var stackDeleteCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "stack.deleteRunE")()
 
-		tgt, err := resolveEditTarget(args[0])
+		tgt, err := resolveEditTarget(args[0], true)
 		if err != nil {
 			return err
 		}
-		if err := atmosyaml.DeleteFile(tgt.file, tgt.inFilePath); err != nil {
+		if err := atmosyaml.DeleteFile(tgt.file, tgt.yqPath); err != nil {
 			return err
 		}
 		ui.Successf("Deleted %s for %s from %s", args[0], flagComponent, tgt.file)
@@ -115,17 +116,22 @@ func init() {
 
 // resolveEditTarget describes the component in the stack (with provenance) and
 // resolves the manifest file plus in-file path for the given component-relative
-// dot-path.
-func resolveEditTarget(dotPath string) (*editTarget, error) {
+// dot-path. When requireEditable is true (set/delete), the value must resolve to
+// a concrete, writable manifest node; otherwise (get) provenance is best-effort
+// and an explicit --file is read directly for its effective value.
+func resolveEditTarget(dotPath string, requireEditable bool) (*editTarget, error) {
 	atmosConfig, result, err := describeComponentForEdit()
 	if err != nil {
 		return nil, err
 	}
 
 	componentType, _ := result.ComponentSection[cfg.ComponentTypeSectionName].(string)
-	inFilePath := pkgstack.BuildComponentInFilePath(componentType, flagComponent, dotPath)
 
-	tgt := &editTarget{inFilePath: inFilePath}
+	tgt := &editTarget{
+		// Raw path keys provenance lookups; escaped path addresses YAML nodes.
+		inFilePath: pkgstack.BuildComponentInFilePath(componentType, flagComponent, dotPath),
+		yqPath:     pkgstack.BuildComponentYqPath(componentType, flagComponent, dotPath),
+	}
 
 	// Effective merged value (best-effort; used by get and for messaging).
 	if sectionYAML, convErr := u.ConvertToYAML(result.ComponentSection); convErr == nil {
@@ -137,10 +143,17 @@ func resolveEditTarget(dotPath string) (*editTarget, error) {
 	// Explicit file override bypasses provenance resolution.
 	if flagFile != "" {
 		tgt.file = flagFile
+		// For read-only get, reflect the value actually stored in the explicit
+		// file rather than the merged value.
+		if !requireEditable {
+			if v, getErr := atmosyaml.GetFile(flagFile, tgt.yqPath); getErr == nil {
+				tgt.value = v
+			}
+		}
 		return tgt, nil
 	}
 
-	return resolveTargetByProvenance(&atmosConfig, result, tgt, dotPath)
+	return resolveTargetByProvenance(&atmosConfig, result, tgt, dotPath, requireEditable)
 }
 
 // describeComponentForEdit initializes a config with stacks processed (the root
@@ -170,15 +183,20 @@ func describeComponentForEdit() (schema.AtmosConfiguration, *exec.DescribeCompon
 // resolveTargetByProvenance fills tgt.file from provenance: it finds the manifest
 // that defines the effective value, resolves it to an absolute path, and verifies
 // the reconstructed in-file path exists there.
-func resolveTargetByProvenance(atmosConfig *schema.AtmosConfiguration, result *exec.DescribeComponentResult, tgt *editTarget, dotPath string) (*editTarget, error) {
-	// Provenance is keyed by the full in-file path (components.<type>.<name>.<rel>),
-	// which is exactly the path we also edit in the resolved file.
+func resolveTargetByProvenance(atmosConfig *schema.AtmosConfiguration, result *exec.DescribeComponentResult, tgt *editTarget, dotPath string, requireEditable bool) (*editTarget, error) {
+	// Provenance is keyed by the raw in-file path (components.<type>.<name>.<rel>),
+	// matching how merge provenance keys are recorded.
 	var entries []merge.ProvenanceEntry
 	if result.MergeContext != nil {
 		entries = result.MergeContext.GetProvenance(tgt.inFilePath)
 	}
 	provFile, provLine, ok := pkgstack.PickProvenanceFile(entries)
 	if !ok {
+		// For read-only get there is nothing to edit; return the best-effort
+		// merged value without provenance instead of erroring.
+		if !requireEditable {
+			return tgt, nil
+		}
 		return nil, errUtils.Build(errUtils.ErrInvalidArgumentError).
 			WithExplanationf("%q is not defined for component %q in stack %q.", dotPath, flagComponent, flagStack).
 			WithHint("Pass --file <manifest> to choose where the value should be written.").
@@ -196,8 +214,12 @@ func resolveTargetByProvenance(atmosConfig *schema.AtmosConfiguration, result *e
 
 	// Verify the reconstructed in-file path actually exists in the resolved file.
 	// When it doesn't (e.g. the value is inherited from a base component under a
-	// different key), report the provenance location and require --file.
-	if _, verifyErr := atmosyaml.GetFile(absFile, tgt.inFilePath); verifyErr != nil {
+	// different key), get still reports the provenance location, but set/delete
+	// require --file because there is no concrete node to edit here.
+	if _, verifyErr := atmosyaml.GetFile(absFile, tgt.yqPath); verifyErr != nil {
+		if !requireEditable {
+			return tgt, nil
+		}
 		return nil, errUtils.Build(errUtils.ErrInvalidArgumentError).
 			WithExplanationf("%q resolves from %s:%d, but its key there is not %q (likely inherited or imported).",
 				dotPath, provFile, provLine, tgt.inFilePath).

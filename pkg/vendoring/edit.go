@@ -3,6 +3,7 @@
 package vendoring
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -43,9 +44,14 @@ func SetComponentVersion(vendorFile, component, version string) error {
 	defer perf.Track(nil, "vendoring.SetComponentVersion")()
 
 	// yq's select() silently no-ops when nothing matches, so confirm the
-	// component exists first and report a clear error otherwise.
+	// component exists first and report a clear error otherwise. Only the
+	// path-not-found case means "component missing"; an unreadable file or
+	// invalid YAML must surface its real cause.
 	if _, err := GetComponentVersion(vendorFile, component); err != nil {
-		return fmt.Errorf("%w: component %q not found in %s", err, component, vendorFile)
+		if errors.Is(err, atmosyaml.ErrYAMLPathNotFound) {
+			return fmt.Errorf("%w: component %q not found in %s", err, component, vendorFile)
+		}
+		return err
 	}
 
 	expr := fmt.Sprintf("(%s | .version) = %s", selectByComponent(component), yqStringLiteral(version))

@@ -6,12 +6,15 @@ id: stack-set
 description: Set a component-relative value in the stack manifest that defines it, preserving comments, anchors, and templates.
 ---
 import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
 
 <Intro>
 Set a component-relative value for a component in a stack. Atmos uses provenance to
 find the manifest file that defines the effective value and edits that file in place,
 preserving comments, anchors/aliases, Atmos YAML functions, and Go templates.
 </Intro>
+
+<Screengrab title="atmos stack set --help" slug="atmos-stack-set--help" />
 
 ## Usage
 
