@@ -100,15 +100,16 @@ func TestRenderer_Render_NoFilters(t *testing.T) {
 
 func TestRenderer_RenderToString_PathsFormat(t *testing.T) {
 	testData := []map[string]any{
-		{"file": "atmos.d/integrations.yaml", "path": "integrations.github.enabled", "type": "bool"},
-		{"file": "atmos.yaml", "path": "logs.level", "type": "string"},
-		{"file": "atmos.yaml", "path": "components.terraform.base_path", "type": "string"},
+		{"file": "atmos.d/integrations.yaml", "path": "integrations.github.enabled", "type": "bool", "value": "true"},
+		{"file": "atmos.yaml", "path": "logs.level", "type": "string", "value": "info"},
+		{"file": "atmos.yaml", "path": "components.terraform.base_path", "type": "string", "value": "components/terraform"},
 	}
 
 	configs := []column.Config{
 		{Name: "file", Value: "{{ .file }}"},
 		{Name: "path", Value: "{{ .path }}"},
 		{Name: "type", Value: "{{ .type }}"},
+		{Name: "value", Value: "{{ .value }}"},
 	}
 	selector, err := column.NewSelector(configs, column.BuildColumnFuncMap())
 	require.NoError(t, err)
@@ -133,6 +134,22 @@ atmos.yaml
   components.terraform.base_path
   logs.level
 `, output)
+}
+
+func TestFormatStyledPathsIncludesTypeAndValue(t *testing.T) {
+	output := formatStyledPaths(
+		[]string{"file", "path", "type", "value"},
+		[][]string{
+			{"atmos.yaml", "logs.level", "string", "info"},
+			{"atmos.yaml", "settings", "object", "{2 keys}"},
+		},
+	)
+
+	require.Contains(t, output, "atmos.yaml")
+	require.Contains(t, output, "logs.level")
+	require.Contains(t, output, "string info")
+	require.Contains(t, output, "settings")
+	require.Contains(t, output, "object {2 keys}")
 }
 
 func TestRenderer_Render_NoSorters(t *testing.T) {

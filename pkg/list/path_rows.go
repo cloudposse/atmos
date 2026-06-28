@@ -11,9 +11,10 @@ import (
 
 // PathRow is the common row shape used by config discovery commands.
 type PathRow struct {
-	File string
-	Path string
-	Type string
+	File  string
+	Path  string
+	Type  string
+	Value string
 }
 
 // RenderPathRows renders path discovery rows through the standard list pipeline.
@@ -29,6 +30,7 @@ func RenderPathRows(rows []PathRow, outputFormat string, delimiter string) (stri
 		{Name: "file", Value: "{{ .file }}"},
 		{Name: "path", Value: "{{ .path }}"},
 		{Name: "type", Value: "{{ .type }}"},
+		{Name: "value", Value: "{{ .value }}"},
 	}, template.FuncMap{})
 	if err != nil {
 		return "", err
@@ -37,9 +39,10 @@ func RenderPathRows(rows []PathRow, outputFormat string, delimiter string) (stri
 	data := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		data = append(data, map[string]any{
-			"file": row.File,
-			"path": row.Path,
-			"type": row.Type,
+			"file":  row.File,
+			"path":  row.Path,
+			"type":  row.Type,
+			"value": row.Value,
 		})
 	}
 

@@ -59,6 +59,6 @@ func TestBuildConfigPathRowsQuotedKeys(t *testing.T) {
 
 	rows, err := buildConfigPathRows([]string{file}, dir)
 	require.NoError(t, err)
-	require.Contains(t, rows, listpkg.PathRow{File: "atmos.yaml", Path: `"foo.bar"`, Type: "object"})
-	require.Contains(t, rows, listpkg.PathRow{File: "atmos.yaml", Path: `"foo.bar"."baz\"qux"`, Type: "bool"})
+	require.Contains(t, rows, listpkg.PathRow{File: "atmos.yaml", Path: `"foo.bar"`, Type: "object", Value: "{1 keys}"})
+	require.Contains(t, rows, listpkg.PathRow{File: "atmos.yaml", Path: `"foo.bar"."baz\"qux"`, Type: "bool", Value: "true"})
 }
