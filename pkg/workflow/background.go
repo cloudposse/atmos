@@ -1,5 +1,7 @@
 package workflow
 
+//go:generate go run go.uber.org/mock/mockgen -destination=mock_background_test.go -package=workflow github.com/cloudposse/atmos/pkg/background Handle,Runner
+
 import (
 	"context"
 	stderrors "errors"

@@ -7,73 +7,62 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/background"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-type fakeHandle struct {
-	name       string
-	readyErr   error
-	stopErr    error
-	readyCalls int
-	stopCalls  int
-}
-
-func (h *fakeHandle) Name() string                      { return h.name }
-func (h *fakeHandle) WaitReady(_ context.Context) error { h.readyCalls++; return h.readyErr }
-func (h *fakeHandle) Stop(_ context.Context) error      { h.stopCalls++; return h.stopErr }
-
-type fakeRunner struct {
-	handles   map[string]*fakeHandle
-	lastEnv   []string
-	startErr  error
-	readyErrs map[string]error
-}
-
-func (r *fakeRunner) Start(_ context.Context, step *schema.WorkflowStep, env []string) (background.Handle, error) {
-	if r.startErr != nil {
-		return nil, r.startErr
-	}
-	r.lastEnv = env
-	h := &fakeHandle{name: step.Name, readyErr: r.readyErrs[step.Name]}
-	if r.handles == nil {
-		r.handles = map[string]*fakeHandle{}
-	}
-	r.handles[step.Name] = h
-	return h, nil
+// newMockHandle returns a MockHandle whose Name() always reports the given name
+// (the registry queries it on register/lookup). Callers add WaitReady/Stop
+// expectations per test.
+func newMockHandle(ctrl *gomock.Controller, name string) *MockHandle {
+	h := NewMockHandle(ctrl)
+	h.EXPECT().Name().Return(name).AnyTimes()
+	return h
 }
 
 func TestStartBackground_RegistersWithoutGating(t *testing.T) {
+	ctrl := gomock.NewController(t)
 	reg := background.NewRegistry()
-	runner := &fakeRunner{}
+	handle := newMockHandle(ctrl, "emulator")
+	// WaitReady is intentionally NOT expected: Start is non-blocking, so readiness is
+	// only checked later by the implicit gate. gomock fails if WaitReady is called.
 	step := &schema.WorkflowStep{Name: "emulator", Type: "container", BackgroundAsync: true}
+
+	var gotEnv []string
+	runner := NewMockRunner(ctrl)
+	runner.EXPECT().Start(gomock.Any(), step, gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ *schema.WorkflowStep, env []string) (background.Handle, error) {
+			gotEnv = env
+			return handle, nil
+		})
 
 	require.NoError(t, StartBackground(context.Background(), reg, runner, step, []string{"K=V"}))
 
-	// Start is non-blocking: the handle is registered but readiness is NOT yet
-	// checked (the implicit gate fires before the next foreground step).
-	h, ok := reg.Get("emulator")
-	require.True(t, ok)
-	assert.Equal(t, 0, h.(*fakeHandle).readyCalls)
-	assert.Equal(t, []string{"K=V"}, runner.lastEnv)
+	_, ok := reg.Get("emulator")
+	require.True(t, ok, "the handle must be registered")
+	assert.Equal(t, []string{"K=V"}, gotEnv)
 }
 
 func TestStartBackground_PropagatesStartError(t *testing.T) {
+	ctrl := gomock.NewController(t)
 	reg := background.NewRegistry()
-	runner := &fakeRunner{startErr: errors.New("boom")}
-	step := &schema.WorkflowStep{Name: "emulator", BackgroundAsync: true}
+	runner := NewMockRunner(ctrl)
+	runner.EXPECT().Start(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("boom"))
 
-	err := StartBackground(context.Background(), reg, runner, step, nil)
+	err := StartBackground(context.Background(), reg, runner, &schema.WorkflowStep{Name: "emulator", BackgroundAsync: true}, nil)
 	require.Error(t, err)
 	assert.Empty(t, reg.Names(), "a failed start must not register a handle")
 }
 
 func TestWaitBackground_ReadiesNamedAndSurfacesError(t *testing.T) {
-	// Register handles directly to isolate WaitBackground from the start-time gate.
+	ctrl := gomock.NewController(t)
 	reg := background.NewRegistry()
-	reg.Register(&fakeHandle{name: "bad", readyErr: errors.New("unhealthy")})
+	bad := newMockHandle(ctrl, "bad")
+	bad.EXPECT().WaitReady(gomock.Any()).Return(errors.New("unhealthy"))
+	reg.Register(bad)
 
 	// Explicit wait surfaces a failed readiness.
 	err := WaitBackground(context.Background(), reg, []string{"bad"})
@@ -87,37 +76,40 @@ func TestWaitBackground_ReadiesNamedAndSurfacesError(t *testing.T) {
 }
 
 func TestCancelBackground_StopsAndRemoves(t *testing.T) {
+	ctrl := gomock.NewController(t)
 	reg := background.NewRegistry()
-	runner := &fakeRunner{}
-	require.NoError(t, StartBackground(context.Background(), reg, runner, &schema.WorkflowStep{Name: "emulator"}, nil))
+	emu := newMockHandle(ctrl, "emulator")
+	// Stop exactly once: Cancel stops+removes it, so the later StopAll must not stop again.
+	emu.EXPECT().Stop(gomock.Any()).Return(nil).Times(1)
+	reg.Register(emu)
 
 	require.NoError(t, CancelBackground(context.Background(), reg, []string{"emulator"}))
-	assert.Equal(t, 1, runner.handles["emulator"].stopCalls)
-	// Removed from the registry, so the end-of-scope StopAll won't stop it again.
-	assert.Empty(t, reg.Names())
+	assert.Empty(t, reg.Names(), "removed from the registry, so end-of-scope StopAll won't stop it again")
 
 	require.NoError(t, reg.StopAll(context.Background()))
-	assert.Equal(t, 1, runner.handles["emulator"].stopCalls)
 }
 
 func TestWaitAllBackground_ReadiesEveryRegistered(t *testing.T) {
+	ctrl := gomock.NewController(t)
 	reg := background.NewRegistry()
-	runner := &fakeRunner{}
 	for _, name := range []string{"a", "b", "c"} {
-		require.NoError(t, StartBackground(context.Background(), reg, runner, &schema.WorkflowStep{Name: name}, nil))
+		h := newMockHandle(ctrl, name)
+		// Start is non-blocking, so wait-all is what readies each (exactly once).
+		h.EXPECT().WaitReady(gomock.Any()).Return(nil).Times(1)
+		reg.Register(h)
 	}
-	// Start is non-blocking, so wait-all is what readies each (exactly once).
+
 	require.NoError(t, WaitAllBackground(context.Background(), reg))
-	for _, name := range []string{"a", "b", "c"} {
-		assert.Equal(t, 1, runner.handles[name].readyCalls)
-	}
 }
 
 func TestCancelBackground_KeepsHandleRegisteredOnFailedStop(t *testing.T) {
+	ctrl := gomock.NewController(t)
 	// Negative path: a failed Stop must NOT remove the handle, so the deferred
 	// StopAll at workflow exit can retry teardown.
 	reg := background.NewRegistry()
-	reg.Register(&fakeHandle{name: "emulator", stopErr: errors.New("down failed")})
+	emu := newMockHandle(ctrl, "emulator")
+	emu.EXPECT().Stop(gomock.Any()).Return(errors.New("down failed"))
+	reg.Register(emu)
 
 	err := CancelBackground(context.Background(), reg, []string{"emulator"})
 	require.Error(t, err)
@@ -126,23 +118,21 @@ func TestCancelBackground_KeepsHandleRegisteredOnFailedStop(t *testing.T) {
 }
 
 func TestGatePendingBackground_GatesOnceThenSkips(t *testing.T) {
+	ctrl := gomock.NewController(t)
 	reg := background.NewRegistry()
-	runner := &fakeRunner{}
 	for _, name := range []string{"a", "b"} {
-		require.NoError(t, StartBackground(context.Background(), reg, runner, &schema.WorkflowStep{Name: name}, nil))
+		h := newMockHandle(ctrl, name)
+		// Times(1) enforces that the second gate does NOT re-probe an already-gated service.
+		h.EXPECT().WaitReady(gomock.Any()).Return(nil).Times(1)
+		reg.Register(h)
 	}
 
 	gated := map[string]bool{}
-	// First gate readies both and records them.
 	require.NoError(t, GatePendingBackground(context.Background(), reg, gated))
-	assert.Equal(t, 1, runner.handles["a"].readyCalls)
-	assert.Equal(t, 1, runner.handles["b"].readyCalls)
-	assert.True(t, gated["a"] && gated["b"])
+	assert.True(t, gated["a"] && gated["b"], "gated services are recorded")
 
 	// Second gate is a no-op for already-gated services (no re-probe).
 	require.NoError(t, GatePendingBackground(context.Background(), reg, gated))
-	assert.Equal(t, 1, runner.handles["a"].readyCalls)
-	assert.Equal(t, 1, runner.handles["b"].readyCalls)
 }
 
 func TestGatePendingBackground_NilRegistryIsNoOp(t *testing.T) {
@@ -151,8 +141,11 @@ func TestGatePendingBackground_NilRegistryIsNoOp(t *testing.T) {
 }
 
 func TestGatePendingBackground_SurfacesUnhealthyAndLeavesUngated(t *testing.T) {
+	ctrl := gomock.NewController(t)
 	reg := background.NewRegistry()
-	reg.Register(&fakeHandle{name: "bad", readyErr: errors.New("unhealthy")})
+	bad := newMockHandle(ctrl, "bad")
+	bad.EXPECT().WaitReady(gomock.Any()).Return(errors.New("unhealthy"))
+	reg.Register(bad)
 
 	gated := map[string]bool{}
 	err := GatePendingBackground(context.Background(), reg, gated)
