@@ -75,10 +75,19 @@ composes anywhere steps run, so you can use it in workflows and custom commands 
 
 ## In CI: Test Summaries
 
-`terraform test` now plugs into Atmos's native-CI reporting, the same path as `plan` and `apply`. In a
-GitHub Actions job, a passing or failing **step summary** is written to the job summary — per-run pass /
-fail / skip results, with the failing assertions inlined — so you see what broke without digging through
-logs.
+`terraform test` now plugs into Atmos's native-CI reporting, the same path as `plan` and `apply`. Turn it
+on in `atmos.yaml` — `ci.enabled` is the master switch:
+
+```yaml
+ci:
+  enabled: true
+  summary:
+    enabled: true
+```
+
+In a GitHub Actions job, a passing or failing **step summary** is then written to the job summary — per-run
+pass / fail / skip results, with the failing assertions inlined — so you see what broke without digging
+through logs.
 
 ## Why This Matters
 
