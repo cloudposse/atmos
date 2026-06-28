@@ -24,6 +24,8 @@ var (
 	flagComponent string
 	flagType      string
 	flagFile      string
+	flagFormat    string
+	flagDelimiter string
 )
 
 // editTarget holds the resolved file and in-file path for an edit, plus the
@@ -45,15 +47,7 @@ var stackGetCmd = &cobra.Command{
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "stack.getRunE")()
-
-		tgt, err := resolveEditTarget(args[0], false)
-		if err != nil {
-			return err
-		}
-		if tgt.provFile != "" {
-			ui.Infof("%s resolves from %s:%d", args[0], tgt.provFile, tgt.provLine)
-		}
-		return data.Writeln(tgt.value)
+		return runStackGet(args)
 	},
 }
 
@@ -68,16 +62,7 @@ a specific manifest.`,
 	Args:    cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "stack.setRunE")()
-
-		tgt, err := resolveEditTarget(args[0], true)
-		if err != nil {
-			return err
-		}
-		if err := atmosyaml.SetFileWithType(tgt.file, tgt.yqPath, args[1], flagType); err != nil {
-			return err
-		}
-		ui.Successf("Updated %s for %s in %s", args[0], flagComponent, tgt.file)
-		return nil
+		return runStackSet(args)
 	},
 }
 
@@ -89,29 +74,59 @@ var stackDeleteCmd = &cobra.Command{
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "stack.deleteRunE")()
-
-		tgt, err := resolveEditTarget(args[0], true)
-		if err != nil {
-			return err
-		}
-		if err := atmosyaml.DeleteFile(tgt.file, tgt.yqPath); err != nil {
-			return err
-		}
-		ui.Successf("Deleted %s for %s from %s", args[0], flagComponent, tgt.file)
-		return nil
+		return runStackDelete(args)
 	},
 }
 
 func init() {
-	for _, c := range []*cobra.Command{stackGetCmd, stackSetCmd, stackDeleteCmd} {
-		c.Flags().StringVarP(&flagStack, "stack", "s", "", "Stack name (required)")
-		c.Flags().StringVarP(&flagComponent, "component", "c", "", "Component name (required)")
-		c.Flags().StringVar(&flagFile, "file", "", "Edit this manifest file explicitly instead of resolving via provenance")
-		_ = c.MarkFlagRequired("stack")
-		_ = c.MarkFlagRequired("component")
-	}
+	registerStackEditFlags(stackGetCmd)
+	registerStackEditFlags(stackSetCmd)
+	registerStackEditFlags(stackDeleteCmd)
 	stackSetCmd.Flags().StringVar(&flagType, "type", atmosyaml.TypeString,
 		"Value type: string, int, bool, float, null, or yaml (raw literal)")
+}
+
+func registerStackEditFlags(c *cobra.Command) {
+	c.Flags().StringVarP(&flagStack, "stack", "s", "", "Stack name (required)")
+	c.Flags().StringVarP(&flagComponent, "component", "c", "", "Component name (required)")
+	c.Flags().StringVar(&flagFile, "file", "", "Edit this manifest file explicitly instead of resolving via provenance")
+	_ = c.MarkFlagRequired("stack")
+	_ = c.MarkFlagRequired("component")
+}
+
+func runStackGet(args []string) error {
+	tgt, err := resolveEditTarget(args[0], false)
+	if err != nil {
+		return err
+	}
+	if tgt.provFile != "" {
+		ui.Infof("%s resolves from %s:%d", args[0], tgt.provFile, tgt.provLine)
+	}
+	return data.Writeln(tgt.value)
+}
+
+func runStackSet(args []string) error {
+	tgt, err := resolveEditTarget(args[0], true)
+	if err != nil {
+		return err
+	}
+	if err := atmosyaml.SetFileWithType(tgt.file, tgt.yqPath, args[1], flagType); err != nil {
+		return err
+	}
+	ui.Successf("Updated %s for %s in %s", args[0], flagComponent, tgt.file)
+	return nil
+}
+
+func runStackDelete(args []string) error {
+	tgt, err := resolveEditTarget(args[0], true)
+	if err != nil {
+		return err
+	}
+	if err := atmosyaml.DeleteFile(tgt.file, tgt.yqPath); err != nil {
+		return err
+	}
+	ui.Successf("Deleted %s for %s from %s", args[0], flagComponent, tgt.file)
+	return nil
 }
 
 // resolveEditTarget describes the component in the stack (with provenance) and

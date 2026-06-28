@@ -34,6 +34,7 @@ func init() {
 	configCmd.AddCommand(configGetCmd)
 	configCmd.AddCommand(configSetCmd)
 	configCmd.AddCommand(configDeleteCmd)
+	configCmd.AddCommand(configListCmd)
 
 	internal.Register(&CommandProvider{})
 }

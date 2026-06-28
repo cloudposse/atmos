@@ -98,6 +98,43 @@ func TestRenderer_Render_NoFilters(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestRenderer_RenderToString_PathsFormat(t *testing.T) {
+	testData := []map[string]any{
+		{"file": "atmos.d/integrations.yaml", "path": "integrations.github.enabled", "type": "bool"},
+		{"file": "atmos.yaml", "path": "logs.level", "type": "string"},
+		{"file": "atmos.yaml", "path": "components.terraform.base_path", "type": "string"},
+	}
+
+	configs := []column.Config{
+		{Name: "file", Value: "{{ .file }}"},
+		{Name: "path", Value: "{{ .path }}"},
+		{Name: "type", Value: "{{ .type }}"},
+	}
+	selector, err := column.NewSelector(configs, column.BuildColumnFuncMap())
+	require.NoError(t, err)
+
+	r := New(
+		nil,
+		selector,
+		[]*sort.Sorter{
+			sort.NewSorter("file", sort.Ascending),
+			sort.NewSorter("path", sort.Ascending),
+		},
+		format.FormatPaths,
+		"",
+	)
+
+	output, err := r.RenderToString(testData)
+	require.NoError(t, err)
+	require.Equal(t, `atmos.d/integrations.yaml
+  integrations.github.enabled
+
+atmos.yaml
+  components.terraform.base_path
+  logs.level
+`, output)
+}
+
 func TestRenderer_Render_NoSorters(t *testing.T) {
 	// Initialize I/O context for output tests.
 	ioCtx, err := iolib.NewContext()

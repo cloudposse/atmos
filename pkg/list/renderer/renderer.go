@@ -115,6 +115,8 @@ func (r *Renderer) formatTable(headers []string, rows [][]string) (string, error
 	}
 
 	switch f {
+	case format.FormatPaths:
+		return formatPaths(headers, rows), nil
 	case format.FormatJSON:
 		return formatJSON(headers, rows)
 	case format.FormatYAML:
@@ -136,6 +138,46 @@ func (r *Renderer) formatTable(headers []string, rows [][]string) (string, error
 	default:
 		return "", fmt.Errorf("%w: unsupported format: %s", errUtils.ErrInvalidConfig, f)
 	}
+}
+
+// formatPaths groups rows by their file column and prints indented path values.
+func formatPaths(headers []string, rows [][]string) string {
+	fileIndex := columnIndex(headers, "file")
+	pathIndex := columnIndex(headers, "path")
+	if fileIndex < 0 || pathIndex < 0 {
+		return ""
+	}
+
+	var lines []string
+	currentFile := ""
+	for _, row := range rows {
+		if fileIndex >= len(row) || pathIndex >= len(row) {
+			continue
+		}
+		file := row[fileIndex]
+		if file != currentFile {
+			if len(lines) > 0 {
+				lines = append(lines, "")
+			}
+			lines = append(lines, file)
+			currentFile = file
+		}
+		lines = append(lines, "  "+row[pathIndex])
+	}
+
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func columnIndex(headers []string, name string) int {
+	for i, header := range headers {
+		if strings.EqualFold(header, name) {
+			return i
+		}
+	}
+	return -1
 }
 
 // formatJSON formats headers and rows as JSON array of objects.
