@@ -142,6 +142,7 @@ func TestRepoSlugFromURI(t *testing.T) {
 		{"ssh://git@github.com:22/acme/infra.git", "acme/infra"}, // port is not a slug.
 		{"https://user@example.com/acme/infra.git", "acme/infra"},
 		{"https://ghe.example.com/group/sub/infra.git", "sub/infra"}, // last two segments.
+		{"https://github.com/justrepo", "justrepo"},                  // single path segment.
 		{"", ""},
 	}
 
@@ -150,6 +151,25 @@ func TestRepoSlugFromURI(t *testing.T) {
 			assert.Equal(t, tt.want, repoSlugFromURI(tt.uri))
 		})
 	}
+}
+
+func TestBaseHostFromContext(t *testing.T) {
+	// ServerURL preferred when set.
+	assert.Equal(t, "github.com", baseHostFromContext(&Context{ServerURL: "https://github.com", CloneURL: "https://ghe.acme.com/a/b.git"}))
+	// Falls back to CloneURL when ServerURL is empty.
+	assert.Equal(t, "ghe.acme.com", baseHostFromContext(&Context{ServerURL: "", CloneURL: "https://ghe.acme.com/a/b.git"}))
+	// Empty when neither is set.
+	assert.Equal(t, "", baseHostFromContext(&Context{}))
+}
+
+func TestEvaluateForkCheckout_CloneURLHostFallback(t *testing.T) {
+	// ServerURL empty: host comparison must still work via CloneURL.
+	ctx := &Context{
+		EventName: "pull_request_target", ElevatedEvent: true,
+		Repository: "acme/infra", CloneURL: "https://github.com/acme/infra.git",
+	}
+	got := EvaluateForkCheckout(ctx, CloneRequest{URI: "https://evil.example.com/acme/infra.git"})
+	assert.True(t, got.Untrusted)
 }
 
 func TestHostFromURI(t *testing.T) {
