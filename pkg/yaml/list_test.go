@@ -22,6 +22,9 @@ components:
         deleted: null
         foo"bar: value
         foo\bar: value
+        script: |
+          echo one
+          echo two
 `)
 
 	entries, err := ListPathEntries(input)
@@ -32,7 +35,7 @@ components:
 		{Path: "components.terraform", Type: "object", Value: "{1 keys}"},
 		{Path: `components.terraform."vpc.prod"`, Type: "object", Value: "{2 keys}"},
 		{Path: `components.terraform."vpc.prod".enabled`, Type: "bool", Value: "true"},
-		{Path: `components.terraform."vpc.prod".vars`, Type: "object", Value: "{7 keys}"},
+		{Path: `components.terraform."vpc.prod".vars`, Type: "object", Value: "{8 keys}"},
 		{Path: `components.terraform."vpc.prod".vars."foo\"bar"`, Type: "string", Value: "value"},
 		{Path: `components.terraform."vpc.prod".vars."foo\\bar"`, Type: "string", Value: "value"},
 		{Path: `components.terraform."vpc.prod".vars.azs`, Type: "array", Value: "[2 items]"},
@@ -41,6 +44,7 @@ components:
 		{Path: `components.terraform."vpc.prod".vars.cidr`, Type: "string", Value: "10.0.0.0/16"},
 		{Path: `components.terraform."vpc.prod".vars.deleted`, Type: "null", Value: "null"},
 		{Path: `components.terraform."vpc.prod".vars.replicas`, Type: "number", Value: "2"},
+		{Path: `components.terraform."vpc.prod".vars.script`, Type: "string", Value: "echo one ... (2 lines)"},
 		{Path: `components.terraform."vpc.prod".vars.threshold`, Type: "number", Value: "2.5"},
 	}, entries)
 }

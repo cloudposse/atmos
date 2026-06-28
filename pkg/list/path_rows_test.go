@@ -8,7 +8,7 @@ import (
 
 func TestRenderPathRowsStructuredFormatsIncludeValue(t *testing.T) {
 	rows := []PathRow{
-		{File: "atmos.yaml", Path: "logs.level", Type: "string", Value: "info"},
+		{File: "atmos.yaml", Path: "commands[0].steps[0]", Type: "string", Value: "echo one\necho two\n"},
 	}
 
 	tests := []struct {
@@ -19,27 +19,27 @@ func TestRenderPathRowsStructuredFormatsIncludeValue(t *testing.T) {
 		{
 			name:     "table",
 			format:   "table",
-			expected: "atmos.yaml\tlogs.level\tstring\tinfo\n",
+			expected: "atmos.yaml\tcommands[0].steps[0]\tstring\techo one ... (2 lines)\n",
 		},
 		{
 			name:     "json",
 			format:   "json",
-			expected: "\"value\": \"info\"",
+			expected: "\"value\": \"echo one ... (2 lines)\"",
 		},
 		{
 			name:     "yaml",
 			format:   "yaml",
-			expected: "value: info",
+			expected: "value: echo one ... (2 lines)",
 		},
 		{
 			name:     "csv",
 			format:   "csv",
-			expected: "file,path,type,value\natmos.yaml,logs.level,string,info\n",
+			expected: "file,path,type,value\natmos.yaml,commands[0].steps[0],string,echo one ... (2 lines)\n",
 		},
 		{
 			name:     "tsv",
 			format:   "tsv",
-			expected: "file\tpath\ttype\tvalue\natmos.yaml\tlogs.level\tstring\tinfo\n",
+			expected: "file\tpath\ttype\tvalue\natmos.yaml\tcommands[0].steps[0]\tstring\techo one ... (2 lines)\n",
 		},
 	}
 

@@ -3,10 +3,13 @@ package yaml
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	goyaml "gopkg.in/yaml.v3"
 )
+
+const yamlPreviewLineEnding = "\n"
 
 // PathEntry describes an addressable YAML value discovered while flattening a
 // document into Atmos dot-notation paths.
@@ -114,8 +117,21 @@ func yamlPathValue(node *goyaml.Node) string {
 		if node.Tag == "!!null" {
 			return "null"
 		}
-		return node.Value
+		return previewScalarValue(node.Value)
 	default:
 		return ""
 	}
+}
+
+func previewScalarValue(value string) string {
+	normalized := strings.ReplaceAll(value, "\r\n", yamlPreviewLineEnding)
+	normalized = strings.ReplaceAll(normalized, "\r", yamlPreviewLineEnding)
+	if !strings.Contains(normalized, yamlPreviewLineEnding) {
+		return normalized
+	}
+	lines := strings.Split(strings.TrimSuffix(normalized, yamlPreviewLineEnding), yamlPreviewLineEnding)
+	if len(lines) <= 1 {
+		return lines[0]
+	}
+	return fmt.Sprintf("%s ... (%d lines)", lines[0], len(lines))
 }
