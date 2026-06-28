@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,9 +41,28 @@ func TestResolveEditableConfigFile_PrefersAtmosYamlOverDotfile(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, AtmosConfigFileName), []byte("a: 1\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, DotAtmosConfigFileName), []byte("a: 2\n"), 0o644))
 
-	got, ok := firstExistingConfig(dir)
+	got, ok, err := firstExistingConfig(dir)
+	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Equal(t, filepath.Join(dir, AtmosConfigFileName), got)
+}
+
+// TestResolveEditableConfigFile_NonMissingStatErrorPropagates verifies that a
+// stat error other than "not found" surfaces instead of collapsing into
+// ErrNoEditableConfig. Using a regular file as a directory component yields
+// ENOTDIR on Unix, which os.IsNotExist does not match.
+func TestResolveEditableConfigFile_NonMissingStatErrorPropagates(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows reports a file-as-directory probe as path-not-found, which os.IsNotExist treats as missing")
+	}
+	dir := t.TempDir()
+	file := filepath.Join(dir, "not-a-dir")
+	require.NoError(t, os.WriteFile(file, []byte("x"), 0o644))
+
+	override := filepath.Join(file, AtmosConfigFileName)
+	_, err := ResolveEditableConfigFile(nil, override)
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrNoEditableConfig, "ENOTDIR must not be reported as missing config")
 }
 
 func TestResolveEditableConfigFile_CurrentDirectory(t *testing.T) {

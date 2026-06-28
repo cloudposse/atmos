@@ -6,12 +6,15 @@ id: vendor-set
 description: Set the pinned version of a vendored component in vendor.yaml, preserving comments, anchors, and templates.
 ---
 import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
 
 <Intro>
 Set the version pinned for a component in your `vendor.yaml` manifest. The source is
 matched by component name (not by index), and the edit preserves comments, anchors,
 and Go templates such as `{{.Version}}` in source URLs.
 </Intro>
+
+<Screengrab title="atmos vendor set --help" slug="atmos-vendor-set--help" />
 
 ## Usage
 

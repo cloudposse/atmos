@@ -37,13 +37,21 @@ func ResolveEditableConfigFile(atmosConfig *schema.AtmosConfiguration, override 
 
 	cwd, err := os.Getwd()
 	if err == nil {
-		if path, ok := firstExistingConfig(cwd); ok {
+		path, ok, probeErr := firstExistingConfig(cwd)
+		if probeErr != nil {
+			return "", probeErr
+		}
+		if ok {
 			return path, nil
 		}
 	}
 
 	if gitRoot, gitErr := u.ProcessTagGitRoot("!repo-root ."); gitErr == nil && gitRoot != "" {
-		if path, ok := firstExistingConfig(gitRoot); ok {
+		path, ok, probeErr := firstExistingConfig(gitRoot)
+		if probeErr != nil {
+			return "", probeErr
+		}
+		if ok {
 			return path, nil
 		}
 	}
@@ -56,24 +64,42 @@ func ResolveEditableConfigFile(atmosConfig *schema.AtmosConfiguration, override 
 func resolveOverridePath(override string) (string, error) {
 	info, err := os.Stat(override)
 	if err != nil {
-		return "", fmt.Errorf("%w: %s", ErrNoEditableConfig, override)
+		// Only a genuinely missing path is "no editable config"; permission or
+		// I/O errors must surface with context so users see the real cause.
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("%w: %s", ErrNoEditableConfig, override)
+		}
+		return "", fmt.Errorf("failed to stat config path %s: %w", override, err)
 	}
 	if !info.IsDir() {
 		return override, nil
 	}
-	if path, ok := firstExistingConfig(override); ok {
+	path, ok, probeErr := firstExistingConfig(override)
+	if probeErr != nil {
+		return "", probeErr
+	}
+	if ok {
 		return path, nil
 	}
 	return "", fmt.Errorf("%w: no atmos.yaml in %s", ErrNoEditableConfig, override)
 }
 
-// firstExistingConfig returns the first existing config file in dir.
-func firstExistingConfig(dir string) (string, bool) {
+// firstExistingConfig returns the first existing config file in dir. A missing
+// candidate is skipped; any other stat error (permission, I/O) is returned so a
+// broken candidate is never silently ignored.
+func firstExistingConfig(dir string) (string, bool, error) {
 	for _, name := range configFileCandidates {
 		candidate := filepath.Join(dir, name)
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			return candidate, true
+		info, err := os.Stat(candidate)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return "", false, fmt.Errorf("failed to stat config file %s: %w", candidate, err)
+		}
+		if !info.IsDir() {
+			return candidate, true, nil
 		}
 	}
-	return "", false
+	return "", false, nil
 }
