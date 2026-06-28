@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -213,7 +214,9 @@ func TestSetFile_AtomicAndPreservesMode(t *testing.T) {
 
 	info, err := os.Stat(file)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o640), info.Mode().Perm(), "original mode preserved")
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0o640), info.Mode().Perm(), "original mode preserved")
+	}
 }
 
 func TestGetFile(t *testing.T) {
