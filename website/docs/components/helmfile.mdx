@@ -110,6 +110,35 @@ atmos helmfile diff nginx-ingress --stack=ue2-dev
 atmos helmfile apply nginx-ingress --stack=ue2-dev
 ```
 
+:::note Prerequisite: the `helm-diff` plugin
+`atmos helmfile diff`, `apply`, and `deploy` shell out to `helm diff`, so they require the
+[`helm-diff`](https://github.com/databus23/helm-diff) plugin. (`atmos helmfile sync` does not.)
+You can satisfy it in either of two ways:
+
+- **Let Atmos manage it** — declare the plugin on the component and Atmos installs it into a
+  managed `HELM_PLUGINS` directory before running helmfile:
+
+  ```yaml
+  components:
+    helmfile:
+      nginx-ingress:
+        plugins:
+          - diff@v3.9.14
+  ```
+
+  See [`atmos helm plugin`](/cli/commands/helm/plugin) for the full plugin spec syntax.
+
+- **Manage it yourself** — if you aren't using the Atmos toolchain, install the plugin with Helm
+  directly:
+
+  ```shell
+  helm plugin install https://github.com/databus23/helm-diff
+  ```
+
+  When a component declares no `plugins:`, Atmos leaves your `HELM_PLUGINS` untouched and uses the
+  plugins already installed in your Helm environment.
+:::
+
 where:
 
 - `nginx-ingress` is the helmfile component to provision (from the `components/helmfile` folder)
