@@ -5,6 +5,7 @@ import (
 	stdio "io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -18,6 +19,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
+
+var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 // TestVendorPullCmd_ExecutorError tests that vendor pull executor handles unexpected args.
 func TestVendorPullCmd_ExecutorError(t *testing.T) {
@@ -120,6 +123,10 @@ func resetCommandFlags(t *testing.T, cmd *cobra.Command) {
 		reset(cmd.Flags())
 		reset(cmd.PersistentFlags())
 	})
+}
+
+func plainOutput(s string) string {
+	return ansiEscapeRE.ReplaceAllString(s, "")
 }
 
 func TestVendorGetSetCommands_UseFileOverride(t *testing.T) {
@@ -240,7 +247,7 @@ func TestRenderUpdateReport_AllStatuses(t *testing.T) {
 	}}
 
 	renderUpdateReport(report, false, false)
-	got := stderr.String()
+	got := plainOutput(stderr.String())
 	assert.Contains(t, got, "updated")
 	assert.Contains(t, got, "1.0.0")
 	assert.Contains(t, got, "1.1.0")
@@ -254,11 +261,11 @@ func TestRenderUpdateReport_AllStatuses(t *testing.T) {
 
 	stderr.Reset()
 	renderUpdateReport(report, true, false)
-	assert.Contains(t, stderr.String(), "Found 1 update(s) available.")
+	assert.Contains(t, plainOutput(stderr.String()), "Found 1 update(s) available.")
 
 	stderr.Reset()
 	renderUpdateReport(report, false, true)
-	got = stderr.String()
+	got = plainOutput(stderr.String())
 	assert.Contains(t, got, "updated")
 	assert.NotContains(t, got, "current")
 	assert.NotContains(t, got, "skipped")
