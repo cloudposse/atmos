@@ -69,6 +69,18 @@ func ExtractGitURI(source string) string {
 		source = source[:idx]
 	}
 
+	if idx := strings.Index(source, ".git//"); idx != -1 {
+		source = source[:idx+len(".git")]
+	} else {
+		start := 0
+		if schemeIdx := strings.Index(source, "://"); schemeIdx != -1 {
+			start = schemeIdx + len("://")
+		}
+		if idx := strings.Index(source[start:], "//"); idx != -1 {
+			source = source[:start+idx]
+		}
+	}
+
 	// go-git accepts URLs with or without the .git suffix; keep it canonical.
 	if !strings.HasSuffix(source, ".git") && strings.HasPrefix(source, "https://") {
 		source += ".git"

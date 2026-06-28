@@ -55,7 +55,30 @@ func TestCollectManifestFiles_FollowsImports(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, files, 2)
 	assert.Equal(t, main, files[0])
-	assert.True(t, filepath.IsAbs(files[1]) || filepath.Base(files[1]) == "terraform.yaml")
+	assert.Equal(t, filepath.Join(dir, "vendor", "terraform.yaml"), files[1])
+}
+
+func TestCollectManifestFiles_PropagatesReadAndImportErrors(t *testing.T) {
+	_, err := CollectManifestFiles(filepath.Join(t.TempDir(), "missing.yaml"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrReadVendorFile)
+
+	dir := t.TempDir()
+	file := writeFile(t, dir, "vendor.yaml", `spec:
+  imports:
+    - missing.yaml
+`)
+	_, err = CollectManifestFiles(file)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrReadVendorFile)
+}
+
+func TestCollectManifestFiles_PropagatesParseErrors(t *testing.T) {
+	file := writeFile(t, t.TempDir(), "vendor.yaml", "spec: [")
+
+	_, err := CollectManifestFiles(file)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrParseVendorFile)
 }
 
 func TestReadVendorSources_DecodesStringTargets(t *testing.T) {
@@ -67,7 +90,15 @@ func TestReadVendorSources_DecodesStringTargets(t *testing.T) {
 	require.Len(t, sources, 1)
 	assert.Equal(t, "vpc", sources[0].Component)
 	assert.Equal(t, "2.0.0", sources[0].Version)
+	require.Len(t, sources[0].Targets, 1)
+	assert.Equal(t, "components/terraform/vpc", sources[0].Targets[0].Path)
 	assert.Equal(t, []string{"networking"}, sources[0].Tags)
+}
+
+func TestReadVendorSources_PropagatesDecodeError(t *testing.T) {
+	_, err := readVendorSources(filepath.Join(t.TempDir(), "missing.yaml"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrReadVendorFile)
 }
 
 func TestFindSource(t *testing.T) {
@@ -101,5 +132,7 @@ func TestCollectManifestFiles_CyclicImportsTerminate(t *testing.T) {
 `)
 	files, err := CollectManifestFiles(a)
 	require.NoError(t, err)
-	assert.Len(t, files, 2, "cycle must be de-duplicated, not infinite")
+	require.Len(t, files, 2, "cycle must be de-duplicated, not infinite")
+	assert.Equal(t, a, files[0])
+	assert.Equal(t, filepath.Join(dir, "b.yaml"), files[1])
 }

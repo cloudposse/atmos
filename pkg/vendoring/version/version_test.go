@@ -2,11 +2,17 @@ package version
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
+	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -27,12 +33,46 @@ func TestExtractGitURI(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"github.com/cloudposse/terraform-aws-vpc", "https://github.com/cloudposse/terraform-aws-vpc.git"},
 		{"git::https://github.com/cloudposse/terraform-aws-vpc.git?ref=v1", "https://github.com/cloudposse/terraform-aws-vpc.git"},
+		{"github.com/org/repo//modules/vpc?ref=v1.2.3", "https://github.com/org/repo.git"},
+		{"git::https://github.com/org/repo.git//modules/vpc?ref=v1.2.3", "https://github.com/org/repo.git"},
 		{"https://github.com/cloudposse/terraform-aws-vpc.git", "https://github.com/cloudposse/terraform-aws-vpc.git"},
 		{"github.com/foo/bar?ref={{.Version}}", "https://github.com/foo/bar.git"},
 	}
 	for _, tt := range tests {
 		assert.Equal(t, tt.want, ExtractGitURI(tt.in), "in=%s", tt.in)
 	}
+}
+
+func TestGoGitLister_ListTagsLocalRepository(t *testing.T) {
+	repoDir := t.TempDir()
+	repo, err := gogit.PlainInit(repoDir, false)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "README.md"), []byte("hello\n"), 0o644))
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+	_, err = wt.Add("README.md")
+	require.NoError(t, err)
+	hash, err := wt.Commit("initial", &gogit.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Atmos Test",
+			Email: "atmos@example.com",
+			When:  time.Unix(1000, 0),
+		},
+	})
+	require.NoError(t, err)
+	_, err = repo.CreateTag("v1.0.0", hash, nil)
+	require.NoError(t, err)
+	_, err = repo.CreateTag("not-semver", hash, nil)
+	require.NoError(t, err)
+
+	tags, err := (&GoGitLister{}).ListTags(context.Background(), repoDir)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"v1.0.0", "not-semver"}, tags)
+
+	_, err = (&GoGitLister{}).ListTags(context.Background(), filepath.Join(t.TempDir(), "missing.git"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitLsRemoteFailed)
 }
 
 func TestIsGitSource(t *testing.T) {

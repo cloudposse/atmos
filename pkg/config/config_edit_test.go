@@ -30,6 +30,12 @@ func TestResolveEditableConfigFile_OverrideDir(t *testing.T) {
 	assert.Equal(t, file, got)
 }
 
+func TestResolveEditableConfigFile_OverrideDirWithoutConfig(t *testing.T) {
+	_, err := ResolveEditableConfigFile(nil, t.TempDir())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNoEditableConfig)
+}
+
 func TestResolveEditableConfigFile_OverrideMissing(t *testing.T) {
 	_, err := ResolveEditableConfigFile(nil, filepath.Join(t.TempDir(), "nope.yaml"))
 	require.Error(t, err)
@@ -45,6 +51,18 @@ func TestResolveEditableConfigFile_PrefersAtmosYamlOverDotfile(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Equal(t, filepath.Join(dir, AtmosConfigFileName), got)
+}
+
+func TestResolveEditableConfigFile_NoCurrentDirectoryConfig(t *testing.T) {
+	dir := t.TempDir()
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(wd) })
+	require.NoError(t, os.Chdir(dir))
+
+	_, err = ResolveEditableConfigFile(nil, "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNoEditableConfig)
 }
 
 // TestResolveEditableConfigFile_NonMissingStatErrorPropagates verifies that a

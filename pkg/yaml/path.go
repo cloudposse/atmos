@@ -175,7 +175,7 @@ func QuotePathSegment(key string) string {
 	if isSimpleKey(key) {
 		return key
 	}
-	return doubleQuote + key + doubleQuote
+	return encodeStringValue(key)
 }
 
 // scanQuotedSegment reads a `"quoted"` key starting at the opening quote (start),

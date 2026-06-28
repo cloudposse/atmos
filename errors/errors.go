@@ -1278,6 +1278,8 @@ var (
 	ErrVendorSourceNotGit = errors.New("vendor source is not a Git repository")
 	// ErrVendorDiffFailed indicates the vendor diff operation failed.
 	ErrVendorDiffFailed = errors.New("failed to produce vendor diff")
+	// ErrVendorUpdateFailed indicates the vendor update operation failed.
+	ErrVendorUpdateFailed = errors.New("failed to update vendor manifest")
 	// ErrReadVendorFile indicates a vendor manifest file could not be read.
 	ErrReadVendorFile = errors.New("failed to read vendor manifest")
 	// ErrParseVendorFile indicates a vendor manifest file could not be parsed.

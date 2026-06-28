@@ -70,6 +70,58 @@ func TestSetRaw_TypedValues(t *testing.T) {
 	assert.NotContains(t, string(out), `count: "5"`, "raw int must not be quoted")
 }
 
+func TestSetWithType(t *testing.T) {
+	tests := []struct {
+		name      string
+		value     string
+		valueType string
+		want      string
+	}{
+		{"default string", "hello", "", "region: hello"},
+		{"explicit string escapes", `foo"bar`, TypeString, `region: foo"bar`},
+		{"int", "42", TypeInt, "count: 42"},
+		{"float", "3.14", TypeFloat, "count: 3.14"},
+		{"bool", " TRUE ", TypeBool, "enabled: true"},
+		{"null", "ignored", TypeNull, "region: null"},
+		{"yaml", "[1, 2, 3]", TypeYAML, "    - 2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := "vars.region"
+			if strings.Contains(tt.want, "count:") {
+				path = "vars.count"
+			}
+			if strings.Contains(tt.want, "enabled:") {
+				path = "vars.enabled"
+			}
+
+			out, err := SetWithType([]byte(fixtureWithComments), path, tt.value, tt.valueType)
+			require.NoError(t, err)
+			assert.Contains(t, string(out), tt.want)
+		})
+	}
+}
+
+func TestSetWithType_InvalidValues(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		value     string
+		valueType string
+	}{
+		{"bad int", "nope", TypeInt},
+		{"bad float", "nope", TypeFloat},
+		{"bad bool", "maybe", TypeBool},
+		{"unknown type", "x", "object"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := SetWithType([]byte(fixtureWithComments), "vars.region", tt.value, tt.valueType)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, ErrInvalidYAMLExpression)
+		})
+	}
+}
+
 func TestGet(t *testing.T) {
 	got, err := Get([]byte(fixtureWithComments), "vars.region")
 	require.NoError(t, err)
@@ -94,6 +146,10 @@ func TestGetTyped(t *testing.T) {
 	count, err := GetTyped[int]([]byte(fixtureWithComments), "vars.count")
 	require.NoError(t, err)
 	assert.Equal(t, 3, count)
+
+	_, err = GetTyped[int]([]byte(fixtureWithComments), "vars.region")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrParseYAML)
 }
 
 func TestDelete(t *testing.T) {
@@ -170,6 +226,54 @@ func TestGetFile(t *testing.T) {
 	assert.Equal(t, "10.0.0.0/16", got)
 }
 
+func TestFileWrappers(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "config.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(fixtureWithComments), 0o644))
+
+	got, err := QueryFile(file, `.vars.region`)
+	require.NoError(t, err)
+	assert.Equal(t, "us-east-1", got)
+
+	require.NoError(t, EvalFile(file, `.vars.region = "us-west-1"`))
+	got, err = GetFile(file, "vars.region")
+	require.NoError(t, err)
+	assert.Equal(t, "us-west-1", got)
+
+	require.NoError(t, SetFileRaw(file, "vars.count", "7"))
+	got, err = GetFile(file, "vars.count")
+	require.NoError(t, err)
+	assert.Equal(t, "7", got)
+
+	require.NoError(t, SetFileWithType(file, "vars.enabled", "false", TypeBool))
+	got, err = GetFile(file, "vars.enabled")
+	require.NoError(t, err)
+	assert.Equal(t, "false", got)
+
+	require.NoError(t, DeleteFile(file, "vars.enabled"))
+	_, err = GetFile(file, "vars.enabled")
+	require.ErrorIs(t, err, ErrYAMLPathNotFound)
+
+	require.NoError(t, FormatFile(file))
+}
+
+func TestFileWrappers_ReadAndValidationErrors(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.yaml")
+	_, err := QueryFile(missing, ".")
+	require.ErrorIs(t, err, ErrReadFile)
+	_, err = GetFile(missing, ".")
+	require.ErrorIs(t, err, ErrReadFile)
+	assert.ErrorIs(t, SetFile(missing, "vars.region", "x"), ErrReadFile)
+	assert.ErrorIs(t, SetFileRaw(missing, "vars.region", `"x"`), ErrReadFile)
+	assert.ErrorIs(t, DeleteFile(missing, "vars.region"), ErrReadFile)
+	assert.ErrorIs(t, FormatFile(missing), ErrReadFile)
+
+	file := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(file, []byte(fixtureWithComments), 0o644))
+	assert.ErrorIs(t, SetFileWithType(file, "vars.region", "not-bool", TypeBool), ErrInvalidYAMLExpression)
+	assert.ErrorIs(t, EvalFile(file, "bad["), ErrInvalidYAMLExpression)
+}
+
 // --- Dot-path translation tests ---------------------------------------------
 
 func TestDotPathToYqPath(t *testing.T) {
@@ -233,6 +337,8 @@ func TestQuotePathSegment(t *testing.T) {
 		{"vpc.prod", `"vpc.prod"`},
 		{"foo[0]", `"foo[0]"`},
 		{"vpc/prod", `"vpc/prod"`},
+		{`foo"bar`, `"foo\"bar"`},
+		{`foo\bar`, `"foo\\bar"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {

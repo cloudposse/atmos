@@ -2,8 +2,13 @@ package vendoring
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"path"
+	"strings"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendoring/version"
@@ -22,6 +27,8 @@ const (
 	StatusUpToDate UpdateStatus = "up-to-date"
 	// StatusSkipped means the source was not checked (templated, non-Git, etc.).
 	StatusSkipped UpdateStatus = "skipped"
+	// StatusFailed means the source could not be checked or updated because of a hard error.
+	StatusFailed UpdateStatus = "failed"
 )
 
 // SourceUpdateResult is the per-source outcome of an update run.
@@ -31,7 +38,7 @@ type SourceUpdateResult struct {
 	CurrentVersion string
 	LatestVersion  string
 	Status         UpdateStatus
-	Reason         string // populated for StatusSkipped
+	Reason         string // Populated for StatusSkipped and StatusFailed.
 }
 
 // UpdateReport summarizes an update run.
@@ -61,6 +68,8 @@ type UpdateParams struct {
 	Component string
 	// Tags, when set, restricts updates to sources carrying any of these tags.
 	Tags []string
+	// Type, when set, restricts updates to sources targeting components of this type.
+	Type string
 	// DryRun reports what would change without writing files.
 	DryRun bool
 	// Lister lists remote tags; defaults to version.DefaultLister when nil.
@@ -79,54 +88,63 @@ func Update(atmosConfig *schema.AtmosConfiguration, params *UpdateParams) (*Upda
 	}
 
 	report := &UpdateReport{}
+	var failures []error
 	for _, file := range params.VendorFiles {
 		sources, err := readVendorSources(file)
 		if err != nil {
 			return nil, err
 		}
 		for i := range sources {
-			res := checkAndUpdateSource(file, &sources[i], params, lister)
+			res, err := checkAndUpdateSource(file, &sources[i], params, lister)
 			if res != nil {
 				report.Results = append(report.Results, *res)
 			}
+			if err != nil {
+				failures = append(failures, err)
+			}
 		}
 	}
-	return report, nil
+	return report, errors.Join(failures...)
 }
 
 // checkAndUpdateSource evaluates one source and, unless DryRun, applies the update.
 // Returns nil when the source is filtered out.
-func checkAndUpdateSource(file string, src *schema.AtmosVendorSource, params *UpdateParams, lister version.RemoteLister) *SourceUpdateResult {
-	if !sourceMatchesFilter(src, params.Component, params.Tags) {
-		return nil
+func checkAndUpdateSource(file string, src *schema.AtmosVendorSource, params *UpdateParams, lister version.RemoteLister) (*SourceUpdateResult, error) {
+	if !sourceMatchesFilter(src, params.Component, params.Tags, params.Type) {
+		return nil, nil
 	}
 
 	res := &SourceUpdateResult{File: file, Component: src.Component, CurrentVersion: src.Version}
 
 	if reason := skipReason(src); reason != "" {
 		res.Status, res.Reason = StatusSkipped, reason
-		return res
+		return res, nil
 	}
 
 	latest, err := resolveLatest(src, lister)
 	if err != nil {
-		res.Status, res.Reason = StatusSkipped, err.Error()
-		return res
+		res.Status, res.Reason = StatusFailed, err.Error()
+		return res, vendorUpdateError(src.Component, err)
 	}
 	res.LatestVersion = latest
 
 	if !isNewer(src.Version, latest) {
 		res.Status = StatusUpToDate
-		return res
+		return res, nil
 	}
 
 	res.Status = StatusUpdated
 	if !params.DryRun {
 		if err := SetComponentVersion(file, src.Component, latest); err != nil {
-			res.Status, res.Reason = StatusSkipped, err.Error()
+			res.Status, res.Reason = StatusFailed, err.Error()
+			return res, vendorUpdateError(src.Component, err)
 		}
 	}
-	return res
+	return res, nil
+}
+
+func vendorUpdateError(component string, err error) error {
+	return errors.Join(errUtils.ErrVendorUpdateFailed, fmt.Errorf("component %q: %w", component, err))
 }
 
 // skipReason returns a non-empty reason when a source must not be version-checked.
@@ -168,9 +186,12 @@ func isNewer(current, latest string) bool {
 	return latest != "" && latest != current
 }
 
-// sourceMatchesFilter applies the component and tags filters.
-func sourceMatchesFilter(src *schema.AtmosVendorSource, component string, tags []string) bool {
+// sourceMatchesFilter applies the component, tags, and type filters.
+func sourceMatchesFilter(src *schema.AtmosVendorSource, component string, tags []string, componentType string) bool {
 	if component != "" && src.Component != component {
+		return false
+	}
+	if componentType != "" && !sourceTargetsType(src, componentType) {
 		return false
 	}
 	if len(tags) == 0 {
@@ -181,6 +202,25 @@ func sourceMatchesFilter(src *schema.AtmosVendorSource, component string, tags [
 			if want == have {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func sourceTargetsType(src *schema.AtmosVendorSource, componentType string) bool {
+	for _, target := range src.Targets {
+		if targetPathMatchesType(target.Path, componentType) {
+			return true
+		}
+	}
+	return false
+}
+
+func targetPathMatchesType(targetPath string, componentType string) bool {
+	parts := strings.Split(path.Clean(strings.ReplaceAll(targetPath, "\\", "/")), "/")
+	for i := 0; i < len(parts)-1; i++ {
+		if parts[i] == "components" && parts[i+1] == componentType {
+			return true
 		}
 	}
 	return false

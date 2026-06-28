@@ -2,12 +2,16 @@ package vendor
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
+
+var vendorDiffParser *flags.StandardParser
 
 // vendorDiffCmd shows the Git diff between two versions of a vendored component.
 var vendorDiffCmd = &cobra.Command{
@@ -21,7 +25,12 @@ current pinned version and --to to the latest tag.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "vendor.diffRunE")()
 
-		component, _ := cmd.Flags().GetString("component")
+		v := viper.GetViper()
+		if err := vendorDiffParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		component := v.GetString("component")
 		if component == "" {
 			return errUtils.Build(errUtils.ErrInvalidArgumentError).
 				WithExplanation("The --component flag is required.").
@@ -29,7 +38,7 @@ current pinned version and --to to the latest tag.`,
 				Err()
 		}
 
-		file, err := resolveVendorFile()
+		file, err := resolveVendorFileWithOverride(v.GetString("file"))
 		if err != nil {
 			return err
 		}
@@ -43,18 +52,16 @@ current pinned version and --to to the latest tag.`,
 			return err
 		}
 
-		from, _ := cmd.Flags().GetString("from")
+		from := v.GetString("from")
 		if from == "" {
 			from = src.Version
 		}
-		to, _ := cmd.Flags().GetString("to")
-		fileFilter, _ := cmd.Flags().GetString("diff-file")
 
 		diff, err := vendoring.Diff(nil, &vendoring.DiffParams{
 			Source: src.Source,
 			From:   from,
-			To:     to,
-			File:   fileFilter,
+			To:     v.GetString("to"),
+			File:   v.GetString("diff-file"),
 		})
 		if err != nil {
 			return err
@@ -64,11 +71,17 @@ current pinned version and --to to the latest tag.`,
 }
 
 func init() {
-	vendorDiffCmd.Flags().StringP("component", "c", "", "Component to diff (required)")
-	vendorDiffCmd.Flags().String("from", "", "Starting ref (default: current pinned version)")
-	vendorDiffCmd.Flags().String("to", "", "Ending ref (default: latest tag)")
-	vendorDiffCmd.Flags().String("diff-file", "", "Restrict the diff to a single file path within the component")
-	vendorDiffCmd.Flags().StringVar(&vendorFileFlag, "file", "", "Vendor manifest file (default: ./vendor.yaml)")
+	vendorDiffParser = flags.NewStandardParser(
+		flags.WithStringFlag("component", "c", "", "Component to diff (required)"),
+		flags.WithStringFlag("from", "", "", "Starting ref (default: current pinned version)"),
+		flags.WithStringFlag("to", "", "", "Ending ref (default: latest tag)"),
+		flags.WithStringFlag("diff-file", "", "", "Restrict the diff to a single file path within the component"),
+		flags.WithStringFlag("file", "", "", "Vendor manifest file (default: ./vendor.yaml)"),
+	)
+	vendorDiffParser.RegisterFlags(vendorDiffCmd)
+	if err := vendorDiffParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
 	vendorCmd.AddCommand(vendorDiffCmd)
 }

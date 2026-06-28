@@ -2,20 +2,27 @@ package vendoring
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // fakeLister returns canned tags keyed by the resolved Git URI.
 type fakeLister struct {
 	tagsByURI map[string][]string
+	err       error
 }
 
 func (f *fakeLister) ListTags(_ context.Context, uri string) ([]string, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
 	return f.tagsByURI[uri], nil
 }
 
@@ -29,14 +36,17 @@ spec:
     - component: "vpc"
       source: "github.com/cloudposse/terraform-aws-vpc"
       version: "0.1.0"  # pinned
+      targets: ["components/terraform/vpc"]
       tags: [networking]
     - component: "eks"
       source: "github.com/cloudposse/terraform-aws-eks"
       version: "1.0.0"
+      targets: ["components/terraform/eks"]
       tags: [compute]
     - component: "mock"
       source: "oci://ghcr.io/cloudposse/mock:{{.Version}}"
       version: "{{.Version}}"
+      targets: ["components/terraform/mock"]
 `
 
 func writeUpdateFixture(t *testing.T) string {
@@ -95,13 +105,15 @@ func TestUpdate_AppliesAndPreservesFormatting(t *testing.T) {
 
 func TestUpdate_DryRunDoesNotWrite(t *testing.T) {
 	file := writeUpdateFixture(t)
-	before, _ := os.ReadFile(file)
+	before, err := os.ReadFile(file)
+	require.NoError(t, err)
 
 	report, err := Update(nil, &UpdateParams{VendorFiles: []string{file}, DryRun: true, Lister: newFakeLister()})
 	require.NoError(t, err)
 	assert.Equal(t, 1, report.UpdatedCount())
 
-	after, _ := os.ReadFile(file)
+	after, err := os.ReadFile(file)
+	require.NoError(t, err)
 	assert.Equal(t, string(before), string(after), "dry-run must not modify the file")
 }
 
@@ -121,6 +133,61 @@ func TestUpdate_TagsFilter(t *testing.T) {
 	assert.Equal(t, "eks", report.Results[0].Component)
 }
 
+func TestUpdate_TypeFilter(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "vendor.yaml")
+	manifest := `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: example
+spec:
+  sources:
+    - component: "vpc"
+      source: "github.com/cloudposse/terraform-aws-vpc"
+      version: "0.1.0"
+      targets: ["components/terraform/vpc"]
+    - component: "nginx"
+      source: "github.com/cloudposse/terraform-aws-nginx"
+      version: "0.1.0"
+      targets:
+        - path: "components/helmfile/nginx"
+`
+	require.NoError(t, os.WriteFile(file, []byte(manifest), 0o644))
+	lister := &fakeLister{tagsByURI: map[string][]string{
+		"https://github.com/cloudposse/terraform-aws-vpc.git":   {"0.1.0", "0.2.0"},
+		"https://github.com/cloudposse/terraform-aws-nginx.git": {"0.1.0", "0.3.0"},
+	}}
+
+	report, err := Update(nil, &UpdateParams{VendorFiles: []string{file}, DryRun: true, Lister: lister})
+	require.NoError(t, err)
+	require.Len(t, report.Results, 2)
+	assert.NotNil(t, resultFor(report, "vpc"))
+	assert.NotNil(t, resultFor(report, "nginx"))
+
+	report, err = Update(nil, &UpdateParams{VendorFiles: []string{file}, Type: "helmfile", DryRun: true, Lister: lister})
+	require.NoError(t, err)
+	require.Len(t, report.Results, 1)
+	assert.Equal(t, "nginx", report.Results[0].Component)
+}
+
+func TestUpdate_HardFailureReturnsReportAndError(t *testing.T) {
+	file := writeUpdateFixture(t)
+	listErr := errors.New("list failed")
+
+	report, err := Update(nil, &UpdateParams{
+		VendorFiles: []string{file},
+		Component:   "vpc",
+		Lister:      &fakeLister{err: listErr},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrVendorUpdateFailed)
+	assert.ErrorIs(t, err, listErr)
+	require.NotNil(t, report)
+	require.Len(t, report.Results, 1)
+	assert.Equal(t, StatusFailed, report.Results[0].Status)
+	assert.Contains(t, report.Results[0].Reason, "list failed")
+}
+
 func TestUpdate_ConstraintBlocksMajor(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "vendor.yaml")
@@ -133,6 +200,7 @@ spec:
     - component: "vpc"
       source: "github.com/cloudposse/terraform-aws-vpc"
       version: "0.1.0"
+      targets: ["components/terraform/vpc"]
       constraints:
         version: ">=0.1.0 <1.0.0"
 `
