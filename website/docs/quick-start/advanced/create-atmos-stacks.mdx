@@ -396,7 +396,7 @@ vars:
 </File>
 
 When Atmos processes this stack config, it imports and deep-merges all the variables defined in the imported files and inline. Because
-`catalog/backend` is imported here at the tenant level, **every account and region under `plat` gets all six backend components automatically**.
+`catalog/backend` is imported here at the tenant level, **every account and region under `plat` gets the full backend catalog, including the emulator, automatically**.
 
 In `stacks/orgs/acme/plat/dev/_defaults.yaml`, configure the `dev` account. This is the file where you can see, at a glance, **what makes `dev`
 different** from the catalog defaults — same services, deliberately different settings (cheap and ephemeral):

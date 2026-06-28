@@ -539,7 +539,7 @@ module.exports = function fileBrowserPlugin(context, options) {
     async loadContent() {
       if (!fs.existsSync(absoluteSourceDir)) {
         console.warn(`[file-browser] Source directory not found: ${absoluteSourceDir}`);
-        return { tree: { examples: [], totalFiles: 0, totalExamples: 0 } };
+        return { tree: { examples: [], featured: [], tags: [], totalFiles: 0, totalExamples: 0 } };
       }
 
       const tree = scanExamples(absoluteSourceDir, {

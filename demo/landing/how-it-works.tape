@@ -13,7 +13,7 @@ Output website/static/img/demos/how-it-works.mp4
 # --- Setup (off camera) ---
 Hide
 Type "unset NO_COLOR ATMOS_NO_COLOR" Enter
-Type `export ATMOS_EXPERIMENTAL=silence ATMOS_PAGER=false NO_PAGER=1 TF_INPUT=false TERM=xterm-256color COLORTERM=truecolor ATMOS_FORCE_COLOR=true FORCE_COLOR=1 CLICOLOR_FORCE=1 ATMOS_KEYRING_PASSWORD=demo-password-123 PS1='\[\033[38;5;42m\]❯\[\033[0m\] '` Enter
+Type `export ATMOS_EXPERIMENTAL=silence ATMOS_PAGER=false NO_PAGER=1 TF_INPUT=false TERM=xterm-256color COLORTERM=truecolor ATMOS_FORCE_COLOR=true FORCE_COLOR=1 CLICOLOR_FORCE=1 ATMOS_KEYRING_PASSWORD=demo-password-123 PS1='\[\033[38;5;42m\]❯\[\033[0m\]'` Enter
 Type `repo="$(git rev-parse --show-toplevel)"` Enter
 Type `work="$(mktemp -d)"` Enter
 Type `cp -R "$repo/demo/landing/fixtures/how-it-works/." "$work/"` Enter

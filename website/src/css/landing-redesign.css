@@ -184,6 +184,7 @@ html[data-theme="light"] .landing-page {
      exactly at the fold. This is the repo idiom (see custom.css) — NOT a bare
      100vh, which overshoots by the navbar height and makes you scroll too far. */
   min-height: calc(100vh - var(--ifm-navbar-height));
+  min-height: calc(100dvh - var(--ifm-navbar-height));
   align-items: center;
 }
 

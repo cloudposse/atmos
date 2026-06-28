@@ -19,6 +19,10 @@ components:
         ports:
           - host: 16443
             container: 6443
+          # Expose the Traefik ingress HTTP listener so app.localhost is reachable
+          # from the host without a separate port-forward.
+          - host: 8080
+            container: 80
 
   helmfile:
     demo:

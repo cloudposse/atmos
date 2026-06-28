@@ -13,7 +13,7 @@ Output website/static/img/demos/secrets.mp4
 # --- Setup (off camera): isolate the local keychain in a temp copy ---
 Hide
 Type "unset NO_COLOR ATMOS_NO_COLOR" Enter
-Type `export ATMOS_EXPERIMENTAL=silence ATMOS_PAGER=false NO_PAGER=1 TERM=xterm-256color COLORTERM=truecolor ATMOS_FORCE_COLOR=true FORCE_COLOR=1 CLICOLOR_FORCE=1 PS1='\[\033[38;5;42m\]❯\[\033[0m\] '` Enter
+Type `export ATMOS_EXPERIMENTAL=silence ATMOS_PAGER=false NO_PAGER=1 TERM=xterm-256color COLORTERM=truecolor ATMOS_FORCE_COLOR=true FORCE_COLOR=1 CLICOLOR_FORCE=1 PS1='\[\033[38;5;42m\]❯\[\033[0m\]'` Enter
 Type "export ATMOS_FORCE_TTY=true ATMOS_INTERACTIVE=true ATMOS_KEYRING_PASSWORD=demo-password-123" Enter
 Type `repo="$(git rev-parse --show-toplevel)"` Enter
 Type `work="$(mktemp -d)"` Enter
@@ -32,15 +32,19 @@ Sleep 1.5s
 # --- Initialize required secrets interactively ---
 Type "atmos secret init --stack dev --component api" Sleep 600ms Enter
 Sleep 1.2s
+Hide
 Type "dd-demo-key" Sleep 300ms Enter
 Sleep 1.2s
 Type "demo-db-password" Sleep 300ms Enter
 Wait /❯$/
+Show
 Sleep 1.5s
 
 # --- Rotate one value, list status, and prove runtime injection ---
+Hide
 Type "atmos secret set DB_PASSWORD=rotated-demo-password --stack dev --component api --force" Sleep 600ms Enter
 Wait /❯$/
+Show
 Sleep 1.2s
 Type "atmos secret list --stack dev --component api" Sleep 600ms Enter
 Wait /❯$/

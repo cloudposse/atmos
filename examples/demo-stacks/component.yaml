@@ -60,10 +60,10 @@ cli_args:
 command: terraform
 component: myapp
 component_info:
-  component_path: /Users/erik/conductor/atmos/.conductor/istanbul-v9/examples/demo-stacks/components/terraform/myapp
+  component_path: examples/demo-stacks/components/terraform/myapp
   component_type: terraform
   terraform_config:
-    path: /Users/erik/conductor/atmos/.conductor/istanbul-v9/examples/demo-stacks/components/terraform/myapp
+    path: examples/demo-stacks/components/terraform/myapp
     variables:
       format:
         name: format
@@ -74,7 +74,7 @@ component_info:
         sensitive: false
         deprecated: ""
         pos:
-          filename: /Users/erik/conductor/atmos/.conductor/istanbul-v9/examples/demo-stacks/components/terraform/myapp/variables.tf
+          filename: examples/demo-stacks/components/terraform/myapp/variables.tf
           line: 18
       lang:
         name: lang
@@ -85,7 +85,7 @@ component_info:
         sensitive: false
         deprecated: ""
         pos:
-          filename: /Users/erik/conductor/atmos/.conductor/istanbul-v9/examples/demo-stacks/components/terraform/myapp/variables.tf
+          filename: examples/demo-stacks/components/terraform/myapp/variables.tf
           line: 24
       location:
         name: location
@@ -96,7 +96,7 @@ component_info:
         sensitive: false
         deprecated: ""
         pos:
-          filename: /Users/erik/conductor/atmos/.conductor/istanbul-v9/examples/demo-stacks/components/terraform/myapp/variables.tf
+          filename: examples/demo-stacks/components/terraform/myapp/variables.tf
           line: 6
       options:
         name: options
@@ -107,7 +107,7 @@ component_info:
         sensitive: false
         deprecated: ""
         pos:
-          filename: /Users/erik/conductor/atmos/.conductor/istanbul-v9/examples/demo-stacks/components/terraform/myapp/variables.tf
+          filename: examples/demo-stacks/components/terraform/myapp/variables.tf
           line: 12
       stage:
         name: stage
@@ -118,7 +118,7 @@ component_info:
         sensitive: false
         deprecated: ""
         pos:
-          filename: /Users/erik/conductor/atmos/.conductor/istanbul-v9/examples/demo-stacks/components/terraform/myapp/variables.tf
+          filename: examples/demo-stacks/components/terraform/myapp/variables.tf
           line: 1
       units:
         name: units
@@ -129,7 +129,7 @@ component_info:
         sensitive: false
         deprecated: ""
         pos:
-          filename: /Users/erik/conductor/atmos/.conductor/istanbul-v9/examples/demo-stacks/components/terraform/myapp/variables.tf
+          filename: examples/demo-stacks/components/terraform/myapp/variables.tf
           line: 30
     outputs:
       lang:
@@ -138,7 +138,7 @@ component_info:
         sensitive: false
         deprecated: ""
         pos:
-          filename: /Users/erik/conductor/atmos/.conductor/istanbul-v9/examples/demo-stacks/components/terraform/myapp/outputs.tf
+          filename: examples/demo-stacks/components/terraform/myapp/outputs.tf
           line: 11
         type: ""
       location:
@@ -147,7 +147,7 @@ component_info:
         sensitive: false
         deprecated: ""
         pos:
-          filename: /Users/erik/conductor/atmos/.conductor/istanbul-v9/examples/demo-stacks/components/terraform/myapp/outputs.tf
+          filename: examples/demo-stacks/components/terraform/myapp/outputs.tf
           line: 6
         type: ""
       stage:
@@ -156,7 +156,7 @@ component_info:
         sensitive: false
         deprecated: ""
         pos:
-          filename: /Users/erik/conductor/atmos/.conductor/istanbul-v9/examples/demo-stacks/components/terraform/myapp/outputs.tf
+          filename: examples/demo-stacks/components/terraform/myapp/outputs.tf
           line: 1
         type: ""
       units:
@@ -165,7 +165,7 @@ component_info:
         sensitive: false
         deprecated: ""
         pos:
-          filename: /Users/erik/conductor/atmos/.conductor/istanbul-v9/examples/demo-stacks/components/terraform/myapp/outputs.tf
+          filename: examples/demo-stacks/components/terraform/myapp/outputs.tf
           line: 16
         type: ""
     requiredcore:
@@ -186,7 +186,7 @@ component_info:
           name: local
           alias: ""
         pos:
-          filename: /Users/erik/conductor/atmos/.conductor/istanbul-v9/examples/demo-stacks/components/terraform/myapp/main.tf
+          filename: examples/demo-stacks/components/terraform/myapp/main.tf
           line: 1
     dataresources: {}
     modulecalls: {}

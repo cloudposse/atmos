@@ -22,7 +22,7 @@ Output website/static/img/demos/dx.mp4
 # --- Setup (off camera): clean prompt, fixture, fresh emulator + pre-pulled providers ---
 Hide
 Type "unset NO_COLOR ATMOS_NO_COLOR" Enter
-Type `export ATMOS_EXPERIMENTAL=silence ATMOS_PAGER=false NO_PAGER=1 TERM=xterm-256color COLORTERM=truecolor ATMOS_FORCE_COLOR=true FORCE_COLOR=1 CLICOLOR_FORCE=1 PS1='\[\033[38;5;42m\]❯\[\033[0m\] '` Enter
+Type `export ATMOS_EXPERIMENTAL=silence ATMOS_PAGER=false NO_PAGER=1 TERM=xterm-256color COLORTERM=truecolor ATMOS_FORCE_COLOR=true FORCE_COLOR=1 CLICOLOR_FORCE=1 PS1='\[\033[38;5;42m\]❯\[\033[0m\]'` Enter
 Type "export ATMOS_FORCE_TTY=true ATMOS_INTERACTIVE=true" Enter
 Type `cd "$(git rev-parse --show-toplevel)/demo/landing/fixtures/dx"` Enter
 # Start from a clean slate so the on-camera deploy always shows a real "1 added".
@@ -37,7 +37,7 @@ Wait /❯$/
 # `deploy` would) leaves it on a new empty workspace and the apply never runs.
 Type "atmos terraform init s3-bucket -s dev || exit $?" Enter
 Wait /❯$/
-Type "atmos terraform workspace new s3-bucket -s dev || true" Enter
+Type 'out=$(atmos terraform workspace new s3-bucket -s dev 2>&1) || echo "$out" | grep -qiE "already exist" || { echo "$out" >&2; exit 1; }' Enter
 Wait /❯$/
 Type "clear" Enter
 Wait /❯$/

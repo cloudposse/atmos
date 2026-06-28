@@ -15,7 +15,7 @@ Output website/static/img/demos/local-ci.mp4
 # --- Setup (off camera): a throwaway repo with a baseline commit to diff against ---
 Hide
 Type "unset NO_COLOR ATMOS_NO_COLOR" Enter
-Type `export ATMOS_EXPERIMENTAL=silence ATMOS_PAGER=false NO_PAGER=1 GIT_PAGER=cat TF_INPUT=false TERM=xterm-256color COLORTERM=truecolor ATMOS_FORCE_COLOR=true FORCE_COLOR=1 CLICOLOR_FORCE=1 PS1='\[\033[38;5;42m\]❯\[\033[0m\] '` Enter
+Type `export ATMOS_EXPERIMENTAL=silence ATMOS_PAGER=false NO_PAGER=1 GIT_PAGER=cat TF_INPUT=false TERM=xterm-256color COLORTERM=truecolor ATMOS_FORCE_COLOR=true FORCE_COLOR=1 CLICOLOR_FORCE=1 PS1='\[\033[38;5;42m\]❯\[\033[0m\]'` Enter
 # Auto-approve apply off camera so the on-screen command stays a clean
 # `atmos terraform apply --affected --ci` (apply errors without -auto-approve in a
 # non-interactive shell; --ci alone does not imply it).
@@ -50,9 +50,10 @@ Wait /❯$/
 Type `atmos list affected --ref baseline` Sleep 600ms Enter
 Wait /❯$/
 Sleep 4s
-# Apply scrolls a lot of output; wait for the prompt to return (apply finished)
-# rather than Wait+Screen, which mis-reads scrollback on scrolling output.
-Type `atmos terraform apply --affected --ref baseline --ci` Sleep 600ms Enter
+# Apply scrolls a lot of output; wait for the sentinel then the prompt.
+# (Wait+Screen mis-reads scrollback on scrolling output, so we use a sentinel echo.)
+Type `atmos terraform apply --affected --ref baseline --ci && echo "__APPLY_OK__"` Sleep 600ms Enter
+Wait /__APPLY_OK__/
 Wait /❯$/
 Sleep 3s
 

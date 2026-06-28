@@ -85,6 +85,6 @@ commands:
               - task: Show variables
                 command: atmos list vars myapp -s {{ .Flags.stack }}
               - task: Plan affected
-                command: atmos terraform plan --affected
+                command: atmos terraform plan myapp -s {{ .Flags.stack }} --affected
               - task: Open workspace
-                command: atmos terraform workspace list myapp
+                command: atmos terraform workspace list myapp -s {{ .Flags.stack }}

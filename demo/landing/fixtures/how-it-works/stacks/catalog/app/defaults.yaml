@@ -8,9 +8,3 @@ components:
         stage: "{{ .vars.stage }}"
         service: api
         image: ghcr.io/cloudposse/demo-api:1.0.0
-      settings:
-        identity: local-dev
-        secrets:
-          DB_PASSWORD:
-            store: app-secrets
-            description: Database password injected only at runtime.

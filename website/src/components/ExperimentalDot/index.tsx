@@ -48,6 +48,9 @@ export default function ExperimentalDot(): JSX.Element {
       aria-label="experimental feature"
       onMouseEnter={() => setShow(true)}
       onMouseLeave={() => setShow(false)}
+      onFocus={() => setShow(true)}
+      onBlur={() => setShow(false)}
+      tabIndex={0}
     >
       {show && (
         <span

@@ -91,8 +91,8 @@ different.
 See it resolved per stage (no deploy required):
 
 ```shell
-atmos describe component s3-bucket -s plat-ue2-dev  --process-functions=false --process-templates=false
-atmos describe component s3-bucket -s plat-ue2-prod --process-functions=false --process-templates=false
+atmos describe component s3-bucket -s plat-ue2-dev
+atmos describe component s3-bucket -s plat-ue2-prod
 ```
 
 ## Operator commands

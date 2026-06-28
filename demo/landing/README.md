@@ -80,12 +80,12 @@ in `defaults.tape`.
 
 | Tape | Section | Example | Emulator |
 |------|---------|---------|----------|
-| `hero.tape` | Hero | `examples/emulator-aws` | aws |
-| `how-it-works.tape` | How It Works | `examples/emulator-aws` | aws |
+| `hero.tape` | Hero | `examples/demo-stacks` | none |
+| `how-it-works.tape` | How It Works | temp copy of `demo/landing/fixtures/how-it-works` | none |
 | `terraform.tape` | Terraform & OpenTofu | `demo/landing/fixtures/terraform` | none |
 | `kubernetes.tape` | Kubernetes & Helm | `examples/emulator-k8s` | k3s |
 | `emulators.tape` | Containers & Emulators | `demo/landing/fixtures/emulators` | aws/gcp/azure (Floci) + k3s |
 | `local-ci.tape` | Local = CI | temp repo from `examples/demo-stacks` | none |
 | `secrets.tape` | Secrets & Stores | temp copy of `demo/landing/fixtures/secrets` | none |
 | `dx.tape` | Developer experience | `demo/landing/fixtures/dx` | aws |
-| `extensibility.tape` | Extensible by design | `examples/quick-start-advanced` | none |
+| `extensibility.tape` | Extensible by design | temp copy of `demo/landing/fixtures/extensibility` | none |

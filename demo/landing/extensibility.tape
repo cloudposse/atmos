@@ -15,7 +15,7 @@ Output website/static/img/demos/extensibility.mp4
 # --- Setup (off camera): clean HOME + the agent-ready fixture ---
 Hide
 Type "unset NO_COLOR ATMOS_NO_COLOR" Enter
-Type `export ATMOS_EXPERIMENTAL=silence ATMOS_PAGER=false NO_PAGER=1 TERM=xterm-256color COLORTERM=truecolor ATMOS_FORCE_COLOR=true FORCE_COLOR=1 CLICOLOR_FORCE=1 PS1='\[\033[38;5;42m\]❯\[\033[0m\] '` Enter
+Type `export ATMOS_EXPERIMENTAL=silence ATMOS_PAGER=false NO_PAGER=1 TERM=xterm-256color COLORTERM=truecolor ATMOS_FORCE_COLOR=true FORCE_COLOR=1 CLICOLOR_FORCE=1 PS1='\[\033[38;5;42m\]❯\[\033[0m\]'` Enter
 Type `repo="$(git rev-parse --show-toplevel)"` Enter
 Type `work="$(mktemp -d)"` Enter
 Type `cp -R "$repo/demo/landing/fixtures/extensibility/." "$work/"` Enter

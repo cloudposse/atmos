@@ -9,6 +9,13 @@ components:
     app:
       vars:
         stage: dev
+      settings:
+        # Dev-specific identity and secret store — not shared with prod.
+        identity: local-dev
+        secrets:
+          DB_PASSWORD:
+            store: app-secrets
+            description: Database password injected only at runtime.
   # Same stack, four workload types — Atmos ships them all.
   helmfile:
     ingress:

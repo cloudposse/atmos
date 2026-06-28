@@ -53,13 +53,17 @@ interface Initiative {
  */
 export function getGroupedExperimentalFeatures(): FeatureGroup[] {
   const groups: FeatureGroup[] = [];
-  const seenLabels = new Set<string>();
+  const seenFeatures = new Set<string>();
+
+  const getFeatureKey = ({label, docs}: {label: string; docs?: string}) =>
+    docs ?? label;
 
   // First, collect featured experimental items into a "Featured" group.
   if (roadmapConfig.featured) {
     const featuredFeatures: ExperimentalFeature[] = [];
     (roadmapConfig.featured as FeaturedItem[]).forEach((item) => {
-      if (item.experimental) {
+      const key = getFeatureKey({label: item.title, docs: item.docs});
+      if (item.experimental && !seenFeatures.has(key)) {
         featuredFeatures.push({
           label: item.title,
           docs: item.docs,
@@ -67,7 +71,7 @@ export function getGroupedExperimentalFeatures(): FeatureGroup[] {
           prd: item.prd,
           description: item.description,
         });
-        seenLabels.add(item.title);
+        seenFeatures.add(key);
       }
     });
     if (featuredFeatures.length > 0) {
@@ -85,7 +89,8 @@ export function getGroupedExperimentalFeatures(): FeatureGroup[] {
       if (initiative.milestones) {
         const initiativeFeatures: ExperimentalFeature[] = [];
         initiative.milestones.forEach((milestone) => {
-          if (milestone.experimental && !seenLabels.has(milestone.label)) {
+          const key = getFeatureKey({label: milestone.label, docs: milestone.docs});
+          if (milestone.experimental && !seenFeatures.has(key)) {
             initiativeFeatures.push({
               label: milestone.label,
               docs: milestone.docs,
@@ -93,7 +98,7 @@ export function getGroupedExperimentalFeatures(): FeatureGroup[] {
               prd: milestone.prd,
               description: milestone.description,
             });
-            seenLabels.add(milestone.label);
+            seenFeatures.add(key);
           }
         });
         if (initiativeFeatures.length > 0) {

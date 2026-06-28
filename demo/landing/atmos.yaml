@@ -80,10 +80,18 @@ commands:
             missing=""
             for t in vhs ttyd ffmpeg; do command -v "$t" >/dev/null 2>&1 || missing="$missing $t"; done
             [ -z "$missing" ] || { echo "missing recording tools:$missing (vhs/ffmpeg auto-install; on macOS run: brew install ttyd)"; exit 1; }
-            command -v podman >/dev/null 2>&1 || command -v docker >/dev/null 2>&1 || { echo "no container runtime — install podman or docker (a runtime cannot be auto-installed)"; exit 1; }
             cd "$repo"
             mkdir -p website/static/img/demos
             name='{{ .Arguments.name }}'
+            # Only emulator-backed tapes require a container runtime.
+            case "$name" in
+              all|dx|emulators|kubernetes)
+                command -v podman >/dev/null 2>&1 || command -v docker >/dev/null 2>&1 || {
+                  echo "no container runtime — install podman or docker (needed for emulator-backed tapes)"
+                  exit 1
+                }
+                ;;
+            esac
             if [ "$name" = "all" ]; then
               for tape in demo/landing/*.tape; do
                 base="$(basename "$tape")"
@@ -162,10 +170,11 @@ commands:
             repo="$(git rev-parse --show-toplevel)"
             cd "$repo"
             rm -rf website/static/img/demos
-            # Best-effort: stop containers Atmos labels as emulators (Docker or Podman).
-            runtime="$(command -v docker || command -v podman || true)"
-            if [ -n "$runtime" ]; then
+            # Best-effort: stop containers Atmos labels as emulators (Docker and Podman).
+            # Iterate both so stray containers from either runtime are removed.
+            for runtime in docker podman; do
+              command -v "$runtime" >/dev/null 2>&1 || continue
               ids="$("$runtime" ps -aq --filter 'label=tools.atmos.component_type=emulator' 2>/dev/null || true)"
               [ -n "$ids" ] && "$runtime" rm -f $ids || true
-            fi
+            done
             echo "✔ cleaned local demo renders"

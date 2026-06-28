@@ -17,7 +17,16 @@ export default function DemoVideo({ title, slug, className }) {
   const remoteBase = siteConfig.customFields?.demosBaseUrl || '';
 
   const [isVisible, setIsVisible] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
   const viewportRef = useRef(null);
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => setReduceMotion(media.matches);
+    sync();
+    media.addEventListener?.('change', sync);
+    return () => media.removeEventListener?.('change', sync);
+  }, []);
 
   useEffect(() => {
     const node = viewportRef.current;
@@ -62,9 +71,10 @@ export default function DemoVideo({ title, slug, className }) {
           {isVisible ? (
             <video
               className="demo-video"
-              autoPlay
+              autoPlay={!reduceMotion}
               muted
-              loop
+              loop={!reduceMotion}
+              controls={reduceMotion}
               playsInline
               preload="metadata"
               poster={poster}

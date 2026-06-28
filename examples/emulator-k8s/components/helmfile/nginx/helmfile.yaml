@@ -13,7 +13,7 @@ releases:
         args: ["apply", "-f", "manifests/"]
       - events: ["postuninstall"]
         command: "kubectl"
-        args: ["delete", "-f", "manifests/"]
+        args: ["delete", "--ignore-not-found=true", "-f", "manifests/"]
       - events: ["postsync"]
         command: "bash"
         showlogs: true

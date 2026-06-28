@@ -677,7 +677,13 @@ const config = {
         // Base URL (no trailing slash) for landing-page demo recordings synced to
         // S3/CDN by `atmos demo publish`. Empty → the gitignored local copies under
         // static/img/demos/ are used (local dev preview). See DemoVideo + demo/landing/.
-        demosBaseUrl: process.env.ATMOS_DEMOS_BASE_URL || '',
+        demosBaseUrl:
+            process.env.ATMOS_DEMOS_BASE_URL ||
+            (process.env.NODE_ENV === 'development'
+                ? ''
+                : (() => {
+                      throw new Error('ATMOS_DEMOS_BASE_URL must be set for production builds');
+                  })()),
         },
 
     markdown: {

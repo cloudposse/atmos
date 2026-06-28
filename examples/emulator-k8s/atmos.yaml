@@ -37,7 +37,6 @@ components:
     use_eks: false
     # The kubernetes/emulator identity harvests the k3s kubeconfig and exports
     # KUBECONFIG into the environment, so leave this unset and let the identity win.
-    kubeconfig_path: ""
 
 stacks:
   base_path: "stacks"
@@ -66,8 +65,15 @@ commands:
   - name: "test"
     description: "Bring up the k3s sandbox, deploy the nginx release, then tear it down"
     steps:
-      - atmos validate stacks
-      - atmos emulator up kubernetes -s local
-      - atmos helmfile apply demo -s local
-      - atmos helmfile destroy demo -s local
-      - atmos emulator down kubernetes -s local
+      - type: shell
+        command: |
+          set -e
+          # Register teardown to run even if apply fails.
+          teardown() {
+            atmos helmfile destroy demo -s local || true
+            atmos emulator down kubernetes -s local || true
+          }
+          trap teardown EXIT
+          atmos validate stacks
+          atmos emulator up kubernetes -s local
+          atmos helmfile apply demo -s local
