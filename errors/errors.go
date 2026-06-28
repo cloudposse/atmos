@@ -1262,6 +1262,30 @@ var (
 	ErrInvalidSettingsDependsOn = errors.New("invalid 'settings.depends_on' dependency")
 )
 
+// Vendor update/diff errors.
+var (
+	// ErrGitLsRemoteFailed indicates listing refs from a remote Git repository failed.
+	ErrGitLsRemoteFailed = errors.New("failed to list refs from remote Git repository")
+	// ErrNoVersionsAvailable indicates no versions were found for a source.
+	ErrNoVersionsAvailable = errors.New("no versions available")
+	// ErrNoVersionsMatchConstraints indicates no available version satisfies the configured constraints.
+	ErrNoVersionsMatchConstraints = errors.New("no versions match the configured constraints")
+	// ErrInvalidSemverConstraint indicates a constraints.version value is not a valid semver constraint.
+	ErrInvalidSemverConstraint = errors.New("invalid semver constraint")
+	// ErrVendorSourceNotFound indicates a requested component/source was not found in the vendor manifest.
+	ErrVendorSourceNotFound = errors.New("vendor source not found")
+	// ErrVendorSourceNotGit indicates a vendor source is not a Git repository (unsupported for update/diff).
+	ErrVendorSourceNotGit = errors.New("vendor source is not a Git repository")
+	// ErrVendorDiffFailed indicates the vendor diff operation failed.
+	ErrVendorDiffFailed = errors.New("failed to produce vendor diff")
+	// ErrReadVendorFile indicates a vendor manifest file could not be read.
+	ErrReadVendorFile = errors.New("failed to read vendor manifest")
+	// ErrParseVendorFile indicates a vendor manifest file could not be parsed.
+	ErrParseVendorFile = errors.New("failed to parse vendor manifest")
+	// ErrInvalidGitRef indicates a Git ref (tag, branch, or commit) could not be resolved.
+	ErrInvalidGitRef = errors.New("invalid Git ref")
+)
+
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.
 // When Code is 0, it indicates successful completion that should exit cleanly without printing errors.
