@@ -9,3 +9,8 @@ components:
     aws:
       driver: floci/aws
       region: us-east-1
+      container:
+        # Pull Floci from Google's Docker Hub mirror to avoid Docker Hub rate
+        # limits/timeouts in CI, and pin an immutable digest (Floci 1.5.23) instead
+        # of `:latest` for reproducibility. Digest matches the floci-go CI job.
+        image: mirror.gcr.io/floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2
