@@ -114,6 +114,29 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "constraints": {
+                  "type": "object",
+                  "description": "Controls which upstream versions 'atmos vendor update' may select for this source",
+                  "properties": {
+                    "version": {
+                      "type": "string",
+                      "description": "Semantic version constraint (e.g. ^1.0.0, ~1.2.3, >=1.0.0 <2.0.0)"
+                    },
+                    "excluded_versions": {
+                      "type": "array",
+                      "description": "Versions to exclude; supports exact values and wildcard patterns (e.g. 1.5.*)",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "no_prereleases": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Exclude pre-release versions (alpha, beta, rc)"
+                    }
+                  },
+                  "additionalProperties": false
                 }
               },
               "required": ["component", "source", "version", "targets"]

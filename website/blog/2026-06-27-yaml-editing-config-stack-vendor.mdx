@@ -45,8 +45,20 @@ reports where a value resolves from, and `--file` lets you target a manifest exp
 [`config`](/cli/commands/config/usage), [`stack`](/cli/commands/stack/usage), and
 [`vendor`](/cli/commands/vendor/usage) command docs.
 
+## Bonus: vendor update and diff
+
+Built on the same engine, two more commands manage vendored components:
+
+- **`atmos vendor update`** checks each Git source for a newer version (honoring per-source
+  semver `constraints`) and updates the `version` field in place — preserving comments,
+  anchors, and `{{.Version}}` templates. Use `--check` for a dry run and `--pull` to fetch
+  afterward.
+- **`atmos vendor diff`** shows the Git diff between two versions of a component, without a
+  local checkout.
+
+Both use go-git (no `git` binary required) and the same format-preserving writer.
+
 ## Get Involved
 
 This is the foundation for scripted, comment-safe configuration changes across Atmos. A normalize
-(`fmt`) command and the broader `vendor diff`/`vendor update` workflow build on the same engine and
-are on the way.
+(`fmt`) command builds on the same engine and is on the way.

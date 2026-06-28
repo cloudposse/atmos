@@ -31,18 +31,6 @@ var vendorPullCmd = &cobra.Command{
 	},
 }
 
-// vendorDiffCmd executes 'vendor diff' CLI commands.
-var vendorDiffCmd = &cobra.Command{
-	Use:                "diff",
-	Short:              "Show differences in vendor configurations or dependencies",
-	Long:               "This command compares and displays the differences in vendor-specific configurations or dependencies.",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		err := e.ExecuteVendorDiffCmd(cmd, args)
-		return err
-	},
-}
-
 func init() {
 	// Set up vendor pull flags.
 	vendorPullCmd.PersistentFlags().StringP("component", "c", "", "Only vendor the specified component")
@@ -52,15 +40,9 @@ func init() {
 	vendorPullCmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags")
 	vendorPullCmd.PersistentFlags().Bool("everything", false, "Vendor all components")
 
-	// Set up vendor diff flags.
-	vendorDiffCmd.PersistentFlags().StringP("component", "c", "", "Compare the differences between the local and vendored versions of the specified component.")
-	vendorDiffCmd.PersistentFlags().StringP("type", "t", "terraform", "Compare the differences between the local and vendored versions of the specified component, filtering by type (terraform or helmfile).")
-	vendorDiffCmd.PersistentFlags().Bool("dry-run", false, "Simulate the comparison of differences between the local and vendored versions of the specified component without making any changes.")
-
-	// Add subcommands.
+	// Add subcommands. The 'update', 'diff', 'get', and 'set' subcommands are
+	// attached in their own files' init() functions.
 	vendorCmd.AddCommand(vendorPullCmd)
-	// vendorDiffCmd is not implemented yet, so exclude it from help.
-	// vendorCmd.AddCommand(vendorDiffCmd)
 
 	// Register with command registry.
 	internal.Register(&VendorCommandProvider{})

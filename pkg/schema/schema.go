@@ -1611,6 +1611,18 @@ type AtmosVendorSource struct {
 	ExcludedPaths []string           `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
 	Tags          []string           `yaml:"tags" json:"tags" mapstructure:"tags"`
 	Retry         *RetryConfig       `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
+	Constraints   *VendorConstraints `yaml:"constraints,omitempty" json:"constraints,omitempty" mapstructure:"constraints"`
+}
+
+// VendorConstraints controls which upstream versions `atmos vendor update` may
+// select for a vendored source.
+type VendorConstraints struct {
+	// Version is a semver constraint (Masterminds/semver syntax, e.g. "^1.0.0", "~1.2.3", ">=1 <2").
+	Version string `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`
+	// ExcludedVersions lists versions to skip; supports exact values and wildcard patterns (e.g. "1.5.*").
+	ExcludedVersions []string `yaml:"excluded_versions,omitempty" json:"excluded_versions,omitempty" mapstructure:"excluded_versions"`
+	// NoPrereleases, when true, excludes pre-release versions (alpha, beta, rc, …).
+	NoPrereleases bool `yaml:"no_prereleases,omitempty" json:"no_prereleases,omitempty" mapstructure:"no_prereleases"`
 }
 
 type AtmosVendorSpec struct {
