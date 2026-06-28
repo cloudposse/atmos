@@ -1,16 +1,21 @@
 package vendor
 
 import (
+	"bytes"
+	stdio "io"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendoring"
 )
 
@@ -70,6 +75,51 @@ func writeCommandVendorManifest(t *testing.T, content string) string {
 	file := filepath.Join(dir, DefaultVendorManifest)
 	require.NoError(t, os.WriteFile(file, []byte(content), 0o644))
 	return file
+}
+
+type testStreams struct {
+	stdin  stdio.Reader
+	stdout *bytes.Buffer
+	stderr *bytes.Buffer
+}
+
+func (ts *testStreams) Input() stdio.Reader     { return ts.stdin }
+func (ts *testStreams) Output() stdio.Writer    { return ts.stdout }
+func (ts *testStreams) Error() stdio.Writer     { return ts.stderr }
+func (ts *testStreams) RawOutput() stdio.Writer { return ts.stdout }
+func (ts *testStreams) RawError() stdio.Writer  { return ts.stderr }
+
+func setupVendorUICapture(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	stderr := &bytes.Buffer{}
+	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: &bytes.Buffer{}, stderr: stderr}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(func() {
+		data.Reset()
+		ui.Reset()
+	})
+	return stderr
+}
+
+func resetCommandFlags(t *testing.T, cmd *cobra.Command) {
+	t.Helper()
+
+	reset := func(flags *pflag.FlagSet) {
+		flags.VisitAll(func(f *pflag.Flag) {
+			_ = f.Value.Set(f.DefValue)
+			f.Changed = false
+		})
+	}
+	reset(cmd.Flags())
+	reset(cmd.PersistentFlags())
+	t.Cleanup(func() {
+		reset(cmd.Flags())
+		reset(cmd.PersistentFlags())
+	})
 }
 
 func TestVendorGetSetCommands_UseFileOverride(t *testing.T) {
@@ -134,6 +184,8 @@ func TestResolveVendorFileWithOverride_MissingDefault(t *testing.T) {
 }
 
 func TestVendorDiffCommandValidationAndManifestErrors(t *testing.T) {
+	resetCommandFlags(t, vendorDiffCmd)
+
 	require.NoError(t, vendorDiffCmd.Flags().Set("component", ""))
 	err := vendorDiffCmd.RunE(vendorDiffCmd, nil)
 	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
@@ -157,6 +209,8 @@ spec:
 }
 
 func TestVendorUpdateCommandSkipsNonGitSources(t *testing.T) {
+	resetCommandFlags(t, vendorUpdateCmd)
+
 	file := writeCommandVendorManifest(t, `apiVersion: atmos/v1
 kind: AtmosVendorConfig
 spec:
@@ -177,6 +231,7 @@ spec:
 }
 
 func TestRenderUpdateReport_AllStatuses(t *testing.T) {
+	stderr := setupVendorUICapture(t)
 	report := &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{
 		{Component: "updated", Status: vendoring.StatusUpdated, CurrentVersion: "1.0.0", LatestVersion: "1.1.0"},
 		{Component: "current", Status: vendoring.StatusUpToDate, CurrentVersion: "1.0.0"},
@@ -185,6 +240,27 @@ func TestRenderUpdateReport_AllStatuses(t *testing.T) {
 	}}
 
 	renderUpdateReport(report, false, false)
+	got := stderr.String()
+	assert.Contains(t, got, "updated")
+	assert.Contains(t, got, "1.0.0")
+	assert.Contains(t, got, "1.1.0")
+	assert.Contains(t, got, "current")
+	assert.Contains(t, got, "up to date")
+	assert.Contains(t, got, "skipped")
+	assert.Contains(t, got, "not git")
+	assert.Contains(t, got, "failed")
+	assert.Contains(t, got, "remote failed")
+	assert.Contains(t, got, "Updated 1 component(s).")
+
+	stderr.Reset()
 	renderUpdateReport(report, true, false)
+	assert.Contains(t, stderr.String(), "Found 1 update(s) available.")
+
+	stderr.Reset()
 	renderUpdateReport(report, false, true)
+	got = stderr.String()
+	assert.Contains(t, got, "updated")
+	assert.NotContains(t, got, "current")
+	assert.NotContains(t, got, "skipped")
+	assert.NotContains(t, got, "failed")
 }
