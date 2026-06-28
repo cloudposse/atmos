@@ -674,16 +674,12 @@ const config = {
 
     customFields: {
         latestRelease: 'v0.0.0', // initial placeholder
-        // Base URL (no trailing slash) for landing-page demo recordings synced to
-        // S3/CDN by `atmos demo publish`. Empty → the gitignored local copies under
-        // static/img/demos/ are used (local dev preview). See DemoVideo + demo/landing/.
-        demosBaseUrl:
-            process.env.ATMOS_DEMOS_BASE_URL ||
-            (process.env.NODE_ENV === 'development'
-                ? ''
-                : (() => {
-                      throw new Error('ATMOS_DEMOS_BASE_URL must be set for production builds');
-                  })()),
+        // Optional base URL (no trailing slash) for landing-page demo recordings.
+        // The videos are published by `atmos demo publish` to the same docs-origin
+        // bucket under /img/demos/, so DemoVideo serves them same-origin from that
+        // path when this is empty. Set ATMOS_DEMOS_BASE_URL only to point at a
+        // separate CDN/host. See DemoVideo + demo/landing/ + .github/workflows/landing-demos.yaml.
+        demosBaseUrl: process.env.ATMOS_DEMOS_BASE_URL || '',
         },
 
     markdown: {
