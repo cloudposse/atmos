@@ -28,19 +28,24 @@ func captureStdout(t *testing.T, fn func()) string {
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
 	os.Stdout = w
-	defer func() {
-		os.Stdout = old
-		_ = w.Close()
-		_ = r.Close()
+	defer func() { os.Stdout = old }()
+
+	// Drain the pipe concurrently so a large fn() output never blocks on a full
+	// pipe buffer. Reading only after fn() returns deadlocks once the output
+	// exceeds the OS pipe buffer (~64KB on Windows) — see the detailed skill
+	// listing, which crosses that threshold with the bundled catalog.
+	var buf bytes.Buffer
+	copied := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&buf, r)
+		close(copied)
 	}()
 
 	fn()
 
 	require.NoError(t, w.Close())
-
-	var buf bytes.Buffer
-	_, err = io.Copy(&buf, r)
-	require.NoError(t, err)
+	<-copied
+	_ = r.Close()
 	return buf.String()
 }
 
