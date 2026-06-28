@@ -15,16 +15,19 @@ type BaseHandler struct {
 	name        string
 	category    StepCategory
 	requiresTTY bool
+	aliases     []string
 }
 
-// NewBaseHandler creates a new BaseHandler.
-func NewBaseHandler(name string, category StepCategory, requiresTTY bool) BaseHandler {
+// NewBaseHandler creates a new BaseHandler. Optional aliases are alternate type
+// names that resolve to the same handler (e.g. "webhook" as an alias for "http").
+func NewBaseHandler(name string, category StepCategory, requiresTTY bool, aliases ...string) BaseHandler {
 	defer perf.Track(nil, "step.NewBaseHandler")()
 
 	return BaseHandler{
 		name:        name,
 		category:    category,
 		requiresTTY: requiresTTY,
+		aliases:     aliases,
 	}
 }
 
@@ -33,6 +36,13 @@ func (h BaseHandler) GetName() string {
 	defer perf.Track(nil, "step.BaseHandler.GetName")()
 
 	return h.name
+}
+
+// GetAliases returns the alternate type names that resolve to this handler.
+func (h BaseHandler) GetAliases() []string {
+	defer perf.Track(nil, "step.BaseHandler.GetAliases")()
+
+	return h.aliases
 }
 
 // GetCategory returns the step category.

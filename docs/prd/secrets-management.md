@@ -122,12 +122,12 @@ encrypt and mask.
 # atmos.yaml — one registry; regular and secret stores side by side
 stores:
   terraform-outputs:                   # regular store (machine outputs)
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: us-east-1
 
   app-secrets:                         # TRACK 1: store-backed secret
-    type: aws-secrets-manager
+    kind: aws/asm
     secret: true                       # subsystem membership
     identity: aws/prod-secrets         # optional auth identity (top-level; resolved via pkg/auth)
     options:
@@ -867,14 +867,14 @@ by default and so can omit the flag.
 stores:
   # AWS SSM Parameter Store — simple, cost-effective; SecureString when secret
   ssm-secrets:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     secret: true
     identity: aws/prod-admin
     options: { region: us-east-1, prefix: /atmos/secrets }
 
   # AWS Secrets Manager — structured/JSON secrets, rotation, larger values (NEW store type)
   asm-secrets:
-    type: aws-secrets-manager
+    kind: aws/asm
     secret: true
     identity: aws/prod-secrets
     options: { region: us-east-1, prefix: atmos/secrets }
@@ -887,14 +887,14 @@ stores:
 
   # Azure Key Vault
   azure-secrets:
-    type: azure-key-vault
+    kind: azure/keyvault
     secret: true
     identity: azure/prod-subscription
     options: { vault_url: https://myvault.vault.azure.net/ }
 
   # GCP Secret Manager
   gcp-secrets:
-    type: google-secret-manager
+    kind: gcp/secretmanager
     secret: true
     options: { project_id: my-project }
 

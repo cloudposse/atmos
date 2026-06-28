@@ -30,7 +30,7 @@ tests:
       file_contains:
         "github-step-summary.txt":
           - '## No Changes for `foobar` in `plat-ue2-sandbox`'
-          - 'cloudposse.com/logo-300x69.svg'
+          - 'atmos.tools/img/atmos-ci-gradient.svg'
           - 'NO_CHANGE-inactive'
           - '<a id="result-plat-ue2-sandbox-foobar" />'
           - 'No changes. Your infrastructure matches the configuration.'
@@ -69,7 +69,7 @@ tests:
       file_contains:
         "github-step-summary.txt":
           - '## Resource Changes Found for `foobar/changes` in `plat-ue2-sandbox`'
-          - 'cloudposse.com/logo-300x69.svg'
+          - 'atmos.tools/img/atmos-ci-gradient.svg'
           - 'PLAN-CREATE-success'
           - '<a id="result-plat-ue2-sandbox-foobar_changes" />'
           - 'Plan: 1 to add, 0 to change, 0 to destroy.'
@@ -113,7 +113,7 @@ tests:
       file_contains:
         "github-step-summary.txt":
           - '## Plan Failed for `foobar-fail` in `plat-ue2-sandbox`'
-          - 'cloudposse.com/logo-300x69.svg'
+          - 'atmos.tools/img/atmos-ci-gradient.svg'
           - 'PLAN-FAILED-ff0000'
           - '<a id="result-plat-ue2-sandbox-foobar-fail" />'
           - ':warning: Error summary'

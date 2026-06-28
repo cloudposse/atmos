@@ -13,6 +13,7 @@ type AWSAuthConfig struct {
 	ConfigFile      string
 	Profile         string
 	Region          string
+	EndpointURL     string
 }
 
 // AzureAuthConfig holds the Azure-specific authentication configuration resolved from an identity.
@@ -48,6 +49,19 @@ type AuthContextResolver interface {
 
 	// ResolveGCPAuthContext authenticates the named identity and returns GCP credentials.
 	ResolveGCPAuthContext(ctx context.Context, identityName string) (*GCPAuthConfig, error)
+}
+
+// SecretsAuthContext carries an identity-resolving AuthContextResolver and the effective default
+// identity name to non-store secret backends (e.g. cloud-KMS SOPS providers) that live outside the
+// store registry but need the same identity->credentials resolution. It is populated by the same
+// code paths that inject the store auth resolver (the `atmos secret` command and terraform), so
+// SOPS providers can authenticate KMS calls via an Atmos identity instead of ambient credentials.
+type SecretsAuthContext struct {
+	// Resolver authenticates an identity name and returns cloud-specific credentials.
+	Resolver AuthContextResolver
+	// DefaultIdentity is the effective identity (from --identity/ATMOS_IDENTITY or the stack/component
+	// default) used when a provider does not name its own identity.
+	DefaultIdentity string
 }
 
 // IdentityAwareStore is implemented by stores that support identity-based authentication.

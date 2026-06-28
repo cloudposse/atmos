@@ -1,11 +1,13 @@
 package shell
 
 import (
+	"os"
 	"runtime"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
@@ -128,5 +130,30 @@ func TestFindAvailableShell(t *testing.T) {
 func TestStartInteractive_NoShell(t *testing.T) {
 	// An empty shell command must surface ErrNoSuitableShell rather than panic.
 	err := StartInteractive("", nil, nil)
+	assert.ErrorIs(t, err, errUtils.ErrNoSuitableShell)
+}
+
+func TestStartInteractive_WithAbsoluteTestBinary(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	err = StartInteractive(exe, nil, append(os.Environ(), "_ATMOS_SHELL_TEST_EXIT_OK=1"))
+	assert.NoError(t, err)
+}
+
+func TestStartInteractive_PropagatesExitCode(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	err = StartInteractive(exe, nil, append(os.Environ(), "_ATMOS_SHELL_TEST_EXIT_ONE=1"))
+	require.Error(t, err)
+
+	var exitErr errUtils.ExitCodeError
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 1, exitErr.Code)
+}
+
+func TestStartInteractive_RelativeMissingShell(t *testing.T) {
+	err := StartInteractive("definitely-missing-shell-for-atmos-test", nil, nil)
 	assert.ErrorIs(t, err, errUtils.ErrNoSuitableShell)
 }

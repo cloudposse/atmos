@@ -1,0 +1,48 @@
+---
+slug: component-metadata-description
+title: "Document Components with metadata.description"
+authors: [osterman]
+tags: [feature]
+---
+
+Component `metadata` now supports an optional `description` field, so you can document what a component is for right next to its configuration. Atmos preserves `description` as component metadata — it does not change how the component is processed, planned, or applied.
+
+<!--truncate-->
+
+## What Changed
+
+You can now add a human-readable `description` to any component's `metadata` section:
+
+```yaml
+components:
+  terraform:
+    vpc-prod:
+      metadata:
+        component: vpc
+        description: "Production VPC with public and private subnets"
+      vars:
+        environment: prod
+```
+
+The Atmos manifest JSON schema was updated to allow the new field, so editors with schema support get auto-completion and validation for `metadata.description`.
+
+## Why This Matters
+
+Stacks often define many components that point at the same Terraform root module with different configurations. A short `description` makes it obvious at a glance what each one is for, without forcing readers to reverse-engineer intent from variables. It keeps documentation co-located with the configuration it describes.
+
+## How to Use It
+
+Add `description` under any component's `metadata`:
+
+```yaml
+components:
+  terraform:
+    vpc-isolated:
+      metadata:
+        component: vpc
+        description: "Isolated VPC without an internet gateway"
+      vars:
+        vpc_cidr: "10.1.0.0/16"
+```
+
+The field is purely informational and additive — existing stacks are unaffected. See the [component metadata reference](/stacks/components/component-metadata) for details.

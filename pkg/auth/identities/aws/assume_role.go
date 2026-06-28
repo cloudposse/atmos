@@ -58,8 +58,8 @@ func (i *assumeRoleIdentity) newSTSClient(ctx context.Context, awsBase *types.AW
 		config.WithRegion(region),
 	}
 
-	// Add custom endpoint resolver if configured
-	if resolverOpt := awsCloud.GetResolverConfigOption(i.config, nil); resolverOpt != nil {
+	// Add custom endpoint if configured.
+	if resolverOpt := awsCloud.GetBaseEndpointConfigOption(i.config, nil); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}
 
@@ -246,8 +246,8 @@ func (i *assumeRoleIdentity) assumeRoleWithWebIdentity(ctx context.Context, oidc
 		config.WithCredentialsProvider(aws.AnonymousCredentials{}),
 	}
 
-	// Add custom endpoint resolver if configured.
-	if resolverOpt := awsCloud.GetResolverConfigOption(i.config, nil); resolverOpt != nil {
+	// Add custom endpoint if configured.
+	if resolverOpt := awsCloud.GetBaseEndpointConfigOption(i.config, nil); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}
 
@@ -547,6 +547,7 @@ func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, params *types
 		IdentityName: params.IdentityName,
 		Credentials:  params.Credentials,
 		BasePath:     "",
+		Manager:      params.Manager,
 		Realm:        params.Realm,
 	}); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)

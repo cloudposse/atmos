@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 )
@@ -19,6 +23,8 @@ const (
 	statusCodeForbidden = 403
 	// AzureKeyVaultHyphen is the hyphen character used for Azure Key Vault secret name normalization.
 	AzureKeyVaultHyphen = "-"
+	// Format string that turns a secret name into the identifier used in wrapped permission errors.
+	secretIDFormat = "secret %s"
 )
 
 // Azure Key Vault secret names must match the pattern: ^[0-9a-zA-Z-]+$.
@@ -29,6 +35,10 @@ type AzureKeyVaultClient interface {
 	SetSecret(ctx context.Context, name string, parameters azsecrets.SetSecretParameters, options *azsecrets.SetSecretOptions) (azsecrets.SetSecretResponse, error)
 	GetSecret(ctx context.Context, name string, version string, options *azsecrets.GetSecretOptions) (azsecrets.GetSecretResponse, error)
 	DeleteSecret(ctx context.Context, name string, options *azsecrets.DeleteSecretOptions) (azsecrets.DeleteSecretResponse, error)
+	// NewListSecretPropertiesVersionsPager lists the versions/properties of a single named secret
+	// without ever returning the secret value, so existence can be confirmed via the "list"
+	// permission instead of "get". Has() uses this to avoid retrieving the secret value.
+	NewListSecretPropertiesVersionsPager(name string, options *azsecrets.ListSecretPropertiesVersionsOptions) *runtime.Pager[azsecrets.ListSecretPropertiesVersionsResponse]
 }
 
 // AzureKeyVaultStore is an implementation of the Store interface for Azure Key Vault.
@@ -37,6 +47,8 @@ type AzureKeyVaultStore struct {
 	vaultURL       string
 	prefix         string
 	stackDelimiter *string
+	clientOptions  *azsecrets.ClientOptions
+	withoutAuth    bool
 
 	// Identity-based authentication fields.
 	identityName string
@@ -46,9 +58,14 @@ type AzureKeyVaultStore struct {
 }
 
 type AzureKeyVaultStoreOptions struct {
-	VaultURL       string  `mapstructure:"vault_url"`
-	Prefix         *string `mapstructure:"prefix"`
-	StackDelimiter *string `mapstructure:"stack_delimiter"`
+	VaultURL                             string  `mapstructure:"vault_url"`
+	Endpoint                             *string `mapstructure:"endpoint"`
+	Prefix                               *string `mapstructure:"prefix"`
+	StackDelimiter                       *string `mapstructure:"stack_delimiter"`
+	DisableChallengeResourceVerification bool    `mapstructure:"disable_challenge_resource_verification"`
+	WithoutAuthentication                bool    `mapstructure:"without_authentication"`
+	InsecureAllowCredentialWithHTTP      bool    `mapstructure:"insecure_allow_credential_with_http"`
+	EndpointInsecure                     bool    `mapstructure:"endpoint_insecure"`
 }
 
 // Ensure AzureKeyVaultStore implements the store.Store, IdentityAwareStore, DeletableStore,
@@ -63,8 +80,22 @@ var (
 // NewAzureKeyVaultStore creates a new Azure Key Vault store.
 // If identityName is non-empty, client initialization is deferred until first use (lazy init).
 func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions, identityName string) (Store, error) {
-	if options.VaultURL == "" {
+	vaultURL := options.VaultURL
+	if vaultURL == "" {
+		vaultURL = firstNonEmptyStringPtr(options.Endpoint)
+	}
+	if vaultURL == "" {
 		return nil, ErrVaultURLRequired
+	}
+	clientOptions := &azsecrets.ClientOptions{
+		DisableChallengeResourceVerification: options.DisableChallengeResourceVerification,
+		ClientOptions: azcore.ClientOptions{
+			InsecureAllowCredentialWithHTTP: options.InsecureAllowCredentialWithHTTP || options.WithoutAuthentication,
+		},
+	}
+	if options.EndpointInsecure && strings.HasPrefix(vaultURL, "http://") {
+		vaultURL = "https://" + strings.TrimPrefix(vaultURL, "http://")
+		clientOptions.Transport = azureInsecureEndpointTransport{base: http.DefaultClient}
 	}
 
 	stackDelimiter := AzureKeyVaultHyphen
@@ -78,9 +109,11 @@ func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions, identityName strin
 	}
 
 	store := &AzureKeyVaultStore{
-		vaultURL:       options.VaultURL,
+		vaultURL:       vaultURL,
 		prefix:         prefix,
 		stackDelimiter: &stackDelimiter,
+		clientOptions:  clientOptions,
+		withoutAuth:    options.WithoutAuthentication,
 		identityName:   identityName,
 	}
 
@@ -108,12 +141,12 @@ func (s *AzureKeyVaultStore) SetAuthContext(resolver AuthContextResolver, identi
 
 // initDefaultClient initializes the Azure client using the default credential chain.
 func (s *AzureKeyVaultStore) initDefaultClient() error {
-	cred, err := azidentity.NewDefaultAzureCredential(nil)
+	cred, err := s.defaultCredential(nil)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
 
-	client, err := azsecrets.NewClient(s.vaultURL, cred, nil)
+	client, err := azsecrets.NewClient(s.vaultURL, cred, s.clientOptions)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
@@ -141,12 +174,12 @@ func (s *AzureKeyVaultStore) initIdentityClient() error {
 		options.TenantID = authContext.TenantID
 	}
 
-	cred, err := azidentity.NewDefaultAzureCredential(options)
+	cred, err := s.defaultCredential(options)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
 
-	client, err := azsecrets.NewClient(s.vaultURL, cred, nil)
+	client, err := azsecrets.NewClient(s.vaultURL, cred, s.clientOptions)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
@@ -154,6 +187,45 @@ func (s *AzureKeyVaultStore) initIdentityClient() error {
 	s.client = client
 
 	return nil
+}
+
+// defaultCredential returns the token credential used to authenticate the Key Vault
+// client: a local stub when the store is configured withoutAuth (for Floci/local
+// testing), otherwise Azure's default credential chain.
+func (s *AzureKeyVaultStore) defaultCredential(options *azidentity.DefaultAzureCredentialOptions) (azcore.TokenCredential, error) {
+	if s.withoutAuth {
+		return localAzureTokenCredential{}, nil
+	}
+	return azidentity.NewDefaultAzureCredential(options)
+}
+
+// localAzureTokenCredential is a stub azcore.TokenCredential that returns a fixed,
+// non-functional token for local/no-auth Key Vault testing against an emulator.
+type localAzureTokenCredential struct{}
+
+func (localAzureTokenCredential) GetToken(context.Context, policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	return azcore.AccessToken{
+		Token:     "floci-local-token",
+		ExpiresOn: time.Now().Add(time.Hour),
+	}, nil
+}
+
+// azureInsecureEndpointTransport wraps an HTTP transport and rewrites request URLs
+// from https to http so the Key Vault client can talk to an insecure local endpoint.
+type azureInsecureEndpointTransport struct {
+	base policy.Transporter
+}
+
+// Do rewrites the request scheme to http and forwards it to the wrapped transport,
+// falling back to http.DefaultClient when no base transport is set.
+func (t azureInsecureEndpointTransport) Do(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	clone.URL.Scheme = "http"
+	base := t.base
+	if base == nil {
+		base = http.DefaultClient
+	}
+	return base.Do(clone)
 }
 
 // ensureClient lazily initializes the Azure client if it hasn't been initialized yet.
@@ -242,7 +314,7 @@ func (s *AzureKeyVaultStore) Set(stack string, component string, key string, val
 	if err != nil {
 		var respErr *azcore.ResponseError
 		if errors.As(err, &respErr) && respErr.StatusCode == statusCodeForbidden {
-			return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
+			return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf(secretIDFormat, secretName), err)
 		}
 		return fmt.Errorf(errWrapFormat, ErrSetParameter, err)
 	}
@@ -278,7 +350,7 @@ func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (in
 			case statusCodeNotFound:
 				return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretName, err)
 			case statusCodeForbidden:
-				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
+				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf(secretIDFormat, secretName), err)
 			}
 		}
 		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
@@ -326,7 +398,7 @@ func (s *AzureKeyVaultStore) Delete(stack string, component string, key string) 
 			case statusCodeNotFound:
 				return fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretName, err)
 			case statusCodeForbidden:
-				return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
+				return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf(secretIDFormat, secretName), err)
 			}
 		}
 		return fmt.Errorf(errWrapFormatWithID, ErrDeleteSecret, secretName, err)
@@ -335,16 +407,50 @@ func (s *AzureKeyVaultStore) Delete(stack string, component string, key string) 
 	return nil
 }
 
-// Has reports whether a secret exists for the given stack, component, and key. It performs a
-// Get and maps a not-found result to false; any other error is propagated.
+// Has reports whether a secret exists for the given stack, component, and key.
+//
+// It uses the secret-versions listing API (NewListSecretPropertiesVersionsPager), which returns
+// only secret metadata/properties and never the secret value. Existence is therefore confirmed
+// without retrieving the value: a non-existent secret yields a 404 mapped to (false, nil), while
+// any other error (e.g. permission denied) is wrapped and returned. Note that Azure Key Vault
+// secrets have no separate "decrypt" permission distinct from "get"; the versions listing relies
+// on the "list" permission and is the lightest existence check that avoids reading the value.
 func (s *AzureKeyVaultStore) Has(stack string, component string, key string) (bool, error) {
-	_, err := s.Get(stack, component, key)
-	if err != nil {
-		if errors.Is(err, ErrResourceNotFound) {
-			return false, nil
-		}
+	if stack == "" {
+		return false, ErrEmptyStack
+	}
+	if component == "" {
+		return false, ErrEmptyComponent
+	}
+	if key == "" {
+		return false, ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
 		return false, err
 	}
+
+	secretName, err := s.getKey(stack, component, key)
+	if err != nil {
+		return false, fmt.Errorf(errWrapFormat, ErrGetKey, err)
+	}
+
+	// Fetch only the first page of secret versions. We never read page contents (the secret
+	// value is not part of this response); a successful fetch is sufficient to prove existence.
+	pager := s.client.NewListSecretPropertiesVersionsPager(secretName, nil)
+	if _, err := pager.NextPage(context.Background()); err != nil {
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) {
+			switch respErr.StatusCode {
+			case statusCodeNotFound:
+				return false, nil
+			case statusCodeForbidden:
+				return false, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf(secretIDFormat, secretName), err)
+			}
+		}
+		return false, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
+	}
+
 	return true, nil
 }
 
@@ -368,7 +474,7 @@ func (s *AzureKeyVaultStore) GetKey(key string) (interface{}, error) {
 			case statusCodeNotFound:
 				return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretName, err)
 			case statusCodeForbidden:
-				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretName), err)
+				return nil, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf(secretIDFormat, secretName), err)
 			}
 		}
 		return nil, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)

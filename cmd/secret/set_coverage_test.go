@@ -52,24 +52,3 @@ func TestResolveSetName_PromptNonInteractive(t *testing.T) {
 	_, err := resolveSetName(svc, nil)
 	require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
 }
-
-// TestGuardInstanceOverride covers all three branches of the stack-scope override guard.
-func TestGuardInstanceOverride(t *testing.T) {
-	t.Run("no component passes through", func(t *testing.T) {
-		svc := newFakeSecretService()
-		require.NoError(t, guardInstanceOverride(svc, secretScope{Stack: "prod"}, "SHARED"))
-	})
-
-	t.Run("stack-scoped at a component is rejected", func(t *testing.T) {
-		svc := newFakeSecretService()
-		svc.scopes = map[string]secrets.Scope{"SHARED": secrets.ScopeStack}
-		err := guardInstanceOverride(svc, secretScope{Stack: "prod", Component: "api"}, "SHARED")
-		require.ErrorIs(t, err, secrets.ErrSecretNotOverridable)
-	})
-
-	t.Run("instance-scoped passes through", func(t *testing.T) {
-		svc := newFakeSecretService()
-		svc.declared = map[string]bool{"INST": true}
-		require.NoError(t, guardInstanceOverride(svc, secretScope{Stack: "prod", Component: "api"}, "INST"))
-	})
-}

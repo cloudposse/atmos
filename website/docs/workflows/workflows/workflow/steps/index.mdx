@@ -1,0 +1,36 @@
+---
+title: steps
+sidebar_label: steps
+slug: /workflows/steps
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `steps` field is an ordered array of step objects. Atmos executes the steps in the order they appear.
+</Intro>
+
+```yaml
+workflows:
+  deploy:
+    steps:
+      - name: plan
+        type: atmos
+        command: terraform plan vpc
+      - name: apply
+        type: atmos
+        command: terraform apply vpc -auto-approve
+```
+
+The array item is the [step](/workflows/steps/step). The `type` field selects step behavior. Fields such as `title`, `columns`, `prompt`, `retry`, and `timeout` are parameters on that same step object; they are not separate steps.
+
+```yaml
+steps:
+  - name: building
+    type: spin
+    title: Building application
+    command: npm run build
+    timeout: 60s
+```
+
+In this example, `spin` is the value of `steps[].type`. The fields `title`, `command`, and `timeout` configure that `spin` step.

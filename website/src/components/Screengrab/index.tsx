@@ -3,12 +3,31 @@ import Typewriter from '@site/src/components/Typewriter';
 
 export default function Screengrab({ title, command, className, slug, children }) {
     const [html, setHtml] = useState(null);
+    const [missing, setMissing] = useState(false);
 
     useEffect(() => {
+        let cancelled = false;
+
+        setHtml(null);
+        setMissing(false);
+
         import(`@site/src/components/Screengrabs/${slug}.html`)
             .then(module => {
-                setHtml(module.default);
+                if (!cancelled) {
+                    setHtml(module.default);
+                }
+            })
+            .catch(error => {
+                console.warn(`Missing screengrab artifact: ${slug}.html`, error);
+
+                if (!cancelled) {
+                    setMissing(true);
+                }
             });
+
+        return () => {
+            cancelled = true;
+        };
     }, [slug]);
 
     return (
@@ -26,6 +45,7 @@ export default function Screengrab({ title, command, className, slug, children }
                     {command && <Typewriter>{command}</Typewriter>}
                     {children}
                     {html && <pre className="screengrab" dangerouslySetInnerHTML={{ __html: html }}></pre>}
+                    {missing && <pre className="screengrab screengrab--missing">Missing screengrab: {slug}.html</pre>}
                 </div>
             </div>
         </div>

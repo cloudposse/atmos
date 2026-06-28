@@ -1,6 +1,6 @@
 # `hooks-infracost`
 
-Demonstrates the **`infracost`** hook kind: an `after-terraform-plan` hook
+Demonstrates the **`infracost`** hook kind: an `after.terraform.plan` hook
 that runs `infracost breakdown` against the component and renders a cost
 summary in the terminal.
 
@@ -28,7 +28,7 @@ summary in the terminal.
 atmos terraform plan nat-gateway -s test
 ```
 
-Expected: terraform plan succeeds; the `after-terraform-plan` hook fires;
+Expected: terraform plan succeeds; the `after.terraform.plan` hook fires;
 infracost runs and prints a markdown cost summary showing the NAT gateway
 and EIP monthly costs (typically ~$32/mo + ~$3.65/mo).
 

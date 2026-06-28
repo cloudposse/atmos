@@ -75,9 +75,14 @@ type Identity struct {
 	Via         *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
 	Principal   map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"` // Principal information (role name, account, etc.). For AWS permission sets: {name: string, account: {name: string, id: string}}.
 	Credentials map[string]interface{} `yaml:"credentials,omitempty" json:"credentials,omitempty" mapstructure:"credentials"`
+	Spec        map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"` // Kind-specific SDK/client configuration.
 	Alias       string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
 	Env         []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 	Session     *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+	// Emulator references an emulator component by name (resolved against the stack
+	// the command runs in). Used by emulator identity kinds (kind: <target>/emulator)
+	// to harvest the running emulator's connection profile (SDK env vars or kubeconfig).
+	Emulator string `yaml:"emulator,omitempty" json:"emulator,omitempty" mapstructure:"emulator"`
 }
 
 // IdentityVia defines how an identity connects to a provider or other identity.

@@ -69,6 +69,7 @@ var legacyTypeToKind = map[string]string{
 	"azure-key-vault":         KindAzureKeyVault,
 	"aws-ssm-parameter-store": KindAWSSSM,
 	"aws-secrets-manager":     KindAWSASM,
+	"google/secretmanager":    KindGCPSecret,
 	"google-secret-manager":   KindGCPSecret,
 	"gsm":                     KindGCPSecret,
 	"hashicorp-vault":         KindHashicorpVault,
@@ -255,8 +256,8 @@ func (r StoreRegistry) SetAuthContextResolver(resolver AuthContextResolver) {
 }
 
 // SetAuthContextResolverWithDefaultIdentity injects an auth context resolver into
-// identity-aware stores. Stores with their own configured identity keep it; stores
-// without a configured identity inherit defaultIdentity.
+// identity-aware stores. Stores with their own configured identity keep it; eligible
+// store types without a configured identity inherit defaultIdentity.
 func (r StoreRegistry) SetAuthContextResolverWithDefaultIdentity(resolver AuthContextResolver, defaultIdentity string) {
 	for _, s := range r {
 		ias, ok := s.(IdentityAwareStore)
@@ -274,6 +275,10 @@ func defaultIdentityForStore(s Store, defaultIdentity string) string {
 
 	switch typed := s.(type) {
 	case *SSMStore:
+		if typed.identityName == "" {
+			return defaultIdentity
+		}
+	case *SecretsManagerStore:
 		if typed.identityName == "" {
 			return defaultIdentity
 		}

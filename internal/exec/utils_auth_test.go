@@ -441,6 +441,90 @@ func TestStoreAutoDetectedIdentity(t *testing.T) {
 	}
 }
 
+func TestHookStoreDefaultIdentity(t *testing.T) {
+	tests := []struct {
+		name             string
+		setupMock        func(ctrl *gomock.Controller) *mockTypes.MockAuthManager
+		nilManager       bool
+		initialIdentity  string
+		expectedReturn   string
+		expectedIdentity string // info.Identity after the call (auto-detect may populate it).
+	}{
+		{
+			name:             "nil manager returns empty (ambient/default credentials preserved)",
+			nilManager:       true,
+			initialIdentity:  "",
+			expectedReturn:   "",
+			expectedIdentity: "",
+		},
+		{
+			name:            "no explicit identity inherits the auto-detected chain leaf",
+			initialIdentity: "",
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{"permission-set", "core-identity/devops"})
+				return m
+			},
+			expectedReturn:   "core-identity/devops",
+			expectedIdentity: "core-identity/devops",
+		},
+		{
+			name:            "empty chain yields no inheritance",
+			initialIdentity: "",
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{})
+				return m
+			},
+			expectedReturn:   "",
+			expectedIdentity: "",
+		},
+		{
+			name:             "explicit identity is preserved without consulting the chain",
+			initialIdentity:  "cli-admin",
+			setupMock:        mockTypes.NewMockAuthManager, // GetChain must NOT be called.
+			expectedReturn:   "cli-admin",
+			expectedIdentity: "cli-admin",
+		},
+		{
+			name:            "interactive select sentinel resolves to the chain leaf",
+			initialIdentity: cfg.IdentityFlagSelectValue,
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{"core-identity/managers"})
+				return m
+			},
+			expectedReturn:   "core-identity/managers",
+			expectedIdentity: "core-identity/managers",
+		},
+		{
+			name:             "disabled sentinel yields no inheritance",
+			initialIdentity:  cfg.IdentityFlagDisabledValue,
+			setupMock:        mockTypes.NewMockAuthManager, // GetChain must NOT be called.
+			expectedReturn:   "",
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+
+			info := &schema.ConfigAndStacksInfo{Identity: tt.initialIdentity}
+
+			var got string
+			if tt.nilManager {
+				got = HookStoreDefaultIdentity(nil, info)
+			} else {
+				got = HookStoreDefaultIdentity(tt.setupMock(ctrl), info)
+			}
+
+			assert.Equal(t, tt.expectedReturn, got, "returned default identity")
+			assert.Equal(t, tt.expectedIdentity, info.Identity, "info.Identity after call")
+		})
+	}
+}
+
 func TestGetMergedAuthConfig_EmptyStackOrComponent(t *testing.T) {
 	// When stack is empty, should return global auth config without calling ExecuteDescribeComponent.
 	atmosConfig := &schema.AtmosConfiguration{
@@ -701,7 +785,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_Success(t *testing.T) {
 	}
 
 	// Mock auth creator returns a mock manager.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return mockManager, nil
 	}
 
@@ -725,7 +809,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_InvalidComponentError(t *testi
 	}
 
 	// Mock auth creator - should not be called.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		t.Fatal("auth creator should not be called when component is invalid")
 		return nil, nil
 	}
@@ -749,7 +833,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_AuthCreatorError(t *testing.T)
 	}
 
 	// Mock auth creator returns an error.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return nil, errors.New("auth failed")
 	}
 
@@ -778,7 +862,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_OtherMergeError(t *testing.T) 
 	}
 
 	// Mock auth creator should still be called because getMergedAuthConfigWithFetcher handles errors gracefully.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return nil, nil
 	}
 
@@ -800,7 +884,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_NilAuthManager(t *testing.T) {
 	}
 
 	// Mock auth creator returns nil (no auth configured).
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return nil, nil
 	}
 
@@ -996,7 +1080,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_PreservesExistingIdentity(t *t
 		return nil, nil
 	}
 
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return mockManager, nil
 	}
 

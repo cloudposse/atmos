@@ -90,10 +90,6 @@ func renderFindingsTable(b *strings.Builder, sorted []Finding, limit int) {
 	b.WriteString("| Severity | Rule | Message | Location |\n")
 	b.WriteString("|---|---|---|---|\n")
 	for _, fd := range sorted[:limit] {
-		loc := fd.File
-		if fd.Line > 0 {
-			loc = fmt.Sprintf("%s:%d", fd.File, fd.Line)
-		}
 		// When a helpUri is available, render the rule ID as a markdown
 		// link so terminals (and Pro, and PR comments) turn it into a
 		// clickable jump to the official remediation guide. Falls back
@@ -103,7 +99,7 @@ func renderFindingsTable(b *strings.Builder, sorted []Finding, limit int) {
 			ruleCell = fmt.Sprintf("[%s](%s)", escapeMD(fd.RuleID), fd.HelpURI)
 		}
 		fmt.Fprintf(b, "| %s | %s | %s | %s |\n",
-			fd.Severity, ruleCell, escapeMD(truncate(fd.Message, maxMessageLength)), escapeMD(loc))
+			fd.Severity, ruleCell, escapeMD(truncate(fd.Message, maxMessageLength)), locationCell(&fd))
 	}
 
 	if len(sorted) > limit {
@@ -147,6 +143,29 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n-1] + "…"
+}
+
+func locationCell(fd *Finding) string {
+	if fd.File == "" {
+		return ""
+	}
+	if fd.Line <= 0 {
+		return escapeMD(fd.File)
+	}
+	loc := fmt.Sprintf("%s:%d", fd.File, fd.Line)
+	return fmt.Sprintf("[%s](%s#L%d)", escapeMD(loc), escapeLinkDestination(fd.File), fd.Line)
+}
+
+func escapeLinkDestination(s string) string {
+	replacer := strings.NewReplacer(
+		" ", "%20",
+		"\n", "",
+		"\r", "",
+		"#", "%23",
+		"(", "%28",
+		")", "%29",
+	)
+	return replacer.Replace(s)
 }
 
 // escapeMD escapes pipe and newline characters that would break a table row.

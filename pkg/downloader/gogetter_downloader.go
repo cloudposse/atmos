@@ -39,9 +39,16 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 	// remote read so private repositories are reachable. Brokers export GIT_CONFIG_*/tokens into
 	// the process env, which the git subprocess this client spawns inherits. Process-once and
 	// gated (CI + configured), so local-only fetches and non-Pro repos pay nothing.
-	if f.atmosConfig != nil && isRemoteSource(src) {
+	remote := f.atmosConfig != nil && isRemoteSource(src)
+	if remote {
 		broker.EnsureCredentials(ctx, f.atmosConfig)
 	}
+
+	// When Atmos brokered a fresh token this process, a freshly minted GitHub token can
+	// briefly 401 before GitHub propagates it. Let the git getter retry such auth failures
+	// within a bounded window — only for remote, brokered reads, so static credentials still
+	// fail fast.
+	retryAuthErrors := remote && broker.HasBrokeredCredentials()
 
 	registerCustomDetectors(f.atmosConfig, src)
 	switch mode {
@@ -67,7 +74,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		DisableSymlinks: false,
 		Getters: map[string]getter.Getter{
 			// Overriding 'git'.
-			"git":   &CustomGitGetter{RetryConfig: f.retryConfig},
+			"git":   &CustomGitGetter{RetryConfig: f.retryConfig, RetryAuthErrors: retryAuthErrors},
 			"file":  &getter.FileGetter{},
 			"hg":    &getter.HgGetter{},
 			"http":  httpGetter,

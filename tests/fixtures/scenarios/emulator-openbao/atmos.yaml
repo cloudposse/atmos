@@ -1,0 +1,36 @@
+# Minimal scenario proving Atmos Secrets backed by Vault/OpenBao work end to end
+# against the emulator-component path: `atmos emulator up openbao` (atmos manages the
+# container) + a hashicorp-vault secret store + a consumer that resolves the secret
+# via `!secret`. Used by TestEmulatorOpenBaoLifecycle (opt-in, runtime-gated).
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+    apply_auto_approve: true
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+
+# The secret store talks to the OpenBao emulator (Vault KV v2 API). A store lives in
+# atmos.yaml (global config, no stack context), so it cannot use the stack-scoped
+# `!emulator` function — instead the emulator publishes its port on a fixed host port
+# (see the component's `container.ports`) and the store points at it with a static
+# address. The OpenBao emulator runs a file-storage backend (so secrets persist), which
+# generates a dynamic root token at init; the store reads it from the standard
+# VAULT_TOKEN environment variable (omit `token` to fall back to the env).
+stores:
+  secrets/vault:
+    kind: hashicorp-vault
+    secret: true
+    options:
+      address: http://localhost:8200
+      mount: secret
+
+logs:
+  file: "/dev/stderr"
+  level: Info

@@ -83,7 +83,8 @@ const markdownComponents = {
   h3: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h4 {...props}>{children}</h4>,
   h4: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h5 {...props}>{children}</h5>,
   h5: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h6 {...props}>{children}</h6>,
-  code({ className, children, ...props }: { className?: string; children?: React.ReactNode }) {
+  pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  code({ className, children, node, ...props }: { className?: string; children?: React.ReactNode; node?: unknown }) {
     const match = /language-(\w+)/.exec(className || '');
     const isInline = !match;
     return isInline ? (
