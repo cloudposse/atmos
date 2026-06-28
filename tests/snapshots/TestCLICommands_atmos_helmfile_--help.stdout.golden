@@ -31,6 +31,8 @@ FLAGS
       --              Use double dashes to separate Atmos-specific options from native arguments and flags for the
                       command.
 
+      --ci            Enable CI mode for automated pipelines (writes job summary).
+
   -h, --help          help for helmfile
 
   -s, --stack string  The stack flag specifies the environment or configuration set for deployment in Atmos CLI.

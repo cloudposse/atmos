@@ -80,10 +80,20 @@ func WithDir(dir string) Option {
 
 // ManagedDir returns the default managed HELM_PLUGINS directory, derived from
 // the toolchain install path.
+//
+// The path is resolved to absolute: helmfile runs helm from the component's
+// working directory, so a HELM_PLUGINS value relative to the Atmos base
+// directory (e.g. a configured `.tools`) would not resolve there and helm would
+// fail to find installed plugins like helm-diff. This mirrors how toolchain
+// binary PATH entries are absolutized (see pkg/dependencies/environment.go).
 func ManagedDir() string {
 	defer perf.Track(nil, "plugin.ManagedDir")()
 
-	return filepath.Join(toolchain.GetInstallPath(), managedDirName)
+	dir := filepath.Join(toolchain.GetInstallPath(), managedDirName)
+	if abs, err := filepath.Abs(dir); err == nil {
+		return abs
+	}
+	return dir
 }
 
 // NewInstaller creates an Installer for the given helm binary path.

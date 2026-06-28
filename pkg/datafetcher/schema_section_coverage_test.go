@@ -46,6 +46,7 @@ var manifestSections = map[string]sectionScope{
 	"packer":                    {topLevel: true},
 	"ansible":                   {topLevel: true},
 	"kubernetes":                {topLevel: true},
+	"helm":                      {topLevel: true},
 	"components":                {topLevel: true},
 	"overrides":                 {topLevel: true},
 	"workflows":                 {topLevel: true},
@@ -82,6 +83,11 @@ var nonManifestSections = map[string]struct{}{
 	"paths":              {}, // Kubernetes component sub-field (manifest paths).
 	"manifests":          {}, // Kubernetes component sub-field (inline manifests).
 	"render":             {}, // Kubernetes component sub-field (render output config).
+	"chart":              {}, // Native Helm component sub-field (chart reference).
+	"values":             {}, // Native Helm component sub-field (inline chart values).
+	"values_files":       {}, // Native Helm component sub-field (chart values file paths).
+	"repositories":       {}, // Native Helm component sub-field (chart repositories).
+	"plugins":            {}, // Helm/Helmfile component sub-field (Helm CLI plugins list).
 	"workspace":          {}, // Terraform workspace (derived/metadata).
 	"required_version":   {}, // Introspected from Terraform, not authored.
 	"required_providers": {}, // Introspected from Terraform, not authored.
@@ -112,10 +118,15 @@ var nonManifestSections = map[string]struct{}{
 //   - website lacks top-level `name`, `ansible`, and global `auth`.
 //   - the embedded schema (pkg/datafetcher/schema/...) lags the website copy on `dependencies`,
 //     `generate`, `provision`, `source`, `ansible`, and global `auth`.
+//   - native Helm is not yet modeled in either schema: top-level `helm` (default config for helm
+//     components, peer of `helmfile`/`kubernetes`) and the `helm_component_manifest` definition
+//     are missing. Tracked until the native-Helm manifest schema lands.
 var knownSchemaGaps = map[string]struct{}{
 	"website:topLevel:name":           {},
 	"website:topLevel:ansible":        {},
 	"website:topLevel:auth":           {},
+	"website:topLevel:helm":           {},
+	"embedded:topLevel:helm":          {},
 	"embedded:topLevel:ansible":       {},
 	"embedded:topLevel:auth":          {},
 	"embedded:topLevel:generate":      {},
