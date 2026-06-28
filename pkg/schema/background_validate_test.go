@@ -75,6 +75,22 @@ func TestValidateBackgroundSteps(t *testing.T) {
 			},
 			wantErr: "references unknown",
 		},
+		{
+			name: "duplicate live background names are rejected (would leak the first handle)",
+			steps: []WorkflowStep{
+				{Name: "svc", Type: "container", BackgroundAsync: true, Run: &ContainerRunStep{Image: "floci"}},
+				{Name: "svc", Type: "container", BackgroundAsync: true, Run: &ContainerRunStep{Image: "floci"}},
+			},
+			wantErr: "must be unique while live",
+		},
+		{
+			name: "background name may be reused after the earlier one is cancelled",
+			steps: []WorkflowStep{
+				{Name: "svc", Type: "container", BackgroundAsync: true, Run: &ContainerRunStep{Image: "floci"}},
+				{Name: "drop", Type: TaskTypeCancel, For: []string{"svc"}},
+				{Name: "svc", Type: "container", BackgroundAsync: true, Run: &ContainerRunStep{Image: "floci"}},
+			},
+		},
 	}
 
 	// Compile-time sentinel: validation keys off these struct fields.

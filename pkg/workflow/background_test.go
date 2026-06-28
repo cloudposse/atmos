@@ -145,6 +145,11 @@ func TestGatePendingBackground_GatesOnceThenSkips(t *testing.T) {
 	assert.Equal(t, 1, runner.handles["b"].readyCalls)
 }
 
+func TestGatePendingBackground_NilRegistryIsNoOp(t *testing.T) {
+	// The documented contract: a nil registry is a no-op (must not panic on reg.Names()).
+	require.NoError(t, GatePendingBackground(context.Background(), nil, map[string]bool{}))
+}
+
 func TestGatePendingBackground_SurfacesUnhealthyAndLeavesUngated(t *testing.T) {
 	reg := background.NewRegistry()
 	reg.Register(&fakeHandle{name: "bad", readyErr: errors.New("unhealthy")})

@@ -67,6 +67,9 @@ func WaitAllBackground(ctx context.Context, reg *background.Registry) error {
 func GatePendingBackground(ctx context.Context, reg *background.Registry, gated map[string]bool) error {
 	defer perf.Track(nil, "workflow.GatePendingBackground")()
 
+	if reg == nil {
+		return nil
+	}
 	var pending []string
 	for _, name := range reg.Names() {
 		if !gated[name] {

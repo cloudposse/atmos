@@ -87,6 +87,9 @@ func ValidateWorkflowSteps(steps []WorkflowStep) error {
 // workflow step list:
 //   - `background: true` is supported only for `type: container` in v1, and a
 //     background step must be non-interactive.
+//   - a background step's name must be unique while it is live: the registry keys
+//     handles by name, so a duplicate would overwrite (and leak) the earlier one.
+//     Reuse is allowed only after the earlier step is `cancel`led.
 //   - a `wait`/`cancel` step's `for:` targets must reference a background step
 //     declared earlier in the workflow (and not already cancelled).
 func validateBackgroundSteps(steps []WorkflowStep) error {
@@ -98,7 +101,12 @@ func validateBackgroundSteps(steps []WorkflowStep) error {
 			if err := validateBackgroundStep(step, i, stepType); err != nil {
 				return err
 			}
-			live[workflowStepName(step, i)] = true
+			name := workflowStepName(step, i)
+			if live[name] {
+				return fmt.Errorf("%w: %s reuses the name of a still-running background step %q; background step names must be unique while live (cancel the earlier one first)",
+					ErrWorkflowControlStepInvalid, workflowStepLabel(step, i), name)
+			}
+			live[name] = true
 		}
 		switch stepType {
 		case TaskTypeWait, TaskTypeCancel:
