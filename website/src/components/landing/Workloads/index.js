@@ -1,30 +1,31 @@
 import React, { useRef } from 'react';
 import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion';
 import { SiGithubactions } from 'react-icons/si';
-import Screengrab from '@site/src/components/Screengrab';
+import DemoVideo from '@site/src/components/landing/DemoVideo';
 
 // Job-to-be-done sections — the heart of the page. Each is a real job, proven
 // with a terminal demo, a monospace feature list, and a product-proof line.
-// `features` entries may be { label, isNew } to render a NEW badge.
+// `features` entries may be { label, isNew } to render a NEW badge, or
+// { label, isPro } to render a PRO badge that links to Atmos Pro.
 // `icon` renders a small accent glyph next to the eyebrow.
 const WORKLOADS = [
   {
     eyebrow: 'Terraform & OpenTofu',
     title: 'Run Terraform like a platform team.',
     desc: 'Plan and apply across every component in dependency order, with bounded concurrency. Backends and providers are generated for you. Drift is caught automatically.',
-    features: ['Dependency-aware apply', 'Auto backends', 'Registry cache', 'Drift detection'],
-    proof: 'atmos terraform apply --all walks the graph so a VPC lands before the cluster that needs it.',
-    slug: 'demo-stacks/deploy-prod',
-    terminalTitle: 'atmos terraform apply --all -s plat-ue2-prod',
+    features: ['Dependency graph', 'Auto backends', 'Registry cache', { label: 'Drift detection', isPro: true }],
+    proof: 'Atmos lists the Terraform instances and resolved stack values it will pass to Terraform.',
+    slug: 'terraform',
+    terminalTitle: 'Terraform, orchestrated',
   },
   {
     eyebrow: 'Kubernetes & Helm',
     title: 'Ship Kubernetes and Helm the same way.',
-    desc: 'Helmfile is a first-class workload. Atmos builds your kubeconfig and authenticates to EKS for you — the same CLI you already use for Terraform.',
-    features: ['Helmfile native', 'Automatic EKS auth', 'Same CLI'],
-    proof: 'No more juggling aws eks update-kubeconfig before every deploy.',
-    slug: 'demo-stacks/deploy-staging',
-    terminalTitle: 'atmos helmfile apply nginx -s dev',
+    desc: 'Helmfile is a first-class workload. Atmos models Kubernetes releases beside the rest of your stack, with the same CLI you already use for Terraform.',
+    features: ['Helmfile native', 'Stack-aware releases', 'Toolchain aware'],
+    proof: 'Atmos starts a local k3s sandbox off camera, installs declared Helm tooling, then deploys the release from the stack.',
+    slug: 'kubernetes',
+    terminalTitle: 'Helm, the platform way',
   },
   {
     eyebrow: 'Containers & Emulators',
@@ -32,8 +33,8 @@ const WORKLOADS = [
     desc: 'Containers and dev containers are workloads too. Spin up cloud emulators locally so your whole stack runs on your laptop — no account required to iterate.',
     features: ['Container components', 'Dev containers', { label: 'Emulators', isNew: true }],
     proof: 'Develop against a local emulated cloud, then ship the identical config to prod.',
-    slug: 'demo-stacks/start-your-project',
-    terminalTitle: 'atmos devcontainer up',
+    slug: 'emulators',
+    terminalTitle: 'A whole cloud on your laptop',
   },
   {
     eyebrow: 'Local = CI',
@@ -41,18 +42,27 @@ const WORKLOADS = [
     desc: 'Same command, same auth, same secrets, same toolchain — whether you run it locally or in a pipeline. And Atmos is git-aware: it detects what changed and plans or applies only the affected components, so CI does exactly the work that changed — nothing more.',
     features: ['Git-aware affected detection', 'Apply only what changed', 'Reusable across repos', 'Zero-config CI'],
     proof: 'What works on your machine works in CI — without any additional GitHub Actions or messy bash scripts, because it is literally the same runtime.',
-    slug: 'demo-stacks/define-your-stacks',
-    terminalTitle: 'atmos describe affected',
+    slug: 'local-ci',
+    terminalTitle: 'atmos terraform apply --affected --ci',
     icon: SiGithubactions,
+  },
+  {
+    eyebrow: 'Secrets & Stores',
+    title: 'Manage secrets without glue code.',
+    desc: 'Declare required secrets next to a component, initialize or rotate them through Atmos, and inject them into commands only when the component runs.',
+    features: ['Declared secrets', 'Local and cloud stores', 'Masked reads', 'Runtime injection'],
+    proof: 'Atmos initializes declared secrets, lists their status, rotates a value, and injects it into a component command without printing the secret.',
+    slug: 'secrets',
+    terminalTitle: 'Secrets without glue code',
   },
   {
     eyebrow: 'Developer experience',
     title: 'It tells you what to do next.',
-    desc: 'Forget a flag and Atmos asks which stack and which component you meant. Hit an error and you get an actionable hint, not a stack trace. Every command follows the same verb-noun grammar.',
-    features: ['Interactive prompts', 'Actionable hints', 'Consistent CLI', 'Tab completion'],
+    desc: 'Forget a flag and Atmos asks which stack and which component you meant. Every command follows the same verb-noun grammar, so the CLI stays discoverable as your platform grows.',
+    features: ['Interactive prompts', 'Guided selection', 'Consistent CLI', 'Tab completion'],
     proof: 'A consistent, discoverable CLI that guides you instead of fighting you.',
-    slug: 'demo-stacks/write-your-components',
-    terminalTitle: 'atmos terraform plan',
+    slug: 'dx',
+    terminalTitle: 'Atmos asks what you meant',
   },
 ];
 
@@ -62,10 +72,21 @@ function FeatureList({ features }) {
       {features.map((f) => {
         const label = typeof f === 'string' ? f : f.label;
         const isNew = typeof f === 'object' && f.isNew;
+        const isPro = typeof f === 'object' && f.isPro;
         return (
           <li key={label}>
             {label}
             {isNew && <span className="lp-new">New</span>}
+            {isPro && (
+              <a
+                className="lp-pro"
+                href="https://atmos-pro.com"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Pro
+              </a>
+            )}
           </li>
         );
       })}
@@ -120,7 +141,7 @@ function WorkloadSection({ w, i }) {
         viewport={{ once: true, amount: 0.25 }}
         transition={{ duration: 0.6, delay: 0.1, ease: 'easeOut' }}
       >
-        <Screengrab title={w.terminalTitle} slug={w.slug} />
+        <DemoVideo title={w.terminalTitle} slug={w.slug} />
       </motion.div>
     </motion.section>
   );

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
@@ -13,6 +14,10 @@ import (
 
 // k3sKubeconfigPath is where k3s writes its admin kubeconfig inside the container.
 const k3sKubeconfigPath = "/etc/rancher/k3s/k3s.yaml"
+
+var kubeconfigReadyTimeout = 90 * time.Second
+
+var kubeconfigPollInterval = time.Second
 
 // kubeconfigServerPattern matches the `server:` line in a kubeconfig.
 var kubeconfigServerPattern = regexp.MustCompile(`(?m)^(\s*server:\s*).*$`)
@@ -24,6 +29,29 @@ var kubeconfigServerPattern = regexp.MustCompile(`(?m)^(\s*server:\s*).*$`)
 func (m *Manager) Kubeconfig(ctx context.Context, stack, name string) ([]byte, error) {
 	defer perf.Track(nil, "emulator.Manager.Kubeconfig")()
 
+	deadline := time.Now().Add(kubeconfigReadyTimeout)
+	var lastErr error
+	for {
+		kubeconfig, err := m.tryKubeconfig(ctx, stack, name)
+		if err == nil {
+			return kubeconfig, nil
+		}
+		lastErr = err
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if time.Now().After(deadline) {
+			return nil, lastErr
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(kubeconfigPollInterval):
+		}
+	}
+}
+
+func (m *Manager) tryKubeconfig(ctx context.Context, stack, name string) ([]byte, error) {
 	runtime, info, err := m.find(ctx, stack, name)
 	if err != nil {
 		return nil, err

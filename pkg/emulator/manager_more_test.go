@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -267,10 +268,18 @@ func TestManager_Resolve_KubernetesKubeconfigError(t *testing.T) {
 	runtime := NewMockRuntime(ctrl)
 	info := kubeRunningInfo(16443)
 	runtime.EXPECT().List(gomock.Any(), gomock.Any()).
-		Return([]container.Info{info}, nil).Times(2)
+		Return([]container.Info{info}, nil).AnyTimes()
 	runtime.EXPECT().
 		Exec(gomock.Any(), info.ID, []string{"cat", k3sKubeconfigPath}, gomock.Any()).
-		Return(errRuntimeBoom)
+		Return(errRuntimeBoom).AnyTimes()
+	oldTimeout := kubeconfigReadyTimeout
+	oldInterval := kubeconfigPollInterval
+	kubeconfigReadyTimeout = time.Millisecond
+	kubeconfigPollInterval = time.Millisecond
+	t.Cleanup(func() {
+		kubeconfigReadyTimeout = oldTimeout
+		kubeconfigPollInterval = oldInterval
+	})
 
 	m := newManagerWithRuntime(runtime)
 	_, _, err := m.Resolve(context.Background(), &Spec{Driver: kubeTestDriverName}, "dev", "k8s")

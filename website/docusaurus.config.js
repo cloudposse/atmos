@@ -674,6 +674,10 @@ const config = {
 
     customFields: {
         latestRelease: 'v0.0.0', // initial placeholder
+        // Base URL (no trailing slash) for landing-page demo recordings synced to
+        // S3/CDN by `atmos demo publish`. Empty → the gitignored local copies under
+        // static/img/demos/ are used (local dev preview). See DemoVideo + demo/landing/.
+        demosBaseUrl: process.env.ATMOS_DEMOS_BASE_URL || '',
         },
 
     markdown: {

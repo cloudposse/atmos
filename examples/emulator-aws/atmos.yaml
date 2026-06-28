@@ -37,6 +37,26 @@ auth:
 
 # Custom CLI commands
 commands:
+  - name: "sandbox"
+    description: "Developer-friendly shortcuts for the local AWS sandbox"
+    commands:
+      - name: "deploy"
+        description: "Apply the demo component and print the resulting outputs"
+        flags:
+          - name: stack
+            shorthand: s
+            description: Target stack.
+            required: true
+        steps:
+          - type: shell
+            name: apply
+            command: atmos terraform apply demo -s {{ .Flags.stack }} -auto-approve > .demo-apply.log
+            output: none
+          - type: shell
+            name: outputs
+            command: atmos terraform output demo -s {{ .Flags.stack }}
+            output: raw
+
   - name: "test"
     description: "Bring up the sandbox, apply and destroy the demo in each stage, then tear it down"
     steps:

@@ -390,6 +390,9 @@ func (e *Executor) executeRegisteredStep(params *WorkflowParams, step *schema.Wo
 	if e.stepVars == nil {
 		e.stepVars = stepPkg.NewVariables()
 	}
+	if cmdParams.finalStack != "" {
+		e.stepVars.SetFlag("stack", cmdParams.finalStack)
+	}
 
 	stepCtx, cancel, err := resolveStepContext(params.Ctx, stepCopy.Timeout)
 	if err != nil {

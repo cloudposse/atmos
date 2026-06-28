@@ -17,6 +17,8 @@ type Variables struct {
 	Steps map[string]*StepResult
 	// Env contains environment variables.
 	Env map[string]string
+	// Flags contains workflow command-line flags exposed to step templates.
+	Flags map[string]string
 	// stageIndex tracks current stage position (1-indexed).
 	stageIndex int
 	// totalStages tracks total number of stage steps in workflow.
@@ -30,6 +32,7 @@ func NewVariables() *Variables {
 	v := &Variables{
 		Steps: make(map[string]*StepResult),
 		Env:   make(map[string]string),
+		Flags: make(map[string]string),
 	}
 	// Pre-populate with OS environment variables.
 	v.LoadOSEnv()
@@ -127,6 +130,16 @@ func (v *Variables) SetEnv(key, value string) {
 	v.Env[key] = value
 }
 
+// SetFlag sets a workflow flag variable.
+func (v *Variables) SetFlag(key, value string) {
+	defer perf.Track(nil, "step.Variables.SetFlag")()
+
+	if v.Flags == nil {
+		v.Flags = make(map[string]string)
+	}
+	v.Flags[key] = value
+}
+
 // SetTotalStages sets the total number of stage steps in the workflow.
 func (v *Variables) SetTotalStages(total int) {
 	defer perf.Track(nil, "step.Variables.SetTotalStages")()
@@ -176,6 +189,8 @@ func (v *Variables) templateData() map[string]any {
 	return map[string]any{
 		"steps": steps,
 		"env":   v.Env,
+		"Flags": v.Flags,
+		"flags": v.Flags,
 	}
 }
 

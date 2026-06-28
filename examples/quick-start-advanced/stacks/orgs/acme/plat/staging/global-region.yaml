@@ -1,3 +1,7 @@
+# Top-level stack `plat-gbl-staging` — a composition manifest, not where config lives.
+# It assembles a deployment from two reusable layers:
+#   - orgs/acme/plat/staging/_defaults  → what makes `staging` different (prod-like, relaxed)
+#   - mixins/region/global-region       → region + environment context vars
 import:
   - orgs/acme/plat/staging/_defaults
   - mixins/region/global-region

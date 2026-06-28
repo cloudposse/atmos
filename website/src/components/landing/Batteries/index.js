@@ -60,7 +60,7 @@ const BATTERIES = [
     icon: RiGitMergeLine,
     title: 'GitOps & CI/CD',
     desc: 'Managed repositories, signed commits, and the same commands locally and in CI. Detect affected components, emit matrices, and catch drift.',
-    tag: 'GITOPS · DESCRIBE AFFECTED · DRIFT',
+    tag: 'GITOPS · LIST AFFECTED · DRIFT',
     to: '/ci',
   },
   {

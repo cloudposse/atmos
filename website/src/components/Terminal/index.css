@@ -62,6 +62,10 @@ html[data-theme="dark"] .terminal .window-title {
     --prism-background-color: transparent !important;
     background-color: transparent !important;
     background: transparent !important;
+    /* The terminal window chrome already frames the code; drop the CodeBlock's own
+       border and radius so we don't nest a border inside a border. */
+    border: 0;
+    border-radius: 0;
 }
 
 .terminal .theme-code-block.language-shell,

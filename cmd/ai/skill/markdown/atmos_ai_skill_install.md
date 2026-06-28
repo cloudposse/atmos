@@ -1,16 +1,19 @@
-Install AI skills from a GitHub repository.
+Install AI skills by bundled name (offline) or from a GitHub repository.
 
-Supports both single-skill repos (with SKILL.md at root) and multi-skill
-packages (with skills/*/SKILL.md pattern). The official Atmos skills package
-contains 21 specialized skills for infrastructure orchestration.
+The official Atmos skills are embedded in the binary, so installing one by its
+bare name (e.g. `atmos-terraform`) works fully offline — no network or Git
+clone. Run `atmos ai skill list` to see every available skill. You can also
+install from any GitHub repository: single-skill repos (with SKILL.md at root)
+and multi-skill packages (with skills/*/SKILL.md pattern) are both supported.
 
-Skills will be downloaded, validated, and installed to ~/.atmos/skills/.
-You can then use them in the AI TUI by switching with Ctrl+A.
+Skills will be validated and installed to ~/.atmos/skills/. You can then use
+them in the AI TUI by switching with Ctrl+A.
 
 Skills follow the Agent Skills open standard (https://agentskills.io)
 and use the SKILL.md format with YAML frontmatter.
 
 Source formats:
+  atmos-terraform                   Bundled skill by name (offline)
   user/repo                         GitHub shorthand (GitHub assumed)
   user/repo@v1.2.3                  Specific version tag
   github.com/user/repo              Full GitHub path

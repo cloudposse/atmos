@@ -3,6 +3,8 @@ package flags
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
@@ -10,11 +12,11 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	atmosterm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -35,7 +37,24 @@ func isInteractive() bool {
 	}
 
 	// Check if stdin is a TTY and not in CI.
-	return atmosterm.IsTTYSupportForStdin() && !telemetry.IsCI()
+	return isTTYForPromptInput() && !telemetry.IsCI()
+}
+
+func isTTYForPromptInput() bool {
+	if terminal.New().IsTTY(terminal.Stdin) {
+		return true
+	}
+
+	forceTTY, ok := os.LookupEnv("ATMOS_FORCE_TTY")
+	if !ok {
+		return false
+	}
+
+	enabled, err := strconv.ParseBool(forceTTY)
+	if err != nil {
+		return forceTTY != ""
+	}
+	return enabled
 }
 
 // PromptForValue shows an interactive Huh selector with the given options.
@@ -270,7 +289,7 @@ func PromptForConfirmation(title string, force bool) (bool, error) {
 	}
 
 	// Check if stdin is a TTY.
-	if !atmosterm.IsTTYSupportForStdin() {
+	if !isTTYForPromptInput() {
 		return false, errUtils.ErrInteractiveNotAvailable
 	}
 

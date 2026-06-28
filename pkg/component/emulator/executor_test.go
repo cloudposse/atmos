@@ -338,6 +338,73 @@ func TestExecutePs_Error(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrComponentExecutionFailed)
 }
 
+// stubListSeams installs the seams ExecuteList consults directly (it bypasses
+// prepare(), so only initCliConfig and newManager are needed). All seams are
+// restored on cleanup.
+func stubListSeams(t *testing.T, mgr *fakeManager) {
+	t.Helper()
+
+	origInit, origNew := initCliConfig, newManager
+	t.Cleanup(func() {
+		initCliConfig = origInit
+		newManager = origNew
+	})
+
+	initCliConfig = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+		var cfg schema.AtmosConfiguration
+		cfg.Container.Runtime.Provider = "podman"
+		return cfg, nil
+	}
+	newManager = func(_ string, _ bool) emulatorManager { return mgr }
+}
+
+func TestExecuteList_ListsStatuses(t *testing.T) {
+	mgr := &fakeManager{psStatuses: []emu.Status{
+		{Name: "aws", Stack: "dev", Image: "docker.io/floci/floci@sha256:abcdef", Status: "running", ID: "628b3ae8a73c92b361"},
+		{Name: "gcp", Stack: "dev", Image: "floci/gcp:latest", Status: "exited", ID: "deadbeef0001"},
+	}}
+	stubListSeams(t, mgr)
+
+	require.NoError(t, ExecuteList(context.Background(), baseInfo()))
+	assert.Equal(t, "dev", mgr.gotStack)
+}
+
+func TestExecuteList_AllStacksWhenStackEmpty(t *testing.T) {
+	mgr := &fakeManager{psStatuses: []emu.Status{
+		{Name: "aws", Stack: "dev", Image: "floci/floci:latest", Status: "running", ID: "abc"},
+	}}
+	stubListSeams(t, mgr)
+
+	info := &schema.ConfigAndStacksInfo{} // no stack set.
+	require.NoError(t, ExecuteList(context.Background(), info))
+	assert.Empty(t, mgr.gotStack, "empty stack is passed through so Ps lists all stacks")
+}
+
+func TestExecuteList_Empty(t *testing.T) {
+	mgr := &fakeManager{psStatuses: nil}
+	stubListSeams(t, mgr)
+	require.NoError(t, ExecuteList(context.Background(), baseInfo()))
+}
+
+func TestExecuteList_Error(t *testing.T) {
+	mgr := &fakeManager{psErr: errBoom}
+	stubListSeams(t, mgr)
+	err := ExecuteList(context.Background(), baseInfo())
+	require.ErrorIs(t, err, errBoom)
+	assert.ErrorIs(t, err, errUtils.ErrComponentExecutionFailed)
+}
+
+func TestShortImage(t *testing.T) {
+	assert.Equal(t, "floci/floci", shortImage("docker.io/floci/floci@sha256:c88ec20bf221"))
+	assert.Equal(t, "floci/aws:latest", shortImage("floci/aws:latest"))
+	assert.Equal(t, "floci/floci", shortImage("floci/floci@sha256:deadbeef"))
+}
+
+func TestShortID(t *testing.T) {
+	assert.Equal(t, "628b3ae8a73c", shortID("628b3ae8a73c92b361b8b5a9fe584cd"))
+	assert.Equal(t, "abc", shortID("abc"))
+}
+
 func TestExecuteLogs_Success(t *testing.T) {
 	mgr := &fakeManager{}
 	stubPrepare(t, validSection(), nil, mgr)

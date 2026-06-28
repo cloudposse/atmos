@@ -32,17 +32,18 @@ const FEATURED = [
   'sops-secrets',
   'toolchain',
   'custom-commands',
-  'demo-floci',
+  'emulator-aws',
 ];
 
 // Friendly display titles for examples (falls back to the directory name when absent).
 const TITLES_MAP = {
   'quick-start-simple': 'Quick Start (Simple)',
   'quick-start-advanced': 'Quick Start (Advanced)',
-  'sops-secrets': 'Stacks (SOPS Secrets)',
+  'sops-secrets': 'SOPS Secrets',
   toolchain: 'Toolchain',
   'custom-commands': 'Custom Commands',
-  'demo-floci': 'Floci (AWS Emulator)',
+  'emulator-aws': 'AWS Emulator',
+  'emulator-k8s': 'Kubernetes Emulator',
 };
 
 // Tags mapping for examples (an example can have multiple tags).
@@ -69,7 +70,8 @@ const TAGS_MAP = {
   toolchain: ['DX'],
   devcontainer: ['DX'],
   'devcontainer-build': ['DX'],
-  'demo-floci': ['DX'],
+  'emulator-aws': ['DX'],
+  'emulator-k8s': ['DX'],
   'demo-helmfile': ['DX'],
   'stack-names': ['Stacks'],
   'demo-ansible': ['Automation'],

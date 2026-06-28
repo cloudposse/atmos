@@ -15,6 +15,7 @@
   --lp-border: rgba(255, 255, 255, 0.1);
   --lp-border-strong: rgba(255, 255, 255, 0.2);
   --lp-accent: #538ce9;
+  --lp-pro-accent: #e0a83b;
   --lp-mono: "Geist Mono", ui-monospace, "SFMono-Regular", "JetBrains Mono", "Fira Code", monospace;
 }
 
@@ -27,6 +28,7 @@ html[data-theme="light"] .landing-page {
   --lp-border: rgba(0, 0, 0, 0.1);
   --lp-border-strong: rgba(0, 0, 0, 0.18);
   --lp-accent: #1e5bb8;
+  --lp-pro-accent: #b97e12;
 }
 
 /* --- Shared section scaffolding ------------------------------------------- */
@@ -144,6 +146,34 @@ html[data-theme="light"] .landing-page {
   background: color-mix(in srgb, var(--lp-accent) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--lp-accent) 32%, transparent);
   vertical-align: middle;
+}
+
+/* Pro pill — same understated shape as .lp-new but a distinct amber/gold accent so
+   it reads as a premium (Atmos Pro) marker rather than "New". It is a link, so it
+   resets link styling and lifts on hover. */
+.lp-pro {
+  display: inline-block;
+  font-family: var(--lp-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.4rem;
+  border-radius: 5px;
+  color: var(--lp-pro-accent);
+  background: color-mix(in srgb, var(--lp-pro-accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--lp-pro-accent) 38%, transparent);
+  vertical-align: middle;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.lp-pro:hover {
+  color: var(--lp-pro-accent);
+  text-decoration: none;
+  background: color-mix(in srgb, var(--lp-pro-accent) 26%, transparent);
+  border-color: color-mix(in srgb, var(--lp-pro-accent) 56%, transparent);
 }
 
 /* Neutralize legacy .landing-page header / main h2 rules from landing-page.css
@@ -483,7 +513,8 @@ html[data-theme="light"] .landing-page .lp-hero-visual .terminal {
 }
 
 .lp-battery {
-  display: block;
+  display: flex;
+  flex-direction: column;
   background: var(--lp-panel);
   border: 1px solid var(--lp-border);
   border-radius: 14px;
@@ -540,6 +571,12 @@ a.lp-extend-card:hover {
 }
 
 .lp-battery-tag {
+  /* Anchor the tag row to the bottom of the card (not just after the paragraph)
+     so every card's tags align on one baseline across the row. The card is a flex
+     column; `margin-top: auto` absorbs the leftover space above the tag. The
+     paragraph's own `margin-bottom` keeps a minimum gap when a long description
+     fills the card height. */
+  margin-top: auto;
   font-family: var(--lp-mono);
   font-size: 0.68rem;
   letter-spacing: 0.1em;
@@ -613,6 +650,73 @@ html[data-theme="light"] .landing-page .lp-workload-visual .terminal {
   margin: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+/* Config-as-code carousel: tabs rotate the terminal through real config
+   domains (environments, auth, secrets, workflows, vendoring). The tabs match
+   the mono, uppercase, letter-spaced treatment of .lp-mono-list. */
+.lp-config-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.lp-config-tabs button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-family: var(--lp-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lp-fg-faint);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.lp-config-tabs button:hover {
+  color: var(--lp-fg-muted);
+}
+
+.lp-config-tabs button.is-active {
+  color: var(--lp-fg);
+  border-color: var(--lp-border);
+  background: var(--lp-panel);
+}
+
+.lp-config-tabs button.is-active::after {
+  content: "";
+  display: block;
+  height: 2px;
+  margin-top: 0.3rem;
+  border-radius: 2px;
+  background: var(--lp-accent);
+}
+
+.lp-config-tabs button:focus-visible {
+  outline: 2px solid var(--lp-accent);
+  outline-offset: 2px;
+}
+
+/* All config snippets are stacked in the same grid cell so the terminal is always
+   as tall as the tallest snippet — swapping tabs crossfades in place instead of
+   resizing the window (a height change re-centered the row and made the tabs
+   jump). The .viewport max-height: 450px + scroll still caps the upper bound. */
+.lp-config .lp-config-stack {
+  display: grid;
+}
+
+.lp-config .lp-config-stack > .lp-config-slide {
+  grid-area: 1 / 1; /* overlap every slide in one cell; height = tallest slide. */
+  min-width: 0;
+}
+
+/* Inactive slides are faded out and must not intercept clicks/selection. */
+.lp-config .lp-config-slide[aria-hidden="true"] {
+  pointer-events: none;
 }
 
 /* ==========================================================================

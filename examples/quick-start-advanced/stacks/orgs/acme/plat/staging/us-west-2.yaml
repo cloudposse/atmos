@@ -1,3 +1,7 @@
+# Top-level stack `plat-uw2-staging` — a composition manifest, not where config lives.
+# It assembles a deployment from two reusable layers:
+#   - orgs/acme/plat/staging/_defaults  → what makes `staging` different (prod-like, relaxed)
+#   - mixins/region/us-west-2           → region + environment context vars
 import:
   - orgs/acme/plat/staging/_defaults
   - mixins/region/us-west-2

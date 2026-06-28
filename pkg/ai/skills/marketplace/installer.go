@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,6 +54,14 @@ func NewInstaller(atmosVersion string) (*Installer, error) {
 // (with skills/*/SKILL.md pattern).
 func (i *Installer) Install(ctx context.Context, source string, opts InstallOptions) error {
 	defer perf.Track(nil, "marketplace.Installer.Install")()
+
+	// Offline fast path: an official skill referenced by bare name (e.g.
+	// "atmos-terraform") installs from the embedded catalog with no network or
+	// Git clone. Any source with slashes/dots (a real URL) falls through to the
+	// Git flow below.
+	if available, ok := LookupBundledSkill(source); ok {
+		return i.installBundledSkill(&available, opts)
+	}
 
 	// 1. Parse source.
 	sourceInfo, err := ParseSource(source)
@@ -180,11 +189,106 @@ func (i *Installer) installSingleSkill(tempDir string, sourceInfo *SourceInfo, o
 		return err
 	}
 
-	// Success.
-	fmt.Printf("\n✓ Skill %q installed successfully\n", metadata.GetDisplayName())
-	fmt.Printf("  Version: %s\n", metadata.GetVersion())
+	printInstallSuccess(metadata.GetDisplayName(), metadata.GetVersion(), installPath)
+
+	return nil
+}
+
+// printInstallSuccess prints the standard post-install confirmation, shared by
+// the single-skill and bundled-skill install paths.
+func printInstallSuccess(displayName, version, installPath string) {
+	fmt.Printf("\n✓ Skill %q installed successfully\n", displayName)
+	fmt.Printf("  Version: %s\n", version)
 	fmt.Printf("  Location: %s\n", redactHomePath(installPath))
 	fmt.Printf("\nUsage: Switch to this skill in the TUI with Ctrl+A\n")
+}
+
+// installBundledSkill installs an official skill from the embedded catalog,
+// fully offline. It mirrors installSingleSkill but sources files from the
+// embedded FS instead of a Git clone.
+func (i *Installer) installBundledSkill(available *AvailableSkill, opts InstallOptions) error {
+	defer perf.Track(nil, "marketplace.Installer.installBundledSkill")()
+
+	if !opts.Force {
+		if _, err := i.localRegistry.Get(available.Name); err == nil {
+			return fmt.Errorf("%w: use --force to reinstall", ErrSkillAlreadyInstalled)
+		}
+	}
+
+	metadata, err := readBundledMetadata(available.Name)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidMetadata, err)
+	}
+
+	// Security check (interactive prompt).
+	if !opts.SkipConfirm {
+		if err := i.confirmInstallation(metadata); err != nil {
+			return err // User cancelled.
+		}
+	}
+
+	installPath, err := i.materializeBundledSkill(available.Name, opts.Force)
+	if err != nil {
+		return err
+	}
+
+	if err := i.registerBundledSkill(available, installPath); err != nil {
+		return err
+	}
+
+	printInstallSuccess(available.DisplayName, available.Version, installPath)
+
+	return nil
+}
+
+// materializeBundledSkill copies a bundled skill's files from the embedded FS to
+// its install path, handling --force replacement, and returns the install path.
+func (i *Installer) materializeBundledSkill(name string, force bool) (string, error) {
+	skillFS, err := bundledSkillFS(name)
+	if err != nil {
+		return "", err
+	}
+
+	skillsDir, err := GetSkillsDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve skills directory: %w", err)
+	}
+	installPath := filepath.Join(skillsDir, name)
+
+	if force {
+		if err := os.RemoveAll(installPath); err != nil {
+			log.Warnf("Failed to remove existing installation: %v", err)
+		}
+		_ = i.localRegistry.Remove(name) // Ignore error if not exists.
+	}
+
+	if err := os.MkdirAll(installPath, dirPermissions); err != nil {
+		return "", fmt.Errorf("failed to create install directory: %w", err)
+	}
+
+	if err := copyFS(skillFS, installPath); err != nil {
+		return "", fmt.Errorf("failed to install bundled skill: %w", err)
+	}
+
+	return installPath, nil
+}
+
+// registerBundledSkill records an installed bundled skill in the local registry.
+func (i *Installer) registerBundledSkill(available *AvailableSkill, installPath string) error {
+	installedSkill := &InstalledSkill{
+		Name:        available.Name,
+		DisplayName: available.DisplayName,
+		Source:      available.Source,
+		Version:     available.Version,
+		InstalledAt: time.Now(),
+		UpdatedAt:   time.Now(),
+		Path:        installPath,
+		IsBuiltIn:   false,
+		Enabled:     true,
+	}
+	if err := i.localRegistry.Add(installedSkill); err != nil {
+		return fmt.Errorf("failed to register skill: %w", err)
+	}
 
 	return nil
 }
@@ -304,6 +408,32 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 	fmt.Printf("\nUsage: Switch skills in the TUI with Ctrl+A\n")
 
 	return nil
+}
+
+// copyFS copies the entire tree of srcFS into the dst directory on disk. It is
+// the fs.FS analogue of copyDir, letting bundled (embedded) skills install
+// through the same write logic as Git-cloned ones. Embedded paths are always
+// forward-slash separated, so they are translated to OS paths under dst.
+func copyFS(srcFS fs.FS, dst string) error {
+	return fs.WalkDir(srcFS, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		target := filepath.Join(dst, filepath.FromSlash(p))
+		if d.IsDir() {
+			return os.MkdirAll(target, dirPermissions)
+		}
+
+		data, err := fs.ReadFile(srcFS, p)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(target), dirPermissions); err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, filePermissions)
+	})
 }
 
 // copyDir copies the contents of a source directory to a destination directory.

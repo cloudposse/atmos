@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,7 +57,15 @@ func TestManager_Kubeconfig_HarvestAndRewriteServer(t *testing.T) {
 func TestManager_Kubeconfig_NotRunning(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	runtime := NewMockRuntime(ctrl)
-	runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return([]container.Info{}, nil)
+	runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return([]container.Info{}, nil).AnyTimes()
+	oldTimeout := kubeconfigReadyTimeout
+	oldInterval := kubeconfigPollInterval
+	kubeconfigReadyTimeout = time.Millisecond
+	kubeconfigPollInterval = time.Millisecond
+	t.Cleanup(func() {
+		kubeconfigReadyTimeout = oldTimeout
+		kubeconfigPollInterval = oldInterval
+	})
 
 	m := newManagerWithRuntime(runtime)
 	_, err := m.Kubeconfig(context.Background(), "dev", "k3s")

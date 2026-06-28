@@ -4,7 +4,7 @@ import Link from '@docusaurus/Link';
 import { SiAmazonwebservices, SiGooglecloud } from 'react-icons/si';
 import { VscAzure } from 'react-icons/vsc';
 import PrimaryCTA from '@site/src/components/PrimaryCTA';
-import Screengrab from '@site/src/components/Screengrab';
+import DemoVideo from '@site/src/components/landing/DemoVideo';
 
 // Three-line monospace value prop, Vercel-style.
 const VALUE_PROPS = ['Run it on your laptop', 'Run it the same in CI', 'Run it with agents'];
@@ -19,8 +19,8 @@ const TOOLS = [
   { label: 'Helmfile', to: '/components/helmfile' },
   { label: 'Helm' },
   { label: 'Kubernetes' },
-  { label: 'Containers' },
-  { label: 'Emulators' },
+  { label: 'Containers', to: '/components/container' },
+  { label: 'Emulators', to: '/components/emulator' },
   { label: 'Bring your own', to: '/components/custom' },
 ];
 
@@ -35,7 +35,7 @@ function Hero() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: 'easeOut' }}
           >
-            <span className="lp-eyebrow">The Infrastructure Runtime</span>
+            <span className="lp-eyebrow">Declarative Infrastructure Runtime</span>
             <h1>Run your infrastructure anywhere.</h1>
             <p className="lp-hero-sub">
               Atmos is the open-source runtime that builds, authenticates, and ships Terraform,
@@ -71,7 +71,7 @@ function Hero() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.15, ease: 'easeOut' }}
           >
-            <Screengrab title="atmos terraform apply vpc -s plat-ue2-prod" slug="demo-stacks/deploy" />
+            <DemoVideo title="Discover your whole platform" slug="hero" />
           </motion.div>
         </div>
         {/* Full-width band below the hero grid so the tools have real horizontal

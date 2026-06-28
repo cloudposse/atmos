@@ -152,13 +152,14 @@ func injectTerraformStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, in
 	storeAutoDetectedIdentity(authManager, info)
 
 	resolver := authbridge.NewResolver(authManager, info)
-	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, storeDefaultIdentity(info.Identity))
+	defaultIdentity := resolveStoreDefaultIdentity(info.Identity, authManager)
+	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, defaultIdentity)
 
 	// Also expose the resolver to cloud-KMS SOPS providers so `!secret` resolution during terraform
 	// authenticates KMS decrypt as the component's effective identity (issue #2637).
 	atmosConfig.SecretsAuth = &store.SecretsAuthContext{
 		Resolver:        resolver,
-		DefaultIdentity: storeDefaultIdentity(info.Identity),
+		DefaultIdentity: defaultIdentity,
 	}
 }
 
@@ -169,6 +170,27 @@ func storeDefaultIdentity(identity string) string {
 	default:
 		return identity
 	}
+}
+
+// resolveStoreDefaultIdentity returns the identity that stores without their own
+// `identity:` should authenticate as. An explicit `--identity`/`ATMOS_IDENTITY`
+// wins; otherwise we fall back to the stack's `default: true` identity so
+// in-process store/secret reads use the same principal (and emulator endpoint) as
+// the Terraform subprocess. When there is no default identity (or auth is
+// disabled), this returns "" — stores then use the AWS/GCP/Azure default
+// credential chain exactly as before (back-compat for ambient real-cloud creds).
+func resolveStoreDefaultIdentity(identity string, authManager auth.AuthManager) string {
+	if explicit := storeDefaultIdentity(identity); explicit != "" {
+		return explicit
+	}
+	if authManager == nil {
+		return ""
+	}
+	defaultIdentity, err := authManager.GetDefaultIdentity(false)
+	if err != nil {
+		return ""
+	}
+	return defaultIdentity
 }
 
 // SetupTerraformAuthForCLI exposes terraform auth setup to command-layer callers

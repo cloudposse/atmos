@@ -1,0 +1,32 @@
+# Landing-page fixture for the "Run Terraform like a platform team" demo
+# (demo/landing/terraform.tape).
+#
+# It declares a small set of Terraform components wired together with
+# `settings.depends_on` so `atmos list dependencies` renders a real dependency
+# tree (app → cluster → vpc, plus dns → vpc). The demo only runs read-only `list`
+# commands, so the components are never applied and need no cloud credentials.
+#
+# Dedicated landing fixture (not an examples/* project) so it can be tuned for the
+# page. Modeled on examples/demo-stacks.
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info

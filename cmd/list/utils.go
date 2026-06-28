@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -193,20 +194,17 @@ func normalizeIdentityValue(value string) string {
 	return cfg.NormalizeIdentityValue(value)
 }
 
-// createAuthManagerForList creates an AuthManager for list commands.
-// It uses the identity from --identity flag or ATMOS_IDENTITY env var.
-// If no identity is specified, it loads stack configs for default identity via the SCAN variant.
-// Returns nil AuthManager if no auth is configured (which is valid for many use cases).
-//
-// Category B: list commands operate across multiple stacks/components without a single target
-// (component, stack) pair, so they use the SCAN variant to discover stack-level defaults
-// (including defaults declared in imported _defaults.yaml). See
-// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
+// createAuthManagerForList creates an AuthManager only when list commands are
+// explicitly asked to authenticate. Inventory commands such as `list stacks`,
+// `list components`, and `list instances` can span many stacks; implicitly
+// resolving default identities for every stack makes discovery fail when one
+// unrelated emulator or external provider is offline.
 func createAuthManagerForList(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
 	identityName := getIdentityFromCommand(cmd)
+	if identityName == "" || identityName == cfg.IdentityFlagDisabledValue {
+		return nil, nil
+	}
 
-	// Scan variant: follows import: chains, discards conflicting defaults, isolates the scan
-	// into a copy of the auth config (no mutation of atmosConfig.Auth).
 	authManager, err := auth.CreateAndAuthenticateManagerWithStackScan(
 		identityName,
 		&atmosConfig.Auth,
@@ -218,6 +216,41 @@ func createAuthManagerForList(cmd *cobra.Command, atmosConfig *schema.AtmosConfi
 	}
 
 	return authManager, nil
+}
+
+func skipCredentialBackedYAMLFunctionsForInventory(skip []string, authManager auth.AuthManager) []string {
+	if authManager != nil {
+		return skip
+	}
+
+	merged := append([]string{}, skip...)
+	for _, functionName := range []string{
+		u.AtmosYamlFuncTerraformState,
+		u.AtmosYamlFuncTerraformOutput,
+		u.AtmosYamlFuncStore,
+		u.AtmosYamlFuncStoreGet,
+		u.AtmosYamlFuncSecret,
+		u.AtmosYamlFuncAwsAccountID,
+		u.AtmosYamlFuncAwsCallerIdentityArn,
+		u.AtmosYamlFuncAwsCallerIdentityUserID,
+		u.AtmosYamlFuncAwsRegion,
+		u.AtmosYamlFuncAwsOrganizationID,
+	} {
+		name := strings.TrimPrefix(functionName, "!")
+		if !containsString(merged, name) {
+			merged = append(merged, name)
+		}
+	}
+	return merged
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 // setDefaultCSVDelimiter sets the delimiter to comma if CSV format is used and delimiter is default TSV.

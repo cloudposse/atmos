@@ -1,11 +1,3 @@
-output "weather" {
-  value = data.http.weather.response_body
-}
-
-output "url" {
-  value = local.url
-}
-
 output "stage" {
   value       = var.stage
   description = "Stage where it was deployed"
@@ -13,15 +5,15 @@ output "stage" {
 
 output "location" {
   value       = var.location
-  description = "Location of the weather report."
+  description = "Location configured for the component."
 }
 
 output "lang" {
   value       = var.lang
-  description = "Language which the weather is displayed."
+  description = "Language configured for the component."
 }
 
 output "units" {
   value       = var.units
-  description = "Units the weather is displayed."
+  description = "Units configured for the component."
 }

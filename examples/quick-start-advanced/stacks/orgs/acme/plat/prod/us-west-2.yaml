@@ -1,3 +1,7 @@
+# Top-level stack `plat-uw2-prod` — a composition manifest, not where config lives.
+# It assembles a deployment from two reusable layers:
+#   - orgs/acme/plat/prod/_defaults  → what makes `prod` different (durable, protected)
+#   - mixins/region/us-west-2        → region + environment context vars
 import:
   - orgs/acme/plat/prod/_defaults
   - mixins/region/us-west-2

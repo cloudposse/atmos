@@ -1,0 +1,102 @@
+name: landing-demos
+# Render the landing-page demos (demo/landing/*.tape) with VHS against real local
+# cloud emulators, then publish the rendered videos to S3/CDN. The binaries are
+# NEVER committed — they are uploaded as a workflow artifact and (when the demo
+# bucket is configured) synced to S3. The site references the remote URL.
+#
+# Manual / label-gated only: this spins up emulators and pulls charts, so it should
+# not run on every push. The same entrypoint runs locally: `cd demo/landing &&
+# atmos demo record all` — local = CI.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+  id-token: write # for AWS OIDC (S3 publish)
+
+jobs:
+  render:
+    # Only on manual dispatch or when the PR carries the `landing-demos` label.
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'landing-demos'
+    runs-on: ubuntu-latest
+    env:
+      TERM: xterm-256color
+      COLORTERM: truecolor
+      LANG: en_US.UTF-8
+      ATMOS_PAGER: "false"
+      # Container runtime for the emulator-backed tapes (ubuntu runners have Docker).
+      ATMOS_CONTAINER_RUNTIME: docker
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Build atmos from THIS branch — the emulator commands the tapes use are not
+      # in any published release yet.
+      - name: Build atmos
+        run: |
+          make build
+          echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
+
+      # helmfile/helm/kubectl for the Kubernetes tape.
+      - name: Install Kubernetes tooling
+        uses: alexellis/arkade-get@master
+        with:
+          helm: latest
+          helmfile: latest
+          kubectl: latest
+
+      - name: Install VHS toolchain (vhs, ttyd, ffmpeg, fonts)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          # ttyd (vhs dependency)
+          TTYD_VERSION=1.7.7
+          sudo curl -fsSL -o /usr/local/bin/ttyd \
+            "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.x86_64"
+          sudo chmod +x /usr/local/bin/ttyd
+          # vhs
+          go install github.com/charmbracelet/vhs@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          # FiraCode Nerd Font (matches demo/landing/defaults.tape)
+          mkdir -p ~/.local/share/fonts
+          curl -fsSL -o /tmp/FiraCode.zip \
+            https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FiraCode.zip
+          unzip -o /tmp/FiraCode.zip -d ~/.local/share/fonts >/dev/null
+          fc-cache -f
+
+      - name: Record all demos
+        working-directory: demo/landing
+        run: atmos demo record all
+
+      # Always make the renders downloadable, even before S3 is wired up.
+      - name: Upload renders as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: landing-demos
+          path: website/static/img/demos/
+          if-no-files-found: error
+
+      # Publish to S3/CDN when the demo bucket + OIDC role are configured.
+      # Set repo var ATMOS_DEMOS_S3_URI (e.g. s3://atmos-website-demos/demos) and
+      # secret AWS_DEMOS_PUBLISH_ROLE to enable.
+      - name: Configure AWS credentials
+        if: vars.ATMOS_DEMOS_S3_URI != '' && secrets.AWS_DEMOS_PUBLISH_ROLE != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEMOS_PUBLISH_ROLE }}
+          aws-region: us-east-1
+
+      - name: Publish demos to S3
+        if: vars.ATMOS_DEMOS_S3_URI != '' && secrets.AWS_DEMOS_PUBLISH_ROLE != ''
+        working-directory: demo/landing
+        env:
+          ATMOS_DEMOS_S3_URI: ${{ vars.ATMOS_DEMOS_S3_URI }}
+        run: atmos demo publish

@@ -102,7 +102,7 @@ This separation allows you to:
 
 ## Component Types
 
-Atmos natively supports five component types:
+Atmos natively supports six component types:
 
 | Type | Implementation | Description |
 |------|----------------|-------------|
@@ -111,6 +111,7 @@ Atmos natively supports five component types:
 | **[Packer](/components/packer)** | Packer templates | Build machine images |
 | **[Ansible](/components/ansible)** | Ansible playbooks | Configuration management and automation |
 | **[Container](/components/container)** | Container images & services | Build and run persistent, stack-scoped containers |
+| **[Emulator](/components/emulator)** | Local cloud & service emulators | Run cloud-API, Kubernetes, and backing-service emulators offline |
 
 Each type has its own configuration schema, but they share common patterns for `metadata` and `settings`.
 
@@ -201,3 +202,4 @@ For more powerful filtering options, consider [describing stacks](/describe/stac
 - [Ansible Components](/components/ansible) — Ansible playbooks
 - [Custom Component Types](/components/custom) — Bring any tool under stack-based config
 - [Container Components](/components/container) — Build and run persistent, stack-scoped containers
+- [Emulator Components](/components/emulator) — Run cloud-API, Kubernetes, and backing-service emulators offline

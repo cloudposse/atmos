@@ -239,8 +239,75 @@ func parsePodmanContainer(containerJSON map[string]interface{}) Info {
 	if labels, ok := containerJSON["Labels"].(map[string]interface{}); ok {
 		info.Labels = parseLabelsMap(labels)
 	}
+	if raw, ok := containerJSON["Ports"]; ok {
+		info.Ports = parsePodmanPorts(raw)
+	}
 
 	return info
+}
+
+// parsePodmanPorts extracts published port bindings from a podman `ps --format json`
+// record. Podman represents ports as a structured array with snake_case keys
+// (host_port/container_port/protocol), unlike docker's `ps` string column parsed by
+// parseDockerPorts. Without this, Info.Ports is empty under podman and emulator
+// endpoint resolution yields an empty URL (see pkg/emulator manager.endpoint), so
+// Terraform falls back to real cloud endpoints.
+func parsePodmanPorts(raw interface{}) []PortBinding {
+	entries, ok := raw.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	var ports []PortBinding
+	seen := make(map[PortBinding]struct{})
+	for _, entry := range entries {
+		binding, ok := parsePodmanPort(entry)
+		if !ok {
+			continue
+		}
+		if _, dup := seen[binding]; dup {
+			continue
+		}
+		seen[binding] = struct{}{}
+		ports = append(ports, binding)
+	}
+
+	return ports
+}
+
+// parsePodmanPort converts one podman port entry into a PortBinding. Unpublished
+// ports (host_port 0) are skipped; a missing protocol defaults to tcp.
+func parsePodmanPort(entry interface{}) (PortBinding, bool) {
+	m, ok := entry.(map[string]interface{})
+	if !ok {
+		return PortBinding{}, false
+	}
+	hostPort := jsonFieldInt(m["host_port"])
+	containerPort := jsonFieldInt(m["container_port"])
+	if hostPort == 0 || containerPort == 0 {
+		return PortBinding{}, false
+	}
+	protocol, _ := m["protocol"].(string)
+	if protocol == "" {
+		protocol = "tcp"
+	}
+	return PortBinding{ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, true
+}
+
+// JsonFieldInt coerces a JSON-decoded numeric field to an int. The json.Unmarshal
+// call into interface{} yields float64 for numbers; int and json.Number are handled defensively.
+func jsonFieldInt(v interface{}) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case json.Number:
+		i, _ := n.Int64()
+		return int(i)
+	default:
+		return 0
+	}
 }
 
 // podmanHealth extracts the health state from a podman ps record. Podman embeds

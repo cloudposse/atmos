@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -287,8 +288,25 @@ func GetOutputMode(step *schema.WorkflowStep, workflow *schema.WorkflowDefinitio
 		return OutputMode(workflow.Output)
 	}
 
+	if envPagerEnabled() {
+		return OutputModeViewport
+	}
+
 	// Default to log mode.
 	return OutputModeLog
+}
+
+func envPagerEnabled() bool {
+	if os.Getenv("NO_PAGER") != "" { //nolint:forbidigo // NO_PAGER is a standard CLI env var.
+		return false
+	}
+
+	pagerValue := os.Getenv("ATMOS_PAGER") //nolint:forbidigo // Used here before command-level Viper binding is guaranteed.
+	if pagerValue == "" {
+		return false
+	}
+
+	return (&schema.Terminal{Pager: pagerValue}).IsPagerEnabled()
 }
 
 // GetViewportConfig returns the effective viewport config for a step.

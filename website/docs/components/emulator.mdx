@@ -1,0 +1,70 @@
+---
+title: Using Emulators
+sidebar_position: 8
+sidebar_label: Emulator
+id: emulator
+description: Run local cloud-API, Kubernetes, and backing-service emulators as stack-scoped components, so the rest of your stack runs offline with no cloud account.
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Atmos natively supports **emulator components** — stack-scoped, long-running containers that
+stand in for a cloud API (AWS, GCP, Azure), Kubernetes, or a backing service (Vault/OpenBao, an
+OCI/Terraform registry) during local development and testing. You declare them with the same
+stack-based configuration used for Terraform, Helmfile, Packer, and Ansible, and operate them
+with the [`atmos emulator`](/cli/commands/emulator/usage) command group — letting the rest of
+your stack run offline, with no cloud account.
+</Intro>
+
+<Experimental />
+
+An emulator is built on the same lifecycle as the [container component](/components/container):
+the container outlives the `atmos` process and is discovered by labels derived from the
+canonical component instance address, so `atmos emulator ps`, `logs`, `exec`, and `down`
+reattach to the already-running container — there are no local state files.
+
+## Stack Configuration
+
+Emulator components are declared under `components.emulator` with **first-class sections**
+(`driver`, `cloud`, `region`, `container`, …) as siblings of `metadata` — NOT nested under
+`vars`. The required `driver` selects the image and target:
+
+```yaml
+components:
+  emulator:
+    aws:
+      driver: floci/aws          # selects the image and target (aws)
+      region: us-east-2
+      container:                 # optional container overrides (same schema as container components)
+        ports:
+          - host: 4566
+            container: 4566
+```
+
+Inheritance (`metadata.inherits`), catalogs, mixins, and deep-merge work exactly like other
+component kinds — define an abstract base emulator with shared defaults and inherit it.
+
+For the **complete configuration reference** — every driver and target, the `!emulator`
+function, health checks, persistence, and full examples — see
+[Emulator Components](/stacks/components/emulator).
+
+## Lifecycle
+
+```bash
+atmos emulator up aws -s dev          # start (or reuse) the emulator for a stack
+atmos emulator ps -s dev              # list running emulators in the stack
+atmos emulator logs aws -s dev        # stream the emulator's logs
+atmos emulator exec aws -s dev -- aws s3 ls   # run a command inside the emulator container
+atmos emulator down aws -s dev        # stop + remove the container (persisted state is kept)
+atmos emulator reset aws -s dev --force       # stop and wipe the emulator's persisted state
+```
+
+Each instance is named and labeled from its canonical address `<stack>/emulator/<component>`,
+so lifecycle commands discover it by label.
+
+## Related
+
+- [Emulator Components](/stacks/components/emulator) — Full stack-manifest configuration reference
+- [atmos emulator](/cli/commands/emulator/usage) — Command reference
+- [Container Components](/components/container) — The container lifecycle emulators are built on

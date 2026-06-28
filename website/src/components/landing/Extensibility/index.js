@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import Link from '@docusaurus/Link';
-import Screengrab from '@site/src/components/Screengrab';
+import DemoVideo from '@site/src/components/landing/DemoVideo';
 
 const EXTENSIONS = [
   { title: 'Custom commands', desc: 'Wrap any script as a first-class atmos command, with flags, args, and identity.', to: '/quick-start/advanced/add-custom-commands' },
@@ -20,7 +20,7 @@ function Extensibility() {
       <div className="lp-section-head">
         <span className="lp-eyebrow">Extensible by design</span>
         <h2>Built by you, or your agents</h2>
-        <p>Everything is pluggable. Add a command, a component type, a store, or a skill — and your agents can use it the moment it exists.</p>
+        <p>Everything is pluggable — and your agents can use it the moment it exists. Atmos ships a catalog of agent skills and an MCP server, so any agent can install what it needs and drive your infrastructure directly.</p>
       </div>
       <motion.div
         className="lp-extend-snippet"
@@ -29,7 +29,7 @@ function Extensibility() {
         viewport={{ once: true, amount: 0.3 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
       >
-        <Screengrab title="atmos workflow run deploy-all -s prod" slug="demo-stacks/deploy-dev" />
+        <DemoVideo title="Built for your agents" slug="extensibility" />
       </motion.div>
       <div className="lp-extend-grid">
         {EXTENSIONS.map((ext, i) => (

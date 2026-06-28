@@ -1,0 +1,171 @@
+# Atmos config for the landing-page demo recorder.
+#
+# This project exists only to host the `atmos demo …` custom commands that render
+# the VHS tapes in this directory. Run it from here:
+#
+#     cd demo/landing
+#     atmos demo record all      # render every tape
+#     atmos demo record hero     # render one tape
+#     atmos demo publish         # sync rendered assets to S3/CDN
+#     atmos demo clean           # remove local renders + stray emulator containers
+#
+# The same commands run in CI (see .github/workflows/landing-demos.yaml) — local = CI.
+#
+# Recording prerequisites: the `record`/`check` commands auto-install most of the
+# recording toolchain (vhs + ffmpeg) via Atmos toolchain — no manual install needed.
+# Two things can't be auto-installed: a container runtime (Docker or Podman, a system
+# daemon, for the emulator-backed tapes) and `ttyd` on macOS (the aqua registry ships
+# ttyd for Linux/Windows only, so on macOS run `brew install ttyd` once; Linux/CI
+# images already include it). Publishing needs the AWS CLI.
+
+base_path: "./"
+
+# The recording toolchain. `vhs` shells out to `ttyd` and `ffmpeg` at runtime. Only
+# vhs + ffmpeg are pinned in .tool-versions (so the custom-command preflight installs
+# them on every platform); the record/check commands put them on PATH via
+# `atmos toolchain path`. The `ttyd` alias is kept for convenience, but ttyd is NOT in
+# .tool-versions: the aqua registry has no macOS binary for it, and a macOS-incompatible
+# entry would hard-fail the preflight. ttyd therefore comes from the system (brew on
+# macOS, the Linux/CI image elsewhere). (podman/docker is a container runtime, not an
+# aqua single-binary, so it stays a system prerequisite.)
+toolchain:
+  install_path: .tools
+  aliases:
+    vhs: charmbracelet/vhs
+    ttyd: tsl0922/ttyd
+    ffmpeg: Tyrrrz/FFmpegBin
+  registries:
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
+# No stacks of our own — the tapes cd into examples/* which carry their own config.
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+commands:
+  - name: demo
+    description: Record and publish the landing-page demos (VHS).
+    commands:
+      - name: record
+        description: Render one tape (by name) or all of them to website/static/img/demos/.
+        arguments:
+          - name: name
+            description: 'Tape name without extension (e.g. "hero"), or "all" for every tape.'
+        steps:
+          - |
+            set -euo pipefail
+            repo="$(git rev-parse --show-toplevel)"
+            landing="$repo/demo/landing"
+            # The tapes type `atmos …`; make sure the inner VHS shell uses the freshly
+            # built binary (emulator is newer than any published release), not whatever
+            # `atmos` is on PATH. `make build` writes ./build/atmos.
+            export PATH="$repo/build:$PATH"
+            command -v atmos >/dev/null 2>&1 || { echo "atmos not found — run 'make build'"; exit 1; }
+            # vhs + ffmpeg are auto-installed by the toolchain preflight (they're in
+            # .tool-versions and resolve on every platform via the aqua registry); put
+            # them on PATH. ttyd has NO macOS aqua binary, so it is intentionally left
+            # out of .tool-versions (it would hard-fail the preflight on macOS) and
+            # comes from the system instead — `brew install ttyd` on macOS; the Linux
+            # CI image ships it.
+            export PATH="$( cd "$landing" && atmos toolchain path 2>/dev/null | tr '\n' ':' )$PATH"
+            missing=""
+            for t in vhs ttyd ffmpeg; do command -v "$t" >/dev/null 2>&1 || missing="$missing $t"; done
+            [ -z "$missing" ] || { echo "missing recording tools:$missing (vhs/ffmpeg auto-install; on macOS run: brew install ttyd)"; exit 1; }
+            command -v podman >/dev/null 2>&1 || command -v docker >/dev/null 2>&1 || { echo "no container runtime — install podman or docker (a runtime cannot be auto-installed)"; exit 1; }
+            cd "$repo"
+            mkdir -p website/static/img/demos
+            name='{{ .Arguments.name }}'
+            if [ "$name" = "all" ]; then
+              for tape in demo/landing/*.tape; do
+                base="$(basename "$tape")"
+                [ "$base" = "defaults.tape" ] && continue
+                echo "▶ recording $tape"
+                vhs "$tape"
+              done
+            else
+              tape="demo/landing/${name}.tape"
+              [ -f "$tape" ] || { echo "no such tape: $tape"; exit 1; }
+              echo "▶ recording $tape"
+              vhs "$tape"
+            fi
+            echo "✔ wrote assets to website/static/img/demos/ (gitignored — publish with: atmos demo publish)"
+
+      - name: check
+        description: Fast dry-run — render a tape to inspectable .ascii (no video), short timeout.
+        arguments:
+          - name: name
+            description: 'Tape name without extension (e.g. "hero").'
+        steps:
+          - |
+            set -euo pipefail
+            repo="$(git rev-parse --show-toplevel)"
+            landing="$repo/demo/landing"
+            export PATH="$repo/build:$PATH"  # use the freshly built atmos (see `record`).
+            command -v atmos >/dev/null 2>&1 || { echo "atmos not found — run 'make build'"; exit 1; }
+            # vhs + ffmpeg auto-install via the toolchain preflight; put them on PATH.
+            # ttyd comes from the system (see `record` for the macOS ttyd note).
+            export PATH="$( cd "$landing" && atmos toolchain path 2>/dev/null | tr '\n' ':' )$PATH"
+            missing=""
+            for t in vhs ttyd ffmpeg; do command -v "$t" >/dev/null 2>&1 || missing="$missing $t"; done
+            [ -z "$missing" ] || { echo "missing recording tools:$missing (vhs/ffmpeg auto-install; on macOS run: brew install ttyd)"; exit 1; }
+            cd "$repo"
+            name='{{ .Arguments.name }}'
+            src="demo/landing/${name}.tape"
+            [ -f "$src" ] || { echo "no such tape: $src"; exit 1; }
+            mkdir -p website/static/img/demos
+            out="website/static/img/demos/${name}.ascii"
+            tmp="$(mktemp -t atmos-demo-check-XXXXXX).tape"
+            # Drop the video Output/Screenshot lines, emit a single .ascii instead, and
+            # shorten the wait timeout so a broken tape fails in ~90s, not minutes.
+            awk -v out="$out" '
+              /^[[:space:]]*Output /  { next }
+              /^[[:space:]]*Screenshot / { next }
+              { print }
+              /Source .*defaults\.tape/ { print "Output " out; print "Set WaitTimeout 150s" }
+            ' "$src" > "$tmp"
+            echo "▶ dry-run $src → $out (vhs, ascii)"
+            if vhs "$tmp"; then status=0; else status=$?; fi
+            rm -f "$tmp"
+            echo "──────── last frame of $name ────────"
+            # Show the final terminal frame (last screen between rule lines).
+            awk 'BEGIN{RS="────────────────────────────────────────────────────────────────────────────────"} {f=$0} END{print f}' "$out" 2>/dev/null || cat "$out"
+            exit $status
+
+      - name: publish
+        description: Sync rendered demos to the S3/CDN bucket (set ATMOS_DEMOS_S3_URI).
+        steps:
+          - |
+            set -euo pipefail
+            : "${ATMOS_DEMOS_S3_URI:?set ATMOS_DEMOS_S3_URI, e.g. s3://atmos-website-demos/demos}"
+            repo="$(git rev-parse --show-toplevel)"
+            cd "$repo"
+            [ -d website/static/img/demos ] || { echo "nothing to publish — run 'atmos demo record all' first"; exit 1; }
+            aws s3 sync website/static/img/demos "$ATMOS_DEMOS_S3_URI" \
+              --exclude '*' --include '*.webm' --include '*.mp4' --include '*.png' \
+              --cache-control 'public, max-age=86400'
+            echo "✔ synced website/static/img/demos/ → $ATMOS_DEMOS_S3_URI"
+
+      - name: clean
+        description: Remove local renders and stop any stray emulator containers.
+        steps:
+          - |
+            set -euo pipefail
+            repo="$(git rev-parse --show-toplevel)"
+            cd "$repo"
+            rm -rf website/static/img/demos
+            # Best-effort: stop containers Atmos labels as emulators (Docker or Podman).
+            runtime="$(command -v docker || command -v podman || true)"
+            if [ -n "$runtime" ]; then
+              ids="$("$runtime" ps -aq --filter 'label=tools.atmos.component_type=emulator' 2>/dev/null || true)"
+              [ -n "$ids" ] && "$runtime" rm -f $ids || true
+            fi
+            echo "✔ cleaned local demo renders"

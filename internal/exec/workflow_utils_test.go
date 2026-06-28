@@ -123,11 +123,15 @@ func TestExecuteExtendedStepInitializesExecutorAndLoadsEnv(t *testing.T) {
 		step,
 		&schema.WorkflowDefinition{Output: "none"},
 		[]string{"ATMOS_TEST_EXTENDED_ENV=loaded", "malformed"},
-		true,
+		extendedStepOptions{
+			DryRun:     true,
+			FinalStack: "plat-ue2-dev",
+		},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, stepExecutorState)
 	assert.Equal(t, "loaded", stepExecutorState.Variables().Env["ATMOS_TEST_EXTENDED_ENV"])
+	assert.Equal(t, "plat-ue2-dev", stepExecutorState.Variables().Flags["stack"])
 	_, ok := stepExecutorState.GetResult("blank")
 	assert.True(t, ok)
 }

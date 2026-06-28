@@ -42,7 +42,8 @@ func TestInstallCmd_Flags(t *testing.T) {
 
 func TestInstallCmd_LongDescription(t *testing.T) {
 	// Verify long description contains important information.
-	assert.Contains(t, installCmd.Long, "Install AI skills from a GitHub repository")
+	assert.Contains(t, installCmd.Long, "Install AI skills")
+	assert.Contains(t, installCmd.Long, "atmos-terraform")
 	assert.Contains(t, installCmd.Long, "~/.atmos/skills/")
 	assert.Contains(t, installCmd.Long, "agentskills.io")
 	assert.Contains(t, installCmd.Long, "SKILL.md")

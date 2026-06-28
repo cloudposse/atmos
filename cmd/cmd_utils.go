@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,6 +58,8 @@ const (
 	customCommandKeyCommand  = "command"
 	customCommandKeyIdentity = "identity"
 )
+
+var errCustomCommandFlagNotRegistered = errors.New("flag is not registered")
 
 // FlagStack is the name of the stack flag used across commands.
 const FlagStack = "stack"
@@ -742,15 +745,16 @@ func executeCustomCommand(
 		}
 
 		// Prepare template data for flags
-		flags := cmd.Flags()
 		flagsData := map[string]any{}
 		for _, fl := range commandConfig.Flags {
+			flag := cmd.Flag(fl.Name)
+			if flag == nil {
+				errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %q", errCustomCommandFlagNotRegistered, fl.Name), "", "")
+			}
 			if fl.Type == "" || fl.Type == "string" {
-				providedFlag, err := flags.GetString(fl.Name)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
-				flagsData[fl.Name] = providedFlag
+				flagsData[fl.Name] = flag.Value.String()
 			} else if fl.Type == "bool" {
-				boolFlag, err := flags.GetBool(fl.Name)
+				boolFlag, err := strconv.ParseBool(flag.Value.String())
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 				flagsData[fl.Name] = boolFlag
 			}
@@ -879,8 +883,8 @@ func executeCustomCommand(
 		}
 
 		// Process Go templates in the command's steps.
-		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step.Command, data, false)
+		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
+		commandToRun, err := processCustomCommandTemplate(&atmosConfig, fmt.Sprintf("step-%d", i), step.Command, data)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
 		// Determine step type - default to shell if not specified.
@@ -938,6 +942,7 @@ func executeCustomCommand(
 				workflowStep := step.ToWorkflowStep()
 				// Update command with template-resolved value.
 				workflowStep.Command = commandToRun
+				processCustomCommandWorkflowStepTemplates(&atmosConfig, &workflowStep, data, i)
 				// Carry env onto the step so handlers that read step.Env (e.g. the
 				// container handler's in-container env) see it. The step's own
 				// declared `env:` had its map keys lowercased by Viper, so restore
@@ -964,6 +969,9 @@ func executeCustomCommand(
 						executor.SetEnv(parts[0], parts[1])
 					}
 				}
+				if stack, ok := flagsData["stack"].(string); ok && stack != "" {
+					executor.SetFlag("stack", stack)
+				}
 
 				// Execute the extended step.
 				_, err = executor.Execute(context.Background(), &workflowStep)
@@ -979,6 +987,52 @@ func customCommandConditionContext() schema.ConditionContext {
 	return schema.ConditionContext{
 		CI:     telemetry.IsCI(),
 		Status: schema.ConditionPredicateSuccess,
+	}
+}
+
+func processCustomCommandTemplate(atmosConfig *schema.AtmosConfiguration, name, value string, data map[string]any) (string, error) {
+	result := value
+	for pass := 0; pass < 3; pass++ {
+		if !strings.Contains(result, "{{") {
+			return result, nil
+		}
+		processed, err := e.ProcessTmpl(atmosConfig, fmt.Sprintf("%s-pass-%d", name, pass+1), result, data, false)
+		if err != nil {
+			return "", err
+		}
+		if processed == result {
+			return processed, nil
+		}
+		result = processed
+	}
+	return result, nil
+}
+
+func processCustomCommandWorkflowStepTemplates(atmosConfig *schema.AtmosConfiguration, step *schema.WorkflowStep, data map[string]any, stepIndex int) {
+	var err error
+	step.Title, err = processCustomCommandTemplate(atmosConfig, fmt.Sprintf("step-%d-title", stepIndex), step.Title, data)
+	errUtils.CheckErrorPrintAndExit(err, "", "")
+	step.Content, err = processCustomCommandTemplate(atmosConfig, fmt.Sprintf("step-%d-content", stepIndex), step.Content, data)
+	errUtils.CheckErrorPrintAndExit(err, "", "")
+	step.Stack, err = processCustomCommandTemplate(atmosConfig, fmt.Sprintf("step-%d-stack", stepIndex), step.Stack, data)
+	errUtils.CheckErrorPrintAndExit(err, "", "")
+	step.WorkingDirectory, err = processCustomCommandTemplate(atmosConfig, fmt.Sprintf("step-%d-working-directory", stepIndex), step.WorkingDirectory, data)
+	errUtils.CheckErrorPrintAndExit(err, "", "")
+
+	for rowIndex := range step.Data {
+		for key, value := range step.Data[rowIndex] {
+			stringValue, ok := value.(string)
+			if !ok {
+				continue
+			}
+			step.Data[rowIndex][key], err = processCustomCommandTemplate(
+				atmosConfig,
+				fmt.Sprintf("step-%d-data-%d-%s", stepIndex, rowIndex, key),
+				stringValue,
+				data,
+			)
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
 	}
 }
 

@@ -70,11 +70,12 @@ func TestVariablesTemplateData(t *testing.T) {
 		WithOutput("alias", "declared").
 		WithSkipped())
 	vars.SetEnv("ENV_VAR", "env_value")
+	vars.SetFlag("stack", "plat-ue2-dev")
 
 	// Access templateData indirectly through Resolve.
-	result, err := vars.Resolve("{{ .steps.step1.value }}-{{ .steps.step1.outputs.alias }}-{{ .steps.step1.key }}-{{ .steps.step1.skipped }}-{{ .env.ENV_VAR }}")
+	result, err := vars.Resolve("{{ .steps.step1.value }}-{{ .steps.step1.outputs.alias }}-{{ .steps.step1.key }}-{{ .steps.step1.skipped }}-{{ .env.ENV_VAR }}-{{ .Flags.stack }}-{{ .flags.stack }}")
 	require.NoError(t, err)
-	assert.Equal(t, "value1-declared-meta_value-true-env_value", result)
+	assert.Equal(t, "value1-declared-meta_value-true-env_value-plat-ue2-dev-plat-ue2-dev", result)
 }
 
 func TestVariablesSetWithOutputs(t *testing.T) {

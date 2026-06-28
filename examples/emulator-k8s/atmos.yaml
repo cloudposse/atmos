@@ -1,0 +1,73 @@
+base_path: "./"
+
+toolchain:
+  install_path: .tools
+  versions_file: .tool-versions
+  aliases:
+    helmfile: helmfile/helmfile
+    helm: helm/helm
+    kubectl: kubernetes/kubectl
+    kustomize: kubernetes-sigs/kustomize
+  registries:
+    - name: emulator-k8s-tools
+      type: atmos
+      priority: 100
+      tools:
+        kubernetes-sigs/kustomize:
+          type: github_release
+          asset: "kustomize_v{{.SemVer}}_{{.OS}}_{{.Arch}}.tar.gz"
+          binary_name: kustomize
+          version_prefix: "kustomize/v"
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+
+components:
+  helmfile:
+    base_path: "components/helmfile"
+    use_eks: false
+    # The kubernetes/emulator identity harvests the k3s kubeconfig and exports
+    # KUBECONFIG into the environment, so leave this unset and let the identity win.
+    kubeconfig_path: ""
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# A single kubernetes/emulator identity binds every helmfile component to the local
+# k3s sandbox. `atmos emulator up kubernetes -s local` starts it; the identity writes
+# the harvested kubeconfig and exports KUBECONFIG automatically — no
+# `aws eks update-kubeconfig`, no hand-managed kubeconfig path.
+auth:
+  identities:
+    local-k8s:
+      kind: kubernetes/emulator
+      emulator: kubernetes
+      default: true
+
+commands:
+  - name: "test"
+    description: "Bring up the k3s sandbox, deploy the nginx release, then tear it down"
+    steps:
+      - atmos validate stacks
+      - atmos emulator up kubernetes -s local
+      - atmos helmfile apply demo -s local
+      - atmos helmfile destroy demo -s local
+      - atmos emulator down kubernetes -s local

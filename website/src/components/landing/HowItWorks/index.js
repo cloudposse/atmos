@@ -1,20 +1,20 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import Link from '@docusaurus/Link';
-import Screengrab from '@site/src/components/Screengrab';
+import DemoVideo from '@site/src/components/landing/DemoVideo';
 
 const STEPS = [
   {
-    title: 'Install Atmos',
-    desc: 'One binary, no dependencies. It even installs the right Terraform, OpenTofu, and Helmfile versions for you.',
+    title: 'Model your platform',
+    desc: 'Stacks, components, identities, secrets, and stores live in one declarative graph.',
   },
   {
-    title: 'Configure with YAML',
-    desc: 'Describe your environments as configuration. Inherit a common baseline and keep everything DRY.',
+    title: 'Authenticate once',
+    desc: 'Atmos identities feed Terraform, stores, emulators, and CI without bespoke wrapper scripts.',
   },
   {
     title: 'Run it anywhere',
-    desc: 'The same command builds, authenticates, and ships — on your laptop and in CI, identically.',
+    desc: 'The same commands build, authenticate, and ship on your laptop and in CI, identically.',
   },
 ];
 
@@ -30,7 +30,7 @@ function HowItWorks() {
       <div className="lp-section-head">
         <span className="lp-eyebrow">From zero to deployed</span>
         <h2>Ship anything with Atmos</h2>
-        <p>Three steps from an empty directory to infrastructure running in production.</p>
+        <p>Three steps from config to authenticated infrastructure workflows.</p>
       </div>
       <div className="lp-how-grid">
         <motion.div
@@ -62,7 +62,7 @@ function HowItWorks() {
           viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 0.6, delay: 0.1, ease: 'easeOut' }}
         >
-          <Screengrab title="atmos terraform deploy vpc -s dev" slug="demo-stacks/deploy-dev" />
+          <DemoVideo title="Config in, infrastructure out" slug="how-it-works" />
         </motion.div>
       </div>
     </section>

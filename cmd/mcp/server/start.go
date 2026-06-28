@@ -225,7 +225,7 @@ func logServerInfo(server *mcp.Server, transportType, addr string) {
 	} else {
 		ui.Writeln("  Transport: stdio")
 	}
-	ui.Info("Waiting for client connection...")
+	ui.Success("MCP running. Waiting for an agent…")
 }
 
 // initializeAIComponents initializes the AI tool registry and executor.

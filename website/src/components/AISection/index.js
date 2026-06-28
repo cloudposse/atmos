@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import Link from '@docusaurus/Link';
-import { RiStackLine, RiGraduationCapLine, RiTerminalBoxLine } from 'react-icons/ri';
+import { RiStackLine, RiGraduationCapLine, RiPlugLine } from 'react-icons/ri';
 import './styles.css';
 
 function AIBadge() {
@@ -22,22 +22,22 @@ const MotionLink = motion(Link);
 const capabilities = [
   {
     icon: RiStackLine,
-    title: 'Declarative and consistent',
-    desc: 'Every environment is the same stack configuration, resolved the same way. Agents reason about one predictable model instead of a dozen bespoke tools and scripts.',
+    title: 'Declared, not scripted',
+    desc: 'The tools, workflows, dependencies, and validation — everything you used to script together — is declared and wired end to end. Agents drive one complete system, not a pile of glue scripts.',
     link: '/stacks',
     delay: 0,
   },
   {
     icon: RiGraduationCapLine,
-    title: 'Skills that teach the agent',
-    desc: '21+ pre-built skills hand agents exactly what they need to know about your stacks, components, and workflows — and you can publish your own.',
+    title: 'Agent Skills',
+    desc: '22 portable skills in the open Agent Skills format hand agents exactly what they need about your stacks, components, and workflows — working across Claude Code, Cursor, Gemini, and Copilot. Publish your own.',
     link: '/ai/agent-skills',
     delay: 0.1,
   },
   {
-    icon: RiTerminalBoxLine,
-    title: 'A self-documenting CLI',
-    desc: 'Every command ships usage examples and actionable hints, and Atmos exposes itself over MCP. Agents learn the system by running it.',
+    icon: RiPlugLine,
+    title: 'MCP Server',
+    desc: 'Atmos exposes itself over the Model Context Protocol, so any MCP client — Claude Code, Cursor, VS Code — can query and drive your infrastructure as native tools. No custom integration.',
     link: '/ai/mcp-server',
     delay: 0.2,
   },
