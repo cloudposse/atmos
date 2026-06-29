@@ -104,4 +104,10 @@ exclude = [
   # no-color.org (intermittent connection failures / unreachable from CI runners;
   # it is the canonical NO_COLOR spec site and resolves in a real browser)
   "no-color\\.org",
+  # Algolia DocSearch docs (intermittent timeouts from CI runners)
+  "docsearch\\.algolia\\.com",
+  # Open Group POSIX specs (intermittent timeouts from CI runners)
+  "pubs\\.opengroup\\.org",
+  # Pact docs (intermittent timeouts from CI runners)
+  "docs\\.pact\\.io",
 ]
