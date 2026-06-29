@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
 
@@ -662,6 +664,87 @@ func TestYAMLMerger_KeyDeletion(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestYAMLMerger_ParseErrors(t *testing.T) {
+	tests := []struct {
+		name   string
+		base   string
+		ours   string
+		theirs string
+	}{
+		{name: "bad base", base: "bad: [", ours: "a: 1\n", theirs: "a: 1\n"},
+		{name: "bad ours", base: "a: 1\n", ours: "bad: [", theirs: "a: 1\n"},
+		{name: "bad theirs", base: "a: 1\n", ours: "a: 1\n", theirs: "bad: ["},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewYAMLMerger(50).Merge(tt.base, tt.ours, tt.theirs)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestYAMLMerger_EmptyDocumentConcurrentAdditions(t *testing.T) {
+	result, err := NewYAMLMerger(100).Merge("", "user: true\n", "template: true\n")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Contains(t, result.Content, "user: true")
+	assert.NotContains(t, result.Content, "template: true")
+}
+
+func TestYAMLMerger_KindDivergencePreservesOursAndRecordsConflict(t *testing.T) {
+	result, err := NewYAMLMerger(100).Merge("key: value\n", "key:\n  nested: true\n", "key:\n  - item\n")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.HasConflicts)
+	assert.Equal(t, 1, result.ConflictCount)
+	assert.Contains(t, result.Content, "nested: true")
+}
+
+func TestYAMLMerger_ComplexMappingKeyError(t *testing.T) {
+	base := "? [a, b]\n: value\n"
+	ours := "? [a, b]\n: user\n"
+	theirs := "? [a, b]\n: template\n"
+
+	_, err := NewYAMLMerger(100).Merge(base, ours, theirs)
+	require.Error(t, err)
+}
+
+func TestYAMLMerger_HelperFunctions(t *testing.T) {
+	assert.Equal(t, "(document root)", displayPath(""))
+	assert.Equal(t, "spec.fields", displayPath("spec.fields"))
+
+	mapping := createEmptyNodeOfKind(&yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"})
+	assert.Equal(t, yaml.MappingNode, mapping.Kind)
+	assert.Empty(t, mapping.Content)
+
+	sequence := createEmptyNodeOfKind(&yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"})
+	assert.Equal(t, yaml.SequenceNode, sequence.Kind)
+	assert.Empty(t, sequence.Content)
+
+	document := createEmptyNodeOfKind(&yaml.Node{Kind: yaml.DocumentNode})
+	assert.Equal(t, yaml.DocumentNode, document.Kind)
+	assert.Empty(t, document.Content)
+
+	scalar := createEmptyNodeOfKind(&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Style: yaml.DoubleQuotedStyle})
+	assert.Equal(t, yaml.ScalarNode, scalar.Kind)
+	assert.Empty(t, scalar.Value)
+	assert.Equal(t, yaml.DoubleQuotedStyle, scalar.Style)
+}
+
+func TestYAMLMerger_NodesEqualAdditionalKinds(t *testing.T) {
+	assert.True(t, nodesEqual(nil, nil))
+	assert.False(t, nodesEqual(nil, &yaml.Node{}))
+	assert.False(t, nodesEqual(&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "true"}, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"}))
+	assert.True(t, nodesEqual(&yaml.Node{Kind: yaml.AliasNode, Value: "a"}, &yaml.Node{Kind: yaml.AliasNode, Value: "a"}))
+}
+
+func TestYAMLMerger_CalculatePercentageParseFallback(t *testing.T) {
+	assert.Equal(t, maxChangePercentage, NewYAMLMerger(50).calculateYAMLChangePercentage("bad: [", "", "", 1))
 }
 
 func TestYAMLMerger_PreservesTagsAndStyle(t *testing.T) {

@@ -1,10 +1,12 @@
 package scaffold
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -257,6 +259,151 @@ func TestExecuteTemplateGenerationErrors(t *testing.T) {
 	err := executeTemplateGeneration(&selectedConfig, "", opts, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrTargetDirRequired)
+}
+
+func TestScaffoldCommandProvider_UncoveredMetadata(t *testing.T) {
+	provider := &ScaffoldCommandProvider{}
+
+	assert.Nil(t, provider.GetAliases())
+	assert.True(t, provider.IsExperimental())
+}
+
+func TestSelectGenerateTemplate_NonInteractiveRequiresName(t *testing.T) {
+	_, err := selectGenerateTemplate(scaffoldGenerateOptions{interactive: false}, map[string]templates.Configuration{}, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTemplateNameRequired)
+}
+
+func TestRenderDryRunPreview_RendersHeaderAndFileList(t *testing.T) {
+	cfg := &templates.Configuration{
+		Name:        "demo",
+		Description: "demo scaffold",
+		Files: []templates.File{
+			{
+				Path: config.ScaffoldConfigFileName,
+				Content: `apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: demo
+spec:
+  fields:
+    - name: project_name
+      type: input
+      default: demo-default
+`,
+			},
+			{Path: "{{ .Config.project_name }}/README.md", Content: "hello"},
+			{Path: "static/file.txt", Content: "static"},
+		},
+	}
+
+	err := renderDryRunPreview(cfg, t.TempDir(), map[string]interface{}{"project_name": "demo-project"})
+	require.NoError(t, err)
+}
+
+func TestPrintFilePath_WithoutTargetDir(t *testing.T) {
+	printFilePath("", "relative/file.txt")
+}
+
+func TestExecuteScaffoldGenerate_DryRunBuiltInTemplate(t *testing.T) {
+	err := executeScaffoldGenerate(scaffoldGenerateOptions{
+		templateName:   "simple",
+		targetDir:      t.TempDir(),
+		dryRun:         true,
+		interactive:    false,
+		useDefaults:    true,
+		templateValues: map[string]interface{}{"project_name": "demo"},
+	})
+
+	require.NoError(t, err)
+}
+
+func TestExecuteScaffoldGenerate_DryRunRequiresTarget(t *testing.T) {
+	err := executeScaffoldGenerate(scaffoldGenerateOptions{
+		templateName:   "simple",
+		dryRun:         true,
+		interactive:    false,
+		useDefaults:    true,
+		templateValues: map[string]interface{}{},
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTargetDirRequired)
+}
+
+func TestExecuteScaffoldList_LoadsAndDisplaysTemplates(t *testing.T) {
+	require.NoError(t, executeScaffoldList(nil))
+}
+
+func TestExecuteValidateScaffold_EndToEnd(t *testing.T) {
+	t.Run("empty directory", func(t *testing.T) {
+		require.NoError(t, executeValidateScaffold(context.Background(), t.TempDir()))
+	})
+
+	t.Run("valid scaffold", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "scaffold.yaml")
+		require.NoError(t, os.WriteFile(path, []byte(`apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: valid
+spec:
+  fields:
+    - name: project_name
+      type: input
+      default: demo
+`), 0o600))
+
+		require.NoError(t, executeValidateScaffold(context.Background(), dir))
+	})
+
+	t.Run("invalid scaffold", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "scaffold.yaml")
+		require.NoError(t, os.WriteFile(path, []byte("not: a scaffold\n"), 0o600))
+
+		err := executeValidateScaffold(context.Background(), dir)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrScaffoldValidation)
+	})
+}
+
+func TestScaffoldGenerateRunE_DryRunAndSetFlags(t *testing.T) {
+	cmd := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+	require.NoError(t, cmd.Flags().Set("set", "project_name=demo"))
+
+	err := scaffoldGenerateCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.NoError(t, err)
+}
+
+func TestScaffoldGenerateRunE_MalformedSetFlag(t *testing.T) {
+	cmd := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd)
+	require.NoError(t, cmd.Flags().Set("set", "missing-equals"))
+
+	err := scaffoldGenerateCmd.RunE(cmd, []string{"simple", t.TempDir()})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+}
+
+func TestScaffoldListAndValidateRunE(t *testing.T) {
+	require.NoError(t, scaffoldListCmd.RunE(&cobra.Command{}, nil))
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scaffold.yaml"), []byte(`apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: valid
+spec:
+  fields: []
+`), 0o600))
+
+	require.NoError(t, scaffoldValidateCmd.RunE(&cobra.Command{}, []string{dir}))
 }
 
 // TestExecuteScaffoldGenerateWithDryRun tests dry-run flag integration.

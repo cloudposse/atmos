@@ -34,9 +34,9 @@ func writeSampleTemplate(t *testing.T) string {
 	return dir
 }
 
-func hasFile(files []templates.File, path string) bool {
+func hasSampleFile(files []templates.File) bool {
 	for _, f := range files {
-		if f.Path == path {
+		if f.Path == "file.txt" {
 			return true
 		}
 	}
@@ -51,7 +51,17 @@ func TestResolve_LocalPath(t *testing.T) {
 	require.NotNil(t, cleanup)
 	defer cleanup()
 	require.NotNil(t, cfg)
-	assert.True(t, hasFile(cfg.Files, "file.txt"), "local template files must be loaded")
+	assert.True(t, hasSampleFile(cfg.Files), "local template files must be loaded")
+}
+
+func TestResolve_LocalPathDefaultTimeout(t *testing.T) {
+	dir := writeSampleTemplate(t)
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "sample", dir, 0)
+	require.NoError(t, err)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.True(t, hasSampleFile(cfg.Files))
 }
 
 func TestResolve_FileURI(t *testing.T) {
@@ -61,13 +71,28 @@ func TestResolve_FileURI(t *testing.T) {
 	require.NoError(t, err)
 	defer cleanup()
 	require.NotNil(t, cfg)
-	assert.True(t, hasFile(cfg.Files, "file.txt"))
+	assert.True(t, hasSampleFile(cfg.Files))
+}
+
+func TestResolve_BadLocalPathReturnsLoadError(t *testing.T) {
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "missing", filepath.Join(t.TempDir(), "missing"), time.Minute)
+	require.Error(t, err)
+	require.NotNil(t, cleanup)
+	cleanup()
 }
 
 func TestResolve_OCIUnsupported(t *testing.T) {
 	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "x", "oci://ghcr.io/cloudposse/x:latest", time.Minute)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrScaffoldSourceUnsupported)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
+func TestResolve_RemoteFetchFailureCleansUp(t *testing.T) {
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "x", "git::file:///definitely/not/a/repo", time.Millisecond)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldFetchSource)
 	require.NotNil(t, cleanup)
 	cleanup()
 }
@@ -96,5 +121,14 @@ func TestHydrate_LocalStub(t *testing.T) {
 	cleanup, err := Hydrate(stub, "")
 	require.NoError(t, err)
 	defer cleanup()
-	assert.True(t, hasFile(stub.Files, "file.txt"), "local stub must be hydrated from its source")
+	assert.True(t, hasSampleFile(stub.Files), "local stub must be hydrated from its source")
+}
+
+func TestHydrate_LocalStubError(t *testing.T) {
+	stub := &templates.Configuration{Name: "missing", Source: filepath.Join(t.TempDir(), "missing")}
+
+	cleanup, err := Hydrate(stub, "")
+	require.Error(t, err)
+	require.NotNil(t, cleanup)
+	cleanup()
 }

@@ -84,6 +84,59 @@ func TestProcessTemplateExecutionErrors(t *testing.T) {
 	}
 }
 
+func TestFileSkippedError_Error(t *testing.T) {
+	err := &FileSkippedError{Path: "template/path", RenderedPath: "false"}
+
+	assert.Contains(t, err.Error(), "template/path")
+	assert.Contains(t, err.Error(), "false")
+}
+
+func TestProcessTemplateWithInvalidDelimiterSliceUsesDefaults(t *testing.T) {
+	processor := NewProcessor()
+
+	result, err := processor.ProcessTemplateWithDelimiters("Hello {{ .Config.name }}", t.TempDir(), nil, map[string]interface{}{"name": "demo"}, []string{"<<"})
+
+	require.NoError(t, err)
+	assert.Equal(t, "Hello demo", result)
+}
+
+func TestProcessTemplateExecuteError(t *testing.T) {
+	processor := NewProcessor()
+
+	_, err := processor.ProcessTemplate(`{{ fail "boom" }}`, t.TempDir(), nil, map[string]interface{}{})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTemplateExecution)
+}
+
+func TestExtractDelimitersFromValueConfig(t *testing.T) {
+	cfg := config.ScaffoldConfig{Spec: config.ScaffoldSpec{Delimiters: []string{"[[", "]]"}}}
+
+	assert.Equal(t, []string{"[[", "]]"}, extractDelimiters(cfg))
+}
+
+func TestExtractDelimitersFromInvalidMapConfig(t *testing.T) {
+	assert.Equal(t, []string{"{{", "}}"}, extractDelimiters(map[string]interface{}{"delimiters": []interface{}{"[[", 42}}))
+	assert.Equal(t, []string{"{{", "}}"}, extractDelimiters(map[string]interface{}{"delimiters": "not-a-list"}))
+}
+
+func TestProcessFileContentUnprocessedTemplateError(t *testing.T) {
+	processor := NewProcessor()
+	tempDir := t.TempDir()
+
+	file := File{
+		Path:        "test.txt",
+		Content:     `{{ "{{ .Config.name }}" }}`,
+		IsTemplate:  true,
+		Permissions: 0o644,
+	}
+
+	err := processor.ProcessFile(file, tempDir, false, false, nil, map[string]interface{}{"name": "demo"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnprocessedTemplate)
+}
+
 // TestProcessFileDirectoryCreationError tests error when directory cannot be created.
 func TestProcessFileDirectoryCreationError(t *testing.T) {
 	processor := NewProcessor()

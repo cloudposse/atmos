@@ -22,9 +22,10 @@ type gitTestRepo struct {
 }
 
 // setupGitTestRepo creates a git repository with an initial commit and user modifications.
-func setupGitTestRepo(t *testing.T, fileName, initialContent, userContent string) *gitTestRepo {
+func setupGitTestRepo(t *testing.T, initialContent, userContent string) *gitTestRepo {
 	t.Helper()
 
+	const fileName = "config.yaml"
 	tmpDir := t.TempDir()
 
 	// Initialize git repository.
@@ -71,7 +72,7 @@ func TestProcessorWithGitStorage(t *testing.T) {
 	initialContent := "# Config\nversion: 1.0\nname: test\n"
 	userContent := "# Config\nversion: 1.0\nname: test\n\n# User's custom section\ncustom: value\n"
 
-	testRepo := setupGitTestRepo(t, "config.yaml", initialContent, userContent)
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
 
 	// Simulate template update (new version adds a new section).
 	templateFile := File{
@@ -196,7 +197,7 @@ func TestProcessorWithGitStorage_TemplateFile(t *testing.T) {
 	initialContent := "# Config\nversion: 1.0\n"
 	userContent := "# Config\nversion: 1.0\ncustom: user-value\n"
 
-	testRepo := setupGitTestRepo(t, "config.yaml", initialContent, userContent)
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
 
 	// Template file with IsTemplate=true.
 	// Using simple Go template syntax that doesn't require variables.
@@ -228,7 +229,7 @@ func TestProcessorWithGitStorage_MergeConflict(t *testing.T) {
 	initialContent := "setting: original\n"
 	userContent := "setting: user-change\n"
 
-	testRepo := setupGitTestRepo(t, "config.yaml", initialContent, userContent)
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
 
 	// Template also modifies the same setting (conflict!).
 	templateFile := File{
@@ -249,4 +250,85 @@ func TestProcessorWithGitStorage_MergeConflict(t *testing.T) {
 	assert.True(t,
 		strings.Contains(errorMsg, "merge conflict") || strings.Contains(errorMsg, "three-way merge failed"),
 		"Error should mention merge conflict or three-way merge failure, got: %s", errorMsg)
+}
+
+func TestProcessorSetMaxChangesAndDirectMerge(t *testing.T) {
+	processor := NewProcessor()
+	processor.SetMaxChanges(100)
+
+	result, err := processor.Merge("name: old\n", "name: user\n", "name: template\n", "config.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.HasConflicts)
+	assert.Contains(t, result.Content, "name: user")
+}
+
+func TestProcessorSetupGitStorageInvalidBaseRef(t *testing.T) {
+	repoDir := t.TempDir()
+	repo, err := git.PlainInit(repoDir, false)
+	require.NoError(t, err)
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+	configPath := filepath.Join(repoDir, "config.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte("name: demo\n"), 0o644))
+	_, err = worktree.Add("config.yaml")
+	require.NoError(t, err)
+	_, err = worktree.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{Name: "Test", Email: "test@example.com"},
+	})
+	require.NoError(t, err)
+
+	processor := NewProcessor()
+	err = processor.SetupGitStorage(repoDir, "missing-ref")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidBaseRef)
+}
+
+func TestProcessorMergeFileReadError(t *testing.T) {
+	processor := NewProcessor()
+
+	err := processor.mergeFile(filepath.Join(t.TempDir(), "missing.yaml"), File{Path: "missing.yaml", Permissions: 0o644}, t.TempDir())
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrReadFile)
+}
+
+func TestProcessorMergeFileTemplateProcessingError(t *testing.T) {
+	initialContent := "name: demo\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "{{",
+		IsTemplate:  true,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTemplateExecution)
+}
+
+func TestProcessorDetermineBaseContentWithoutGitStorage(t *testing.T) {
+	processor := NewProcessor()
+
+	_, shouldSkip, err := processor.determineBaseContent(File{Path: "config.yaml"}, filepath.Join(t.TempDir(), "config.yaml"))
+
+	require.Error(t, err)
+	assert.False(t, shouldSkip)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+func TestProcessorDetermineBaseContentRelFallback(t *testing.T) {
+	initialContent := "name: demo\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+	testRepo.processor.targetPath = "relative"
+
+	base, shouldSkip, err := testRepo.processor.determineBaseContent(File{Path: "config.yaml"}, testRepo.configPath)
+
+	require.NoError(t, err)
+	assert.False(t, shouldSkip)
+	assert.Equal(t, initialContent, base)
 }
