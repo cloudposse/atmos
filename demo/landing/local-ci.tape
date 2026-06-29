@@ -15,7 +15,7 @@ Output website/static/img/demos/local-ci.mp4
 # --- Setup (off camera): a throwaway repo with a baseline commit to diff against ---
 Hide
 Type "unset NO_COLOR ATMOS_NO_COLOR" Enter
-Type `export ATMOS_EXPERIMENTAL=silence ATMOS_PAGER=false NO_PAGER=1 GIT_PAGER=cat TF_INPUT=false TERM=xterm-256color COLORTERM=truecolor ATMOS_FORCE_COLOR=true FORCE_COLOR=1 CLICOLOR_FORCE=1 PS1='\[\033[38;5;42m\]❯\[\033[0m\]'` Enter
+Type `export ATMOS_EXPERIMENTAL=silence ATMOS_TERMINAL_SPEED=8 ATMOS_PAGER=false NO_PAGER=1 GIT_PAGER=cat TF_INPUT=false TERM=xterm-256color COLORTERM=truecolor ATMOS_FORCE_COLOR=true FORCE_COLOR=1 CLICOLOR_FORCE=1 PS1='\[\033[38;5;42m\]❯\[\033[0m\]'` Enter
 # Auto-approve apply off camera so the on-screen command stays a clean
 # `atmos terraform apply --affected --ci` (apply errors without -auto-approve in a
 # non-interactive shell; --ci alone does not imply it).

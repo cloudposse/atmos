@@ -19,7 +19,7 @@ import (
 const newline = "\n"
 
 // newDotSpinner builds the shared Dot spinner used by every spinner variant here.
-// spinnerfps.Apply honors the ATMOS_SPINNER_FPS override (for VHS demo recordings).
+// Apply honors the ATMOS_SPINNER_FPS override (for VHS demo recordings).
 func newDotSpinner() spinner.Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot

@@ -171,30 +171,28 @@ func New(opts ...Option) Terminal {
 		opt(t)
 	}
 
-	// Detect color profile once at initialization.
-	// Priority order (highest to lowest):
-	// 1. NO_COLOR env var - always disables color (overrides --force-color)
-	// 2. --force-color flag - forces TrueColor
-	// 3. Standard detection via DetectColorProfile
+	t.initializeColorProfile()
+
+	return t
+}
+
+func (t *terminal) initializeColorProfile() {
 	// Check Stderr first (where UI is written), fall back to Stdout.
 	isTTYOut := t.IsTTY(Stderr)
 	if !isTTYOut {
 		isTTYOut = t.IsTTY(Stdout)
 	}
 
-	// Determine color profile based on precedence
 	switch {
-	case cfg.EnvNoColor:
+	case t.config.EnvNoColor:
 		// NO_COLOR always wins, even over --force-color
 		t.colorProfile = ColorNone
 	case t.forceColor:
 		// Force color profile if --force-color is set (but NO_COLOR takes precedence)
 		t.colorProfile = ColorTrue
 	default:
-		t.colorProfile = cfg.DetectColorProfile(isTTYOut)
+		t.colorProfile = t.config.DetectColorProfile(isTTYOut)
 	}
-
-	return t
 }
 
 // Option configures Terminal.

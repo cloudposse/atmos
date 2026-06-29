@@ -157,13 +157,6 @@ jobs:
           }
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
-      - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        with:
-          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
-          tofu_wrapper: false
-
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
         uses: hashicorp/setup-packer@3286471d6cc6756d056a0b199fea5e0becdbc189 # main
@@ -182,17 +175,21 @@ jobs:
         continue-on-error: true
         uses: ./actions/cache
 
-      - name: Install Helm and Helmfile
+      - name: Install Terraform, OpenTofu, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
           atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
           atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
           atmos toolchain env --format=github
 
-      - name: Verify Helm and Helmfile
+      - name: Verify OpenTofu, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
+          tofu version
           helm version --short
           helmfile version
 
@@ -368,16 +365,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Add Terraform from Atmos toolchain to PATH
+      - name: Add Terraform and OpenTofu from Atmos toolchain to PATH
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
           atmos toolchain env --format=github
 
-      - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
-        with:
-          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
-          tofu_wrapper: false
+      - name: Verify OpenTofu
+        run: tofu version
 
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
@@ -599,18 +596,18 @@ jobs:
         run: |
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
-      - name: Add Terraform from Atmos toolchain to PATH
+      - name: Add Terraform and OpenTofu from Atmos toolchain to PATH
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
           atmos toolchain env --format=github
 
-      - name: Install OpenTofu
+      - name: Verify OpenTofu
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
-        with:
-          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
-          tofu_wrapper: false
+        run: tofu version
 
       - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
         working-directory: ${{ matrix.demo-folder }}
@@ -697,11 +694,22 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
-          tofu_wrapper: false
+          name: build-artifacts-linux
+          path: /usr/local/bin
+
+      - name: Set execute permissions on atmos
+        run: chmod +x /usr/local/bin/atmos
+
+      - name: Install OpenTofu with Atmos toolchain
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain env --format=github
+          tofu version
 
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
         uses: reviewdog/action-tflint@54a5e5aed57dcfbb4662ec548de876df33d6288d # v1

@@ -2,15 +2,18 @@ package pager
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	terminalpkg "github.com/cloudposse/atmos/pkg/terminal"
 )
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -74,23 +77,26 @@ type pageCreator struct {
 	contentFitsTerminal   func(content string) bool
 	isTTYSupportForStdout func() bool
 	isTTYAccessible       func() bool
+	terminalSpeed         float64
 }
 
-func NewWithAtmosConfig(enablePager bool) PageCreator {
+func NewWithAtmosConfig(enablePager bool, speed ...float64) PageCreator {
 	pager := New()
 	pager.(*pageCreator).enablePager = enablePager
+	pager.(*pageCreator).terminalSpeed = resolveSpeed(speed)
 	return pager
 }
 
 // NewWithViewport creates a pager with optional dimension constraints.
 // If maxHeight or maxWidth are non-zero, they constrain the viewport dimensions.
 // Zero values mean use the full terminal dimensions.
-func NewWithViewport(enablePager bool, maxHeight, maxWidth int) PageCreator {
+func NewWithViewport(enablePager bool, maxHeight, maxWidth int, speed ...float64) PageCreator {
 	pager := New()
 	pc := pager.(*pageCreator)
 	pc.enablePager = enablePager
 	pc.maxHeight = maxHeight
 	pc.maxWidth = maxWidth
+	pc.terminalSpeed = resolveSpeed(speed)
 	return pager
 }
 
@@ -102,7 +108,15 @@ func New() PageCreator {
 		contentFitsTerminal:   ContentFitsTerminal,
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYAccessible:       isTTYAccessible,
+		terminalSpeed:         viper.GetFloat64("settings.terminal.speed"),
 	}
+}
+
+func resolveSpeed(speed []float64) float64 {
+	if len(speed) > 0 {
+		return speed[0]
+	}
+	return viper.GetFloat64("settings.terminal.speed")
 }
 
 // isTTYAccessible checks if /dev/tty can be opened.
@@ -119,6 +133,10 @@ func (p *pageCreator) Run(title, content string) error {
 	// Always print content directly if pager is disabled or no TTY support.
 	if !p.enablePager || !p.isTTYSupportForStdout() {
 		return p.writeContent(content)
+	}
+
+	if terminalpkg.IsSpeedLimited(p.terminalSpeed) {
+		return p.writePacedContent(content)
 	}
 
 	// Check if /dev/tty is accessible before trying to use alternate screen.
@@ -161,6 +179,28 @@ func (p *pageCreator) Run(title, content string) error {
 	return nil
 }
 
+func (p *pageCreator) writePacedContent(content string) error {
+	writer := p.writer
+	if writer == nil {
+		log.Warn("pager writer is nil, falling back to direct print")
+		writer = stringWriterFunc(func(content string) error {
+			maskedContent := maskContent(content)
+			fmt.Print(maskedContent)
+			return nil
+		})
+	}
+
+	adapter := &stringWriterAdapter{writer: writer}
+	pacedWriter := terminalpkg.NewPacingWriter(adapter, p.terminalSpeed)
+	if _, err := io.WriteString(pacedWriter, content); err != nil {
+		return fmt.Errorf("failed to write paced content: %w", err)
+	}
+	if err := pacedWriter.Close(); err != nil {
+		return fmt.Errorf("failed to flush paced content: %w", err)
+	}
+	return nil
+}
+
 // writeContent writes content to the configured writer.
 // If the writer is nil, it falls back to fmt.Print with masking and logs a warning.
 // Returns any error from the writer.
@@ -179,4 +219,21 @@ func (p *pageCreator) writeContent(content string) error {
 	}
 
 	return nil
+}
+
+type stringWriterFunc func(string) error
+
+func (fn stringWriterFunc) Write(content string) error {
+	return fn(content)
+}
+
+type stringWriterAdapter struct {
+	writer Writer
+}
+
+func (w *stringWriterAdapter) Write(p []byte) (int, error) {
+	if err := w.writer.Write(string(p)); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }

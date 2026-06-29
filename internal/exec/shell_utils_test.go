@@ -120,6 +120,38 @@ func TestExecuteShellCommandUsesInjectedStreamsAndCapture(t *testing.T) {
 	assert.Equal(t, "stderr", captureErr.String())
 }
 
+func TestExecuteShellCommandTerminalSpeedPreservesNonTTYStreamsAndCapture(t *testing.T) {
+	var terminalOut, terminalErr, captureOut, captureErr bytes.Buffer
+	helper := shellHelperCommand(t, "stdout-stderr")
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{Speed: 8},
+		},
+	}
+
+	err := ExecuteShellCommand(
+		atmosConfig,
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &terminalErr,
+		}),
+		WithStdoutCapture(&captureOut),
+		WithStderrCapture(&captureErr),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "stdout", terminalOut.String())
+	assert.Equal(t, "stderr", terminalErr.String())
+	assert.Equal(t, "stdout", captureOut.String())
+	assert.Equal(t, "stderr", captureErr.String())
+}
+
 func TestExecuteShellCommandPreservesDetailedExitCode(t *testing.T) {
 	helper := shellHelperCommand(t, "exit")
 	err := ExecuteShellCommand(

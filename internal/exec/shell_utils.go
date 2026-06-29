@@ -26,6 +26,7 @@ import (
 	process "github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/shell"
+	terminalpkg "github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -156,6 +157,8 @@ func ExecuteShellCommand(
 		}
 	}
 
+	var pacedClosers []io.Closer
+
 	// Set up stdout: masked output to terminal, optionally tee'd to a capture writer.
 	// When stdoutOverride is set, use it instead of os.Stdout (e.g., redirect to stderr
 	// for workspace select so it doesn't pollute data-producing commands like output).
@@ -163,6 +166,7 @@ func ExecuteShellCommand(
 	if cfg.stdoutOverride != nil {
 		stdoutTarget = cfg.stdoutOverride
 	}
+	stdoutTarget = maybePaceTerminalWriter(stdoutTarget, atmosConfig.Settings.Terminal.Speed, &pacedClosers)
 	maskedStdout := ioLayer.MaskWriter(stdoutTarget)
 	var stdout io.Writer
 	if cfg.stdoutCapture != nil {
@@ -180,7 +184,8 @@ func ExecuteShellCommand(
 
 	var stderr io.Writer
 	if redirectStdError == "/dev/stderr" {
-		maskedStderr := ioLayer.MaskWriter(streams.Stderr)
+		stderrTarget := maybePaceTerminalWriter(streams.Stderr, atmosConfig.Settings.Terminal.Speed, &pacedClosers)
+		maskedStderr := ioLayer.MaskWriter(stderrTarget)
 		if cfg.stderrCapture != nil {
 			stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
 		} else {
@@ -194,7 +199,8 @@ func ExecuteShellCommand(
 			stderr = maskedStderr
 		}
 	} else if redirectStdError == "" {
-		maskedStderr := ioLayer.MaskWriter(streams.Stderr)
+		stderrTarget := maybePaceTerminalWriter(streams.Stderr, atmosConfig.Settings.Terminal.Speed, &pacedClosers)
+		maskedStderr := ioLayer.MaskWriter(stderrTarget)
 		if cfg.stderrCapture != nil {
 			stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
 		} else {
@@ -219,7 +225,7 @@ func ExecuteShellCommand(
 	log.Debug("Executing", "command", command, "args", args)
 
 	if dryRun {
-		return nil
+		return closePacedWriters(pacedClosers)
 	}
 
 	ctx := cfg.ctx
@@ -238,6 +244,9 @@ func ExecuteShellCommand(
 			Stderr: stderr,
 		},
 	})
+	if closeErr := closePacedWriters(pacedClosers); closeErr != nil && result.Err == nil {
+		return closeErr
+	}
 	if result.Err == nil {
 		return nil
 	}
@@ -251,6 +260,26 @@ func ExecuteShellCommand(
 		return errUtils.ExitCodeError{Code: result.ExitCode}
 	}
 	return result.Err
+}
+
+func maybePaceTerminalWriter(w io.Writer, speed float64, closers *[]io.Closer) io.Writer {
+	if !terminalpkg.IsSpeedLimited(speed) || !terminalpkg.IsTTYWriter(w) {
+		return w
+	}
+
+	pacedWriter := terminalpkg.NewPacingWriter(w, speed)
+	*closers = append(*closers, pacedWriter)
+	return pacedWriter
+}
+
+func closePacedWriters(closers []io.Closer) error {
+	var closeErr error
+	for _, closer := range closers {
+		if err := closer.Close(); err != nil && closeErr == nil {
+			closeErr = err
+		}
+	}
+	return closeErr
 }
 
 type synchronizedWriter struct {

@@ -688,6 +688,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 		envVars         map[string]string
 		args            []string
 		expectedPager   string
+		expectedSpeed   float64
 		expectedNoColor bool
 		expectedColor   bool
 	}{
@@ -732,6 +733,14 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			},
 			args:          []string{"atmos", "describe", "config"},
 			expectedColor: true,
+		},
+		{
+			name: "ATMOS_TERMINAL_SPEED environment variable",
+			envVars: map[string]string{
+				"ATMOS_TERMINAL_SPEED": "8",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedSpeed: 8,
 		},
 		{
 			name: "CLI flag overrides environment variable",
@@ -856,7 +865,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			originalEnvVars := make(map[string]string)
 
 			// Clear and save relevant environment variables
-			envVarsToCheck := []string{"ATMOS_PAGER", "PAGER", "NO_PAGER", "NO_COLOR", "ATMOS_NO_COLOR", "COLOR", "ATMOS_COLOR"}
+			envVarsToCheck := []string{"ATMOS_PAGER", "PAGER", "NO_PAGER", "NO_COLOR", "ATMOS_NO_COLOR", "COLOR", "ATMOS_COLOR", "ATMOS_TERMINAL_SPEED"}
 			for _, envVar := range envVarsToCheck {
 				if val, exists := os.LookupEnv(envVar); exists {
 					originalEnvVars[envVar] = val
@@ -895,6 +904,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			v.BindEnv("settings.terminal.pager", "ATMOS_PAGER", "PAGER")
 			v.BindEnv("settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
 			v.BindEnv("settings.terminal.color", "ATMOS_COLOR", "COLOR")
+			v.BindEnv("settings.terminal.speed", "ATMOS_TERMINAL_SPEED")
 
 			// Create a test config
 			atmosConfig := &schema.AtmosConfiguration{
@@ -918,6 +928,9 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 				// Only set Color if NoColor is not true
 				atmosConfig.Settings.Terminal.Color = v.GetBool("settings.terminal.color")
 			}
+			if v.IsSet("settings.terminal.speed") {
+				atmosConfig.Settings.Terminal.Speed = v.GetFloat64("settings.terminal.speed")
+			}
 
 			// Apply CLI flags (simulating what setLogConfig does)
 			setLogConfig(atmosConfig)
@@ -925,6 +938,9 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			// Verify results
 			if tt.expectedPager != "" {
 				assert.Equal(t, tt.expectedPager, atmosConfig.Settings.Terminal.Pager, "Pager setting mismatch")
+			}
+			if tt.expectedSpeed != 0 {
+				assert.Equal(t, tt.expectedSpeed, atmosConfig.Settings.Terminal.Speed, "Terminal speed setting mismatch")
 			}
 			assert.Equal(t, tt.expectedNoColor, atmosConfig.Settings.Terminal.NoColor, "NoColor setting mismatch")
 			if tt.expectedColor || tt.expectedNoColor {
@@ -934,6 +950,16 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTerminalSpeedDefaultAndEnvBinding(t *testing.T) {
+	v := viper.New()
+	setDefaultConfiguration(v)
+	assert.Equal(t, 0.0, v.GetFloat64("settings.terminal.speed"))
+
+	t.Setenv("ATMOS_TERMINAL_SPEED", "8")
+	bindEnv(v, "settings.terminal.speed", "ATMOS_TERMINAL_SPEED")
+	assert.Equal(t, 8.0, v.GetFloat64("settings.terminal.speed"))
 }
 
 // TestResolveAbsolutePath tests the path resolution logic for different scenarios.

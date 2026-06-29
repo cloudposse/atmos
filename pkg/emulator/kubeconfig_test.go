@@ -170,3 +170,20 @@ func TestManager_Kubeconfig_NotRunning(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "not running"))
 }
+
+func TestManager_Kubeconfig_ContextCanceledAfterAttempt(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	runtime := NewMockRuntime(ctrl)
+	ctx, cancel := context.WithCancel(context.Background())
+	runtime.EXPECT().List(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, map[string]string) ([]container.Info, error) {
+			cancel()
+			return []container.Info{}, nil
+		},
+	)
+	shrinkKubeconfigTimers(t)
+
+	m := newManagerWithRuntime(runtime)
+	_, err := m.Kubeconfig(ctx, "dev", "k3s")
+	require.ErrorIs(t, err, context.Canceled)
+}

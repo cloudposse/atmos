@@ -337,6 +337,7 @@ type Terminal struct {
 	Color              bool               `yaml:"color" json:"color" mapstructure:"color"`
 	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"` // Deprecated in config, use Color instead
 	ForceColor         bool               `yaml:"-" json:"-" mapstructure:"force_color"`            // ENV-only: ATMOS_FORCE_COLOR
+	Speed              float64            `yaml:"speed,omitempty" json:"speed,omitempty" mapstructure:"speed"`
 	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
 	Title              bool               `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
 	Alerts             bool               `yaml:"alerts,omitempty" json:"alerts,omitempty" mapstructure:"alerts"`

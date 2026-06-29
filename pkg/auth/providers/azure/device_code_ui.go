@@ -73,7 +73,8 @@ func waitForAuthWithSpinner(authCtx context.Context, deviceCode *public.DeviceCo
 
 // displayDeviceCodePrompt displays the device code, opens the browser, and waits for user authentication.
 func displayDeviceCodePrompt(userCode, verificationURL string) {
-	log.Debug("Displaying Azure authentication prompt",
+	log.Debug(
+		"Displaying Azure authentication prompt",
 		"url", verificationURL,
 		"code", userCode,
 		"isTTY", isTTY(),

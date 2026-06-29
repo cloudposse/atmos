@@ -77,6 +77,115 @@ func TestBuildGraph_DependenciesComponents(t *testing.T) {
 	assert.Equal(t, []string{NodeID("app", "dev")}, web.Dependencies)
 }
 
+func TestBuildGraph_DependenciesComponentsEmptyPreventsSettingsFallback(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": {},
+			"app": {
+				"dependencies": map[string]any{
+					"components": []any{},
+				},
+				"settings": map[string]any{
+					"depends_on": map[string]any{
+						"1": map[string]any{"component": "vpc"},
+					},
+				},
+			},
+		},
+	})
+
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	app, ok := graph.GetNode(NodeID("app", "dev"))
+	require.True(t, ok)
+	assert.Empty(t, app.Dependencies, "explicit dependencies.components must not fall back to settings.depends_on")
+}
+
+func TestBuildGraph_DependenciesComponentsInvalidPreventsSettingsFallback(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"vpc": {},
+			"app": {
+				"dependencies": map[string]any{
+					"components": "not-a-list",
+				},
+				"settings": map[string]any{
+					"depends_on": map[string]any{
+						"1": map[string]any{"component": "vpc"},
+					},
+				},
+			},
+		},
+	})
+
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	app, ok := graph.GetNode(NodeID("app", "dev"))
+	require.True(t, ok)
+	assert.Empty(t, app.Dependencies, "invalid authoritative dependencies.components must not fall back to settings.depends_on")
+}
+
+func TestBuildGraph_IgnoresMalformedStackShapes(t *testing.T) {
+	stacks := map[string]any{
+		"stack-is-not-map": "bad",
+		"components-is-not-map": map[string]any{
+			"components": "bad",
+		},
+		"terraform-is-not-map": map[string]any{
+			"components": map[string]any{
+				"terraform": "bad",
+			},
+		},
+		"component-is-not-map": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"bad": "bad",
+				},
+			},
+		},
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"app": map[string]any{},
+				},
+			},
+		},
+	}
+
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, graph.Size())
+	_, ok := graph.GetNode(NodeID("app", "dev"))
+	assert.True(t, ok)
+}
+
+func TestBuildGraph_FiltersPathDependencies(t *testing.T) {
+	stacks := terraformStacks(map[string]map[string]map[string]any{
+		"dev": {
+			"app": {
+				"dependencies": map[string]any{
+					"components": []any{
+						map[string]any{"kind": "file", "path": "main.tf"},
+						map[string]any{"kind": "folder", "path": "modules"},
+					},
+					"files":   []string{"values.yaml"},
+					"folders": []string{"templates"},
+				},
+			},
+		},
+	})
+
+	graph, err := BuildGraph(stacks)
+	require.NoError(t, err)
+
+	app, ok := graph.GetNode(NodeID("app", "dev"))
+	require.True(t, ok)
+	assert.Empty(t, app.Dependencies)
+}
+
 func TestBuildGraph_CrossStackDependency(t *testing.T) {
 	stacks := terraformStacks(map[string]map[string]map[string]any{
 		"dev":  {"app": dependsOn(map[string]any{"component": "vpc", "stack": "prod"})},

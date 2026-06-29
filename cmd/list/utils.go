@@ -321,7 +321,7 @@ func renderWithPager(atmosConfig *schema.AtmosConfiguration, title string, r *re
 		}
 
 		// Try to use pager - it handles TTY detection and falls back to direct print.
-		pageCreator := pager.NewWithAtmosConfig(true)
+		pageCreator := pager.NewWithAtmosConfig(true, atmosConfig.Settings.Terminal.Speed)
 		if err := pageCreator.Run(title, content); err != nil {
 			// Pager failed, fall back to direct render.
 			return r.Render(data)

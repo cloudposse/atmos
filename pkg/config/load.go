@@ -449,6 +449,7 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
 	bindEnv(v, "settings.terminal.force_color", "ATMOS_FORCE_COLOR")
 	bindEnv(v, "settings.terminal.theme", "ATMOS_THEME", "THEME")
+	bindEnv(v, "settings.terminal.speed", "ATMOS_TERMINAL_SPEED")
 
 	// Experimental feature handling
 	bindEnv(v, "settings.experimental", "ATMOS_EXPERIMENTAL")
@@ -512,7 +513,8 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.terminal.color", true)
 	v.SetDefault("settings.terminal.no_color", false)
 	v.SetDefault("settings.terminal.pager", "false") // String value to match the field type
-	v.SetDefault("settings.experimental", "warn")    // Experimental feature handling: silence, disable, warn, error
+	v.SetDefault("settings.terminal.speed", 0.0)
+	v.SetDefault("settings.experimental", "warn") // Experimental feature handling: silence, disable, warn, error
 	// Note: force_color is ENV-only (ATMOS_FORCE_COLOR), no config default
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 
