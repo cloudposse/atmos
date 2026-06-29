@@ -106,12 +106,19 @@ For complete Terraform/OpenTofu documentation, see:
 			if errOut := stderrBuf.String(); errOut != "" {
 				capturedTestOutput = capturedTestOutput + "\n" + ansi.Strip(errOut)
 			}
-			// Render a clean human-readable summary to the terminal/log; fall back to
-			// stderr when no test results were produced (e.g. an early failure).
+			// Render a clean human-readable summary to the terminal/log. When the
+			// stream is not a parseable `-json` test run (e.g. an init/auth failure
+			// before any test executed), never swallow what terraform actually wrote:
+			// surface the raw captured stdout and stderr so the failure is visible.
 			if text := tfci.RenderTestText([]byte(jsonOut)); text != "" {
 				ui.Write(text)
-			} else if errOut := stderrBuf.String(); errOut != "" {
-				ui.Write(errOut)
+			} else {
+				if jsonOut != "" {
+					ui.Write(jsonOut)
+				}
+				if errOut := stderrBuf.String(); errOut != "" {
+					ui.Write(errOut)
+				}
 			}
 		}
 
