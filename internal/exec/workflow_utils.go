@@ -12,6 +12,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"mvdan.cc/sh/v3/shell"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	"github.com/cloudposse/atmos/pkg/background"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
@@ -39,6 +41,10 @@ import (
 
 // Workflow error title for formatted output.
 const WorkflowErrTitle = "Workflow Error"
+
+// bgRunIDLen is the length of the short per-run id used to scope background container
+// instance names when no explicit `--stack` is given.
+const bgRunIDLen = 8
 
 // Local errors not in shared package (workflow-specific internal errors).
 var (
@@ -289,13 +295,39 @@ func ExecuteWorkflow(
 	// Check if the workflow steps have the `name` attribute
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
+	// Background container services started by `background: true` steps are tracked in
+	// a run-scoped registry. runCtx propagates cancellation (Ctrl-C / step failure) to
+	// readiness waits and teardown. Any service still running when the workflow ends —
+	// or when it exits early on error — is auto-torn-down here (implicit, since a service
+	// never exits on its own); an explicit `cancel` step removes it from the registry first.
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	bgRegistry := background.NewRegistry()
+	// bgGated records background steps that have already passed their readiness gate,
+	// so the implicit gate before each foreground step does not re-probe them.
+	bgGated := map[string]bool{}
+	// Scope background container instance names per run. An explicit `--stack` is honored
+	// verbatim (override path); otherwise use a run-specific id rather than the shared
+	// workflow/stack name, so concurrent executions of the same workflow do not collide
+	// on the same container.
+	bgStack := commandLineStack
+	if bgStack == "" {
+		bgStack = "run-" + uuid.NewString()[:bgRunIDLen]
+	}
+	bgRunner := &workflowPkg.ContainerRunner{Stack: bgStack, DryRun: dryRun}
+	defer func() {
+		if stopErr := bgRegistry.StopAll(runCtx); stopErr != nil {
+			retErr = errors.Join(retErr, stopErr)
+		}
+	}()
+
 	// Validate exec steps before executing anything: an exec step replaces
 	// the Atmos process, so it must be the final step and must not set
 	// supervisor-only fields (tty, interactive, retry, timeout, output).
-	if err := schema.ValidateExecWorkflowSteps(workflowDefinition.Steps); err != nil {
+	if err := schema.ValidateWorkflowSteps(workflowDefinition.Steps); err != nil {
 		return errUtils.Build(err).
 			WithTitle(WorkflowErrTitle).
-			WithHint("Steps of type `exec` replace the Atmos process; move the exec step to the end of the workflow and remove unsupported fields").
+			WithHint("Check workflow step type, nested steps, needs dependencies, and control-step output/fail configuration").
 			WithContext("workflow", workflow).
 			WithExitCode(1).
 			Err()
@@ -442,8 +474,61 @@ func ExecuteWorkflow(
 			progressRenderer.RenderPermanent(label)
 		}
 
-		switch commandType {
-		case "shell":
+		// Background steps (start/wait/wait-all/cancel) are coordinated by the
+		// run-scoped registry; everything else falls through to the normal switch.
+		handled := true
+		switch {
+		case step.BackgroundAsync:
+			// Start the container service detached (non-blocking): consecutive background
+			// steps come up concurrently. Readiness is enforced by the implicit gate before
+			// the next foreground step (and by `wait`/`wait-all`).
+			err = workflowPkg.StartBackground(runCtx, bgRegistry, bgRunner, &steps[stepIdx], stepEnv)
+		case commandType == schema.TaskTypeWait:
+			err = workflowPkg.WaitBackground(runCtx, bgRegistry, step.For)
+			if err == nil {
+				for _, name := range step.For {
+					bgGated[name] = true
+				}
+			}
+		case commandType == schema.TaskTypeWaitAll:
+			err = workflowPkg.WaitAllBackground(runCtx, bgRegistry)
+			if err == nil {
+				for _, name := range bgRegistry.Names() {
+					bgGated[name] = true
+				}
+			}
+		case commandType == schema.TaskTypeCancel:
+			err = workflowPkg.CancelBackground(runCtx, bgRegistry, step.For)
+			for _, name := range step.For {
+				delete(bgGated, name)
+			}
+		default:
+			handled = false
+		}
+
+		// Implicit readiness gate: before running a foreground step, block until every
+		// background service started so far is healthy. Already-gated services are skipped.
+		if !handled && err == nil {
+			err = workflowPkg.GatePendingBackground(runCtx, bgRegistry, bgGated)
+		}
+
+		switch {
+		case handled:
+			// already executed above
+		case err != nil:
+			// A failed readiness gate skips this step's foreground work; the error
+			// handler below reports it.
+		case commandType == schema.TaskTypeParallel, commandType == schema.TaskTypeMatrix:
+			err = executeWorkflowControlStep(context.Background(), &workflowControlContext{
+				atmosConfig:         atmosConfig,
+				workflowDefinition:  workflowDefinition,
+				dryRun:              dryRun,
+				commandLineStack:    commandLineStack,
+				commandLineIdentity: stepIdentity,
+				baseEnv:             baseEnv,
+				authManager:         authManager,
+			}, &steps[stepIdx])
+		case commandType == "shell":
 			// Render command before execution if show.command is enabled.
 			// Steps with tty/interactive attach the user's terminal; plain
 			// steps keep the existing masked shell-interpreter behavior.
@@ -503,7 +588,7 @@ func ExecuteWorkflow(
 					})
 				})
 			}
-		case schema.TaskTypeExec:
+		case commandType == schema.TaskTypeExec:
 			// Replace the Atmos process with the command (shell exec semantics).
 			// Validated earlier to be the final step; no retry wrapper (the
 			// process is replaced, so a retry could never run).
@@ -515,7 +600,7 @@ func ExecuteWorkflow(
 				Env:     stepEnv,
 				DryRun:  dryRun,
 			})
-		case "atmos":
+		case commandType == "atmos":
 			// Parse command using shell.Fields for proper quote handling.
 			// This correctly handles arguments like -var="foo=bar" by stripping quotes.
 			args, parseErr := shell.Fields(command, nil)
@@ -869,24 +954,21 @@ func promptForWorkflowFile(matches []WorkflowMatch) (string, error) {
 }
 
 func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefinition) {
-	steps := workflowDefinition.Steps
+	generateWorkflowStepNames(workflowDefinition.Steps, "")
+}
 
-	if steps == nil {
-		return
-	}
-
-	// Check if the steps have the `name` attribute.
-	// If not, generate a friendly name consisting of a prefix of `step` and followed by the index of the
-	// step (the index starts with 1, so the first generated step name would be `step1`)
-	for index, step := range steps {
+func generateWorkflowStepNames(steps []schema.WorkflowStep, parent string) {
+	for index := range steps {
+		step := &steps[index]
 		if step.Name == "" {
-			// When iterating through a slice with a range loop, if elements need to be changed,
-			// changing the returned value from the range is not changing the original slice element.
-			// That return value is a copy of the element.
-			// So doing changes to it will not affect the original elements.
-			// We need to access the element with the index returned from the range iterator and change it there.
-			// https://medium.com/@nsspathirana/common-mistakes-with-go-slices-95f2e9b362a9
-			steps[index].Name = fmt.Sprintf("step%d", index+1)
+			if parent == "" {
+				step.Name = fmt.Sprintf("step%d", index+1)
+			} else {
+				step.Name = fmt.Sprintf("%s_step%d", parent, index+1)
+			}
+		}
+		if len(step.Steps) > 0 {
+			generateWorkflowStepNames(step.Steps, step.Name)
 		}
 	}
 }

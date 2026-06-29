@@ -52,7 +52,7 @@ commands:
           - name: hello
             type: container
             action: run
-            run:
+            with:
               image: alpine:latest
               command: echo "hello from a custom command container"
 
@@ -62,7 +62,7 @@ commands:
           - name: build
             type: container
             action: build
-            build:
+            with:
               context: .
               dockerfile: Dockerfile
               tags:
@@ -73,13 +73,13 @@ commands:
           - name: inspect
             type: container
             action: inspect
-            inspect:
+            with:
               image: "{{ .steps.build.outputs.image }}"
 
           - name: run
             type: container
             action: run
-            run:
+            with:
               image: "{{ .steps.build.outputs.image }}"
               command: |
                 /usr/local/bin/example
@@ -91,7 +91,7 @@ commands:
           - name: build
             type: container
             action: build
-            build:
+            with:
               context: .
               dockerfile: Dockerfile
               tags:
@@ -102,7 +102,7 @@ commands:
           - name: push
             type: container
             action: push
-            push:
+            with:
               image: "{{ .steps.build.outputs.image }}"
               tags:
                 - localhost:5000/atmos-container-step:local
@@ -113,19 +113,21 @@ commands:
           - name: run
             type: container
             action: run
-            run:
+            with:
               image: "{{ .steps.push.outputs.image }}"
               command: |
                 /usr/local/bin/example
                 uname -a
 
       - name: flat-run
-        description: Run using the backward-compatible flat run shorthand
+        description: Run a single command using the with params block
         steps:
           - name: hello
             type: container
-            image: alpine:latest
-            command: echo "hello from flat run shorthand"
+            action: run
+            with:
+              image: alpine:latest
+              command: echo "hello from with params"
 
       - name: workspace
         description: Show the mounted workspace from a container
@@ -133,7 +135,7 @@ commands:
           - name: workspace
             type: container
             action: run
-            run:
+            with:
               image: alpine:latest
               command: |
                 uname -a
@@ -148,6 +150,6 @@ commands:
             env:
               EXAMPLE_MESSAGE: "hello from env"
             action: run
-            run:
+            with:
               image: alpine:latest
               command: echo "$EXAMPLE_MESSAGE"

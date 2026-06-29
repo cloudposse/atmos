@@ -1596,7 +1596,8 @@
                         "type": "string"
                       },
                       "type": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Step type (step kind): any registered workflow/custom-command step type, e.g. shell, container, http, log, wait, wait-all, cancel. Omitted defaults to a command step."
                       },
                       "retry": {
                         "title": "retry",
@@ -1682,11 +1683,62 @@
                           "type": "string"
                         },
                         "description": "Environment variables for the workflow step"
+                      },
+                      "needs": {
+                        "description": "Names of earlier steps that must complete before this step runs.",
+                        "oneOf": [
+                          { "type": "string" },
+                          { "type": "array", "items": { "type": "string" } }
+                        ]
+                      },
+                      "outputs": {
+                        "type": "object",
+                        "description": "Named outputs exported by the step for use by later steps.",
+                        "additionalProperties": { "type": "string" }
+                      },
+                      "timeout": {
+                        "type": "string",
+                        "description": "Maximum duration the step may run (e.g. '30s', '5m')."
+                      },
+                      "background": {
+                        "description": "Run the step asynchronously in the background (boolean; v1 supports this only for container steps). A string value instead sets the step's background style color.",
+                        "oneOf": [
+                          { "type": "boolean" },
+                          { "type": "string" }
+                        ]
+                      },
+                      "for": {
+                        "description": "Fan the step out over a list of values (string expression or explicit array of strings).",
+                        "oneOf": [
+                          { "type": "string" },
+                          { "type": "array", "items": { "type": "string" } }
+                        ]
+                      },
+                      "action": {
+                        "type": "string",
+                        "description": "Action selector for action-bearing step kinds (e.g. container: run, build, push, inspect). Selects which params 'with' holds."
+                      },
+                      "provider": {
+                        "type": "string",
+                        "description": "Provider/runtime backend for the step kind (e.g. container: docker, podman)."
+                      },
+                      "container": {
+                        "description": "Container sandbox control for the step. Boolean to enable/disable, or an object with sandbox settings.",
+                        "oneOf": [
+                          { "type": "boolean" },
+                          { "type": "object", "additionalProperties": true }
+                        ]
+                      },
+                      "runtime_auto_start": {
+                        "type": "boolean",
+                        "description": "Automatically start the container runtime if it is not already running."
+                      },
+                      "with": {
+                        "type": "object",
+                        "description": "Parameters for the step named by 'type' (and 'action' where applicable). Validated by the step handler at run time. For container steps this holds image, command, ports, mounts, build context, etc.",
+                        "additionalProperties": true
                       }
-                    },
-                    "required": [
-                      "command"
-                    ]
+                    }
                   }
                 }
               ]

@@ -174,57 +174,20 @@ func (h *ContainerHandler) buildConfig(ctx context.Context, step *schema.Workflo
 	return config, err
 }
 
+// effectiveRunStep resolves the run configuration from the step's `with:` block
+// (step.Run). Only the cross-cutting execution modifiers — provider and
+// runtime_auto_start — fall through from the step level; every other parameter
+// (image, command, ports, mounts, healthcheck, …) lives under `with:`.
 func effectiveRunStep(step *schema.WorkflowStep) schema.ContainerRunStep {
 	run := schema.ContainerRunStep{}
 	if step.Run != nil {
 		run = *step.Run
 	}
-	mergeRunScalarFields(&run, step)
-	mergeRunSliceFields(&run, step)
-	run.RuntimeAutoStart = run.RuntimeAutoStart || step.RuntimeAutoStart
-	run.WorkspaceReadOnly = run.WorkspaceReadOnly || step.WorkspaceReadOnly
-	return run
-}
-
-// mergeRunScalarFields fills empty scalar run fields from the step-level shorthand.
-func mergeRunScalarFields(run *schema.ContainerRunStep, step *schema.WorkflowStep) {
-	if run.Image == "" {
-		run.Image = step.Image
-	}
-	if run.Command == "" {
-		run.Command = step.Command
-	}
-	if run.Shell == "" {
-		run.Shell = step.Shell
-	}
 	if run.Provider == "" {
 		run.Provider = step.Provider
 	}
-	if run.Pull == "" {
-		run.Pull = step.Pull
-	}
-	if run.Workspace == "" {
-		run.Workspace = step.Workspace
-	}
-	if run.Cleanup == "" {
-		run.Cleanup = step.Cleanup
-	}
-	if run.User == "" {
-		run.User = step.User
-	}
-}
-
-// mergeRunSliceFields fills empty slice run fields from the step-level shorthand.
-func mergeRunSliceFields(run *schema.ContainerRunStep, step *schema.WorkflowStep) {
-	if len(run.RunArgs) == 0 {
-		run.RunArgs = step.RunArgs
-	}
-	if len(run.Mounts) == 0 {
-		run.Mounts = step.Mounts
-	}
-	if len(run.Ports) == 0 {
-		run.Ports = step.Ports
-	}
+	run.RuntimeAutoStart = run.RuntimeAutoStart || step.RuntimeAutoStart
+	return run
 }
 
 func resolveWorkDir(vars *Variables, step *schema.WorkflowStep) (string, error) {
