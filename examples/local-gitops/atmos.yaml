@@ -62,7 +62,6 @@ commands:
       - name: "up"
         description: "Stand up the full local GitOps loop: emulators + Flux + a Git round trip"
         steps:
-          - atmos vendor pull
           - atmos emulator up gitserver -s local
           - atmos emulator up kubernetes -s local
           - atmos kubernetes apply flux -s local --identity local-k3s
