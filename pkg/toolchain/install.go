@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinnerfps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -46,6 +47,7 @@ func initialSpinnerModel(message string) *spinnerModel {
 	s.Spinner = bspinner.Dot
 	styles := theme.GetCurrentStyles()
 	s.Style = styles.Spinner
+	spinnerfps.Apply(&s)
 	return &spinnerModel{
 		spinner: s,
 		message: message,

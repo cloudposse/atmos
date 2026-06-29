@@ -114,6 +114,11 @@ commands:
             missing=""
             for t in vhs ttyd ffmpeg; do command -v "$t" >/dev/null 2>&1 || missing="$missing $t"; done
             [ -z "$missing" ] || { echo "missing recording tools:$missing (auto-install via toolchain; on macOS run: brew install ttyd)"; exit 1; }
+            # Slow the spinner redraw rate for recordings only. The default (~10/sec) of
+            # off-camera `atmos emulator up` spinners scrolls enough to trip VHS's
+            # scrollback handling (charmbracelet/vhs#657/#659). 4/sec keeps a visible
+            # spinner with ~2.5x fewer redraws. Only affects VHS recording, not normal use.
+            export ATMOS_SPINNER_FPS="${ATMOS_SPINNER_FPS:-4}"
             cd "$repo"
             mkdir -p website/static/img/demos
             name='{{ .Arguments.name }}'

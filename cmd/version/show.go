@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/spinnerfps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -103,6 +104,7 @@ func fetchReleaseWithSpinner(client GitHubClient, versionArg string) (*github.Re
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = theme.GetCurrentStyles().Spinner
+	spinnerfps.Apply(&s)
 
 	// Fetch release with spinner.
 	m := &showModel{spinner: s, client: client, versionArg: versionArg}

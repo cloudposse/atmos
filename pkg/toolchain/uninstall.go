@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinnerfps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -200,6 +201,7 @@ func handleToolNotFound(owner, repo, version string, err error, showProgressBar 
 // showUninstallProgress displays progress indicators during uninstall.
 func showUninstallProgress() {
 	spinner := bspinner.New()
+	spinnerfps.Apply(&spinner)
 	progressBar := progress.New(progress.WithDefaultGradient())
 
 	// Show progress for finding tool
@@ -234,6 +236,7 @@ func handleUninstallError(owner, repo, version string, err error, showProgressBa
 func showUninstallCompletion(owner, repo, version string) {
 	progressBar := progress.New(progress.WithDefaultGradient())
 	spinner := bspinner.New()
+	spinnerfps.Apply(&spinner)
 	bar := progressBar.ViewAs(1.0)
 	printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
 	time.Sleep(100 * time.Millisecond)
