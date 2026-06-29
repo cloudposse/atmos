@@ -1,0 +1,103 @@
+name: landing-demos-debug
+# Throwaway diagnostic harness for the landing-demos render hang.
+#
+# `atmos terraform init s3-bucket -s dev` (the off-camera step in demo/landing/dx.tape)
+# hangs for the full VHS WaitTimeout (~6 min) in GitHub Actions Docker but works locally,
+# so we can't reproduce it on a laptop. This workflow reproduces it WITHOUT VHS as raw
+# shell, fails fast (timeout), captures Atmos + Terraform TRACE logs and Docker/network
+# state to files, and uploads them as an artifact — so we can read the actual hang point.
+#
+# Manual only. Does not publish anything. Delete once the hang is diagnosed and fixed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ATMOS_CONTAINER_RUNTIME: docker
+      # Full Atmos + Terraform tracing to files we can upload (ATMOS_LOGS_FILE is honored
+      # by pkg/config/config.go; TF_LOG_PATH captures the terraform subprocess).
+      ATMOS_LOGS_LEVEL: Trace
+      ATMOS_LOGS_FILE: ${{ github.workspace }}/diag/atmos.log
+      TF_LOG: TRACE
+      TF_LOG_PATH: ${{ github.workspace }}/diag/terraform.log
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # setup-go caches modules + build output by default (keyed on go.sum), so
+      # re-dispatches rebuild in ~1-2 min for fast iteration.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build atmos
+        run: |
+          make build
+          echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
+
+      # Stage 1 — RAW reproduction (no VHS). Replicate demo/landing/dx.tape's off-camera
+      # sequence as plain shell so we get raw stdout/stderr, fail fast via `timeout`, and
+      # snapshot the emulator/network state around the hang. This also rules out VHS vs.
+      # the Actions/Docker environment: if this hangs too, VHS is not the cause.
+      - name: Reproduce dx terraform init (raw, instrumented)
+        run: |
+          set -uo pipefail
+          D="${{ github.workspace }}/diag"
+          mkdir -p "$D"
+          cd demo/landing/fixtures/dx
+
+          atmos version            > "$D/atmos-version.txt" 2>&1 || true
+          command -v terraform tofu > "$D/tf-which.txt"      2>&1 || true
+          env | grep -iE 'AWS_|ATMOS_|TF_' | sort > "$D/env.txt" 2>&1 || true
+
+          echo "::group::emulator up"
+          atmos emulator reset aws -s dev --force > "$D/emulator-reset.txt" 2>&1 || true
+          atmos emulator up aws -s dev            > "$D/emulator-up.txt"    2>&1
+          echo "::endgroup::"
+
+          cid="$(docker ps -q --filter 'label=tools.atmos.component_type=emulator' --filter 'label=tools.atmos.component=aws' | head -1)"
+          echo "emulator container id: ${cid:-<none>}"
+          docker ps -a            > "$D/docker-ps.txt"            2>&1 || true
+          docker port "$cid"      > "$D/docker-port.txt"          2>&1 || true
+          docker logs "$cid"      > "$D/emulator-logs-before.txt" 2>&1 || true
+          getent hosts localhost  > "$D/getent.txt"               2>&1 || true
+          ss -tlnp                > "$D/listening.txt"            2>&1 || true
+
+          # Probe the published endpoint the terraform AWS provider would hit. A fast
+          # connect/refuse rules out a port-binding hang; a hang here is the smoking gun.
+          hostport="$(docker port "$cid" 4566/tcp 2>/dev/null | sed -n '1s/.*://p')"
+          echo "hostport=${hostport:-<none>}" | tee "$D/hostport.txt"
+          if [ -n "${hostport:-}" ]; then
+            timeout 25 curl -sv "http://127.0.0.1:${hostport}/" > "$D/curl-probe.txt" 2>&1 || true
+          fi
+
+          # THE HANG — bounded to ~160s (vs the 360s tape timeout) so we fail fast. Give
+          # the init its own atmos trace file so a later command can't overwrite it.
+          echo "::group::terraform init (bounded)"
+          set +e
+          ATMOS_LOGS_FILE="$D/atmos-init.log" timeout 160 atmos terraform init s3-bucket -s dev
+          code=$?
+          set -e
+          echo "::endgroup::"
+          echo "init_exit=$code" | tee "$D/init-exit.txt"   # 124 == timed out (hung)
+
+          docker logs "$cid" > "$D/emulator-logs-after.txt" 2>&1 || true
+          ss -tlnp           > "$D/listening-after.txt"     2>&1 || true
+
+          exit "$code"
+
+      # Always capture the diagnostics, even (especially) when init hung/failed.
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dx-init-diagnostics
+          path: ${{ github.workspace }}/diag/
+          if-no-files-found: warn
