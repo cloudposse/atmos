@@ -83,6 +83,29 @@ var configDeleteCmd = &cobra.Command{
 	},
 }
 
+var configFormatCmd = &cobra.Command{
+	Use:     "format",
+	Aliases: []string{"fmt"},
+	Short:   "Format the active atmos.yaml file",
+	Long: `Format the active atmos.yaml file in place, preserving comments, anchors,
+Atmos YAML functions, and Go templates.`,
+	Example: "atmos config format\natmos --config ./config/atmos.yaml config format",
+	Args:    cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		defer perf.Track(atmosConfigPtr, "config.formatRunE")()
+
+		file, err := resolveConfigFile(cmd)
+		if err != nil {
+			return err
+		}
+		if err := atmosyaml.FormatFile(file); err != nil {
+			return err
+		}
+		ui.Successf("Formatted %s", file)
+		return nil
+	},
+}
+
 func init() {
 	configSetCmd.Flags().StringVar(&valueType, "type", atmosyaml.TypeString,
 		"Value type: string, int, bool, float, null, or yaml (raw literal)")

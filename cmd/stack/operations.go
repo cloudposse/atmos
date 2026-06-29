@@ -2,6 +2,8 @@ package stack
 
 import (
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -78,10 +80,26 @@ var stackDeleteCmd = &cobra.Command{
 	},
 }
 
+var stackFormatCmd = &cobra.Command{
+	Use:     "format",
+	Aliases: []string{"fmt"},
+	Short:   "Format the manifest files that define a stack component",
+	Long: `Format the manifest files that define the selected component in place.
+Atmos uses provenance to find the files that contribute effective component
+values. Use --file to format one manifest explicitly.`,
+	Example: "atmos stack format -s plat-ue2-prod -c vpc\natmos stack format -s plat-ue2-prod -c vpc --file stacks/catalog/vpc.yaml",
+	Args:    cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		defer perf.Track(atmosConfigPtr, "stack.formatRunE")()
+		return runStackFormat()
+	},
+}
+
 func init() {
 	registerStackEditFlags(stackGetCmd)
 	registerStackEditFlags(stackSetCmd)
 	registerStackEditFlags(stackDeleteCmd)
+	registerStackEditFlags(stackFormatCmd)
 	stackSetCmd.Flags().StringVar(&flagType, "type", atmosyaml.TypeString,
 		"Value type: string, int, bool, float, null, or yaml (raw literal)")
 }
@@ -127,6 +145,71 @@ func runStackDelete(args []string) error {
 	}
 	ui.Successf("Deleted %s for %s from %s", args[0], flagComponent, tgt.file)
 	return nil
+}
+
+func runStackFormat() error {
+	files, err := resolveStackFormatFiles()
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		if err := atmosyaml.FormatFile(file); err != nil {
+			return err
+		}
+	}
+	ui.Successf("Formatted %d stack config file(s).", len(files))
+	return nil
+}
+
+func resolveStackFormatFiles() ([]string, error) {
+	if flagFile != "" {
+		return []string{flagFile}, nil
+	}
+
+	atmosConfig, result, err := describeComponentForEdit()
+	if err != nil {
+		return nil, err
+	}
+	return stackFormatFilesFromProvenance(&atmosConfig, result, flagComponent)
+}
+
+func stackFormatFilesFromProvenance(atmosConfig *schema.AtmosConfiguration, result *exec.DescribeComponentResult, component string) ([]string, error) {
+	if result == nil || result.MergeContext == nil {
+		return nil, errUtils.Build(errUtils.ErrInvalidArgumentError).
+			WithExplanationf("No provenance was found for component %q.", component).
+			WithHint("Pass --file <manifest> to format a manifest explicitly.").
+			Err()
+	}
+
+	componentType, _ := result.ComponentSection[cfg.ComponentTypeSectionName].(string)
+	prefix := pkgstack.BuildComponentInFilePath(componentType, component, "")
+	seen := map[string]bool{}
+	files := make([]string, 0)
+	for _, path := range result.MergeContext.GetProvenancePaths() {
+		if path != prefix && !strings.HasPrefix(path, prefix+".") {
+			continue
+		}
+		provFile, _, ok := pkgstack.PickProvenanceFile(result.MergeContext.GetProvenance(path))
+		if !ok {
+			continue
+		}
+		absFile := provFile
+		if !filepath.IsAbs(absFile) {
+			absFile = filepath.Join(atmosConfig.StacksBaseAbsolutePath, provFile)
+		}
+		if !seen[absFile] {
+			seen[absFile] = true
+			files = append(files, absFile)
+		}
+	}
+	sort.Strings(files)
+	if len(files) == 0 {
+		return nil, errUtils.Build(errUtils.ErrInvalidArgumentError).
+			WithExplanationf("No editable manifest files were found for component %q in stack %q.", component, flagStack).
+			WithHint("Pass --file <manifest> to format a manifest explicitly.").
+			Err()
+	}
+	return files, nil
 }
 
 // resolveEditTarget describes the component in the stack (with provenance) and

@@ -61,6 +61,18 @@ var stackConfigDeleteCmd = &cobra.Command{
 	},
 }
 
+var stackConfigFormatCmd = &cobra.Command{
+	Use:     "format",
+	Aliases: []string{"fmt"},
+	Short:   "Format the manifest files that define a stack component",
+	Example: "atmos stack config format -s plat-ue2-prod -c vpc\natmos stack config format -s plat-ue2-prod -c vpc --file stacks/catalog/vpc.yaml",
+	Args:    cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		defer perf.Track(atmosConfigPtr, "stack.config.formatRunE")()
+		return runStackFormat()
+	},
+}
+
 var stackConfigListCmd = &cobra.Command{
 	Use:     "list [path-pattern]",
 	Short:   "List editable component config paths for a stack",
@@ -89,7 +101,7 @@ func stackPathPatternArg(args []string) string {
 }
 
 func init() {
-	for _, c := range []*cobra.Command{stackConfigGetCmd, stackConfigSetCmd, stackConfigDeleteCmd} {
+	for _, c := range []*cobra.Command{stackConfigGetCmd, stackConfigSetCmd, stackConfigDeleteCmd, stackConfigFormatCmd} {
 		registerStackEditFlags(c)
 	}
 	stackConfigSetCmd.Flags().StringVar(&flagType, "type", atmosyaml.TypeString,
@@ -102,6 +114,7 @@ func init() {
 	stackConfigCmd.AddCommand(stackConfigGetCmd)
 	stackConfigCmd.AddCommand(stackConfigSetCmd)
 	stackConfigCmd.AddCommand(stackConfigDeleteCmd)
+	stackConfigCmd.AddCommand(stackConfigFormatCmd)
 	stackConfigCmd.AddCommand(stackConfigListCmd)
 }
 
