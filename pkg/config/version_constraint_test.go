@@ -353,13 +353,24 @@ func TestValidateVersionConstraint_ExplicitOverrideWarnings(t *testing.T) {
 			defer func() { version.Version = originalVersion }()
 			version.Version = tt.currentVersion
 
+			originalArgs := os.Args
+			os.Args = []string{"atmos"}
+			t.Cleanup(func() { os.Args = originalArgs })
+
+			for _, key := range []string{
+				"ATMOS_VERSION_ENFORCEMENT",
+				version.VersionUseEnvVar,
+				version.UseVersionEnvVar,
+				version.VersionEnvVar,
+			} {
+				t.Setenv(key, "")
+			}
+
 			if tt.envKey != "" {
 				t.Setenv(tt.envKey, tt.envValue)
 			}
 			if tt.osArgs != nil {
-				originalArgs := os.Args
 				os.Args = tt.osArgs
-				t.Cleanup(func() { os.Args = originalArgs })
 			}
 
 			logs := captureVersionConstraintLogs(t)
@@ -397,6 +408,61 @@ func TestValidateVersionConstraint_ExplicitOverrideWarnings(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExplicitVersionOverrideFromArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "equals form",
+			args: []string{"atmos", "list", "stacks", "--use-version=ref:main"},
+			want: "ref:main",
+		},
+		{
+			name: "separate value form",
+			args: []string{"atmos", "list", "stacks", "--use-version", "1.2.3"},
+			want: "1.2.3",
+		},
+		{
+			name: "bare separator stops parsing",
+			args: []string{"atmos", "terraform", "plan", "--", "--use-version=ref:main"},
+			want: "",
+		},
+		{
+			name: "missing separate value",
+			args: []string{"atmos", "list", "stacks", "--use-version"},
+			want: "",
+		},
+		{
+			name: "absent flag",
+			args: []string{"atmos", "list", "stacks"},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, explicitVersionOverrideFromArgs(tt.args))
+		})
+	}
+}
+
+func TestWarnVersionConstraintOverride_WithConfiguredMessage(t *testing.T) {
+	logs := captureVersionConstraintLogs(t)
+
+	warnVersionConstraintOverride(schema.VersionConstraint{
+		Require: ">=99.0.0",
+		Message: "Use a released Atmos version for normal workflows.",
+	}, "ref:main", nil)
+
+	output := logs.String()
+	assert.Contains(t, output, "Atmos version constraint not satisfied")
+	assert.Contains(t, output, `required=">=99.0.0"`)
+	assert.Contains(t, output, "override=ref:main")
+	assert.Contains(t, output, `configured_message="Use a released Atmos version for normal workflows."`)
 }
 
 func TestValidateVersionConstraint_ExitCode(t *testing.T) {
