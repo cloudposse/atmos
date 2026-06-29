@@ -1333,11 +1333,34 @@
                       "tty": {
                         "type": "boolean",
                         "description": "Allocate a pseudo-terminal for the step (like docker -t); combine with interactive for full terminal sessions"
+                      },
+                      "tools": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Require step (type: require/assert): executables that must be found on PATH"
+                      },
+                      "files": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Require step (type: require/assert): paths that must exist"
+                      },
+                      "dirs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Require step (type: require/assert): directories that must exist"
+                      },
+                      "hint": {
+                        "type": "string",
+                        "description": "Require step (type: require/assert): extra remediation note appended to the failure error"
                       }
                     },
-                    "required": [
-                      "command"
-                    ]
+                    "required": []
                   }
                 }
               ]

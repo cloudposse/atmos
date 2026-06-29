@@ -1,0 +1,75 @@
+---
+title: require
+sidebar_label: require
+slug: /workflows/steps/type/require
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `require` step type is a declarative preconditions gate. It verifies that the CLI tools a workflow or custom command depends on are executable and on `PATH`, and that required files and directories exist — failing fast with a friendly, aggregated error and an install hint when anything is missing. It replaces brittle, non-portable shell checks like `command -v vhs ffmpeg || exit 1`, and works on Linux, macOS, and Windows.
+</Intro>
+
+:::note Alias
+`assert` is an accepted alias for `require` — `type: assert` behaves identically.
+:::
+
+```yaml
+steps:
+  - name: require recording tools
+    type: require
+    tools:
+      - vhs
+      - ttyd
+      - ffmpeg
+    files:
+      - ./Taskfile.yml
+    hint: "on macOS run: brew install ttyd"
+```
+
+If every tool is found and every path exists, the step succeeds and the workflow continues. If anything is missing, the step fails before any work runs and prints exactly what was missing along with remediation hints — for example:
+
+```
+Step 'require recording tools' is missing 1 required tool(s)/path(s)
+ 💡 Install missing tool(s) [ttyd] with `atmos toolchain install <tool>`, or add them to `dependencies.tools`
+ 💡 on macOS run: brew install ttyd
+```
+
+## Toolchain integration
+
+The step is **read-only** — it never installs anything and never modifies `PATH`. It checks the **effective** `PATH` at the time it runs, so tools installed by the [toolchain](/cli/configuration/toolchain) (declared in [`dependencies.tools`](/cli/configuration/commands)) are found automatically, because Atmos has already prepended the toolchain `bin` directories to the step environment. Tools that are not toolchain-managed are resolved from your existing `PATH` exactly as a shell would. To auto-install missing tools instead of gating on them, declare them under `dependencies.tools` — that resolution happens before steps run.
+
+A tool entry may be a bare name (searched on `PATH`) or an absolute/relative path to a specific binary (validated directly).
+
+## Fields
+
+At least one of `tools`, `files`, or `dirs` must be set.
+
+<dl>
+  <dt>`tools`</dt>
+  <dd>List of executables that must be found and runnable on `PATH`. Bare names are searched across `PATH`; entries containing a path separator are checked directly. Supports Go templates.</dd>
+
+  <dt>`files`</dt>
+  <dd>List of paths that must exist (relative to the Atmos process working directory). Supports Go templates.</dd>
+
+  <dt>`dirs`</dt>
+  <dd>List of directories that must exist (and be directories). Supports Go templates.</dd>
+
+  <dt>`hint`</dt>
+  <dd>Optional extra remediation note appended to the failure error as its own hint. Use it for platform-specific install instructions. Supports Go templates.</dd>
+</dl>
+
+## Result
+
+On success the step value is a short summary and metadata records the counts (see [outputs](/workflows/steps/outputs)):
+
+<dl>
+  <dt>`{{ .steps.<name>.metadata.tools }}`</dt>
+  <dd>Number of tools verified.</dd>
+
+  <dt>`{{ .steps.<name>.metadata.files }}`</dt>
+  <dd>Number of files verified.</dd>
+
+  <dt>`{{ .steps.<name>.metadata.dirs }}`</dt>
+  <dd>Number of directories verified.</dd>
+</dl>
