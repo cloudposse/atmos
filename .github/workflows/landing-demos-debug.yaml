@@ -49,6 +49,11 @@ jobs:
           make build
           echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
 
+      # ATMOS_LOGS_FILE / TF_LOG_PATH point into diag/; create it before the first
+      # atmos command (Atmos does not mkdir -p the log dir).
+      - name: Prepare diagnostics dir
+        run: mkdir -p "${{ github.workspace }}/diag"
+
       # HYPOTHESIS UNDER TEST: the landing-demos render job never installs terraform
       # (the mock/k3s jobs do), so `atmos terraform init` in the tapes has no binary to
       # exec — fast-fails raw, hangs under VHS's interactive TTY. Install it like mock does.
