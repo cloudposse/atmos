@@ -159,6 +159,10 @@ func ExecuteShellCommand(
 		}
 	}
 
+	diagConfig := diagnostics.FromSchema(atmosConfig.Diagnostics)
+	diagID := diagnostics.NewID("process")
+	diagStartedAt := time.Now()
+
 	var pacedClosers []io.Closer
 
 	// Set up stdout: masked output to terminal, optionally tee'd to a capture writer.
@@ -170,12 +174,14 @@ func ExecuteShellCommand(
 	}
 	stdoutTarget = maybePaceTerminalWriter(stdoutTarget, atmosConfig.Settings.Terminal.Speed, &pacedClosers)
 	maskedStdout := ioLayer.MaskWriter(stdoutTarget)
-	var stdout io.Writer
-	if cfg.stdoutCapture != nil {
-		stdout = io.MultiWriter(maskedStdout, cfg.stdoutCapture)
-	} else {
-		stdout = maskedStdout
+	stdoutWriters := []io.Writer{maskedStdout}
+	if diagnostics.OutputEnabled(diagConfig) {
+		stdoutWriters = append(stdoutWriters, diagnostics.NewOutputWriter(diagConfig, diagID, "stdout"))
 	}
+	if cfg.stdoutCapture != nil {
+		stdoutWriters = append(stdoutWriters, cfg.stdoutCapture)
+	}
+	stdout := io.MultiWriter(stdoutWriters...)
 
 	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
 		redirectStdError = "NUL"
@@ -188,11 +194,14 @@ func ExecuteShellCommand(
 	if redirectStdError == "/dev/stderr" {
 		stderrTarget := maybePaceTerminalWriter(streams.Stderr, atmosConfig.Settings.Terminal.Speed, &pacedClosers)
 		maskedStderr := ioLayer.MaskWriter(stderrTarget)
-		if cfg.stderrCapture != nil {
-			stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
-		} else {
-			stderr = maskedStderr
+		stderrWriters := []io.Writer{maskedStderr}
+		if diagnostics.OutputEnabled(diagConfig) {
+			stderrWriters = append(stderrWriters, diagnostics.NewOutputWriter(diagConfig, diagID, "stderr"))
 		}
+		if cfg.stderrCapture != nil {
+			stderrWriters = append(stderrWriters, cfg.stderrCapture)
+		}
+		stderr = io.MultiWriter(stderrWriters...)
 	} else if redirectStdError == "/dev/stdout" {
 		maskedStderr := ioLayer.MaskWriter(stdout)
 		if cfg.stderrCapture != nil {
@@ -203,11 +212,14 @@ func ExecuteShellCommand(
 	} else if redirectStdError == "" {
 		stderrTarget := maybePaceTerminalWriter(streams.Stderr, atmosConfig.Settings.Terminal.Speed, &pacedClosers)
 		maskedStderr := ioLayer.MaskWriter(stderrTarget)
-		if cfg.stderrCapture != nil {
-			stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
-		} else {
-			stderr = maskedStderr
+		stderrWriters := []io.Writer{maskedStderr}
+		if diagnostics.OutputEnabled(diagConfig) {
+			stderrWriters = append(stderrWriters, diagnostics.NewOutputWriter(diagConfig, diagID, "stderr"))
 		}
+		if cfg.stderrCapture != nil {
+			stderrWriters = append(stderrWriters, cfg.stderrCapture)
+		}
+		stderr = io.MultiWriter(stderrWriters...)
 	} else {
 		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
@@ -226,9 +238,6 @@ func ExecuteShellCommand(
 	}
 	log.Debug("Executing", "command", command, "args", args)
 
-	diagConfig := diagnostics.FromSchema(atmosConfig.Diagnostics)
-	diagID := diagnostics.NewID("process")
-	diagStartedAt := time.Now()
 	emitDiagnosticsEvent(diagConfig, &diagnostics.Event{
 		Type:           "process.start",
 		ID:             diagID,

@@ -455,6 +455,7 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "diagnostics.level", "ATMOS_DIAGNOSTICS_LEVEL")
 	bindEnv(v, "diagnostics.sink", "ATMOS_DIAGNOSTICS_SINK")
 	bindEnv(v, "diagnostics.url", "ATMOS_DIAGNOSTICS_URL")
+	bindEnv(v, "diagnostics.output", "ATMOS_DIAGNOSTICS_OUTPUT")
 
 	// Experimental feature handling
 	bindEnv(v, "settings.experimental", "ATMOS_EXPERIMENTAL")
@@ -516,6 +517,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("logs.level", "Warning")
 	v.SetDefault("diagnostics.level", "debug")
 	v.SetDefault("diagnostics.sink", "file")
+	v.SetDefault("diagnostics.output", false)
 
 	v.SetDefault("settings.terminal.color", true)
 	v.SetDefault("settings.terminal.no_color", false)

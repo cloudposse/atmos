@@ -36,10 +36,11 @@ var (
 
 // Config describes the active diagnostics sink configuration.
 type Config struct {
-	File  string
-	Level string
-	Sink  string
-	URL   string
+	File   string
+	Level  string
+	Sink   string
+	URL    string
+	Output bool
 }
 
 // Event is a machine-readable diagnostics event. Events are intentionally flat
@@ -67,6 +68,10 @@ type Event struct {
 	Signal         string    `json:"signal,omitempty"`
 	SignalNumber   *int      `json:"signal_number,omitempty"`
 	Error          string    `json:"error,omitempty"`
+	Stream         string    `json:"stream,omitempty"`
+	Data           string    `json:"data,omitempty"`
+	Bytes          *int      `json:"bytes,omitempty"`
+	Sequence       *uint64   `json:"sequence,omitempty"`
 }
 
 // FromSchema converts Atmos configuration into a diagnostics package config.
@@ -74,10 +79,11 @@ func FromSchema(config schema.Diagnostics) Config {
 	defer perf.Track(nil, "diagnostics.FromSchema")()
 
 	return Config{
-		File:  config.File,
-		Level: config.Level,
-		Sink:  config.Sink,
-		URL:   config.URL,
+		File:   config.File,
+		Level:  config.Level,
+		Sink:   config.Sink,
+		URL:    config.URL,
+		Output: config.Output,
 	}
 }
 
@@ -174,12 +180,61 @@ func EmitWithConfig(config Config, event *Event) error {
 	return enc.Encode(event)
 }
 
+// OutputEnabled reports whether process output events should be emitted.
+func OutputEnabled(config Config) bool {
+	defer perf.Track(nil, "diagnostics.OutputEnabled")()
+
+	return config.Output && Enabled(config)
+}
+
+// OutputWriter emits masked process.output diagnostics events for subprocess output.
+type OutputWriter struct {
+	config Config
+	id     string
+	stream string
+	seq    uint64
+}
+
+// NewOutputWriter returns a writer for opt-in subprocess output diagnostics.
+func NewOutputWriter(config Config, id, stream string) *OutputWriter {
+	defer perf.Track(nil, "diagnostics.NewOutputWriter")()
+
+	return &OutputWriter{
+		config: config,
+		id:     id,
+		stream: stream,
+	}
+}
+
+// Write emits one process.output event per write. Diagnostics writes are best-effort
+// and never fail the subprocess stream.
+func (w *OutputWriter) Write(p []byte) (int, error) {
+	defer perf.Track(nil, "diagnostics.OutputWriter.Write")()
+
+	if w == nil || len(p) == 0 || !OutputEnabled(w.config) {
+		return len(p), nil
+	}
+	seq := atomic.AddUint64(&w.seq, 1)
+	_ = EmitWithConfig(w.config, &Event{
+		Type:     "process.output",
+		ID:       w.id,
+		Level:    LevelDebug,
+		Stream:   w.stream,
+		Data:     iolib.MaskString(string(p)),
+		Bytes:    Int(len(p)),
+		Sequence: Uint64(seq),
+	})
+	return len(p), nil
+}
+
 func redactEvent(event *Event) {
 	event.Command = iolib.MaskString(event.Command)
 	event.CWD = iolib.MaskString(event.CWD)
 	event.RedirectStderr = iolib.MaskString(event.RedirectStderr)
 	event.Signal = iolib.MaskString(event.Signal)
 	event.Error = iolib.MaskString(event.Error)
+	event.Stream = iolib.MaskString(event.Stream)
+	event.Data = iolib.MaskString(event.Data)
 	for i, arg := range event.Args {
 		event.Args[i] = iolib.MaskString(arg)
 	}
@@ -202,6 +257,13 @@ func Int(value int) *int {
 // Int64 returns a pointer for optional int64 event fields.
 func Int64(value int64) *int64 {
 	defer perf.Track(nil, "diagnostics.Int64")()
+
+	return &value
+}
+
+// Uint64 returns a pointer for optional uint64 event fields.
+func Uint64(value uint64) *uint64 {
+	defer perf.Track(nil, "diagnostics.Uint64")()
 
 	return &value
 }

@@ -969,20 +969,24 @@ func TestDiagnosticsDefaultAndEnvBinding(t *testing.T) {
 	assert.Equal(t, "debug", v.GetString("diagnostics.level"))
 	assert.Equal(t, "file", v.GetString("diagnostics.sink"))
 	assert.Equal(t, "", v.GetString("diagnostics.url"))
+	assert.False(t, v.GetBool("diagnostics.output"))
 
 	t.Setenv("ATMOS_DIAGNOSTICS_FILE", "/tmp/atmos-events.jsonl")
 	t.Setenv("ATMOS_DIAGNOSTICS_LEVEL", "debug")
 	t.Setenv("ATMOS_DIAGNOSTICS_SINK", "file")
 	t.Setenv("ATMOS_DIAGNOSTICS_URL", "https://example.com/events")
+	t.Setenv("ATMOS_DIAGNOSTICS_OUTPUT", "true")
 	bindEnv(v, "diagnostics.file", "ATMOS_DIAGNOSTICS_FILE")
 	bindEnv(v, "diagnostics.level", "ATMOS_DIAGNOSTICS_LEVEL")
 	bindEnv(v, "diagnostics.sink", "ATMOS_DIAGNOSTICS_SINK")
 	bindEnv(v, "diagnostics.url", "ATMOS_DIAGNOSTICS_URL")
+	bindEnv(v, "diagnostics.output", "ATMOS_DIAGNOSTICS_OUTPUT")
 
 	assert.Equal(t, "/tmp/atmos-events.jsonl", v.GetString("diagnostics.file"))
 	assert.Equal(t, "debug", v.GetString("diagnostics.level"))
 	assert.Equal(t, "file", v.GetString("diagnostics.sink"))
 	assert.Equal(t, "https://example.com/events", v.GetString("diagnostics.url"))
+	assert.True(t, v.GetBool("diagnostics.output"))
 }
 
 // TestResolveAbsolutePath tests the path resolution logic for different scenarios.

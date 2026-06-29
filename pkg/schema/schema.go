@@ -1001,10 +1001,11 @@ type Logs struct {
 
 // Diagnostics contains machine-readable diagnostic event stream settings.
 type Diagnostics struct {
-	File  string `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
-	Level string `yaml:"level,omitempty" json:"level,omitempty" mapstructure:"level"`
-	Sink  string `yaml:"sink,omitempty" json:"sink,omitempty" mapstructure:"sink"`
-	URL   string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
+	File   string `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
+	Level  string `yaml:"level,omitempty" json:"level,omitempty" mapstructure:"level"`
+	Sink   string `yaml:"sink,omitempty" json:"sink,omitempty" mapstructure:"sink"`
+	URL    string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
+	Output bool   `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
 }
 
 // ErrorsConfig contains configuration for error handling.

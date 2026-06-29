@@ -77,3 +77,39 @@ func TestEmitWithConfigMasksStructuredFields(t *testing.T) {
 	assert.NotContains(t, string(data), "super-secret-token")
 	assert.Contains(t, string(data), "<MASKED>")
 }
+
+func TestOutputWriterOptInMasksOutput(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	iolib.RegisterSecret("super-secret-output")
+
+	writer := NewOutputWriter(Config{File: path, Level: LevelDebug, Sink: SinkFile, Output: true}, "process-1", "stderr")
+	n, err := writer.Write([]byte("line with super-secret-output\n"))
+	require.NoError(t, err)
+	assert.Equal(t, len("line with super-secret-output\n"), n)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	var event Event
+	require.NoError(t, json.Unmarshal(data, &event))
+	assert.Equal(t, "process.output", event.Type)
+	assert.Equal(t, "process-1", event.ID)
+	assert.Equal(t, "stderr", event.Stream)
+	assert.Equal(t, "line with <MASKED>\n", event.Data)
+	require.NotNil(t, event.Bytes)
+	assert.Equal(t, len("line with super-secret-output\n"), *event.Bytes)
+	require.NotNil(t, event.Sequence)
+	assert.Equal(t, uint64(1), *event.Sequence)
+}
+
+func TestOutputWriterDisabledByDefault(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+
+	writer := NewOutputWriter(Config{File: path, Level: LevelDebug, Sink: SinkFile}, "process-1", "stdout")
+	n, err := writer.Write([]byte("ignored\n"))
+	require.NoError(t, err)
+	assert.Equal(t, len("ignored\n"), n)
+
+	_, statErr := os.Stat(path)
+	assert.ErrorIs(t, statErr, os.ErrNotExist)
+}

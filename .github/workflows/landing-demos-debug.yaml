@@ -31,6 +31,10 @@ jobs:
       # by pkg/config/config.go; TF_LOG_PATH captures the terraform subprocess).
       ATMOS_LOGS_LEVEL: Trace
       ATMOS_LOGS_FILE: ${{ github.workspace }}/diag/atmos.log
+      ATMOS_DIAGNOSTICS_FILE: ${{ github.workspace }}/diag/atmos-events.jsonl
+      ATMOS_DIAGNOSTICS_LEVEL: debug
+      ATMOS_DIAGNOSTICS_SINK: file
+      ATMOS_DIAGNOSTICS_OUTPUT: "true"
       TF_LOG: TRACE
       TF_LOG_PATH: ${{ github.workspace }}/diag/terraform.log
     steps:

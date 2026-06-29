@@ -209,6 +209,59 @@ func TestExecuteShellCommandWritesDiagnosticsEvents(t *testing.T) {
 	assert.GreaterOrEqual(t, *endEvent.DurationMS, int64(0))
 }
 
+func TestExecuteShellCommandWritesDiagnosticsOutputWhenEnabled(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atmos-events.jsonl")
+	helper := shellHelperCommand(t, "stdout-stderr")
+	atmosConfig := schema.AtmosConfiguration{
+		Diagnostics: schema.Diagnostics{
+			File:   path,
+			Level:  diagnostics.LevelDebug,
+			Sink:   diagnostics.SinkFile,
+			Output: true,
+		},
+	}
+
+	err := ExecuteShellCommand(
+		atmosConfig,
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+		WithProcessStreams(process.Streams{
+			Stdout: &bytes.Buffer{},
+			Stderr: &bytes.Buffer{},
+		}),
+	)
+
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	var outputEvents []diagnostics.Event
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		var event diagnostics.Event
+		require.NoError(t, json.Unmarshal([]byte(line), &event))
+		if event.Type == "process.output" {
+			outputEvents = append(outputEvents, event)
+		}
+	}
+	require.Len(t, outputEvents, 2)
+	outputByStream := map[string]diagnostics.Event{}
+	for _, event := range outputEvents {
+		outputByStream[event.Stream] = event
+	}
+	assert.Equal(t, "stdout", outputByStream["stdout"].Data)
+	assert.Equal(t, "stderr", outputByStream["stderr"].Data)
+	assert.Equal(t, outputEvents[0].ID, outputEvents[1].ID)
+	require.NotNil(t, outputByStream["stdout"].Bytes)
+	assert.Equal(t, len("stdout"), *outputByStream["stdout"].Bytes)
+	require.NotNil(t, outputByStream["stdout"].Sequence)
+	assert.Equal(t, uint64(1), *outputByStream["stdout"].Sequence)
+}
+
 func TestExecuteShellCommandPreservesDetailedExitCode(t *testing.T) {
 	helper := shellHelperCommand(t, "exit")
 	err := ExecuteShellCommand(

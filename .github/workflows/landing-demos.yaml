@@ -29,6 +29,7 @@ jobs:
       ATMOS_DIAGNOSTICS_FILE: ${{ github.workspace }}/diag/atmos-events.jsonl
       ATMOS_DIAGNOSTICS_LEVEL: debug
       ATMOS_DIAGNOSTICS_SINK: file
+      ATMOS_DIAGNOSTICS_OUTPUT: "true"
       # Container runtime for the emulator-backed tapes (ubuntu runners have Docker).
       ATMOS_CONTAINER_RUNTIME: docker
       # Publish to the SAME origin bucket / OIDC role the docs site already uses
