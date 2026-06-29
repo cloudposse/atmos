@@ -290,7 +290,8 @@
     },
     "comments": {},
     "templates": {},
-    "cache": {}
+    "cache": {},
+    "groups": {}
   },
   "ai": {
     "sessions": {
