@@ -453,6 +453,10 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
+// renderAndDeliver is a seam over helmfile.RenderAndDeliver so the inline
+// call-site can be unit-tested without invoking the helmfile binary.
+var renderAndDeliver = helmfile.RenderAndDeliver
+
 // helmfileTargetDelivery bundles the inputs for rendering a helmfile and
 // delivering the result to a provision target.
 type helmfileTargetDelivery struct {
@@ -481,7 +485,7 @@ func deliverHelmfileToTarget(
 	}
 	provisionSection, _ := info.ComponentSection[cfg.ProvisionSectionName].(map[string]any)
 
-	return helmfile.RenderAndDeliver(context.Background(), &helmfile.RenderDeliverInput{
+	return renderAndDeliver(context.Background(), &helmfile.RenderDeliverInput{
 		AtmosConfig:      atmosConfig,
 		Info:             info,
 		Command:          info.Command,
