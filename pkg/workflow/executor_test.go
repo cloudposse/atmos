@@ -208,9 +208,11 @@ func TestExecutor_Execute_ContainerStepUsesRegistry(t *testing.T) {
 			{
 				Name:     "container-step",
 				Type:     "container",
-				Image:    "alpine:latest",
-				Command:  "echo hello",
 				Provider: "docker",
+				Run: &schema.ContainerRunStep{
+					Image:   "alpine:latest",
+					Command: "echo hello",
+				},
 			},
 		},
 	}

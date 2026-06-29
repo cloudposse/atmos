@@ -184,11 +184,13 @@ func TestContainerHandlerExecuteDryRunActions(t *testing.T) {
 	vars := NewVariables()
 
 	runResult, err := handler.Execute(context.Background(), &schema.WorkflowStep{
-		Name:    "run",
-		Type:    "container",
-		DryRun:  true,
-		Image:   "alpine:latest",
-		Command: "echo ok",
+		Name:   "run",
+		Type:   "container",
+		DryRun: true,
+		Run: &schema.ContainerRunStep{
+			Image:   "alpine:latest",
+			Command: "echo ok",
+		},
 	}, vars)
 	require.NoError(t, err)
 	assert.Contains(t, runResult.Value, "docker|podman run --rm")

@@ -194,6 +194,13 @@ func (v *Variables) templateData() map[string]any {
 	}
 }
 
+// TemplateData returns the data structure used for Go template execution.
+func (v *Variables) TemplateData() map[string]any {
+	defer perf.Track(nil, "step.Variables.TemplateData")()
+
+	return v.templateData()
+}
+
 func (v *Variables) outputTemplateData(result *StepResult) map[string]any {
 	data := v.templateData()
 	data["value"] = result.Value
