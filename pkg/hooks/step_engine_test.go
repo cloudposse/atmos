@@ -192,16 +192,16 @@ with:
 func TestStepFromHookDecodesNestedConfig(t *testing.T) {
 	hook := &Hook{
 		Kind: stepKindName,
-		Type: "container",
+		Type: "say",
 		Retry: &schema.RetryConfig{
 			MaxAttempts: func() *int { n := 5; return &n }(),
 		},
 		With: map[string]any{
-			"action": "build",
-			"image":  "example:latest",
-			"build": map[string]any{
-				"context": ".",
-				"tags":    []any{"example:latest", "example:v1"},
+			"content": "deployed",
+			"voice":   []any{"Alex", "Daniel"},
+			"viewport": map[string]any{
+				"height": 10,
+				"width":  80,
 			},
 		},
 	}
@@ -210,19 +210,19 @@ func TestStepFromHookDecodesNestedConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	// Envelope wins: type + retry are set from the hook, not `with`.
-	assert.Equal(t, "container", ws.Type)
+	assert.Equal(t, "say", ws.Type)
 	require.NotNil(t, ws.Retry)
 	assert.Equal(t, 5, *ws.Retry.MaxAttempts)
-	assert.Equal(t, "hook:container", ws.Name)
+	assert.Equal(t, "hook:say", ws.Name)
 
-	// `with:` decodes into the step, including nested structs and slices.
-	assert.Equal(t, "build", ws.Action)
-	assert.Equal(t, "example:latest", ws.Image)
-	require.NotNil(t, ws.Build)
-	assert.Equal(t, ".", ws.Build.Context)
-	require.Len(t, ws.Build.Tags, 2)
-	assert.Equal(t, "example:latest", ws.Build.Tags[0])
-	assert.Equal(t, "example:v1", ws.Build.Tags[1])
+	// `with:` decodes into the step, including scalars, slices, and nested structs.
+	assert.Equal(t, "deployed", ws.Content)
+	require.Len(t, ws.Voice, 2)
+	assert.Equal(t, "Alex", ws.Voice[0])
+	assert.Equal(t, "Daniel", ws.Voice[1])
+	require.NotNil(t, ws.Viewport)
+	assert.Equal(t, 10, ws.Viewport.Height)
+	assert.Equal(t, 80, ws.Viewport.Width)
 }
 
 func TestStepEngineRunLog(t *testing.T) {

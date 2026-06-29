@@ -171,6 +171,25 @@ func storeDefaultIdentity(identity string) string {
 	}
 }
 
+// HookStoreDefaultIdentity resolves the identity that identity-less stores invoked by terraform
+// lifecycle hooks (e.g. the after-apply `store-outputs` hook) should inherit. It mirrors the main
+// terraform path (injectTerraformStoreAuthResolver): it auto-detects the active identity from the
+// auth manager's chain when info carries no explicit identity, then normalizes empty/select/disabled
+// to "" (meaning "no inheritance — keep ambient/default SDK credentials"). It returns "" when no auth
+// manager is present, preserving the prior behavior for runs without Atmos auth.
+//
+// The hook executes in a freshly loaded config (prepareHookContext), so it must re-derive this from
+// the persisted auth manager rather than relying on the apply-phase config.
+func HookStoreDefaultIdentity(authManager auth.AuthManager, info *schema.ConfigAndStacksInfo) string {
+	defer perf.Track(nil, "exec.HookStoreDefaultIdentity")()
+
+	if authManager == nil || info == nil {
+		return ""
+	}
+	storeAutoDetectedIdentity(authManager, info)
+	return storeDefaultIdentity(info.Identity)
+}
+
 // SetupTerraformAuthForCLI exposes terraform auth setup to command-layer callers
 // that need the same merged-auth and explicit-identity behavior as ExecuteTerraform.
 func SetupTerraformAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (any, error) {

@@ -369,7 +369,6 @@ module.exports = {
                             collapsed: false,
                             link: {type: 'doc', id: 'workflows/workflows/workflow/steps/index'},
                             items: [
-                                {type: 'doc', id: 'workflows/workflows/workflow/steps/step', label: 'step'},
                                 {
                                     type: 'category',
                                     label: 'type',
@@ -381,6 +380,8 @@ module.exports = {
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/exec', label: 'exec'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/container', label: 'container'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/emulator', label: 'emulator'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/parallel', label: 'parallel'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/matrix', label: 'matrix'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/input', label: 'input'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/confirm', label: 'confirm'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/choose', label: 'choose'},
