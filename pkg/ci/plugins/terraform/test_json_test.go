@@ -77,6 +77,45 @@ func TestParseOutput_RoutesTestText(t *testing.T) {
 	assert.Equal(t, 0, data.Runs[0].Line, "text path has no line info")
 }
 
+func TestParseOutput_RoutesTestJSON_WithInitPreamble(t *testing.T) {
+	// The captured CI stream is prefixed with terraform init/workspace human
+	// preamble before the `-json` events; routing must still pick the JSON parser
+	// (a leading-char check would wrongly fall through to the text parser, leaving
+	// TestResult empty so badges/run-table/counts go missing).
+	preamble := "Initializing provider plugins...\n" +
+		"Terraform has been successfully initialized!\n" +
+		"Switched to workspace \"local\".\n"
+	data := testJSONData(t, ParseOutput(preamble+sampleTestJSON, "test"))
+	assert.Equal(t, 3, data.Total)
+	assert.Equal(t, 1, data.Pass)
+	assert.Equal(t, 1, data.Fail)
+	assert.Equal(t, 30, data.Runs[1].Line, "file:line must survive the preamble (JSON path)")
+}
+
+func TestIsJSONStream(t *testing.T) {
+	assert.True(t, isJSONStream(sampleTestJSON), "leading JSON")
+	assert.True(t, isJSONStream("Initializing provider plugins...\n"+sampleTestJSON), "JSON after preamble")
+	assert.False(t, isJSONStream("  run \"a\"... pass\nSuccess! 1 passed, 0 failed.\n"), "human output")
+	assert.False(t, isJSONStream(`{"foo":"bar"}`), "non-terraform JSON without @level")
+}
+
+func TestCleanOutput_TestRendersJSONToCleanText(t *testing.T) {
+	// In CI the test output is the `-json` stream (mixed with init preamble); the
+	// job summary must show the rendered human summary, never the raw JSON.
+	preamble := "Initializing provider plugins...\n"
+	cleaned := cleanOutput(preamble+sampleTestJSON, "test")
+	assert.NotContains(t, cleaned, `"@level"`, "raw JSON must not leak into the summary")
+	assert.NotContains(t, cleaned, "Initializing provider", "init preamble must not leak")
+	assert.Contains(t, cleaned, `✓ run "ok"... pass`)
+	assert.Contains(t, cleaned, "Failure! 1 passed, 1 failed, 1 skipped.")
+}
+
+func TestCleanOutput_TestKeepsHumanOutputVerbatim(t *testing.T) {
+	// Non-CI runs emit no `-json`; keep the human output as-is (trimmed).
+	human := "run \"a\"... pass\nSuccess! 1 passed, 0 failed."
+	assert.Equal(t, human, cleanOutput("  "+human+"\n", "test"))
+}
+
 func TestRenderTestText(t *testing.T) {
 	text := RenderTestText([]byte(sampleTestJSON))
 	assert.Contains(t, text, `✓ run "ok"... pass`)

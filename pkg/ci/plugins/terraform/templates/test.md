@@ -16,28 +16,21 @@
 {{- else }} [![failed](https://shields.io/badge/TESTS-FAILED-ff0000?style=for-the-badge)](#user-content-result-{{$target}})
 {{- end }}
 
-<details><summary><a id="result-{{$target}}" />Test results</summary>
-
-<br/>
-To reproduce this locally, run:<br/><br/>
-
-```shell
-atmos terraform test {{.Component}} -s {{.Stack}}
-```
-
----
+<a id="result-{{$target}}" />
 
 {{- if and $test (gt (len $test.Runs) 0) }}
 
-| Result | Run |
-|--------|-----|
+| Result | Run | Details |
+|--------|-----|---------|
 {{- range $test.Runs }}
 {{- if eq .Status "pass" }}
-| :white_check_mark: pass | `{{ .Name }}` |
+| :white_check_mark: pass | `{{ .Name }}` | |
 {{- else if eq .Status "fail" }}
-| :x: fail | `{{ .Name }}` |
+| :x: fail | `{{ .Name }}` | {{ if .File }}`{{ .File }}{{ if gt .Line 0 }}:{{ .Line }}{{ end }}` {{ end }}{{ .Error }} |
+{{- else if eq .Status "error" }}
+| :boom: error | `{{ .Name }}` | {{ if .File }}`{{ .File }}{{ if gt .Line 0 }}:{{ .Line }}{{ end }}` {{ end }}{{ .Error }} |
 {{- else }}
-| :fast_forward: skip | `{{ .Name }}` |
+| :fast_forward: skip | `{{ .Name }}` | |
 {{- end }}
 {{- end }}
 {{- end }}
@@ -52,15 +45,11 @@ atmos terraform test {{.Component}} -s {{.Stack}}
 ```
 {{- end }}
 {{- end }}
-</details>
 
-{{- if gt (len .Output) 0 }}
+<details><summary>Reproduce locally</summary>
 
-<details><summary>Terraform <strong>Test</strong> Output</summary>
-
-```hcl
-{{ .Output }}
+```shell
+atmos terraform test {{.Component}} -s {{.Stack}}
 ```
 
 </details>
-{{- end }}

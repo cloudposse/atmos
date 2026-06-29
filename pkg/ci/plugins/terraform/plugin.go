@@ -243,8 +243,14 @@ func cleanOutput(output, command string) string {
 	case "apply", "destroy":
 		return cleanApplyOutput(output)
 	case "test":
-		// terraform test output is already compact (per-run lines + summary);
-		// keep it verbatim so the run results render in the summary.
+		// In CI the captured output is the machine-readable `test -json` event
+		// stream (mixed with terraform init/workspace preamble). Render it to a
+		// clean, human-readable summary so the job summary never shows raw JSON.
+		// When the output is already human (non-CI runs emit no `-json`),
+		// RenderTestText finds no events and returns "", so we keep it verbatim.
+		if rendered := RenderTestText([]byte(output)); rendered != "" {
+			return strings.TrimSpace(rendered)
+		}
 		return strings.TrimSpace(output)
 	default:
 		return cleanPlanOutput(output)

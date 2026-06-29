@@ -643,8 +643,17 @@ func ParseTestOutput(output string) *plugin.OutputResult {
 // isJSONStream reports whether output looks like a `test -json` stream (the
 // first non-whitespace byte is `{`).
 func isJSONStream(output string) bool {
-	trimmed := strings.TrimLeft(output, " \t\r\n")
-	return strings.HasPrefix(trimmed, "{")
+	// The captured stream is usually prefixed with terraform init/workspace
+	// preamble (human text) before the `-json` event lines begin, so scan each
+	// line for a JSON object carrying terraform's `@level` field rather than only
+	// checking the first non-blank character.
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimLeft(line, " \t\r")
+		if strings.HasPrefix(trimmed, "{") && strings.Contains(trimmed, `"@level"`) {
+			return true
+		}
+	}
+	return false
 }
 
 // testJSONEvent is the envelope shared by all `terraform test -json` messages.
