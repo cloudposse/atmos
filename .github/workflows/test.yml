@@ -618,7 +618,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos test
+          # Retry to ride out transient registry/network failures — e.g. a 502
+          # from github.com while terraform fetches a provider signature. A
+          # genuine test failure still fails on the final attempt.
+          for attempt in 1 2 3; do
+            atmos test && exit 0
+            status=$?
+            echo "atmos test failed (attempt ${attempt}/3, status ${status})" >&2
+            [ "${attempt}" -lt 3 ] && sleep 15
+          done
+          exit "${status}"
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -637,7 +646,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos test
+          # Retry to ride out transient registry/network failures (e.g. a 502
+          # from github.com during terraform provider download). A genuine test
+          # failure still fails on the final attempt.
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            atmos test
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Output "atmos test failed (attempt $attempt/3, exit $LASTEXITCODE)"
+            if ($attempt -lt 3) { Start-Sleep -Seconds 15 }
+          }
+          exit $LASTEXITCODE
 
   # run other demo tests
   lint:
