@@ -122,27 +122,55 @@ commands:
             cd "$repo"
             mkdir -p website/static/img/demos
             name='{{ .Arguments.name }}'
-            # Only emulator-backed tapes require a container runtime.
+            # Preconditions (fail in milliseconds, not by wedging VHS for minutes):
+            # emulator-backed tapes need a container runtime, and the dx/emulators tapes
+            # drive `atmos terraform`, which needs a real terraform/tofu binary on PATH.
             case "$name" in
               all|dx|emulators|kubernetes)
                 command -v podman >/dev/null 2>&1 || command -v docker >/dev/null 2>&1 || {
-                  echo "no container runtime — install podman or docker (needed for emulator-backed tapes)"
-                  exit 1
-                }
+                  echo "no container runtime — install podman or docker (needed for emulator-backed tapes)"; exit 1; }
                 ;;
             esac
+            case "$name" in
+              all|dx|emulators)
+                command -v terraform >/dev/null 2>&1 || command -v tofu >/dev/null 2>&1 || {
+                  echo "no terraform/opentofu on PATH — the emulator tapes run 'atmos terraform'"; exit 1; }
+                ;;
+            esac
+            # Fail-fast recording: a wedged tape (a command exits the shell, so VHS waits
+            # for a prompt that never returns) would otherwise burn its full 300-600s
+            # WaitTimeout. Cap each render with `timeout` so it aborts in minutes. Degrade
+            # gracefully where no timeout binary exists (e.g. macOS without coreutils).
+            record_timeout="${ATMOS_DEMO_RECORD_TIMEOUT:-420}"
+            timeout_bin="$(command -v timeout || command -v gtimeout || true)"
+            record_one() {
+              echo "▶ recording $1"
+              set +e
+              if [ -n "$timeout_bin" ]; then
+                "$timeout_bin" --kill-after=10s "${record_timeout}s" vhs "$1"
+              else
+                vhs "$1"
+              fi
+              code=$?
+              set -e
+              [ "$code" -eq 0 ] && return 0
+              if [ "$code" -eq 124 ]; then
+                echo "✗ $1 exceeded ${record_timeout}s — a command likely wedged VHS (the shell exited; VHS is waiting for a prompt that won't return). Try: atmos demo check $(basename "${1%.tape}")" >&2
+              else
+                echo "✗ $1 failed (vhs exit $code)" >&2
+              fi
+              return "$code"
+            }
             if [ "$name" = "all" ]; then
               for tape in demo/landing/*.tape; do
                 base="$(basename "$tape")"
                 [ "$base" = "defaults.tape" ] && continue
-                echo "▶ recording $tape"
-                vhs "$tape"
+                record_one "$tape" || exit $?
               done
             else
               tape="demo/landing/${name}.tape"
               [ -f "$tape" ] || { echo "no such tape: $tape"; exit 1; }
-              echo "▶ recording $tape"
-              vhs "$tape"
+              record_one "$tape" || exit $?
             fi
             echo "✔ wrote assets to website/static/img/demos/ (gitignored — publish with: atmos demo publish)"
 
