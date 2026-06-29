@@ -441,6 +441,20 @@ func TestMergeComponentConfigurations_TerraformTestSection(t *testing.T) {
 	assert.Equal(t, "base", testVars["base_only"])
 }
 
+func TestMergeComponentConfigurations_TerraformTestSectionOmittedWhenEmpty(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "app",
+		AtmosConfig:   atmosCfg,
+	}
+	res := minimalComponentResult()
+
+	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+	assert.NotContains(t, comp, cfg.TestSectionName)
+}
+
 // TestMergeComponentConfigurations_Retry covers the per-component retry merge added by
 // the component-retry feature: base → component → overrides precedence on scalars, and
 // list-append on the `conditions:` slice (the existing deep-merge semantic). It also

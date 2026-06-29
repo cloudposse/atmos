@@ -520,7 +520,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.RequiredProvidersSectionName] = finalComponentRequiredProviders
 		comp[cfg.RequiredVersionSectionName] = finalComponentRequiredVersion
 		comp[cfg.HooksSectionName] = finalComponentHooks
-		comp[cfg.TestSectionName] = finalComponentTest
+		if len(finalComponentTest) > 0 {
+			comp[cfg.TestSectionName] = finalComponentTest
+		}
 		comp[cfg.GenerateSectionName] = finalComponentGenerate
 		comp[cfg.BackendTypeSectionName] = finalComponentBackendType
 		comp[cfg.BackendSectionName] = finalComponentBackend

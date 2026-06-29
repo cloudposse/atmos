@@ -118,8 +118,6 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 				return fmt.Errorf("%w: 'components.%s.%s.test' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
 			}
 			result.ComponentTest = componentTest
-		} else {
-			result.ComponentTest = make(map[string]any, componentSmallMapCapacity)
 		}
 	}
 
