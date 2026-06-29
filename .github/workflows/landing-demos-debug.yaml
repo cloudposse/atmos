@@ -78,7 +78,9 @@ jobs:
           echo "::endgroup::"
 
           # (2) Explicit per-tool install for comparison (does ttyd install on its own?).
-          for spec in "charmbracelet/vhs" "Tyrrrz/FFmpegBin" "tsl0922/ttyd"; do
+          # NOTE: requires owner/repo@version — the key question is whether
+          # tsl0922/ttyd@1.7.7 resolves an aqua binary on this Linux runner.
+          for spec in "charmbracelet/vhs@v0.11.0" "Tyrrrz/FFmpegBin@8.1.1" "tsl0922/ttyd@1.7.7"; do
             base="$(basename "$spec")"
             echo "::group::toolchain install $spec"
             set +e
