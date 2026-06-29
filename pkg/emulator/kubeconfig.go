@@ -83,7 +83,12 @@ func (m *Manager) tryKubeconfig(ctx context.Context, stack, name string) ([]byte
 	if hostPort == 0 {
 		return nil, fmt.Errorf("%w: %s/emulator/%s has no bound port", errUtils.ErrEmulatorNotRunning, stack, name)
 	}
-	server := fmt.Sprintf("https://localhost:%d", hostPort)
+	// Use the IPv4 loopback literal, not "localhost": on Linux the runtime
+	// publishes the API-server port on IPv4 only, while "localhost" resolves to
+	// IPv6 ::1 first, and a connect to ::1 against an IPv4-only published port
+	// hangs rather than refusing (see loopbackHostToIPv4 in profile.go). k3s's
+	// serving certificate includes 127.0.0.1 in its SANs, so TLS still verifies.
+	server := fmt.Sprintf("https://%s:%d", loopbackHostToIPv4("localhost"), hostPort)
 	return kubeconfigServerPattern.ReplaceAll(buf.Bytes(), []byte("${1}"+server)), nil
 }
 

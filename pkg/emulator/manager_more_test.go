@@ -259,8 +259,9 @@ func TestManager_Resolve_KubernetesHarvestsKubeconfig(t *testing.T) {
 	assert.Equal(t, 16443, endpoint.Ports[kubeTestDriverPort])
 	assert.Equal(t, "1", profile.Env["KUBE_DRIVER"])
 	require.NotEmpty(t, profile.Kubeconfig)
-	// The harvested kubeconfig's server URL is rewritten to the live host port.
-	assert.Contains(t, string(profile.Kubeconfig), "server: https://localhost:16443")
+	// The harvested kubeconfig's server URL is rewritten to the live host port on
+	// the IPv4 loopback literal (not "localhost"; see loopbackHostToIPv4).
+	assert.Contains(t, string(profile.Kubeconfig), "server: https://127.0.0.1:16443")
 }
 
 func TestManager_Resolve_KubernetesKubeconfigError(t *testing.T) {

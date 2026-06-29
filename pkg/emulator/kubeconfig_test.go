@@ -51,8 +51,10 @@ func TestManager_Kubeconfig_HarvestAndRewriteServer(t *testing.T) {
 	require.NoError(t, err)
 
 	out := string(kubeconfig)
-	assert.Contains(t, out, "server: https://localhost:36443", "server rewritten to the live host port")
-	assert.NotContains(t, out, "127.0.0.1:6443")
+	// Rewritten to the live host port on the IPv4 loopback literal (not "localhost":
+	// it can resolve to IPv6 ::1 and hang against an IPv4-only published port).
+	assert.Contains(t, out, "server: https://127.0.0.1:36443", "server rewritten to the live host port on IPv4 loopback")
+	assert.NotContains(t, out, ":6443", "original container port replaced by the live host port")
 	assert.Contains(t, out, "certificate-authority-data: BASE64CA", "embedded CA preserved verbatim")
 }
 

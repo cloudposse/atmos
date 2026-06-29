@@ -60,6 +60,15 @@ commands:
         arguments:
           - name: name
             description: 'Tape name without extension (e.g. "hero"), or "all" for every tape.'
+        # Pinned recording toolchain, auto-installed before the step runs. Declaring it
+        # here (not in .tool-versions) means it works in CI with no checked-in
+        # .tool-versions and overrides any local one. ttyd is intentionally absent: it
+        # has no macOS aqua binary, so it comes from the system (brew on macOS; the
+        # workflow installs it on Linux/CI).
+        dependencies:
+          tools:
+            vhs: "v0.11.0"
+            ffmpeg: "8.1.1"
         steps:
           - |
             set -euo pipefail
@@ -70,12 +79,12 @@ commands:
             # `atmos` is on PATH. `make build` writes ./build/atmos.
             export PATH="$repo/build:$PATH"
             command -v atmos >/dev/null 2>&1 || { echo "atmos not found — run 'make build'"; exit 1; }
-            # vhs + ffmpeg are auto-installed by the toolchain preflight (they're in
-            # .tool-versions and resolve on every platform via the aqua registry); put
-            # them on PATH. ttyd has NO macOS aqua binary, so it is intentionally left
-            # out of .tool-versions (it would hard-fail the preflight on macOS) and
-            # comes from the system instead — `brew install ttyd` on macOS; the Linux
-            # CI image ships it.
+            # vhs + ffmpeg are auto-installed from this command's `dependencies.tools`
+            # (pinned above) and resolve on every platform via the aqua registry; put
+            # them on PATH. ttyd has NO macOS aqua binary, so it is intentionally NOT a
+            # declared dependency (it would hard-fail the preflight on macOS) and comes
+            # from the system instead — `brew install ttyd` on macOS; the Linux CI image
+            # / workflow installs it.
             export PATH="$( cd "$landing" && atmos toolchain path 2>/dev/null | tr '\n' ':' )$PATH"
             missing=""
             for t in vhs ttyd ffmpeg; do command -v "$t" >/dev/null 2>&1 || missing="$missing $t"; done
@@ -112,6 +121,11 @@ commands:
         arguments:
           - name: name
             description: 'Tape name without extension (e.g. "hero").'
+        # Pinned recording toolchain, auto-installed before the step runs (see `record`).
+        dependencies:
+          tools:
+            vhs: "v0.11.0"
+            ffmpeg: "8.1.1"
         steps:
           - |
             set -euo pipefail
@@ -119,8 +133,8 @@ commands:
             landing="$repo/demo/landing"
             export PATH="$repo/build:$PATH"  # use the freshly built atmos (see `record`).
             command -v atmos >/dev/null 2>&1 || { echo "atmos not found — run 'make build'"; exit 1; }
-            # vhs + ffmpeg auto-install via the toolchain preflight; put them on PATH.
-            # ttyd comes from the system (see `record` for the macOS ttyd note).
+            # vhs + ffmpeg auto-install from this command's `dependencies.tools`; put
+            # them on PATH. ttyd comes from the system (see `record` for the macOS note).
             export PATH="$( cd "$landing" && atmos toolchain path 2>/dev/null | tr '\n' ':' )$PATH"
             missing=""
             for t in vhs ttyd ffmpeg; do command -v "$t" >/dev/null 2>&1 || missing="$missing $t"; done

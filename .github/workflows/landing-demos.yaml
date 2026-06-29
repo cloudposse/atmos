@@ -58,23 +58,24 @@ jobs:
           helmfile: latest
           kubectl: latest
 
-      - name: Install VHS toolchain (vhs, ttyd, ffmpeg, fonts)
+      # ttyd + fonts only. vhs and ffmpeg are NOT installed here: `atmos demo record`
+      # auto-installs them from the command's `dependencies.tools` (pinned in
+      # demo/landing/atmos.yaml) and prepends them to PATH, so CI and local use the exact
+      # same vhs/ffmpeg with no checked-in .tool-versions. ttyd has no macOS aqua binary,
+      # so it is not a declared dependency and stays a manually-pinned system install.
+      - name: Install ttyd + Nerd Font (vhs/ffmpeg come from the pinned Atmos toolchain)
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          # ttyd (vhs dependency)
+          # ttyd (vhs dependency) — pinned.
           TTYD_VERSION=1.7.7
           sudo curl -fsSL -o /usr/local/bin/ttyd \
             "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.x86_64"
           sudo chmod +x /usr/local/bin/ttyd
-          # vhs
-          go install github.com/charmbracelet/vhs@latest
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-          # FiraCode Nerd Font (matches demo/landing/defaults.tape)
+          # FiraCode Nerd Font (matches demo/landing/defaults.tape) — pinned.
+          NERD_FONTS_VERSION=v3.4.0
           mkdir -p ~/.local/share/fonts
           curl -fsSL -o /tmp/FiraCode.zip \
-            https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FiraCode.zip
+            "https://github.com/ryanoasis/nerd-fonts/releases/download/${NERD_FONTS_VERSION}/FiraCode.zip"
           unzip -o /tmp/FiraCode.zip -d ~/.local/share/fonts >/dev/null
           fc-cache -f
 
