@@ -49,6 +49,14 @@ jobs:
           make build
           echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
 
+      # HYPOTHESIS UNDER TEST: the landing-demos render job never installs terraform
+      # (the mock/k3s jobs do), so `atmos terraform init` in the tapes has no binary to
+      # exec — fast-fails raw, hangs under VHS's interactive TTY. Install it like mock does.
+      - name: Install Terraform via Atmos toolchain
+        run: |
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain env --format=github
+
       # Stage 1 — RAW reproduction (no VHS). Replicate demo/landing/dx.tape's off-camera
       # sequence as plain shell so we get raw stdout/stderr, fail fast via `timeout`, and
       # snapshot the emulator/network state around the hang. This also rules out VHS vs.
