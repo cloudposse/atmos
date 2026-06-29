@@ -106,7 +106,8 @@ func TestLocalGitOpsPushE2E(t *testing.T) {
 // `kubectl apply`.
 //
 // Opt-in and runtime-gated; it also needs a privileged-capable runtime for k3s and
-// network egress to vendor the Flux install manifest and pull controller images.
+// network egress to provision the Flux install manifest (pulled JIT by the flux
+// component's `source:` field) and pull controller images.
 func TestLocalGitOpsRoundTripE2E(t *testing.T) {
 	requireGitOpsRuntime(t)
 	ensureAtmosRunner(t)
@@ -120,9 +121,8 @@ func TestLocalGitOpsRoundTripE2E(t *testing.T) {
 	const id = "--identity"
 	const k3sIdentity = "local-k3s"
 
-	// Vendor the pinned Flux install manifest into the flux component's files/.
-	_, stderr, err := run(2*time.Minute, "vendor", "pull")
-	require.NoErrorf(t, err, "vendor pull failed: %s", stderr)
+	// No vendor step: the flux component provisions its install manifest just-in-time
+	// from the pinned release asset (its `source:` field) on the apply below.
 
 	// Bring up both emulators (Git server + k3s). Always tear them down.
 	for _, emulatorName := range []string{gitServerEmulator, k8sEmulator} {
@@ -135,7 +135,7 @@ func TestLocalGitOpsRoundTripE2E(t *testing.T) {
 	}
 
 	// Install Flux (controllers + CRDs), then the Git source/sync custom resources.
-	_, stderr, err = run(5*time.Minute, "kubernetes", "apply", "flux", "-s", localGitOpsStack, id, k3sIdentity)
+	_, stderr, err := run(5*time.Minute, "kubernetes", "apply", "flux", "-s", localGitOpsStack, id, k3sIdentity)
 	require.NoErrorf(t, err, "apply flux failed: %s", stderr)
 
 	// The CRDs Flux just installed must be established before its custom resources

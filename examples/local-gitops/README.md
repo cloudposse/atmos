@@ -37,16 +37,15 @@ atmos gitops up
 `atmos gitops up` runs these steps (run them by hand to watch each stage):
 
 ```shell
-# 0. Vendor the pinned Flux install manifest into the flux component's files/
-atmos vendor pull
-
 # 1. Start the Git server emulator (Gitea bootstraps admin + `deployments` repo)
 atmos emulator up gitserver -s local
 
 # 2. Start the Kubernetes emulator (k3s)
 atmos emulator up kubernetes -s local
 
-# 3. Install Flux into the cluster, then point it at the local Gitea repository
+# 3. Install Flux into the cluster, then point it at the local Gitea repository.
+#    The flux component pulls its install manifest just-in-time from the pinned
+#    Flux release (via its `source:` field) the first time it is applied.
 atmos kubernetes apply flux -s local --identity local-k3s
 atmos kubernetes apply flux-sync -s local --identity local-k3s
 
@@ -104,9 +103,8 @@ Both point at the same Gitea server — one from outside, one from inside.
 | `atmos.yaml` | `git.repositories.deployments` (local Gitea), the `local-k3s` identity, and the `atmos gitops up` / `atmos gitops down` commands |
 | `stacks/catalog/emulator/gitea.yaml` | The Git server emulator (`driver: gitea`) |
 | `stacks/catalog/emulator/kubernetes.yaml` | The Kubernetes emulator (`driver: k3s`) |
-| `stacks/catalog/flux.yaml` | `flux` (controllers) + `flux-sync` (GitRepository/Kustomization/Secret pointing at Gitea) |
+| `stacks/catalog/flux.yaml` | `flux` (controllers, pulled JIT via its `source:` field) + `flux-sync` (GitRepository/Kustomization/Secret pointing at Gitea) |
 | `stacks/catalog/demo-app.yaml` | The app delivered through the loop, with a `git` provision target |
-| `vendor.yaml` | Pulls the pinned upstream Flux install manifest |
 
 ## The Bigger Picture
 
