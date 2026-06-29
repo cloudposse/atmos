@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/exec"
 )
 
 // runValidateSchema runs the `atmos validate schema` command in the current working
@@ -74,7 +75,10 @@ func TestTestCaseSchemaValidation(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(atmosYAML), 0o644))
 
 		t.Chdir(dir)
-		exitCode, _ := runValidateSchema(t)
+		exitCode, err := runValidateSchema(t)
+		require.Error(t, err, "`atmos validate schema` must surface an error for a schema-invalid file")
+		require.ErrorIs(t, err, exec.ErrInvalidYAML,
+			"the failure must be invalid-YAML, not an unrelated CLI/config error")
 		require.Equal(t, 1, exitCode,
 			"`atmos validate schema` must exit non-zero for a schema-invalid file")
 	})
