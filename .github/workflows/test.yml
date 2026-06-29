@@ -234,11 +234,10 @@ jobs:
           CGO_ENABLED: 0
         run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
 
-      # Enable this after merging test-cases. Dogfood Atmos rather than a third-party action:
-      # `atmos validate schema` validates arbitrary YAML against a JSON Schema declared under
-      # the `schemas:` section of atmos.yaml (schema + matches glob).
-      #- name: Validate YAML Schema for Test Cases
-      #  run: atmos validate schema
+      # NOTE: The test-case YAML files (tests/test-cases/*.yaml) are validated against
+      # tests/test-cases/schema.json by the Go test `TestTestCaseSchemaValidation`, which
+      # dogfoods Atmos's own schema validator (the engine behind `atmos validate schema`).
+      # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
       - name: Acceptance tests with coverage
         timeout-minutes: 45
