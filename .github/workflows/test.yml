@@ -479,6 +479,15 @@ jobs:
         with:
           persist-credentials: false
 
+      # Route Docker Hub pulls (rancher/k3s) through Google's mirror.gcr.io
+      # pull-through cache. Anonymous registry-1.docker.io pulls intermittently
+      # rate-limit / time out on CI runners; the mirror is transparent and only
+      # affects this runner, so the example's docker-compose.yml stays unchanged.
+      - name: Configure Docker Hub registry mirror
+        run: |
+          echo '{ "registry-mirrors": ["https://mirror.gcr.io"] }' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+
       - name: Start Docker Compose
         working-directory: examples/${{ matrix.demo-folder }}
         run: docker compose up -d --wait
