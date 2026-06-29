@@ -79,11 +79,12 @@ jobs:
           atmos emulator up gcp   -s dev > "$D/up-gcp.txt"   2>&1 || true
           atmos emulator up azure -s dev > "$D/up-azure.txt" 2>&1 || true
           atmos emulator up k3s   -s dev > "$D/up-k3s.txt"   2>&1 || true
+          atmos emulator up aws   -s dev > "$D/up-aws.txt"   2>&1 || true   # matches the fixed tape
           echo "::endgroup::"
 
           docker ps -a > "$D/docker-ps.txt" 2>&1 || true
 
-          echo "::group::terraform init demo (aws NOT up) — bounded 150s"
+          echo "::group::terraform init demo (aws UP) — bounded 150s"
           set +e
           ATMOS_LOGS_FILE="$D/init.log" timeout 150 atmos terraform init demo -s dev
           code=$?
