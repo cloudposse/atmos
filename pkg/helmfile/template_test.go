@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -66,10 +68,20 @@ func (f *fakeProvisioner) Deliver(_ context.Context, in *target.DeliverInput) er
 	return f.err
 }
 
-func writeHelmfileScript(t *testing.T, body string) string {
+func writeHelmfileProgram(t *testing.T, body string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "helmfile")
-	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), 0o700))
+	dir := t.TempDir()
+	name := "helmfile"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	path := filepath.Join(dir, name)
+	sourcePath := filepath.Join(dir, "main.go")
+	source := "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc main() {\n\t_ = os.Args\n" + body + "\n}\n"
+	require.NoError(t, os.WriteFile(sourcePath, []byte(source), 0o600))
+	cmd := exec.Command("go", "build", "-o", path, sourcePath)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
 	return path
 }
 
@@ -77,13 +89,7 @@ func TestRenderAndDeliverExternalTarget(t *testing.T) {
 	provisioner := &fakeProvisioner{}
 	target.Register("test-helmfile", provisioner)
 
-	cmd := writeHelmfileScript(t, `printf '%s\n' 'apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: app
-  namespace: demo
-data:
-  key: value'`)
+	cmd := writeHelmfileProgram(t, `fmt.Print("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app\n  namespace: demo\ndata:\n  key: value\n")`)
 
 	rendered, err := RenderAndDeliver(context.Background(), &RenderDeliverInput{
 		AtmosConfig: &schema.AtmosConfiguration{},
@@ -112,7 +118,7 @@ func TestRenderAndDeliverErrors(t *testing.T) {
 		_, err := RenderAndDeliver(context.Background(), &RenderDeliverInput{
 			AtmosConfig:      &schema.AtmosConfiguration{},
 			Info:             &schema.ConfigAndStacksInfo{},
-			Command:          writeHelmfileScript(t, "echo ok"),
+			Command:          writeHelmfileProgram(t, `fmt.Print("ok\n")`),
 			WorkingDir:       t.TempDir(),
 			ProvisionSection: map[string]any{"default": "missing"},
 		})
@@ -120,7 +126,8 @@ func TestRenderAndDeliverErrors(t *testing.T) {
 	})
 
 	t.Run("command failure includes stderr", func(t *testing.T) {
-		cmd := writeHelmfileScript(t, "echo bad >&2\nexit 7")
+		cmd := writeHelmfileProgram(t, `fmt.Fprint(os.Stderr, "bad\n")
+	os.Exit(7)`)
 		rendered, err := RenderAndDeliver(context.Background(), &RenderDeliverInput{
 			AtmosConfig: &schema.AtmosConfiguration{},
 			Info:        &schema.ConfigAndStacksInfo{},
@@ -137,10 +144,7 @@ func TestRenderAndDeliverErrors(t *testing.T) {
 		sentinel := errors.New("deliver failed")
 		provisioner := &fakeProvisioner{err: sentinel}
 		target.Register("test-helmfile-error", provisioner)
-		cmd := writeHelmfileScript(t, `printf '%s\n' 'apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: app'`)
+		cmd := writeHelmfileProgram(t, `fmt.Print("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app\n")`)
 
 		_, err := RenderAndDeliver(context.Background(), &RenderDeliverInput{
 			AtmosConfig: &schema.AtmosConfiguration{},
@@ -161,7 +165,11 @@ metadata:
 
 func TestCaptureCommandEnvironmentAndWorkingDir(t *testing.T) {
 	dir := t.TempDir()
-	cmd := writeHelmfileScript(t, "printf '%s:%s' \"$CUSTOM_ENV\" \"$(pwd)\"")
+	cmd := writeHelmfileProgram(t, `wd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%s:%s", os.Getenv("CUSTOM_ENV"), wd)`)
 	out, err := captureCommand(context.Background(), &RenderDeliverInput{
 		Command:    cmd,
 		WorkingDir: dir,
