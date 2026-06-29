@@ -437,6 +437,11 @@ func TestExplicitVersionOverrideFromArgs(t *testing.T) {
 			want: "",
 		},
 		{
+			name: "bare separator is not a separate value",
+			args: []string{"atmos", "list", "stacks", "--use-version", "--"},
+			want: "",
+		},
+		{
 			name: "absent flag",
 			args: []string{"atmos", "list", "stacks"},
 			want: "",

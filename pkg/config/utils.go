@@ -510,7 +510,7 @@ func explicitVersionOverrideFromArgs(args []string) string {
 		if strings.HasPrefix(arg, "--use-version=") {
 			return strings.TrimPrefix(arg, "--use-version=")
 		}
-		if arg == "--use-version" && i+1 < len(args) {
+		if arg == "--use-version" && i+1 < len(args) && args[i+1] != "--" {
 			return args[i+1]
 		}
 	}
