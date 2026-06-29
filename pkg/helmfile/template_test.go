@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -178,5 +179,23 @@ func TestCaptureCommandEnvironmentAndWorkingDir(t *testing.T) {
 	require.NoError(t, err)
 	expectedDir, err := filepath.EvalSymlinks(dir)
 	require.NoError(t, err)
-	assert.Equal(t, "value:"+expectedDir, out)
+	envValue, actualDir, ok := strings.Cut(out, ":")
+	require.True(t, ok, "expected helper output to contain env and cwd")
+	assert.Equal(t, "value", envValue)
+
+	sameDir, err := sameFile(expectedDir, actualDir)
+	require.NoError(t, err)
+	assert.Truef(t, sameDir, "expected %q and %q to refer to the same directory", expectedDir, actualDir)
+}
+
+func sameFile(left, right string) (bool, error) {
+	leftInfo, err := os.Stat(left)
+	if err != nil {
+		return false, err
+	}
+	rightInfo, err := os.Stat(right)
+	if err != nil {
+		return false, err
+	}
+	return os.SameFile(leftInfo, rightInfo), nil
 }
