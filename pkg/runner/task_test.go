@@ -161,29 +161,32 @@ func TestTasks_UnmarshalYAML_WithIdentity(t *testing.T) {
 }
 
 func TestTasks_UnmarshalYAML_WithContainerFields(t *testing.T) {
+	// Container run parameters live under `with:` (GitHub Actions style) and
+	// decode into task.Run; only cross-cutting modifiers (provider) stay top-level.
 	input := `
 - name: scan
   type: container
-  image: alpine:latest
-  command: echo hello
-  shell: /bin/sh
   provider: docker
-  pull: always
-  workspace: /workspace
-  workspace_read_only: true
-  cleanup: on_success
-  user: "1000:1000"
-  run_args:
-    - --network=none
-  mounts:
-    - type: bind
-      source: ./cache
-      target: /cache
-      read_only: true
-  ports:
-    - host: 8080
-      container: 8080
-      protocol: tcp
+  with:
+    image: alpine:latest
+    command: echo hello
+    shell: /bin/sh
+    pull: always
+    workspace: /workspace
+    workspace_read_only: true
+    cleanup: on_success
+    user: "1000:1000"
+    run_args:
+      - --network=none
+    mounts:
+      - type: bind
+        source: ./cache
+        target: /cache
+        read_only: true
+    ports:
+      - host: 8080
+        container: 8080
+        protocol: tcp
 `
 	var tasks Tasks
 	err := yaml.Unmarshal([]byte(input), &tasks)
@@ -192,31 +195,33 @@ func TestTasks_UnmarshalYAML_WithContainerFields(t *testing.T) {
 	require.Len(t, tasks, 1)
 	task := tasks[0]
 	assert.Equal(t, "container", task.Type)
-	assert.Equal(t, "alpine:latest", task.Image)
-	assert.Equal(t, "/bin/sh", task.Shell)
 	assert.Equal(t, "docker", task.Provider)
-	assert.Equal(t, "always", task.Pull)
-	assert.Equal(t, "/workspace", task.Workspace)
-	assert.True(t, task.WorkspaceReadOnly)
-	assert.Equal(t, "on_success", task.Cleanup)
-	assert.Equal(t, "1000:1000", task.User)
-	assert.Equal(t, []string{"--network=none"}, task.RunArgs)
-	require.Len(t, task.Mounts, 1)
-	assert.Equal(t, "./cache", task.Mounts[0].Source)
-	assert.Equal(t, "/cache", task.Mounts[0].Target)
-	assert.True(t, task.Mounts[0].ReadOnly)
-	require.Len(t, task.Ports, 1)
-	assert.Equal(t, 8080, task.Ports[0].Host)
-	assert.Equal(t, 8080, task.Ports[0].Container)
-	assert.Equal(t, "tcp", task.Ports[0].Protocol)
+	require.NotNil(t, task.Run)
+	assert.Equal(t, "alpine:latest", task.Run.Image)
+	assert.Equal(t, "/bin/sh", task.Run.Shell)
+	assert.Equal(t, "always", task.Run.Pull)
+	assert.Equal(t, "/workspace", task.Run.Workspace)
+	assert.True(t, task.Run.WorkspaceReadOnly)
+	assert.Equal(t, "on_success", task.Run.Cleanup)
+	assert.Equal(t, "1000:1000", task.Run.User)
+	assert.Equal(t, []string{"--network=none"}, task.Run.RunArgs)
+	require.Len(t, task.Run.Mounts, 1)
+	assert.Equal(t, "./cache", task.Run.Mounts[0].Source)
+	assert.Equal(t, "/cache", task.Run.Mounts[0].Target)
+	assert.True(t, task.Run.Mounts[0].ReadOnly)
+	require.Len(t, task.Run.Ports, 1)
+	assert.Equal(t, 8080, task.Run.Ports[0].Host)
+	assert.Equal(t, 8080, task.Run.Ports[0].Container)
+	assert.Equal(t, "tcp", task.Run.Ports[0].Protocol)
 }
 
 func TestTasks_UnmarshalYAML_WithContainerActionBlocksAndOutputs(t *testing.T) {
+	// Container action params live under `with:`; the action selects the struct.
 	input := `
 - name: build
   type: container
   action: build
-  build:
+  with:
     provider: docker
     runtime_auto_start: true
     engine: buildx
@@ -318,19 +323,9 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 		Retry: &schema.RetryConfig{
 			MaxAttempts: &maxAttempts,
 		},
-		Timeout:           30 * time.Second,
-		Image:             "alpine:latest",
-		Shell:             "/bin/sh",
-		Provider:          "docker",
-		Pull:              "always",
-		Workspace:         "/workspace",
-		WorkspaceReadOnly: true,
-		Cleanup:           "on_success",
-		User:              "1000:1000",
-		RunArgs:           []string{"--network=none"},
-		Mounts:            []schema.ContainerMount{{Type: "bind", Source: "./cache", Target: "/cache", ReadOnly: true}},
-		Ports:             []schema.ContainerPort{{Host: 8080, Container: 8080, Protocol: "tcp"}},
-		Action:            "run",
+		Timeout:  30 * time.Second,
+		Provider: "docker",
+		Action:   "run",
 		Build: &schema.ContainerBuildStep{
 			Engine:  "buildx",
 			Context: ".",
@@ -345,8 +340,17 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 			Tags:  []string{"registry.example.com/app:local"},
 		},
 		Run: &schema.ContainerRunStep{
-			Image:   "app:local",
-			Command: "echo ok",
+			Image:             "app:local",
+			Command:           "echo ok",
+			Shell:             "/bin/sh",
+			Pull:              "always",
+			Workspace:         "/workspace",
+			WorkspaceReadOnly: true,
+			Cleanup:           "on_success",
+			User:              "1000:1000",
+			RunArgs:           []string{"--network=none"},
+			Mounts:            []schema.ContainerMount{{Type: "bind", Source: "./cache", Target: "/cache", ReadOnly: true}},
+			Ports:             []schema.ContainerPort{{Host: 8080, Container: 8080, Protocol: "tcp"}},
 		},
 		Outputs: map[string]string{"image": "{{ .metadata.image }}"},
 	}
@@ -360,17 +364,7 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 	assert.Equal(t, task.WorkingDirectory, step.WorkingDirectory)
 	assert.Equal(t, task.Identity, step.Identity)
 	assert.Equal(t, task.Retry, step.Retry)
-	assert.Equal(t, task.Image, step.Image)
-	assert.Equal(t, task.Shell, step.Shell)
 	assert.Equal(t, task.Provider, step.Provider)
-	assert.Equal(t, task.Pull, step.Pull)
-	assert.Equal(t, task.Workspace, step.Workspace)
-	assert.Equal(t, task.WorkspaceReadOnly, step.WorkspaceReadOnly)
-	assert.Equal(t, task.Cleanup, step.Cleanup)
-	assert.Equal(t, task.User, step.User)
-	assert.Equal(t, task.RunArgs, step.RunArgs)
-	assert.Equal(t, task.Mounts, step.Mounts)
-	assert.Equal(t, task.Ports, step.Ports)
 	assert.Equal(t, task.Action, step.Action)
 	assert.Equal(t, task.Build, step.Build)
 	assert.Equal(t, task.Push, step.Push)
@@ -391,18 +385,8 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 		Retry: &schema.RetryConfig{
 			MaxAttempts: &maxAttempts,
 		},
-		Image:             "alpine:latest",
-		Shell:             "/bin/sh",
-		Provider:          "docker",
-		Pull:              "always",
-		Workspace:         "/workspace",
-		WorkspaceReadOnly: true,
-		Cleanup:           "on_success",
-		User:              "1000:1000",
-		RunArgs:           []string{"--network=none"},
-		Mounts:            []schema.ContainerMount{{Type: "bind", Source: "./cache", Target: "/cache", ReadOnly: true}},
-		Ports:             []schema.ContainerPort{{Host: 8080, Container: 8080, Protocol: "tcp"}},
-		Action:            "run",
+		Provider: "docker",
+		Action:   "run",
 		Build: &schema.ContainerBuildStep{
 			Engine:  "buildx",
 			Context: ".",
@@ -417,8 +401,17 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 			Tags:  []string{"registry.example.com/app:local"},
 		},
 		Run: &schema.ContainerRunStep{
-			Image:   "app:local",
-			Command: "echo ok",
+			Image:             "app:local",
+			Command:           "echo ok",
+			Shell:             "/bin/sh",
+			Pull:              "always",
+			Workspace:         "/workspace",
+			WorkspaceReadOnly: true,
+			Cleanup:           "on_success",
+			User:              "1000:1000",
+			RunArgs:           []string{"--network=none"},
+			Mounts:            []schema.ContainerMount{{Type: "bind", Source: "./cache", Target: "/cache", ReadOnly: true}},
+			Ports:             []schema.ContainerPort{{Host: 8080, Container: 8080, Protocol: "tcp"}},
 		},
 		Outputs: map[string]string{"image": "{{ .metadata.image }}"},
 	}
@@ -432,17 +425,7 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 	assert.Equal(t, step.WorkingDirectory, task.WorkingDirectory)
 	assert.Equal(t, step.Identity, task.Identity)
 	assert.Equal(t, step.Retry, task.Retry)
-	assert.Equal(t, step.Image, task.Image)
-	assert.Equal(t, step.Shell, task.Shell)
 	assert.Equal(t, step.Provider, task.Provider)
-	assert.Equal(t, step.Pull, task.Pull)
-	assert.Equal(t, step.Workspace, task.Workspace)
-	assert.Equal(t, step.WorkspaceReadOnly, task.WorkspaceReadOnly)
-	assert.Equal(t, step.Cleanup, task.Cleanup)
-	assert.Equal(t, step.User, task.User)
-	assert.Equal(t, step.RunArgs, task.RunArgs)
-	assert.Equal(t, step.Mounts, task.Mounts)
-	assert.Equal(t, step.Ports, task.Ports)
 	assert.Equal(t, step.Action, task.Action)
 	assert.Equal(t, step.Build, task.Build)
 	assert.Equal(t, step.Push, task.Push)

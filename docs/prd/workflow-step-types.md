@@ -41,7 +41,7 @@ Plus **per-step output modes** for controlling how command output is displayed.
 1. **Full Gum CLI Parity**: We implement the most useful subset, not every Gum option
 2. **External Process Execution**: Step types are native Go, not shelling out to `gum`
 3. **Custom Themes per Step**: Steps use the global Atmos theme, not per-step theming
-4. **Parallel Step Execution**: Steps execute sequentially (existing behavior)
+4. **Parallel Step Execution**: Out of scope for *this* PRD. Concurrent execution shipped separately via the `parallel`/`matrix` control steps — see [`parallel-workflow-steps.md`](./parallel-workflow-steps.md).
 5. **Conditional Logic**: No if/else branching in workflows (use shell for this)
 
 ## Proposed Configuration

@@ -1433,51 +1433,7 @@
                 {
                   "type": "array",
                   "items": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                      "name": {
-                        "type": "string"
-                      },
-                      "command": {
-                        "type": "string"
-                      },
-                      "stack": {
-                        "type": "string"
-                      },
-                      "type": {
-                        "type": "string"
-                      },
-                      "retry": {
-                        "$ref": "#/definitions/workflow_retry"
-                      },
-                      "when": {
-                        "description": "Condition controlling whether this workflow step runs. Omitted means run.",
-                        "allOf": [
-                          {
-                            "$ref": "#/definitions/step_condition"
-                          }
-                        ]
-                      },
-                      "working_directory": {
-                        "type": "string",
-                        "description": "Working directory for the workflow step"
-                      },
-                      "identity": {
-                        "type": "string",
-                        "description": "Identity to use for the workflow step"
-                      },
-                      "env": {
-                        "type": "object",
-                        "additionalProperties": {
-                          "type": "string"
-                        },
-                        "description": "Environment variables for the workflow step"
-                      }
-                    },
-                    "required": [
-                      "command"
-                    ]
+                    "$ref": "#/definitions/workflow_step"
                   }
                 }
               ]
@@ -1488,6 +1444,146 @@
           ]
         }
       ]
+    },
+    "workflow_step": {
+      "title": "workflow_step",
+      "description": "Workflow step",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "stack": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "retry": {
+          "$ref": "#/definitions/workflow_retry"
+        },
+        "working_directory": {
+          "type": "string",
+          "description": "Working directory for the workflow step"
+        },
+        "identity": {
+          "type": "string",
+          "description": "Identity to use for the workflow step"
+        },
+        "when": {
+          "description": "Condition controlling whether this workflow step runs. Omitted means run.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/step_condition"
+            }
+          ]
+        },
+        "timeout": {
+          "type": "string",
+          "description": "Timeout duration for the workflow step"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Environment variables for the workflow step"
+        },
+        "needs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "description": "Sibling workflow steps that must complete before this step can run"
+        },
+        "max_concurrency": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum number of child steps to run concurrently"
+        },
+        "fail": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "wait_all",
+                "fail_fast",
+                "best_effort"
+              ]
+            },
+            "max_failures": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "output": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "grouped",
+                    "prefixed",
+                    "none"
+                  ]
+                },
+                "order": {
+                  "type": "string",
+                  "enum": [
+                    "completion",
+                    "definition"
+                  ]
+                },
+                "show_summary": {
+                  "type": "boolean"
+                },
+                "prefix": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        },
+        "matrix": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": "Matrix axes for matrix workflow steps"
+        },
+        "steps": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^!include"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/workflow_step"
+              }
+            }
+          ]
+        }
+      }
     },
     "providers": {
       "title": "providers",
