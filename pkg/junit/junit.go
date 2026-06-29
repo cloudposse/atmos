@@ -128,9 +128,10 @@ func Format(r *Report) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMarshal, err)
 	}
-	out := make([]byte, 0, len(xml.Header)+len(body)+1)
-	out = append(out, xml.Header...)
-	out = append(out, body...)
+	// Build header + body + trailing newline via append so the allocation size is
+	// driven by a single length (xml.Header is a constant), avoiding a len()+len()
+	// sum that CodeQL flags as a potential allocation-size overflow.
+	out := append([]byte(xml.Header), body...)
 	out = append(out, '\n')
 	return out, nil
 }
