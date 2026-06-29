@@ -129,6 +129,79 @@ func TestInitFunction(t *testing.T) {
 	}
 }
 
+func TestInvocationGroupLabel(t *testing.T) {
+	root := testInvocationRoot()
+
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "workflow includes first positional after flags",
+			args: []string{"workflow", "--file", "workflows", "deploy"},
+			want: "atmos workflow deploy",
+		},
+		{
+			name: "terraform plan includes component and drops flags",
+			args: []string{"terraform", "plan", "vpc", "-s", "dev", "-var", "secret=x"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "terraform apply ignores args after separator",
+			args: []string{"terraform", "apply", "app", "--", "-target=module.secret"},
+			want: "atmos terraform apply app",
+		},
+		{
+			name: "describe affected uses command path only",
+			args: []string{"describe", "affected", "--stack", "prod"},
+			want: "atmos describe affected",
+		},
+		{
+			name: "custom command includes first positional",
+			args: []string{"my-custom-command", "target", "--token", "secret"},
+			want: "atmos my-custom-command target",
+		},
+		{
+			name: "no args",
+			args: nil,
+			want: "atmos",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, invocationGroupLabel(root, tt.args))
+		})
+	}
+}
+
+func testInvocationRoot() *cobra.Command {
+	root := &cobra.Command{Use: "atmos"}
+
+	workflowCmd := &cobra.Command{Use: "workflow [name]"}
+	workflowCmd.Flags().StringP("file", "f", "", "")
+	workflowCmd.Flags().StringP("stack", "s", "", "")
+
+	terraformCmd := &cobra.Command{Use: "terraform"}
+	terraformCmd.PersistentFlags().StringP("stack", "s", "", "")
+	terraformPlanCmd := &cobra.Command{Use: "plan [component]"}
+	terraformPlanCmd.Flags().String("var", "", "")
+	terraformApplyCmd := &cobra.Command{Use: "apply [component]"}
+	terraformCmd.AddCommand(terraformPlanCmd, terraformApplyCmd)
+
+	describeCmd := &cobra.Command{Use: "describe"}
+	describeCmd.PersistentFlags().String("stack", "", "")
+	describeAffectedCmd := &cobra.Command{Use: "affected"}
+	describeCmd.AddCommand(describeAffectedCmd)
+
+	customCmd := &cobra.Command{Use: "my-custom-command [target]"}
+	customCmd.Flags().String("token", "", "")
+
+	root.AddCommand(workflowCmd, terraformCmd, describeCmd, customCmd)
+	return root
+}
+
 func TestSetupLogger_TraceLevel(t *testing.T) {
 	// Save original state.
 	originalLevel := log.GetLevel()

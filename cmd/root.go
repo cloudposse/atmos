@@ -111,6 +111,16 @@ const (
 	verboseFlagName = "verbose"
 	// AnsiEscapePrefix is the ANSI escape sequence prefix.
 	ansiEscapePrefix = "\x1b["
+	// SingleDashArg is the single dash argument.
+	singleDashArg = "-"
+	// FlagPrefix is the command-line flag prefix.
+	flagPrefix = "-"
+	// LongFlagPrefix is the command-line long flag prefix.
+	longFlagPrefix = "--"
+	// EndOfOptionsArg is the POSIX end-of-options marker.
+	endOfOptionsArg = "--"
+	// FlagAssignmentSeparator separates a flag name from its inline value.
+	flagAssignmentSeparator = "="
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -1591,7 +1601,7 @@ func Execute() error {
 
 	// Preprocess args before Cobra parses.
 	// This orchestrates multiple preprocessing steps in the correct order.
-	preprocessArgs()
+	effectiveArgs := preprocessArgs()
 
 	// Set up AI output capture if --ai flag is present (flag parsing in cmd/ai,
 	// orchestration in pkg/ai/analyze, skill loading in pkg/ai/skills).
@@ -1603,7 +1613,16 @@ func Execute() error {
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
-	cmd, err := internal.Execute(RootCmd)
+
+	// Invocation-level CI log grouping (Dimension "invocation"): wrap the whole
+	// command run in one collapsible group. A no-op unless ci.groups.mode is
+	// "invocation" (the finer step/phase grouping owns "auto"), and outside CI.
+	var cmd *cobra.Command
+	err = ci.Group(&atmosConfig, ci.DimensionInvocation, invocationGroupLabel(RootCmd, effectiveArgs), func() error {
+		var execErr error
+		cmd, execErr = internal.Execute(RootCmd)
+		return execErr
+	})
 
 	telemetry.CaptureCmd(cmd, err)
 
@@ -1623,6 +1642,134 @@ func Execute() error {
 	return err
 }
 
+// invocationGroupLabel builds the label for the invocation-level CI log group
+// from the resolved Atmos command path plus the first remaining positional
+// argument. Flags, flag values, and args after "--" are intentionally omitted.
+func invocationGroupLabel(root *cobra.Command, args []string) string {
+	if root == nil || len(args) == 0 {
+		return "atmos"
+	}
+
+	cmd, remaining, err := root.Find(args)
+	if err != nil || cmd == nil {
+		if first := firstFallbackPositional(args); first != "" {
+			return "atmos " + first
+		}
+		return "atmos"
+	}
+
+	label := strings.TrimSpace(cmd.CommandPath())
+	if label == "" {
+		label = "atmos"
+	}
+	if first := firstPositionalArg(cmd, remaining); first != "" {
+		label += " " + first
+	}
+	return label
+}
+
+func firstFallbackPositional(args []string) string {
+	if len(args) == 0 || args[0] == endOfOptionsArg || strings.HasPrefix(args[0], flagPrefix) {
+		return ""
+	}
+	return args[0]
+}
+
+func firstPositionalArg(cmd *cobra.Command, args []string) string {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == endOfOptionsArg {
+			return ""
+		}
+		if !strings.HasPrefix(arg, flagPrefix) {
+			return arg
+		}
+		if flagConsumesNextValue(cmd, arg) && i+1 < len(args) && args[i+1] != endOfOptionsArg && !strings.HasPrefix(args[i+1], flagPrefix) {
+			i++
+		}
+	}
+	return ""
+}
+
+func flagConsumesNextValue(cmd *cobra.Command, arg string) bool {
+	if arg == singleDashArg || arg == endOfOptionsArg || strings.Contains(arg, flagAssignmentSeparator) {
+		return false
+	}
+	if hasAttachedShorthandValue(cmd, arg) {
+		return false
+	}
+
+	return flagRequiresNextValue(lookupFlagForArg(cmd, arg))
+}
+
+func hasAttachedShorthandValue(cmd *cobra.Command, arg string) bool {
+	if !strings.HasPrefix(arg, flagPrefix) || strings.HasPrefix(arg, longFlagPrefix) {
+		return false
+	}
+	name := strings.TrimPrefix(arg, flagPrefix)
+	if len(name) <= 1 {
+		return false
+	}
+	return flagConsumesAttachedValue(cmd.Flags().ShorthandLookup(name[:1]))
+}
+
+func flagRequiresNextValue(flag *pflag.Flag) bool {
+	if flag == nil {
+		// Unknown flags are treated conservatively: skip the following value
+		// rather than risk exposing a flag value in the group label.
+		return true
+	}
+	if flag.NoOptDefVal != "" {
+		return false
+	}
+	if flag.Value != nil && flag.Value.Type() == "bool" {
+		return false
+	}
+	return true
+}
+
+func lookupFlagForArg(cmd *cobra.Command, arg string) *pflag.Flag {
+	if cmd == nil {
+		return nil
+	}
+
+	if strings.HasPrefix(arg, longFlagPrefix) {
+		name := strings.TrimPrefix(arg, longFlagPrefix)
+		if idx := strings.Index(name, flagAssignmentSeparator); idx >= 0 {
+			name = name[:idx]
+		}
+		return cmd.Flags().Lookup(name)
+	}
+
+	name := strings.TrimPrefix(arg, flagPrefix)
+	if idx := strings.Index(name, flagAssignmentSeparator); idx >= 0 {
+		name = name[:idx]
+	}
+	if len(name) == 1 {
+		return cmd.Flags().ShorthandLookup(name)
+	}
+	if flag := cmd.Flags().Lookup(name); flag != nil {
+		return flag
+	}
+	if len(name) > 0 {
+		return cmd.Flags().ShorthandLookup(name[:1])
+	}
+	return nil
+}
+
+func flagConsumesAttachedValue(flag *pflag.Flag) bool {
+	if flag == nil {
+		return false
+	}
+	if flag.NoOptDefVal != "" {
+		return false
+	}
+	if flag.Value != nil && flag.Value.Type() == "bool" {
+		return false
+	}
+	return true
+}
+
 // unknownSubcommand reports whether err represents an unknown Atmos subcommand
 // (as converted from Cobra in cmd/internal/executor.go) and returns the offending
 // command name. It deliberately does NOT match ErrCommandNotFound, which is used
@@ -1639,10 +1786,10 @@ func unknownSubcommand(err error) (string, bool) {
 // This orchestrates multiple preprocessing steps in the correct order:
 //  1. NoOptDefVal flags: Rewrites --flag value → --flag=value for native Atmos flags
 //  2. Compatibility flags: Separates Atmos flags from pass-through flags for external tools
-func preprocessArgs() {
+func preprocessArgs() []string {
 	osArgs := os.Args[1:]
 	if len(osArgs) == 0 {
-		return
+		return nil
 	}
 
 	// Step 1: Preprocess NoOptDefVal flags (native Atmos flags like --identity, --pager).
@@ -1652,13 +1799,17 @@ func preprocessArgs() {
 	// Step 2: Preprocess compatibility flags (external tool syntax like -var).
 	// This separates Atmos flags from pass-through flags.
 	// Note: This may call RootCmd.SetArgs() if there are compat flags.
-	hasCompatFlags := preprocessCompatibilityFlags(processedArgs)
+	atmosArgs, hasCompatFlags := preprocessCompatibilityFlags(processedArgs)
+	if hasCompatFlags {
+		return atmosArgs
+	}
 
 	// If no compat flags were processed but NoOptDefVal changed the args,
 	// we need to set the processed args for Cobra to use.
-	if !hasCompatFlags && !slicesEqual(processedArgs, osArgs) {
+	if !slicesEqual(processedArgs, osArgs) {
 		RootCmd.SetArgs(processedArgs)
 	}
+	return processedArgs
 }
 
 // slicesEqual compares two string slices for equality.
@@ -1685,12 +1836,13 @@ func slicesEqual(a, b []string) bool {
 // The separated args are stored globally via compat.SetSeparated() and can be
 // retrieved in RunE via compat.GetSeparated().
 //
-// Returns true if compatibility flags were processed and SetArgs was called.
-func preprocessCompatibilityFlags(args []string) bool {
+// Returns the Atmos args and true if compatibility flags were processed and
+// SetArgs was called.
+func preprocessCompatibilityFlags(args []string) ([]string, bool) {
 	// Find target command without parsing flags.
 	targetCmd, _, _ := RootCmd.Find(args)
 	if targetCmd == nil {
-		return false
+		return args, false
 	}
 
 	// Get the top-level command name (e.g., "terraform").
@@ -1700,13 +1852,13 @@ func preprocessCompatibilityFlags(args []string) bool {
 		cmdName = c.Name()
 	}
 	if cmdName == "" {
-		return false
+		return args, false
 	}
 
 	// Get compatibility flags from the command registry.
 	compatFlags := internal.GetCompatFlagsForCommand(cmdName)
 	if len(compatFlags) == 0 {
-		return false
+		return args, false
 	}
 
 	// Translate args: separate Atmos flags from pass-through flags.
@@ -1719,7 +1871,7 @@ func preprocessCompatibilityFlags(args []string) bool {
 	// Store separated args globally via compat package.
 	compat.SetSeparated(separatedArgs)
 
-	return true
+	return atmosArgs, true
 }
 
 // preprocessNoOptDefValFlags rewrites space-separated NoOptDefVal flags to equals syntax.

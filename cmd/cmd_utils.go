@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component/custom"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
@@ -878,6 +879,13 @@ func executeCustomCommand(
 			log.Debug("Prepared environment with identity for custom command step", customCommandKeyIdentity, commandIdentity, customCommandKeyCommand, commandConfig.Name, "step", i)
 		}
 
+		// Whenever grouping is enabled (any mode), mark the subprocess environment
+		// so a nested `atmos` invocation skips its own grouping — CI providers do
+		// not support nested groups.
+		if ci.GroupingEnabled(&atmosConfig) {
+			env = append(env, ci.LogGroupSentinelEnv())
+		}
+
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step.Command, data, false)
@@ -898,42 +906,50 @@ func executeCustomCommand(
 		// hardcode `sh -c` → exit 126) and leaked orphaned `atmos` child
 		// processes on Linux (no process-group cleanup), so they stay on the
 		// legacy paths.
-		switch stepType {
-		case "shell":
-			// Execute shell command (backward compatible).
-			// Steps with tty/interactive attach the user's terminal so commands
-			// like `aws ssm start-session` get a real TTY and own Ctrl-C.
-			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-			err = process.RunShellStep(context.Background(), &process.ShellSessionSpec{
-				Command:     commandToRun,
-				Name:        commandName,
-				Dir:         workDir,
-				Env:         env,
-				TTY:         step.Tty,
-				Interactive: step.Interactive,
-			}, func() error {
-				return e.ExecuteShell(commandToRun, commandName, workDir, env, false)
-			})
-		case schema.TaskTypeExec:
-			// Replace the Atmos process with the command (shell exec semantics).
-			err = process.ReplaceShellSession(&process.ExecSpec{
-				Command: commandToRun,
-				Name:    fmt.Sprintf("%s-step-%d", commandConfig.Name, i),
-				Dir:     workDir,
-				Env:     env,
-			})
-		case "atmos":
-			// Execute atmos command.
-			args := strings.Fields(commandToRun)
-			execPath, execErr := os.Executable()
-			if execErr != nil {
-				err = execErr
-				break
-			}
-			err = e.ExecuteShellCommand(atmosConfig, execPath, args, workDir, env, false, "")
-		default:
-			// Check if this is an extended step type (input, confirm, choose, etc.).
-			if stepPkg.IsExtendedStepType(stepType) {
+		//
+		// The whole dispatch is wrapped in a collapsible CI log group (no-op
+		// outside CI / when disabled), labeled with the step name or command.
+		err = stepPkg.RunGrouped(&atmosConfig, step.Name, commandToRun, func() error {
+			switch stepType {
+			case "shell":
+				// Execute shell command (backward compatible).
+				// Steps with tty/interactive attach the user's terminal so commands
+				// like `aws ssm start-session` get a real TTY and own Ctrl-C.
+				commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+				err = process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+					Command:     commandToRun,
+					Name:        commandName,
+					Dir:         workDir,
+					Env:         env,
+					TTY:         step.Tty,
+					Interactive: step.Interactive,
+				}, func() error {
+					return e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+				})
+			case schema.TaskTypeExec:
+				// Replace the Atmos process with the command (shell exec semantics).
+				err = process.ReplaceShellSession(&process.ExecSpec{
+					Command: commandToRun,
+					Name:    fmt.Sprintf("%s-step-%d", commandConfig.Name, i),
+					Dir:     workDir,
+					Env:     env,
+				})
+			case "atmos":
+				// Execute atmos command.
+				args := strings.Fields(commandToRun)
+				execPath, execErr := os.Executable()
+				if execErr != nil {
+					err = execErr
+					break
+				}
+				err = e.ExecuteShellCommand(atmosConfig, execPath, args, workDir, env, false, "")
+			default:
+				// Check if this is an extended step type (input, confirm, choose, etc.).
+				if !stepPkg.IsExtendedStepType(stepType) {
+					err = fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
+					break
+				}
+
 				// Convert Task to WorkflowStep for handler compatibility.
 				workflowStep := step.ToWorkflowStep()
 				// Update command with template-resolved value.
@@ -967,10 +983,9 @@ func executeCustomCommand(
 
 				// Execute the extended step.
 				_, err = executor.Execute(context.Background(), &workflowStep)
-			} else {
-				err = fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
 			}
-		}
+			return err
+		})
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/config"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -197,7 +198,14 @@ func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep,
 			progressRenderer.Render()
 		}
 
-		stepResult := e.executeStep(params, step, stepIdx)
+		// Wrap each step's output in a collapsible CI log group when grouping is
+		// active. RunGrouped is a no-op outside CI / when disabled, so executeStep
+		// runs unchanged in the common case.
+		var stepResult stepResultInternal
+		_ = stepPkg.RunGrouped(params.AtmosConfig, step.Name, step.Command, func() error {
+			stepResult = e.executeStep(params, step, stepIdx)
+			return nil
+		})
 		result.Steps = append(result.Steps, stepResult.StepResult)
 
 		if !stepResult.Success {
@@ -325,6 +333,13 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 				Error:    err,
 			},
 		}
+	}
+
+	// When this step's output is wrapped in a CI log group (see runSteps), mark
+	// the subprocess environment so a nested `atmos workflow`/custom-command
+	// invocation skips re-grouping (CI providers do not support nested groups).
+	if ci.GroupingEnabled(params.AtmosConfig) {
+		stepEnv = append(stepEnv, ci.LogGroupSentinelEnv())
 	}
 
 	// Calculate final stack.
