@@ -54,48 +54,43 @@ jobs:
       - name: Prepare diagnostics dir
         run: mkdir -p "${{ github.workspace }}/diag"
 
-      # HYPOTHESIS UNDER TEST: on Linux CI ttyd does not end up on PATH from the toolchain,
-      # even though vhs/ffmpeg do (the record/check command's `command -v ttyd` gate fails).
-      # `atmos demo check hero` triggers the SAME `dependencies.tools` auto-install
-      # (vhs v0.11.0 / ffmpeg 8.1.1 / ttyd 1.7.7) as `record`, but `hero` is a non-emulator
-      # tape so no docker is needed — fast. Capture the toolchain TRACE, then explicitly
-      # install ttyd to see if that path differs, and dump what `atmos toolchain path`
-      # resolves + the .tools tree.
-      - name: Probe ttyd toolchain install (vhs/ffmpeg/ttyd)
+      # Terraform is needed by `atmos terraform init demo` below.
+      - name: Install Terraform via Atmos toolchain
+        run: |
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain env --format=github
+
+      # HYPOTHESIS UNDER TEST: emulators.tape's off-camera `atmos terraform init demo`
+      # hangs ~10 min, even though the emulator-not-running path (Manager.endpoint) already
+      # fails fast. Faithfully reproduce the tape: bring up gcp/azure/k3s but NOT aws (the
+      # tape's ordering bug), then run `terraform init demo` bounded by a timeout, with
+      # Atmos + Terraform TRACE, to capture WHERE it actually blocks (emulator resolve vs
+      # provider download vs in-process AWS SDK retry).
+      - name: Reproduce emulators terraform init (bounded, instrumented)
         run: |
           set -uo pipefail
           D="${{ github.workspace }}/diag"
-          cd demo/landing
-          uname -srm    > "$D/uname.txt"         2>&1 || true
+          cd demo/landing/fixtures/emulators
           atmos version > "$D/atmos-version.txt" 2>&1 || true
 
-          # (1) Faithful path: the command's dependencies.tools auto-install + gate.
-          echo "::group::atmos demo check hero (Trace)"
-          set +e
-          ATMOS_LOGS_FILE="$D/demo-check.log" atmos demo check hero > "$D/demo-check.txt" 2>&1
-          echo "demo_check_exit=$?" | tee "$D/demo-check-exit.txt"
-          set -e
+          echo "::group::bring up gcp/azure/k3s (NOT aws — reproduce the tape)"
+          atmos terraform clean demo -s dev --everything --force --skip-lock-file > "$D/clean.txt" 2>&1 || true
+          for e in aws gcp azure k3s; do atmos emulator reset "$e" -s dev --force > "$D/reset-$e.txt" 2>&1 || true; done
+          atmos emulator up gcp   -s dev > "$D/up-gcp.txt"   2>&1 || true
+          atmos emulator up azure -s dev > "$D/up-azure.txt" 2>&1 || true
+          atmos emulator up k3s   -s dev > "$D/up-k3s.txt"   2>&1 || true
           echo "::endgroup::"
 
-          # (2) Explicit per-tool install for comparison (does ttyd install on its own?).
-          # NOTE: requires owner/repo@version — the key question is whether
-          # tsl0922/ttyd@1.7.7 resolves an aqua binary on this Linux runner.
-          for spec in "charmbracelet/vhs@v0.11.0" "Tyrrrz/FFmpegBin@8.1.1" "tsl0922/ttyd@1.7.7"; do
-            base="$(basename "$spec")"
-            echo "::group::toolchain install $spec"
-            set +e
-            ATMOS_LOGS_FILE="$D/install-$base.log" atmos toolchain install "$spec" > "$D/install-$base.txt" 2>&1
-            echo "$spec exit=$?" | tee -a "$D/install-results.txt"
-            set -e
-            echo "::endgroup::"
-          done
+          docker ps -a > "$D/docker-ps.txt" 2>&1 || true
 
-          atmos toolchain path > "$D/toolchain-path.txt" 2>&1 || true
-          atmos toolchain list > "$D/toolchain-list.txt" 2>&1 || true
-          find .tools -maxdepth 7 -type f 2>/dev/null | sort > "$D/tools-tree.txt" || true
-
-          export PATH="$(atmos toolchain path 2>/dev/null | tr '\n' ':')$PATH"
-          { for t in vhs ttyd ffmpeg; do printf '%s -> ' "$t"; command -v "$t" || echo MISSING; done; } | tee "$D/which.txt"
+          echo "::group::terraform init demo (aws NOT up) — bounded 150s"
+          set +e
+          ATMOS_LOGS_FILE="$D/init.log" timeout 150 atmos terraform init demo -s dev
+          code=$?
+          set -e
+          echo "::endgroup::"
+          echo "init_exit=$code" | tee "$D/init-exit.txt"   # 124 == hung; fast non-zero == fails fast
+          ls -la "$D/terraform.log" 2>/dev/null && echo "terraform RAN" || echo "terraform did NOT run"
           true
 
       - name: Upload diagnostics
