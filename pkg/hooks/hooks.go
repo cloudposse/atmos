@@ -680,6 +680,9 @@ func (h *Hooks) verifyHookBinary(name string, hook *Hook) error {
 	if hook.Kind == stepKindName {
 		return verifyStepHookType(name, hook.Type)
 	}
+	if hook.Kind == stepsKindName {
+		return verifyStepsHookTypes(name, hook)
+	}
 	resolved := kind.ResolveDefaults(hook)
 	if resolved.Command == "" {
 		return nil

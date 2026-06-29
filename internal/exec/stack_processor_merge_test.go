@@ -393,6 +393,7 @@ func minimalComponentResult() *ComponentProcessorResult {
 		BaseComponentAuth:                      map[string]any{},
 		ComponentProviders:                     map[string]any{},
 		ComponentHooks:                         map[string]any{},
+		ComponentTest:                          map[string]any{},
 		ComponentBackendType:                   "",
 		ComponentBackendSection:                map[string]any{},
 		ComponentRemoteStateBackendType:        "",
@@ -401,11 +402,43 @@ func minimalComponentResult() *ComponentProcessorResult {
 		ComponentOverridesHooks:                map[string]any{},
 		BaseComponentProviders:                 map[string]any{},
 		BaseComponentHooks:                     map[string]any{},
+		BaseComponentTest:                      map[string]any{},
 		BaseComponentBackendType:               "",
 		BaseComponentBackendSection:            map[string]any{},
 		BaseComponentRemoteStateBackendType:    "",
 		BaseComponentRemoteStateBackendSection: map[string]any{},
 	}
+}
+
+func TestMergeComponentConfigurations_TerraformTestSection(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "app",
+		AtmosConfig:   atmosCfg,
+	}
+	res := minimalComponentResult()
+	res.BaseComponentTest = map[string]any{
+		cfg.VarsSectionName: map[string]any{
+			"fixture_vpc_id": "vpc-from-base",
+			"base_only":      "base",
+		},
+	}
+	res.ComponentTest = map[string]any{
+		cfg.VarsSectionName: map[string]any{
+			"fixture_vpc_id": "vpc-from-component",
+		},
+	}
+
+	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+
+	testSection, ok := comp[cfg.TestSectionName].(map[string]any)
+	require.True(t, ok)
+	testVars, ok := testSection[cfg.VarsSectionName].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "vpc-from-component", testVars["fixture_vpc_id"])
+	assert.Equal(t, "base", testVars["base_only"])
 }
 
 // TestMergeComponentConfigurations_Retry covers the per-component retry merge added by

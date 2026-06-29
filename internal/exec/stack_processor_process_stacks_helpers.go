@@ -83,6 +83,7 @@ type ComponentProcessorResult struct {
 	ComponentRequiredProviders map[string]any
 	ComponentRequiredVersion   string
 	ComponentHooks             map[string]any
+	ComponentTest              map[string]any
 	// ComponentSecrets holds the component-level `secrets:` declaration section.
 	ComponentSecrets          map[string]any
 	ComponentOverridesSecrets map[string]any
@@ -104,6 +105,7 @@ type ComponentProcessorResult struct {
 	BaseComponentRequiredProviders         map[string]any
 	BaseComponentRequiredVersion           string
 	BaseComponentHooks                     map[string]any
+	BaseComponentTest                      map[string]any
 	BaseComponentGenerate                  map[string]any
 	BaseComponentBackendType               string
 	BaseComponentBackendSection            map[string]any

@@ -171,11 +171,53 @@ type TerraformTestOutputData struct {
 	// Fail is the number of run blocks that failed.
 	Fail int
 
+	// Error is the number of run blocks that errored.
+	Error int
+
 	// Skip is the number of run blocks that were skipped.
 	Skip int
 
+	// Files contains per-test-file results in execution order.
+	Files []TerraformTestFile
+
 	// Runs contains the per-run results in execution order.
 	Runs []TerraformTestRun
+
+	// CleanupFailures contains resources Terraform could not destroy after tests.
+	CleanupFailures []TerraformTestCleanupFailure
+}
+
+// TerraformTestFile represents the result of a single `.tftest.hcl` file.
+type TerraformTestFile struct {
+	// Path is the test file path.
+	Path string
+
+	// Status is the file outcome: "pass", "fail", "error", or "skip".
+	Status string
+
+	// Pass is the number of run blocks in this file that passed.
+	Pass int
+
+	// Fail is the number of run blocks in this file that failed.
+	Fail int
+
+	// Error is the number of run blocks in this file that errored.
+	Error int
+
+	// Skip is the number of run blocks in this file that were skipped.
+	Skip int
+}
+
+// TerraformTestCleanupFailure represents resources left behind after a test run.
+type TerraformTestCleanupFailure struct {
+	// File is the test file path.
+	File string
+
+	// Run is the run block associated with the cleanup failure.
+	Run string
+
+	// Resources contains Terraform resource instance addresses that need cleanup.
+	Resources []string
 }
 
 // TerraformTestRun represents the result of a single `terraform test` run block.

@@ -174,6 +174,67 @@ func TestPrintAndWriteVarFiles_WriteActualFile(t *testing.T) {
 	assert.FileExists(t, expectedVarfilePath)
 }
 
+func TestPrintAndWriteVarFiles_WritesTerraformTestVarfile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.BasePath = tmpDir
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:    "test",
+		ContextPrefix: "ctx",
+		Component:     "mycomp",
+		ComponentVarsSection: map[string]any{
+			"name": "app",
+		},
+		ComponentSection: map[string]any{
+			cfg.TestSectionName: map[string]any{
+				cfg.VarsSectionName: map[string]any{
+					"fixture_vpc_id":       "vpc-123",
+					"expected_bucket_name": "app-test",
+				},
+			},
+		},
+	}
+	expectedVarfilePath := constructTerraformComponentTestVarfilePath(&atmosConfig, &info)
+	require.NoError(t, os.MkdirAll(filepath.Dir(expectedVarfilePath), 0o755))
+
+	err := printAndWriteVarFiles(&atmosConfig, &info)
+
+	require.NoError(t, err)
+	data, err := os.ReadFile(expectedVarfilePath)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"fixture_vpc_id":"vpc-123","expected_bucket_name":"app-test"}`, string(data))
+}
+
+func TestPrintAndWriteVarFiles_IgnoresTerraformTestVarsForNonTestCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.BasePath = tmpDir
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:    "plan",
+		ContextPrefix: "ctx",
+		Component:     "mycomp",
+		ComponentVarsSection: map[string]any{
+			"name": "app",
+		},
+		ComponentSection: map[string]any{
+			cfg.TestSectionName: map[string]any{
+				cfg.VarsSectionName: map[string]any{
+					"fixture_vpc_id": "vpc-123",
+				},
+			},
+		},
+	}
+	expectedVarfilePath := constructTerraformComponentTestVarfilePath(&atmosConfig, &info)
+	require.NoError(t, os.MkdirAll(filepath.Dir(expectedVarfilePath), 0o755))
+
+	err := printAndWriteVarFiles(&atmosConfig, &info)
+
+	require.NoError(t, err)
+	assert.NoFileExists(t, expectedVarfilePath)
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // validateTerraformComponent
 // ──────────────────────────────────────────────────────────────────────────────

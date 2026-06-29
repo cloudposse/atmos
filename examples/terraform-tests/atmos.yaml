@@ -58,13 +58,13 @@ ci:
 # Custom CLI commands.
 commands:
   - name: "test"
-    description: "Run the Terraform tests for the app component against the local AWS emulator"
+    description: "Run the Terraform tests for the app component against fixture infrastructure in the local AWS emulator"
     # The emulator lifecycle is declarative: component hooks on
-    # before/after.terraform.test bring the sandbox up and down (see
-    # stacks/catalog/app.yaml), so this command is just validate + test.
+    # before/after.terraform.test bring the sandbox and fixture VPC up and down
+    # (see stacks/catalog/app.yaml), so this command is just validate + test.
     steps:
       - atmos validate stacks
-      - atmos terraform test app -s local
+      - atmos terraform test app -s fixtures
 
   - name: "terraform"
     commands:

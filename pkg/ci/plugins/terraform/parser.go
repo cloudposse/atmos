@@ -658,13 +658,22 @@ func isJSONStream(output string) bool {
 
 // testJSONEvent is the envelope shared by all `terraform test -json` messages.
 type testJSONEvent struct {
-	Level    string          `json:"@level"`
-	Type     string          `json:"type"`
-	TestFile string          `json:"@testfile"`
-	TestRun  string          `json:"@testrun"`
-	TestRunP json.RawMessage `json:"test_run"`
-	Summary  json.RawMessage `json:"test_summary"`
-	Diag     json.RawMessage `json:"diagnostic"`
+	Level     string          `json:"@level"`
+	Type      string          `json:"type"`
+	TestFile  string          `json:"@testfile"`
+	TestRun   string          `json:"@testrun"`
+	TestFileP json.RawMessage `json:"test_file"`
+	TestRunP  json.RawMessage `json:"test_run"`
+	Summary   json.RawMessage `json:"test_summary"`
+	Diag      json.RawMessage `json:"diagnostic"`
+	Cleanup   json.RawMessage `json:"test_cleanup"`
+}
+
+// testJSONFile is the `test_file` payload.
+type testJSONFile struct {
+	Path     string `json:"path"`
+	Progress string `json:"progress"`
+	Status   string `json:"status"`
 }
 
 // testJSONRun is the `test_run` payload.
@@ -695,6 +704,13 @@ type testJSONDiag struct {
 			Line int `json:"line"`
 		} `json:"start"`
 	} `json:"range"`
+}
+
+// testJSONCleanup is the `test_cleanup` payload.
+type testJSONCleanup struct {
+	FailedResources []struct {
+		Instance string `json:"instance"`
+	} `json:"failed_resources"`
 }
 
 // testRunKey identifies a run by its file + name (used to attach diagnostics).
@@ -738,9 +754,17 @@ func ParseTestJSON(stream []byte) *plugin.OutputResult {
 		switch ev.Type {
 		case "diagnostic":
 			recordDiagnostic(&ev, diagByRun)
+		case "test_file":
+			if file, ok := completedTestFile(&ev); ok {
+				upsertTestFile(data, file)
+			}
 		case "test_run":
 			if run, ok := completedTestRun(&ev, diagByRun); ok {
 				data.Runs = append(data.Runs, run)
+			}
+		case "test_cleanup":
+			if cleanup, ok := parseTestCleanup(&ev); ok {
+				data.CleanupFailures = append(data.CleanupFailures, cleanup)
 			}
 		case "test_summary":
 			if s := parseTestSummary(&ev); s != nil {
@@ -751,6 +775,33 @@ func ParseTestJSON(stream []byte) *plugin.OutputResult {
 
 	finalizeTestJSON(data, result, summary)
 	return result
+}
+
+// completedTestFile decodes a test_file event and returns it only when the file
+// has completed. Counts are derived from completed run events later.
+func completedTestFile(ev *testJSONEvent) (plugin.TerraformTestFile, bool) {
+	var tf testJSONFile
+	_ = json.Unmarshal(ev.TestFileP, &tf)
+	if tf.Progress != "complete" {
+		return plugin.TerraformTestFile{}, false
+	}
+	path := firstNonEmpty(tf.Path, ev.TestFile)
+	if path == "" {
+		return plugin.TerraformTestFile{}, false
+	}
+	return plugin.TerraformTestFile{Path: path, Status: tf.Status}, true
+}
+
+// upsertTestFile records a completed file once, preserving the first-seen order
+// while allowing a later complete event to refresh status.
+func upsertTestFile(data *plugin.TerraformTestOutputData, file plugin.TerraformTestFile) {
+	for i := range data.Files {
+		if data.Files[i].Path == file.Path {
+			data.Files[i].Status = file.Status
+			return
+		}
+	}
+	data.Files = append(data.Files, file)
 }
 
 // recordDiagnostic remembers the first error diagnostic for a run keyed by
@@ -787,6 +838,26 @@ func parseTestSummary(ev *testJSONEvent) *testJSONSummary {
 	return nil
 }
 
+// parseTestCleanup decodes resources Terraform could not destroy after a test
+// file completed. Empty cleanup messages are ignored.
+func parseTestCleanup(ev *testJSONEvent) (plugin.TerraformTestCleanupFailure, bool) {
+	var c testJSONCleanup
+	_ = json.Unmarshal(ev.Cleanup, &c)
+	if len(c.FailedResources) == 0 {
+		return plugin.TerraformTestCleanupFailure{}, false
+	}
+	resources := make([]string, 0, len(c.FailedResources))
+	for _, r := range c.FailedResources {
+		if r.Instance != "" {
+			resources = append(resources, r.Instance)
+		}
+	}
+	if len(resources) == 0 {
+		return plugin.TerraformTestCleanupFailure{}, false
+	}
+	return plugin.TerraformTestCleanupFailure{File: ev.TestFile, Run: ev.TestRun, Resources: resources}, true
+}
+
 // buildTestRun assembles one run from its complete event, attaching any pending
 // diagnostic (file/line/message) recorded earlier in the stream.
 func buildTestRun(ev *testJSONEvent, tr testJSONRun, diagByRun map[testRunKey]pendingDiag) plugin.TerraformTestRun {
@@ -820,8 +891,10 @@ func finalizeTestJSON(data *plugin.TerraformTestOutputData, result *plugin.Outpu
 			data.Pass++
 		case "skip":
 			data.Skip++
-		case "fail", "error":
+		case "fail":
 			data.Fail++
+		case "error":
+			data.Error++
 		}
 		if r.Error != "" {
 			result.Errors = append(result.Errors, r.Error)
@@ -829,14 +902,66 @@ func finalizeTestJSON(data *plugin.TerraformTestOutputData, result *plugin.Outpu
 	}
 	if summary != nil {
 		data.Pass = summary.Passed
-		data.Fail = summary.Failed + summary.Errored
+		data.Fail = summary.Failed
+		data.Error = summary.Errored
 		data.Skip = summary.Skipped
 		if data.Total == 0 {
 			data.Total = summary.Passed + summary.Failed + summary.Errored + summary.Skipped
 		}
 	}
-	if data.Fail > 0 || len(result.Errors) > 0 {
+	populateTestFileCounts(data)
+	if data.Fail > 0 || data.Error > 0 || len(result.Errors) > 0 || len(data.CleanupFailures) > 0 {
 		result.HasErrors = true
+	}
+}
+
+// populateTestFileCounts derives file-level counts from completed run events.
+// It also creates file entries for runs when Terraform omitted test_file events.
+func populateTestFileCounts(data *plugin.TerraformTestOutputData) {
+	index := make(map[string]int, len(data.Files))
+	for i := range data.Files {
+		index[data.Files[i].Path] = i
+		data.Files[i].Pass = 0
+		data.Files[i].Fail = 0
+		data.Files[i].Error = 0
+		data.Files[i].Skip = 0
+	}
+	for _, run := range data.Runs {
+		if run.File == "" {
+			continue
+		}
+		i, ok := index[run.File]
+		if !ok {
+			data.Files = append(data.Files, plugin.TerraformTestFile{Path: run.File})
+			i = len(data.Files) - 1
+			index[run.File] = i
+		}
+		switch run.Status {
+		case "pass":
+			data.Files[i].Pass++
+		case "fail":
+			data.Files[i].Fail++
+		case "error":
+			data.Files[i].Error++
+		case "skip":
+			data.Files[i].Skip++
+		}
+		if data.Files[i].Status == "" {
+			data.Files[i].Status = fileStatusFromCounts(data.Files[i])
+		}
+	}
+}
+
+func fileStatusFromCounts(file plugin.TerraformTestFile) string {
+	switch {
+	case file.Error > 0:
+		return "error"
+	case file.Fail > 0:
+		return "fail"
+	case file.Skip > 0 && file.Pass == 0:
+		return "skip"
+	default:
+		return "pass"
 	}
 }
 
@@ -885,10 +1010,14 @@ func RenderTestText(jsonStream []byte) string {
 		}
 	}
 	headline := "Success!"
-	if data.Fail > 0 {
+	if data.Fail > 0 || data.Error > 0 || len(data.CleanupFailures) > 0 {
 		headline = "Failure!"
 	}
-	fmt.Fprintf(&b, "%s %d passed, %d failed, %d skipped.\n", headline, data.Pass, data.Fail, data.Skip)
+	if data.Error > 0 {
+		fmt.Fprintf(&b, "%s %d passed, %d failed, %d errored, %d skipped.\n", headline, data.Pass, data.Fail, data.Error, data.Skip)
+	} else {
+		fmt.Fprintf(&b, "%s %d passed, %d failed, %d skipped.\n", headline, data.Pass, data.Fail, data.Skip)
+	}
 	return b.String()
 }
 

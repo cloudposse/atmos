@@ -105,6 +105,7 @@ func TestPlugin_GetOutputVariables_Test(t *testing.T) {
 	assert.Equal(t, "2", vars["tests_total"])
 	assert.Equal(t, "1", vars["tests_passed"])
 	assert.Equal(t, "1", vars["tests_failed"])
+	assert.Equal(t, "0", vars["tests_errored"])
 	assert.Equal(t, "false", vars["success"])
 }
 

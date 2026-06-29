@@ -458,6 +458,16 @@
             "vars": {
               "$ref": "#/definitions/vars"
             },
+            "test": {
+              "type": "object",
+              "description": "Terraform test configuration. `vars` are passed only to `terraform test` as test-scope variables.",
+              "additionalProperties": false,
+              "properties": {
+                "vars": {
+                  "$ref": "#/definitions/vars"
+                }
+              }
+            },
             "env": {
               "$ref": "#/definitions/env"
             },

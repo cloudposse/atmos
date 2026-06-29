@@ -40,38 +40,53 @@ endpoint, dummy credentials, path-style S3, skip-flags — into **every** Terraf
 `terraform test`. Your component code doesn't change between local and real cloud:
 
 ```shell
-atmos terraform test app -s local
+atmos terraform test app -s fixtures
 ```
 
-That's it. The `apply` run blocks create the bucket and table in the emulator, the assertions run against
-them, and everything is torn down — no AWS account, no credentials, no `providers.tf`.
+That's it. The component hook starts the emulator, applies the fixture VPC, the `apply` run blocks create
+the app resources against that VPC, and everything is torn down — no AWS account, no credentials, no
+`providers.tf`.
 
-## Lifecycle Hooks Bring the Sandbox Up and Down
+## Lifecycle Hooks Bring Fixtures Up and Down
 
-You don't even start the emulator yourself. The component declares two lifecycle hooks using the new
-`emulator` step type, bound to the new `before.terraform.test` and `after.terraform.test` events:
+You don't even start the emulator or provision fixtures yourself. The component declares ordered lifecycle
+hooks using `kind: steps`, bound to the new `before.terraform.test` and `after.terraform.test` events:
 
 ```yaml
 components:
   terraform:
     app:
       hooks:
-        start-emulator:
-          kind: step
-          type: emulator
+        test-fixtures-up:
+          kind: steps
+          on_failure: fail
           events: [before.terraform.test]
-          with: { component: aws, action: up }
-        stop-emulator:
-          kind: step
-          type: emulator
+          with:
+            - type: emulator
+              component: aws
+              action: up
+            - type: atmos
+              command: terraform apply vpc -s fixtures -auto-approve
+
+        test-fixtures-down:
+          kind: steps
           events: [after.terraform.test]
-          when: always                       # tear down even if a test fails
-          with: { component: aws, action: down }
+          when: always
+          with:
+            - type: atmos
+              command: terraform destroy vpc -s fixtures -auto-approve
+            - type: emulator
+              component: aws
+              action: down
 ```
 
-`atmos terraform test` fires these hooks around the run: the emulator comes up before the tests and is
-torn down after — and `when: always` guarantees teardown even when a test fails. The `emulator` step
-composes anywhere steps run, so you can use it in workflows and custom commands too.
+`atmos terraform test` fires these hooks around the run: the emulator comes up, the fixture VPC is applied,
+the app test uses that VPC, and `when: always` guarantees teardown even when a test fails. The app component
+owns its test fixture lifecycle without scripts or a custom command wrapper.
+
+When a test needs fixture outputs, define them under the component's `test.vars`. Atmos resolves those
+values after the setup hook, so `test.vars` can use `!terraform.state` to read the fixture VPC ID and pass
+it into `.tftest.hcl` as a declared Terraform test variable.
 
 ## In CI: Test Summaries
 

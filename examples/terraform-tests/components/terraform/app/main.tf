@@ -4,12 +4,20 @@
 # emulator endpoint) automatically, so the same code runs against the local
 # emulator and against real AWS unchanged.
 
+data "aws_vpc" "fixture" {
+  filter {
+    name   = "tag:Name"
+    values = [var.fixture_vpc_name]
+  }
+}
+
 resource "aws_s3_bucket" "this" {
   bucket = "${var.name}-${var.environment}"
 
   tags = {
     Environment = var.environment
     ManagedBy   = "atmos"
+    VpcId       = data.aws_vpc.fixture.id
   }
 }
 
@@ -33,5 +41,6 @@ resource "aws_dynamodb_table" "this" {
 
   tags = {
     Environment = var.environment
+    VpcId       = data.aws_vpc.fixture.id
   }
 }

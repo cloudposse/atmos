@@ -2,31 +2,47 @@
 
 components:
   terraform:
+    vpc:
+      metadata:
+        type: abstract
+        component: vpc
+      vars:
+        name: atmos-fixture-vpc
+        cidr_block: 10.99.0.0/16
+
     app:
       metadata:
         type: abstract
         component: app
-      # Declarative emulator lifecycle: these `kind: step` hooks use the
-      # `emulator` step type to bring the local AWS sandbox up before the
-      # Terraform tests run and tear it down after — even if a test fails
-      # (when: always). No manual `atmos emulator up/down`.
+      # Declarative fixture lifecycle: the app component owns the test fixture
+      # it needs. The ordered `kind: steps` hooks bring the emulator up, apply
+      # the VPC fixture, and tear both down after the Terraform tests.
       hooks:
-        start-emulator:
-          kind: step
-          type: emulator
+        test-fixtures-up:
+          kind: steps
+          on_failure: fail
           events:
             - before.terraform.test
           with:
-            component: aws
-            action: up
-        stop-emulator:
-          kind: step
-          type: emulator
+            - type: emulator
+              component: aws
+              action: up
+
+            - type: atmos
+              command: terraform apply vpc -s fixtures -auto-approve
+
+        test-fixtures-down:
+          kind: steps
           events:
             - after.terraform.test
           when: always
           with:
-            component: aws
-            action: down
+            - type: atmos
+              command: terraform destroy vpc -s fixtures -auto-approve
+
+            - type: emulator
+              component: aws
+              action: down
       vars:
         name: atmos-demo
+        fixture_vpc_name: atmos-fixture-vpc

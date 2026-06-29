@@ -460,6 +460,51 @@ restrict them. Whether an interactive step makes sense on a (usually
 headless / CI) lifecycle event is the step's responsibility, not the
 hook's.
 
+### `kind: steps` (run ordered steps)
+
+Runs an ordered list of registered workflow/custom-command step types on one
+lifecycle event. Use this when a lifecycle needs sequencing but should still
+stay local to the component being operated on — for example, start an emulator,
+apply a fixture component, run the test, then destroy the fixture and stop the
+emulator.
+
+`kind: steps` uses the same hook envelope as every other hook (`events`, `when`,
+`on_failure`, `retry`, `env`). The ordered payload lives under `with:`, the same
+conventional payload key used by `kind: step`.
+
+```yaml
+hooks:
+  test-fixtures-up:
+    events: [before.terraform.test]
+    kind: steps
+    on_failure: fail
+    with:
+      - type: emulator
+        component: aws
+        stack: fixtures
+        action: up
+
+      - type: atmos
+        command: terraform apply vpc -s fixtures -auto-approve
+
+  test-fixtures-down:
+    events: [after.terraform.test]
+    when: always
+    kind: steps
+    with:
+      - type: atmos
+        command: terraform destroy vpc -s fixtures -auto-approve
+
+      - type: emulator
+        component: aws
+        stack: fixtures
+        action: down
+```
+
+Steps run in list order. A failing step stops the list and the hook's
+`on_failure` policy decides whether the Terraform operation fails, warns, or
+continues. A hook-level `retry` retries the whole ordered list.
+
 ### Reacting to success or failure
 
 By default an `after-*` hook runs **only when the operation succeeds** — a
@@ -847,16 +892,16 @@ Stores](/stacks/sharing-state/stores).
   <dd>List of [lifecycle events](#supported-lifecycle-events) that trigger this hook.</dd>
 
   <dt>`hooks.<name>.kind`</dt>
-  <dd>Which engine runs the hook. One of `store`, `command`, `git`, `step`, `infracost`, `checkov`, `trivy`, `kics`. Aliased from legacy `command:` field.</dd>
+  <dd>Which engine runs the hook. One of `store`, `command`, `git`, `step`, `steps`, `infracost`, `checkov`, `trivy`, `kics`. Aliased from legacy `command:` field.</dd>
 
   <dt>`hooks.<name>.type`</dt>
   <dd>For `kind: step`: the [step type](#kind-step-run-a-step-type) to run (e.g. `container`, `http`, `toast`, `log`).</dd>
 
   <dt>`hooks.<name>.with`</dt>
-  <dd>For `kind: step`: the step's own parameters. Rendered with the hook template context and YAML functions, then validated by the step at run time.</dd>
+  <dd>For `kind: step`: the step's own parameters. For `kind: steps`: the ordered list of steps. Rendered with the hook template context and YAML functions, then validated by the step engine at run time.</dd>
 
   <dt>`hooks.<name>.retry`</dt>
-  <dd>For `kind: step`: retry policy wrapping the step execution. Same schema as a workflow step's `retry`.</dd>
+  <dd>For `kind: step`: retry policy wrapping the step execution. For `kind: steps`: retry policy wrapping the whole ordered list. Same schema as a workflow step's `retry`.</dd>
 
   <dt>`hooks.<name>.command`</dt>
   <dd>For `kind: command`: the binary to execute (resolved via the toolchain or PATH). Named kinds default this.</dd>

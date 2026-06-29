@@ -611,6 +611,7 @@ func TestOnAfterTest_WritesOutputs(t *testing.T) {
 	assert.Equal(t, "2", mp.writer.outputs["tests_total"])
 	assert.Equal(t, "2", mp.writer.outputs["tests_passed"])
 	assert.Equal(t, "0", mp.writer.outputs["tests_failed"])
+	assert.Equal(t, "0", mp.writer.outputs["tests_errored"])
 	assert.Equal(t, "true", mp.writer.outputs["success"])
 }
 
@@ -646,6 +647,7 @@ func TestOnAfterTest_FailureSetsErrorOutputs(t *testing.T) {
 	assert.Equal(t, "false", mp.writer.outputs["success"])
 	assert.Equal(t, "true", mp.writer.outputs["has_errors"])
 	assert.Equal(t, "1", mp.writer.outputs["tests_failed"])
+	assert.Equal(t, "0", mp.writer.outputs["tests_errored"])
 }
 
 func TestOnAfterTest_RendersPassingSummary(t *testing.T) {
@@ -798,14 +800,19 @@ func TestOnAfterTest_EmitsJUnitAndAnnotations(t *testing.T) {
 	assert.Contains(t, string(body), `<testsuite name="tests/app.tftest.hcl"`)
 	assert.Contains(t, string(body), `<failure message="Test assertion failed: bucket not created"`)
 
-	// One annotation for the single failing run, with file:line.
+	// One annotation per failing/errored run, with file:line.
 	require.Len(t, mp.annotateCalls, 1)
-	require.Len(t, mp.annotateCalls[0], 1)
+	require.Len(t, mp.annotateCalls[0], 2)
 	ann := mp.annotateCalls[0][0]
 	assert.Equal(t, "tests/app.tftest.hcl", ann.Path)
 	assert.Equal(t, 30, ann.StartLine)
 	assert.Equal(t, provider.AnnotationError, ann.Level)
 	assert.Contains(t, ann.Message, "bucket not created")
+	ann = mp.annotateCalls[0][1]
+	assert.Equal(t, "tests/extra.tftest.hcl", ann.Path)
+	assert.Equal(t, 12, ann.StartLine)
+	assert.Equal(t, provider.AnnotationError, ann.Level)
+	assert.Contains(t, ann.Message, "could not create role")
 }
 
 func TestOnAfterApply_BothSummaryAndOutputDisabled(t *testing.T) {

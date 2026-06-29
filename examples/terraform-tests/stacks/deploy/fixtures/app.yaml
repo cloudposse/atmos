@@ -5,12 +5,19 @@ import:
   - catalog/app
 
 vars:
-  stage: local
+  stage: fixtures
 
 components:
   terraform:
+    vpc:
+      metadata:
+        type: real
     app:
       metadata:
         type: real
       vars:
-        environment: local
+        environment: fixtures
+      test:
+        vars:
+          expected_bucket_name: atmos-demo-test
+          fixture_vpc_id: !terraform.state vpc fixtures vpc_id

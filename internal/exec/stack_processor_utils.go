@@ -2047,6 +2047,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentLocals map[string]any
 	var baseComponentProviders map[string]any
 	var baseComponentHooks map[string]any
+	var baseComponentTest map[string]any
 	var baseComponentGenerate map[string]any
 	var baseComponentCommand string
 	var baseComponentBackendType string
@@ -2238,6 +2239,13 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		if baseComponentTestSection, baseComponentTestSectionExist := baseComponentMap[cfg.TestSectionName]; baseComponentTestSectionExist {
+			baseComponentTest, ok = baseComponentTestSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.test' in the stack '%s'", errUtils.ErrInvalidConfig, baseComponent, stack)
+			}
+		}
+
 		if baseComponentGenerateSection, baseComponentGenerateSectionExist := baseComponentMap[cfg.GenerateSectionName]; baseComponentGenerateSectionExist {
 			baseComponentGenerate, ok = baseComponentGenerateSection.(map[string]any)
 			if !ok {
@@ -2426,6 +2434,13 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentHooks = merged
+
+		// Base component `test`
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentTest, baseComponentTest})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentTest = merged
 
 		// Base component `generate`
 		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentGenerate, baseComponentGenerate})

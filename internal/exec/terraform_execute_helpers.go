@@ -289,6 +289,9 @@ func printAndWriteVarFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 	if err := logAndWriteComponentVars(atmosConfig, info); err != nil {
 		return err
 	}
+	if err := writeTerraformTestVars(atmosConfig, info); err != nil {
+		return err
+	}
 
 	return logCliVarsOverrides(atmosConfig, info)
 }
@@ -343,6 +346,46 @@ func secretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
 	return tfvars.SecretEnv(secret)
 }
 
+func terraformTestVars(info *schema.ConfigAndStacksInfo) map[string]any {
+	if info == nil || info.SubCommand != "test" {
+		return nil
+	}
+	testSection, ok := info.ComponentSection[cfg.TestSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+	vars, ok := testSection[cfg.VarsSectionName].(map[string]any)
+	if !ok || len(vars) == 0 {
+		return nil
+	}
+	return vars
+}
+
+func hasTerraformTestVars(info *schema.ConfigAndStacksInfo) bool {
+	return len(terraformTestVars(info)) > 0
+}
+
+func diskSafeTerraformTestVars(info *schema.ConfigAndStacksInfo) map[string]any {
+	vars := terraformTestVars(info)
+	if len(vars) == 0 {
+		return nil
+	}
+	safe, _ := tfvars.Partition(vars, atmosio.ContainsSecret)
+	return safe
+}
+
+func terraformTestSecretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
+	vars := terraformTestVars(info)
+	if len(vars) == 0 {
+		return nil, nil
+	}
+	_, secret := tfvars.Partition(vars, atmosio.ContainsSecret)
+	if len(secret) == 0 {
+		return nil, nil
+	}
+	return tfvars.SecretEnv(secret)
+}
+
 // logAndWriteComponentVars logs component variables and writes the varfile to disk
 // when not using a pre-existing plan. Secret-bearing variables are excluded from the
 // varfile (they are injected as TF_VAR_<name> env vars in assembleComponentEnvVars).
@@ -364,6 +407,18 @@ func logAndWriteComponentVars(atmosConfig *schema.AtmosConfiguration, info *sche
 		}
 	}
 	return nil
+}
+
+func writeTerraformTestVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if !hasTerraformTestVars(info) {
+		return nil
+	}
+	varFilePath := constructTerraformComponentTestVarfilePath(atmosConfig, info)
+	log.Debug("Writing Terraform test variables", "file", varFilePath)
+	if info.DryRun {
+		return nil
+	}
+	return u.WriteToFileAsJSON(varFilePath, diskSafeTerraformTestVars(info), filePermissions)
 }
 
 // logCliVarsOverrides logs CLI variable overrides when present at debug/trace level.
@@ -519,6 +574,15 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 	if len(secretEnv) > 0 {
 		info.ComponentEnvList = append(info.ComponentEnvList, secretEnv...)
 		log.Debug("Injecting secret variables as TF_VAR_* environment variables", "count", len(secretEnv))
+	}
+
+	testSecretEnv, err := terraformTestSecretVarEnv(info)
+	if err != nil {
+		return err
+	}
+	if len(testSecretEnv) > 0 {
+		info.ComponentEnvList = append(info.ComponentEnvList, testSecretEnv...)
+		log.Debug("Injecting secret Terraform test variables as TF_VAR_* environment variables", "count", len(testSecretEnv))
 	}
 
 	return nil

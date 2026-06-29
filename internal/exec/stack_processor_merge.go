@@ -245,6 +245,26 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
+	// Terraform-specific: merge test configuration.
+	var finalComponentTest map[string]any
+	if opts.ComponentType == cfg.TerraformComponentType {
+		var testCtx *m.DeferredMergeContext
+		finalComponentTest, testCtx, err = m.MergeWithDeferred(
+			mergeConfig,
+			[]map[string]any{
+				result.BaseComponentTest,
+				result.ComponentTest,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := m.ApplyDeferredMerges(testCtx, finalComponentTest, mergeConfig, nil); err != nil {
+			return nil, err
+		}
+	}
+
 	// Merge secrets declarations (global stack → base → component → overrides). Available for
 	// all component types; inherits through the stack hierarchy like other sections. The
 	// stack-level (global) `secrets:` block lets providers/declarations be defined once per stack.
@@ -500,6 +520,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.RequiredProvidersSectionName] = finalComponentRequiredProviders
 		comp[cfg.RequiredVersionSectionName] = finalComponentRequiredVersion
 		comp[cfg.HooksSectionName] = finalComponentHooks
+		comp[cfg.TestSectionName] = finalComponentTest
 		comp[cfg.GenerateSectionName] = finalComponentGenerate
 		comp[cfg.BackendTypeSectionName] = finalComponentBackendType
 		comp[cfg.BackendSectionName] = finalComponentBackend

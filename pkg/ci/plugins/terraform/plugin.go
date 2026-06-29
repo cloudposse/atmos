@@ -175,6 +175,7 @@ func (p *Plugin) getOutputVariables(result *plugin.OutputResult, command string)
 			vars["tests_total"] = strconv.Itoa(data.Total)
 			vars["tests_passed"] = strconv.Itoa(data.Pass)
 			vars["tests_failed"] = strconv.Itoa(data.Fail)
+			vars["tests_errored"] = strconv.Itoa(data.Error)
 			vars["tests_skipped"] = strconv.Itoa(data.Skip)
 		}
 	}

@@ -932,6 +932,9 @@ func buildStatusDescription(command string, result *plugin.OutputResult) string 
 	// Terraform test reports pass/fail counts rather than resource changes.
 	if testData, ok := result.Data.(*plugin.TerraformTestOutputData); ok {
 		if result.HasErrors {
+			if testData.Error > 0 {
+				return fmt.Sprintf("%d passed, %d failed, %d errored", testData.Pass, testData.Fail, testData.Error)
+			}
 			return fmt.Sprintf("%d passed, %d failed", testData.Pass, testData.Fail)
 		}
 		return fmt.Sprintf("%d passed", testData.Pass)

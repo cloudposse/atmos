@@ -7,36 +7,57 @@ they usually need a cloud account and spend. Here they run against an
 Atmos starts and stops for you. By default it runs [Floci](https://github.com/floci-io/floci), a free,
 MIT-licensed AWS emulator and a drop-in replacement for LocalStack Community Edition (EOL'd March 2026).
 
-The `app` component provisions an S3 bucket (with versioning) and a DynamoDB table. There is **no
-`providers.tf`**: a single `aws/emulator` identity in `atmos.yaml` binds every component to the emulator,
-and the provider-config contributor injects the AWS provider settings (dummy credentials, path-style S3,
-skip-flags, endpoint) automatically.
+The `fixtures` stack defines two Terraform components:
 
-The emulator lifecycle is **declarative**. The `app` component declares two `kind: step` lifecycle hooks
-(see `stacks/catalog/app.yaml`) that use the `emulator` step type:
+- `vpc` provisions a fixture VPC in the emulator.
+- `app` provisions an S3 bucket (with versioning) and a DynamoDB table, and requires the fixture VPC to
+  already exist. The app component looks the VPC up by tag; it does not create the VPC itself.
+
+There is **no `providers.tf`**: a single `aws/emulator` identity in `atmos.yaml` binds every component to
+the emulator, and the provider-config contributor injects the AWS provider settings (dummy credentials,
+path-style S3, skip-flags, endpoint) automatically.
+
+The fixture lifecycle is **declarative** and owned by the component being tested. The `app` component
+declares two ordered `kind: steps` lifecycle hooks (see `stacks/catalog/app.yaml`):
 
 ```yaml
 hooks:
-  start-emulator:
-    kind: step
-    type: emulator
+  test-fixtures-up:
+    kind: steps
+    on_failure: fail
     events: [before.terraform.test]
-    with: { component: aws, action: up }
-  stop-emulator:
-    kind: step
-    type: emulator
+    with:
+      - type: emulator
+        component: aws
+        action: up
+      - type: atmos
+        command: terraform apply vpc -s fixtures -auto-approve
+
+  test-fixtures-down:
+    kind: steps
     events: [after.terraform.test]
-    when: always                       # tear down even if a test fails
-    with: { component: aws, action: down }
+    when: always
+    with:
+      - type: atmos
+        command: terraform destroy vpc -s fixtures -auto-approve
+      - type: emulator
+        component: aws
+        action: down
 ```
+
+Atmos passes two generated varfiles to native `terraform test`: the normal component varfile for module
+inputs, and a test varfile from `test.vars`. The `fixtures` stack uses `test.vars.fixture_vpc_id` with
+`!terraform.state` so the test can assert against the VPC ID after the hook applies the fixture. Test
+files declare only the test-scope variables they reference, so other test files can ignore those values
+without undeclared-variable warnings.
 
 ## Usage
 
 A container runtime — Docker or Podman — is the only prerequisite. Then a single command runs the tests
-(the hooks bring the emulator up and down around them):
+(the hooks bring the emulator and fixture VPC up and down around them):
 
 ```shell
-atmos terraform test app -s local
+atmos terraform test app -s fixtures
 ```
 
 Or use the bundled custom command, which also validates the stacks first:
