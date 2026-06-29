@@ -50,27 +50,15 @@ jobs:
           make build
           echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
 
-      # helmfile/helm/kubectl for the Kubernetes tape.
-      - name: Install Kubernetes tooling
-        uses: alexellis/arkade-get@master
-        with:
-          helm: latest
-          helmfile: latest
-          kubectl: latest
-
-      # ttyd + fonts only. vhs and ffmpeg are NOT installed here: `atmos demo record`
-      # auto-installs them from the command's `dependencies.tools` (pinned in
-      # demo/landing/atmos.yaml) and prepends them to PATH, so CI and local use the exact
-      # same vhs/ffmpeg with no checked-in .tool-versions. ttyd has no macOS aqua binary,
-      # so it is not a declared dependency and stays a manually-pinned system install.
-      - name: Install ttyd + Nerd Font (vhs/ffmpeg come from the pinned Atmos toolchain)
+      # Fonts only. All CLI tooling comes from the Atmos toolchain: `atmos demo record`
+      # auto-installs vhs/ffmpeg/ttyd from the command's `dependencies.tools` (pinned in
+      # demo/landing/atmos.yaml), and the Kubernetes tape's helm/helmfile/kubectl are
+      # auto-installed by `atmos helmfile` from the k8s example's component dependencies —
+      # so CI and local use the exact same pinned versions with no checked-in .tool-versions.
+      # Fonts are the one thing the toolchain can't provide (aqua ships binaries, not fonts).
+      - name: Install Nerd Font
         run: |
           set -euo pipefail
-          # ttyd (vhs dependency) — pinned.
-          TTYD_VERSION=1.7.7
-          sudo curl -fsSL -o /usr/local/bin/ttyd \
-            "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.x86_64"
-          sudo chmod +x /usr/local/bin/ttyd
           # FiraCode Nerd Font (matches demo/landing/defaults.tape) — pinned.
           NERD_FONTS_VERSION=v3.4.0
           mkdir -p ~/.local/share/fonts
@@ -78,6 +66,17 @@ jobs:
             "https://github.com/ryanoasis/nerd-fonts/releases/download/${NERD_FONTS_VERSION}/FiraCode.zip"
           unzip -o /tmp/FiraCode.zip -d ~/.local/share/fonts >/dev/null
           fc-cache -f
+
+      # The tapes run `atmos terraform …` against the emulators, so install the
+      # toolchain-pinned terraform up front. Unlike `atmos helmfile` (which auto-installs
+      # helm/helmfile) and `atmos demo record` (vhs/ffmpeg/ttyd), `atmos terraform`
+      # expects terraform already on PATH — without it, `atmos terraform init` in dx.tape
+      # HANGS forever under VHS's interactive TTY (it fast-fails "executable not found"
+      # non-interactively), so the demos never render. Confirmed via landing-demos-debug.
+      - name: Install Terraform via Atmos toolchain
+        run: |
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain env --format=github
 
       - name: Record all demos
         working-directory: demo/landing
@@ -94,17 +93,16 @@ jobs:
       # Publish the rendered demos to the same origin bucket the docs site is served
       # from, under the /img/demos path the site references (website/static/img/demos/
       # → /img/demos/). Reuses the existing prod docs OIDC role — no separate bucket,
-      # role, or secret. These steps run whenever the job runs, i.e. on the
-      # `landing-demos` PR label AND on manual dispatch (see the job-level `if`).
-      # The site deploy excludes img/demos/* from its --delete sync, so the videos
-      # published here survive subsequent website deploys.
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ env.IAM_ROLE_ARN }}
-          role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
-
+      # role, or secret. Runs whenever the job runs, i.e. on the `landing-demos` PR label
+      # AND on manual dispatch (see the job-level `if`). The site deploy excludes
+      # img/demos/* from its --delete sync, so the videos published here survive
+      # subsequent website deploys.
+      #
+      # AWS auth is handled by Atmos, not aws-actions/configure-aws-credentials: the
+      # `demo publish` command declares `identity: docs/publish` (a github/oidc →
+      # aws/assume-role identity in demo/landing/atmos.yaml), which reads IAM_ROLE_ARN /
+      # AWS_REGION / IAM_ROLE_SESSION_NAME below via `!env`. Atmos assumes the role and
+      # injects the credentials into the publish step — no separate credentials step.
       - name: Publish demos to S3
         working-directory: demo/landing
         env:
