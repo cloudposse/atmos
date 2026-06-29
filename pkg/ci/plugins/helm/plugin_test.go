@@ -159,12 +159,15 @@ func (f fakeProvider) Context() (*provider.Context, error) { return &provider.Co
 func (f fakeProvider) GetStatus(context.Context, provider.StatusOptions) (*provider.Status, error) {
 	return nil, nil
 }
+
 func (f fakeProvider) CreateCheckRun(context.Context, *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
 	return nil, nil
 }
+
 func (f fakeProvider) UpdateCheckRun(context.Context, *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	return nil, nil
 }
+
 func (f fakeProvider) PostComment(context.Context, *provider.PostCommentOptions) (*provider.Comment, error) {
 	return nil, nil
 }
