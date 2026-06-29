@@ -55,3 +55,33 @@ func TestRenderPathRowsStructuredFormatsIncludeValue(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderPathRowsWithPattern(t *testing.T) {
+	rows := []PathRow{
+		{File: "atmos.yaml", Path: "commands[0].name", Type: "string", Value: "check"},
+		{File: "atmos.yaml", Path: "toolchain.aliases.gofumpt", Type: "string", Value: "gofumpt"},
+		{File: "atmos.yaml", Path: "toolchain.registries[0].name", Type: "string", Value: "aqua"},
+	}
+
+	output, err := RenderPathRowsWithPattern(rows, "paths", "", "toolchain.*")
+	require.NoError(t, err)
+	require.Equal(t, `atmos.yaml
+  toolchain.aliases.gofumpt
+  toolchain.registries[0].name
+`, output)
+}
+
+func TestRenderPathRowsWithPatternMatchesArrayIndexes(t *testing.T) {
+	rows := []PathRow{
+		{File: "vendor.yaml", Path: "spec.sources[0].component", Type: "string", Value: "vpc"},
+		{File: "vendor.yaml", Path: "spec.sources[0].version", Type: "string", Value: "v1.0.0"},
+		{File: "vendor.yaml", Path: "spec.sources[1].version", Type: "string", Value: "v2.0.0"},
+	}
+
+	output, err := RenderPathRowsWithPattern(rows, "paths", "", "spec.sources[*].version")
+	require.NoError(t, err)
+	require.Equal(t, `vendor.yaml
+  spec.sources[0].version
+  spec.sources[1].version
+`, output)
+}

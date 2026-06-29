@@ -94,10 +94,10 @@ var vendorConfigDeleteCmd = &cobra.Command{
 }
 
 var vendorConfigListCmd = &cobra.Command{
-	Use:     "list",
+	Use:     "list [path-pattern]",
 	Short:   "List raw vendor manifest setting paths",
-	Example: "atmos vendor config list\natmos vendor config list --format json",
-	Args:    cobra.NoArgs,
+	Example: "atmos vendor config list\natmos vendor config list 'spec.sources[*].version'\natmos vendor config list --format json",
+	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "vendor.config.listRunE")()
 
@@ -109,12 +109,19 @@ var vendorConfigListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		output, err := listpkg.RenderPathRows(rows, vendorConfigFormat, vendorConfigDelimiter)
+		output, err := listpkg.RenderPathRowsWithPattern(rows, vendorConfigFormat, vendorConfigDelimiter, vendorPathPatternArg(args))
 		if err != nil {
 			return err
 		}
 		return data.Write(output)
 	},
+}
+
+func vendorPathPatternArg(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	return args[0]
 }
 
 func init() {
