@@ -1253,6 +1253,53 @@ func TestStore_List(t *testing.T) {
 		assert.Equal(t, "stack2/comp2/sha2.tfplan", files[1].Name)
 	})
 
+	t.Run("retries transient server error", func(t *testing.T) {
+		oldDelay := listArtifactsRetryBaseDelay
+		listArtifactsRetryBaseDelay = time.Nanosecond
+		defer func() { listArtifactsRetryBaseDelay = oldDelay }()
+
+		now := time.Now()
+		callCount := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			callCount++
+			if callCount == 1 {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"message":"temporary server error"}`))
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			response := map[string]any{
+				"total_count": 1,
+				"artifacts": []map[string]any{
+					{
+						"id":            1,
+						"name":          "planfile-stack1--comp1--sha1.tfplan",
+						"size_in_bytes": 100,
+						"created_at":    now.Format(time.RFC3339),
+					},
+				},
+			}
+			respBytes, _ := json.Marshal(response)
+			_, _ = w.Write(respBytes)
+		}))
+		defer server.Close()
+
+		store := &Store{
+			httpClient: server.Client(),
+			baseURL:    server.URL,
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
+		}
+
+		files, err := store.List(context.Background(), artifact.Query{All: true})
+		require.NoError(t, err)
+		require.Len(t, files, 1)
+		assert.Equal(t, "stack1/comp1/sha1.tfplan", files[0].Name)
+		assert.Equal(t, 2, callCount)
+	})
+
 	t.Run("with prefix filter", func(t *testing.T) {
 		now := time.Now()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

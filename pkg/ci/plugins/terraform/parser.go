@@ -25,6 +25,19 @@ const testJSONMaxLine = 4 * 1024 * 1024
 // `test -json` stream) to the seconds used by JUnit `time` attributes.
 const millisecondsPerSecond = 1000.0
 
+const (
+	testEventDiagnostic = "diagnostic"
+	testEventFile       = "test_file"
+	testEventRun        = "test_run"
+	testEventCleanup    = "test_cleanup"
+	testEventSummary    = "test_summary"
+
+	testStatusPass  = "pass"
+	testStatusFail  = "fail"
+	testStatusError = "error"
+	testStatusSkip  = "skip"
+)
+
 // Regular expressions for parsing terraform stdout (errors/warnings only).
 // These are compiled at package initialization and are safe for concurrent use
 // as regexp.Regexp is immutable after compilation.
@@ -606,11 +619,11 @@ func ParseTestOutput(output string) *plugin.OutputResult {
 	for _, match := range testRunRe.FindAllStringSubmatch(output, -1) {
 		run := plugin.TerraformTestRun{Name: match[1], Status: match[2]}
 		switch match[2] {
-		case "pass":
+		case testStatusPass:
 			data.Pass++
-		case "fail":
+		case testStatusFail:
 			data.Fail++
-		case "skip":
+		case testStatusSkip:
 			data.Skip++
 		}
 		data.Runs = append(data.Runs, run)
@@ -751,30 +764,39 @@ func ParseTestJSON(stream []byte) *plugin.OutputResult {
 			continue
 		}
 
-		switch ev.Type {
-		case "diagnostic":
-			recordDiagnostic(&ev, diagByRun)
-		case "test_file":
-			if file, ok := completedTestFile(&ev); ok {
-				upsertTestFile(data, file)
-			}
-		case "test_run":
-			if run, ok := completedTestRun(&ev, diagByRun); ok {
-				data.Runs = append(data.Runs, run)
-			}
-		case "test_cleanup":
-			if cleanup, ok := parseTestCleanup(&ev); ok {
-				data.CleanupFailures = append(data.CleanupFailures, cleanup)
-			}
-		case "test_summary":
-			if s := parseTestSummary(&ev); s != nil {
-				summary = s
-			}
+		if s := handleTestJSONEvent(&ev, data, diagByRun); s != nil {
+			summary = s
 		}
 	}
 
 	finalizeTestJSON(data, result, summary)
 	return result
+}
+
+func handleTestJSONEvent(
+	ev *testJSONEvent,
+	data *plugin.TerraformTestOutputData,
+	diagByRun map[testRunKey]pendingDiag,
+) *testJSONSummary {
+	switch ev.Type {
+	case testEventDiagnostic:
+		recordDiagnostic(ev, diagByRun)
+	case testEventFile:
+		if file, ok := completedTestFile(ev); ok {
+			upsertTestFile(data, file)
+		}
+	case testEventRun:
+		if run, ok := completedTestRun(ev, diagByRun); ok {
+			data.Runs = append(data.Runs, run)
+		}
+	case testEventCleanup:
+		if cleanup, ok := parseTestCleanup(ev); ok {
+			data.CleanupFailures = append(data.CleanupFailures, cleanup)
+		}
+	case testEventSummary:
+		return parseTestSummary(ev)
+	}
+	return nil
 }
 
 // completedTestFile decodes a test_file event and returns it only when the file
@@ -885,21 +907,31 @@ func buildTestRun(ev *testJSONEvent, tr testJSONRun, diagByRun map[testRunKey]pe
 // authoritative test_summary (when present).
 func finalizeTestJSON(data *plugin.TerraformTestOutputData, result *plugin.OutputResult, summary *testJSONSummary) {
 	data.Total = len(data.Runs)
+	collectTestJSONRunResults(data, result)
+	applyTestJSONSummary(data, summary)
+	populateTestFileCounts(data)
+	result.HasErrors = testJSONHasErrors(data, result)
+}
+
+func collectTestJSONRunResults(data *plugin.TerraformTestOutputData, result *plugin.OutputResult) {
 	for _, r := range data.Runs {
 		switch r.Status {
-		case "pass":
+		case testStatusPass:
 			data.Pass++
-		case "skip":
+		case testStatusSkip:
 			data.Skip++
-		case "fail":
+		case testStatusFail:
 			data.Fail++
-		case "error":
+		case testStatusError:
 			data.Error++
 		}
 		if r.Error != "" {
 			result.Errors = append(result.Errors, r.Error)
 		}
 	}
+}
+
+func applyTestJSONSummary(data *plugin.TerraformTestOutputData, summary *testJSONSummary) {
 	if summary != nil {
 		data.Pass = summary.Passed
 		data.Fail = summary.Failed
@@ -909,10 +941,10 @@ func finalizeTestJSON(data *plugin.TerraformTestOutputData, result *plugin.Outpu
 			data.Total = summary.Passed + summary.Failed + summary.Errored + summary.Skipped
 		}
 	}
-	populateTestFileCounts(data)
-	if data.Fail > 0 || data.Error > 0 || len(result.Errors) > 0 || len(data.CleanupFailures) > 0 {
-		result.HasErrors = true
-	}
+}
+
+func testJSONHasErrors(data *plugin.TerraformTestOutputData, result *plugin.OutputResult) bool {
+	return data.Fail > 0 || data.Error > 0 || len(result.Errors) > 0 || len(data.CleanupFailures) > 0
 }
 
 // populateTestFileCounts derives file-level counts from completed run events.
@@ -937,13 +969,13 @@ func populateTestFileCounts(data *plugin.TerraformTestOutputData) {
 			index[run.File] = i
 		}
 		switch run.Status {
-		case "pass":
+		case testStatusPass:
 			data.Files[i].Pass++
-		case "fail":
+		case testStatusFail:
 			data.Files[i].Fail++
-		case "error":
+		case testStatusError:
 			data.Files[i].Error++
-		case "skip":
+		case testStatusSkip:
 			data.Files[i].Skip++
 		}
 		if data.Files[i].Status == "" {
@@ -955,13 +987,13 @@ func populateTestFileCounts(data *plugin.TerraformTestOutputData) {
 func fileStatusFromCounts(file plugin.TerraformTestFile) string {
 	switch {
 	case file.Error > 0:
-		return "error"
+		return testStatusError
 	case file.Fail > 0:
-		return "fail"
+		return testStatusFail
 	case file.Skip > 0 && file.Pass == 0:
-		return "skip"
+		return testStatusSkip
 	default:
-		return "pass"
+		return testStatusPass
 	}
 }
 
@@ -996,29 +1028,37 @@ func RenderTestText(jsonStream []byte) string {
 	}
 
 	var b strings.Builder
-	for _, run := range data.Runs {
-		icon := "✓"
-		switch run.Status {
-		case "fail", "error":
-			icon = "✗"
-		case "skip":
-			icon = "⏭"
-		}
-		fmt.Fprintf(&b, "  %s run %q... %s\n", icon, run.Name, run.Status)
-		if run.Error != "" {
-			fmt.Fprintf(&b, "      %s\n", run.Error)
-		}
+	for i := range data.Runs {
+		renderTestRunLine(&b, &data.Runs[i])
 	}
+	renderTestSummaryLine(&b, data)
+	return b.String()
+}
+
+func renderTestRunLine(b *strings.Builder, run *plugin.TerraformTestRun) {
+	icon := "✓"
+	switch run.Status {
+	case testStatusFail, testStatusError:
+		icon = "✗"
+	case testStatusSkip:
+		icon = "⏭"
+	}
+	fmt.Fprintf(b, "  %s run %q... %s\n", icon, run.Name, run.Status)
+	if run.Error != "" {
+		fmt.Fprintf(b, "      %s\n", run.Error)
+	}
+}
+
+func renderTestSummaryLine(b *strings.Builder, data *plugin.TerraformTestOutputData) {
 	headline := "Success!"
 	if data.Fail > 0 || data.Error > 0 || len(data.CleanupFailures) > 0 {
 		headline = "Failure!"
 	}
 	if data.Error > 0 {
-		fmt.Fprintf(&b, "%s %d passed, %d failed, %d errored, %d skipped.\n", headline, data.Pass, data.Fail, data.Error, data.Skip)
-	} else {
-		fmt.Fprintf(&b, "%s %d passed, %d failed, %d skipped.\n", headline, data.Pass, data.Fail, data.Skip)
+		fmt.Fprintf(b, "%s %d passed, %d failed, %d errored, %d skipped.\n", headline, data.Pass, data.Fail, data.Error, data.Skip)
+		return
 	}
-	return b.String()
+	fmt.Fprintf(b, "%s %d passed, %d failed, %d skipped.\n", headline, data.Pass, data.Fail, data.Skip)
 }
 
 // ParseOutput parses terraform output for a given command (fallback when JSON not available).

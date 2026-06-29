@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,6 +42,9 @@ const (
 	// HTTPTimeout is the timeout for HTTP requests.
 	httpTimeout = 30 * time.Second
 
+	// ListArtifactsMaxAttempts bounds retries for transient GitHub API failures.
+	listArtifactsMaxAttempts = 5
+
 	// artifactServicePath is the Twirp service path for artifact operations.
 	artifactServicePath = "twirp/github.actions.results.api.v1.ArtifactService"
 
@@ -52,6 +56,10 @@ const (
 	headerAuthorization = "Authorization"
 	contentTypeJSON     = "application/json"
 )
+
+var listArtifactsRetryBaseDelay = time.Second
+
+var errListArtifactsStatus = errors.New("list artifacts returned unsuccessful status")
 
 // artifactUploader handles the GitHub Actions runtime API calls for artifact upload.
 // This is extracted as an interface for testability.
@@ -165,6 +173,12 @@ type githubArtifact struct {
 type listArtifactsResponse struct {
 	TotalCount int              `json:"total_count"`
 	Artifacts  []githubArtifact `json:"artifacts"`
+}
+
+type listArtifactsAttemptResult struct {
+	response  *listArtifactsResponse
+	nextPage  int
+	retryable bool
 }
 
 // Store implements the artifact.Backend interface using GitHub Actions Artifacts.
@@ -409,33 +423,74 @@ func createArtifactZip(data io.Reader, metadata *artifact.Metadata) ([]byte, err
 
 // listArtifacts calls GET /repos/{owner}/{repo}/actions/artifacts with pagination params.
 func (s *Store) listArtifacts(ctx context.Context, perPage, page int) (*listArtifactsResponse, int, error) {
+	var lastErr error
+	for attempt := 1; attempt <= listArtifactsMaxAttempts; attempt++ {
+		result, err := s.listArtifactsOnce(ctx, perPage, page)
+		if err == nil {
+			return result.response, result.nextPage, nil
+		}
+		lastErr = err
+		if result == nil || !result.retryable || attempt == listArtifactsMaxAttempts {
+			break
+		}
+		if err := sleepBeforeListRetry(ctx, attempt); err != nil {
+			return nil, 0, err
+		}
+	}
+
+	return nil, 0, lastErr
+}
+
+func sleepBeforeListRetry(ctx context.Context, attempt int) error {
+	delay := listArtifactsRetryBaseDelay * time.Duration(1<<(attempt-1))
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func isRetryableListArtifactsStatus(statusCode int) bool {
+	return statusCode == http.StatusTooManyRequests || statusCode >= http.StatusInternalServerError
+}
+
+func (s *Store) listArtifactsOnce(ctx context.Context, perPage, page int) (*listArtifactsAttemptResult, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s/actions/artifacts?per_page=%d&page=%d", s.baseURL, s.owner, s.repo, perPage, page)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create list artifacts request: %w", err)
+		return &listArtifactsAttemptResult{retryable: false}, fmt.Errorf("failed to create list artifacts request: %w", err)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to list artifacts: %w", err)
+		return &listArtifactsAttemptResult{retryable: true}, fmt.Errorf("failed to list artifacts: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, 0, fmt.Errorf("list artifacts returned status %d: %s", resp.StatusCode, string(body))
+		return &listArtifactsAttemptResult{
+			retryable: isRetryableListArtifactsStatus(resp.StatusCode),
+		}, fmt.Errorf("%w: status %d: %s", errListArtifactsStatus, resp.StatusCode, string(body))
 	}
 
 	var result listArtifactsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, 0, fmt.Errorf("failed to decode list artifacts response: %w", err)
+		return &listArtifactsAttemptResult{retryable: false}, fmt.Errorf("failed to decode list artifacts response: %w", err)
 	}
 
 	nextPage := parseNextPage(resp.Header.Get("Link"))
 
-	return &result, nextPage, nil
+	return &listArtifactsAttemptResult{
+		response: &result,
+		nextPage: nextPage,
+	}, nil
 }
 
 // downloadArtifactURL calls GET /repos/{owner}/{repo}/actions/artifacts/{id}/zip
