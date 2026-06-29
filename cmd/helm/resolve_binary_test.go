@@ -2,6 +2,8 @@ package helm
 
 import (
 	"errors"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -20,7 +22,7 @@ func TestResolveHelmBinary(t *testing.T) {
 		dependenciesForHelmComponent = origDeps
 	})
 
-	t.Run("falls back to PATH name", func(t *testing.T) {
+	t.Run("resolves the helm binary", func(t *testing.T) {
 		initHelmCliConfig = func(_ schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
 			assert.False(t, processStacks)
 			return schema.AtmosConfiguration{}, nil
@@ -30,7 +32,11 @@ func TestResolveHelmBinary(t *testing.T) {
 		}
 		got, err := resolveHelmBinary(&cobra.Command{Use: "list"})
 		require.NoError(t, err)
-		assert.Equal(t, "helm", got)
+		// Resolve returns the bare name ("helm") when nothing is installed, or a
+		// toolchain/PATH-resolved path (e.g. ".../helm/v3.19.2/helm[.exe]") when it
+		// is — assert the binary name rather than the environment-dependent path.
+		base := strings.TrimSuffix(filepath.Base(got), ".exe")
+		assert.Equal(t, "helm", base)
 	})
 
 	t.Run("config init error", func(t *testing.T) {
