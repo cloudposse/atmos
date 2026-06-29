@@ -1316,7 +1316,8 @@
                         "type": "string"
                       },
                       "type": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Step type (step kind): any registered workflow/custom-command step type, e.g. shell, container, http, log, wait, wait-all, cancel. Omitted defaults to a command step."
                       },
                       "when": {
                         "description": "Condition controlling whether this workflow step runs. Omitted means run.",
@@ -1326,6 +1327,77 @@
                           }
                         ]
                       },
+                      "needs": {
+                        "description": "Names of earlier steps that must complete before this step runs.",
+                        "oneOf": [
+                          { "type": "string" },
+                          { "type": "array", "items": { "type": "string" } }
+                        ]
+                      },
+                      "env": {
+                        "type": "object",
+                        "description": "Environment variables for the step.",
+                        "additionalProperties": { "type": "string" }
+                      },
+                      "identity": {
+                        "type": "string",
+                        "description": "Identity to use for the step."
+                      },
+                      "retry": {
+                        "description": "Retry policy wrapping step execution.",
+                        "$ref": "#/definitions/workflow_retry"
+                      },
+                      "timeout": {
+                        "type": "string",
+                        "description": "Maximum duration the step may run (e.g. '30s', '5m')."
+                      },
+                      "working_directory": {
+                        "type": "string",
+                        "description": "Working directory for the step."
+                      },
+                      "outputs": {
+                        "type": "object",
+                        "description": "Named outputs exported by the step for use by later steps.",
+                        "additionalProperties": { "type": "string" }
+                      },
+                      "background": {
+                        "description": "Run the step in the background. true/false, or a string name used to reference the background step from wait/wait-all/cancel steps.",
+                        "oneOf": [
+                          { "type": "boolean" },
+                          { "type": "string" }
+                        ]
+                      },
+                      "for": {
+                        "description": "Fan the step out over a list of values (string expression or explicit array of strings).",
+                        "oneOf": [
+                          { "type": "string" },
+                          { "type": "array", "items": { "type": "string" } }
+                        ]
+                      },
+                      "action": {
+                        "type": "string",
+                        "description": "Action selector for action-bearing step kinds (e.g. container: run, build, push, inspect). Selects which params 'with' holds."
+                      },
+                      "provider": {
+                        "type": "string",
+                        "description": "Provider/runtime backend for the step kind (e.g. container: docker, podman)."
+                      },
+                      "container": {
+                        "description": "Container sandbox control for the step. Boolean to enable/disable, or an object with sandbox settings.",
+                        "oneOf": [
+                          { "type": "boolean" },
+                          { "type": "object", "additionalProperties": true }
+                        ]
+                      },
+                      "runtime_auto_start": {
+                        "type": "boolean",
+                        "description": "Automatically start the container runtime if it is not already running."
+                      },
+                      "with": {
+                        "type": "object",
+                        "description": "Parameters for the step named by 'type' (and 'action' where applicable). Validated by the step handler at run time. For container steps this holds image, command, ports, mounts, build context, etc.",
+                        "additionalProperties": true
+                      },
                       "interactive": {
                         "type": "boolean",
                         "description": "Attach host stdin to the step and let the step handle Ctrl-C (like docker -i)"
@@ -1334,10 +1406,7 @@
                         "type": "boolean",
                         "description": "Allocate a pseudo-terminal for the step (like docker -t); combine with interactive for full terminal sessions"
                       }
-                    },
-                    "required": [
-                      "command"
-                    ]
+                    }
                   }
                 }
               ]

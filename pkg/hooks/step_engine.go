@@ -3,7 +3,10 @@ package hooks
 import (
 	"context"
 
-	yaml "gopkg.in/yaml.v2"
+	// Use yaml.v3 (not v2) so that WorkflowStep.UnmarshalYAML fires when decoding the
+	// hook `with:` block — that custom unmarshaler owns the polymorphic `output`
+	// and the container `action:`/`with:` keys, which yaml.v2 would silently skip.
+	yaml "gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"

@@ -1,0 +1,71 @@
+workflows:
+  # Start a long-running container service in the background, run work against it,
+  # then tear it down. Readiness reuses the container `healthcheck:` — Atmos blocks
+  # until the service is healthy before the next step runs.
+  service:
+    description: Start a background service, use it, then cancel it.
+    steps:
+      - name: cache
+        type: container
+        action: run
+        background: true
+        with:
+          # A tiny long-running service with a health check. nginx:alpine ships
+          # busybox `wget`, so the check probes the web root.
+          image: nginx:alpine
+          ports:
+            - { host: 8080, container: 80 }
+          healthcheck:
+            test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+            interval: 2s
+            timeout: 2s
+            retries: 10
+            start_period: 2s
+
+      # Implicit readiness gate: because `cache` has a health check, this step does
+      # not run until the service reports healthy.
+      - name: use-service
+        type: shell
+        command: 'echo "service is healthy; doing work against http://localhost:8080"'
+
+      # Graceful teardown (stop + remove). Omit this and Atmos auto-tears-down the
+      # service when the workflow ends — a service is never "waited to exit".
+      - type: cancel
+        for: cache
+
+  # Start several background services and gate on all of them with `wait-all`.
+  fanout:
+    description: Start two services in the background, wait for all, then tear down.
+    steps:
+      - name: redis
+        type: container
+        action: run
+        background: true
+        with:
+          image: redis:7-alpine
+          ports: [{ host: 6379, container: 6379 }]
+          healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 2s
+            retries: 10
+
+      - name: web
+        type: container
+        action: run
+        background: true
+        with:
+          image: nginx:alpine
+          ports: [{ host: 8081, container: 80 }]
+          healthcheck:
+            test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+            interval: 2s
+            retries: 10
+
+      - type: wait-all
+
+      - name: smoke
+        type: shell
+        command: 'echo "redis and web are both healthy"'
+
+      - type: cancel
+        for: [redis, web]
