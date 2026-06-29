@@ -850,8 +850,8 @@ func CheckAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefini
 		return
 	}
 
-	for index, step := range steps {
-		if step.Name == "" {
+	for index := range steps {
+		if steps[index].Name == "" {
 			steps[index].Name = fmt.Sprintf("step%d", index+1)
 		}
 	}

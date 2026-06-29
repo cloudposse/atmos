@@ -709,7 +709,9 @@ jobs:
         run: |
           atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
           atmos toolchain env --format=github
-          tofu version
+
+      - name: Verify OpenTofu
+        run: tofu version
 
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
         uses: reviewdog/action-tflint@54a5e5aed57dcfbb4662ec548de876df33d6288d # v1

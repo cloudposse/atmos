@@ -7,6 +7,17 @@ logs:
   # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
   level: Info
 
+diagnostics:
+  # Machine-readable diagnostic events. Local JSONL file sink is enabled when a file is configured.
+  # Can also be set using 'ATMOS_DIAGNOSTICS_FILE' ENV var.
+  file: ""
+  # Can also be set using 'ATMOS_DIAGNOSTICS_LEVEL' ENV var.
+  level: debug
+  # Reserved for future sinks. Can also be set using 'ATMOS_DIAGNOSTICS_SINK' ENV var.
+  sink: file
+  # Reserved for future streaming sinks. Can also be set using 'ATMOS_DIAGNOSTICS_URL' ENV var.
+  url: ""
+
 settings:
   telemetry:
     enabled: true

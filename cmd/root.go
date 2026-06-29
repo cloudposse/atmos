@@ -47,6 +47,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/diagnostics"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -692,6 +693,8 @@ func maybePromoteLogLevelForDebugMode(atmosConfig *schema.AtmosConfiguration, co
 //
 //nolint:revive,cyclop // Function complexity is acceptable for logger configuration.
 func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
+	diagnostics.Configure(atmosConfig.Diagnostics)
+
 	switch atmosConfig.Logs.Level {
 	case "Trace":
 		log.SetLevel(log.TraceLevel)

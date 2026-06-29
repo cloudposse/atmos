@@ -38,14 +38,10 @@ Wait /❯$/
 # still records cleanly where k3s can't start.
 Type "atmos emulator up k3s -s dev >/dev/null 2>&1 || true" Enter
 Wait /❯$/
-# Pre-pull the AWS provider so the on-camera deploy stays focused. The `demo`
-# component runs under the `local-aws` (aws/emulator) default identity, so this
-# init needs the AWS emulator running — bring it up here (hidden). It is started
-# again on camera below; `atmos emulator up` is idempotent and still reports
-# "✓ emulator aws is up at <endpoint>", so the on-camera highlight is preserved.
+# Bring AWS up once during setup so the on-camera `emulator up` call is fast and
+# deterministic. Keep provider init inside the visible deploy path; running a
+# hidden `atmos terraform init` under VHS can wedge waiting for a prompt on CI.
 Type "atmos emulator up aws -s dev >/dev/null 2>&1 || exit $?" Enter
-Wait /❯$/
-Type "atmos terraform init demo -s dev >/dev/null 2>&1 || exit $?" Enter
 Wait /❯$/
 Type "clear" Enter
 Wait /❯$/

@@ -887,8 +887,8 @@ func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefini
 	// Check if the steps have the `name` attribute.
 	// If not, generate a friendly name consisting of a prefix of `step` and followed by the index of the
 	// step (the index starts with 1, so the first generated step name would be `step1`)
-	for index, step := range steps {
-		if step.Name == "" {
+	for index := range steps {
+		if steps[index].Name == "" {
 			// When iterating through a slice with a range loop, if elements need to be changed,
 			// changing the returned value from the range is not changing the original slice element.
 			// That return value is a copy of the element.

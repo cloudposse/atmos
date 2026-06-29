@@ -26,6 +26,9 @@ jobs:
       COLORTERM: truecolor
       LANG: en_US.UTF-8
       ATMOS_PAGER: "false"
+      ATMOS_DIAGNOSTICS_FILE: ${{ github.workspace }}/diag/atmos-events.jsonl
+      ATMOS_DIAGNOSTICS_LEVEL: debug
+      ATMOS_DIAGNOSTICS_SINK: file
       # Container runtime for the emulator-backed tapes (ubuntu runners have Docker).
       ATMOS_CONTAINER_RUNTIME: docker
       # Publish to the SAME origin bucket / OIDC role the docs site already uses
@@ -78,9 +81,20 @@ jobs:
           atmos toolchain install hashicorp/terraform
           atmos toolchain env --format=github
 
+      - name: Prepare diagnostics dir
+        run: mkdir -p "${{ github.workspace }}/diag"
+
       - name: Record all demos
         working-directory: demo/landing
         run: atmos demo record all
+
+      - name: Upload diagnostics as an artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: landing-demos-diagnostics
+          path: diag/
+          if-no-files-found: warn
 
       # Always make the renders downloadable, even before S3 is wired up.
       - name: Upload renders as an artifact

@@ -75,6 +75,7 @@ type AtmosConfiguration struct {
 	Imports                       ImportsSettings    `yaml:"imports,omitempty" json:"imports,omitempty" mapstructure:"imports"`
 	Workflows                     Workflows          `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
 	Logs                          Logs               `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
+	Diagnostics                   Diagnostics        `yaml:"diagnostics,omitempty" json:"diagnostics,omitempty" mapstructure:"diagnostics"`
 	Errors                        ErrorsConfig       `yaml:"errors,omitempty" json:"errors,omitempty" mapstructure:"errors"`
 	Commands                      []Command          `yaml:"commands,omitempty" json:"commands,omitempty" mapstructure:"commands"`
 	CommandAliases                CommandAliases     `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
@@ -984,6 +985,14 @@ type Workflows struct {
 type Logs struct {
 	File  string `yaml:"file" json:"file" mapstructure:"file"`
 	Level string `yaml:"level" json:"level" mapstructure:"level"`
+}
+
+// Diagnostics contains machine-readable diagnostic event stream settings.
+type Diagnostics struct {
+	File  string `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
+	Level string `yaml:"level,omitempty" json:"level,omitempty" mapstructure:"level"`
+	Sink  string `yaml:"sink,omitempty" json:"sink,omitempty" mapstructure:"sink"`
+	URL   string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
 }
 
 // ErrorsConfig contains configuration for error handling.

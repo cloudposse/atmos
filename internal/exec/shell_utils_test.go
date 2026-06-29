@@ -2,6 +2,7 @@ package exec
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/diagnostics"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	process "github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -150,6 +152,61 @@ func TestExecuteShellCommandTerminalSpeedPreservesNonTTYStreamsAndCapture(t *tes
 	assert.Equal(t, "stderr", terminalErr.String())
 	assert.Equal(t, "stdout", captureOut.String())
 	assert.Equal(t, "stderr", captureErr.String())
+}
+
+func TestExecuteShellCommandWritesDiagnosticsEvents(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atmos-events.jsonl")
+	helper := shellHelperCommand(t, "stdout-stderr")
+	atmosConfig := schema.AtmosConfiguration{
+		Diagnostics: schema.Diagnostics{
+			File:  path,
+			Level: diagnostics.LevelDebug,
+			Sink:  diagnostics.SinkFile,
+		},
+	}
+
+	err := ExecuteShellCommand(
+		atmosConfig,
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+		WithProcessStreams(process.Streams{
+			Stdout: &bytes.Buffer{},
+			Stderr: &bytes.Buffer{},
+		}),
+	)
+
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	require.Len(t, lines, 2)
+
+	var startEvent diagnostics.Event
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &startEvent))
+	assert.Equal(t, "process.start", startEvent.Type)
+	assert.NotEmpty(t, startEvent.ID)
+	assert.Equal(t, helper.command, startEvent.Command)
+	assert.Equal(t, helper.args, startEvent.Args)
+	require.NotNil(t, startEvent.TTY)
+	assert.False(t, *startEvent.TTY)
+
+	var endEvent diagnostics.Event
+	require.NoError(t, json.Unmarshal([]byte(lines[1]), &endEvent))
+	assert.Equal(t, "process.end", endEvent.Type)
+	assert.Equal(t, startEvent.ID, endEvent.ID)
+	require.NotNil(t, endEvent.Started)
+	assert.True(t, *endEvent.Started)
+	require.NotNil(t, endEvent.Success)
+	assert.True(t, *endEvent.Success)
+	require.NotNil(t, endEvent.ExitCode)
+	assert.Equal(t, 0, *endEvent.ExitCode)
+	require.NotNil(t, endEvent.DurationMS)
+	assert.GreaterOrEqual(t, *endEvent.DurationMS, int64(0))
 }
 
 func TestExecuteShellCommandPreservesDetailedExitCode(t *testing.T) {
