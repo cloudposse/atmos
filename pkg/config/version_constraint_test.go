@@ -237,7 +237,7 @@ func TestValidateVersionConstraint_ExplicitOverrideWarnings(t *testing.T) {
 				`required=">=1.216.0"`,
 				"current=test",
 				"override=ref:main",
-				"bypassing version constraint enforcement because an explicit version override was requested",
+				"explicit override bypasses enforcement",
 				"invalid current version",
 			},
 		},
@@ -256,7 +256,7 @@ func TestValidateVersionConstraint_ExplicitOverrideWarnings(t *testing.T) {
 				`required=">=99.0.0"`,
 				"current=1.0.0",
 				"override=1.100.0",
-				"bypassing version constraint enforcement because an explicit version override was requested",
+				"explicit override bypasses enforcement",
 			},
 		},
 		{
@@ -301,7 +301,7 @@ func TestValidateVersionConstraint_ExplicitOverrideWarnings(t *testing.T) {
 			expectWarning: false,
 			warningOmits: []string{
 				"Atmos version constraint",
-				"bypassing version constraint enforcement",
+				"explicit override bypasses enforcement",
 			},
 		},
 		{
@@ -316,7 +316,7 @@ func TestValidateVersionConstraint_ExplicitOverrideWarnings(t *testing.T) {
 			expectErr:     errUtils.ErrInvalidVersionConstraint,
 			expectWarning: false,
 			warningOmits: []string{
-				"bypassing version constraint enforcement",
+				"explicit override bypasses enforcement",
 			},
 		},
 		{
@@ -331,7 +331,7 @@ func TestValidateVersionConstraint_ExplicitOverrideWarnings(t *testing.T) {
 			expectWarning: false,
 			warningOmits: []string{
 				"Atmos version constraint",
-				"bypassing version constraint enforcement",
+				"explicit override bypasses enforcement",
 			},
 		},
 		{
@@ -406,51 +406,6 @@ func TestValidateVersionConstraint_ExplicitOverrideWarnings(t *testing.T) {
 			for _, omitted := range tt.warningOmits {
 				assert.NotContains(t, output, omitted)
 			}
-		})
-	}
-}
-
-func TestExplicitVersionOverrideFromArgs(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want string
-	}{
-		{
-			name: "equals form",
-			args: []string{"atmos", "list", "stacks", "--use-version=ref:main"},
-			want: "ref:main",
-		},
-		{
-			name: "separate value form",
-			args: []string{"atmos", "list", "stacks", "--use-version", "1.2.3"},
-			want: "1.2.3",
-		},
-		{
-			name: "bare separator stops parsing",
-			args: []string{"atmos", "terraform", "plan", "--", "--use-version=ref:main"},
-			want: "",
-		},
-		{
-			name: "missing separate value",
-			args: []string{"atmos", "list", "stacks", "--use-version"},
-			want: "",
-		},
-		{
-			name: "bare separator is not a separate value",
-			args: []string{"atmos", "list", "stacks", "--use-version", "--"},
-			want: "",
-		},
-		{
-			name: "absent flag",
-			args: []string{"atmos", "list", "stacks"},
-			want: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, explicitVersionOverrideFromArgs(tt.args))
 		})
 	}
 }

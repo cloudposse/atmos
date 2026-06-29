@@ -483,38 +483,8 @@ func getVersionEnforcement(configEnforcement string) string {
 	return configEnforcement
 }
 
-// explicitVersionOverride returns the requested version when the user explicitly
-// asks Atmos to run with a different version.
 func explicitVersionOverride() string {
-	if requested := os.Getenv(version.VersionUseEnvVar); requested != "" { //nolint:forbidigo
-		return requested
-	}
-	if requested := explicitVersionOverrideFromArgs(os.Args); requested != "" {
-		return requested
-	}
-	if requested := os.Getenv(version.UseVersionEnvVar); requested != "" { //nolint:forbidigo
-		return requested
-	}
-	if requested := os.Getenv(version.VersionEnvVar); requested != "" { //nolint:forbidigo
-		return requested
-	}
-	return ""
-}
-
-func explicitVersionOverrideFromArgs(args []string) string {
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			return ""
-		}
-		if strings.HasPrefix(arg, "--use-version=") {
-			return strings.TrimPrefix(arg, "--use-version=")
-		}
-		if arg == "--use-version" && i+1 < len(args) && args[i+1] != "--" {
-			return args[i+1]
-		}
-	}
-	return ""
+	return version.ExplicitVersionOverride(os.Args)
 }
 
 // buildVersionConstraintError builds the error for unsatisfied version constraint.
@@ -558,14 +528,14 @@ func warnVersionConstraint(constraint schema.VersionConstraint) {
 // warnVersionConstraintOverride logs a warning when an explicit version override
 // bypasses a failed or non-evaluable version constraint.
 func warnVersionConstraintOverride(constraint schema.VersionConstraint, requestedVersion string, validationErr error) {
-	message := "Atmos version constraint not satisfied; bypassing version constraint enforcement because an explicit version override was requested"
+	message := "Atmos version constraint not satisfied; explicit override bypasses enforcement"
 	keyvals := []interface{}{
 		"required", constraint.Require,
 		"current", version.Version,
 		"override", requestedVersion,
 	}
 	if validationErr != nil {
-		message = "Atmos version constraint could not be evaluated; bypassing version constraint enforcement because an explicit version override was requested"
+		message = "Atmos version constraint could not be evaluated; explicit override bypasses enforcement"
 		keyvals = append(keyvals, "error", validationErr)
 	}
 	if constraint.Message != "" {

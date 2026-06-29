@@ -122,6 +122,52 @@ func getEnvWrapper(key string) string {
 	return os.Getenv(key)
 }
 
+// ParseUseVersionFromArgs returns the value supplied to --use-version, if any.
+func ParseUseVersionFromArgs(args []string) string {
+	defer perf.Track(nil, "version.ParseUseVersionFromArgs")()
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return ""
+		}
+		if strings.HasPrefix(arg, "--use-version=") {
+			return strings.TrimPrefix(arg, "--use-version=")
+		}
+		if arg == "--use-version" {
+			if i+1 < len(args) && args[i+1] != "--" {
+				return args[i+1]
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+// ExplicitVersionOverride returns the explicit version override requested by
+// env vars or --use-version, using the same precedence as version re-exec.
+func ExplicitVersionOverride(args []string) string {
+	defer perf.Track(nil, "version.ExplicitVersionOverride")()
+
+	return explicitVersionOverride(getEnvWrapper, args)
+}
+
+func explicitVersionOverride(getEnv func(string) string, args []string) string {
+	if requested := getEnv(VersionUseEnvVar); requested != "" {
+		return requested
+	}
+	if requested := ParseUseVersionFromArgs(args); requested != "" {
+		return requested
+	}
+	if requested := getEnv(UseVersionEnvVar); requested != "" {
+		return requested
+	}
+	if requested := getEnv(VersionEnvVar); requested != "" {
+		return requested
+	}
+	return ""
+}
+
 // defaultInstaller wraps toolchain.RunInstall.
 type defaultInstaller struct{}
 
