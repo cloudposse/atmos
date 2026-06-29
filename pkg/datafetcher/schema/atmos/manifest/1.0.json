@@ -1822,6 +1822,7 @@
                   "trivy",
                   "git",
                   "step",
+                  "steps",
                   "ci.check",
                   "ci.output",
                   "ci.summary",
@@ -1877,9 +1878,20 @@
                 "description": "Step type to run (step kind): any registered workflow/custom-command step type, e.g. container, http, toast, log."
               },
               "with": {
-                "type": "object",
-                "description": "Parameters for the step named by 'type' (step kind). Validated by the step handler at run time.",
-                "additionalProperties": true
+                "description": "Parameters for the step named by 'type' (step kind), or an ordered list of steps (steps kind). Validated by the step handler at run time.",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                ]
               },
               "retry": {
                 "$ref": "#/definitions/workflow_retry"

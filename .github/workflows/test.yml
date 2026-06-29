@@ -695,13 +695,13 @@ jobs:
           - demo-stacks
           - demo-helmfile
           - quick-start-simple
-          # quick-start-advanced is intentionally NOT validated here. It now uses runtime
+          # quick-start-advanced is intentionally NOT validated here. It uses several runtime
           # Atmos YAML functions (`!terraform.state`, `!store`, `!secret`) that the static
           # yaml-language-server cannot resolve (the InoUno/yaml-ls-check action hardcodes
-          # an empty customTags list, so unknown tags fail with "Unresolved tag"). Every
-          # other function-using example (custom-components, sops-secrets,
-          # onepassword-secrets, native-terraform) is likewise excluded from this matrix.
-          # The example is still exercised end-to-end by the floci and acceptance jobs.
+          # an empty customTags list, so unknown tags fail with "Unresolved tag"). Other
+          # function-heavy examples (custom-components, sops-secrets, onepassword-secrets,
+          # native-terraform) are likewise excluded from this matrix. Examples with a small
+          # number of scalar functions can stay in the matrix by masking tags below.
 
     timeout-minutes: 20
     steps:
@@ -723,6 +723,17 @@ jobs:
           find "examples/${{ matrix.demo-folder }}/stacks" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 \
             | xargs -0 --no-run-if-empty sed -i \
               "s#https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#file://${GITHUB_WORKSPACE}/website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#g"
+
+      # yaml-language-server validates the YAML parse tree before schema validation, but this
+      # action does not expose yaml.customTags. The committed example must keep the real Atmos
+      # tag so runtime tests exercise `!terraform.state`; this CI-only checkout rewrite masks the
+      # scalar tag as a plain string for static schema validation.
+      - name: Mask Atmos scalar YAML tags for validation
+        if: matrix.demo-folder == 'terraform-tests'
+        run: |
+          find "examples/${{ matrix.demo-folder }}/stacks" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 \
+            | xargs -0 --no-run-if-empty sed -i -E \
+              's#(:[[:space:]]*)!(terraform\.state)([^#[:cntrl:]]*)#\1"!\2\3"#g'
 
       - name: Validate YAML Schema for Stacks
         uses: InoUno/yaml-ls-check@2c229b85b877b2853b40bd0fbdcfccff5ff735c7 # v1.4.0

@@ -99,6 +99,21 @@ func TestManifestSchema_HookRetryUsesWorkflowRetrySchema(t *testing.T) {
 	}
 }
 
+func TestManifestSchema_TerraformTestFixturesHookShape(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded":      loadEmbeddedSchemaBytes(t),
+		"website":       loadWebsiteSchemaBytes(t),
+		"fixture":       loadFixtureSchemaBytes(t),
+		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName, func(t *testing.T) {
+			assertSchemaValid(t, schemaData, terraformTestFixturesManifest())
+		})
+	}
+}
+
 func workflowManifestWithWhen(condition any) map[string]any {
 	return map[string]any{
 		"workflows": map[string]any{
@@ -130,6 +145,44 @@ func hookManifestWithRetry(retry any) map[string]any {
 	manifest := hookManifestWithWhen("always")
 	manifest["hooks"].(map[string]any)["test"].(map[string]any)["retry"] = retry
 	return manifest
+}
+
+func terraformTestFixturesManifest() map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"app": map[string]any{
+					"metadata": map[string]any{
+						"type": "real",
+					},
+					"hooks": map[string]any{
+						"test-fixtures-up": map[string]any{
+							"kind": "steps",
+							"events": []any{
+								"before.terraform.test",
+							},
+							"with": []any{
+								map[string]any{
+									"type":      "emulator",
+									"component": "aws",
+									"action":    "up",
+								},
+								map[string]any{
+									"type":    "atmos",
+									"command": "terraform apply vpc -s fixtures -auto-approve",
+								},
+							},
+						},
+					},
+					"test": map[string]any{
+						"vars": map[string]any{
+							"fixture_vpc_id": "vpc-123",
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 func loadEmbeddedSchemaBytes(t *testing.T) []byte {
