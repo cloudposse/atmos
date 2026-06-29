@@ -8,14 +8,21 @@ name: landing-demos-debug
 # state to files, and uploads them as an artifact — so we can read the actual hang point.
 #
 # Manual only. Does not publish anything. Delete once the hang is diagnosed and fixed.
+#
+# Triggered by the `landing-demos-debug` PR label (workflow_dispatch only works once a
+# workflow is on the default branch; this one lives only on the feature branch). Remove
+# and re-apply the label to re-run.
 on:
   workflow_dispatch:
+  pull_request:
+    types: [labeled]
 
 permissions:
   contents: read
 
 jobs:
   diagnose:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'landing-demos-debug'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
