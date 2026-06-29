@@ -3,6 +3,7 @@ package tests
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,12 @@ func runValidateSchema(t *testing.T) (exitCode int, err error) {
 // does the job, not just an embedded JSON Schema library. A negative sub-test confirms the
 // command actually rejects a schema-invalid file (i.e., it is not a silent no-op).
 func TestTestCaseSchemaValidation(t *testing.T) {
-	testCasesDir, err := filepath.Abs("test-cases")
+	// Derive the test-cases dir from this source file's location (via runtime.Caller)
+	// so the test is independent of the working directory — the subtests below t.Chdir
+	// into temp dirs, so a CWD-relative base path would not survive.
+	_, callerFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller(0) must succeed")
+	testCasesDir, err := filepath.Abs(filepath.Join(filepath.Dir(callerFile), "test-cases"))
 	require.NoError(t, err, "Failed to resolve test-cases dir")
 
 	schemaPath := filepath.Join(testCasesDir, "schema.json")
