@@ -17,6 +17,21 @@ import (
 
 const flagComponent = "component"
 
+type helmPluginLister interface {
+	ListInstalled(context.Context) (map[string]string, error)
+}
+
+var (
+	initHelmCliConfig             = cfg.InitCliConfig
+	describeHelmComponent         = e.ExecuteDescribeComponent
+	dependenciesForHelmComponent  = dependencies.ForComponent
+	resolveHelmBinaryForPlugin    = resolveHelmBinary
+	ensureHelmPluginsForComponent = helmplugin.EnsureForComponent
+	newHelmPluginLister           = func(helmBin string) helmPluginLister {
+		return helmplugin.NewInstaller(helmBin)
+	}
+)
+
 func init() {
 	pluginCmd := &cobra.Command{
 		Use:   "plugin",
@@ -49,12 +64,12 @@ func init() {
 
 // runPluginList lists the plugins installed in the managed HELM_PLUGINS directory.
 func runPluginList(cmd *cobra.Command, _ []string) error {
-	helmBin, err := resolveHelmBinary(cmd)
+	helmBin, err := resolveHelmBinaryForPlugin(cmd)
 	if err != nil {
 		return err
 	}
 
-	installed, err := helmplugin.NewInstaller(helmBin).ListInstalled(context.Background())
+	installed, err := newHelmPluginLister(helmBin).ListInstalled(context.Background())
 	if err != nil {
 		return err
 	}
@@ -95,12 +110,12 @@ func runPluginInstall(cmd *cobra.Command, args []string) error {
 			Err()
 	}
 
-	helmBin, err := resolveHelmBinary(cmd)
+	helmBin, err := resolveHelmBinaryForPlugin(cmd)
 	if err != nil {
 		return err
 	}
 
-	if _, err := helmplugin.EnsureForComponent(context.Background(), helmBin, specs); err != nil {
+	if _, err := ensureHelmPluginsForComponent(context.Background(), helmBin, specs); err != nil {
 		return err
 	}
 	ui.Success("Helm plugins are installed")
@@ -124,12 +139,12 @@ func collectInstallSpecs(cmd *cobra.Command, args []string) ([]string, error) {
 		return nil, errUtils.ErrStackNotFound
 	}
 
-	atmosConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := initHelmCliConfig(info, true)
 	if err != nil {
 		return nil, err
 	}
 
-	section, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+	section, err := describeHelmComponent(&e.ExecuteDescribeComponentParams{
 		AtmosConfig:          &atmosConfig,
 		Component:            componentName,
 		Stack:                info.Stack,
@@ -147,12 +162,12 @@ func collectInstallSpecs(cmd *cobra.Command, args []string) ([]string, error) {
 // toolchain when declared as a dependency, and falling back to PATH.
 func resolveHelmBinary(cmd *cobra.Command) (string, error) {
 	info := buildConfigAndStacksInfo(cmd)
-	atmosConfig, err := cfg.InitCliConfig(info, false)
+	atmosConfig, err := initHelmCliConfig(info, false)
 	if err != nil {
 		return "", err
 	}
 
-	tenv, err := dependencies.ForComponent(&atmosConfig, cfg.HelmfileComponentType, nil, nil)
+	tenv, err := dependenciesForHelmComponent(&atmosConfig, cfg.HelmfileComponentType, nil, nil)
 	if err != nil {
 		return "", err
 	}

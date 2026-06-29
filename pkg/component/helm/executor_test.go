@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -120,6 +121,117 @@ func TestRunOperationUnsupported(t *testing.T) {
 	)
 	require.ErrorIs(t, err, errUtils.ErrHelmUnsupportedOperation)
 	assert.NotNil(t, summary)
+}
+
+func TestExecuteBulkInitializesConfigAndGraph(t *testing.T) {
+	originalInit := initCliConfig
+	originalDescribe := executeDescribeStacks
+	originalGraph := executeGraph
+	t.Cleanup(func() {
+		initCliConfig = originalInit
+		executeDescribeStacks = originalDescribe
+		executeGraph = originalGraph
+	})
+
+	var initInfo schema.ConfigAndStacksInfo
+	initCliConfig = func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		initInfo = info
+		assert.True(t, processStacks)
+		return schema.AtmosConfiguration{}, nil
+	}
+
+	stacks := map[string]any{"dev": map[string]any{}}
+	executeDescribeStacks = func(
+		_ *schema.AtmosConfiguration,
+		filterByStack string,
+		_ []string,
+		componentTypes []string,
+		_ []string,
+		_, processTemplates, processYamlFunctions, includeEmptyStacks bool,
+		_ []string,
+		_ auth.AuthManager,
+	) (map[string]any, error) {
+		assert.Equal(t, "dev", filterByStack)
+		assert.Equal(t, []string{cfg.HelmComponentType}, componentTypes)
+		assert.True(t, processTemplates)
+		assert.True(t, processYamlFunctions)
+		assert.True(t, includeEmptyStacks)
+		return stacks, nil
+	}
+
+	var graphOpts *component.GraphExecutionOptions
+	executeGraph = func(_ context.Context, opts *component.GraphExecutionOptions) error {
+		graphOpts = opts
+		return nil
+	}
+
+	ctx := &component.ExecutionContext{
+		SubCommand: "template",
+		Flags:      map[string]any{"include-dependents": true},
+		ConfigAndStacksInfo: schema.ConfigAndStacksInfo{
+			All:   true,
+			Stack: "dev",
+		},
+	}
+	require.NoError(t, Execute(ctx, OperationTemplate))
+
+	assert.Equal(t, cfg.HelmComponentType, initInfo.ComponentType)
+	assert.Equal(t, "template", initInfo.SubCommand)
+	assert.Equal(t, []string{cfg.HelmComponentType, "template"}, initInfo.CliArgs)
+	require.NotNil(t, graphOpts)
+	assert.Equal(t, stacks, graphOpts.Stacks)
+	assert.Equal(t, cfg.HelmComponentType, graphOpts.ComponentType)
+	assert.Equal(t, "template", graphOpts.SubCommand)
+	assert.Equal(t, ctx.Flags, graphOpts.Flags)
+}
+
+func TestExecuteSingleSkipsDisabledComponent(t *testing.T) {
+	originalInit := initCliConfig
+	originalProcessStacks := processStacks
+	originalDependencies := dependenciesForComponent
+	t.Cleanup(func() {
+		initCliConfig = originalInit
+		processStacks = originalProcessStacks
+		dependenciesForComponent = originalDependencies
+	})
+
+	initCliConfig = func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		assert.Equal(t, cfg.HelmComponentType, info.ComponentType)
+		assert.True(t, processStacks)
+		return schema.AtmosConfiguration{}, nil
+	}
+
+	processStacksCalled := false
+	processStacks = func(
+		_ *schema.AtmosConfiguration,
+		info schema.ConfigAndStacksInfo,
+		checkStack, processTemplates, processYamlFunctions bool,
+		_ []string,
+		_ auth.AuthManager,
+	) (schema.ConfigAndStacksInfo, error) {
+		processStacksCalled = true
+		assert.True(t, checkStack)
+		assert.True(t, processTemplates)
+		assert.True(t, processYamlFunctions)
+		info.ComponentIsEnabled = false
+		info.ComponentFromArg = "app"
+		return info, nil
+	}
+
+	dependenciesForComponent = func(_ *schema.AtmosConfiguration, _ string, _ map[string]any, _ map[string]any) (*dependencies.ToolchainEnvironment, error) {
+		t.Fatal("dependencies should not be resolved for disabled components")
+		return nil, nil
+	}
+
+	err := Execute(&component.ExecutionContext{
+		SubCommand: "apply",
+		ConfigAndStacksInfo: schema.ConfigAndStacksInfo{
+			ComponentFromArg: "app",
+			Stack:            "dev",
+		},
+	}, OperationApply)
+	require.NoError(t, err)
+	assert.True(t, processStacksCalled)
 }
 
 func TestExecutorHelpers(t *testing.T) {

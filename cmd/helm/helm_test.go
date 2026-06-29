@@ -1,11 +1,17 @@
 package helm
 
 import (
+	"context"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestCommandProviderMetadata(t *testing.T) {
@@ -64,6 +70,121 @@ func TestGetOperationFlagsIncludesDiffFlags(t *testing.T) {
 	assert.Equal(t, "old.yaml", flags["from-manifest"])
 	assert.Equal(t, 7, flags["context"])
 }
+
+func TestGetOperationFlagsIncludesAllOperationFlags(t *testing.T) {
+	cmd := configuredOperationCommand(t, "template", map[string]string{
+		"all":                "true",
+		"affected":           "true",
+		"ci":                 "true",
+		"include-dependents": "true",
+		"clone-target-ref":   "true",
+		"repo-path":          "/repo",
+		"base":               "origin/main",
+		"ref":                "feature",
+		"sha":                "abc123",
+		"ssh-key":            "id_rsa",
+		"ssh-key-password":   "secret",
+		"output":             "rendered.yaml",
+		"output-dir":         "rendered",
+		"split":              "true",
+	})
+
+	flags := getOperationFlags(cmd)
+	assert.Equal(t, true, flags["all"])
+	assert.Equal(t, true, flags["affected"])
+	assert.Equal(t, true, flags["ci"])
+	assert.Equal(t, true, flags["include-dependents"])
+	assert.Equal(t, true, flags["clone-target-ref"])
+	assert.Equal(t, "/repo", flags["repo-path"])
+	assert.Equal(t, "origin/main", flags["base"])
+	assert.Equal(t, "feature", flags["ref"])
+	assert.Equal(t, "abc123", flags["sha"])
+	assert.Equal(t, "id_rsa", flags["ssh-key"])
+	assert.Equal(t, "secret", flags["ssh-key-password"])
+	assert.Equal(t, "rendered.yaml", flags["output"])
+	assert.Equal(t, "rendered", flags["output_dir"])
+	assert.Equal(t, true, flags["split"])
+}
+
+func TestGetOperationFlagsIgnoresInvalidContext(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("context", "not-an-int", "")
+	flags := getOperationFlags(cmd)
+	assert.NotContains(t, flags, "context")
+}
+
+func TestBuildAndInitConfigAndStacksInfo(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	cmd := newOperationCommand("apply", "Apply")
+	cmd.Flags().String("stack", "", "")
+	cmd.Flags().Bool("dry-run", false, "")
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+	require.NoError(t, cmd.Flags().Set("dry-run", "true"))
+	require.NoError(t, cmd.Flags().Set("all", "true"))
+	require.NoError(t, cmd.Flags().Set("affected", "true"))
+
+	info := buildConfigAndStacksInfo(cmd)
+	assert.Equal(t, "dev", info.Stack)
+	assert.True(t, info.DryRun)
+	assert.True(t, info.All)
+	assert.True(t, info.Affected)
+	assert.True(t, info.ProcessTemplates)
+	assert.True(t, info.ProcessFunctions)
+
+	info = initConfigAndStacksInfo(cmd, "apply", []string{"app"})
+	assert.Equal(t, cfg.HelmComponentType, info.ComponentType)
+	assert.Equal(t, "apply", info.SubCommand)
+	assert.Equal(t, []string{cfg.HelmComponentType, "apply"}, info.CliArgs)
+	assert.Equal(t, "app", info.ComponentFromArg)
+}
+
+func TestRunOperationBuildsExecutionContext(t *testing.T) {
+	provider := &capturingHelmProvider{}
+	original, hadOriginal := component.GetProvider(cfg.HelmComponentType)
+	require.NoError(t, component.Register(provider))
+	t.Cleanup(func() {
+		if hadOriginal {
+			require.NoError(t, component.Register(original))
+		}
+	})
+
+	cmd := configuredOperationCommand(t, "diff", map[string]string{
+		"against": "target",
+		"context": "5",
+	})
+	cmd.Flags().String("stack", "", "")
+	require.NoError(t, cmd.Flags().Set("stack", "dev"))
+
+	require.NoError(t, runOperation(cmd, "diff", []string{"app"}))
+	require.NotNil(t, provider.ctx)
+	assert.Equal(t, cfg.HelmComponentType, provider.ctx.ComponentType)
+	assert.Equal(t, "app", provider.ctx.Component)
+	assert.Equal(t, "dev", provider.ctx.Stack)
+	assert.Equal(t, "diff", provider.ctx.SubCommand)
+	assert.Equal(t, []string{"app"}, provider.ctx.Args)
+	assert.Equal(t, "target", provider.ctx.Flags["against"])
+	assert.Equal(t, 5, provider.ctx.Flags["context"])
+}
+
+type capturingHelmProvider struct {
+	ctx *component.ExecutionContext
+}
+
+func (p *capturingHelmProvider) GetType() string                                 { return cfg.HelmComponentType }
+func (p *capturingHelmProvider) GetGroup() string                                { return "Kubernetes" }
+func (p *capturingHelmProvider) GetBasePath(_ *schema.AtmosConfiguration) string { return "" }
+func (p *capturingHelmProvider) ListComponents(context.Context, string, map[string]any) ([]string, error) {
+	return nil, nil
+}
+func (p *capturingHelmProvider) ValidateComponent(map[string]any) error { return nil }
+func (p *capturingHelmProvider) Execute(ctx *component.ExecutionContext) error {
+	p.ctx = ctx
+	return nil
+}
+func (p *capturingHelmProvider) GenerateArtifacts(*component.ExecutionContext) error { return nil }
+func (p *capturingHelmProvider) GetAvailableCommands() []string                      { return nil }
 
 func configuredOperationCommand(t *testing.T, name string, flags map[string]string) *cobra.Command {
 	t.Helper()
