@@ -436,15 +436,6 @@ func ExecuteWorkflow(
 			workDir = "."
 		}
 
-		// Whenever grouping is enabled (any mode), mark the subprocess environment
-		// so a nested `atmos` invocation skips its own grouping — CI providers do
-		// not support nested groups. This applies even in invocation mode (where
-		// this step itself does not open a group): the parent's invocation group
-		// must stay flat.
-		if ci.GroupingEnabled(&atmosConfig) {
-			stepEnv = append(stepEnv, ci.LogGroupSentinelEnv())
-		}
-
 		// Clear progress line and re-render as permanent record before step execution.
 		// This ensures progress line appears as header, then step output below it.
 		if progressRenderer.IsEnabled() {
@@ -457,15 +448,26 @@ func ExecuteWorkflow(
 		if commandType != "shell" && commandType != schema.TaskTypeExec && commandType != "atmos" && !stepPkg.IsExtendedStepType(commandType) {
 			return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
 				WithTitle(WorkflowErrTitle).
+				WithExplanationf("Workflow `%s` step `%s` uses unsupported type `%s`.", workflow, step.Name, commandType).
+				WithContext("workflow", workflow).
+				WithContext("step", step.Name).
 				WithHintf("Step type '%s' is not supported", commandType).
 				WithHint("Each step must specify a valid type: 'atmos', 'shell', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
 				WithExitCode(1).
 				Err()
 		}
 
+		// If this step will be enclosed in a CI log group, mark the subprocess
+		// environment so a nested `atmos` invocation skips unsupported nested
+		// grouping.
+		if commandType != schema.TaskTypeExec && ci.ShouldPropagateLogGroupSentinel(&atmosConfig, ci.DimensionStep) {
+			stepEnv = append(stepEnv, ci.LogGroupSentinelEnv())
+		}
+
 		// Wrap each step's output in a collapsible CI log group when grouping is
-		// active. RunGrouped is a no-op outside CI / when disabled.
-		err = stepPkg.RunGrouped(&atmosConfig, step.Name, command, func() error {
+		// active. Exec steps run bare because a successful Unix exec never returns
+		// to close a deferred group.
+		err = stepPkg.RunGroupedForType(&atmosConfig, step.Name, command, commandType, func() error {
 			switch commandType {
 			case "shell":
 				// Render command before execution if show.command is enabled.

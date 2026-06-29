@@ -22,6 +22,18 @@ func RunGrouped(atmosConfig *schema.AtmosConfiguration, name, command string, fn
 	return ci.Group(atmosConfig, ci.DimensionStep, groupLabel(name, command), fn)
 }
 
+// RunGroupedForType is RunGrouped for ordinary step types, but deliberately
+// skips grouping for exec steps. Exec steps may replace the Atmos process on
+// Unix, so a deferred group close would never run after a successful handoff.
+func RunGroupedForType(atmosConfig *schema.AtmosConfiguration, name, command, stepType string, fn func() error) error {
+	defer perf.Track(nil, "step.RunGroupedForType")()
+
+	if strings.TrimSpace(stepType) == schema.TaskTypeExec {
+		return fn()
+	}
+	return RunGrouped(atmosConfig, name, command, fn)
+}
+
 // groupLabel picks the human-facing group label: the step name when present,
 // otherwise the resolved command.
 func groupLabel(name, command string) string {

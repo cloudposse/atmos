@@ -199,10 +199,10 @@ func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep,
 		}
 
 		// Wrap each step's output in a collapsible CI log group when grouping is
-		// active. RunGrouped is a no-op outside CI / when disabled, so executeStep
-		// runs unchanged in the common case.
+		// active. Exec steps run bare because a successful Unix exec never returns
+		// to close a deferred group.
 		var stepResult stepResultInternal
-		_ = stepPkg.RunGrouped(params.AtmosConfig, step.Name, step.Command, func() error {
+		_ = stepPkg.RunGroupedForType(params.AtmosConfig, step.Name, step.Command, step.Type, func() error {
 			stepResult = e.executeStep(params, step, stepIdx)
 			return nil
 		})
@@ -337,8 +337,8 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 
 	// When this step's output is wrapped in a CI log group (see runSteps), mark
 	// the subprocess environment so a nested `atmos workflow`/custom-command
-	// invocation skips re-grouping (CI providers do not support nested groups).
-	if ci.GroupingEnabled(params.AtmosConfig) {
+	// invocation skips unsupported nested grouping.
+	if commandType != schema.TaskTypeExec && ci.ShouldPropagateLogGroupSentinel(params.AtmosConfig, ci.DimensionStep) {
 		stepEnv = append(stepEnv, ci.LogGroupSentinelEnv())
 	}
 

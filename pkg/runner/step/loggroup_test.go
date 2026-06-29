@@ -44,3 +44,12 @@ func TestRunGrouped_PassthroughWhenInactive(t *testing.T) {
 	}))
 	assert.True(t, called)
 }
+
+func TestRunGroupedForType_ExecRunsBare(t *testing.T) {
+	called := false
+	require.NoError(t, RunGroupedForType(&schema.AtmosConfiguration{}, "name", "command", schema.TaskTypeExec, func() error {
+		called = true
+		return nil
+	}))
+	assert.True(t, called)
+}

@@ -211,6 +211,42 @@ func TestGroupingEnabled(t *testing.T) {
 	})
 }
 
+func TestShouldPropagateLogGroupSentinel(t *testing.T) {
+	tests := []struct {
+		name string
+		mode string
+		dim  Dimension
+		want bool
+	}{
+		{name: "auto step boundary will group", mode: GroupModeAuto, dim: DimensionStep, want: true},
+		{name: "auto phase boundary will group", mode: GroupModeAuto, dim: DimensionPhase, want: true},
+		{name: "auto invocation boundary will not group", mode: GroupModeAuto, dim: DimensionInvocation, want: false},
+		{name: "invocation step boundary will not group by itself", mode: GroupModeInvocation, dim: DimensionStep, want: false},
+		{name: "invocation boundary will group", mode: GroupModeInvocation, dim: DimensionInvocation, want: true},
+		{name: "off boundary will not group", mode: GroupModeOff, dim: DimensionStep, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registerGrouping(t)
+			assert.Equal(t, tt.want, ShouldPropagateLogGroupSentinel(modeConfig(tt.mode), tt.dim))
+		})
+	}
+}
+
+func TestShouldPropagateLogGroupSentinel_WhenGroupAlreadyOpen(t *testing.T) {
+	registerGrouping(t)
+	var buf bytes.Buffer
+	setLogGroupOut(t, &buf)
+
+	err := Group(modeConfig(GroupModeInvocation), DimensionInvocation, "atmos workflow deploy", func() error {
+		assert.True(t, ShouldPropagateLogGroupSentinel(modeConfig(GroupModeInvocation), DimensionStep))
+		return nil
+	})
+
+	require.NoError(t, err)
+}
+
 func TestLogGroupSentinelEnv(t *testing.T) {
 	assert.Equal(t, "ATMOS_CI_LOG_GROUP_ACTIVE=1", LogGroupSentinelEnv())
 }

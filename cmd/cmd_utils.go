@@ -879,10 +879,16 @@ func executeCustomCommand(
 			log.Debug("Prepared environment with identity for custom command step", customCommandKeyIdentity, commandIdentity, customCommandKeyCommand, commandConfig.Name, "step", i)
 		}
 
-		// Whenever grouping is enabled (any mode), mark the subprocess environment
-		// so a nested `atmos` invocation skips its own grouping — CI providers do
-		// not support nested groups.
-		if ci.GroupingEnabled(&atmosConfig) {
+		// Determine step type - default to shell if not specified.
+		stepType := strings.TrimSpace(step.Type)
+		if stepType == "" {
+			stepType = "shell"
+		}
+
+		// If this step will be enclosed in a CI log group, mark the subprocess
+		// environment so a nested `atmos` invocation skips unsupported nested
+		// grouping.
+		if stepType != schema.TaskTypeExec && ci.ShouldPropagateLogGroupSentinel(&atmosConfig, ci.DimensionStep) {
 			env = append(env, ci.LogGroupSentinelEnv())
 		}
 
@@ -890,12 +896,6 @@ func executeCustomCommand(
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step.Command, data, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
-
-		// Determine step type - default to shell if not specified.
-		stepType := strings.TrimSpace(step.Type)
-		if stepType == "" {
-			stepType = "shell"
-		}
 
 		// Execute the step based on type.
 		//
@@ -907,9 +907,10 @@ func executeCustomCommand(
 		// processes on Linux (no process-group cleanup), so they stay on the
 		// legacy paths.
 		//
-		// The whole dispatch is wrapped in a collapsible CI log group (no-op
-		// outside CI / when disabled), labeled with the step name or command.
-		err = stepPkg.RunGrouped(&atmosConfig, step.Name, commandToRun, func() error {
+		// The dispatch is wrapped in a collapsible CI log group (no-op outside
+		// CI / when disabled), labeled with the step name or command. Exec steps
+		// run bare because a successful Unix exec never returns to close a group.
+		err = stepPkg.RunGroupedForType(&atmosConfig, step.Name, commandToRun, stepType, func() error {
 			switch stepType {
 			case "shell":
 				// Execute shell command (backward compatible).

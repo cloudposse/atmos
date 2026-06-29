@@ -68,9 +68,8 @@ var logGroupOut io.Writer = os.Stdout
 var logGroupDepth int32
 
 // LogGroupSentinelEnv returns the "KEY=VALUE" environment entry that
-// orchestrators append to a step/command subprocess's environment while
-// grouping is enabled, so nested `atmos` invocations skip re-grouping. Callers
-// append it only when GroupingEnabled reports true.
+// orchestrators append to a step/command subprocess's environment while that
+// subprocess is inside, or is about to be inside, a CI log group.
 func LogGroupSentinelEnv() string {
 	defer perf.Track(nil, "ci.LogGroupSentinelEnv")()
 
@@ -132,19 +131,30 @@ func grouper(atmosConfig *schema.AtmosConfiguration) (provider.LogGrouper, bool)
 	return lg, true
 }
 
-// GroupingEnabled reports whether CI log grouping is active for this run in any
-// dimension: a grouping mode other than "off" is configured, a grouping-capable
-// provider is detected, and no parent Atmos process already has grouping open.
-//
-// Orchestrators use it to decide whether to append LogGroupSentinelEnv to a
-// child subprocess's environment — which must happen whenever grouping is
-// enabled, regardless of which dimension the current command emits, so that a
-// nested `atmos` invocation never emits its own (nested) groups.
+// GroupingEnabled reports whether CI log grouping is available for this run in
+// any dimension: a grouping mode other than "off" is configured, a
+// grouping-capable provider is detected, and no parent Atmos process already has
+// grouping open.
 func GroupingEnabled(atmosConfig *schema.AtmosConfiguration) bool {
 	defer perf.Track(nil, "ci.GroupingEnabled")()
 
 	_, ok := grouper(atmosConfig)
 	return ok
+}
+
+// ShouldPropagateLogGroupSentinel reports whether a subprocess launched at dim
+// should inherit LogGroupSentinelEnv. It is true when a group is already open in
+// this Atmos process, or when the configured mode/provider would open a group at
+// dim. This keeps child Atmos invocations from suppressing their own grouping
+// unless a parent group actually exists or will be opened for this boundary.
+func ShouldPropagateLogGroupSentinel(atmosConfig *schema.AtmosConfiguration, dim Dimension) bool {
+	defer perf.Track(nil, "ci.ShouldPropagateLogGroupSentinel")()
+
+	if atomic.LoadInt32(&logGroupDepth) > 0 {
+		return true
+	}
+	_, ok := grouper(atmosConfig)
+	return ok && dimensionActive(resolveGroupMode(atmosConfig), dim)
 }
 
 // Group runs fn wrapped in the detected CI provider's log-group markers, named
