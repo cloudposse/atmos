@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	goversion "github.com/hashicorp/go-version"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -481,6 +483,40 @@ func getVersionEnforcement(configEnforcement string) string {
 	return configEnforcement
 }
 
+// explicitVersionOverride returns the requested version when the user explicitly
+// asks Atmos to run with a different version.
+func explicitVersionOverride() string {
+	if requested := os.Getenv(version.VersionUseEnvVar); requested != "" { //nolint:forbidigo
+		return requested
+	}
+	if requested := explicitVersionOverrideFromArgs(os.Args); requested != "" {
+		return requested
+	}
+	if requested := os.Getenv(version.UseVersionEnvVar); requested != "" { //nolint:forbidigo
+		return requested
+	}
+	if requested := os.Getenv(version.VersionEnvVar); requested != "" { //nolint:forbidigo
+		return requested
+	}
+	return ""
+}
+
+func explicitVersionOverrideFromArgs(args []string) string {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return ""
+		}
+		if strings.HasPrefix(arg, "--use-version=") {
+			return strings.TrimPrefix(arg, "--use-version=")
+		}
+		if arg == "--use-version" && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
 // buildVersionConstraintError builds the error for unsatisfied version constraint.
 func buildVersionConstraintError(constraint schema.VersionConstraint) error {
 	builder := errUtils.Build(errUtils.ErrVersionConstraint).
@@ -498,6 +534,15 @@ func buildVersionConstraintError(constraint schema.VersionConstraint) error {
 	return builder.Err()
 }
 
+func buildInvalidVersionConstraintError(constraint schema.VersionConstraint, err error) error {
+	return errUtils.Build(errors.Join(errUtils.ErrInvalidVersionConstraint, err)).
+		WithHint("Please use valid semver constraint syntax").
+		WithHint("Reference: https://github.com/hashicorp/go-version").
+		WithContext("constraint", constraint.Require).
+		WithExitCode(1).
+		Err()
+}
+
 // warnVersionConstraint logs a warning for unsatisfied version constraint.
 func warnVersionConstraint(constraint schema.VersionConstraint) {
 	ui.Warning(fmt.Sprintf(
@@ -508,6 +553,26 @@ func warnVersionConstraint(constraint schema.VersionConstraint) {
 	if constraint.Message != "" {
 		ui.Warning(constraint.Message)
 	}
+}
+
+// warnVersionConstraintOverride logs a warning when an explicit version override
+// bypasses a failed or non-evaluable version constraint.
+func warnVersionConstraintOverride(constraint schema.VersionConstraint, requestedVersion string, validationErr error) {
+	message := "Atmos version constraint not satisfied; bypassing version constraint enforcement because an explicit version override was requested"
+	keyvals := []interface{}{
+		"required", constraint.Require,
+		"current", version.Version,
+		"override", requestedVersion,
+	}
+	if validationErr != nil {
+		message = "Atmos version constraint could not be evaluated; bypassing version constraint enforcement because an explicit version override was requested"
+		keyvals = append(keyvals, "error", validationErr)
+	}
+	if constraint.Message != "" {
+		keyvals = append(keyvals, "configured_message", constraint.Message)
+	}
+
+	log.Warn(message, keyvals...)
 }
 
 // validateVersionConstraint validates the current Atmos version against the constraint
@@ -522,17 +587,27 @@ func validateVersionConstraint(constraint schema.VersionConstraint) error {
 		return nil
 	}
 
+	if _, err := goversion.NewConstraint(constraint.Require); err != nil {
+		return buildInvalidVersionConstraintError(constraint, fmt.Errorf("invalid version constraint %q: %w", constraint.Require, err))
+	}
+
+	requestedVersion := explicitVersionOverride()
+
 	satisfied, err := version.ValidateConstraint(constraint.Require)
 	if err != nil {
-		return errUtils.Build(errors.Join(errUtils.ErrInvalidVersionConstraint, err)).
-			WithHint("Please use valid semver constraint syntax").
-			WithHint("Reference: https://github.com/hashicorp/go-version").
-			WithContext("constraint", constraint.Require).
-			WithExitCode(1).
-			Err()
+		if requestedVersion != "" {
+			warnVersionConstraintOverride(constraint, requestedVersion, err)
+			return nil
+		}
+		return buildInvalidVersionConstraintError(constraint, err)
 	}
 
 	if satisfied {
+		return nil
+	}
+
+	if requestedVersion != "" {
+		warnVersionConstraintOverride(constraint, requestedVersion, nil)
 		return nil
 	}
 
