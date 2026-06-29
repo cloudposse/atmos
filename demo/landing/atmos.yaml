@@ -11,23 +11,25 @@
 #
 # The same commands run in CI (see .github/workflows/landing-demos.yaml) — local = CI.
 #
-# Recording prerequisites: the `record`/`check` commands auto-install most of the
-# recording toolchain (vhs + ffmpeg) via Atmos toolchain — no manual install needed.
-# Two things can't be auto-installed: a container runtime (Docker or Podman, a system
-# daemon, for the emulator-backed tapes) and `ttyd` on macOS (the aqua registry ships
-# ttyd for Linux/Windows only, so on macOS run `brew install ttyd` once; Linux/CI
-# images already include it). Publishing needs the AWS CLI.
+# Recording prerequisites: the `record`/`check` commands auto-install the recording
+# toolchain (vhs + ffmpeg + ttyd) via the Atmos toolchain — no manual install needed on
+# Linux/CI. Two caveats: a container runtime (Docker or Podman, a system daemon) is still
+# required for the emulator-backed tapes; and `ttyd` has no macOS aqua binary (the registry
+# ships it for Linux/Windows only), so on macOS its auto-install is skipped with a warning —
+# run `brew install ttyd` once. The Kubernetes tape's helm/helmfile/kubectl are provisioned
+# separately by the k8s example's own component `dependencies.tools`. Publishing assumes the
+# `docs/publish` identity (GitHub OIDC → S3) and needs the AWS CLI.
 
 base_path: "./"
 
-# The recording toolchain. `vhs` shells out to `ttyd` and `ffmpeg` at runtime. Only
-# vhs + ffmpeg are pinned in .tool-versions (so the custom-command preflight installs
-# them on every platform); the record/check commands put them on PATH via
-# `atmos toolchain path`. The `ttyd` alias is kept for convenience, but ttyd is NOT in
-# .tool-versions: the aqua registry has no macOS binary for it, and a macOS-incompatible
-# entry would hard-fail the preflight. ttyd therefore comes from the system (brew on
-# macOS, the Linux/CI image elsewhere). (podman/docker is a container runtime, not an
-# aqua single-binary, so it stays a system prerequisite.)
+# The recording toolchain. `vhs` shells out to `ttyd` and `ffmpeg` at runtime. vhs,
+# ffmpeg, and ttyd are pinned in the `record`/`check` commands' `dependencies.tools`
+# (below) and auto-installed before the steps run; those steps put them on PATH via
+# `atmos toolchain path`. ttyd has no macOS aqua binary (the registry ships it for
+# Linux/Windows only), so on macOS its install is skipped with a warning and ttyd falls
+# back to the system (`brew install ttyd`); on Linux/CI it installs from aqua. (podman/
+# docker is a container runtime, not an aqua single-binary, so it stays a system
+# prerequisite.)
 toolchain:
   install_path: .tools
   aliases:
@@ -51,6 +53,30 @@ logs:
   file: "/dev/stderr"
   level: Info
 
+# Publishing identity for `atmos demo publish` (used in CI by .github/workflows/landing-demos.yaml).
+# Assumes the existing prod docs role via GitHub OIDC — no static credentials, no separate
+# bucket/role. The role ARN, region, and session name are read from the SAME workflow env vars
+# the old `aws-actions/configure-aws-credentials` step used (IAM_ROLE_ARN / AWS_REGION /
+# IAM_ROLE_SESSION_NAME) via `!env`, so the workflow stays the single source of truth and
+# nothing is hardcoded here. The audience must match the role's trust-policy `aud` condition
+# (`sts.amazonaws.com` — the configure-aws-credentials default the role already trusts).
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      spec:
+        audience: sts.amazonaws.com
+  identities:
+    docs/publish:
+      kind: aws/assume-role
+      default: true
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: !env IAM_ROLE_ARN
+        region: !env AWS_REGION
+        session_name: !env IAM_ROLE_SESSION_NAME
+
 commands:
   - name: demo
     description: Record and publish the landing-page demos (VHS).
@@ -62,13 +88,14 @@ commands:
             description: 'Tape name without extension (e.g. "hero"), or "all" for every tape.'
         # Pinned recording toolchain, auto-installed before the step runs. Declaring it
         # here (not in .tool-versions) means it works in CI with no checked-in
-        # .tool-versions and overrides any local one. ttyd is intentionally absent: it
-        # has no macOS aqua binary, so it comes from the system (brew on macOS; the
-        # workflow installs it on Linux/CI).
+        # .tool-versions and overrides any local one. ttyd auto-installs on Linux/CI; on
+        # macOS it has no aqua binary, so its install is skipped with a warning and it
+        # falls back to the system (`brew install ttyd`).
         dependencies:
           tools:
             vhs: "v0.11.0"
             ffmpeg: "8.1.1"
+            ttyd: "1.7.7"
         steps:
           - |
             set -euo pipefail
@@ -79,16 +106,14 @@ commands:
             # `atmos` is on PATH. `make build` writes ./build/atmos.
             export PATH="$repo/build:$PATH"
             command -v atmos >/dev/null 2>&1 || { echo "atmos not found — run 'make build'"; exit 1; }
-            # vhs + ffmpeg are auto-installed from this command's `dependencies.tools`
-            # (pinned above) and resolve on every platform via the aqua registry; put
-            # them on PATH. ttyd has NO macOS aqua binary, so it is intentionally NOT a
-            # declared dependency (it would hard-fail the preflight on macOS) and comes
-            # from the system instead — `brew install ttyd` on macOS; the Linux CI image
-            # / workflow installs it.
+            # vhs, ffmpeg, and ttyd are auto-installed from this command's
+            # `dependencies.tools` (pinned above) and put on PATH. ttyd has NO macOS aqua
+            # binary, so on macOS its install is skipped with a warning and it must come
+            # from the system (`brew install ttyd`); on Linux/CI it installs from aqua.
             export PATH="$( cd "$landing" && atmos toolchain path 2>/dev/null | tr '\n' ':' )$PATH"
             missing=""
             for t in vhs ttyd ffmpeg; do command -v "$t" >/dev/null 2>&1 || missing="$missing $t"; done
-            [ -z "$missing" ] || { echo "missing recording tools:$missing (vhs/ffmpeg auto-install; on macOS run: brew install ttyd)"; exit 1; }
+            [ -z "$missing" ] || { echo "missing recording tools:$missing (auto-install via toolchain; on macOS run: brew install ttyd)"; exit 1; }
             cd "$repo"
             mkdir -p website/static/img/demos
             name='{{ .Arguments.name }}'
@@ -126,6 +151,7 @@ commands:
           tools:
             vhs: "v0.11.0"
             ffmpeg: "8.1.1"
+            ttyd: "1.7.7"
         steps:
           - |
             set -euo pipefail
@@ -133,12 +159,12 @@ commands:
             landing="$repo/demo/landing"
             export PATH="$repo/build:$PATH"  # use the freshly built atmos (see `record`).
             command -v atmos >/dev/null 2>&1 || { echo "atmos not found — run 'make build'"; exit 1; }
-            # vhs + ffmpeg auto-install from this command's `dependencies.tools`; put
-            # them on PATH. ttyd comes from the system (see `record` for the macOS note).
+            # vhs, ffmpeg, and ttyd auto-install from this command's `dependencies.tools`;
+            # put them on PATH (ttyd on macOS comes from brew — see `record`).
             export PATH="$( cd "$landing" && atmos toolchain path 2>/dev/null | tr '\n' ':' )$PATH"
             missing=""
             for t in vhs ttyd ffmpeg; do command -v "$t" >/dev/null 2>&1 || missing="$missing $t"; done
-            [ -z "$missing" ] || { echo "missing recording tools:$missing (vhs/ffmpeg auto-install; on macOS run: brew install ttyd)"; exit 1; }
+            [ -z "$missing" ] || { echo "missing recording tools:$missing (auto-install via toolchain; on macOS run: brew install ttyd)"; exit 1; }
             cd "$repo"
             name='{{ .Arguments.name }}'
             src="demo/landing/${name}.tape"
@@ -164,6 +190,10 @@ commands:
 
       - name: publish
         description: Sync rendered demos to the S3/CDN bucket (set ATMOS_DEMOS_S3_URI).
+        # Self-authenticates via the `docs/publish` identity (GitHub OIDC → assume role);
+        # Atmos injects the AWS credentials into the step env, so `aws s3 sync` needs no
+        # `atmos auth exec` wrapper. CI sets IAM_ROLE_ARN / AWS_REGION / IAM_ROLE_SESSION_NAME.
+        identity: docs/publish
         steps:
           - |
             set -euo pipefail
