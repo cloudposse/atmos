@@ -38,6 +38,27 @@ func TestConfigCommands_EditCurrentDirectoryConfig(t *testing.T) {
 	require.ErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound)
 }
 
+func TestConfigFormatCommand_FormatsCurrentDirectoryConfig(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("settings: {enabled: true}\n"), 0o644))
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(wd))
+	})
+	require.NoError(t, os.Chdir(dir))
+
+	require.NoError(t, configFormatCmd.RunE(configFormatCmd, nil))
+	got, err := atmosyaml.GetFile(file, "settings.enabled")
+	require.NoError(t, err)
+	assert.Equal(t, "true", got)
+	formatted, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.NotEmpty(t, formatted)
+}
+
 func TestResolveConfigFile_OverrideFlag(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "custom.yaml")

@@ -19,6 +19,7 @@ import (
 	listpkg "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendoring"
+	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -220,6 +221,39 @@ spec:
 	require.NoError(t, err)
 	require.Contains(t, output, "imports/common.yaml\n  spec\n  spec.sources\n")
 	require.Contains(t, output, "vendor.yaml\n  apiVersion\n")
+}
+
+func TestFormatVendorConfigFiles_FormatsRootAndImports(t *testing.T) {
+	dir := t.TempDir()
+	rootFile := filepath.Join(dir, DefaultVendorManifest)
+	importFile := filepath.Join(dir, "imports", "common.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(importFile), 0o755))
+	require.NoError(t, os.WriteFile(rootFile, []byte(`apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  imports: [imports/common.yaml]
+  sources:
+    - component: vpc
+      version: v0.1.0
+`), 0o644))
+	require.NoError(t, os.WriteFile(importFile, []byte("spec: {sources: [{component: eks, version: v0.2.0}]}\n"), 0o644))
+
+	files, err := formatVendorConfigFiles(rootFile)
+	require.NoError(t, err)
+	assert.Equal(t, []string{rootFile, importFile}, files)
+
+	gotRoot, err := os.ReadFile(rootFile)
+	require.NoError(t, err)
+	assert.NotEmpty(t, gotRoot)
+	gotVersion, err := atmosyaml.GetFile(rootFile, "spec.sources[0].version")
+	require.NoError(t, err)
+	assert.Equal(t, "v0.1.0", gotVersion)
+	gotImport, err := os.ReadFile(importFile)
+	require.NoError(t, err)
+	assert.NotEmpty(t, gotImport)
+	gotComponent, err := atmosyaml.GetFile(importFile, "spec.sources[0].component")
+	require.NoError(t, err)
+	assert.Equal(t, "eks", gotComponent)
 }
 
 func TestVendorDiffCommandValidationAndManifestErrors(t *testing.T) {

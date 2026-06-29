@@ -93,6 +93,30 @@ var vendorConfigDeleteCmd = &cobra.Command{
 	},
 }
 
+var vendorConfigFormatCmd = &cobra.Command{
+	Use:     "format",
+	Aliases: []string{"fmt"},
+	Short:   "Format vendor manifest config files",
+	Long: `Format the root vendor manifest and imported vendor manifest files in place,
+preserving comments, anchors, YAML functions, and templates.`,
+	Example: "atmos vendor config format\natmos vendor config format --file ./vendor.yaml",
+	Args:    cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		defer perf.Track(nil, "vendor.config.formatRunE")()
+
+		file, err := resolveVendorConfigFile()
+		if err != nil {
+			return err
+		}
+		files, err := formatVendorConfigFiles(file)
+		if err != nil {
+			return err
+		}
+		ui.Successf("Formatted %d vendor config file(s).", len(files))
+		return nil
+	},
+}
+
 var vendorConfigListCmd = &cobra.Command{
 	Use:     "list [path-pattern]",
 	Short:   "List raw vendor manifest setting paths",
@@ -125,7 +149,7 @@ func vendorPathPatternArg(args []string) string {
 }
 
 func init() {
-	for _, c := range []*cobra.Command{vendorConfigGetCmd, vendorConfigSetCmd, vendorConfigDeleteCmd, vendorConfigListCmd} {
+	for _, c := range []*cobra.Command{vendorConfigGetCmd, vendorConfigSetCmd, vendorConfigDeleteCmd, vendorConfigFormatCmd, vendorConfigListCmd} {
 		c.Flags().StringVar(&vendorConfigFileFlag, "file", "", "Vendor manifest file (default: ./vendor.yaml)")
 	}
 	vendorConfigSetCmd.Flags().StringVar(&vendorConfigType, "type", atmosyaml.TypeString,
@@ -136,6 +160,7 @@ func init() {
 	vendorConfigCmd.AddCommand(vendorConfigGetCmd)
 	vendorConfigCmd.AddCommand(vendorConfigSetCmd)
 	vendorConfigCmd.AddCommand(vendorConfigDeleteCmd)
+	vendorConfigCmd.AddCommand(vendorConfigFormatCmd)
 	vendorConfigCmd.AddCommand(vendorConfigListCmd)
 	vendorCmd.AddCommand(vendorConfigCmd)
 }
@@ -172,6 +197,19 @@ func buildVendorConfigPathRows(rootFile string) ([]listpkg.PathRow, error) {
 		}
 	}
 	return rows, nil
+}
+
+func formatVendorConfigFiles(rootFile string) ([]string, error) {
+	files, err := vendoring.CollectManifestFiles(rootFile)
+	if err != nil {
+		return nil, err
+	}
+	for _, file := range files {
+		if err := atmosyaml.FormatFile(file); err != nil {
+			return nil, err
+		}
+	}
+	return files, nil
 }
 
 func relativeVendorPathForDisplay(file, basePath string) string {

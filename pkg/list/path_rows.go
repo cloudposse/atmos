@@ -38,10 +38,7 @@ func RenderPathRowsWithPattern(rows []PathRow, outputFormat string, delimiter st
 	if err := format.ValidateFormat(outputFormat); err != nil {
 		return "", err
 	}
-	filteredRows, err := filterPathRows(rows, pathPattern)
-	if err != nil {
-		return "", err
-	}
+	filteredRows := filterPathRows(rows, pathPattern)
 
 	selector, err := column.NewSelector([]column.Config{
 		{Name: "file", Value: "{{ .file }}"},
@@ -76,9 +73,9 @@ func RenderPathRowsWithPattern(rows []PathRow, outputFormat string, delimiter st
 	return r.RenderToString(data)
 }
 
-func filterPathRows(rows []PathRow, pathPattern string) ([]PathRow, error) {
+func filterPathRows(rows []PathRow, pathPattern string) []PathRow {
 	if pathPattern == "" {
-		return rows, nil
+		return rows
 	}
 
 	pattern := pathPatternRegexp(pathPattern)
@@ -88,7 +85,7 @@ func filterPathRows(rows []PathRow, pathPattern string) ([]PathRow, error) {
 			filtered = append(filtered, row)
 		}
 	}
-	return filtered, nil
+	return filtered
 }
 
 func pathPatternRegexp(pathPattern string) *regexp.Regexp {

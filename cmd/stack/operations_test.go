@@ -143,6 +143,54 @@ func TestBuildStackConfigRowsFromDescribe(t *testing.T) {
 	require.NotContains(t, rows, listpkg.PathRow{File: "deploy/prod.yaml", Path: cfg.ComponentTypeSectionName, Type: "string", Value: "terraform"})
 }
 
+func TestStackFormatFilesFromProvenance(t *testing.T) {
+	mctx := merge.NewMergeContext()
+	mctx.EnableProvenance()
+	mctx.RecordProvenance("components.terraform.vpc", merge.ProvenanceEntry{File: "deploy/prod.yaml", Line: 3})
+	mctx.RecordProvenance("components.terraform.vpc.vars.region", merge.ProvenanceEntry{File: "deploy/prod.yaml", Line: 5})
+	mctx.RecordProvenance("components.terraform.vpc.settings.enabled", merge.ProvenanceEntry{File: "deploy/settings.yaml", Line: 8})
+	mctx.RecordProvenance("components.terraform.eks.vars.region", merge.ProvenanceEntry{File: "deploy/eks.yaml", Line: 5})
+
+	dir := t.TempDir()
+	files, err := stackFormatFilesFromProvenance(
+		&schema.AtmosConfiguration{StacksBaseAbsolutePath: dir},
+		&exec.DescribeComponentResult{
+			ComponentSection: map[string]any{
+				cfg.ComponentTypeSectionName: "terraform",
+			},
+			MergeContext: mctx,
+		},
+		"vpc",
+	)
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		filepath.Join(dir, "deploy", "prod.yaml"),
+		filepath.Join(dir, "deploy", "settings.yaml"),
+	}, files)
+}
+
+func TestStackFormatFilesFromProvenance_NoFiles(t *testing.T) {
+	mctx := merge.NewMergeContext()
+	mctx.EnableProvenance()
+
+	flagStack = "prod"
+	t.Cleanup(func() {
+		flagStack = ""
+	})
+
+	_, err := stackFormatFilesFromProvenance(
+		&schema.AtmosConfiguration{StacksBaseAbsolutePath: t.TempDir()},
+		&exec.DescribeComponentResult{
+			ComponentSection: map[string]any{
+				cfg.ComponentTypeSectionName: "terraform",
+			},
+			MergeContext: mctx,
+		},
+		"vpc",
+	)
+	require.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+}
+
 func TestCommandProvider(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{}
 	SetAtmosConfig(cfg)

@@ -198,8 +198,13 @@ func formatStyledPaths(headers []string, rows [][]string) string {
 	widths := styledPathWidths(rows, indexes)
 	var lines []string
 	currentFile := ""
+	opts := styledPathLineOptions{
+		indexes: indexes,
+		widths:  widths,
+		styles:  &styles,
+	}
 	for _, row := range rows {
-		nextLines, nextFile, ok := appendStyledPathLine(lines, currentFile, row, indexes, widths, &styles)
+		nextLines, nextFile, ok := appendStyledPathLine(lines, currentFile, row, opts)
 		if !ok {
 			continue
 		}
@@ -235,6 +240,12 @@ type pathColumnWidths struct {
 	typ  int
 }
 
+type styledPathLineOptions struct {
+	indexes pathColumnIndexes
+	widths  pathColumnWidths
+	styles  *pathStyles
+}
+
 func styledPathStyles() pathStyles {
 	styles := theme.GetCurrentStyles()
 	fileStyle := lipgloss.NewStyle().Bold(true)
@@ -261,7 +272,10 @@ func styledPathWidths(rows [][]string, indexes pathColumnIndexes) pathColumnWidt
 	return widths
 }
 
-func appendStyledPathLine(lines []string, currentFile string, row []string, indexes pathColumnIndexes, widths pathColumnWidths, styles *pathStyles) ([]string, string, bool) {
+func appendStyledPathLine(lines []string, currentFile string, row []string, opts styledPathLineOptions) ([]string, string, bool) {
+	indexes := opts.indexes
+	widths := opts.widths
+	styles := opts.styles
 	if indexes.file >= len(row) || indexes.path >= len(row) {
 		return lines, currentFile, false
 	}

@@ -36,6 +36,7 @@ func init() {
 	stackCmd.AddCommand(stackGetCmd)
 	stackCmd.AddCommand(stackSetCmd)
 	stackCmd.AddCommand(stackDeleteCmd)
+	stackCmd.AddCommand(stackFormatCmd)
 	stackCmd.AddCommand(stackConfigCmd)
 
 	internal.Register(&CommandProvider{})
