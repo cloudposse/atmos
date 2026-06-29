@@ -62,10 +62,10 @@ var stackConfigDeleteCmd = &cobra.Command{
 }
 
 var stackConfigListCmd = &cobra.Command{
-	Use:     "list",
+	Use:     "list [path-pattern]",
 	Short:   "List editable component config paths for a stack",
-	Example: "atmos stack config list -s plat-ue2-prod -c vpc\natmos stack config list -s plat-ue2-prod -c vpc --format json",
-	Args:    cobra.NoArgs,
+	Example: "atmos stack config list -s plat-ue2-prod -c vpc\natmos stack config list 'vars.*' -s plat-ue2-prod -c vpc\natmos stack config list -s plat-ue2-prod -c vpc --format json",
+	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "stack.config.listRunE")()
 
@@ -73,12 +73,19 @@ var stackConfigListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		output, err := listpkg.RenderPathRows(rows, flagFormat, flagDelimiter)
+		output, err := listpkg.RenderPathRowsWithPattern(rows, flagFormat, flagDelimiter, stackPathPatternArg(args))
 		if err != nil {
 			return err
 		}
 		return data.Write(output)
 	},
+}
+
+func stackPathPatternArg(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	return args[0]
 }
 
 func init() {

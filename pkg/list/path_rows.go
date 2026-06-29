@@ -2,6 +2,7 @@ package list
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listsort "github.com/cloudposse/atmos/pkg/list/sort"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const pathRowLineEnding = "\n"
@@ -23,10 +25,21 @@ type PathRow struct {
 
 // RenderPathRows renders path discovery rows through the standard list pipeline.
 func RenderPathRows(rows []PathRow, outputFormat string, delimiter string) (string, error) {
+	return RenderPathRowsWithPattern(rows, outputFormat, delimiter, "")
+}
+
+// RenderPathRowsWithPattern renders path discovery rows after applying an optional path glob.
+func RenderPathRowsWithPattern(rows []PathRow, outputFormat string, delimiter string, pathPattern string) (string, error) {
+	defer perf.Track(nil, "list.RenderPathRowsWithPattern")()
+
 	if outputFormat == "" {
 		outputFormat = string(format.FormatPaths)
 	}
 	if err := format.ValidateFormat(outputFormat); err != nil {
+		return "", err
+	}
+	filteredRows, err := filterPathRows(rows, pathPattern)
+	if err != nil {
 		return "", err
 	}
 
@@ -40,8 +53,8 @@ func RenderPathRows(rows []PathRow, outputFormat string, delimiter string) (stri
 		return "", err
 	}
 
-	data := make([]map[string]any, 0, len(rows))
-	for _, row := range rows {
+	data := make([]map[string]any, 0, len(filteredRows))
+	for _, row := range filteredRows {
 		data = append(data, map[string]any{
 			"file":  row.File,
 			"path":  row.Path,
@@ -61,6 +74,28 @@ func RenderPathRows(rows []PathRow, outputFormat string, delimiter string) (stri
 		delimiter,
 	)
 	return r.RenderToString(data)
+}
+
+func filterPathRows(rows []PathRow, pathPattern string) ([]PathRow, error) {
+	if pathPattern == "" {
+		return rows, nil
+	}
+
+	pattern := pathPatternRegexp(pathPattern)
+	filtered := make([]PathRow, 0, len(rows))
+	for _, row := range rows {
+		if pattern.MatchString(row.Path) {
+			filtered = append(filtered, row)
+		}
+	}
+	return filtered, nil
+}
+
+func pathPatternRegexp(pathPattern string) *regexp.Regexp {
+	quoted := regexp.QuoteMeta(pathPattern)
+	quoted = strings.ReplaceAll(quoted, `\*`, `.*`)
+	quoted = strings.ReplaceAll(quoted, `\?`, `.`)
+	return regexp.MustCompile("^" + quoted + "$")
 }
 
 func previewPathRowValue(value string) string {

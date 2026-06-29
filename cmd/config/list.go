@@ -20,12 +20,12 @@ import (
 var configListParser *flags.StandardParser
 
 var configListCmd = &cobra.Command{
-	Use:   "list",
+	Use:   "list [path-pattern]",
 	Short: "List editable atmos.yaml setting paths",
 	Long: `List the physical Atmos config files that contributed settings and the
-dot-notation setting paths defined in each file.`,
-	Example: "atmos config list\natmos config list --format json",
-	Args:    cobra.NoArgs,
+dot-notation setting paths defined in each file. Optionally filter paths with a glob pattern.`,
+	Example: "atmos config list\natmos config list 'toolchain.*'\natmos config list --format json",
+	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "config.listRunE")()
 
@@ -44,12 +44,19 @@ dot-notation setting paths defined in each file.`,
 			return err
 		}
 
-		output, err := listpkg.RenderPathRows(rows, v.GetString("format"), v.GetString("delimiter"))
+		output, err := listpkg.RenderPathRowsWithPattern(rows, v.GetString("format"), v.GetString("delimiter"), pathPatternArg(args))
 		if err != nil {
 			return err
 		}
 		return data.Write(output)
 	},
+}
+
+func pathPatternArg(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	return args[0]
 }
 
 func init() {
