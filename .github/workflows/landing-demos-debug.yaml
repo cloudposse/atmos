@@ -54,70 +54,52 @@ jobs:
       - name: Prepare diagnostics dir
         run: mkdir -p "${{ github.workspace }}/diag"
 
-      # HYPOTHESIS UNDER TEST: the landing-demos render job never installs terraform
-      # (the mock/k3s jobs do), so `atmos terraform init` in the tapes has no binary to
-      # exec — fast-fails raw, hangs under VHS's interactive TTY. Install it like mock does.
-      - name: Install Terraform via Atmos toolchain
-        run: |
-          atmos toolchain install hashicorp/terraform
-          atmos toolchain env --format=github
-
-      # Stage 1 — RAW reproduction (no VHS). Replicate demo/landing/dx.tape's off-camera
-      # sequence as plain shell so we get raw stdout/stderr, fail fast via `timeout`, and
-      # snapshot the emulator/network state around the hang. This also rules out VHS vs.
-      # the Actions/Docker environment: if this hangs too, VHS is not the cause.
-      - name: Reproduce dx terraform init (raw, instrumented)
+      # HYPOTHESIS UNDER TEST: on Linux CI ttyd does not end up on PATH from the toolchain,
+      # even though vhs/ffmpeg do (the record/check command's `command -v ttyd` gate fails).
+      # `atmos demo check hero` triggers the SAME `dependencies.tools` auto-install
+      # (vhs v0.11.0 / ffmpeg 8.1.1 / ttyd 1.7.7) as `record`, but `hero` is a non-emulator
+      # tape so no docker is needed — fast. Capture the toolchain TRACE, then explicitly
+      # install ttyd to see if that path differs, and dump what `atmos toolchain path`
+      # resolves + the .tools tree.
+      - name: Probe ttyd toolchain install (vhs/ffmpeg/ttyd)
         run: |
           set -uo pipefail
           D="${{ github.workspace }}/diag"
-          mkdir -p "$D"
-          cd demo/landing/fixtures/dx
+          cd demo/landing
+          uname -srm    > "$D/uname.txt"         2>&1 || true
+          atmos version > "$D/atmos-version.txt" 2>&1 || true
 
-          atmos version            > "$D/atmos-version.txt" 2>&1 || true
-          command -v terraform tofu > "$D/tf-which.txt"      2>&1 || true
-          env | grep -iE 'AWS_|ATMOS_|TF_' | sort > "$D/env.txt" 2>&1 || true
-
-          echo "::group::emulator up"
-          atmos emulator reset aws -s dev --force > "$D/emulator-reset.txt" 2>&1 || true
-          atmos emulator up aws -s dev            > "$D/emulator-up.txt"    2>&1
-          echo "::endgroup::"
-
-          cid="$(docker ps -q --filter 'label=tools.atmos.component_type=emulator' --filter 'label=tools.atmos.component=aws' | head -1)"
-          echo "emulator container id: ${cid:-<none>}"
-          docker ps -a            > "$D/docker-ps.txt"            2>&1 || true
-          docker port "$cid"      > "$D/docker-port.txt"          2>&1 || true
-          docker logs "$cid"      > "$D/emulator-logs-before.txt" 2>&1 || true
-          getent hosts localhost  > "$D/getent.txt"               2>&1 || true
-          ss -tlnp                > "$D/listening.txt"            2>&1 || true
-
-          # Probe the published endpoint the terraform AWS provider would hit. A fast
-          # connect/refuse rules out a port-binding hang; a hang here is the smoking gun.
-          hostport="$(docker port "$cid" 4566/tcp 2>/dev/null | sed -n '1s/.*://p')"
-          echo "hostport=${hostport:-<none>}" | tee "$D/hostport.txt"
-          if [ -n "${hostport:-}" ]; then
-            timeout 25 curl -sv "http://127.0.0.1:${hostport}/" > "$D/curl-probe.txt" 2>&1 || true
-          fi
-
-          # THE HANG — bounded to ~160s (vs the 360s tape timeout) so we fail fast. Give
-          # the init its own atmos trace file so a later command can't overwrite it.
-          echo "::group::terraform init (bounded)"
+          # (1) Faithful path: the command's dependencies.tools auto-install + gate.
+          echo "::group::atmos demo check hero (Trace)"
           set +e
-          ATMOS_LOGS_FILE="$D/atmos-init.log" timeout 160 atmos terraform init s3-bucket -s dev
-          code=$?
+          ATMOS_LOGS_FILE="$D/demo-check.log" atmos demo check hero > "$D/demo-check.txt" 2>&1
+          echo "demo_check_exit=$?" | tee "$D/demo-check-exit.txt"
           set -e
           echo "::endgroup::"
-          echo "init_exit=$code" | tee "$D/init-exit.txt"   # 124 == timed out (hung)
 
-          docker logs "$cid" > "$D/emulator-logs-after.txt" 2>&1 || true
-          ss -tlnp           > "$D/listening-after.txt"     2>&1 || true
+          # (2) Explicit per-tool install for comparison (does ttyd install on its own?).
+          for spec in "charmbracelet/vhs" "Tyrrrz/FFmpegBin" "tsl0922/ttyd"; do
+            base="$(basename "$spec")"
+            echo "::group::toolchain install $spec"
+            set +e
+            ATMOS_LOGS_FILE="$D/install-$base.log" atmos toolchain install "$spec" > "$D/install-$base.txt" 2>&1
+            echo "$spec exit=$?" | tee -a "$D/install-results.txt"
+            set -e
+            echo "::endgroup::"
+          done
 
-          exit "$code"
+          atmos toolchain path > "$D/toolchain-path.txt" 2>&1 || true
+          atmos toolchain list > "$D/toolchain-list.txt" 2>&1 || true
+          find .tools -maxdepth 7 -type f 2>/dev/null | sort > "$D/tools-tree.txt" || true
 
-      # Always capture the diagnostics, even (especially) when init hung/failed.
+          export PATH="$(atmos toolchain path 2>/dev/null | tr '\n' ':')$PATH"
+          { for t in vhs ttyd ffmpeg; do printf '%s -> ' "$t"; command -v "$t" || echo MISSING; done; } | tee "$D/which.txt"
+          true
+
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: dx-init-diagnostics
+          name: ttyd-toolchain-diagnostics
           path: ${{ github.workspace }}/diag/
           if-no-files-found: warn
