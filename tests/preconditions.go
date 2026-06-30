@@ -341,16 +341,13 @@ func RequireNetworkAccess(t *testing.T, url string) {
 func RequireExecutable(t *testing.T, name string, purpose string) {
 	t.Helper()
 
+	prependCachedTestTool(name)
+
 	if !ShouldCheckPreconditions() {
 		return
 	}
 
 	_, err := exec.LookPath(name)
-	if err != nil {
-		prependCachedTestTool(name)
-	}
-
-	_, err = exec.LookPath(name)
 	if err != nil {
 		t.Skipf("'%s' not found in PATH: required for %s. Install the tool or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
 			name, purpose)

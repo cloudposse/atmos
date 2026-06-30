@@ -206,15 +206,17 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	if err != nil {
 		return nil, nil, err
 	}
+	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
 
-	stacksMap, err := e.ExecuteDescribeStacks(
+	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
 		&atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		false, // includeEmptyStacks
-		opts.Skip,
+		skip,
 		authManager,
+		authManager == nil,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)

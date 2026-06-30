@@ -1,4 +1,0 @@
-vars:
-  stage: staging
-
-# Other defaults for the `staging` stage/account

@@ -2,6 +2,7 @@ package exec
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/diagnostics"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	process "github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -35,8 +37,8 @@ func TestShellHelperProcess(t *testing.T) {
 
 	switch args[1] {
 	case "stdout-stderr":
-		fmt.Fprint(os.Stdout, "stdout")
-		fmt.Fprint(os.Stderr, "stderr")
+		_, _ = os.Stdout.Write([]byte("stdout"))
+		_, _ = os.Stderr.Write([]byte("stderr"))
 	case "exit":
 		os.Exit(2)
 	default:
@@ -118,6 +120,146 @@ func TestExecuteShellCommandUsesInjectedStreamsAndCapture(t *testing.T) {
 	assert.Equal(t, "stderr", terminalErr.String())
 	assert.Equal(t, "stdout", captureOut.String())
 	assert.Equal(t, "stderr", captureErr.String())
+}
+
+func TestExecuteShellCommandTerminalSpeedPreservesNonTTYStreamsAndCapture(t *testing.T) {
+	var terminalOut, terminalErr, captureOut, captureErr bytes.Buffer
+	helper := shellHelperCommand(t, "stdout-stderr")
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{Speed: 8},
+		},
+	}
+
+	err := ExecuteShellCommand(
+		atmosConfig,
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &terminalErr,
+		}),
+		WithStdoutCapture(&captureOut),
+		WithStderrCapture(&captureErr),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "stdout", terminalOut.String())
+	assert.Equal(t, "stderr", terminalErr.String())
+	assert.Equal(t, "stdout", captureOut.String())
+	assert.Equal(t, "stderr", captureErr.String())
+}
+
+func TestExecuteShellCommandWritesDiagnosticsEvents(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atmos-events.jsonl")
+	helper := shellHelperCommand(t, "stdout-stderr")
+	atmosConfig := schema.AtmosConfiguration{
+		Diagnostics: schema.Diagnostics{
+			Enabled: true,
+			File:    path,
+		},
+	}
+
+	err := ExecuteShellCommand(
+		atmosConfig,
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+		WithProcessStreams(process.Streams{
+			Stdout: &bytes.Buffer{},
+			Stderr: &bytes.Buffer{},
+		}),
+	)
+
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"level"`)
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	require.Len(t, lines, 2)
+
+	var startEvent diagnostics.Event
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &startEvent))
+	assert.Equal(t, "process.start", startEvent.Type)
+	assert.NotEmpty(t, startEvent.ID)
+	assert.Equal(t, helper.command, startEvent.Command)
+	assert.Equal(t, helper.args, startEvent.Args)
+	require.NotNil(t, startEvent.TTY)
+	assert.False(t, *startEvent.TTY)
+
+	var endEvent diagnostics.Event
+	require.NoError(t, json.Unmarshal([]byte(lines[1]), &endEvent))
+	assert.Equal(t, "process.end", endEvent.Type)
+	assert.Equal(t, startEvent.ID, endEvent.ID)
+	require.NotNil(t, endEvent.Started)
+	assert.True(t, *endEvent.Started)
+	require.NotNil(t, endEvent.Success)
+	assert.True(t, *endEvent.Success)
+	require.NotNil(t, endEvent.ExitCode)
+	assert.Equal(t, 0, *endEvent.ExitCode)
+	require.NotNil(t, endEvent.DurationMS)
+	assert.GreaterOrEqual(t, *endEvent.DurationMS, int64(0))
+}
+
+func TestExecuteShellCommandWritesDiagnosticsOutputWhenEnabled(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atmos-events.jsonl")
+	helper := shellHelperCommand(t, "stdout-stderr")
+	atmosConfig := schema.AtmosConfiguration{
+		Diagnostics: schema.Diagnostics{
+			Enabled:       true,
+			File:          path,
+			IncludeOutput: true,
+		},
+	}
+
+	err := ExecuteShellCommand(
+		atmosConfig,
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+		WithProcessStreams(process.Streams{
+			Stdout: &bytes.Buffer{},
+			Stderr: &bytes.Buffer{},
+		}),
+	)
+
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"level"`)
+
+	var outputEvents []diagnostics.Event
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		var event diagnostics.Event
+		require.NoError(t, json.Unmarshal([]byte(line), &event))
+		if event.Type == "process.output" {
+			outputEvents = append(outputEvents, event)
+		}
+	}
+	require.Len(t, outputEvents, 2)
+	outputByStream := map[string]diagnostics.Event{}
+	for _, event := range outputEvents {
+		outputByStream[event.Stream] = event
+	}
+	assert.Equal(t, "stdout", outputByStream["stdout"].Data)
+	assert.Equal(t, "stderr", outputByStream["stderr"].Data)
+	assert.Equal(t, outputEvents[0].ID, outputEvents[1].ID)
+	require.NotNil(t, outputByStream["stdout"].Bytes)
+	assert.Equal(t, len("stdout"), *outputByStream["stdout"].Bytes)
+	require.NotNil(t, outputByStream["stdout"].Sequence)
+	assert.Equal(t, uint64(1), *outputByStream["stdout"].Sequence)
 }
 
 func TestExecuteShellCommandPreservesDetailedExitCode(t *testing.T) {

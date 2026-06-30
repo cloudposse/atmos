@@ -91,6 +91,11 @@
     "file": "/dev/stderr",
     "level": "Info"
   },
+  "diagnostics": {
+    "enabled": false,
+    "file": "",
+    "include_output": false
+  },
   "errors": {
     "format": {},
     "sentry": {

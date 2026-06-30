@@ -118,7 +118,7 @@ func pullImageIfAlways(ctx context.Context, runtime Runtime, config *EphemeralCo
 	if config.PullPolicy != PullAlways {
 		return nil
 	}
-	if err := runtime.Pull(ctx, config.Image); err != nil {
+	if err := pullWithRetry(ctx, runtime, config.Image); err != nil {
 		return fmt.Errorf("%w: pull image %q: %w", errUtils.ErrContainerRuntimeOperation, config.Image, err)
 	}
 	return nil
@@ -158,7 +158,7 @@ func createEphemeralContainer(ctx context.Context, runtime Runtime, config *Ephe
 		return containerID, err
 	}
 
-	if pullErr := runtime.Pull(ctx, config.Image); pullErr != nil {
+	if pullErr := pullWithRetry(ctx, runtime, config.Image); pullErr != nil {
 		return "", fmt.Errorf(
 			"failed to create container and pull image: %w",
 			errors.Join(

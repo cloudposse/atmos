@@ -135,11 +135,11 @@ func TestGCPDriver_Profile(t *testing.T) {
 
 	assert.Equal(t, "true", profile.Env["CLOUDSDK_AUTH_DISABLE_CREDENTIALS"])
 	// GCS expects a URL; the rest want a bare host:port.
-	assert.Equal(t, "http://localhost:14588", profile.Env["STORAGE_EMULATOR_HOST"])
-	assert.Equal(t, "localhost:14588", profile.Env["PUBSUB_EMULATOR_HOST"])
-	assert.Equal(t, "localhost:14588", profile.Env["FIRESTORE_EMULATOR_HOST"])
-	assert.Equal(t, "localhost:14588", profile.Env["BIGTABLE_EMULATOR_HOST"])
-	assert.Equal(t, "localhost:14588", profile.Env["DATASTORE_EMULATOR_HOST"])
+	assert.Equal(t, "http://127.0.0.1:14588", profile.Env["STORAGE_EMULATOR_HOST"])
+	assert.Equal(t, "127.0.0.1:14588", profile.Env["PUBSUB_EMULATOR_HOST"])
+	assert.Equal(t, "127.0.0.1:14588", profile.Env["FIRESTORE_EMULATOR_HOST"])
+	assert.Equal(t, "127.0.0.1:14588", profile.Env["BIGTABLE_EMULATOR_HOST"])
+	assert.Equal(t, "127.0.0.1:14588", profile.Env["DATASTORE_EMULATOR_HOST"])
 	assert.Equal(t, "my-project", profile.Env["CLOUDSDK_CORE_PROJECT"])
 	assert.Equal(t, "my-project", profile.Env["GOOGLE_CLOUD_PROJECT"])
 
@@ -170,7 +170,7 @@ func TestAzureDriver_Profile(t *testing.T) {
 	)
 	assert.Equal(
 		t,
-		"DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://localhost:14577/devstoreaccount1;",
+		"DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:14577/devstoreaccount1;",
 		profile.Env["AZURE_STORAGE_CONNECTION_STRING"],
 	)
 
@@ -194,8 +194,8 @@ func TestVaultDrivers_Profile(t *testing.T) {
 			}
 			profile := d.Profile(&ep)
 
-			assert.Equal(t, "http://localhost:18200", profile.Env["VAULT_ADDR"])
-			assert.Equal(t, "http://localhost:18200", profile.Env["BAO_ADDR"])
+			assert.Equal(t, "http://127.0.0.1:18200", profile.Env["VAULT_ADDR"])
+			assert.Equal(t, "http://127.0.0.1:18200", profile.Env["BAO_ADDR"])
 			// The root token is dynamic (file-backed server) and harvested by the
 			// manager in Resolve, not set by the driver's profile builder.
 			assert.NotContains(t, profile.Env, "VAULT_TOKEN")
@@ -220,7 +220,7 @@ func TestRegistryDriver_Profile(t *testing.T) {
 	}
 	profile := d.Profile(&ep)
 
-	assert.Equal(t, "localhost:15000", profile.Env["ATMOS_REGISTRY_HOST"])
+	assert.Equal(t, "127.0.0.1:15000", profile.Env["ATMOS_REGISTRY_HOST"])
 	assert.Nil(t, profile.Kubeconfig)
 	assert.Empty(t, profile.ResolverURL)
 	assert.Nil(t, profile.Provider)

@@ -46,8 +46,8 @@ func TestValueForKey_ScalarKeys(t *testing.T) {
 	profile := &Profile{Env: map[string]string{"AWS_ACCESS_KEY_ID": "test"}}
 
 	cases := map[string]any{
-		"endpoint":              "http://localhost:34566",
-		"url":                   "http://localhost:34566",
+		"endpoint":              "http://127.0.0.1:34566",
+		"url":                   "http://127.0.0.1:34566",
 		"host":                  "localhost",
 		"port":                  "34566",
 		"region":                "us-east-1",
@@ -126,7 +126,7 @@ func TestResolveYAMLFunc_DispatchesToResolver(t *testing.T) {
 
 	got, err := ResolveYAMLFunc(nil, "aws endpoint", "dev", nil)
 	require.NoError(t, err)
-	assert.Equal(t, "http://localhost:34566", got)
+	assert.Equal(t, "http://127.0.0.1:34566", got)
 	assert.Equal(t, "aws", gotRef)
 	assert.Equal(t, "dev", gotStack)
 }

@@ -16,8 +16,10 @@ import Experimental from '@site/src/components/Experimental'
 <Intro>
 Atmos brings first-class CI/CD support directly into the CLI. Run Atmos commands in
 GitHub Actions and get rich job summaries, status checks, output variables, and stored planfile
-verification for Terraform — no extra actions required. Kubernetes components also write native
-job summaries, with a deliberately smaller v1 surface.
+verification — no extra actions required. And because every command is **git-aware**, the same
+CLI powers GitOps end to end: plan and apply only what changed, vendor reusable catalogs across
+repositories, and commit results back to your source of truth. Kubernetes components also write
+native job summaries, with a deliberately smaller v1 surface.
 </Intro>
 
 <Experimental />
@@ -415,6 +417,25 @@ Warm-start the toolchain across CI jobs by restoring and saving the Atmos cache 
 CI provider's cache store — the same store `actions/cache` uses. Runs automatically with
 `ci.cache.auto: both`, or explicitly with the [`atmos ci cache`](/cli/commands/ci/cache)
 subcommands.
+
+### [GitOps](/cli/configuration/git)
+
+Atmos is **git-aware**, which is what makes true GitOps possible: the repository is the source of
+truth, and the pipeline reconciles only what changed.
+
+<dl>
+  <dt>Plan what's affected</dt>
+  <dd>[`atmos describe affected`](/cli/commands/describe/affected) diffs two Git commits and reports exactly which components and stacks changed — including changes that ripple through dependencies, imports, and remote state. See [Deploy Affected](#deploy-affected) for the matrix workflow.</dd>
+
+  <dt>Apply only what changed</dt>
+  <dd>Fan out across just the affected components, so a PR plans — and a merge applies — only the work that actually changed, instead of re-running the entire estate on every commit.</dd>
+
+  <dt>Reusable across repositories</dt>
+  <dd>Publish service catalogs and module libraries once and [vendor](/vendor/) them into every workload repository, so many repos share one versioned source of truth instead of copy-pasting configuration.</dd>
+
+  <dt>Automate workload repositories</dt>
+  <dd>Commit generated artifacts back to a source-of-truth repository as part of the pipeline. Define managed repositories once under `git.repositories`, then have Atmos commit and push automatically — with signed commits, a bot author identity, and bounded non-fast-forward retries — from [`kind: git` hooks](/stacks/hooks#kind-git), the [`atmos git`](/cli/commands/git/usage) commands, or CI workflows. This is the foundation for GitOps with Argo CD, Flux, or downstream CI consuming the committed output.</dd>
+</dl>
 
 ## Commands
 

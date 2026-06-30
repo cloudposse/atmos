@@ -13,14 +13,14 @@ workflows:
 
       - name: show-stacks
         type: shell
-        command: atmos list stacks --format tree --provenance --identity=false --process-functions=false --process-templates=false
+        command: atmos list stacks --format tree --provenance
 
       - name: instances
         type: stage
         title: Component instances
 
       - name: show-instances
-        command: list instances --format tree --provenance --identity=false --process-functions=false --process-templates=false
+        command: list instances --format tree --provenance
 
       - name: catalog
         type: stage
@@ -32,7 +32,7 @@ workflows:
         command: true
 
       - name: show-components
-        command: list components --identity=false --process-functions=false --process-templates=false
+        command: list components
 
       - name: commands
         type: stage

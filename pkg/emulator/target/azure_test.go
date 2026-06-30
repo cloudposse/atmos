@@ -18,7 +18,7 @@ func TestAzureProfile_Branches(t *testing.T) {
 		assert.Equal(t, azuriteKey, p.Env["AZURE_STORAGE_KEY"])
 
 		wantConn := fmt.Sprintf(
-			"DefaultEndpointsProtocol=http;AccountName=%s;AccountKey=%s;BlobEndpoint=http://localhost:30002/%s;",
+			"DefaultEndpointsProtocol=http;AccountName=%s;AccountKey=%s;BlobEndpoint=http://127.0.0.1:30002/%s;",
 			azuriteAccount, azuriteKey, azuriteAccount,
 		)
 		assert.Equal(t, wantConn, p.Env["AZURE_STORAGE_CONNECTION_STRING"])

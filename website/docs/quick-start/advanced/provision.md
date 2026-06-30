@@ -95,6 +95,27 @@ atmos list instances --format tree --provenance --identity=false --process-funct
 atmos describe component app-config -s plat-ue2-dev --provenance
 ```
 
+### See how environments differ
+
+The whole point of the layered configuration is that the three environments deploy the **same services with different settings**. The catalog defines
+each component once; each account's `_defaults.yaml` overrides only what differs. You can see this without deploying anything — compare the resolved
+config for the same component across stages:
+
+```shell
+atmos describe component s3-bucket -s plat-ue2-dev  --process-functions=false --process-templates=false
+atmos describe component s3-bucket -s plat-ue2-prod --process-functions=false --process-templates=false
+```
+
+`dev` resolves to `force_destroy: true` / `versioning_enabled: false` (cheap and ephemeral), while `prod` resolves to `force_destroy: false` /
+`versioning_enabled: true` (durable and protected) — and likewise the KMS key uses a 7-day deletion window with rotation off in `dev` versus 30 days with
+rotation on in `prod`. Add `--provenance` to see exactly which file each value came from:
+
+```shell
+atmos describe component kms-key -s plat-ue2-prod --provenance
+```
+
+The `deletion_window_in_days: 30` traces back to `orgs/acme/plat/prod/_defaults.yaml` — the one file that captures "what makes prod different."
+
 ## 6. Tear down
 
 When you're done, destroy the components through the dependency graph and stop the sandbox:

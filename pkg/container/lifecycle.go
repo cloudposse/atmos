@@ -148,7 +148,7 @@ func upWithRuntime(ctx context.Context, runtime Runtime, config *NamedConfig, na
 func createNamedContainer(ctx context.Context, runtime Runtime, config *NamedConfig, name string) (string, error) {
 	createConfig := buildNamedCreateConfig(config, name)
 	if config.PullPolicy == PullAlways {
-		if err := runtime.Pull(ctx, config.Image); err != nil {
+		if err := pullWithRetry(ctx, runtime, config.Image); err != nil {
 			return "", fmt.Errorf("%w: pull image %q: %w", errUtils.ErrContainerRuntimeOperation, config.Image, err)
 		}
 	}
@@ -164,7 +164,7 @@ func createNamedContainer(ctx context.Context, runtime Runtime, config *NamedCon
 		return "", fmt.Errorf("%w: create container: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 	createErr := err
-	if pullErr := runtime.Pull(ctx, config.Image); pullErr != nil {
+	if pullErr := pullWithRetry(ctx, runtime, config.Image); pullErr != nil {
 		return "", fmt.Errorf(
 			"%w: create container and pull image: %w",
 			errUtils.ErrContainerRuntimeOperation,
