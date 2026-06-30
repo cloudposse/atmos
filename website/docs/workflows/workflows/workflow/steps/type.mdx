@@ -28,6 +28,15 @@ steps:
 | [`container`](/workflows/steps/type/container) | Build, push, run, or inspect containers. | `action`, `build`, `push`, `run`, `inspect` |
 | [`http`](/workflows/steps/type/http) | Call an HTTP endpoint (alias: `webhook`). | `url`, `method`, `body`/`form`, `expect`, `retry` |
 
+## Orchestration Types
+
+| Type | Purpose | Primary fields |
+| --- | --- | --- |
+| [`parallel`](/workflows/steps/type/parallel) | Run child steps concurrently with dependencies and bounded concurrency. | `steps`, `max_concurrency`, `fail`, `output`, `needs` |
+| [`matrix`](/workflows/steps/type/matrix) | Expand axes into generated child steps and run them concurrently. | `matrix`, `steps`, `max_concurrency`, `fail`, `output` |
+| [`wait`](/workflows/steps/type/wait) | Block until named background container services are healthy (`wait-all` waits for all). | `for` |
+| [`cancel`](/workflows/steps/type/cancel) | Stop and remove a background container service. | `for` |
+
 ## Interactive Types
 
 | Type | Purpose | Primary fields |

@@ -146,33 +146,7 @@ func parseChdirFromArgs() string {
 // It recognizes `--use-version=value` and `--use-version value` forms.
 // If no --use-version flag is found, it returns an empty string.
 func parseUseVersionFromArgs() string {
-	return parseUseVersionFromArgsInternal(os.Args)
-}
-
-// parseUseVersionFromArgsInternal manually parses --use-version flag from the provided args.
-// This internal version accepts args as a parameter for testability.
-func parseUseVersionFromArgsInternal(args []string) string {
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-
-		// Stop scanning after bare "--" (end-of-flags delimiter).
-		if arg == "--" {
-			break
-		}
-
-		// Check for --use-version=value format.
-		if strings.HasPrefix(arg, "--use-version=") {
-			return strings.TrimPrefix(arg, "--use-version=")
-		}
-
-		// Check for --use-version value format (next arg is the value).
-		if arg == "--use-version" {
-			if i+1 < len(args) {
-				return args[i+1]
-			}
-		}
-	}
-	return ""
+	return pkgversion.ParseUseVersionFromArgs(os.Args)
 }
 
 // parseChdirFromArgsInternal manually parses --chdir or -C flag from the provided args.

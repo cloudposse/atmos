@@ -3,6 +3,7 @@ package schema
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -36,6 +37,20 @@ type ShowConfig struct {
 	Count *bool `yaml:"count,omitempty" json:"count,omitempty" mapstructure:"count"`
 	// Progress shows progress bar pinned to bottom (Docker-build style, TTY only).
 	Progress *bool `yaml:"progress,omitempty" json:"progress,omitempty" mapstructure:"progress"`
+}
+
+// ParallelFailConfig configures failure behavior for parallel and matrix steps.
+type ParallelFailConfig struct {
+	Mode        string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+	MaxFailures int    `yaml:"max_failures,omitempty" json:"max_failures,omitempty" mapstructure:"max_failures"`
+}
+
+// ParallelOutputConfig configures parent-owned output rendering for parallel and matrix steps.
+type ParallelOutputConfig struct {
+	Mode        string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+	Order       string `yaml:"order,omitempty" json:"order,omitempty" mapstructure:"order"`
+	ShowSummary *bool  `yaml:"show_summary,omitempty" json:"show_summary,omitempty" mapstructure:"show_summary"`
+	Prefix      string `yaml:"prefix,omitempty" json:"prefix,omitempty" mapstructure:"prefix"`
 }
 
 // ContainerMount represents a volume mount for container steps.
@@ -199,6 +214,7 @@ type WorkflowStep struct {
 	WorkingDirectory string       `yaml:"working_directory,omitempty" json:"working_directory,omitempty" mapstructure:"working_directory"`
 	Retry            *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 	Identity         string       `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+	Needs            []string     `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
 	When             Condition    `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
@@ -226,15 +242,18 @@ type WorkflowStep struct {
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
 	// Display configuration.
-	Output   string          `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
-	Height   int             `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
-	Viewport *ViewportConfig `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Viewport settings for output mode.
-	Timeout  string          `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`    // Timeout duration.
-	Count    int             `yaml:"count,omitempty" json:"count,omitempty" mapstructure:"count"`          // Count for linebreak type.
+	Output         string                `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
+	ParallelOutput *ParallelOutputConfig `yaml:"-" json:"parallel_output,omitempty" mapstructure:"parallel_output"`    // Structured output for parallel/matrix.
+	Height         int                   `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
+	Viewport       *ViewportConfig       `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Viewport settings for output mode.
+	Timeout        string                `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`    // Timeout duration.
+	Count          int                   `yaml:"count,omitempty" json:"count,omitempty" mapstructure:"count"`          // Count for linebreak type.
 
 	// Style step fields (like gum style).
-	Foreground       string `yaml:"foreground,omitempty" json:"foreground,omitempty" mapstructure:"foreground"`                      // Foreground color.
-	Background       string `yaml:"background,omitempty" json:"background,omitempty" mapstructure:"background"`                      // Background color.
+	Foreground string `yaml:"foreground,omitempty" json:"foreground,omitempty" mapstructure:"foreground"` // Foreground color.
+	// Background is the style background color. The YAML key `background:` is polymorphic
+	// (see UnmarshalYAML): a string value sets this color; a boolean value sets BackgroundAsync.
+	Background       string `yaml:"-" json:"background,omitempty" mapstructure:"background"`                                         // Background color (string-valued `background:`).
 	Border           string `yaml:"border,omitempty" json:"border,omitempty" mapstructure:"border"`                                  // Border style: none, hidden, normal, rounded, thick, double.
 	BorderForeground string `yaml:"border_foreground,omitempty" json:"border_foreground,omitempty" mapstructure:"border_foreground"` // Border foreground color.
 	BorderBackground string `yaml:"border_background,omitempty" json:"border_background,omitempty" mapstructure:"border_background"` // Border background color.
@@ -277,25 +296,23 @@ type WorkflowStep struct {
 	Expect  *HTTPExpect       `yaml:"expect,omitempty" json:"expect,omitempty" mapstructure:"expect"`    // Success criteria; defaults to any 2xx.
 
 	// Container step fields.
-	Action            string                  `yaml:"action,omitempty" json:"action,omitempty" mapstructure:"action"` // build, push, run, inspect.
-	Build             *ContainerBuildStep     `yaml:"build,omitempty" json:"build,omitempty" mapstructure:"build"`
-	Push              *ContainerPushStep      `yaml:"push,omitempty" json:"push,omitempty" mapstructure:"push"`
-	Run               *ContainerRunStep       `yaml:"run,omitempty" json:"run,omitempty" mapstructure:"run"`
-	Inspect           *ContainerInspectStep   `yaml:"inspect,omitempty" json:"inspect,omitempty" mapstructure:"inspect"`
-	RuntimeAutoStart  bool                    `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
-	Runtime           *ContainerRuntimeConfig `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`                                     // Inline per-step runtime block (e.g. runtime.host for Docker-out-of-Docker).
-	Image             string                  `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`                                           // Container image to run.
-	Shell             string                  `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                                           // Shell used to execute command in container.
-	Provider          string                  `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`                                  // docker, podman, or empty for auto-detect.
-	Pull              string                  `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`                                              // missing, always, never.
-	Workspace         string                  `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`                               // Container workspace path.
-	WorkspaceReadOnly bool                    `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"` // Mount workspace read-only.
-	Cleanup           string                  `yaml:"cleanup,omitempty" json:"cleanup,omitempty" mapstructure:"cleanup"`                                     // always, on_success, never.
-	User              string                  `yaml:"user,omitempty" json:"user,omitempty" mapstructure:"user"`                                              // Container user.
-	RunArgs           []string                `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`                                  // Runtime-specific create args.
-	Mounts            []ContainerMount        `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`                                        // Extra container mounts.
-	Ports             []ContainerPort         `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`                                           // Port mappings.
-	Container         *WorkflowContainer      `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`                               // Workflow container override or false to run on host.
+	//
+	// Action selects the container verb; the action's parameters are supplied under
+	// the single `with:` key (GitHub Actions `uses`/`with` style). Build/Push/Run/Inspect
+	// are populated from `with:` by UnmarshalYAML based on Action, so they carry no YAML key.
+	//
+	// Only cross-cutting execution modifiers stay top-level (provider, runtime_auto_start,
+	// runtime, container). All action parameters — image, command, ports, mounts,
+	// healthcheck, etc. — live under `with:` (decoded into Build/Run/Push/Inspect).
+	Action           string                  `yaml:"action,omitempty" json:"action,omitempty" mapstructure:"action"` // build, push, run, inspect.
+	Build            *ContainerBuildStep     `yaml:"-" json:"build,omitempty" mapstructure:"build"`
+	Push             *ContainerPushStep      `yaml:"-" json:"push,omitempty" mapstructure:"push"`
+	Run              *ContainerRunStep       `yaml:"-" json:"run,omitempty" mapstructure:"run"`
+	Inspect          *ContainerInspectStep   `yaml:"-" json:"inspect,omitempty" mapstructure:"inspect"`
+	RuntimeAutoStart bool                    `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	Runtime          *ContainerRuntimeConfig `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`       // Inline per-step runtime block (e.g. runtime.host for Docker-out-of-Docker).
+	Provider         string                  `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // docker, podman, or empty for auto-detect.
+	Container        *WorkflowContainer      `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"` // Workflow container override or false to run on host.
 
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
@@ -303,8 +320,217 @@ type WorkflowStep struct {
 	// Show configuration for this step (overrides workflow-level show settings).
 	Show *ShowConfig `yaml:"show,omitempty" json:"show,omitempty" mapstructure:"show"`
 
+	// Control step fields.
+	Steps          []WorkflowStep      `yaml:"steps,omitempty" json:"steps,omitempty" mapstructure:"steps"`
+	MaxConcurrency int                 `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty" mapstructure:"max_concurrency"`
+	Matrix         map[string][]string `yaml:"matrix,omitempty" json:"matrix,omitempty" mapstructure:"matrix"`
+	Fail           *ParallelFailConfig `yaml:"fail,omitempty" json:"fail,omitempty" mapstructure:"fail"`
+
+	// BackgroundAsync marks a container step to run asynchronously: the step starts and the
+	// workflow continues to the next step while Atmos supervises it. Decoded from a
+	// boolean-valued `background:` key (see UnmarshalYAML); a string-valued `background:`
+	// sets the style color instead. In v1 the validator accepts `background: true` only
+	// on `type: container` steps.
+	BackgroundAsync bool `yaml:"-" json:"background_async,omitempty" mapstructure:"background_async"`
+	// For lists the background step name(s) a `wait`/`cancel` action step targets.
+	// Accepts a scalar or a sequence in YAML.
+	For []string `yaml:"-" json:"for,omitempty" mapstructure:"for"`
+
 	// DryRun is set by executors and is not read from user configuration.
 	DryRun bool `yaml:"-" json:"-" mapstructure:"-"`
+}
+
+// UnmarshalYAML handles the keys whose meaning depends on shape or a sibling field:
+//   - `output`     : scalar mode string or a structured ParallelOutputConfig.
+//   - `with`       : the container action's parameters, decoded into Build/Run/Push/Inspect by `action`.
+//   - `background` : boolean async marker, or a string style color.
+//   - `for`        : scalar or sequence of target step names (wait/cancel).
+func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
+	type plain WorkflowStep
+	// Decode into a zero-value temp first so a reused receiver does not retain
+	// fields omitted from this YAML node (Decode merges into the destination).
+	var fresh plain
+	nodes, sanitized := splitStepPolymorphicNodes(value)
+	if err := sanitized.Decode(&fresh); err != nil {
+		return err
+	}
+	*step = WorkflowStep(fresh)
+	return applyStepPolymorphicNodes(nodes, step.Action, stepPolyTargets{
+		output:    &step.Output,
+		parallel:  &step.ParallelOutput,
+		async:     &step.BackgroundAsync,
+		color:     &step.Background,
+		forList:   &step.For,
+		container: containerActionTargets{Build: &step.Build, Run: &step.Run, Push: &step.Push, Inspect: &step.Inspect},
+	})
+}
+
+// stepPolyNodes holds the extracted YAML nodes for a step's shape-dependent keys.
+type stepPolyNodes struct {
+	output     *yaml.Node
+	with       *yaml.Node
+	background *yaml.Node
+	forNode    *yaml.Node
+}
+
+// stepPolyTargets bundles the destinations a step exposes for its polymorphic keys.
+// It lets WorkflowStep and Task share one decode path (see applyStepPolymorphicNodes).
+type stepPolyTargets struct {
+	output    *string
+	parallel  **ParallelOutputConfig
+	async     *bool
+	color     *string
+	forList   *[]string
+	container containerActionTargets
+}
+
+// splitStepPolymorphicNodes peels the polymorphic keys (output/with/background/for)
+// off the mapping so the remainder decodes via the plain struct path.
+func splitStepPolymorphicNodes(value *yaml.Node) (stepPolyNodes, *yaml.Node) {
+	outputNode, sanitized := splitMappingField(value, "output")
+	withNode, sanitized := splitMappingField(sanitized, "with")
+	backgroundNode, sanitized := splitMappingField(sanitized, "background")
+	forNode, sanitized := splitMappingField(sanitized, "for")
+	return stepPolyNodes{output: outputNode, with: withNode, background: backgroundNode, forNode: forNode}, sanitized
+}
+
+// applyStepPolymorphicNodes decodes the extracted nodes into the step's targets.
+// The action is read from the already-decoded plain struct to select the container shape.
+func applyStepPolymorphicNodes(nodes stepPolyNodes, action string, t stepPolyTargets) error {
+	if err := decodeWorkflowStepOutput(nodes.output, t.output, t.parallel); err != nil {
+		return err
+	}
+	if err := decodeStepBackground(nodes.background, t.async, t.color); err != nil {
+		return err
+	}
+	if err := decodeStringOrSlice(nodes.forNode, t.forList); err != nil {
+		return err
+	}
+	return decodeContainerWith(nodes.with, action, t.container)
+}
+
+// decodeStepBackground routes the polymorphic `background:` key: a boolean value
+// is the async-execution marker; any other scalar is a style background color.
+func decodeStepBackground(node *yaml.Node, async *bool, color *string) error {
+	if node == nil {
+		return nil
+	}
+	if node.Kind != yaml.ScalarNode {
+		return fmt.Errorf("%w: `background` must be a boolean (async) or a color string", ErrWorkflowControlStepInvalid)
+	}
+	if node.Tag == "!!bool" {
+		return node.Decode(async)
+	}
+	*color = node.Value
+	return nil
+}
+
+// decodeStringOrSlice decodes a YAML scalar into a single-element slice or a
+// sequence into a slice, so keys like `for:` accept `for: x` and `for: [x, y]`.
+func decodeStringOrSlice(node *yaml.Node, out *[]string) error {
+	if node == nil {
+		return nil
+	}
+	if node.Kind == yaml.ScalarNode {
+		// Only genuine strings name a step; reject coerced scalars like
+		// `for: true` (!!bool) or `for: 1` (!!int). Unquoted identifiers
+		// (e.g. `for: cache`) resolve to !!str and still pass.
+		if node.Tag != "!!str" {
+			return fmt.Errorf("%w: `for` must be a string or list of strings, got %s", ErrWorkflowControlStepInvalid, node.Tag)
+		}
+		*out = []string{node.Value}
+		return nil
+	}
+	return node.Decode(out)
+}
+
+// containerActionTargets bundles the four container action-struct pointers a step
+// owns, so decodeContainerWith can populate the one selected by `action`.
+type containerActionTargets struct {
+	Build   **ContainerBuildStep
+	Run     **ContainerRunStep
+	Push    **ContainerPushStep
+	Inspect **ContainerInspectStep
+}
+
+// decodeContainerWith decodes the `with:` params block into the container action
+// struct selected by `action` (defaulting to `run`). It is shared by WorkflowStep
+// and Task so both step flavors accept the same GitHub-style `action:`/`with:` shape.
+func decodeContainerWith(node *yaml.Node, action string, t containerActionTargets) error {
+	if node == nil {
+		return nil
+	}
+	switch normalizeContainerAction(action) {
+	case "build":
+		return decodeYAMLInto(node, t.Build)
+	case "push":
+		return decodeYAMLInto(node, t.Push)
+	case "inspect":
+		return decodeYAMLInto(node, t.Inspect)
+	case "run":
+		return decodeYAMLInto(node, t.Run)
+	default:
+		return fmt.Errorf("%w: container `action: %s` does not accept a `with:` block", ErrWorkflowControlStepInvalid, action)
+	}
+}
+
+// decodeYAMLInto decodes a YAML node into a freshly allocated T and stores it in dst.
+func decodeYAMLInto[T any](node *yaml.Node, dst **T) error {
+	var cfg T
+	if err := node.Decode(&cfg); err != nil {
+		return err
+	}
+	*dst = &cfg
+	return nil
+}
+
+// normalizeContainerAction returns the canonical container verb, defaulting an
+// empty action to `run` (matching the runtime default in pkg/runner/step).
+func normalizeContainerAction(action string) string {
+	action = strings.TrimSpace(action)
+	if action == "" {
+		return "run"
+	}
+	return action
+}
+
+func decodeWorkflowStepOutput(node *yaml.Node, scalar *string, structured **ParallelOutputConfig) error {
+	if node == nil {
+		return nil
+	}
+	switch node.Kind {
+	case yaml.ScalarNode:
+		*scalar = node.Value
+	case yaml.MappingNode:
+		var cfg ParallelOutputConfig
+		if err := node.Decode(&cfg); err != nil {
+			return err
+		}
+		*scalar = cfg.Mode
+		*structured = &cfg
+	default:
+		return node.Decode(scalar)
+	}
+	return nil
+}
+
+func splitMappingField(value *yaml.Node, field string) (*yaml.Node, *yaml.Node) {
+	if value == nil || value.Kind != yaml.MappingNode {
+		return nil, value
+	}
+	copied := *value
+	copied.Content = make([]*yaml.Node, 0, len(value.Content))
+	var fieldNode *yaml.Node
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		key := value.Content[i]
+		val := value.Content[i+1]
+		if key.Value == field {
+			fieldNode = val
+			continue
+		}
+		copied.Content = append(copied.Content, key, val)
+	}
+	return fieldNode, &copied
 }
 
 // HTTPExpect defines success criteria for an http step.

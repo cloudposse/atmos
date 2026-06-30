@@ -175,15 +175,19 @@ func (h *ContainerHandler) buildConfig(ctx context.Context, step *schema.Workflo
 	return config, err
 }
 
+// effectiveRunStep resolves the run configuration from the step's `with:` block
+// (step.Run). Only the cross-cutting execution modifiers — provider and
+// runtime_auto_start — fall through from the step level; every other parameter
+// (image, command, ports, mounts, healthcheck, …) lives under `with:`.
 func effectiveRunStep(step *schema.WorkflowStep) schema.ContainerRunStep {
 	run := schema.ContainerRunStep{}
 	if step.Run != nil {
 		run = *step.Run
 	}
-	mergeRunScalarFields(&run, step)
-	mergeRunSliceFields(&run, step)
+	if run.Provider == "" {
+		run.Provider = step.Provider
+	}
 	run.RuntimeAutoStart = run.RuntimeAutoStart || step.RuntimeAutoStart
-	run.WorkspaceReadOnly = run.WorkspaceReadOnly || step.WorkspaceReadOnly
 	// Merge the inline step-level `runtime` block over the `run.runtime` block for
 	// host access. Copy rather than mutate the shared pointer from step.Run.Runtime.
 	if step.Runtime != nil && step.Runtime.Host && !runtimeHost(run.Runtime) {
@@ -200,47 +204,6 @@ func effectiveRunStep(step *schema.WorkflowStep) schema.ContainerRunStep {
 // runtimeHost reports whether a runtime config requests host-runtime access.
 func runtimeHost(rt *schema.ContainerRuntimeConfig) bool {
 	return rt != nil && rt.Host
-}
-
-// mergeRunScalarFields fills empty scalar run fields from the step-level shorthand.
-func mergeRunScalarFields(run *schema.ContainerRunStep, step *schema.WorkflowStep) {
-	if run.Image == "" {
-		run.Image = step.Image
-	}
-	if run.Command == "" {
-		run.Command = step.Command
-	}
-	if run.Shell == "" {
-		run.Shell = step.Shell
-	}
-	if run.Provider == "" {
-		run.Provider = step.Provider
-	}
-	if run.Pull == "" {
-		run.Pull = step.Pull
-	}
-	if run.Workspace == "" {
-		run.Workspace = step.Workspace
-	}
-	if run.Cleanup == "" {
-		run.Cleanup = step.Cleanup
-	}
-	if run.User == "" {
-		run.User = step.User
-	}
-}
-
-// mergeRunSliceFields fills empty slice run fields from the step-level shorthand.
-func mergeRunSliceFields(run *schema.ContainerRunStep, step *schema.WorkflowStep) {
-	if len(run.RunArgs) == 0 {
-		run.RunArgs = step.RunArgs
-	}
-	if len(run.Mounts) == 0 {
-		run.Mounts = step.Mounts
-	}
-	if len(run.Ports) == 0 {
-		run.Ports = step.Ports
-	}
 }
 
 func resolveWorkDir(vars *Variables, step *schema.WorkflowStep) (string, error) {

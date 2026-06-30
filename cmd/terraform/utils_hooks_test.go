@@ -768,22 +768,43 @@ func TestRunHooksWithOutput_InjectsLastAuthContext(t *testing.T) {
 	assert.Equal(t, "mock-auth-manager", gotMgr)
 }
 
-func TestInjectHookStoreAuthResolver_ResolverOnly(t *testing.T) {
+// TestInjectHookStoreAuthResolver_InheritsDefaultIdentity verifies that the after-apply hook path
+// now wires the resolver AND lets identity-less stores inherit the run's auto-detected identity
+// (matching the main terraform path), so hook store writes work under Atmos auth. Auto-detection
+// runs only when no explicit identity is present; an explicit/disabled identity is not overridden by
+// the chain.
+//
+// Note: the per-store identity argument to SetAuthContext is computed by the store registry via
+// defaultIdentityForStore, which only applies the default to the concrete SSM/ASM/AKV/GSM store types
+// (a MockIdentityAwareStore receives ""). This test therefore asserts the seam behavior — chain
+// auto-detection (GetChain), info.Identity population, and resolver wiring. That identity-less
+// concrete stores actually receive the default is covered by pkg/store
+// TestSetAuthContextResolverWithDefaultIdentity_DefaultsOnlyEmptyStores, and end to end by the Floci
+// E2E TestAWSStoreHooks_InheritedIdentity_FlociE2E.
+func TestInjectHookStoreAuthResolver_InheritsDefaultIdentity(t *testing.T) {
 	tests := []struct {
-		name     string
-		identity string
+		name             string
+		identity         string
+		chain            []string // nil => GetChain must NOT be called.
+		expectedIdentity string   // info.Identity after the call.
 	}{
 		{
-			name:     "empty command identity does not inject default identity",
-			identity: "",
+			name:             "no explicit identity auto-detects the chain leaf",
+			identity:         "",
+			chain:            []string{"permission-set", "core-identity/devops"},
+			expectedIdentity: "core-identity/devops",
 		},
 		{
-			name:     "explicit command identity does not override store identity",
-			identity: "cli-admin",
+			name:             "explicit command identity is preserved (chain not consulted)",
+			identity:         "cli-admin",
+			chain:            nil,
+			expectedIdentity: "cli-admin",
 		},
 		{
-			name:     "disabled identity does not fall back to default identity",
-			identity: cfg.IdentityFlagDisabledValue,
+			name:             "disabled identity is not overridden by the chain",
+			identity:         cfg.IdentityFlagDisabledValue,
+			chain:            nil,
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
 		},
 	}
 
@@ -791,18 +812,21 @@ func TestInjectHookStoreAuthResolver_ResolverOnly(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			authManager := authtypes.NewMockAuthManager(ctrl)
+			if tc.chain != nil {
+				authManager.EXPECT().GetChain().Return(tc.chain)
+			}
 			mockStore := storepkg.NewMockIdentityAwareStore(ctrl)
 
+			// The resolver must always be wired into the store (regardless of identity).
 			mockStore.EXPECT().
-				SetAuthContext(gomock.Not(nil), "").
-				Do(func(resolver storepkg.AuthContextResolver, identityName string) {
+				SetAuthContext(gomock.Not(nil), gomock.Any()).
+				Do(func(resolver storepkg.AuthContextResolver, _ string) {
 					assert.NotNil(t, resolver)
-					assert.Empty(t, identityName)
 				})
 
 			atmosConfig := &schema.AtmosConfiguration{
 				Stores: storepkg.StoreRegistry{
-					"explicit-identity-store": mockStore,
+					"store": mockStore,
 				},
 			}
 			info := &schema.ConfigAndStacksInfo{
@@ -811,6 +835,9 @@ func TestInjectHookStoreAuthResolver_ResolverOnly(t *testing.T) {
 			}
 
 			injectHookStoreAuthResolver(atmosConfig, info)
+
+			assert.Equal(t, tc.expectedIdentity, info.Identity,
+				"hook should auto-detect the active identity when none is explicitly set")
 		})
 	}
 }

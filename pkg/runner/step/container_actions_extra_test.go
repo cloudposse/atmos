@@ -167,9 +167,8 @@ func TestEffectiveBuildStep(t *testing.T) {
 func TestValidateInspectAction(t *testing.T) {
 	h := &ContainerHandler{}
 
-	// Valid via the inspect block and via the flat image shorthand.
+	// Valid via the inspect block.
 	require.NoError(t, h.validateInspectAction(&schema.WorkflowStep{Inspect: &schema.ContainerInspectStep{Image: "alpine"}}))
-	require.NoError(t, h.validateInspectAction(&schema.WorkflowStep{Image: "alpine"}))
 
 	// Missing image.
 	require.Error(t, h.validateInspectAction(&schema.WorkflowStep{}))
@@ -210,22 +209,24 @@ func TestResolveWorkDir(t *testing.T) {
 }
 
 func TestEffectiveRunStepMergesShorthand(t *testing.T) {
-	// Flat shorthand fields are folded into the run config.
+	// Run parameters live under `with:` (step.Run) and are returned as-is.
 	run := effectiveRunStep(&schema.WorkflowStep{
-		Image:   "alpine",
-		Command: "echo hi",
-		Shell:   "/bin/bash",
-		Mounts:  []schema.ContainerMount{{Source: "/h", Target: "/c"}},
+		Run: &schema.ContainerRunStep{
+			Image:   "alpine",
+			Command: "echo hi",
+			Shell:   "/bin/bash",
+			Mounts:  []schema.ContainerMount{{Source: "/h", Target: "/c"}},
+		},
 	})
 	assert.Equal(t, "alpine", run.Image)
 	assert.Equal(t, "echo hi", run.Command)
 	assert.Equal(t, "/bin/bash", run.Shell)
 	require.Len(t, run.Mounts, 1)
+	assert.Equal(t, schema.ContainerMount{Source: "/h", Target: "/c"}, run.Mounts[0])
 
-	// An explicit run block wins over the shorthand.
+	// The run block's image is preserved.
 	run = effectiveRunStep(&schema.WorkflowStep{
-		Image: "flat",
-		Run:   &schema.ContainerRunStep{Image: "explicit"},
+		Run: &schema.ContainerRunStep{Image: "explicit"},
 	})
 	assert.Equal(t, "explicit", run.Image)
 }
@@ -254,7 +255,7 @@ func TestEffectiveRunStepHostRuntime(t *testing.T) {
 	assert.False(t, stepRuntime.Host, "the original run.runtime must stay unmodified")
 
 	// No runtime block → no host access.
-	run = effectiveRunStep(&schema.WorkflowStep{Image: "alpine"})
+	run = effectiveRunStep(&schema.WorkflowStep{})
 	assert.False(t, runtimeHost(run.Runtime))
 }
 
@@ -269,11 +270,37 @@ func TestConvertContainerPorts(t *testing.T) {
 }
 
 func TestEffectiveInspectStepRuntimeShorthand(t *testing.T) {
-	got := effectiveInspectStep(&schema.WorkflowStep{Image: "alpine", Provider: "podman", RuntimeAutoStart: true})
+	got := effectiveInspectStep(&schema.WorkflowStep{Inspect: &schema.ContainerInspectStep{Image: "alpine"}, Provider: "podman", RuntimeAutoStart: true})
 	assert.Equal(t, "alpine", got.Image)
 	assert.Equal(t, "podman", got.Provider)
 	assert.True(t, got.RuntimeAutoStart)
 
 	// Ensure the BakeConfig type is referenced so a field rename fails the build.
 	_ = container.BakeConfig{}
+}
+
+// TestEffectiveBuildStepProviderFallthrough guards the fix for the bake-build-run
+// example: provider/runtime_auto_start are top-level cross-cutting modifiers that
+// must fall through into the build/push config (bake requires `provider: docker`).
+func TestEffectiveBuildStepProviderFallthrough(t *testing.T) {
+	build := effectiveBuildStep(&schema.WorkflowStep{
+		Build:            &schema.ContainerBuildStep{Engine: "buildx", Bake: &schema.ContainerBuildBakeStep{File: "docker-bake.hcl"}},
+		Provider:         "docker",
+		RuntimeAutoStart: true,
+	})
+	assert.Equal(t, "docker", build.Provider)
+	assert.True(t, build.RuntimeAutoStart)
+
+	// An explicit provider under `with:` still wins over the top-level fallthrough.
+	build = effectiveBuildStep(&schema.WorkflowStep{
+		Build:    &schema.ContainerBuildStep{Provider: "podman"},
+		Provider: "docker",
+	})
+	assert.Equal(t, "podman", build.Provider)
+
+	push := effectivePushStep(&schema.WorkflowStep{
+		Push:     &schema.ContainerPushStep{Image: "app:local"},
+		Provider: "docker",
+	})
+	assert.Equal(t, "docker", push.Provider)
 }
