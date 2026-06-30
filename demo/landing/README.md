@@ -36,12 +36,15 @@ dev), `DemoVideo` falls back to the gitignored local copies so you can preview b
 
 ## Prerequisites
 
-- The recording toolchain — [`vhs`](https://github.com/charmbracelet/vhs) and its `ttyd` +
-  `ffmpeg` runtime deps — is **auto-installed** by `atmos demo record`/`check` via Atmos
-  toolchain (declared under `toolchain:` in [`atmos.yaml`](./atmos.yaml), pinned in
-  `.tool-versions`). On Linux/CI all three install from the aqua registry; on macOS `ttyd`
-  has no aqua binary, so install it once with `brew install ttyd` (vhs + ffmpeg still
-  auto-install). The `FiraCode Nerd Font` is also expected for the rendered glyphs.
+- The recording toolchain — [`vhs`](https://github.com/charmbracelet/vhs) and its `ffmpeg`
+  runtime dependency — is **auto-installed** by `atmos demo record`/`check` via Atmos
+  toolchain (declared under `toolchain:` in [`atmos.yaml`](./atmos.yaml), pinned in each
+  command's `dependencies.tools`). FFmpeg publishes source only, so the aqua-managed
+  `ffmpeg` alias uses the third-party `Tyrrrz/FFmpegBin` prebuilt distribution.
+- `ttyd` is required by VHS at runtime, but it is intentionally **not** a command dependency
+  because its aqua package has no macOS binary. Install it once with `brew install ttyd` on
+  macOS; CI installs it from the same Atmos toolchain on Linux.
+- The `FiraCode Nerd Font` is expected for the rendered glyphs.
 - A container runtime (Docker or Podman) for the emulator-backed tapes — this is the one
   thing that can't be auto-installed (it's a system daemon, not a single binary).
 - The k8s example installs `helmfile`, `helm`, and `kubectl` through Atmos toolchain

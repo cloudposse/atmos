@@ -48,11 +48,10 @@ jobs:
           make build
           echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
 
-      # Fonts only. All CLI tooling comes from the Atmos toolchain: `atmos demo record`
-      # auto-installs vhs/ffmpeg/ttyd from the command's `dependencies.tools` (pinned in
+      # Fonts only. Most CLI tooling comes from the Atmos toolchain: `atmos demo record`
+      # auto-installs vhs/ffmpeg from the command's `dependencies.tools` (pinned in
       # demo/landing/atmos.yaml), and the Kubernetes tape's helm/helmfile/kubectl are
-      # auto-installed by `atmos helmfile` from the k8s example's component dependencies —
-      # so CI and local use the exact same pinned versions with no checked-in .tool-versions.
+      # auto-installed by `atmos helmfile` from the k8s example's component dependencies.
       # Fonts are the one thing the toolchain can't provide (aqua ships binaries, not fonts).
       - name: Install Nerd Font
         run: |
@@ -65,9 +64,18 @@ jobs:
           unzip -o /tmp/FiraCode.zip -d ~/.local/share/fonts >/dev/null
           fc-cache -f
 
+      # VHS needs ttyd at runtime. The aqua package is Linux/Windows only, so it is not
+      # a command dependency (that would fail before the recorder can use the system
+      # Homebrew ttyd on macOS). CI is Linux, so install it explicitly here.
+      - name: Install ttyd via Atmos toolchain
+        working-directory: demo/landing
+        run: |
+          atmos toolchain install tsl0922/ttyd
+          atmos toolchain env --format=github
+
       # The tapes run `atmos terraform …` against the emulators, so install the
       # toolchain-pinned terraform up front. Unlike `atmos helmfile` (which auto-installs
-      # helm/helmfile) and `atmos demo record` (vhs/ffmpeg/ttyd), `atmos terraform`
+      # helm/helmfile) and `atmos demo record` (vhs/ffmpeg), `atmos terraform`
       # expects terraform already on PATH — without it, `atmos terraform init` in dx.tape
       # HANGS forever under VHS's interactive TTY (it fast-fails "executable not found"
       # non-interactively), so the demos never render. Confirmed via landing-demos-debug.

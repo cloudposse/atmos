@@ -4,7 +4,7 @@ variable "stage" {
 }
 
 variable "location" {
-  description = "Location configured for the component."
+  description = "Location for which the weather."
   type        = string
   default     = "Los Angeles"
 }
@@ -16,19 +16,19 @@ variable "options" {
 }
 
 variable "format" {
-  description = "Format label written to the demo artifact."
+  description = "Format of the output."
   type        = string
   default     = "v2"
 }
 
 variable "lang" {
-  description = "Language configured for the component."
+  description = "Language in which the weather is displayed."
   type        = string
   default     = "en"
 }
 
 variable "units" {
-  description = "Units configured for the component."
+  description = "Units in which the weather is displayed."
   type        = string
   default     = "m"
 }

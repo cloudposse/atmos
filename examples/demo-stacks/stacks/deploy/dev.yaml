@@ -10,5 +10,5 @@ components:
   terraform:
     myapp:
       vars:
-        location: Seattle
-        lang: en
+        location: Stockholm
+        lang: sv

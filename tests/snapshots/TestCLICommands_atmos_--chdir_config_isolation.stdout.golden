@@ -45,11 +45,14 @@ stacks:
 logs:
   file: /dev/stderr
   level: Info
+diagnostics:
+  level: debug
+  sink: file
 settings:
   list_merge_strategy: ""
   terminal:
     max_width: 0
-    pager: "false"
+    pager: cat
     unicode: false
     syntax_highlighting:
       enabled: false

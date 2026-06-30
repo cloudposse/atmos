@@ -46,6 +46,9 @@ stacks:
 logs:
   file: /dev/stderr
   level: Debug
+diagnostics:
+  level: debug
+  sink: file
 commands:
   - name: test
     description: Run all tests
