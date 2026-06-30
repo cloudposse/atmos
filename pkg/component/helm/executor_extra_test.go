@@ -117,10 +117,12 @@ func TestRunWithHooks_DeleteSuccess(t *testing.T) {
 	originalHooks := getHooks
 	originalDelete := deleteHelmRelease
 	originalCI := runCIHooks
+	originalSetup := setupRepositories
 	t.Cleanup(func() {
 		getHooks = originalHooks
 		deleteHelmRelease = originalDelete
 		runCIHooks = originalCI
+		setupRepositories = originalSetup
 	})
 
 	getHooks = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
@@ -132,6 +134,10 @@ func TestRunWithHooks_DeleteSuccess(t *testing.T) {
 		deleted = releaseName
 		return nil
 	}
+	setupRepositories = func([]chartRepository) error {
+		t.Fatal("delete must not set up repositories")
+		return nil
+	}
 
 	info := &schema.ConfigAndStacksInfo{
 		ComponentFromArg: "apps/app",
@@ -141,6 +147,48 @@ func TestRunWithHooks_DeleteSuccess(t *testing.T) {
 	err := runWithHooks(&component.ExecutionContext{Flags: map[string]any{}}, &schema.AtmosConfiguration{}, info, OperationDelete, "")
 	require.NoError(t, err)
 	assert.Equal(t, "app", deleted)
+}
+
+func TestRunWithHooks_ApplySetsUpRepositories(t *testing.T) {
+	originalHooks := getHooks
+	originalApply := applyHelmRelease
+	originalCI := runCIHooks
+	originalSetup := setupRepositories
+	t.Cleanup(func() {
+		getHooks = originalHooks
+		applyHelmRelease = originalApply
+		runCIHooks = originalCI
+		setupRepositories = originalSetup
+	})
+
+	getHooks = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
+		return &hooks.Hooks{}, nil
+	}
+	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
+	applyHelmRelease = func(context.Context, *chartSpec, bool) (string, error) {
+		return helmExecutorManifest, nil
+	}
+	var setup []chartRepository
+	setupRepositories = func(repositories []chartRepository) error {
+		setup = repositories
+		return nil
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "apps/app",
+		SubCommand:       "apply",
+		ComponentSection: map[string]any{
+			"chart": "bitnami/nginx",
+			"name":  "app",
+			"repositories": []any{
+				map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"},
+			},
+		},
+	}
+	err := runWithHooks(&component.ExecutionContext{Flags: map[string]any{}}, &schema.AtmosConfiguration{}, info, OperationApply, "")
+	require.NoError(t, err)
+	require.Len(t, setup, 1)
+	assert.Equal(t, "bitnami", setup[0].Name)
 }
 
 func TestRunWithHooks_GetHooksError(t *testing.T) {

@@ -123,8 +123,8 @@ func resolveUpgradeChartRef(client *action.Upgrade, spec *chartSpec) string {
 		return spec.Chart
 	}
 	if name, chart, ok := cutRepoRef(spec.Chart); ok {
-		if url, found := spec.Repositories[name]; found {
-			client.RepoURL = url
+		if repo, found := findRepository(spec.Repositories, name); found {
+			client.RepoURL = repo.URL
 			return chart
 		}
 	}

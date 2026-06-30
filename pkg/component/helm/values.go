@@ -44,7 +44,7 @@ func buildChartSpec(
 		Namespace:    resolveNamespace(section),
 		Values:       values,
 		IncludeCRDs:  true,
-		Repositories: repositoriesMap(section),
+		Repositories: mergeRepositories(atmosConfig, section),
 	}, nil
 }
 
@@ -125,25 +125,115 @@ func resolveNamespace(section map[string]any) string {
 	return defaultNamespace
 }
 
-// repositoriesMap converts a `repositories:` list of {name,url} into a name->url map.
+// repositoriesMap converts a `repositories:` list of {name,url} into a name->url
+// map for callers that only need chart reference lookup.
 func repositoriesMap(section map[string]any) map[string]string {
 	out := make(map[string]string)
+	repositories := repositoriesFromSection(section, repositorySourceComponent)
+	for i := range repositories {
+		repo := &repositories[i]
+		out[repo.Name] = repo.URL
+	}
+	return out
+}
+
+func mergeRepositories(atmosConfig *schema.AtmosConfiguration, section map[string]any) []chartRepository {
+	out := make([]chartRepository, 0)
+	positions := make(map[string]int)
+
+	global := globalRepositories(atmosConfig)
+	for i := range global {
+		repo := &global[i]
+		if repo.Name == "" || repo.URL == "" {
+			continue
+		}
+		positions[repo.Name] = len(out)
+		out = append(out, *repo)
+	}
+
+	componentRepositories := repositoriesFromSection(section, repositorySourceComponent)
+	for i := range componentRepositories {
+		repo := &componentRepositories[i]
+		if repo.Name == "" || repo.URL == "" {
+			continue
+		}
+		if pos, ok := positions[repo.Name]; ok {
+			out[pos] = *repo
+			continue
+		}
+		positions[repo.Name] = len(out)
+		out = append(out, *repo)
+	}
+
+	return out
+}
+
+func globalRepositories(atmosConfig *schema.AtmosConfiguration) []chartRepository {
+	if atmosConfig == nil {
+		return nil
+	}
+	out := make([]chartRepository, 0, len(atmosConfig.Components.Helm.Repositories))
+	for i := range atmosConfig.Components.Helm.Repositories {
+		repo := &atmosConfig.Components.Helm.Repositories[i]
+		out = append(out, chartRepository{
+			Name:                  repo.Name,
+			URL:                   repo.URL,
+			Username:              repo.Username,
+			Password:              repo.Password,
+			PassCredentialsAll:    repo.PassCredentialsAll,
+			CertFile:              repo.CertFile,
+			KeyFile:               repo.KeyFile,
+			CAFile:                repo.CAFile,
+			InsecureSkipTLSVerify: repo.InsecureSkipTLSVerify,
+			Source:                repositorySourceGlobal,
+		})
+	}
+	return out
+}
+
+func repositoriesFromSection(section map[string]any, source repositorySource) []chartRepository {
+	out := make([]chartRepository, 0)
 	for _, entry := range asAnySlice(section[cfg.RepositoriesSectionName]) {
 		repo, ok := entry.(map[string]any)
 		if !ok {
 			continue
 		}
-		name, _ := repo["name"].(string)
-		url, _ := repo["url"].(string)
-		if name != "" && url != "" {
-			out[name] = url
+		item := chartRepository{
+			Name:                  stringField(repo, "name"),
+			URL:                   stringField(repo, "url"),
+			Username:              stringField(repo, "username"),
+			Password:              stringField(repo, "password"),
+			PassCredentialsAll:    boolField(repo, "pass_credentials_all"),
+			CertFile:              stringField(repo, "cert_file"),
+			KeyFile:               stringField(repo, "key_file"),
+			CAFile:                stringField(repo, "ca_file"),
+			InsecureSkipTLSVerify: boolField(repo, "insecure_skip_tls_verify"),
+			Source:                source,
+		}
+		if item.Name != "" && item.URL != "" {
+			out = append(out, item)
 		}
 	}
 	return out
 }
 
+func findRepository(repositories []chartRepository, name string) (chartRepository, bool) {
+	for i := range repositories {
+		repo := &repositories[i]
+		if repo.Name == name {
+			return *repo, true
+		}
+	}
+	return chartRepository{}, false
+}
+
 func stringField(section map[string]any, key string) string {
 	value, _ := section[key].(string)
+	return value
+}
+
+func boolField(section map[string]any, key string) bool {
+	value, _ := section[key].(bool)
 	return value
 }
 

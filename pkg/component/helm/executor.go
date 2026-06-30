@@ -54,6 +54,7 @@ var (
 	renderChartManifest              = renderManifest
 	applyHelmRelease                 = applyRelease
 	deleteHelmRelease                = deleteRelease
+	setupRepositories                = setupHelmRepositories
 )
 
 // renderTimeout bounds a single chart render/locate (which may download remote charts).
@@ -151,6 +152,11 @@ func runWithHooks(
 	}
 	if spec.ReleaseName == "" {
 		return errUtils.ErrHelmReleaseNameRequired
+	}
+	if operation != OperationDelete {
+		if err := setupRepositories(spec.Repositories); err != nil {
+			return err
+		}
 	}
 
 	summary, opErr := runOperation(ctx, atmosConfig, info, operation, spec)

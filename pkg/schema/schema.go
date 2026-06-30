@@ -999,6 +999,19 @@ type Kubernetes struct {
 	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 }
 
+// HelmRepository describes an HTTP Helm chart repository.
+type HelmRepository struct {
+	Name                  string `yaml:"name" json:"name" mapstructure:"name"`
+	URL                   string `yaml:"url" json:"url" mapstructure:"url"`
+	Username              string `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
+	Password              string `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"` // #nosec G117 -- Helm repository credentials are part of user configuration.
+	PassCredentialsAll    bool   `yaml:"pass_credentials_all,omitempty" json:"pass_credentials_all,omitempty" mapstructure:"pass_credentials_all"`
+	CertFile              string `yaml:"cert_file,omitempty" json:"cert_file,omitempty" mapstructure:"cert_file"`
+	KeyFile               string `yaml:"key_file,omitempty" json:"key_file,omitempty" mapstructure:"key_file"`
+	CAFile                string `yaml:"ca_file,omitempty" json:"ca_file,omitempty" mapstructure:"ca_file"`
+	InsecureSkipTLSVerify bool   `yaml:"insecure_skip_tls_verify,omitempty" json:"insecure_skip_tls_verify,omitempty" mapstructure:"insecure_skip_tls_verify"`
+}
+
 // Helm defines configuration for native Helm components.
 // Helm components render and deploy Helm charts (local, remote-repo, or OCI)
 // using the Helm Go SDK, and can deliver rendered manifests to provision targets.
@@ -1017,6 +1030,9 @@ type Helm struct {
 	// helm-binary passthrough. Type-level defaults inherit down to instances via
 	// normal stack deep-merge.
 	Plugins []string `yaml:"plugins,omitempty" json:"plugins,omitempty" mapstructure:"plugins"`
+	// Repositories lists reusable Helm chart repositories available to native
+	// Helm components. Component-level repositories override entries by name.
+	Repositories []HelmRepository `yaml:"repositories,omitempty" json:"repositories,omitempty" mapstructure:"repositories"`
 }
 
 type Components struct {

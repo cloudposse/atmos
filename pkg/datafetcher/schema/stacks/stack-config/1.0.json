@@ -20,6 +20,45 @@
     "kubernetes": {
       "$ref": "#/definitions/kubernetes"
     },
+    "helm_repository": {
+      "title": "helm_repository",
+      "description": "Helm chart repository",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "pass_credentials_all": {
+          "type": "boolean"
+        },
+        "cert_file": {
+          "type": "string"
+        },
+        "key_file": {
+          "type": "string"
+        },
+        "ca_file": {
+          "type": "string"
+        },
+        "insecure_skip_tls_verify": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "url"
+      ]
+    },
     "helm": {
       "$ref": "#/definitions/helm"
     },
@@ -637,6 +676,12 @@
             "plugins": {
               "$ref": "#/definitions/plugins"
             },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/helm_repository"
+              }
+            },
             "generate": {
               "$ref": "#/definitions/generate"
             }
@@ -694,20 +739,7 @@
             "repositories": {
               "type": "array",
               "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "url": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "name",
-                  "url"
-                ]
+                "$ref": "#/definitions/helm_repository"
               }
             },
             "namespace": {

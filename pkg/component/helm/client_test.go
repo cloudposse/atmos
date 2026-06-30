@@ -33,8 +33,10 @@ func TestResolveUpgradeChartRef(t *testing.T) {
 	t.Run("configured repository maps repo prefix", func(t *testing.T) {
 		client := &action.Upgrade{}
 		ref := resolveUpgradeChartRef(client, &chartSpec{
-			Chart:        "bitnami/nginx",
-			Repositories: map[string]string{"bitnami": "https://charts.bitnami.com/bitnami"},
+			Chart: "bitnami/nginx",
+			Repositories: []chartRepository{
+				{Name: "bitnami", URL: "https://charts.bitnami.com/bitnami"},
+			},
 		})
 		assert.Equal(t, "nginx", ref)
 		assert.Equal(t, "https://charts.bitnami.com/bitnami", client.RepoURL)
@@ -43,8 +45,10 @@ func TestResolveUpgradeChartRef(t *testing.T) {
 	t.Run("unknown repo prefix stays unchanged", func(t *testing.T) {
 		client := &action.Upgrade{}
 		assert.Equal(t, "unknown/nginx", resolveUpgradeChartRef(client, &chartSpec{
-			Chart:        "unknown/nginx",
-			Repositories: map[string]string{"bitnami": "https://charts.bitnami.com/bitnami"},
+			Chart: "unknown/nginx",
+			Repositories: []chartRepository{
+				{Name: "bitnami", URL: "https://charts.bitnami.com/bitnami"},
+			},
 		}))
 		assert.Empty(t, client.RepoURL)
 	})

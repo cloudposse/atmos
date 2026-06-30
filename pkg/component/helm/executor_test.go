@@ -362,7 +362,9 @@ func TestBuildChartSpecAndValueHelpers(t *testing.T) {
 	assert.Equal(t, "demo", spec.ReleaseName)
 	assert.Equal(t, "apps", spec.Namespace)
 	assert.True(t, spec.IncludeCRDs)
-	assert.Equal(t, "https://charts.bitnami.com/bitnami", spec.Repositories["bitnami"])
+	repo, found := findRepository(spec.Repositories, "bitnami")
+	require.True(t, found)
+	assert.Equal(t, "https://charts.bitnami.com/bitnami", repo.URL)
 	assert.Equal(t, "inline", spec.Values["image"].(map[string]any)["tag"])
 	assert.Equal(t, float64(1), spec.Values["replicas"])
 

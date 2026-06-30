@@ -18,3 +18,26 @@ const (
 	// The dirPerm const is the permission mode used when creating directories.
 	dirPerm = 0o755
 )
+
+// repositorySource describes where a repository entry came from.
+type repositorySource string
+
+const (
+	repositorySourceGlobal    repositorySource = "global"
+	repositorySourceComponent repositorySource = "component"
+	repositorySourceDirect    repositorySource = "direct"
+)
+
+// chartRepository is the normalized form of a declarative Helm chart repository.
+type chartRepository struct {
+	Name                  string
+	URL                   string
+	Username              string
+	Password              string // #nosec G117 -- Helm repository credentials are user-provided configuration passed through to Helm.
+	PassCredentialsAll    bool
+	CertFile              string
+	KeyFile               string
+	CAFile                string
+	InsecureSkipTLSVerify bool
+	Source                repositorySource
+}

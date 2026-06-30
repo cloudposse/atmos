@@ -35,8 +35,8 @@ type chartSpec struct {
 	Values map[string]any
 	// IncludeCRDs includes CRDs from the chart's crds/ directory in the output.
 	IncludeCRDs bool
-	// Repositories maps repo name -> URL for "repo/name" chart references.
-	Repositories map[string]string
+	// Repositories lists declarative chart repositories for "repo/name" refs.
+	Repositories []chartRepository
 }
 
 // newSettings builds Helm CLI environment settings honoring ambient HELM_* env.
@@ -132,8 +132,8 @@ func resolveChartRef(client *action.Install, spec *chartSpec) string {
 	}
 
 	if name, chart, ok := cutRepoRef(spec.Chart); ok {
-		if url, found := spec.Repositories[name]; found {
-			client.RepoURL = url
+		if repo, found := findRepository(spec.Repositories, name); found {
+			client.RepoURL = repo.URL
 			return chart
 		}
 	}

@@ -54,7 +54,7 @@ included in affected runs.
   <dd>An explicit HTTP chart repository URL used with a bare <code>chart</code> name.</dd>
 
   <dt>`repositories`</dt>
-  <dd>A list of <code>{'{name, url}'}</code> entries used to resolve <code>repo/name</code> chart references.</dd>
+  <dd>A list of chart repositories used to resolve <code>repo/name</code> chart references. Entries support <code>name</code>, <code>url</code>, optional basic auth, TLS files, <code>pass_credentials_all</code>, and <code>insecure_skip_tls_verify</code>. Atmos adds/updates these repositories in Helm's local repository config before rendering or deploying.</dd>
 
   <dt>`namespace`</dt>
   <dd>The target Kubernetes namespace. Defaults to <code>default</code>.</dd>
@@ -74,6 +74,10 @@ included in affected runs.
   <dt>`provision`</dt>
   <dd>Delivery targets for <code>apply</code>/<code>deploy</code> — the cluster (default) or an external target such as a Git deployment repository.</dd>
 </dl>
+
+Reusable repository defaults can also be configured under
+`components.helm.repositories` in `atmos.yaml`. Component-level repositories
+override global entries with the same `name`.
 
 :::note Diffs
 [`atmos helm diff`](/cli/commands/helm/diff) shows a real unified diff (via the
@@ -117,3 +121,10 @@ components:
 
 See the [`atmos helm`](/cli/commands/helm/usage) command reference for the full
 workflow.
+
+To inspect which repositories are associated with Helm components, run:
+
+```shell
+atmos helm repo list --stack=ue2-dev
+atmos helm repo list monitoring --format=json
+```

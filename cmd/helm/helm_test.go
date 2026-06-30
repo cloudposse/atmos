@@ -30,7 +30,7 @@ func TestCommandProviderMetadata(t *testing.T) {
 	for _, cmd := range provider.GetCommand().Commands() {
 		subcommands = append(subcommands, cmd.Name())
 	}
-	assert.ElementsMatch(t, []string{"template", "diff", "plan", "apply", "deploy", "delete", "plugin"}, subcommands)
+	assert.ElementsMatch(t, []string{"template", "diff", "plan", "apply", "deploy", "delete", "plugin", "repo"}, subcommands)
 }
 
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
@@ -172,7 +172,8 @@ type capturingHelmProvider struct {
 	ctx *component.ExecutionContext
 }
 
-func (p *capturingHelmProvider) GetType() string                                 { return cfg.HelmComponentType }
+func (p *capturingHelmProvider) GetType() string { return cfg.HelmComponentType }
+
 func (p *capturingHelmProvider) GetGroup() string                                { return "Kubernetes" }
 func (p *capturingHelmProvider) GetBasePath(_ *schema.AtmosConfiguration) string { return "" }
 func (p *capturingHelmProvider) ListComponents(context.Context, string, map[string]any) ([]string, error) {

@@ -48,6 +48,7 @@ func init() {
 	helmCmd.AddCommand(newOperationCommand("apply", "Install or upgrade a Helm release"))
 	helmCmd.AddCommand(newOperationCommand("deploy", "Deploy a Helm release"))
 	helmCmd.AddCommand(newOperationCommand("delete", "Uninstall a Helm release"))
+	helmCmd.AddCommand(newRepoCommand())
 
 	internal.Register(&CommandProvider{})
 }

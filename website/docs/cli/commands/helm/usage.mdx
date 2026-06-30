@@ -79,7 +79,7 @@ The `chart` field accepts three kinds of references:
   <dd>A path relative to the component directory (e.g. `chart: .` or `chart: ./charts/app`), or an absolute path.</dd>
 
   <dt>Remote repository chart</dt>
-  <dd>Either `repository: https://...` plus `chart: <name>`, or a `repo/name` reference resolved against the component's `repositories:` list.</dd>
+  <dd>Either `repository: https://...` plus `chart: <name>`, or a `repo/name` reference resolved against merged global and component `repositories:` entries. Declarative repositories are added/updated in Helm's local repository config before chart operations.</dd>
 
   <dt>OCI chart</dt>
   <dd>An `oci://` reference (e.g. `chart: oci://ghcr.io/acme/charts/app`).</dd>
@@ -106,6 +106,13 @@ components:
       values:
         grafana:
           adminPassword: !secret grafana_admin_password
+```
+
+List repository associations for Helm components:
+
+```shell
+atmos helm repo list --stack=ue2-dev
+atmos helm repo list monitoring --format=json
 ```
 
 ## Provision targets
