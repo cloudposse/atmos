@@ -70,26 +70,32 @@ atmos list dependencies --format yaml
 
 ## Tree Output
 
-The default `tree` format renders each selected component with one branch per
-requested direction:
+The default `tree` format keeps stack context next to the component dependency
+tree. The `Component` column carries the hierarchy, while `Type` is secondary
+metadata on the right. Repeated metadata is omitted on child rows unless the
+stack or type changes.
 
-```
+```text
 Dependencies
-│
-├── tgw/attachment [plat-ue2-dev]
-│   ├── depends on ↓
-│   │   ├── tgw/hub [plat-ue1-dev]
-│   │   │   └── vpc [plat-ue1-dev]
-│   │   └── vpc [plat-ue2-dev]
-│   └── required by ↑
-│       └── (none)
-│
-├── vpc [plat-ue2-dev]
-│   ├── depends on ↓
-│   │   └── (none)
-│   └── required by ↑
-│       └── tgw/attachment [plat-ue2-dev]
+Stack         Component                 Type
+plat-ue2-dev  app-config                terraform
+              ├──depends on ↓
+              │  ├──▶ dynamodb-table
+              │  └──▶ kms-key
+              └──required by ↑
+                 └──(none)
+
+plat-ue2-dev  kms-key                   terraform
+              ├──depends on ↓
+              │  └──(none)
+              └──required by ↑
+                 └──◀ app-config
 ```
+
+The filled triangle marker shows edge direction:
+
+- `▶` marks a forward dependency edge: the selected component depends on that child.
+- `◀` marks a reverse dependency edge: that child depends on the selected component.
 
 When you select a single direction with `--direction forward` or
 `--direction reverse`, the dependency subtree is attached directly under each

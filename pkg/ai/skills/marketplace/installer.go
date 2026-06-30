@@ -15,7 +15,9 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ai/skills"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Installer manages skill installation.
@@ -78,9 +80,7 @@ func (i *Installer) Install(ctx context.Context, source string, opts InstallOpti
 	}
 
 	// 3. Download to temporary directory.
-	if err := writeDataf("Downloading skills from %s...\n", sourceInfo.URL); err != nil {
-		return err
-	}
+	ui.Infof("Downloading skills from %s...", sourceInfo.URL)
 	tempDir, err := i.downloader.Download(ctx, sourceInfo)
 	if err != nil {
 		return fmt.Errorf("failed to download skill: %w", err)
@@ -198,12 +198,11 @@ func (i *Installer) installSingleSkill(tempDir string, sourceInfo *SourceInfo, o
 // printInstallSuccess prints the standard post-install confirmation, shared by
 // the single-skill and bundled-skill install paths.
 func printInstallSuccess(displayName, version, installPath string) error {
-	return writeDataf(
-		"\n✓ Skill %q installed successfully\n  Version: %s\n  Location: %s\n\nUsage: Switch to this skill in the TUI with Ctrl+A\n",
-		displayName,
-		version,
-		redactHomePath(installPath),
-	)
+	ui.Successf("Skill %q installed successfully", displayName)
+	ui.Infof("Version: %s", version)
+	ui.Infof("Location: %s", redactHomePath(installPath))
+	ui.Infof("Usage: Switch to this skill in the TUI with Ctrl+A")
+	return nil
 }
 
 // installBundledSkill installs an official skill from the embedded catalog,
@@ -355,22 +354,12 @@ func discoverSkillsFromPaths(skillMDPaths []string) ([]discoveredSkill, []string
 
 // confirmMultiSkillInstall prompts the user for multi-skill install confirmation.
 func confirmMultiSkillInstall(count int) error {
-	if err := writeDataf("\nInstall all %d skills? [y/N] ", count); err != nil {
-		return err
-	}
-	response, err := readInputLine()
-	if err != nil {
-		return err
-	}
-	if strings.ToLower(strings.TrimSpace(response)) != "y" {
-		return ErrInstallationCancelled
-	}
-	return nil
+	return requireConfirmation(fmt.Sprintf("Install all %d skills?", count), ErrInstallationCancelled)
 }
 
 // installOneSkillFromPackage installs a single skill from a multi-skill package.
 // Returns true if the skill was successfully installed.
-func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo *SourceInfo, opts InstallOptions) (bool, error) {
+func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo *SourceInfo, opts InstallOptions) bool {
 	skillName := skill.metadata.Name
 	skillsDir, _ := GetSkillsDir()
 	installPath := filepath.Join(skillsDir, sourceInfo.Owner, sourceInfo.Repo, skillName)
@@ -381,20 +370,18 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 		}
 		_ = i.localRegistry.Remove(skillName)
 	} else if _, err := i.localRegistry.Get(skillName); err == nil {
-		if err := writeDataf("  Skipping %s (already installed, use --force to reinstall)\n", skillName); err != nil {
-			return false, err
-		}
-		return false, nil
+		ui.Warningf("Skipping %s (already installed, use --force to reinstall)", skillName)
+		return false
 	}
 
 	if err := os.MkdirAll(installPath, dirPermissions); err != nil {
 		log.Warnf("Failed to create directory for %s: %v", skillName, err)
-		return false, nil
+		return false
 	}
 
 	if err := copyDir(skill.dir, installPath); err != nil {
 		log.Warnf("Failed to install skill %s: %v", skillName, err)
-		return false, nil
+		return false
 	}
 
 	installedSkill := &InstalledSkill{
@@ -411,13 +398,11 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 
 	if err := i.localRegistry.Add(installedSkill); err != nil {
 		log.Warnf("Failed to register skill %s: %v", skillName, err)
-		return false, nil
+		return false
 	}
 
-	if err := writeDataf("  Installing %s... done\n", skillName); err != nil {
-		return false, err
-	}
-	return true, nil
+	ui.Successf("Installed %s", skillName)
+	return true
 }
 
 // installMultiSkillPackage installs multiple skills discovered in a package.
@@ -428,9 +413,7 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 	}
 
 	// Show discovery summary.
-	if err := writeDataf("Discovered %d skills in package:\n  %s\n", len(discovered), strings.Join(skillNames, ", ")); err != nil {
-		return err
-	}
+	ui.Infof("Discovered %d skills in package: %s", len(discovered), strings.Join(skillNames, ", "))
 
 	if !opts.SkipConfirm {
 		if err := confirmMultiSkillInstall(len(discovered)); err != nil {
@@ -438,22 +421,16 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 		}
 	}
 
-	if err := writeDataf("\n"); err != nil {
-		return err
-	}
-
 	installed := 0
 	for _, skill := range discovered {
-		ok, err := i.installOneSkillFromPackage(skill, sourceInfo, opts)
-		if err != nil {
-			return err
-		}
-		if ok {
+		if i.installOneSkillFromPackage(skill, sourceInfo, opts) {
 			installed++
 		}
 	}
 
-	return writeDataf("\n%d skills installed successfully.\n\nUsage: Switch skills in the TUI with Ctrl+A\n", installed)
+	ui.Successf("%d skills installed successfully", installed)
+	ui.Infof("Usage: Switch skills in the TUI with Ctrl+A")
+	return nil
 }
 
 // copyFS copies the entire tree of srcFS into the dst directory on disk. It is
@@ -529,16 +506,9 @@ func (i *Installer) Uninstall(name string, force bool) error {
 
 	// 2. Confirm uninstallation (unless force).
 	if !force {
-		if err := writeDataf("Uninstall skill %q (version %s)? [y/N] ", skill.DisplayName, skill.Version); err != nil {
+		title := fmt.Sprintf("Uninstall skill %q (version %s)?", skill.DisplayName, skill.Version)
+		if err := requireConfirmation(title, ErrUninstallationCancelled); err != nil {
 			return err
-		}
-		response, err := readInputLine()
-		if err != nil {
-			return err
-		}
-
-		if strings.ToLower(strings.TrimSpace(response)) != "y" {
-			return ErrUninstallationCancelled
 		}
 	}
 
@@ -552,7 +522,8 @@ func (i *Installer) Uninstall(name string, force bool) error {
 		return err
 	}
 
-	return writeDataf("✓ Skill %q uninstalled successfully\n", skill.DisplayName)
+	ui.Successf("Skill %q uninstalled successfully", skill.DisplayName)
+	return nil
 }
 
 // List returns all installed skills.
@@ -716,49 +687,38 @@ func printToolAccessWarnings(metadata *SkillMetadata) error {
 		return nil
 	}
 
-	if err := writeDataf("\nTool Access:\n  Allowed: %s\n", strings.Join(metadata.AllowedTools, ", ")); err != nil {
-		return err
-	}
+	ui.Infof("Tool access allowed: %s", strings.Join(metadata.AllowedTools, ", "))
 
 	if !hasDestructiveTools(metadata.AllowedTools) {
 		return nil
 	}
 
-	return writeDataf(
-		"\n⚠️  WARNING: This skill requests access to destructive operations.\n   Review the skill source before using:\n   %s\n",
-		metadata.GetRepository(),
-	)
+	ui.Warningf("This skill requests access to destructive operations. Review the skill source before using: %s", metadata.GetRepository())
+	return nil
 }
 
 // confirmInstallation prompts user to confirm skill installation.
 func (i *Installer) confirmInstallation(metadata *SkillMetadata) error {
 	// Display skill info.
-	if err := writeDataf(
-		"\nSkill: %s\nAuthor: %s\nVersion: %s\nRepository: %s\n",
-		metadata.GetDisplayName(),
-		metadata.GetAuthor(),
-		metadata.GetVersion(),
-		metadata.GetRepository(),
-	); err != nil {
-		return err
-	}
+	ui.Infof("Skill: %s", metadata.GetDisplayName())
+	ui.Infof("Author: %s", metadata.GetAuthor())
+	ui.Infof("Version: %s", metadata.GetVersion())
+	ui.Infof("Repository: %s", metadata.GetRepository())
 
 	if err := printToolAccessWarnings(metadata); err != nil {
 		return err
 	}
 
-	// Prompt for confirmation.
-	if err := writeDataf("\nDo you want to install this skill? [y/N] "); err != nil {
-		return err
-	}
-	response, err := readInputLine()
+	return requireConfirmation("Install this skill?", ErrInstallationCancelled)
+}
+
+func requireConfirmation(title string, cancelErr error) error {
+	confirmed, err := flags.PromptForConfirmation(title, false)
 	if err != nil {
 		return err
 	}
-
-	if strings.ToLower(strings.TrimSpace(response)) != "y" {
-		return ErrInstallationCancelled
+	if !confirmed {
+		return cancelErr
 	}
-
 	return nil
 }

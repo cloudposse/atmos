@@ -11,6 +11,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	defaultTemplatePasses = 1
+	templateOpenDelim     = "{{"
+	protectedTemplateOpen = "\x00ATMOS_TMPL_OPEN\x00"
+)
+
+// TemplateRenderer renders one template pass with the provided data.
+type TemplateRenderer func(name, input string, data any) (string, error)
+
 // Variables holds step outputs accessible via Go templates.
 type Variables struct {
 	// Steps maps step names to their results.
@@ -18,7 +27,11 @@ type Variables struct {
 	// Env contains environment variables.
 	Env map[string]string
 	// Flags contains workflow command-line flags exposed to step templates.
-	Flags map[string]string
+	Flags            map[string]string
+	templateRoots    map[string]any
+	templateRenderer TemplateRenderer
+	templatePasses   int
+	protectedRoots   map[string]struct{}
 	// stageIndex tracks current stage position (1-indexed).
 	stageIndex int
 	// totalStages tracks total number of stage steps in workflow.
@@ -30,9 +43,11 @@ func NewVariables() *Variables {
 	defer perf.Track(nil, "step.NewVariables")()
 
 	v := &Variables{
-		Steps: make(map[string]*StepResult),
-		Env:   make(map[string]string),
-		Flags: make(map[string]string),
+		Steps:          make(map[string]*StepResult),
+		Env:            make(map[string]string),
+		Flags:          make(map[string]string),
+		templateRoots:  make(map[string]any),
+		templatePasses: defaultTemplatePasses,
 	}
 	// Pre-populate with OS environment variables.
 	v.LoadOSEnv()
@@ -140,6 +155,44 @@ func (v *Variables) SetFlag(key, value string) {
 	v.Flags[key] = value
 }
 
+// SetTemplateData sets extra root values exposed during template resolution.
+func (v *Variables) SetTemplateData(data map[string]any) {
+	defer perf.Track(nil, "step.Variables.SetTemplateData")()
+
+	v.templateRoots = make(map[string]any, len(data))
+	for key, value := range data {
+		v.templateRoots[key] = value
+	}
+}
+
+// SetTemplateRenderer sets the one-pass renderer used by Resolve.
+func (v *Variables) SetTemplateRenderer(renderer TemplateRenderer) {
+	defer perf.Track(nil, "step.Variables.SetTemplateRenderer")()
+
+	v.templateRenderer = renderer
+}
+
+// SetTemplatePasses sets the maximum number of render passes used by Resolve.
+func (v *Variables) SetTemplatePasses(passes int) {
+	defer perf.Track(nil, "step.Variables.SetTemplatePasses")()
+
+	if passes < 1 {
+		passes = defaultTemplatePasses
+	}
+	v.templatePasses = passes
+}
+
+// ProtectTemplateRoots prevents template markers in selected roots from being
+// re-evaluated during later render passes.
+func (v *Variables) ProtectTemplateRoots(roots ...string) {
+	defer perf.Track(nil, "step.Variables.ProtectTemplateRoots")()
+
+	v.protectedRoots = make(map[string]struct{}, len(roots))
+	for _, root := range roots {
+		v.protectedRoots[root] = struct{}{}
+	}
+}
+
 // SetTotalStages sets the total number of stage steps in the workflow.
 func (v *Variables) SetTotalStages(total int) {
 	defer perf.Track(nil, "step.Variables.SetTotalStages")()
@@ -186,12 +239,16 @@ func (v *Variables) templateData() map[string]any {
 		}
 		steps[name] = stepData
 	}
-	return map[string]any{
+	data := map[string]any{
 		"steps": steps,
 		"env":   v.Env,
 		"Flags": v.Flags,
 		"flags": v.Flags,
 	}
+	for key, value := range v.templateRoots {
+		data[key] = value
+	}
+	return data
 }
 
 // TemplateData returns the data structure used for Go template execution.
@@ -222,15 +279,11 @@ func (v *Variables) ResolveOutputs(outputs map[string]string, result *StepResult
 
 	resolved := make(map[string]string, len(outputs))
 	for key, value := range outputs {
-		tmpl, err := template.New("step-output").Parse(value)
+		resolvedValue, err := v.resolveTemplate(fmt.Sprintf("step-output-%s", key), value, v.outputTemplateData(result))
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse output %s: %w", key, err)
+			return nil, fmt.Errorf("failed to resolve output %s: %w", key, err)
 		}
-		var buf bytes.Buffer
-		if err := tmpl.Execute(&buf, v.outputTemplateData(result)); err != nil {
-			return nil, fmt.Errorf("failed to execute output %s: %w", key, err)
-		}
-		resolved[key] = buf.String()
+		resolved[key] = resolvedValue
 	}
 	return resolved, nil
 }
@@ -243,17 +296,7 @@ func (v *Variables) Resolve(input string) (string, error) {
 		return "", nil
 	}
 
-	tmpl, err := template.New("step").Parse(input)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w", err)
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, v.templateData()); err != nil {
-		return "", fmt.Errorf("failed to execute template: %w", err)
-	}
-
-	return buf.String(), nil
+	return v.resolveTemplate("step", input, v.templateData())
 }
 
 // ResolveEnvMap resolves Go templates in a map of environment variables.
@@ -273,4 +316,94 @@ func (v *Variables) ResolveEnvMap(envMap map[string]string) (map[string]string, 
 		result[key] = resolved
 	}
 	return result, nil
+}
+
+func (v *Variables) resolveTemplate(name, input string, data map[string]any) (string, error) {
+	safeData := v.protectTemplateData(data)
+	passes := v.templatePasses
+	if passes < 1 {
+		passes = defaultTemplatePasses
+	}
+
+	result := input
+	for pass := 0; pass < passes; pass++ {
+		if pass > 0 && !strings.Contains(result, templateOpenDelim) {
+			break
+		}
+		processed, err := v.renderTemplatePass(fmt.Sprintf("%s-pass-%d", name, pass+1), result, safeData)
+		if err != nil {
+			return "", err
+		}
+		result = processed
+		if processed == input || processed == "" {
+			break
+		}
+		input = processed
+	}
+	return strings.ReplaceAll(result, protectedTemplateOpen, templateOpenDelim), nil
+}
+
+func (v *Variables) renderTemplatePass(name, input string, data map[string]any) (string, error) {
+	if v.templateRenderer != nil {
+		return v.templateRenderer(name, input, data)
+	}
+
+	tmpl, err := template.New(name).Parse(input)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+func (v *Variables) protectTemplateData(data map[string]any) map[string]any {
+	if len(v.protectedRoots) == 0 {
+		return data
+	}
+
+	out := make(map[string]any, len(data))
+	for key, value := range data {
+		if _, ok := v.protectedRoots[key]; ok {
+			out[key] = protectTemplateValue(value)
+			continue
+		}
+		out[key] = value
+	}
+	return out
+}
+
+func protectTemplateValue(value any) any {
+	switch typed := value.(type) {
+	case string:
+		return strings.ReplaceAll(typed, templateOpenDelim, protectedTemplateOpen)
+	case map[string]string:
+		out := make(map[string]string, len(typed))
+		for key, value := range typed {
+			out[key] = strings.ReplaceAll(value, templateOpenDelim, protectedTemplateOpen)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, value := range typed {
+			if str, ok := value.(string); ok {
+				out[key] = strings.ReplaceAll(str, templateOpenDelim, protectedTemplateOpen)
+				continue
+			}
+			out[key] = value
+		}
+		return out
+	case []string:
+		out := make([]string, len(typed))
+		for i, value := range typed {
+			out[i] = strings.ReplaceAll(value, templateOpenDelim, protectedTemplateOpen)
+		}
+		return out
+	default:
+		return value
+	}
 }

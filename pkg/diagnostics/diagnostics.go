@@ -16,13 +16,6 @@ import (
 )
 
 const (
-	// SinkFile is the first supported diagnostics sink.
-	SinkFile = "file"
-
-	// LevelDebug is the default diagnostics event level for process lifecycle events.
-	LevelDebug = "debug"
-
-	levelOff     = "off"
 	dirMode      = 0o755
 	eventLogMode = 0o600
 )
@@ -36,11 +29,9 @@ var (
 
 // Config describes the active diagnostics sink configuration.
 type Config struct {
-	File   string
-	Level  string
-	Sink   string
-	URL    string
-	Output bool
+	Enabled       bool
+	File          string
+	IncludeOutput bool
 }
 
 // Event is a machine-readable diagnostics event. Events are intentionally flat
@@ -48,7 +39,6 @@ type Config struct {
 type Event struct {
 	Type           string    `json:"type"`
 	Time           time.Time `json:"time"`
-	Level          string    `json:"level,omitempty"`
 	ID             string    `json:"id,omitempty"`
 	Command        string    `json:"command,omitempty"`
 	Args           []string  `json:"args,omitempty"`
@@ -79,11 +69,9 @@ func FromSchema(config schema.Diagnostics) Config {
 	defer perf.Track(nil, "diagnostics.FromSchema")()
 
 	return Config{
-		File:   config.File,
-		Level:  config.Level,
-		Sink:   config.Sink,
-		URL:    config.URL,
-		Output: config.Output,
+		Enabled:       config.Enabled,
+		File:          config.File,
+		IncludeOutput: config.IncludeOutput,
 	}
 }
 
@@ -126,14 +114,7 @@ func NewID(prefix string) string {
 func Enabled(config Config) bool {
 	defer perf.Track(nil, "diagnostics.Enabled")()
 
-	if strings.EqualFold(strings.TrimSpace(config.Level), levelOff) {
-		return false
-	}
-	if strings.TrimSpace(config.File) == "" {
-		return false
-	}
-	sink := strings.TrimSpace(config.Sink)
-	return sink == "" || strings.EqualFold(sink, SinkFile)
+	return config.Enabled && strings.TrimSpace(config.File) != ""
 }
 
 // Emit appends one event to the package-level diagnostics sink.
@@ -154,9 +135,6 @@ func EmitWithConfig(config Config, event *Event) error {
 	}
 	if event.Time.IsZero() {
 		event.Time = time.Now().UTC()
-	}
-	if event.Level == "" {
-		event.Level = LevelDebug
 	}
 
 	redactEvent(event)
@@ -184,7 +162,7 @@ func EmitWithConfig(config Config, event *Event) error {
 func OutputEnabled(config Config) bool {
 	defer perf.Track(nil, "diagnostics.OutputEnabled")()
 
-	return config.Output && Enabled(config)
+	return config.IncludeOutput && Enabled(config)
 }
 
 // OutputWriter emits masked process.output diagnostics events for subprocess output.
@@ -218,7 +196,6 @@ func (w *OutputWriter) Write(p []byte) (int, error) {
 	_ = EmitWithConfig(w.config, &Event{
 		Type:     "process.output",
 		ID:       w.id,
-		Level:    LevelDebug,
 		Stream:   w.stream,
 		Data:     iolib.MaskString(string(p)),
 		Bytes:    Int(len(p)),

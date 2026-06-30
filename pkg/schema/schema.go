@@ -75,7 +75,7 @@ type AtmosConfiguration struct {
 	Imports                       ImportsSettings    `yaml:"imports,omitempty" json:"imports,omitempty" mapstructure:"imports"`
 	Workflows                     Workflows          `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
 	Logs                          Logs               `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
-	Diagnostics                   Diagnostics        `yaml:"diagnostics,omitempty" json:"diagnostics,omitempty" mapstructure:"diagnostics"`
+	Diagnostics                   Diagnostics        `yaml:"diagnostics" json:"diagnostics" mapstructure:"diagnostics"`
 	Errors                        ErrorsConfig       `yaml:"errors,omitempty" json:"errors,omitempty" mapstructure:"errors"`
 	Commands                      []Command          `yaml:"commands,omitempty" json:"commands,omitempty" mapstructure:"commands"`
 	CommandAliases                CommandAliases     `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
@@ -1001,11 +1001,9 @@ type Logs struct {
 
 // Diagnostics contains machine-readable diagnostic event stream settings.
 type Diagnostics struct {
-	File   string `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"`
-	Level  string `yaml:"level,omitempty" json:"level,omitempty" mapstructure:"level"`
-	Sink   string `yaml:"sink,omitempty" json:"sink,omitempty" mapstructure:"sink"`
-	URL    string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
-	Output bool   `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
+	Enabled       bool   `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	File          string `yaml:"file" json:"file" mapstructure:"file"`
+	IncludeOutput bool   `yaml:"include_output" json:"include_output" mapstructure:"include_output"`
 }
 
 // ErrorsConfig contains configuration for error handling.

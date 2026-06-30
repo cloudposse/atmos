@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
 # A small platform topology for the landing dependency-tree demo. The
-# `settings.depends_on` edges make `atmos list dependencies -s dev` render a
+# `dependencies.components` edges make `atmos list dependencies -s dev` render a
 # real tree: app depends on cluster, cluster and dns depend on vpc.
 vars:
   stage: dev
@@ -11,19 +11,16 @@ components:
     vpc: {}
 
     cluster:
-      settings:
-        depends_on:
-          1:
-            component: vpc
+      dependencies:
+        components:
+          - name: vpc
 
     dns:
-      settings:
-        depends_on:
-          1:
-            component: vpc
+      dependencies:
+        components:
+          - name: vpc
 
     app:
-      settings:
-        depends_on:
-          1:
-            component: cluster
+      dependencies:
+        components:
+          - name: cluster

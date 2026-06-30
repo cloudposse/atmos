@@ -730,6 +730,12 @@ func executeCustomCommand(
 
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
 	executor := stepPkg.NewStepExecutor()
+	stepVars := executor.Variables()
+	stepVars.SetTemplateRenderer(func(name, input string, data any) (string, error) {
+		return e.ProcessTmpl(&atmosConfig, name, input, data, false)
+	})
+	stepVars.SetTemplatePasses(3)
+	stepVars.ProtectTemplateRoots("Arguments", "Flags", "flags", "TrailingArgs")
 
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
@@ -768,6 +774,7 @@ func executeCustomCommand(
 		data := map[string]any{
 			"Arguments":    argumentsData,
 			"Flags":        flagsData,
+			"flags":        flagsData,
 			"TrailingArgs": trailingArgs,
 		}
 
@@ -822,6 +829,13 @@ func executeCustomCommand(
 			// the caller's PATH (e.g. `./build/atmos <cmd>`). Keeps example steps readable.
 			env = envpkg.EnsureBinaryInPath(env, execPath)
 		}
+		stepVars.SetTemplateData(data)
+		for _, envVar := range env {
+			parts := strings.SplitN(envVar, "=", 2)
+			if len(parts) == 2 {
+				stepVars.SetEnv(parts[0], parts[1])
+			}
+		}
 
 		// Export the custom component's resolved `env` section into the step subprocess
 		// environment, mirroring the built-in terraform/helmfile/packer providers. Without this,
@@ -855,12 +869,13 @@ func executeCustomCommand(
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
-				value, err = e.ProcessTmpl(&atmosConfig, fmt.Sprintf("env-var-%d", i), value, data, false)
+				value, err = stepVars.Resolve(value)
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
 			// Add or update the environment variable in the env slice
 			env = envpkg.UpdateEnvVar(env, key, value)
+			stepVars.SetEnv(key, value)
 		}
 
 		if len(commandConfig.Env) > 0 && commandConfig.Verbose {
@@ -881,10 +896,16 @@ func executeCustomCommand(
 			}
 			log.Debug("Prepared environment with identity for custom command step", customCommandKeyIdentity, commandIdentity, customCommandKeyCommand, commandConfig.Name, "step", i)
 		}
+		for _, envVar := range env {
+			parts := strings.SplitN(envVar, "=", 2)
+			if len(parts) == 2 {
+				stepVars.SetEnv(parts[0], parts[1])
+			}
+		}
 
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
-		commandToRun, err := processCustomCommandTemplate(&atmosConfig, fmt.Sprintf("step-%d", i), step.Command, data)
+		commandToRun, err := stepVars.Resolve(step.Command)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
 		// Determine step type - default to shell if not specified.
@@ -940,9 +961,6 @@ func executeCustomCommand(
 			if stepPkg.IsExtendedStepType(stepType) {
 				// Convert Task to WorkflowStep for handler compatibility.
 				workflowStep := step.ToWorkflowStep()
-				// Update command with template-resolved value.
-				workflowStep.Command = commandToRun
-				processCustomCommandWorkflowStepTemplates(&atmosConfig, &workflowStep, data, i)
 				// Carry env onto the step so handlers that read step.Env (e.g. the
 				// container handler's in-container env) see it. The step's own
 				// declared `env:` had its map keys lowercased by Viper, so restore
@@ -962,13 +980,6 @@ func executeCustomCommand(
 					workflowStep.WorkingDirectory = workDir
 				}
 
-				// Update environment variables for this step (reuse executor to preserve step outputs).
-				for _, envVar := range env {
-					parts := strings.SplitN(envVar, "=", 2)
-					if len(parts) == 2 {
-						executor.SetEnv(parts[0], parts[1])
-					}
-				}
 				if stack, ok := flagsData["stack"].(string); ok && stack != "" {
 					executor.SetFlag("stack", stack)
 				}
@@ -987,120 +998,6 @@ func customCommandConditionContext() schema.ConditionContext {
 	return schema.ConditionContext{
 		CI:     telemetry.IsCI(),
 		Status: schema.ConditionPredicateSuccess,
-	}
-}
-
-// tmplOpen is a placeholder substituted for "{{" in user-supplied runtime values
-// (Arguments, Flags, TrailingArgs) before template rendering.  After rendering
-// the placeholder is replaced back to "{{" so the user sees the literal string.
-// The sequence uses ASCII null bytes that cannot appear in normal YAML or
-// shell strings, preventing any accidental collision.
-const (
-	tmplOpen = "\x00ATMOS_TMPL_OPEN\x00"
-
-	// Template opening delimiter that user-supplied runtime values are escaped
-	// against before rendering.
-	tmplOpenDelim = "{{"
-)
-
-// escapeUserTemplateMarkers returns a shallow copy of data with "{{" replaced by
-// tmplOpen in every user-supplied runtime string (Arguments values, string Flags
-// values, and TrailingArgs elements).  Config-owned keys (ComponentConfig,
-// Component, etc.) are referenced by pointer so they are not copied.
-func escapeUserTemplateMarkers(data map[string]any) map[string]any {
-	out := make(map[string]any, len(data))
-	for k, v := range data {
-		out[k] = v
-	}
-
-	// Escape Arguments (map[string]string).
-	if args, ok := data["Arguments"].(map[string]string); ok {
-		escaped := make(map[string]string, len(args))
-		for k, v := range args {
-			escaped[k] = strings.ReplaceAll(v, tmplOpenDelim, tmplOpen)
-		}
-		out["Arguments"] = escaped
-	}
-
-	// Escape string values inside Flags (map[string]any).
-	if flags, ok := data["Flags"].(map[string]any); ok {
-		escaped := make(map[string]any, len(flags))
-		for k, v := range flags {
-			if s, ok := v.(string); ok {
-				escaped[k] = strings.ReplaceAll(s, tmplOpenDelim, tmplOpen)
-			} else {
-				escaped[k] = v
-			}
-		}
-		out["Flags"] = escaped
-	}
-
-	// Escape TrailingArgs ([]string).
-	if trailing, ok := data["TrailingArgs"].([]string); ok {
-		escaped := make([]string, len(trailing))
-		for i, v := range trailing {
-			escaped[i] = strings.ReplaceAll(v, tmplOpenDelim, tmplOpen)
-		}
-		out["TrailingArgs"] = escaped
-	}
-
-	return out
-}
-
-// processCustomCommandTemplate renders value as a Go template using data.
-// Multi-pass rendering is used to resolve nested references such as
-// {{ .ComponentConfig.xxx }} that themselves expand to another template.
-// User-supplied runtime values (Arguments, Flags, TrailingArgs) are escaped
-// before the first pass so that "{{" literals in user input are never
-// re-evaluated as template directives on subsequent passes.
-func processCustomCommandTemplate(atmosConfig *schema.AtmosConfiguration, name, value string, data map[string]any) (string, error) {
-	// Sanitize user-supplied values to prevent template injection.
-	safeData := escapeUserTemplateMarkers(data)
-
-	result := value
-	for pass := 0; pass < 3; pass++ {
-		if !strings.Contains(result, tmplOpenDelim) {
-			break
-		}
-		processed, err := e.ProcessTmpl(atmosConfig, fmt.Sprintf("%s-pass-%d", name, pass+1), result, safeData, false)
-		if err != nil {
-			return "", err
-		}
-		if processed == result {
-			break
-		}
-		result = processed
-	}
-
-	// Restore escaped template markers so the caller receives the literal "{{".
-	return strings.ReplaceAll(result, tmplOpen, tmplOpenDelim), nil
-}
-
-func processCustomCommandWorkflowStepTemplates(atmosConfig *schema.AtmosConfiguration, step *schema.WorkflowStep, data map[string]any, stepIndex int) {
-	var err error
-	step.Title, err = processCustomCommandTemplate(atmosConfig, fmt.Sprintf("step-%d-title", stepIndex), step.Title, data)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-	step.Content, err = processCustomCommandTemplate(atmosConfig, fmt.Sprintf("step-%d-content", stepIndex), step.Content, data)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-	step.Stack, err = processCustomCommandTemplate(atmosConfig, fmt.Sprintf("step-%d-stack", stepIndex), step.Stack, data)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-	step.WorkingDirectory, err = processCustomCommandTemplate(atmosConfig, fmt.Sprintf("step-%d-working-directory", stepIndex), step.WorkingDirectory, data)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-
-	for rowIndex := range step.Data {
-		for key, value := range step.Data[rowIndex] {
-			stringValue, ok := value.(string)
-			if !ok {
-				continue
-			}
-			step.Data[rowIndex][key], err = processCustomCommandTemplate(
-				atmosConfig,
-				fmt.Sprintf("step-%d-data-%d-%s", stepIndex, rowIndex, key),
-				stringValue,
-				data,
-			)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
-		}
 	}
 }
 
@@ -1294,7 +1191,7 @@ func checkAtmosConfigE(opts ...AtmosValidateOption) error {
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
-	fmt.Println()
+	u.PrintMessage("")
 	err := tuiUtils.PrintStyledText("ATMOS")
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 

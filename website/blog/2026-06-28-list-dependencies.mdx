@@ -21,6 +21,23 @@ As infrastructure grows, the relationships between components matter as much as 
 atmos list dependencies
 ```
 
+Tree output keeps stack context next to the component hierarchy, with component
+type as secondary metadata on the right:
+
+```text
+Dependencies
+Stack         Component                 Type
+plat-ue2-dev  app-config                terraform
+              ├──depends on ↓
+              │  ├──▶ dynamodb-table
+              │  └──▶ kms-key
+              └──required by ↑
+                 └──(none)
+```
+
+Triangle markers show edge direction: `▶` means the component depends on that
+child, and `◀` means that child depends on the selected component.
+
 By default it walks every component and renders **both directions** — prerequisites and dependents. Scope it to a stack, focus on a single component, pick a direction, or emit structured data instead:
 
 ```shell

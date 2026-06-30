@@ -241,7 +241,6 @@ func ExecuteShellCommand(
 	emitDiagnosticsEvent(diagConfig, &diagnostics.Event{
 		Type:           "process.start",
 		ID:             diagID,
-		Level:          diagnostics.LevelDebug,
 		Command:        command,
 		Args:           append([]string{}, args...),
 		CWD:            resolveDiagnosticsCWD(dir),
@@ -258,7 +257,6 @@ func ExecuteShellCommand(
 		emitDiagnosticsEvent(diagConfig, &diagnostics.Event{
 			Type:       "process.end",
 			ID:         diagID,
-			Level:      diagnostics.LevelDebug,
 			Started:    diagnostics.Bool(false),
 			Success:    diagnostics.Bool(closeErr == nil),
 			ExitCode:   diagnostics.Int(0),
@@ -341,7 +339,6 @@ func emitProcessEndDiagnostics(config diagnostics.Config, id string, fallbackSta
 		Type:       "process.end",
 		Time:       finishedAt.UTC(),
 		ID:         id,
-		Level:      diagnostics.LevelDebug,
 		Started:    diagnostics.Bool(result.Started),
 		Success:    diagnostics.Bool(result.Err == nil),
 		Canceled:   diagnostics.Bool(result.Canceled),

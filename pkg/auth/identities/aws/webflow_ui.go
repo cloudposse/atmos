@@ -71,7 +71,7 @@ func displayWebflowDialog(authURL string) {
 	content.WriteString("\n\n")
 	content.WriteString(urlStyle.Render(authURL))
 
-	fmt.Fprintf(os.Stderr, "%s\n", boxStyle.Render(content.String()))
+	utils.PrintfMessageToTUI("%s\n", boxStyle.Render(content.String()))
 }
 
 // displayWebflowDialogPlainText shows the authentication URL in plain text (non-TTY).

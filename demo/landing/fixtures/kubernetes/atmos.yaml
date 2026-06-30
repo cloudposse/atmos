@@ -8,20 +8,6 @@ toolchain:
     helm: helm/helm
     kubectl: kubernetes/kubectl
     kustomize: kubernetes-sigs/kustomize
-  registries:
-    - name: emulator-k8s-tools
-      type: atmos
-      priority: 100
-      tools:
-        kubernetes-sigs/kustomize:
-          type: github_release
-          asset: "kustomize_v{{.SemVer}}_{{.OS}}_{{.Arch}}.tar.gz"
-          binary_name: kustomize
-          version_prefix: "kustomize/v"
-    - name: aqua-public
-      type: aqua
-      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
-      priority: 10
 
 templates:
   settings:
@@ -65,15 +51,15 @@ commands:
   - name: "test"
     description: "Bring up the k3s sandbox, deploy the nginx release, then tear it down"
     steps:
-      - type: shell
-        command: |
-          set -e
-          # Register teardown to run even if apply fails.
-          teardown() {
-            atmos helmfile destroy demo -s local || true
-            atmos emulator down kubernetes -s local || true
-          }
-          trap teardown EXIT
-          atmos validate stacks
-          atmos emulator up kubernetes -s local
-          atmos helmfile apply demo -s local
+      - type: atmos
+        command: validate stacks
+      - type: atmos
+        command: emulator up kubernetes -s local
+      - type: atmos
+        command: helmfile apply demo -s local
+      - type: atmos
+        command: helmfile destroy demo -s local
+        when: always
+      - type: atmos
+        command: emulator down kubernetes -s local
+        when: always

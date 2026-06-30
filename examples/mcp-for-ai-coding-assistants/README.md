@@ -78,7 +78,8 @@ from `aws-api`.
 To smoke-test the Atmos MCP server from this example:
 
 ```bash
-atmos mcp start --chdir=examples/mcp-for-ai-coding-assistants
+cd examples/mcp-for-ai-coding-assistants
+atmos mcp start
 ```
 
 The server starts even before stack manifests exist. Stack-dependent tools load

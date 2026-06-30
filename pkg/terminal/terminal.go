@@ -228,7 +228,7 @@ func (t *terminal) Write(content string) error {
 
 	// Fallback: write directly to stderr (no masking)
 	// This should only happen in tests or when terminal is created without I/O
-	_, err := fmt.Fprint(os.Stderr, content)
+	_, err := os.Stderr.Write([]byte(content))
 	return err
 }
 
@@ -345,7 +345,7 @@ func (t *terminal) SetTitle(title string) {
 		_ = t.io.Write(int(IOStreamUI), titleSeq)
 	} else {
 		// Fallback for tests
-		fmt.Fprint(os.Stderr, titleSeq)
+		_, _ = os.Stderr.Write([]byte(titleSeq))
 	}
 }
 
@@ -359,7 +359,7 @@ func (t *terminal) RestoreTitle() {
 		if t.io != nil {
 			_ = t.io.Write(int(IOStreamUI), titleSeq)
 		} else {
-			fmt.Fprint(os.Stderr, titleSeq)
+			_, _ = os.Stderr.Write([]byte(titleSeq))
 		}
 	}
 }
@@ -382,7 +382,7 @@ func (t *terminal) Alert() {
 		_ = t.io.Write(int(IOStreamUI), escBEL)
 	} else {
 		// Fallback for tests
-		fmt.Fprint(os.Stderr, escBEL)
+		_, _ = os.Stderr.Write([]byte(escBEL))
 	}
 }
 

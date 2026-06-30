@@ -47,8 +47,9 @@ logs:
   file: /dev/stderr
   level: Debug
 diagnostics:
-  level: debug
-  sink: file
+  enabled: false
+  file: ""
+  include_output: false
 commands:
   - name: test
     description: Run all tests

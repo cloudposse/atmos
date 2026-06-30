@@ -1,7 +1,23 @@
-# Top-level stack `plat-ue2-staging` — a composition manifest, not where config lives.
-# It assembles a deployment from two reusable layers:
-#   - orgs/acme/plat/staging/_defaults  → what makes `staging` different (prod-like, relaxed)
-#   - mixins/region/us-east-2           → region + environment context vars
 import:
+  - catalog/backend
   - orgs/acme/plat/staging/_defaults
   - mixins/region/us-east-2
+
+components:
+  terraform:
+    s3-bucket:
+      vars:
+        # Still allow forced teardown of pre-production environments.
+        force_destroy: true
+        # Mirror prod durability so staging validates the same behavior.
+        versioning_enabled: true
+    kms-key:
+      vars:
+        # Middle-ground deletion window.
+        deletion_window_in_days: 14
+        # Rotate keys like prod, so staging exercises the same path.
+        enable_key_rotation: true
+    sqs-queue:
+      vars:
+        # Default 4-day retention.
+        message_retention_seconds: 345600

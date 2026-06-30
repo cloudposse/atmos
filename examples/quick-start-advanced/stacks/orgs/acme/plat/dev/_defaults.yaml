@@ -1,28 +1,7 @@
 import:
   - orgs/acme/plat/_defaults
 
-# Dev: cheap and ephemeral — optimized for fast teardown and recreation, not durability.
-# This file is the single place to see how `dev` differs from the catalog defaults: same
-# services as staging/prod, deliberately different settings.
+# Dev account context. Component settings live in the regional top-level stacks that
+# import and deploy the backend catalog.
 vars:
   stage: dev
-
-components:
-  terraform:
-    s3-bucket:
-      vars:
-        # Allow `terraform destroy` to remove a non-empty bucket so dev tears down cleanly.
-        force_destroy: true
-        # Versioning costs storage; not worth it for throwaway dev data. The prod OPA
-        # policy (see configure-validation) requires versioning in `prod`, not here.
-        versioning_enabled: false
-    kms-key:
-      vars:
-        # Shortest window AWS allows, so a destroyed dev key frees its alias quickly.
-        deletion_window_in_days: 7
-        # No rotation needed for ephemeral dev keys.
-        enable_key_rotation: false
-    sqs-queue:
-      vars:
-        # Retain messages for 1 day — plenty for dev debugging.
-        message_retention_seconds: 86400

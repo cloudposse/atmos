@@ -14,7 +14,7 @@ import (
 func TestEmitWithConfigWritesJSONL(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.jsonl")
 
-	err := EmitWithConfig(Config{File: path, Level: LevelDebug, Sink: SinkFile}, &Event{
+	err := EmitWithConfig(Config{Enabled: true, File: path}, &Event{
 		Type:    "process.start",
 		ID:      "process-1",
 		Command: "terraform",
@@ -27,12 +27,12 @@ func TestEmitWithConfigWritesJSONL(t *testing.T) {
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"level"`)
 
 	var event Event
 	require.NoError(t, json.Unmarshal(data, &event))
 	assert.Equal(t, "process.start", event.Type)
 	assert.Equal(t, "process-1", event.ID)
-	assert.Equal(t, LevelDebug, event.Level)
 	assert.Equal(t, "terraform", event.Command)
 	assert.Equal(t, []string{"init"}, event.Args)
 	assert.Equal(t, "/work", event.CWD)
@@ -43,7 +43,7 @@ func TestEmitWithConfigWritesJSONL(t *testing.T) {
 
 func TestEmitWithConfigDisabledWithoutFile(t *testing.T) {
 	dir := t.TempDir()
-	err := EmitWithConfig(Config{Level: LevelDebug, Sink: SinkFile}, &Event{Type: "process.start"})
+	err := EmitWithConfig(Config{Enabled: true}, &Event{Type: "process.start"})
 	require.NoError(t, err)
 
 	entries, err := os.ReadDir(dir)
@@ -51,9 +51,9 @@ func TestEmitWithConfigDisabledWithoutFile(t *testing.T) {
 	assert.Empty(t, entries)
 }
 
-func TestEmitWithConfigOffLevelDisables(t *testing.T) {
+func TestEmitWithConfigDisabledByDefault(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.jsonl")
-	err := EmitWithConfig(Config{File: path, Level: "off", Sink: SinkFile}, &Event{Type: "process.start"})
+	err := EmitWithConfig(Config{File: path}, &Event{Type: "process.start"})
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(path)
@@ -64,7 +64,7 @@ func TestEmitWithConfigMasksStructuredFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.jsonl")
 	iolib.RegisterSecret("super-secret-token")
 
-	err := EmitWithConfig(Config{File: path, Level: LevelDebug, Sink: SinkFile}, &Event{
+	err := EmitWithConfig(Config{Enabled: true, File: path}, &Event{
 		Type:    "process.start",
 		Command: "terraform",
 		Args:    []string{"-var", "token=super-secret-token"},
@@ -82,13 +82,14 @@ func TestOutputWriterOptInMasksOutput(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.jsonl")
 	iolib.RegisterSecret("super-secret-output")
 
-	writer := NewOutputWriter(Config{File: path, Level: LevelDebug, Sink: SinkFile, Output: true}, "process-1", "stderr")
+	writer := NewOutputWriter(Config{Enabled: true, File: path, IncludeOutput: true}, "process-1", "stderr")
 	n, err := writer.Write([]byte("line with super-secret-output\n"))
 	require.NoError(t, err)
 	assert.Equal(t, len("line with super-secret-output\n"), n)
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"level"`)
 
 	var event Event
 	require.NoError(t, json.Unmarshal(data, &event))
@@ -105,7 +106,7 @@ func TestOutputWriterOptInMasksOutput(t *testing.T) {
 func TestOutputWriterDisabledByDefault(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.jsonl")
 
-	writer := NewOutputWriter(Config{File: path, Level: LevelDebug, Sink: SinkFile}, "process-1", "stdout")
+	writer := NewOutputWriter(Config{Enabled: true, File: path}, "process-1", "stdout")
 	n, err := writer.Write([]byte("ignored\n"))
 	require.NoError(t, err)
 	assert.Equal(t, len("ignored\n"), n)

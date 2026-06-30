@@ -333,8 +333,8 @@ the textbook case: every account (`dev`, `staging`, `prod`) deploys into the sam
 :::tip Don't create a mixin for a single line
 Earlier versions of this example also had `mixins/tenant/*` and `mixins/stage/*` files that each set a single context variable (`tenant: plat`,
 `stage: dev`). That added an extra file to chase for no real reuse. A value that belongs to exactly one layer of the hierarchy should live **in that
-layer's `_defaults.yaml`**, not in a one-line mixin. So `tenant` now lives in the tenant's `_defaults.yaml`, and `stage` (plus the per-environment
-overrides) lives in each account's `_defaults.yaml` — see the sections below.
+layer's `_defaults.yaml`**, not in a one-line mixin. So `tenant` now lives in the tenant's `_defaults.yaml`, and `stage` lives in each account's
+`_defaults.yaml`. Component settings stay in the top-level regional stacks that actually deploy those components.
 :::
 
 In `stacks/mixins/region/us-east-2.yaml`, add the following config:
@@ -382,24 +382,23 @@ vars:
 </File>
 
 In `stacks/orgs/acme/plat/_defaults.yaml`, configure the `plat` OU (tenant). The `tenant` context variable lives right here in the tenant's
-`_defaults.yaml` (no separate one-line mixin to chase). This is also where the whole backend catalog is brought in, by importing `catalog/backend`:
+`_defaults.yaml` (no separate one-line mixin to chase). Defaults files should hold context and truly common settings; deployable component catalogs are
+imported by the top-level stacks that actually run them.
 
 <File title="stacks/orgs/acme/plat/_defaults.yaml">
 ```yaml
 import:
   - orgs/acme/_defaults
-  - catalog/backend
 
 vars:
   tenant: plat
 ```
 </File>
 
-When Atmos processes this stack config, it imports and deep-merges all the variables defined in the imported files and inline. Because
-`catalog/backend` is imported here at the tenant level, **every account and region under `plat` gets the full backend catalog, including the emulator, automatically**.
+When Atmos processes this stack config, it imports and deep-merges all the variables defined in the imported files and inline. Since the backend catalog
+is not imported at this layer, helper stacks such as `global-region` can carry context without accidentally defining regional application resources.
 
-In `stacks/orgs/acme/plat/dev/_defaults.yaml`, configure the `dev` account. This is the file where you can see, at a glance, **what makes `dev`
-different** from the catalog defaults — same services, deliberately different settings (cheap and ephemeral):
+In `stacks/orgs/acme/plat/dev/_defaults.yaml`, configure the `dev` account context. Keep this file focused on context and truly common defaults:
 
 <File title="stacks/orgs/acme/plat/dev/_defaults.yaml">
 ```yaml
@@ -408,6 +407,41 @@ import:
 
 vars:
   stage: dev
+```
+</File>
+
+Configure the `prod` account the same way:
+
+<File title="stacks/orgs/acme/plat/prod/_defaults.yaml">
+```yaml
+import:
+  - orgs/acme/plat/_defaults
+
+vars:
+  stage: prod
+```
+</File>
+
+Add the `staging` account defaults the same way.
+
+### Configure Top-level Stacks
+
+After we've configured the catalog, the region mixins, and the defaults for the Organization, OU and accounts, the final step is to configure the Atmos
+root (top-level) stacks. Each deployable regional leaf stack imports the backend catalog, its account defaults, and a region mixin. It also carries the
+component settings for that stage and region.
+
+This keeps component definitions in the stacks that actually deploy them, while defaults stay focused on shared context. This layering is the
+[organizational hierarchy](/design-patterns/stack-organization/organizational-hierarchy-configuration) pattern in action.
+
+In `stacks/orgs/acme/plat/dev/us-east-2.yaml`, define the dev backend in `us-east-2`. This is where you can see, at a glance, **what makes `dev`
+different** from the catalog defaults — same services, deliberately cheaper and more ephemeral settings:
+
+<File title="stacks/orgs/acme/plat/dev/us-east-2.yaml">
+```yaml
+import:
+  - catalog/backend
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-east-2
 
 components:
   terraform:
@@ -425,16 +459,40 @@ components:
 ```
 </File>
 
-Configure the `prod` account the same way, but with the **opposite, hardened** choices. Putting the two side by side is the whole point of the layered
-model — this is the real-world divergence that a flat, identical-everywhere example can never show:
+Similarly, create the top-level Atmos stack for the `dev` account in `us-west-2` with the same dev component settings and a different region mixin:
 
-<File title="stacks/orgs/acme/plat/prod/_defaults.yaml">
+<File title="stacks/orgs/acme/plat/dev/us-west-2.yaml">
 ```yaml
 import:
-  - orgs/acme/plat/_defaults
+  - catalog/backend
+  - orgs/acme/plat/dev/_defaults
+  - mixins/region/us-west-2
 
-vars:
-  stage: prod
+components:
+  terraform:
+    s3-bucket:
+      vars:
+        force_destroy: true
+        versioning_enabled: false
+    kms-key:
+      vars:
+        deletion_window_in_days: 7
+        enable_key_rotation: false
+    sqs-queue:
+      vars:
+        message_retention_seconds: 86400
+```
+</File>
+
+Repeat the pattern for the `staging` and `prod` accounts, importing the matching `_defaults`, region mixin, and component settings. For example,
+`stacks/orgs/acme/plat/prod/us-east-2.yaml` uses the **opposite, hardened** choices:
+
+<File title="stacks/orgs/acme/plat/prod/us-east-2.yaml">
+```yaml
+import:
+  - catalog/backend
+  - orgs/acme/plat/prod/_defaults
+  - mixins/region/us-east-2
 
 components:
   terraform:
@@ -452,50 +510,12 @@ components:
 ```
 </File>
 
-Add the `staging` account defaults the same way, somewhere between `dev` and `prod`.
-
-### Configure Top-level Stacks
-
-After we've configured the catalog, the mixins for tenants/regions/stages, and the defaults for the Organization, OU and accounts, the final step is to
-configure the Atmos root (top-level) stacks. Each leaf stack just imports its account defaults and a region mixin — there's nothing left to repeat,
-because the backend components were already brought in at the `plat` tenant level. This layering is the
-[organizational hierarchy](/design-patterns/stack-organization/organizational-hierarchy-configuration) pattern in action.
-
-In `stacks/orgs/acme/plat/dev/us-east-2.yaml`, add the following config:
-
-<File title="stacks/orgs/acme/plat/dev/us-east-2.yaml">
-```yaml
-import:
-  - orgs/acme/plat/dev/_defaults
-  - mixins/region/us-east-2
-```
-</File>
-
-Similarly, create the top-level Atmos stack for the `dev` account in `us-west-2`:
-
-<File title="stacks/orgs/acme/plat/dev/us-west-2.yaml">
-```yaml
-import:
-  - orgs/acme/plat/dev/_defaults
-  - mixins/region/us-west-2
-```
-</File>
-
-Repeat the pattern for the `staging` and `prod` accounts, importing the matching `_defaults` and region mixin. For example,
-`stacks/orgs/acme/plat/prod/us-east-2.yaml`:
-
-<File title="stacks/orgs/acme/plat/prod/us-east-2.yaml">
-```yaml
-import:
-  - orgs/acme/plat/prod/_defaults
-  - mixins/region/us-east-2
-```
-</File>
-
 These per-account, per-region leaf files are the top-level stacks Atmos resolves when you pass `-s plat-ue2-dev`, `-s plat-uw2-prod`, and so on.
+The `global-region` stacks intentionally omit `catalog/backend`; they define context only, so regional resources like `sns-topic` and `sqs-queue` are not
+accidentally instantiated in `plat-gbl-*`.
 
 :::tip Component Inheritance
-This is exactly what the account `_defaults.yaml` files do above: the catalog defines the defaults once, and each stage overrides only what differs via
+This is exactly what the regional top-level stack files do above: the catalog defines the defaults once, and each stage overrides only what differs via
 [Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance). `dev` turns `versioning_enabled` off while `prod` keeps it on —
 which is exactly the difference the [OPA policy](/quick-start/advanced/configure-validation) enforces for `prod`. You can override per stage (as here) or
 per region, at any layer of the hierarchy.

@@ -43,19 +43,19 @@ type Writer interface {
 }
 
 // dataWriter is the default implementation that uses the data package.
-// Falls back to fmt.Print if data package isn't initialized.
+// Falls back to the global data writer if data package isn't initialized.
 type dataWriter struct{}
 
 // Write writes content using the data package.
-// If data package isn't initialized (panics), falls back to fmt.Print with masking.
+// If data package isn't initialized (panics), falls back to the global data writer with masking.
 func (d *dataWriter) Write(content string) (err error) {
 	// Use recover to catch panic from data.Write() when not initialized.
 	defer func() {
 		if r := recover(); r != nil {
 			// Data package not initialized, use fallback with native masking.
-			log.Debug("data package not initialized, using fmt.Print fallback")
+			log.Debug("data package not initialized, using global data writer fallback")
 			maskedContent := maskContent(content)
-			fmt.Print(maskedContent)
+			_, _ = iolib.Data.Write([]byte(maskedContent))
 			err = nil
 		}
 	}()
@@ -182,10 +182,10 @@ func (p *pageCreator) Run(title, content string) error {
 func (p *pageCreator) writePacedContent(content string) error {
 	writer := p.writer
 	if writer == nil {
-		log.Warn("pager writer is nil, falling back to direct print")
+		log.Warn("pager writer is nil, falling back to global data writer")
 		writer = stringWriterFunc(func(content string) error {
 			maskedContent := maskContent(content)
-			fmt.Print(maskedContent)
+			_, _ = iolib.Data.Write([]byte(maskedContent))
 			return nil
 		})
 	}
@@ -202,14 +202,14 @@ func (p *pageCreator) writePacedContent(content string) error {
 }
 
 // writeContent writes content to the configured writer.
-// If the writer is nil, it falls back to fmt.Print with masking and logs a warning.
+// If the writer is nil, it falls back to the global data writer with masking and logs a warning.
 // Returns any error from the writer.
 func (p *pageCreator) writeContent(content string) error {
 	if p.writer == nil {
 		// Fallback for nil writer (shouldn't happen in production, but safe for tests).
-		log.Warn("pager writer is nil, falling back to fmt.Print")
+		log.Warn("pager writer is nil, falling back to global data writer")
 		maskedContent := maskContent(content)
-		fmt.Print(maskedContent)
+		_, _ = iolib.Data.Write([]byte(maskedContent))
 		return nil
 	}
 

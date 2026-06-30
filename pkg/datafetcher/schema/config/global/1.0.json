@@ -39,6 +39,9 @@
     },
     "container": {
       "$ref": "#/definitions/container"
+    },
+    "diagnostics": {
+      "$ref": "#/definitions/diagnostics"
     }
   },
   "additionalProperties": true,
@@ -776,6 +779,35 @@
             },
             "templates": {
               "$ref": "#/definitions/templates"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "diagnostics": {
+      "title": "diagnostics",
+      "description": "Machine-readable JSONL diagnostic event stream settings.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable machine-readable diagnostic events."
+            },
+            "file": {
+              "type": "string",
+              "description": "Path to the local JSONL diagnostics file."
+            },
+            "include_output": {
+              "type": "boolean",
+              "description": "Include masked subprocess stdout/stderr chunks in diagnostics."
             }
           },
           "required": []

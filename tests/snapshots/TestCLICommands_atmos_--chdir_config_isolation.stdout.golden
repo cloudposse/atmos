@@ -46,13 +46,14 @@ logs:
   file: /dev/stderr
   level: Info
 diagnostics:
-  level: debug
-  sink: file
+  enabled: false
+  file: ""
+  include_output: false
 settings:
   list_merge_strategy: ""
   terminal:
     max_width: 0
-    pager: cat
+    pager: "false"
     unicode: false
     syntax_highlighting:
       enabled: false

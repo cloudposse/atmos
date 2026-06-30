@@ -409,7 +409,7 @@ func displayVerificationDialog(code, url string) {
 	}
 
 	// Render the box and display it.
-	fmt.Fprintf(os.Stderr, "%s\n", boxStyle.Render(content.String()))
+	utils.PrintfMessageToTUI("%s\n", boxStyle.Render(content.String()))
 }
 
 // displayVerificationPlainText shows verification code in plain text (for non-TTY/CI).

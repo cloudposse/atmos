@@ -992,7 +992,7 @@ func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, s
 
 	// Start the UI
 	app, err := w.Execute(allWorkflows)
-	fmt.Println()
+	u.PrintMessage("")
 	if err != nil {
 		return "", "", "", err
 	}

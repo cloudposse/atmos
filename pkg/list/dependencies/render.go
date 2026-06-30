@@ -103,6 +103,7 @@ func renderTree(graph *dependency.Graph, tops []*dependency.Node, direction Dire
 		entry := &format.DepTreeEntry{
 			Component: node.Component,
 			Stack:     node.Stack,
+			Type:      node.Type,
 			ShowBoth:  showBoth,
 		}
 		if direction == DirectionForward || direction == DirectionBoth {
@@ -152,7 +153,7 @@ func buildSubtree(graph *dependency.Graph, node *dependency.Node, dir edgeDirect
 		if !exists {
 			continue
 		}
-		child := &format.DepTreeNode{Component: next.Component, Stack: next.Stack}
+		child := &format.DepTreeNode{Component: next.Component, Stack: next.Stack, Type: next.Type}
 		if path[id] {
 			child.Circular = true
 			children = append(children, child)

@@ -37,8 +37,8 @@ func TestShellHelperProcess(t *testing.T) {
 
 	switch args[1] {
 	case "stdout-stderr":
-		fmt.Fprint(os.Stdout, "stdout")
-		fmt.Fprint(os.Stderr, "stderr")
+		_, _ = os.Stdout.Write([]byte("stdout"))
+		_, _ = os.Stderr.Write([]byte("stderr"))
 	case "exit":
 		os.Exit(2)
 	default:
@@ -159,9 +159,8 @@ func TestExecuteShellCommandWritesDiagnosticsEvents(t *testing.T) {
 	helper := shellHelperCommand(t, "stdout-stderr")
 	atmosConfig := schema.AtmosConfiguration{
 		Diagnostics: schema.Diagnostics{
-			File:  path,
-			Level: diagnostics.LevelDebug,
-			Sink:  diagnostics.SinkFile,
+			Enabled: true,
+			File:    path,
 		},
 	}
 
@@ -183,6 +182,7 @@ func TestExecuteShellCommandWritesDiagnosticsEvents(t *testing.T) {
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"level"`)
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	require.Len(t, lines, 2)
 
@@ -214,10 +214,9 @@ func TestExecuteShellCommandWritesDiagnosticsOutputWhenEnabled(t *testing.T) {
 	helper := shellHelperCommand(t, "stdout-stderr")
 	atmosConfig := schema.AtmosConfiguration{
 		Diagnostics: schema.Diagnostics{
-			File:   path,
-			Level:  diagnostics.LevelDebug,
-			Sink:   diagnostics.SinkFile,
-			Output: true,
+			Enabled:       true,
+			File:          path,
+			IncludeOutput: true,
 		},
 	}
 
@@ -239,6 +238,7 @@ func TestExecuteShellCommandWritesDiagnosticsOutputWhenEnabled(t *testing.T) {
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"level"`)
 
 	var outputEvents []diagnostics.Event
 	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {

@@ -1,9 +1,11 @@
 // Package agentskills embeds the official Atmos agent skills into the binary so
-// the CLI can list the full catalog and install skills offline — no network or
+// the CLI can list the full catalog and install skills offline -- no network or
 // Git clone required.
 //
-// The embed lives next to the skills/ directory (rather than under pkg/) because
-// the embed directive cannot reference parent directories with "..".
+// This directory is also the distributable Agent Skills / Claude plugin bundle.
+// This Go file is intentionally not skill content; it is a small embedding shim
+// that lives next to skills/ because //go:embed cannot reference parent
+// directories with "..".
 package agentskills
 
 import "embed"

@@ -1,8 +1,5 @@
 import:
   - orgs/acme/_defaults
-  # The whole backend catalog is brought in here at the tenant level, so every account
-  # and region under `plat` inherits all six backend components automatically.
-  - catalog/backend
 
 # Defaults for the `plat` tenant/OU. The tenant context variable lives right here in the
 # tenant's `_defaults` (no separate one-line mixin to chase).

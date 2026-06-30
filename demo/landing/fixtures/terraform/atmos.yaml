@@ -2,7 +2,7 @@
 # (demo/landing/terraform.tape).
 #
 # It declares a small set of Terraform components wired together with
-# `settings.depends_on` so `atmos list dependencies` renders a real dependency
+# `dependencies.components` so `atmos list dependencies` renders a real dependency
 # tree (app → cluster → vpc, plus dns → vpc). The demo only runs read-only `list`
 # commands, so the components are never applied and need no cloud credentials.
 #

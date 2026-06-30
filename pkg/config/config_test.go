@@ -965,28 +965,20 @@ func TestTerminalSpeedDefaultAndEnvBinding(t *testing.T) {
 func TestDiagnosticsDefaultAndEnvBinding(t *testing.T) {
 	v := viper.New()
 	setDefaultConfiguration(v)
+	assert.False(t, v.GetBool("diagnostics.enabled"))
 	assert.Equal(t, "", v.GetString("diagnostics.file"))
-	assert.Equal(t, "debug", v.GetString("diagnostics.level"))
-	assert.Equal(t, "file", v.GetString("diagnostics.sink"))
-	assert.Equal(t, "", v.GetString("diagnostics.url"))
-	assert.False(t, v.GetBool("diagnostics.output"))
+	assert.False(t, v.GetBool("diagnostics.include_output"))
 
+	t.Setenv("ATMOS_DIAGNOSTICS_ENABLED", "true")
 	t.Setenv("ATMOS_DIAGNOSTICS_FILE", "/tmp/atmos-events.jsonl")
-	t.Setenv("ATMOS_DIAGNOSTICS_LEVEL", "debug")
-	t.Setenv("ATMOS_DIAGNOSTICS_SINK", "file")
-	t.Setenv("ATMOS_DIAGNOSTICS_URL", "https://example.com/events")
-	t.Setenv("ATMOS_DIAGNOSTICS_OUTPUT", "true")
+	t.Setenv("ATMOS_DIAGNOSTICS_INCLUDE_OUTPUT", "true")
+	bindEnv(v, "diagnostics.enabled", "ATMOS_DIAGNOSTICS_ENABLED")
 	bindEnv(v, "diagnostics.file", "ATMOS_DIAGNOSTICS_FILE")
-	bindEnv(v, "diagnostics.level", "ATMOS_DIAGNOSTICS_LEVEL")
-	bindEnv(v, "diagnostics.sink", "ATMOS_DIAGNOSTICS_SINK")
-	bindEnv(v, "diagnostics.url", "ATMOS_DIAGNOSTICS_URL")
-	bindEnv(v, "diagnostics.output", "ATMOS_DIAGNOSTICS_OUTPUT")
+	bindEnv(v, "diagnostics.include_output", "ATMOS_DIAGNOSTICS_INCLUDE_OUTPUT")
 
+	assert.True(t, v.GetBool("diagnostics.enabled"))
 	assert.Equal(t, "/tmp/atmos-events.jsonl", v.GetString("diagnostics.file"))
-	assert.Equal(t, "debug", v.GetString("diagnostics.level"))
-	assert.Equal(t, "file", v.GetString("diagnostics.sink"))
-	assert.Equal(t, "https://example.com/events", v.GetString("diagnostics.url"))
-	assert.True(t, v.GetBool("diagnostics.output"))
+	assert.True(t, v.GetBool("diagnostics.include_output"))
 }
 
 // TestResolveAbsolutePath tests the path resolution logic for different scenarios.

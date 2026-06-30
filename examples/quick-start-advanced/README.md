@@ -75,10 +75,10 @@ Available stacks: `plat-ue2-{dev,staging,prod}` (us-east-2) and `plat-uw2-{dev,s
 
 ## How the environments differ
 
-The three environments deploy the **same services with different settings** — that's the whole point of the layered configuration. The
-[catalog](stacks/catalog/) defines each component's defaults once; each account's `_defaults.yaml` overrides only what differs. Open
-[`stacks/orgs/acme/plat/prod/_defaults.yaml`](stacks/orgs/acme/plat/prod/_defaults.yaml) and you can see, in one file, exactly what makes `prod`
-different.
+The three environments deploy the **same services with different settings** - that's the whole point of the layered configuration. The
+[catalog](stacks/catalog/) defines each component's defaults once; each region manifest sets the stage-specific values directly. Open
+[`stacks/orgs/acme/plat/prod/us-east-2.yaml`](stacks/orgs/acme/plat/prod/us-east-2.yaml) and you can see exactly what makes that `prod`
+region different.
 
 | Setting | `dev` (ephemeral) | `staging` (middle) | `prod` (hardened) |
 |---|---|---|---|

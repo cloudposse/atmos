@@ -31,7 +31,7 @@ components:
             bucket_id: .bucket_id
       vars:
         name: assets
-        # Safe default. Per-environment overrides live in each stage's `_defaults.yaml`:
+        # Safe default. Per-environment overrides live in each region manifest:
         # dev/staging set `force_destroy: true` for easy teardown; prod keeps it `false`
         # and the OPA policy requires `versioning_enabled: true` in prod.
         versioning_enabled: true

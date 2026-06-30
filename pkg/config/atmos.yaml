@@ -8,15 +8,14 @@ logs:
   level: Info
 
 diagnostics:
-  # Machine-readable diagnostic events. Local JSONL file sink is enabled when a file is configured.
+  # Machine-readable JSONL diagnostic events. Disabled by default.
+  # Can also be set using 'ATMOS_DIAGNOSTICS_ENABLED' ENV var.
+  enabled: false
   # Can also be set using 'ATMOS_DIAGNOSTICS_FILE' ENV var.
   file: ""
-  # Can also be set using 'ATMOS_DIAGNOSTICS_LEVEL' ENV var.
-  level: debug
-  # Reserved for future sinks. Can also be set using 'ATMOS_DIAGNOSTICS_SINK' ENV var.
-  sink: file
-  # Reserved for future streaming sinks. Can also be set using 'ATMOS_DIAGNOSTICS_URL' ENV var.
-  url: ""
+  # Include masked subprocess stdout/stderr chunks in diagnostics.
+  # Can also be set using 'ATMOS_DIAGNOSTICS_INCLUDE_OUTPUT' ENV var.
+  include_output: false
 
 settings:
   telemetry:

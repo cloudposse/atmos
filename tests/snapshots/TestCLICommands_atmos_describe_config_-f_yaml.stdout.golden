@@ -47,8 +47,9 @@ logs:
   file: /dev/stderr
   level: Info
 diagnostics:
-  level: debug
-  sink: file
+  enabled: false
+  file: ""
+  include_output: false
 settings:
   list_merge_strategy: ""
   terminal:

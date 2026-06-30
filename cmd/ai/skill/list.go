@@ -277,7 +277,7 @@ func skillListRows(entries []listEntry) []map[string]any {
 }
 
 func legend() string {
-	return fmt.Sprintf("\n  %s installed   %s available\n", markerInstalled, markerAvailable)
+	return "\n  " + markerInstalled + " installed   " + markerAvailable + " available\n"
 }
 
 func installHint() string {
@@ -300,24 +300,42 @@ func writeEntryDetail(b *strings.Builder, e *listEntry) {
 		status = "Installed"
 	}
 
-	fmt.Fprintf(b, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-	fmt.Fprintf(b, "%s (%s)\n", e.displayName, status)
-	fmt.Fprintf(b, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	b.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	b.WriteString(e.displayName)
+	b.WriteString(" (")
+	b.WriteString(status)
+	b.WriteByte(')')
+	b.WriteByte('\n')
+	b.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
-	fmt.Fprintf(b, "Name:         %s\n", e.name)
-	fmt.Fprintf(b, "Version:      %s\n", e.version)
-	fmt.Fprintf(b, "Source:       %s\n", e.source)
+	b.WriteString("Name:         ")
+	b.WriteString(e.name)
+	b.WriteByte('\n')
+	b.WriteString("Version:      ")
+	b.WriteString(e.version)
+	b.WriteByte('\n')
+	b.WriteString("Source:       ")
+	b.WriteString(e.source)
+	b.WriteByte('\n')
 	if e.description != "" {
-		fmt.Fprintf(b, "Description:  %s\n", e.description)
+		b.WriteString("Description:  ")
+		b.WriteString(e.description)
+		b.WriteByte('\n')
 	}
 
 	if e.installed && e.skill != nil {
-		fmt.Fprintf(b, "Installed:    %s\n", formatTime(e.skill.InstalledAt))
-		fmt.Fprintf(b, "Last Updated: %s\n", formatTime(e.skill.UpdatedAt))
-		fmt.Fprintf(b, "Location:     %s\n", e.skill.Path)
+		b.WriteString("Installed:    ")
+		b.WriteString(formatTime(e.skill.InstalledAt))
+		b.WriteByte('\n')
+		b.WriteString("Last Updated: ")
+		b.WriteString(formatTime(e.skill.UpdatedAt))
+		b.WriteByte('\n')
+		b.WriteString("Location:     ")
+		b.WriteString(e.skill.Path)
+		b.WriteByte('\n')
 	}
 
-	fmt.Fprintf(b, "\n")
+	b.WriteByte('\n')
 }
 
 func writeSkillListOutput(content string) error {

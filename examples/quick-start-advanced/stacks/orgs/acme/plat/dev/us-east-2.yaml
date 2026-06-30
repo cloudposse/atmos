@@ -1,7 +1,24 @@
-# Top-level stack `plat-ue2-dev` — a composition manifest, not where config lives.
-# It assembles a deployment from two reusable layers:
-#   - orgs/acme/plat/dev/_defaults  → what makes `dev` different (ephemeral settings)
-#   - mixins/region/us-east-2       → region + environment context vars
 import:
+  - catalog/backend
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-east-2
+
+components:
+  terraform:
+    s3-bucket:
+      vars:
+        # Allow `terraform destroy` to remove a non-empty bucket so dev tears down cleanly.
+        force_destroy: true
+        # Versioning costs storage; not worth it for throwaway dev data. The prod OPA
+        # policy (see configure-validation) requires versioning in `prod`, not here.
+        versioning_enabled: false
+    kms-key:
+      vars:
+        # Shortest window AWS allows, so a destroyed dev key frees its alias quickly.
+        deletion_window_in_days: 7
+        # No rotation needed for ephemeral dev keys.
+        enable_key_rotation: false
+    sqs-queue:
+      vars:
+        # Retain messages for 1 day — plenty for dev debugging.
+        message_retention_seconds: 86400
