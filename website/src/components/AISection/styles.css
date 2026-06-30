@@ -61,9 +61,10 @@ html[data-theme="dark"] .ai-section-eyebrow {
 
 html[data-theme="dark"] .ai-section-left h2 {
   color: transparent;
-  background-image: linear-gradient(to right bottom, #fff 30%, rgba(255, 255, 255, 0.5));
+  background-image: linear-gradient(180deg, #ffffff 0%, #e7e5e4 45%, #a8a29e 100%);
   background-clip: text;
   -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 /* Description */
@@ -195,11 +196,14 @@ html[data-theme="light"] .ai-badge-subtitle {
 }
 
 .ai-capability-card {
+  display: block;
   background: rgba(0, 0, 0, 0.02);
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 12px;
   padding: 1.75rem;
   transition: all 0.3s ease;
+  color: inherit;
+  text-decoration: none;
 }
 
 html[data-theme="dark"] .ai-capability-card {
@@ -210,6 +214,8 @@ html[data-theme="dark"] .ai-capability-card {
 .ai-capability-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  color: inherit;
+  text-decoration: none;
 }
 
 html[data-theme="dark"] .ai-capability-card:hover {
@@ -218,21 +224,19 @@ html[data-theme="dark"] .ai-capability-card:hover {
   box-shadow: 0 8px 20px rgba(88, 60, 231, 0.15);
 }
 
+/* Solid accent color so the react-icon <svg> (fill: currentColor) actually
+   renders. The previous gradient + background-clip:text only clips text glyphs,
+   not SVG, so the icons were invisible in dark mode. Dark-first base uses a
+   brightened sibling of the section purple; light keeps the original purple. */
 .ai-capability-icon {
   font-size: 2rem;
   margin-bottom: 0.75rem;
   display: inline-flex;
-  color: transparent;
-  background: linear-gradient(-45deg, #583ce7, #2ec8ff);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #7f9cff;
 }
 
 html[data-theme="light"] .ai-capability-icon {
   color: #583ce7;
-  background: none;
-  -webkit-text-fill-color: #583ce7;
 }
 
 .ai-capability-card h3 {

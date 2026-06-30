@@ -282,6 +282,62 @@ settings:
 	}
 }
 
+func TestLoadProfileFilesProcessesImports(t *testing.T) {
+	setupTestAdapters()
+
+	tmpDir := t.TempDir()
+	profileDir := filepath.Join(tmpDir, "managers")
+	require.NoError(t, os.MkdirAll(filepath.Join(profileDir, "imports"), 0o755))
+
+	importedYAML := `
+auth:
+  providers:
+    imported-provider:
+      kind: aws/iam-identity-center
+      region: us-east-1
+  identities:
+    imported-identity:
+      via:
+        provider: imported-provider
+      principal:
+        account:
+          name: imported
+settings:
+  terminal:
+    max_width: 100
+`
+	require.NoError(t, os.WriteFile(filepath.Join(profileDir, "imports", "auth.yaml"), []byte(importedYAML), 0o644))
+
+	profileYAML := `
+import:
+  - imports/auth.yaml
+auth:
+  providers:
+    imported-provider:
+      kind: aws/iam-identity-center
+      region: us-west-2
+    local-provider:
+      kind: aws/iam-identity-center
+      region: us-east-2
+settings:
+  terminal:
+    color: true
+`
+	require.NoError(t, os.WriteFile(filepath.Join(profileDir, "atmos.yaml"), []byte(profileYAML), 0o644))
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	require.NoError(t, loadProfileFiles(v, profileDir, "managers"))
+
+	assert.Equal(t, "us-west-2", v.GetString("auth.providers.imported-provider.region"),
+		"profile file should override values from its import")
+	assert.Equal(t, "us-east-2", v.GetString("auth.providers.local-provider.region"))
+	assert.Equal(t, "imported-provider", v.GetString("auth.identities.imported-identity.via.provider"),
+		"profile imports should contribute auth identities")
+	assert.Equal(t, 100, v.GetInt("settings.terminal.max_width"))
+	assert.True(t, v.GetBool("settings.terminal.color"))
+}
+
 // TestLoadProfiles tests loading multiple profiles with precedence.
 func TestLoadProfiles(t *testing.T) {
 	// Create temporary directory structure.

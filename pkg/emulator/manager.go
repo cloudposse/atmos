@@ -87,6 +87,9 @@ func (m *Manager) Up(ctx context.Context, spec *Spec, stack, name string, env ma
 	if err := m.bootstrapGitIfNeeded(ctx, runtime, spec, stack, name); err != nil {
 		return Endpoint{}, err
 	}
+	if err := m.waitKubernetesIfNeeded(ctx, spec, stack, name); err != nil {
+		return Endpoint{}, err
+	}
 	return m.endpoint(ctx, runtime, spec, stack, name)
 }
 
@@ -157,6 +160,21 @@ func (m *Manager) bootstrapGitIfNeeded(ctx context.Context, runtime container.Ru
 		return fmt.Errorf("%w: %s/emulator/%s has no published HTTP port", errUtils.ErrEmulatorNotRunning, stack, name)
 	}
 	return bootstrapGitea(ctx, runtime, info.ID, baseURL)
+}
+
+// waitKubernetesIfNeeded blocks until a Kubernetes emulator has produced a
+// harvestable kubeconfig. This is the real readiness signal for k3s because the
+// kubeconfig is what downstream Helmfile/Kubectl commands consume.
+func (m *Manager) waitKubernetesIfNeeded(ctx context.Context, spec *Spec, stack, name string) error {
+	target, err := spec.Target()
+	if err != nil {
+		return err
+	}
+	if target != TargetKubernetes {
+		return nil
+	}
+	_, err = m.Kubeconfig(ctx, stack, name)
+	return err
 }
 
 func (m *Manager) namedConfig(spec *Spec, stack, name string, env map[string]string, rootless bool) (*container.NamedConfig, error) {
@@ -507,15 +525,18 @@ func (m *Manager) Exec(ctx context.Context, stack, name string, command []string
 	})
 }
 
-// Status is one row of `atmos emulator ps`.
+// Status is one row of `atmos emulator ps` / `atmos emulator list`.
 type Status struct {
 	Name   string
+	Stack  string
 	Image  string
 	Status string
 	ID     string
 }
 
-// Ps lists emulator containers in a stack (by canonical labels).
+// Ps lists emulator containers (by canonical labels). When stack is non-empty it
+// returns only that stack's emulators; an empty stack returns every emulator
+// across all stacks (used by `atmos emulator list` without `--stack`).
 func (m *Manager) Ps(ctx context.Context, stack string) ([]Status, error) {
 	defer perf.Track(nil, "emulator.Manager.Ps")()
 
@@ -532,11 +553,13 @@ func (m *Manager) Ps(ctx context.Context, stack string) ([]Status, error) {
 	}
 	statuses := make([]Status, 0, len(infos))
 	for i := range infos {
-		if infos[i].Labels[container.LabelStack] != stack {
+		instanceStack := infos[i].Labels[container.LabelStack]
+		if stack != "" && instanceStack != stack {
 			continue
 		}
 		statuses = append(statuses, Status{
 			Name:   infos[i].Labels[container.LabelComponent],
+			Stack:  instanceStack,
 			Image:  infos[i].Image,
 			Status: infos[i].Status,
 			ID:     infos[i].ID,

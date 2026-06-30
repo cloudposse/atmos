@@ -12,10 +12,21 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const newline = "\n"
+
+// newDotSpinner builds the shared Dot spinner used by every spinner variant here.
+// Apply honors the ATMOS_SPINNER_FPS override (for VHS demo recordings).
+func newDotSpinner() spinner.Model {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = theme.GetCurrentStyles().Spinner
+	fps.Apply(&s)
+	return s
+}
 
 // ExecWithSpinner runs an operation with a spinner UI.
 // ProgressMsg is shown while operation is running (e.g., "Starting container").
@@ -144,9 +155,7 @@ func (m spinnerModel) View() string {
 }
 
 func newSpinnerModel(progressMsg, completedMsg string) spinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
+	s := newDotSpinner()
 	return spinnerModel{
 		spinner:      s,
 		progressMsg:  progressMsg,
@@ -297,9 +306,7 @@ func (m dynamicSpinnerModel) View() string {
 }
 
 func newDynamicSpinnerModel(progressMsg string) dynamicSpinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
+	s := newDotSpinner()
 	return dynamicSpinnerModel{
 		spinner:     s,
 		progressMsg: progressMsg,
@@ -418,9 +425,7 @@ type manualStopMsg struct {
 }
 
 func newManualSpinnerModel(progressMsg string) manualSpinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
+	s := newDotSpinner()
 	return manualSpinnerModel{
 		spinner:     s,
 		progressMsg: progressMsg,

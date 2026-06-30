@@ -129,6 +129,16 @@ mcp:
       identity: "readonly"
 
 # ---------------------------------------------------------------------------
+# Atmos AI Tools
+# ---------------------------------------------------------------------------
+# Required for `atmos mcp start`. No provider API key is required just to expose
+# Atmos tools over MCP; providers are only needed for `atmos ai ask/chat/exec`.
+ai:
+  enabled: true
+  tools:
+    enabled: true
+
+# ---------------------------------------------------------------------------
 # Atmos Auth — automatic credential injection for AWS MCP servers
 # ---------------------------------------------------------------------------
 # Update the `start_url` to your AWS IAM Identity Center start URL,

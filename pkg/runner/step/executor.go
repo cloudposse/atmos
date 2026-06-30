@@ -149,6 +149,13 @@ func (e *StepExecutor) SetEnv(key, value string) {
 	e.vars.SetEnv(key, value)
 }
 
+// SetFlag sets a workflow flag for use in templates.
+func (e *StepExecutor) SetFlag(key, value string) {
+	defer perf.Track(nil, "step.StepExecutor.SetFlag")()
+
+	e.vars.SetFlag(key, value)
+}
+
 // IsExtendedStepType checks if a step type is an extended type (not atmos or shell).
 func IsExtendedStepType(stepType string) bool {
 	defer perf.Track(nil, "step.IsExtendedStepType")()

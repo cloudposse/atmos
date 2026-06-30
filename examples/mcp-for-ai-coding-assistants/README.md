@@ -75,6 +75,17 @@ from `aws-api`.
 
 ## Wiring the MCP Servers Into Your AI CLI
 
+To smoke-test the Atmos MCP server from this example:
+
+```bash
+cd examples/mcp-for-ai-coding-assistants
+atmos mcp start
+```
+
+The server starts even before stack manifests exist. Stack-dependent tools load
+stacks when they are called, so newly added or fixed stack files are picked up by
+the next tool call.
+
 ### Claude Code
 
 Claude Code reads MCP servers from a `.mcp.json` file in the project root. Atmos generates

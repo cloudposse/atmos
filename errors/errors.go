@@ -675,6 +675,8 @@ var (
 	ErrHTTPStepRequestFailed         = errors.New("http request failed")
 	ErrHTTPStepUnexpectedStatus      = errors.New("http response did not match expected status")
 	ErrHTTPStepUnexpectedResponse    = errors.New("http response body did not match expected pattern")
+	ErrRequireStepEmpty              = errors.New("require step must specify at least one of tools, files, or dirs")
+	ErrRequirementsNotMet            = errors.New("required tools or paths are missing")
 	ErrWorkingDirNotFound            = errors.New("working directory does not exist")
 	ErrWorkingDirNotDirectory        = errors.New("working directory path is not a directory")
 	ErrWorkingDirAccessFailed        = errors.New("failed to access working directory")
@@ -1239,7 +1241,7 @@ var (
 	ErrWebSearchNotEnabled  = errors.New("web search is not enabled in configuration")
 
 	// MCP errors.
-	ErrMCPNotEnabled            = errors.New("MCP server is not enabled: add 'mcp:\n  enabled: true' to atmos.yaml")
+	ErrMCPNotEnabled            = errors.New("MCP server is not enabled")
 	ErrMCPToolNotFound          = errors.New("MCP tool not found")
 	ErrMCPInvalidJSONRPCVersion = errors.New("invalid JSON-RPC version")
 	ErrMCPInvalidTransport      = errors.New("invalid transport type")

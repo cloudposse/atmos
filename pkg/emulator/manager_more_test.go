@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -258,8 +259,9 @@ func TestManager_Resolve_KubernetesHarvestsKubeconfig(t *testing.T) {
 	assert.Equal(t, 16443, endpoint.Ports[kubeTestDriverPort])
 	assert.Equal(t, "1", profile.Env["KUBE_DRIVER"])
 	require.NotEmpty(t, profile.Kubeconfig)
-	// The harvested kubeconfig's server URL is rewritten to the live host port.
-	assert.Contains(t, string(profile.Kubeconfig), "server: https://localhost:16443")
+	// The harvested kubeconfig's server URL is rewritten to the live host port on
+	// the IPv4 loopback literal (not "localhost"; see loopbackHostToIPv4).
+	assert.Contains(t, string(profile.Kubeconfig), "server: https://127.0.0.1:16443")
 }
 
 func TestManager_Resolve_KubernetesKubeconfigError(t *testing.T) {
@@ -273,10 +275,18 @@ func TestManager_Resolve_KubernetesKubeconfigError(t *testing.T) {
 	runtime := NewMockRuntime(ctrl)
 	info := kubeRunningInfo(16443)
 	runtime.EXPECT().List(gomock.Any(), gomock.Any()).
-		Return([]container.Info{info}, nil).Times(2)
+		Return([]container.Info{info}, nil).AnyTimes()
 	runtime.EXPECT().
 		Exec(gomock.Any(), info.ID, []string{"cat", k3sKubeconfigPath}, gomock.Any()).
-		Return(errRuntimeBoom)
+		Return(errRuntimeBoom).AnyTimes()
+	oldTimeout := kubeconfigReadyTimeout
+	oldInterval := kubeconfigPollInterval
+	kubeconfigReadyTimeout = time.Millisecond
+	kubeconfigPollInterval = time.Millisecond
+	t.Cleanup(func() {
+		kubeconfigReadyTimeout = oldTimeout
+		kubeconfigPollInterval = oldInterval
+	})
 
 	m := newManagerWithRuntime(runtime)
 	_, _, err := m.Resolve(context.Background(), &Spec{Driver: kubeTestDriverName}, "dev", "k8s")

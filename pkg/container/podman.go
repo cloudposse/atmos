@@ -254,49 +254,81 @@ func parsePodmanContainer(containerJSON map[string]interface{}) Info {
 	if labels, ok := containerJSON["Labels"].(map[string]interface{}); ok {
 		info.Labels = parseLabelsMap(labels)
 	}
-
-	info.Ports = parsePodmanPorts(containerJSON)
+	if raw, ok := containerJSON["Ports"]; ok {
+		info.Ports = parsePodmanPorts(raw)
+	}
 
 	return info
 }
 
-// parsePodmanPorts extracts published port bindings from a `podman ps --format
-// json` record. Each entry carries `container_port`, `host_port`, and `protocol`
-// (numbers decode as float64 through the generic map). Exposed-but-unpublished
-// ports (host_port == 0, e.g. the Gitea image's 22/tcp) are skipped so callers see
-// only live host bindings — mirroring the Docker List path, which is the only
-// reason emulator endpoint resolution works there.
-func parsePodmanPorts(containerJSON map[string]interface{}) []PortBinding {
-	raw, ok := containerJSON["Ports"].([]interface{})
-	if !ok || len(raw) == 0 {
+// parsePodmanPorts extracts published port bindings from a podman `ps --format json`
+// record. Podman represents ports as a structured array with snake_case keys
+// (host_port/container_port/protocol), unlike docker's `ps` string column parsed by
+// parseDockerPorts. Without this, Info.Ports is empty under podman and emulator
+// endpoint resolution yields an empty URL (see pkg/emulator manager.endpoint), so
+// Terraform falls back to real cloud endpoints.
+func parsePodmanPorts(raw interface{}) []PortBinding {
+	entries, ok := raw.([]interface{})
+	if !ok {
 		return nil
 	}
-	bindings := make([]PortBinding, 0, len(raw))
-	for _, item := range raw {
-		mapping, ok := item.(map[string]interface{})
+
+	var ports []PortBinding
+	seen := make(map[PortBinding]struct{})
+	for _, entry := range entries {
+		binding, span, ok := parsePodmanPort(entry)
 		if !ok {
 			continue
 		}
-		hostPort := toInt(mapping["host_port"])
-		if hostPort == 0 {
-			continue
+		if span <= 0 {
+			span = 1
 		}
-		protocol, _ := mapping["protocol"].(string)
-		if protocol == "" {
-			protocol = "tcp"
+		// Expand consecutive host/container ports within the range.
+		for i := 0; i < span; i++ {
+			expanded := PortBinding{
+				ContainerPort: binding.ContainerPort + i,
+				HostPort:      binding.HostPort + i,
+				Protocol:      binding.Protocol,
+			}
+			if _, dup := seen[expanded]; dup {
+				continue
+			}
+			seen[expanded] = struct{}{}
+			ports = append(ports, expanded)
 		}
-		bindings = append(bindings, PortBinding{
-			ContainerPort: toInt(mapping["container_port"]),
-			HostPort:      hostPort,
-			Protocol:      protocol,
-		})
 	}
-	return bindings
+
+	return ports
 }
 
-// toInt converts a JSON-decoded numeric value (float64, json.Number, or int) to an
-// int, returning 0 for anything else.
-func toInt(v interface{}) int {
+// parsePodmanPort converts one podman port entry into a PortBinding and the
+// port range span. Unpublished ports (host_port 0) are skipped; a missing
+// protocol defaults to tcp. The span field reflects Podman's `range` key for
+// consecutive port ranges; callers must expand [base, base+span) themselves.
+func parsePodmanPort(entry interface{}) (PortBinding, int, bool) {
+	m, ok := entry.(map[string]interface{})
+	if !ok {
+		return PortBinding{}, 0, false
+	}
+	hostPort := jsonFieldInt(m["host_port"])
+	containerPort := jsonFieldInt(m["container_port"])
+	if hostPort == 0 || containerPort == 0 {
+		return PortBinding{}, 0, false
+	}
+	protocol, _ := m["protocol"].(string)
+	if protocol == "" {
+		protocol = "tcp"
+	}
+	span := jsonFieldInt(m["range"])
+	if span <= 0 {
+		span = 1
+	}
+	return PortBinding{ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, span, true
+}
+
+// JsonFieldInt coerces a JSON-decoded numeric field to an int. The json.Unmarshal
+// call into interface{} yields float64 for numbers; int and json.Number are handled defensively.
+func jsonFieldInt(v interface{}) int {
 	switch n := v.(type) {
 	case float64:
 		return int(n)

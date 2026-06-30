@@ -111,6 +111,9 @@ var verbExecutors = map[string]verbExecutor{
 	"ps": func(ctx context.Context, ec *component.ExecutionContext) error {
 		return ExecutePs(ctx, &ec.ConfigAndStacksInfo)
 	},
+	"list": func(ctx context.Context, ec *component.ExecutionContext) error {
+		return ExecuteList(ctx, &ec.ConfigAndStacksInfo)
+	},
 	"logs": func(ctx context.Context, ec *component.ExecutionContext) error {
 		return ExecuteLogs(ctx, &ec.ConfigAndStacksInfo)
 	},
@@ -141,7 +144,7 @@ func (p *EmulatorComponentProvider) GenerateArtifacts(_ *component.ExecutionCont
 func (p *EmulatorComponentProvider) GetAvailableCommands() []string {
 	defer perf.Track(nil, "emulator.EmulatorComponentProvider.GetAvailableCommands")()
 
-	return []string{"up", "down", "reset", "ps", "logs", "exec"}
+	return []string{"up", "down", "reset", "ps", "list", "logs", "exec"}
 }
 
 // flagBool reads a boolean flag from the execution context's Flags map, returning
