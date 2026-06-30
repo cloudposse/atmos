@@ -80,9 +80,8 @@ func effectiveInspectStep(step *schema.WorkflowStep) schema.ContainerInspectStep
 	if step.Inspect != nil {
 		inspect = *step.Inspect
 	}
-	if inspect.Image == "" {
-		inspect.Image = step.Image
-	}
+	// image comes from `with:` (step.Inspect.Image); only provider and
+	// runtime_auto_start fall through from the step level.
 	if inspect.Provider == "" {
 		inspect.Provider = step.Provider
 	}

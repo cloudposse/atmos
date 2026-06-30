@@ -10,14 +10,14 @@ import Intro from '@site/src/components/Intro'
 The `container` step type builds, pushes, runs, and inspects containers through Docker or Podman, bringing the full container lifecycle into your custom commands and workflows without leaving Atmos.
 </Intro>
 
-Set `action` to choose the operation, then provide the matching nested config block (`build`, `push`, `run`, or `inspect`). When `action` is omitted, Atmos defaults to `run`.
+Set `action` to choose the operation, then provide the operation's parameters under a single `with:` block. When `action` is omitted, Atmos defaults to `run`.
 
 ```yaml
 steps:
   - name: build
     type: container
     action: build
-    build:
+    with:
       context: .
       dockerfile: Dockerfile
       tags:
@@ -26,7 +26,7 @@ steps:
   - name: smoke
     type: container
     action: run
-    run:
+    with:
       image: app:local
       command: uname -a
 ```
@@ -39,20 +39,14 @@ This step type is different from the step-level [`container`](/workflows/steps/c
   <dt>`action`</dt>
   <dd>Operation to perform: `build`, `push`, `run`, or `inspect`. Defaults to `run` when omitted.</dd>
 
-  <dt>`build`</dt>
-  <dd>Configuration for `action: build`. See [Build](#build).</dd>
+  <dt>`with`</dt>
+  <dd>Parameters for the chosen `action`. The accepted fields depend on the action: see [Build](#build), [Push](#push), [Run](#run), and [Inspect](#inspect).</dd>
 
-  <dt>`push`</dt>
-  <dd>Configuration for `action: push`. See [Push](#push).</dd>
-
-  <dt>`run`</dt>
-  <dd>Configuration for `action: run`. See [Run](#run).</dd>
-
-  <dt>`inspect`</dt>
-  <dd>Configuration for `action: inspect`. See [Inspect](#inspect).</dd>
+  <dt>`background`</dt>
+  <dd>For `action: run`, start the container detached as a long-running service and continue the workflow. See [Background services](#background-services).</dd>
 </dl>
 
-Every action block also accepts `provider` (`docker` or `podman`, auto-detected when omitted) and `runtime_auto_start` (start the Podman machine when no runtime is running).
+The `provider` (`docker` or `podman`, auto-detected when omitted) and `runtime_auto_start` (start the Podman machine when no runtime is running) keys stay at the top level of the step, alongside `action` and `with`.
 
 ## Build
 
@@ -63,9 +57,9 @@ steps:
   - name: build
     type: container
     action: build
-    build:
-      provider: docker          # docker | podman (auto-detected when omitted)
-      runtime_auto_start: true  # start the Podman machine if no runtime is running
+    provider: docker            # docker | podman (auto-detected when omitted)
+    runtime_auto_start: true    # start the Podman machine if no runtime is running
+    with:
       engine: buildx            # buildx (Docker BuildKit) or omit for the default builder
       context: .                # build context directory
       dockerfile: Dockerfile    # path to the Dockerfile
@@ -110,11 +104,10 @@ steps:
 
 ### Bake
 
-Set `build.bake` to build one or more targets from a `docker-bake.hcl` (or `.json`) definition:
+Set `with.bake` to build one or more targets from a `docker-bake.hcl` (or `.json`) definition:
 
 ```yaml
-build:
-  provider: docker
+with:
   bake:
     file: docker-bake.hcl       # primary bake file
     files:                      # additional bake files
@@ -163,8 +156,8 @@ steps:
   - name: publish
     type: container
     action: push
-    push:
-      provider: docker
+    provider: docker
+    with:
       image: app:local          # source image to push
       tags:                     # target tags (omit to push all existing tags)
         - registry.example.com/app:1.0.0
@@ -188,13 +181,13 @@ steps:
   - name: smoke
     type: container
     action: run
+    provider: docker
     env:                        # environment variables come from the step-level env
       LOG_LEVEL: debug
-    run:
+    with:
       image: app:local          # required
       command: ./run-tests.sh   # required
       shell: /bin/sh            # shell used to run the command (default /bin/sh)
-      provider: docker
       pull: missing             # missing (default) | always | never
       workspace: /workspace     # where the working directory is mounted (default /workspace)
       workspace_read_only: false
@@ -251,14 +244,16 @@ steps:
   <dd>Nested runtime block. Set `runtime.host: true` to grant the container access to the host container runtime (Docker-out-of-Docker) so it can launch sibling containers — Atmos mounts the runtime socket, runs as root, relabels for SELinux, and sets `DOCKER_HOST`. Opt-in and effectively host-root; works on Docker and rootful podman (on rootless podman the socket is unreachable in-container). May also be set inline on the step as `runtime.host`.</dd>
 </dl>
 
-Environment variables for the container come from the step-level [`env`](/workflows/steps/env) field, not from a field under `run`.
+Environment variables for the container come from the step-level [`env`](/workflows/steps/env) field, not from a field under `with`.
+
+`action: run` also accepts `restart` and `healthcheck` under `with`, mapping onto the Docker Compose shapes. A `healthcheck` is what gates readiness for [background services](#background-services).
 
 ### Mounts
 
-`run.mounts` is a list of mount objects:
+`with.mounts` is a list of mount objects:
 
 ```yaml
-run:
+with:
   image: app:local
   command: ls /cache
   mounts:
@@ -289,10 +284,10 @@ run:
 
 ### Ports
 
-`run.ports` is a list of port mappings:
+`with.ports` is a list of port mappings:
 
 ```yaml
-run:
+with:
   image: nginx:latest
   command: nginx -g 'daemon off;'
   ports:
@@ -321,12 +316,58 @@ steps:
   - name: inspect
     type: container
     action: inspect
-    inspect:
-      provider: docker
+    provider: docker
+    with:
       image: app:local          # image to inspect
 ```
 
 <dl>
   <dt>`image`</dt>
   <dd>Required. Image to inspect.</dd>
+</dl>
+
+## Background services
+
+Set `background: true` on an `action: run` step to start a long-running service detached. Atmos starts the container, then continues to the next step instead of blocking on the container's exit. This is how you bring up an emulator, database, or other dependency that later steps need, without dropping into shell scripts and background jobs.
+
+```yaml
+workflows:
+  e2e:
+    steps:
+      - name: emulator
+        type: container
+        action: run
+        background: true
+        with:
+          image: localstack/localstack
+          ports:
+            - host: 4566
+              container: 4566
+          healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+            interval: 5s
+            retries: 10
+            start_period: 30s
+
+      - name: apply
+        type: atmos
+        command: terraform apply vpc -s dev
+
+      - type: cancel
+        for: emulator
+```
+
+### Readiness via healthcheck
+
+When a background service declares a `healthcheck` under `with`, Atmos blocks until the container reports healthy before running the next step. This reuses the same container health check as container components — no `sleep` guesses, no readiness-polling scripts. A background service "waits until healthy", never "until exit": a long-running service never exits on its own, so readiness is defined by its health check, not its exit code.
+
+You can also gate readiness explicitly with a [`wait`](/workflows/steps/type/wait) step (`{ type: wait, for: [emulator] }`), or wait for every background service at once with [`wait-all`](/workflows/steps/type/wait). The ordinary [`needs`](/workflows/steps) field is unchanged and still expresses step ordering.
+
+### Teardown
+
+Stop and remove a background service with a [`cancel`](/workflows/steps/type/cancel) step (`{ type: cancel, for: emulator }`). If you never cancel it explicitly, Atmos automatically tears down all background services when the workflow ends — including on failure — so a crashed workflow does not leave orphaned containers behind.
+
+<dl>
+  <dt>`background`</dt>
+  <dd>When `true` on an `action: run` step, start the container detached and continue the workflow. The step does not block on the container's exit; readiness is gated by its `healthcheck` (or an explicit `wait` step), and teardown happens via `cancel` or automatically at workflow end.</dd>
 </dl>

@@ -12,9 +12,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -873,6 +875,47 @@ func TestPrepareStepEnvironment_NilAuthManager(t *testing.T) {
 
 	assert.ErrorIs(t, err, errUtils.ErrAuthManager)
 	assert.Nil(t, env)
+}
+
+func TestExecuteWorkflowControlStepUsesResolvedIdentityFallback(t *testing.T) {
+	showSummary := false
+	ctrl := gomock.NewController(t)
+	authManager := authTypes.NewMockAuthManager(ctrl)
+	gomock.InOrder(
+		authManager.EXPECT().
+			GetCachedCredentials(gomock.Any(), "parent-id").
+			Return(&authTypes.WhoamiInfo{Identity: "parent-id"}, nil),
+		authManager.EXPECT().
+			PrepareShellEnvironment(gomock.Any(), "parent-id", gomock.Any()).
+			DoAndReturn(func(_ context.Context, identityName string, currentEnv []string) ([]string, error) {
+				assert.Equal(t, "parent-id", identityName)
+				assert.Contains(t, currentEnv, "BASE_VAR=base-value")
+				return append(currentEnv, "ATMOS_IDENTITY="+identityName), nil
+			}),
+	)
+	parent := &schema.WorkflowStep{
+		Name: "checks",
+		Type: schema.TaskTypeParallel,
+		ParallelOutput: &schema.ParallelOutputConfig{
+			Mode:        "none",
+			ShowSummary: &showSummary,
+		},
+		Steps: []schema.WorkflowStep{{
+			Name:    "child",
+			Type:    schema.TaskTypeShell,
+			Command: "echo child",
+		}},
+	}
+
+	err := executeWorkflowControlStep(context.Background(), &workflowControlContext{
+		workflowDefinition:  &schema.WorkflowDefinition{},
+		dryRun:              true,
+		commandLineIdentity: "parent-id",
+		baseEnv:             []string{"BASE_VAR=base-value"},
+		authManager:         authManager,
+	}, parent)
+
+	require.NoError(t, err)
 }
 
 // TestWorkflowMatch tests the WorkflowMatch struct.

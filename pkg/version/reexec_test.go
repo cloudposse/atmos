@@ -3,6 +3,7 @@ package version
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -129,6 +130,79 @@ func TestCheckAndReexecWithConfig_GuardActive(t *testing.T) {
 
 	assert.False(t, result, "Should return false when depth > 0")
 	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when depth > 0")
+}
+
+func TestParseUseVersionFromArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "empty", args: []string{}, want: ""},
+		{name: "absent flag", args: []string{"atmos", "terraform", "plan"}, want: ""},
+		{name: "equals form", args: []string{"atmos", "--use-version=ref:main", "list", "stacks"}, want: "ref:main"},
+		{name: "separate value form", args: []string{"atmos", "--use-version", "1.2.3", "list", "stacks"}, want: "1.2.3"},
+		{name: "missing separate value", args: []string{"atmos", "list", "stacks", "--use-version"}, want: ""},
+		{name: "bare separator is not a separate value", args: []string{"atmos", "list", "stacks", "--use-version", "--"}, want: ""},
+		{name: "after bare separator is ignored", args: []string{"atmos", "--", "--use-version=ref:main"}, want: ""},
+		{name: "before bare separator is found", args: []string{"atmos", "--use-version=ref:main", "--", "plan"}, want: "ref:main"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, ParseUseVersionFromArgs(tt.args))
+		})
+	}
+}
+
+func TestExplicitVersionOverride(t *testing.T) {
+	originalArgs := os.Args
+	os.Args = []string{"atmos"}
+	t.Cleanup(func() { os.Args = originalArgs })
+
+	for _, key := range []string{
+		VersionUseEnvVar,
+		UseVersionEnvVar,
+		VersionEnvVar,
+	} {
+		t.Setenv(key, "")
+	}
+
+	t.Run("internal env has highest precedence", func(t *testing.T) {
+		t.Setenv(VersionUseEnvVar, "1.2.3")
+		t.Setenv(UseVersionEnvVar, "1.2.4")
+		t.Setenv(VersionEnvVar, "1.2.5")
+		os.Args = []string{"atmos", "--use-version=ref:main"}
+
+		assert.Equal(t, "1.2.3", ExplicitVersionOverride(os.Args))
+	})
+
+	t.Run("args precede public env", func(t *testing.T) {
+		t.Setenv(VersionUseEnvVar, "")
+		t.Setenv(UseVersionEnvVar, "1.2.4")
+		t.Setenv(VersionEnvVar, "1.2.5")
+		os.Args = []string{"atmos", "--use-version=ref:main"}
+
+		assert.Equal(t, "ref:main", ExplicitVersionOverride(os.Args))
+	})
+
+	t.Run("public env precedes legacy env", func(t *testing.T) {
+		t.Setenv(VersionUseEnvVar, "")
+		t.Setenv(UseVersionEnvVar, "1.2.4")
+		t.Setenv(VersionEnvVar, "1.2.5")
+		os.Args = []string{"atmos"}
+
+		assert.Equal(t, "1.2.4", ExplicitVersionOverride(os.Args))
+	})
+
+	t.Run("legacy env fallback", func(t *testing.T) {
+		t.Setenv(VersionUseEnvVar, "")
+		t.Setenv(UseVersionEnvVar, "")
+		t.Setenv(VersionEnvVar, "1.2.5")
+		os.Args = []string{"atmos"}
+
+		assert.Equal(t, "1.2.5", ExplicitVersionOverride(os.Args))
+	})
 }
 
 func TestCheckAndReexecWithConfig_VersionMatch(t *testing.T) {

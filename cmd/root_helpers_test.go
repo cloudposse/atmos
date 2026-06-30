@@ -1224,8 +1224,8 @@ func TestIsTopLevelCommand(t *testing.T) {
 	assert.False(t, isTopLevelCommand(orphan), "command with no parent should not be top-level")
 }
 
-// TestParseUseVersionFromArgsInternal tests --use-version flag parsing.
-func TestParseUseVersionFromArgsInternal(t *testing.T) {
+// TestParseUseVersionFromArgs tests --use-version flag parsing.
+func TestParseUseVersionFromArgs(t *testing.T) {
 	tests := []struct {
 		name     string
 		args     []string
@@ -1257,6 +1257,11 @@ func TestParseUseVersionFromArgsInternal(t *testing.T) {
 			expected: "",
 		},
 		{
+			name:     "use-version with bare separator value returns empty",
+			args:     []string{"terraform", "--use-version", "--"},
+			expected: "",
+		},
+		{
 			name:     "use-version after bare -- is ignored",
 			args:     []string{"terraform", "--", "--use-version=1.2.3"},
 			expected: "",
@@ -1270,7 +1275,7 @@ func TestParseUseVersionFromArgsInternal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseUseVersionFromArgsInternal(tt.args)
+			result := pkgversion.ParseUseVersionFromArgs(tt.args)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

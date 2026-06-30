@@ -157,13 +157,6 @@ jobs:
           }
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
-      - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        with:
-          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
-          tofu_wrapper: false
-
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
         uses: hashicorp/setup-packer@3286471d6cc6756d056a0b199fea5e0becdbc189 # main
@@ -182,10 +175,13 @@ jobs:
         continue-on-error: true
         uses: ./actions/cache
 
-      - name: Install Helm and Helmfile
+      - name: Install OpenTofu, Helm, and Helmfile with Atmos toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
           atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
           atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
           atmos toolchain env --format=github
@@ -234,13 +230,10 @@ jobs:
           CGO_ENABLED: 0
         run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
 
-      # Enable this after merging test-cases
-      # Only seems to work with remote schema files
-      #- name: Validate YAML Schema for Test Cases
-      #  run: |
-      #    npx --yes yaml-ls-check@1.5.1 schema \
-      #      "schema.json" \
-      #      "tests/test-cases/**/*.yaml"
+      # NOTE: The test-case YAML files (tests/test-cases/*.yaml) are validated against
+      # tests/test-cases/schema.json by the Go test `TestTestCaseSchemaValidation`, which
+      # dogfoods Atmos's own schema validator (the engine behind `atmos validate schema`).
+      # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
       - name: Acceptance tests with coverage
         timeout-minutes: 45
@@ -368,16 +361,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Add Terraform from Atmos toolchain to PATH
+      - name: Install Terraform and OpenTofu with Atmos toolchain
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
           atmos toolchain env --format=github
-
-      - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
-        with:
-          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
-          tofu_wrapper: false
 
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
@@ -626,18 +616,14 @@ jobs:
         run: |
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
-      - name: Add Terraform from Atmos toolchain to PATH
+      - name: Install Terraform and OpenTofu with Atmos toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
           atmos toolchain env --format=github
-
-      - name: Install OpenTofu
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
-        with:
-          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
-          tofu_wrapper: false
 
       - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
         working-directory: ${{ matrix.demo-folder }}
@@ -706,11 +692,21 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
-          tofu_wrapper: false
+          name: build-artifacts-linux
+          path: /usr/local/bin
+
+      - name: Set execute permissions on atmos
+        run: chmod +x /usr/local/bin/atmos
+
+      - name: Install OpenTofu with Atmos toolchain
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain env --format=github
 
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
         uses: reviewdog/action-tflint@54a5e5aed57dcfbb4662ec548de876df33d6288d # v1
@@ -738,15 +734,20 @@ jobs:
           - emulator-aws
           - demo-stacks
           - quick-start-simple
-          # quick-start-advanced is intentionally NOT validated here. It now uses runtime
-          # Atmos YAML functions (`!terraform.state`, `!store`, `!secret`) that the static
-          # yaml-language-server cannot resolve (the InoUno/yaml-ls-check action hardcodes
-          # an empty customTags list, so unknown tags fail with "Unresolved tag"). Every
-          # other function-using example (custom-components, sops-secrets,
-          # onepassword-secrets, native-terraform) is likewise excluded from this matrix.
-          # demo-helmfile is also excluded: it now uses `!emulator` to harvest the local
-          # k3s emulator's kubeconfig. Its stacks are still validated by `atmos validate
-          # stacks` inside the `[k3s] demo-helmfile` job (atmos understands the function).
+          # Examples below use runtime Atmos YAML functions (`!terraform.state`, `!store`,
+          # `!secret`, …). They were previously excluded because the static yaml-language-server
+          # hardcodes an empty customTags list and fails them with "Unresolved tag". Atmos
+          # itself understands its own tags natively, so `atmos validate stacks` validates them.
+          - custom-components
+          - sops-secrets
+          - onepassword-secrets
+          # quick-start-advanced and native-terraform are intentionally NOT validated here:
+          #   - quick-start-advanced: its `stacks/workflows/*.yaml` manifests use newer workflow
+          #     step types (`type: stage`/`spin`, `title:`) that the atmos-manifest JSON Schema
+          #     does not describe yet, so schema validation fails. (Functions now parse fine.)
+          #   - native-terraform: intentionally configures no `stacks.name_pattern`/`name_template`,
+          #     which `atmos validate stacks` requires, so the command cannot resolve stacks.
+          # Both are still exercised end-to-end by the floci and acceptance jobs.
 
     timeout-minutes: 20
     steps:
@@ -755,31 +756,30 @@ jobs:
         with:
           persist-credentials: false
 
-      # The example stacks pin their `# yaml-language-server: $schema` modeline to the
-      # published schema at atmos.tools, which only updates after a PR merges and the site
-      # deploys. yaml-language-server gives the inline modeline absolute precedence over the
-      # `schemaMapping` below, so without this step the examples would always validate against
-      # the live (stale) schema — and a PR could never add a schema field and use it in an
-      # example at the same time. Rewrite the modeline URL to the in-repo schema (ephemeral,
-      # CI checkout only) so examples are validated against the schema this PR actually ships.
-      # The committed files keep the public URL for users who copy them.
-      - name: Use in-repo schema for validation
-        run: |
-          find "examples/${{ matrix.demo-folder }}/stacks" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 \
-            | xargs -0 --no-run-if-empty sed -i \
-              "s#https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#file://${GITHUB_WORKSPACE}/website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#g"
-
-      - name: Validate YAML Schema for Stacks
-        uses: InoUno/yaml-ls-check@2c229b85b877b2853b40bd0fbdcfccff5ff735c7 # v1.4.0
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          root: "examples/${{ matrix.demo-folder }}/stacks"
-          schemaMapping: |
-            {
-              "file://${{ github.workspace }}/website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
-                "examples/${{ matrix.demo-folder }}/stacks/**/*.yaml",
-                "examples/${{ matrix.demo-folder }}/stacks/**/*.yml"
-              ]
-            }
+          name: build-artifacts-linux
+          path: /usr/local/bin
+
+      - name: Set execute permissions on atmos
+        run: chmod +x /usr/local/bin/atmos
+
+      # Dogfood Atmos to validate the example stacks instead of a third-party action.
+      # `atmos validate stacks` checks YAML syntax, validates every manifest against the
+      # Atmos manifest JSON Schema, resolves imports, and detects duplicate components —
+      # and it understands Atmos YAML tags natively (`!terraform.state`, `!store`, `!secret`).
+      #
+      # `--schemas-atmos-manifest` points at the in-repo schema this PR ships (rather than the
+      # published schema at atmos.tools, which only updates after merge + site deploy), so a PR
+      # can add a schema field and use it in an example at the same time. This overrides any
+      # per-example `schemas.atmos.manifest` config. Atmos ignores the `# yaml-language-server:
+      # $schema` modeline, so the committed files keep their public URL for users who copy them.
+      - name: Validate stacks
+        working-directory: examples/${{ matrix.demo-folder }}
+        run: |
+          atmos validate stacks \
+            --schemas-atmos-manifest "${GITHUB_WORKSPACE}/website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 
   # run container step tests against a local registry (build -> push -> run)
   # Docker is available directly on the runner (see the k3s job), and a

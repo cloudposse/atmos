@@ -43,7 +43,7 @@ commands:
 ```
 
 A structured step is the same object documented for workflows. See the
-[step reference](/workflows/steps/step) for the common step fields (`name`, `type`, `command`,
+[step reference](/workflows/steps) for the common step fields (`name`, `type`, `command`,
 `output`, and more).
 
 ## Conditional steps
@@ -68,6 +68,28 @@ commands:
 
 String shorthand steps remain plain shell commands and always run. Use the
 structured form when a custom command step needs a condition.
+
+Step predicates are:
+
+<dl>
+  <dt>`ci`</dt>
+  <dd>Run only when Atmos detects CI using its standard CI detection.</dd>
+
+  <dt>`local`</dt>
+  <dd>Run only outside CI.</dd>
+
+  <dt>`always`</dt>
+  <dd>Always run.</dd>
+
+  <dt>`never`</dt>
+  <dd>Never run.</dd>
+
+  <dt>`success`</dt>
+  <dd>Run when the step condition is evaluated with success status.</dd>
+</dl>
+
+`failure` is supported for hooks, which evaluate against a lifecycle outcome,
+but not for workflow or custom command steps.
 
 ## Step types
 

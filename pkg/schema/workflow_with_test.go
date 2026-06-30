@@ -1,0 +1,113 @@
+package schema
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
+)
+
+// TestWorkflowStep_DecodeWith verifies that the container `action:`/`with:` vocabulary
+// decodes into the typed action struct selected by `action` (defaulting to run).
+func TestWorkflowStep_DecodeWith(t *testing.T) {
+	t.Run("run is the default action", func(t *testing.T) {
+		var step WorkflowStep
+		require.NoError(t, yaml.Unmarshal([]byte(`
+type: container
+with:
+  image: alpine:latest
+  command: echo hi
+  ports:
+    - { host: 8080, container: 80 }
+`), &step))
+		require.NotNil(t, step.Run)
+		assert.Equal(t, "alpine:latest", step.Run.Image)
+		assert.Equal(t, "echo hi", step.Run.Command)
+		require.Len(t, step.Run.Ports, 1)
+		assert.Equal(t, 8080, step.Run.Ports[0].Host)
+		assert.Equal(t, 80, step.Run.Ports[0].Container)
+		assert.Nil(t, step.Build)
+		assert.Nil(t, step.Inspect)
+	})
+
+	t.Run("explicit build action", func(t *testing.T) {
+		var step WorkflowStep
+		require.NoError(t, yaml.Unmarshal([]byte(`
+type: container
+action: build
+with:
+  context: .
+  dockerfile: Dockerfile
+  tags: [app:local]
+`), &step))
+		require.NotNil(t, step.Build)
+		assert.Equal(t, "Dockerfile", step.Build.Dockerfile)
+		require.Len(t, step.Build.Tags, 1)
+		assert.Equal(t, "app:local", step.Build.Tags[0])
+		assert.Nil(t, step.Run)
+	})
+
+	t.Run("verb-named blocks are no longer decoded", func(t *testing.T) {
+		// Hard-cut: a `run:` block (the old syntax) must NOT populate the run config.
+		var step WorkflowStep
+		require.NoError(t, yaml.Unmarshal([]byte(`
+type: container
+action: run
+run:
+  image: alpine:latest
+`), &step))
+		assert.Nil(t, step.Run, "legacy run: block must be ignored after the with: hard-cut")
+	})
+}
+
+// TestWorkflowStep_DecodeBackground verifies the polymorphic `background:` key:
+// a boolean sets the async marker; a string sets the style color.
+func TestWorkflowStep_DecodeBackground(t *testing.T) {
+	t.Run("boolean sets async marker", func(t *testing.T) {
+		var step WorkflowStep
+		require.NoError(t, yaml.Unmarshal([]byte("type: container\nbackground: true\n"), &step))
+		assert.True(t, step.BackgroundAsync)
+		assert.Empty(t, step.Background)
+	})
+
+	t.Run("string sets style color", func(t *testing.T) {
+		var step WorkflowStep
+		require.NoError(t, yaml.Unmarshal([]byte("type: style\nbackground: \"#1e1e2e\"\n"), &step))
+		assert.False(t, step.BackgroundAsync)
+		assert.Equal(t, "#1e1e2e", step.Background)
+	})
+}
+
+// TestWorkflowStep_DecodeFor verifies that `for:` accepts both a scalar and a sequence.
+func TestWorkflowStep_DecodeFor(t *testing.T) {
+	t.Run("scalar", func(t *testing.T) {
+		var step WorkflowStep
+		require.NoError(t, yaml.Unmarshal([]byte("type: cancel\nfor: emulator\n"), &step))
+		assert.Equal(t, []string{"emulator"}, step.For)
+	})
+
+	t.Run("sequence", func(t *testing.T) {
+		var step WorkflowStep
+		require.NoError(t, yaml.Unmarshal([]byte("type: wait\nfor: [a, b]\n"), &step))
+		assert.Equal(t, []string{"a", "b"}, step.For)
+	})
+}
+
+// TestTask_DecodeWith confirms the custom-command Task flavor shares the same vocabulary.
+func TestTask_DecodeWith(t *testing.T) {
+	var tasks Tasks
+	require.NoError(t, yaml.Unmarshal([]byte(`
+- type: container
+  action: run
+  background: true
+  with:
+    image: postgres:16
+    command: ./migrate.sh
+`), &tasks))
+	require.Len(t, tasks, 1)
+	assert.True(t, tasks[0].BackgroundAsync)
+	require.NotNil(t, tasks[0].Run)
+	assert.Equal(t, "postgres:16", tasks[0].Run.Image)
+	assert.Equal(t, "./migrate.sh", tasks[0].Run.Command)
+}
