@@ -44,7 +44,7 @@ func (h *ContainerHandler) executePush(ctx context.Context, step *schema.Workflo
 
 // previewPush renders the dry-run output for a push step.
 func previewPush(runtimeName string, pushConfig *resolvedPushConfig, tags []string) *StepResult {
-	previews := make([]string, 0, len(tags)*2+1)
+	previews := make([]string, 0, len(tags))
 	for _, tag := range tags {
 		previews = append(previews, container.BuildImageTagPreview(runtimeName, pushConfig.Image, tag))
 		previews = append(previews, container.BuildImagePushPreview(runtimeName, tag))
