@@ -162,6 +162,13 @@ type Task struct {
 	Provider         string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // docker, podman, or empty for auto-detect.
 	Container        *WorkflowContainer    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"` // Workflow container override or false to run on host.
 
+	// Require step type fields (type: require; also accepts the alias type: assert).
+	// The step is a read-only preconditions gate: it never mutates PATH or the environment.
+	Tools []string `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"` // Executables that must be found on PATH (supports templates).
+	Files []string `yaml:"files,omitempty" json:"files,omitempty" mapstructure:"files"` // Paths that must exist (supports templates).
+	Dirs  []string `yaml:"dirs,omitempty" json:"dirs,omitempty" mapstructure:"dirs"`    // Directories that must exist (supports templates).
+	Hint  string   `yaml:"hint,omitempty" json:"hint,omitempty" mapstructure:"hint"`    // Extra remediation note appended to the failure error (supports templates).
+
 	// Outputs declares named outputs derived from the step result.
 	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
 
@@ -372,6 +379,12 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Provider:         task.Provider,
 		Container:        task.Container,
 
+		// Require step fields.
+		Tools: task.Tools,
+		Files: task.Files,
+		Dirs:  task.Dirs,
+		Hint:  task.Hint,
+
 		Outputs: task.Outputs,
 
 		// Show configuration.
@@ -494,6 +507,12 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		RuntimeAutoStart: step.RuntimeAutoStart,
 		Provider:         step.Provider,
 		Container:        step.Container,
+
+		// Require step fields.
+		Tools: step.Tools,
+		Files: step.Files,
+		Dirs:  step.Dirs,
+		Hint:  step.Hint,
 
 		Outputs: step.Outputs,
 

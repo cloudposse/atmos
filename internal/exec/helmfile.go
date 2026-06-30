@@ -11,6 +11,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
@@ -64,7 +65,12 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		)
 	}
 
-	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil, nil)
+	authManager, err := SetupComponentAuthForCLI(&atmosConfig, &info)
+	if err != nil {
+		return err
+	}
+
+	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil, authManager)
 	if err != nil {
 		return err
 	}
@@ -190,7 +196,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		info.SubCommand = "sync"
 	}
 
-	context := cfg.GetContextFromVars(info.ComponentVarsSection)
+	stackContext := cfg.GetContextFromVars(info.ComponentVarsSection)
 
 	envVarsEKS := []string{}
 
@@ -205,7 +211,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 
 		clusterResult, err := helmfile.ResolveClusterName(
 			clusterInput,
-			&context,
+			&stackContext,
 			&atmosConfig,
 			info.ComponentSection,
 			ProcessTmpl,
@@ -226,7 +232,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 			ProfilePattern: atmosConfig.Components.Helmfile.HelmAwsProfilePattern,
 		}
 
-		authResult, err := helmfile.ResolveAWSAuth(authInput, &context)
+		authResult, err := helmfile.ResolveAWSAuth(authInput, &stackContext)
 		if err != nil {
 			return err
 		}
@@ -247,7 +253,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 			"eks",
 			"update-kubeconfig",
 			fmt.Sprintf("--name=%s", clusterName),
-			fmt.Sprintf("--region=%s", context.Region),
+			fmt.Sprintf("--region=%s", stackContext.Region),
 			fmt.Sprintf("--kubeconfig=%s", kubeconfigPath),
 		}
 
@@ -327,23 +333,23 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	// Append the context ENV vars (first check if they are not set by the caller).
 	env := os.Getenv("NAMESPACE")
 	if env == "" {
-		envVars = append(envVars, fmt.Sprintf("NAMESPACE=%s", context.Namespace))
+		envVars = append(envVars, fmt.Sprintf("NAMESPACE=%s", stackContext.Namespace))
 	}
 	env = os.Getenv("TENANT")
 	if env == "" {
-		envVars = append(envVars, fmt.Sprintf("TENANT=%s", context.Tenant))
+		envVars = append(envVars, fmt.Sprintf("TENANT=%s", stackContext.Tenant))
 	}
 	env = os.Getenv("ENVIRONMENT")
 	if env == "" {
-		envVars = append(envVars, fmt.Sprintf("ENVIRONMENT=%s", context.Environment))
+		envVars = append(envVars, fmt.Sprintf("ENVIRONMENT=%s", stackContext.Environment))
 	}
 	env = os.Getenv("STAGE")
 	if env == "" {
-		envVars = append(envVars, fmt.Sprintf("STAGE=%s", context.Stage))
+		envVars = append(envVars, fmt.Sprintf("STAGE=%s", stackContext.Stage))
 	}
 	env = os.Getenv("REGION")
 	if env == "" {
-		envVars = append(envVars, fmt.Sprintf("REGION=%s", context.Region))
+		envVars = append(envVars, fmt.Sprintf("REGION=%s", stackContext.Region))
 	}
 
 	// Set KUBECONFIG: When UseEKS is true, the EKS-specific kubeconfig (from envVarsEKS)
@@ -361,6 +367,12 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
+
+	envVars, err = prepareHelmfileAuthEnvironment(authManager, info.Identity, envVars)
+	if err != nil {
+		return err
+	}
+
 	log.Debug("Using ENV vars:")
 	for _, v := range envVars {
 		log.Debug(v)
@@ -368,7 +380,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 
 	err = ExecuteShellCommand(
 		atmosConfig,
-		info.Command,
+		tenv.Resolve(info.Command),
 		allArgsAndFlags,
 		componentPath,
 		envVars,
@@ -387,4 +399,40 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	return nil
+}
+
+// resolveDefaultIdentity resolves the default identity. A lookup failure is fatal
+// only when the caller explicitly requested the select-default path; for an
+// implicit empty identity the requested value is returned so execution can
+// continue without identity.
+func resolveDefaultIdentity(authManager auth.AuthManager, requested string) (string, error) {
+	defaultIdentity, err := authManager.GetDefaultIdentity(false)
+	if err == nil {
+		return defaultIdentity, nil
+	}
+	if requested == cfg.IdentityFlagSelectValue {
+		return "", fmt.Errorf("%w: resolve default identity: %w", errUtils.ErrAuthenticationFailed, err)
+	}
+	return requested, nil
+}
+
+func prepareHelmfileAuthEnvironment(authManager auth.AuthManager, identity string, envVars []string) ([]string, error) {
+	if authManager == nil {
+		return envVars, nil
+	}
+	if identity == "" || identity == cfg.IdentityFlagSelectValue {
+		resolved, err := resolveDefaultIdentity(authManager, identity)
+		if err != nil {
+			return nil, err
+		}
+		identity = resolved
+	}
+	if identity == "" || identity == cfg.IdentityFlagDisabledValue {
+		return envVars, nil
+	}
+	preparedEnv, err := authManager.PrepareShellEnvironment(context.Background(), identity, envVars)
+	if err != nil {
+		return nil, fmt.Errorf("%w: prepare helmfile environment for identity %q: %w", errUtils.ErrAuthenticationFailed, identity, err)
+	}
+	return preparedEnv, nil
 }

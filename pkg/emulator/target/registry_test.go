@@ -13,7 +13,7 @@ func TestRegistryProfile_Branches(t *testing.T) {
 		ep := &emu.Endpoint{Target: emu.TargetRegistry, Host: "localhost", Ports: map[int]int{5000: 35000}}
 		p := RegistryProfile(ep)
 
-		assert.Equal(t, "localhost:35000", p.Env["ATMOS_REGISTRY_HOST"])
+		assert.Equal(t, "127.0.0.1:35000", p.Env["ATMOS_REGISTRY_HOST"])
 	})
 
 	t.Run("no bound port yields empty env", func(t *testing.T) {

@@ -449,6 +449,11 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
 	bindEnv(v, "settings.terminal.force_color", "ATMOS_FORCE_COLOR")
 	bindEnv(v, "settings.terminal.theme", "ATMOS_THEME", "THEME")
+	bindEnv(v, "settings.terminal.speed", "ATMOS_TERMINAL_SPEED")
+
+	bindEnv(v, "diagnostics.enabled", "ATMOS_DIAGNOSTICS_ENABLED")
+	bindEnv(v, "diagnostics.file", "ATMOS_DIAGNOSTICS_FILE")
+	bindEnv(v, "diagnostics.include_output", "ATMOS_DIAGNOSTICS_INCLUDE_OUTPUT")
 
 	// Experimental feature handling
 	bindEnv(v, "settings.experimental", "ATMOS_EXPERIMENTAL")
@@ -511,11 +516,15 @@ func setDefaultConfiguration(v *viper.Viper) {
 
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Warning")
+	v.SetDefault("diagnostics.enabled", false)
+	v.SetDefault("diagnostics.file", "")
+	v.SetDefault("diagnostics.include_output", false)
 
 	v.SetDefault("settings.terminal.color", true)
 	v.SetDefault("settings.terminal.no_color", false)
 	v.SetDefault("settings.terminal.pager", "false") // String value to match the field type
-	v.SetDefault("settings.experimental", "warn")    // Experimental feature handling: silence, disable, warn, error
+	v.SetDefault("settings.terminal.speed", 0.0)
+	v.SetDefault("settings.experimental", "warn") // Experimental feature handling: silence, disable, warn, error
 	// Note: force_color is ENV-only (ATMOS_FORCE_COLOR), no config default
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 
@@ -1215,6 +1224,12 @@ func shouldExcludePathForTesting(dirPath string) bool {
 //
 // Returns error if files can't be read or YAML is invalid.
 func loadAtmosConfigsFromDirectory(searchPattern string, dst *viper.Viper, source string) error {
+	return loadAtmosConfigsFromDirectoryWithMerge(searchPattern, dst, source, mergeConfigFile)
+}
+
+type configFileMergeFunc func(path string, v *viper.Viper) error
+
+func loadAtmosConfigsFromDirectoryWithMerge(searchPattern string, dst *viper.Viper, source string, mergeFile configFileMergeFunc) error {
 	// Find all config files using existing search infrastructure.
 	foundPaths, err := SearchAtmosConfig(searchPattern)
 	if err != nil {
@@ -1229,7 +1244,7 @@ func loadAtmosConfigsFromDirectory(searchPattern string, dst *viper.Viper, sourc
 
 	// Load and merge each file.
 	for _, filePath := range foundPaths {
-		if err := mergeConfigFile(filePath, dst); err != nil {
+		if err := mergeFile(filePath, dst); err != nil {
 			return fmt.Errorf("%w: failed to load configuration file from %s: %s: %w", errUtils.ErrParseFile, source, filePath, err)
 		}
 
@@ -1425,8 +1440,8 @@ func mergeConfigFile(
 	// We need to do this because viper.MergeConfig doesn't overwrite arrays.
 	tempViper := viper.New()
 	tempViper.SetConfigType(yamlType)
-	err = tempViper.ReadConfig(bytes.NewReader(content))
-	if err != nil {
+	tempViper.SetConfigFile(path)
+	if err = tempViper.ReadConfig(bytes.NewReader(content)); err != nil {
 		return err
 	}
 	newCommands := tempViper.Get(commandsKey)
@@ -1453,6 +1468,69 @@ func mergeConfigFile(
 	}
 
 	return nil
+}
+
+func mergeConfigFileWithImports(path string, v *viper.Viper) error {
+	//nolint:gosec // path is a resolved Atmos configuration/profile file path selected by the loader.
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	content, err = resolveDotenvMergeIncludeKeys(path, content)
+	if err != nil {
+		return err
+	}
+
+	tempViper := viper.New()
+	tempViper.SetConfigType(yamlType)
+	tempViper.SetConfigFile(path)
+	if err = tempViper.ReadConfig(bytes.NewReader(content)); err != nil {
+		return err
+	}
+
+	imports := tempViper.GetStringSlice("import")
+	if len(imports) > 0 {
+		var importConfig schema.AtmosConfiguration
+		if err = v.UnmarshalKey("settings", &importConfig.Settings, atmosDecodeHook()); err != nil {
+			return err
+		}
+		importConfig.Import = imports
+		importConfig.BasePath = tempViper.GetString("base_path")
+		if importConfig.BasePath == "" {
+			importConfig.BasePath = filepath.Dir(path)
+		}
+		if err = processConfigImports(&importConfig, v); err != nil {
+			return err
+		}
+	}
+
+	if err = mergeConfigFile(path, v); err != nil {
+		return err
+	}
+	if len(imports) > 0 {
+		if err = preprocessAtmosYamlFunc(content, tempViper); err != nil {
+			return err
+		}
+		overlayProfileSettings(v, tempViper.AllSettings(), "")
+	}
+	return nil
+}
+
+func overlayProfileSettings(v *viper.Viper, settings map[string]any, prefix string) {
+	for key, value := range settings {
+		if key == "import" || key == commandsKey {
+			continue
+		}
+		path := key
+		if prefix != "" {
+			path = prefix + yamlPathDelimiter + key
+		}
+		if nested, ok := value.(map[string]any); ok {
+			overlayProfileSettings(v, nested, path)
+			continue
+		}
+		v.Set(path, value)
+	}
 }
 
 // mergeCommandArrays merges two command arrays, appending new commands to existing ones.

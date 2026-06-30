@@ -191,8 +191,49 @@ li.sidebar-title > ul:first .menu__list .menu__list {
     padding-left: 0;
 }
 
+/* ============================================================ */
+/* MODERN LEADING COLLAPSE CHEVRON                              */
+/* Thin chevron moved to the leading (left) edge, VS Code /     */
+/* Linear / Stripe style. The glyph stays up-pointing so        */
+/* Infima's existing rotation still works: expanded points      */
+/* down (rotate 180deg), collapsed points right (rotateZ 90deg).*/
+/* Dark mode is handled by --ifm-menu-link-sublist-icon-filter. */
+/* ============================================================ */
+
+/* Swap the chunky default caret for a thin, stroke-based chevron. */
+:root {
+    --ifm-menu-link-sublist-icon: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.55)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>');
+}
+
+/* Pure-expander categories (no own page): caret rendered as ::after
+   inside the flex .menu__link. Move it ahead of the label. */
+.menu__link--sublist-caret:after {
+    order: -1;
+    margin-left: 0;
+    margin-right: 0.25rem;
+    min-width: 1.25rem;
+    background: var(--ifm-menu-link-sublist-icon) 50% / 1rem 1rem no-repeat;
+}
+
+/* Linked categories (own page): caret is a separate .menu__caret button
+   inside the flex .menu__list-item-collapsible row. Move it ahead of the link. */
+.menu__list-item-collapsible .menu__caret {
+    order: -1;
+    padding-left: 0;
+    padding-right: 0;
+    margin-right: 0.25rem;
+}
+
 .menu__caret:before {
-    background: var(--ifm-menu-link-sublist-icon) 50% / 2rem 1.5rem;
+    min-width: 1.25rem;
+    background: var(--ifm-menu-link-sublist-icon) 50% / 1rem 1rem no-repeat;
+}
+
+/* Reserve the chevron gutter on leaf links so their labels line up with
+   category labels (chevron column stays empty for leaves). Section titles
+   (li.sidebar-title > div > a) are direct grandchildren and unaffected. */
+.menu__list-item > .menu__link:not(.menu__link--sublist-caret) {
+    padding-left: calc(var(--ifm-menu-link-padding-horizontal) + 1.5rem);
 }
 
 li > ul.menu__list {
@@ -262,8 +303,8 @@ article h1 {
     --ifm-menu-color: var(--c-gray-100);
     --ifm-menu-link-padding-horizontal: 0.25rem;
 
-    --atmos-docs-font-sans: var(--font-geist-sans, 'Optimistic Text', -apple-system, ui-sans-serif, system-ui, sans-serif);
-    --atmos-docs-font-mono: var(--font-geist-mono, var(--ifm-font-family-monospace));
+    --atmos-docs-font-sans: var(--font-geist-sans, 'Geist', 'Optimistic Text', -apple-system, ui-sans-serif, system-ui, sans-serif);
+    --atmos-docs-font-mono: var(--font-geist-mono, 'Geist Mono', ui-monospace, 'SFMono-Regular', 'JetBrains Mono', 'Fira Code', monospace);
     --atmos-docs-radius: 8px;
     --atmos-docs-surface: #ffffff;
     --atmos-docs-surface-subtle: #fafafa;
@@ -309,6 +350,11 @@ article h1 {
     --aa-primary-color-rgb: var(--ifm-toc-border-color) !important;
     --announcement-bar-background: #070b12;
     --announcement-bar-text-color: #d7dde8;
+
+    /* Geist font family (Vercel's typeface) across the whole site. */
+    --ifm-font-family-base: var(--atmos-docs-font-sans), 'Apple Color Emoji', 'Segoe UI Emoji';
+    --ifm-font-family-monospace: var(--atmos-docs-font-mono);
+    --ifm-heading-font-family: var(--atmos-docs-font-sans);
 }
 
 /* Fix announcement bar responsive wrapping at mid-range widths */
@@ -734,6 +780,10 @@ li.menu__list-item.command {
 li.menu__list-item.hidden {
     display: none;
 }
+
+/* The experimental-feature sidebar marker (yellow dot + hover tooltip) is rendered
+   by the ExperimentalDot component (src/components/ExperimentalDot), injected into
+   the item label by the DocSidebarItem swizzle. Styles live in that component. */
 
 .aa-Autocomplete > .aa-DetachedSearchButton {
     border-radius: 32px;
@@ -1206,8 +1256,11 @@ article header {
     font-weight: 600;
 }
 
-/* Fix sidebar sticky positioning - allow native Docusaurus collapse to work */
-.theme-doc-sidebar-container:not([class*="hidden"]) {
+/* Fix sidebar sticky positioning - allow native Docusaurus collapse to work.
+   The collapsed class is `docSidebarContainerHidden` (capital H, build-hashed),
+   so we must match that exact token - a lowercase `hidden` never matches and
+   would leave the collapsed state styled like the expanded one. */
+.theme-doc-sidebar-container:not([class*="docSidebarContainerHidden"]) {
     position: sticky !important;
     top: var(--ifm-navbar-height) !important;
     max-height: calc(100vh - var(--ifm-navbar-height)) !important;
@@ -1315,15 +1368,31 @@ html[data-theme='dark'] .token.punctuation {
 /* RESIZABLE DOCS SIDEBAR    */
 /* ========================= */
 
-/* Drag handle: invisible strip on right edge of sidebar, visible on hover */
+/* Drag handle: invisible strip on right edge of sidebar, visible on hover.
+   All rules are scoped to the expanded (`:not(...docSidebarContainerHidden)`)
+   state so that the native Docusaurus collapse - which adds the
+   `docSidebarContainerHidden` class and sets width to 30px WITHOUT `!important` -
+   can shrink the container to the discreet strip. An unscoped `!important` width
+   here would always win and leave the sidebar hidden-but-full-width. */
 @media (min-width: 997px) {
-    .theme-doc-sidebar-container {
+    .theme-doc-sidebar-container:not([class*="docSidebarContainerHidden"]) {
         width: var(--doc-sidebar-width, 300px) !important;
         min-width: var(--doc-sidebar-width, 300px) !important;
         flex: 0 0 var(--doc-sidebar-width, 300px) !important;
+        /* Borderless sidebar (Vercel/Linear style). The resize drag-handle
+           below (::after) still provides the edge affordance and resizing. */
+        border-right: none !important;
     }
 
-    .theme-doc-sidebar-container::after {
+    /* Drop the hard border box around the bottom collapse («) button so the
+       borderless look is consistent top-to-bottom. Hover background kept. */
+    .collapseSidebarButton {
+        border: none !important;
+    }
+
+    /* Resize affordance only in the expanded state - the collapsed 30px strip
+       must not show a col-resize edge. */
+    .theme-doc-sidebar-container:not([class*="docSidebarContainerHidden"])::after {
         content: '';
         position: absolute;
         top: 0;
@@ -1336,12 +1405,12 @@ html[data-theme='dark'] .token.punctuation {
         z-index: 10;
     }
 
-    .theme-doc-sidebar-container:hover::after {
+    .theme-doc-sidebar-container:not([class*="docSidebarContainerHidden"]):hover::after {
         background: var(--ifm-color-primary-lightest);
         opacity: 0.4;
     }
 
-    html.sidebar-resizing .theme-doc-sidebar-container::after {
+    html.sidebar-resizing .theme-doc-sidebar-container:not([class*="docSidebarContainerHidden"])::after {
         background: var(--ifm-color-primary);
         opacity: 0.6;
         width: 3px;

@@ -204,7 +204,7 @@ func loadProfileFiles(v *viper.Viper, profileDir string, profileName string) err
 	searchPattern := filepath.Join(profileDir, "**", "*")
 	source := fmt.Sprintf("profile '%s'", profileName)
 
-	return loadAtmosConfigsFromDirectory(searchPattern, v, source)
+	return loadAtmosConfigsFromDirectoryWithMerge(searchPattern, v, source, mergeConfigFileWithImports)
 }
 
 // loadProfiles loads the specified profiles in order (left-to-right precedence).

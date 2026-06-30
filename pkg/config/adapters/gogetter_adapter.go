@@ -14,6 +14,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	remoteimports "github.com/cloudposse/atmos/pkg/stack/imports"
 )
 
 // GoGetterAdapter handles remote imports using HashiCorp's go-getter.
@@ -63,46 +64,60 @@ func (g *GoGetterAdapter) Resolve(
 ) ([]config.ResolvedPaths, error) {
 	defer perf.Track(nil, "adapters.GoGetterAdapter.Resolve")()
 
-	// Download the remote configuration.
-	tempFile, err := downloadRemoteConfig(importPath, tempDir, atmosConfig)
+	// Resolve the remote configuration.
+	tempFiles, err := resolveRemoteConfigFiles(importPath, atmosConfig)
 	if err != nil {
 		log.Debug("failed to download remote config", "path", importPath, "error", err)
 		return nil, err
 	}
 
-	// Read the downloaded configuration.
-	v := viper.New()
-	v.SetConfigFile(tempFile)
-	err = v.ReadInConfig()
-	if err != nil {
-		log.Debug("failed to read remote config", "path", importPath, "error", err)
-		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrReadConfig, err)
-	}
-
 	resolvedPaths := make([]config.ResolvedPaths, 0)
-	resolvedPaths = append(resolvedPaths, config.ResolvedPaths{
-		FilePath:    tempFile,
-		ImportPaths: importPath,
-		ImportType:  config.REMOTE,
-	})
-
-	// Process nested imports from the remote file.
-	imports := v.GetStringSlice("import")
-	importBasePath := v.GetString("base_path")
-	if importBasePath == "" {
-		importBasePath = basePath
-	}
-
-	if len(imports) > 0 {
-		nestedPaths, err := config.ProcessImportsFromAdapter(atmosConfig, importBasePath, imports, tempDir, currentDepth+1, maxDepth)
+	for _, tempFile := range tempFiles {
+		// Read the downloaded configuration.
+		v := viper.New()
+		v.SetConfigFile(tempFile)
+		err = v.ReadInConfig()
 		if err != nil {
-			log.Debug("failed to process nested imports", "import", importPath, "err", err)
-			return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessNestedImports, err)
+			log.Debug("failed to read remote config", "path", importPath, "error", err)
+			return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrReadConfig, err)
 		}
-		resolvedPaths = append(resolvedPaths, nestedPaths...)
+
+		resolvedPaths = append(resolvedPaths, config.ResolvedPaths{
+			FilePath:    tempFile,
+			ImportPaths: importPath,
+			ImportType:  config.REMOTE,
+		})
+
+		// Process nested imports from the remote file.
+		imports := v.GetStringSlice("import")
+		importBasePath := v.GetString("base_path")
+		if importBasePath == "" {
+			importBasePath = basePath
+		}
+
+		if len(imports) > 0 {
+			nestedPaths, err := config.ProcessImportsFromAdapter(atmosConfig, importBasePath, imports, tempDir, currentDepth+1, maxDepth)
+			if err != nil {
+				log.Debug("failed to process nested imports", "import", importPath, "err", err)
+				return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessNestedImports, err)
+			}
+			resolvedPaths = append(resolvedPaths, nestedPaths...)
+		}
 	}
 
 	return resolvedPaths, nil
+}
+
+func resolveRemoteConfigFiles(url string, atmosConfig *schema.AtmosConfiguration) ([]string, error) {
+	matches, err := remoteimports.ResolveRemoteImport(atmosConfig, url)
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]string, 0, len(matches))
+	for _, match := range matches {
+		paths = append(paths, match.Path)
+	}
+	return paths, nil
 }
 
 // remoteConfigTimeout bounds a single remote config-import download.

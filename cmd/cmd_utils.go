@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,6 +59,8 @@ const (
 	customCommandKeyCommand  = "command"
 	customCommandKeyIdentity = "identity"
 )
+
+var errCustomCommandFlagNotRegistered = errors.New("flag is not registered")
 
 // FlagStack is the name of the stack flag used across commands.
 const FlagStack = "stack"
@@ -728,6 +731,12 @@ func executeCustomCommand(
 
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
 	executor := stepPkg.NewStepExecutor()
+	stepVars := executor.Variables()
+	stepVars.SetTemplateRenderer(func(name, input string, data any) (string, error) {
+		return e.ProcessTmpl(&atmosConfig, name, input, data, false)
+	})
+	stepVars.SetTemplatePasses(3)
+	stepVars.ProtectTemplateRoots("Arguments", "Flags", "flags", "TrailingArgs")
 
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
@@ -743,15 +752,16 @@ func executeCustomCommand(
 		}
 
 		// Prepare template data for flags
-		flags := cmd.Flags()
 		flagsData := map[string]any{}
 		for _, fl := range commandConfig.Flags {
+			flag := cmd.Flag(fl.Name)
+			if flag == nil {
+				errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %q", errCustomCommandFlagNotRegistered, fl.Name), "", "")
+			}
 			if fl.Type == "" || fl.Type == "string" {
-				providedFlag, err := flags.GetString(fl.Name)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
-				flagsData[fl.Name] = providedFlag
+				flagsData[fl.Name] = flag.Value.String()
 			} else if fl.Type == "bool" {
-				boolFlag, err := flags.GetBool(fl.Name)
+				boolFlag, err := strconv.ParseBool(flag.Value.String())
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 				flagsData[fl.Name] = boolFlag
 			}
@@ -765,6 +775,7 @@ func executeCustomCommand(
 		data := map[string]any{
 			"Arguments":    argumentsData,
 			"Flags":        flagsData,
+			"flags":        flagsData,
 			"TrailingArgs": trailingArgs,
 		}
 
@@ -819,6 +830,13 @@ func executeCustomCommand(
 			// the caller's PATH (e.g. `./build/atmos <cmd>`). Keeps example steps readable.
 			env = envpkg.EnsureBinaryInPath(env, execPath)
 		}
+		stepVars.SetTemplateData(data)
+		for _, envVar := range env {
+			parts := strings.SplitN(envVar, "=", 2)
+			if len(parts) == 2 {
+				stepVars.SetEnv(parts[0], parts[1])
+			}
+		}
 
 		// Export the custom component's resolved `env` section into the step subprocess
 		// environment, mirroring the built-in terraform/helmfile/packer providers. Without this,
@@ -852,12 +870,13 @@ func executeCustomCommand(
 				value = strings.TrimRight(res, "\r\n")
 			} else {
 				// Process Go templates in the values of the command's ENV vars
-				value, err = e.ProcessTmpl(&atmosConfig, fmt.Sprintf("env-var-%d", i), value, data, false)
+				value, err = stepVars.Resolve(value)
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
 			// Add or update the environment variable in the env slice
 			env = envpkg.UpdateEnvVar(env, key, value)
+			stepVars.SetEnv(key, value)
 		}
 
 		if len(commandConfig.Env) > 0 && commandConfig.Verbose {
@@ -878,6 +897,12 @@ func executeCustomCommand(
 			}
 			log.Debug("Prepared environment with identity for custom command step", customCommandKeyIdentity, commandIdentity, customCommandKeyCommand, commandConfig.Name, "step", i)
 		}
+		for _, envVar := range env {
+			parts := strings.SplitN(envVar, "=", 2)
+			if len(parts) == 2 {
+				stepVars.SetEnv(parts[0], parts[1])
+			}
+		}
 
 		// Determine step type - default to shell if not specified.
 		stepType := strings.TrimSpace(step.Type)
@@ -889,12 +914,16 @@ func executeCustomCommand(
 		// environment so a nested `atmos` invocation skips unsupported nested
 		// grouping.
 		if stepType != schema.TaskTypeExec && ci.ShouldPropagateLogGroupSentinel(&atmosConfig, ci.DimensionStep) {
-			env = append(env, ci.LogGroupSentinelEnv())
+			sentinel := ci.LogGroupSentinelEnv()
+			env = append(env, sentinel)
+			if key, value, ok := strings.Cut(sentinel, "="); ok {
+				stepVars.SetEnv(key, value)
+			}
 		}
 
 		// Process Go templates in the command's steps.
-		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step.Command, data, false)
+		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
+		commandToRun, err := stepVars.Resolve(step.Command)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
 		// Execute the step based on type.
@@ -953,8 +982,6 @@ func executeCustomCommand(
 
 				// Convert Task to WorkflowStep for handler compatibility.
 				workflowStep := step.ToWorkflowStep()
-				// Update command with template-resolved value.
-				workflowStep.Command = commandToRun
 				// Carry env onto the step so handlers that read step.Env (e.g. the
 				// container handler's in-container env) see it. The step's own
 				// declared `env:` had its map keys lowercased by Viper, so restore
@@ -974,12 +1001,8 @@ func executeCustomCommand(
 					workflowStep.WorkingDirectory = workDir
 				}
 
-				// Update environment variables for this step (reuse executor to preserve step outputs).
-				for _, envVar := range env {
-					parts := strings.SplitN(envVar, "=", 2)
-					if len(parts) == 2 {
-						executor.SetEnv(parts[0], parts[1])
-					}
+				if stack, ok := flagsData["stack"].(string); ok && stack != "" {
+					executor.SetFlag("stack", stack)
 				}
 
 				// Execute the extended step.
@@ -1188,7 +1211,7 @@ func checkAtmosConfigE(opts ...AtmosValidateOption) error {
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
-	fmt.Println()
+	u.PrintMessage("")
 	err := tuiUtils.PrintStyledText("ATMOS")
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 

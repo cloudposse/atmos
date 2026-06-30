@@ -15,14 +15,14 @@ workflows:
         command: true
 
       - name: show-components
-        command: list components --identity=false --process-functions=false --process-templates=false
+        command: list components
 
       - name: instances
         type: stage
         title: Component instances
 
       - name: show-instances
-        command: list instances --format tree --provenance --identity=false --process-functions=false --process-templates=false
+        command: list instances --format tree --provenance
 
       - name: validation-note
         type: markdown

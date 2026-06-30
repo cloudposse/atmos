@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -177,4 +179,68 @@ func TestMergeContextErrorFormatting(t *testing.T) {
 			assert.NoError(t, err, "Expected no error when expectedParts is nil")
 		})
 	}
+}
+
+// inRepoManifestSchemaPath returns the absolute path to the in-repo Atmos manifest
+// JSON Schema (the same file CI passes via `--schemas-atmos-manifest`), resolved
+// source-file-relative so it is CWD-independent.
+func inRepoManifestSchemaPath(t *testing.T) string {
+	t.Helper()
+	_, callerFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller(0) must succeed")
+	p := filepath.Join(filepath.Dir(callerFile), "..", "..",
+		"website", "static", "schemas", "atmos", "atmos-manifest", "1.0", "atmos-manifest.json")
+	abs, err := filepath.Abs(p)
+	require.NoError(t, err, "cannot resolve schema path")
+	require.FileExists(t, abs, "in-repo manifest schema must exist")
+	return abs
+}
+
+// TestValidateStacksSchemaValidationHasTeeth guards against the JSON Schema validation
+// in `atmos validate stacks` silently becoming a no-op (which would let CI stay green
+// while validating nothing). It is the negative-path counterpart to the CI `[validate]`
+// matrix, which only exercises the positive path (all example stacks must be valid).
+//
+// The invalid manifest is *structurally* valid (the `settings` section is free-form, so
+// the stack processor accepts a string for `settings.templates`) but violates the schema,
+// which requires `settings.templates` to be an object. The failure must therefore come
+// specifically from JSON Schema validation — not from the structural parser.
+func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
+	schemaPath := inRepoManifestSchemaPath(t)
+
+	const validManifest = "vars:\n  stage: dev\n" +
+		"components:\n  terraform:\n    vpc:\n      vars:\n        name: vpc\n"
+	const invalidManifest = "vars:\n  stage: dev\n" +
+		"settings:\n  templates: \"this must be an object per the schema\"\n" +
+		"components:\n  terraform:\n    vpc:\n      vars:\n        name: vpc\n"
+
+	// validate builds a fresh, isolated temp project for the given manifest and runs
+	// `atmos validate stacks` against it with the in-repo schema. A fresh directory per
+	// call sidesteps Atmos's per-path manifest memoization, so reusing this helper for
+	// both the valid and invalid manifest is sound.
+	validate := func(manifest string) error {
+		dir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks", "deploy"), 0o755))
+		atmosYAML := "base_path: \".\"\n" +
+			"stacks:\n  base_path: \"stacks\"\n  included_paths: [\"deploy/**/*\"]\n  name_pattern: \"{stage}\"\n" +
+			"logs:\n  level: \"Warning\"\n"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "stack.yaml"), []byte(manifest), 0o644))
+
+		t.Chdir(dir)
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		require.NoError(t, err)
+		atmosConfig.SetSchemaRegistry("atmos", schema.SchemaRegistry{Manifest: schemaPath})
+		return ValidateStacks(&atmosConfig)
+	}
+
+	// Negative: a schema-invalid manifest must be rejected by JSON Schema validation.
+	err := validate(invalidManifest)
+	require.Error(t, err, "schema-invalid manifest must fail validation")
+	require.Contains(t, err.Error(), "JSON Schema validation",
+		"failure must come from JSON Schema validation, not the structural parser")
+
+	// Positive control: a valid manifest must pass — proving the failure above is the
+	// manifest, not a broken harness.
+	require.NoError(t, validate(validManifest), "valid manifest must pass validation")
 }

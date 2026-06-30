@@ -31,10 +31,10 @@ components:
             bucket_id: .bucket_id
       vars:
         name: assets
+        # Safe default. Per-environment overrides live in each region manifest:
+        # dev/staging set `force_destroy: true` for easy teardown; prod keeps it `false`
+        # and the OPA policy requires `versioning_enabled: true` in prod.
         versioning_enabled: true
-        # Demo convenience: allow `terraform destroy` to remove a non-empty bucket so
-        # the quick-start tears down cleanly. The module default is `false` (safe).
-        force_destroy: true
         # Read the KMS key ARN straight from the kms-key component's Terraform state,
         # so it always matches the key that was actually deployed.
         kms_key_arn: !terraform.state kms-key key_arn

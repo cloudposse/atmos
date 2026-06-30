@@ -14,10 +14,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	emu "github.com/cloudposse/atmos/pkg/emulator"
+	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // Seams for testability — overridden in tests.
@@ -250,6 +253,98 @@ func ExecutePs(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		ui.Writef("%s\t%s\t%s\t%s\n", status.Name, status.Image, status.Status, status.ID)
 	}
 	return nil
+}
+
+// ExecuteList lists emulators in a clean, theme-aware table with a status dot.
+// Unlike ExecutePs it does not require a component: it builds the manager from
+// the container-runtime config alone and lists every emulator discovered by
+// label (scoped to info.Stack when `--stack` is set, otherwise all stacks).
+func ExecuteList(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "componentemulator.ExecuteList")()
+
+	info.ComponentType = cfg.EmulatorComponentType
+	atmosConfig, err := initCliConfig(*info, true)
+	if err != nil {
+		return err
+	}
+
+	manager := newManager(strings.TrimSpace(atmosConfig.Container.Runtime.Provider), false)
+	statuses, err := manager.Ps(ctx, info.Stack)
+	if err != nil {
+		return fmt.Errorf("%w: list: %w", errUtils.ErrComponentExecutionFailed, err)
+	}
+
+	renderEmulatorList(statuses, info.Stack)
+	return nil
+}
+
+// renderEmulatorList prints the emulator statuses. In a TTY it renders the shared
+// styled list table with a colored status dot; otherwise it emits a plain,
+// tab-separated row per emulator so the output stays pipeable.
+func renderEmulatorList(statuses []emu.Status, stack string) {
+	if len(statuses) == 0 {
+		if stack != "" {
+			ui.Infof("No emulators running in stack %s.", stack)
+		} else {
+			ui.Info("No emulators running.")
+		}
+		return
+	}
+
+	if !terminal.New().IsTTY(terminal.Stdout) {
+		for _, s := range statuses {
+			ui.Writef("%s\t%s\t%s\t%s\t%s\n", s.Name, s.Stack, shortImage(s.Image), s.Status, shortID(s.ID))
+		}
+		return
+	}
+
+	styles := theme.GetCurrentStyles()
+	header := []string{"", "NAME", "STACK", "IMAGE", "CONTAINER ID"}
+	rows := make([][]string, 0, len(statuses))
+	for _, s := range statuses {
+		rows = append(rows, []string{
+			statusDot(s.Status, styles),
+			s.Name,
+			s.Stack,
+			shortImage(s.Image),
+			shortID(s.ID),
+		})
+	}
+	ui.Write(format.CreateStyledTable(header, rows))
+}
+
+// statusDot renders a colored ● indicating whether the emulator container is
+// running (green) or not (muted).
+func statusDot(status string, styles *theme.StyleSet) string {
+	const dot = "●"
+	s := strings.ToLower(status)
+	// Check negative states first so "unhealthy" is not matched by the "healthy" substring below.
+	if strings.Contains(s, "unhealthy") || strings.Contains(s, "exited") || strings.Contains(s, "dead") {
+		return styles.Muted.Render(dot)
+	}
+	if strings.Contains(s, "up") || strings.Contains(s, "running") || strings.Contains(s, "healthy") {
+		return styles.Success.Render(dot)
+	}
+	return styles.Muted.Render(dot)
+}
+
+// shortImage drops the `@sha256:…` digest and the `docker.io/` registry prefix so
+// the image column stays narrow and readable (e.g. `floci/floci`).
+func shortImage(image string) string {
+	if idx := strings.Index(image, "@"); idx >= 0 {
+		image = image[:idx]
+	}
+	image = strings.TrimPrefix(image, "docker.io/")
+	return image
+}
+
+// shortID truncates a container ID to the conventional 12-character short form.
+func shortID(id string) string {
+	const shortIDLen = 12
+	if len(id) > shortIDLen {
+		return id[:shortIDLen]
+	}
+	return id
 }
 
 // ExecuteLogs streams the emulator container's logs.

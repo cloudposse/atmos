@@ -442,13 +442,27 @@ func ExecuteWorkflow(
 		command := strings.TrimSpace(step.Command)
 		commandType := strings.TrimSpace(step.Type)
 		stepIdentity := strings.TrimSpace(step.Identity)
+		workflowStack := strings.TrimSpace(workflowDefinition.Stack)
+		stepStack := strings.TrimSpace(step.Stack)
+		finalStack := ""
+
+		// The workflow `stack` attribute overrides the stack in the `command` (if specified).
+		// The step `stack` attribute overrides the stack in the `command` and the workflow `stack` attribute.
+		// The stack defined on the command line has the highest priority.
+		if workflowStack != "" {
+			finalStack = workflowStack
+		}
+		if stepStack != "" {
+			finalStack = stepStack
+		}
+		if commandLineStack != "" {
+			finalStack = commandLineStack
+		}
 
 		// If step doesn't specify identity, use command-line identity (if provided).
 		if stepIdentity == "" && commandLineIdentity != "" {
 			stepIdentity = commandLineIdentity
 		}
-
-		finalStack := ""
 
 		log.Debug("Executing workflow step", "step", stepIdx, "name", step.Name, "command", command)
 
@@ -640,23 +654,6 @@ func ExecuteWorkflow(
 					args = strings.Fields(command)
 				}
 
-				workflowStack := strings.TrimSpace(workflowDefinition.Stack)
-				stepStack := strings.TrimSpace(step.Stack)
-
-				// The workflow `stack` attribute overrides the stack in the `command` (if specified)
-				// The step `stack` attribute overrides the stack in the `command` and the workflow `stack` attribute
-				// The stack defined on the command line (`atmos workflow <name> -f <file> -s <stack>`) has the highest priority,
-				// it overrides all other stacks attributes
-				if workflowStack != "" {
-					finalStack = workflowStack
-				}
-				if stepStack != "" {
-					finalStack = stepStack
-				}
-				if commandLineStack != "" {
-					finalStack = commandLineStack
-				}
-
 				if finalStack != "" {
 					if idx := slices.Index(args, "--"); idx != -1 {
 						// Insert before the "--"
@@ -695,7 +692,10 @@ func ExecuteWorkflow(
 						WithExitCode(1).
 						Err()
 				}
-				err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, dryRun)
+				err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
+					DryRun:     dryRun,
+					FinalStack: finalStack,
+				})
 			}
 			return err
 		}
@@ -747,8 +747,13 @@ func workflowConditionContext() schema.ConditionContext {
 // This allows step results to be passed between steps for variable templating.
 var stepExecutorState *stepPkg.StepExecutor
 
+type extendedStepOptions struct {
+	DryRun     bool
+	FinalStack string
+}
+
 // executeExtendedStep runs an extended step type (input, confirm, choose, etc.).
-func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep, workflow *schema.WorkflowDefinition, envVars []string, dryRun bool) error {
+func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep, workflow *schema.WorkflowDefinition, envVars []string, opts extendedStepOptions) error {
 	// Initialize or reuse step executor.
 	if stepExecutorState == nil {
 		stepExecutorState = stepPkg.NewStepExecutor()
@@ -764,10 +769,14 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 			stepExecutorState.SetEnv(parts[0], parts[1])
 		}
 	}
+	// Always set (or clear) the stack flag so a stackless step does not
+	// inherit a stale value from a prior step in the same workflow.
+	stepExecutorState.SetFlag("stack", opts.FinalStack)
 
 	// Execute the step.
 	stepCopy := *workflowStep
-	stepCopy.DryRun = dryRun
+	stepCopy.DryRun = opts.DryRun
+	stepCopy.Stack = opts.FinalStack
 	_, err := stepExecutorState.Execute(ctx, &stepCopy)
 	return err
 }
@@ -1023,7 +1032,7 @@ func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, s
 
 	// Start the UI
 	app, err := w.Execute(allWorkflows)
-	fmt.Println()
+	u.PrintMessage("")
 	if err != nil {
 		return "", "", "", err
 	}

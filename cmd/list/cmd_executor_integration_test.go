@@ -22,6 +22,8 @@ import (
 // Built with filepath.Join for Windows compatibility.
 var completeFixturePath = filepath.Join("..", "..", "tests", "fixtures", "scenarios", "complete")
 
+var dependenciesFixturePath = filepath.Join("..", "..", "tests", "fixtures", "scenarios", "dependencies-components-inheritance")
+
 // initExecutorTestIO initializes the I/O, UI, and data contexts expected
 // by the executor functions. Safe to call multiple times (init guards
 // against double registration).
@@ -41,6 +43,12 @@ func chdirToCompleteFixture(t *testing.T) {
 	t.Helper()
 	tests.RequireFilePath(t, completeFixturePath, "test fixture directory")
 	t.Chdir(completeFixturePath)
+}
+
+func chdirToDependenciesFixture(t *testing.T) {
+	t.Helper()
+	tests.RequireFilePath(t, dependenciesFixturePath, "test fixture directory")
+	t.Chdir(dependenciesFixturePath)
 }
 
 // newCmdWithListParser returns a fresh cobra command with the given list
@@ -146,6 +154,30 @@ func TestExecuteListSources_CoverageIntegration(t *testing.T) {
 	cmd := newCmdWithListParser("sources", sourcesParser.RegisterFlags)
 	require.NoError(t, executeListSources(cmd, []string{"vpc"}),
 		"executeListSources should return nil when no matching sources — prints an info message")
+}
+
+// TestExecuteListDependenciesCmd_CoverageIntegration exercises the cmd-layer
+// `executeListDependenciesCmd` against a dependency-focused fixture. This covers
+// the command glue path — ProcessCommandLineArgs → InitCliConfig →
+// createAuthManagerForList → ExecuteDescribeStacksWithAuthDisabled →
+// dependencies.BuildGraph/Render.
+func TestExecuteListDependenciesCmd_CoverageIntegration(t *testing.T) {
+	initExecutorTestIO(t)
+	chdirToDependenciesFixture(t)
+
+	cmd := newCmdWithListParser("dependencies", dependenciesParser.RegisterFlags)
+	opts := &DependenciesOptions{
+		Format:           "json",
+		Direction:        "both",
+		Stack:            "dev",
+		Component:        "vpc",
+		ProcessTemplates: true,
+		ProcessFunctions: false,
+		AuthDisabled:     true,
+	}
+
+	require.NoError(t, executeListDependenciesCmd(cmd, []string{"vpc"}, opts),
+		"dependencies fixture should list vpc dependencies cleanly")
 }
 
 // TestListStacksWithOptions_CoverageIntegration exercises the cmd-layer
