@@ -111,16 +111,6 @@ const (
 	verboseFlagName = "verbose"
 	// AnsiEscapePrefix is the ANSI escape sequence prefix.
 	ansiEscapePrefix = "\x1b["
-	// SingleDashArg is the single dash argument.
-	singleDashArg = "-"
-	// FlagPrefix is the command-line flag prefix.
-	flagPrefix = "-"
-	// LongFlagPrefix is the command-line long flag prefix.
-	longFlagPrefix = "--"
-	// EndOfOptionsArg is the POSIX end-of-options marker.
-	endOfOptionsArg = "--"
-	// FlagAssignmentSeparator separates a flag name from its inline value.
-	flagAssignmentSeparator = "="
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -1652,7 +1642,7 @@ func invocationGroupLabel(root *cobra.Command, args []string) string {
 
 	cmd, remaining, err := root.Find(args)
 	if err != nil || cmd == nil {
-		if first := firstFallbackPositional(args); first != "" {
+		if first := flags.FirstPositionalArg(nil, args); first != "" {
 			return "atmos " + first
 		}
 		return "atmos"
@@ -1662,112 +1652,10 @@ func invocationGroupLabel(root *cobra.Command, args []string) string {
 	if label == "" {
 		label = "atmos"
 	}
-	if first := firstPositionalArg(cmd, remaining); first != "" {
+	if first := flags.FirstPositionalArg(cmd, remaining); first != "" {
 		label += " " + first
 	}
 	return label
-}
-
-func firstFallbackPositional(args []string) string {
-	if len(args) == 0 || args[0] == endOfOptionsArg || strings.HasPrefix(args[0], flagPrefix) {
-		return ""
-	}
-	return args[0]
-}
-
-func firstPositionalArg(cmd *cobra.Command, args []string) string {
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == endOfOptionsArg {
-			return ""
-		}
-		if !strings.HasPrefix(arg, flagPrefix) {
-			return arg
-		}
-		if flagConsumesNextValue(cmd, arg) && i+1 < len(args) && args[i+1] != endOfOptionsArg && !strings.HasPrefix(args[i+1], flagPrefix) {
-			i++
-		}
-	}
-	return ""
-}
-
-func flagConsumesNextValue(cmd *cobra.Command, arg string) bool {
-	if arg == singleDashArg || arg == endOfOptionsArg || strings.Contains(arg, flagAssignmentSeparator) {
-		return false
-	}
-	if hasAttachedShorthandValue(cmd, arg) {
-		return false
-	}
-
-	return flagRequiresNextValue(lookupFlagForArg(cmd, arg))
-}
-
-func hasAttachedShorthandValue(cmd *cobra.Command, arg string) bool {
-	if !strings.HasPrefix(arg, flagPrefix) || strings.HasPrefix(arg, longFlagPrefix) {
-		return false
-	}
-	name := strings.TrimPrefix(arg, flagPrefix)
-	if len(name) <= 1 {
-		return false
-	}
-	return flagConsumesAttachedValue(cmd.Flags().ShorthandLookup(name[:1]))
-}
-
-func flagRequiresNextValue(flag *pflag.Flag) bool {
-	if flag == nil {
-		// Unknown flags are treated conservatively: skip the following value
-		// rather than risk exposing a flag value in the group label.
-		return true
-	}
-	if flag.NoOptDefVal != "" {
-		return false
-	}
-	if flag.Value != nil && flag.Value.Type() == "bool" {
-		return false
-	}
-	return true
-}
-
-func lookupFlagForArg(cmd *cobra.Command, arg string) *pflag.Flag {
-	if cmd == nil {
-		return nil
-	}
-
-	if strings.HasPrefix(arg, longFlagPrefix) {
-		name := strings.TrimPrefix(arg, longFlagPrefix)
-		if idx := strings.Index(name, flagAssignmentSeparator); idx >= 0 {
-			name = name[:idx]
-		}
-		return cmd.Flags().Lookup(name)
-	}
-
-	name := strings.TrimPrefix(arg, flagPrefix)
-	if idx := strings.Index(name, flagAssignmentSeparator); idx >= 0 {
-		name = name[:idx]
-	}
-	if len(name) == 1 {
-		return cmd.Flags().ShorthandLookup(name)
-	}
-	if flag := cmd.Flags().Lookup(name); flag != nil {
-		return flag
-	}
-	if len(name) > 0 {
-		return cmd.Flags().ShorthandLookup(name[:1])
-	}
-	return nil
-}
-
-func flagConsumesAttachedValue(flag *pflag.Flag) bool {
-	if flag == nil {
-		return false
-	}
-	if flag.NoOptDefVal != "" {
-		return false
-	}
-	if flag.Value != nil && flag.Value.Type() == "bool" {
-		return false
-	}
-	return true
 }
 
 // unknownSubcommand reports whether err represents an unknown Atmos subcommand

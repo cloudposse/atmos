@@ -227,44 +227,6 @@ func TestPreprocessArgs_NoArgs(t *testing.T) {
 	assert.Nil(t, preprocessArgs())
 }
 
-func TestInvocationFlagHelpers(t *testing.T) {
-	cmd := &cobra.Command{Use: "plan"}
-	cmd.Flags().String("var", "", "")
-	cmd.Flags().StringP("config", "c", "", "")
-	cmd.Flags().Bool("dry-run", false, "")
-	cmd.Flags().String("optional", "", "")
-	cmd.Flags().Lookup("optional").NoOptDefVal = "true"
-
-	assert.Empty(t, firstFallbackPositional(nil))
-	assert.Empty(t, firstFallbackPositional([]string{"--"}))
-	assert.Empty(t, firstFallbackPositional([]string{"--token"}))
-	assert.Equal(t, "deploy", firstFallbackPositional([]string{"deploy"}))
-
-	assert.True(t, flagConsumesNextValue(cmd, "--var"))
-	assert.False(t, flagConsumesNextValue(cmd, "--var=value"))
-	assert.False(t, flagConsumesNextValue(cmd, "-cvalue"))
-	assert.False(t, flagConsumesNextValue(cmd, "--dry-run"))
-	assert.False(t, flagConsumesNextValue(cmd, "--optional"))
-	assert.True(t, flagConsumesNextValue(cmd, "--unknown"))
-	assert.False(t, flagConsumesNextValue(cmd, "-"))
-	assert.False(t, flagConsumesNextValue(cmd, "--"))
-
-	assert.False(t, hasAttachedShorthandValue(cmd, "-"))
-	assert.False(t, flagRequiresNextValue(cmd.Flags().Lookup("dry-run")))
-
-	assert.Equal(t, cmd.Flags().Lookup("var"), lookupFlagForArg(cmd, "--var=value"))
-	assert.Equal(t, cmd.Flags().ShorthandLookup("c"), lookupFlagForArg(cmd, "-c"))
-	assert.Equal(t, cmd.Flags().Lookup("config"), lookupFlagForArg(cmd, "-config=value"))
-	assert.Equal(t, cmd.Flags().ShorthandLookup("c"), lookupFlagForArg(cmd, "-cvalue"))
-	assert.Nil(t, lookupFlagForArg(nil, "--var"))
-	assert.Nil(t, lookupFlagForArg(cmd, "-"))
-
-	assert.True(t, flagConsumesAttachedValue(cmd.Flags().Lookup("config")))
-	assert.False(t, flagConsumesAttachedValue(cmd.Flags().Lookup("dry-run")))
-	assert.False(t, flagConsumesAttachedValue(cmd.Flags().Lookup("optional")))
-	assert.False(t, flagConsumesAttachedValue(nil))
-}
-
 func testInvocationRoot() *cobra.Command {
 	root := &cobra.Command{Use: "atmos"}
 
