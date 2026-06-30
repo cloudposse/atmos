@@ -1,0 +1,42 @@
+---
+slug: terminal-speed
+title: "Pace Terminal Output for Demos and Recordings"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+Terminal demos and recordings are hard to follow when a command dumps hundreds of lines instantly. The output may be correct, but viewers cannot read it and recording tools capture a wall of text instead of a sequence.
+
+<!--truncate-->
+
+## The Problem
+
+Some Atmos commands produce rich, multi-line output that is useful in a real terminal but awkward in demos, docs, and recorded walkthroughs. When everything appears at once, important transitions are easy to miss.
+
+That is especially noticeable with VHS recordings and scripted demos, where readable pacing matters as much as the final output.
+
+## The Change
+
+Atmos now supports `settings.terminal.speed`, also available as `ATMOS_TERMINAL_SPEED`, to pace terminal output by lines per second.
+
+```yaml
+settings:
+  terminal:
+    speed: 18
+```
+
+```shell
+ATMOS_TERMINAL_SPEED=18 atmos describe stacks
+```
+
+A value of `0` keeps the existing unlimited output behavior. That is the default, so normal interactive and CI usage does not change unless you opt in.
+
+## Why It Matters
+
+- **Better recordings.** Output appears at a readable pace for demos, tutorials, and screengrabs.
+- **No command rewrites.** Keep the same Atmos command and control pacing through config or an environment variable.
+- **Default behavior is unchanged.** Unlimited output remains the default.
+
+## Get Involved
+
+See the [terminal settings documentation](/cli/configuration/settings/terminal) for the full terminal configuration reference.

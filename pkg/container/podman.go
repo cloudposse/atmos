@@ -239,60 +239,95 @@ func parsePodmanContainer(containerJSON map[string]interface{}) Info {
 	if labels, ok := containerJSON["Labels"].(map[string]interface{}); ok {
 		info.Labels = parseLabelsMap(labels)
 	}
-
-	info.Ports = parsePodmanPorts(containerJSON)
+	if raw, ok := containerJSON["Ports"]; ok {
+		info.Ports = parsePodmanPorts(raw)
+	}
 
 	return info
 }
 
-// parsePodmanPorts extracts published port bindings from a podman
-// `ps --format json` record. Unlike docker's `.Ports` string, podman represents
-// ports as a structured array of objects ({container_port, host_port, protocol,
-// range}). Without this, Info.Ports is empty and any consumer that reads back an
-// auto-assigned host port (e.g. the emulator endpoint resolver) sees no port and
-// falls through to the real cloud endpoint.
-//
-// Only bindings with a published host port are returned. A `range` greater than 1
-// (consecutive ports published in one mapping) is expanded into individual
-// container/host port pairs.
-func parsePodmanPorts(containerJSON map[string]interface{}) []PortBinding {
-	raw, ok := containerJSON["Ports"].([]interface{})
+// parsePodmanPorts extracts published port bindings from a podman `ps --format json`
+// record. Podman represents ports as a structured array with snake_case keys
+// (host_port/container_port/protocol), unlike docker's `ps` string column parsed by
+// parseDockerPorts. Without this, Info.Ports is empty under podman and emulator
+// endpoint resolution yields an empty URL (see pkg/emulator manager.endpoint), so
+// Terraform falls back to real cloud endpoints.
+func parsePodmanPorts(raw interface{}) []PortBinding {
+	if containerJSON, ok := raw.(map[string]interface{}); ok {
+		raw = containerJSON["Ports"]
+	}
+	entries, ok := raw.([]interface{})
 	if !ok {
 		return nil
 	}
 
 	var ports []PortBinding
-	for _, item := range raw {
-		entry, ok := item.(map[string]interface{})
+	seen := make(map[PortBinding]struct{})
+	for _, entry := range entries {
+		binding, span, ok := parsePodmanPort(entry)
 		if !ok {
 			continue
 		}
-
-		hostPort := int(getInt64(entry, "host_port"))
-		containerPort := int(getInt64(entry, "container_port"))
-		if hostPort == 0 || containerPort == 0 {
-			continue
+		if span <= 0 {
+			span = 1
 		}
-
-		protocol := getString(entry, "protocol")
-		if protocol == "" {
-			protocol = "tcp"
-		}
-
-		count := int(getInt64(entry, "range"))
-		if count < 1 {
-			count = 1
-		}
-		for i := 0; i < count; i++ {
-			ports = append(ports, PortBinding{
-				ContainerPort: containerPort + i,
-				HostPort:      hostPort + i,
-				Protocol:      protocol,
-			})
+		// Expand consecutive host/container ports within the range.
+		for i := 0; i < span; i++ {
+			expanded := PortBinding{
+				ContainerPort: binding.ContainerPort + i,
+				HostPort:      binding.HostPort + i,
+				Protocol:      binding.Protocol,
+			}
+			if _, dup := seen[expanded]; dup {
+				continue
+			}
+			seen[expanded] = struct{}{}
+			ports = append(ports, expanded)
 		}
 	}
 
 	return ports
+}
+
+// parsePodmanPort converts one podman port entry into a PortBinding and the
+// port range span. Unpublished ports (host_port 0) are skipped; a missing
+// protocol defaults to tcp. The span field reflects Podman's `range` key for
+// consecutive port ranges; callers must expand [base, base+span) themselves.
+func parsePodmanPort(entry interface{}) (PortBinding, int, bool) {
+	m, ok := entry.(map[string]interface{})
+	if !ok {
+		return PortBinding{}, 0, false
+	}
+	hostPort := jsonFieldInt(m["host_port"])
+	containerPort := jsonFieldInt(m["container_port"])
+	if hostPort == 0 || containerPort == 0 {
+		return PortBinding{}, 0, false
+	}
+	protocol, _ := m["protocol"].(string)
+	if protocol == "" {
+		protocol = "tcp"
+	}
+	span := jsonFieldInt(m["range"])
+	if span <= 0 {
+		span = 1
+	}
+	return PortBinding{ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, span, true
+}
+
+// JsonFieldInt coerces a JSON-decoded numeric field to an int. The json.Unmarshal
+// call into interface{} yields float64 for numbers; int and json.Number are handled defensively.
+func jsonFieldInt(v interface{}) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case json.Number:
+		i, _ := n.Int64()
+		return int(i)
+	default:
+		return 0
+	}
 }
 
 // podmanHealth extracts the health state from a podman ps record. Podman embeds

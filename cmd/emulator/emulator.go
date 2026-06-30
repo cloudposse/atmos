@@ -78,7 +78,7 @@ func init() {
 		panic(err)
 	}
 
-	emulatorCmd.AddCommand(upCmd, downCmd, resetCmd, psCmd, logsCmd, execCmd)
+	emulatorCmd.AddCommand(upCmd, downCmd, resetCmd, psCmd, listCmd, logsCmd, execCmd)
 
 	RegisterEmulatorCompletions(emulatorCmd)
 	internal.Register(&EmulatorCommandProvider{})

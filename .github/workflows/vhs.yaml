@@ -42,12 +42,17 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           IS_LABELED: ${{ steps.labeled.outputs.labeled }}
         run: |
+          # Landing-page tapes (demo/landing/**) are rendered by landing-demos.yaml,
+          # not here — exclude them so they never enter this matrix.
           if [[ "$IS_LABELED" == "true" ]]; then
-            echo "files=$(find . -path './build-harness' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)" >> $GITHUB_OUTPUT
+            files=$(find . -path './build-harness' -prune -o -path './demo/landing' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)
           else
-            files=$(gh pr diff --name-only "$PR_NUMBER" | (grep '\.tape$' | grep -v '(style|defaults)\.tape$' || true) | cut -d/ -f2-)
-            echo "files=$files" >> $GITHUB_OUTPUT
+            files=$(gh pr diff --name-only "$PR_NUMBER" | grep '\.tape$' | grep -vE '(^|/)(style|defaults)\.tape$' | grep -v '^demo/landing/' | cut -d/ -f2- || true)
           fi
+          # A multi-line value is invalid for $GITHUB_OUTPUT and would break the matrix
+          # split; collapse to a single space-separated line.
+          files=$(printf '%s' "$files" | tr '\n' ' ' | sed -E 's/ +/ /g; s/^ //; s/ $//')
+          echo "files=$files" >> "$GITHUB_OUTPUT"
 
       - name: Set up matrix
         id: create-matrix

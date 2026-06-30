@@ -110,4 +110,7 @@ exclude = [
   "pubs\\.opengroup\\.org",
   # Pact docs (intermittent timeouts from CI runners)
   "docs\\.pact\\.io",
+  # google-gemini/gemini-cli repo deep-links intermittently return 502 Bad Gateway
+  # from GitHub's gateway in CI; the pages are valid and load in a browser.
+  "github\\.com/google-gemini/gemini-cli",
 ]

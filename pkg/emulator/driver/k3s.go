@@ -18,11 +18,6 @@ const (
 	k3sImage = "rancher/k3s:latest"
 	k3sPort  = 6443
 
-	// The k3sDataDir is k3s's persistent state root inside the container (its
-	// embedded datastore / server state, a declared volume). Persisting it keeps
-	// the cluster across `down`/`up`.
-	k3sDataDir = "/var/lib/rancher/k3s"
-
 	// The k3sRootlessScript is the entrypoint used under a ROOTLESS runtime. Rootless
 	// containers run in a user namespace and (by default) don't get every cgroup-v2
 	// controller, which breaks the kubelet. This shim — the same pattern kind/k3d
@@ -50,7 +45,6 @@ func init() {
 		target:          emu.TargetKubernetes,
 		image:           k3sImage,
 		ports:           []int{k3sPort},
-		dataDir:         k3sDataDir,
 		privileged:      true,
 		env:             map[string]string{"K3S_TOKEN": "atmos-emulator"},
 		command:         []string{"server"},

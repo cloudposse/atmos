@@ -1,0 +1,68 @@
+---
+slug: list-dependencies
+title: "Visualize Component Dependencies as a Tree"
+authors: [osterman]
+tags: [feature]
+---
+
+The new `atmos list dependencies` command renders the dependency relationships between your components as a tree — showing, for every component, both what it **depends on** and what **depends on it**. It reads `dependencies.components` (preferred) and the legacy `settings.depends_on`, so the output stays consistent with [`atmos describe dependents`](/cli/commands/describe/dependents).
+
+<!--truncate-->
+
+## The Problem
+
+As infrastructure grows, the relationships between components matter as much as the components themselves. A `vpc` is a prerequisite for the `eks` cluster, which is a prerequisite for the `alb-controller`, and so on. Until now, answering "what would break if I change this?" or "what has to exist before I deploy that?" meant reading `atmos describe dependents` for one component at a time and stitching the picture together in your head.
+
+## The Solution
+
+`atmos list dependencies` gives you the whole graph at a glance, as a tree:
+
+```shell
+atmos list dependencies
+```
+
+Tree output keeps stack context next to the component hierarchy, with component
+type as secondary metadata on the right:
+
+```text
+Dependencies
+Stack         Component                 Type
+plat-ue2-dev  app-config                terraform
+              ├──depends on ↓
+              │  ├──▶ dynamodb-table
+              │  └──▶ kms-key
+              └──required by ↑
+                 └──(none)
+```
+
+Triangle markers show edge direction: `▶` means the component depends on that
+child, and `◀` means that child depends on the selected component.
+
+By default it walks every component and renders **both directions** — prerequisites and dependents. Scope it to a stack, focus on a single component, pick a direction, or emit structured data instead:
+
+```shell
+# Limit to one stack
+atmos list dependencies --stack plat-ue2-dev
+
+# Focus on a single component in a stack
+atmos list dependencies vpc --stack plat-ue2-dev
+
+# Only what the component depends on (its prerequisites)
+atmos list dependencies vpc --stack plat-ue2-dev --direction forward
+
+# Only what depends on the component (its dependents)
+atmos list dependencies vpc --stack plat-ue2-dev --direction reverse
+
+# Machine-readable output for scripts and CI
+atmos list dependencies --format json
+```
+
+## Why It Matters
+
+- **See blast radius before you change anything.** `--direction reverse` answers "what depends on this?" so you know what a change could affect.
+- **Understand deployment order.** `--direction forward` shows prerequisites, so you know what must exist first.
+- **Consistent with the rest of Atmos.** Dependencies come from the same `dependencies.components` / `settings.depends_on` sources used by `atmos describe dependents`, so the tree never contradicts your CI change-detection.
+
+## Get Involved
+
+See the [`atmos list dependencies`](/cli/commands/list/dependencies) reference for all flags and output formats. As always, feedback and ideas are welcome in the [Atmos community](https://github.com/cloudposse/atmos).

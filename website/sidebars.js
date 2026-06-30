@@ -306,6 +306,16 @@ module.exports = {
                 },
                 {
                     type: 'doc',
+                    id: 'components/container',
+                    label: 'Container',
+                },
+                {
+                    type: 'doc',
+                    id: 'components/emulator',
+                    label: 'Emulator',
+                },
+                {
+                    type: 'doc',
                     id: 'components/custom',
                     label: 'Custom',
                 },
