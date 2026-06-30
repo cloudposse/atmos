@@ -1,0 +1,2 @@
+{"version":2,"width":120,"height":36,"timestamp":1782860808,"command":"cast list-stacks","env":{"SHELL":"/bin/zsh","TERM":"dumb"}}
+[0.117004417,"o"," Stacks \n│\n├──dev\n│\n└──production\n\n"]

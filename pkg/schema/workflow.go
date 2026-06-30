@@ -235,11 +235,14 @@ type WorkflowStep struct {
 	Separator string           `yaml:"separator,omitempty" json:"separator,omitempty" mapstructure:"separator"` // Separator for join type (default: newline).
 
 	// File picker fields.
-	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker.
+	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker, or target path for workdir.
+	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source for workdir provisioning; string or source map.
+	Reset      bool     `yaml:"reset,omitempty" json:"reset,omitempty" mapstructure:"reset"`                // Reset the target path before provisioning.
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
 	// Display configuration.
 	Output         string                `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
+	CastOutput     *CastOutput           `yaml:"-" json:"cast_output,omitempty" mapstructure:"cast_output"`            // Structured output for cast artifacts.
 	ParallelOutput *ParallelOutputConfig `yaml:"-" json:"parallel_output,omitempty" mapstructure:"parallel_output"`    // Structured output for parallel/matrix.
 	Height         int                   `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
 	Viewport       *ViewportConfig       `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Viewport settings for output mode.
@@ -291,6 +294,18 @@ type WorkflowStep struct {
 	Body    string            `yaml:"body,omitempty" json:"body,omitempty" mapstructure:"body"`          // Raw request body (supports templates); mutually exclusive with form.
 	Form    map[string]string `yaml:"form,omitempty" json:"form,omitempty" mapstructure:"form"`          // Form/JSON body params; mutually exclusive with body.
 	Expect  *HTTPExpect       `yaml:"expect,omitempty" json:"expect,omitempty" mapstructure:"expect"`    // Success criteria; defaults to any 2xx.
+
+	// Cast step and session action fields.
+	Mode        string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
+	Shell       string `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
+	WriteRate   string `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
+	KeyInterval string `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
+	Text        string `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`                         // Text for write/wait actions.
+	Regex       string `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`                      // Regex for wait actions.
+	Key         string `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`                            // Key name for key actions.
+	Duration    string `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`             // Duration for pause/wait actions.
+	Interval    string `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`             // Per-key repeat delay override.
+	Repeat      int    `yaml:"repeat,omitempty" json:"repeat,omitempty" mapstructure:"repeat"`                   // Key repeat count.
 
 	// Container step fields.
 	//
@@ -351,8 +366,9 @@ func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	*step = WorkflowStep(fresh)
-	return applyStepPolymorphicNodes(nodes, step.Action, stepPolyTargets{
+	return applyStepPolymorphicNodes(nodes, step.Type, step.Action, stepPolyTargets{
 		output:    &step.Output,
+		cast:      &step.CastOutput,
 		parallel:  &step.ParallelOutput,
 		async:     &step.BackgroundAsync,
 		color:     &step.Background,
@@ -373,6 +389,7 @@ type stepPolyNodes struct {
 // It lets WorkflowStep and Task share one decode path (see applyStepPolymorphicNodes).
 type stepPolyTargets struct {
 	output    *string
+	cast      **CastOutput
 	parallel  **ParallelOutputConfig
 	async     *bool
 	color     *string
@@ -392,8 +409,8 @@ func splitStepPolymorphicNodes(value *yaml.Node) (stepPolyNodes, *yaml.Node) {
 
 // applyStepPolymorphicNodes decodes the extracted nodes into the step's targets.
 // The action is read from the already-decoded plain struct to select the container shape.
-func applyStepPolymorphicNodes(nodes stepPolyNodes, action string, t stepPolyTargets) error {
-	if err := decodeWorkflowStepOutput(nodes.output, t.output, t.parallel); err != nil {
+func applyStepPolymorphicNodes(nodes stepPolyNodes, stepType, action string, t stepPolyTargets) error {
+	if err := decodeWorkflowStepOutput(nodes.output, stepType, t.output, t.cast, t.parallel); err != nil {
 		return err
 	}
 	if err := decodeStepBackground(nodes.background, t.async, t.color); err != nil {
@@ -490,7 +507,7 @@ func normalizeContainerAction(action string) string {
 	return action
 }
 
-func decodeWorkflowStepOutput(node *yaml.Node, scalar *string, structured **ParallelOutputConfig) error {
+func decodeWorkflowStepOutput(node *yaml.Node, stepType string, scalar *string, cast **CastOutput, structured **ParallelOutputConfig) error {
 	if node == nil {
 		return nil
 	}
@@ -498,6 +515,14 @@ func decodeWorkflowStepOutput(node *yaml.Node, scalar *string, structured **Para
 	case yaml.ScalarNode:
 		*scalar = node.Value
 	case yaml.MappingNode:
+		if stepType == TaskTypeCast {
+			var cfg CastOutput
+			if err := node.Decode(&cfg); err != nil {
+				return err
+			}
+			*cast = &cfg
+			return nil
+		}
 		var cfg ParallelOutputConfig
 		if err := node.Decode(&cfg); err != nil {
 			return err
@@ -537,6 +562,13 @@ type HTTPExpect struct {
 	// Response lists regular expressions; when set, the response body must match at least one.
 	// Patterns may be written as /.../ literals (surrounding slashes are stripped) or bare regex strings.
 	Response []string `yaml:"response,omitempty" json:"response,omitempty" mapstructure:"response"`
+}
+
+type CastOutput struct {
+	Cast string `yaml:"cast,omitempty" json:"cast,omitempty" mapstructure:"cast"`
+	SVG  string `yaml:"svg,omitempty" json:"svg,omitempty" mapstructure:"svg"`
+	GIF  string `yaml:"gif,omitempty" json:"gif,omitempty" mapstructure:"gif"`
+	MP4  string `yaml:"mp4,omitempty" json:"mp4,omitempty" mapstructure:"mp4"`
 }
 
 // WorkflowDefinition represents a complete workflow with steps.

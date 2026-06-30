@@ -22,6 +22,19 @@ const (
 	TargetDirPermissions = 0o755
 )
 
+type VendorSourceOption func(*vendorSourceOptions)
+
+type vendorSourceOptions struct {
+	replaceTarget bool
+}
+
+// WithReplaceTarget controls whether VendorSource may replace an existing target directory.
+func WithReplaceTarget(replace bool) VendorSourceOption {
+	return func(opts *vendorSourceOptions) {
+		opts.replaceTarget = replace
+	}
+}
+
 // VendorSource vendors a component source to the target directory.
 // It uses go-getter via the existing downloader infrastructure.
 // Note: Authentication is not yet supported - credentials must be configured
@@ -33,8 +46,14 @@ func VendorSource(
 	atmosConfig *schema.AtmosConfiguration,
 	sourceSpec *schema.VendorComponentSource,
 	targetDir string,
+	options ...VendorSourceOption,
 ) error {
 	defer perf.Track(atmosConfig, "source.VendorSource")()
+
+	vendorOpts := vendorSourceOptions{replaceTarget: true}
+	for _, option := range options {
+		option(&vendorOpts)
+	}
 
 	if sourceSpec == nil {
 		return errUtils.Build(errUtils.ErrNilParam).
@@ -53,6 +72,33 @@ func VendorSource(
 
 	// Normalize the URI for go-getter using the same logic as regular vendoring.
 	uri = vendor.NormalizeURI(uri)
+	if vendor.IsLocalPath(uri) && !filepath.IsAbs(uri) {
+		absURI, err := filepath.Abs(uri)
+		if err != nil {
+			return errUtils.Build(errUtils.ErrSourceInvalidSpec).
+				WithCause(err).
+				WithExplanation("Failed to resolve local source path").
+				WithContext("uri", uri).
+				Err()
+		}
+		uri = absURI
+	}
+
+	if !vendorOpts.replaceTarget {
+		if _, err := os.Stat(targetDir); err == nil {
+			return errUtils.Build(errUtils.ErrSourceCopyFailed).
+				WithExplanation("Target directory already exists").
+				WithContext("target", targetDir).
+				WithHint("Remove the target directory or enable replacement before provisioning").
+				Err()
+		} else if err != nil && !os.IsNotExist(err) {
+			return errUtils.Build(errUtils.ErrSourceCopyFailed).
+				WithCause(err).
+				WithExplanation("Failed to inspect target directory").
+				WithContext("target", targetDir).
+				Err()
+		}
+	}
 
 	// Generate a unique temp path for the download staging area.
 	//
@@ -82,11 +128,11 @@ func VendorSource(
 	defer os.RemoveAll(tempDir)
 
 	// Download using go-getter.
-	opts := []downloader.GoGetterOption{}
+	downloadOpts := []downloader.GoGetterOption{}
 	if sourceSpec.Retry != nil {
-		opts = append(opts, downloader.WithRetryConfig(sourceSpec.Retry))
+		downloadOpts = append(downloadOpts, downloader.WithRetryConfig(sourceSpec.Retry))
 	}
-	dl := downloader.NewGoGetterDownloader(atmosConfig, opts...)
+	dl := downloader.NewGoGetterDownloader(atmosConfig, downloadOpts...)
 	err = dl.Fetch(uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
@@ -106,8 +152,15 @@ func VendorSource(
 			Err()
 	}
 
-	// Remove existing target directory if it exists.
+	// Remove existing target directory if it exists and replacement is allowed.
 	if _, err := os.Stat(targetDir); err == nil {
+		if !vendorOpts.replaceTarget {
+			return errUtils.Build(errUtils.ErrSourceCopyFailed).
+				WithExplanation("Target directory already exists").
+				WithContext("target", targetDir).
+				WithHint("Remove the target directory or enable replacement before provisioning").
+				Err()
+		}
 		if err := os.RemoveAll(targetDir); err != nil {
 			return errUtils.Build(errUtils.ErrSourceCopyFailed).
 				WithCause(err).
@@ -115,6 +168,12 @@ func VendorSource(
 				WithContext("target", targetDir).
 				Err()
 		}
+	} else if err != nil && !os.IsNotExist(err) {
+		return errUtils.Build(errUtils.ErrSourceCopyFailed).
+			WithCause(err).
+			WithExplanation("Failed to inspect target directory").
+			WithContext("target", targetDir).
+			Err()
 	}
 
 	// Copy from temp to target using the same code path as regular vendoring.

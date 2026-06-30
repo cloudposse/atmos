@@ -88,6 +88,42 @@ func TestResolveSourceURI(t *testing.T) {
 	}
 }
 
+func TestVendorSourceWithReplaceTargetFalseFailsWhenTargetExists(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# source\n"), 0o644))
+
+	targetDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "existing.tf"), []byte("# existing\n"), 0o644))
+
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceDir}, targetDir, WithReplaceTarget(false))
+	require.Error(t, err)
+
+	content, readErr := os.ReadFile(filepath.Join(targetDir, "existing.tf"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "# existing\n", string(content))
+}
+
+func TestVendorSourceSupportsRelativeLocalPath(t *testing.T) {
+	originalDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	rootDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(rootDir, "fixtures", "demo"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "fixtures", "demo", "README.md"), []byte("demo\n"), 0o644))
+	require.NoError(t, os.Chdir(rootDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(originalDir))
+	})
+
+	targetDir := filepath.Join(rootDir, "workdirs", "demo")
+	err = VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: "fixtures/demo"}, targetDir)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(targetDir, "README.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "demo\n", string(content))
+}
+
 func TestNormalizeURI(t *testing.T) {
 	tests := []struct {
 		name     string

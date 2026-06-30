@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -100,7 +101,7 @@ func ExecWithPTY(ctx context.Context, cmd *exec.Cmd, opts *Options) error {
 	if opts.DisableStdinForward {
 		stdin = nil
 	}
-	return runWithIO(ctx, cmd, ptmx, stdin, outputWriter)
+	return runWithIO(ctx, cmd, ptmx, stdin, outputWriter, opts.DisableStdinForward)
 }
 
 // applyDefaults applies default values to Options if not set.
@@ -123,17 +124,17 @@ func applyDefaults(opts *Options) *Options {
 // createOutputWriter creates an output writer with optional masking.
 func createOutputWriter(opts *Options) io.Writer {
 	if opts.EnableMasking && opts.Masker != nil && opts.Masker.Enabled() {
-		return &maskedWriter{
+		return &recordingWriter{
 			underlying: opts.Stdout,
 			masker:     opts.Masker,
 		}
 	}
-	return opts.Stdout
+	return &recordingWriter{underlying: opts.Stdout}
 }
 
 // runWithIO sets up bidirectional IO and waits for command completion.
 // The stdin reader may be nil to skip input forwarding entirely.
-func runWithIO(ctx context.Context, cmd *exec.Cmd, ptmx *os.File, stdin io.Reader, stdout io.Writer) error {
+func runWithIO(ctx context.Context, cmd *exec.Cmd, ptmx *os.File, stdin io.Reader, stdout io.Writer, emulateTerminalResponses bool) error {
 	var wg sync.WaitGroup
 	errChan := make(chan error, 2)
 
@@ -148,7 +149,7 @@ func runWithIO(ctx context.Context, cmd *exec.Cmd, ptmx *os.File, stdin io.Reade
 
 	// Copy output from PTY to terminal.
 	wg.Add(1)
-	go copyOutput(&wg, errChan, stdout, ptmx)
+	go copyOutput(&wg, errChan, stdout, newOutputReader(ptmx, emulateTerminalResponses))
 
 	// Wait for completion or cancellation.
 	return waitForCompletion(ctx, cmd, ptmx, &wg, errChan)
@@ -165,6 +166,64 @@ func copyInput(errChan chan error, dst io.Writer, src io.Reader) {
 		default:
 		}
 	}
+}
+
+func newOutputReader(ptmx *os.File, emulateTerminalResponses bool) io.Reader {
+	if !emulateTerminalResponses {
+		return ptmx
+	}
+	return &terminalResponseReader{src: ptmx, responder: ptmx}
+}
+
+type terminalResponseReader struct {
+	src       io.Reader
+	responder io.Writer
+	tail      string
+}
+
+func (r *terminalResponseReader) Read(p []byte) (int, error) {
+	n, err := r.src.Read(p)
+	if n > 0 {
+		previousTailLen := len(r.tail)
+		output := r.tail + string(p[:n])
+		r.respond(output, previousTailLen)
+		r.tail = lastN(output, 64)
+	}
+	return n, err
+}
+
+func (r *terminalResponseReader) respond(output string, previousTailLen int) {
+	if containsNewSequence(output, "\x1b]10;?\x1b\\", previousTailLen) {
+		_, _ = r.responder.Write([]byte("\x1b]10;rgb:ffff/ffff/ffff\x1b\\"))
+	}
+	if containsNewSequence(output, "\x1b]11;?\x1b\\", previousTailLen) {
+		_, _ = r.responder.Write([]byte("\x1b]11;rgb:0000/0000/0000\x1b\\"))
+	}
+	if containsNewSequence(output, "\x1b[6n", previousTailLen) {
+		_, _ = r.responder.Write([]byte("\x1b[1;1R"))
+	}
+}
+
+func containsNewSequence(output, sequence string, previousTailLen int) bool {
+	for index := strings.Index(output, sequence); index >= 0; {
+		if index+len(sequence) > previousTailLen {
+			return true
+		}
+		nextOffset := index + 1
+		next := strings.Index(output[nextOffset:], sequence)
+		if next < 0 {
+			return false
+		}
+		index = nextOffset + next
+	}
+	return false
+}
+
+func lastN(input string, n int) string {
+	if len(input) <= n {
+		return input
+	}
+	return input[len(input)-n:]
 }
 
 // outputDrainTimeout bounds how long completion waits for the output copier
@@ -253,25 +312,29 @@ func IsSupported() bool {
 	return runtime.GOOS == "darwin" || runtime.GOOS == "linux"
 }
 
-// maskedWriter wraps an io.Writer to apply masking to all written data.
-type maskedWriter struct {
+// recordingWriter wraps PTY output so terminal-attached steps are both masked
+// and visible to the asciicast recorder. PTY output is terminal-like, so it is
+// recorded as stdout even though the PTY merges stdout and stderr.
+type recordingWriter struct {
 	underlying io.Writer
 	masker     iolib.Masker
 }
 
 // Write implements io.Writer by masking data before writing to underlying writer.
-func (m *maskedWriter) Write(p []byte) (n int, err error) {
-	defer perf.Track(nil, "pty.maskedWriter.Write")()
+func (w *recordingWriter) Write(p []byte) (n int, err error) {
+	defer perf.Track(nil, "pty.recordingWriter.Write")()
 
-	// Convert bytes to string, apply masking, write back.
-	original := string(p)
-	masked := m.masker.Mask(original)
+	output := string(p)
+	if w.masker != nil && w.masker.Enabled() {
+		output = w.masker.Mask(output)
+	}
 
-	// Write masked data to underlying writer.
-	_, err = m.underlying.Write([]byte(masked))
+	_, err = w.underlying.Write([]byte(output))
 	if err != nil {
 		return 0, err
 	}
+
+	iolib.RecordMaskedOutput(iolib.DataStream, output)
 
 	// Return original byte count (not masked length) to maintain io.Writer contract.
 	return len(p), nil

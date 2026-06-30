@@ -23,6 +23,10 @@ const (
 	// TaskTypeExec is the task type for commands that replace the Atmos
 	// process entirely (shell exec semantics). Must be the final step.
 	TaskTypeExec = "exec"
+	// TaskTypeCast records nested steps or a scripted shell session as an asciicast.
+	TaskTypeCast = "cast"
+	// TaskTypeWorkdir provisions a mutable working directory from a source.
+	TaskTypeWorkdir = "workdir"
 	// TaskTypeWait is the action step that blocks until the background step(s)
 	// named in `for:` are ready (a service's health check) or complete.
 	TaskTypeWait = "wait"
@@ -88,11 +92,14 @@ type Task struct {
 	Separator string           `yaml:"separator,omitempty" json:"separator,omitempty" mapstructure:"separator"` // Separator for join type (default: newline).
 
 	// File picker fields.
-	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker.
+	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker, or target path for workdir.
+	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source for workdir provisioning; string or source map.
+	Reset      bool     `yaml:"reset,omitempty" json:"reset,omitempty" mapstructure:"reset"`                // Reset the target path before provisioning.
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
 	// Display configuration.
 	Output         string                `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
+	CastOutput     *CastOutput           `yaml:"-" json:"cast_output,omitempty" mapstructure:"cast_output"`            // Structured output for cast artifacts.
 	ParallelOutput *ParallelOutputConfig `yaml:"-" json:"parallel_output,omitempty" mapstructure:"parallel_output"`    // Structured output for parallel/matrix.
 	Height         int                   `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
 	Viewport       *ViewportConfig       `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Viewport settings for output mode.
@@ -143,6 +150,18 @@ type Task struct {
 	Body    string            `yaml:"body,omitempty" json:"body,omitempty" mapstructure:"body"`          // Raw request body (supports templates); mutually exclusive with form.
 	Form    map[string]string `yaml:"form,omitempty" json:"form,omitempty" mapstructure:"form"`          // Form/JSON body params; mutually exclusive with body.
 	Expect  *HTTPExpect       `yaml:"expect,omitempty" json:"expect,omitempty" mapstructure:"expect"`    // Success criteria; defaults to any 2xx.
+
+	// Cast step and session action fields.
+	Mode        string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+	Shell       string `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`
+	WriteRate   string `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`
+	KeyInterval string `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"`
+	Text        string `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`
+	Regex       string `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`
+	Key         string `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`
+	Duration    string `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`
+	Interval    string `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`
+	Repeat      int    `yaml:"repeat,omitempty" json:"repeat,omitempty" mapstructure:"repeat"`
 
 	// Container step fields.
 	//
@@ -200,8 +219,9 @@ func (task *Task) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	*task = Task(fresh)
-	return applyStepPolymorphicNodes(nodes, task.Action, stepPolyTargets{
+	return applyStepPolymorphicNodes(nodes, task.Type, task.Action, stepPolyTargets{
 		output:    &task.Output,
+		cast:      &task.CastOutput,
 		parallel:  &task.ParallelOutput,
 		async:     &task.BackgroundAsync,
 		color:     &task.Background,
@@ -308,10 +328,13 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 
 		// File picker fields.
 		Path:       task.Path,
+		Source:     task.Source,
+		Reset:      task.Reset,
 		Extensions: task.Extensions,
 
 		// Display configuration.
 		Output:         task.Output,
+		CastOutput:     task.CastOutput,
 		ParallelOutput: task.ParallelOutput,
 		Height:         task.Height,
 		Viewport:       task.Viewport,
@@ -361,6 +384,18 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Body:    task.Body,
 		Form:    task.Form,
 		Expect:  task.Expect,
+
+		// Cast step and session action fields.
+		Mode:        task.Mode,
+		Shell:       task.Shell,
+		WriteRate:   task.WriteRate,
+		KeyInterval: task.KeyInterval,
+		Text:        task.Text,
+		Regex:       task.Regex,
+		Key:         task.Key,
+		Duration:    task.Duration,
+		Interval:    task.Interval,
+		Repeat:      task.Repeat,
 
 		// Container step fields.
 		Action:           task.Action,
@@ -432,10 +467,13 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 
 		// File picker fields.
 		Path:       step.Path,
+		Source:     step.Source,
+		Reset:      step.Reset,
 		Extensions: step.Extensions,
 
 		// Display configuration.
 		Output:         step.Output,
+		CastOutput:     step.CastOutput,
 		ParallelOutput: step.ParallelOutput,
 		Height:         step.Height,
 		Viewport:       step.Viewport,
@@ -484,6 +522,18 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Body:    step.Body,
 		Form:    step.Form,
 		Expect:  step.Expect,
+
+		// Cast step and session action fields.
+		Mode:        step.Mode,
+		Shell:       step.Shell,
+		WriteRate:   step.WriteRate,
+		KeyInterval: step.KeyInterval,
+		Text:        step.Text,
+		Regex:       step.Regex,
+		Key:         step.Key,
+		Duration:    step.Duration,
+		Interval:    step.Interval,
+		Repeat:      step.Repeat,
 
 		// Container step fields.
 		Action:           step.Action,
@@ -602,6 +652,29 @@ func normalizeTaskOutputMap(m map[string]any, task *Task) (map[string]any, error
 	case string:
 		return m, nil
 	case map[string]any:
+		if m["type"] == TaskTypeCast {
+			var cfg CastOutput
+			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+				Result:           &cfg,
+				TagName:          "mapstructure",
+				WeaklyTypedInput: true,
+			})
+			if err != nil {
+				return nil, err
+			}
+			if err := decoder.Decode(v); err != nil {
+				return nil, err
+			}
+			task.CastOutput = &cfg
+			copied := make(map[string]any, len(m)-1)
+			for key, val := range m {
+				if key == "output" {
+					continue
+				}
+				copied[key] = val
+			}
+			return copied, nil
+		}
 		var cfg ParallelOutputConfig
 		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 			Result:           &cfg,

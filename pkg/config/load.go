@@ -513,6 +513,11 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.terminal.no_color", false)
 	v.SetDefault("settings.terminal.pager", "false") // String value to match the field type
 	v.SetDefault("settings.experimental", "warn")    // Experimental feature handling: silence, disable, warn, error
+	v.SetDefault("cast.recording.enabled", false)
+	v.SetDefault("cast.recording.base_path", "")
+	v.SetDefault("cast.recording.input", false)
+	v.SetDefault("cast.recording.width", 120)
+	v.SetDefault("cast.recording.height", 36)
 	// Note: force_color is ENV-only (ATMOS_FORCE_COLOR), no config default
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 

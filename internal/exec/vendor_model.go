@@ -21,6 +21,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -118,9 +119,9 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 		return fmt.Errorf("%w: %v (verify terminal capabilities and permissions)", errUtils.ErrTUIModel, err)
 	}
 
-	var opts []tea.ProgramOption
+	opts := []tea.ProgramOption{tea.WithOutput(iolib.MaskWriter(os.Stdout))}
 	if !term.IsTTYSupportForStdout() {
-		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
+		opts = append(opts, tea.WithoutRenderer(), tea.WithInput(nil))
 		log.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
 	}
 
