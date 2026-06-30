@@ -27,13 +27,42 @@ interface IndexPageProps {
 }
 
 export default function IndexPage({ treeData, optionsData }: IndexPageProps): JSX.Element {
-  const { examples, tags } = treeData;
+  const { examples, featured = [], tags } = treeData;
   const { routeBasePath, title, description } = optionsData;
   const [activeTag, setActiveTag] = useState<string | null>(null);
 
   const filteredExamples = activeTag
     ? examples.filter((ex) => ex.tags.includes(activeTag))
     : examples;
+
+  // Render a single example card. Featured cards use the friendly title; the full grid keeps
+  // the directory name so it stays scannable alongside the URL path.
+  const renderCard = (example: ExamplesTree['examples'][number], displayName: string) => (
+    <Link
+      key={example.name}
+      to={`${routeBasePath}/${example.name}`}
+      className={styles.exampleCard}
+    >
+      <div className={styles.exampleCardHeader}>
+        <div className={styles.exampleCardIcon}>
+          <FontAwesomeIcon icon={faFolder} />
+        </div>
+        <h2 className={styles.exampleCardTitle}>{displayName}</h2>
+      </div>
+      <div className={styles.exampleCardDescription}>
+        <Markdown components={cardMarkdownComponents}>
+          {example.description || 'Explore this example project'}
+        </Markdown>
+      </div>
+      <div className={styles.exampleCardFooter}>
+        <div className={styles.tagList}>
+          {example.tags.map((tag) => (
+            <span key={tag} className={styles.tagBadge}>{tag}</span>
+          ))}
+        </div>
+      </div>
+    </Link>
+  );
 
   return (
     <Layout title={title} description={description}>
@@ -42,6 +71,15 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
           <h1 className={styles.indexTitle}>{title}</h1>
           <p className={styles.indexDescription}>{description}</p>
         </header>
+
+        {activeTag === null && featured.length > 0 && (
+          <section className={styles.featuredSection}>
+            <h2 className={styles.featuredHeading}>Featured</h2>
+            <div className={styles.examplesGrid}>
+              {featured.map((example) => renderCard(example, example.title || example.name))}
+            </div>
+          </section>
+        )}
 
         <div className={styles.filterBar}>
           <button
@@ -64,32 +102,7 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
         </div>
 
         <div className={styles.examplesGrid}>
-          {filteredExamples.map((example) => (
-            <Link
-              key={example.name}
-              to={`${routeBasePath}/${example.name}`}
-              className={styles.exampleCard}
-            >
-              <div className={styles.exampleCardHeader}>
-                <div className={styles.exampleCardIcon}>
-                  <FontAwesomeIcon icon={faFolder} />
-                </div>
-                <h2 className={styles.exampleCardTitle}>{example.name}</h2>
-              </div>
-              <div className={styles.exampleCardDescription}>
-                <Markdown components={cardMarkdownComponents}>
-                  {example.description || 'Explore this example project'}
-                </Markdown>
-              </div>
-              <div className={styles.exampleCardFooter}>
-                <div className={styles.tagList}>
-                  {example.tags.map((tag) => (
-                    <span key={tag} className={styles.tagBadge}>{tag}</span>
-                  ))}
-                </div>
-              </div>
-            </Link>
-          ))}
+          {filteredExamples.map((example) => renderCard(example, example.name))}
         </div>
       </div>
     </Layout>

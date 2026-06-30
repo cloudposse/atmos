@@ -70,7 +70,7 @@ export default function Footer(): ReactElement {
       <div className={styles.container}>
         <div className={styles.top}>
           <div className={styles.brand}>
-            <Link to="/" className={styles.brandLink} aria-label="Atmos home">
+            <Link to="/media-kit" className={styles.brandLink} aria-label="Atmos brand kit">
               <img
                 className={`${styles.brandLogo} ${styles.logoLight}`}
                 src="/img/atmos-logo-gradient-on-light.svg"

@@ -18,7 +18,7 @@ const DEPLOYMENT_HOST = process.env.DEPLOYMENT_HOST || 'atmos.tools';
 /** @type {import('@docusaurus/types').Config} */
 const config = {
     title: 'atmos',
-    tagline: 'Universal tool for DevOps and Cloud Automation',
+    tagline: 'The runtime for infrastructure.',
     url: `https://${DEPLOYMENT_HOST}`,
     baseUrl: `${BASE_URL}/`,
     onBrokenLinks: 'throw',
@@ -37,6 +37,13 @@ const config = {
     },
 
     scripts: [
+    ],
+
+    stylesheets: [
+        {
+            href: 'https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap',
+            rel: 'stylesheet',
+        },
     ],
 
     plugins: [
@@ -667,6 +674,12 @@ const config = {
 
     customFields: {
         latestRelease: 'v0.0.0', // initial placeholder
+        // Optional base URL (no trailing slash) for landing-page demo recordings.
+        // The videos are published by `atmos demo publish` to the same docs-origin
+        // bucket under /img/demos/, so DemoVideo serves them same-origin from that
+        // path when this is empty. Set ATMOS_DEMOS_BASE_URL only to point at a
+        // separate CDN/host. See DemoVideo + demo/landing/ + .github/workflows/landing-demos.yaml.
+        demosBaseUrl: process.env.ATMOS_DEMOS_BASE_URL || '',
         },
 
     markdown: {

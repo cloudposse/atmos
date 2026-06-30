@@ -114,7 +114,7 @@ func startSandboxWithRuntime(ctx context.Context, runtime Runtime, config *Sandb
 	cleanupStaleWorkflowSandboxes(ctx, runtime, config)
 
 	if config.PullPolicy == PullAlways {
-		if err := runtime.Pull(ctx, config.Image); err != nil {
+		if err := pullWithRetry(ctx, runtime, config.Image); err != nil {
 			return nil, fmt.Errorf("%w: pull image %q: %w", errUtils.ErrContainerRuntimeOperation, config.Image, err)
 		}
 	}
@@ -175,7 +175,7 @@ func createSandboxContainer(ctx context.Context, runtime Runtime, config *Sandbo
 		return "", fmt.Errorf("%w: create workflow sandbox: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 	createErr := err
-	if pullErr := runtime.Pull(ctx, config.Image); pullErr != nil {
+	if pullErr := pullWithRetry(ctx, runtime, config.Image); pullErr != nil {
 		return "", fmt.Errorf(
 			"%w: create workflow sandbox and pull image: %w",
 			errUtils.ErrContainerRuntimeOperation,

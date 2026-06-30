@@ -70,11 +70,99 @@ func TestVariablesTemplateData(t *testing.T) {
 		WithOutput("alias", "declared").
 		WithSkipped())
 	vars.SetEnv("ENV_VAR", "env_value")
+	vars.SetFlag("stack", "plat-ue2-dev")
 
 	// Access templateData indirectly through Resolve.
-	result, err := vars.Resolve("{{ .steps.step1.value }}-{{ .steps.step1.outputs.alias }}-{{ .steps.step1.key }}-{{ .steps.step1.skipped }}-{{ .env.ENV_VAR }}")
+	result, err := vars.Resolve("{{ .steps.step1.value }}-{{ .steps.step1.outputs.alias }}-{{ .steps.step1.key }}-{{ .steps.step1.skipped }}-{{ .env.ENV_VAR }}-{{ .Flags.stack }}-{{ .flags.stack }}")
 	require.NoError(t, err)
-	assert.Equal(t, "value1-declared-meta_value-true-env_value", result)
+	assert.Equal(t, "value1-declared-meta_value-true-env_value-plat-ue2-dev-plat-ue2-dev", result)
+}
+
+func TestVariablesResolveCustomTemplateData(t *testing.T) {
+	vars := NewVariables()
+	vars.SetTemplatePasses(3)
+	vars.ProtectTemplateRoots("Arguments", "Flags", "flags", "TrailingArgs")
+	vars.Set("previous", NewStepResult("ready"))
+	vars.SetTemplateData(map[string]any{
+		"Arguments": map[string]string{
+			"component": "api",
+			"message":   "{{ .ComponentConfig.injected }}",
+		},
+		"Flags": map[string]any{
+			"stack":   "plat-ue2-dev",
+			"target":  "{{ .ComponentConfig.injected }}",
+			"verbose": true,
+		},
+		"flags": map[string]any{
+			"stack": "plat-ue2-dev",
+		},
+		"TrailingArgs": []string{"{{ .ComponentConfig.injected }}"},
+		"ComponentConfig": map[string]any{
+			"nested":   "{{ .Flags.stack }}",
+			"injected": "expanded",
+		},
+	})
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "argument value with template markers stays literal",
+			input:    "echo {{ .Arguments.message }}",
+			expected: "echo {{ .ComponentConfig.injected }}",
+		},
+		{
+			name:     "flag string with template markers stays literal",
+			input:    "run --target {{ .Flags.target }}",
+			expected: "run --target {{ .ComponentConfig.injected }}",
+		},
+		{
+			name:     "trailing arg with template markers stays literal",
+			input:    "cmd {{ index .TrailingArgs 0 }}",
+			expected: "cmd {{ .ComponentConfig.injected }}",
+		},
+		{
+			name:     "config owned nested template expands",
+			input:    "stack {{ .ComponentConfig.nested }}",
+			expected: "stack plat-ue2-dev",
+		},
+		{
+			name:     "bool flag is preserved",
+			input:    "run --verbose={{ .Flags.verbose }}",
+			expected: "run --verbose=true",
+		},
+		{
+			name:     "lowercase flags and step outputs coexist",
+			input:    "table {{ .flags.stack }} {{ .steps.previous.value }}",
+			expected: "table plat-ue2-dev ready",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := vars.Resolve(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestVariablesResolveUsesTemplateRenderer(t *testing.T) {
+	vars := NewVariables()
+	vars.SetTemplateRenderer(func(name, input string, data any) (string, error) {
+		assert.Equal(t, "step-pass-1", name)
+		assert.Contains(t, data.(map[string]any), "Arguments")
+		return "rendered by callback", nil
+	})
+	vars.SetTemplateData(map[string]any{
+		"Arguments": map[string]string{"name": "api"},
+	})
+
+	result, err := vars.Resolve("ignored")
+	require.NoError(t, err)
+	assert.Equal(t, "rendered by callback", result)
 }
 
 func TestVariablesSetWithOutputs(t *testing.T) {

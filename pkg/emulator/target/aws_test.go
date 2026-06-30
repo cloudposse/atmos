@@ -19,13 +19,13 @@ func TestAWSProfile_Branches(t *testing.T) {
 		"bound port and explicit region": {
 			ep:             &emu.Endpoint{Target: emu.TargetAWS, Host: "localhost", Ports: map[int]int{4566: 54321}, Region: "eu-west-1"},
 			wantRegion:     "eu-west-1",
-			wantURL:        "http://localhost:54321",
+			wantURL:        "http://127.0.0.1:54321",
 			wantEndpointKV: true,
 		},
 		"bound port and default region fallback": {
 			ep:             &emu.Endpoint{Target: emu.TargetAWS, Host: "localhost", Ports: map[int]int{4566: 4566}},
 			wantRegion:     awsDefaultRegion,
-			wantURL:        "http://localhost:4566",
+			wantURL:        "http://127.0.0.1:4566",
 			wantEndpointKV: true,
 		},
 		"no bound port omits endpoint keys": {

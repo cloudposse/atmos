@@ -29,6 +29,14 @@ atmos packer version --help
 atmos helmfile --help
 atmos helmfile generate --help
 atmos helmfile generate varfile --help
+atmos container --help
+atmos emulator --help
+atmos emulator up --help
+atmos emulator ps --help
+atmos emulator logs --help
+atmos emulator exec --help
+atmos emulator down --help
+atmos emulator reset --help
 atmos --help
 atmos atlantis --help
 atmos atlantis generate --help
@@ -83,6 +91,7 @@ atmos git hooks uninstall --help
 atmos env --help
 atmos list --help
 atmos list components --help
+atmos list dependencies --help
 atmos list metadata --help
 atmos list settings --help
 atmos list stacks --help
