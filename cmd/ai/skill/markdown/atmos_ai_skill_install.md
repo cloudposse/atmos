@@ -12,13 +12,16 @@ them in the AI TUI by switching with Ctrl+A.
 Skills follow the Agent Skills open standard (https://agentskills.io)
 and use the SKILL.md format with YAML frontmatter.
 
+The `<source>` argument can be a bundled Atmos skill name or a GitHub repository
+source.
+
 Source formats:
-  atmos-terraform                   Bundled skill by name (offline)
-  user/repo                         GitHub shorthand (GitHub assumed)
-  user/repo@v1.2.3                  Specific version tag
-  github.com/user/repo              Full GitHub path
-  github.com/user/repo@v1.2.3       Full path with version
-  https://github.com/user/repo.git  Full HTTPS URL
+  - `atmos-terraform` - Bundled skill by name (offline)
+  - `user/repo` - GitHub shorthand (GitHub assumed)
+  - `user/repo@v1.2.3` - Specific version tag
+  - `github.com/user/repo` - Full GitHub path
+  - `github.com/user/repo@v1.2.3` - Full path with version
+  - `https://github.com/user/repo.git` - Full HTTPS URL
 
 Security:
   - Skills cannot execute arbitrary code

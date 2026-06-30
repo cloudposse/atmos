@@ -155,6 +155,16 @@ func TestListCmd_Flags(t *testing.T) {
 	})
 }
 
+func TestSkillListColumns(t *testing.T) {
+	columns := skillListColumns()
+	require.Len(t, columns, 4)
+	assert.Equal(t, " ", columns[0].Name)
+	assert.Equal(t, 1, columns[0].Width)
+	assert.Equal(t, "Name", columns[1].Name)
+	assert.Equal(t, "Source", columns[2].Name)
+	assert.Equal(t, "State", columns[3].Name)
+}
+
 func TestListCmd_EnvVarBinding(t *testing.T) {
 	t.Run("detailed env var", func(t *testing.T) {
 		t.Setenv("ATMOS_AI_SKILL_DETAILED", "true")
@@ -190,9 +200,13 @@ func TestBuildListEntries(t *testing.T) {
 		assert.Equal(t, catalog[0].Name, entries[0].name)
 		assert.True(t, entries[0].available)
 		assert.False(t, entries[0].installed)
+		assert.Equal(t, sourceBuiltIn, entries[0].displaySource)
+		assert.Equal(t, catalog[0].Source, entries[0].source)
 		assert.Equal(t, catalog[len(catalog)-1].Name, entries[len(entries)-1].name)
 		assert.True(t, entries[len(entries)-1].available)
 		assert.False(t, entries[len(entries)-1].installed)
+		assert.Equal(t, sourceBuiltIn, entries[len(entries)-1].displaySource)
+		assert.Equal(t, catalog[len(catalog)-1].Source, entries[len(entries)-1].source)
 	})
 
 	t.Run("installed catalog skill is marked installed with its version", func(t *testing.T) {
@@ -223,6 +237,8 @@ func TestBuildListEntries(t *testing.T) {
 			assert.True(t, e.installed)
 			assert.True(t, e.available)
 			assert.Equal(t, "1.0.0", e.version)
+			assert.Equal(t, sourceBuiltIn, e.displaySource)
+			assert.Equal(t, "github.com/cloudposse/atmos//agent-skills/skills/atmos-terraform", e.source)
 			require.NotNil(t, e.skill)
 		}
 		assert.True(t, found, "atmos-terraform must be present")
@@ -251,6 +267,8 @@ func TestBuildListEntries(t *testing.T) {
 			assert.True(t, e.installed)
 			assert.False(t, e.available)
 			assert.Equal(t, "v2.0.0", e.version)
+			assert.Equal(t, "github.com/example/my-skill", e.displaySource)
+			assert.Equal(t, "github.com/example/my-skill", e.source)
 		}
 		assert.True(t, found, "community skill must be appended")
 	})
@@ -281,10 +299,13 @@ func TestListCmd_DefaultOutput(t *testing.T) {
 	assert.Contains(t, output, "available")
 	assert.Contains(t, output, "installed")
 	// Installed skill gets the filled marker; an available one gets the hollow marker.
-	assert.Contains(t, output, markerInstalled+"\tatmos-terraform")
+	assert.Contains(t, output, markerInstalled+"\tatmos-terraform\t"+sourceBuiltIn)
 	assert.Contains(t, output, markerAvailable)
 	// Legend + install hint.
+	assert.Contains(t, output, "Install a built-in skill by name:")
 	assert.Contains(t, output, "atmos ai skill install <name>")
+	assert.Contains(t, output, "Install from a repository source:")
+	assert.Contains(t, output, "atmos ai skill install <source>")
 	// Every catalog skill is listed.
 	for _, c := range catalog {
 		assert.Contains(t, output, c.Name)

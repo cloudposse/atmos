@@ -27,6 +27,7 @@ import (
 const (
 	markerInstalled = "●"
 	markerAvailable = "○"
+	sourceBuiltIn   = "built-in"
 )
 
 // listParser handles flag parsing with Viper precedence for the list command.
@@ -41,14 +42,15 @@ var listUsageMarkdown string
 // listEntry is the merged view of a skill: a catalog entry, an installed skill,
 // or both. It powers the available-vs-installed listing.
 type listEntry struct {
-	name        string
-	displayName string
-	description string
-	version     string
-	source      string
-	available   bool                        // True when part of the bundled catalog.
-	installed   bool                        // True when installed locally.
-	skill       *marketplace.InstalledSkill // Non-nil when installed.
+	name          string
+	displayName   string
+	description   string
+	version       string
+	source        string
+	displaySource string
+	available     bool                        // True when part of the bundled catalog.
+	installed     bool                        // True when installed locally.
+	skill         *marketplace.InstalledSkill // Non-nil when installed.
 }
 
 // listCmd represents the 'atmos ai skill list' command.
@@ -128,12 +130,13 @@ func buildListEntries(installer *marketplace.Installer) ([]listEntry, error) {
 	for _, c := range catalog {
 		seen[c.Name] = true
 		e := listEntry{
-			name:        c.Name,
-			displayName: c.DisplayName,
-			description: c.Description,
-			version:     c.Version,
-			source:      c.Source,
-			available:   true,
+			name:          c.Name,
+			displayName:   c.DisplayName,
+			description:   c.Description,
+			version:       c.Version,
+			source:        c.Source,
+			displaySource: sourceBuiltIn,
+			available:     true,
 		}
 		if s, ok := byName[c.Name]; ok {
 			e.installed = true
@@ -150,13 +153,14 @@ func buildListEntries(installer *marketplace.Installer) ([]listEntry, error) {
 			continue
 		}
 		entries = append(entries, listEntry{
-			name:        s.Name,
-			displayName: s.DisplayName,
-			description: "",
-			version:     s.Version,
-			source:      s.Source,
-			installed:   true,
-			skill:       s,
+			name:          s.Name,
+			displayName:   s.DisplayName,
+			description:   "",
+			version:       s.Version,
+			source:        s.Source,
+			displaySource: s.Source,
+			installed:     true,
+			skill:         s,
 		})
 	}
 
@@ -246,8 +250,9 @@ func countEntries(entries []listEntry) (available, installed int) {
 
 func skillListColumns() []column.Config {
 	return []column.Config{
-		{Name: "Status", Value: "{{ .status_marker }}"},
+		{Name: " ", Value: "{{ .status_marker }}", Width: 1},
 		{Name: "Name", Value: "{{ .name }}"},
+		{Name: "Source", Value: "{{ .source }}"},
 		{Name: "State", Value: "{{ .state }}"},
 	}
 }
@@ -264,6 +269,7 @@ func skillListRows(entries []listEntry) []map[string]any {
 		rows = append(rows, map[string]any{
 			"status_marker": marker,
 			"name":          e.name,
+			"source":        e.displaySource,
 			"state":         state,
 		})
 	}
@@ -275,7 +281,7 @@ func legend() string {
 }
 
 func installHint() string {
-	return "\nInstall a skill with:\n  atmos ai skill install <name>\n"
+	return "\nInstall a built-in skill by name:\n  atmos ai skill install <name>\n\nInstall from a repository source:\n  atmos ai skill install <source>\n"
 }
 
 // renderEntryDetails renders detailed blocks, including

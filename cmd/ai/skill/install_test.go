@@ -18,7 +18,7 @@ import (
 
 func TestInstallCmd_BasicProperties(t *testing.T) {
 	assert.Equal(t, "install <source>", installCmd.Use)
-	assert.Equal(t, "Install skills from a GitHub repository", installCmd.Short)
+	assert.Equal(t, "Install bundled or GitHub-hosted AI skills", installCmd.Short)
 	assert.NotEmpty(t, installCmd.Long)
 	assert.NotNil(t, installCmd.RunE)
 }
@@ -43,6 +43,7 @@ func TestInstallCmd_Flags(t *testing.T) {
 func TestInstallCmd_LongDescription(t *testing.T) {
 	// Verify long description contains important information.
 	assert.Contains(t, installCmd.Long, "Install AI skills")
+	assert.Contains(t, installCmd.Long, "bundled Atmos skill name")
 	assert.Contains(t, installCmd.Long, "atmos-terraform")
 	assert.Contains(t, installCmd.Long, "~/.atmos/skills/")
 	assert.Contains(t, installCmd.Long, "agentskills.io")
@@ -90,6 +91,7 @@ func TestInstallCmd_SecuritySection(t *testing.T) {
 
 func TestInstallCmd_SourceFormats(t *testing.T) {
 	// Verify all documented source formats are mentioned.
+	assert.Contains(t, installCmd.Long, "Bundled skill by name")
 	assert.Contains(t, installCmd.Long, "user/repo")
 	assert.Contains(t, installCmd.Long, "user/repo@v1.2.3")
 	assert.Contains(t, installCmd.Long, "github.com/user/repo")
@@ -457,7 +459,7 @@ func TestInstallCmd_UseFieldCorrect(t *testing.T) {
 }
 
 func TestInstallCmd_ShortDescription(t *testing.T) {
-	assert.Equal(t, "Install skills from a GitHub repository", installCmd.Short)
+	assert.Equal(t, "Install bundled or GitHub-hosted AI skills", installCmd.Short)
 }
 
 func TestInstallCmd_LongDescriptionContainsExamples(t *testing.T) {
