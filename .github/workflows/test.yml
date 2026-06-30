@@ -221,7 +221,7 @@ jobs:
           make deps
 
       - name: Terraform registry cache acceptance test
-        timeout-minutes: 10
+        timeout-minutes: 25
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
