@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"bytes"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -22,6 +23,8 @@ var testParser *flags.StandardParser
 // capturedTestOutput holds the terraform test stdout when CI mode is active.
 // Written in RunE, read in PostRunE and the error-path defer.
 var capturedTestOutput string
+
+const terraformTestOutputNewline = "\n"
 
 // testCmd represents the terraform test command.
 var testCmd = &cobra.Command{
@@ -111,7 +114,7 @@ For complete Terraform/OpenTofu documentation, see:
 			// before any test executed), never swallow what terraform actually wrote:
 			// surface the raw captured stdout and stderr so the failure is visible.
 			if text := tfci.RenderTestText([]byte(jsonOut)); text != "" {
-				ui.Write(text)
+				writeTerraformTestText(text)
 			} else {
 				if jsonOut != "" {
 					ui.Write(jsonOut)
@@ -130,6 +133,30 @@ For complete Terraform/OpenTofu documentation, see:
 		// the CI plugin (via RunCIHooks — the pass/fail step summary).
 		return runHooksWithOutput(h.AfterTerraformTest, cmd, args, capturedTestOutput)
 	},
+}
+
+func writeTerraformTestText(text string) {
+	trimmed := strings.TrimSuffix(text, terraformTestOutputNewline)
+	if trimmed == "" {
+		return
+	}
+	lines := strings.Split(trimmed, terraformTestOutputNewline)
+	summary := lines[len(lines)-1]
+	if len(lines) > 1 {
+		body := strings.Join(lines[:len(lines)-1], terraformTestOutputNewline)
+		if body != "" {
+			ui.Writeln(body)
+		}
+	}
+
+	switch {
+	case strings.HasPrefix(summary, "Success!"):
+		ui.Success(summary)
+	case strings.HasPrefix(summary, "Failure!"):
+		ui.Error(summary)
+	default:
+		ui.Writeln(summary)
+	}
 }
 
 // appendJSONFlag adds `-json` to the terraform test pass-through flags unless it
