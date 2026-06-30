@@ -7,7 +7,7 @@ slug: /workflows/steps/type/require
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `require` step type is a declarative preconditions gate. It verifies that the CLI tools a workflow or custom command depends on are executable and on `PATH`, and that required files and directories exist — failing fast with a friendly, aggregated error and an install hint when anything is missing. It replaces brittle, non-portable shell checks like `command -v vhs ffmpeg || exit 1`, and works on Linux, macOS, and Windows.
+The `require` step type is a declarative preconditions gate. It verifies that the CLI tools a workflow or custom command depends on are executable and on `PATH`, and that required files and directories exist — failing fast with a friendly, aggregated error and an install hint when anything is missing. It replaces brittle, non-portable shell checks and works on Linux, macOS, and Windows.
 </Intro>
 
 :::note Alias

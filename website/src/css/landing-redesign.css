@@ -31,6 +31,27 @@ html[data-theme="light"] .landing-page {
   --lp-pro-accent: #b97e12;
 }
 
+.landing-page nav.navbar {
+  transition:
+    background 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    backdrop-filter 180ms ease;
+}
+
+.landing-page:not(.landing-page--scrolled) nav.navbar {
+  background: transparent !important;
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.landing-page:not(.landing-page--scrolled) .navbar__title {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
 /* --- Shared section scaffolding ------------------------------------------- */
 .lp-section {
   width: 100%;

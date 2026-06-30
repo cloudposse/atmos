@@ -11,9 +11,9 @@ Type `export ATMOS_EXPERIMENTAL=silence ATMOS_TERMINAL_SPEED=8 ATMOS_PAGER=false
 Type `cd "$(git rev-parse --show-toplevel)/demo/landing/fixtures/kubernetes"` Enter
 Type "clear" Enter
 Wait /❯$/
-Type "atmos emulator reset kubernetes -s local --force || exit $?" Enter
+Type "atmos emulator reset kubernetes -s local --force" Enter
 Wait /❯$/
-Type "atmos emulator up kubernetes -s local || exit $?" Enter
+Type "atmos emulator up kubernetes -s local" Enter
 Wait /❯$/
 Type "clear" Enter
 Wait /❯$/

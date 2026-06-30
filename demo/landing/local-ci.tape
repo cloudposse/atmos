@@ -18,7 +18,7 @@ Type `git init -q && git config user.email demo@atmos.tools && git config user.n
 Wait /❯$/
 Type `git branch baseline` Enter
 Wait /❯$/
-Type `atmos terraform workspace new myapp -s dev || exit $?` Enter
+Type `atmos terraform workspace new myapp -s dev` Enter
 Wait /❯$/
 Type "clear" Enter
 Wait /❯$/
@@ -36,7 +36,7 @@ Wait /❯$/
 Type `atmos list affected --ref baseline` Sleep 600ms Enter
 Wait /❯$/
 Sleep 4s
-Type `atmos terraform apply --affected --ref baseline --ci || exit $?` Sleep 600ms Enter
+Type `atmos terraform apply --affected --ref baseline --ci` Sleep 600ms Enter
 Wait /❯$/
 Sleep 3s
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { MotionConfig } from 'framer-motion';
 import Layout from '@theme/Layout';
 import Hero from '@site/src/components/landing/Hero';
@@ -13,9 +13,19 @@ import '../css/landing-page.css';
 import '../css/landing-redesign.css';
 
 function Home() {
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const updateScrolled = () => setScrolled(window.scrollY > 0);
+
+    updateScrolled();
+    window.addEventListener('scroll', updateScrolled, { passive: true });
+    return () => window.removeEventListener('scroll', updateScrolled);
+  }, []);
+
   return (
     <MotionConfig reducedMotion="user">
-      <div className="landing-page">
+      <div className={`landing-page${scrolled ? ' landing-page--scrolled' : ''}`}>
         <Layout
           title="The runtime for infrastructure"
           description="Atmos is the runtime for infrastructure — one consistent way to build, ship, and run Terraform, Kubernetes, and containers, identically on your laptop and in CI. Auth, secrets, vendoring, and CI included."
