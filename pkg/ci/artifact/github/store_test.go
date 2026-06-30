@@ -21,6 +21,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 )
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
 func TestStore_Name(t *testing.T) {
 	store := &Store{}
 	assert.Equal(t, "github/artifacts", store.Name())
@@ -1298,6 +1304,30 @@ func TestStore_List(t *testing.T) {
 		require.Len(t, files, 1)
 		assert.Equal(t, "stack1/comp1/sha1.tfplan", files[0].Name)
 		assert.Equal(t, 2, callCount)
+	})
+
+	t.Run("does not retry client transport error", func(t *testing.T) {
+		oldDelay := listArtifactsRetryBaseDelay
+		listArtifactsRetryBaseDelay = time.Nanosecond
+		defer func() { listArtifactsRetryBaseDelay = oldDelay }()
+
+		callCount := 0
+		store := &Store{
+			httpClient: &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+				callCount++
+				return nil, fmt.Errorf("dial failed")
+			})},
+			baseURL: "https://api.github.test",
+			prefix:  "planfile",
+			owner:   "testowner",
+			repo:    "testrepo",
+		}
+
+		files, err := store.List(context.Background(), artifact.Query{All: true})
+		require.Error(t, err)
+		assert.Nil(t, files)
+		assert.Equal(t, 1, callCount)
+		assert.Contains(t, err.Error(), "dial failed")
 	})
 
 	t.Run("with prefix filter", func(t *testing.T) {

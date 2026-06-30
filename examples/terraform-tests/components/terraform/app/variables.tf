@@ -24,4 +24,5 @@ variable "enable_versioning" {
 variable "fixture_vpc_name" {
   type        = string
   description = "Name tag of the fixture VPC that must already exist."
+  default     = null
 }

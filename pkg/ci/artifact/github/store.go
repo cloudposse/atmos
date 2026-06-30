@@ -469,7 +469,7 @@ func (s *Store) listArtifactsOnce(ctx context.Context, perPage, page int) (*list
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return &listArtifactsAttemptResult{retryable: true}, fmt.Errorf("failed to list artifacts: %w", err)
+		return &listArtifactsAttemptResult{retryable: false}, fmt.Errorf("failed to list artifacts: %w", err)
 	}
 	defer resp.Body.Close()
 

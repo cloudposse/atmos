@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -204,6 +205,35 @@ func TestPrintAndWriteVarFiles_WritesTerraformTestVarfile(t *testing.T) {
 	data, err := os.ReadFile(expectedVarfilePath)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"fixture_vpc_id":"vpc-123","expected_bucket_name":"app-test"}`, string(data))
+}
+
+func TestDiskSafeVars_RemovesComponentVarCollidingWithSecretTestVar(t *testing.T) {
+	secret := "terraform-test-secret-collision-7f1d"
+	atmosio.RegisterSecret(secret)
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand: "test",
+		ComponentVarsSection: map[string]any{
+			"fixture_vpc_name": "public-fallback",
+			"name":             "app",
+		},
+		ComponentSection: map[string]any{
+			cfg.TestSectionName: map[string]any{
+				cfg.VarsSectionName: map[string]any{
+					"fixture_vpc_name": secret,
+					"expected_name":    "app-test",
+				},
+			},
+		},
+	}
+
+	safe := diskSafeVars(info)
+	assert.NotContains(t, safe, "fixture_vpc_name")
+	assert.Equal(t, "app", safe["name"])
+	assert.Equal(t, map[string]any{"expected_name": "app-test"}, diskSafeTerraformTestVars(info))
+
+	env, err := terraformTestSecretVarEnv(info)
+	require.NoError(t, err)
+	assert.Contains(t, env, "TF_VAR_fixture_vpc_name="+secret)
 }
 
 func TestPrintAndWriteVarFiles_IgnoresTerraformTestVarsForNonTestCommand(t *testing.T) {

@@ -98,15 +98,23 @@ For complete Terraform/OpenTofu documentation, see:
 		// being mis-parsed as a positional stack argument.
 		var shellOpts []e.ShellCommandOption
 		var stdoutBuf, stderrBuf bytes.Buffer
+		var statusWriter *terraformTestStatusWriter
 		if ciMode {
 			opts.AppendArgs = appendJSONFlag(opts.AppendArgs)
 			shellOpts = append(shellOpts, e.WithStdoutOverride(&stdoutBuf))
 			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
 		} else {
-			shellOpts = append(shellOpts, e.WithStdoutOverride(newTerraformTestStatusWriter(os.Stdout)))
+			statusWriter = newTerraformTestStatusWriter(os.Stdout)
+			shellOpts = append(shellOpts, e.WithStdoutOverride(io.MultiWriter(&stdoutBuf, statusWriter)))
 		}
 
 		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
+		if statusWriter != nil {
+			if flushErr := statusWriter.Flush(); flushErr != nil && err == nil {
+				err = flushErr
+			}
+			capturedTestOutput = ansi.Strip(stdoutBuf.String())
+		}
 
 		if ciMode {
 			jsonOut := stdoutBuf.String()
@@ -147,7 +155,7 @@ type terraformTestStatusWriter struct {
 	buf []byte
 }
 
-func newTerraformTestStatusWriter(w io.Writer) io.Writer {
+func newTerraformTestStatusWriter(w io.Writer) *terraformTestStatusWriter {
 	return &terraformTestStatusWriter{w: w}
 }
 
@@ -164,6 +172,15 @@ func (w *terraformTestStatusWriter) Write(p []byte) (int, error) {
 		}
 		w.buf = w.buf[idx+1:]
 	}
+}
+
+func (w *terraformTestStatusWriter) Flush() error {
+	if len(w.buf) == 0 {
+		return nil
+	}
+	_, err := io.WriteString(w.w, formatTerraformTestStatusLine(string(w.buf)))
+	w.buf = nil
+	return err
 }
 
 func formatTerraformTestStatusLine(line string) string {

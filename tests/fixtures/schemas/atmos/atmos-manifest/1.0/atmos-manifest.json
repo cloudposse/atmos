@@ -2268,6 +2268,15 @@
             "required": {
               "type": "boolean",
               "description": "Marks the secret as required; validation fails if it is not initialized."
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "instance",
+                "stack",
+                "global"
+              ],
+              "description": "Storage scope. Normally derived from declaration position (top-level `secrets:` => stack, shared by every component instance; `components.<c>.secrets:` => instance). If set explicitly it must match the position \u2014 a conflict (e.g. `scope: stack` under a component) is an error \u2014 except `global`, which is honored at either position. Instance-scoped secrets are stored per component; stack-scoped secrets are stored once per stack; global secrets are stored once per backend store and shared by every stack and component that resolves through it."
             }
           },
           "oneOf": [

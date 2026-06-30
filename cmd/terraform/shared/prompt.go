@@ -16,6 +16,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -72,6 +73,8 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 // surfaces the real cause, and an empty list yields a clear "no components" message —
 // instead of silently falling through to a misleading "component is required" error.
 func PromptForComponent(cmd *cobra.Command, stack string) (string, error) {
+	defer perf.Track(nil, "shared.PromptForComponent")()
+
 	if !isInteractiveFn() {
 		return "", nil // Non-interactive: let the caller's required-arg validation handle it.
 	}
@@ -110,6 +113,8 @@ func noComponentsExplanation(stack string) string {
 // Like PromptForComponent, it surfaces load errors and an explicit "no stacks"
 // message instead of silently returning empty.
 func PromptForStack(cmd *cobra.Command, component string) (string, error) {
+	defer perf.Track(nil, "shared.PromptForStack")()
+
 	if !isInteractiveFn() {
 		return "", nil // Non-interactive: let the caller's required-arg validation handle it.
 	}

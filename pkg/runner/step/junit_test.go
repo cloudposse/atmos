@@ -104,6 +104,38 @@ func TestJUnitHandler_Execute_SummaryOnly(t *testing.T) {
 	assert.Empty(t, *annotations, "annotate action not requested")
 }
 
+func TestJUnitHandler_Execute_DeduplicatesOverlappingGlobs(t *testing.T) {
+	stubJUnitCISeams(t)
+	path := writeFixture(t, junitFixture)
+
+	h := &JUnitHandler{BaseHandler: NewBaseHandler(junitStepType, CategoryOutput, false)}
+	step := &schema.WorkflowStep{Name: "report", Type: "junit", Files: []string{path, path}, Action: "summary"}
+
+	result, err := h.Execute(context.Background(), step, NewVariables())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "1 passed, 1 failed", result.Value)
+}
+
+func TestJUnitHandler_Execute_SkipsAnnotationsWithoutLocation(t *testing.T) {
+	_, annotations := stubJUnitCISeams(t)
+	path := writeFixture(t, `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="atmos">
+  <testsuite name="suite">
+    <testcase name="broken" classname="app">
+      <failure message="no source location">assertion failed</failure>
+    </testcase>
+  </testsuite>
+</testsuites>`)
+
+	h := &JUnitHandler{BaseHandler: NewBaseHandler(junitStepType, CategoryOutput, false)}
+	step := &schema.WorkflowStep{Name: "report", Type: "junit", Files: []string{path}, Action: "annotate"}
+
+	_, err := h.Execute(context.Background(), step, NewVariables())
+	require.NoError(t, err)
+	assert.Empty(t, *annotations)
+}
+
 func TestJUnitHandler_Execute_NoMatches(t *testing.T) {
 	stubJUnitCISeams(t)
 	h := &JUnitHandler{BaseHandler: NewBaseHandler(junitStepType, CategoryOutput, false)}

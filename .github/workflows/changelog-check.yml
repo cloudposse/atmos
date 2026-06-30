@@ -160,7 +160,10 @@ jobs:
         run: |
           # Find existing comment (warning or success)
           EXISTING_COMMENT=$(gh api --paginate "/repos/${GH_REPO}/issues/${PR_NUMBER}/comments" --jq '.[] | select(.body | contains("<!-- release-docs-check -->")) | .id' | head -1)
-          EXISTING_COMMENT_BODY=$(gh api --paginate "/repos/${GH_REPO}/issues/${PR_NUMBER}/comments" --jq '.[] | select(.body | contains("<!-- release-docs-check -->")) | .body' | head -1)
+          EXISTING_COMMENT_BODY=""
+          if [ -n "$EXISTING_COMMENT" ]; then
+            EXISTING_COMMENT_BODY=$(gh api "/repos/${GH_REPO}/issues/comments/$EXISTING_COMMENT" --jq '.body')
+          fi
 
           SUCCESS_COMMENT_BODY="<!-- release-docs-check -->
           > [!NOTE]

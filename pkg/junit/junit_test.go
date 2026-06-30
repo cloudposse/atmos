@@ -40,6 +40,21 @@ func TestAggregate_ComputesCounts(t *testing.T) {
 	assert.False(t, r.Passed())
 }
 
+func TestAggregate_ResetsTime(t *testing.T) {
+	r := Report{
+		Suites: []Suite{
+			{Name: "suite-a", Time: 1.25, Cases: []Case{{Name: "ok"}}},
+			{Name: "suite-b", Time: 2.75, Cases: []Case{{Name: "also-ok"}}},
+		},
+	}
+
+	r.Aggregate()
+	assert.Equal(t, 4.0, r.Time)
+
+	r.Aggregate()
+	assert.Equal(t, 4.0, r.Time, "re-aggregating should not add suite time twice")
+}
+
 func TestFormatParse_RoundTrip(t *testing.T) {
 	original := sampleReport()
 

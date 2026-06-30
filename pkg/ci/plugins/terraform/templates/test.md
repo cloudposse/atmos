@@ -17,7 +17,7 @@
 {{- else }} [![failed](https://shields.io/badge/TESTS-FAILED-ff0000?style=for-the-badge)](#user-content-result-{{$target}})
 {{- end }}
 
-<a id="result-{{$target}}" />
+<a id="result-{{$target}}"></a>
 
 {{- if and $test (gt (len $test.Runs) 0) }}
 

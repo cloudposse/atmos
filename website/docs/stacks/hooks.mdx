@@ -894,6 +894,9 @@ Stores](/stacks/sharing-state/stores).
   <dt>`hooks.<name>.kind`</dt>
   <dd>Which engine runs the hook. One of `store`, `command`, `git`, `step`, `steps`, `infracost`, `checkov`, `trivy`, `kics`. Aliased from legacy `command:` field.</dd>
 
+  <dt>CI hook kinds</dt>
+  <dd>`ci.check`, `ci.output`, `ci.summary`, `ci.upload`, and `ci.download` are reserved for Atmos CI integrations.</dd>
+
   <dt>`hooks.<name>.type`</dt>
   <dd>For `kind: step`: the [step type](#kind-step-run-a-step-type) to run (e.g. `container`, `http`, `toast`, `log`).</dd>
 

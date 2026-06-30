@@ -121,23 +121,35 @@ func (p *Plugin) emitTestAnnotations(ctx *plugin.HookContext, result *plugin.Out
 	}
 
 	var annotations []provider.Annotation
-	for _, run := range data.Runs {
-		if run.Status != "fail" && run.Status != "error" {
+	for i := range data.Runs {
+		run := &data.Runs[i]
+		if !shouldAnnotateTestRun(run) {
 			continue
 		}
-		annotations = append(annotations, provider.Annotation{
-			Path:      run.File,
-			StartLine: run.Line,
-			Level:     provider.AnnotationError,
-			Title:     "terraform test: " + run.Name,
-			Message:   run.Error,
-		})
+		annotations = append(annotations, annotationForTestRun(run))
 	}
 	if len(annotations) == 0 {
 		return
 	}
 	if err := annotator.Annotate(annotations); err != nil {
 		log.Warn("CI annotations failed", "error", err)
+	}
+}
+
+func shouldAnnotateTestRun(run *plugin.TerraformTestRun) bool {
+	if run.Status != "fail" && run.Status != "error" {
+		return false
+	}
+	return run.File != "" && run.Line > 0
+}
+
+func annotationForTestRun(run *plugin.TerraformTestRun) provider.Annotation {
+	return provider.Annotation{
+		Path:      run.File,
+		StartLine: run.Line,
+		Level:     provider.AnnotationError,
+		Title:     "terraform test: " + run.Name,
+		Message:   run.Error,
 	}
 }
 

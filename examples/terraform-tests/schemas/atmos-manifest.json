@@ -1171,6 +1171,25 @@
                       "type": {
                         "type": "string"
                       },
+                      "component": {
+                        "type": "string",
+                        "description": "Component name for component-backed step types."
+                      },
+                      "action": {
+                        "type": "string",
+                        "description": "Action selector for action-bearing step kinds."
+                      },
+                      "files": {
+                        "type": "array",
+                        "description": "File globs consumed by file-backed step types.",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "ephemeral": {
+                        "type": "boolean",
+                        "description": "Run the step with ephemeral resources when supported."
+                      },
                       "retry": {
                         "title": "retry",
                         "description": "Retry configuration for workflow step execution",
@@ -1239,11 +1258,13 @@
                           "type": "string"
                         },
                         "description": "Environment variables for the workflow step"
+                      },
+                      "with": {
+                        "type": "object",
+                        "description": "Parameters for the step named by type and action.",
+                        "additionalProperties": true
                       }
-                    },
-                    "required": [
-                      "command"
-                    ]
+                    }
                   }
                 }
               ]

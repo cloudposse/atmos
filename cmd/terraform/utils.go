@@ -103,16 +103,20 @@ func preResolveInteractiveSelection(cmd_ *cobra.Command, args []string) error {
 	return nil
 }
 
-// isMultiComponentInvocation reports whether any multi-component flag was explicitly
-// set on the command. It reads cmd flags directly (not the parsed info) because this
-// runs in PreRunE, before the subcommand parser has populated info via applyOptionsToInfo.
+// isMultiComponentInvocation reports whether any multi-component flag is set.
+// It checks explicit Cobra flags first, then Viper for env/config-driven values,
+// because this runs in PreRunE before applyOptionsToInfo has populated info.
 func isMultiComponentInvocation(cmd_ *cobra.Command) bool {
 	for _, name := range multiComponentFlagNames {
 		if f := cmd_.Flags().Lookup(name); f != nil && f.Changed {
 			return true
 		}
 	}
-	return false
+	v := viper.GetViper()
+	return v.GetBool("all") ||
+		v.GetBool("affected") ||
+		len(v.GetStringSlice("components")) > 0 ||
+		v.GetString("query") != ""
 }
 
 // applyPreResolvedComponent injects the interactively-selected component into info

@@ -50,6 +50,7 @@ func TestManifestSchema_HookWhenConditionForms(t *testing.T) {
 		"website":       loadWebsiteSchemaBytes(t),
 		"fixture":       loadFixtureSchemaBytes(t),
 		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
+		"stack-config":  loadStackConfigSchemaBytes(t),
 	}
 
 	validConditions := map[string]any{
@@ -81,6 +82,7 @@ func TestManifestSchema_HookRetryUsesWorkflowRetrySchema(t *testing.T) {
 		"website":       loadWebsiteSchemaBytes(t),
 		"fixture":       loadFixtureSchemaBytes(t),
 		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
+		"stack-config":  loadStackConfigSchemaBytes(t),
 	}
 
 	for schemaName, schemaData := range schemas {
@@ -201,6 +203,11 @@ func loadWebsiteSchemaBytes(t *testing.T) []byte {
 func loadFixtureSchemaBytes(t *testing.T) []byte {
 	t.Helper()
 	return loadSchemaFile(t, "../../tests/fixtures/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json")
+}
+
+func loadStackConfigSchemaBytes(t *testing.T) []byte {
+	t.Helper()
+	return loadSchemaFile(t, "schema/stacks/stack-config/1.0.json")
 }
 
 func loadSchemaFile(t *testing.T, path string) []byte {

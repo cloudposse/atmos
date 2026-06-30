@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -931,13 +932,7 @@ func buildStatusDescription(command string, result *plugin.OutputResult) string 
 
 	// Terraform test reports pass/fail counts rather than resource changes.
 	if testData, ok := result.Data.(*plugin.TerraformTestOutputData); ok {
-		if result.HasErrors {
-			if testData.Error > 0 {
-				return fmt.Sprintf("%d passed, %d failed, %d errored", testData.Pass, testData.Fail, testData.Error)
-			}
-			return fmt.Sprintf("%d passed, %d failed", testData.Pass, testData.Fail)
-		}
-		return fmt.Sprintf("%d passed", testData.Pass)
+		return buildTerraformTestStatusDescription(testData)
 	}
 
 	if result.HasErrors {
@@ -953,6 +948,23 @@ func buildStatusDescription(command string, result *plugin.OutputResult) string 
 	}
 
 	return "No changes"
+}
+
+func buildTerraformTestStatusDescription(testData *plugin.TerraformTestOutputData) string {
+	parts := []string{fmt.Sprintf("%d passed", testData.Pass)}
+	if testData.Fail > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed", testData.Fail))
+	}
+	if testData.Error > 0 {
+		parts = append(parts, fmt.Sprintf("%d errored", testData.Error))
+	}
+	if testData.Skip > 0 {
+		parts = append(parts, fmt.Sprintf("%d skipped", testData.Skip))
+	}
+	if len(testData.CleanupFailures) > 0 {
+		parts = append(parts, fmt.Sprintf("%d cleanup failed", len(testData.CleanupFailures)))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // getContextPrefix returns the context prefix from configuration, defaulting to "atmos".

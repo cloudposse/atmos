@@ -337,12 +337,16 @@ func computeTerraformSecretVarKeys(info *schema.ConfigAndStacksInfo) {
 // so resolved secrets are never written to the on-disk varfile. Returns the original map
 // unchanged when no secret-bearing variables were detected.
 func diskSafeVars(info *schema.ConfigAndStacksInfo) map[string]any {
-	if len(info.TerraformSecretVarKeys) == 0 {
+	testSecretVars := terraformTestSecretVars(info)
+	if len(info.TerraformSecretVarKeys) == 0 && len(testSecretVars) == 0 {
 		return info.ComponentVarsSection
 	}
 	safe := make(map[string]any, len(info.ComponentVarsSection))
 	for k, v := range info.ComponentVarsSection {
 		if info.TerraformSecretVarKeys[k] {
+			continue
+		}
+		if _, collidesWithSecretTestVar := testSecretVars[k]; collidesWithSecretTestVar {
 			continue
 		}
 		safe[k] = v
@@ -393,12 +397,17 @@ func diskSafeTerraformTestVars(info *schema.ConfigAndStacksInfo) map[string]any 
 	return safe
 }
 
-func terraformTestSecretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
+func terraformTestSecretVars(info *schema.ConfigAndStacksInfo) map[string]any {
 	vars := terraformTestVars(info)
 	if len(vars) == 0 {
-		return nil, nil
+		return nil
 	}
 	_, secret := tfvars.Partition(vars, atmosio.ContainsSecret)
+	return secret
+}
+
+func terraformTestSecretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
+	secret := terraformTestSecretVars(info)
 	if len(secret) == 0 {
 		return nil, nil
 	}

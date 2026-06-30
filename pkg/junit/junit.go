@@ -89,7 +89,7 @@ func (c *Case) Status() string {
 func (r *Report) Aggregate() {
 	defer perf.Track(nil, "junit.Report.Aggregate")()
 
-	r.Tests, r.Failures, r.Errors, r.Skipped = 0, 0, 0, 0
+	r.Tests, r.Failures, r.Errors, r.Skipped, r.Time = 0, 0, 0, 0, 0
 	for i := range r.Suites {
 		s := &r.Suites[i]
 		s.Tests, s.Failures, s.Errors, s.Skipped = 0, 0, 0, 0

@@ -114,6 +114,7 @@ func (h *JUnitHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 func (h *JUnitHandler) loadReport(step *schema.WorkflowStep, vars *Variables) (junit.Report, int, error) {
 	var merged junit.Report
 	fileCount := 0
+	seen := make(map[string]struct{})
 
 	for _, pattern := range step.Files {
 		resolved, err := vars.Resolve(pattern)
@@ -125,6 +126,11 @@ func (h *JUnitHandler) loadReport(step *schema.WorkflowStep, vars *Variables) (j
 			return junit.Report{}, 0, fmt.Errorf("step '%s': invalid files pattern %q: %w", step.Name, resolved, err)
 		}
 		for _, path := range matches {
+			cleanPath := filepath.Clean(path)
+			if _, ok := seen[cleanPath]; ok {
+				continue
+			}
+			seen[cleanPath] = struct{}{}
 			data, readErr := os.ReadFile(path)
 			if readErr != nil {
 				return junit.Report{}, 0, fmt.Errorf("step '%s': failed to read JUnit file %q: %w", step.Name, path, readErr)
@@ -170,6 +176,9 @@ func emitAnnotations(report *junit.Report) {
 	}
 	annotations := make([]ci.Annotation, 0, len(failed))
 	for _, f := range failed {
+		if f.File == "" || f.Line <= 0 {
+			continue
+		}
 		annotations = append(annotations, ci.Annotation{
 			Path:      f.File,
 			StartLine: f.Line,
@@ -177,6 +186,9 @@ func emitAnnotations(report *junit.Report) {
 			Title:     fmt.Sprintf("test: %s", f.Name),
 			Message:   f.Message,
 		})
+	}
+	if len(annotations) == 0 {
+		return
 	}
 	if err := annotateFn(annotations); err != nil {
 		log.Debug("junit step: failed to emit CI annotations", "error", err)

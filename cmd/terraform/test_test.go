@@ -129,3 +129,32 @@ func TestTerraformTestStatusWriterBuffersPartialLines(t *testing.T) {
 	assert.Equal(t, len("ss\n  run \"broken\"... fail\n"), n)
 	assert.Equal(t, "✓ run \"ok\"... pass\n✗ run \"broken\"... fail\n", ansi.Strip(out.String()))
 }
+
+func TestTerraformTestStatusWriterFlushesPartialFinalLine(t *testing.T) {
+	initTerraformTestUI(t)
+	var out bytes.Buffer
+	w := newTerraformTestStatusWriter(&out)
+
+	n, err := w.Write([]byte("  run \"ok\"... pass"))
+	require.NoError(t, err)
+	assert.Equal(t, len("  run \"ok\"... pass"), n)
+	assert.Empty(t, out.String())
+
+	require.NoError(t, w.Flush())
+	assert.Equal(t, "✓ run \"ok\"... pass", ansi.Strip(out.String()))
+	assert.NoError(t, w.Flush(), "second flush should be a no-op")
+}
+
+func TestTerraformTestStatusWriterTeeKeepsRawOutputForHooks(t *testing.T) {
+	initTerraformTestUI(t)
+	var rawOut, terminalOut bytes.Buffer
+	statusWriter := newTerraformTestStatusWriter(&terminalOut)
+	w := stdio.MultiWriter(&rawOut, statusWriter)
+
+	_, err := w.Write([]byte("  run \"ok\"... pass"))
+	require.NoError(t, err)
+	require.NoError(t, statusWriter.Flush())
+
+	assert.Equal(t, "  run \"ok\"... pass", rawOut.String())
+	assert.Equal(t, "✓ run \"ok\"... pass", ansi.Strip(terminalOut.String()))
+}

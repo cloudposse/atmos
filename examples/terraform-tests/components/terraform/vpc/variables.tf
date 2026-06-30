@@ -7,6 +7,11 @@ variable "cidr_block" {
   type        = string
   description = "CIDR block for the fixture VPC."
   default     = "10.99.0.0/16"
+
+  validation {
+    condition     = can(cidrhost(var.cidr_block, 0))
+    error_message = "cidr_block must be a valid IPv4 or IPv6 CIDR block."
+  }
 }
 
 variable "stage" {

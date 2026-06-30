@@ -280,6 +280,56 @@ func TestBuildStatusDescription(t *testing.T) {
 		result := &plugin.OutputResult{HasErrors: true}
 		assert.Equal(t, "Failed", buildStatusDescription("plan", result))
 	})
+
+	t.Run("with terraform test skipped and cleanup failure", func(t *testing.T) {
+		result := &plugin.OutputResult{
+			HasErrors: true,
+			Data: &plugin.TerraformTestOutputData{
+				Pass:  2,
+				Fail:  1,
+				Error: 1,
+				Skip:  3,
+				CleanupFailures: []plugin.TerraformTestCleanupFailure{
+					{File: "tests/app.tftest.hcl", Run: "cleanup"},
+				},
+			},
+		}
+		assert.Equal(t, "2 passed, 1 failed, 1 errored, 3 skipped, 1 cleanup failed", buildStatusDescription("test", result))
+	})
+
+	t.Run("with terraform test skips and no errors", func(t *testing.T) {
+		result := &plugin.OutputResult{
+			Data: &plugin.TerraformTestOutputData{
+				Pass: 4,
+				Skip: 2,
+			},
+		}
+		assert.Equal(t, "4 passed, 2 skipped", buildStatusDescription("test", result))
+	})
+}
+
+func TestEmitTestAnnotationsSkipsFailuresWithoutLocation(t *testing.T) {
+	provider := newMockProvider()
+	p := &Plugin{}
+	ctx := &plugin.HookContext{Provider: provider}
+	result := &plugin.OutputResult{
+		Data: &plugin.TerraformTestOutputData{
+			Runs: []plugin.TerraformTestRun{
+				{Name: "missing-file", Status: "fail", Error: "no file", Line: 12},
+				{Name: "missing-line", File: "tests/app.tftest.hcl", Status: "error", Error: "no line"},
+				{Name: "located", File: "tests/app.tftest.hcl", Line: 30, Status: "fail", Error: "broken"},
+				{Name: "passing", File: "tests/app.tftest.hcl", Line: 31, Status: "pass"},
+			},
+		},
+	}
+
+	p.emitTestAnnotations(ctx, result)
+
+	require.Len(t, provider.annotateCalls, 1)
+	require.Len(t, provider.annotateCalls[0], 1)
+	assert.Equal(t, "tests/app.tftest.hcl", provider.annotateCalls[0][0].Path)
+	assert.Equal(t, 30, provider.annotateCalls[0][0].StartLine)
+	assert.Equal(t, "terraform test: located", provider.annotateCalls[0][0].Title)
 }
 
 func TestGetContextPrefix(t *testing.T) {
