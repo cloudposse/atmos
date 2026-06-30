@@ -225,6 +225,46 @@ func TestStepFromHookDecodesNestedConfig(t *testing.T) {
 	assert.Equal(t, 80, ws.Viewport.Width)
 }
 
+func TestVerifyStepHookType(t *testing.T) {
+	require.NoError(t, verifyStepHookType("announce", "log"))
+
+	missingErr := verifyStepHookType("announce", "")
+	require.Error(t, missingErr)
+	assert.ErrorIs(t, missingErr, errUtils.ErrInvalidConfig)
+
+	unknownErr := verifyStepHookType("announce", "no-such-step")
+	require.Error(t, unknownErr)
+	assert.ErrorIs(t, unknownErr, errUtils.ErrUnknownStepType)
+}
+
+func TestStepsFromHookValidationErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		hook *Hook
+	}{
+		{
+			name: "missing with",
+			hook: &Hook{Kind: stepsKindName},
+		},
+		{
+			name: "with is not a list",
+			hook: &Hook{Kind: stepsKindName, With: map[string]any{"type": "log"}},
+		},
+		{
+			name: "empty list",
+			hook: &Hook{Kind: stepsKindName, With: []any{}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := stepsFromHook(tt.hook)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		})
+	}
+}
+
 func TestStepEngineRunLog(t *testing.T) {
 	hook := &Hook{
 		Kind: stepKindName,
@@ -257,6 +297,46 @@ func TestStepEngineSeedsAtmosEnv(t *testing.T) {
 	assert.Equal(t, "test-stack", captured["ATMOS_STACK"])
 	assert.Equal(t, "test-component", captured["ATMOS_COMPONENT"])
 	assert.Equal(t, "from-hook", captured["CUSTOM_HOOK_VAR"])
+}
+
+func TestStepsSummary(t *testing.T) {
+	tests := []struct {
+		name   string
+		result *runnerstep.StepResult
+		runErr error
+		status SummaryStatus
+		title  string
+	}{
+		{
+			name:   "failure",
+			runErr: errFlaky,
+			status: StatusFailure,
+			title:  "steps failed",
+		},
+		{
+			name:   "skipped",
+			result: runnerstep.NewStepResult("skip").WithSkipped(),
+			status: StatusSuccess,
+			title:  "steps skipped",
+		},
+		{
+			name:   "success",
+			result: runnerstep.NewStepResult("ok"),
+			status: StatusSuccess,
+			title:  "steps ok",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := stepsSummary(tt.result, tt.runErr)
+			require.NotNil(t, out)
+			require.NotNil(t, out.Summary)
+			assert.Equal(t, stepsKindName, out.Summary.Kind)
+			assert.Equal(t, tt.status, out.Summary.Status)
+			assert.Equal(t, tt.title, out.Summary.Title)
+		})
+	}
 }
 
 func TestRunsOnStatus(t *testing.T) {
@@ -538,6 +618,7 @@ func TestVerifyStepsHookTypes(t *testing.T) {
 		hook := &Hook{
 			Kind: stepsKindName,
 			With: []any{
+				map[string]any{"content": "defaults to shell"},
 				map[string]any{"type": "log", "content": "hello"},
 				map[string]any{"type": "atmos", "command": "version"},
 			},

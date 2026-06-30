@@ -155,6 +155,53 @@ func TestRenderTestText_Empty(t *testing.T) {
 	assert.Empty(t, RenderTestText([]byte("not json")))
 }
 
+func TestFileStatusFromCounts(t *testing.T) {
+	tests := []struct {
+		name string
+		file plugin.TerraformTestFile
+		want string
+	}{
+		{
+			name: "error wins",
+			file: plugin.TerraformTestFile{Pass: 1, Fail: 1, Error: 1, Skip: 1},
+			want: testStatusError,
+		},
+		{
+			name: "fail wins over skip",
+			file: plugin.TerraformTestFile{Pass: 1, Fail: 1, Skip: 1},
+			want: testStatusFail,
+		},
+		{
+			name: "only skipped",
+			file: plugin.TerraformTestFile{Skip: 2},
+			want: testStatusSkip,
+		},
+		{
+			name: "pass when at least one pass and skips",
+			file: plugin.TerraformTestFile{Pass: 1, Skip: 1},
+			want: testStatusPass,
+		},
+		{
+			name: "empty defaults pass",
+			file: plugin.TerraformTestFile{},
+			want: testStatusPass,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, fileStatusFromCounts(tt.file))
+		})
+	}
+}
+
+func TestDiagMessage(t *testing.T) {
+	assert.Equal(t, "summary: detail", diagMessage(testJSONDiag{Summary: "summary", Detail: "detail"}))
+	assert.Equal(t, "summary", diagMessage(testJSONDiag{Summary: "summary"}))
+	assert.Equal(t, "detail", diagMessage(testJSONDiag{Detail: "detail"}))
+	assert.Empty(t, diagMessage(testJSONDiag{}))
+}
+
 func TestToJUnit(t *testing.T) {
 	data := testJSONData(t, ParseTestJSON([]byte(sampleTestJSON)))
 	report := toJUnit(data, "app")

@@ -235,6 +235,67 @@ func TestPrintAndWriteVarFiles_IgnoresTerraformTestVarsForNonTestCommand(t *test
 	assert.NoFileExists(t, expectedVarfilePath)
 }
 
+func TestTerraformTestVarsDefaults(t *testing.T) {
+	tests := []struct {
+		name string
+		info *schema.ConfigAndStacksInfo
+	}{
+		{
+			name: "nil info",
+			info: nil,
+		},
+		{
+			name: "non test command",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				ComponentSection: map[string]any{
+					cfg.TestSectionName: map[string]any{
+						cfg.VarsSectionName: map[string]any{"fixture_vpc_id": "vpc-123"},
+					},
+				},
+			},
+		},
+		{
+			name: "missing test section",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:       "test",
+				ComponentSection: map[string]any{},
+			},
+		},
+		{
+			name: "test section without vars",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "test",
+				ComponentSection: map[string]any{
+					cfg.TestSectionName: map[string]any{},
+				},
+			},
+		},
+		{
+			name: "empty test vars",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "test",
+				ComponentSection: map[string]any{
+					cfg.TestSectionName: map[string]any{
+						cfg.VarsSectionName: map[string]any{},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Nil(t, terraformTestVars(tt.info))
+			assert.False(t, hasTerraformTestVars(tt.info))
+			assert.Nil(t, diskSafeTerraformTestVars(tt.info))
+			env, err := terraformTestSecretVarEnv(tt.info)
+			require.NoError(t, err)
+			assert.Nil(t, env)
+		})
+	}
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // validateTerraformComponent
 // ──────────────────────────────────────────────────────────────────────────────
