@@ -1456,6 +1456,77 @@ func TestExecuteWorkflow_DryRunBackgroundAndControlSteps(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestExecuteWorkflow_DryRunShellStepContainerOverride(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test shell step container override in dry run",
+		Steps: []schema.WorkflowStep{{
+			Name:    "step-container",
+			Type:    schema.TaskTypeShell,
+			Command: "echo in step container",
+			Container: &schema.WorkflowContainer{
+				Image: "alpine:latest",
+			},
+		}},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-step-container", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
+	require.NoError(t, err)
+}
+
+func TestExecuteWorkflow_DryRunShellWorkflowContainer(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test workflow container shell step in dry run",
+		Container: &schema.WorkflowContainer{
+			Image: "alpine:latest",
+		},
+		Output: "none",
+		Steps: []schema.WorkflowStep{{
+			Name:    "workflow-container",
+			Type:    schema.TaskTypeShell,
+			Command: "echo in workflow container",
+		}},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-workflow-container", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
+	require.NoError(t, err)
+}
+
+func TestExecuteWorkflow_DryRunAtmosStepStackBeforeSeparator(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test atmos step stack insertion before separator",
+		Steps: []schema.WorkflowStep{{
+			Name:    "plan",
+			Type:    schema.TaskTypeAtmos,
+			Command: "terraform plan vpc -- -target=module.example",
+			Stack:   "tenant1-ue2-dev",
+		}},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-atmos-stack-before-separator", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
+	require.NoError(t, err)
+}
+
 func registerGitHubLogGroupingForWorkflowTest(t *testing.T) {
 	t.Helper()
 
