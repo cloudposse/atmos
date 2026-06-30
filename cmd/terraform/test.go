@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // testParser handles flag parsing for the test command.
@@ -172,23 +173,31 @@ func formatTerraformTestStatusLine(line string) string {
 	if len(body) != len(line) {
 		ending = terraformTestOutputNewline
 	}
-	if !strings.Contains(ansi.Strip(body), "...") {
+	plain := ansi.Strip(body)
+	if !strings.Contains(plain, "...") {
 		return line
 	}
-	match := terraformTestStatusSuffixRE.FindStringSubmatchIndex(body)
+	match := terraformTestStatusSuffixRE.FindStringSubmatchIndex(plain)
 	if match == nil {
 		return line
 	}
-	status := body[match[2]:match[3]]
-	prefix := body[:match[0]]
+	status := plain[match[2]:match[3]]
+	text := strings.TrimLeft(plain, " \t")
 	switch status {
 	case "pass":
-		return prefix + ui.FormatSuccess(status) + ending
+		return formatTerraformTestToast(theme.IconCheckmark, text, ending, line)
 	case "fail", "error":
-		return prefix + ui.FormatError(status) + ending
+		return formatTerraformTestToast(theme.IconXMark, text, ending, line)
 	default:
 		return line
 	}
+}
+
+func formatTerraformTestToast(icon, text, ending, fallback string) string {
+	if ui.Format == nil {
+		return fallback
+	}
+	return strings.TrimSuffix(ui.Format.Toast(icon, text), terraformTestOutputNewline) + ending
 }
 
 // appendJSONFlag adds `-json` to the terraform test pass-through flags unless it

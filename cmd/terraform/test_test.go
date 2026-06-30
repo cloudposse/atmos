@@ -2,13 +2,41 @@ package terraform
 
 import (
 	"bytes"
+	stdio "io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ansi"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+type terraformTestStreams struct {
+	stdin  stdio.Reader
+	stdout stdio.Writer
+	stderr stdio.Writer
+}
+
+func (s *terraformTestStreams) Input() stdio.Reader     { return s.stdin }
+func (s *terraformTestStreams) Output() stdio.Writer    { return s.stdout }
+func (s *terraformTestStreams) Error() stdio.Writer     { return s.stderr }
+func (s *terraformTestStreams) RawOutput() stdio.Writer { return s.stdout }
+func (s *terraformTestStreams) RawError() stdio.Writer  { return s.stderr }
+
+func initTerraformTestUI(t *testing.T) {
+	t.Helper()
+	streams := &terraformTestStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: &bytes.Buffer{},
+		stderr: &bytes.Buffer{},
+	}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+}
 
 func TestAppendJSONFlag(t *testing.T) {
 	t.Run("appends when missing", func(t *testing.T) {
@@ -44,22 +72,22 @@ func TestFormatTerraformTestStatusLine(t *testing.T) {
 		{
 			name: "success",
 			line: "  run \"ok\"... pass\n",
-			want: "  run \"ok\"... ✓ pass\n",
+			want: "✓ run \"ok\"... pass\n",
 		},
 		{
 			name: "failure",
 			line: "  run \"broken\"... fail\n",
-			want: "  run \"broken\"... ✗ fail\n",
+			want: "✗ run \"broken\"... fail\n",
 		},
 		{
 			name: "error",
 			line: "tests/app.tftest.hcl... error\n",
-			want: "tests/app.tftest.hcl... ✗ error\n",
+			want: "✗ tests/app.tftest.hcl... error\n",
 		},
 		{
 			name: "strips terraform status color",
 			line: "tests/app.tftest.hcl... \x1b[32mpass\x1b[0m\n",
-			want: "tests/app.tftest.hcl... ✓ pass\n",
+			want: "✓ tests/app.tftest.hcl... pass\n",
 		},
 		{
 			name: "in progress unchanged",
@@ -75,12 +103,14 @@ func TestFormatTerraformTestStatusLine(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			initTerraformTestUI(t)
 			assert.Equal(t, tt.want, ansi.Strip(formatTerraformTestStatusLine(tt.line)))
 		})
 	}
 }
 
 func TestTerraformTestStatusWriterBuffersPartialLines(t *testing.T) {
+	initTerraformTestUI(t)
 	var out bytes.Buffer
 	w := newTerraformTestStatusWriter(&out)
 
@@ -92,5 +122,5 @@ func TestTerraformTestStatusWriterBuffersPartialLines(t *testing.T) {
 	n, err = w.Write([]byte("ss\n  run \"broken\"... fail\n"))
 	require.NoError(t, err)
 	assert.Equal(t, len("ss\n  run \"broken\"... fail\n"), n)
-	assert.Equal(t, "  run \"ok\"... ✓ pass\n  run \"broken\"... ✗ fail\n", ansi.Strip(out.String()))
+	assert.Equal(t, "✓ run \"ok\"... pass\n✗ run \"broken\"... fail\n", ansi.Strip(out.String()))
 }
