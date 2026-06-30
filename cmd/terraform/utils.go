@@ -719,7 +719,11 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		return e.ExecuteTerraformAllWithContext(ctx, &info)
 	}
 	if isMultiComponentExecution(&info) {
-		wasMultiComponentExecution = true
+    wasMultiComponentExecution = true
+		if info.All {
+			log.Debug("Routing to ExecuteTerraformAll (dependency-ordered --all)")
+			return e.ExecuteTerraformAll(&info)
+		}
 		log.Debug("Routing to ExecuteTerraformQuery (multi-component)")
 		wirePerComponentHook(&info, subCommand, actualCmd)
 		ctx, stop := terraformSignalContext(actualCmd)

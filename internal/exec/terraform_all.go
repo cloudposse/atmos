@@ -39,6 +39,18 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 		return fmt.Errorf(errWrapFmt, errUtils.ErrInitializeCLIConfig, err)
 	}
 
+	// Create auth manager for YAML function processing during stack description.
+	// Matches ExecuteTerraformQuery so !terraform.state and identity-aware stores work.
+	authManager, err := createQueryAuthManager(info, &atmosConfig)
+	if err != nil {
+		return err
+	}
+
+	if authManager != nil {
+		resolver := authbridge.NewResolver(authManager, info)
+		atmosConfig.Stores.SetAuthContextResolver(resolver)
+	}
+
 	log.Debug("Executing terraform command for all components in dependency order", "command", info.SubCommand)
 
 	// Create auth manager so YAML functions (e.g. !terraform.state) can use authenticated
