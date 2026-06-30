@@ -244,11 +244,33 @@ commands:
             command: |
               set -euo pipefail
               demos_s3_uri="s3://cplive-plat-ue2-prod-atmos-docs-origin/img/demos"
+              demo_cache_control="public, max-age=3600"
               repo="$(git rev-parse --show-toplevel)"
               cd "$repo"
               aws s3 sync website/static/img/demos "$demos_s3_uri" \
                 --exclude '*' --include '*.webm' --include '*.mp4' --include '*.png' \
-                --cache-control 'public, max-age=86400'
+                --cache-control "$demo_cache_control"
+
+              # `aws s3 sync` only applies metadata to uploaded objects. Restamp
+              # existing demo objects too so unchanged renders get the same TTL.
+              aws s3 cp "$demos_s3_uri" "$demos_s3_uri" \
+                --recursive --exclude '*' --include '*.webm' \
+                --metadata-directive REPLACE \
+                --content-type 'video/webm' \
+                --cache-control "$demo_cache_control" \
+                --no-progress
+              aws s3 cp "$demos_s3_uri" "$demos_s3_uri" \
+                --recursive --exclude '*' --include '*.mp4' \
+                --metadata-directive REPLACE \
+                --content-type 'video/mp4' \
+                --cache-control "$demo_cache_control" \
+                --no-progress
+              aws s3 cp "$demos_s3_uri" "$demos_s3_uri" \
+                --recursive --exclude '*' --include '*.png' \
+                --metadata-directive REPLACE \
+                --content-type 'image/png' \
+                --cache-control "$demo_cache_control" \
+                --no-progress
           - type: toast
             level: success
             content: "Synced website/static/img/demos/ to s3://cplive-plat-ue2-prod-atmos-docs-origin/img/demos"

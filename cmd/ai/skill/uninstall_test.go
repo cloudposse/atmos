@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
@@ -545,11 +546,11 @@ This is a test skill.
 	err = os.WriteFile(registryPath, registryData, 0o600)
 	require.NoError(t, err)
 
-	// Reset the force flag.
-	forceFlag := uninstallCmd.Flags().Lookup("force")
-	if forceFlag != nil {
-		_ = forceFlag.Value.Set("true") // Use force to skip confirmation prompt.
-	}
+	// Use force to skip confirmation prompt.
+	require.NoError(t, uninstallCmd.Flags().Set("force", "true"))
+	t.Cleanup(func() {
+		_ = uninstallCmd.Flags().Set("force", "false")
+	})
 
 	// Run the uninstall command.
 	err = uninstallCmd.RunE(uninstallCmd, []string{"test-skill"})
@@ -557,7 +558,7 @@ This is a test skill.
 	// Verify uninstallation was successful.
 	require.NoError(t, err)
 
-	assert.Contains(t, uiOutput.String(), "uninstalled successfully")
+	assert.Contains(t, atmosansi.Strip(uiOutput.String()), "uninstalled successfully")
 
 	// Verify the skill directory was removed.
 	_, statErr := os.Stat(skillPath)
@@ -629,11 +630,11 @@ Another test skill.
 	err = os.WriteFile(registryPath, registryData, 0o600)
 	require.NoError(t, err)
 
-	// Reset the force flag.
-	forceFlag := uninstallCmd.Flags().Lookup("force")
-	if forceFlag != nil {
-		_ = forceFlag.Value.Set("true") // Use force to skip confirmation prompt.
-	}
+	// Use force to skip confirmation prompt.
+	require.NoError(t, uninstallCmd.Flags().Set("force", "true"))
+	t.Cleanup(func() {
+		_ = uninstallCmd.Flags().Set("force", "false")
+	})
 
 	// Capture stdout.
 	oldStdout := os.Stdout
