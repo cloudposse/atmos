@@ -3,7 +3,7 @@
 # exactly the component that changed — the same git-aware detection CI uses to act
 # on only what changed.
 #
-# Self-contained: builds a throwaway git repo from examples/demo-stacks in a temp
+# Self-contained: builds a throwaway git repo from the landing fixture in a temp
 # dir (no tracked files are touched) and compares against the hidden baseline
 # branch. No emulator needed. Uses `perl -i` (portable across macOS/Linux).
 
@@ -23,14 +23,13 @@ Type `export ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE=true` Enter
 Type `repo="$(git rev-parse --show-toplevel)"` Enter
 Type `work="$(mktemp -d)"` Enter
 Type `export CI=true` Enter
-Type `rsync -a --exclude '.terraform' --exclude '*.terraform.tfvars.json' --exclude 'terraform.tfstate*' "$repo/examples/demo-stacks/" "$work/"` Enter
+Type `rsync -a --exclude '.terraform' --exclude '*.terraform.tfvars.json' --exclude 'terraform.tfstate*' "$repo/demo/landing/fixtures/local-ci/" "$work/"` Enter
 Type `cd "$work"` Enter
 Type `git init -q && git config user.email demo@atmos.tools && git config user.name demo && git config commit.gpgsign false && git add -A && git commit -qm baseline` Enter
 Wait /❯$/
 Type `git branch baseline` Enter
 Wait /❯$/
-Type `atmos terraform workspace new myapp -s dev` Enter
-Wait+Screen /workspace.*dev|Created and switched|Switched/
+Type `atmos terraform workspace new myapp -s dev || exit $?` Enter
 Wait /❯$/
 Type "clear" Enter
 Wait /❯$/
@@ -38,7 +37,7 @@ Show
 
 # --- On camera: change one value and commit it ---
 Sleep 800ms
-Type `perl -i -pe 's/location: Seattle/location: Berlin/' stacks/deploy/dev.yaml` Sleep 400ms Enter
+Type `perl -i -pe 's/location: Stockholm/location: Berlin/' stacks/deploy/dev.yaml` Sleep 400ms Enter
 Wait /❯$/
 Type "git diff stacks/deploy/dev.yaml" Sleep 400ms Enter
 Wait /❯$/
@@ -50,10 +49,9 @@ Wait /❯$/
 Type `atmos list affected --ref baseline` Sleep 600ms Enter
 Wait /❯$/
 Sleep 4s
-# Apply scrolls a lot of output; wait for the sentinel then the prompt.
-# (Wait+Screen mis-reads scrollback on scrolling output, so we use a sentinel echo.)
-Type `atmos terraform apply --affected --ref baseline --ci && echo "__APPLY_OK__"` Sleep 600ms Enter
-Wait /__APPLY_OK__/
+# Apply scrolls a lot of output; fail the shell if apply fails, then wait for
+# the returned prompt. Screen/sentinel matching is brittle after this much output.
+Type `atmos terraform apply --affected --ref baseline --ci || exit $?` Sleep 600ms Enter
 Wait /❯$/
 Sleep 3s
 

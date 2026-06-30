@@ -15,7 +15,7 @@ cd demo/landing
 atmos demo check hero        # FAST dry-run → readable .ascii, short timeout (do this first!)
 atmos demo record hero       # full render of one tape → website/static/img/demos/
 atmos demo record all        # render every tape
-atmos demo publish           # aws s3 sync renders to the docs S3/CDN origin
+atmos demo publish --profile=managers --identity=plat-prod/terraform  # local SSO → docs S3/CDN origin
 atmos demo clean             # remove local renders + stop stray emulator containers
 ```
 
@@ -26,6 +26,15 @@ broken command or a stuck `Wait` shows up in seconds, not after a multi-minute v
 `./build/atmos` on PATH so the demos use this branch's `atmos`, not an older one.)
 
 CI runs the same entrypoint: [`.github/workflows/landing-demos.yaml`](../../.github/workflows/landing-demos.yaml).
+In CI, `atmos demo publish` uses the command's `docs/publish` GitHub OIDC identity.
+Locally, override that identity with `--identity=plat-prod/terraform` so publishing
+uses manager SSO credentials from `--profile=managers`.
+The `managers` profile is project-local, so run these commands from `demo/landing`.
+If the local SSO session has expired, refresh it first:
+
+```shell
+atmos auth login --profile=managers --identity=plat-prod/terraform
+```
 
 ## The renders are never committed
 
@@ -47,7 +56,7 @@ dev), `DemoVideo` falls back to the gitignored local copies so you can preview b
 - The `FiraCode Nerd Font` is expected for the rendered glyphs.
 - A container runtime (Docker or Podman) for the emulator-backed tapes — this is the one
   thing that can't be auto-installed (it's a system daemon, not a single binary).
-- The k8s example installs `helmfile`, `helm`, and `kubectl` through Atmos toolchain
+- The Kubernetes landing fixture installs `helmfile`, `helm`, and `kubectl` through Atmos toolchain
   dependencies; `emulators.tape` brings up the AWS/GCP/Azure (Floci) and k3s emulators.
 - The AWS CLI for `atmos demo publish`.
 - **A locally built atmos** (`make build`, on `PATH`): the emulator commands these tapes use
@@ -83,12 +92,12 @@ in `defaults.tape`.
 
 | Tape | Section | Example | Emulator |
 |------|---------|---------|----------|
-| `hero.tape` | Hero | `examples/demo-stacks` | none |
+| `hero.tape` | Hero | `demo/landing/fixtures/hero` | none |
 | `how-it-works.tape` | How It Works | temp copy of `demo/landing/fixtures/how-it-works` | none |
 | `terraform.tape` | Terraform & OpenTofu | `demo/landing/fixtures/terraform` | none |
-| `kubernetes.tape` | Kubernetes & Helm | `examples/emulator-k8s` | k3s |
+| `kubernetes.tape` | Kubernetes & Helm | `demo/landing/fixtures/kubernetes` | k3s |
 | `emulators.tape` | Containers & Emulators | `demo/landing/fixtures/emulators` | aws/gcp/azure (Floci) + k3s |
-| `local-ci.tape` | Local = CI | temp repo from `examples/demo-stacks` | none |
+| `local-ci.tape` | Local = CI | temp repo from `demo/landing/fixtures/local-ci` | none |
 | `secrets.tape` | Secrets & Stores | temp copy of `demo/landing/fixtures/secrets` | none |
 | `dx.tape` | Developer experience | `demo/landing/fixtures/dx` | aws |
 | `extensibility.tape` | Extensible by design | temp copy of `demo/landing/fixtures/extensibility` | none |

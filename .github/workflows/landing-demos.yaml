@@ -51,7 +51,7 @@ jobs:
       # Fonts only. Most CLI tooling comes from the Atmos toolchain: `atmos demo record`
       # auto-installs vhs/ffmpeg from the command's `dependencies.tools` (pinned in
       # demo/landing/atmos.yaml), and the Kubernetes tape's helm/helmfile/kubectl are
-      # auto-installed by `atmos helmfile` from the k8s example's component dependencies.
+      # auto-installed by `atmos helmfile` from the landing fixture's component dependencies.
       # Fonts are the one thing the toolchain can't provide (aqua ships binaries, not fonts).
       - name: Install Nerd Font
         run: |
@@ -78,7 +78,7 @@ jobs:
       # helm/helmfile) and `atmos demo record` (vhs/ffmpeg), `atmos terraform`
       # expects terraform already on PATH — without it, `atmos terraform init` in dx.tape
       # HANGS forever under VHS's interactive TTY (it fast-fails "executable not found"
-      # non-interactively), so the demos never render. Confirmed via landing-demos-debug.
+      # non-interactively), so the demos never render.
       - name: Install Terraform via Atmos toolchain
         run: |
           atmos toolchain install hashicorp/terraform
