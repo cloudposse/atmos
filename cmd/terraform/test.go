@@ -2,6 +2,9 @@ package terraform
 
 import (
 	"bytes"
+	"io"
+	"os"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -25,6 +28,8 @@ var testParser *flags.StandardParser
 var capturedTestOutput string
 
 const terraformTestOutputNewline = "\n"
+
+var terraformTestStatusSuffixRE = regexp.MustCompile(`(?:\x1b\[[0-9;]*m)*(pass|fail|error)(?:\x1b\[[0-9;]*m)*$`)
 
 // testCmd represents the terraform test command.
 var testCmd = &cobra.Command{
@@ -97,6 +102,8 @@ For complete Terraform/OpenTofu documentation, see:
 			opts.AppendArgs = appendJSONFlag(opts.AppendArgs)
 			shellOpts = append(shellOpts, e.WithStdoutOverride(&stdoutBuf))
 			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
+		} else {
+			shellOpts = append(shellOpts, e.WithStdoutOverride(newTerraformTestStatusWriter(os.Stdout)))
 		}
 
 		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
@@ -114,7 +121,7 @@ For complete Terraform/OpenTofu documentation, see:
 			// before any test executed), never swallow what terraform actually wrote:
 			// surface the raw captured stdout and stderr so the failure is visible.
 			if text := tfci.RenderTestText([]byte(jsonOut)); text != "" {
-				writeTerraformTestText(text)
+				ui.Write(text)
 			} else {
 				if jsonOut != "" {
 					ui.Write(jsonOut)
@@ -135,27 +142,52 @@ For complete Terraform/OpenTofu documentation, see:
 	},
 }
 
-func writeTerraformTestText(text string) {
-	trimmed := strings.TrimSuffix(text, terraformTestOutputNewline)
-	if trimmed == "" {
-		return
-	}
-	lines := strings.Split(trimmed, terraformTestOutputNewline)
-	summary := lines[len(lines)-1]
-	if len(lines) > 1 {
-		body := strings.Join(lines[:len(lines)-1], terraformTestOutputNewline)
-		if body != "" {
-			ui.Writeln(body)
-		}
-	}
+type terraformTestStatusWriter struct {
+	w   io.Writer
+	buf []byte
+}
 
-	switch {
-	case strings.HasPrefix(summary, "Success!"):
-		ui.Success(summary)
-	case strings.HasPrefix(summary, "Failure!"):
-		ui.Error(summary)
+func newTerraformTestStatusWriter(w io.Writer) io.Writer {
+	return &terraformTestStatusWriter{w: w}
+}
+
+func (w *terraformTestStatusWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	for {
+		idx := bytes.IndexByte(w.buf, '\n')
+		if idx < 0 {
+			return len(p), nil
+		}
+		line := string(w.buf[:idx+1])
+		if _, err := io.WriteString(w.w, formatTerraformTestStatusLine(line)); err != nil {
+			return 0, err
+		}
+		w.buf = w.buf[idx+1:]
+	}
+}
+
+func formatTerraformTestStatusLine(line string) string {
+	body := strings.TrimSuffix(line, terraformTestOutputNewline)
+	ending := ""
+	if len(body) != len(line) {
+		ending = terraformTestOutputNewline
+	}
+	if !strings.Contains(ansi.Strip(body), "...") {
+		return line
+	}
+	match := terraformTestStatusSuffixRE.FindStringSubmatchIndex(body)
+	if match == nil {
+		return line
+	}
+	status := body[match[2]:match[3]]
+	prefix := body[:match[0]]
+	switch status {
+	case "pass":
+		return prefix + ui.FormatSuccess(status) + ending
+	case "fail", "error":
+		return prefix + ui.FormatError(status) + ending
 	default:
-		ui.Writeln(summary)
+		return line
 	}
 }
 

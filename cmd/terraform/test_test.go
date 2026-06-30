@@ -2,42 +2,13 @@ package terraform
 
 import (
 	"bytes"
-	stdio "io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	iolib "github.com/cloudposse/atmos/pkg/io"
-	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ansi"
 )
-
-type terraformTestStreams struct {
-	stdin  stdio.Reader
-	stdout stdio.Writer
-	stderr stdio.Writer
-}
-
-func (s *terraformTestStreams) Input() stdio.Reader     { return s.stdin }
-func (s *terraformTestStreams) Output() stdio.Writer    { return s.stdout }
-func (s *terraformTestStreams) Error() stdio.Writer     { return s.stderr }
-func (s *terraformTestStreams) RawOutput() stdio.Writer { return s.stdout }
-func (s *terraformTestStreams) RawError() stdio.Writer  { return s.stderr }
-
-func initTerraformTestUI(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	stderr := &bytes.Buffer{}
-	streams := &terraformTestStreams{
-		stdin:  &bytes.Buffer{},
-		stdout: &bytes.Buffer{},
-		stderr: stderr,
-	}
-	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
-	require.NoError(t, err)
-	ui.InitFormatter(ioCtx)
-	t.Cleanup(ui.Reset)
-	return stderr
-}
 
 func TestAppendJSONFlag(t *testing.T) {
 	t.Run("appends when missing", func(t *testing.T) {
@@ -64,47 +35,62 @@ func TestAppendJSONFlag(t *testing.T) {
 	})
 }
 
-func TestWriteTerraformTestTextStylesSummary(t *testing.T) {
+func TestFormatTerraformTestStatusLine(t *testing.T) {
 	tests := []struct {
-		name         string
-		text         string
-		wantContains []string
+		name string
+		line string
+		want string
 	}{
 		{
 			name: "success",
-			text: "  ✓ run \"ok\"... pass\nSuccess! 1 passed, 0 failed.\n",
-			wantContains: []string{
-				"  ✓ run \"ok\"... pass\n",
-				"✓ Success! 1 passed, 0 failed.",
-			},
+			line: "  run \"ok\"... pass\n",
+			want: "  run \"ok\"... ✓ pass\n",
 		},
 		{
 			name: "failure",
-			text: "  ✗ run \"broken\"... fail\nFailure! 0 passed, 1 failed.\n",
-			wantContains: []string{
-				"  ✗ run \"broken\"... fail\n",
-				"✗ Failure! 0 passed, 1 failed.",
-			},
+			line: "  run \"broken\"... fail\n",
+			want: "  run \"broken\"... ✗ fail\n",
 		},
 		{
-			name: "unknown summary stays plain",
-			text: "No tests ran\n",
-			wantContains: []string{
-				"No tests ran\n",
-			},
+			name: "error",
+			line: "tests/app.tftest.hcl... error\n",
+			want: "tests/app.tftest.hcl... ✗ error\n",
+		},
+		{
+			name: "strips terraform status color",
+			line: "tests/app.tftest.hcl... \x1b[32mpass\x1b[0m\n",
+			want: "tests/app.tftest.hcl... ✓ pass\n",
+		},
+		{
+			name: "in progress unchanged",
+			line: "tests/app.tftest.hcl... in progress\n",
+			want: "tests/app.tftest.hcl... in progress\n",
+		},
+		{
+			name: "non test line unchanged",
+			line: "Success! 1 passed, 0 failed.\n",
+			want: "Success! 1 passed, 0 failed.\n",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stderr := initTerraformTestUI(t)
-
-			writeTerraformTestText(tt.text)
-
-			got := stderr.String()
-			for _, want := range tt.wantContains {
-				assert.Contains(t, got, want)
-			}
+			assert.Equal(t, tt.want, ansi.Strip(formatTerraformTestStatusLine(tt.line)))
 		})
 	}
+}
+
+func TestTerraformTestStatusWriterBuffersPartialLines(t *testing.T) {
+	var out bytes.Buffer
+	w := newTerraformTestStatusWriter(&out)
+
+	n, err := w.Write([]byte("  run \"ok\"... pa"))
+	require.NoError(t, err)
+	assert.Equal(t, len("  run \"ok\"... pa"), n)
+	assert.Empty(t, out.String())
+
+	n, err = w.Write([]byte("ss\n  run \"broken\"... fail\n"))
+	require.NoError(t, err)
+	assert.Equal(t, len("ss\n  run \"broken\"... fail\n"), n)
+	assert.Equal(t, "  run \"ok\"... ✓ pass\n  run \"broken\"... ✗ fail\n", ansi.Strip(out.String()))
 }
