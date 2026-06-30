@@ -17,7 +17,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ui/spinnerfps"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
@@ -109,7 +109,7 @@ func newWebflowSpinnerModel(tokenCh <-chan webflowSpinnerTokenResult, cancel con
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = theme.GetCurrentStyles().Spinner
-	spinnerfps.Apply(&s)
+	fps.Apply(&s)
 	return webflowSpinnerModel{
 		spinner: s,
 		message: "Waiting for browser authentication",

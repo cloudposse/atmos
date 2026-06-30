@@ -23,7 +23,7 @@ import (
 	aiTypes "github.com/cloudposse/atmos/pkg/ai/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/spinnerfps"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -249,7 +249,7 @@ func initSpinner() spinner.Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
-	spinnerfps.Apply(&s)
+	fps.Apply(&s)
 	return s
 }
 

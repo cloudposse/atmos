@@ -1,4 +1,4 @@
-package spinnerfps
+package fps
 
 import (
 	"os"

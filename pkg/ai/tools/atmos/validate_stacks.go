@@ -52,9 +52,18 @@ func (t *ValidateStacksTool) Execute(ctx context.Context, params map[string]inte
 		schemaType = st
 	}
 
+	atmosConfig, err := currentStackConfig(t.atmosConfig)
+	if err != nil {
+		return &tools.Result{
+			Success: false,
+			Output:  fmt.Sprintf("Validation failed: %v", err),
+			Error:   err,
+		}, err
+	}
+
 	// Execute validation using ValidateStacks.
 	// Note: ValidateStacks uses the schema configured in atmos.yaml
-	err := exec.ValidateStacks(t.atmosConfig)
+	err = exec.ValidateStacks(atmosConfig)
 	if err != nil {
 		return &tools.Result{
 			Success: false,

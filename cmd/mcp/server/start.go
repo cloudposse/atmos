@@ -29,11 +29,12 @@ import (
 )
 
 const (
-	transportStdio     = "stdio"
-	transportHTTP      = "http"
-	defaultHTTPPort    = 8080
-	defaultHTTPHost    = "localhost"
-	mcpProtocolVersion = "2025-03-26"
+	transportStdio      = "stdio"
+	transportHTTP       = "http"
+	defaultHTTPPort     = 8080
+	defaultHTTPHost     = "localhost"
+	mcpProtocolVersion  = "2025-03-26"
+	shutdownGracePeriod = 250 * time.Millisecond
 )
 
 // transportConfig holds the validated transport configuration.
@@ -78,8 +79,6 @@ func init() {
 }
 
 func executeMCPServer(cmd *cobra.Command, args []string) error {
-	defer ui.Info("MCP server stopped")
-
 	// Get and validate transport flags.
 	config, err := getTransportConfig(cmd)
 	if err != nil {
@@ -91,6 +90,7 @@ func executeMCPServer(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	defer ui.Info("MCP server stopped")
 
 	// Create context with cancellation for signal handling.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -136,16 +136,20 @@ func getTransportConfig(cmd *cobra.Command) (*transportConfig, error) {
 
 // setupMCPServer initializes the MCP server with all required components.
 func setupMCPServer() (*mcp.Server, error) {
-	// Load Atmos configuration.
+	// Load base Atmos configuration. Stack graph tools load stack manifests
+	// lazily so the MCP server can start before stacks exist or while stack
+	// imports are temporarily broken.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
 	// Check if MCP server is explicitly enabled.
 	if !atmosConfig.MCP.Enabled {
-		return nil, errUtils.ErrMCPNotEnabled
+		return nil, errUtils.Build(errUtils.ErrMCPNotEnabled).
+			WithHint("Add the following to atmos.yaml:\n\n```yaml\nmcp:\n  enabled: true\n```").
+			Err()
 	}
 
 	// Check if AI is enabled.
@@ -170,16 +174,31 @@ func setupMCPServer() (*mcp.Server, error) {
 // waitForShutdown waits for either a shutdown signal or server error.
 func waitForShutdown(sigChan chan os.Signal, errChan chan error, cancel context.CancelFunc) error {
 	select {
-	case sig := <-sigChan:
-		ui.Infof("Received signal: %v", sig)
+	case <-sigChan:
 		cancel()
-		return nil
+		return waitForServerStop(errChan)
 	case err := <-errChan:
-		if err != nil && !errors.Is(err, context.Canceled) {
-			return fmt.Errorf("MCP server error: %w", err)
+		return normalizeServerStopError(err)
+	}
+}
+
+func waitForServerStop(errChan chan error) error {
+	select {
+	case err, ok := <-errChan:
+		if !ok {
+			return nil
 		}
+		return normalizeServerStopError(err)
+	case <-time.After(shutdownGracePeriod):
 		return nil
 	}
+}
+
+func normalizeServerStopError(err error) error {
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return fmt.Errorf("MCP server error: %w", err)
+	}
+	return nil
 }
 
 // startStdioServer starts the MCP server with stdio transport.

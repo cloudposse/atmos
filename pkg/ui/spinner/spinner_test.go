@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ui/spinnerfps"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 )
 
 func TestNewSpinnerModel(t *testing.T) {
@@ -990,7 +990,7 @@ func TestSpinner_Idempotency(t *testing.T) {
 // TestNewDotSpinner_AppliesFPSOverride verifies the shared ATMOS_SPINNER_FPS
 // override flows into this package's spinner model.
 func TestNewDotSpinner_AppliesFPSOverride(t *testing.T) {
-	t.Setenv(spinnerfps.EnvVar, "4")
+	t.Setenv(fps.EnvVar, "4")
 	s := newDotSpinner()
 	assert.Equal(t, time.Second/4, s.Spinner.FPS)
 }

@@ -21,7 +21,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
-	"github.com/cloudposse/atmos/pkg/ui/spinnerfps"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -70,7 +70,7 @@ type mirrorModel struct {
 func newMirrorModel(platforms int, isTTY bool) *mirrorModel {
 	s := spinner.New()
 	s.Style = theme.GetCurrentStyles().Spinner
-	spinnerfps.Apply(&s)
+	fps.Apply(&s)
 	p := progress.New(
 		progress.WithDefaultGradient(),
 		progress.WithWidth(mirrorProgressBarWidth),

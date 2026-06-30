@@ -15,7 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/browser"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/ui/spinnerfps"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -169,7 +169,7 @@ func newSpinnerModel() *spinnerModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
-	spinnerfps.Apply(&s)
+	fps.Apply(&s)
 	return &spinnerModel{spinner: s}
 }
 

@@ -12,7 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/spinnerfps"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -24,7 +24,7 @@ func newDotSpinner() spinner.Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = theme.GetCurrentStyles().Spinner
-	spinnerfps.Apply(&s)
+	fps.Apply(&s)
 	return s
 }
 

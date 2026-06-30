@@ -22,7 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/spinnerfps"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 )
 
 const (
@@ -490,7 +490,7 @@ func fetchGitHubVersionsWithSpinner(owner, repo string) ([]versionItem, error) {
 		// Create spinner model.
 		s := spinner.New()
 		s.Spinner = spinner.Dot
-		spinnerfps.Apply(&s)
+		fps.Apply(&s)
 
 		// Fetch versions with spinner.
 		m := &versionFetchModel{spinner: s, owner: owner, repo: repo}

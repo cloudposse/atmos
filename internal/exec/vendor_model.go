@@ -22,7 +22,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/spinnerfps"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -163,7 +163,7 @@ func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
 	)
 	s := spinner.New()
 	s.Style = theme.GetCurrentStyles().Spinner
-	spinnerfps.Apply(&s)
+	fps.Apply(&s)
 
 	if len(pkgs) == 0 {
 		return modelVendor{done: true}, nil

@@ -1,13 +1,12 @@
-// Package spinnerfps centralizes the optional spinner redraw-rate override so
-// every spinner in Atmos (there are many independent ones — emulator, vendoring,
-// terraform output, toolchain, auth, AI, version, …) honors a single control.
+// Package fps centralizes the optional spinner redraw-rate override so every
+// spinner in Atmos honors a single control.
 //
-// Spinners default to the bubbles rate (~10 redraws/sec). When recording VHS
-// demos, that many redraws of off-camera spinners scroll enough to trip VHS's
-// scrollback handling (charmbracelet/vhs#657/#659) and hang the recording.
-// Setting ATMOS_SPINNER_FPS to a lower positive integer slows every spinner;
-// leaving it unset preserves the default for normal interactive use.
-package spinnerfps
+// Spinners default to the bubbles rate. When recording VHS demos, frequent
+// redraws of off-camera spinners can scroll enough to trip VHS's scrollback
+// handling (charmbracelet/vhs#657/#659) and hang the recording. Setting
+// ATMOS_SPINNER_FPS to a lower positive integer slows every spinner; leaving it
+// unset preserves the default for normal interactive use.
+package fps
 
 import (
 	"strconv"
