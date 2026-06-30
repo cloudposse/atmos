@@ -102,6 +102,37 @@ func ShellRunner(command string, name string, dir string, env []string, out io.W
 	return nil
 }
 
+// extractCommandNamesFromShell parses a POSIX shell command string and returns all
+// simple-command executable names found in the AST (including those nested in pipes,
+// subshells, and command substitutions).
+// The second return value indicates whether every command name was a static literal;
+// dynamic names such as $VAR or "$(expr)" produce a false value.
+func extractCommandNamesFromShell(cmd string) ([]string, bool, error) {
+	f, err := syntax.NewParser().Parse(strings.NewReader(cmd), "")
+	if err != nil {
+		return nil, false, err
+	}
+
+	var names []string
+	allLiteral := true
+
+	syntax.Walk(f, func(node syntax.Node) bool {
+		call, ok := node.(*syntax.CallExpr)
+		if !ok || len(call.Args) == 0 || len(call.Args[0].Parts) == 0 {
+			return true
+		}
+		lit, ok := call.Args[0].Parts[0].(*syntax.Lit)
+		if !ok {
+			allLiteral = false
+			return true
+		}
+		names = append(names, lit.Value)
+		return true
+	})
+
+	return names, allLiteral, nil
+}
+
 // GetNextShellLevel increments the ATMOS_SHLVL and returns the new value or an error if maximum depth is exceeded.
 func GetNextShellLevel() (int, error) {
 	defer perf.Track(nil, "utils.GetNextShellLevel")()
