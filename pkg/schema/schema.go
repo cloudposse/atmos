@@ -150,6 +150,18 @@ func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
 	return SchemaRegistry{}
 }
 
+// SetSchemaRegistry stores a SchemaRegistry under the given key, lazily
+// initializing the Schemas map when it is nil. A nil map occurs when the loaded
+// `atmos.yaml` has no `schemas:` section (mapstructure leaves the field nil), so
+// callers applying flag/env overrides must use this setter instead of a raw
+// map assignment to avoid an "assignment to entry in nil map" panic.
+func (m *AtmosConfiguration) SetSchemaRegistry(key string, registry SchemaRegistry) {
+	if m.Schemas == nil {
+		m.Schemas = make(map[string]any)
+	}
+	m.Schemas[key] = registry
+}
+
 func (m *AtmosConfiguration) GetResourcePath(key string) ResourcePath {
 	atmosSchemaInterface, interfaceOk := m.Schemas[key]
 	var resourcePath ResourcePath
