@@ -44,6 +44,27 @@ func TestBuildTerraformCommandArgs_Plan(t *testing.T) {
 	assert.Contains(t, args, "plan.tfplan")
 }
 
+func TestTerraformPhaseLabel(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		phase   string
+		want    string
+	}{
+		{name: "blank command defaults to terraform", command: "", phase: "plan", want: "terraform plan"},
+		{name: "dot command defaults to terraform", command: ".", phase: "init", want: "terraform init"},
+		{name: "absolute tool path uses base name", command: "/opt/bin/tofu", phase: "apply", want: "tofu apply"},
+		{name: "trimmed tool path uses base name", command: "  /opt/bin/terraform  ", phase: "destroy", want: "terraform destroy"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &schema.ConfigAndStacksInfo{Command: tt.command}
+			assert.Equal(t, tt.want, terraformPhaseLabel(info, tt.phase))
+		})
+	}
+}
+
 func TestBuildTerraformCommandArgs_PlanSkipPlanfile(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	atmosConfig.Components.Terraform.Plan.SkipPlanfile = true

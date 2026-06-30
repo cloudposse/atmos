@@ -17,6 +17,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/ci"
+	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1384,6 +1386,83 @@ func TestExecuteWorkflow_DryRunShell(t *testing.T) {
 	// Dry run should not execute the command.
 	err = ExecuteWorkflow(atmosConfig, "test-dryrun", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
 	assert.NoError(t, err)
+}
+
+func TestExecuteWorkflow_DryRunShellWithCILogGrouping(t *testing.T) {
+	registerGitHubLogGroupingForWorkflowTest(t)
+
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+	atmosConfig.CI.Enabled = true
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test dry run with CI log grouping",
+		Steps: []schema.WorkflowStep{{
+			Name:    "step1",
+			Command: "echo hello",
+			Type:    schema.TaskTypeShell,
+		}},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-dryrun-ci-group", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
+	require.NoError(t, err)
+}
+
+func TestExecuteWorkflow_DryRunBackgroundAndControlSteps(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	showSummary := false
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test background and control step dispatch in dry run",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:            "svc",
+				Type:            "container",
+				BackgroundAsync: true,
+				Run: &schema.ContainerRunStep{
+					Image:   "busybox:latest",
+					Command: "sleep 1",
+				},
+			},
+			{Name: "wait-svc", Type: schema.TaskTypeWait, For: []string{"svc"}},
+			{Name: "wait-all", Type: schema.TaskTypeWaitAll},
+			{Name: "cancel-svc", Type: schema.TaskTypeCancel, For: []string{"svc"}},
+			{
+				Name: "checks",
+				Type: schema.TaskTypeParallel,
+				ParallelOutput: &schema.ParallelOutputConfig{
+					Mode:        "none",
+					ShowSummary: &showSummary,
+				},
+				Steps: []schema.WorkflowStep{{
+					Name:    "pause",
+					Type:    "sleep",
+					Timeout: "1ms",
+				}},
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-control-dispatch", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
+	require.NoError(t, err)
+}
+
+func registerGitHubLogGroupingForWorkflowTest(t *testing.T) {
+	t.Helper()
+
+	restore := ci.SwapRegistryForTest()
+	t.Cleanup(restore)
+	ci.Register(githubprovider.NewProvider())
+	t.Setenv("GITHUB_ACTIONS", "true")
 }
 
 // TestExecuteWorkflow_DryRunAtmos tests ExecuteWorkflow with dry run for atmos commands.

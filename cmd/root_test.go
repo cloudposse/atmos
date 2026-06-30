@@ -163,6 +163,46 @@ func TestInvocationGroupLabel(t *testing.T) {
 			want: "atmos my-custom-command target",
 		},
 		{
+			name: "unknown command falls back to first positional",
+			args: []string{"missing-command", "--token", "secret"},
+			want: "atmos missing-command",
+		},
+		{
+			name: "unknown leading flag is not exposed",
+			args: []string{"--token", "secret"},
+			want: "atmos",
+		},
+		{
+			name: "end of options as first arg is not exposed",
+			args: []string{"--", "secret"},
+			want: "atmos",
+		},
+		{
+			name: "long flag assignment does not consume following positional",
+			args: []string{"terraform", "plan", "--var=secret=x", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "unknown flag consumes following value",
+			args: []string{"terraform", "plan", "--token", "secret", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "bool flag does not consume following positional",
+			args: []string{"terraform", "plan", "--dry-run", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "no opt flag does not consume following positional",
+			args: []string{"terraform", "plan", "--optional", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "attached shorthand value does not consume following positional",
+			args: []string{"terraform", "plan", "-csecret", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
 			name: "no args",
 			args: nil,
 			want: "atmos",
@@ -174,6 +214,55 @@ func TestInvocationGroupLabel(t *testing.T) {
 			assert.Equal(t, tt.want, invocationGroupLabel(root, tt.args))
 		})
 	}
+
+	assert.Equal(t, "atmos", invocationGroupLabel(nil, []string{"version"}))
+	assert.Equal(t, "atmos orphan", invocationGroupLabel(&cobra.Command{}, []string{"orphan"}))
+}
+
+func TestPreprocessArgs_NoArgs(t *testing.T) {
+	originalArgs := os.Args
+	t.Cleanup(func() { os.Args = originalArgs })
+
+	os.Args = []string{"atmos"}
+	assert.Nil(t, preprocessArgs())
+}
+
+func TestInvocationFlagHelpers(t *testing.T) {
+	cmd := &cobra.Command{Use: "plan"}
+	cmd.Flags().String("var", "", "")
+	cmd.Flags().StringP("config", "c", "", "")
+	cmd.Flags().Bool("dry-run", false, "")
+	cmd.Flags().String("optional", "", "")
+	cmd.Flags().Lookup("optional").NoOptDefVal = "true"
+
+	assert.Empty(t, firstFallbackPositional(nil))
+	assert.Empty(t, firstFallbackPositional([]string{"--"}))
+	assert.Empty(t, firstFallbackPositional([]string{"--token"}))
+	assert.Equal(t, "deploy", firstFallbackPositional([]string{"deploy"}))
+
+	assert.True(t, flagConsumesNextValue(cmd, "--var"))
+	assert.False(t, flagConsumesNextValue(cmd, "--var=value"))
+	assert.False(t, flagConsumesNextValue(cmd, "-cvalue"))
+	assert.False(t, flagConsumesNextValue(cmd, "--dry-run"))
+	assert.False(t, flagConsumesNextValue(cmd, "--optional"))
+	assert.True(t, flagConsumesNextValue(cmd, "--unknown"))
+	assert.False(t, flagConsumesNextValue(cmd, "-"))
+	assert.False(t, flagConsumesNextValue(cmd, "--"))
+
+	assert.False(t, hasAttachedShorthandValue(cmd, "-"))
+	assert.False(t, flagRequiresNextValue(cmd.Flags().Lookup("dry-run")))
+
+	assert.Equal(t, cmd.Flags().Lookup("var"), lookupFlagForArg(cmd, "--var=value"))
+	assert.Equal(t, cmd.Flags().ShorthandLookup("c"), lookupFlagForArg(cmd, "-c"))
+	assert.Equal(t, cmd.Flags().Lookup("config"), lookupFlagForArg(cmd, "-config=value"))
+	assert.Equal(t, cmd.Flags().ShorthandLookup("c"), lookupFlagForArg(cmd, "-cvalue"))
+	assert.Nil(t, lookupFlagForArg(nil, "--var"))
+	assert.Nil(t, lookupFlagForArg(cmd, "-"))
+
+	assert.True(t, flagConsumesAttachedValue(cmd.Flags().Lookup("config")))
+	assert.False(t, flagConsumesAttachedValue(cmd.Flags().Lookup("dry-run")))
+	assert.False(t, flagConsumesAttachedValue(cmd.Flags().Lookup("optional")))
+	assert.False(t, flagConsumesAttachedValue(nil))
 }
 
 func testInvocationRoot() *cobra.Command {
@@ -187,6 +276,10 @@ func testInvocationRoot() *cobra.Command {
 	terraformCmd.PersistentFlags().StringP("stack", "s", "", "")
 	terraformPlanCmd := &cobra.Command{Use: "plan [component]"}
 	terraformPlanCmd.Flags().String("var", "", "")
+	terraformPlanCmd.Flags().StringP("config", "c", "", "")
+	terraformPlanCmd.Flags().Bool("dry-run", false, "")
+	terraformPlanCmd.Flags().String("optional", "", "")
+	terraformPlanCmd.Flags().Lookup("optional").NoOptDefVal = "true"
 	terraformApplyCmd := &cobra.Command{Use: "apply [component]"}
 	terraformCmd.AddCommand(terraformPlanCmd, terraformApplyCmd)
 

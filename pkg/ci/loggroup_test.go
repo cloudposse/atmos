@@ -110,6 +110,10 @@ func TestGroup_DimensionVsMode(t *testing.T) {
 	}
 }
 
+func TestDimensionActive_UnknownDimension(t *testing.T) {
+	assert.False(t, dimensionActive(GroupModeAuto, Dimension(99)))
+}
+
 func TestGroup_NoNestedGroups(t *testing.T) {
 	registerGrouping(t)
 	var buf bytes.Buffer
