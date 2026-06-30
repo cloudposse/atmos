@@ -38,15 +38,41 @@ const (
 	logKeyTemplate = "template"
 )
 
-// getSprigFuncMap returns a cached copy of the sprig function map.
+// getSprigFuncMap returns a cached copy of the sprig hermetic function map.
 // Sprig function maps are expensive to create (173MB+ allocations) and immutable,
 // so we cache and reuse them across template operations.
 // This optimization reduces heap allocations by ~3.76% (173MB) per profile run.
+//
+// We use HermeticTxtFuncMap instead of FuncMap to exclude non-pure side-effectful
+// functions like env/expandenv/getHostByName from the Sprig base. The env and
+// expandenv functions are instead provided explicitly via getEnvFuncMap, which
+// is a deliberate design decision: stack templates legitimately need env var access
+// (e.g. {{ env "GITHUB_TOKEN" }} in vendor.yaml, {{ env "USER" }} in stack manifests).
+// For untrusted-template contexts (Aqua registry, asset URL templates) use only
+// HermeticTxtFuncMap without getEnvFuncMap.
 func getSprigFuncMap() template.FuncMap {
 	sprigFuncMapCacheOnce.Do(func() {
-		sprigFuncMapCache = sprig.FuncMap()
+		sprigFuncMapCache = sprig.HermeticTxtFuncMap()
 	})
 	return sprigFuncMapCache
+}
+
+// getEnvFuncMap returns a FuncMap with env and expandenv functions.
+// These are provided separately from getSprigFuncMap so that:
+//  1. The Sprig base (HermeticTxtFuncMap) stays free of other OS/network side-effects.
+//  2. Stack templates that legitimately need {{ env "KEY" }} and {{ expandenv "$KEY" }}
+//     get those functions via an explicit deliberate provision rather than inheriting
+//     them from the full Sprig FuncMap.
+//  3. Untrusted-template contexts (asset URL templates, Aqua registry) can safely
+//     use only HermeticTxtFuncMap without these functions.
+//
+// The env and expandenv functions shadow Gomplate's "env" namespace object, which
+// takes 0 arguments and is not compatible with {{ env "KEY" }} syntax used in Atmos.
+func getEnvFuncMap() template.FuncMap {
+	return template.FuncMap{
+		"env":       os.Getenv,
+		"expandenv": os.ExpandEnv,
+	}
 }
 
 // ProcessTmpl parses and executes Go templates.
@@ -67,7 +93,7 @@ func ProcessTmpl(
 	if cfg == nil {
 		cfg = &schema.AtmosConfiguration{}
 	}
-	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
+	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), getEnvFuncMap(), FuncMap(cfg, &schema.ConfigAndStacksInfo{}, ctx, &d))
 
 	t, err := template.New(tmplName).Funcs(funcs).Parse(tmplValue)
 	if err != nil {
@@ -311,6 +337,9 @@ func ProcessTmplWithDatasources(
 		// Sprig functions
 		if atmosConfig.Templates.Settings.Sprig.Enabled {
 			funcs = lo.Assign(funcs, getSprigFuncMap())
+			// Explicitly add env/expandenv since HermeticTxtFuncMap excludes them
+			// but they are a documented, intentional feature of Atmos stack templates.
+			funcs = lo.Assign(funcs, getEnvFuncMap())
 		}
 
 		// Atmos functions

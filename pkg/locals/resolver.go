@@ -12,6 +12,7 @@ package locals
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"text/template"
@@ -453,7 +454,19 @@ func (r *Resolver) resolveString(strVal, localName string) (any, error) {
 	context["locals"] = r.resolved
 
 	// Parse and execute the template.
-	tmpl, err := template.New(localName).Funcs(sprig.FuncMap()).Parse(strVal)
+	// HermeticTxtFuncMap is used as the Sprig base to exclude non-pure side-effectful
+	// functions (e.g. getHostByName). env and expandenv are added back explicitly
+	// because they are a documented, intentional feature for locals templates
+	// (e.g. {{ env "HOME" | default "/tmp" }}).
+	envFuncMap := template.FuncMap{
+		"env":       os.Getenv,
+		"expandenv": os.ExpandEnv,
+	}
+	funcMap := sprig.HermeticTxtFuncMap()
+	for k, v := range envFuncMap {
+		funcMap[k] = v
+	}
+	tmpl, err := template.New(localName).Funcs(funcMap).Parse(strVal)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template for local %q in %s: %w", localName, r.filePath, err)
 	}
