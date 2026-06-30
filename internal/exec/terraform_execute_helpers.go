@@ -114,7 +114,7 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	// Create and authenticate the AuthManager using the same injectable creator as
 	// createAndAuthenticateAuthManagerWithDeps to keep injection points unified.
 	authManager, err := defaultAuthManagerCreator(
-		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig,
+		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, info.Stack,
 	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrUserAborted) {
@@ -126,6 +126,16 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 
 	// Store manager for nested YAML functions (e.g. !terraform.state).
 	info.AuthManager = authManager
+
+	// The manager is created with its own empty stackInfo; thread the target stack
+	// through so emulator identities can resolve the running emulator's endpoint
+	// when stores (`!store`, `!secret`, hooks) build their in-process auth context.
+	// authManager may be nil when no identity/auth is configured.
+	if authManager != nil {
+		if si := authManager.GetStackInfo(); si != nil && si.Stack == "" {
+			si.Stack = info.Stack
+		}
+	}
 
 	injectTerraformStoreAuthResolver(atmosConfig, info, authManager)
 
@@ -142,13 +152,14 @@ func injectTerraformStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, in
 	storeAutoDetectedIdentity(authManager, info)
 
 	resolver := authbridge.NewResolver(authManager, info)
-	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, storeDefaultIdentity(info.Identity))
+	defaultIdentity := resolveStoreDefaultIdentity(info.Identity, authManager)
+	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, defaultIdentity)
 
 	// Also expose the resolver to cloud-KMS SOPS providers so `!secret` resolution during terraform
 	// authenticates KMS decrypt as the component's effective identity (issue #2637).
 	atmosConfig.SecretsAuth = &store.SecretsAuthContext{
 		Resolver:        resolver,
-		DefaultIdentity: storeDefaultIdentity(info.Identity),
+		DefaultIdentity: defaultIdentity,
 	}
 }
 
@@ -159,6 +170,49 @@ func storeDefaultIdentity(identity string) string {
 	default:
 		return identity
 	}
+}
+
+// resolveStoreDefaultIdentity returns the identity that stores without their own
+// `identity:` should authenticate as. An explicit `--identity`/`ATMOS_IDENTITY`
+// wins; otherwise we fall back to the stack's `default: true` identity so
+// in-process store/secret reads use the same principal (and emulator endpoint) as
+// the Terraform subprocess. When there is no default identity (or auth is
+// disabled), this returns "" — stores then use the AWS/GCP/Azure default
+// credential chain exactly as before (back-compat for ambient real-cloud creds).
+func resolveStoreDefaultIdentity(identity string, authManager auth.AuthManager) string {
+	if identity == cfg.IdentityFlagDisabledValue {
+		return ""
+	}
+	if explicit := storeDefaultIdentity(identity); explicit != "" {
+		return explicit
+	}
+	if authManager == nil {
+		return ""
+	}
+	defaultIdentity, err := authManager.GetDefaultIdentity(false)
+	if err != nil {
+		return ""
+	}
+	return defaultIdentity
+}
+
+// HookStoreDefaultIdentity resolves the identity that identity-less stores invoked by terraform
+// lifecycle hooks (e.g. the after-apply `store-outputs` hook) should inherit. It mirrors the main
+// terraform path (injectTerraformStoreAuthResolver): it auto-detects the active identity from the
+// auth manager's chain when info carries no explicit identity, then normalizes empty/select/disabled
+// to "" (meaning "no inheritance — keep ambient/default SDK credentials"). It returns "" when no auth
+// manager is present, preserving the prior behavior for runs without Atmos auth.
+//
+// The hook executes in a freshly loaded config (prepareHookContext), so it must re-derive this from
+// the persisted auth manager rather than relying on the apply-phase config.
+func HookStoreDefaultIdentity(authManager auth.AuthManager, info *schema.ConfigAndStacksInfo) string {
+	defer perf.Track(nil, "exec.HookStoreDefaultIdentity")()
+
+	if authManager == nil || info == nil {
+		return ""
+	}
+	storeAutoDetectedIdentity(authManager, info)
+	return storeDefaultIdentity(info.Identity)
 }
 
 // SetupTerraformAuthForCLI exposes terraform auth setup to command-layer callers

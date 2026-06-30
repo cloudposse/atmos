@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1106,6 +1107,75 @@ func TestAssumeRoleIdentity_buildAssumeRoleWithWebIdentityInput(t *testing.T) {
 			} else {
 				assert.Nil(t, input.DurationSeconds)
 			}
+		})
+	}
+}
+
+// TestAssumeRoleIdentity_resolveRoleSessionName verifies that an explicit
+// `principal.session_name` is honored (sanitized + length-capped) and that the
+// session name falls back to a generated `atmos-<name>-<unix>` value when absent.
+// Both assume-role input builders must surface the resolved name.
+func TestAssumeRoleIdentity_resolveRoleSessionName(t *testing.T) {
+	longName := strings.Repeat("a", 80) // exceeds the 64-char STS limit.
+
+	tests := []struct {
+		name        string
+		sessionName string // value for principal.session_name ("" = omit the key).
+		// assertName checks the resolved/sanitized session name.
+		assertName func(t *testing.T, got string)
+	}{
+		{
+			name:        "honors configured session_name",
+			sessionName: "cloudposse-atmos-ci-deploy-demos",
+			assertName: func(t *testing.T, got string) {
+				assert.Equal(t, "cloudposse-atmos-ci-deploy-demos", got)
+			},
+		},
+		{
+			name:        "falls back to generated name when omitted",
+			sessionName: "",
+			assertName: func(t *testing.T, got string) {
+				assert.Contains(t, got, "atmos-fallback-role")
+			},
+		},
+		{
+			name:        "sanitizes disallowed characters",
+			sessionName: "my session/name",
+			assertName: func(t *testing.T, got string) {
+				assert.Equal(t, "my-session-name", got)
+			},
+		},
+		{
+			name:        "truncates to the 64-char STS limit",
+			sessionName: longName,
+			assertName: func(t *testing.T, got string) {
+				assert.LessOrEqual(t, len(got), maxSessionNameLength)
+				assert.Equal(t, strings.Repeat("a", maxSessionNameLength), got)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			principal := map[string]any{
+				"assume_role": "arn:aws:iam::123456789012:role/Dev",
+			}
+			if tt.sessionName != "" {
+				principal["session_name"] = tt.sessionName
+			}
+			i := &assumeRoleIdentity{name: "fallback-role", config: &schema.Identity{
+				Kind:      "aws/assume-role",
+				Principal: principal,
+			}}
+			require.NoError(t, i.Validate())
+
+			// Direct helper result.
+			tt.assertName(t, i.resolveRoleSessionName())
+
+			// Both builders must use the resolved name.
+			tt.assertName(t, *i.buildAssumeRoleInput().RoleSessionName)
+			webInput := i.buildAssumeRoleWithWebIdentityInput(&types.OIDCCredentials{Token: "tok"})
+			tt.assertName(t, *webInput.RoleSessionName)
 		})
 	}
 }

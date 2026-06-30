@@ -45,6 +45,10 @@ stacks:
 logs:
   file: /dev/stderr
   level: Info
+diagnostics:
+  enabled: false
+  file: ""
+  include_output: false
 settings:
   list_merge_strategy: ""
   terminal:

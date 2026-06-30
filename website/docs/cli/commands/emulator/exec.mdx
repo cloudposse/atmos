@@ -1,0 +1,59 @@
+---
+title: atmos emulator exec
+sidebar_label: exec
+sidebar_class_name: command
+id: exec
+description: Run a command in an emulator container
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to run a command inside the emulator's container. Pass the command and its arguments after `--`. If no command is supplied, a shell is opened. The container is discovered by label.
+</Intro>
+
+<Experimental />
+
+<Screengrab title="atmos emulator exec --help" slug="atmos-emulator-exec--help" />
+
+## Usage
+
+```shell
+atmos emulator exec <component> --stack <stack> -- <command> [args...]
+```
+
+## Examples
+
+```shell
+# List S3 buckets in the local aws emulator
+atmos emulator exec aws --stack=plat-ue2-dev -- aws s3 ls
+
+# Open a shell in the emulator container (no command after --)
+atmos emulator exec aws --stack=plat-ue2-dev
+
+# Using the emu alias
+atmos emu exec aws --stack=plat-ue2-dev -- env
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>**Required.** The emulator component to run the command in (for example, `aws`).</dd>
+
+  <dt>`command` <em>(after `--`)</em></dt>
+  <dd>The command and arguments to run inside the container. Everything after `--` is passed through to the container verbatim. If omitted, a shell is opened.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`-s, --stack`</dt>
+  <dd>**Required.** The stack the emulator component belongs to (for example, `plat-ue2-dev`).</dd>
+</dl>
+
+## See Also
+
+- [`atmos emulator up`](/cli/commands/emulator/up) — Start (or reuse) the emulator container
+- [`atmos emulator logs`](/cli/commands/emulator/logs) — Stream the emulator container's logs

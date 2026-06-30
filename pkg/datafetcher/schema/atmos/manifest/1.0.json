@@ -356,6 +356,9 @@
             },
             "container": {
               "$ref": "#/definitions/container_components"
+            },
+            "emulator": {
+              "$ref": "#/definitions/emulator_components"
             }
           },
           "required": []
@@ -550,6 +553,127 @@
         }
       ]
     },
+    "container_restart": {
+      "title": "container_restart",
+      "type": "object",
+      "description": "Restart policy (maps to docker/podman --restart). Shared by the container and emulator component kinds.",
+      "additionalProperties": false,
+      "properties": {
+        "policy": {
+          "type": "string",
+          "description": "Restart policy.",
+          "enum": ["no", "always", "on-failure", "unless-stopped"]
+        },
+        "max_retries": {
+          "type": "integer",
+          "description": "Maximum restart attempts (only used with the `on-failure` policy).",
+          "minimum": 0
+        }
+      }
+    },
+    "container_healthcheck": {
+      "title": "container_healthcheck",
+      "type": "object",
+      "description": "Health check, mirroring the Docker Compose `healthcheck` shape (maps to docker/podman --health-* flags). Shared by the container and emulator component kinds.",
+      "additionalProperties": false,
+      "properties": {
+        "test": {
+          "description": "Health command. A string (run via the shell, equivalent to CMD-SHELL) or a list whose first element is NONE, CMD, or CMD-SHELL.",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "interval": { "type": "string", "description": "Time between checks (e.g. 30s, 1m30s)." },
+        "timeout": { "type": "string", "description": "Time a check may take before it is considered failed (e.g. 10s)." },
+        "retries": { "type": "integer", "description": "Consecutive failures before the container is marked unhealthy.", "minimum": 0 },
+        "start_period": { "type": "string", "description": "Grace period before failures are counted (e.g. 40s)." },
+        "start_interval": { "type": "string", "description": "Time between checks during the start period (e.g. 5s)." },
+        "disable": { "type": "boolean", "description": "Disable any health check baked into the image." }
+      }
+    },
+    "emulator_components": {
+      "title": "emulator_components",
+      "description": "Emulator components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/emulator_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "emulator_component_manifest": {
+      "title": "emulator_component_manifest",
+      "description": "Emulator component manifest. A driver-backed, long-lived cloud-API emulator (Floci, k3s, OpenBao, registry, …). `driver` and the nested `container` block are first-class sections (not under `vars`).",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "driver": {
+              "type": "string",
+              "description": "Built-in emulator driver, e.g. `floci/aws`, `k3s`, `openbao`, `registry`."
+            },
+            "cloud": {
+              "type": "string",
+              "description": "Explicit emulated cloud/target (optional; derived from the driver when omitted)."
+            },
+            "region": {
+              "type": "string",
+              "description": "Cloud region (AWS/GCP/Azure)."
+            },
+            "project": {
+              "type": "string",
+              "description": "GCP project."
+            },
+            "services": {
+              "type": "array",
+              "description": "Emulated services to enable (informational; may drive env).",
+              "items": { "type": "string" }
+            },
+            "ephemeral": {
+              "type": "boolean",
+              "description": "When true, run without persisting state (no host data dir is bind-mounted)."
+            },
+            "container": {
+              "type": "object",
+              "description": "Container overrides for the emulator (image, ports, mounts, env, restart, healthcheck). Reuses the container kind's run shape; the driver supplies defaults.",
+              "additionalProperties": true,
+              "properties": {
+                "restart": {
+                  "$ref": "#/definitions/container_restart"
+                },
+                "healthcheck": {
+                  "$ref": "#/definitions/container_healthcheck"
+                }
+              }
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            }
+          }
+        }
+      ]
+    },
     "container_components": {
       "title": "container_components",
       "description": "Container components section",
@@ -600,41 +724,10 @@
               "additionalProperties": true,
               "properties": {
                 "restart": {
-                  "type": "object",
-                  "description": "Restart policy (maps to docker/podman --restart).",
-                  "additionalProperties": false,
-                  "properties": {
-                    "policy": {
-                      "type": "string",
-                      "description": "Restart policy.",
-                      "enum": ["no", "always", "on-failure", "unless-stopped"]
-                    },
-                    "max_retries": {
-                      "type": "integer",
-                      "description": "Maximum restart attempts (only used with the `on-failure` policy).",
-                      "minimum": 0
-                    }
-                  }
+                  "$ref": "#/definitions/container_restart"
                 },
                 "healthcheck": {
-                  "type": "object",
-                  "description": "Health check, mirroring the Docker Compose `healthcheck` shape (maps to docker/podman --health-* flags).",
-                  "additionalProperties": false,
-                  "properties": {
-                    "test": {
-                      "description": "Health command. A string (run via the shell, equivalent to CMD-SHELL) or a list whose first element is NONE, CMD, or CMD-SHELL.",
-                      "oneOf": [
-                        { "type": "string" },
-                        { "type": "array", "items": { "type": "string" } }
-                      ]
-                    },
-                    "interval": { "type": "string", "description": "Time between checks (e.g. 30s, 1m30s)." },
-                    "timeout": { "type": "string", "description": "Time a check may take before it is considered failed (e.g. 10s)." },
-                    "retries": { "type": "integer", "description": "Consecutive failures before the container is marked unhealthy.", "minimum": 0 },
-                    "start_period": { "type": "string", "description": "Grace period before failures are counted (e.g. 40s)." },
-                    "start_interval": { "type": "string", "description": "Time between checks during the start period (e.g. 5s)." },
-                    "disable": { "type": "boolean", "description": "Disable any health check baked into the image." }
-                  }
+                  "$ref": "#/definitions/container_healthcheck"
                 }
               }
             },
@@ -1503,7 +1596,8 @@
                         "type": "string"
                       },
                       "type": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Step type (step kind): any registered workflow/custom-command step type, e.g. shell, container, http, log, wait, wait-all, cancel. Omitted defaults to a command step."
                       },
                       "retry": {
                         "title": "retry",
@@ -1553,13 +1647,6 @@
                               "max_elapsed_time": {
                                 "type": "string",
                                 "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
-                              },
-                              "conditions": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                },
-                                "description": "Regular expressions; an error/response matching any pattern is treated as retryable"
                               }
                             },
                             "required": []
@@ -1597,101 +1684,86 @@
                         },
                         "description": "Environment variables for the workflow step"
                       },
+                      "tools": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Require step (type: require/assert): executables that must be found on PATH"
+                      },
+                      "files": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Require step (type: require/assert): paths that must exist"
+                      },
+                      "dirs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Require step (type: require/assert): directories that must exist"
+                      },
+                      "hint": {
+                        "type": "string",
+                        "description": "Require step (type: require/assert): extra remediation note appended to the failure error"
+                      },
+                      "needs": {
+                        "description": "Names of earlier steps that must complete before this step runs.",
+                        "oneOf": [
+                          { "type": "string" },
+                          { "type": "array", "items": { "type": "string" } }
+                        ]
+                      },
+                      "outputs": {
+                        "type": "object",
+                        "description": "Named outputs exported by the step for use by later steps.",
+                        "additionalProperties": { "type": "string" }
+                      },
                       "timeout": {
                         "type": "string",
-                        "description": "Step timeout duration (e.g., '30s', '1m'). For the http step type this is the per-attempt timeout."
+                        "description": "Maximum duration the step may run (e.g. '30s', '5m')."
                       },
-                      "url": {
+                      "background": {
+                        "description": "Run the step asynchronously in the background (boolean; v1 supports this only for container steps). A string value instead sets the step's background style color.",
+                        "oneOf": [
+                          { "type": "boolean" },
+                          { "type": "string" }
+                        ]
+                      },
+                      "for": {
+                        "description": "Fan the step out over a list of values (string expression or explicit array of strings).",
+                        "oneOf": [
+                          { "type": "string" },
+                          { "type": "array", "items": { "type": "string" } }
+                        ]
+                      },
+                      "action": {
                         "type": "string",
-                        "description": "Request URL for the http step type (supports templates)"
+                        "description": "Action selector for action-bearing step kinds (e.g. container: run, build, push, inspect). Selects which params 'with' holds."
                       },
-                      "method": {
+                      "provider": {
                         "type": "string",
-                        "enum": [
-                          "GET",
-                          "POST",
-                          "PUT",
-                          "PATCH",
-                          "DELETE",
-                          "HEAD",
-                          "OPTIONS"
-                        ],
-                        "description": "HTTP method/verb for the http step type (default: GET)"
+                        "description": "Provider/runtime backend for the step kind (e.g. container: docker, podman)."
                       },
-                      "headers": {
+                      "container": {
+                        "description": "Container sandbox control for the step. Boolean to enable/disable, or an object with sandbox settings.",
+                        "oneOf": [
+                          { "type": "boolean" },
+                          { "type": "object", "additionalProperties": true }
+                        ]
+                      },
+                      "runtime_auto_start": {
+                        "type": "boolean",
+                        "description": "Automatically start the container runtime if it is not already running."
+                      },
+                      "with": {
                         "type": "object",
-                        "additionalProperties": {
-                          "type": "string"
-                        },
-                        "description": "HTTP request headers for the http step type (supports templates)"
-                      },
-                      "query": {
-                        "type": "object",
-                        "additionalProperties": {
-                          "type": "string"
-                        },
-                        "description": "Query-string parameters for the http step type (supports templates)"
-                      },
-                      "body": {
-                        "type": "string",
-                        "description": "Raw request body for the http step type (supports templates); mutually exclusive with form"
-                      },
-                      "form": {
-                        "type": "object",
-                        "additionalProperties": {
-                          "type": "string"
-                        },
-                        "description": "Form/JSON body parameters for the http step type; mutually exclusive with body"
-                      },
-                      "expect": {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "description": "Success criteria for the http step type; defaults to any 2xx response",
-                        "properties": {
-                          "status": {
-                            "type": "array",
-                            "items": {
-                              "type": "integer"
-                            },
-                            "description": "Acceptable HTTP status codes"
-                          },
-                          "response": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            },
-                            "description": "Regular expressions; the response body must match at least one (/.../ literals or bare regex strings)"
-                          }
-                        }
+                        "description": "Parameters for the step named by 'type' (and 'action' where applicable). Validated by the step handler at run time. For container steps this holds image, command, ports, mounts, build context, etc.",
+                        "additionalProperties": true
                       }
-                    },
-                    "allOf": [
-                      {
-                        "if": {
-                          "required": [
-                            "type"
-                          ],
-                          "properties": {
-                            "type": {
-                              "enum": [
-                                "http",
-                                "webhook"
-                              ]
-                            }
-                          }
-                        },
-                        "then": {
-                          "required": [
-                            "url"
-                          ]
-                        },
-                        "else": {
-                          "required": [
-                            "command"
-                          ]
-                        }
-                      }
-                    ]
+                    }
                   }
                 }
               ]

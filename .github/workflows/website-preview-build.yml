@@ -49,6 +49,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEPLOYMENT_HOST: ${{ github.event.pull_request.number && format('pr-{0}.atmos-docs.ue2.dev.plat.cloudposse.org', github.event.pull_request.number) || '' }}
+          # Landing-page demo videos are published out-of-band to the prod docs-origin
+          # bucket (see .github/workflows/landing-demos.yaml) and are NOT in the git
+          # checkout, so they're absent from this build. Point DemoVideo at the public
+          # production copies so preview players aren't blank. Reflects current prod;
+          # demo *changes* won't preview until published. See DemoVideo/index.js.
+          ATMOS_DEMOS_BASE_URL: https://atmos.tools/img/demos
 
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

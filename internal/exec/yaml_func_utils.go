@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/emulator"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -316,6 +317,17 @@ func processSimpleTags(
 	}
 	if input == u.AtmosYamlFuncAwsOrganizationID && !skipFunc(skip, u.AtmosYamlFuncAwsOrganizationID) {
 		return processTagAwsOrganizationID(atmosConfig, input, stackInfo), true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncEmulator, skip) {
+		args, err := getStringAfterTag(input, u.AtmosYamlFuncEmulator)
+		if err != nil {
+			return nil, true, err
+		}
+		res, err := emulator.ResolveYAMLFunc(atmosConfig, args, currentStack, stackInfo)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
 	}
 	return nil, false, nil
 }

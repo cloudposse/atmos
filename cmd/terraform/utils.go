@@ -246,6 +246,13 @@ func verifyPlanModeFromBool(verify bool) schema.PlanfileVerifyMode {
 // atmosConfig as the store auth-context resolver so stores invoked by hooks can
 // resolve credentials lazily. It is a no-op when the inputs are nil or info holds
 // no usable AuthManager.
+//
+// Stores that omit `identity` inherit the run's auto-detected identity (the same one the apply ran
+// as), matching the main terraform path. Without this, the after-apply `store-outputs` hook would
+// fall back to the default AWS SDK credential chain — which is empty under Atmos auth (credentials
+// live in the keyring, not the environment) — and fail with "no EC2 IMDS role found". Inheritance is
+// guarded by HookStoreDefaultIdentity (returns "" when no identity is resolved), so runs without
+// Atmos auth keep their prior ambient/default-credential behavior.
 func injectHookStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
 	if atmosConfig == nil || info == nil || info.AuthManager == nil {
 		return
@@ -257,7 +264,7 @@ func injectHookStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, info *s
 	}
 
 	resolver := authbridge.NewResolver(authManager, info)
-	atmosConfig.Stores.SetAuthContextResolver(resolver)
+	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, e.HookStoreDefaultIdentity(authManager, info))
 }
 
 // runCIHooksForDeploy fires CI hooks using already-resolved info.

@@ -198,6 +198,23 @@ func MaskWriter(w stdio.Writer) stdio.Writer {
 	}
 }
 
+// MaskString applies the global masker to a string and returns the masked value.
+// It is useful for structured sinks that need to redact individual fields before
+// serialization rather than wrapping a writer.
+func MaskString(value string) string {
+	defer perf.Track(nil, "io.MaskString")()
+
+	if value == "" {
+		return value
+	}
+
+	ctx := GetContext()
+	if ctx == nil {
+		return value
+	}
+	return ctx.Masker().Mask(value)
+}
+
 // RegisterSecret registers a secret value for masking.
 // The secret and its common encodings (base64, URL, JSON) will be masked.
 // This adds to the global masker used by io.Data and io.UI.

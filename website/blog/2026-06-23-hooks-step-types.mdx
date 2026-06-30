@@ -53,14 +53,12 @@ hooks:
   publish-image:
     kind: step
     type: container
+    action: build
     events: [after-terraform-apply]
     on_failure: warn
     with:
-      action: build
-      image: example:latest
-      build:
-        context: .
-        tags: [example:latest]
+      context: .
+      tags: [example:latest]
 ```
 
 Values inside `with:` are rendered with the standard hook template context and YAML functions,
