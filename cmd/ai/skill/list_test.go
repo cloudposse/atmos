@@ -15,38 +15,58 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
-// captureStdout runs fn and returns everything it wrote to os.Stdout.
-// A defer restores os.Stdout and closes the pipe so that an aborting fn()
-// (e.g. require.*, panic, t.FailNow) cannot leave the process-global
-// os.Stdout redirected or leak file descriptors.
-func captureStdout(t *testing.T, fn func()) string {
+type testStreams struct {
+	input  io.Reader
+	output io.Writer
+	error  io.Writer
+}
+
+func (s testStreams) Input() io.Reader {
+	return s.input
+}
+
+func (s testStreams) Output() io.Writer {
+	return s.output
+}
+
+func (s testStreams) Error() io.Writer {
+	return s.error
+}
+
+func (s testStreams) RawOutput() io.Writer {
+	return s.output
+}
+
+func (s testStreams) RawError() io.Writer {
+	return s.error
+}
+
+func setupSkillListOutput(t *testing.T) *bytes.Buffer {
 	t.Helper()
 
-	old := os.Stdout
-	r, w, err := os.Pipe()
+	iolib.Reset()
+	data.Reset()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(testStreams{
+		input:  bytes.NewBuffer(nil),
+		output: &stdout,
+		error:  &stderr,
+	}))
 	require.NoError(t, err)
-	os.Stdout = w
-	defer func() { os.Stdout = old }()
+	data.InitWriter(ioCtx)
 
-	// Drain the pipe concurrently so a large fn() output never blocks on a full
-	// pipe buffer. Reading only after fn() returns deadlocks once the output
-	// exceeds the OS pipe buffer (~64KB on Windows) — see the detailed skill
-	// listing, which crosses that threshold with the bundled catalog.
-	var buf bytes.Buffer
-	copied := make(chan struct{})
-	go func() {
-		_, _ = io.Copy(&buf, r)
-		close(copied)
-	}()
+	t.Cleanup(func() {
+		data.Reset()
+		iolib.Reset()
+	})
 
-	fn()
-
-	require.NoError(t, w.Close())
-	<-copied
-	_ = r.Close()
-	return buf.String()
+	return &stdout
 }
 
 // withTempHome points HOME at a clean temp dir so the local skill registry
@@ -252,16 +272,16 @@ func TestListCmd_DefaultOutput(t *testing.T) {
 	})
 	resetListFlags(t)
 
-	output := captureStdout(t, func() {
-		require.NoError(t, listCmd.RunE(listCmd, []string{}))
-	})
+	stdout := setupSkillListOutput(t)
+	require.NoError(t, listCmd.RunE(listCmd, []string{}))
+	output := stdout.String()
 
 	// Header reflects available + installed counts.
 	assert.Contains(t, output, "Atmos skills (")
 	assert.Contains(t, output, "available")
 	assert.Contains(t, output, "installed")
 	// Installed skill gets the filled marker; an available one gets the hollow marker.
-	assert.Contains(t, output, markerInstalled+" atmos-terraform")
+	assert.Contains(t, output, markerInstalled+"\tatmos-terraform")
 	assert.Contains(t, output, markerAvailable)
 	// Legend + install hint.
 	assert.Contains(t, output, "atmos ai skill install <name>")
@@ -286,9 +306,9 @@ func TestListCmd_InstalledOnly(t *testing.T) {
 		resetListFlags(t)
 		require.NoError(t, listCmd.Flags().Set("installed", "true"))
 
-		output := captureStdout(t, func() {
-			require.NoError(t, listCmd.RunE(listCmd, []string{}))
-		})
+		stdout := setupSkillListOutput(t)
+		require.NoError(t, listCmd.RunE(listCmd, []string{}))
+		output := stdout.String()
 
 		assert.Contains(t, output, "atmos-stacks")
 		// A skill that is available-but-not-installed must be absent.
@@ -300,9 +320,9 @@ func TestListCmd_InstalledOnly(t *testing.T) {
 		resetListFlags(t)
 		require.NoError(t, listCmd.Flags().Set("installed", "true"))
 
-		output := captureStdout(t, func() {
-			require.NoError(t, listCmd.RunE(listCmd, []string{}))
-		})
+		stdout := setupSkillListOutput(t)
+		require.NoError(t, listCmd.RunE(listCmd, []string{}))
+		output := stdout.String()
 
 		assert.Contains(t, output, "No skills installed")
 		assert.Contains(t, output, "atmos ai skill list")
@@ -323,9 +343,9 @@ func TestListCmd_DetailedOutput(t *testing.T) {
 	resetListFlags(t)
 	require.NoError(t, listCmd.Flags().Set("detailed", "true"))
 
-	output := captureStdout(t, func() {
-		require.NoError(t, listCmd.RunE(listCmd, []string{}))
-	})
+	stdout := setupSkillListOutput(t)
+	require.NoError(t, listCmd.RunE(listCmd, []string{}))
+	output := stdout.String()
 
 	assert.Contains(t, output, "━━━")
 	assert.Contains(t, output, "Name:")

@@ -15,7 +15,7 @@ cd demo/landing
 atmos demo check hero        # FAST dry-run → readable .ascii, short timeout (do this first!)
 atmos demo record hero       # full render of one tape → website/static/img/demos/
 atmos demo record all        # render every tape
-atmos demo publish           # aws s3 sync renders to $ATMOS_DEMOS_S3_URI
+atmos demo publish           # aws s3 sync renders to the docs S3/CDN origin
 atmos demo clean             # remove local renders + stop stray emulator containers
 ```
 

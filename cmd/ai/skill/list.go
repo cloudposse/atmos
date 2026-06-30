@@ -14,6 +14,10 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/list/column"
+	listformat "github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/output"
+	"github.com/cloudposse/atmos/pkg/list/renderer"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -78,8 +82,7 @@ var listCmd = &cobra.Command{
 			return err
 		}
 
-		renderSkillList(entries, installedOnly, detailed)
-		return nil
+		return renderSkillList(entries, installedOnly, detailed)
 	},
 }
 
@@ -164,10 +167,10 @@ func buildListEntries(installer *marketplace.Installer) ([]listEntry, error) {
 	return entries, nil
 }
 
-// renderSkillList prints the merged skill view honoring the --installed and
+// renderSkillList renders the merged skill view honoring the --installed and
 // --detailed flags. Counts are computed from the full catalog before filtering
 // so the header is accurate regardless of which rows are shown.
-func renderSkillList(entries []listEntry, installedOnly, detailed bool) {
+func renderSkillList(entries []listEntry, installedOnly, detailed bool) error {
 	available, installed := countEntries(entries)
 
 	display := entries
@@ -177,32 +180,30 @@ func renderSkillList(entries []listEntry, installedOnly, detailed bool) {
 
 	if len(display) == 0 {
 		// Only reachable with --installed (the catalog is never empty).
-		fmt.Println("No skills installed.")
-		fmt.Println("\nBrowse available skills with:")
-		fmt.Println("  atmos ai skill list")
-		return
+		return writeSkillListOutput("No skills installed.\n\nBrowse available skills with:\n  atmos ai skill list\n")
 	}
 
-	printListHeader(installedOnly, available, installed)
-
+	var rendered string
+	var err error
 	if detailed {
-		for i := range display {
-			printEntryDetailed(&display[i])
+		rendered = renderEntryDetails(display) + installHint()
+	} else {
+		rendered, err = renderEntrySummaries(display)
+		if err != nil {
+			return err
 		}
-		printInstallHint()
-		return
+		rendered += legend() + installHint()
 	}
 
-	printEntrySummaries(display)
+	return writeSkillListOutput(listHeader(installedOnly, available, installed) + rendered)
 }
 
-// printListHeader prints the count header, worded for the active view.
-func printListHeader(installedOnly bool, available, installed int) {
+// listHeader returns the count header, worded for the active view.
+func listHeader(installedOnly bool, available, installed int) string {
 	if installedOnly {
-		fmt.Printf("Installed skills (%d):\n\n", installed)
-		return
+		return fmt.Sprintf("Installed skills (%d):\n\n", installed)
 	}
-	fmt.Printf("Atmos skills (%d available, %d installed):\n\n", available, installed)
+	return fmt.Sprintf("Atmos skills (%d available, %d installed):\n\n", available, installed)
 }
 
 // filterInstalled returns only the installed entries.
@@ -216,28 +217,16 @@ func filterInstalled(entries []listEntry) []listEntry {
 	return out
 }
 
-// printEntrySummaries prints a one-line summary per skill with a status marker,
-// padded to align names into columns.
-func printEntrySummaries(entries []listEntry) {
-	nameWidth := 0
-	for _, e := range entries {
-		if len(e.name) > nameWidth {
-			nameWidth = len(e.name)
-		}
+// renderEntrySummaries renders a one-line summary per skill using the shared
+// list renderer pipeline.
+func renderEntrySummaries(entries []listEntry) (string, error) {
+	selector, err := column.NewSelector(skillListColumns(), column.BuildColumnFuncMap())
+	if err != nil {
+		return "", fmt.Errorf("error creating skill list column selector: %w", err)
 	}
 
-	for _, e := range entries {
-		marker := markerAvailable
-		status := "available"
-		if e.installed {
-			marker = markerInstalled
-			status = "installed (v" + e.version + ")"
-		}
-		fmt.Printf("  %s %-*s  %s\n", marker, nameWidth, e.name, status)
-	}
-
-	fmt.Printf("\n  %s installed   %s available\n", markerInstalled, markerAvailable)
-	printInstallHint()
+	r := renderer.New(nil, selector, nil, listformat.FormatTable, "")
+	return r.RenderToString(skillListRows(entries))
 }
 
 // countEntries returns the number of available (uninstalled catalog) and installed entries.
@@ -255,38 +244,78 @@ func countEntries(entries []listEntry) (available, installed int) {
 	return available, installed
 }
 
-// printInstallHint prints the install command hint shown after the listing.
-func printInstallHint() {
-	fmt.Println("\nInstall a skill with:")
-	fmt.Println("  atmos ai skill install <name>")
+func skillListColumns() []column.Config {
+	return []column.Config{
+		{Name: "Status", Value: "{{ .status_marker }}"},
+		{Name: "Name", Value: "{{ .name }}"},
+		{Name: "State", Value: "{{ .state }}"},
+	}
 }
 
-// printEntryDetailed prints a detailed block for a single skill, including
+func skillListRows(entries []listEntry) []map[string]any {
+	rows := make([]map[string]any, 0, len(entries))
+	for _, e := range entries {
+		marker := markerAvailable
+		state := "available"
+		if e.installed {
+			marker = markerInstalled
+			state = "installed (v" + e.version + ")"
+		}
+		rows = append(rows, map[string]any{
+			"status_marker": marker,
+			"name":          e.name,
+			"state":         state,
+		})
+	}
+	return rows
+}
+
+func legend() string {
+	return fmt.Sprintf("\n  %s installed   %s available\n", markerInstalled, markerAvailable)
+}
+
+func installHint() string {
+	return "\nInstall a skill with:\n  atmos ai skill install <name>\n"
+}
+
+// renderEntryDetails renders detailed blocks, including
 // install details when installed.
-func printEntryDetailed(e *listEntry) {
+func renderEntryDetails(entries []listEntry) string {
+	var b strings.Builder
+	for i := range entries {
+		writeEntryDetail(&b, &entries[i])
+	}
+	return b.String()
+}
+
+func writeEntryDetail(b *strings.Builder, e *listEntry) {
 	status := "Available"
 	if e.installed {
 		status = "Installed"
 	}
 
-	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-	fmt.Printf("%s (%s)\n", e.displayName, status)
-	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Fprintf(b, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Fprintf(b, "%s (%s)\n", e.displayName, status)
+	fmt.Fprintf(b, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
-	fmt.Printf("Name:         %s\n", e.name)
-	fmt.Printf("Version:      %s\n", e.version)
-	fmt.Printf("Source:       %s\n", e.source)
+	fmt.Fprintf(b, "Name:         %s\n", e.name)
+	fmt.Fprintf(b, "Version:      %s\n", e.version)
+	fmt.Fprintf(b, "Source:       %s\n", e.source)
 	if e.description != "" {
-		fmt.Printf("Description:  %s\n", e.description)
+		fmt.Fprintf(b, "Description:  %s\n", e.description)
 	}
 
 	if e.installed && e.skill != nil {
-		fmt.Printf("Installed:    %s\n", formatTime(e.skill.InstalledAt))
-		fmt.Printf("Last Updated: %s\n", formatTime(e.skill.UpdatedAt))
-		fmt.Printf("Location:     %s\n", e.skill.Path)
+		fmt.Fprintf(b, "Installed:    %s\n", formatTime(e.skill.InstalledAt))
+		fmt.Fprintf(b, "Last Updated: %s\n", formatTime(e.skill.UpdatedAt))
+		fmt.Fprintf(b, "Location:     %s\n", e.skill.Path)
 	}
 
-	fmt.Printf("\n")
+	fmt.Fprintf(b, "\n")
+}
+
+func writeSkillListOutput(content string) error {
+	return output.New(listformat.FormatTable).Write(content)
 }
 
 // formatTime formats a time in a human-readable way.

@@ -78,7 +78,9 @@ func (i *Installer) Install(ctx context.Context, source string, opts InstallOpti
 	}
 
 	// 3. Download to temporary directory.
-	fmt.Printf("Downloading skills from %s...\n", sourceInfo.URL)
+	if err := writeDataf("Downloading skills from %s...\n", sourceInfo.URL); err != nil {
+		return err
+	}
 	tempDir, err := i.downloader.Download(ctx, sourceInfo)
 	if err != nil {
 		return fmt.Errorf("failed to download skill: %w", err)
@@ -190,18 +192,18 @@ func (i *Installer) installSingleSkill(tempDir string, sourceInfo *SourceInfo, o
 		return err
 	}
 
-	printInstallSuccess(metadata.GetDisplayName(), metadata.GetVersion(), installPath)
-
-	return nil
+	return printInstallSuccess(metadata.GetDisplayName(), metadata.GetVersion(), installPath)
 }
 
 // printInstallSuccess prints the standard post-install confirmation, shared by
 // the single-skill and bundled-skill install paths.
-func printInstallSuccess(displayName, version, installPath string) {
-	fmt.Printf("\n✓ Skill %q installed successfully\n", displayName)
-	fmt.Printf("  Version: %s\n", version)
-	fmt.Printf("  Location: %s\n", redactHomePath(installPath))
-	fmt.Printf("\nUsage: Switch to this skill in the TUI with Ctrl+A\n")
+func printInstallSuccess(displayName, version, installPath string) error {
+	return writeDataf(
+		"\n✓ Skill %q installed successfully\n  Version: %s\n  Location: %s\n\nUsage: Switch to this skill in the TUI with Ctrl+A\n",
+		displayName,
+		version,
+		redactHomePath(installPath),
+	)
 }
 
 // installBundledSkill installs an official skill from the embedded catalog,
@@ -244,9 +246,7 @@ func (i *Installer) installBundledSkill(available *AvailableSkill, opts InstallO
 		return err
 	}
 
-	printInstallSuccess(available.DisplayName, available.Version, installPath)
-
-	return nil
+	return printInstallSuccess(available.DisplayName, available.Version, installPath)
 }
 
 // materializeBundledSkill copies a bundled skill's files from the embedded FS
@@ -355,9 +355,13 @@ func discoverSkillsFromPaths(skillMDPaths []string) ([]discoveredSkill, []string
 
 // confirmMultiSkillInstall prompts the user for multi-skill install confirmation.
 func confirmMultiSkillInstall(count int) error {
-	fmt.Printf("\nInstall all %d skills? [y/N] ", count)
-	var response string
-	_, _ = fmt.Scanln(&response)
+	if err := writeDataf("\nInstall all %d skills? [y/N] ", count); err != nil {
+		return err
+	}
+	response, err := readInputLine()
+	if err != nil {
+		return err
+	}
 	if strings.ToLower(strings.TrimSpace(response)) != "y" {
 		return ErrInstallationCancelled
 	}
@@ -366,7 +370,7 @@ func confirmMultiSkillInstall(count int) error {
 
 // installOneSkillFromPackage installs a single skill from a multi-skill package.
 // Returns true if the skill was successfully installed.
-func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo *SourceInfo, opts InstallOptions) bool {
+func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo *SourceInfo, opts InstallOptions) (bool, error) {
 	skillName := skill.metadata.Name
 	skillsDir, _ := GetSkillsDir()
 	installPath := filepath.Join(skillsDir, sourceInfo.Owner, sourceInfo.Repo, skillName)
@@ -377,18 +381,20 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 		}
 		_ = i.localRegistry.Remove(skillName)
 	} else if _, err := i.localRegistry.Get(skillName); err == nil {
-		fmt.Printf("  Skipping %s (already installed, use --force to reinstall)\n", skillName)
-		return false
+		if err := writeDataf("  Skipping %s (already installed, use --force to reinstall)\n", skillName); err != nil {
+			return false, err
+		}
+		return false, nil
 	}
 
 	if err := os.MkdirAll(installPath, dirPermissions); err != nil {
 		log.Warnf("Failed to create directory for %s: %v", skillName, err)
-		return false
+		return false, nil
 	}
 
 	if err := copyDir(skill.dir, installPath); err != nil {
 		log.Warnf("Failed to install skill %s: %v", skillName, err)
-		return false
+		return false, nil
 	}
 
 	installedSkill := &InstalledSkill{
@@ -405,11 +411,13 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 
 	if err := i.localRegistry.Add(installedSkill); err != nil {
 		log.Warnf("Failed to register skill %s: %v", skillName, err)
-		return false
+		return false, nil
 	}
 
-	fmt.Printf("  Installing %s... done\n", skillName)
-	return true
+	if err := writeDataf("  Installing %s... done\n", skillName); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // installMultiSkillPackage installs multiple skills discovered in a package.
@@ -420,8 +428,9 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 	}
 
 	// Show discovery summary.
-	fmt.Printf("Discovered %d skills in package:\n", len(discovered))
-	fmt.Printf("  %s\n", strings.Join(skillNames, ", "))
+	if err := writeDataf("Discovered %d skills in package:\n  %s\n", len(discovered), strings.Join(skillNames, ", ")); err != nil {
+		return err
+	}
 
 	if !opts.SkipConfirm {
 		if err := confirmMultiSkillInstall(len(discovered)); err != nil {
@@ -429,19 +438,22 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 		}
 	}
 
-	fmt.Println()
+	if err := writeDataf("\n"); err != nil {
+		return err
+	}
 
 	installed := 0
 	for _, skill := range discovered {
-		if i.installOneSkillFromPackage(skill, sourceInfo, opts) {
+		ok, err := i.installOneSkillFromPackage(skill, sourceInfo, opts)
+		if err != nil {
+			return err
+		}
+		if ok {
 			installed++
 		}
 	}
 
-	fmt.Printf("\n%d skills installed successfully.\n", installed)
-	fmt.Printf("\nUsage: Switch skills in the TUI with Ctrl+A\n")
-
-	return nil
+	return writeDataf("\n%d skills installed successfully.\n\nUsage: Switch skills in the TUI with Ctrl+A\n", installed)
 }
 
 // copyFS copies the entire tree of srcFS into the dst directory on disk. It is
@@ -517,9 +529,13 @@ func (i *Installer) Uninstall(name string, force bool) error {
 
 	// 2. Confirm uninstallation (unless force).
 	if !force {
-		fmt.Printf("Uninstall skill %q (version %s)? [y/N] ", skill.DisplayName, skill.Version)
-		var response string
-		_, _ = fmt.Scanln(&response)
+		if err := writeDataf("Uninstall skill %q (version %s)? [y/N] ", skill.DisplayName, skill.Version); err != nil {
+			return err
+		}
+		response, err := readInputLine()
+		if err != nil {
+			return err
+		}
 
 		if strings.ToLower(strings.TrimSpace(response)) != "y" {
 			return ErrUninstallationCancelled
@@ -536,8 +552,7 @@ func (i *Installer) Uninstall(name string, force bool) error {
 		return err
 	}
 
-	fmt.Printf("✓ Skill %q uninstalled successfully\n", skill.DisplayName)
-	return nil
+	return writeDataf("✓ Skill %q uninstalled successfully\n", skill.DisplayName)
 }
 
 // List returns all installed skills.
@@ -696,37 +711,50 @@ func hasDestructiveTools(allowedTools []string) bool {
 }
 
 // printToolAccessWarnings prints tool access information and warnings for destructive tools.
-func printToolAccessWarnings(metadata *SkillMetadata) {
+func printToolAccessWarnings(metadata *SkillMetadata) error {
 	if len(metadata.AllowedTools) == 0 {
-		return
+		return nil
 	}
 
-	fmt.Printf("\nTool Access:\n")
-	fmt.Printf("  Allowed: %s\n", strings.Join(metadata.AllowedTools, ", "))
+	if err := writeDataf("\nTool Access:\n  Allowed: %s\n", strings.Join(metadata.AllowedTools, ", ")); err != nil {
+		return err
+	}
 
 	if !hasDestructiveTools(metadata.AllowedTools) {
-		return
+		return nil
 	}
 
-	fmt.Printf("\n⚠️  WARNING: This skill requests access to destructive operations.\n")
-	fmt.Printf("   Review the skill source before using:\n")
-	fmt.Printf("   %s\n", metadata.GetRepository())
+	return writeDataf(
+		"\n⚠️  WARNING: This skill requests access to destructive operations.\n   Review the skill source before using:\n   %s\n",
+		metadata.GetRepository(),
+	)
 }
 
 // confirmInstallation prompts user to confirm skill installation.
 func (i *Installer) confirmInstallation(metadata *SkillMetadata) error {
 	// Display skill info.
-	fmt.Printf("\nSkill: %s\n", metadata.GetDisplayName())
-	fmt.Printf("Author: %s\n", metadata.GetAuthor())
-	fmt.Printf("Version: %s\n", metadata.GetVersion())
-	fmt.Printf("Repository: %s\n", metadata.GetRepository())
+	if err := writeDataf(
+		"\nSkill: %s\nAuthor: %s\nVersion: %s\nRepository: %s\n",
+		metadata.GetDisplayName(),
+		metadata.GetAuthor(),
+		metadata.GetVersion(),
+		metadata.GetRepository(),
+	); err != nil {
+		return err
+	}
 
-	printToolAccessWarnings(metadata)
+	if err := printToolAccessWarnings(metadata); err != nil {
+		return err
+	}
 
 	// Prompt for confirmation.
-	fmt.Printf("\nDo you want to install this skill? [y/N] ")
-	var response string
-	_, _ = fmt.Scanln(&response)
+	if err := writeDataf("\nDo you want to install this skill? [y/N] "); err != nil {
+		return err
+	}
+	response, err := readInputLine()
+	if err != nil {
+		return err
+	}
 
 	if strings.ToLower(strings.TrimSpace(response)) != "y" {
 		return ErrInstallationCancelled

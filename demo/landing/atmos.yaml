@@ -55,10 +55,7 @@ logs:
 
 # Publishing identity for `atmos demo publish` (used in CI by .github/workflows/landing-demos.yaml).
 # Assumes the existing prod docs role via GitHub OIDC — no static credentials, no separate
-# bucket/role. The role ARN, region, and session name are read from the SAME workflow env vars
-# the old `aws-actions/configure-aws-credentials` step used (IAM_ROLE_ARN / AWS_REGION /
-# IAM_ROLE_SESSION_NAME) via `!env`, so the workflow stays the single source of truth and
-# nothing is hardcoded here. The audience must match the role's trust-policy `aud` condition
+# bucket/role. The audience must match the role's trust-policy `aud` condition
 # (`sts.amazonaws.com` — the configure-aws-credentials default the role already trusts).
 auth:
   providers:
@@ -73,9 +70,9 @@ auth:
       via:
         provider: github-oidc
       principal:
-        assume_role: !env IAM_ROLE_ARN
-        region: !env AWS_REGION
-        session_name: !env IAM_ROLE_SESSION_NAME
+        assume_role: arn:aws:iam::557075604627:role/cplive-plat-ue2-prod-atmos-docs-gha
+        region: us-east-2
+        session_name: cloudposse-atmos-ci-deploy-demos
 
 commands:
   - name: demo
@@ -222,22 +219,22 @@ commands:
             exit $status
 
       - name: publish
-        description: Sync rendered demos to the S3/CDN bucket (set ATMOS_DEMOS_S3_URI).
+        description: Sync rendered demos to the S3/CDN bucket.
         # Self-authenticates via the `docs/publish` identity (GitHub OIDC → assume role);
         # Atmos injects the AWS credentials into the step env, so `aws s3 sync` needs no
-        # `atmos auth exec` wrapper. CI sets IAM_ROLE_ARN / AWS_REGION / IAM_ROLE_SESSION_NAME.
+        # `atmos auth exec` wrapper.
         identity: docs/publish
         steps:
           - |
             set -euo pipefail
-            : "${ATMOS_DEMOS_S3_URI:?set ATMOS_DEMOS_S3_URI, e.g. s3://atmos-website-demos/demos}"
+            demos_s3_uri="s3://cplive-plat-ue2-prod-atmos-docs-origin/img/demos"
             repo="$(git rev-parse --show-toplevel)"
             cd "$repo"
             [ -d website/static/img/demos ] || { echo "nothing to publish — run 'atmos demo record all' first"; exit 1; }
-            aws s3 sync website/static/img/demos "$ATMOS_DEMOS_S3_URI" \
+            aws s3 sync website/static/img/demos "$demos_s3_uri" \
               --exclude '*' --include '*.webm' --include '*.mp4' --include '*.png' \
               --cache-control 'public, max-age=86400'
-            echo "✔ synced website/static/img/demos/ → $ATMOS_DEMOS_S3_URI"
+            echo "✔ synced website/static/img/demos/ → $demos_s3_uri"
 
       - name: clean
         description: Remove local renders and stop any stray emulator containers.
