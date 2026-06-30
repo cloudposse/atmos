@@ -16,33 +16,35 @@ jobs:
 
       - name: Check if PR has minor or major label and targets main
         id: check-labels
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
+          if [ ! -f "$GITHUB_EVENT_PATH" ]; then
+            echo "GitHub event payload not found: $GITHUB_EVENT_PATH"
+            exit 1
+          fi
+
           # Skip checks for draft PRs entirely
-          IS_DRAFT=$(gh pr view "$PR_NUMBER" --json isDraft --jq '.isDraft')
+          IS_DRAFT=$(jq -r '.pull_request.draft // false' "$GITHUB_EVENT_PATH")
           if [ "$IS_DRAFT" = "true" ]; then
-            echo "requires_docs=false" >> $GITHUB_OUTPUT
+            echo "requires_docs=false" >> "$GITHUB_OUTPUT"
             echo "✅ PR is a draft - release documentation check skipped"
             exit 0
           fi
 
-          LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name')
+          BASE_REF=$(jq -r '.pull_request.base.ref // ""' "$GITHUB_EVENT_PATH")
+          LABELS=$(jq -r '.pull_request.labels[]?.name' "$GITHUB_EVENT_PATH")
 
           # Only require changelog for PRs targeting main branch
           if [ "$BASE_REF" != "main" ]; then
-            echo "requires_docs=false" >> $GITHUB_OUTPUT
+            echo "requires_docs=false" >> "$GITHUB_OUTPUT"
             echo "✅ PR does not target main branch - release documentation not required"
             exit 0
           fi
 
           if echo "$LABELS" | grep -qE '^(minor|major)$'; then
-            echo "requires_docs=true" >> $GITHUB_OUTPUT
+            echo "requires_docs=true" >> "$GITHUB_OUTPUT"
             echo "PR targets main and has minor or major label - release documentation required"
           else
-            echo "requires_docs=false" >> $GITHUB_OUTPUT
+            echo "requires_docs=false" >> "$GITHUB_OUTPUT"
             echo "PR does not have minor or major label - release documentation not required"
           fi
 
@@ -60,13 +62,15 @@ jobs:
           NEW_BLOG_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^website/blog/.*\.(md|mdx)$' | grep -v 'tags.yml' || true)
 
           if [ -z "$NEW_BLOG_FILES" ]; then
-            echo "has_changelog=false" >> $GITHUB_OUTPUT
+            echo "has_changelog=false" >> "$GITHUB_OUTPUT"
             echo "❌ No changelog entry found"
           else
-            echo "has_changelog=true" >> $GITHUB_OUTPUT
-            echo "blog_files<<EOF" >> $GITHUB_OUTPUT
-            echo "$NEW_BLOG_FILES" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            {
+              echo "has_changelog=true"
+              echo "blog_files<<EOF"
+              echo "$NEW_BLOG_FILES"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
             echo "✅ Changelog entry found:"
             echo "$NEW_BLOG_FILES"
           fi
@@ -83,10 +87,10 @@ jobs:
           ROADMAP_CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '^website/src/data/roadmap\.js$' || true)
 
           if [ -z "$ROADMAP_CHANGED" ]; then
-            echo "has_roadmap=false" >> $GITHUB_OUTPUT
+            echo "has_roadmap=false" >> "$GITHUB_OUTPUT"
             echo "❌ No roadmap update found"
           else
-            echo "has_roadmap=true" >> $GITHUB_OUTPUT
+            echo "has_roadmap=true" >> "$GITHUB_OUTPUT"
             echo "✅ Roadmap update found"
           fi
 
@@ -120,7 +124,7 @@ jobs:
           fi
 
           # Check if comment already exists
-          EXISTING_COMMENT=$(gh pr view "$PR_NUMBER" --json comments --jq '.comments[] | select(.body | contains("<!-- release-docs-check -->")) | .id' | head -1)
+          EXISTING_COMMENT=$(gh api --paginate "/repos/${GH_REPO}/issues/${PR_NUMBER}/comments" --jq '.[] | select(.body | contains("<!-- release-docs-check -->")) | .id' | head -1)
 
           COMMENT_BODY="<!-- release-docs-check -->
           > [!WARNING]
@@ -155,8 +159,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           # Find existing comment (warning or success)
-          EXISTING_COMMENT=$(gh pr view "$PR_NUMBER" --json comments --jq '.comments[] | select(.body | contains("<!-- release-docs-check -->")) | .id' | head -1)
-          EXISTING_COMMENT_BODY=$(gh pr view "$PR_NUMBER" --json comments --jq '.comments[] | select(.body | contains("<!-- release-docs-check -->")) | .body' | head -1)
+          EXISTING_COMMENT=$(gh api --paginate "/repos/${GH_REPO}/issues/${PR_NUMBER}/comments" --jq '.[] | select(.body | contains("<!-- release-docs-check -->")) | .id' | head -1)
+          EXISTING_COMMENT_BODY=$(gh api --paginate "/repos/${GH_REPO}/issues/${PR_NUMBER}/comments" --jq '.[] | select(.body | contains("<!-- release-docs-check -->")) | .body' | head -1)
 
           SUCCESS_COMMENT_BODY="<!-- release-docs-check -->
           > [!NOTE]
