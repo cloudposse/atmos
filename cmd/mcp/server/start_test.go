@@ -96,7 +96,17 @@ func TestStartCmd_BasicProperties(t *testing.T) {
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Long)
 	assert.NotEmpty(t, cmd.Example)
+	assert.NotNil(t, cmd.Args)
 	assert.NotNil(t, cmd.RunE)
+}
+
+func TestStartCmd_RejectsTrailingArgs(t *testing.T) {
+	require.NotNil(t, startCmd.Args)
+
+	err := startCmd.Args(startCmd, []string{"list", "dependencies"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unknown command "list" for "mcp start"`)
 }
 
 // TestStartCmd_Flags tests that all expected flags are properly defined.
@@ -403,6 +413,42 @@ func TestWaitForShutdown_SignalReceived(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.True(t, cancelCalled, "cancel function should have been called")
+}
+
+func TestWaitForShutdownWithStopMessage_SignalReceived(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	errChan := make(chan error, 1)
+	cancelCalled := false
+	stopCalled := false
+	cancel := func() { cancelCalled = true }
+
+	sigChan <- os.Interrupt
+
+	err := waitForShutdownWithStopMessage(sigChan, errChan, cancel, func() {
+		stopCalled = true
+	})
+
+	assert.NoError(t, err)
+	assert.True(t, cancelCalled)
+	assert.True(t, stopCalled)
+}
+
+func TestWaitForShutdownWithStopMessage_ServerReturn(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	errChan := make(chan error, 1)
+	cancelCalled := false
+	stopCalled := false
+	cancel := func() { cancelCalled = true }
+
+	errChan <- nil
+
+	err := waitForShutdownWithStopMessage(sigChan, errChan, cancel, func() {
+		stopCalled = true
+	})
+
+	assert.NoError(t, err)
+	assert.False(t, cancelCalled)
+	assert.True(t, stopCalled)
 }
 
 // TestWaitForShutdown_SIGTERMReceived tests waitForShutdown when SIGTERM is received.

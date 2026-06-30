@@ -25,6 +25,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/mcp"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/signals"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -51,6 +52,7 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start Atmos MCP server",
 	Long:  startLongMarkdown,
+	Args:  cobra.NoArgs,
 	Example: `  # Start MCP server with stdio transport (default, for desktop clients)
   atmos mcp start
 
@@ -90,7 +92,9 @@ func executeMCPServer(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer ui.Info("MCP server stopped")
+
+	releaseInterruptExit := signals.SuspendInterruptExit()
+	defer releaseInterruptExit()
 
 	// Create context with cancellation for signal handling.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -99,6 +103,7 @@ func executeMCPServer(cmd *cobra.Command, args []string) error {
 	// Set up signal handling.
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
 
 	// Start server based on transport type.
 	errChan := make(chan error, 1)
@@ -113,7 +118,9 @@ func executeMCPServer(cmd *cobra.Command, args []string) error {
 	}
 
 	// Wait for signal or error.
-	return waitForShutdown(sigChan, errChan, cancel)
+	return waitForShutdownWithStopMessage(sigChan, errChan, cancel, func() {
+		ui.Info("MCP server stopped")
+	})
 }
 
 // getTransportConfig extracts and validates transport configuration from command flags.
@@ -173,11 +180,21 @@ func setupMCPServer() (*mcp.Server, error) {
 
 // waitForShutdown waits for either a shutdown signal or server error.
 func waitForShutdown(sigChan chan os.Signal, errChan chan error, cancel context.CancelFunc) error {
+	return waitForShutdownWithStopMessage(sigChan, errChan, cancel, nil)
+}
+
+func waitForShutdownWithStopMessage(sigChan chan os.Signal, errChan chan error, cancel context.CancelFunc, onStop func()) error {
 	select {
 	case <-sigChan:
+		if onStop != nil {
+			onStop()
+		}
 		cancel()
 		return waitForServerStop(errChan)
 	case err := <-errChan:
+		if onStop != nil {
+			onStop()
+		}
 		return normalizeServerStopError(err)
 	}
 }

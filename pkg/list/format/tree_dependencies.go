@@ -73,7 +73,7 @@ func buildDependenciesRootTree(entries []*DepTreeEntry) *tree.Tree {
 // buildDependencyEntryNode builds the tree node for one top-level component.
 func buildDependencyEntryNode(entry *DepTreeEntry) *tree.Tree {
 	node := tree.New().
-		Root(styleComponentStack(entry.Component, entry.Stack)).
+		Root(styleDependencyRef(entry.Component, entry.Stack)).
 		EnumeratorStyle(getBranchStyle())
 
 	if entry.ShowBoth {
@@ -119,9 +119,9 @@ func buildDirectionBranch(label string, children []*DepTreeNode) *tree.Tree {
 func buildDependencyChildNode(n *DepTreeNode) *tree.Tree {
 	var label string
 	if n.Circular {
-		label = getCircularStyle().Render(fmt.Sprintf("%s [%s] (circular reference)", n.Component, n.Stack))
+		label = getCircularStyle().Render(fmt.Sprintf("%s (circular reference)", dependencyRef(n.Component, n.Stack)))
 	} else {
-		label = styleComponentStack(n.Component, n.Stack)
+		label = styleDependencyRef(n.Component, n.Stack)
 	}
 
 	node := tree.New().Root(label).EnumeratorStyle(getBranchStyle())
@@ -134,8 +134,12 @@ func buildDependencyChildNode(n *DepTreeNode) *tree.Tree {
 	return node
 }
 
-// styleComponentStack renders "component [stack]" with the component name styled
-// and the stack name shown in the muted branch style.
-func styleComponentStack(component, stack string) string {
-	return getComponentStyle().Render(component) + " " + getBranchStyle().Render("["+stack+"]")
+// styleDependencyRef renders the stack-qualified component identity so repeated
+// component names are immediately distinguishable in tree output.
+func styleDependencyRef(component, stack string) string {
+	return getComponentStyle().Render(dependencyRef(component, stack))
+}
+
+func dependencyRef(component, stack string) string {
+	return stack + "/" + component
 }

@@ -31,7 +31,7 @@ func TestRenderDependenciesTree_SingleDirection(t *testing.T) {
 	})
 	plain := stripANSI(output)
 
-	for _, want := range []string{"Dependencies", "app [dev]", "db [dev]", "network [shared]"} {
+	for _, want := range []string{"Dependencies", "dev/app", "dev/db", "shared/network"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected output to contain %q:\n%s", want, plain)
 		}
@@ -55,7 +55,7 @@ func TestRenderDependenciesTree_BothDirectionsAndEmptyBranches(t *testing.T) {
 	})
 	plain := stripANSI(output)
 
-	for _, want := range []string{"app [dev]", "depends on", "required by", "db [dev]", "(none)"} {
+	for _, want := range []string{"dev/app", "depends on", "required by", "dev/db", "(none)"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected output to contain %q:\n%s", want, plain)
 		}
@@ -81,7 +81,7 @@ func TestRenderDependenciesTree_RequiredByFallbackAndCircular(t *testing.T) {
 	})
 	plain := stripANSI(output)
 
-	for _, want := range []string{"db [dev]", "app [dev] (circular reference)"} {
+	for _, want := range []string{"dev/db", "dev/app (circular reference)"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected output to contain %q:\n%s", want, plain)
 		}
