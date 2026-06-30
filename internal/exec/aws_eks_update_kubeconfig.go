@@ -253,7 +253,15 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 	if tenvErr != nil {
 		return tenvErr
 	}
-	err = ExecuteShellCommand(atmosConfig, tenv.Resolve("aws"), args, shellCommandWorkingDir, tenv.EnvVars(), dryRun, "")
+
+	// Build env: toolchain env + component env (including auth-derived vars from ComponentEnvSection).
+	// ConvertComponentEnvSectionToList merges auth hook env vars (e.g., AWS_SHARED_CREDENTIALS_FILE)
+	// into ComponentEnvList so they are passed to the aws subprocess.
+	ConvertComponentEnvSectionToList(&configAndStacksInfo)
+	awsEnv := append(tenv.EnvVars(), configAndStacksInfo.ComponentEnvList...)
+
+	err = ExecuteShellCommand(atmosConfig, tenv.Resolve("aws"), args, shellCommandWorkingDir, awsEnv, dryRun, "",
+		WithEnvironment(configAndStacksInfo.SanitizedEnv))
 	if err != nil {
 		return err
 	}
