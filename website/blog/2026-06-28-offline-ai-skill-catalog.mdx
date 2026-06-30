@@ -11,7 +11,9 @@ The official Atmos [agent skills](/ai/agent-skills) are now embedded directly in
 
 ## What Changed
 
-Previously, installing an Atmos skill meant fetching it from a GitHub repository. Now the complete catalog of official skills (and their reference files) ships inside the binary via an embedded filesystem. Two user-facing improvements fall out of that:
+Previously, installing an Atmos skill meant fetching it from a GitHub repository. But this also meant that the skills could be out of sync with the version of Atmos that you're running.
+
+Now the complete catalog of official skills (and their reference files) ships inside the binary via an embedded filesystem. Two user-facing improvements fall out of that:
 
 - **Offline install by name.** `atmos ai skill install atmos-terraform` copies the skill straight out of the binary — instant, deterministic, and air-gap friendly. Community skills can still be installed from any GitHub repository.
 - **A unified available-vs-installed listing.** `atmos ai skill list` merges the bundled catalog with what's installed locally, alphabetically sorted, with a status marker per skill (`●` installed, `○` available).

@@ -1,0 +1,44 @@
+---
+slug: require-assert-step
+title: "Check Workflow Prerequisites with require and assert"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+Workflows often depend on tools, files, and directories being present before they run. Without a first-class check, those prerequisites tend to hide inside brittle shell snippets like `command -v vhs || exit 1`.
+
+<!--truncate-->
+
+## The Problem
+
+Shell checks work until they have to be portable, readable, and friendly. A workflow might need `vhs`, `ffmpeg`, a generated config file, and a local output directory before the real work starts. Encoding that as inline shell makes the workflow harder to scan and usually produces a poor error when something is missing.
+
+## The Change
+
+Atmos now has a declarative `require` step type for workflow and custom command prerequisites. The `assert` step type is an alias for the same behavior.
+
+```yaml
+steps:
+  - name: require recording tools
+    type: require
+    tools:
+      - vhs
+      - ffmpeg
+    files:
+      - ./Taskfile.yml
+    dirs:
+      - ./demo
+    hint: "on macOS run: brew install vhs ffmpeg"
+```
+
+The step checks that tools are executable on `PATH`, files exist, and directories exist. If anything is missing, Atmos fails fast with one aggregated error and the remediation hint.
+
+## Why It Matters
+
+- **Prerequisites are visible.** The workflow declares what it needs before the work starts.
+- **Errors are actionable.** Missing tools and paths are reported together with a hint.
+- **It is read-only.** `require` never installs tools and never mutates `PATH`; use `dependencies.tools` when you want Atmos to manage tool installation.
+
+## Get Involved
+
+See the [`require` step reference](/workflows/steps/type/require) for all supported fields and examples.

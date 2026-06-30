@@ -122,6 +122,13 @@ func installedEntry(name, source, version, path string) map[string]interface{} {
 	}
 }
 
+func installedEntryWithMetadata(name, source, version, path string, enabled, isBuiltIn bool) map[string]interface{} {
+	entry := installedEntry(name, source, version, path)
+	entry["enabled"] = enabled
+	entry["is_builtin"] = isBuiltIn
+	return entry
+}
+
 // resetListFlags restores the list command's flags to defaults between subtests.
 func resetListFlags(t *testing.T) {
 	t.Helper()
@@ -240,6 +247,8 @@ func TestBuildListEntries(t *testing.T) {
 			assert.Equal(t, sourceBuiltIn, e.displaySource)
 			assert.Equal(t, "github.com/cloudposse/atmos//agent-skills/skills/atmos-terraform", e.source)
 			require.NotNil(t, e.skill)
+			assert.True(t, e.skill.Enabled)
+			assert.False(t, e.skill.IsBuiltIn)
 		}
 		assert.True(t, found, "atmos-terraform must be present")
 	})
@@ -272,6 +281,114 @@ func TestBuildListEntries(t *testing.T) {
 		}
 		assert.True(t, found, "community skill must be appended")
 	})
+
+	t.Run("installed metadata is preserved for disabled built-in skills", func(t *testing.T) {
+		tempHome := withTempHome(t)
+		skillPath := filepath.Join(tempHome, ".atmos", "skills", "custom-builtin")
+		writeRegistry(t, tempHome, map[string]map[string]interface{}{
+			"custom-builtin": installedEntryWithMetadata(
+				"custom-builtin",
+				sourceBuiltIn,
+				"v3.0.0",
+				skillPath,
+				false,
+				true,
+			),
+		})
+
+		installer, err := marketplace.NewInstaller("test")
+		require.NoError(t, err)
+
+		entries, err := buildListEntries(installer)
+		require.NoError(t, err)
+
+		var found bool
+		for _, e := range entries {
+			if e.name != "custom-builtin" {
+				continue
+			}
+			found = true
+			require.NotNil(t, e.skill)
+			assert.False(t, e.skill.Enabled)
+			assert.True(t, e.skill.IsBuiltIn)
+		}
+		assert.True(t, found, "custom-builtin must be present")
+	})
+}
+
+func TestSkillListRows_InstalledState(t *testing.T) {
+	rows := skillListRows([]listEntry{
+		{name: "available", displaySource: sourceBuiltIn},
+		{
+			name:          "enabled-skill",
+			version:       "1.0.0",
+			displaySource: "github.com/example/enabled",
+			installed:     true,
+			skill:         &marketplace.InstalledSkill{Enabled: true},
+		},
+		{
+			name:          "disabled-skill",
+			version:       "v2.0.0",
+			displaySource: "github.com/example/disabled",
+			installed:     true,
+			skill:         &marketplace.InstalledSkill{Enabled: false},
+		},
+	})
+
+	require.Len(t, rows, 3)
+	assert.Equal(t, "available", rows[0]["state"])
+	assert.Equal(t, "installed, enabled (v1.0.0)", rows[1]["state"])
+	assert.Equal(t, "installed, disabled (v2.0.0)", rows[2]["state"])
+}
+
+func TestRenderEntryDetails_Metadata(t *testing.T) {
+	now := time.Now()
+	output := renderEntryDetails([]listEntry{
+		{
+			name:        "atmos-terraform",
+			displayName: "Atmos Terraform",
+			version:     "1.0.0",
+			source:      "github.com/cloudposse/atmos//agent-skills/skills/atmos-terraform",
+			available:   true,
+			installed:   true,
+			skill: &marketplace.InstalledSkill{
+				Enabled:     true,
+				IsBuiltIn:   false,
+				InstalledAt: now,
+				UpdatedAt:   now,
+				Path:        "/tmp/atmos-terraform",
+			},
+		},
+		{
+			name:        "community-skill",
+			displayName: "Community Skill",
+			version:     "v2.0.0",
+			source:      "github.com/example/community-skill",
+			installed:   true,
+			skill: &marketplace.InstalledSkill{
+				Enabled:     false,
+				IsBuiltIn:   false,
+				InstalledAt: now,
+				UpdatedAt:   now,
+				Path:        "/tmp/community-skill",
+			},
+		},
+		{
+			name:        "available-skill",
+			displayName: "Available Skill",
+			version:     "1.0.0",
+			source:      "github.com/cloudposse/atmos//agent-skills/skills/available-skill",
+			available:   true,
+		},
+	})
+
+	assert.Contains(t, output, "Atmos Terraform (Installed)")
+	assert.Contains(t, output, "Status:       Enabled")
+	assert.Contains(t, output, "Community Skill (Installed)")
+	assert.Contains(t, output, "Status:       Disabled")
+	assert.Contains(t, output, "Type:         Built-in")
+	assert.Contains(t, output, "Type:         Community")
+	assert.Contains(t, output, "Available Skill (Available)")
 }
 
 func TestListCmd_DefaultOutput(t *testing.T) {

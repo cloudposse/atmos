@@ -25,9 +25,10 @@ import (
 // Status markers for the available-vs-installed view. A filled dot marks an
 // installed skill; a hollow dot marks one that is available to install.
 const (
-	markerInstalled = "●"
-	markerAvailable = "○"
-	sourceBuiltIn   = "built-in"
+	markerInstalled  = "●"
+	markerAvailable  = "○"
+	sourceBuiltIn    = "built-in"
+	detailLabelWidth = 13
 )
 
 // listParser handles flag parsing with Viper precedence for the list command.
@@ -261,19 +262,44 @@ func skillListRows(entries []listEntry) []map[string]any {
 	rows := make([]map[string]any, 0, len(entries))
 	for _, e := range entries {
 		marker := markerAvailable
-		state := "available"
 		if e.installed {
 			marker = markerInstalled
-			state = "installed (v" + e.version + ")"
 		}
 		rows = append(rows, map[string]any{
 			"status_marker": marker,
 			"name":          e.name,
 			"source":        e.displaySource,
-			"state":         state,
+			"state":         entryState(&e),
 		})
 	}
 	return rows
+}
+
+func entryState(e *listEntry) string {
+	if !e.installed {
+		return "available"
+	}
+
+	status := "enabled"
+	if e.skill != nil && !e.skill.Enabled {
+		status = "disabled"
+	}
+
+	return fmt.Sprintf("installed, %s (%s)", status, versionLabel(e.version))
+}
+
+func entryType(e *listEntry) string {
+	if e.available || (e.skill != nil && e.skill.IsBuiltIn) {
+		return "Built-in"
+	}
+	return "Community"
+}
+
+func versionLabel(version string) string {
+	if strings.HasPrefix(version, "v") {
+		return version
+	}
+	return "v" + version
 }
 
 func legend() string {
@@ -308,34 +334,40 @@ func writeEntryDetail(b *strings.Builder, e *listEntry) {
 	b.WriteByte('\n')
 	b.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
-	b.WriteString("Name:         ")
-	b.WriteString(e.name)
-	b.WriteByte('\n')
-	b.WriteString("Version:      ")
-	b.WriteString(e.version)
-	b.WriteByte('\n')
-	b.WriteString("Source:       ")
-	b.WriteString(e.source)
-	b.WriteByte('\n')
+	writeDetailField(b, "Name", e.name)
+	writeDetailField(b, "Version", e.version)
+	writeDetailField(b, "Source", e.source)
+	writeDetailField(b, "Type", entryType(e))
 	if e.description != "" {
-		b.WriteString("Description:  ")
-		b.WriteString(e.description)
-		b.WriteByte('\n')
+		writeDetailField(b, "Description", e.description)
 	}
 
 	if e.installed && e.skill != nil {
-		b.WriteString("Installed:    ")
-		b.WriteString(formatTime(e.skill.InstalledAt))
-		b.WriteByte('\n')
-		b.WriteString("Last Updated: ")
-		b.WriteString(formatTime(e.skill.UpdatedAt))
-		b.WriteByte('\n')
-		b.WriteString("Location:     ")
-		b.WriteString(e.skill.Path)
-		b.WriteByte('\n')
+		writeInstalledEntryDetail(b, e.skill)
 	}
 
 	b.WriteByte('\n')
+}
+
+func writeDetailField(b *strings.Builder, label, value string) {
+	b.WriteString(label)
+	b.WriteString(":")
+	if padding := detailLabelWidth - len(label); padding > 0 {
+		b.WriteString(strings.Repeat(" ", padding))
+	}
+	b.WriteString(value)
+	b.WriteByte('\n')
+}
+
+func writeInstalledEntryDetail(b *strings.Builder, skill *marketplace.InstalledSkill) {
+	status := "Enabled"
+	if !skill.Enabled {
+		status = "Disabled"
+	}
+	writeDetailField(b, "Status", status)
+	writeDetailField(b, "Installed", formatTime(skill.InstalledAt))
+	writeDetailField(b, "Last Updated", formatTime(skill.UpdatedAt))
+	writeDetailField(b, "Location", skill.Path)
 }
 
 func writeSkillListOutput(content string) error {
