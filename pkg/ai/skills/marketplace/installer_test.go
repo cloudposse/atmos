@@ -703,7 +703,7 @@ func TestConfirmInstallation_BasicInfo(t *testing.T) {
 
 	// We can't easily test the interactive prompt without stdin mocking,
 	// but we can verify the function doesn't panic.
-	err := installer.confirmInstallation(metadata)
+	err := installer.confirmInstallation(metadata, "abc123")
 	// Expect error because no stdin input in test.
 	assert.Error(t, err)
 }
@@ -724,7 +724,7 @@ func TestConfirmInstallation_WithDestructiveTools(t *testing.T) {
 	}
 
 	// Verify function handles destructive tools.
-	err := installer.confirmInstallation(metadata)
+	err := installer.confirmInstallation(metadata, "abc123")
 	assert.Error(t, err) // No stdin in test.
 }
 
@@ -1568,4 +1568,229 @@ metadata:
 func TestRedactHomePath_FallbackOnError(t *testing.T) {
 	result := redactHomePath("/some/random/path")
 	assert.Equal(t, "/some/random/path", result)
+}
+
+// --- Content-hash unit tests ---
+
+func TestComputeSkillHash_Success(t *testing.T) {
+	skillDir := createTestSkillDir(t)
+
+	hash, err := computeSkillHash(skillDir)
+
+	require.NoError(t, err)
+	assert.Len(t, hash, 64, "SHA-256 hex digest should be 64 characters")
+}
+
+func TestComputeSkillHash_Deterministic(t *testing.T) {
+	skillDir := createTestSkillDir(t)
+
+	hash1, err := computeSkillHash(skillDir)
+	require.NoError(t, err)
+
+	hash2, err := computeSkillHash(skillDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, hash1, hash2, "same content should produce identical hash")
+}
+
+func TestComputeSkillHash_DifferentContentDifferentHash(t *testing.T) {
+	dir1 := createTestSkillDirWithMetadata(t, "name: s1\ndescription: d1", "# S1\n\nContent one.")
+	dir2 := createTestSkillDirWithMetadata(t, "name: s2\ndescription: d2", "# S2\n\nContent two.")
+
+	hash1, err := computeSkillHash(dir1)
+	require.NoError(t, err)
+
+	hash2, err := computeSkillHash(dir2)
+	require.NoError(t, err)
+
+	assert.NotEqual(t, hash1, hash2, "different content should produce different hashes")
+}
+
+func TestComputeSkillHash_SkipsGitDir(t *testing.T) {
+	skillDir := createTestSkillDir(t)
+
+	// Hash without .git.
+	hashBefore, err := computeSkillHash(skillDir)
+	require.NoError(t, err)
+
+	// Add a fake .git directory with a file.
+	gitDir := filepath.Join(skillDir, ".git")
+	err = os.MkdirAll(gitDir, 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644)
+	require.NoError(t, err)
+
+	// Hash with .git present should be the same.
+	hashAfter, err := computeSkillHash(skillDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, hashBefore, hashAfter, ".git directory must not affect the content hash")
+}
+
+func TestComputeSkillHash_RejectsSymlinks(t *testing.T) {
+	skillDir := createTestSkillDir(t)
+
+	// Create a symlink inside the skill directory.
+	target := filepath.Join(skillDir, "SKILL.md")
+	link := filepath.Join(skillDir, "link.md")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skip("symlinks not supported on this platform:", err)
+	}
+
+	_, err := computeSkillHash(skillDir)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrSymlinkNotAllowed, "symlinks in skill directories must be rejected")
+}
+
+func TestVerifySkillHash_Success(t *testing.T) {
+	skillDir := createTestSkillDir(t)
+
+	hash, err := computeSkillHash(skillDir)
+	require.NoError(t, err)
+
+	err = verifySkillHash(skillDir, hash)
+	assert.NoError(t, err)
+}
+
+func TestVerifySkillHash_Mismatch(t *testing.T) {
+	skillDir := createTestSkillDir(t)
+
+	err := verifySkillHash(skillDir, "0000000000000000000000000000000000000000000000000000000000000000")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrSkillHashMismatch)
+}
+
+func TestInstall_ContentHashStoredInRegistry(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	skillDir := createTestSkillDir(t)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return skillDir, nil
+		},
+	}
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true}
+
+	err = installer.Install(ctx, "github.com/test/test-skill", opts)
+	require.NoError(t, err)
+
+	skill, err := installer.Get("test-skill")
+	require.NoError(t, err)
+	assert.NotEmpty(t, skill.ContentHash, "ContentHash must be set after installation")
+	assert.Len(t, skill.ContentHash, 64, "ContentHash must be a valid SHA-256 hex digest")
+
+	// Disk round-trip: re-create the installer to reload registry.json from disk and
+	// verify the ContentHash was actually persisted (not just held in memory).
+	installer2, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	skill2, err := installer2.Get("test-skill")
+	require.NoError(t, err)
+	assert.Equal(t, skill.ContentHash, skill2.ContentHash, "ContentHash must be persisted to registry.json")
+	assert.Len(t, skill2.ContentHash, 64, "persisted ContentHash must be a valid SHA-256 hex digest")
+}
+
+func TestLoadInstalledSkills_TamperedSkillSkipped(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	// Install a real skill so it is in the registry with a valid hash.
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	skillDir := createTestSkillDir(t)
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return skillDir, nil
+		},
+	}
+
+	ctx := context.Background()
+	err = installer.Install(ctx, "github.com/test/test-skill", opts_skipConfirm())
+	require.NoError(t, err)
+
+	// Find the installed path and tamper with SKILL.md.
+	installed, err := installer.Get("test-skill")
+	require.NoError(t, err)
+	require.NotEmpty(t, installed.ContentHash)
+
+	tamperedContent := "---\nname: test-skill\ndescription: TAMPERED\n---\n\n# TAMPERED\n\nMalicious content injected.\n"
+	err = os.WriteFile(filepath.Join(installed.Path, skillFileName), []byte(tamperedContent), 0o644)
+	require.NoError(t, err)
+
+	// Loading skills should skip the tampered skill.
+	registry := skills.NewRegistry()
+	err = installer.LoadInstalledSkills(registry)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, registry.Count(), "tampered skill must not be loaded into the registry")
+}
+
+func TestLoadInstalledSkills_LegacySkillWithoutHash(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	// Create a fresh installer.
+	localReg, err := NewLocalRegistry()
+	require.NoError(t, err)
+
+	installer := &Installer{
+		downloader:    NewDownloader(),
+		validator:     NewValidator("1.0.0"),
+		localRegistry: localReg,
+		atmosVersion:  "1.0.0",
+	}
+
+	// Create a skill directory with SKILL.md but no ContentHash in the registry entry.
+	skillPath := filepath.Join(tempDir, ".atmos", "skills", "legacy-skill")
+	err = os.MkdirAll(skillPath, 0o755)
+	require.NoError(t, err)
+
+	skillMD := filepath.Join(skillPath, skillFileName)
+	content := `---
+name: legacy-skill
+description: Legacy skill without hash
+metadata:
+  display_name: Legacy Skill
+  category: general
+---
+
+# Legacy Skill
+
+This skill was installed before content-hash verification was added.
+`
+	err = os.WriteFile(skillMD, []byte(content), 0o644)
+	require.NoError(t, err)
+
+	// Register with empty ContentHash to simulate a legacy install.
+	err = localReg.Add(&InstalledSkill{
+		Name:        "legacy-skill",
+		Path:        skillPath,
+		Enabled:     true,
+		ContentHash: "", // empty — no hash recorded.
+	})
+	require.NoError(t, err)
+
+	registry := skills.NewRegistry()
+	err = installer.LoadInstalledSkills(registry)
+	require.NoError(t, err)
+
+	// Legacy skill (no hash) should still be loaded without error.
+	assert.Equal(t, 1, registry.Count(), "legacy skill without hash should be loaded successfully")
+}
+
+// opts_skipConfirm returns InstallOptions with SkipConfirm set for use in tests.
+func opts_skipConfirm() InstallOptions { //nolint:revive // intentional lower-case test helper name.
+	return InstallOptions{SkipConfirm: true}
 }

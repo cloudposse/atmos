@@ -29,9 +29,10 @@ type InstalledSkill struct {
 	Version     string    `json:"version"` // e.g., "1.2.3".
 	InstalledAt time.Time `json:"installed_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
-	Path        string    `json:"path"`       // Absolute path to skill directory.
-	IsBuiltIn   bool      `json:"is_builtin"` // Always false for community skills.
-	Enabled     bool      `json:"enabled"`    // Can disable without uninstalling.
+	Path        string    `json:"path"`         // Absolute path to skill directory.
+	IsBuiltIn   bool      `json:"is_builtin"`   // Always false for community skills.
+	Enabled     bool      `json:"enabled"`      // Can disable without uninstalling.
+	ContentHash string    `json:"content_hash"` // SHA-256 of all skill files at install time.
 }
 
 // NewLocalRegistry creates or loads the local skill registry.

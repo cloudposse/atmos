@@ -3,6 +3,8 @@ package marketplace
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -132,7 +134,7 @@ func (i *Installer) moveSkillToInstallPath(tempDir, installPath string, force bo
 }
 
 // registerSkill registers a skill in the local registry.
-func (i *Installer) registerSkill(metadata *SkillMetadata, sourceInfo *SourceInfo, installPath string, force bool) error {
+func (i *Installer) registerSkill(metadata *SkillMetadata, sourceInfo *SourceInfo, installPath, contentHash string, force bool) error {
 	installedSkill := &InstalledSkill{
 		Name:        metadata.Name,
 		DisplayName: metadata.GetDisplayName(),
@@ -143,6 +145,7 @@ func (i *Installer) registerSkill(metadata *SkillMetadata, sourceInfo *SourceInf
 		Path:        installPath,
 		IsBuiltIn:   false,
 		Enabled:     true,
+		ContentHash: contentHash,
 	}
 
 	if force {
@@ -156,6 +159,58 @@ func (i *Installer) registerSkill(metadata *SkillMetadata, sourceInfo *SourceInf
 	return nil
 }
 
+// computeSkillHash computes a SHA-256 content hash over all files in skillDir,
+// walking subdirectories in deterministic (lexicographic) order and skipping .git.
+// Each file contributes its forward-slash relative path and raw content to the hash,
+// so the result is identical on Windows and Unix for the same skill content.
+func computeSkillHash(skillDir string) (string, error) {
+	h := sha256.New()
+	err := filepath.WalkDir(skillDir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// Reject symlinks — they could point outside the skill directory.
+		if d.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%w: %s", ErrSymlinkNotAllowed, path)
+		}
+		relPath, relErr := filepath.Rel(skillDir, path)
+		if relErr != nil {
+			return fmt.Errorf("failed to get relative path: %w", relErr)
+		}
+		// Normalise to forward slashes so the hash is platform-independent.
+		fmt.Fprintf(h, "\x00%s\x00", filepath.ToSlash(relPath))
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return fmt.Errorf("failed to read %s: %w", relPath, readErr)
+		}
+		_, writeErr := h.Write(data)
+		return writeErr
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to compute skill hash: %w", err)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// verifySkillHash recomputes the content hash for skillDir and checks it against expected.
+// Returns ErrSkillHashMismatch when the hashes differ.
+func verifySkillHash(skillDir, expected string) error {
+	actual, err := computeSkillHash(skillDir)
+	if err != nil {
+		return err
+	}
+	if actual != expected {
+		return fmt.Errorf("%w", ErrSkillHashMismatch)
+	}
+	return nil
+}
+
 // installSingleSkill installs a single skill from a downloaded repository.
 func (i *Installer) installSingleSkill(tempDir string, sourceInfo *SourceInfo, opts InstallOptions) error {
 	metadata, err := i.parseAndValidateSkill(tempDir)
@@ -163,9 +218,15 @@ func (i *Installer) installSingleSkill(tempDir string, sourceInfo *SourceInfo, o
 		return err
 	}
 
+	// Compute content hash before moving the skill to its final location.
+	contentHash, err := computeSkillHash(tempDir)
+	if err != nil {
+		return fmt.Errorf("failed to compute content hash: %w", err)
+	}
+
 	// Security check (interactive prompt).
 	if !opts.SkipConfirm {
-		if err := i.confirmInstallation(metadata); err != nil {
+		if err := i.confirmInstallation(metadata, contentHash); err != nil {
 			return err // User cancelled.
 		}
 	}
@@ -176,7 +237,7 @@ func (i *Installer) installSingleSkill(tempDir string, sourceInfo *SourceInfo, o
 		return err
 	}
 
-	if err := i.registerSkill(metadata, sourceInfo, installPath, opts.Force); err != nil {
+	if err := i.registerSkill(metadata, sourceInfo, installPath, contentHash, opts.Force); err != nil {
 		return err
 	}
 
@@ -248,6 +309,13 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 		return false
 	}
 
+	// Compute content hash from the source directory before copying.
+	contentHash, err := computeSkillHash(skill.dir)
+	if err != nil {
+		log.Warnf("Failed to compute content hash for %s: %v", skillName, err)
+		return false
+	}
+
 	if err := copyDir(skill.dir, installPath); err != nil {
 		log.Warnf("Failed to install skill %s: %v", skillName, err)
 		return false
@@ -263,6 +331,7 @@ func (i *Installer) installOneSkillFromPackage(skill discoveredSkill, sourceInfo
 		Path:        installPath,
 		IsBuiltIn:   false,
 		Enabled:     true,
+		ContentHash: contentHash,
 	}
 
 	if err := i.localRegistry.Add(installedSkill); err != nil {
@@ -395,6 +464,15 @@ func (i *Installer) LoadInstalledSkills(registry *skills.Registry) error {
 	for _, installed := range i.localRegistry.List() {
 		if !installed.Enabled {
 			continue // Skip disabled skills.
+		}
+
+		// Verify content integrity when a hash was recorded at install time.
+		// Skills installed before this feature was introduced have an empty hash and are loaded without verification.
+		if installed.ContentHash != "" {
+			if err := verifySkillHash(installed.Path, installed.ContentHash); err != nil {
+				log.Warnf("Integrity check failed for skill %q: %v — skipping", installed.Name, err)
+				continue
+			}
 		}
 
 		// Parse metadata from SKILL.md.
@@ -550,12 +628,13 @@ func printToolAccessWarnings(metadata *SkillMetadata) {
 }
 
 // confirmInstallation prompts user to confirm skill installation.
-func (i *Installer) confirmInstallation(metadata *SkillMetadata) error {
+func (i *Installer) confirmInstallation(metadata *SkillMetadata, contentHash string) error {
 	// Display skill info.
 	fmt.Printf("\nSkill: %s\n", metadata.GetDisplayName())
 	fmt.Printf("Author: %s\n", metadata.GetAuthor())
 	fmt.Printf("Version: %s\n", metadata.GetVersion())
 	fmt.Printf("Repository: %s\n", metadata.GetRepository())
+	fmt.Printf("SHA-256: %s\n", contentHash)
 
 	printToolAccessWarnings(metadata)
 
