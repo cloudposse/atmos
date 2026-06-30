@@ -19,6 +19,9 @@ badges:
   - name: Slack Community
     image: https://slack.cloudposse.com/for-the-badge.svg
     url: https://slack.cloudposse.com
+  - name: OpenSSF Scorecard
+    image: https://api.securityscorecards.dev/projects/github.com/cloudposse/atmos/badge
+    url: https://scorecard.dev/viewer/?uri=github.com/cloudposse/atmos
 
 categories:
   - cli
