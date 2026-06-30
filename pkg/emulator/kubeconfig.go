@@ -12,8 +12,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// k3sKubeconfigPath is where k3s writes its admin kubeconfig inside the container.
-const k3sKubeconfigPath = "/etc/rancher/k3s/k3s.yaml"
+const (
+	// K3sKubeconfigPath is where k3s writes its admin kubeconfig inside the container.
+	k3sKubeconfigPath = "/etc/rancher/k3s/k3s.yaml"
+	// K3sAPIServerPort is the container port for the Kubernetes API server.
+	k3sAPIServerPort = 6443
+)
 
 var kubeconfigReadyTimeout = 90 * time.Second
 
@@ -79,9 +83,9 @@ func (m *Manager) tryKubeconfig(ctx context.Context, stack, name string) ([]byte
 	}); err != nil {
 		return nil, fmt.Errorf("%w: read kubeconfig from %s/emulator/%s: %w", errUtils.ErrEmulatorConfigInvalid, stack, name, err)
 	}
-	hostPort := firstBoundPort(info)
+	hostPort := apiServerHostPort(info)
 	if hostPort == 0 {
-		return nil, fmt.Errorf("%w: %s/emulator/%s has no bound port", errUtils.ErrEmulatorNotRunning, stack, name)
+		return nil, fmt.Errorf("%w: %s/emulator/%s has no bound API server port", errUtils.ErrEmulatorNotRunning, stack, name)
 	}
 	// Use the IPv4 loopback literal, not "localhost": on Linux the runtime
 	// publishes the API-server port on IPv4 only, while "localhost" resolves to
@@ -92,10 +96,10 @@ func (m *Manager) tryKubeconfig(ctx context.Context, stack, name string) ([]byte
 	return kubeconfigServerPattern.ReplaceAll(buf.Bytes(), []byte("${1}"+server)), nil
 }
 
-// firstBoundPort returns the live host port of the first bound container port.
-func firstBoundPort(info *container.Info) int {
+// apiServerHostPort returns the live host port bound to the k3s API server.
+func apiServerHostPort(info *container.Info) int {
 	for _, binding := range info.Ports {
-		if binding.HostPort != 0 {
+		if binding.ContainerPort == k3sAPIServerPort && binding.HostPort != 0 {
 			return binding.HostPort
 		}
 	}

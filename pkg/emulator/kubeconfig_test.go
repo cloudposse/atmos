@@ -58,6 +58,31 @@ func TestManager_Kubeconfig_HarvestAndRewriteServer(t *testing.T) {
 	assert.Contains(t, out, "certificate-authority-data: BASE64CA", "embedded CA preserved verbatim")
 }
 
+func TestManager_Kubeconfig_UsesAPIServerPortWhenIngressAlsoBound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	runtime := NewMockRuntime(ctrl)
+	info := k3sEmulatorInfo(16443)
+	info.Ports = []container.PortBinding{
+		{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"},
+		{ContainerPort: 6443, HostPort: 16443, Protocol: "tcp"},
+	}
+	runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return([]container.Info{info}, nil)
+	runtime.EXPECT().
+		Exec(gomock.Any(), "k3s-abc", []string{"cat", k3sKubeconfigPath}, gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ string, _ []string, opts *container.ExecOptions) error {
+			_, err := opts.Stdout.Write([]byte(rawK3sKubeconfig))
+			return err
+		})
+
+	m := newManagerWithRuntime(runtime)
+	kubeconfig, err := m.Kubeconfig(context.Background(), "dev", "k3s")
+	require.NoError(t, err)
+
+	out := string(kubeconfig)
+	assert.Contains(t, out, "server: https://127.0.0.1:16443")
+	assert.NotContains(t, out, "server: https://127.0.0.1:8080")
+}
+
 // shrinkKubeconfigTimers shrinks the readiness timers so retrying error paths
 // fail fast instead of polling for 90s. Restored on cleanup.
 func shrinkKubeconfigTimers(t *testing.T) {
@@ -111,10 +136,10 @@ func TestManager_Kubeconfig_NoBoundPort(t *testing.T) {
 	_, err := m.Kubeconfig(context.Background(), "dev", "k3s")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrEmulatorNotRunning)
-	assert.Contains(t, err.Error(), "no bound port")
+	assert.Contains(t, err.Error(), "no bound API server port")
 }
 
-func TestFirstBoundPort(t *testing.T) {
+func TestAPIServerHostPort(t *testing.T) {
 	tests := []struct {
 		name  string
 		ports []container.PortBinding
@@ -131,22 +156,30 @@ func TestFirstBoundPort(t *testing.T) {
 			want:  0,
 		},
 		{
-			name: "skips unbound and returns first bound",
+			name: "ignores non-api bound port",
 			ports: []container.PortBinding{
 				{ContainerPort: 6443, HostPort: 0, Protocol: "tcp"},
 				{ContainerPort: 8080, HostPort: 49153, Protocol: "tcp"},
 			},
-			want: 49153,
+			want: 0,
 		},
 		{
 			name:  "single bound port",
 			ports: []container.PortBinding{{ContainerPort: 6443, HostPort: 36443, Protocol: "tcp"}},
 			want:  36443,
 		},
+		{
+			name: "selects api server port even when ingress is first",
+			ports: []container.PortBinding{
+				{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"},
+				{ContainerPort: 6443, HostPort: 16443, Protocol: "tcp"},
+			},
+			want: 16443,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := firstBoundPort(&container.Info{Ports: tt.ports})
+			got := apiServerHostPort(&container.Info{Ports: tt.ports})
 			assert.Equal(t, tt.want, got)
 		})
 	}
