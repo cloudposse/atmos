@@ -29,7 +29,7 @@ var capturedTestOutput string
 
 const terraformTestOutputNewline = "\n"
 
-var terraformTestStatusSuffixRE = regexp.MustCompile(`(?:\x1b\[[0-9;]*m)*(pass|fail|error)(?:\x1b\[[0-9;]*m)*$`)
+var terraformTestStatusSuffixRE = regexp.MustCompile(`(?:\x1b\[[0-9;]*m)*(in progress|tearing down|pass|fail|error)(?:\x1b\[[0-9;]*m)*$`)
 
 // testCmd represents the terraform test command.
 var testCmd = &cobra.Command{
@@ -183,6 +183,8 @@ func formatTerraformTestStatusLine(line string) string {
 	status := plain[match[2]:match[3]]
 	text := strings.TrimLeft(plain, " \t")
 	switch status {
+	case "in progress", "tearing down":
+		return formatTerraformTestInfo(text, ending, line)
 	case "pass":
 		return formatTerraformTestSuccess(text, ending, line)
 	case "fail", "error":
@@ -190,6 +192,13 @@ func formatTerraformTestStatusLine(line string) string {
 	default:
 		return line
 	}
+}
+
+func formatTerraformTestInfo(text, ending, fallback string) string {
+	if ui.Format == nil {
+		return fallback
+	}
+	return strings.TrimSuffix(ui.Format.Info(text), terraformTestOutputNewline) + ending
 }
 
 func formatTerraformTestSuccess(text, ending, fallback string) string {

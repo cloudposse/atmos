@@ -92,7 +92,12 @@ func TestFormatTerraformTestStatusLine(t *testing.T) {
 		{
 			name: "in progress unchanged",
 			line: "tests/app.tftest.hcl... in progress\n",
-			want: "tests/app.tftest.hcl... in progress\n",
+			want: "▶ tests/app.tftest.hcl... in progress\n",
+		},
+		{
+			name: "tearing down",
+			line: "tests/app.tftest.hcl... tearing down\n",
+			want: "▶ tests/app.tftest.hcl... tearing down\n",
 		},
 		{
 			name: "non test line unchanged",
