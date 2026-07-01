@@ -17,7 +17,7 @@ tests:
       # hosted Windows and Apple Silicon macOS acceptance runners do not provide
       # one reliably. The dedicated k3s workflow still runs this example on
       # Linux and macOS Intel runners.
-      os: darwin|windows
+      os: !not "darwin|windows"
     expect:
       timeout: "10m"
       exit_code: 0
