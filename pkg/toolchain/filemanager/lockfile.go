@@ -20,23 +20,39 @@ type LockFileManager struct {
 }
 
 // NewLockFileManager creates a new lock file manager.
+//
+// File resolution order (first non-empty wins):
+//  1. config.Toolchain.LockFile (explicit user override)
+//  2. <config.BasePath>/toolchain.lock.yaml — peer of atmos.yaml, the recommended location
+//     for the project lockfile. Mirrors how pnpm-lock.yaml sits next to package.json,
+//     Cargo.lock next to Cargo.toml, and aqua-checksums.json next to aqua.yaml.
+//  3. ./toolchain.lock.yaml (CWD fallback when no base path is configured)
+//
+// Old installations stored the lockfile at <install_path>/toolchain.lock.yaml (typically
+// .tools/toolchain.lock.yaml). That location implied the file was a build artifact and
+// discouraged committing it. The new location at the project root makes it obvious the
+// file belongs in git — committing it is the entire point of reproducible builds.
 func NewLockFileManager(config *schema.AtmosConfiguration) *LockFileManager {
 	defer perf.Track(nil, "filemanager.NewLockFileManager")()
 
-	filePath := config.Toolchain.LockFile
-	if filePath == "" {
-		// Default: install_path/toolchain.lock.yaml
-		installPath := config.Toolchain.InstallPath
-		if installPath == "" {
-			installPath = ".tools"
-		}
-		filePath = filepath.Join(installPath, "toolchain.lock.yaml")
-	}
+	filePath := resolveLockFilePath(config)
 
 	return &LockFileManager{
 		config:   config,
 		filePath: filePath,
 	}
+}
+
+// resolveLockFilePath returns the on-disk path for toolchain.lock.yaml per the
+// resolution order documented on NewLockFileManager.
+func resolveLockFilePath(config *schema.AtmosConfiguration) string {
+	if config.Toolchain.LockFile != "" {
+		return config.Toolchain.LockFile
+	}
+	if config.BasePath != "" {
+		return filepath.Join(config.BasePath, "toolchain.lock.yaml")
+	}
+	return "toolchain.lock.yaml"
 }
 
 // Enabled returns true if this file manager is enabled by configuration.
