@@ -117,6 +117,7 @@ commands:
           PY
 
           atmos emulator up kubernetes -s dev
+          atmos helm diff demo-repo -s dev --identity local-k3s
           atmos helm apply demo-repo -s dev --identity local-k3s
           applied=1
           atmos emulator exec kubernetes -s dev -- kubectl -n demo-repo get deployment demo-repo

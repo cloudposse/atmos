@@ -8,7 +8,7 @@ tests:
     description: "Deploy the repository-backed native Helm example chart to the k3s emulator and verify resources."
     workdir: "../examples/helm"
     env:
-      ATMOS_EXPERIMENTAL: "silent"
+      ATMOS_EXPERIMENTAL: "silence"
     command: "atmos"
     args:
       - "test"

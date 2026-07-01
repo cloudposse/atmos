@@ -200,8 +200,8 @@ jobs:
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
         run: |
-          brew install colima docker
-          colima start --cpu 2 --memory 4 --disk 20
+          brew install colima docker qemu
+          colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20
           docker version
 
       - name: Check atmos.exe integrity
@@ -492,8 +492,8 @@ jobs:
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
         run: |
-          brew install colima docker
-          colima start --cpu 2 --memory 4 --disk 20
+          brew install colima docker qemu
+          colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20
           docker version
 
       - name: Download build artifacts
@@ -567,10 +567,14 @@ jobs:
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
+          cache: false
           go-version-file: "go.mod"
 
       - name: Run Kubernetes end-to-end tests
         env:
+          GOCACHE: ${{ runner.temp }}/go-build
+          GOTMPDIR: ${{ runner.temp }}/go-tmp
+          TMPDIR: ${{ runner.temp }}/tmp
           # Atmos builds with CGO disabled (see Makefile). Match that here so the
           # toolchain's transitive CGO dependencies (e.g. bearsh/hid → libudev)
           # are not compiled — they are unused and libudev is absent on runners.
@@ -578,7 +582,9 @@ jobs:
           # Fail loudly if the control plane can't be provisioned/started, rather
           # than silently skipping all coverage.
           ATMOS_ENVTEST_REQUIRED: "true"
-        run: go test -tags envtest -count=1 ./pkg/component/kubernetes/... -run TestEnvtest
+        run: |
+          mkdir -p "$GOCACHE" "$GOTMPDIR" "$TMPDIR"
+          go test -tags envtest -count=1 ./pkg/component/kubernetes/... -run TestEnvtest
 
   # run other demo tests
   mock:
