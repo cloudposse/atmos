@@ -1,0 +1,132 @@
+{
+  "$id": "https://atmos.tools/schemas/atmosscaffoldconfig.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "const": "atmos/v1",
+      "description": "Atmos manifest API version"
+    },
+    "kind": {
+      "const": "AtmosScaffoldConfig",
+      "description": "Atmos manifest kind"
+    },
+    "metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "description": "Author or maintainer",
+          "type": "string"
+        },
+        "description": {
+          "description": "Human-readable description",
+          "type": "string"
+        },
+        "name": {
+          "description": "Unique name of this manifest",
+          "minLength": 1,
+          "type": "string"
+        },
+        "version": {
+          "description": "Version of this manifest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "spec": {
+      "additionalProperties": false,
+      "properties": {
+        "baseRef": {
+          "description": "Git ref used as the three-way merge base",
+          "type": "string"
+        },
+        "delimiters": {
+          "description": "Template delimiters as a two-element list",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "fields": {
+          "description": "Ordered questionnaire fields",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "default": {
+                "description": "Default value"
+              },
+              "description": {
+                "description": "Longer help text shown with the prompt",
+                "type": "string"
+              },
+              "label": {
+                "description": "Short prompt label",
+                "type": "string"
+              },
+              "name": {
+                "description": "Field name used as the template variable",
+                "type": "string"
+              },
+              "options": {
+                "description": "Choices for select and multiselect fields",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "placeholder": {
+                "description": "Placeholder text for input fields",
+                "type": "string"
+              },
+              "required": {
+                "description": "Whether a value must be provided",
+                "type": "boolean"
+              },
+              "type": {
+                "description": "Prompt type",
+                "enum": [
+                  "input",
+                  "text",
+                  "string",
+                  "select",
+                  "multiselect",
+                  "confirm",
+                  "bool",
+                  "boolean"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "source": {
+          "description": "Where the template came from (written to project records)",
+          "type": "string"
+        },
+        "values": {
+          "description": "Field values (answers) keyed by field name",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata"
+  ],
+  "title": "Atmos AtmosScaffoldConfig manifest",
+  "type": "object"
+}

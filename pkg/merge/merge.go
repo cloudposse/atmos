@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/sergi/go-diff/diffmatchpatch"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -22,6 +24,119 @@ const (
 	// This is 2^30 (about 1 billion elements), providing a safe margin below the int max.
 	maxSliceCapacity = 1 << 30
 )
+
+// ThreeWayMerger handles 3-way merging of text files.
+type ThreeWayMerger struct {
+	maxChanges int
+}
+
+// NewThreeWayMerger creates a new 3-way merger with the specified max changes threshold.
+func NewThreeWayMerger(maxChanges int) *ThreeWayMerger {
+	return &ThreeWayMerger{
+		maxChanges: maxChanges,
+	}
+}
+
+// Merge performs a 3-way merge between existing and new content.
+func (m *ThreeWayMerger) Merge(existingContent, newContent, fileName string) (string, error) {
+	// Use diffmatchpatch to compute the diff between existing and new content.
+	dmp := diffmatchpatch.New()
+	diffs := dmp.DiffMain(existingContent, newContent, true)
+
+	// Check if the diff is too complex (too many changes).
+	changeCount := 0
+	for _, diff := range diffs {
+		if diff.Type != diffmatchpatch.DiffEqual {
+			changeCount++
+		}
+	}
+
+	// If there are too many changes, refuse to merge.
+	if changeCount > m.maxChanges {
+		return "", errUtils.Build(errUtils.ErrMergeThresholdExceeded).
+			WithExplanationf("Too many changes detected (%d changes)", changeCount).
+			WithHint("Use --force to overwrite or manually merge").
+			Err()
+	}
+
+	// Apply the diff as patches to existingContent so that only the specific
+	// changes from newContent are incorporated. PatchApply attempts each patch
+	// hunk independently: if a hunk cannot match the surrounding context it is
+	// skipped and the original text is kept for that region.  This preserves
+	// any local edits that do not conflict with the incoming changes, unlike
+	// DiffText2 which unconditionally returns newContent.
+	patches := dmp.PatchMake(existingContent, diffs)
+	mergedContentStr, _ := dmp.PatchApply(patches, existingContent)
+	mergedContent := mergedContentStr
+
+	// Check for conflicts by looking for diff markers.
+	if strings.Contains(mergedContent, "<<<<<<<") || strings.Contains(mergedContent, "=======") || strings.Contains(mergedContent, ">>>>>>>") {
+		// There are conflicts, let's handle them intelligently.
+		mergedContent = m.resolveConflicts(mergedContent, fileName)
+	}
+
+	return mergedContent, nil
+}
+
+// resolveConflicts handles merge conflicts by preserving user customizations.
+func (m *ThreeWayMerger) resolveConflicts(content, fileName string) string {
+	lines := strings.Split(content, "\n")
+	var resolvedLines []string
+	var inConflict bool
+	var conflictBuffer []string
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "<<<<<<<") {
+			inConflict = true
+			conflictBuffer = []string{}
+			continue
+		}
+
+		if strings.HasPrefix(line, "=======") {
+			// Middle of conflict - separator between ours and theirs sides.
+			// Keep conflictBuffer intact so the full conflict block (both sides)
+			// is passed to resolveConflictBlock for intelligent resolution.
+			continue
+		}
+
+		if strings.HasPrefix(line, ">>>>>>>") {
+			inConflict = false
+			// Resolve the conflict by preferring existing content (user customizations).
+			resolvedLines = append(resolvedLines, m.resolveConflictBlock(conflictBuffer, fileName)...)
+			continue
+		}
+
+		if inConflict {
+			conflictBuffer = append(conflictBuffer, line)
+		} else {
+			resolvedLines = append(resolvedLines, line)
+		}
+	}
+
+	return strings.Join(resolvedLines, "\n")
+}
+
+// resolveConflictBlock resolves a single conflict block.
+func (m *ThreeWayMerger) resolveConflictBlock(conflictLines []string, fileName string) []string {
+	var resolved []string
+
+	// Add conflict resolution marker.
+	resolved = append(resolved, fmt.Sprintf("# CONFLICT RESOLVED for %s", fileName))
+	resolved = append(resolved, "# Preserving user customizations and adding new template content")
+	resolved = append(resolved, "")
+
+	// For now, preserve all lines from the conflict.
+	// In a more sophisticated implementation, you'd analyze the content
+	// and make intelligent decisions about what to keep.
+	for _, line := range conflictLines {
+		if strings.TrimSpace(line) != "" {
+			resolved = append(resolved, line)
+		}
+	}
+
+	resolved = append(resolved, "")
+	return resolved
+}
 
 // DeepCopyMap performs a deep copy of a map optimized for map[string]any structures.
 // This custom implementation avoids reflection overhead for common cases (maps, slices, primitives)

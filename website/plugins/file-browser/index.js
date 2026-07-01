@@ -73,6 +73,7 @@ const TAGS_MAP = {
   'emulator-aws': ['DX'],
   'emulator-k8s': ['DX'],
   'demo-helmfile': ['DX'],
+  scaffolding: ['Scaffold', 'Init'],
   'stack-names': ['Stacks'],
   'demo-ansible': ['Automation'],
   'mcp-with-aws': ['DX', 'Automation'],
@@ -158,6 +159,10 @@ const DOCS_MAP = {
   ],
   'demo-helmfile': [
     { label: 'Helmfile', url: '/stacks/components/helmfile' },
+  ],
+  scaffolding: [
+    { label: 'Init Command', url: '/cli/commands/init' },
+    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
   ],
   'stack-names': [
     { label: 'Stack Names', url: '/stacks/name' },
@@ -451,7 +456,7 @@ function scanExamples(sourceDir, options) {
   examples.sort((a, b) => a.name.localeCompare(b.name));
 
   // Collect unique tags in display order.
-  const tagOrder = ['Quickstart', 'Stacks', 'Components', 'Automation', 'DX'];
+  const tagOrder = ['Quickstart', 'Stacks', 'Components', 'Automation', 'DX', 'Scaffold', 'Init'];
   const tags = tagOrder.filter((tag) => examples.some((ex) => ex.tags.includes(tag)));
 
   // Build the curated featured list in FEATURED order (skip any that don't resolve).

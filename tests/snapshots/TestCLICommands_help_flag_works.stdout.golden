@@ -44,6 +44,7 @@ AVAILABLE COMMANDS
       git [command] [EXPERIMENTAL]           GitOps enablement: automate Git commits locally and in CI
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments
       help                                   Help about any command
+      init [EXPERIMENTAL]                    Initialize a new Atmos project from a template
       kubernetes [command] [EXPERIMENTAL]    Manage Kubernetes-native components
       list [command]                         List available stacks and components
       lsp [command] [EXPERIMENTAL]           Language Server Protocol commands
@@ -51,6 +52,7 @@ AVAILABLE COMMANDS
       packer [command]                       Manage packer-based machine images for multiple platforms
       pro [command]                          Access premium features integrated with atmos-pro.com
       profile [command]                      Manage configuration profiles
+      scaffold [command] [EXPERIMENTAL]      Generate code from scaffold templates
       secret [command] [EXPERIMENTAL]        Manage declarative secrets across stacks and components.
       show [command]                         Execute 'show' commands
       support                                Show Atmos support options

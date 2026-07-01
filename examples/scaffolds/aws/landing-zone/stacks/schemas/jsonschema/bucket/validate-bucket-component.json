@@ -1,0 +1,26 @@
+{
+  "$id": "bucket-component",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bucket component validation",
+  "description": "JSON Schema for the 'bucket' Atmos component.",
+  "type": "object",
+  "properties": {
+    "vars": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
+        },
+        "stage": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true,
+      "required": [
+        "name",
+        "stage"
+      ]
+    }
+  }
+}

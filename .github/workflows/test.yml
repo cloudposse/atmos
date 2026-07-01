@@ -33,6 +33,7 @@ permissions:
 env:
   OPEN_TOFU_VERSION: "1.12.2"
   HELM_VERSION: "v3.19.2"
+  HELM_DIFF_VERSION: "v3.15.10"
   HELMFILE_VERSION: "v1.1.0"
   PACKER_VERSION: "1.14.2"
 
@@ -195,7 +196,7 @@ jobs:
 
       - name: Install helm-diff plugin
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: helm plugin install https://github.com/databus23/helm-diff
+        run: helm plugin install https://github.com/databus23/helm-diff --version ${{ env.HELM_DIFF_VERSION }}
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -498,7 +499,7 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Install helm-diff plugin
-        run: helm plugin install https://github.com/databus23/helm-diff
+        run: helm plugin install https://github.com/databus23/helm-diff --version ${{ env.HELM_DIFF_VERSION }}
 
       - name: Write a default AWS profile to the AWS config file
         run: |

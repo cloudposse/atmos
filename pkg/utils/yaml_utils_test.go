@@ -1175,8 +1175,12 @@ func TestWriteToFileAsYAML(t *testing.T) {
 
 // TestWriteToFileAsYAML_InvalidPath tests writing to an invalid path.
 func TestWriteToFileAsYAML_InvalidPath(t *testing.T) {
-	// Try to write to a non-existent directory.
-	invalidPath := filepath.Join(string(filepath.Separator), "nonexistent", "directory", "that", "does", "not", "exist", "test.yaml")
+	// Create a regular file and then try to use it as a parent directory.
+	// Opening "parentFile/test.yaml" always fails on every OS because a file
+	// cannot simultaneously be a directory — no drive letters or root paths needed.
+	parentFile := filepath.Join(t.TempDir(), "parent")
+	require.NoError(t, os.WriteFile(parentFile, []byte("x"), 0o644))
+	invalidPath := filepath.Join(parentFile, "test.yaml")
 
 	data := map[string]any{"key": "value"}
 
