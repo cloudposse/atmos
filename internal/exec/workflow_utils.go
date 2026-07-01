@@ -654,14 +654,65 @@ func ExecuteWorkflow(
 				return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
 					WithTitle(WorkflowErrTitle).
 					WithHintf("Step type '%s' is not supported", commandType).
-					WithHint("Each step must specify a valid type: 'atmos', 'shell', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
+					WithHint("Each step must specify a valid type: 'atmos', 'shell', 'script', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
 					WithExitCode(1).
 					Err()
 			}
-			err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
-				DryRun:     dryRun,
-				FinalStack: finalStack,
-			})
+			if commandType == schema.TaskTypeScript {
+				stepPkg.RenderCommand(&step, workflowDefinition, process.FormatScriptDisplay(step.Interpreter, step.Script))
+				switch {
+				case workflowPkg.StepContainerOverride(&step):
+					err = retry.Do(context.Background(), step.Retry, func() error {
+						return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
+							Workflow:     workflow,
+							WorkflowPath: workflowPath,
+							BasePath:     atmosConfig.BasePath,
+							WorkflowDef:  workflowDefinition,
+							Step:         &step,
+							HostWorkDir:  workDir,
+							Command:      process.FormatScriptDisplay(step.Interpreter, step.Script),
+							StepEnv:      stepEnv,
+							RuntimeEnv:   stepEnv,
+							DryRun:       dryRun,
+						})
+					})
+				case workflowDefinition.Container != nil && workflowDefinition.Container.IsEnabled() && !workflowPkg.StepContainerDisabled(&step):
+					if activeContainer == nil {
+						activeContainer, err = workflowPkg.StartWorkflowContainer(context.Background(), &workflowPkg.ContainerStepParams{
+							Workflow:     workflow,
+							WorkflowPath: workflowPath,
+							BasePath:     atmosConfig.BasePath,
+							WorkflowDef:  workflowDefinition,
+							RuntimeEnv:   stepEnv,
+							DryRun:       dryRun,
+						})
+						if err != nil {
+							break
+						}
+					}
+					err = retry.Do(context.Background(), step.Retry, func() error {
+						return activeContainer.ExecShell(context.Background(), &workflowPkg.ContainerStepParams{
+							Step:        &step,
+							WorkflowDef: workflowDefinition,
+							HostWorkDir: workDir,
+							Command:     process.FormatScriptDisplay(step.Interpreter, step.Script),
+							StepEnv:     stepEnv,
+						})
+					})
+				default:
+					err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
+						DryRun:     dryRun,
+						FinalStack: finalStack,
+					})
+				}
+				break
+			}
+			if err == nil {
+				err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
+					DryRun:     dryRun,
+					FinalStack: finalStack,
+				})
+			}
 		}
 
 		if err != nil {

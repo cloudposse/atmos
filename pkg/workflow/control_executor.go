@@ -53,13 +53,16 @@ func (executor *ControlCommandExecutor) Execute(ctx context.Context, child *Cont
 	}
 
 	switch stepType {
-	case schema.TaskTypeShell, schema.TaskTypeAtmos:
+	case schema.TaskTypeShell, schema.TaskTypeAtmos, schema.TaskTypeScript:
 		stepEnv, err := executor.stepEnv(&step)
 		if err != nil {
 			return &ControlChildResult{}, err
 		}
 		if stepType == schema.TaskTypeShell {
 			return executor.executeShell(ctx, &step, stepEnv, output)
+		}
+		if stepType == schema.TaskTypeScript {
+			return executor.executeScript(ctx, &step, stepEnv, output)
 		}
 		return executor.executeAtmos(ctx, &step, stepEnv, output)
 	case "sleep":
@@ -82,6 +85,27 @@ func (executor *ControlCommandExecutor) stepEnv(step *schema.WorkflowStep) ([]st
 		workflowEnv = executor.WorkflowDefinition.Env
 	}
 	return executor.PrepareEnv(executor.BaseEnv, stepIdentity, step.Name, workflowEnv, step.Env)
+}
+
+func (executor *ControlCommandExecutor) executeScript(ctx context.Context, step *schema.WorkflowStep, stepEnv []string, output ControlChildOutput) (*ControlChildResult, error) {
+	argv, stdin := process.ScriptInvocation(step.Interpreter, step.Script)
+	ioSpec := executor.commandStreams(output)
+	if stdin != nil {
+		ioSpec.streams.Stdin = stdin
+	}
+	err := retry.Do(ctx, step.Retry, func() error {
+		return executor.runCommand(&ControlCommandRequest{
+			Context: ctx,
+			Program: argv[0],
+			Args:    argv[1:],
+			Env:     stepEnv,
+			Streams: ioSpec.streams,
+			Stdout:  ioSpec.stdout,
+			Stderr:  ioSpec.stderr,
+		})
+	})
+	ioSpec.flush()
+	return controlChildExecutionResult(ioSpec.stdout, ioSpec.stderr, err), err
 }
 
 func (executor *ControlCommandExecutor) executeShell(ctx context.Context, step *schema.WorkflowStep, stepEnv []string, output ControlChildOutput) (*ControlChildResult, error) {

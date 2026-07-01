@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -908,6 +909,12 @@ func executeCustomCommand(
 		commandToRun, err := stepVars.Resolve(step.Command)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
+		stepWorkDir := workDir
+		if strings.TrimSpace(step.WorkingDirectory) != "" {
+			stepWorkDir, err = resolveWorkingDirectory(step.WorkingDirectory, workDir, workDir)
+			errUtils.CheckErrorPrintAndExit(err, "Invalid working_directory", "https://atmos.tools/cli/configuration/commands/working-directory")
+		}
+
 		// Determine step type - default to shell if not specified.
 		stepType := strings.TrimSpace(step.Type)
 		if stepType == "" {
@@ -932,19 +939,29 @@ func executeCustomCommand(
 			err = process.RunShellStep(context.Background(), &process.ShellSessionSpec{
 				Command:     commandToRun,
 				Name:        commandName,
-				Dir:         workDir,
+				Dir:         stepWorkDir,
 				Env:         env,
 				TTY:         step.Tty,
 				Interactive: step.Interactive,
 			}, func() error {
-				return e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+				if step.Output == string(stepPkg.OutputModeNone) {
+					return e.ExecuteShellWithWriters(&e.ExecuteShellSpec{
+						Command: commandToRun,
+						Name:    commandName,
+						Dir:     stepWorkDir,
+						EnvVars: env,
+						Stdout:  io.Discard,
+						Stderr:  io.Discard,
+					})
+				}
+				return e.ExecuteShell(commandToRun, commandName, stepWorkDir, env, false)
 			})
 		case schema.TaskTypeExec:
 			// Replace the Atmos process with the command (shell exec semantics).
 			err = process.ReplaceShellSession(&process.ExecSpec{
 				Command: commandToRun,
 				Name:    fmt.Sprintf("%s-step-%d", commandConfig.Name, i),
-				Dir:     workDir,
+				Dir:     stepWorkDir,
 				Env:     env,
 			})
 		case "atmos":
@@ -955,7 +972,7 @@ func executeCustomCommand(
 				err = execErr
 				break
 			}
-			err = e.ExecuteShellCommand(atmosConfig, execPath, args, workDir, env, false, "")
+			err = e.ExecuteShellCommand(atmosConfig, execPath, args, stepWorkDir, env, false, "")
 		default:
 			// Check if this is an extended step type (input, confirm, choose, etc.).
 			if stepPkg.IsExtendedStepType(stepType) {
@@ -975,10 +992,7 @@ func executeCustomCommand(
 					mergedStepEnv[key] = value
 				}
 				workflowStep.Env = mergedStepEnv
-				// Propagate working directory to extended step if not already set.
-				if workflowStep.WorkingDirectory == "" {
-					workflowStep.WorkingDirectory = workDir
-				}
+				workflowStep.WorkingDirectory = stepWorkDir
 
 				if stack, ok := flagsData["stack"].(string); ok && stack != "" {
 					executor.SetFlag("stack", stack)

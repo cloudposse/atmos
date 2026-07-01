@@ -1,3 +1,8 @@
+---
+asciicast: /casts/examples/quick-start-advanced.cast
+asciicastTitle: atmos quick start advanced
+---
+
 # Atmos Quick Start (Advanced)
 
 [Atmos](https://atmos.tools/) is a universal tool for DevOps and cloud automation. This advanced

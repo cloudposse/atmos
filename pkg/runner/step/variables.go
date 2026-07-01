@@ -241,6 +241,7 @@ func (v *Variables) templateData() map[string]any {
 	}
 	data := map[string]any{
 		"steps": steps,
+		"Env":   v.Env,
 		"env":   v.Env,
 		"Flags": v.Flags,
 		"flags": v.Flags,

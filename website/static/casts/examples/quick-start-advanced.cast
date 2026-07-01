@@ -1,0 +1,7 @@
+{"version":2,"width":120,"height":36,"timestamp":1782878643,"command":"atmos list stacks --format tree","env":{"SHELL":"/bin/zsh","TERM":"dumb"}}
+[0.003288166,"e","[list-stacks]\n"]
+[7.03356825,"o"," Stacks \n│\n├──plat-ue2-dev\n│\n├──plat-ue2-prod\n│\n├──plat-ue2-staging\n│\n├──plat-uw2-dev\n│\n├──plat-uw2-prod\n│\n└──plat-uw2-staging\n\n"]
+[7.033646208,"e","✓ list-stacks completed\n"]
+[7.03668075,"e","[list-instances]\n"]
+[7.489539458,"o"," Component Instances \n│\n└──plat-ue2-dev\n   ├──app-config (components/terraform/app-config)\n   ├──aws (components/emulator/aws)\n   ├──dynamodb-table (components/terraform/dynamodb-table)\n   ├──kms-key (components/terraform/kms-key)\n   ├──s3-bucket (components/terraform/s3-bucket)\n   ├──sns-topic (components/terraform/sns-topic)\n   └──sqs-queue (components/terraform/sqs-queue)\n\n"]
+[7.489592375,"e","✓ list-instances completed\n"]

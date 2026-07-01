@@ -206,6 +206,8 @@ type WorkflowStep struct {
 	// Existing fields.
 	Name             string       `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 	Command          string       `yaml:"command" json:"command" mapstructure:"command"`
+	Script           string       `yaml:"script,omitempty" json:"script,omitempty" mapstructure:"script"`                // Inline script body for type: script.
+	Interpreter      string       `yaml:"interpreter,omitempty" json:"interpreter,omitempty" mapstructure:"interpreter"` // Script interpreter for type: script.
 	Stack            string       `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
 	Type             string       `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 	WorkingDirectory string       `yaml:"working_directory,omitempty" json:"working_directory,omitempty" mapstructure:"working_directory"`

@@ -1,3 +1,8 @@
+---
+asciicast: /casts/examples/sops-secrets.cast
+asciicastTitle: atmos sops secrets lifecycle
+---
+
 # SOPS Secrets Example
 
 Atmos **declarative secrets management** end to end with a **SOPS** backend (age encryption) — the

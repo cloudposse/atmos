@@ -1,0 +1,7 @@
+{"version":2,"width":120,"height":36,"timestamp":1782878623,"command":"atmos list stacks --format tree","env":{"SHELL":"/bin/zsh","TERM":"dumb"}}
+[0.030716,"e","[list-stacks]\n"]
+[6.115236625,"o"," Stacks \n│\n├──dev\n│\n├──prod\n│\n└──staging\n\n"]
+[6.115611708,"e","✓ list-stacks completed\n"]
+[6.12053575,"e","[list-components]\n"]
+[7.489395292,"o","station\tterraform\t3\n"]
+[7.489492708,"e","✓ list-components completed\n"]

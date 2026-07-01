@@ -14,6 +14,8 @@ import (
 const (
 	// TaskTypeShell is the default task type for shell commands.
 	TaskTypeShell = "shell"
+	// TaskTypeScript is the task type for inline scripts run by an explicit interpreter.
+	TaskTypeScript = "script"
 	// TaskTypeAtmos is the task type for atmos commands.
 	TaskTypeAtmos = "atmos"
 	// TaskTypeParallel is the task type for running nested steps concurrently.
@@ -54,7 +56,11 @@ type Task struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 	// Command is the command to execute.
 	Command string `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
-	// Type specifies the command type: TaskTypeShell, TaskTypeAtmos, or TaskTypeExec. Defaults to TaskTypeShell.
+	// Script is the inline script body for TaskTypeScript.
+	Script string `yaml:"script,omitempty" json:"script,omitempty" mapstructure:"script"`
+	// Interpreter is the executable used to run Script for TaskTypeScript.
+	Interpreter string `yaml:"interpreter,omitempty" json:"interpreter,omitempty" mapstructure:"interpreter"`
+	// Type specifies the command type: TaskTypeShell, TaskTypeScript, TaskTypeAtmos, or TaskTypeExec. Defaults to TaskTypeShell.
 	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 	// Timeout specifies the maximum duration for the task. Zero means no timeout.
 	Timeout time.Duration `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
@@ -307,6 +313,8 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		// Core fields.
 		Name:             task.Name,
 		Command:          task.Command,
+		Script:           task.Script,
+		Interpreter:      task.Interpreter,
 		Type:             task.Type,
 		Stack:            task.Stack,
 		WorkingDirectory: task.WorkingDirectory,
@@ -451,6 +459,8 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		// Core fields.
 		Name:             step.Name,
 		Command:          step.Command,
+		Script:           step.Script,
+		Interpreter:      step.Interpreter,
 		Type:             step.Type,
 		Stack:            step.Stack,
 		WorkingDirectory: step.WorkingDirectory,

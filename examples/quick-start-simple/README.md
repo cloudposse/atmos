@@ -1,3 +1,8 @@
+---
+asciicast: /casts/examples/quick-start-simple.cast
+asciicastTitle: atmos quick start simple
+---
+
 # Example: Quick Start Simple
 
 Minimal Atmos setup with a single component and three environments.

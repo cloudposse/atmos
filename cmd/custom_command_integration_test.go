@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,6 +25,175 @@ func stepsFromStrings(commands ...string) schema.Tasks {
 		tasks[i] = schema.Task{Command: cmd, Type: "shell"}
 	}
 	return tasks
+}
+
+func captureStdoutStderr(t *testing.T, fn func()) (string, string) {
+	t.Helper()
+
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	require.NoError(t, err)
+	stderrReader, stderrWriter, err := os.Pipe()
+	require.NoError(t, err)
+
+	os.Stdout = stdoutWriter
+	os.Stderr = stderrWriter
+
+	fn()
+
+	require.NoError(t, stdoutWriter.Close())
+	require.NoError(t, stderrWriter.Close())
+	os.Stdout = oldStdout
+	os.Stderr = oldStderr
+
+	stdout, err := io.ReadAll(stdoutReader)
+	require.NoError(t, err)
+	stderr, err := io.ReadAll(stderrReader)
+	require.NoError(t, err)
+
+	require.NoError(t, stdoutReader.Close())
+	require.NoError(t, stderrReader.Close())
+
+	return string(stdout), string(stderr)
+}
+
+func TestCustomCommandStepWorkingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell redirection")
+	}
+
+	_ = NewTestKit(t)
+
+	tmpDir := t.TempDir()
+	stepDir := filepath.Join(tmpDir, "step-dir")
+	require.NoError(t, os.Mkdir(stepDir, 0o755))
+	outputFile := filepath.Join(tmpDir, "pwd.txt")
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{
+			{
+				Name:             "test-step-workdir",
+				Description:      "Exercise step-level working_directory",
+				WorkingDirectory: tmpDir,
+				Steps: schema.Tasks{
+					{
+						Type:             "shell",
+						Name:             "pwd",
+						WorkingDirectory: "step-dir",
+						Command:          fmt.Sprintf("pwd > %q", outputFile),
+					},
+				},
+			},
+		},
+	}
+
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	customCmd, _, err := RootCmd.Find([]string{"test-step-workdir"})
+	require.NoError(t, err)
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
+
+	actual, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	assert.Equal(t, stepDir, strings.TrimSpace(string(actual)))
+}
+
+func TestCustomCommandEnvValueCanUseEnvTemplateAlias(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell redirection")
+	}
+
+	_ = NewTestKit(t)
+
+	tmpDir := t.TempDir()
+	outputFile := filepath.Join(tmpDir, "env.txt")
+	t.Setenv("ATMOS_TEST_TEMPLATE_SOURCE", "from-env-alias")
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{
+			{
+				Name:        "test-env-template-alias",
+				Description: "Exercise command env .Env template alias",
+				Env: []schema.CommandEnv{
+					{Key: "ATMOS_TEST_TEMPLATE_TARGET", Value: "{{ .Env.ATMOS_TEST_TEMPLATE_SOURCE }}"},
+				},
+				Steps: schema.Tasks{
+					{
+						Type:    "shell",
+						Name:    "write-env",
+						Command: fmt.Sprintf("printf '%%s' \"$ATMOS_TEST_TEMPLATE_TARGET\" > %q", outputFile),
+					},
+				},
+			},
+		},
+	}
+
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	customCmd, _, err := RootCmd.Find([]string{"test-env-template-alias"})
+	require.NoError(t, err)
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
+
+	actual, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	assert.Equal(t, "from-env-alias", string(actual))
+}
+
+func TestCustomCommandShellOutputNoneSuppressesOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell redirection")
+	}
+
+	_ = NewTestKit(t)
+
+	tmpDir := t.TempDir()
+	outputFile := filepath.Join(tmpDir, "ran.txt")
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{
+			{
+				Name:        "test-output-none",
+				Description: "Exercise output none for legacy shell custom command steps",
+				Steps: schema.Tasks{
+					{
+						Type:    "shell",
+						Name:    "quiet",
+						Output:  "none",
+						Command: fmt.Sprintf("echo stdout-visible; echo stderr-visible >&2; printf ran > %q", outputFile),
+					},
+				},
+			},
+		},
+	}
+
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	customCmd, _, err := RootCmd.Find([]string{"test-output-none"})
+	require.NoError(t, err)
+	require.NotNil(t, customCmd)
+
+	stdout, stderr := captureStdoutStderr(t, func() {
+		customCmd.Run(customCmd, []string{})
+	})
+
+	assert.NotContains(t, stdout, "stdout-visible")
+	assert.NotContains(t, stderr, "stderr-visible")
+
+	actual, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	assert.Equal(t, "ran", string(actual))
 }
 
 // TestCustomCommandIntegration_MockProviderEnvironment tests that custom commands with mock provider

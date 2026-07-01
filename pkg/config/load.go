@@ -1706,6 +1706,7 @@ func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
 		schema.ConditionDecodeHook(),
+		schema.CommandEnvDecodeHook(),
 		schema.TasksDecodeHook(),
 	)
 }
@@ -1789,6 +1790,25 @@ func restoreCaseSensitiveEnvMaps(atmosConfig *schema.AtmosConfiguration) {
 	}
 	if caseSensitiveEnv := atmosConfig.GetCaseSensitiveMap("templates.settings.env"); len(caseSensitiveEnv) > 0 {
 		atmosConfig.Templates.Settings.Env = caseSensitiveEnv
+	}
+	restoreCommandEnvCase(atmosConfig.Commands, atmosConfig.CaseMaps)
+}
+
+func restoreCommandEnvCase(commands []schema.Command, caseMaps *casemap.CaseMaps) {
+	if len(commands) == 0 || caseMaps == nil {
+		return
+	}
+	envCaseMap := caseMaps.Get(envKey)
+	if len(envCaseMap) == 0 {
+		return
+	}
+	for i := range commands {
+		for j := range commands[i].Env {
+			if original, ok := envCaseMap[strings.ToLower(commands[i].Env[j].Key)]; ok {
+				commands[i].Env[j].Key = original
+			}
+		}
+		restoreCommandEnvCase(commands[i].Commands, caseMaps)
 	}
 }
 

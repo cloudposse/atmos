@@ -357,6 +357,8 @@ func TestTaskWorkflowStepControlFieldsRoundTrip(t *testing.T) {
 		Identity:         "id",
 		Stack:            "dev",
 		Command:          "run",
+		Script:           "print('ok')",
+		Interpreter:      "python3",
 	}
 
 	step := task.ToWorkflowStep()
@@ -371,6 +373,8 @@ func TestTaskWorkflowStepControlFieldsRoundTrip(t *testing.T) {
 	assert.Equal(t, task.Name, roundTripped.Name)
 	assert.Equal(t, task.Needs, roundTripped.Needs)
 	assert.Equal(t, task.Output, roundTripped.Output)
+	assert.Equal(t, task.Script, roundTripped.Script)
+	assert.Equal(t, task.Interpreter, roundTripped.Interpreter)
 	assert.Equal(t, task.ParallelOutput, roundTripped.ParallelOutput)
 	assert.Equal(t, task.Timeout, roundTripped.Timeout)
 	assert.Equal(t, task.Steps, roundTripped.Steps)

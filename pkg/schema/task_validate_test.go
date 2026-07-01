@@ -38,6 +38,34 @@ func TestValidateExecTasks(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name: "valid script step",
+			tasks: Tasks{
+				{Type: TaskTypeScript, Interpreter: "python3", Script: "print('ok')"},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "script missing interpreter",
+			tasks: Tasks{
+				{Type: TaskTypeScript, Script: "print('ok')"},
+			},
+			wantErr: ErrScriptStepFieldRequired,
+		},
+		{
+			name: "script missing script",
+			tasks: Tasks{
+				{Type: TaskTypeScript, Interpreter: "python3"},
+			},
+			wantErr: ErrScriptStepFieldRequired,
+		},
+		{
+			name: "script rejects command",
+			tasks: Tasks{
+				{Type: TaskTypeScript, Interpreter: "python3", Script: "print('ok')", Command: "python3 - <<'PY'"},
+			},
+			wantErr: ErrScriptStepInvalidField,
+		},
+		{
 			name: "exec as only step",
 			tasks: Tasks{
 				{Type: TaskTypeExec, Command: "aws ssm start-session"},
@@ -147,6 +175,20 @@ func TestValidateExecWorkflowSteps(t *testing.T) {
 				{Type: TaskTypeExec, Command: "psql $DATABASE_URL"},
 			},
 			wantErr: nil,
+		},
+		{
+			name: "valid script step",
+			steps: []WorkflowStep{
+				{Type: TaskTypeScript, Interpreter: "python3", Script: "print('ok')"},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "script rejects command",
+			steps: []WorkflowStep{
+				{Type: TaskTypeScript, Interpreter: "python3", Script: "print('ok')", Command: "python3 - <<'PY'"},
+			},
+			wantErr: ErrScriptStepInvalidField,
 		},
 		{
 			name: "exec not last",

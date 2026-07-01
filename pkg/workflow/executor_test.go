@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -25,6 +26,37 @@ func newTestParams(workflowDef *schema.WorkflowDefinition, opts ExecuteOptions) 
 		WorkflowDefinition: workflowDef,
 		Opts:               opts,
 	}
+}
+
+func TestExecutor_Execute_ScriptWorkflow(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not found on PATH")
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+	executor := NewExecutor(mockRunner, nil, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{
+				Name:        "validate",
+				Type:        schema.TaskTypeScript,
+				Interpreter: "python3",
+				Script:      "from pathlib import Path\nprint(Path('.').resolve())\n",
+				Output:      "none",
+			},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	require.Len(t, result.Steps, 1)
+	assert.Equal(t, "validate", result.Steps[0].StepName)
 }
 
 // TestExecutor_Execute_BasicShellWorkflow tests executing a simple shell workflow.

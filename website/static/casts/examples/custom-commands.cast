@@ -1,0 +1,7 @@
+{"version":2,"width":120,"height":36,"timestamp":1782878665,"command":"atmos hello","env":{"SHELL":"/bin/zsh","TERM":"dumb"}}
+[0.000854,"e","[hello]\n"]
+[2.036994583,"o","Hello world!\n"]
+[2.037074,"e","✓ hello completed\n"]
+[2.038175458,"e","[greet]\n"]
+[2.404605,"o","Hello, Alice\n"]
+[2.404666917,"e","✓ greet completed\n"]

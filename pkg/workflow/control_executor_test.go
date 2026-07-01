@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"runtime"
 	"testing"
 	"time"
@@ -66,6 +67,40 @@ func TestControlCommandExecutorExecuteShell(t *testing.T) {
 	assert.Equal(t, "build ok", result.Stdout)
 	assert.Equal(t, "build warning", result.Stderr)
 	assert.False(t, result.Canceled)
+}
+
+func TestControlCommandExecutorExecuteScript(t *testing.T) {
+	var gotProgram string
+	var gotArgs []string
+	var gotStdin string
+
+	executor := &ControlCommandExecutor{
+		PrepareEnv: func(baseEnv []string, identity string, stepName string, workflowEnv map[string]string, stepEnv map[string]string) ([]string, error) {
+			return []string{"SCRIPT_ENV=true"}, nil
+		},
+		RunCommand: func(request *ControlCommandRequest) error {
+			gotProgram = request.Program
+			gotArgs = append([]string{}, request.Args...)
+			stdin, err := io.ReadAll(request.Streams.Stdin)
+			require.NoError(t, err)
+			gotStdin = string(stdin)
+			request.Stdout.WriteString("script ok")
+			return nil
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), &ControlChild{Step: schema.WorkflowStep{
+		Name:        "validate",
+		Type:        schema.TaskTypeScript,
+		Interpreter: "python3",
+		Script:      "print('ok')",
+	}}, ControlChildOutput{Mode: ControlOutputNone})
+
+	require.NoError(t, err)
+	assert.Equal(t, "python3", gotProgram)
+	assert.Equal(t, []string{"-"}, gotArgs)
+	assert.Equal(t, "print('ok')", gotStdin)
+	assert.Equal(t, "script ok", result.Stdout)
 }
 
 func TestControlShellInvocationForOS(t *testing.T) {

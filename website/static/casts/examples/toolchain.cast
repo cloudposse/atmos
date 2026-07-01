@@ -1,0 +1,4 @@
+{"version":2,"width":120,"height":36,"timestamp":1782878662,"command":"atmos demo convert","env":{"SHELL":"/bin/zsh","TERM":"dumb"}}
+[0.000878959,"e","[demo-convert]\n"]
+[0.908186709,"o","Converting YAML to formatted JSON\n{\n  \"name\": \"atmos\"\n}\n"]
+[0.908274834,"e","✓ demo-convert completed\n"]
