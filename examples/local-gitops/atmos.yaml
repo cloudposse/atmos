@@ -19,7 +19,8 @@ git:
       branch: main
       # Keep the managed clone inside the project (not the shared XDG cache) so the
       # demo is self-contained and each fresh `gitserver` lines up with a fresh
-      # workdir. `atmos teardown` removes it; the .gitignore keeps it out of git.
+      # workdir. `atmos git clean deployments` removes it; the .gitignore keeps
+      # it out of git.
       workdir: .atmos/git/deployments
       commit:
         # Pin the committer identity so the provisioner's `git commit` works on a CI
@@ -74,4 +75,4 @@ commands:
           - atmos emulator down gitserver -s local
           # Remove the managed deployments clone so a later `atmos gitops up` starts
           # from a fresh workdir that matches a fresh `gitserver` repository.
-          - rm -rf .atmos/git/deployments
+          - atmos git clean deployments --force
