@@ -10,7 +10,7 @@ import Workloads from '@site/src/components/landing/Workloads';
 import Extensibility from '@site/src/components/landing/Extensibility';
 import FinalCta from '@site/src/components/landing/FinalCta';
 import '../css/landing-page.css';
-import '../css/landing-redesign.css';
+import '../css/landing-runtime.css';
 
 function Home() {
   const [scrolled, setScrolled] = useState(false);
