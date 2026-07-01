@@ -131,6 +131,21 @@ Use `--failure-mode keep-going` to continue independent graph branches after one
         atmos terraform destroy vpc -s dev --dry-run
         ```
     </dd>
+
+    <dt>`--log-order` <em>(optional)</em></dt>
+    <dd>
+        Controls how concurrent per-component logs are ordered when `--max-concurrency` is greater than `1`.
+
+        Supported values:
+        - `stream` *(default)* — print log lines as they arrive, interleaved across components
+        - `grouped` — buffer each component's output and print it as a contiguous block after the component finishes
+
+        **Environment variable:** `ATMOS_TERRAFORM_DESTROY_LOG_ORDER`
+
+        ```shell
+        atmos terraform destroy --all -s dev --max-concurrency 2 -auto-approve --log-order grouped
+        ```
+    </dd>
 </dl>
 
 ## Native Terraform Flags
