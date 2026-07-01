@@ -15,6 +15,7 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 var (
@@ -26,11 +27,12 @@ var (
 	ErrPauseActionRequiresDuration   = errors.New("pause action requires duration")
 	ErrWaitActionRequiresTextOrRegex = errors.New("wait action requires exactly one of text or regex")
 	ErrUnsupportedSessionAction      = errors.New("unsupported session action type")
+	ErrInvalidSimulateMode           = errors.New("simulate step has invalid mode")
+	ErrSimulateTypedRequiresText     = errors.New("simulate typed step requires text")
+	ErrUnsupportedPromptStyle        = errors.New("unsupported simulate prompt style")
 )
 
 const wrappedQuotedErrorFormat = "%w: %q"
-
-const castPrompt = "\x1b[1;38;2;0;95;135m>\x1b[0m "
 
 const (
 	defaultCastTypeDelay      = 35 * time.Millisecond
@@ -57,6 +59,13 @@ func (h *CastHandler) Validate(step *schema.WorkflowStep) error {
 	case "steps":
 		if len(step.Steps) == 0 {
 			return fmt.Errorf(wrappedQuotedErrorFormat, ErrCastStepRequiresSteps, step.Name)
+		}
+		for i := range step.Steps {
+			if step.Steps[i].Type == schema.TaskTypeSimulate {
+				if err := validateCastSimulateStep(&step.Steps[i]); err != nil {
+					return fmt.Errorf("cast simulate step %d: %w", i+1, err)
+				}
+			}
 		}
 	case "session":
 		if len(step.Steps) == 0 {
@@ -171,8 +180,11 @@ func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *V
 	for i := range castStep.Steps {
 		child := &castStep.Steps[i]
 		prepareCastChildStep(castStep, child, i)
-		if err := recordCastStepInput(ctx, castStep, child, vars); err != nil {
-			return err
+		if child.Type == schema.TaskTypeSimulate {
+			if err := runCastSimulateStep(ctx, castStep, child, vars); err != nil {
+				return err
+			}
+			continue
 		}
 		if _, err := executor.Execute(ctx, child); err != nil {
 			return err
@@ -181,7 +193,7 @@ func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *V
 			return err
 		}
 	}
-	return recordCastPrompt()
+	return recordCastPrompt(nil)
 }
 
 func applyCastStepEnv(castStep *schema.WorkflowStep, vars *Variables) error {
@@ -217,32 +229,36 @@ func prepareCastChildStep(castStep, child *schema.WorkflowStep, index int) {
 	if child.Output == "" {
 		child.Output = castStep.Output
 	}
+	if child.Show == nil {
+		child.Show = castStep.Show
+	}
 }
 
-func recordCastStepInput(ctx context.Context, castStep, child *schema.WorkflowStep, vars *Variables) error {
-	lines, err := castStepInputLines(child, vars)
-	if err != nil {
-		return err
-	}
-	writeRate, err := parseDurationDefault(castStep.WriteRate, defaultCastTypeDelay)
-	if err != nil {
-		return err
-	}
-	enterDelay, err := castStepEnterDelay(child)
-	if err != nil {
-		return err
-	}
-	for _, line := range lines {
-		if err := recordCastTypedLine(ctx, line, writeRate, enterDelay); err != nil {
+func runCastSimulateStep(ctx context.Context, castStep, child *schema.WorkflowStep, vars *Variables) error {
+	switch castSimulateMode(child) {
+	case "typed":
+		text, err := vars.Resolve(strings.TrimRight(child.Text, "\n"))
+		if err != nil {
 			return err
 		}
+		writeRate, err := parseDurationDefault(firstNonEmpty(child.Rate, castStep.WriteRate), defaultCastTypeDelay)
+		if err != nil {
+			return err
+		}
+		enterDelay, err := castStepEnterDelay(child)
+		if err != nil {
+			return err
+		}
+		return recordCastTypedLine(ctx, child.SimulatePrompt, text, writeRate, enterDelay)
+	case "prompt":
+		return recordCastPrompt(child.SimulatePrompt)
+	default:
+		return fmt.Errorf(wrappedQuotedErrorFormat, ErrInvalidSimulateMode, child.Mode)
 	}
-	return nil
 }
 
-func recordCastTypedLine(ctx context.Context, line string, writeRate, enterDelay time.Duration) error {
-	writer := iolib.GetContext().Data()
-	if _, err := fmt.Fprint(writer, castPrompt); err != nil {
+func recordCastTypedLine(ctx context.Context, prompt *schema.SimulatePrompt, line string, writeRate, enterDelay time.Duration) error {
+	if err := recordCastPrompt(prompt); err != nil {
 		return err
 	}
 	if err := sleepCastInput(ctx, defaultCastPromptDelay); err != nil {
@@ -252,14 +268,96 @@ func recordCastTypedLine(ctx context.Context, line string, writeRate, enterDelay
 		if err := sleepCastInput(ctx, writeRate); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprint(writer, string(char)); err != nil {
+		if _, err := fmt.Fprint(iolib.GetContext().Data(), string(char)); err != nil {
 			return err
 		}
 	}
 	if err := sleepCastInput(ctx, enterDelay); err != nil {
 		return err
 	}
-	_, err := fmt.Fprint(writer, "\n")
+	_, err := fmt.Fprint(iolib.GetContext().Data(), "\n")
+	return err
+}
+
+func castPromptText(prompt *schema.SimulatePrompt) string {
+	if prompt == nil || prompt.Text == "" {
+		return "> "
+	}
+	return prompt.Text
+}
+
+func castPromptStyle(prompt *schema.SimulatePrompt) string {
+	if prompt == nil || strings.TrimSpace(prompt.Style) == "" {
+		return "command"
+	}
+	return strings.TrimSpace(prompt.Style)
+}
+
+func renderCastPrompt(prompt *schema.SimulatePrompt) (string, error) {
+	text := castPromptText(prompt)
+	styles := theme.GetCurrentStyles()
+	if styles == nil {
+		return text, nil
+	}
+	switch castPromptStyle(prompt) {
+	case "command":
+		return styles.Command.Bold(true).Render(text), nil
+	case "label":
+		return styles.Label.Render(text), nil
+	case "muted":
+		return styles.Muted.Render(text), nil
+	case "info":
+		return styles.Info.Render(text), nil
+	case "notice":
+		return styles.Notice.Render(text), nil
+	default:
+		return "", fmt.Errorf(wrappedQuotedErrorFormat, ErrUnsupportedPromptStyle, castPromptStyle(prompt))
+	}
+}
+
+func validateCastSimulateStep(step *schema.WorkflowStep) error {
+	switch castSimulateMode(step) {
+	case "typed":
+		if strings.TrimRight(step.Text, "\n") == "" {
+			return ErrSimulateTypedRequiresText
+		}
+		if _, err := parseDurationDefault(step.Rate, 0); step.Rate != "" && err != nil {
+			return err
+		}
+		if _, err := castStepEnterDelay(step); err != nil {
+			return err
+		}
+	case "prompt":
+	default:
+		return fmt.Errorf(wrappedQuotedErrorFormat, ErrInvalidSimulateMode, step.Mode)
+	}
+	_, err := renderCastPrompt(step.SimulatePrompt)
+	return err
+}
+
+func castSimulateMode(step *schema.WorkflowStep) string {
+	mode := strings.TrimSpace(step.Mode)
+	if mode == "" {
+		return "typed"
+	}
+	return mode
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func recordCastPrompt(prompt *schema.SimulatePrompt) error {
+	rendered, err := renderCastPrompt(prompt)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(iolib.GetContext().Data(), rendered)
 	return err
 }
 
@@ -275,11 +373,6 @@ func castStepPauseDelay(child *schema.WorkflowStep) time.Duration {
 	return delay
 }
 
-func recordCastPrompt() error {
-	_, err := fmt.Fprint(iolib.GetContext().Data(), castPrompt)
-	return err
-}
-
 func sleepCastInput(ctx context.Context, delay time.Duration) error {
 	if delay <= 0 {
 		return nil
@@ -292,27 +385,6 @@ func sleepCastInput(ctx context.Context, delay time.Duration) error {
 	case <-timer.C:
 		return nil
 	}
-}
-
-func castStepInputLines(child *schema.WorkflowStep, vars *Variables) ([]string, error) {
-	var lines []string
-	if text := strings.TrimRight(child.Text, "\n"); text != "" {
-		resolved, err := vars.Resolve(text)
-		if err != nil {
-			return nil, err
-		}
-		lines = append(lines, strings.Split(resolved, "\n")...)
-	}
-
-	command := strings.TrimSpace(child.Command)
-	if command == "" {
-		return lines, nil
-	}
-	resolved, err := vars.Resolve(command)
-	if err != nil {
-		return nil, err
-	}
-	return append(lines, resolved), nil
 }
 
 func runCastSessionMode(ctx context.Context, castStep *schema.WorkflowStep) error {

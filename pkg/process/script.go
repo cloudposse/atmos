@@ -37,7 +37,7 @@ func ScriptInvocation(interpreter, script string) ([]string, io.Reader) {
 	case "bash", "dash", "ksh", "sh", "zsh":
 		return []string{interp, "-c", script}, nil
 	default:
-		return []string{interp, "-c", script}, nil
+		return []string{interp, "-"}, strings.NewReader(script)
 	}
 }
 

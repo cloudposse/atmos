@@ -27,6 +27,8 @@ const (
 	TaskTypeExec = "exec"
 	// TaskTypeCast records nested steps or a scripted shell session as an asciicast.
 	TaskTypeCast = "cast"
+	// TaskTypeSimulate records simulated terminal activity inside a cast step.
+	TaskTypeSimulate = "simulate"
 	// TaskTypeWorkdir provisions a mutable working directory from a source.
 	TaskTypeWorkdir = "workdir"
 	// TaskTypeWait is the action step that blocks until the background step(s)
@@ -82,13 +84,14 @@ type Task struct {
 	Tty bool `yaml:"tty,omitempty" json:"tty,omitempty" mapstructure:"tty"`
 
 	// Interactive step fields.
-	Prompt      string   `yaml:"prompt,omitempty" json:"prompt,omitempty" mapstructure:"prompt"`                // Prompt text for interactive types.
-	Options     []string `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`             // Options for choose/filter.
-	Default     string   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`             // Default value.
-	Placeholder string   `yaml:"placeholder,omitempty" json:"placeholder,omitempty" mapstructure:"placeholder"` // Input placeholder.
-	Password    bool     `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`          // Mask input.
-	Multiple    bool     `yaml:"multiple,omitempty" json:"multiple,omitempty" mapstructure:"multiple"`          // Allow multiple selection.
-	Limit       int      `yaml:"limit,omitempty" json:"limit,omitempty" mapstructure:"limit"`                   // Selection limit.
+	Prompt         string          `yaml:"prompt,omitempty" json:"prompt,omitempty" mapstructure:"prompt"`                // Prompt text for interactive types.
+	SimulatePrompt *SimulatePrompt `yaml:"-" json:"simulate_prompt,omitempty" mapstructure:"simulate_prompt"`             // Structured prompt for cast simulation steps.
+	Options        []string        `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`             // Options for choose/filter.
+	Default        string          `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`             // Default value.
+	Placeholder    string          `yaml:"placeholder,omitempty" json:"placeholder,omitempty" mapstructure:"placeholder"` // Input placeholder.
+	Password       bool            `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`          // Mask input.
+	Multiple       bool            `yaml:"multiple,omitempty" json:"multiple,omitempty" mapstructure:"multiple"`          // Allow multiple selection.
+	Limit          int             `yaml:"limit,omitempty" json:"limit,omitempty" mapstructure:"limit"`                   // Selection limit.
 
 	// Output/UI step fields.
 	Content   string           `yaml:"content,omitempty" json:"content,omitempty" mapstructure:"content"`       // Content for output types (supports templates).
@@ -234,11 +237,14 @@ func (task *Task) UnmarshalYAML(value *yaml.Node) error {
 	*task = Task(fresh)
 	return applyStepPolymorphicNodes(nodes, task.Type, task.Action, &stepPolyTargets{
 		output:    &task.Output,
+		prompt:    &task.Prompt,
+		simPrompt: &task.SimulatePrompt,
 		cast:      &task.CastOutput,
 		parallel:  &task.ParallelOutput,
 		async:     &task.BackgroundAsync,
 		color:     &task.Background,
 		forList:   &task.For,
+		steps:     &task.Steps,
 		container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
 	})
 }
@@ -326,13 +332,14 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Tty:              task.Tty,
 
 		// Interactive step fields.
-		Prompt:      task.Prompt,
-		Options:     task.Options,
-		Default:     task.Default,
-		Placeholder: task.Placeholder,
-		Password:    task.Password,
-		Multiple:    task.Multiple,
-		Limit:       task.Limit,
+		Prompt:         task.Prompt,
+		SimulatePrompt: task.SimulatePrompt,
+		Options:        task.Options,
+		Default:        task.Default,
+		Placeholder:    task.Placeholder,
+		Password:       task.Password,
+		Multiple:       task.Multiple,
+		Limit:          task.Limit,
 
 		// Output/UI step fields.
 		Content:   task.Content,
@@ -473,13 +480,14 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Timeout:          timeout,
 
 		// Interactive step fields.
-		Prompt:      step.Prompt,
-		Options:     step.Options,
-		Default:     step.Default,
-		Placeholder: step.Placeholder,
-		Password:    step.Password,
-		Multiple:    step.Multiple,
-		Limit:       step.Limit,
+		Prompt:         step.Prompt,
+		SimulatePrompt: step.SimulatePrompt,
+		Options:        step.Options,
+		Default:        step.Default,
+		Placeholder:    step.Placeholder,
+		Password:       step.Password,
+		Multiple:       step.Multiple,
+		Limit:          step.Limit,
 
 		// Output/UI step fields.
 		Content:   step.Content,
@@ -650,6 +658,14 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	if err != nil {
 		return Task{}, fmt.Errorf("failed to decode task output at index %d: %w", index, err)
 	}
+	m, err = normalizeTaskPromptMap(m, &task)
+	if err != nil {
+		return Task{}, fmt.Errorf("failed to decode task prompt at index %d: %w", index, err)
+	}
+	m, err = normalizeTaskStepsMap(m)
+	if err != nil {
+		return Task{}, fmt.Errorf("failed to decode task steps at index %d: %w", index, err)
+	}
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		Result:           &task,
 		TagName:          "mapstructure",
@@ -670,6 +686,108 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 		task.Type = TaskTypeShell
 	}
 	return task, nil
+}
+
+func normalizeTaskStepsMap(m map[string]any) (map[string]any, error) {
+	steps, ok := m["steps"]
+	if !ok {
+		return m, nil
+	}
+	normalized, err := normalizeWorkflowStepMaps(steps)
+	if err != nil {
+		return nil, err
+	}
+	copied := make(map[string]any, len(m))
+	for key, val := range m {
+		copied[key] = val
+	}
+	copied["steps"] = normalized
+	return copied, nil
+}
+
+func normalizeWorkflowStepMaps(value any) (any, error) {
+	steps, ok := value.([]any)
+	if !ok {
+		return value, nil
+	}
+	normalized := make([]any, len(steps))
+	for i, item := range steps {
+		stepMap, ok := item.(map[string]any)
+		if !ok {
+			normalized[i] = item
+			continue
+		}
+		normalizedStep, err := normalizeWorkflowStepMap(stepMap)
+		if err != nil {
+			return nil, err
+		}
+		normalized[i] = normalizedStep
+	}
+	return normalized, nil
+}
+
+func normalizeWorkflowStepMap(m map[string]any) (map[string]any, error) {
+	copied := make(map[string]any, len(m))
+	for key, val := range m {
+		copied[key] = val
+	}
+	if prompt, ok := copied["prompt"]; ok {
+		switch v := prompt.(type) {
+		case string:
+		case map[string]any:
+			if copied["type"] != TaskTypeSimulate {
+				return nil, fmt.Errorf("%w: structured prompt is supported only for type %q", ErrWorkflowControlStepInvalid, TaskTypeSimulate)
+			}
+			copied["simulate_prompt"] = v
+			delete(copied, "prompt")
+		}
+	}
+	if steps, ok := copied["steps"]; ok {
+		normalizedSteps, err := normalizeWorkflowStepMaps(steps)
+		if err != nil {
+			return nil, err
+		}
+		copied["steps"] = normalizedSteps
+	}
+	return copied, nil
+}
+
+func normalizeTaskPromptMap(m map[string]any, task *Task) (map[string]any, error) {
+	prompt, ok := m["prompt"]
+	if !ok {
+		return m, nil
+	}
+	switch v := prompt.(type) {
+	case string:
+		return m, nil
+	case map[string]any:
+		if m["type"] != TaskTypeSimulate {
+			return nil, fmt.Errorf("%w: structured prompt is supported only for type %q", ErrWorkflowControlStepInvalid, TaskTypeSimulate)
+		}
+		var cfg SimulatePrompt
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result:           &cfg,
+			TagName:          "mapstructure",
+			WeaklyTypedInput: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := decoder.Decode(v); err != nil {
+			return nil, err
+		}
+		task.SimulatePrompt = &cfg
+		copied := make(map[string]any, len(m)-1)
+		for key, val := range m {
+			if key == "prompt" {
+				continue
+			}
+			copied[key] = val
+		}
+		return copied, nil
+	default:
+		return m, nil
+	}
 }
 
 func normalizeTaskOutputMap(m map[string]any, task *Task) (map[string]any, error) {

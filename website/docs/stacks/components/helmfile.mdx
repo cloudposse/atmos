@@ -6,11 +6,14 @@ sidebar_class_name: command
 description: Configure Helmfile components in your Atmos stack manifests for Kubernetes deployments.
 id: helmfile
 ---
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
 
 <Intro>
-Helmfile components manage Kubernetes deployments using Helmfile, a declarative spec for deploying Helm charts. They allow you to manage Helm releases with the same stack-based configuration approach used for Terraform.
+  Helmfile components manage Kubernetes deployments using Helmfile, a
+  declarative spec for deploying Helm charts. They allow you to manage Helm
+  releases with the same stack-based configuration approach used for Terraform.
 </Intro>
 
 ## Available Configuration Sections
@@ -21,17 +24,17 @@ Helmfile components support the common configuration sections:
   <dt>[`vars`](/stacks/vars)</dt>
   <dd>Variables passed to helmfile.</dd>
 
-  <dt>[`env`](/stacks/env)</dt>
-  <dd>Environment variables during execution.</dd>
+<dt>[`env`](/stacks/env)</dt>
+<dd>Environment variables during execution.</dd>
 
-  <dt>[`settings`](/stacks/settings)</dt>
-  <dd>Integrations and metadata.</dd>
+<dt>[`settings`](/stacks/settings)</dt>
+<dd>Integrations and metadata.</dd>
 
-  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
-  <dd>Component behavior and inheritance.</dd>
+<dt>[`metadata`](/stacks/components/component-metadata)</dt>
+<dd>Component behavior and inheritance.</dd>
 
-  <dt>[`command`](/stacks/command)</dt>
-  <dd>Override helmfile binary.</dd>
+<dt>[`command`](/stacks/command)</dt>
+<dd>Override helmfile binary.</dd>
 
   <dt>[`hooks`](/stacks/hooks)</dt>
   <dd>Lifecycle event handlers.</dd>
@@ -52,7 +55,7 @@ components:
         replica_count: 3
         service_type: LoadBalancer
       env:
-        KUBECONFIG: "{{ env \"HOME\" }}/.kube/config"
+        KUBECONFIG: '{{ env "HOME" }}/.kube/config'
       settings:
         depends_on:
           - component: eks
@@ -189,6 +192,7 @@ components:
       settings:
         depends_on:
           - component: nginx-ingress
+
 ```
 </File>
 
@@ -221,17 +225,17 @@ Common environment variables for Helmfile components:
   <dt>`KUBECONFIG`</dt>
   <dd>Path to kubeconfig file.</dd>
 
-  <dt>`HELM_CACHE_HOME`</dt>
-  <dd>Helm cache directory.</dd>
+<dt>`HELM_CACHE_HOME`</dt>
+<dd>Helm cache directory.</dd>
 
-  <dt>`HELM_CONFIG_HOME`</dt>
-  <dd>Helm configuration directory.</dd>
+<dt>`HELM_CONFIG_HOME`</dt>
+<dd>Helm configuration directory.</dd>
 
-  <dt>`HELM_DATA_HOME`</dt>
-  <dd>Helm data directory.</dd>
+<dt>`HELM_DATA_HOME`</dt>
+<dd>Helm data directory.</dd>
 
-  <dt>`AWS_PROFILE`</dt>
-  <dd>AWS profile for EKS authentication.</dd>
+<dt>`AWS_PROFILE`</dt>
+<dd>AWS profile for EKS authentication.</dd>
 
   <dt>`HELM_EXPERIMENTAL_OCI`</dt>
   <dd>Enable OCI registry support.</dd>

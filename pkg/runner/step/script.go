@@ -2,7 +2,6 @@ package step
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 
@@ -79,7 +78,7 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 		mode = OutputModeLog
 	}
 
-	writer := NewOutputModeWriter(mode, step.Name, GetViewportConfig(step, workflow))
+	writer := NewOutputModeWriter(mode, step.Name, GetViewportConfig(step, workflow), GetShowConfig(step, workflow))
 	stdout, stderr, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
 		return process.RunScript(ctx, &process.ScriptSpec{
 			Interpreter: invocation.interpreter,
@@ -125,7 +124,11 @@ func (h *ScriptHandler) resolveInvocation(step *schema.WorkflowStep, vars *Varia
 	if workDir != "" {
 		workDir, err = vars.Resolve(workDir)
 		if err != nil {
-			return scriptInvocation{}, fmt.Errorf("step '%s': failed to resolve working_directory: %w", step.Name, err)
+			return scriptInvocation{}, errUtils.Build(errUtils.ErrTemplateEvaluation).
+				WithCause(err).
+				WithContext("step", step.Name).
+				WithContext("field", "working_directory").
+				Err()
 		}
 	}
 	return scriptInvocation{interpreter: interpreter, script: script, workDir: workDir}, nil
@@ -141,7 +144,11 @@ func (h *ScriptHandler) resolveEnv(step *schema.WorkflowStep, vars *Variables) (
 	}
 	resolvedEnv, err := vars.ResolveEnvMap(step.Env)
 	if err != nil {
-		return nil, fmt.Errorf("step '%s': %w", step.Name, err)
+		return nil, errUtils.Build(errUtils.ErrTemplateEvaluation).
+			WithCause(err).
+			WithContext("step", step.Name).
+			WithContext("field", "env").
+			Err()
 	}
 	for key, value := range resolvedEnv {
 		env = envpkg.UpdateEnvVar(env, key, value)

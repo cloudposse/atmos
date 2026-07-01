@@ -64,6 +64,21 @@ type CommandEnv struct {
 	ValueCommand string `yaml:"valueCommand" json:"valueCommand" mapstructure:"valueCommand"`
 }
 
+const commandEnvDecodeFailedMessage = "failed to decode command env"
+
+// ErrCommandEnvDecodeFailed is returned when command env map decoding fails.
+var ErrCommandEnvDecodeFailed error = commandEnvDecodeError{}
+
+type commandEnvDecodeError struct{}
+
+func (commandEnvDecodeError) Error() string {
+	return commandEnvDecodeFailedMessage
+}
+
+func (commandEnvDecodeError) Is(target error) bool {
+	return target != nil && target.Error() == commandEnvDecodeFailedMessage
+}
+
 // CommandEnvDecodeHook lets command-level env accept both the legacy list form:
 //
 //	env:
@@ -120,10 +135,10 @@ func decodeCommandEnvMapValue(key string, value any) (CommandEnv, error) {
 			WeaklyTypedInput: true,
 		})
 		if err != nil {
-			return CommandEnv{}, fmt.Errorf("failed to create command env decoder for %q: %w", key, err)
+			return CommandEnv{}, fmt.Errorf("%w for %q: %w", ErrCommandEnvDecodeFailed, key, err)
 		}
 		if err := decoder.Decode(v); err != nil {
-			return CommandEnv{}, fmt.Errorf("failed to decode command env %q: %w", key, err)
+			return CommandEnv{}, fmt.Errorf("%w for %q: %w", ErrCommandEnvDecodeFailed, key, err)
 		}
 		item.Key = key
 		return item, nil

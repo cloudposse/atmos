@@ -1883,6 +1883,39 @@ func TestExecutor_Execute_EnvWithIdentity(t *testing.T) {
 	assert.True(t, result.Success)
 }
 
+func TestExecutor_Execute_ContainerScriptRegistersOutputs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+	executor := NewExecutor(mockRunner, nil, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{
+				Name:        "script",
+				Type:        schema.TaskTypeScript,
+				Interpreter: "python3",
+				Script:      "print('ok')",
+				Container:   &schema.WorkflowContainer{Image: "alpine"},
+				Outputs: map[string]string{
+					"code": "{{ .exit_code }}",
+				},
+			},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{DryRun: true}))
+
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	require.NotNil(t, executor.stepVars)
+	stored := executor.stepVars.Steps["script"]
+	require.NotNil(t, stored)
+	assert.Equal(t, "0", stored.Outputs["code"])
+}
+
 // TestExecutor_Execute_AtmosCommandWithEnv tests atmos command type with env vars.
 func TestExecutor_Execute_AtmosCommandWithEnv(t *testing.T) {
 	ctrl := gomock.NewController(t)

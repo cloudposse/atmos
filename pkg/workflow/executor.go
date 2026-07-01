@@ -362,6 +362,9 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 		if err != nil {
 			return e.handleStepError(params, step.Name, cmdParams, err)
 		}
+		if e.stepVars != nil {
+			_ = e.stepVars.SetWithOutputs(step.Name, stepPkg.NewStepResult("").WithMetadata("exit_code", 0), step.Outputs)
+		}
 		return stepResultInternal{
 			StepResult: StepResult{
 				StepName: step.Name,

@@ -467,6 +467,79 @@ func TestTasksDecodeHook_StructuredCastOutputMode(t *testing.T) {
 	assert.Equal(t, "demo.cast", result.Steps[0].CastOutput.Cast)
 }
 
+func TestTasksDecodeHook_StructuredSimulatePrompt(t *testing.T) {
+	input := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"type": TaskTypeSimulate,
+				"mode": "typed",
+				"prompt": map[string]any{
+					"text":  "> ",
+					"style": "command",
+				},
+				"text": "atmos version",
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	require.NotNil(t, result.Steps[0].SimulatePrompt)
+	assert.Equal(t, "> ", result.Steps[0].SimulatePrompt.Text)
+	assert.Equal(t, "command", result.Steps[0].SimulatePrompt.Style)
+	assert.Equal(t, "atmos version", result.Steps[0].Text)
+}
+
+func TestTasksDecodeHook_NestedCastSimulatePrompt(t *testing.T) {
+	input := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"type": TaskTypeCast,
+				"mode": "steps",
+				"steps": []any{
+					map[string]any{
+						"type": TaskTypeSimulate,
+						"mode": "typed",
+						"prompt": map[string]any{
+							"text":  "> ",
+							"style": "command",
+						},
+						"text": "atmos secret list --stack dev --component api",
+					},
+					map[string]any{
+						"type":    TaskTypeShell,
+						"command": "atmos secret list --stack dev --component api",
+					},
+				},
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	require.Len(t, result.Steps[0].Steps, 2)
+	require.NotNil(t, result.Steps[0].Steps[0].SimulatePrompt)
+	assert.Equal(t, "> ", result.Steps[0].Steps[0].SimulatePrompt.Text)
+	assert.Equal(t, "command", result.Steps[0].Steps[0].SimulatePrompt.Style)
+	assert.Equal(t, "atmos secret list --stack dev --component api", result.Steps[0].Steps[1].Command)
+}
+
 func TestTasksDecodeHook_InvalidOutputType(t *testing.T) {
 	input := map[string]any{
 		"steps": []any{

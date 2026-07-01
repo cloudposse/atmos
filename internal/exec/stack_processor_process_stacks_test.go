@@ -822,6 +822,59 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 				assert.NotNil(t, result)
 			},
 		},
+		{
+			name: "config with kubernetes section and component",
+			config: map[string]any{
+				cfg.KubernetesSectionName: map[string]any{
+					cfg.CommandSectionName: "kubectl",
+					cfg.VarsSectionName: map[string]any{
+						"namespace": "default",
+					},
+					cfg.SettingsSectionName: map[string]any{
+						"enabled": true,
+					},
+					cfg.EnvSectionName: map[string]any{
+						"KUBECONFIG": "/path/to/config",
+					},
+					cfg.AuthSectionName: map[string]any{
+						"role": "deployer",
+					},
+					cfg.DependenciesSectionName: map[string]any{
+						"file": []any{"dep"},
+					},
+					cfg.SourceSectionName: map[string]any{
+						"uri": "github.com/example/repo",
+					},
+					cfg.ProvisionSectionName: map[string]any{
+						"workdir": ".",
+					},
+					cfg.ProviderSectionName:  "kustomize",
+					cfg.PathsSectionName:     []any{"base"},
+					cfg.ManifestsSectionName: map[string]any{"deployment": "d.yaml"},
+					cfg.RenderSectionName:    map[string]any{"engine": "kustomize"},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.KubernetesComponentType: map[string]any{
+						"app": map[string]any{
+							cfg.VarsSectionName: map[string]any{"replicas": 3},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+				require.True(t, ok, "result must contain a components section")
+				kubernetes, ok := components[cfg.KubernetesComponentType].(map[string]any)
+				require.True(t, ok, "result must contain kubernetes components")
+				app, ok := kubernetes["app"].(map[string]any)
+				require.True(t, ok, "kubernetes component 'app' must exist")
+				// Stack-global kubernetes provider/paths/manifests/render flow into the component.
+				assert.Equal(t, "kustomize", app[cfg.ProviderSectionName])
+				assert.Equal(t, []any{"base"}, app[cfg.PathsSectionName])
+				assert.Equal(t, map[string]any{"deployment": "d.yaml"}, app[cfg.ManifestsSectionName])
+				assert.Equal(t, map[string]any{"engine": "kustomize"}, app[cfg.RenderSectionName])
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -844,6 +897,65 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 			)
 			require.NoError(t, err)
 			tt.validateResult(t, result)
+		})
+	}
+}
+
+// TestProcessStackConfig_KubernetesErrorPaths covers the stack-global kubernetes section
+// type-validation branches: command/vars/settings/env/auth/dependencies/source/provision/
+// provider/render must each be the expected type or ProcessStackConfig returns a precise
+// error.
+func TestProcessStackConfig_KubernetesErrorPaths(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tests := []struct {
+		name          string
+		k8sSection    map[string]any
+		expectedError error
+	}{
+		{"invalid kubernetes section type", nil, errUtils.ErrInvalidConfig},
+		{"invalid command type", map[string]any{cfg.CommandSectionName: 123}, errUtils.ErrInvalidComponentCommand},
+		{"invalid vars type", map[string]any{cfg.VarsSectionName: "x"}, errUtils.ErrInvalidVarsSection},
+		{"invalid hooks type", map[string]any{cfg.HooksSectionName: "x"}, errUtils.ErrInvalidHooksSection},
+		{"invalid generate type", map[string]any{cfg.GenerateSectionName: "x"}, errUtils.ErrInvalidGenerateSection},
+		{"invalid settings type", map[string]any{cfg.SettingsSectionName: "x"}, errUtils.ErrInvalidSettingsSection},
+		{"invalid env type", map[string]any{cfg.EnvSectionName: "x"}, errUtils.ErrInvalidEnvSection},
+		{"invalid auth type", map[string]any{cfg.AuthSectionName: "x"}, errUtils.ErrInvalidAuthSection},
+		{"invalid dependencies type", map[string]any{cfg.DependenciesSectionName: "x"}, errUtils.ErrInvalidDependenciesSection},
+		{"invalid source type", map[string]any{cfg.SourceSectionName: "x"}, errUtils.ErrInvalidComponentSource},
+		{"invalid provision type", map[string]any{cfg.ProvisionSectionName: "x"}, errUtils.ErrInvalidComponentProvision},
+		{"invalid provider type", map[string]any{cfg.ProviderSectionName: 123}, errUtils.ErrInvalidConfig},
+		{"invalid render type", map[string]any{cfg.RenderSectionName: "x"}, errUtils.ErrInvalidConfig},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config map[string]any
+			if tt.k8sSection == nil {
+				// Top-level kubernetes section is not a map.
+				config = map[string]any{cfg.KubernetesSectionName: "invalid-not-a-map"}
+			} else {
+				config = map[string]any{cfg.KubernetesSectionName: tt.k8sSection}
+			}
+
+			_, err := ProcessStackConfig(
+				atmosConfig,
+				"/test/stacks",
+				"/test/terraform",
+				"/test/helmfile",
+				"/test/packer",
+				"/test/ansible",
+				"test-stack.yaml",
+				config,
+				false,
+				false,
+				"",
+				map[string]map[string][]string{},
+				map[string]map[string]any{},
+				false,
+			)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, tt.expectedError)
 		})
 	}
 }

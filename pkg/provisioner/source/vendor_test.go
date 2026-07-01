@@ -2,6 +2,7 @@ package source
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -122,6 +123,46 @@ func TestVendorSourceSupportsRelativeLocalPath(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(targetDir, "README.md"))
 	require.NoError(t, err)
 	assert.Equal(t, "demo\n", string(content))
+}
+
+func TestVendorSourceRejectsNilAndEmptySource(t *testing.T) {
+	err := VendorSource(context.Background(), nil, nil, filepath.Join(t.TempDir(), "target"))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrNilParam))
+
+	err = VendorSource(context.Background(), nil, &schema.VendorComponentSource{}, filepath.Join(t.TempDir(), "target"))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceInvalidSpec))
+}
+
+func TestVendorSourceReplacesExistingTargetWhenEnabled(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "new.txt"), []byte("new\n"), 0o644))
+
+	targetDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "old.txt"), []byte("old\n"), 0o644))
+
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceDir}, targetDir)
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(targetDir, "old.txt"))
+	assert.True(t, os.IsNotExist(err))
+	content, err := os.ReadFile(filepath.Join(targetDir, "new.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "new\n", string(content))
+}
+
+func TestVendorSourceReportsDownloadFailure(t *testing.T) {
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: filepath.Join(t.TempDir(), "missing")}, filepath.Join(t.TempDir(), "target"))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceProvision))
+	assert.Contains(t, err.Error(), "failed to download")
+}
+
+func TestCopyToTargetCreatesParentDirectoryAndWrapsCopyErrors(t *testing.T) {
+	targetDir := filepath.Join(t.TempDir(), "nested", "target")
+	err := copyToTarget(filepath.Join(t.TempDir(), "missing"), targetDir, &schema.VendorComponentSource{})
+	require.Error(t, err)
 }
 
 func TestNormalizeURI(t *testing.T) {

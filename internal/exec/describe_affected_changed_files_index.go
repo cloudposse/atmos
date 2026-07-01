@@ -100,6 +100,11 @@ func buildNormalizedBasePaths(atmosConfig *schema.AtmosConfiguration) []string {
 		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath))
 	}
 
+	// Add kubernetes base path if configured.
+	if atmosConfig.Components.Kubernetes.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Kubernetes.BasePath))
+	}
+
 	// Add stacks base path if configured.
 	if atmosConfig.Stacks.BasePath != "" {
 		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath))
@@ -176,6 +181,8 @@ func (idx *changedFilesIndex) getRelevantFiles(componentType string, atmosConfig
 		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
 	case cfg.PackerComponentType:
 		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
+	case cfg.KubernetesComponentType:
+		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Kubernetes.BasePath)
 	default:
 		// Unknown component type - return all files as fallback.
 		return idx.allFiles

@@ -23,6 +23,7 @@ Valid subcommands are:
   • git
   • helmfile
   • help
+  • kubernetes
   • list
   • lsp
   • mcp

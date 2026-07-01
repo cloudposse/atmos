@@ -376,6 +376,38 @@ func TestParsePodmanContainer(t *testing.T) {
 	}
 }
 
+func TestParsePodmanPortsFromContainerRecord(t *testing.T) {
+	t.Run("published port parsed, exposed-only port skipped", func(t *testing.T) {
+		// `podman ps --format json` decodes numbers as float64 through the generic map.
+		// The Gitea image both publishes 3000 and merely exposes 22 (no host_port).
+		rawPorts := []interface{}{
+			map[string]interface{}{
+				"host_ip": "0.0.0.0", "container_port": float64(3000), "host_port": float64(3000), "protocol": "tcp",
+			},
+			map[string]interface{}{
+				"container_port": float64(22), "protocol": "tcp",
+			},
+		}
+		ports := parsePodmanPorts(rawPorts)
+		require.Len(t, ports, 1)
+		assert.Equal(t, PortBinding{ContainerPort: 3000, HostPort: 3000, Protocol: "tcp"}, ports[0])
+	})
+
+	t.Run("auto-assigned host port is surfaced", func(t *testing.T) {
+		rawPorts := []interface{}{
+			map[string]interface{}{"container_port": float64(4566), "host_port": float64(49153), "protocol": "tcp"},
+		}
+		ports := parsePodmanPorts(rawPorts)
+		require.Len(t, ports, 1)
+		assert.Equal(t, PortBinding{ContainerPort: 4566, HostPort: 49153, Protocol: "tcp"}, ports[0])
+	})
+
+	t.Run("missing or empty Ports yields nil", func(t *testing.T) {
+		assert.Nil(t, parsePodmanPorts(map[string]interface{}{}))
+		assert.Nil(t, parsePodmanPorts([]interface{}{}))
+	})
+}
+
 func TestParsePodmanContainers(t *testing.T) {
 	tests := []struct {
 		name              string

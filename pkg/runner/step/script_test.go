@@ -4,11 +4,13 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -69,7 +71,7 @@ func TestScriptHandlerExecuteWithWorkflowCastValidationSnippet(t *testing.T) {
 
 	t.Run("validates file content with pathlib", func(t *testing.T) {
 		dir := t.TempDir()
-		path := dir + "/sops-secrets.cast"
+		path := filepath.Join(dir, "sops-secrets.cast")
 		require.NoError(t, os.WriteFile(path, []byte("describe (masking on)\nencrypted at rest\nOK: reveal without key failed as expected\nAll proofs passed\n"), 0o600))
 
 		step := &schema.WorkflowStep{
@@ -91,4 +93,25 @@ for needle in ["describe (masking on)", "encrypted at rest", "OK: reveal without
 		require.NoError(t, err)
 		assert.Equal(t, 0, result.Metadata[exitCodeMetadata])
 	})
+}
+
+func TestScriptHandlerTemplateResolutionErrorsUseSentinel(t *testing.T) {
+	handler := &ScriptHandler{}
+	vars := NewVariables()
+
+	_, err := handler.resolveInvocation(&schema.WorkflowStep{
+		Name:             "bad-workdir",
+		Interpreter:      "python3",
+		Script:           "print('ok')",
+		WorkingDirectory: "{{ range .steps }}",
+	}, vars)
+	require.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+
+	_, err = handler.resolveEnv(&schema.WorkflowStep{
+		Name: "bad-env",
+		Env: map[string]string{
+			"BROKEN": "{{ range .steps }}",
+		},
+	}, vars)
+	require.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 }

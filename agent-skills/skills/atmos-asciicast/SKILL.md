@@ -1,35 +1,39 @@
 ---
 name: atmos-asciicast
-description: Create and update Atmos asciicast demos for command documentation and website publishing.
+description: Create and review portable Atmos CLI asciicast demos for community-facing documentation, examples, and training materials.
 ---
 
-# Atmos Asciicast Demo Skill
+# Atmos Asciicast Skill
 
-Use this skill when creating or updating committed Atmos `.cast` recordings.
+Use this skill when creating or reviewing `.cast` recordings that demonstrate Atmos CLI usage for a broad community audience.
+
+This is a distributed Agent Skill. Keep it portable and audience-neutral. Do not assume Cloud Posse repository paths, the Atmos documentation website, a specific cast player component, or internal development fixtures unless the project using the skill explicitly provides those conventions.
 
 ## Defaults
 
 - Use `width: 120` and `height: 36` unless the target docs page needs a narrower recording.
-- Write curated casts under `website/static/casts/...`; they are served from `/casts/...`.
 - Use `type: cast` with `mode: steps` for deterministic command demos that need exit-code propagation.
 - Use `mode: session` only when the demo must show typed input, prompts, key presses, or terminal timing.
 - Keep ad hoc local recordings in the XDG cache via `--cast`; do not commit cache recordings.
+- Store committed casts wherever the host project keeps documentation assets.
 
 ## Fixture Policy
 
-- Use deterministic demo fixtures under `demo/casts`.
-- Do not reuse product examples or test fixtures just to make a docs cast easier.
+- Prefer small deterministic fixtures owned by the documentation example.
+- Do not reuse unrelated product examples or test fixtures just to make a recording easier.
 - Keep demo output stable: no local absolute paths, hostnames, real account IDs, secrets, random IDs, or live timestamps.
 
 ## Authoring Checklist
 
-1. Add or update the workflow/custom command that regenerates the cast.
-2. Regenerate the `.cast` into `website/static/casts`.
-3. Review the cast as plain text for secrets, local paths, unstable timestamps, and noisy logs.
-4. Embed it with the website `CastPlayer` component when the corresponding docs page can show it usefully:
+1. Identify the exact command sequence and fixture data that the audience should learn from.
+2. Add or update the workflow/custom command that regenerates the cast when the host project supports that pattern.
+3. Regenerate the `.cast` into the project-approved documentation asset location.
+4. Review the cast as plain text for secrets, local paths, unstable timestamps, noisy logs, and project-specific assumptions.
+5. Embed or link the cast using the host project's documentation conventions.
+6. Prefer committing only `.cast` files. Commit GIF/MP4/SVG derivatives only when a publishing target cannot consume asciicast files directly.
 
-   ```mdx
-   <CastPlayer src="/casts/cli/describe-component.cast" title="describe component" chrome controls scrubber />
-   ```
+## Boundaries
 
-5. Prefer committing only `.cast` files. Commit GIF/MP4/SVG derivatives only when a publishing target cannot consume the player.
+- Do not include internal Atmos development workflows in this Agent Skill.
+- Do not reference Claude skills or assume a sync relationship with them.
+- Do not hard-code Cloud Posse website paths, `CastPlayer`, or internal demo fixture locations in community guidance.

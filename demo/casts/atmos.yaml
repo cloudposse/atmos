@@ -435,7 +435,13 @@ commands:
                 write_rate: 35ms
                 width: 120
                 height: 36
-                env: *force_color_env
+                env:
+                  <<: *force_color_env
+                  ATMOS_STACKS_BASE_PATH: stacks
+                  ATMOS_STACKS_INCLUDED_PATHS: "deploy/**/*"
+                  ATMOS_STACKS_EXCLUDED_PATHS: "**/_defaults.yaml"
+                show:
+                  labels: false
                 output:
                   mode: raw
                   cast: ../../website/static/casts/examples/quick-start-simple.cast
@@ -484,7 +490,15 @@ commands:
                 mode: steps
                 width: 120
                 height: 36
+                env:
+                  <<: *force_color_env
+                  ATMOS_STACKS_BASE_PATH: stacks
+                  ATMOS_STACKS_INCLUDED_PATHS: "orgs/**/*"
+                  ATMOS_STACKS_EXCLUDED_PATHS: "**/_defaults.yaml"
+                show:
+                  labels: false
                 output:
+                  mode: raw
                   cast: ../../website/static/casts/examples/quick-start-advanced.cast
                 steps:
                   - type: shell
@@ -511,20 +525,131 @@ commands:
               - type: shell
                 name: clean
                 command: rm -f ../../website/static/casts/examples/sops-secrets.cast
+              - type: shell
+                name: prepare-sops-secrets
+                working_directory: ../../.context/cast-fixtures/sops-secrets
+                output: none
+                command: |
+                  cp secrets/dev.enc.yaml secrets/dev.enc.yaml.cast.bak
               - type: cast
                 name: sops-secrets
-                command: atmos describe component api --stack dev
+                command: atmos secret lifecycle api --stack dev
                 mode: steps
                 width: 120
                 height: 36
+                env:
+                  <<: *force_color_env
+                  ATMOS_STACKS_BASE_PATH: stacks
+                  ATMOS_STACKS_INCLUDED_PATHS: "deploy/**/*"
+                  ATMOS_STACKS_EXCLUDED_PATHS: "**/_defaults.yaml"
+                show:
+                  labels: false
                 output:
+                  mode: raw
                   cast: ../../website/static/casts/examples/sops-secrets.cast
                 steps:
+                  - type: simulate
+                    mode: typed
+                    prompt: &demo_prompt
+                      text: "> "
+                      style: command
+                    rate: 35ms
+                    text: &describe_secrets_cmd "atmos describe component api --stack dev --query '.secrets'"
                   - type: shell
-                    name: describe-masked-secrets
+                    name: describe-secrets
                     working_directory: ../../.context/cast-fixtures/sops-secrets
                     env: *force_color_env
-                    command: atmos describe component api --stack dev | grep -E 'datadog_api_key|redis_url|<MASKED>|secrets:'
+                    command: *describe_secrets_cmd
+                  - type: simulate
+                    mode: typed
+                    prompt: *demo_prompt
+                    rate: 35ms
+                    text: &list_vars_cmd "atmos list vars api --stack dev"
+                  - type: shell
+                    name: list-vars
+                    working_directory: ../../.context/cast-fixtures/sops-secrets
+                    env: *force_color_env
+                    command: *list_vars_cmd
+                  - type: simulate
+                    mode: typed
+                    prompt: *demo_prompt
+                    rate: 35ms
+                    text: &set_datadog_api_key_cmd "atmos secret set DATADOG_API_KEY=dd-abc123secret --stack dev --component api"
+                  - type: shell
+                    name: set-datadog-api-key
+                    working_directory: ../../.context/cast-fixtures/sops-secrets
+                    env: *force_color_env
+                    command: *set_datadog_api_key_cmd
+                  - type: simulate
+                    mode: typed
+                    prompt: *demo_prompt
+                    rate: 35ms
+                    text: &set_redis_url_cmd "atmos secret set REDIS_URL=redis://prod:6379 --stack dev --component api"
+                  - type: shell
+                    name: set-redis-url
+                    working_directory: ../../.context/cast-fixtures/sops-secrets
+                    env: *force_color_env
+                    command: *set_redis_url_cmd
+                  - type: simulate
+                    mode: typed
+                    prompt: *demo_prompt
+                    rate: 35ms
+                    text: &list_secrets_cmd "atmos secret list --stack dev --component api"
+                  - type: shell
+                    name: list-secrets
+                    working_directory: ../../.context/cast-fixtures/sops-secrets
+                    env: *force_color_env
+                    command: *list_secrets_cmd
+                  - type: simulate
+                    mode: typed
+                    prompt: *demo_prompt
+                    rate: 35ms
+                    text: &validate_secrets_cmd "atmos secret validate --stack dev --component api"
+                  - type: shell
+                    name: validate-secrets
+                    working_directory: ../../.context/cast-fixtures/sops-secrets
+                    env: *force_color_env
+                    command: *validate_secrets_cmd
+                  - type: shell
+                    name: prepare-workspace
+                    working_directory: ../../.context/cast-fixtures/sops-secrets
+                    env: *force_color_env
+                    output: none
+                    command: |
+                      atmos terraform workspace new api --stack dev >/dev/null 2>&1 \
+                        || atmos terraform workspace select api --stack dev >/dev/null 2>&1
+                  - type: simulate
+                    mode: typed
+                    prompt: *demo_prompt
+                    rate: 35ms
+                    text: &deploy_api_cmd "atmos terraform deploy api --stack dev"
+                  - type: shell
+                    name: deploy-api
+                    working_directory: ../../.context/cast-fixtures/sops-secrets
+                    env: *force_color_env
+                    command: *deploy_api_cmd
+                  - type: simulate
+                    mode: typed
+                    prompt: *demo_prompt
+                    rate: 35ms
+                    text: &output_api_cmd "atmos terraform output api --stack dev"
+                  - type: shell
+                    name: output-api
+                    working_directory: ../../.context/cast-fixtures/sops-secrets
+                    env: *force_color_env
+                    command: *output_api_cmd
+              - type: shell
+                name: cleanup-sops-secrets
+                working_directory: ../../.context/cast-fixtures/sops-secrets
+                output: none
+                command: |
+                  set +e
+                  atmos terraform destroy api --stack dev -auto-approve >/dev/null 2>&1
+                  rm -rf components/terraform/api/.terraform components/terraform/api/.terraform.lock.hcl
+                  rm -rf components/terraform/api/terraform.tfstate components/terraform/api/terraform.tfstate.backup
+                  rm -rf components/terraform/api/terraform.tfstate.d components/terraform/api/.terraform.tfstate
+                  rm -f components/terraform/api/*.terraform.tfvars.json
+                  mv -f secrets/dev.enc.yaml.cast.bak secrets/dev.enc.yaml
               - type: shell
                 name: validate
                 command: atmos casts validate sops-secrets
@@ -845,7 +970,9 @@ commands:
                   for needle in ["Stacks", "plat-ue2-dev", "Component Instances", "s3-bucket", "app-config"]:
                       if needle not in text:
                           raise SystemExit(f"quick-start-advanced cast missing {needle!r}")
-                  for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
+                  if "\\u001b[" not in text:
+                      raise SystemExit("quick-start-advanced cast is missing ANSI color sequences")
+                  for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[list-stacks]", "[list-instances]", "completed"]:
                       if bad in text:
                           raise SystemExit(f"quick-start-advanced cast contains {bad!r}")
 
@@ -856,13 +983,47 @@ commands:
                 name: validate
                 interpreter: python3
                 script: |
+                  import json
                   from pathlib import Path
-                  text = Path("../../website/static/casts/examples/sops-secrets.cast").read_text()
-                  for needle in ["secrets:", "datadog_api_key", "redis_url", "MASKED"]:
+                  raw = Path("../../website/static/casts/examples/sops-secrets.cast").read_text()
+                  text = "".join(
+                      json.loads(line)[2]
+                      for line in raw.splitlines()[1:]
+                      if line and json.loads(line)[1] in ("o", "e")
+                  )
+                  for needle in [
+                      "atmos describe component api --stack dev --query '.secrets'",
+                      "atmos list vars api --stack dev",
+                      "atmos secret set DATADOG_API_KEY",
+                      "atmos secret set REDIS_URL",
+                      "atmos secret list --stack dev --component api",
+                      "atmos secret validate --stack dev --component api",
+                      "atmos terraform deploy api --stack dev",
+                      "atmos terraform output api --stack dev",
+                      "redis_url",
+                      "MASKED",
+                  ]:
                       if needle not in text:
                           raise SystemExit(f"sops-secrets cast missing {needle!r}")
-                  for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "UNEXPECTED", "/Users/"]:
-                      if bad in text:
+                  if "\\u001b[" not in raw:
+                      raise SystemExit("sops-secrets cast is missing ANSI color sequences")
+                  for bad in [
+                      "# Error",
+                      "Incorrect Usage",
+                      "unknown flag",
+                      "panic",
+                      "UNEXPECTED",
+                      "/Users/",
+                      "[describe-masked]",
+                      "[describe-secrets]",
+                      "[list-vars]",
+                      "completed",
+                      "printf '> ",
+                      "grep -E",
+                      "workspace new api",
+                      "workspace select api",
+                  ]:
+                      if bad in raw or bad in text:
                           raise SystemExit(f"sops-secrets cast contains {bad!r}")
 
           - name: toolchain

@@ -49,6 +49,11 @@
         "command": "",
         "auto_generate_files": false
       },
+      "kubernetes": {
+        "base_path": "",
+        "provider": "",
+        "auto_generate_files": false
+      },
       "list": {
         "format": "",
         "columns": null

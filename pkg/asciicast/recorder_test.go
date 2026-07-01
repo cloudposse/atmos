@@ -1,6 +1,8 @@
 package asciicast
 
 import (
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,4 +68,240 @@ func TestRecorderOmitsInputUnlessEnabled(t *testing.T) {
 	if !strings.Contains(string(content), "visible output") {
 		t.Fatal("output event was not recorded")
 	}
+}
+
+func TestStartWritesHeaderDefaultsAndSafeEnvironment(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "demo.cast")
+	started := time.Unix(123, 0)
+
+	rec, err := Start(&Options{
+		Path:     path,
+		Explicit: true,
+		Command:  []string{"atmos", "workflow", "run"},
+		Env: map[string]string{
+			"SHELL":        "/bin/zsh",
+			"TERM":         "xterm-256color",
+			"COLORTERM":    "truecolor",
+			"SECRET_TOKEN": "redacted",
+		},
+		Now: func() time.Time { return started },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Path() != path {
+		t.Fatalf("path = %q, want %q", rec.Path(), path)
+	}
+	if err := rec.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	lines := readCastLines(t, path)
+	var header Header
+	if err := json.Unmarshal([]byte(lines[0]), &header); err != nil {
+		t.Fatal(err)
+	}
+	if header.Version != 2 || header.Width != DefaultWidth || header.Height != DefaultHeight {
+		t.Fatalf("unexpected header: %#v", header)
+	}
+	if header.Timestamp != started.Unix() {
+		t.Fatalf("timestamp = %d, want %d", header.Timestamp, started.Unix())
+	}
+	if header.Command != "atmos workflow run" {
+		t.Fatalf("command = %q", header.Command)
+	}
+	if header.Env["SHELL"] != "/bin/zsh" || header.Env["TERM"] != "xterm-256color" || header.Env["COLORTERM"] != "truecolor" {
+		t.Fatalf("safe env missing expected keys: %#v", header.Env)
+	}
+	if _, ok := header.Env["SECRET_TOKEN"]; ok {
+		t.Fatalf("unsafe env was recorded: %#v", header.Env)
+	}
+}
+
+func TestRecorderRecordsInputWhenEnabledAndNormalizesStreams(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "demo.cast")
+	rec, err := Start(&Options{Path: path, Explicit: true, RecordIn: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec.Record("i", "typed")
+	rec.Record("debug", "visible")
+	if err := rec.Resize(100, 24); err != nil {
+		t.Fatal(err)
+	}
+	if err := rec.Event("e", "stderr"); err != nil {
+		t.Fatal(err)
+	}
+	if err := rec.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := rec.Close(); err != nil {
+		t.Fatalf("second close should be ignored: %v", err)
+	}
+	if err := rec.Event("o", "ignored"); err != nil {
+		t.Fatalf("event after close should be ignored: %v", err)
+	}
+	if err := rec.Resize(1, 1); err != nil {
+		t.Fatalf("resize after close should be ignored: %v", err)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"i","typed"`, `"o","visible"`, `"r","100x24"`, `"e","stderr"`} {
+		if !strings.Contains(string(content), want) {
+			t.Fatalf("missing %s in:\n%s", want, content)
+		}
+	}
+	if strings.Contains(string(content), "ignored") {
+		t.Fatalf("closed recorder wrote event:\n%s", content)
+	}
+}
+
+func TestRecorderOutputRateSplitsTerminalLines(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "demo.cast")
+	rec, err := Start(&Options{Path: path, Explicit: true, OutputRate: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rec.Event("o", "one\ntwo\nthree"); err != nil {
+		t.Fatal(err)
+	}
+	if err := rec.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	lines := readCastLines(t, path)
+	if len(lines) != 4 {
+		t.Fatalf("line count = %d, want header plus 3 events:\n%s", len(lines), strings.Join(lines, "\n"))
+	}
+	for _, want := range []string{`"one\n"`, `"two\n"`, `"three"`} {
+		if !strings.Contains(strings.Join(lines, "\n"), want) {
+			t.Fatalf("missing split chunk %s in %v", want, lines)
+		}
+	}
+}
+
+func TestRecorderNilAndEmptyOperationsAreNoops(t *testing.T) {
+	var rec *Recorder
+	if rec.Path() != "" {
+		t.Fatal("nil recorder path should be empty")
+	}
+	rec.Record("o", "ignored")
+	if err := rec.Close(); err != nil {
+		t.Fatalf("nil close error: %v", err)
+	}
+
+	if got := splitTerminalLines("plain"); len(got) != 1 || got[0] != "plain" {
+		t.Fatalf("split without newline = %#v", got)
+	}
+	if got := splitTerminalLines("a\nb\n"); len(got) != 2 || got[0] != "a\n" || got[1] != "b\n" {
+		t.Fatalf("split with trailing newline = %#v", got)
+	}
+	if maxDuration(time.Second, time.Millisecond) != time.Second {
+		t.Fatal("maxDuration did not return larger value")
+	}
+	if env := safeEnv(map[string]string{"SECRET": "x"}); env != nil {
+		t.Fatalf("safeEnv = %#v, want nil", env)
+	}
+}
+
+func TestResolvePathExplicitBaseAndCommandSlug(t *testing.T) {
+	started := time.Date(2026, 7, 1, 1, 2, 3, 0, time.UTC)
+	explicit := filepath.Join(t.TempDir(), "..", "demo.cast")
+	path, err := ResolvePath(&Options{Path: explicit}, started)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != filepath.Clean(explicit) {
+		t.Fatalf("explicit path = %q, want clean path", path)
+	}
+
+	base := t.TempDir()
+	path, err = ResolvePath(&Options{BasePath: base, Command: []string{"/usr/local/bin/atmos", "--flag", "terraform", "plan", "vpc", "extra"}}, started)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(path, filepath.Join(base, "2026", "07", "01")) {
+		t.Fatalf("path = %q", path)
+	}
+	if !strings.Contains(filepath.Base(path), "010203-terraform-plan-vpc-extra-") {
+		t.Fatalf("path does not include slug: %q", path)
+	}
+	if slug := CommandSlug([]string{"atmos", "-s", "dev", "terraform!!!", strings.Repeat("x", 100)}); len(slug) > slugMaxLen {
+		t.Fatalf("slug too long: %q", slug)
+	}
+	if slug := CommandSlug([]string{"atmos", "--help"}); slug != "" {
+		t.Fatalf("slug = %q, want empty", slug)
+	}
+}
+
+func TestReadEventsAndPlay(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "demo.cast")
+	content := strings.Join([]string{
+		`{"version":2,"width":80,"height":24,"timestamp":1}`,
+		`[0,"o","hello"]`,
+		`[0,"i","ignored"]`,
+		`[0,"e"," error"]`,
+		`[0,"o"]`,
+	}, "\n")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	header, events, err := ReadEvents(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if header.Width != 80 || len(events) != 3 {
+		t.Fatalf("header=%#v events=%#v", header, events)
+	}
+	var out strings.Builder
+	if err := Play(path, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "hello error" {
+		t.Fatalf("played output = %q", out.String())
+	}
+}
+
+func TestReadEventsErrors(t *testing.T) {
+	temp := t.TempDir()
+	empty := filepath.Join(temp, "empty.cast")
+	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := ReadEvents(empty)
+	if !errors.Is(err, ErrEmptyCastFile) {
+		t.Fatalf("expected empty cast error, got %v", err)
+	}
+
+	badHeader := filepath.Join(temp, "bad-header.cast")
+	if err := os.WriteFile(badHeader, []byte("{\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = ReadEvents(badHeader)
+	if err == nil || !strings.Contains(err.Error(), "decode cast header") {
+		t.Fatalf("expected header decode error, got %v", err)
+	}
+
+	badEvent := filepath.Join(temp, "bad-event.cast")
+	if err := os.WriteFile(badEvent, []byte("{}\n[\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = ReadEvents(badEvent)
+	if err == nil || !strings.Contains(err.Error(), "decode cast event") {
+		t.Fatalf("expected event decode error, got %v", err)
+	}
+}
+
+func readCastLines(t *testing.T, path string) []string {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Split(strings.TrimSpace(string(content)), "\n")
 }

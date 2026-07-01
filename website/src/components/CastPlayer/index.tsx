@@ -1,6 +1,7 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {RiPauseFill, RiPlayFill} from 'react-icons/ri';
 import styles from './styles.module.css';
+import {applyIdleSkip} from './playback.mjs';
 
 type CastEvent = [number, string, string];
 
@@ -78,7 +79,7 @@ export default function CastPlayer({
           enterDelay,
           exitDelay,
         });
-        const playbackEvents = applyIdleSkip(withIntro, idleSkip && !eventsStartWithPrompt(withIntro) ? 1.5 : 0);
+        const playbackEvents = applyIdleSkip(withIntro, idleSkip ? 1.5 : 0);
         const initialPosition = 0;
         setEvents(playbackEvents);
         setContent(renderAt(playbackEvents, initialPosition));
@@ -360,22 +361,6 @@ function renderAt(events: CastEvent[], seconds: number) {
     .filter((event) => event[0] <= seconds)
     .map((event) => event[2])
     .join(''));
-}
-
-function applyIdleSkip(events: CastEvent[], maxGap: number) {
-  if (maxGap <= 0 || events.length === 0) {
-    return events;
-  }
-  let previous = 0;
-  let offset = 0;
-  return events.map((event, index) => {
-    const gap = index === 0 ? event[0] : event[0] - previous;
-    if (gap > maxGap) {
-      offset += gap - maxGap;
-    }
-    previous = event[0];
-    return [Math.max(0, event[0] - offset), event[1], event[2]] as CastEvent;
-  });
 }
 
 function latestEventTimeAt(events: CastEvent[], seconds: number) {

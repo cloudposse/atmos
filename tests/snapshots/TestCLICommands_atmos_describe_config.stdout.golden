@@ -54,6 +54,11 @@
       "command": "",
       "auto_generate_files": false
     },
+    "kubernetes": {
+      "base_path": "",
+      "provider": "",
+      "auto_generate_files": false
+    },
     "list": {
       "format": "",
       "columns": null
@@ -224,6 +229,7 @@
   "helmfileDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "packerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "ansibleDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "kubernetesDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
     "check": {},

@@ -83,7 +83,7 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	}
 
 	// Execute with output mode handling.
-	writer := NewOutputModeWriter(mode, step.Name, step.Viewport)
+	writer := NewOutputModeWriter(mode, step.Name, step.Viewport, GetShowConfig(step, nil))
 	stdout, stderr, err := writer.Execute(cmd)
 	if err != nil {
 		return NewStepResult(stdout).
@@ -177,9 +177,10 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 	// Get output mode from step or workflow.
 	mode := GetOutputMode(step, workflow)
 	viewport := GetViewportConfig(step, workflow)
+	show := GetShowConfig(step, workflow)
 
 	// Execute with output mode handling.
-	writer := NewOutputModeWriter(mode, step.Name, viewport)
+	writer := NewOutputModeWriter(mode, step.Name, viewport, show)
 	stdout, stderr, err := writer.Execute(cmd)
 	if err != nil {
 		return NewStepResult(stdout).

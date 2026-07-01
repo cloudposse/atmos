@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -36,4 +37,11 @@ func TestCommandEnvDecodeHook_MapValues(t *testing.T) {
 	assert.Equal(t, CommandEnv{Key: "FROM_COMMAND", ValueCommand: "printf value"}, result.Env[0])
 	assert.Equal(t, CommandEnv{Key: "GOBIN", Value: "{{ env \"PWD\" }}/bin"}, result.Env[1])
 	assert.Equal(t, CommandEnv{Key: "PATH", Value: "{{ env \"PWD\" }}/bin:{{ env \"PATH\" }}"}, result.Env[2])
+}
+
+func TestDecodeCommandEnvMapValueDecodeErrorUsesSentinel(t *testing.T) {
+	_, err := decodeCommandEnvMapValue("BROKEN", map[string]any{"value": []string{"not", "a", "string"}})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrCommandEnvDecodeFailed))
 }

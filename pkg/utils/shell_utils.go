@@ -94,8 +94,8 @@ func ShellRunnerWithWriters(spec *ShellRunnerSpec) error {
 		return err
 	}
 
-	// Use provided environment directly to preserve PATH modifications
-	// If no environment provided, fall back to current process environment
+	// Use provided environment directly to preserve PATH modifications.
+	// If no environment provided, fall back to current process environment.
 	environ := spec.Env
 	if len(environ) == 0 {
 		environ = os.Environ()

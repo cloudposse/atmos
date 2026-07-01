@@ -39,10 +39,12 @@ func TestScriptInvocation(t *testing.T) {
 			wantArgv: []string{"node", "-e", "console.log('ok')"},
 		},
 		{
-			name:     "unknown uses command flag",
-			interp:   "ruby",
-			script:   "puts 'ok'",
-			wantArgv: []string{"ruby", "-c", "puts 'ok'"},
+			name:      "unknown uses stdin",
+			interp:    "ruby",
+			script:    "puts 'ok'",
+			wantArgv:  []string{"ruby", "-"},
+			wantStdin: "puts 'ok'",
+			hasStdin:  true,
 		},
 	}
 

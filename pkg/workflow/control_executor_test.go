@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
@@ -101,6 +102,76 @@ func TestControlCommandExecutorExecuteScript(t *testing.T) {
 	assert.Equal(t, []string{"-"}, gotArgs)
 	assert.Equal(t, "print('ok')", gotStdin)
 	assert.Equal(t, "script ok", result.Stdout)
+}
+
+func TestControlCommandExecutorPassesWorkingDirectory(t *testing.T) {
+	basePath := t.TempDir()
+	workflowDir := "workflow"
+	stepDir := "step"
+
+	tests := []struct {
+		name        string
+		step        schema.WorkflowStep
+		wantProgram string
+		wantDir     string
+	}{
+		{
+			name: "shell inherits workflow working directory",
+			step: schema.WorkflowStep{
+				Name:    "shell",
+				Type:    schema.TaskTypeShell,
+				Command: "make test",
+			},
+			wantDir: filepath.Join(basePath, workflowDir),
+		},
+		{
+			name: "script uses step working directory",
+			step: schema.WorkflowStep{
+				Name:             "script",
+				Type:             schema.TaskTypeScript,
+				Interpreter:      "python3",
+				Script:           "print('ok')",
+				WorkingDirectory: stepDir,
+			},
+			wantProgram: "python3",
+			wantDir:     filepath.Join(basePath, stepDir),
+		},
+		{
+			name: "atmos uses step working directory",
+			step: schema.WorkflowStep{
+				Name:             "atmos",
+				Type:             schema.TaskTypeAtmos,
+				Command:          "version",
+				WorkingDirectory: stepDir,
+			},
+			wantProgram: "atmos",
+			wantDir:     filepath.Join(basePath, stepDir),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotProgram string
+			var gotDir string
+			executor := &ControlCommandExecutor{
+				WorkflowDefinition: &schema.WorkflowDefinition{WorkingDirectory: workflowDir},
+				BasePath:           basePath,
+				RunCommand: func(request *ControlCommandRequest) error {
+					gotProgram = request.Program
+					gotDir = request.Dir
+					return nil
+				},
+			}
+
+			_, err := executor.Execute(context.Background(), &ControlChild{Step: tt.step}, ControlChildOutput{Mode: ControlOutputNone})
+
+			require.NoError(t, err)
+			if tt.wantProgram != "" {
+				assert.Equal(t, tt.wantProgram, gotProgram)
+			}
+			assert.Equal(t, tt.wantDir, gotDir)
+		})
+	}
 }
 
 func TestControlShellInvocationForOS(t *testing.T) {
