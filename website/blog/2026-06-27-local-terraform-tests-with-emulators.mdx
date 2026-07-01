@@ -9,7 +9,7 @@ date: 2026-06-27
 Terraform's native testing framework (`*.tftest.hcl`) is great — until you hit a `run` block with
 `command = apply`. Those blocks create **real** infrastructure, so running them means a cloud account,
 credentials, and spend. Atmos now lets you point `terraform test` at a **local emulator**, so the same
-apply-backed tests run for free and hermetically on your laptop.
+apply-backed tests run for free and hermetically on your laptop or in CI.
 
 <!--truncate-->
 

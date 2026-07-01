@@ -1,9 +1,5 @@
 base_path: "./"
 
-schemas:
-  atmos:
-    manifest: "schemas/atmos-manifest.json"
-
 components:
   terraform:
     base_path: "components/terraform"
@@ -71,5 +67,4 @@ commands:
       - name: "reset"
         description: Delete all local state files
         steps:
-          - 'find . \( -name "*.tfstate" -o -name "*.tfstate.backup" -o -path "*/terraform.tfstate.d/*" -o -path "*/.terraform.tfstate/*" -o -path "*/.terraform.tfstate.backup/*" \) -delete'
-          - echo "Deleted all state files"
+          - atmos terraform clean --everything --force
