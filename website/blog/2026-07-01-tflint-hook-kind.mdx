@@ -1,0 +1,56 @@
+---
+slug: tflint-hook-kind
+title: "Lint Terraform on Every Plan with the tflint Hook Kind"
+authors: [osterman]
+tags: [feature, security]
+---
+
+Terraform errors that the compiler happily accepts — unused declarations, deprecated syntax, invalid instance types, missing provider constraints — usually surface late: in code review, in CI, or after a bad apply. Atmos already runs security scanners (Checkov, Trivy, KICS) as component hooks, but there was no built-in way to run a **linter** the same way.
+
+<!--truncate-->
+
+## The Problem
+
+`terraform validate` only checks that your configuration is internally consistent — it won't tell you a variable is declared but never used, that you're on deprecated interpolation syntax, or that an `instance_type` doesn't exist. [tflint](https://github.com/terraform-linters/tflint) catches exactly those things, but wiring it into every component meant a custom `kind: command` hook per stack, plus figuring out how to get its output to render.
+
+There was also a mechanical snag. The security scanners all write their SARIF report to a file (`--output $ATMOS_OUTPUT_FILE`), which is how Atmos picks it up. tflint has **no file-output flag** — `tflint --format=sarif` writes to **stdout**. So a first-class tflint kind needed the hook engine to learn one new trick: capture a tool's stdout.
+
+## The Solution
+
+A built-in `tflint` hook kind — zero configuration:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      hooks:
+        lint:
+          events: [after.terraform.plan]
+          kind: tflint
+```
+
+The kind ships sane defaults (`tflint --chdir=$ATMOS_COMPONENT_PATH --format=sarif`, `on_failure: warn`) and runs against the same directory Terraform does — including the provisioned workdir when that feature is enabled.
+
+Under the hood, hook kinds can now opt into **stdout capture**: Atmos redirects the tool's stdout into its structured-output side channel, so a tool that only prints to stdout is handled identically to one that writes a file. From there, tflint rides the exact same path as the other scanners — a single markdown summary in your terminal and on the Atmos Pro run page.
+
+And because it produces SARIF through the shared handler, tflint automatically inherits everything the [scanner CI integration](/stacks/hooks) added: a job **step summary**, inline **PR annotations** on the diff, and a **GitHub Code Scanning** upload — all gated by your `ci:` config, no extra wiring. (See [Scanner Findings as Inline PR Annotations and Code Scanning Alerts](/changelog/scanner-annotations-and-code-scanning).)
+
+## How to Use It
+
+1. Make sure `tflint` is on `PATH` (`brew install tflint`), or pin it for auto-install:
+
+   ```yaml
+   dependencies:
+     tools:
+       tflint: "0.59.1"
+   ```
+
+2. Add the hook to a component and plan:
+
+   ```bash
+   atmos terraform plan vpc -s test
+   ```
+
+tflint runs after the plan and renders its findings. The builtin `terraform` ruleset needs no setup; for provider rulesets (aws/google/azurerm) add a `.tflint.hcl` and run `tflint --init` once (a `kind: command` hook works for that). A working end-to-end setup lives in [`examples/hooks-tflint`](https://github.com/cloudposse/atmos/tree/main/examples/hooks-tflint).
+
+Lint findings default to `on_failure: warn`, so they surface without blocking your plan — flip to `fail` when you're ready to enforce.
