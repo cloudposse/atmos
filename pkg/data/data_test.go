@@ -616,6 +616,54 @@ func TestMarkdown_RendererError(t *testing.T) {
 	}
 }
 
+func TestReset(t *testing.T) {
+	// Initialize with a context.
+	stdout := &bytes.Buffer{}
+	streams := &testStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: stdout,
+		stderr: &bytes.Buffer{},
+	}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	if err != nil {
+		t.Fatalf("failed to create I/O context: %v", err)
+	}
+	InitWriter(ioCtx)
+	mockRenderer := &mockMarkdownRenderer{}
+	SetMarkdownRenderer(mockRenderer)
+
+	// Verify initialized.
+	ioMu.RLock()
+	ctxBefore := globalIOContext
+	rendererBefore := globalMarkdownRender
+	ioMu.RUnlock()
+	if ctxBefore == nil {
+		t.Fatal("expected non-nil context before Reset")
+	}
+	if rendererBefore == nil {
+		t.Fatal("expected non-nil renderer before Reset")
+	}
+
+	// Call Reset.
+	Reset()
+
+	// Verify cleared.
+	ioMu.RLock()
+	ctxAfter := globalIOContext
+	rendererAfter := globalMarkdownRender
+	ioMu.RUnlock()
+	if ctxAfter != nil {
+		t.Error("expected nil context after Reset")
+	}
+	if rendererAfter != nil {
+		t.Error("expected nil renderer after Reset")
+	}
+
+	// Restore state so other tests can use the package.
+	InitWriter(ioCtx)
+	SetMarkdownRenderer(mockRenderer)
+}
+
 func TestMarkdown_ContextNotInitialized(t *testing.T) {
 	// Save current context.
 	ioMu.Lock()
