@@ -529,6 +529,7 @@ func decodeWorkflowStepOutput(node *yaml.Node, stepType string, scalar *string, 
 			if err := node.Decode(&cfg); err != nil {
 				return err
 			}
+			*scalar = cfg.Mode
 			*cast = &cfg
 			return nil
 		}
@@ -574,6 +575,7 @@ type HTTPExpect struct {
 }
 
 type CastOutput struct {
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
 	Cast string `yaml:"cast,omitempty" json:"cast,omitempty" mapstructure:"cast"`
 	SVG  string `yaml:"svg,omitempty" json:"svg,omitempty" mapstructure:"svg"`
 	GIF  string `yaml:"gif,omitempty" json:"gif,omitempty" mapstructure:"gif"`

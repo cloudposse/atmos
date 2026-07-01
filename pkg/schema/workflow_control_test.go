@@ -33,6 +33,28 @@ steps:
 	assert.Equal(t, "{{ .step.name }}", step.ParallelOutput.Prefix)
 }
 
+func TestWorkflowStep_UnmarshalYAML_StructuredCastOutputMode(t *testing.T) {
+	input := `
+name: demo
+type: cast
+output:
+  mode: raw
+  cast: demo.cast
+  svg: demo.svg
+steps:
+  - name: list
+    command: atmos list stacks
+`
+	var step WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte(input), &step))
+
+	assert.Equal(t, "raw", step.Output)
+	require.NotNil(t, step.CastOutput)
+	assert.Equal(t, "raw", step.CastOutput.Mode)
+	assert.Equal(t, "demo.cast", step.CastOutput.Cast)
+	assert.Equal(t, "demo.svg", step.CastOutput.SVG)
+}
+
 func TestValidateWorkflowSteps_ControlSteps(t *testing.T) {
 	tests := []struct {
 		name    string

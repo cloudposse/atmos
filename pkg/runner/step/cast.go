@@ -30,6 +30,15 @@ var (
 
 const wrappedQuotedErrorFormat = "%w: %q"
 
+const castPrompt = "\x1b[1;38;2;0;95;135m>\x1b[0m "
+
+const (
+	defaultCastTypeDelay      = 35 * time.Millisecond
+	defaultCastPromptDelay    = 350 * time.Millisecond
+	defaultCastEnterDelay     = 550 * time.Millisecond
+	defaultCastStepPauseDelay = 700 * time.Millisecond
+)
+
 type CastHandler struct {
 	BaseHandler
 }
@@ -151,6 +160,10 @@ func runCastBody(ctx context.Context, castStep *schema.WorkflowStep, vars *Varia
 }
 
 func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) error {
+	normalizeCastOutputMode(castStep)
+	if err := applyCastStepEnv(castStep, vars); err != nil {
+		return err
+	}
 	executor := NewStepExecutorWithVars(vars)
 	if workflow != nil {
 		executor.SetWorkflow(workflow)
@@ -158,11 +171,37 @@ func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *V
 	for i := range castStep.Steps {
 		child := &castStep.Steps[i]
 		prepareCastChildStep(castStep, child, i)
+		if err := recordCastStepInput(ctx, castStep, child, vars); err != nil {
+			return err
+		}
 		if _, err := executor.Execute(ctx, child); err != nil {
 			return err
 		}
+		if err := sleepCastInput(ctx, castStepPauseDelay(child)); err != nil {
+			return err
+		}
+	}
+	return recordCastPrompt()
+}
+
+func applyCastStepEnv(castStep *schema.WorkflowStep, vars *Variables) error {
+	if len(castStep.Env) == 0 {
+		return nil
+	}
+	resolvedEnv, err := vars.ResolveEnvMap(castStep.Env)
+	if err != nil {
+		return fmt.Errorf("step '%s': %w", castStep.Name, err)
+	}
+	for key, value := range resolvedEnv {
+		vars.SetEnv(key, value)
 	}
 	return nil
+}
+
+func normalizeCastOutputMode(castStep *schema.WorkflowStep) {
+	if castStep.Output == "" && castStep.CastOutput != nil {
+		castStep.Output = castStep.CastOutput.Mode
+	}
 }
 
 func prepareCastChildStep(castStep, child *schema.WorkflowStep, index int) {
@@ -175,6 +214,105 @@ func prepareCastChildStep(castStep, child *schema.WorkflowStep, index int) {
 	if child.Type == "" {
 		child.Type = schema.TaskTypeShell
 	}
+	if child.Output == "" {
+		child.Output = castStep.Output
+	}
+}
+
+func recordCastStepInput(ctx context.Context, castStep, child *schema.WorkflowStep, vars *Variables) error {
+	lines, err := castStepInputLines(child, vars)
+	if err != nil {
+		return err
+	}
+	writeRate, err := parseDurationDefault(castStep.WriteRate, defaultCastTypeDelay)
+	if err != nil {
+		return err
+	}
+	enterDelay, err := castStepEnterDelay(child)
+	if err != nil {
+		return err
+	}
+	for _, line := range lines {
+		if err := recordCastTypedLine(ctx, line, writeRate, enterDelay); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func recordCastTypedLine(ctx context.Context, line string, writeRate, enterDelay time.Duration) error {
+	writer := iolib.GetContext().Data()
+	if _, err := fmt.Fprint(writer, castPrompt); err != nil {
+		return err
+	}
+	if err := sleepCastInput(ctx, defaultCastPromptDelay); err != nil {
+		return err
+	}
+	for _, char := range line {
+		if err := sleepCastInput(ctx, writeRate); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprint(writer, string(char)); err != nil {
+			return err
+		}
+	}
+	if err := sleepCastInput(ctx, enterDelay); err != nil {
+		return err
+	}
+	_, err := fmt.Fprint(writer, "\n")
+	return err
+}
+
+func castStepEnterDelay(child *schema.WorkflowStep) (time.Duration, error) {
+	return parseDurationDefault(child.Duration, defaultCastEnterDelay)
+}
+
+func castStepPauseDelay(child *schema.WorkflowStep) time.Duration {
+	delay, err := parseDurationDefault(child.Interval, defaultCastStepPauseDelay)
+	if err != nil {
+		return defaultCastStepPauseDelay
+	}
+	return delay
+}
+
+func recordCastPrompt() error {
+	_, err := fmt.Fprint(iolib.GetContext().Data(), castPrompt)
+	return err
+}
+
+func sleepCastInput(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func castStepInputLines(child *schema.WorkflowStep, vars *Variables) ([]string, error) {
+	var lines []string
+	if text := strings.TrimRight(child.Text, "\n"); text != "" {
+		resolved, err := vars.Resolve(text)
+		if err != nil {
+			return nil, err
+		}
+		lines = append(lines, strings.Split(resolved, "\n")...)
+	}
+
+	command := strings.TrimSpace(child.Command)
+	if command == "" {
+		return lines, nil
+	}
+	resolved, err := vars.Resolve(command)
+	if err != nil {
+		return nil, err
+	}
+	return append(lines, resolved), nil
 }
 
 func runCastSessionMode(ctx context.Context, castStep *schema.WorkflowStep) error {

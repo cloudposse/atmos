@@ -429,23 +429,41 @@ commands:
                 command: rm -f ../../website/static/casts/examples/quick-start-simple.cast
               - type: cast
                 name: quick-start-simple
-                command: atmos list stacks --format tree
+                command: atmos terraform plan station -s dev
                 mode: steps
+                rate: 12ms
+                write_rate: 35ms
                 width: 120
                 height: 36
+                env: *force_color_env
                 output:
+                  mode: raw
                   cast: ../../website/static/casts/examples/quick-start-simple.cast
                 steps:
                   - type: shell
                     name: list-stacks
+                    text: "# see the stacks in this quick start"
                     working_directory: ../../.context/cast-fixtures/quick-start-simple
                     env: *force_color_env
+                    duration: 450ms
+                    interval: 750ms
                     command: atmos list stacks --format tree
                   - type: shell
                     name: list-components
+                    text: "# station is a Terraform component instance in all three stacks"
                     working_directory: ../../.context/cast-fixtures/quick-start-simple
                     env: *force_color_env
+                    duration: 450ms
+                    interval: 750ms
                     command: atmos list components
+                  - type: shell
+                    name: terraform-plan
+                    text: "# plan the dev station instance"
+                    working_directory: ../../.context/cast-fixtures/quick-start-simple
+                    env: *force_color_env
+                    duration: 550ms
+                    interval: 900ms
+                    command: atmos terraform plan station -s dev
               - type: shell
                 name: validate
                 command: atmos casts validate quick-start-simple
@@ -788,13 +806,31 @@ commands:
                 name: validate
                 interpreter: python3
                 script: |
+                  import json
                   from pathlib import Path
-                  text = Path("../../website/static/casts/examples/quick-start-simple.cast").read_text()
-                  for needle in ["Stacks", "dev", "staging", "prod", "station", "terraform"]:
+                  raw = Path("../../website/static/casts/examples/quick-start-simple.cast").read_text()
+                  rows = raw.splitlines()
+                  text = "".join(json.loads(line)[2] for line in rows[1:] if json.loads(line)[1] in ("o", "e"))
+                  for needle in [
+                      "# see the stacks in this quick start",
+                      "atmos list stacks --format tree",
+                      "Stacks",
+                      "atmos list components",
+                      "station",
+                      "# plan the dev station instance",
+                      "atmos terraform plan station -s dev",
+                      "Terraform will perform the following actions",
+                      "local_file.cache",
+                      "https://wttr.in/Stockholm?0m",
+                      "lang=sv",
+                      "Plan:",
+                  ]:
                       if needle not in text:
                           raise SystemExit(f"quick-start-simple cast missing {needle!r}")
-                  for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
-                      if bad in text:
+                  if "\\u001b[" not in raw:
+                      raise SystemExit("quick-start-simple cast is missing ANSI color sequences")
+                  for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[list-stacks]", "[list-components]", "completed"]:
+                      if bad in raw or bad in text:
                           raise SystemExit(f"quick-start-simple cast contains {bad!r}")
 
           - name: quick-start-advanced

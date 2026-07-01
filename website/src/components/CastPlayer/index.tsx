@@ -35,7 +35,7 @@ export default function CastPlayer({
   chrome = false,
   controls,
   scrubber = true,
-  autoplay = false,
+  autoplay = true,
   loop = true,
   loopDelay = 5,
   speed = 1,
@@ -59,7 +59,7 @@ export default function CastPlayer({
 
   useEffect(() => {
     let cancelled = false;
-    fetch(src)
+    fetch(src, {cache: 'no-store'})
       .then((response) => response.text())
       .then((text) => {
         if (cancelled) return;
@@ -78,8 +78,8 @@ export default function CastPlayer({
           enterDelay,
           exitDelay,
         });
-        const playbackEvents = applyIdleSkip(withIntro, idleSkip ? 1.5 : 0);
-        const initialPosition = autoplay ? 0 : playbackEvents.at(-1)?.[0] ?? 0;
+        const playbackEvents = applyIdleSkip(withIntro, idleSkip && !eventsStartWithPrompt(withIntro) ? 1.5 : 0);
+        const initialPosition = 0;
         setEvents(playbackEvents);
         setContent(renderAt(playbackEvents, initialPosition));
         setPosition(initialPosition);
@@ -428,6 +428,9 @@ function addCommandIntro(
   if (!options.enabled || !command) {
     return events;
   }
+  if (eventsStartWithPrompt(events)) {
+    return events;
+  }
 
   const intro: CastEvent[] = [[0, 'o', options.prompt]];
   let cursor = Math.max(options.typeRate, 0.001);
@@ -451,6 +454,19 @@ function addCommandIntro(
 
 function lastEventTime(events: CastEvent[]) {
   return events.at(-1)?.[0] ?? 0;
+}
+
+function eventsStartWithPrompt(events: CastEvent[]) {
+  const firstText = events
+    .filter((event) => event[1] === 'o' || event[1] === 'e')
+    .map((event) => event[2])
+    .join('')
+    .trimStart();
+  return stripAnsi(firstText).startsWith('> ');
+}
+
+function stripAnsi(input: string) {
+  return input.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
 }
 
 function normalizeTerminalText(input: string) {

@@ -434,6 +434,39 @@ func TestTasksDecodeHook_StructuredParallelOutput(t *testing.T) {
 	assert.Equal(t, "{{ .step.name }}", result.Steps[0].ParallelOutput.Prefix)
 }
 
+func TestTasksDecodeHook_StructuredCastOutputMode(t *testing.T) {
+	input := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"name": "demo",
+				"type": TaskTypeCast,
+				"output": map[string]any{
+					"mode": "raw",
+					"cast": "demo.cast",
+				},
+				"steps": []any{
+					map[string]any{"name": "list", "command": "atmos list stacks"},
+				},
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	assert.Equal(t, "raw", result.Steps[0].Output)
+	require.NotNil(t, result.Steps[0].CastOutput)
+	assert.Equal(t, "raw", result.Steps[0].CastOutput.Mode)
+	assert.Equal(t, "demo.cast", result.Steps[0].CastOutput.Cast)
+}
+
 func TestTasksDecodeHook_InvalidOutputType(t *testing.T) {
 	input := map[string]any{
 		"steps": []any{

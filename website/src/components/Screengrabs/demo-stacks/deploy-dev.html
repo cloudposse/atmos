@@ -33,7 +33,7 @@ so if you run &quot;terraform plan&quot; Terraform will not see any existing sta
 for this configuration.</span>
 <span style="font-weight:bold;">data.http.weather: Reading...</span>
 <span style="font-weight:bold;">data.http.weather: Read complete after 1s 
-    [id=https://wttr.in/Stockholm?0&amp;format=&amp;lang=se&amp;u=m]</span>
+    [id=https://wttr.in/Stockholm?0m&amp;lang=sv]</span>
 
 Terraform used the selected providers to generate the following execution
 plan. 
@@ -73,7 +73,7 @@ Changes to Outputs:
   <span style="color:green;">+</span> location = &quot;Stockholm&quot;
   <span style="color:green;">+</span> stage    = &quot;dev&quot;
   <span style="color:green;">+</span> units    = &quot;m&quot;
-  <span style="color:green;">+</span> url      = &quot;https://wttr.in/Stockholm?0&amp;format=&amp;lang=se&amp;u=m&quot;
+  <span style="color:green;">+</span> url      = &quot;https://wttr.in/Stockholm?0m&amp;lang=sv&quot;
   <span style="color:green;">+</span> weather  =
 
         Weather report: Stockholm
@@ -96,7 +96,7 @@ Outputs:
 location = &quot;Stockholm&quot;
 stage = &quot;dev&quot;
 units = &quot;m&quot;
-url = &quot;https://wttr.in/Stockholm?0&amp;format=&amp;lang=se&amp;u=m&quot;
+url = &quot;https://wttr.in/Stockholm?0m&amp;lang=sv&quot;
 weather =
 
 Weather report: Stockholm

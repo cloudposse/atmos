@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
@@ -53,16 +54,9 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		}
 	}
 
-	// Resolve environment variables.
-	var envVars []string
-	if len(step.Env) > 0 {
-		resolvedEnv, err := vars.ResolveEnvMap(step.Env)
-		if err != nil {
-			return nil, fmt.Errorf("step '%s': %w", step.Name, err)
-		}
-		for k, v := range resolvedEnv {
-			envVars = append(envVars, k+"="+v)
-		}
+	envVars, err := h.resolveEnv(step, vars)
+	if err != nil {
+		return nil, err
 	}
 
 	// Terminal-attached or interactive steps need the session path for
@@ -80,7 +74,7 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	}
 
 	// Set environment - inherit current environment and add custom vars.
-	cmd.Env = append(os.Environ(), envVars...)
+	cmd.Env = envVars
 
 	// Get output mode - use default log mode if not in workflow context.
 	mode := OutputMode(step.Output)
@@ -130,7 +124,7 @@ func (h *ShellHandler) executeShellSessionStep(ctx context.Context, step *schema
 		Command:     command,
 		Name:        step.Name,
 		Dir:         workDir,
-		Env:         append(os.Environ(), envVars...),
+		Env:         envVars,
 		TTY:         step.Tty,
 		Interactive: step.Interactive,
 	})
@@ -158,16 +152,9 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 		}
 	}
 
-	// Resolve environment variables.
-	var envVars []string
-	if len(step.Env) > 0 {
-		resolvedEnv, err := vars.ResolveEnvMap(step.Env)
-		if err != nil {
-			return nil, fmt.Errorf("step '%s': %w", step.Name, err)
-		}
-		for k, v := range resolvedEnv {
-			envVars = append(envVars, k+"="+v)
-		}
+	envVars, err := h.resolveEnv(step, vars)
+	if err != nil {
+		return nil, err
 	}
 
 	// Terminal-attached or interactive steps need the session path for
@@ -185,7 +172,7 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 	}
 
 	// Set environment.
-	cmd.Env = append(os.Environ(), envVars...)
+	cmd.Env = envVars
 
 	// Get output mode from step or workflow.
 	mode := GetOutputMode(step, workflow)
@@ -206,4 +193,22 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 		WithMetadata("stdout", stdout).
 		WithMetadata("stderr", stderr).
 		WithMetadata(exitCodeMetadata, 0), nil
+}
+
+func (h *ShellHandler) resolveEnv(step *schema.WorkflowStep, vars *Variables) ([]string, error) {
+	env := vars.EnvSlice()
+	if len(env) == 0 {
+		env = os.Environ()
+	}
+	if len(step.Env) == 0 {
+		return env, nil
+	}
+	resolvedEnv, err := vars.ResolveEnvMap(step.Env)
+	if err != nil {
+		return nil, fmt.Errorf("step '%s': %w", step.Name, err)
+	}
+	for key, value := range resolvedEnv {
+		env = envpkg.UpdateEnvVar(env, key, value)
+	}
+	return env, nil
 }

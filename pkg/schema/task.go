@@ -695,6 +695,7 @@ func normalizeTaskOutputMap(m map[string]any, task *Task) (map[string]any, error
 				return nil, err
 			}
 			task.CastOutput = &cfg
+			task.Output = cfg.Mode
 			copied := make(map[string]any, len(m)-1)
 			for key, val := range m {
 				if key == "output" {
