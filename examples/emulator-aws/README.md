@@ -1,3 +1,8 @@
+---
+asciicast: /casts/emulator/aws-lifecycle.cast
+asciicastTitle: atmos emulator aws lifecycle
+---
+
 ## Notes
 
 This example provisions an S3 bucket against a **local AWS sandbox** — no AWS account or

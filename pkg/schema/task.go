@@ -219,7 +219,7 @@ func (task *Task) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	*task = Task(fresh)
-	return applyStepPolymorphicNodes(nodes, task.Type, task.Action, stepPolyTargets{
+	return applyStepPolymorphicNodes(nodes, task.Type, task.Action, &stepPolyTargets{
 		output:    &task.Output,
 		cast:      &task.CastOutput,
 		parallel:  &task.ParallelOutput,

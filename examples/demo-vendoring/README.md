@@ -1,3 +1,8 @@
+---
+asciicast: /casts/vendor/pull.cast
+asciicastTitle: atmos vendor pull
+---
+
 # Example: Demo Vendoring
 
 Pull Terraform modules from GitHub, S3, or OCI registries with pinned versions.

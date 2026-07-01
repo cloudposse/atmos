@@ -13,7 +13,7 @@ func TestResolvePathUsesXDGCacheBase(t *testing.T) {
 	t.Setenv("ATMOS_XDG_CACHE_HOME", temp)
 
 	started := time.Date(2026, 6, 30, 14, 22, 33, 0, time.UTC)
-	path, err := ResolvePath(Options{Command: []string{"terraform", "plan", "vpc"}}, started)
+	path, err := ResolvePath(&Options{Command: []string{"terraform", "plan", "vpc"}}, started)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestStartFailsWhenExplicitPathExists(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := Start(Options{Path: path, Explicit: true})
+	_, err := Start(&Options{Path: path, Explicit: true})
 	if err == nil {
 		t.Fatal("expected explicit path collision error")
 	}
@@ -44,7 +44,7 @@ func TestStartFailsWhenExplicitPathExists(t *testing.T) {
 
 func TestRecorderOmitsInputUnlessEnabled(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "demo.cast")
-	rec, err := Start(Options{Path: path, Explicit: true, Now: func() time.Time {
+	rec, err := Start(&Options{Path: path, Explicit: true, Now: func() time.Time {
 		return time.Unix(10, 0)
 	}})
 	if err != nil {

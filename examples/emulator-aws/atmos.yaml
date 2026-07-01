@@ -10,6 +10,7 @@ components:
     apply_auto_approve: false
     deploy_run_init: true
     init_run_reconfigure: true
+    plugin_cache: false
     auto_generate_backend_file: false
 
 stacks:

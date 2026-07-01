@@ -2,6 +2,7 @@ package step
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -15,6 +16,19 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+var (
+	ErrCastStepRequiresSteps         = errors.New("cast step requires nested steps")
+	ErrCastSessionRequiresActions    = errors.New("cast session step requires session actions")
+	ErrInvalidCastMode               = errors.New("cast step has invalid mode")
+	ErrWriteActionRequiresText       = errors.New("write action requires text")
+	ErrKeyActionRequiresKey          = errors.New("key action requires key")
+	ErrPauseActionRequiresDuration   = errors.New("pause action requires duration")
+	ErrWaitActionRequiresTextOrRegex = errors.New("wait action requires exactly one of text or regex")
+	ErrUnsupportedSessionAction      = errors.New("unsupported session action type")
+)
+
+const wrappedQuotedErrorFormat = "%w: %q"
 
 type CastHandler struct {
 	BaseHandler
@@ -33,11 +47,11 @@ func (h *CastHandler) Validate(step *schema.WorkflowStep) error {
 	switch mode {
 	case "steps":
 		if len(step.Steps) == 0 {
-			return fmt.Errorf("cast step %q requires nested steps", step.Name)
+			return fmt.Errorf(wrappedQuotedErrorFormat, ErrCastStepRequiresSteps, step.Name)
 		}
 	case "session":
 		if len(step.Steps) == 0 {
-			return fmt.Errorf("cast session step %q requires session actions", step.Name)
+			return fmt.Errorf(wrappedQuotedErrorFormat, ErrCastSessionRequiresActions, step.Name)
 		}
 		for i := range step.Steps {
 			if err := validateCastSessionAction(&step.Steps[i]); err != nil {
@@ -45,12 +59,14 @@ func (h *CastHandler) Validate(step *schema.WorkflowStep) error {
 			}
 		}
 	default:
-		return fmt.Errorf("cast step %q has invalid mode %q (expected steps or session)", step.Name, step.Mode)
+		return fmt.Errorf("%w: %q mode %q", ErrInvalidCastMode, step.Name, step.Mode)
 	}
 	return nil
 }
 
 func (h *CastHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
+	defer perf.Track(nil, "step.CastHandler.Execute")()
+
 	return h.ExecuteWithWorkflow(ctx, step, vars, nil)
 }
 
@@ -102,15 +118,20 @@ func startStepRecorder(step *schema.WorkflowStep) (*asciicast.Recorder, func(), 
 	if height <= 0 {
 		height = viper.GetInt("cast.recording.height")
 	}
-	rec, err := asciicast.Start(asciicast.Options{
-		Path:     path,
-		BasePath: viper.GetString("cast.recording.base_path"),
-		Command:  []string{"cast", step.Name},
-		Width:    width,
-		Height:   height,
-		RecordIn: viper.GetBool("cast.recording.input"),
-		Explicit: path != "",
-		Env:      env,
+	outputRate, err := parseDurationDefault(step.Rate, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	rec, err := asciicast.Start(&asciicast.Options{
+		Path:       path,
+		BasePath:   viper.GetString("cast.recording.base_path"),
+		Command:    castCommandArgs(step),
+		Width:      width,
+		Height:     height,
+		RecordIn:   viper.GetBool("cast.recording.input"),
+		Explicit:   path != "",
+		Env:        env,
+		OutputRate: outputRate,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -121,57 +142,85 @@ func startStepRecorder(step *schema.WorkflowStep) (*asciicast.Recorder, func(), 
 func runCastBody(ctx context.Context, castStep *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) error {
 	switch castMode(castStep) {
 	case "steps":
-		executor := NewStepExecutorWithVars(vars)
-		if workflow != nil {
-			executor.SetWorkflow(workflow)
-		}
-		for i := range castStep.Steps {
-			child := &castStep.Steps[i]
-			if child.Name == "" {
-				child.Name = fmt.Sprintf("%s_step_%d", castStep.Name, i+1)
-			}
-			if child.Type == "" {
-				child.Type = schema.TaskTypeShell
-			}
-			if _, err := executor.Execute(ctx, child); err != nil {
-				return err
-			}
-		}
-		return nil
+		return runCastStepMode(ctx, castStep, vars, workflow)
 	case "session":
-		writeRate, err := parseDurationDefault(castStep.WriteRate, 40*time.Millisecond)
-		if err != nil {
-			return err
-		}
-		keyInterval, err := parseDurationDefault(castStep.KeyInterval, 20*time.Millisecond)
-		if err != nil {
-			return err
-		}
-		actions := make([]asciicast.SessionAction, 0, len(castStep.Steps))
-		for _, child := range castStep.Steps {
-			actions = append(actions, asciicast.SessionAction{
-				Type:     child.Type,
-				Text:     child.Text,
-				Regex:    child.Regex,
-				Key:      child.Key,
-				Duration: child.Duration,
-				Timeout:  child.Timeout,
-				Rate:     child.Rate,
-				Interval: child.Interval,
-				Repeat:   child.Repeat,
-			})
-		}
-		return asciicast.RunSession(ctx, asciicast.SessionOptions{
-			Shell:       castStep.Shell,
-			Width:       castStep.Width,
-			Height:      castStep.Height,
-			WriteRate:   writeRate,
-			KeyInterval: keyInterval,
-			Actions:     actions,
-		})
+		return runCastSessionMode(ctx, castStep)
 	default:
-		return fmt.Errorf("invalid cast mode %q", castStep.Mode)
+		return fmt.Errorf(wrappedQuotedErrorFormat, ErrInvalidCastMode, castStep.Mode)
 	}
+}
+
+func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) error {
+	executor := NewStepExecutorWithVars(vars)
+	if workflow != nil {
+		executor.SetWorkflow(workflow)
+	}
+	for i := range castStep.Steps {
+		child := &castStep.Steps[i]
+		prepareCastChildStep(castStep, child, i)
+		if _, err := executor.Execute(ctx, child); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func prepareCastChildStep(castStep, child *schema.WorkflowStep, index int) {
+	if child.Name == "" {
+		child.Name = fmt.Sprintf("%s_step_%d", castStep.Name, index+1)
+	}
+	if child.WorkingDirectory == "" {
+		child.WorkingDirectory = castStep.WorkingDirectory
+	}
+	if child.Type == "" {
+		child.Type = schema.TaskTypeShell
+	}
+}
+
+func runCastSessionMode(ctx context.Context, castStep *schema.WorkflowStep) error {
+	writeRate, err := parseDurationDefault(castStep.WriteRate, 40*time.Millisecond)
+	if err != nil {
+		return err
+	}
+	keyInterval, err := parseDurationDefault(castStep.KeyInterval, 20*time.Millisecond)
+	if err != nil {
+		return err
+	}
+	return asciicast.RunSession(ctx, asciicast.SessionOptions{
+		Shell:       castStep.Shell,
+		Width:       castStep.Width,
+		Height:      castStep.Height,
+		WriteRate:   writeRate,
+		KeyInterval: keyInterval,
+		Actions:     castSessionActions(castStep.Steps),
+	})
+}
+
+func castSessionActions(steps []schema.WorkflowStep) []asciicast.SessionAction {
+	actions := make([]asciicast.SessionAction, 0, len(steps))
+	for i := range steps {
+		child := &steps[i]
+		actions = append(actions, asciicast.SessionAction{
+			Type:     child.Type,
+			Text:     child.Text,
+			Regex:    child.Regex,
+			Key:      child.Key,
+			Duration: child.Duration,
+			Timeout:  child.Timeout,
+			Rate:     child.Rate,
+			Interval: child.Interval,
+			Repeat:   child.Repeat,
+		})
+	}
+	return actions
+}
+
+func castCommandArgs(step *schema.WorkflowStep) []string {
+	command := strings.TrimSpace(step.Command)
+	if command != "" {
+		return strings.Fields(command)
+	}
+	return []string{"cast", step.Name}
 }
 
 func renderCastOutputs(step *schema.WorkflowStep, castPath string) error {
@@ -196,48 +245,63 @@ func castMode(step *schema.WorkflowStep) string {
 func validateCastSessionAction(action *schema.WorkflowStep) error {
 	switch action.Type {
 	case "write":
-		if action.Text == "" {
-			return fmt.Errorf("write action requires text")
-		}
-		if _, err := parseDurationDefault(action.Rate, 0); action.Rate != "" && err != nil {
-			return err
-		}
+		return validateWriteAction(action)
 	case "key":
-		if action.Key == "" {
-			return fmt.Errorf("key action requires key")
-		}
-		if action.Interval != "" {
-			if _, err := time.ParseDuration(action.Interval); err != nil {
-				return err
-			}
-		}
+		return validateKeyAction(action)
 	case "pause":
-		if action.Duration == "" {
-			return fmt.Errorf("pause action requires duration")
-		}
-		if _, err := time.ParseDuration(action.Duration); err != nil {
-			return err
-		}
+		return validatePauseAction(action)
 	case "wait":
-		hasText := action.Text != ""
-		hasRegex := action.Regex != ""
-		if hasText == hasRegex {
-			return fmt.Errorf("wait action requires exactly one of text or regex")
-		}
-		if hasRegex {
-			if _, err := regexp.Compile(action.Regex); err != nil {
-				return err
-			}
-		}
-		if action.Timeout != "" {
-			if _, err := time.ParseDuration(action.Timeout); err != nil {
-				return err
-			}
-		}
+		return validateWaitAction(action)
 	default:
-		return fmt.Errorf("unsupported session action type %q", action.Type)
+		return fmt.Errorf(wrappedQuotedErrorFormat, ErrUnsupportedSessionAction, action.Type)
+	}
+}
+
+func validateWriteAction(action *schema.WorkflowStep) error {
+	if action.Text == "" {
+		return ErrWriteActionRequiresText
+	}
+	if _, err := parseDurationDefault(action.Rate, 0); action.Rate != "" && err != nil {
+		return err
 	}
 	return nil
+}
+
+func validateKeyAction(action *schema.WorkflowStep) error {
+	if action.Key == "" {
+		return ErrKeyActionRequiresKey
+	}
+	if action.Interval == "" {
+		return nil
+	}
+	_, err := time.ParseDuration(action.Interval)
+	return err
+}
+
+func validatePauseAction(action *schema.WorkflowStep) error {
+	if action.Duration == "" {
+		return ErrPauseActionRequiresDuration
+	}
+	_, err := time.ParseDuration(action.Duration)
+	return err
+}
+
+func validateWaitAction(action *schema.WorkflowStep) error {
+	hasText := action.Text != ""
+	hasRegex := action.Regex != ""
+	if hasText == hasRegex {
+		return ErrWaitActionRequiresTextOrRegex
+	}
+	if hasRegex {
+		if _, err := regexp.Compile(action.Regex); err != nil {
+			return err
+		}
+	}
+	if action.Timeout == "" {
+		return nil
+	}
+	_, err := time.ParseDuration(action.Timeout)
+	return err
 }
 
 func parseDurationDefault(value string, fallback time.Duration) (time.Duration, error) {

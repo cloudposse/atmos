@@ -55,6 +55,8 @@ export interface ExampleProject {
   hasAtmosYaml: boolean;
   tags: string[];
   docs: DocLink[];
+  asciicast?: string;
+  asciicastTitle?: string;
   root: DirectoryNode;
 }
 

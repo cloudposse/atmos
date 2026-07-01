@@ -1,6 +1,10 @@
 package io
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/cloudposse/atmos/pkg/perf"
+)
 
 // Recorder receives already-masked terminal events from the I/O layer.
 type Recorder interface {
@@ -14,6 +18,8 @@ var recorderState struct {
 
 // SetRecorder installs a process-wide I/O recorder and returns a restore function.
 func SetRecorder(rec Recorder) func() {
+	defer perf.Track(nil, "io.SetRecorder")()
+
 	recorderState.mu.Lock()
 	previous := recorderState.recorder
 	recorderState.recorder = rec
@@ -47,5 +53,7 @@ func recordOutput(stream Stream, content string) {
 // Use this only from stream adapters that perform their own writing and masking
 // outside Context.Write, such as PTY bridges.
 func RecordMaskedOutput(stream Stream, content string) {
+	defer perf.Track(nil, "io.RecordMaskedOutput")()
+
 	recordOutput(stream, content)
 }

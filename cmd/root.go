@@ -123,6 +123,11 @@ var profilerServer *profiler.Server
 
 var activeCast *activeCastRecording
 
+const (
+	castFlagName    = "cast"
+	castAutoFlagVal = "__AUTO__"
+)
+
 type activeCastRecording struct {
 	recorder *asciicast.Recorder
 	restore  func()
@@ -316,7 +321,7 @@ func startCastRecordingIfRequested(cmd *cobra.Command, atmosConfig *schema.Atmos
 		return nil
 	}
 
-	castFlag := cmd.Flags().Lookup("cast")
+	castFlag := cmd.Flags().Lookup(castFlagName)
 	flagChanged := castFlag != nil && castFlag.Changed
 	enabled := atmosConfig.Cast.Recording.Enabled || flagChanged
 	if !enabled {
@@ -326,30 +331,12 @@ func startCastRecordingIfRequested(cmd *cobra.Command, atmosConfig *schema.Atmos
 	flagValue := ""
 	if flagChanged {
 		var err error
-		flagValue, err = cmd.Flags().GetString("cast")
+		flagValue, err = cmd.Flags().GetString(castFlagName)
 		if err != nil {
 			return err
 		}
 	}
-	explicitPath := flagChanged && flagValue != "" && flagValue != "__AUTO__"
-
-	env := make(map[string]string)
-	for _, pair := range os.Environ() {
-		k, v, ok := strings.Cut(pair, "=")
-		if ok {
-			env[k] = v
-		}
-	}
-	rec, err := asciicast.Start(asciicast.Options{
-		Path:     explicitPathValue(flagValue, explicitPath),
-		BasePath: atmosConfig.Cast.Recording.BasePath,
-		Command:  castRecordedCommandArgs(os.Args[1:]),
-		Width:    atmosConfig.Cast.Recording.Width,
-		Height:   atmosConfig.Cast.Recording.Height,
-		RecordIn: atmosConfig.Cast.Recording.Input,
-		Explicit: explicitPath,
-		Env:      env,
-	})
+	rec, err := startCastRecorder(flagValue, flagChanged, atmosConfig)
 	if err != nil {
 		return err
 	}
@@ -359,6 +346,31 @@ func startCastRecordingIfRequested(cmd *cobra.Command, atmosConfig *schema.Atmos
 		restore:  iolib.SetRecorder(rec),
 	}
 	return nil
+}
+
+func startCastRecorder(flagValue string, flagChanged bool, atmosConfig *schema.AtmosConfiguration) (*asciicast.Recorder, error) {
+	explicitPath := flagChanged && flagValue != "" && flagValue != castAutoFlagVal
+	return asciicast.Start(&asciicast.Options{
+		Path:     explicitPathValue(flagValue, explicitPath),
+		BasePath: atmosConfig.Cast.Recording.BasePath,
+		Command:  castRecordedCommandArgs(os.Args[1:]),
+		Width:    atmosConfig.Cast.Recording.Width,
+		Height:   atmosConfig.Cast.Recording.Height,
+		RecordIn: atmosConfig.Cast.Recording.Input,
+		Explicit: explicitPath,
+		Env:      castEnvironment(),
+	})
+}
+
+func castEnvironment() map[string]string {
+	env := make(map[string]string)
+	for _, pair := range os.Environ() {
+		k, v, ok := strings.Cut(pair, "=")
+		if ok {
+			env[k] = v
+		}
+	}
+	return env
 }
 
 func explicitPathValue(value string, explicit bool) string {
@@ -371,7 +383,7 @@ func explicitPathValue(value string, explicit bool) string {
 func castRecordedCommandArgs(args []string) []string {
 	result := make([]string, 0, len(args))
 	for _, arg := range args {
-		if arg == "--cast" || strings.HasPrefix(arg, "--cast=") {
+		if arg == "--"+castFlagName || strings.HasPrefix(arg, "--"+castFlagName+"=") {
 			continue
 		}
 		result = append(result, arg)
@@ -1935,9 +1947,9 @@ func init() {
 	if err := globalParser.BindToViper(viper.GetViper()); err != nil {
 		log.Error("Failed to bind global flags to viper", "error", err)
 	}
-	RootCmd.PersistentFlags().String("cast", "", "Record command output as an asciinema cast (--cast for generated path, --cast=path for explicit output)")
-	if castFlag := RootCmd.PersistentFlags().Lookup("cast"); castFlag != nil {
-		castFlag.NoOptDefVal = "__AUTO__"
+	RootCmd.PersistentFlags().String(castFlagName, "", "Record command output as an asciinema cast (--cast for generated path, --cast=path for explicit output)")
+	if castFlag := RootCmd.PersistentFlags().Lookup(castFlagName); castFlag != nil {
+		castFlag.NoOptDefVal = castAutoFlagVal
 	}
 
 	// Register --version as a LOCAL flag (not inherited by subcommands).

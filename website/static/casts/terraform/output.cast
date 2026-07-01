@@ -1,6 +1,7 @@
-{"version":2,"width":120,"height":36,"timestamp":1782858924,"command":"cast terraform-output","env":{"SHELL":"/bin/zsh","TERM":"dumb"}}
-[0.612023,"o","\u001b[0m\u001b[1mInitializing provider plugins found in the configuration...\u001b[0m\r\n- Reusing previous version of hashicorp/null from the dependency lock file\r\n"]
-[0.771107542,"o","- Using previously-installed hashicorp/null v3.3.0\r\n\r\n\u001b[0m\u001b[1mInitializing the backend...\u001b[0m\r\n"]
-[0.78754675,"o","\r\n\r\n\r\n\u001b[0m\u001b[1m\u001b[32mTerraform has been successfully initialized!\u001b[0m\u001b[32m\u001b[0m\r\n"]
-[0.919964,"o","\u001b[0m\u001b[32mSwitched to workspace \"dev\".\u001b[0m\r\n"]
-[1.039213709,"o","environment = \"dev\"\r\nvpc_cidr = \"10.0.0.0/16\"\r\n"]
+{"version":2,"width":120,"height":36,"timestamp":1782863268,"command":"atmos terraform output vpc -s dev","env":{"SHELL":"/bin/zsh","TERM":"dumb"}}
+[0.151030666,"o","\u001b[0m\u001b[1mInitializing provider plugins found in the configuration...\u001b[0m\r\n- Reusing previous version of hashicorp/null from the dependency lock file\r\n"]
+[0.237850208,"o","- Using previously-installed hashicorp/null v3.3.0\r\n\r\n\u001b[0m\u001b[1mInitializing the backend...\u001b[0m\r\n"]
+[0.245276833,"o","\r\n"]
+[0.245304875,"o","\r\n\r\n\u001b[0m\u001b[1m\u001b[32mTerraform has been successfully initialized!\u001b[0m\u001b[32m\u001b[0m\r\n"]
+[0.283823708,"o","\u001b[0m\u001b[32mSwitched to workspace \"dev\".\u001b[0m\r\n"]
+[0.320177083,"o","environment = \"dev\"\r\nvpc_cidr = \"10.0.0.0/16\"\r\n"]

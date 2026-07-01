@@ -101,7 +101,13 @@ func ExecWithPTY(ctx context.Context, cmd *exec.Cmd, opts *Options) error {
 	if opts.DisableStdinForward {
 		stdin = nil
 	}
-	return runWithIO(ctx, cmd, ptmx, stdin, outputWriter, opts.DisableStdinForward)
+	return runWithIO(ctx, &ioRunConfig{
+		cmd:                      cmd,
+		ptmx:                     ptmx,
+		stdin:                    stdin,
+		stdout:                   outputWriter,
+		emulateTerminalResponses: opts.DisableStdinForward,
+	})
 }
 
 // applyDefaults applies default values to Options if not set.
@@ -132,9 +138,17 @@ func createOutputWriter(opts *Options) io.Writer {
 	return &recordingWriter{underlying: opts.Stdout}
 }
 
+type ioRunConfig struct {
+	cmd                      *exec.Cmd
+	ptmx                     *os.File
+	stdin                    io.Reader
+	stdout                   io.Writer
+	emulateTerminalResponses bool
+}
+
 // runWithIO sets up bidirectional IO and waits for command completion.
 // The stdin reader may be nil to skip input forwarding entirely.
-func runWithIO(ctx context.Context, cmd *exec.Cmd, ptmx *os.File, stdin io.Reader, stdout io.Writer, emulateTerminalResponses bool) error {
+func runWithIO(ctx context.Context, cfg *ioRunConfig) error {
 	var wg sync.WaitGroup
 	errChan := make(chan error, 2)
 
@@ -143,16 +157,16 @@ func runWithIO(ctx context.Context, cmd *exec.Cmd, ptmx *os.File, stdin io.Reade
 	// next read after the PTY closes, so joining it would block completion
 	// until the user presses a key (the standard docker-CLI pattern is to let
 	// it die with the process).
-	if stdin != nil {
-		go copyInput(errChan, ptmx, stdin)
+	if cfg.stdin != nil {
+		go copyInput(errChan, cfg.ptmx, cfg.stdin)
 	}
 
 	// Copy output from PTY to terminal.
 	wg.Add(1)
-	go copyOutput(&wg, errChan, stdout, newOutputReader(ptmx, emulateTerminalResponses))
+	go copyOutput(&wg, errChan, cfg.stdout, newOutputReader(cfg.ptmx, cfg.emulateTerminalResponses))
 
 	// Wait for completion or cancellation.
-	return waitForCompletion(ctx, cmd, ptmx, &wg, errChan)
+	return waitForCompletion(ctx, cfg.cmd, cfg.ptmx, &wg, errChan)
 }
 
 // copyInput copies data from stdin to PTY, ignoring expected EIO errors.
@@ -181,13 +195,15 @@ type terminalResponseReader struct {
 	tail      string
 }
 
+const terminalResponseTailLen = 64
+
 func (r *terminalResponseReader) Read(p []byte) (int, error) {
 	n, err := r.src.Read(p)
 	if n > 0 {
 		previousTailLen := len(r.tail)
 		output := r.tail + string(p[:n])
 		r.respond(output, previousTailLen)
-		r.tail = lastN(output, 64)
+		r.tail = lastN(output, terminalResponseTailLen)
 	}
 	return n, err
 }

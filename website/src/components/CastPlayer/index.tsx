@@ -79,16 +79,17 @@ export default function CastPlayer({
           exitDelay,
         });
         const playbackEvents = applyIdleSkip(withIntro, idleSkip ? 1.5 : 0);
+        const initialPosition = autoplay ? 0 : playbackEvents.at(-1)?.[0] ?? 0;
         setEvents(playbackEvents);
-        setContent(renderAt(playbackEvents, 0));
-        setPosition(0);
-        renderedEventTime.current = latestEventTimeAt(playbackEvents, 0);
+        setContent(renderAt(playbackEvents, initialPosition));
+        setPosition(initialPosition);
+        renderedEventTime.current = latestEventTimeAt(playbackEvents, initialPosition);
         setSeekVersion((version) => version + 1);
       });
     return () => {
       cancelled = true;
     };
-  }, [src, command, showCommand, prompt, typeRate, enterDelay, exitDelay, idleSkip]);
+  }, [src, command, showCommand, prompt, typeRate, enterDelay, exitDelay, idleSkip, autoplay]);
 
   const duration = useMemo(() => events.at(-1)?.[0] ?? 0, [events]);
 

@@ -3,12 +3,22 @@ package asciicast
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
+
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+var (
+	ErrEmptyCastFile      = errors.New("empty cast file")
+	ErrRenderOutputExists = errors.New("render output already exists")
+	ErrMissingAgg         = errors.New("missing required tool `agg`; install asciinema agg and retry")
+	ErrMissingFFmpeg      = errors.New("missing required tool `ffmpeg`; install FFmpeg and retry")
 )
 
 type Event struct {
@@ -18,6 +28,8 @@ type Event struct {
 }
 
 func ReadEvents(path string) (Header, []Event, error) {
+	defer perf.Track(nil, "asciicast.ReadEvents")()
+
 	file, err := os.Open(path)
 	if err != nil {
 		return Header{}, nil, err
@@ -26,7 +38,7 @@ func ReadEvents(path string) (Header, []Event, error) {
 
 	scanner := bufio.NewScanner(file)
 	if !scanner.Scan() {
-		return Header{}, nil, fmt.Errorf("empty cast file: %s", path)
+		return Header{}, nil, fmt.Errorf("%w: %s", ErrEmptyCastFile, path)
 	}
 	var header Header
 	if err := json.Unmarshal(scanner.Bytes(), &header); err != nil {
@@ -53,6 +65,8 @@ func ReadEvents(path string) (Header, []Event, error) {
 }
 
 func Play(path string, out io.Writer) error {
+	defer perf.Track(nil, "asciicast.Play")()
+
 	_, events, err := ReadEvents(path)
 	if err != nil {
 		return err
@@ -80,40 +94,58 @@ type RenderOptions struct {
 }
 
 func Render(input string, opts RenderOptions) error {
-	for _, output := range []string{opts.SVG, opts.GIF, opts.MP4} {
-		if output == "" {
-			continue
-		}
-		if _, err := os.Stat(output); err == nil {
-			return fmt.Errorf("render output already exists: %s", output)
-		}
-		if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil && filepath.Dir(output) != "." {
+	defer perf.Track(nil, "asciicast.Render")()
+
+	targets := renderTargets(opts)
+	for _, target := range targets {
+		if err := prepareRenderOutput(target.output); err != nil {
 			return err
 		}
 	}
-	if opts.SVG != "" {
-		if err := renderWithAgg(input, opts.SVG); err != nil {
-			return err
-		}
-	}
-	if opts.GIF != "" {
-		if err := renderWithAgg(input, opts.GIF); err != nil {
-			return err
-		}
-	}
-	if opts.MP4 != "" {
-		if err := renderMP4(input, opts.MP4); err != nil {
+	for _, target := range targets {
+		if err := target.render(input, target.output); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+type renderTarget struct {
+	output string
+	render func(input, output string) error
+}
+
+func renderTargets(opts RenderOptions) []renderTarget {
+	targets := make([]renderTarget, 0, 3)
+	if opts.SVG != "" {
+		targets = append(targets, renderTarget{output: opts.SVG, render: renderWithAgg})
+	}
+	if opts.GIF != "" {
+		targets = append(targets, renderTarget{output: opts.GIF, render: renderWithAgg})
+	}
+	if opts.MP4 != "" {
+		targets = append(targets, renderTarget{output: opts.MP4, render: renderMP4})
+	}
+	return targets
+}
+
+func prepareRenderOutput(output string) error {
+	if _, err := os.Stat(output); err == nil {
+		return fmt.Errorf("%w: %s", ErrRenderOutputExists, output)
+	}
+	dir := filepath.Dir(output)
+	if dir == "." {
+		return nil
+	}
+	return os.MkdirAll(dir, castDirPerm)
+}
+
 func renderWithAgg(input, output string) error {
 	agg, err := exec.LookPath("agg")
 	if err != nil {
-		return fmt.Errorf("render %s: missing required tool `agg`; install asciinema agg and retry", output)
+		return fmt.Errorf("render %s: %w", output, ErrMissingAgg)
 	}
+	//nolint:gosec // agg is resolved via PATH and receives cast/output paths as argv, not shell input.
 	cmd := exec.Command(agg, input, output)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -122,7 +154,7 @@ func renderWithAgg(input, output string) error {
 
 func renderMP4(input, output string) error {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		return fmt.Errorf("render %s: missing required tool `ffmpeg`; install FFmpeg and retry", output)
+		return fmt.Errorf("render %s: %w", output, ErrMissingFFmpeg)
 	}
 	tmp, err := os.CreateTemp("", "atmos-cast-*.gif")
 	if err != nil {
@@ -135,6 +167,7 @@ func renderMP4(input, output string) error {
 		return err
 	}
 	ffmpeg, _ := exec.LookPath("ffmpeg")
+	//nolint:gosec // ffmpeg is resolved via PATH and receives file paths as argv, not shell input.
 	cmd := exec.Command(ffmpeg, "-y", "-i", tmpPath, "-movflags", "+faststart", output)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

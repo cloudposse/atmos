@@ -1,7 +1,7 @@
 package cast
 
 import (
-	"fmt"
+	"errors"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -16,6 +16,8 @@ var castCmd = &cobra.Command{
 	Use:   "cast",
 	Short: "Play and render Atmos asciicast recordings",
 }
+
+var ErrMissingRenderOutput = errors.New("specify at least one output flag: --svg, --gif, or --mp4")
 
 var playCmd = &cobra.Command{
 	Use:   "play <input.cast>",
@@ -35,7 +37,7 @@ var renderCmd = &cobra.Command{
 		gif, _ := cmd.Flags().GetString("gif")
 		mp4, _ := cmd.Flags().GetString("mp4")
 		if svg == "" && gif == "" && mp4 == "" {
-			return fmt.Errorf("specify at least one output flag: --svg, --gif, or --mp4")
+			return ErrMissingRenderOutput
 		}
 		return asciicast.Render(args[0], asciicast.RenderOptions{SVG: svg, GIF: gif, MP4: mp4})
 	},

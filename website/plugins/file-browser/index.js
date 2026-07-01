@@ -260,6 +260,44 @@ function generateGitHubUrl(relativePath, options) {
 }
 
 /**
+ * Parses simple README front matter. The example browser only needs scalar
+ * metadata, so keep this intentionally narrow and avoid changing README bodies.
+ * @param {string} content - README content.
+ * @returns {{data: object, body: string}} Parsed metadata and markdown body.
+ */
+function parseReadmeFrontmatter(content) {
+  if (!content || !content.startsWith('---')) {
+    return { data: {}, body: content || '' };
+  }
+
+  const lines = content.split(/\r?\n/);
+  if (lines[0].trim() !== '---') {
+    return { data: {}, body: content };
+  }
+
+  const endIndex = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
+  if (endIndex === -1) {
+    return { data: {}, body: content };
+  }
+
+  const data = {};
+  for (const line of lines.slice(1, endIndex)) {
+    const match = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line);
+    if (!match) continue;
+    let value = match[2].trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    data[match[1]] = value;
+  }
+
+  return {
+    data,
+    body: lines.slice(endIndex + 1).join('\n').trim(),
+  };
+}
+
+/**
  * Recursively scans a directory and builds a file tree.
  * @param {string} dirPath - Absolute path to directory.
  * @param {string} relativePath - Path relative to source root.
@@ -354,15 +392,7 @@ function scanDirectory(dirPath, relativePath, options) {
  */
 function extractDescription(content) {
   if (!content) return '';
-
-  // Remove frontmatter if present.
-  let text = content;
-  if (text.startsWith('---')) {
-    const endIndex = text.indexOf('---', 3);
-    if (endIndex !== -1) {
-      text = text.slice(endIndex + 3).trim();
-    }
-  }
+  const { body: text } = parseReadmeFrontmatter(content);
 
   // Skip headers and find first paragraph.
   const lines = text.split('\n');
@@ -397,6 +427,7 @@ function scanExamples(sourceDir, options) {
 
     const examplePath = path.join(sourceDir, entry.name);
     const tree = scanDirectory(examplePath, entry.name, options);
+    const readmeMetadata = tree.readme ? parseReadmeFrontmatter(tree.readme.content) : { data: {} };
 
     // Get description from README.
     const description = tree.readme ? extractDescription(tree.readme.content) : '';
@@ -414,6 +445,8 @@ function scanExamples(sourceDir, options) {
       hasAtmosYaml,
       tags: TAGS_MAP[entry.name] || [],
       docs: DOCS_MAP[entry.name] || [],
+      asciicast: readmeMetadata.data.asciicast || '',
+      asciicastTitle: readmeMetadata.data.asciicastTitle || '',
       root: tree,
     });
 

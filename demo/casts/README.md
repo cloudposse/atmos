@@ -11,6 +11,7 @@ Regenerate one cast from the repository root:
 ATMOS_CLI_CONFIG_PATH=demo/casts atmos casts generate terraform-plan
 ATMOS_CLI_CONFIG_PATH=demo/casts atmos casts generate vendor-pull
 ATMOS_CLI_CONFIG_PATH=demo/casts atmos casts generate list-stacks
+ATMOS_CLI_CONFIG_PATH=demo/casts atmos casts generate emulator-aws-lifecycle
 ```
 
 Regenerate every committed cast:

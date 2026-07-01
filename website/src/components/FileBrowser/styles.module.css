@@ -577,6 +577,11 @@
   margin-bottom: 1.5rem;
 }
 
+.castSection {
+  width: 100%;
+  margin-bottom: 1.5rem;
+}
+
 /* Empty State */
 .emptyState {
   text-align: center;

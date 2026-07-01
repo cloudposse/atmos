@@ -366,7 +366,7 @@ func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	*step = WorkflowStep(fresh)
-	return applyStepPolymorphicNodes(nodes, step.Type, step.Action, stepPolyTargets{
+	return applyStepPolymorphicNodes(nodes, step.Type, step.Action, &stepPolyTargets{
 		output:    &step.Output,
 		cast:      &step.CastOutput,
 		parallel:  &step.ParallelOutput,
@@ -409,7 +409,7 @@ func splitStepPolymorphicNodes(value *yaml.Node) (stepPolyNodes, *yaml.Node) {
 
 // applyStepPolymorphicNodes decodes the extracted nodes into the step's targets.
 // The action is read from the already-decoded plain struct to select the container shape.
-func applyStepPolymorphicNodes(nodes stepPolyNodes, stepType, action string, t stepPolyTargets) error {
+func applyStepPolymorphicNodes(nodes stepPolyNodes, stepType, action string, t *stepPolyTargets) error {
 	if err := decodeWorkflowStepOutput(nodes.output, stepType, t.output, t.cast, t.parallel); err != nil {
 		return err
 	}

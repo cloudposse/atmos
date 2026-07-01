@@ -2,11 +2,18 @@ package step
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	sourceprov "github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+var (
+	ErrWorkdirPathRequired     = errors.New("workdir path is required")
+	ErrWorkdirSourceRequired   = errors.New("workdir source is required")
+	ErrWorkdirSourceKeyInvalid = errors.New("workdir source map keys must be strings")
 )
 
 // WorkdirHandler provisions a mutable working directory from a source.
@@ -42,7 +49,7 @@ func (h *WorkdirHandler) Execute(ctx context.Context, step *schema.WorkflowStep,
 		return nil, fmt.Errorf("step '%s': failed to resolve path: %w", step.Name, err)
 	}
 	if targetPath == "" {
-		return nil, fmt.Errorf("step '%s': path is required", step.Name)
+		return nil, fmt.Errorf("%w: step %q", ErrWorkdirPathRequired, step.Name)
 	}
 
 	sourceSpec, err := h.resolveSourceSpec(step, vars)
@@ -72,7 +79,7 @@ func (h *WorkdirHandler) resolveSourceSpec(step *schema.WorkflowStep, vars *Vari
 		return nil, fmt.Errorf("step '%s': invalid source: %w", step.Name, err)
 	}
 	if spec == nil || spec.Uri == "" {
-		return nil, fmt.Errorf("step '%s': source is required", step.Name)
+		return nil, fmt.Errorf("%w: step %q", ErrWorkdirSourceRequired, step.Name)
 	}
 	return spec, nil
 }
@@ -82,40 +89,52 @@ func resolveWorkdirSourceValue(value any, vars *Variables) (any, error) {
 	case string:
 		return vars.Resolve(v)
 	case map[string]any:
-		out := make(map[string]any, len(v))
-		for key, val := range v {
-			resolved, err := resolveWorkdirSourceValue(val, vars)
-			if err != nil {
-				return nil, err
-			}
-			out[key] = resolved
-		}
-		return out, nil
+		return resolveStringSourceMap(v, vars)
 	case map[any]any:
-		out := make(map[string]any, len(v))
-		for key, val := range v {
-			keyString, ok := key.(string)
-			if !ok {
-				return nil, fmt.Errorf("source map keys must be strings")
-			}
-			resolved, err := resolveWorkdirSourceValue(val, vars)
-			if err != nil {
-				return nil, err
-			}
-			out[keyString] = resolved
-		}
-		return out, nil
+		return resolveAnySourceMap(v, vars)
 	case []any:
-		out := make([]any, len(v))
-		for i, val := range v {
-			resolved, err := resolveWorkdirSourceValue(val, vars)
-			if err != nil {
-				return nil, err
-			}
-			out[i] = resolved
-		}
-		return out, nil
+		return resolveSourceSlice(v, vars)
 	default:
 		return value, nil
 	}
+}
+
+func resolveStringSourceMap(input map[string]any, vars *Variables) (map[string]any, error) {
+	out := make(map[string]any, len(input))
+	for key, val := range input {
+		resolved, err := resolveWorkdirSourceValue(val, vars)
+		if err != nil {
+			return nil, err
+		}
+		out[key] = resolved
+	}
+	return out, nil
+}
+
+func resolveAnySourceMap(input map[any]any, vars *Variables) (map[string]any, error) {
+	out := make(map[string]any, len(input))
+	for key, val := range input {
+		keyString, ok := key.(string)
+		if !ok {
+			return nil, ErrWorkdirSourceKeyInvalid
+		}
+		resolved, err := resolveWorkdirSourceValue(val, vars)
+		if err != nil {
+			return nil, err
+		}
+		out[keyString] = resolved
+	}
+	return out, nil
+}
+
+func resolveSourceSlice(input []any, vars *Variables) ([]any, error) {
+	out := make([]any, len(input))
+	for i, val := range input {
+		resolved, err := resolveWorkdirSourceValue(val, vars)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = resolved
+	}
+	return out, nil
 }

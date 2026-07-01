@@ -112,6 +112,12 @@
   color: var(--atmos-docs-muted);
 }
 
+.castSection {
+  padding: 1rem;
+  border-bottom: 1px solid var(--atmos-docs-border);
+  background: var(--atmos-docs-surface);
+}
+
 /* README Content */
 .readmeContent {
   padding: 1.25rem 1.35rem;

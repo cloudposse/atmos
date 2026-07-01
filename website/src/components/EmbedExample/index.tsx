@@ -15,6 +15,7 @@ import {
   faChevronDown,
   faArrowRight,
 } from '@fortawesome/free-solid-svg-icons';
+import CastPlayer from '@site/src/components/CastPlayer';
 import type { ExampleProject, TreeNode, FileBrowserOptions } from '../FileBrowser/types';
 import styles from './styles.module.css';
 
@@ -25,6 +26,8 @@ interface EmbedExampleProps {
   showReadme?: boolean;
   /** Whether to show the file listing. Default: true. */
   showFiles?: boolean;
+  /** Whether to show the example asciicast from README front matter. Default: true. */
+  showCast?: boolean;
   /** Override the display title. */
   title?: string;
   /** Maximum number of files to show. Default: 10. */
@@ -101,6 +104,7 @@ export default function EmbedExample({
   example,
   showReadme = true,
   showFiles = true,
+  showCast = true,
   title,
   maxFiles = 10,
 }: EmbedExampleProps): JSX.Element | null {
@@ -128,6 +132,7 @@ export default function EmbedExample({
   const readmeContent = exampleData.root.readme?.content;
   const files = collectFiles(exampleData.root, maxFiles);
   const exampleUrl = `${options.routeBasePath}/${exampleData.name}`;
+  const shouldShowCast = showCast && !!exampleData.asciicast;
 
   return (
     <div className={styles.embedExample}>
@@ -143,6 +148,18 @@ export default function EmbedExample({
           View full example <FontAwesomeIcon icon={faArrowRight} />
         </Link>
       </div>
+
+      {shouldShowCast && (
+        <div className={styles.castSection}>
+          <CastPlayer
+            src={exampleData.asciicast!}
+            title={exampleData.asciicastTitle || displayTitle}
+            chrome
+            controls
+            scrubber
+          />
+        </div>
+      )}
 
       {/* README Section */}
       {showReadme && readmeContent && (
