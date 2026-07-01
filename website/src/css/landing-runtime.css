@@ -929,9 +929,17 @@ html[data-theme="light"] .landing-page .lp-workload-visual .terminal {
     min-height: auto;
     overflow: visible;
     padding:
-      calc(var(--ifm-navbar-height) + 2.5rem)
+      2rem
       clamp(1.25rem, 5vw, 2rem)
-      3rem;
+      2rem;
+  }
+
+  .lp-hero-inner {
+    gap: 0;
+  }
+
+  .lp-hero-grid {
+    gap: 0;
   }
 
   .lp-hero-copy,
@@ -950,26 +958,83 @@ html[data-theme="light"] .landing-page .lp-workload-visual .terminal {
   }
 
   .landing-page .lp-hero h1 {
-    font-size: 2.35rem;
-    line-height: 1.08;
+    font-size: clamp(2rem, 10vw, 2.35rem);
+    line-height: 1.02;
     max-width: 8.5em;
     overflow-wrap: break-word;
   }
 
+  .lp-eyebrow {
+    font-size: 0.68rem;
+    letter-spacing: 0.18em;
+    margin-bottom: 0.8rem;
+  }
+
   .lp-hero-sub {
-    font-size: 1rem;
-    line-height: 1.55;
+    font-size: 0.98rem;
+    line-height: 1.45;
     max-width: 100%;
+    margin-top: 1rem;
+  }
+
+  .lp-hero-runit-row {
+    gap: 1.1rem;
+    margin-top: 1.2rem;
+  }
+
+  .lp-hero-valueprops {
+    gap: 0.25rem;
+  }
+
+  .lp-hero-valueprops span {
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
   }
 
   .lp-hero-clouds {
     flex: 0 1 100%;
     justify-content: flex-start;
+    gap: 1.25rem;
     max-width: 100%;
+  }
+
+  .lp-hero-clouds svg {
+    height: 36px;
+  }
+
+  .lp-hero-cta {
+    gap: 0.9rem;
+    margin-top: 1.4rem;
   }
 
   .lp-hero-cta,
   .lp-primary-cta {
     max-width: 100%;
+  }
+
+  .lp-hero-visual,
+  .lp-runs {
+    display: none;
+  }
+}
+
+@media screen and (max-width: 380px) {
+  .landing-page header.lp-hero,
+  .lp-hero {
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .landing-page .lp-hero h1 {
+    font-size: 2rem;
+  }
+
+  .lp-hero-sub {
+    font-size: 0.94rem;
+    line-height: 1.4;
+  }
+
+  .lp-hero-cta {
+    margin-top: 1.2rem;
   }
 }
