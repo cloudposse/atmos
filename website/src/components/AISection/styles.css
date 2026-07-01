@@ -295,7 +295,54 @@ html[data-theme="dark"] .ai-capability-card p {
 
 @media screen and (max-width: 768px) {
   .ai-section {
-    padding: 3rem 1rem 4rem 1rem;
+    padding: 2.25rem 1.25rem 3rem 1.25rem;
+  }
+
+  .ai-section-content {
+    gap: 1.25rem;
+    margin-bottom: 2.25rem;
+    text-align: left;
+  }
+
+  .ai-section-left {
+    width: 100%;
+    max-width: 36rem;
+  }
+
+  .ai-section-right {
+    display: none;
+  }
+
+  .ai-section-eyebrow {
+    font-size: 0.68rem;
+    letter-spacing: 0.18em;
+    margin-bottom: 0.75rem;
+  }
+
+  .ai-section-left h2 {
+    font-size: clamp(1.9rem, 8vw, 2.2rem);
+    line-height: 1.08;
+    margin-bottom: 0.85rem;
+    text-align: left;
+  }
+
+  .ai-section-left p {
+    font-size: 1rem;
+    line-height: 1.45;
+    margin-bottom: 1rem;
+    text-align: left;
+  }
+
+  .ai-section-cta {
+    justify-content: flex-start;
+    margin-top: 1.1rem;
+    margin-bottom: 0;
+  }
+
+  .ai-section-cta .button {
+    max-width: 100%;
+    padding-top: 0.7em;
+    padding-bottom: 0.7em;
   }
 
   .ai-badge-text {
