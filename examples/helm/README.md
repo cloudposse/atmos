@@ -5,9 +5,11 @@ A minimal, credential-free example of a native Helm component. The chart lives i
 
 ## Test
 
-`atmos test` is the CI-backed smoke test for this example. It starts a local
-K3s emulator, deploys the Helm release into it, verifies the Deployment and
-Service, uninstalls the release, and tears the emulator down.
+`atmos test` is the CI-backed smoke test for this example. It creates a temporary
+Helm chart repository from the local demo chart, verifies `atmos helm repo list`,
+starts a local K3s emulator, deploys the repository-backed Helm release into it,
+verifies the Deployment and Service, uninstalls the release, and tears everything
+down.
 
 ```shell
 atmos test
@@ -17,6 +19,9 @@ atmos test
 
 ```shell
 atmos helm template demo -s dev
+
+# Render the same chart through a declarative Helm repository.
+HELM_DEMO_REPO_URL=http://127.0.0.1:8080 atmos helm template demo-repo -s dev
 ```
 
 ## Diff
@@ -47,6 +52,26 @@ atmos helm apply demo -s dev
 # Or deploy directly to the local K3s emulator used by `atmos test`.
 atmos emulator up kubernetes -s dev
 atmos helm apply demo -s dev --identity local-k3s
+```
+
+## Helm Repositories
+
+The `demo-repo` component shows the declarative Helm repository path:
+
+```yaml
+components:
+  helm:
+    demo-repo:
+      repositories:
+        - name: local
+          url: !env HELM_DEMO_REPO_URL
+      chart: local/demo
+```
+
+Use `atmos helm repo list` to inspect chart repository associations:
+
+```shell
+atmos helm repo list demo-repo -s dev
 ```
 
 See the [`atmos helm`](https://atmos.tools/cli/commands/helm/usage) docs for the full

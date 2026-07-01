@@ -197,6 +197,13 @@ jobs:
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: helm plugin install https://github.com/databus23/helm-diff
 
+      - name: Start Docker-compatible runtime on macOS
+        if: matrix.flavor.target == 'macos'
+        run: |
+          brew install colima docker
+          colima start --cpu 2 --memory 4 --disk 20
+          docker version
+
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
         shell: pwsh
@@ -455,15 +462,20 @@ jobs:
 
   # run k3s demo tests
   k3s:
-    name: "[k3s] ${{ matrix.demo-folder }}"
+    name: "[k3s-${{ matrix.flavor.target }}] ${{ matrix.demo-folder }}"
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.flavor.os }}
     env:
       ATMOS_LOGS_LEVEL: Debug
     strategy:
+      fail-fast: false
       matrix:
+        flavor:
+          - { os: ubuntu-latest, target: linux }
+          - { os: macos-latest, target: macos }
         demo-folder:
           - demo-helmfile
+          - helm
 
     timeout-minutes: 20
     steps:
@@ -477,20 +489,33 @@ jobs:
       # kubernetes`), which runs the privileged k3s container itself on the runner's
       # Docker, and the helmfile component harvests its kubeconfig via `!emulator`.
 
+      - name: Start Docker-compatible runtime on macOS
+        if: matrix.flavor.target == 'macos'
+        run: |
+          brew install colima docker
+          colima start --cpu 2 --memory 4 --disk 20
+          docker version
+
       - name: Download build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: build-artifacts-linux
+          name: build-artifacts-${{ matrix.flavor.target }}
           path: /usr/local/bin
 
       - name: Set execute permissions on atmos
         run: chmod +x /usr/local/bin/atmos
 
       - name: Install the Cloud Posse package repository
+        if: matrix.flavor.target == 'linux'
         run: curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | sudo bash
 
-      - name: Install kubectl and helmfile
+      - name: Install kubectl and helmfile on Linux
+        if: matrix.flavor.target == 'linux'
         run: sudo apt-get -y install kubectl helmfile
+
+      - name: Install kubectl and helmfile on macOS
+        if: matrix.flavor.target == 'macos'
+        run: brew install kubectl helmfile
 
       - name: Install Helm
         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0

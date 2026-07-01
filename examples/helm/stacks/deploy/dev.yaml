@@ -22,3 +22,19 @@ components:
           tag: "1.27"
         service:
           port: 8080
+
+    demo-repo:
+      metadata:
+        component: demo
+      repositories:
+        - name: local
+          url: !env HELM_DEMO_REPO_URL
+      chart: local/demo
+      version: 0.1.0
+      namespace: demo-repo
+      values:
+        replicaCount: 2
+        image:
+          tag: "1.27"
+        service:
+          port: 8080

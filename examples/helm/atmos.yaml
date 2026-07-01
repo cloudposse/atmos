@@ -28,19 +28,96 @@ logs:
 
 commands:
   - name: "test"
-    description: "Bring up the local Kubernetes emulator, deploy the Helm chart, verify it, then tear it down"
+    description: "Bring up the local Kubernetes emulator, deploy a repository-backed Helm chart, verify it, then tear it down"
     steps:
       - type: shell
         command: |
           set -e
+          repo_dir="$(mktemp -d)"
+          repo_pid=""
+          applied=0
           teardown() {
-            atmos helm delete demo -s dev --identity local-k3s || true
+            if [ "$applied" = "1" ]; then
+              atmos helm delete demo-repo -s dev --identity local-k3s || true
+            fi
             atmos emulator down kubernetes -s dev || true
+            if [ -n "$repo_pid" ]; then
+              kill "$repo_pid" 2>/dev/null || true
+            fi
+            rm -rf "$repo_dir"
           }
           trap teardown EXIT
 
+          python3 - "$repo_dir" <<'PY'
+          import hashlib
+          import pathlib
+          import tarfile
+
+          repo_dir = pathlib.Path(__import__("sys").argv[1])
+          chart_dir = pathlib.Path("components/helm/demo").resolve()
+          archive = repo_dir / "demo-0.1.0.tgz"
+          with tarfile.open(archive, "w:gz") as tar:
+              for path in sorted(chart_dir.rglob("*")):
+                  tar.add(path, arcname=str(path.relative_to(chart_dir.parent)))
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          (repo_dir / "index.yaml").write_text(f"""apiVersion: v1
+          entries:
+            demo:
+              - apiVersion: v2
+                name: demo
+                description: A minimal local Helm chart used by the Atmos native Helm component demo.
+                type: application
+                version: 0.1.0
+                appVersion: "1.0.0"
+                urls:
+                  - demo-0.1.0.tgz
+                digest: {digest}
+          generated: "1970-01-01T00:00:00Z"
+          """, encoding="utf-8")
+          PY
+
+          python3 - "$repo_dir" "$repo_dir/port" >"$repo_dir/http.log" 2>&1 <<'PY' &
+          import functools
+          import http.server
+          import pathlib
+          import socketserver
+          import sys
+
+          repo_dir = pathlib.Path(sys.argv[1])
+          port_file = pathlib.Path(sys.argv[2])
+          handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(repo_dir))
+          with socketserver.TCPServer(("127.0.0.1", 0), handler) as httpd:
+              port_file.write_text(str(httpd.server_address[1]), encoding="utf-8")
+              httpd.serve_forever()
+          PY
+          repo_pid=$!
+
+          for _ in $(seq 1 50); do
+            [ -s "$repo_dir/port" ] && break
+            sleep 0.1
+          done
+          export HELM_DEMO_REPO_URL="http://127.0.0.1:$(cat "$repo_dir/port")"
+
           atmos validate stacks
+          atmos helm repo list demo-repo -s dev --format=json > "$repo_dir/repos.json"
+          python3 - "$repo_dir/repos.json" "$HELM_DEMO_REPO_URL" <<'PY'
+          import json
+          import sys
+
+          rows = json.load(open(sys.argv[1], encoding="utf-8"))
+          expected_url = sys.argv[2]
+          assert any(
+              row.get("component") == "demo-repo"
+              and row.get("name") == "local"
+              and row.get("url") == expected_url
+              and row.get("source") == "component"
+              and row.get("used") in (True, "true")
+              for row in rows
+          ), rows
+          PY
+
           atmos emulator up kubernetes -s dev
-          atmos helm apply demo -s dev --identity local-k3s
-          atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
-          atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
+          atmos helm apply demo-repo -s dev --identity local-k3s
+          applied=1
+          atmos emulator exec kubernetes -s dev -- kubectl -n demo-repo get deployment demo-repo
+          atmos emulator exec kubernetes -s dev -- kubectl -n demo-repo get service demo-repo
