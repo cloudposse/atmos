@@ -1,0 +1,8 @@
+# `_defaults` sets settings.context.deployment_repo to a value that is ITSELF a
+# template (`catalog/{{ .settings.context.tier }}`). The import path below references
+# `deployment_repo`, so the first render pass substitutes the raw template string and
+# a second (fixed-point) pass resolves the nested `{{ .settings.context.tier }}` to
+# `v1`, yielding `catalog/v1/service`.
+import:
+  - _defaults
+  - "{{ .settings.context.deployment_repo }}/service"
