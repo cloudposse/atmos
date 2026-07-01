@@ -12,6 +12,8 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
+	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -63,6 +65,38 @@ func TestExecutor_Execute_BasicShellWorkflow(t *testing.T) {
 	assert.Len(t, result.Steps, 1)
 	assert.True(t, result.Steps[0].Success)
 	assert.Equal(t, "step1", result.Steps[0].StepName)
+}
+
+func TestExecutor_Execute_PropagatesLogGroupSentinel(t *testing.T) {
+	restore := ci.SwapRegistryForTest()
+	t.Cleanup(restore)
+	ci.Register(githubprovider.NewProvider())
+	t.Setenv("GITHUB_ACTIONS", "true")
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+	mockRunner.EXPECT().
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{ci.LogGroupSentinelEnv()}, false).
+		Return(nil)
+
+	executor := NewExecutor(mockRunner, nil, mockUI)
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{{
+			Name:    "step1",
+			Command: "echo 'hello'",
+			Type:    "shell",
+		}},
+	}
+	params := newTestParams(workflowDef, ExecuteOptions{})
+	params.AtmosConfig.CI.Enabled = true
+
+	result, err := executor.Execute(params)
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
 }
 
 func TestExecutor_Execute_SkipsStepWhenConditionIsFalse(t *testing.T) {

@@ -129,6 +129,134 @@ func TestInitFunction(t *testing.T) {
 	}
 }
 
+func TestInvocationGroupLabel(t *testing.T) {
+	root := testInvocationRoot()
+
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "workflow includes first positional after flags",
+			args: []string{"workflow", "--file", "workflows", "deploy"},
+			want: "atmos workflow deploy",
+		},
+		{
+			name: "terraform plan includes component and drops flags",
+			args: []string{"terraform", "plan", "vpc", "-s", "dev", "-var", "secret=x"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "terraform apply ignores args after separator",
+			args: []string{"terraform", "apply", "app", "--", "-target=module.secret"},
+			want: "atmos terraform apply app",
+		},
+		{
+			name: "describe affected uses command path only",
+			args: []string{"describe", "affected", "--stack", "prod"},
+			want: "atmos describe affected",
+		},
+		{
+			name: "custom command includes first positional",
+			args: []string{"my-custom-command", "target", "--token", "secret"},
+			want: "atmos my-custom-command target",
+		},
+		{
+			name: "unknown command falls back to first positional",
+			args: []string{"missing-command", "--token", "secret"},
+			want: "atmos missing-command",
+		},
+		{
+			name: "unknown leading flag is not exposed",
+			args: []string{"--token", "secret"},
+			want: "atmos",
+		},
+		{
+			name: "end of options as first arg is not exposed",
+			args: []string{"--", "secret"},
+			want: "atmos",
+		},
+		{
+			name: "long flag assignment does not consume following positional",
+			args: []string{"terraform", "plan", "--var=secret=x", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "unknown flag consumes following value",
+			args: []string{"terraform", "plan", "--token", "secret", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "bool flag does not consume following positional",
+			args: []string{"terraform", "plan", "--dry-run", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "no opt flag does not consume following positional",
+			args: []string{"terraform", "plan", "--optional", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "attached shorthand value does not consume following positional",
+			args: []string{"terraform", "plan", "-csecret", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "no args",
+			args: nil,
+			want: "atmos",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, invocationGroupLabel(root, tt.args))
+		})
+	}
+
+	assert.Equal(t, "atmos", invocationGroupLabel(nil, []string{"version"}))
+	assert.Equal(t, "atmos orphan", invocationGroupLabel(&cobra.Command{}, []string{"orphan"}))
+}
+
+func TestPreprocessArgs_NoArgs(t *testing.T) {
+	originalArgs := os.Args
+	t.Cleanup(func() { os.Args = originalArgs })
+
+	os.Args = []string{"atmos"}
+	assert.Nil(t, preprocessArgs())
+}
+
+func testInvocationRoot() *cobra.Command {
+	root := &cobra.Command{Use: "atmos"}
+
+	workflowCmd := &cobra.Command{Use: "workflow [name]"}
+	workflowCmd.Flags().StringP("file", "f", "", "")
+	workflowCmd.Flags().StringP("stack", "s", "", "")
+
+	terraformCmd := &cobra.Command{Use: "terraform"}
+	terraformCmd.PersistentFlags().StringP("stack", "s", "", "")
+	terraformPlanCmd := &cobra.Command{Use: "plan [component]"}
+	terraformPlanCmd.Flags().String("var", "", "")
+	terraformPlanCmd.Flags().StringP("config", "c", "", "")
+	terraformPlanCmd.Flags().Bool("dry-run", false, "")
+	terraformPlanCmd.Flags().String("optional", "", "")
+	terraformPlanCmd.Flags().Lookup("optional").NoOptDefVal = "true"
+	terraformApplyCmd := &cobra.Command{Use: "apply [component]"}
+	terraformCmd.AddCommand(terraformPlanCmd, terraformApplyCmd)
+
+	describeCmd := &cobra.Command{Use: "describe"}
+	describeCmd.PersistentFlags().String("stack", "", "")
+	describeAffectedCmd := &cobra.Command{Use: "affected"}
+	describeCmd.AddCommand(describeAffectedCmd)
+
+	customCmd := &cobra.Command{Use: "my-custom-command [target]"}
+	customCmd.Flags().String("token", "", "")
+
+	root.AddCommand(workflowCmd, terraformCmd, describeCmd, customCmd)
+	return root
+}
+
 func TestSetupLogger_TraceLevel(t *testing.T) {
 	// Save original state.
 	originalLevel := log.GetLevel()

@@ -800,6 +800,27 @@ type CIConfig struct {
 	Comments    CICommentsConfig    `yaml:"comments,omitempty" json:"comments,omitempty" mapstructure:"comments"`
 	Templates   CITemplatesConfig   `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Cache       CICacheConfig       `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+	Groups      CIGroupsConfig      `yaml:"groups,omitempty" json:"groups,omitempty" mapstructure:"groups"`
+}
+
+// CIGroupsConfig configures collapsible CI log groups. On GitHub Actions this
+// emits the `::group::<name>` / `::endgroup::` workflow commands that fold a
+// region of the run log into a named, expandable section.
+//
+// Mode selects the grouping granularity (mutually exclusive — CI providers do
+// not support nested groups):
+//
+//   - "auto" (default when omitted): the finest granularity that applies to
+//     each command — one group per workflow/custom-command step, and one group
+//     per phase (init/plan/apply) of a terraform/helmfile/packer invocation.
+//   - "invocation": one group around each whole top-level `atmos <command>`
+//     run; finer step/phase grouping is suppressed.
+//   - "off": no grouping.
+//
+// Effective only when the global ci.enabled is true and a grouping-capable CI
+// provider is detected.
+type CIGroupsConfig struct {
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
 }
 
 // CICacheConfig configures the CI build cache, which restores a well-known
