@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -60,6 +61,20 @@ func TestHelmRepositoryRows(t *testing.T) {
 	assert.Equal(t, true, rows[2]["used"])
 	assert.Equal(t, "extra", rows[3]["name"])
 	assert.Equal(t, false, rows[3]["used"])
+}
+
+func TestRepoListAuthManagerSkipsImplicitIdentity(t *testing.T) {
+	for _, identity := range []string{"", cfg.IdentityFlagDisabledValue} {
+		t.Run(identity, func(t *testing.T) {
+			manager, err := repoListAuthManager(
+				&schema.ConfigAndStacksInfo{Identity: identity},
+				&schema.AtmosConfiguration{},
+			)
+
+			require.NoError(t, err)
+			assert.Nil(t, manager)
+		})
+	}
 }
 
 func TestChartUsesRepository(t *testing.T) {

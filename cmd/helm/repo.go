@@ -106,12 +106,7 @@ func repoListConfigAndStacks(cmd *cobra.Command, opts *repoListOptions) (*schema
 		return nil, nil, err
 	}
 
-	authManager, err := auth.CreateAndAuthenticateManagerWithStackScan(
-		info.Identity,
-		&atmosConfig.Auth,
-		cfg.IdentityFlagSelectValue,
-		&atmosConfig,
-	)
+	authManager, err := repoListAuthManager(&info, &atmosConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -134,6 +129,18 @@ func repoListConfigAndStacks(cmd *cobra.Command, opts *repoListOptions) (*schema
 	}
 
 	return &atmosConfig, stacksMap, nil
+}
+
+func repoListAuthManager(info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	if info.Identity == "" || info.Identity == cfg.IdentityFlagDisabledValue {
+		return nil, nil
+	}
+	return auth.CreateAndAuthenticateManagerWithStackScan(
+		info.Identity,
+		&atmosConfig.Auth,
+		cfg.IdentityFlagSelectValue,
+		atmosConfig,
+	)
 }
 
 func renderRepoListRows(rows []map[string]any, opts *repoListOptions) error {
