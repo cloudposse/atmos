@@ -1,6 +1,6 @@
 ---
 name: atmos-custom-commands
-description: "Custom CLI commands: command definition in atmos.yaml, arguments, flags, steps, env vars"
+description: "Custom CLI commands: command definitions in atmos.yaml, arguments, flags, env maps, subcommands, and shared Atmos steps"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -21,8 +21,8 @@ Each command can have:
 - A name and description
 - Positional arguments and flags (with shorthand, required/optional, defaults)
 - Boolean flags
-- Environment variables (supporting Go templates)
-- One or more execution steps (shell commands, also supporting Go templates)
+- Environment variables (supporting Go templates, preferably as a map)
+- One or more execution steps (including shared typed Atmos steps)
 - Nested subcommands
 - Access to resolved component configuration via `component_config`
 - Authentication via `identity`
@@ -31,6 +31,10 @@ Each command can have:
 
 Custom commands can call Atmos built-in commands, shell scripts, workflows, or any other CLI tools.
 They are fully interoperable with Atmos workflows.
+
+When a task is about `steps`, step `type`, `working_directory`, step `env`, `output`, scripts,
+workdirs, or hook-compatible step payloads, also load `atmos-steps`. Custom commands share the same
+step DSL with workflows, hooks (`kind: step`), and cast recordings.
 
 ## Defining Commands in atmos.yaml
 
@@ -195,10 +199,8 @@ commands:
             description: Stack name
             required: true
         env:
-          - key: ATMOS_COMPONENT
-            value: "{{ .Arguments.component }}"
-          - key: ATMOS_STACK
-            value: "{{ .Flags.stack }}"
+          ATMOS_COMPONENT: "{{ .Arguments.component }}"
+          ATMOS_STACK: "{{ .Flags.stack }}"
         steps:
           - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
           - atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
@@ -233,19 +235,21 @@ commands:
 
 ## Environment Variables
 
-The `env` section sets environment variables accessible in steps. Values support Go templates:
+The `env` section sets environment variables accessible in steps. Values support Go templates.
+Prefer map syntax:
 
 ```yaml
 commands:
   - name: deploy
     env:
-      - key: ATMOS_COMPONENT
-        value: "{{ .Arguments.component }}"
-      - key: ATMOS_STACK
-        value: "{{ .Flags.stack }}"
+      ATMOS_COMPONENT: "{{ .Arguments.component }}"
+      ATMOS_STACK: "{{ .Flags.stack }}"
     steps:
       - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
 ```
+
+Use `valueCommand` only when the value must come from a command's stdout. Do not use it to move
+shell string construction out of a step.
 
 ## Component Configuration Access
 
@@ -357,6 +361,8 @@ Path resolution:
 - Relative paths resolved against `base_path`
 - `!repo-root .` resolves to git repository root
 
+Use `working_directory` instead of `cd` or `--chdir` when defining custom command behavior.
+
 ## Tool Dependencies
 
 Declare tools that must be available before execution:
@@ -379,7 +385,9 @@ commands:
         required: true
     steps:
       - atmos terraform generate varfile {{ .Arguments.component }} -s {{ .Flags.stack }}
-      - tflint --chdir=components/terraform/{{ .Arguments.component }}
+      - command: tflint
+        type: shell
+        working_directory: components/terraform/{{ .Arguments.component }}
 ```
 
 When you run the command, Atmos:
@@ -430,7 +438,9 @@ commands:
         tflint: "0.54.0"
         checkov: "3.0.0"
     steps:
-      - tflint --chdir=components/terraform
+      - command: tflint
+        type: shell
+        working_directory: components/terraform
       - checkov -d components/terraform
 ```
 
@@ -464,8 +474,9 @@ commands:
 9. **Use `!repo-root .` for working_directory** when commands need to run from the repository
    root regardless of where `atmos` is invoked.
 
-10. **Use environment variables for shared values.** Define values once in `env` and reference
-    them in multiple steps via shell variables like `$ATMOS_COMPONENT`.
+10. **Use native step fields before shell glue.** Define shared values once in `env`, use
+    `working_directory` for execution paths, `output: none` for quiet setup, and `type: script`
+    for inline Python or other interpreted code.
 
 ## Additional Resources
 
