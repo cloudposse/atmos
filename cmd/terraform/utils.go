@@ -52,6 +52,81 @@ const ciHookConfigInitFailedMsg = "CI hook config init failed"
 // the global CI hook call when per-component hooks already fired inside the component walker.
 var wasMultiComponentExecution bool
 
+// preResolvedComponent carries the interactively-selected component from PreRunE
+// (runBeforeHooks) into the before-hooks and RunE. The selected stack is persisted
+// to the --stack flag by PromptForStack, but the component is a positional arg with
+// no flag to write back, so it is threaded through this package var instead. Set by
+// preResolveInteractiveSelection; consumed by applyPreResolvedComponent.
+var preResolvedComponent string
+
+// multiComponentFlagNames are the flags that put terraform into multi-component
+// mode, where interactive single-component/stack selection does not apply.
+var multiComponentFlagNames = []string{"all", "affected", "components", "query"}
+
+// runBeforeHooks resolves interactive component/stack selection BEFORE firing the
+// before-hooks, so lifecycle hooks (e.g. a `kind: step` emulator hook on
+// before.terraform.test) operate on the chosen target instead of an empty one. With
+// explicit args or in non-interactive contexts it is a no-op beyond the normal hook run.
+func runBeforeHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
+	if err := preResolveInteractiveSelection(cmd_, args); err != nil {
+		return err
+	}
+	return runHooks(event, cmd_, args)
+}
+
+// preResolveInteractiveSelection prompts for a missing component/stack up front (when
+// interactive and single-component), persisting the stack to the --stack flag and the
+// component to preResolvedComponent so both the before-hooks and RunE observe the
+// selection. It resets preResolvedComponent on every call.
+func preResolveInteractiveSelection(cmd_ *cobra.Command, args []string) error {
+	preResolvedComponent = ""
+
+	// Multi-component invocations (--all/--affected/--components/--query) have no single
+	// component/stack to select; leave them to the normal flow.
+	if isMultiComponentInvocation(cmd_) {
+		return nil
+	}
+
+	finalArgs := append([]string{cmd_.Name()}, args...)
+	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, cmd_, finalArgs, compat.GetSeparated())
+	if err != nil {
+		return err
+	}
+
+	// resolveAndPromptForArgs is a no-op when not interactive or when both values are
+	// already provided; otherwise it shows the component/stack pickers.
+	if err := resolveAndPromptForArgs(&info, cmd_); err != nil {
+		return err
+	}
+
+	preResolvedComponent = info.ComponentFromArg
+	return nil
+}
+
+// isMultiComponentInvocation reports whether any multi-component flag is set.
+// It checks explicit Cobra flags first, then Viper for env/config-driven values,
+// because this runs in PreRunE before applyOptionsToInfo has populated info.
+func isMultiComponentInvocation(cmd_ *cobra.Command) bool {
+	for _, name := range multiComponentFlagNames {
+		if f := cmd_.Flags().Lookup(name); f != nil && f.Changed {
+			return true
+		}
+	}
+	v := viper.GetViper()
+	return v.GetBool("all") ||
+		v.GetBool("affected") ||
+		len(v.GetStringSlice("components")) > 0 ||
+		v.GetString("query") != ""
+}
+
+// applyPreResolvedComponent injects the interactively-selected component into info
+// when info has none (the positional arg is empty after a re-parse). No-op otherwise.
+func applyPreResolvedComponent(info *schema.ConfigAndStacksInfo) {
+	if preResolvedComponent != "" && info.ComponentFromArg == "" {
+		info.ComponentFromArg = preResolvedComponent
+	}
+}
+
 func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
 	return runHooksWithOutput(event, cmd_, args, "")
 }
@@ -124,6 +199,10 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 	if err != nil {
 		return hookContext{info: info}, err
 	}
+
+	// Honor a component chosen interactively in PreRunE so before-hooks resolve
+	// against the selected component (the stack comes from the persisted --stack flag).
+	applyPreResolvedComponent(&info)
 
 	if authCtx, authMgr := e.GetLastAuthContext(); authCtx != nil {
 		info.AuthContext = authCtx
@@ -617,6 +696,13 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	info.TerraformPlanHideNoChanges = opts.PlanHideNoChanges
 	info.TerraformPlanSummaryFile = opts.PlanSummaryFile
 
+	// Caller-injected terraform pass-through flags (e.g. `-json` for `terraform
+	// test` in CI). Appended to AdditionalArgsAndFlags so they reach the terraform
+	// command directly without going through Cobra positional-arg parsing.
+	if len(opts.AppendArgs) > 0 {
+		info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, opts.AppendArgs...)
+	}
+
 	// Backend execution flags (only apply if set via CLI).
 	if opts.AutoGenerateBackendFile != "" {
 		info.AutoGenerateBackendFile = opts.AutoGenerateBackendFile
@@ -664,6 +750,10 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
 	// This fixes issue #1945: --all flag must be set before resolveAndPromptForArgs checks it.
 	applyOptionsToInfo(&info, opts)
+
+	// Honor a component already chosen interactively in PreRunE (runBeforeHooks) so the
+	// prompt below sees both component and stack and does not ask again.
+	applyPreResolvedComponent(&info)
 
 	// Resolve the tri-state --verify-plan override from the command (reliable
 	// Changed/env detection) rather than from opts, which cannot tell an unset

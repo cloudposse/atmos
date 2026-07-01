@@ -47,7 +47,7 @@ func startProxy(t *testing.T, mirrors []Mirror, opts Options) *Server { //nolint
 	srv := NewServer(opts)
 	_, err := srv.Start(t.Context())
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = srv.Shutdown(t.Context()) })
+	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
 	return srv
 }
 
