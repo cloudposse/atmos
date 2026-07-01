@@ -224,6 +224,7 @@ var (
 	ErrGitWorkdirNotInitialized    = errors.New("git repository not cloned or initialized")
 	ErrGitTargetPathInvalid        = errors.New("git target path must not be empty or the repository root")
 	ErrGitArtifactWrite            = errors.New("failed to write provision artifact")
+	ErrUnsafeForkCheckout          = errors.New("refusing to clone untrusted fork content in an elevated CI event")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")
