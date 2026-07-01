@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Landing page redesign — "The runtime for infrastructure".
+   Landing page runtime theme — "The runtime for infrastructure".
    Dark-first, Vercel-style: big type, monospace eyebrows + feature lists,
    job-to-be-done sections, breadth mega-footer. Light theme stays functional.
    All rules are scoped to .landing-page so docs chrome is untouched.
@@ -153,7 +153,7 @@ html[data-theme="light"] .landing-page {
   border-bottom: 1px solid var(--lp-border);
 }
 
-/* Subtle accent pill, consistent with the redesign's understated aesthetic —
+/* Subtle accent pill, consistent with the runtime theme's understated aesthetic —
    not a loud multi-color gradient that reads as foreign to the rest of the site. */
 .lp-new {
   display: inline-block;
@@ -199,7 +199,7 @@ html[data-theme="light"] .landing-page {
 }
 
 /* Neutralize legacy .landing-page header / main h2 rules from landing-page.css
-   so they don't leak into the redesigned hero and section headings. */
+   so they don't leak into the runtime hero and section headings. */
 .landing-page header.lp-hero {
   width: 100%;
   /* Above-the-fold: fill the viewport MINUS the navbar so the next section sits
@@ -362,10 +362,12 @@ html[data-theme="dark"] .landing-page .lp-finalcta h2 {
   gap: 1rem;
   margin-top: 2rem;
   flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .lp-hero-cta .button {
   margin: 0;
+  max-width: 100%;
 }
 
 .lp-hero-link {
@@ -895,6 +897,16 @@ html[data-theme="light"] .landing-page .lp-workload-visual .terminal {
     padding-top: calc(var(--ifm-navbar-height) + 2.5rem);
   }
 
+  .landing-page header.lp-hero {
+    width: 100%;
+    max-width: 100%;
+    overflow: visible;
+    padding:
+      calc(var(--ifm-navbar-height) + 2.5rem)
+      2rem
+      2.5rem;
+  }
+
   .landing-page .lp-hero h1,
   .landing-page .lp-workload h2 {
     text-align: left;
@@ -910,8 +922,16 @@ html[data-theme="light"] .landing-page .lp-workload-visual .terminal {
     padding: 3rem 1.25rem;
   }
 
+  .landing-page header.lp-hero,
   .lp-hero {
-    padding: calc(var(--ifm-navbar-height) + 2.5rem) 1.25rem 3rem 1.25rem;
+    width: 100%;
+    max-width: 100%;
+    min-height: auto;
+    overflow: visible;
+    padding:
+      calc(var(--ifm-navbar-height) + 2.5rem)
+      clamp(1.25rem, 5vw, 2rem)
+      3rem;
   }
 
   .lp-hero-copy,
@@ -920,8 +940,8 @@ html[data-theme="light"] .landing-page .lp-workload-visual .terminal {
   }
 
   .lp-hero-copy {
-    width: min(22rem, calc(100vw - 2.5rem));
-    max-width: min(22rem, calc(100vw - 2.5rem));
+    width: 100%;
+    max-width: 36rem;
   }
 
   .lp-hero-grid {
@@ -945,6 +965,11 @@ html[data-theme="light"] .landing-page .lp-workload-visual .terminal {
   .lp-hero-clouds {
     flex: 0 1 100%;
     justify-content: flex-start;
+    max-width: 100%;
+  }
+
+  .lp-hero-cta,
+  .lp-primary-cta {
     max-width: 100%;
   }
 }
