@@ -9,12 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/muesli/termenv"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -300,6 +302,15 @@ func recordCastTypedLine(ctx context.Context, prompt *schema.SimulatePrompt, lin
 	if err := sleepCastInput(ctx, defaultCastPromptDelay); err != nil {
 		return err
 	}
+	stylePrefix, styleSuffix, err := renderCastTypedLineParts(prompt, line)
+	if err != nil {
+		return err
+	}
+	if stylePrefix != "" {
+		if _, err := fmt.Fprint(iolib.GetContext().Data(), stylePrefix); err != nil {
+			return err
+		}
+	}
 	for _, char := range line {
 		if err := sleepCastInput(ctx, writeRate); err != nil {
 			return err
@@ -308,10 +319,15 @@ func recordCastTypedLine(ctx context.Context, prompt *schema.SimulatePrompt, lin
 			return err
 		}
 	}
+	if styleSuffix != "" {
+		if _, err := fmt.Fprint(iolib.GetContext().Data(), styleSuffix); err != nil {
+			return err
+		}
+	}
 	if err := sleepCastInput(ctx, enterDelay); err != nil {
 		return err
 	}
-	_, err := fmt.Fprint(iolib.GetContext().Data(), "\n")
+	_, err = fmt.Fprint(iolib.GetContext().Data(), "\n")
 	return err
 }
 
@@ -330,14 +346,50 @@ func castPromptStyle(prompt *schema.SimulatePrompt) string {
 }
 
 func renderCastPrompt(prompt *schema.SimulatePrompt) (string, error) {
-	text := castPromptText(prompt)
+	return renderCastStyledText(castPromptText(prompt), castPromptStyle(prompt), true)
+}
+
+func castTypedTextStyle(prompt *schema.SimulatePrompt, line string) string {
+	if strings.HasPrefix(strings.TrimSpace(line), "#") {
+		return "muted"
+	}
+	return castPromptStyle(prompt)
+}
+
+func renderCastTypedText(prompt *schema.SimulatePrompt, line, text string) (string, error) {
+	return renderCastStyledText(text, castTypedTextStyle(prompt, line), false)
+}
+
+func renderCastTypedLineParts(prompt *schema.SimulatePrompt, line string) (string, string, error) {
+	rendered, err := renderCastTypedText(prompt, line, line)
+	if err != nil {
+		return "", "", err
+	}
+	if rendered == line {
+		return "", "", nil
+	}
+	index := strings.Index(rendered, line)
+	if index == -1 {
+		return "", "", nil
+	}
+	return rendered[:index], rendered[index+len(line):], nil
+}
+
+func renderCastStyledText(text, styleName string, bold bool) (string, error) {
+	restoreColorProfile := forceCastColorProfile()
+	defer restoreColorProfile()
+
 	styles := theme.GetCurrentStyles()
 	if styles == nil {
 		return text, nil
 	}
-	switch castPromptStyle(prompt) {
+	switch styleName {
 	case "command":
-		return styles.Command.Bold(true).Render(text), nil
+		style := styles.Command
+		if bold {
+			style = style.Bold(true)
+		}
+		return style.Render(text), nil
 	case "label":
 		return styles.Label.Render(text), nil
 	case "muted":
@@ -347,7 +399,18 @@ func renderCastPrompt(prompt *schema.SimulatePrompt) (string, error) {
 	case "notice":
 		return styles.Notice.Render(text), nil
 	default:
-		return "", fmt.Errorf(wrappedQuotedErrorFormat, ErrUnsupportedPromptStyle, castPromptStyle(prompt))
+		return "", fmt.Errorf(wrappedQuotedErrorFormat, ErrUnsupportedPromptStyle, styleName)
+	}
+}
+
+func forceCastColorProfile() func() {
+	profile := ui.GetColorProfile()
+	if profile == termenv.TrueColor {
+		return func() {}
+	}
+	ui.SetColorProfile(termenv.TrueColor)
+	return func() {
+		ui.SetColorProfile(profile)
 	}
 }
 

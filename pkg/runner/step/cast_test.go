@@ -577,6 +577,29 @@ func TestRenderCastPromptStylesAndInvalidStyle(t *testing.T) {
 	}
 }
 
+func TestRenderCastTypedLinePartsStylesCommentsAsMuted(t *testing.T) {
+	prompt := &schema.SimulatePrompt{Text: "> ", Style: "command"}
+
+	commandPrefix, commandSuffix, err := renderCastTypedLineParts(prompt, "atmos version")
+	if err != nil {
+		t.Fatalf("render command parts: %v", err)
+	}
+	commentPrefix, commentSuffix, err := renderCastTypedLineParts(prompt, "# this is how to run it")
+	if err != nil {
+		t.Fatalf("render comment parts: %v", err)
+	}
+
+	if commandPrefix == "" || commandSuffix == "" {
+		t.Fatalf("expected command ANSI parts, got prefix=%q suffix=%q", commandPrefix, commandSuffix)
+	}
+	if commentPrefix == "" || commentSuffix == "" {
+		t.Fatalf("expected comment ANSI parts, got prefix=%q suffix=%q", commentPrefix, commentSuffix)
+	}
+	if commandPrefix == commentPrefix {
+		t.Fatalf("expected command and comment prefixes to differ, both were %q", commandPrefix)
+	}
+}
+
 func TestValidateCastSimulateStepModesAndDurations(t *testing.T) {
 	tests := []struct {
 		name      string
