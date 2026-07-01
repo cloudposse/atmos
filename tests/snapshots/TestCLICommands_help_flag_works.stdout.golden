@@ -17,6 +17,7 @@ SUBCOMMAND ALIASES
       c                Alias of atmos container command
       emu              Alias of atmos emulator command
       hf               Alias of atmos helmfile command
+      k8s              Alias of atmos kubernetes command
       pk               Alias of atmos packer command
       tf               Alias of atmos terraform command
 
@@ -44,6 +45,7 @@ AVAILABLE COMMANDS
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments
       help                                   Help about any command
       init [EXPERIMENTAL]                    Initialize a new Atmos project from a template
+      kubernetes [command] [EXPERIMENTAL]    Manage Kubernetes-native components
       list [command]                         List available stacks and components
       lsp [command] [EXPERIMENTAL]           Language Server Protocol commands
       mcp [command] [EXPERIMENTAL]           Manage MCP servers and external server connections

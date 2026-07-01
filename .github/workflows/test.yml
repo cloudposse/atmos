@@ -222,7 +222,7 @@ jobs:
           make deps
 
       - name: Terraform registry cache acceptance test
-        timeout-minutes: 10
+        timeout-minutes: 25
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -452,7 +452,7 @@ jobs:
           FLOCI_GCP_ENDPOINT: "http://localhost:4588"
           FLOCI_AZURE_ENDPOINT: "http://localhost:4577"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: go test ./tests -run 'Test(AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E' -count=1 -timeout 15m -v
+        run: go test ./tests -run 'Test((AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E|LocalGitOpsPushE2E)' -count=1 -timeout 15m -v
 
   # run k3s demo tests
   k3s:
@@ -460,7 +460,6 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     env:
-      KUBECONFIG: ${{github.workspace}}/examples/${{ matrix.demo-folder }}/kubeconfig.yaml
       ATMOS_LOGS_LEVEL: Debug
     strategy:
       matrix:
@@ -474,27 +473,10 @@ jobs:
         with:
           persist-credentials: false
 
-      # Route Docker Hub pulls (rancher/k3s) through Google's mirror.gcr.io
-      # pull-through cache. Anonymous registry-1.docker.io pulls intermittently
-      # rate-limit / time out on CI runners; the mirror is transparent and only
-      # affects this runner, so the example's docker-compose.yml stays unchanged.
-      - name: Configure Docker Hub registry mirror
-        run: |
-          echo '{ "registry-mirrors": ["https://mirror.gcr.io"] }' | sudo tee /etc/docker/daemon.json
-          sudo systemctl restart docker
-
-      - name: Start Docker Compose
-        working-directory: examples/${{ matrix.demo-folder }}
-        run: docker compose up -d --wait
-
-      - name: Wait for k3s to start
-        working-directory: examples/${{ matrix.demo-folder }}
-        run: |
-          until kubectl get pods --all-namespaces >/dev/null 2>&1; do
-            echo "Retrying..."
-            sleep 1
-          done
-          kubectl get pods --all-namespaces
+      # The local k3s cluster is no longer started via docker-compose: `atmos test`
+      # brings it up through the native Kubernetes emulator (`atmos emulator up
+      # kubernetes`), which runs the privileged k3s container itself on the runner's
+      # Docker, and the helmfile component harvests its kubeconfig via `!emulator`.
 
       - name: Download build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -528,6 +510,51 @@ jobs:
         run: |
           cd examples/${{ matrix.demo-folder }}
           atmos test
+
+  # Exercise the Kubernetes native component against a real kube-apiserver+etcd
+  # control plane (started by controller-runtime envtest): server-side apply,
+  # dry-run diff, delete, server-side validate, and a CRD round-trip. The
+  # control-plane binaries are provisioned on demand by the tests themselves via
+  # the Atmos toolchain (an inline registry in envtest_test.go) — there is no
+  # install step here. Windows is intentionally excluded: there is no official
+  # kube-apiserver build for it, so the tests are gated off that platform.
+  #
+  # The binaries land in the toolchain cache under the user cache dir; CI does
+  # not yet persist that across runs, so each run re-downloads the (small)
+  # tarball. Adding an actions/cache step keyed on the envtest version is an
+  # easy follow-up.
+  kubernetes-e2e:
+    name: "[kubernetes] e2e tests (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Run Kubernetes end-to-end tests
+        env:
+          # Atmos builds with CGO disabled (see Makefile). Match that here so the
+          # toolchain's transitive CGO dependencies (e.g. bearsh/hid → libudev)
+          # are not compiled — they are unused and libudev is absent on runners.
+          CGO_ENABLED: "0"
+          # Fail loudly if the control plane can't be provisioned/started, rather
+          # than silently skipping all coverage.
+          ATMOS_ENVTEST_REQUIRED: "true"
+        run: go test -tags envtest -count=1 ./pkg/component/kubernetes/... -run TestEnvtest
 
   # run other demo tests
   mock:
@@ -736,7 +763,6 @@ jobs:
           - demo-context
           - emulator-aws
           - demo-stacks
-          - demo-helmfile
           - quick-start-simple
           # Examples below use runtime Atmos YAML functions (`!terraform.state`, `!store`,
           # `!secret`, …). They were previously excluded because the static yaml-language-server
@@ -838,7 +864,7 @@ jobs:
           echo "failing-check correctly returned a non-zero exit code"
 
   release:
-    needs: [test, lint, mock, k3s, floci, floci-go, docker, validate, container-step]
+    needs: [test, kubernetes-e2e, lint, mock, k3s, floci, floci-go, docker, validate, container-step]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
     with:

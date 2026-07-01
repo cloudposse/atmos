@@ -6,8 +6,9 @@ sidebar_class_name: command
 description: Use the metadata section to control component behavior, inheritance, and deployment settings.
 id: component-metadata
 ---
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
 
 <Intro>
 The `metadata` section configures how Atmos interprets and manages a component. Unlike other sections, `metadata` is only valid within component definitions (`components.terraform.<name>.metadata`), not at the global or component-type level.
@@ -48,7 +49,7 @@ components:
   terraform:
     vpc-prod:
       metadata:
-        component: vpc  # Uses components/terraform/vpc
+        component: vpc # Uses components/terraform/vpc
         description: Production VPC
       vars:
         environment: prod
@@ -80,8 +81,8 @@ components:
   terraform:
     vpc:
       metadata:
-        name: vpc              # Stable logical identity
-        component: vpc/v2      # Physical version path
+        name: vpc # Stable logical identity
+        component: vpc/v2 # Physical version path
 ```
 
 **Why this matters:** Without `name`, the `workspace_key_prefix` is auto-generated from `component`, which includes the version (`vpc-v2`). When you upgrade to `vpc/v3`, the workspace key prefix changes, creating a new state file and losing your existing infrastructure state.
@@ -123,12 +124,13 @@ components:
   terraform:
     vpc/base:
       metadata:
-        type: abstract  # Cannot be deployed directly
+        type: abstract # Cannot be deployed directly
       vars:
         enable_dns_hostnames: true
 ```
 
 **Abstract components:**
+
 - Serve as templates for other components to inherit from
 - Cannot be deployed with `atmos terraform apply`
 - Do not appear in `atmos describe stacks` output by default
@@ -143,12 +145,13 @@ components:
   terraform:
     monitoring:
       metadata:
-        enabled: false  # Component is disabled
+        enabled: false # Component is disabled
       vars:
         # ...
 ```
 
 When `enabled: false`:
+
 - The component is skipped during `atmos terraform apply`
 - The component does not appear in active stack listings
 - Useful for conditionally disabling components per environment
@@ -162,12 +165,13 @@ components:
   terraform:
     core-network:
       metadata:
-        locked: true  # Prevent changes
+        locked: true # Prevent changes
       vars:
         # ...
 ```
 
 When `locked: true`:
+
 - Atmos will warn or prevent changes to the component
 - Useful for protecting critical infrastructure components
 
@@ -200,6 +204,7 @@ components:
 ```
 
 Supported tokens:
+
 - `{namespace}` - The namespace from context variables
 - `{tenant}` - The tenant from context variables
 - `{environment}` - The environment from context variables
@@ -227,6 +232,7 @@ components:
 ```
 
 Use `custom` for:
+
 - Storing metadata for external tooling to consume (CI/CD pipelines, dashboards)
 - Adding labels or annotations readable via `atmos describe stacks`
 - Custom categorization that doesn't affect Atmos behavior
@@ -261,6 +267,7 @@ components:
         vpc_cidr: "10.1.0.0/16"
         name: isolated
         enable_internet_gateway: false
+
 ```
 </File>
 
@@ -282,6 +289,7 @@ components:
         enable_nat_gateway: true
         single_nat_gateway: false
 ```
+
 </File>
 
 <File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
@@ -316,6 +324,7 @@ components:
       vars:
         # ...
 ```
+
 </File>
 
 <File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
@@ -324,7 +333,7 @@ components:
   terraform:
     expensive-feature:
       metadata:
-        enabled: true   # Enabled in production
+        enabled: true # Enabled in production
       vars:
         # ...
 ```
@@ -363,6 +372,7 @@ components:
       vars:
         enable_nat_gateway: true
         multi_az: true
+
 ```
 </File>
 
@@ -385,3 +395,4 @@ components:
 - [Overrides](/stacks/overrides)
 - [Variables (vars)](/stacks/vars)
 - [Terraform Components](/stacks/components/terraform)
+```

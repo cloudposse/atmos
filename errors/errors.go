@@ -223,6 +223,8 @@ var (
 	ErrGitWorkdirExists            = errors.New("git workdir already exists")
 	ErrGitNoTrackingBranch         = errors.New("no branch to pull: the current branch has no upstream")
 	ErrGitWorkdirNotInitialized    = errors.New("git repository not cloned or initialized")
+	ErrGitTargetPathInvalid        = errors.New("git target path must not be empty or the repository root")
+	ErrGitArtifactWrite            = errors.New("failed to write provision artifact")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")
@@ -720,6 +722,8 @@ var (
 	ErrDescribeStacks               = errors.New("describe stacks failed")
 	ErrBuildDepGraph                = errors.New("build dependency graph failed")
 	ErrTopologicalOrder             = errors.New("topological sort failed")
+	ErrGraphExecutionCanceled       = errors.New("graph execution canceled")
+	ErrGraphExecutionOptions        = errors.New("graph execution options are invalid")
 	ErrFormatForLogging             = errors.New("format affected for logging failed")
 	ErrQueryEvaluation              = errors.New("query evaluation failed")
 	ErrNilResult                    = errors.New("nil result")
@@ -948,6 +952,12 @@ var (
 	ErrIdentityNotInConfig                  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig                  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
+
+	// Provision target (delivery destination) errors.
+	ErrProvisionTargetNotFound    = errors.New("provision target not found")
+	ErrProvisionTargetKindUnknown = errors.New("provision target kind is not registered")
+	ErrProvisionTargetKindMissing = errors.New("provision target is missing a kind")
+	ErrGitPullRequestNotSupported = errors.New("git pull request publishing is not supported by the cli provider")
 
 	// Backend provisioning errors.
 	ErrBucketRequired            = errors.New("backend.bucket is required")
@@ -1327,6 +1337,36 @@ var (
 	ErrLSPNoServerForFile       = errors.New("no LSP server found for file")
 	ErrLSPRPCError              = errors.New("RPC error")
 	ErrLSPNoContentLengthHeader = errors.New("no Content-Length header found")
+
+	// Kubernetes-native component errors.
+	ErrKubernetesFlagsMutuallyExclusive     = errors.New("--all and --affected are mutually exclusive")
+	ErrKubernetesComponentArgWithSelection  = errors.New("component argument cannot be used with --all or --affected")
+	ErrKubernetesOutputSingleComponentOnly  = errors.New("--output and --output-dir are only supported when rendering one component")
+	ErrKubernetesComponentArgRequired       = errors.New("requires exactly one component argument unless --all or --affected is set")
+	ErrKubernetesUnsupportedOperation       = errors.New("unsupported kubernetes operation")
+	ErrKubernetesUnsupportedSubcommand      = errors.New("unsupported kubernetes subcommand")
+	ErrKubernetesMissingMetadataName        = errors.New("object is missing metadata.name")
+	ErrKubernetesMissingGVK                 = errors.New("object is missing group/version/kind")
+	ErrManifestEntryInvalidType             = errors.New("manifest entries must be YAML strings or maps")
+	ErrManifestMissingAPIVersionKind        = errors.New("manifest is missing apiVersion or kind")
+	ErrManifestListItemNotObject            = errors.New("list item is not an unstructured object")
+	ErrKubernetesOutputDirMutuallyExclusive = errors.New("--output and --output-dir are mutually exclusive")
+	ErrKubernetesSplitRequiresOutputDir     = errors.New("--split requires --output-dir and cannot be used with --output")
+	ErrKubernetesSplitNeedsOutputDir        = errors.New("--split requires --output-dir")
+	ErrKubernetesClientInit                 = errors.New("failed to initialize kubernetes client")
+	ErrKubernetesApply                      = errors.New("failed to apply kubernetes object")
+	ErrKubernetesDelete                     = errors.New("failed to delete kubernetes object")
+	ErrKubernetesDiff                       = errors.New("failed to diff kubernetes object")
+	ErrKubernetesMarshal                    = errors.New("failed to marshal kubernetes object")
+	ErrKubernetesResolveResource            = errors.New("failed to resolve kubernetes resource")
+	ErrKubernetesComponentDir               = errors.New("failed to create kubernetes component directory")
+	ErrKubernetesRenderOutput               = errors.New("failed to write rendered kubernetes manifests")
+	ErrKubernetesRender                     = errors.New("failed to render kubernetes object")
+	ErrKubernetesProviderType               = errors.New("provider must be a string")
+	ErrManifestPathTraversal                = errors.New("manifest path escapes the component directory")
+	ErrKubernetesValidationFailed           = errors.New("kubernetes manifest validation failed")
+	ErrKubernetesManifestInvalidName        = errors.New("object metadata.name is not a valid DNS-1123 subdomain")
+	ErrKubernetesValidate                   = errors.New("failed to validate kubernetes object")
 )
 
 // Stack dependency (`depends_on`) resolution errors.
