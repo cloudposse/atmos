@@ -979,11 +979,15 @@ html[data-theme="light"] .landing-page .lp-workload-visual .terminal {
 
   .lp-hero-runit-row {
     gap: 1.1rem;
+    justify-content: center;
     margin-top: 1.2rem;
   }
 
   .lp-hero-valueprops {
+    flex: 1 1 100%;
+    align-items: center;
     gap: 0.25rem;
+    text-align: center;
   }
 
   .lp-hero-valueprops span {
@@ -993,7 +997,7 @@ html[data-theme="light"] .landing-page .lp-workload-visual .terminal {
 
   .lp-hero-clouds {
     flex: 0 1 100%;
-    justify-content: flex-start;
+    justify-content: center;
     gap: 1.25rem;
     max-width: 100%;
   }
@@ -1004,6 +1008,7 @@ html[data-theme="light"] .landing-page .lp-workload-visual .terminal {
 
   .lp-hero-cta {
     gap: 0.9rem;
+    justify-content: center;
     margin-top: 1.4rem;
   }
 
