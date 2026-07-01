@@ -6,6 +6,19 @@ components:
       metadata:
         type: abstract
         component: nginx
+      # Atmos installs these CLIs and puts them on PATH for `atmos helmfile *`:
+      # helmfile (the orchestrator), helm (the chart engine it drives), and kubectl
+      # (the nginx release's presync/postuninstall hooks shell out to it). Resolved
+      # from the Aqua public registry configured in atmos.yaml. Versions are pinned
+      # for reproducibility (and because the Aqua `kubernetes/kubectl` package has no
+      # GitHub releases to resolve "latest" from — kubectl ships from dl.k8s.io).
+      dependencies:
+        tools:
+          helmfile: "v1.6.0"
+          helm: "v3.21.2"
+          kubectl: "1.31.3"
+          # The nginx release's AnnotationsTransformer runs through kustomize.
+          kustomize: "v5.4.3"
       vars:
         image:
           tag: "latest"

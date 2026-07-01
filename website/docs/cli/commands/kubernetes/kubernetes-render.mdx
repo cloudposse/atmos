@@ -1,0 +1,132 @@
+---
+title: atmos kubernetes render
+sidebar_label: render
+sidebar_class_name: command
+id: render
+description: Render the final Kubernetes manifests for a stack-configured component without touching the cluster.
+---
+
+import Intro from "@site/src/components/Intro";
+import ActionCard from "@site/src/components/ActionCard";
+import PrimaryCTA from "@site/src/components/PrimaryCTA";
+import Screengrab from "@site/src/components/Screengrab";
+
+<Intro>
+  See exactly what Kubernetes YAML Atmos will send before anything touches the
+  cluster. `render` resolves stack values, inline manifests, generated files,
+  and provider inputs into the final manifests you can inspect, save, or pass to
+  another tool.
+</Intro>
+
+<Screengrab title="atmos kubernetes render --help" slug="atmos-kubernetes-render--help" />
+
+<ActionCard title="Configure Render Inputs">
+  Put manifest files, Kustomize paths, inline objects, variables, environment,
+  and default output paths in the Kubernetes component stack configuration.
+  <div>
+    <PrimaryCTA to="/stacks/components/kubernetes">
+      Stack Configuration
+    </PrimaryCTA>
+  </div>
+</ActionCard>
+
+## Usage
+
+```shell
+atmos kubernetes render <component> --stack <stack> [options]
+```
+
+`render` resolves the component stack configuration, runs generation when
+enabled, loads inline `manifests`, renders provider inputs, and writes the final
+Kubernetes YAML. It does not contact the Kubernetes API server.
+
+## Output
+
+By default, `render` writes a multi-document YAML stream to stdout:
+
+```shell
+atmos kubernetes render argocd -s plat-ue2-dev
+```
+
+Write a single multi-document YAML file:
+
+```shell
+atmos kubernetes render argocd -s plat-ue2-dev \
+  --output rendered/argocd.yaml
+```
+
+Write one file per Kubernetes object:
+
+```shell
+atmos kubernetes render argocd -s plat-ue2-dev \
+  --output-dir rendered/argocd \
+  --split
+```
+
+Configure a default render output in the component:
+
+```yaml
+components:
+  kubernetes:
+    argocd:
+      render:
+        output:
+          path: rendered/clusters/{{ .vars.cluster }}/argocd
+          split: true
+```
+
+When `split: true`, `path` is treated as an output directory. Otherwise,
+`path` is treated as a single output file.
+
+Render all Kubernetes components in dependency order:
+
+```shell
+atmos kubernetes render --all -s plat-ue2-dev
+```
+
+Render affected Kubernetes components:
+
+```shell
+atmos kubernetes render --affected --base origin/main
+```
+
+`--output` and `--output-dir` are only supported when rendering one component.
+For `--all` or `--affected`, configure component-level `render.output` paths.
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+<dt>
+  `--output` <em>(optional)</em>
+</dt>
+<dd>Write rendered manifests to a single multi-document YAML file.</dd>
+
+<dt>
+  `--output-dir` <em>(optional)</em>
+</dt>
+<dd>
+  Write rendered manifests to a directory. Without `--split`, Atmos writes
+  `manifest.yaml` in that directory.
+</dd>
+
+<dt>
+  `--split` <em>(optional)</em>
+</dt>
+<dd>Write one YAML file per Kubernetes object. Requires `--output-dir`.</dd>
+
+<dt>
+  `--all` <em>(optional)</em>
+</dt>
+<dd>Render all Kubernetes components in dependency order.</dd>
+
+<dt>
+  `--affected` <em>(optional)</em>
+</dt>
+<dd>Render affected Kubernetes components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent Kubernetes components.</dd>
+</dl>

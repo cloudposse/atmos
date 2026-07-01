@@ -288,6 +288,10 @@
             "auto_start": {
               "type": "boolean",
               "description": "Auto-init/start the Podman machine when no running runtime is found."
+            },
+            "host": {
+              "type": "boolean",
+              "description": "Grant containers access to the host container runtime (Docker-out-of-Docker): mount the runtime socket, run as root, relabel for SELinux, set DOCKER_HOST. Opt-in; effectively host-root. On rootless podman the socket is unreachable in-container."
             }
           }
         }

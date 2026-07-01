@@ -2049,6 +2049,10 @@ func processBaseComponentConfigInternal(
 	var baseComponentHooks map[string]any
 	var baseComponentGenerate map[string]any
 	var baseComponentCommand string
+	var baseComponentProvider string
+	var baseComponentPaths any
+	var baseComponentManifests any
+	var baseComponentRender map[string]any
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[string]any
 	var baseComponentRemoteStateBackendType string
@@ -2245,6 +2249,28 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		if baseComponentProviderSection, baseComponentProviderSectionExist := baseComponentMap[cfg.ProviderSectionName]; baseComponentProviderSectionExist {
+			baseComponentProvider, ok = baseComponentProviderSection.(string)
+			if !ok {
+				return fmt.Errorf("%w '%s.provider' in the stack '%s'", errUtils.ErrInvalidConfig, baseComponent, stack)
+			}
+		}
+
+		if baseComponentPathsSection, baseComponentPathsSectionExist := baseComponentMap[cfg.PathsSectionName]; baseComponentPathsSectionExist {
+			baseComponentPaths = baseComponentPathsSection
+		}
+
+		if baseComponentManifestsSection, baseComponentManifestsSectionExist := baseComponentMap[cfg.ManifestsSectionName]; baseComponentManifestsSectionExist {
+			baseComponentManifests = baseComponentManifestsSection
+		}
+
+		if baseComponentRenderSection, baseComponentRenderSectionExist := baseComponentMap[cfg.RenderSectionName]; baseComponentRenderSectionExist {
+			baseComponentRender, ok = baseComponentRenderSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.render' in the stack '%s'", errUtils.ErrInvalidConfig, baseComponent, stack)
+			}
+		}
+
 		// Base component backend
 		if i, ok2 := baseComponentMap[cfg.BackendTypeSectionName]; ok2 {
 			baseComponentBackendType, ok = i.(string)
@@ -2433,6 +2459,32 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentGenerate = merged
+
+		// Base component `provider`
+		if baseComponentProvider != "" {
+			baseComponentConfig.BaseComponentProvider = baseComponentProvider
+		}
+
+		// Base component `paths`
+		mergedAny, err := mergeComponentAnySection(levelMergeConfig, cfg.PathsSectionName, baseComponentConfig.BaseComponentPaths, baseComponentPaths)
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentPaths = mergedAny
+
+		// Base component `manifests`
+		mergedAny, err = mergeComponentAnySection(levelMergeConfig, cfg.ManifestsSectionName, baseComponentConfig.BaseComponentManifests, baseComponentManifests)
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentManifests = mergedAny
+
+		// Base component `render`
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentRender, baseComponentRender})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentRender = merged
 
 		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand

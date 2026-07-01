@@ -121,6 +121,7 @@ type CreateConfig struct {
 	OverrideCommand bool           // Whether to override default command with sleep infinity
 	Init            bool           // Whether to use init process
 	Privileged      bool           // Run in privileged mode
+	Host            bool           // Grant access to the host container runtime (Docker-out-of-Docker)
 	CapAdd          []string       // Linux capabilities to add
 	SecurityOpt     []string       // Security options
 	Restart         *RestartPolicy // Restart policy (nil = runtime default)

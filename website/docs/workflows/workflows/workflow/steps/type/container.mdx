@@ -239,6 +239,9 @@ steps:
 
   <dt>`ports`</dt>
   <dd>List of published port mappings. See [Ports](#ports).</dd>
+
+  <dt>`runtime`</dt>
+  <dd>Nested runtime block. Set `runtime.host: true` to grant the container access to the host container runtime (Docker-out-of-Docker) so it can launch sibling containers — Atmos mounts the runtime socket, runs as root, relabels for SELinux, and sets `DOCKER_HOST`. Opt-in and effectively host-root; works on Docker and rootful podman (on rootless podman the socket is unreachable in-container). May also be set inline on the step as `runtime.host`.</dd>
 </dl>
 
 Environment variables for the container come from the step-level [`env`](/workflows/steps/env) field, not from a field under `with`.

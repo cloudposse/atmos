@@ -76,6 +76,10 @@ func (d *DockerRuntime) Build(ctx context.Context, config *BuildConfig) error {
 func (d *DockerRuntime) Create(ctx context.Context, config *CreateConfig) (string, error) {
 	defer perf.Track(nil, "container.DockerRuntime.Create")()
 
+	if err := prepareHostRuntime(ctx, d, config); err != nil {
+		return "", err
+	}
+
 	args := buildCreateArgs(config)
 
 	cmd := d.command(ctx, args...)
@@ -94,6 +98,17 @@ func (d *DockerRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 	log.Debug("Created docker container", logKeyID, containerID, "name", config.Name)
 
 	return containerID, nil
+}
+
+// EnsureNetwork idempotently creates a user-defined docker network. It implements
+// NetworkEnsurer so emulators in a stack can share a network and resolve each
+// other by component name.
+func (d *DockerRuntime) EnsureNetwork(ctx context.Context, name string) error {
+	defer perf.Track(nil, "container.DockerRuntime.EnsureNetwork")()
+
+	cmd := d.command(ctx, "network", "create", name)
+	output, err := cmd.CombinedOutput()
+	return networkCreateResult(err, string(output))
 }
 
 // Start starts a container.
