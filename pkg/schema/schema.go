@@ -1507,7 +1507,7 @@ type ConfigAndStacksInfo struct {
 	FailFast                   bool
 	KeepGoing                  bool
 	DisablePluginCache         bool
-	TerraformPlanLogOrder      string
+	TerraformLogOrder          string
 	TerraformPlanHide          []string
 	TerraformPlanHideNoChanges bool
 	TerraformPlanSummaryFile   string

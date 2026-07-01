@@ -12,8 +12,8 @@ import (
 const (
 	terraformFailureModeFailFast  = "fail-fast"
 	terraformFailureModeKeepGoing = "keep-going"
-	terraformPlanLogOrderStream   = "stream"
-	terraformPlanLogOrderGrouped  = "grouped"
+	terraformLogOrderStream       = "stream"
+	terraformLogOrderGrouped      = "grouped"
 )
 
 // TerraformRunOptions contains shared flags from terraformParser.
@@ -47,7 +47,7 @@ type TerraformRunOptions struct {
 	// Graph-backed Terraform concurrency.
 	MaxConcurrency    int
 	FailureMode       string
-	PlanLogOrder      string
+	LogOrder          string
 	PlanHide          []string
 	PlanHideNoChanges bool
 	PlanSummaryFile   string
@@ -84,7 +84,7 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		Affected:                v.GetBool("affected"),
 		MaxConcurrency:          v.GetInt("max-concurrency"),
 		FailureMode:             v.GetString("failure-mode"),
-		PlanLogOrder:            v.GetString("log-order"),
+		LogOrder:                v.GetString("log-order"),
 		PlanHide:                v.GetStringSlice("hide"),
 		PlanHideNoChanges:       terraformPlanHideContains(v.GetStringSlice("hide"), "no-changes"),
 		PlanSummaryFile:         v.GetString("execution-summary-file"),
@@ -110,12 +110,12 @@ func validateTerraformRunOptions(opts *TerraformRunOptions) error {
 		}
 	}
 
-	if logOrder := strings.ToLower(strings.TrimSpace(opts.PlanLogOrder)); logOrder != "" {
+	if logOrder := strings.ToLower(strings.TrimSpace(opts.LogOrder)); logOrder != "" {
 		switch logOrder {
-		case terraformPlanLogOrderStream, terraformPlanLogOrderGrouped:
-			opts.PlanLogOrder = logOrder
+		case terraformLogOrderStream, terraformLogOrderGrouped:
+			opts.LogOrder = logOrder
 		default:
-			return fmt.Errorf("invalid --log-order %q: supported values are %q, %q", opts.PlanLogOrder, terraformPlanLogOrderStream, terraformPlanLogOrderGrouped)
+			return fmt.Errorf("invalid --log-order %q: supported values are %q, %q", opts.LogOrder, terraformLogOrderStream, terraformLogOrderGrouped)
 		}
 	}
 	return nil
