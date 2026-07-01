@@ -47,6 +47,12 @@ type ComponentProcessorOptions struct {
 	GlobalSourceSection             map[string]any
 	GlobalProvisionSection          map[string]any
 
+	// Kubernetes-specific global defaults (lowest precedence in the final merge).
+	GlobalKubernetesProvider  string
+	GlobalKubernetesPaths     any
+	GlobalKubernetesManifests any
+	GlobalKubernetesRender    map[string]any
+
 	// Atmos configuration.
 	AtmosConfig *schema.AtmosConfiguration
 }
@@ -60,6 +66,10 @@ type ComponentProcessorResult struct {
 	ComponentDependencies      map[string]any
 	ComponentLocals            map[string]any // Component-level locals for template processing.
 	ComponentCommand           string
+	ComponentProvider          string
+	ComponentPaths             any
+	ComponentManifests         any
+	ComponentRender            map[string]any
 	ComponentOverrides         map[string]any
 	ComponentOverridesVars     map[string]any
 	ComponentOverridesSettings map[string]any
@@ -75,6 +85,10 @@ type ComponentProcessorResult struct {
 	BaseComponentDependencies  map[string]any
 	BaseComponentLocals        map[string]any // Base component locals for inheritance.
 	BaseComponentCommand       string
+	BaseComponentProvider      string
+	BaseComponentPaths         any
+	BaseComponentManifests     any
+	BaseComponentRender        map[string]any
 	ComponentInheritanceChain  []string
 	BaseComponents             []string
 

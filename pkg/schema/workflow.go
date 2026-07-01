@@ -137,21 +137,24 @@ type ContainerHealthCheck struct {
 
 // ContainerRunStep configures a one-shot container run action.
 type ContainerRunStep struct {
-	Image             string                `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`
-	Command           string                `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
-	Shell             string                `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`
-	Provider          string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
-	RuntimeAutoStart  bool                  `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
-	Pull              string                `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`
-	Workspace         string                `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
-	WorkspaceReadOnly bool                  `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"`
-	Cleanup           string                `yaml:"cleanup,omitempty" json:"cleanup,omitempty" mapstructure:"cleanup"`
-	User              string                `yaml:"user,omitempty" json:"user,omitempty" mapstructure:"user"`
-	RunArgs           []string              `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`
-	Mounts            []ContainerMount      `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`
-	Ports             []ContainerPort       `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`
-	Restart           *ContainerRestart     `yaml:"restart,omitempty" json:"restart,omitempty" mapstructure:"restart"`
-	HealthCheck       *ContainerHealthCheck `yaml:"healthcheck,omitempty" json:"healthcheck,omitempty" mapstructure:"healthcheck"`
+	Image            string `yaml:"image,omitempty" json:"image,omitempty" mapstructure:"image"`
+	Command          string `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
+	Shell            string `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`
+	Provider         string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
+	RuntimeAutoStart bool   `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	// Runtime is the nested per-instance runtime block (e.g. `runtime.host: true` for
+	// Docker-out-of-Docker). Mirrors the global `container.runtime` config.
+	Runtime           *ContainerRuntimeConfig `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`
+	Pull              string                  `yaml:"pull,omitempty" json:"pull,omitempty" mapstructure:"pull"`
+	Workspace         string                  `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
+	WorkspaceReadOnly bool                    `yaml:"workspace_read_only,omitempty" json:"workspace_read_only,omitempty" mapstructure:"workspace_read_only"`
+	Cleanup           string                  `yaml:"cleanup,omitempty" json:"cleanup,omitempty" mapstructure:"cleanup"`
+	User              string                  `yaml:"user,omitempty" json:"user,omitempty" mapstructure:"user"`
+	RunArgs           []string                `yaml:"run_args,omitempty" json:"run_args,omitempty" mapstructure:"run_args"`
+	Mounts            []ContainerMount        `yaml:"mounts,omitempty" json:"mounts,omitempty" mapstructure:"mounts"`
+	Ports             []ContainerPort         `yaml:"ports,omitempty" json:"ports,omitempty" mapstructure:"ports"`
+	Restart           *ContainerRestart       `yaml:"restart,omitempty" json:"restart,omitempty" mapstructure:"restart"`
+	HealthCheck       *ContainerHealthCheck   `yaml:"healthcheck,omitempty" json:"healthcheck,omitempty" mapstructure:"healthcheck"`
 }
 
 // WorkflowContainer configures a workflow-level container-backed sandbox or a
@@ -299,16 +302,17 @@ type WorkflowStep struct {
 	// are populated from `with:` by UnmarshalYAML based on Action, so they carry no YAML key.
 	//
 	// Only cross-cutting execution modifiers stay top-level (provider, runtime_auto_start,
-	// container). All action parameters — image, command, ports, mounts, healthcheck, etc. —
-	// live under `with:` (decoded into Build/Run/Push/Inspect).
-	Action           string                `yaml:"action,omitempty" json:"action,omitempty" mapstructure:"action"` // build, push, run, inspect.
-	Build            *ContainerBuildStep   `yaml:"-" json:"build,omitempty" mapstructure:"build"`
-	Push             *ContainerPushStep    `yaml:"-" json:"push,omitempty" mapstructure:"push"`
-	Run              *ContainerRunStep     `yaml:"-" json:"run,omitempty" mapstructure:"run"`
-	Inspect          *ContainerInspectStep `yaml:"-" json:"inspect,omitempty" mapstructure:"inspect"`
-	RuntimeAutoStart bool                  `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
-	Provider         string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // docker, podman, or empty for auto-detect.
-	Container        *WorkflowContainer    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"` // Workflow container override or false to run on host.
+	// runtime, container). All action parameters — image, command, ports, mounts,
+	// healthcheck, etc. — live under `with:` (decoded into Build/Run/Push/Inspect).
+	Action           string                  `yaml:"action,omitempty" json:"action,omitempty" mapstructure:"action"` // build, push, run, inspect.
+	Build            *ContainerBuildStep     `yaml:"-" json:"build,omitempty" mapstructure:"build"`
+	Push             *ContainerPushStep      `yaml:"-" json:"push,omitempty" mapstructure:"push"`
+	Run              *ContainerRunStep       `yaml:"-" json:"run,omitempty" mapstructure:"run"`
+	Inspect          *ContainerInspectStep   `yaml:"-" json:"inspect,omitempty" mapstructure:"inspect"`
+	RuntimeAutoStart bool                    `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	Runtime          *ContainerRuntimeConfig `yaml:"runtime,omitempty" json:"runtime,omitempty" mapstructure:"runtime"`       // Inline per-step runtime block (e.g. runtime.host for Docker-out-of-Docker).
+	Provider         string                  `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // docker, podman, or empty for auto-detect.
+	Container        *WorkflowContainer      `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"` // Workflow container override or false to run on host.
 
 	// Emulator step fields.
 	Component string `yaml:"component,omitempty" json:"component,omitempty" mapstructure:"component"` // Emulator component name to operate on (emulator step type).

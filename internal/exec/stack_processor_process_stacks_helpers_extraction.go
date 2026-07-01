@@ -97,8 +97,8 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
-	// Terraform-specific: extract hooks section.
-	if opts.ComponentType == cfg.TerraformComponentType {
+	// Extract hooks section for component types with lifecycle hooks.
+	if supportsComponentHooks(opts.ComponentType) {
 		if i, ok := opts.ComponentMap[cfg.HooksSectionName]; ok {
 			componentHooks, ok := i.(map[string]any)
 			if !ok {
@@ -152,10 +152,8 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentRetry = componentRetry
 	}
 
-	// Extract provision section (for workdir provisioning) for terraform, helmfile, and packer.
-	if opts.ComponentType == cfg.TerraformComponentType ||
-		opts.ComponentType == cfg.HelmfileComponentType ||
-		opts.ComponentType == cfg.PackerComponentType {
+	// Extract provision section (for workdir provisioning).
+	if supportsSourceProvision(opts.ComponentType) {
 		if i, ok := opts.ComponentMap[cfg.ProvisionSectionName]; ok {
 			componentProvision, ok := i.(map[string]any)
 			if !ok {
@@ -227,10 +225,8 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
-	// Extract source configuration for terraform, helmfile, and packer components.
-	if opts.ComponentType == cfg.TerraformComponentType ||
-		opts.ComponentType == cfg.HelmfileComponentType ||
-		opts.ComponentType == cfg.PackerComponentType {
+	// Extract source configuration.
+	if supportsSourceProvision(opts.ComponentType) {
 		if i, ok := opts.ComponentMap[cfg.SourceSectionName]; ok {
 			componentSourceSection, ok := normalizeComponentSourceSection(i)
 			if !ok {
@@ -251,8 +247,8 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentCommand = componentCommand
 	}
 
-	// Terraform-specific: extract generate section for file generation.
-	if opts.ComponentType == cfg.TerraformComponentType {
+	// Extract generate section for file generation.
+	if supportsGenerate(opts.ComponentType) {
 		if i, ok := opts.ComponentMap[cfg.GenerateSectionName]; ok {
 			componentGenerate, ok := i.(map[string]any)
 			if !ok {
@@ -264,7 +260,51 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Kubernetes-specific manifest/render sections.
+	if opts.ComponentType == cfg.KubernetesComponentType {
+		if i, ok := opts.ComponentMap[cfg.ProviderSectionName]; ok {
+			componentProvider, ok := i.(string)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.provider' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentProvider = componentProvider
+		}
+
+		if i, ok := opts.ComponentMap[cfg.PathsSectionName]; ok {
+			result.ComponentPaths = i
+		}
+
+		if i, ok := opts.ComponentMap[cfg.ManifestsSectionName]; ok {
+			result.ComponentManifests = i
+		}
+
+		if i, ok := opts.ComponentMap[cfg.RenderSectionName]; ok {
+			componentRender, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.render' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentRender = componentRender
+		}
+	}
+
 	return nil
+}
+
+func supportsComponentHooks(componentType string) bool {
+	return componentType == cfg.TerraformComponentType || componentType == cfg.KubernetesComponentType
+}
+
+func supportsGenerate(componentType string) bool {
+	return componentType == cfg.TerraformComponentType || componentType == cfg.KubernetesComponentType
+}
+
+func supportsSourceProvision(componentType string) bool {
+	switch componentType {
+	case cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType, cfg.KubernetesComponentType:
+		return true
+	default:
+		return false
+	}
 }
 
 // sourceURIKey is the field name for the go-getter URI within a component `source` map.

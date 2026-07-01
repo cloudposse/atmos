@@ -1,7 +1,7 @@
 ---
 title: Job Summaries
 sidebar_label: Job Summaries
-description: Rich Markdown job summaries for Terraform plan, apply, and test operations
+description: Rich Markdown job summaries for Terraform plan, apply, test, and Kubernetes operations
 id: job-summaries
 slug: /ci/job-summaries
 ---
@@ -11,7 +11,9 @@ import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 When CI mode is enabled, Atmos writes rich Markdown summaries to `$GITHUB_STEP_SUMMARY` with
-resource badges, collapsible diffs, and clear warnings about destructive changes.
+resource badges, collapsible diffs, and clear warnings about destructive changes for Terraform.
+Kubernetes components write compact object-action summaries for render, plan/diff, apply/deploy,
+delete, and validate.
 </Intro>
 
 <Experimental />
@@ -80,6 +82,31 @@ terraform outputs that were produced.
 table (✅ pass, ❌ fail, ⏭️ skip), and inlines the failing assertions. This pairs naturally with
 [emulators](/stacks/components/emulator): point `terraform test` at a local emulator and the
 apply-backed `run` blocks execute — and report — entirely in CI without a cloud account.
+
+## Kubernetes Summary
+
+Kubernetes summaries are intentionally smaller than Terraform summaries. They are designed for
+humans reading the CI run, not for downstream workflow conditionals.
+
+For Kubernetes commands, Atmos writes:
+
+- `render`: rendered object count and object list
+- `plan` / `diff`: created, changed, and no-change object counts, plus a collapsible
+  **Kubernetes Diff** block with the per-object unified diff (GitHub renders the `+`/`-` lines
+  in green/red)
+- `apply` / `deploy`: applied or delivered object counts
+- `delete`: deleted and not-found object counts
+- `validate`: valid and invalid object counts
+- failures: an error section with the command failure
+
+The `plan`/`diff` diff is computed from the server-side dry-run against live cluster state, with
+server-managed noise (`managedFields`, `resourceVersion`, `status`, …) stripped. `Secret`
+objects are **omitted** from the diff so their data is never written to the (unmasked) job
+summary; they still appear in the object list with their action. Large diffs are truncated to
+their tail to stay within the platform job-summary size limit.
+
+Kubernetes CI summaries do not emit `$GITHUB_OUTPUT` variables, commit statuses, PR comments, or
+stored artifacts in v1.
 
 ## Configuration
 

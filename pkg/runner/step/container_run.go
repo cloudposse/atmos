@@ -160,6 +160,7 @@ func (h *ContainerHandler) buildRunConfig(ctx context.Context, step *schema.Work
 		RunArgs:           run.RunArgs,
 		PullPolicy:        run.Pull,
 		CleanupPolicy:     run.Cleanup,
+		Host:              runtimeHost(run.Runtime),
 		TTY:               step.Tty,
 		Interactive:       step.Interactive,
 		Labels: map[string]string{
@@ -187,7 +188,22 @@ func effectiveRunStep(step *schema.WorkflowStep) schema.ContainerRunStep {
 		run.Provider = step.Provider
 	}
 	run.RuntimeAutoStart = run.RuntimeAutoStart || step.RuntimeAutoStart
+	// Merge the inline step-level `runtime` block over the `run.runtime` block for
+	// host access. Copy rather than mutate the shared pointer from step.Run.Runtime.
+	if step.Runtime != nil && step.Runtime.Host && !runtimeHost(run.Runtime) {
+		merged := schema.ContainerRuntimeConfig{}
+		if run.Runtime != nil {
+			merged = *run.Runtime
+		}
+		merged.Host = true
+		run.Runtime = &merged
+	}
 	return run
+}
+
+// runtimeHost reports whether a runtime config requests host-runtime access.
+func runtimeHost(rt *schema.ContainerRuntimeConfig) bool {
+	return rt != nil && rt.Host
 }
 
 func resolveWorkDir(vars *Variables, step *schema.WorkflowStep) (string, error) {

@@ -112,7 +112,7 @@ func findAffectedParallel(
 // processStackAffected processes a single stack to find affected components.
 // This function is called in parallel for each stack.
 //
-//nolint:funlen,revive // Component type processing requires separate sections for Terraform, Helmfile, and Packer
+//nolint:funlen,revive // Component type processing requires separate sections for supported component types
 func processStackAffected(
 	stackName string,
 	stackSection any,
@@ -195,6 +195,26 @@ func processStackAffected(
 			return nil, err
 		}
 		affected = append(affected, packerAffected...)
+	}
+
+	// Process Kubernetes components.
+	if kubernetesSection, ok := componentsSection[cfg.KubernetesComponentType].(map[string]any); ok {
+		kubernetesAffected, err := processKubernetesComponentsIndexed(
+			stackName,
+			kubernetesSection,
+			remoteStacks,
+			currentStacks,
+			atmosConfig,
+			filesIndex,
+			patternCache,
+			includeSpaceliftAdminStacks,
+			includeSettings,
+			excludeLocked,
+		)
+		if err != nil {
+			return nil, err
+		}
+		affected = append(affected, kubernetesAffected...)
 	}
 
 	return affected, nil

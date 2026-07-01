@@ -713,7 +713,13 @@ func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
 		BaseComponentRemoteStateBackendSection: map[string]any{"s3": map[string]any{"bucket": "tfstate-remote"}},
 		BaseComponentSourceSection:             map[string]any{"uri": "github.com/example/repo"},
 		BaseComponentProvisionSection:          map[string]any{"enabled": true},
-		ComponentInheritanceChain:              []string{"base", "abstract"},
+		// Kubernetes-specific fields: Provider is scalar (struct-literal copy),
+		// Paths/Manifests are `any` (deepCopyComponentAnySection), Render is a map.
+		BaseComponentProvider:     "kustomize",
+		BaseComponentPaths:        []any{"base/deployment.yaml", "base/service.yaml"},
+		BaseComponentManifests:    map[string]any{"deployment": "base/deployment.yaml"},
+		BaseComponentRender:       map[string]any{"engine": "kustomize"},
+		ComponentInheritanceChain: []string{"base", "abstract"},
 	}
 	cacheBaseComponentConfig("roundtrip-key", src)
 
@@ -759,6 +765,18 @@ func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
 	assert.Equal(t, "github.com/example/repo", cached.BaseComponentSourceSection["uri"])
 	assert.True(t, cached.BaseComponentProvisionSection["enabled"].(bool))
 
+	// Kubernetes-specific fields round-trip too.
+	assert.Equal(t, "kustomize", cached.BaseComponentProvider)
+	cachedPaths, ok := cached.BaseComponentPaths.([]any)
+	require.True(t, ok, "BaseComponentPaths should round-trip as a slice")
+	require.Len(t, cachedPaths, 2)
+	assert.Equal(t, "base/deployment.yaml", cachedPaths[0])
+	assert.Equal(t, "base/service.yaml", cachedPaths[len(cachedPaths)-1])
+	cachedManifests, ok := cached.BaseComponentManifests.(map[string]any)
+	require.True(t, ok, "BaseComponentManifests should round-trip as a map")
+	assert.Equal(t, "base/deployment.yaml", cachedManifests["deployment"])
+	assert.Equal(t, "kustomize", cached.BaseComponentRender["engine"])
+
 	// The slice round-trips too.
 	require.NotNil(t, chain)
 	assert.Equal(t, []string{"base", "abstract"}, *chain)
@@ -771,4 +789,105 @@ func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
 	require.NotNil(t, second)
 	assert.Equal(t, "prod", second.BaseComponentLocals["stage"],
 		"mutating a retrieved cached value must not affect subsequent retrievals")
+}
+
+// TestDeepCopyComponentAnySection exercises every branch of
+// deepCopyComponentAnySection: map[string]any, []any (recursive), []string
+// (shallow copy), primitive/passthrough, and nil. For the container branches it
+// verifies isolation in BOTH directions per the project's testing conventions:
+// mutating the copy must not affect the source, and mutating the source after the
+// copy must not affect the copy.
+func TestDeepCopyComponentAnySection(t *testing.T) {
+	t.Run("nil passes through as nil", func(t *testing.T) {
+		got, err := deepCopyComponentAnySection(nil)
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("string primitive passes through unchanged", func(t *testing.T) {
+		got, err := deepCopyComponentAnySection("hello")
+		require.NoError(t, err)
+		assert.Equal(t, "hello", got)
+	})
+
+	t.Run("int primitive passes through unchanged", func(t *testing.T) {
+		got, err := deepCopyComponentAnySection(42)
+		require.NoError(t, err)
+		assert.Equal(t, 42, got)
+	})
+
+	t.Run("bool primitive passes through unchanged", func(t *testing.T) {
+		got, err := deepCopyComponentAnySection(true)
+		require.NoError(t, err)
+		assert.Equal(t, true, got)
+	})
+
+	t.Run("map[string]any is deep-copied and isolated both directions", func(t *testing.T) {
+		src := map[string]any{
+			"engine": "kustomize",
+			"nested": map[string]any{"key": "original"},
+		}
+		got, err := deepCopyComponentAnySection(src)
+		require.NoError(t, err)
+
+		copied, ok := got.(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "kustomize", copied["engine"])
+		assert.Equal(t, "original", copied["nested"].(map[string]any)["key"])
+
+		// copy -> src isolation: mutating the copy must not affect the source.
+		copied["nested"].(map[string]any)["key"] = "copy-mutated"
+		assert.Equal(t, "original", src["nested"].(map[string]any)["key"],
+			"mutating the copy must not affect the source")
+
+		// src -> copy isolation: mutating the source after the copy must not affect the copy.
+		src["nested"].(map[string]any)["key"] = "src-mutated"
+		assert.Equal(t, "copy-mutated", copied["nested"].(map[string]any)["key"],
+			"mutating the source after the copy must not affect the copy")
+	})
+
+	t.Run("[]any is deep-copied recursively and isolated both directions", func(t *testing.T) {
+		src := []any{
+			"a/b.yaml",
+			map[string]any{"deployment": "original"},
+		}
+		got, err := deepCopyComponentAnySection(src)
+		require.NoError(t, err)
+
+		copied, ok := got.([]any)
+		require.True(t, ok)
+		require.Len(t, copied, 2)
+		assert.Equal(t, "a/b.yaml", copied[0])
+		assert.Equal(t, "original", copied[1].(map[string]any)["deployment"])
+
+		// copy -> src isolation.
+		copied[1].(map[string]any)["deployment"] = "copy-mutated"
+		assert.Equal(t, "original", src[1].(map[string]any)["deployment"],
+			"mutating the copy must not affect the source")
+
+		// src -> copy isolation.
+		src[1].(map[string]any)["deployment"] = "src-mutated"
+		assert.Equal(t, "copy-mutated", copied[1].(map[string]any)["deployment"],
+			"mutating the source after the copy must not affect the copy")
+	})
+
+	t.Run("[]string is shallow-copied into a new backing array", func(t *testing.T) {
+		src := []string{"first", "middle", "last"}
+		got, err := deepCopyComponentAnySection(src)
+		require.NoError(t, err)
+
+		copied, ok := got.([]string)
+		require.True(t, ok)
+		require.Len(t, copied, 3)
+		assert.Equal(t, "first", copied[0])
+		assert.Equal(t, "last", copied[len(copied)-1])
+
+		// The slice header is independent: mutating the copy element does not
+		// reach back into the source, and vice versa.
+		copied[0] = "copy-mutated"
+		assert.Equal(t, "first", src[0], "mutating the copy must not affect the source")
+
+		src[1] = "src-mutated"
+		assert.Equal(t, "middle", copied[1], "mutating the source must not affect the copy")
+	})
 }

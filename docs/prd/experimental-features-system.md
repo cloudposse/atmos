@@ -183,6 +183,7 @@ The following commands are marked as experimental:
 | `atmos terraform backend` | Terraform state backend management |
 | `atmos terraform workdir` | Component working directory management |
 | `atmos list affected` | Identify changes for targeted CI/CD |
+| `atmos kubernetes` | Manage Kubernetes-native components |
 
 ## Implementation Details
 

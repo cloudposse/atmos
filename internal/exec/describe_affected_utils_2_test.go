@@ -226,6 +226,92 @@ func TestAddAffectedSpaceliftAdminStack_WithValidConfig(t *testing.T) {
 	assert.True(t, found, "Spacelift admin stack should be added to affected list")
 }
 
+func TestAddAffectedSpaceliftAdminStack_IgnoresMissingTemplateValues(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Stacks: schema.Stacks{
+			NameTemplate: "{{ .vars.environment }}-{{ .vars.stage }}-{{ .vars.missing }}",
+		},
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				IgnoreMissingTemplateValues: true,
+			},
+		},
+	}
+
+	stackName := "tenant1-ue2-dev"
+	componentName := "app"
+	adminComponentName := "spacelift-admin"
+	affectedList := []schema.Affected{{
+		Component:     componentName,
+		Stack:         stackName,
+		ComponentType: "terraform",
+		Affected:      "test",
+	}}
+	settingsSection := map[string]any{
+		"spacelift": map[string]any{
+			"admin_stack_selector": map[string]string{
+				"component":   adminComponentName,
+				"environment": "ue2",
+				"stage":       "admin",
+			},
+		},
+	}
+	stacks := map[string]any{
+		"ue2-admin-<no value>": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					adminComponentName: map[string]any{
+						"vars": map[string]any{
+							"environment": "ue2",
+							"stage":       "admin",
+							"component":   adminComponentName,
+						},
+						"settings": map[string]any{
+							"spacelift": map[string]any{
+								"workspace_enabled": true,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{
+			"vars": map[string]any{
+				"environment": "ue2",
+				"stage":       "admin",
+			},
+		},
+	}
+
+	result, err := addAffectedSpaceliftAdminStack(
+		atmosConfig,
+		&affectedList,
+		&settingsSection,
+		&stacks,
+		stackName,
+		componentName,
+		configAndStacksInfo,
+		true,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, *result, 2)
+
+	found := false
+	for _, affected := range *result {
+		if affected.Component == adminComponentName &&
+			affected.Stack == "ue2-admin-<no value>" &&
+			affected.ComponentType == "terraform" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected spacelift admin stack to be added even with ignored missing template values")
+}
+
 func TestIsComponentFolderChanged(t *testing.T) {
 	// Create a temporary directory for testing
 	tempDir := t.TempDir()

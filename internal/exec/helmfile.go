@@ -378,6 +378,10 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		log.Debug(v)
 	}
 
+	// Resolve the helmfile binary through the toolchain environment so a
+	// toolchain-installed helmfile (under the install path, not the system PATH)
+	// is found — mirroring the `version` subcommand above. Falls back to the bare
+	// command name when no toolchain dependency provides it.
 	err = ExecuteShellCommand(
 		atmosConfig,
 		tenv.Resolve(info.Command),
