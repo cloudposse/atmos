@@ -24,7 +24,7 @@ components:
           helm: "v3.21.2"
           kubectl: "1.31.3"
           # The nginx release's AnnotationsTransformer runs through kustomize.
-          kustomize: "v5.4.3"
+          kustomize: "5.4.3"
       vars:
         image:
           tag: "latest"

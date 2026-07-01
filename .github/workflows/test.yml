@@ -492,7 +492,9 @@ jobs:
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
         run: |
-          brew untap aws/tap || true
+          if brew tap | grep -qx 'aws/tap'; then
+            brew untap aws/tap
+          fi
           brew install colima docker qemu
           colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20
           docker version
@@ -517,7 +519,9 @@ jobs:
       - name: Install kubectl and helmfile on macOS
         if: matrix.flavor.target == 'macos'
         run: |
-          brew untap aws/tap || true
+          if brew tap | grep -qx 'aws/tap'; then
+            brew untap aws/tap
+          fi
           brew install kubectl helmfile
 
       - name: Install Helm

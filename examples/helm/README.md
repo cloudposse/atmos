@@ -5,14 +5,27 @@ A minimal, credential-free example of a native Helm component. The chart lives i
 
 ## Test
 
-`atmos test` is the CI-backed smoke test for this example. It creates a temporary
-Helm chart repository from the local demo chart, verifies `atmos helm repo list`,
-starts a local K3s emulator, deploys the repository-backed Helm release into it,
-verifies the Deployment and Service, uninstalls the release, and tears everything
-down.
+`atmos test` is the CI-backed smoke test for this example. It validates the
+stacks, renders the local demo chart, starts a local K3s emulator, diffs and
+deploys the release into it, verifies the Deployment and Service, uninstalls the
+release, and tears the emulator down.
 
 ```shell
 atmos test
+```
+
+The command runs the same local chart workflow documented below:
+
+```shell
+atmos validate stacks
+atmos helm template demo -s dev
+atmos emulator up kubernetes -s dev
+atmos helm diff demo -s dev --identity local-k3s
+atmos helm apply demo -s dev --identity local-k3s
+atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
+atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
+atmos helm delete demo -s dev --identity local-k3s
+atmos emulator down kubernetes -s dev
 ```
 
 ## Render (no cluster, no credentials)
