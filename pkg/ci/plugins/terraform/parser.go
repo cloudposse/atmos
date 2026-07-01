@@ -653,13 +653,10 @@ func ParseTestOutput(output string) *plugin.OutputResult {
 	return result
 }
 
-// isJSONStream reports whether output looks like a `test -json` stream (the
-// first non-whitespace byte is `{`).
+// isJSONStream reports whether output contains Terraform/OpenTofu `test -json`
+// event lines. The captured stream may include init/workspace preamble before
+// JSON starts, so it scans line by line for event objects.
 func isJSONStream(output string) bool {
-	// The captured stream is usually prefixed with terraform init/workspace
-	// preamble (human text) before the `-json` event lines begin, so scan each
-	// line for a JSON object carrying terraform's `@level` field rather than only
-	// checking the first non-blank character.
 	for _, line := range strings.Split(output, "\n") {
 		trimmed := strings.TrimLeft(line, " \t\r")
 		if strings.HasPrefix(trimmed, "{") && strings.Contains(trimmed, `"@level"`) {

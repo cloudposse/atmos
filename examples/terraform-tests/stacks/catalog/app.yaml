@@ -45,4 +45,6 @@ components:
               action: down
       vars:
         name: atmos-demo
-        fixture_vpc_name: atmos-fixture-vpc
+      test:
+        vars:
+          fixture_vpc_name: atmos-fixture-vpc

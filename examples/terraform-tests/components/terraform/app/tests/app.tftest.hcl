@@ -16,9 +16,8 @@ variable "fixture_vpc_id" {
 }
 
 variables {
-  name             = "atmos-demo"
-  environment      = "test"
-  fixture_vpc_name = "atmos-fixture-vpc"
+  name        = "atmos-demo"
+  environment = "test"
 }
 
 # Static validation — runs as `plan`, no infrastructure created.

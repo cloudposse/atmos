@@ -439,6 +439,15 @@ func TestMergeComponentConfigurations_TerraformTestSection(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "vpc-from-component", testVars["fixture_vpc_id"])
 	assert.Equal(t, "base", testVars["base_only"])
+
+	testVars["fixture_vpc_id"] = "merged-mutated"
+	assert.Equal(t, "vpc-from-component", res.ComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"],
+		"mutating merged test vars must not mutate the component source map")
+
+	res.BaseComponentTest[cfg.VarsSectionName].(map[string]any)["base_only"] = "source-mutated"
+	res.ComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"] = "source-mutated"
+	assert.Equal(t, "base", testVars["base_only"], "mutating source maps after merge must not mutate merged test vars")
+	assert.Equal(t, "merged-mutated", testVars["fixture_vpc_id"], "mutating source maps after merge must not mutate merged test vars")
 }
 
 func TestMergeComponentConfigurations_TerraformTestSectionOmittedWhenEmpty(t *testing.T) {

@@ -107,6 +107,7 @@ func TestManifestSchema_TerraformTestFixturesHookShape(t *testing.T) {
 		"website":       loadWebsiteSchemaBytes(t),
 		"fixture":       loadFixtureSchemaBytes(t),
 		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
+		"stack-config":  loadStackConfigSchemaBytes(t),
 	}
 
 	for schemaName, schemaData := range schemas {

@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -58,8 +57,6 @@ const (
 )
 
 var listArtifactsRetryBaseDelay = time.Second
-
-var errListArtifactsStatus = errors.New("list artifacts returned unsuccessful status")
 
 // artifactUploader handles the GitHub Actions runtime API calls for artifact upload.
 // This is extracted as an interface for testability.
@@ -477,7 +474,7 @@ func (s *Store) listArtifactsOnce(ctx context.Context, perPage, page int) (*list
 		body, _ := io.ReadAll(resp.Body)
 		return &listArtifactsAttemptResult{
 			retryable: isRetryableListArtifactsStatus(resp.StatusCode),
-		}, fmt.Errorf("%w: status %d: %s", errListArtifactsStatus, resp.StatusCode, string(body))
+		}, fmt.Errorf("%w: status %d: %s", errUtils.ErrArtifactListFailed, resp.StatusCode, string(body))
 	}
 
 	var result listArtifactsResponse
