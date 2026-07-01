@@ -57,27 +57,36 @@ func (h *CastHandler) Validate(step *schema.WorkflowStep) error {
 	mode := castMode(step)
 	switch mode {
 	case "steps":
-		if len(step.Steps) == 0 {
-			return fmt.Errorf(wrappedQuotedErrorFormat, ErrCastStepRequiresSteps, step.Name)
-		}
-		for i := range step.Steps {
-			if step.Steps[i].Type == schema.TaskTypeSimulate {
-				if err := validateCastSimulateStep(&step.Steps[i]); err != nil {
-					return fmt.Errorf("cast simulate step %d: %w", i+1, err)
-				}
-			}
-		}
+		return validateCastStepsMode(step)
 	case "session":
-		if len(step.Steps) == 0 {
-			return fmt.Errorf(wrappedQuotedErrorFormat, ErrCastSessionRequiresActions, step.Name)
-		}
-		for i := range step.Steps {
-			if err := validateCastSessionAction(&step.Steps[i]); err != nil {
-				return fmt.Errorf("cast session action %d: %w", i+1, err)
-			}
-		}
+		return validateCastSessionMode(step)
 	default:
 		return fmt.Errorf("%w: %q mode %q", ErrInvalidCastMode, step.Name, step.Mode)
+	}
+}
+
+func validateCastStepsMode(step *schema.WorkflowStep) error {
+	if len(step.Steps) == 0 {
+		return fmt.Errorf(wrappedQuotedErrorFormat, ErrCastStepRequiresSteps, step.Name)
+	}
+	for i := range step.Steps {
+		if step.Steps[i].Type == schema.TaskTypeSimulate {
+			if err := validateCastSimulateStep(&step.Steps[i]); err != nil {
+				return fmt.Errorf("cast simulate step %d: %w", i+1, err)
+			}
+		}
+	}
+	return nil
+}
+
+func validateCastSessionMode(step *schema.WorkflowStep) error {
+	if len(step.Steps) == 0 {
+		return fmt.Errorf(wrappedQuotedErrorFormat, ErrCastSessionRequiresActions, step.Name)
+	}
+	for i := range step.Steps {
+		if err := validateCastSessionAction(&step.Steps[i]); err != nil {
+			return fmt.Errorf("cast session action %d: %w", i+1, err)
+		}
 	}
 	return nil
 }

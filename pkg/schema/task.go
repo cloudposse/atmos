@@ -42,6 +42,11 @@ const (
 	TaskTypeCancel = "cancel"
 )
 
+const (
+	taskMapKeyPrompt = "prompt"
+	taskMapKeySteps  = "steps"
+)
+
 // Sentinel errors for task validation.
 var (
 	// ErrTaskInvalidFormat is returned when a task has an invalid format.
@@ -689,7 +694,7 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 }
 
 func normalizeTaskStepsMap(m map[string]any) (map[string]any, error) {
-	steps, ok := m["steps"]
+	steps, ok := m[taskMapKeySteps]
 	if !ok {
 		return m, nil
 	}
@@ -701,7 +706,7 @@ func normalizeTaskStepsMap(m map[string]any) (map[string]any, error) {
 	for key, val := range m {
 		copied[key] = val
 	}
-	copied["steps"] = normalized
+	copied[taskMapKeySteps] = normalized
 	return copied, nil
 }
 
@@ -731,7 +736,7 @@ func normalizeWorkflowStepMap(m map[string]any) (map[string]any, error) {
 	for key, val := range m {
 		copied[key] = val
 	}
-	if prompt, ok := copied["prompt"]; ok {
+	if prompt, ok := copied[taskMapKeyPrompt]; ok {
 		switch v := prompt.(type) {
 		case string:
 		case map[string]any:
@@ -739,21 +744,21 @@ func normalizeWorkflowStepMap(m map[string]any) (map[string]any, error) {
 				return nil, fmt.Errorf("%w: structured prompt is supported only for type %q", ErrWorkflowControlStepInvalid, TaskTypeSimulate)
 			}
 			copied["simulate_prompt"] = v
-			delete(copied, "prompt")
+			delete(copied, taskMapKeyPrompt)
 		}
 	}
-	if steps, ok := copied["steps"]; ok {
+	if steps, ok := copied[taskMapKeySteps]; ok {
 		normalizedSteps, err := normalizeWorkflowStepMaps(steps)
 		if err != nil {
 			return nil, err
 		}
-		copied["steps"] = normalizedSteps
+		copied[taskMapKeySteps] = normalizedSteps
 	}
 	return copied, nil
 }
 
 func normalizeTaskPromptMap(m map[string]any, task *Task) (map[string]any, error) {
-	prompt, ok := m["prompt"]
+	prompt, ok := m[taskMapKeyPrompt]
 	if !ok {
 		return m, nil
 	}
@@ -779,7 +784,7 @@ func normalizeTaskPromptMap(m map[string]any, task *Task) (map[string]any, error
 		task.SimulatePrompt = &cfg
 		copied := make(map[string]any, len(m)-1)
 		for key, val := range m {
-			if key == "prompt" {
+			if key == taskMapKeyPrompt {
 				continue
 			}
 			copied[key] = val

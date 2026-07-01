@@ -76,28 +76,31 @@ func TestSafePTYSizeBounds(t *testing.T) {
 }
 
 func TestKeySequenceAliasesAndLiteralCharacters(t *testing.T) {
-	tests := map[string]string{
-		"enter":     "\r",
-		" Return ":  "\r",
-		"tab":       "\t",
-		"esc":       "\x1b",
-		"escape":    "\x1b",
-		"backspace": "\x7f",
-		"space":     " ",
-		"up":        "\x1b[A",
-		"down":      "\x1b[B",
-		"right":     "\x1b[C",
-		"left":      "\x1b[D",
-		"x":         "x",
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "enter", want: "\r"},
+		{input: " Return ", want: "\r"},
+		{input: "tab", want: "\t"},
+		{input: "esc", want: "\x1b"},
+		{input: "escape", want: "\x1b"},
+		{input: "backspace", want: "\x7f"},
+		{input: "space", want: " "},
+		{input: "up", want: "\x1b[A"},
+		{input: "down", want: "\x1b[B"},
+		{input: "right", want: "\x1b[C"},
+		{input: "left", want: "\x1b[D"},
+		{input: "x", want: "x"},
 	}
 
-	for input, want := range tests {
-		got, err := keySequence(input)
+	for _, tt := range tests {
+		got, err := keySequence(tt.input)
 		if err != nil {
-			t.Fatalf("keySequence(%q) error: %v", input, err)
+			t.Fatalf("keySequence(%q) error: %v", tt.input, err)
 		}
-		if got != want {
-			t.Fatalf("keySequence(%q) = %q, want %q", input, got, want)
+		if got != tt.want {
+			t.Fatalf("keySequence(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
