@@ -987,7 +987,7 @@ html[data-theme="light"] .landing-page .lp-workload-visual .terminal {
   }
 
   .lp-hero-valueprops {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     align-items: flex-start;
     gap: 0.25rem;
     min-width: 0;
@@ -1000,8 +1000,8 @@ html[data-theme="light"] .landing-page .lp-workload-visual .terminal {
   }
 
   .lp-hero-clouds {
-    flex: 0 0 auto;
-    justify-content: flex-start;
+    flex: 1 1 auto;
+    justify-content: center;
     gap: 0.7rem;
     max-width: 100%;
   }
