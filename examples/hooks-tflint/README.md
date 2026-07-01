@@ -1,42 +1,48 @@
 # `hooks-tflint`
 
-Demonstrates the **`tflint`** hook kind: an `after.terraform.plan` hook that
-runs [tflint](https://github.com/terraform-linters/tflint) against the
-component and renders a SARIF findings summary in the terminal.
+Demonstrates the **`tflint`** hook kind: a `before.terraform.init` hook that
+lints a component with [tflint](https://github.com/terraform-linters/tflint)
+and renders a SARIF findings summary in the terminal.
+
+## Why lint
+
+`terraform validate` only proves your config parses and is internally
+consistent. A linter goes further — it enforces **team conventions** and
+**code consistency**, and catches **hygiene** problems that otherwise rot a
+codebase: unused variables and outputs, deprecated syntax, invalid instance
+types, and missing version constraints. Running it as a hook makes those
+standards automatic on every run, locally and in CI, instead of relying on
+reviewers to catch them.
 
 ## What this shows
 
-- `kind: tflint` with **zero configuration** — the kind's defaults supply
-  the binary name, args (`--chdir=$ATMOS_COMPONENT_PATH --format=sarif`),
-  failure mode (`warn`), and the shared SARIF result handler.
-- tflint has no file-output flag — `--format=sarif` writes to **stdout** — so
-  the kind opts into the engine's `CaptureStdout` behavior, which redirects
-  stdout into `$ATMOS_OUTPUT_FILE`. From there it's identical to
-  `trivy`/`checkov`/`kics`.
-- Single markdown rendering used in the terminal and on the Pro run page (the
-  same `pkg/hooks/sarif` parser serves every scanner kind). In CI, the same
-  findings also become a `$GITHUB_STEP_SUMMARY` block, inline PR annotations,
-  and a GitHub Code Scanning upload — automatically, gated by your `ci.*`
-  config.
+- `kind: tflint` with **zero configuration** — the kind's defaults supply the
+  binary name, args (`--chdir=$ATMOS_COMPONENT_PATH --format=sarif`), failure
+  mode (`warn`), and the shared SARIF result handler.
+- Linting on `before.terraform.init` — a linter should **fail fast**, before
+  any init/plan work. tflint reads static HCL, so it needs no prior init or
+  plan (and no cloud credentials).
+- The component is a provider-free `terraform_data` resource, so it lints and
+  plans fully offline. The intentionally-unused `unused` variable gives tflint
+  a deterministic finding (`terraform_unused_declarations`).
 
 ## Requirements
 
 - `tofu` (OpenTofu) on PATH.
 - `tflint` on PATH (e.g., `brew install tflint`). The builtin `terraform`
   ruleset needs no `tflint --init`; provider rulesets (aws/google/azurerm) do.
-- **No real cloud credentials needed** — tflint parses HCL directly.
+- **No cloud credentials** — nothing here touches a real provider.
 
 ## Run
 
 ```bash
-atmos terraform plan bucket -s test
+atmos terraform plan example -s test
 ```
 
-Expected: plan runs, then tflint runs and flags the intentionally-unused
-`unused` variable (`terraform_unused_declarations`); the plan proceeds
-(`on_failure: warn`).
+Expected: tflint runs first (before init) and flags the unused `unused`
+variable; the command then proceeds (`on_failure: warn`).
 
 ## Files
 
-- `components/terraform/bucket/variables.tf` — declares an unused variable so
+- `components/terraform/example/variables.tf` — declares an unused variable so
   tflint has a deterministic finding.

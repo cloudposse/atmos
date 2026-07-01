@@ -1,6 +1,6 @@
 variable "environment" {
   type        = string
-  description = "Environment tag."
+  description = "Fed into the example resource."
 }
 
 # Atmos passes stack-level vars (stage) into the tfvars file; declaring

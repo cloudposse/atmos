@@ -746,6 +746,7 @@ var (
 	// File operation errors.
 	ErrCopyFile            = errors.New("failed to copy file")
 	ErrCreateDirectory     = errors.New("failed to create directory")
+	ErrCreateFile          = errors.New("failed to create file")
 	ErrOpenFile            = errors.New("failed to open file")
 	ErrWriteFile           = errors.New("failed to write to file")
 	ErrStatFile            = errors.New("failed to stat file")

@@ -1,23 +1,29 @@
 ---
 slug: tflint-hook-kind
-title: "Lint Terraform on Every Plan with the tflint Hook Kind"
+title: "Enforce Terraform Conventions with the tflint Hook Kind"
 authors: [osterman]
-tags: [feature, security]
+tags: [feature, dx]
 ---
 
-Terraform errors that the compiler happily accepts — unused declarations, deprecated syntax, invalid instance types, missing provider constraints — usually surface late: in code review, in CI, or after a bad apply. Atmos already runs security scanners (Checkov, Trivy, KICS) as component hooks, but there was no built-in way to run a **linter** the same way.
+Consistent, idiomatic Terraform doesn't happen by accident — it takes a linter enforcing the same conventions on every component, every run. Atmos already runs security and cost scanners as component hooks; now it runs a **linter** the same way, with a built-in `tflint` hook kind.
 
 <!--truncate-->
 
 ## The Problem
 
-`terraform validate` only checks that your configuration is internally consistent — it won't tell you a variable is declared but never used, that you're on deprecated interpolation syntax, or that an `instance_type` doesn't exist. [tflint](https://github.com/terraform-linters/tflint) catches exactly those things, but wiring it into every component meant a custom `kind: command` hook per stack, plus figuring out how to get its output to render.
+`terraform validate` only proves your configuration parses and is internally consistent. It says nothing about the things that keep a growing codebase healthy:
 
-There was also a mechanical snag. The security scanners all write their SARIF report to a file (`--output $ATMOS_OUTPUT_FILE`), which is how Atmos picks it up. tflint has **no file-output flag** — `tflint --format=sarif` writes to **stdout**. So a first-class tflint kind needed the hook engine to learn one new trick: capture a tool's stdout.
+- **Code consistency & conventions** — naming, formatting, and required version constraints, applied uniformly across every component and every contributor.
+- **Hygiene** — unused variables, outputs, and locals; deprecated interpolation syntax; provider settings that will bite you later.
+- **Correctness `validate` misses** — invalid instance types, unsupported arguments, and other provider-specific mistakes.
+
+[tflint](https://github.com/terraform-linters/tflint) checks all of that. But without a first-class integration, enforcing it meant a hand-rolled `kind: command` hook in every stack — and figuring out how to get its output to render. Worse, standards that aren't automated quietly become optional: they hold only as long as a reviewer remembers to look.
+
+There was also a mechanical snag. The security scanners write their SARIF report to a file (`--output $ATMOS_OUTPUT_FILE`), which is how Atmos picks it up. tflint has **no file-output flag** — `tflint --format=sarif` writes to **stdout**. So a first-class tflint kind needed the hook engine to learn one new trick: capture a tool's stdout.
 
 ## The Solution
 
-A built-in `tflint` hook kind — zero configuration:
+A built-in `tflint` hook kind — zero configuration. Wire it on `before.terraform.init` so a lint failure stops you *before* any init/plan work, the way a fast-failing linter should:
 
 ```yaml
 components:
@@ -25,7 +31,7 @@ components:
     vpc:
       hooks:
         lint:
-          events: [after.terraform.plan]
+          events: [before.terraform.init]
           kind: tflint
 ```
 
@@ -45,12 +51,12 @@ And because it produces SARIF through the shared handler, tflint automatically i
        tflint: "0.59.1"
    ```
 
-2. Add the hook to a component and plan:
+2. Add the hook to a component and run any Terraform command:
 
    ```bash
    atmos terraform plan vpc -s test
    ```
 
-tflint runs after the plan and renders its findings. The builtin `terraform` ruleset needs no setup; for provider rulesets (aws/google/azurerm) add a `.tflint.hcl` and run `tflint --init` once (a `kind: command` hook works for that). A working end-to-end setup lives in [`examples/hooks-tflint`](https://github.com/cloudposse/atmos/tree/main/examples/hooks-tflint).
+tflint runs first — before init — and renders its findings. The builtin `terraform` ruleset enforces core conventions with no setup; add a `.tflint.hcl` and run `tflint --init` once for provider rulesets (aws/google/azurerm) that catch cloud-specific mistakes (a `kind: command` hook works for that). A working, credential-free setup lives in [`examples/hooks-tflint`](https://github.com/cloudposse/atmos/tree/main/examples/hooks-tflint).
 
-Lint findings default to `on_failure: warn`, so they surface without blocking your plan — flip to `fail` when you're ready to enforce.
+Findings default to `on_failure: warn`, so conventions surface as guidance first — flip to `fail` when you're ready to enforce them as a gate.

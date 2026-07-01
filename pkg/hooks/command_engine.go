@@ -222,7 +222,7 @@ func runSubprocess(p *subprocessPrep) error {
 	if p.captureStdoutPath != "" {
 		f, err := os.Create(p.captureStdoutPath) // #nosec G304 -- engine-controlled temp path (makeOutputDir)
 		if err != nil {
-			return fmt.Errorf("failed to create hook stdout capture file: %w", err)
+			return fmt.Errorf("%w: hook stdout capture file: %w", errUtils.ErrCreateFile, err)
 		}
 		defer f.Close()
 		cmd.Stdout = f

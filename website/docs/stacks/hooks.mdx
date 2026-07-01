@@ -210,15 +210,21 @@ hooks:
 ### `kind: tflint`
 
 [tflint](https://github.com/terraform-linters/tflint) is an open-source
-Terraform/OpenTofu linter that catches errors, deprecated syntax, and
-provider-specific issues the compiler won't. The `tflint` kind runs tflint
-over the component's sources and feeds the SARIF output through Atmos's shared
-scanner result handler.
+Terraform/OpenTofu linter. Where `terraform validate` only proves your config
+parses, tflint enforces **code consistency and conventions** and catches
+**hygiene** problems — unused declarations, deprecated syntax, missing version
+constraints, and invalid provider-specific arguments — so those standards hold
+uniformly across every component instead of relying on reviewers. The `tflint`
+kind runs tflint over the component's sources and feeds the SARIF output
+through Atmos's shared scanner result handler.
+
+Wire it on `before.terraform.init` so a lint failure stops you before any
+init/plan work — a linter should fail fast:
 
 ```yaml
 hooks:
   lint:
-    events: [after.terraform.plan]
+    events: [before.terraform.init]
     kind: tflint
 ```
 

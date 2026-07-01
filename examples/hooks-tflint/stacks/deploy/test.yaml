@@ -5,7 +5,7 @@ vars:
 
 components:
   terraform:
-    bucket:
+    example:
       vars:
         environment: test
       # NOTE: dependencies.tools.tflint is intentionally omitted so the
@@ -15,6 +15,10 @@ components:
       # Aqua registry entry is a plain github_release (no cosign gate).
       hooks:
         lint:
+          # Lint on before-init so problems fail fast — before any init/plan
+          # work. tflint enforces team conventions and catches hygiene issues
+          # (unused declarations, deprecated syntax, invalid types) that
+          # `terraform validate` never sees.
           events:
-            - after-terraform-plan
+            - before.terraform.init
           kind: tflint
