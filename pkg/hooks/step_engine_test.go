@@ -54,6 +54,39 @@ func (h *envCaptureHandler) Execute(_ context.Context, _ *schema.WorkflowStep, v
 	return runnerstep.NewStepResult("ok"), nil
 }
 
+// orderCaptureHandler records step execution order without shelling out.
+type orderCaptureHandler struct {
+	runnerstep.BaseHandler
+	calls *[]string
+}
+
+func (h *orderCaptureHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *orderCaptureHandler) Execute(_ context.Context, step *schema.WorkflowStep, _ *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	*h.calls = append(*h.calls, step.Content)
+	return runnerstep.NewStepResult(step.Content), nil
+}
+
+// failOnceOnContentHandler records order and fails the first time it sees the
+// configured content.
+type failOnceOnContentHandler struct {
+	runnerstep.BaseHandler
+	calls       *[]string
+	failContent string
+	failed      *bool
+}
+
+func (h *failOnceOnContentHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *failOnceOnContentHandler) Execute(_ context.Context, step *schema.WorkflowStep, _ *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	*h.calls = append(*h.calls, step.Content)
+	if step.Content == h.failContent && !*h.failed {
+		*h.failed = true
+		return nil, errFlaky
+	}
+	return runnerstep.NewStepResult(step.Content), nil
+}
+
 func stepExecContext(hook *Hook) *ExecContext {
 	kind, _ := GetKind(stepKindName)
 	return &ExecContext{
@@ -64,12 +97,39 @@ func stepExecContext(hook *Hook) *ExecContext {
 	}
 }
 
+func stepsExecContext(hook *Hook) *ExecContext {
+	kind, _ := GetKind(stepsKindName)
+	return &ExecContext{
+		Hook:  hook,
+		Kind:  kind,
+		Event: AfterTerraformApply,
+		Info:  &schema.ConfigAndStacksInfo{Stack: "test-stack", ComponentFromArg: "test-component"},
+	}
+}
+
+func hookWithMap(t *testing.T, with any) map[string]any {
+	t.Helper()
+	data, err := yaml.Marshal(with)
+	require.NoError(t, err)
+	var out map[string]any
+	require.NoError(t, yaml.Unmarshal(data, &out))
+	return out
+}
+
 func TestStepKindRegistered(t *testing.T) {
 	kind, ok := GetKind(stepKindName)
 	require.True(t, ok, "step kind must be registered")
 	assert.Equal(t, stepKindName, kind.Name)
 	assert.Equal(t, OnFailureWarn, kind.OnFailure)
 	assert.Contains(t, ListKinds(), stepKindName)
+}
+
+func TestStepsKindRegistered(t *testing.T) {
+	kind, ok := GetKind(stepsKindName)
+	require.True(t, ok, "steps kind must be registered")
+	assert.Equal(t, stepsKindName, kind.Name)
+	assert.Equal(t, OnFailureWarn, kind.OnFailure)
+	assert.Contains(t, ListKinds(), stepsKindName)
 }
 
 func TestHookUnmarshalStepFields(t *testing.T) {
@@ -98,7 +158,35 @@ with:
 	require.NotNil(t, hook.Retry)
 	require.NotNil(t, hook.Retry.MaxAttempts)
 	assert.Equal(t, 3, *hook.Retry.MaxAttempts)
-	assert.Equal(t, "build", hook.With["action"])
+	assert.Equal(t, "build", hookWithMap(t, hook.With)["action"])
+}
+
+func TestHookUnmarshalStepsFields(t *testing.T) {
+	const src = `
+kind: steps
+events:
+  - before.terraform.test
+with:
+  - type: emulator
+    component: aws
+    stack: fixtures
+    action: up
+  - type: atmos
+    command: terraform apply vpc -s fixtures -auto-approve
+`
+	var hook Hook
+	require.NoError(t, yaml.Unmarshal([]byte(src), &hook))
+
+	assert.Equal(t, stepsKindName, hook.Kind)
+	steps, err := stepsFromHook(&hook)
+	require.NoError(t, err)
+	require.Len(t, steps, 2)
+	assert.Equal(t, "emulator", steps[0].Type)
+	assert.Equal(t, "aws", steps[0].Component)
+	assert.Equal(t, "fixtures", steps[0].Stack)
+	assert.Equal(t, "up", steps[0].Action)
+	assert.Equal(t, "atmos", steps[1].Type)
+	assert.Equal(t, "terraform apply vpc -s fixtures -auto-approve", steps[1].Command)
 }
 
 func TestStepFromHookDecodesNestedConfig(t *testing.T) {
@@ -137,6 +225,46 @@ func TestStepFromHookDecodesNestedConfig(t *testing.T) {
 	assert.Equal(t, 80, ws.Viewport.Width)
 }
 
+func TestVerifyStepHookType(t *testing.T) {
+	require.NoError(t, verifyStepHookType("announce", "log"))
+
+	missingErr := verifyStepHookType("announce", "")
+	require.Error(t, missingErr)
+	assert.ErrorIs(t, missingErr, errUtils.ErrInvalidConfig)
+
+	unknownErr := verifyStepHookType("announce", "no-such-step")
+	require.Error(t, unknownErr)
+	assert.ErrorIs(t, unknownErr, errUtils.ErrUnknownStepType)
+}
+
+func TestStepsFromHookValidationErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		hook *Hook
+	}{
+		{
+			name: "missing with",
+			hook: &Hook{Kind: stepsKindName},
+		},
+		{
+			name: "with is not a list",
+			hook: &Hook{Kind: stepsKindName, With: map[string]any{"type": "log"}},
+		},
+		{
+			name: "empty list",
+			hook: &Hook{Kind: stepsKindName, With: []any{}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := stepsFromHook(tt.hook)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		})
+	}
+}
+
 func TestStepEngineRunLog(t *testing.T) {
 	hook := &Hook{
 		Kind: stepKindName,
@@ -169,6 +297,46 @@ func TestStepEngineSeedsAtmosEnv(t *testing.T) {
 	assert.Equal(t, "test-stack", captured["ATMOS_STACK"])
 	assert.Equal(t, "test-component", captured["ATMOS_COMPONENT"])
 	assert.Equal(t, "from-hook", captured["CUSTOM_HOOK_VAR"])
+}
+
+func TestStepsSummary(t *testing.T) {
+	tests := []struct {
+		name   string
+		result *runnerstep.StepResult
+		runErr error
+		status SummaryStatus
+		title  string
+	}{
+		{
+			name:   "failure",
+			runErr: errFlaky,
+			status: StatusFailure,
+			title:  "steps failed",
+		},
+		{
+			name:   "skipped",
+			result: runnerstep.NewStepResult("skip").WithSkipped(),
+			status: StatusSuccess,
+			title:  "steps skipped",
+		},
+		{
+			name:   "success",
+			result: runnerstep.NewStepResult("ok"),
+			status: StatusSuccess,
+			title:  "steps ok",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := stepsSummary(tt.result, tt.runErr)
+			require.NotNil(t, out)
+			require.NotNil(t, out.Summary)
+			assert.Equal(t, stepsKindName, out.Summary.Kind)
+			assert.Equal(t, tt.status, out.Summary.Status)
+			assert.Equal(t, tt.title, out.Summary.Title)
+		})
+	}
 }
 
 func TestRunsOnStatus(t *testing.T) {
@@ -250,7 +418,7 @@ func TestResolveHookRendersOutcomeInWith(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resolved.With)
 	// Component and stack come from the section; status from the outcome.
-	assert.Equal(t, "vpc in foobar: failure", resolved.With["message"])
+	assert.Equal(t, "vpc in foobar: failure", hookWithMap(t, resolved.With)["message"])
 }
 
 func TestResolveHookRendersSayApplyOutcome(t *testing.T) {
@@ -280,14 +448,14 @@ Terraform apply for {{ .atmos_component }} in {{ .stack }} was not successful.
 		&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunSuccess},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "Terraform apply for hello-world in test was successful.", success.With["content"])
+	assert.Equal(t, "Terraform apply for hello-world in test was successful.", hookWithMap(t, success.With)["content"])
 
 	failure, err := hooks.resolveHookForExecution(
 		"announce-apply", &Hook{Kind: stepKindName, Type: "say"},
 		&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunFailure, Err: errors.New("apply boom"), ExitCode: 1},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "Terraform apply for hello-world in test was not successful. apply boom", failure.With["content"])
+	assert.Equal(t, "Terraform apply for hello-world in test was not successful. apply boom", hookWithMap(t, failure.With)["content"])
 }
 
 func TestStepEngineSeedsOutcomeEnv(t *testing.T) {
@@ -376,5 +544,97 @@ func TestStepEngineRetry(t *testing.T) {
 		_, err := stepEngine{}.Run(stepExecContext(hook))
 		require.Error(t, err)
 		assert.Equal(t, 1, attempts, "must run exactly once without a retry block")
+	})
+}
+
+func TestStepsEngineRunsWithInOrder(t *testing.T) {
+	calls := []string{}
+	runnerstep.Register(&orderCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler("order-capture-steps-test", runnerstep.CategoryCommand, false),
+		calls:       &calls,
+	})
+
+	hook := &Hook{
+		Kind: stepsKindName,
+		With: []any{
+			map[string]any{
+				"type":    "order-capture-steps-test",
+				"content": "start emulator",
+			},
+			map[string]any{
+				"type":    "order-capture-steps-test",
+				"content": "apply fixture",
+			},
+		},
+	}
+
+	out, err := stepsEngine{}.Run(stepsExecContext(hook))
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.NotNil(t, out.Summary)
+	assert.Equal(t, StatusSuccess, out.Summary.Status)
+	assert.Equal(t, []string{"start emulator", "apply fixture"}, calls)
+}
+
+func TestStepsEngineRetryWrapsWholeList(t *testing.T) {
+	calls := []string{}
+	failed := false
+	runnerstep.Register(&failOnceOnContentHandler{
+		BaseHandler: runnerstep.NewBaseHandler("fail-once-steps-test", runnerstep.CategoryCommand, false),
+		calls:       &calls,
+		failContent: "apply fixture",
+		failed:      &failed,
+	})
+
+	maxAttempts := 2
+	hook := &Hook{
+		Kind:  stepsKindName,
+		Retry: &schema.RetryConfig{MaxAttempts: &maxAttempts},
+		With: []any{
+			map[string]any{
+				"type":    "fail-once-steps-test",
+				"content": "start emulator",
+			},
+			map[string]any{
+				"type":    "fail-once-steps-test",
+				"content": "apply fixture",
+			},
+		},
+	}
+
+	_, err := stepsEngine{}.Run(stepsExecContext(hook))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"start emulator", "apply fixture", "start emulator", "apply fixture"}, calls)
+}
+
+func TestStepsEngineRejectsMissingWith(t *testing.T) {
+	_, err := stepsEngine{}.Run(stepsExecContext(&Hook{Kind: stepsKindName}))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+func TestVerifyStepsHookTypes(t *testing.T) {
+	t.Run("known types", func(t *testing.T) {
+		hook := &Hook{
+			Kind: stepsKindName,
+			With: []any{
+				map[string]any{"content": "defaults to shell"},
+				map[string]any{"type": "log", "content": "hello"},
+				map[string]any{"type": "atmos", "command": "version"},
+			},
+		}
+		require.NoError(t, verifyStepsHookTypes("fixtures", hook))
+	})
+
+	t.Run("unknown type", func(t *testing.T) {
+		hook := &Hook{
+			Kind: stepsKindName,
+			With: []any{
+				map[string]any{"type": "does-not-exist"},
+			},
+		}
+		err := verifyStepsHookTypes("fixtures", hook)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrUnknownStepType)
 	})
 }

@@ -11,7 +11,8 @@ import (
 type Hook struct {
 	// Kind selects the engine that runs this hook. Built-in kinds:
 	// "store" (existing semantics), "command" (generic binary execution),
-	// plus named tool kinds like "infracost", "checkov", "trivy", "kics".
+	// plus step-backed kinds like "step" and "steps", and named tool kinds
+	// like "infracost", "checkov", "trivy", "kics".
 	//
 	// For back-compat, the legacy `command:` YAML key is accepted as an
 	// alias when `kind:` is absent. See UnmarshalYAML.
@@ -68,10 +69,11 @@ type Hook struct {
 	// Type names the step-registry step type to run (e.g. "container",
 	// "toast", "http"). Required for kind: step.
 	Type string `yaml:"type,omitempty"`
-	// With holds the step's own parameters, decoded into a WorkflowStep at
-	// run time. Rendered (templates + YAML functions) by
-	// resolveHookForExecution before the step sees it.
-	With map[string]any `yaml:"with,omitempty"`
+	// With holds the kind-specific payload. For kind: step it is the step's
+	// parameter map, decoded into one WorkflowStep. For kind: steps it is an
+	// ordered list of WorkflowStep objects. Rendered (templates + YAML
+	// functions) by resolveHookForExecution before the engine sees it.
+	With any `yaml:"with,omitempty"`
 	// Retry wraps the step execution in retry.Do. Same schema as a
 	// workflow step's retry block; interpreted by the bridge, not the step.
 	Retry *schema.RetryConfig `yaml:"retry,omitempty"`

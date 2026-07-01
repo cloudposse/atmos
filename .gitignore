@@ -166,3 +166,6 @@ reply_to_*.sh
 *.ascii
 .claude-plan.md
 .claude/plans/
+
+# Generated JUnit test reports from `atmos terraform test` in CI.
+*.junit.xml

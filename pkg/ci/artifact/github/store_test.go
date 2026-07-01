@@ -21,6 +21,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 )
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
 func TestStore_Name(t *testing.T) {
 	store := &Store{}
 	assert.Equal(t, "github/artifacts", store.Name())
@@ -1251,6 +1257,77 @@ func TestStore_List(t *testing.T) {
 		// Should be sorted by last modified (newest first).
 		assert.Equal(t, "stack1/comp1/sha1.tfplan", files[0].Name)
 		assert.Equal(t, "stack2/comp2/sha2.tfplan", files[1].Name)
+	})
+
+	t.Run("retries transient server error", func(t *testing.T) {
+		oldDelay := listArtifactsRetryBaseDelay
+		listArtifactsRetryBaseDelay = time.Nanosecond
+		defer func() { listArtifactsRetryBaseDelay = oldDelay }()
+
+		now := time.Now()
+		callCount := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			callCount++
+			if callCount == 1 {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"message":"temporary server error"}`))
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			response := map[string]any{
+				"total_count": 1,
+				"artifacts": []map[string]any{
+					{
+						"id":            1,
+						"name":          "planfile-stack1--comp1--sha1.tfplan",
+						"size_in_bytes": 100,
+						"created_at":    now.Format(time.RFC3339),
+					},
+				},
+			}
+			respBytes, _ := json.Marshal(response)
+			_, _ = w.Write(respBytes)
+		}))
+		defer server.Close()
+
+		store := &Store{
+			httpClient: server.Client(),
+			baseURL:    server.URL,
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
+		}
+
+		files, err := store.List(context.Background(), artifact.Query{All: true})
+		require.NoError(t, err)
+		require.Len(t, files, 1)
+		assert.Equal(t, "stack1/comp1/sha1.tfplan", files[0].Name)
+		assert.Equal(t, 2, callCount)
+	})
+
+	t.Run("does not retry client transport error", func(t *testing.T) {
+		oldDelay := listArtifactsRetryBaseDelay
+		listArtifactsRetryBaseDelay = time.Nanosecond
+		defer func() { listArtifactsRetryBaseDelay = oldDelay }()
+
+		callCount := 0
+		store := &Store{
+			httpClient: &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+				callCount++
+				return nil, fmt.Errorf("dial failed")
+			})},
+			baseURL: "https://api.github.test",
+			prefix:  "planfile",
+			owner:   "testowner",
+			repo:    "testrepo",
+		}
+
+		files, err := store.List(context.Background(), artifact.Query{All: true})
+		require.Error(t, err)
+		assert.Nil(t, files)
+		assert.Equal(t, 1, callCount)
+		assert.Contains(t, err.Error(), "dial failed")
 	})
 
 	t.Run("with prefix filter", func(t *testing.T) {

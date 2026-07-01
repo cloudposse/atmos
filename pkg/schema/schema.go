@@ -1621,6 +1621,7 @@ type BaseComponentConfig struct {
 	BaseComponentRequiredProviders AtmosSectionMapType
 	BaseComponentRequiredVersion   string
 	BaseComponentHooks             AtmosSectionMapType
+	BaseComponentTest              AtmosSectionMapType
 	// BaseComponentGenerate holds the generate section configuration from the base component,
 	// defining auxiliary files to be generated for this component.
 	BaseComponentGenerate                  AtmosSectionMapType

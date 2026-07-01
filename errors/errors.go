@@ -328,6 +328,9 @@ var (
 
 	ErrMissingStack            = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrMissingComponent        = errors.New("component is required")
+	ErrNoStacksToSelect        = errors.New("no stacks are configured to choose from")
+	ErrNoComponentsToSelect    = errors.New("no components are configured to choose from")
+	ErrLoadSelectionOptions    = errors.New("failed to load options for interactive selection")
 	ErrMissingComponentType    = errors.New("component type is required")
 	ErrRequiredFlagNotProvided = errors.New("required flag not provided")
 	ErrRequiredFlagEmpty       = errors.New("required flag cannot be empty")
@@ -667,6 +670,7 @@ var (
 	ErrStepEmptyCommand              = errors.New("empty command for step")
 	ErrStepNoFilesFound              = errors.New("no files found matching criteria")
 	ErrStepFieldRequired             = errors.New("required field missing for step")
+	ErrStepExecutionFailed           = errors.New("step execution failed")
 	ErrStepTTYRequired               = errors.New("interactive terminal required for step")
 	ErrHTTPStepURLRequired           = errors.New("url is required for http step")
 	ErrHTTPStepInvalidMethod         = errors.New("invalid HTTP method for http step")

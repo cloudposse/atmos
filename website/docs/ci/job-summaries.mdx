@@ -1,7 +1,7 @@
 ---
 title: Job Summaries
 sidebar_label: Job Summaries
-description: Rich Markdown job summaries for Terraform and Kubernetes operations
+description: Rich Markdown job summaries for Terraform plan, apply, test, and Kubernetes operations
 id: job-summaries
 slug: /ci/job-summaries
 ---
@@ -75,6 +75,14 @@ when every component completed with no changes.
 Apply summaries show the result of the apply operation, including resource counts and any
 terraform outputs that were produced.
 
+## Test Summary
+
+`atmos terraform test` emits a pass/fail summary for the Terraform test framework
+(`*.tftest.hcl`). The summary shows total / passed / failed / skipped badges, a per-run results
+table (✅ pass, ❌ fail, ⏭️ skip), and inlines the failing assertions. This pairs naturally with
+[emulators](/stacks/components/emulator): point `terraform test` at a local emulator and the
+apply-backed `run` blocks execute — and report — entirely in CI without a cloud account.
+
 ## Kubernetes Summary
 
 Kubernetes summaries are intentionally smaller than Terraform summaries. They are designed for
@@ -103,9 +111,17 @@ stored artifacts in v1.
 ## Configuration
 
 <dl>
+  <dt>`ci.enabled`</dt>
+  <dd>
+    Master switch for all native-CI integration (summaries, outputs, checks). It must be
+    `true` for any of them to run — the per-feature toggles below have no effect on their own.
+
+    **Default:** `false`
+  </dd>
+
   <dt>`ci.summary.enabled`</dt>
   <dd>
-    Enable or disable job summaries.
+    Enable or disable job summaries (requires `ci.enabled: true`).
 
     **Default:** `true`
   </dd>
