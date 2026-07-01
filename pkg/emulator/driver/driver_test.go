@@ -96,14 +96,14 @@ func TestFlociDriver_Profile(t *testing.T) {
 	profile := d.Profile(&ep)
 
 	// Env: live endpoint URL + dummy creds + region.
-	assert.Equal(t, "http://localhost:54321", profile.Env["AWS_ENDPOINT_URL"])
+	assert.Equal(t, "http://127.0.0.1:54321", profile.Env["AWS_ENDPOINT_URL"])
 	assert.Equal(t, "test", profile.Env["AWS_ACCESS_KEY_ID"])
 	assert.Equal(t, "test", profile.Env["AWS_SECRET_ACCESS_KEY"])
 	assert.Equal(t, "eu-west-1", profile.Env["AWS_REGION"])
 	assert.Equal(t, "eu-west-1", profile.Env["AWS_DEFAULT_REGION"])
 
 	// Internal-SDK resolver URL.
-	assert.Equal(t, "http://localhost:54321", profile.ResolverURL)
+	assert.Equal(t, "http://127.0.0.1:54321", profile.ResolverURL)
 
 	// Provider fragment: behavior flags env cannot set.
 	assert.Equal(t, true, profile.Provider["skip_requesting_account_id"])

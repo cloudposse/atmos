@@ -63,7 +63,7 @@ atmos terraform deploy --all -s plat-ue2-dev
 
 # Inspect a component and see where every value came from.
 atmos describe component app-config -s plat-ue2-dev --provenance
-atmos list instances --format tree --provenance --identity=false --process-functions=false --process-templates=false
+atmos list instances --format tree --provenance
 
 # Tear down.
 atmos terraform destroy --all -s plat-ue2-dev -auto-approve
@@ -72,6 +72,28 @@ atmos emulator down aws -s plat-ue2-dev
 
 Available stacks: `plat-ue2-{dev,staging,prod}` (us-east-2) and `plat-uw2-{dev,staging,prod}`
 (us-west-2).
+
+## How the environments differ
+
+The three environments deploy the **same services with different settings** - that's the whole point of the layered configuration. The
+[catalog](stacks/catalog/) defines each component's defaults once; each region manifest sets the stage-specific values directly. Open
+[`stacks/orgs/acme/plat/prod/us-east-2.yaml`](stacks/orgs/acme/plat/prod/us-east-2.yaml) and you can see exactly what makes that `prod`
+region different.
+
+| Setting | `dev` (ephemeral) | `staging` (middle) | `prod` (hardened) |
+|---|---|---|---|
+| `s3-bucket` `force_destroy` | `true` | `true` | `false` |
+| `s3-bucket` `versioning_enabled` | `false` | `true` | `true` |
+| `kms-key` `deletion_window_in_days` | `7` | `14` | `30` |
+| `kms-key` `enable_key_rotation` | `false` | `true` | `true` |
+| `sqs-queue` `message_retention_seconds` | `86400` (1d) | `345600` (4d) | `1209600` (14d) |
+
+See it resolved per stage (no deploy required):
+
+```shell
+atmos describe component s3-bucket -s plat-ue2-dev
+atmos describe component s3-bucket -s plat-ue2-prod
+```
 
 ## Operator commands
 

@@ -149,6 +149,12 @@ func RegisterEmulatorCompletions(cmd *cobra.Command) {
 	defer perf.Track(nil, "emulator.RegisterEmulatorCompletions")()
 
 	for _, subCmd := range cmd.Commands() {
+		// `list` takes no component positional; leave its arg completion unset so
+		// it doesn't suggest components. The --stack flag completion still applies
+		// (registered on the persistent flag).
+		if subCmd.Name() == "list" {
+			continue
+		}
 		subCmd.ValidArgsFunction = componentArgCompletion
 	}
 }

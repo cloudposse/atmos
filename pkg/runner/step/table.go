@@ -3,7 +3,6 @@ package step
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -63,11 +62,14 @@ func (h *TableHandler) executeDataTable(step *schema.WorkflowStep, vars *Variabl
 	styles := theme.GetCurrentStyles()
 	columns := h.determineColumns(step)
 	header := h.buildHeader(columns, styles)
-	rows := h.buildRows(step.Data, columns)
+	rows, err := h.buildRows(step.Data, columns, vars)
+	if err != nil {
+		return nil, err
+	}
 
-	output := strings.Join(header, "\t") + "\n" + strings.Join(rows, "\n")
+	output := theme.CreateMinimalTable(header, rows)
 
-	output, err := h.addTitle(output, step, vars, styles)
+	output, err = h.addTitle(output, step, vars, styles)
 	if err != nil {
 		return nil, err
 	}
@@ -108,18 +110,22 @@ func (h *TableHandler) buildHeader(columns []string, styles *theme.StyleSet) []s
 }
 
 // buildRows builds the table rows from data.
-func (h *TableHandler) buildRows(data []map[string]any, columns []string) []string {
-	rows := make([]string, len(data))
+func (h *TableHandler) buildRows(data []map[string]any, columns []string, vars *Variables) ([][]string, error) {
+	rows := make([][]string, len(data))
 	for i, rowData := range data {
 		cells := make([]string, len(columns))
 		for j, col := range columns {
 			if v, ok := rowData[col]; ok {
-				cells[j] = fmt.Sprintf("%v", v)
+				cell, err := vars.Resolve(fmt.Sprintf("%v", v))
+				if err != nil {
+					return nil, fmt.Errorf("failed to resolve table cell %q: %w", col, err)
+				}
+				cells[j] = cell
 			}
 		}
-		rows[i] = strings.Join(cells, "\t")
+		rows[i] = cells
 	}
-	return rows
+	return rows, nil
 }
 
 // addTitle adds a styled title to the output if present.

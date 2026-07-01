@@ -190,18 +190,18 @@ commands:
             type: stage
             title: Stack import tree
           - type: shell
-            command: atmos list stacks --format tree --provenance --identity=false --process-functions=false --process-templates=false
+            command: atmos list stacks --format tree --provenance
           - name: instances
             type: stage
             title: Component instances in {{ .Flags.stack }}
           - type: shell
-            command: atmos list instances --stack {{ .Flags.stack }} --format tree --provenance --identity=false --process-functions=false --process-templates=false
+            command: atmos list instances --stack {{ .Flags.stack }} --format tree --provenance
           - name: catalog
             type: stage
             title: Component catalog
           - type: spin
             title: Resolving component catalog
-            command: atmos list components --identity=false --process-functions=false --process-templates=false
+            command: atmos list components
           - type: table
             title: Next operator commands
             columns:
