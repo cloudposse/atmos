@@ -170,11 +170,13 @@ func TestNormalizeCastOutputModeUsesStructuredOutput(t *testing.T) {
 
 func TestApplyCastStepEnvAddsEnvToVariables(t *testing.T) {
 	vars := NewVariables()
+	binDir := filepath.Join(t.TempDir(), "bin")
+	prefix := binDir + string(os.PathListSeparator)
 	castStep := &schema.WorkflowStep{
 		Name: "demo",
 		Env: map[string]string{
 			"ATMOS_FORCE_COLOR": "1",
-			"PATH":              "/tmp/bin:{{ .env.PATH }}",
+			"PATH":              prefix + "{{ .env.PATH }}",
 		},
 	}
 
@@ -185,8 +187,8 @@ func TestApplyCastStepEnvAddsEnvToVariables(t *testing.T) {
 	if vars.Env["ATMOS_FORCE_COLOR"] != "1" {
 		t.Fatalf("ATMOS_FORCE_COLOR = %q, want 1", vars.Env["ATMOS_FORCE_COLOR"])
 	}
-	if !strings.HasPrefix(vars.Env["PATH"], "/tmp/bin:") {
-		t.Fatalf("PATH = %q, want /tmp/bin prefix", vars.Env["PATH"])
+	if !strings.HasPrefix(vars.Env["PATH"], prefix) {
+		t.Fatalf("PATH = %q, want %q prefix", vars.Env["PATH"], prefix)
 	}
 }
 
@@ -385,6 +387,62 @@ func TestCastHandlerExecuteReturnsRenderErrorsWithMetadata(t *testing.T) {
 	}
 	if result == nil || result.Metadata["cast"] != castPath || result.Metadata["svg"] != svgPath {
 		t.Fatalf("unexpected result metadata: %#v", result)
+	}
+}
+
+func TestCastHandlerStepsRunAlwaysCleanupAfterFailure(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	tmpDir := t.TempDir()
+	castPath := filepath.Join(tmpDir, "demo.cast")
+	mainPath := filepath.Join(tmpDir, "main.txt")
+	afterPath := filepath.Join(tmpDir, "after.txt")
+	cleanupPath := filepath.Join(tmpDir, "cleanup.txt")
+
+	_, err := (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{
+			{
+				Name:             "main",
+				Type:             schema.TaskTypeShell,
+				WorkingDirectory: tmpDir,
+				Output:           string(OutputModeNone),
+				Command:          "printf main > main.txt; exit 7",
+			},
+			{
+				Name:             "after",
+				Type:             schema.TaskTypeShell,
+				WorkingDirectory: tmpDir,
+				Output:           string(OutputModeNone),
+				Command:          "printf after > after.txt",
+			},
+			{
+				Name:             "cleanup",
+				Type:             schema.TaskTypeShell,
+				When:             schema.MustCondition(schema.ConditionPredicateAlways),
+				WorkingDirectory: tmpDir,
+				Output:           string(OutputModeNone),
+				Command:          "printf cleanup > cleanup.txt",
+			},
+		},
+	}, NewVariables())
+
+	if err == nil {
+		t.Fatal("expected cast step failure")
+	}
+	if _, readErr := os.Stat(mainPath); readErr != nil {
+		t.Fatalf("expected main step to run: %v", readErr)
+	}
+	if _, readErr := os.Stat(cleanupPath); readErr != nil {
+		t.Fatalf("expected cleanup step to run: %v", readErr)
+	}
+	if _, readErr := os.Stat(afterPath); !errors.Is(readErr, os.ErrNotExist) {
+		t.Fatalf("expected success-only step after failure to be skipped, stat err: %v", readErr)
 	}
 }
 

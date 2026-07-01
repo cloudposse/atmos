@@ -20,6 +20,8 @@ commands:
 
           secret_file="secrets/dev.enc.yaml"
           backup_file="$(mktemp)"
+          empty_home=""
+          empty_xdg_config=""
           cp "${secret_file}" "${backup_file}"
 
           cleanup() {
@@ -32,6 +34,8 @@ commands:
             rm -f components/terraform/api/*.terraform.tfvars.json
             cp "${backup_file}" "${secret_file}"
             rm -f "${backup_file}"
+            [ -n "${empty_home:-}" ] && rm -rf "${empty_home}"
+            [ -n "${empty_xdg_config:-}" ] && rm -rf "${empty_xdg_config}"
           }
           trap cleanup EXIT
 
@@ -63,7 +67,17 @@ commands:
 
           echo "[8/8] reveal with the key removed must FAIL"
           mv secrets/keys.txt secrets/keys.txt.bak
-          if env -u SOPS_AGE_KEY_FILE atmos describe component api --stack dev --mask=false >/dev/null 2>&1; then
+          empty_home="$(mktemp -d)"
+          empty_xdg_config="$(mktemp -d)"
+          if env \
+            -u SOPS_AGE_KEY \
+            -u SOPS_AGE_KEY_FILE \
+            -u SOPS_AGE_KEY_CMD \
+            -u SOPS_AGE_SSH_PRIVATE_KEY_FILE \
+            -u SOPS_AGE_SSH_PRIVATE_KEY_CMD \
+            HOME="${empty_home}" \
+            XDG_CONFIG_HOME="${empty_xdg_config}" \
+            atmos describe component api --stack dev --mask=false >/dev/null 2>&1; then
             echo "UNEXPECTED: reveal without key succeeded"
             exit 1
           fi

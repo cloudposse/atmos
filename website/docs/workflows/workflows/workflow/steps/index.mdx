@@ -70,6 +70,39 @@ In this example, `spin` is the value of `steps[].type`. The fields `title`, `com
 
   <dt>`outputs`</dt>
   <dd>Declared outputs derived from the step result. See [outputs](/workflows/steps/outputs).</dd>
+
+  <dt>`when`</dt>
+  <dd>Condition controlling whether the step runs. Omitted means success-only: the step runs while the workflow status is still `success`. Use `when: always` for cleanup steps that must run after a previous step fails, such as stopping an emulator, restoring a backup file, or removing Terraform state.</dd>
 </dl>
 
 Type-specific fields are documented with [type](/workflows/steps/type).
+
+## Cleanup Steps
+
+Atmos continues evaluating structured steps after a failure so failure-aware
+cleanup can run:
+
+```yaml
+steps:
+  - type: shell
+    name: start-emulator
+    command: atmos emulator up aws -s dev --ephemeral
+
+  - type: shell
+    name: record-or-test
+    command: atmos terraform apply demo -s dev -auto-approve
+
+  - type: shell
+    name: stop-emulator
+    when: always
+    command: atmos emulator down aws -s dev
+
+  - type: shell
+    name: validate
+    command: atmos terraform output demo -s dev
+```
+
+If `record-or-test` fails, `stop-emulator` still runs because it declares
+`when: always`. The `validate` step is skipped because omitted `when` means
+success-only. The workflow still exits with the original failure; cleanup does
+not make the failed workflow look successful.

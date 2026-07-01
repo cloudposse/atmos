@@ -627,7 +627,7 @@ func executeCustomCommand(
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
-		if step.When.Evaluate(conditionContext) {
+		if step.When.EvaluateWithImplicitSuccess(conditionContext) {
 			hasRunnableStep = true
 			break
 		}
@@ -739,8 +739,9 @@ func executeCustomCommand(
 	stepVars.ProtectTemplateRoots("Arguments", "Flags", "flags", "TrailingArgs")
 
 	// Execute custom command's steps
+	var commandErr error
 	for i, step := range commandConfig.Steps {
-		if !step.When.Evaluate(conditionContext) {
+		if !step.When.EvaluateWithImplicitSuccess(conditionContext) {
 			log.Debug("Skipping custom command step, `when` condition did not match", customCommandKeyCommand, commandConfig.Name, "step", i)
 			continue
 		}
@@ -1004,8 +1005,20 @@ func executeCustomCommand(
 				err = fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
 			}
 		}
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			var silentExit errUtils.ExitCodeError
+			if errors.As(err, &silentExit) && silentExit.Silent {
+				errUtils.CheckErrorPrintAndExit(err, "", "")
+			}
+			if commandErr == nil {
+				commandErr = err
+			} else {
+				commandErr = errors.Join(commandErr, err)
+			}
+			conditionContext.Status = schema.ConditionPredicateFailure
+		}
 	}
+	errUtils.CheckErrorPrintAndExit(commandErr, "", "")
 }
 
 func customCommandConditionContext() schema.ConditionContext {

@@ -186,23 +186,50 @@ func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *V
 	if workflow != nil {
 		executor.SetWorkflow(workflow)
 	}
+	conditionContext := schema.ConditionContext{Status: schema.ConditionPredicateSuccess}
+	var runErr error
 	for i := range castStep.Steps {
 		child := &castStep.Steps[i]
+		if !child.When.EvaluateWithImplicitSuccess(conditionContext) {
+			continue
+		}
 		prepareCastChildStep(castStep, child, i)
 		if child.Type == schema.TaskTypeSimulate {
 			if err := runCastSimulateStep(ctx, castStep, child, vars); err != nil {
-				return err
+				if runErr == nil {
+					runErr = err
+				} else {
+					runErr = errors.Join(runErr, err)
+				}
+				conditionContext.Status = schema.ConditionPredicateFailure
 			}
 			continue
 		}
 		if _, err := executor.Execute(ctx, child); err != nil {
-			return err
+			if runErr == nil {
+				runErr = err
+			} else {
+				runErr = errors.Join(runErr, err)
+			}
+			conditionContext.Status = schema.ConditionPredicateFailure
+			continue
 		}
 		if err := sleepCastInput(ctx, castStepPauseDelay(child)); err != nil {
-			return err
+			if runErr == nil {
+				runErr = err
+			} else {
+				runErr = errors.Join(runErr, err)
+			}
+			conditionContext.Status = schema.ConditionPredicateFailure
 		}
 	}
-	return recordCastPrompt(nil)
+	if err := recordCastPrompt(nil); err != nil {
+		if runErr == nil {
+			return err
+		}
+		return errors.Join(runErr, err)
+	}
+	return runErr
 }
 
 func applyCastStepEnv(castStep *schema.WorkflowStep, vars *Variables) error {

@@ -378,7 +378,7 @@ func ExecuteWorkflow(
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			return err
 		}
-		if !step.When.Evaluate(conditionContext) {
+		if !step.When.EvaluateWithImplicitSuccess(conditionContext) {
 			continue
 		}
 		if commandLineIdentity != "" || strings.TrimSpace(step.Identity) != "" {
@@ -420,8 +420,9 @@ func ExecuteWorkflow(
 	// Render header before first step (if enabled).
 	showRenderer.RenderHeaderIfNeeded(workflowDefinition, workflow, flags)
 
+	var workflowErr error
 	for stepIdx, step := range steps {
-		if !step.When.Evaluate(conditionContext) {
+		if !step.When.EvaluateWithImplicitSuccess(conditionContext) {
 			log.Debug("Skipping workflow step, `when` condition did not match", "step", step.Name)
 			continue
 		}
@@ -474,7 +475,13 @@ func ExecuteWorkflow(
 		// If identity is specified, also authenticate and add credentials.
 		stepEnv, err := prepareStepEnvironment(baseEnv, stepIdentity, step.Name, authManager, workflowDefinition.Env, step.Env)
 		if err != nil {
-			return err
+			if workflowErr == nil {
+				workflowErr = err
+			} else {
+				workflowErr = errors.Join(workflowErr, err)
+			}
+			conditionContext.Status = schema.ConditionPredicateFailure
+			continue
 		}
 		workDir := workflowPkg.CalculateWorkingDirectory(workflowDefinition, &step, atmosConfig.BasePath)
 		if workDir == "" {
@@ -651,12 +658,13 @@ func ExecuteWorkflow(
 		default:
 			// Check if this is an extended step type (input, confirm, choose, etc.).
 			if !stepPkg.IsExtendedStepType(commandType) {
-				return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
+				err = errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
 					WithTitle(WorkflowErrTitle).
 					WithHintf("Step type '%s' is not supported", commandType).
 					WithHint("Each step must specify a valid type: 'atmos', 'shell', 'script', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
 					WithExitCode(1).
 					Err()
+				break
 			}
 			if commandType == schema.TaskTypeScript {
 				stepPkg.RenderCommand(&step, workflowDefinition, process.FormatScriptDisplay(step.Interpreter, step.Script))
@@ -716,10 +724,6 @@ func ExecuteWorkflow(
 		}
 
 		if err != nil {
-			// Clean up progress on error.
-			if progressRenderer.IsEnabled() {
-				progressRenderer.Done()
-			}
 			// Terminal-handoff steps (tty/interactive/exec) that exit non-zero
 			// propagate the code silently, like a shell - don't wrap them in a
 			// themed workflow error (which would query the terminal post-session).
@@ -727,7 +731,7 @@ func ExecuteWorkflow(
 			if errors.As(err, &silentExit) && silentExit.Silent {
 				return err
 			}
-			return buildWorkflowStepError(err, &workflowStepErrorContext{
+			stepErr := buildWorkflowStepError(err, &workflowStepErrorContext{
 				WorkflowPath:     workflowPath,
 				WorkflowBasePath: atmosConfig.Workflows.BasePath,
 				Workflow:         workflow,
@@ -736,6 +740,12 @@ func ExecuteWorkflow(
 				CommandType:      commandType,
 				FinalStack:       finalStack,
 			})
+			if workflowErr == nil {
+				workflowErr = stepErr
+			} else {
+				workflowErr = errors.Join(workflowErr, stepErr)
+			}
+			conditionContext.Status = schema.ConditionPredicateFailure
 		}
 	}
 
@@ -744,7 +754,7 @@ func ExecuteWorkflow(
 		progressRenderer.Done()
 	}
 
-	return nil
+	return workflowErr
 }
 
 func workflowConditionContext() schema.ConditionContext {

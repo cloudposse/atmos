@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -61,14 +60,10 @@ func TestRenderTargetsOrderAndTypes(t *testing.T) {
 }
 
 func TestRenderWithFakeAgg(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake PATH executables use POSIX shell scripts")
-	}
 	bin := t.TempDir()
-	writeFakeTool(t, bin, "agg", `#!/bin/sh
-printf 'agg:%s:%s' "$1" "$2" > "$2"
-`)
+	installFakeTool(t, bin, "agg")
 	t.Setenv("PATH", bin)
+	t.Setenv(asciicastHelperEnv, "1")
 
 	output := filepath.Join(t.TempDir(), "out.svg")
 	if err := Render("input.cast", RenderOptions{SVG: output}); err != nil {
@@ -92,20 +87,11 @@ func TestRenderMP4ReportsMissingFFmpegBeforeAgg(t *testing.T) {
 }
 
 func TestRenderMP4WithFakeTools(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake PATH executables use POSIX shell scripts")
-	}
 	bin := t.TempDir()
-	writeFakeTool(t, bin, "agg", `#!/bin/sh
-printf 'gif' > "$2"
-`)
-	writeFakeTool(t, bin, "ffmpeg", `#!/bin/sh
-for arg do
-  out="$arg"
-done
-printf 'mp4' > "$out"
-`)
+	installFakeTool(t, bin, "agg")
+	installFakeTool(t, bin, "ffmpeg")
 	t.Setenv("PATH", bin)
+	t.Setenv(asciicastHelperEnv, "1")
 
 	output := filepath.Join(t.TempDir(), "out.mp4")
 	if err := Render("input.cast", RenderOptions{MP4: output}); err != nil {
@@ -120,10 +106,18 @@ printf 'mp4' > "$out"
 	}
 }
 
-func writeFakeTool(t *testing.T, dir, name, script string) {
+func installFakeTool(t *testing.T, dir, name string) {
 	t.Helper()
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	path := filepath.Join(dir, helperExecutableName(name))
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, content, 0o755); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -410,6 +410,7 @@ commands:
                     command: atmos terraform output demo -s dev
                   - type: shell
                     name: emulator-down
+                    when: always
                     working_directory: ../../.context/cast-fixtures/emulator-aws
                     env: *force_color_env
                     command: atmos emulator down aws -s dev
@@ -640,6 +641,7 @@ commands:
                     command: *output_api_cmd
               - type: shell
                 name: cleanup-sops-secrets
+                when: always
                 working_directory: ../../.context/cast-fixtures/sops-secrets
                 output: none
                 command: |
@@ -911,7 +913,7 @@ commands:
                   text = Path("../../website/static/casts/emulator/aws-lifecycle.cast").read_text()
                   for needle in [
                       "emulator aws is up",
-                      "floci/floci",
+                      "c88ec20bf221",
                       "running",
                       "Apply complete!",
                       "stage =",

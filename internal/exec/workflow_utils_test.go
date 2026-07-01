@@ -1397,6 +1397,9 @@ func TestExecuteWorkflow_DryRunScriptStep(t *testing.T) {
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	require.NoError(t, err)
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	counterFile := filepath.Join(t.TempDir(), "script-ran")
 
 	workflowDef := &schema.WorkflowDefinition{
 		Description: "Test script dry run",
@@ -1404,10 +1407,10 @@ func TestExecuteWorkflow_DryRunScriptStep(t *testing.T) {
 			{
 				Name:        "script-step",
 				Type:        schema.TaskTypeScript,
-				Interpreter: "sh",
+				Interpreter: exe,
 				Script:      "echo should-not-run",
 				Env: map[string]string{
-					"SCRIPT_ENV": "value",
+					"_ATMOS_TEST_COUNTER_FILE": counterFile,
 				},
 			},
 		},
@@ -1415,6 +1418,8 @@ func TestExecuteWorkflow_DryRunScriptStep(t *testing.T) {
 
 	err = ExecuteWorkflow(atmosConfig, "test-dryrun-script", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
 	assert.NoError(t, err)
+	_, err = os.Stat(counterFile)
+	assert.True(t, os.IsNotExist(err), "dry-run script step executed the helper process")
 }
 
 // TestExecuteWorkflow_DryRunAtmos tests ExecuteWorkflow with dry run for atmos commands.

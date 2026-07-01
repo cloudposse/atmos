@@ -3,8 +3,8 @@ package step
 import (
 	"bytes"
 	"io"
+	"os"
 	"os/exec"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,47 +16,71 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-var outputModeInitOnce sync.Once
-
 // initOutputModeTestIO initializes the I/O context for output mode tests.
 func initOutputModeTestIO(t *testing.T) {
 	t.Helper()
-	outputModeInitOnce.Do(func() {
-		ioCtx, err := iolib.NewContext()
-		require.NoError(t, err)
-		ui.InitFormatter(ioCtx)
-		data.InitWriter(ioCtx)
-	})
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
 }
-
-type outputModeTestStreams struct {
-	stdin  io.Reader
-	stdout io.Writer
-	stderr io.Writer
-}
-
-func (s *outputModeTestStreams) Input() io.Reader     { return s.stdin }
-func (s *outputModeTestStreams) Output() io.Writer    { return s.stdout }
-func (s *outputModeTestStreams) Error() io.Writer     { return s.stderr }
-func (s *outputModeTestStreams) RawOutput() io.Writer { return s.stdout }
-func (s *outputModeTestStreams) RawError() io.Writer  { return s.stderr }
 
 func setupOutputModeCapture(t *testing.T) (*bytes.Buffer, *bytes.Buffer, func()) {
 	t.Helper()
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	streams := &outputModeTestStreams{
-		stdin:  &bytes.Buffer{},
-		stdout: stdout,
-		stderr: stderr,
-	}
-	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+
+	stdoutReader, stdoutWriter, err := os.Pipe()
 	require.NoError(t, err)
+	stderrReader, stderrWriter, err := os.Pipe()
+	require.NoError(t, err)
+
+	stdoutDone := make(chan error, 1)
+	stderrDone := make(chan error, 1)
+	go func() {
+		_, copyErr := io.Copy(stdout, stdoutReader)
+		stdoutDone <- copyErr
+	}()
+	go func() {
+		_, copyErr := io.Copy(stderr, stderrReader)
+		stderrDone <- copyErr
+	}()
+
+	os.Stdout = stdoutWriter
+	os.Stderr = stderrWriter
+	iolib.Reset()
+	ui.Reset()
+	data.Reset()
+	require.NoError(t, iolib.Initialize())
+	ioCtx := iolib.GetContext()
 	ui.InitFormatter(ioCtx)
 	data.InitWriter(ioCtx)
 
-	return stdout, stderr, func() {}
+	var cleaned bool
+	cleanup := func() {
+		if cleaned {
+			return
+		}
+		cleaned = true
+
+		_ = stdoutWriter.Close()
+		_ = stderrWriter.Close()
+		require.NoError(t, <-stdoutDone)
+		require.NoError(t, <-stderrDone)
+		_ = stdoutReader.Close()
+		_ = stderrReader.Close()
+
+		os.Stdout = oldStdout
+		os.Stderr = oldStderr
+		iolib.Reset()
+		ui.Reset()
+		data.Reset()
+	}
+
+	return stdout, stderr, cleanup
 }
 
 // OutputModeWriter creation is tested in output_mode_test.go.
@@ -143,6 +167,7 @@ func TestOutputModeWriterRawLabelsEnabledByDefault(t *testing.T) {
 	})
 
 	require.NoError(t, err)
+	cleanup()
 	assert.Contains(t, stderr.String(), "[raw_step]")
 	assert.Contains(t, stderr.String(), "raw_step completed")
 }
@@ -157,6 +182,7 @@ func TestOutputModeWriterRawLabelsCanBeDisabled(t *testing.T) {
 	})
 
 	require.NoError(t, err)
+	cleanup()
 	assert.NotContains(t, stderr.String(), "[raw_step]")
 	assert.NotContains(t, stderr.String(), "raw_step completed")
 }
@@ -211,6 +237,7 @@ func TestOutputModeWriterLogLabelsCanBeDisabled(t *testing.T) {
 	})
 
 	require.NoError(t, err)
+	cleanup()
 	assert.Equal(t, "logged output", out)
 	assert.Equal(t, "logged output", stdout.String())
 	assert.NotContains(t, stderr.String(), "[log_step]")

@@ -82,7 +82,8 @@ func TestWorkdirHandlerExecuteRequiresResolvedPath(t *testing.T) {
 
 func TestResolveWorkdirSourceValueResolvesNestedTemplates(t *testing.T) {
 	vars := NewVariables()
-	vars.SetEnv("ROOT", "/tmp/root")
+	root := t.TempDir()
+	vars.SetEnv("ROOT", filepath.ToSlash(root))
 	vars.SetEnv("REF", "main")
 
 	resolved, err := resolveWorkdirSourceValue(map[string]any{
@@ -97,7 +98,7 @@ func TestResolveWorkdirSourceValueResolvesNestedTemplates(t *testing.T) {
 
 	sourceMap, ok := resolved.(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "/tmp/root/component", sourceMap["uri"])
+	assert.Equal(t, filepath.ToSlash(filepath.Join(root, "component")), sourceMap["uri"])
 	assert.Equal(t, "main", sourceMap["version"])
 	options := sourceMap["options"].([]any)
 	assert.Equal(t, "plain", options[0])
@@ -106,13 +107,14 @@ func TestResolveWorkdirSourceValueResolvesNestedTemplates(t *testing.T) {
 
 func TestResolveWorkdirSourceValueSupportsYAMLAnyMapsAndRejectsNonStringKeys(t *testing.T) {
 	vars := NewVariables()
-	vars.SetEnv("SRC", "/tmp/src")
+	src := t.TempDir()
+	vars.SetEnv("SRC", filepath.ToSlash(src))
 
 	resolved, err := resolveWorkdirSourceValue(map[any]any{
 		"uri": "{{ .env.SRC }}",
 	}, vars)
 	require.NoError(t, err)
-	assert.Equal(t, "/tmp/src", resolved.(map[string]any)["uri"])
+	assert.Equal(t, filepath.ToSlash(src), resolved.(map[string]any)["uri"])
 
 	_, err = resolveWorkdirSourceValue(map[any]any{42: "value"}, vars)
 	require.Error(t, err)

@@ -7,7 +7,7 @@ description: Create and review portable Atmos CLI asciicast demos for community-
 
 Use this skill when creating or reviewing `.cast` recordings that demonstrate Atmos CLI usage for a broad community audience.
 
-This is a distributed Agent Skill. Keep it portable and audience-neutral. Do not assume Cloud Posse repository paths, the Atmos documentation website, a specific cast player component, or internal development fixtures unless the project using the skill explicitly provides those conventions.
+This is a distributed Agent Skill. Keep it portable and audience-neutral. Do not assume Cloud Posse repository paths, the Atmos documentation website, or internal development fixtures unless the project using the skill explicitly provides those conventions.
 
 ## Defaults
 
@@ -30,10 +30,10 @@ This is a distributed Agent Skill. Keep it portable and audience-neutral. Do not
 3. Regenerate the `.cast` into the project-approved documentation asset location.
 4. Review the cast as plain text for secrets, local paths, unstable timestamps, noisy logs, and project-specific assumptions.
 5. Embed or link the cast using the host project's documentation conventions.
-6. Prefer committing only `.cast` files. Commit GIF/MP4/SVG derivatives only when a publishing target cannot consume asciicast files directly.
+6. Prefer committing only `.cast` files unless the host project explicitly documents additional generated artifacts.
 
 ## Boundaries
 
 - Do not include internal Atmos development workflows in this Agent Skill.
 - Do not reference Claude skills or assume a sync relationship with them.
-- Do not hard-code Cloud Posse website paths, `CastPlayer`, or internal demo fixture locations in community guidance.
+- Do not hard-code Cloud Posse website paths or internal demo fixture locations in community guidance.

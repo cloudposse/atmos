@@ -9,6 +9,16 @@ Use this Claude skill when creating or updating committed `.cast` recordings ins
 
 This is an internal Atmos development skill. It is intentionally separate from distributed Agent Skills. Do not symlink it to `agent-skills`, copy internal website assumptions into Agent Skills, or treat Claude skills and Agent Skills as synchronized artifacts.
 
+## Intent
+
+Atmos casts are product demos, regression evidence, and documentation examples at the same time. They should show users that Atmos workflows are simple to follow and that the feature being demonstrated works in a realistic project.
+
+- Tell a small story a user can follow: inspect context, run the Atmos command, show the result.
+- Prefer Atmos-native commands and workflow features over clever shell expressions.
+- Keep recorded steps light. A visible step should usually be one command with one teaching purpose.
+- Use hidden setup, cleanup, and fixture preparation only to make the recorded story deterministic.
+- Treat each cast as evidence for a feature: include the command output that proves the behavior, then validate the committed `.cast`.
+
 ## Defaults
 
 - Use `width: 120` and `height: 36` unless the target docs page needs a narrower recording.
@@ -23,15 +33,26 @@ This is an internal Atmos development skill. It is intentionally separate from d
 - Do not reuse product examples or test fixtures just to make a docs cast easier.
 - Keep demo output stable: no local absolute paths, hostnames, real account IDs, secrets, random IDs, or live timestamps.
 
+## Workflow Patterns
+
+- Put repeatable setup in `atmos casts setup` using `type: workdir` for fixture copies and a local `GOBIN` for the Atmos binary.
+- Keep pre-recording `clean` steps simple; they remove stale `.cast` files before recording and do not need failure cleanup semantics.
+- Put cleanup-after-recording steps after the `type: cast` step and use `when: always` when they restore secrets, stop services, or remove Terraform state.
+- Leave validation steps success-only so validation runs only after recording and required cleanup complete successfully.
+- Use `output: none` for noisy setup, reset, and cleanup commands that should not be part of the story.
+- Prefer `type: cast` `mode: steps` with nested `type: shell` steps for command demos; add `type: simulate` steps only when typed prompts make a longer story easier to follow.
+- Keep large shell scripts out of recorded casts. If unavoidable, hide them in setup/cleanup and explain the user-facing result with lightweight Atmos commands in the recording.
+
 ## Authoring Checklist
 
-1. Add or update the workflow/custom command that regenerates the cast.
-2. Regenerate the `.cast` into `website/static/casts`.
-3. Review the cast as plain text for secrets, local paths, unstable timestamps, and noisy logs.
-4. Embed it with the website `CastPlayer` component when the corresponding docs page can show it usefully:
+1. Define the user-facing story before editing YAML: what feature is being proven, what command should the user remember, and what output proves it worked?
+2. Add or update the workflow/custom command that regenerates the cast.
+3. Regenerate the `.cast` into `website/static/casts`.
+4. Review the cast as plain text for secrets, local paths, unstable timestamps, noisy logs, and shell complexity that distracts from Atmos.
+5. Embed it with the website `CastPlayer` component when the corresponding docs page can show it usefully:
 
    ```mdx
    <CastPlayer src="/casts/cli/describe-component.cast" title="describe component" chrome controls scrubber />
    ```
 
-5. Prefer committing only `.cast` files. Commit GIF/MP4/SVG derivatives only when a publishing target cannot consume the player.
+6. Prefer committing only `.cast` files. Commit GIF/MP4/SVG derivatives only when a publishing target cannot consume the player.

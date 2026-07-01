@@ -619,14 +619,56 @@ func TasksDecodeHook() mapstructure.DecodeHookFunc {
 			return data, nil
 		}
 
-		// Get the slice data.
-		slice, ok := data.([]any)
+		slice, ok := sliceToAny(data)
 		if !ok {
 			return data, nil
 		}
 
 		return decodeTasksFromSlice(slice)
 	}
+}
+
+// WorkflowStepDecodeHook normalizes polymorphic workflow step maps before
+// mapstructure decodes them into WorkflowStep values.
+func WorkflowStepDecodeHook() mapstructure.DecodeHookFunc {
+	workflowStepType := reflect.TypeOf(WorkflowStep{})
+	workflowStepsType := reflect.TypeOf([]WorkflowStep{})
+
+	return func(f reflect.Type, t reflect.Type, data any) (any, error) {
+		switch t {
+		case workflowStepType:
+			if f.Kind() != reflect.Map {
+				return data, nil
+			}
+			stepMap, ok := stringifyTaskMap(data)
+			if !ok {
+				return data, nil
+			}
+			return normalizeWorkflowStepMap(stepMap)
+		case workflowStepsType:
+			if f.Kind() != reflect.Slice {
+				return data, nil
+			}
+			return normalizeWorkflowStepMaps(data)
+		default:
+			return data, nil
+		}
+	}
+}
+
+func sliceToAny(data any) ([]any, bool) {
+	if slice, ok := data.([]any); ok {
+		return slice, true
+	}
+	rv := reflect.ValueOf(data)
+	if !rv.IsValid() || rv.Kind() != reflect.Slice {
+		return nil, false
+	}
+	slice := make([]any, rv.Len())
+	for i := range slice {
+		slice[i] = rv.Index(i).Interface()
+	}
+	return slice, true
 }
 
 // decodeTasksFromSlice converts a slice of interface{} values into Tasks.
@@ -652,6 +694,9 @@ func decodeTaskItem(item any, index int) (Task, error) {
 	case map[string]any:
 		return decodeTaskFromMap(v, index)
 	default:
+		if taskMap, ok := stringifyTaskMap(v); ok {
+			return decodeTaskFromMap(taskMap, index)
+		}
 		return Task{}, fmt.Errorf("%w at index %d: got %T (expected string or map)", ErrTaskUnexpectedNodeKind, index, item)
 	}
 }
@@ -678,6 +723,7 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
 			mapstructure.StringToTimeDurationHookFunc(),
 			ConditionDecodeHook(),
+			WorkflowStepDecodeHook(),
 		),
 	})
 	if err != nil {
@@ -711,13 +757,14 @@ func normalizeTaskStepsMap(m map[string]any) (map[string]any, error) {
 }
 
 func normalizeWorkflowStepMaps(value any) (any, error) {
-	steps, ok := value.([]any)
-	if !ok {
+	rv := reflect.ValueOf(value)
+	if !rv.IsValid() || rv.Kind() != reflect.Slice {
 		return value, nil
 	}
-	normalized := make([]any, len(steps))
-	for i, item := range steps {
-		stepMap, ok := item.(map[string]any)
+	normalized := make([]any, rv.Len())
+	for i := range normalized {
+		item := rv.Index(i).Interface()
+		stepMap, ok := stringifyTaskMap(item)
 		if !ok {
 			normalized[i] = item
 			continue
@@ -731,6 +778,21 @@ func normalizeWorkflowStepMaps(value any) (any, error) {
 	return normalized, nil
 }
 
+func stringifyTaskMap(item any) (map[string]any, bool) {
+	switch v := item.(type) {
+	case map[string]any:
+		return v, true
+	case map[any]any:
+		converted := make(map[string]any, len(v))
+		for key, val := range v {
+			converted[fmt.Sprint(key)] = val
+		}
+		return converted, true
+	default:
+		return nil, false
+	}
+}
+
 func normalizeWorkflowStepMap(m map[string]any) (map[string]any, error) {
 	copied := make(map[string]any, len(m))
 	for key, val := range m {
@@ -739,11 +801,15 @@ func normalizeWorkflowStepMap(m map[string]any) (map[string]any, error) {
 	if prompt, ok := copied[taskMapKeyPrompt]; ok {
 		switch v := prompt.(type) {
 		case string:
-		case map[string]any:
+		default:
+			promptMap, ok := stringifyTaskMap(v)
+			if !ok {
+				break
+			}
 			if copied["type"] != TaskTypeSimulate {
 				return nil, fmt.Errorf("%w: structured prompt is supported only for type %q", ErrWorkflowControlStepInvalid, TaskTypeSimulate)
 			}
-			copied["simulate_prompt"] = v
+			copied["simulate_prompt"] = promptMap
 			delete(copied, taskMapKeyPrompt)
 		}
 	}
@@ -765,7 +831,11 @@ func normalizeTaskPromptMap(m map[string]any, task *Task) (map[string]any, error
 	switch v := prompt.(type) {
 	case string:
 		return m, nil
-	case map[string]any:
+	default:
+		promptMap, ok := stringifyTaskMap(v)
+		if !ok {
+			return m, nil
+		}
 		if m["type"] != TaskTypeSimulate {
 			return nil, fmt.Errorf("%w: structured prompt is supported only for type %q", ErrWorkflowControlStepInvalid, TaskTypeSimulate)
 		}
@@ -778,7 +848,7 @@ func normalizeTaskPromptMap(m map[string]any, task *Task) (map[string]any, error
 		if err != nil {
 			return nil, err
 		}
-		if err := decoder.Decode(v); err != nil {
+		if err := decoder.Decode(promptMap); err != nil {
 			return nil, err
 		}
 		task.SimulatePrompt = &cfg
@@ -790,8 +860,6 @@ func normalizeTaskPromptMap(m map[string]any, task *Task) (map[string]any, error
 			copied[key] = val
 		}
 		return copied, nil
-	default:
-		return m, nil
 	}
 }
 

@@ -1707,6 +1707,7 @@ func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
 		schema.ConditionDecodeHook(),
 		schema.CommandEnvDecodeHook(),
+		schema.WorkflowStepDecodeHook(),
 		schema.TasksDecodeHook(),
 	)
 }

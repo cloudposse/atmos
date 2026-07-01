@@ -540,6 +540,80 @@ func TestTasksDecodeHook_NestedCastSimulatePrompt(t *testing.T) {
 	assert.Equal(t, "atmos secret list --stack dev --component api", result.Steps[0].Steps[1].Command)
 }
 
+func TestTasksDecodeHook_NestedCastSimulatePromptFromTypedSlice(t *testing.T) {
+	input := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"type": TaskTypeCast,
+				"mode": "steps",
+				"steps": []map[string]any{
+					{
+						"type": TaskTypeSimulate,
+						"mode": "typed",
+						"prompt": map[string]any{
+							"text":  "> ",
+							"style": "command",
+						},
+						"text": "atmos secret list --stack dev --component api",
+					},
+				},
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	require.Len(t, result.Steps[0].Steps, 1)
+	require.NotNil(t, result.Steps[0].Steps[0].SimulatePrompt)
+	assert.Equal(t, "> ", result.Steps[0].Steps[0].SimulatePrompt.Text)
+	assert.Equal(t, "command", result.Steps[0].Steps[0].SimulatePrompt.Style)
+}
+
+func TestTasksDecodeHook_NestedCastSimulatePromptFromAnyMap(t *testing.T) {
+	input := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"type": TaskTypeCast,
+				"mode": "steps",
+				"steps": []any{
+					map[any]any{
+						"type": TaskTypeSimulate,
+						"mode": "typed",
+						"prompt": map[string]any{
+							"text":  "> ",
+							"style": "command",
+						},
+						"text": "atmos secret list --stack dev --component api",
+					},
+				},
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	require.Len(t, result.Steps[0].Steps, 1)
+	require.NotNil(t, result.Steps[0].Steps[0].SimulatePrompt)
+	assert.Equal(t, "> ", result.Steps[0].Steps[0].SimulatePrompt.Text)
+	assert.Equal(t, "command", result.Steps[0].Steps[0].SimulatePrompt.Style)
+}
+
 func TestTasksDecodeHook_InvalidOutputType(t *testing.T) {
 	input := map[string]any{
 		"steps": []any{

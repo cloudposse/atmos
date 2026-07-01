@@ -293,8 +293,8 @@ func TestRegisterConditionPredicate(t *testing.T) {
 
 func TestValidateStepCondition(t *testing.T) {
 	require.NoError(t, ValidateStepCondition(MustCondition([]any{"ci", "success"})))
-	require.Error(t, ValidateStepCondition(MustCondition("failure")))
-	require.Error(t, ValidateStepCondition(MustCondition(map[string]any{"not": "failure"})))
+	require.NoError(t, ValidateStepCondition(MustCondition("failure")))
+	require.NoError(t, ValidateStepCondition(MustCondition(map[string]any{"not": "failure"})))
 }
 
 func TestConditionJSONRoundTrip(t *testing.T) {

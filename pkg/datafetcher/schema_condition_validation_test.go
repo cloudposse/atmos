@@ -99,15 +99,67 @@ func TestManifestSchema_HookRetryUsesWorkflowRetrySchema(t *testing.T) {
 	}
 }
 
+func TestManifestSchema_WorkflowStepCastSimulationFields(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded": loadEmbeddedSchemaBytes(t),
+		"website":  loadWebsiteSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName+"/accepts cast write rate", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, workflowManifestWithStep(map[string]any{
+				"type":       "cast",
+				"mode":       "session",
+				"write_rate": "35ms",
+			}))
+		})
+
+		t.Run(schemaName+"/retains simulate rate", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, workflowManifestWithStep(map[string]any{
+				"type": "simulate",
+				"mode": "typed",
+				"rate": "12ms",
+				"text": "atmos version",
+			}))
+		})
+
+		t.Run(schemaName+"/accepts simulate structured prompt", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, workflowManifestWithStep(map[string]any{
+				"type": "simulate",
+				"mode": "typed",
+				"prompt": map[string]any{
+					"text":  "> ",
+					"style": "command",
+				},
+				"text": "atmos version",
+			}))
+		})
+
+		t.Run(schemaName+"/rejects non-simulate structured prompt", func(t *testing.T) {
+			assertSchemaInvalid(t, schemaData, workflowManifestWithStep(map[string]any{
+				"type": "input",
+				"prompt": map[string]any{
+					"text":  "> ",
+					"style": "command",
+				},
+			}))
+		})
+	}
+}
+
 func workflowManifestWithWhen(condition any) map[string]any {
+	return workflowManifestWithStep(map[string]any{
+		"command": "echo ok",
+		"when":    condition,
+	})
+}
+
+func workflowManifestWithStep(step map[string]any) map[string]any {
 	return map[string]any{
 		"workflows": map[string]any{
 			"test": map[string]any{
 				"steps": []any{
-					map[string]any{
-						"command": "echo ok",
-						"when":    condition,
-					},
+					step,
 				},
 			},
 		},

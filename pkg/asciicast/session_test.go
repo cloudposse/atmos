@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"os/exec"
 	"regexp"
 	"runtime"
 	"strings"
@@ -314,20 +313,19 @@ func TestNewSessionStateCapturesOutputAndEOF(t *testing.T) {
 }
 
 func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("scripted shell session uses /bin/sh")
-	}
-	if _, err := exec.LookPath("/bin/sh"); err != nil {
-		t.Skip("/bin/sh is not available")
-	}
 	if err := iolib.Initialize(); err != nil {
 		t.Fatal(err)
 	}
+	shell, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(asciicastSessionHelperEnv, "1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	err := RunSession(ctx, SessionOptions{
-		Shell:  "/bin/sh",
+	err = RunSession(ctx, SessionOptions{
+		Shell:  shell,
 		Width:  80,
 		Height: 24,
 		Actions: []SessionAction{
@@ -342,20 +340,19 @@ func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 }
 
 func TestRunSessionReturnsActionErrors(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("scripted shell session uses /bin/sh")
-	}
-	if _, err := exec.LookPath("/bin/sh"); err != nil {
-		t.Skip("/bin/sh is not available")
-	}
 	if err := iolib.Initialize(); err != nil {
 		t.Fatal(err)
 	}
+	shell, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(asciicastSessionHelperEnv, "1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	err := RunSession(ctx, SessionOptions{
-		Shell:   "/bin/sh",
+	err = RunSession(ctx, SessionOptions{
+		Shell:   shell,
 		Actions: []SessionAction{{Type: "bogus"}},
 	})
 	if !errors.Is(err, ErrUnknownSessionAction) {
