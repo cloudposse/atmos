@@ -262,6 +262,26 @@ container:
     disable: true        # or:  test: ["NONE"]
 ```
 
+## Host runtime access (Docker-out-of-Docker)
+
+Some emulators need to drive the **host container runtime** themselves — they launch and manage *sibling* containers. The clearest example is the MiniStack AWS emulator's EKS service, which spawns a real `rancher/k3s` container per `eks:CreateCluster`. Grant that access with `container.runtime.host`:
+
+```yaml
+components:
+  emulator:
+    aws:
+      driver: ministack/aws
+      container:
+        runtime:
+          host: true        # MiniStack can spawn its k3s sibling for EKS
+```
+
+When `host: true`, Atmos mounts the host runtime socket into the container at `/var/run/docker.sock`, runs it as root, relabels the mount for SELinux, and sets `DOCKER_HOST` so tooling inside finds the runtime. It is the same `container.runtime.host` flag available on [container components](/components/container) and `type: container` workflow steps, and it mirrors the global [`container.runtime`](/cli/configuration) default.
+
+:::warning Privileged & runtime-dependent
+Host runtime access is effectively host-root — keep it opt-in. It works on Docker (Linux, Docker Desktop) and **rootful** podman. On **rootless podman** the mounted socket is unreachable inside the container; Atmos warns and you should switch with `podman machine set --rootful` (or use Docker). It is independent of `privileged` (kernel capabilities).
+:::
+
 ## Component-Type Defaults
 
 Define defaults for all emulator components under the top-level `emulator` key:
@@ -391,6 +411,7 @@ Each target publishes the connection environment its SDKs and tools expect. The 
 
 ## Related
 
+- [Using Emulators](/components/emulator) — Conceptual overview in the Component Library
 - [Component Types Overview](/stacks/components)
 - [Terraform Components](/stacks/components/terraform)
 - [Ansible Components](/stacks/components/ansible)

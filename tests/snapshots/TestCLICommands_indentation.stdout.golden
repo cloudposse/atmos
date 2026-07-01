@@ -35,6 +35,10 @@ components:
         base_path: ""
         command: ""
         auto_generate_files: false
+    kubernetes:
+        base_path: ""
+        provider: ""
+        auto_generate_files: false
 stacks:
     base_path: stacks
     included_paths:
@@ -45,6 +49,10 @@ stacks:
 logs:
     file: /dev/stderr
     level: Info
+diagnostics:
+    enabled: false
+    file: ""
+    include_output: false
 settings:
     list_merge_strategy: ""
     terminal:
@@ -82,6 +90,7 @@ terraformDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indent
 helmfileDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 packerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 ansibleDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
+kubernetesDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 default: false
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 import: []

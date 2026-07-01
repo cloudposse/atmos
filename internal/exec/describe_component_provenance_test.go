@@ -87,8 +87,6 @@ func TestDescribeComponent_NestedImportProvenance(t *testing.T) {
 		"catalog/dynamodb-table/defaults": true, // Nested: from catalog/backend
 		"catalog/app-config/defaults":     true, // Nested: from catalog/backend
 		"mixins/region/us-east-2":         true,
-		"mixins/stage/dev":                true,
-		"mixins/tenant/plat":              true,
 		"orgs/acme/_defaults":             true,
 		"orgs/acme/plat/_defaults":        true,
 		"orgs/acme/plat/dev/_defaults":    true,

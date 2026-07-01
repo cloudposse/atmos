@@ -25,20 +25,22 @@ func TestContainerHandlerBuildConfig(t *testing.T) {
 	cfg, err := handler.buildConfig(context.Background(), &schema.WorkflowStep{
 		Name:             "scan",
 		Type:             "container",
-		Image:            "{{ .steps.image.value }}",
-		Command:          "echo $FOO",
 		WorkingDirectory: tmpDir,
 		Provider:         "docker",
-		Pull:             container.PullAlways,
-		Cleanup:          container.CleanupOnSuccess,
 		Env: map[string]string{
 			"FOO":                         "bar",
 			"AWS_SHARED_CREDENTIALS_FILE": credFile,
 		},
-		Mounts: []schema.ContainerMount{
-			{Type: "bind", Source: tmpDir, Target: "/cache", ReadOnly: true},
+		Run: &schema.ContainerRunStep{
+			Image:   "{{ .steps.image.value }}",
+			Command: "echo $FOO",
+			Pull:    container.PullAlways,
+			Cleanup: container.CleanupOnSuccess,
+			Mounts: []schema.ContainerMount{
+				{Type: "bind", Source: tmpDir, Target: "/cache", ReadOnly: true},
+			},
+			Ports: []schema.ContainerPort{{Host: 8080, Container: 8080}},
 		},
-		Ports: []schema.ContainerPort{{Host: 8080, Container: 8080}},
 	}, vars)
 
 	require.NoError(t, err)
@@ -174,10 +176,12 @@ func TestContainerHandlerValidateActionBlocks(t *testing.T) {
 	handler := &ContainerHandler{}
 
 	assert.NoError(t, handler.Validate(&schema.WorkflowStep{
-		Name:    "flat-run",
-		Type:    "container",
-		Image:   "alpine",
-		Command: "echo ok",
+		Name: "default-action-run",
+		Type: "container",
+		Run: &schema.ContainerRunStep{
+			Image:   "alpine",
+			Command: "echo ok",
+		},
 	}))
 	assert.NoError(t, handler.Validate(&schema.WorkflowStep{
 		Name:   "block-run",

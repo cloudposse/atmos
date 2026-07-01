@@ -62,6 +62,18 @@
   gap: 0.5rem;
 }
 
+/* Featured Section */
+.featuredSection {
+  margin-bottom: 3rem;
+}
+
+.featuredHeading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 1.5rem 0;
+  color: var(--ifm-heading-color);
+}
+
 /* Filter Bar */
 .filterBar {
   display: flex;
@@ -727,4 +739,64 @@
   .exampleCardTitle {
     font-size: 1rem;
   }
+}
+
+/*
+ * GitHub-flavored admonitions (alerts) rendered by remark-github-blockquote-alert.
+ * The plugin emits global classes (.markdown-alert, .markdown-alert-<type>, .markdown-alert-title)
+ * with an inline Octicon SVG in the title. We style them with Infima color variables so the
+ * accent and tint follow the site's light/dark theme automatically (the plugin's own CSS keys
+ * off prefers-color-scheme, which does not track Docusaurus's class-based dark toggle).
+ */
+:global(.markdown-alert) {
+  --alert-color: var(--ifm-color-info);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border-left: 0.25rem solid var(--alert-color);
+  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--alert-color) 8%, transparent);
+}
+
+:global(.markdown-alert) > :last-child {
+  margin-bottom: 0;
+}
+
+:global(.markdown-alert-title) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--alert-color);
+}
+
+:global(.markdown-alert-title) svg {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+}
+
+:global(.markdown-alert-note) {
+  --alert-color: var(--ifm-color-info);
+}
+
+:global(.markdown-alert-tip) {
+  --alert-color: var(--ifm-color-success);
+}
+
+:global(.markdown-alert-important) {
+  --alert-color: #8957e5;
+}
+
+:global(.markdown-alert-warning) {
+  --alert-color: var(--ifm-color-warning);
+}
+
+:global(.markdown-alert-caution) {
+  --alert-color: var(--ifm-color-danger);
+}
+
+:global(html[data-theme='dark'] .markdown-alert-important) {
+  --alert-color: #a371f7;
 }

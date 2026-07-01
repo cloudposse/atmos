@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -617,6 +618,108 @@ func TestExtractComponentSections_Retry(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "components.terraform.vpc.retry")
 	})
+}
+
+// TestExtractComponentSections_Kubernetes covers the kubernetes-specific extraction
+// branch: provider (scalar), paths/manifests (passed through verbatim as `any`), render
+// (map), plus the hooks/generate/source/provision sections that kubernetes supports.
+func TestExtractComponentSections_Kubernetes(t *testing.T) {
+	t.Run("all-kubernetes-sections-extracted", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "app",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.VarsSectionName:      map[string]any{"replicas": 3},
+				cfg.ProviderSectionName:  "kustomize",
+				cfg.PathsSectionName:     []any{"base/deployment.yaml", "base/service.yaml"},
+				cfg.ManifestsSectionName: map[string]any{"deployment": "d.yaml"},
+				cfg.RenderSectionName:    map[string]any{"engine": "kustomize"},
+				cfg.HooksSectionName:     map[string]any{"before": []any{"echo hi"}},
+				cfg.GenerateSectionName:  map[string]any{"file.yaml": map[string]any{"format": "yaml"}},
+				cfg.SourceSectionName:    map[string]any{"uri": "github.com/example/repo"},
+				cfg.ProvisionSectionName: map[string]any{"workdir": "."},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+
+		assert.Equal(t, map[string]any{"replicas": 3}, result.ComponentVars)
+		assert.Equal(t, "kustomize", result.ComponentProvider)
+		paths, ok := result.ComponentPaths.([]any)
+		require.True(t, ok, "paths must round-trip as []any")
+		require.Len(t, paths, 2)
+		assert.Equal(t, "base/deployment.yaml", paths[0])
+		assert.Equal(t, "base/service.yaml", paths[len(paths)-1])
+		manifests, ok := result.ComponentManifests.(map[string]any)
+		require.True(t, ok, "manifests must round-trip as map")
+		assert.Equal(t, "d.yaml", manifests["deployment"])
+		assert.Equal(t, map[string]any{"engine": "kustomize"}, result.ComponentRender)
+		assert.Equal(t, map[string]any{"before": []any{"echo hi"}}, result.ComponentHooks)
+		assert.Equal(t, map[string]any{"file.yaml": map[string]any{"format": "yaml"}}, result.ComponentGenerate)
+		assert.Equal(t, "github.com/example/repo", result.ComponentSourceSection["uri"])
+		assert.Equal(t, ".", result.ComponentProvision["workdir"])
+	})
+
+	t.Run("invalid-provider-type-returns-error", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "app",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.ProviderSectionName: map[string]any{"not": "a string"},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		err := extractComponentSections(&opts, result)
+		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		assert.Contains(t, err.Error(), "components.kubernetes.app.provider")
+	})
+
+	t.Run("invalid-render-type-returns-error", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "app",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.RenderSectionName: "not a map",
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		err := extractComponentSections(&opts, result)
+		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		assert.Contains(t, err.Error(), "components.kubernetes.app.render")
+	})
+}
+
+// TestSupportsComponentTypeHelpers is a truth-table for the supports* capability helpers
+// that gate which sections each component type extracts and merges.
+func TestSupportsComponentTypeHelpers(t *testing.T) {
+	tests := []struct {
+		componentType   string
+		hooks           bool
+		generate        bool
+		sourceProvision bool
+	}{
+		{cfg.TerraformComponentType, true, true, true},
+		{cfg.KubernetesComponentType, true, true, true},
+		{cfg.HelmfileComponentType, false, false, true},
+		{cfg.PackerComponentType, false, false, true},
+		{"unknown-type", false, false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.componentType, func(t *testing.T) {
+			assert.Equal(t, tt.hooks, supportsComponentHooks(tt.componentType), "supportsComponentHooks")
+			assert.Equal(t, tt.generate, supportsGenerate(tt.componentType), "supportsGenerate")
+			assert.Equal(t, tt.sourceProvision, supportsSourceProvision(tt.componentType), "supportsSourceProvision")
+		})
+	}
 }
 
 func TestProcessComponentOverrides(t *testing.T) {

@@ -64,9 +64,10 @@ type InstancesCommandOptions struct {
 	Delimiter   string
 	Query       string
 	AuthManager auth.AuthManager
-	// AuthDisabled is true when the caller explicitly used --identity=false.
-	// It prevents per-component auth auto-detection while still allowing
-	// templates and YAML functions that do not require credentials to run.
+	// AuthDisabled is true when the caller did not request an identity or
+	// explicitly used --identity=false. It prevents per-component auth
+	// auto-detection while still allowing templates and YAML functions that do
+	// not require credentials to run.
 	AuthDisabled bool
 	OutputFile   string
 	// ProcessTemplates toggles Go template processing of stack manifests

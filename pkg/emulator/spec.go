@@ -289,6 +289,15 @@ func (s *Spec) Privileged() (bool, error) {
 	return driver.Defaults().Privileged, nil
 }
 
+// HostRuntime reports whether the emulator container needs access to the host
+// container runtime (Docker-out-of-Docker), set via `container.runtime.host: true`.
+// Used, for example, by the MiniStack driver's EKS service to spawn a k3s sibling.
+func (s *Spec) HostRuntime() bool {
+	defer perf.Track(nil, "emulator.Spec.HostRuntime")()
+
+	return s.Container != nil && s.Container.Runtime != nil && s.Container.Runtime.Host
+}
+
 // PersistEnabled reports whether the emulator should persist state across
 // `down`/`up`. Persistence is on by default; only an explicit `ephemeral: true`
 // (or the `--ephemeral` CLI flag) disables it.

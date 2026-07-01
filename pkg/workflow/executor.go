@@ -151,6 +151,14 @@ func (e *Executor) prepareSteps(params *WorkflowParams, result *ExecutionResult)
 	CheckAndGenerateWorkflowStepNames(params.WorkflowDefinition)
 	e.stepVars = stepPkg.NewVariables()
 
+	// Validate control steps (parallel/matrix) and their nested step constraints.
+	if err := schema.ValidateWorkflowSteps(params.WorkflowDefinition.Steps); err != nil {
+		e.printError(err)
+		result.Success = false
+		result.Error = err
+		return nil, err
+	}
+
 	log.Debug("Executing workflow", "workflow", params.Workflow, "path", params.WorkflowPath)
 
 	// Handle --from-step flag.
@@ -390,6 +398,9 @@ func (e *Executor) executeRegisteredStep(params *WorkflowParams, step *schema.Wo
 	if e.stepVars == nil {
 		e.stepVars = stepPkg.NewVariables()
 	}
+	// Always set (or clear) the stack flag so a stackless step does not
+	// inherit a stale value from a prior step in the same workflow.
+	e.stepVars.SetFlag("stack", cmdParams.finalStack)
 
 	stepCtx, cancel, err := resolveStepContext(params.Ctx, stepCopy.Timeout)
 	if err != nil {
@@ -842,14 +853,21 @@ func (e *Executor) printError(err error) {
 // CheckAndGenerateWorkflowStepNames generates step names for steps that don't have them.
 // If a step doesn't have a name, it generates one in the format "step1", "step2", etc.
 func CheckAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefinition) {
-	steps := workflowDefinition.Steps
-	if steps == nil {
-		return
-	}
+	generateWorkflowStepNames(workflowDefinition.Steps, "")
+}
 
-	for index, step := range steps {
+func generateWorkflowStepNames(steps []schema.WorkflowStep, parent string) {
+	for index := range steps {
+		step := &steps[index]
 		if step.Name == "" {
-			steps[index].Name = fmt.Sprintf("step%d", index+1)
+			if parent == "" {
+				step.Name = fmt.Sprintf("step%d", index+1)
+			} else {
+				step.Name = fmt.Sprintf("%s_step%d", parent, index+1)
+			}
+		}
+		if len(step.Steps) > 0 {
+			generateWorkflowStepNames(step.Steps, step.Name)
 		}
 	}
 }

@@ -206,6 +206,14 @@ func (s *ContainerSpec) Ports() []ctr.PortBinding {
 	return ports
 }
 
+// HostRuntime reports whether the container needs access to the host container
+// runtime (Docker-out-of-Docker), set via `run.runtime.host: true`.
+func (s *ContainerSpec) HostRuntime() bool {
+	defer perf.Track(nil, "container.ContainerSpec.HostRuntime")()
+
+	return s.Run != nil && s.Run.Runtime != nil && s.Run.Runtime.Host
+}
+
 // RestartPolicy maps the run restart spec onto a runtime RestartPolicy, or nil
 // when none is configured (the runtime then uses its default of `no`).
 func (s *ContainerSpec) RestartPolicy() *ctr.RestartPolicy {
