@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"strings"
 	"testing"
 	"text/template"
 
@@ -96,6 +97,71 @@ func TestRenderer_Render_NoFilters(t *testing.T) {
 
 	err = r.Render(testData)
 	assert.NoError(t, err)
+}
+
+func TestRenderer_RenderToString_PathsFormat(t *testing.T) {
+	testData := []map[string]any{
+		{"file": "atmos.d/integrations.yaml", "path": "integrations.github.enabled", "type": "bool", "value": "true"},
+		{"file": "atmos.yaml", "path": "logs.level", "type": "string", "value": "info"},
+		{"file": "atmos.yaml", "path": "components.terraform.base_path", "type": "string", "value": "components/terraform"},
+	}
+
+	configs := []column.Config{
+		{Name: "file", Value: "{{ .file }}"},
+		{Name: "path", Value: "{{ .path }}"},
+		{Name: "type", Value: "{{ .type }}"},
+		{Name: "value", Value: "{{ .value }}"},
+	}
+	selector, err := column.NewSelector(configs, column.BuildColumnFuncMap())
+	require.NoError(t, err)
+
+	r := New(
+		nil,
+		selector,
+		[]*sort.Sorter{
+			sort.NewSorter("file", sort.Ascending),
+			sort.NewSorter("path", sort.Ascending),
+		},
+		format.FormatPaths,
+		"",
+	)
+
+	output, err := r.RenderToString(testData)
+	require.NoError(t, err)
+	require.Equal(t, `atmos.d/integrations.yaml
+  integrations.github.enabled
+
+atmos.yaml
+  components.terraform.base_path
+  logs.level
+`, output)
+}
+
+func TestFormatStyledPathsIncludesTypeAndValue(t *testing.T) {
+	output := formatStyledPaths(
+		[]string{"file", "path", "type", "value"},
+		[][]string{
+			{"atmos.yaml", "logs.level", "string", "info"},
+			{"atmos.yaml", "settings", "object", "{2 keys}"},
+			{"atmos.yaml", "commands[0].steps[0]", "string", "echo one\necho two\n"},
+		},
+	)
+
+	require.Contains(t, output, "atmos.yaml")
+	require.Contains(t, output, "logs.level")
+	require.Contains(t, output, "info")
+	require.Contains(t, output, "settings")
+	require.Contains(t, output, "{2 keys}")
+	require.Contains(t, output, "echo one ... (2 lines)")
+
+	lines := strings.Split(output, "\n")
+	logLine := lines[1]
+	settingsLine := lines[2]
+	commandLine := lines[3]
+	require.Equal(t, strings.Index(logLine, "string"), strings.Index(settingsLine, "object"))
+	require.Equal(t, strings.Index(logLine, "string"), strings.Index(commandLine, "string"))
+	require.Equal(t, strings.Index(logLine, "info"), strings.Index(settingsLine, "{2 keys}"))
+	require.Equal(t, strings.Index(logLine, "info"), strings.Index(commandLine, "echo one"))
 }
 
 func TestRenderer_Render_NoSorters(t *testing.T) {

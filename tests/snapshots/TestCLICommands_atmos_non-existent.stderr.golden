@@ -13,6 +13,7 @@ Valid subcommands are:
   • ci
   • completion
   • composition
+  • config
   • container
   • describe
   • devcontainer
@@ -31,6 +32,7 @@ Valid subcommands are:
   • profile
   • secret
   • show
+  • stack
   • support
   • terraform
   • tf

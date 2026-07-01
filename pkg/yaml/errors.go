@@ -20,4 +20,26 @@ var (
 
 	// ErrInvalidYAMLFunction is returned when a YAML function has invalid syntax.
 	ErrInvalidYAMLFunction = errors.New("invalid Atmos YAML function")
+
+	// ErrInvalidYAMLExpression is returned when a dot-path or yq expression cannot be parsed or evaluated.
+	ErrInvalidYAMLExpression = errors.New("invalid YAML path or expression")
+
+	// ErrYAMLPathNotFound is returned when a requested path does not exist in the document.
+	ErrYAMLPathNotFound = errors.New("YAML path not found")
+
+	// ErrYAMLUpdateFailed is returned when an edit operation fails to produce a valid document.
+	ErrYAMLUpdateFailed = errors.New("failed to update YAML")
+
+	// ErrYAMLAnchorAltered is returned when an edit would alter or expand a YAML anchor or alias,
+	// which the strict editing contract forbids.
+	ErrYAMLAnchorAltered = errors.New("edit would alter or expand a YAML anchor or alias")
+
+	// ErrParseYAML is returned when YAML content cannot be parsed.
+	ErrParseYAML = errors.New("failed to parse YAML")
+
+	// ErrReadFile is returned when a file cannot be read.
+	ErrReadFile = errors.New("failed to read file")
+
+	// ErrWriteFile is returned when a file cannot be written.
+	ErrWriteFile = errors.New("failed to write file")
 )
