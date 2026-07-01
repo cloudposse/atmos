@@ -7,6 +7,8 @@ tests:
     snapshot: false
     description: "Deploy the repository-backed native Helm example chart to the k3s emulator and verify resources."
     workdir: "../examples/helm"
+    env:
+      ATMOS_EXPERIMENTAL: "silent"
     command: "atmos"
     args:
       - "test"
