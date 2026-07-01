@@ -92,7 +92,7 @@ func (m *Manager) Up(ctx context.Context, spec *Spec, stack, name string, env ma
 	if err := m.bootstrapGitIfNeeded(ctx, runtime, spec, stack, name); err != nil {
 		return Endpoint{}, err
 	}
-	if err := m.waitKubernetesIfNeeded(ctx, spec, stack, name); err != nil {
+	if err := m.waitKubernetesIfNeeded(ctx, runtime, spec, stack, name); err != nil {
 		return Endpoint{}, err
 	}
 	return m.endpoint(ctx, runtime, spec, stack, name)
@@ -168,9 +168,9 @@ func (m *Manager) bootstrapGitIfNeeded(ctx context.Context, runtime container.Ru
 }
 
 // waitKubernetesIfNeeded blocks until a Kubernetes emulator has produced a
-// harvestable kubeconfig. This is the real readiness signal for k3s because the
-// kubeconfig is what downstream Helmfile/Kubectl commands consume.
-func (m *Manager) waitKubernetesIfNeeded(ctx context.Context, spec *Spec, stack, name string) error {
+// harvestable kubeconfig and registered a Ready node. K3s writes kubeconfig before
+// the API server is stable enough for immediate Helm/Kubectl release operations.
+func (m *Manager) waitKubernetesIfNeeded(ctx context.Context, runtime container.Runtime, spec *Spec, stack, name string) error {
 	target, err := spec.Target()
 	if err != nil {
 		return err
@@ -178,8 +178,10 @@ func (m *Manager) waitKubernetesIfNeeded(ctx context.Context, spec *Spec, stack,
 	if target != TargetKubernetes {
 		return nil
 	}
-	_, err = m.Kubeconfig(ctx, stack, name)
-	return err
+	if _, err := m.Kubeconfig(ctx, stack, name); err != nil {
+		return err
+	}
+	return m.waitKubernetesReady(ctx, runtime, stack, name)
 }
 
 func (m *Manager) namedConfig(spec *Spec, stack, name string, env map[string]string, rootless bool) (*container.NamedConfig, error) {
