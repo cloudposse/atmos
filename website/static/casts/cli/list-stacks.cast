@@ -1,2 +1,0 @@
-{"version":2,"width":120,"height":36,"timestamp":1782863290,"command":"atmos list stacks --format tree","env":{"SHELL":"/bin/zsh","TERM":"dumb"}}
-[0.116851583,"o"," Stacks \n│\n├──dev\n│\n└──production\n\n"]

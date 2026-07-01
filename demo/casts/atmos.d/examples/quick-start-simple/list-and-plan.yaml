@@ -1,0 +1,148 @@
+commands:
+- name: casts
+  commands:
+  - name: generate
+    commands:
+    - name: examples
+      commands:
+      - name: quick-start-simple
+        commands:
+        - name: list-and-plan
+          description: Regenerate the Quick Start Simple example cast
+          env:
+            PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+          steps:
+          - type: shell
+            name: setup
+            command: atmos casts setup
+          - type: shell
+            name: clean
+            command: rm -f ../../website/static/casts/examples/quick-start-simple/list-and-plan.cast
+          - type: cast
+            name: list-and-plan
+            working_directory: "../../.context/cast-fixtures/quick-start-simple"
+            command: atmos terraform plan station -s dev
+            mode: steps
+            rate: 12ms
+            write_rate: 35ms
+            width: 120
+            height: 36
+            env:
+              TERM: xterm-256color
+              COLORTERM: truecolor
+              ATMOS_FORCE_COLOR: '1'
+              CLICOLOR_FORCE: '1'
+              FORCE_COLOR: '1'
+              ATMOS_FORCE_TTY: 'true'
+              ATMOS_KEYRING_TYPE: memory
+              ATMOS_STACKS_BASE_PATH: stacks
+              ATMOS_STACKS_INCLUDED_PATHS: deploy/**/*
+              ATMOS_STACKS_EXCLUDED_PATHS: "**/_defaults.yaml"
+            show:
+              labels: false
+            output:
+              mode: raw
+              cast: "../../website/static/casts/examples/quick-start-simple/list-and-plan.cast"
+            steps:
+            - type: simulate
+              mode: typed
+              prompt: &1
+                text: "> "
+                style: command
+              rate: 35ms
+              text: "# see the stacks in this quick start"
+            - type: simulate
+              mode: typed
+              prompt: *1
+              rate: 35ms
+              text: atmos list stacks --format tree
+            - type: shell
+              name: list-stacks
+              working_directory: "../../.context/cast-fixtures/quick-start-simple"
+              env: &2
+                TERM: xterm-256color
+                COLORTERM: truecolor
+                ATMOS_FORCE_COLOR: '1'
+                CLICOLOR_FORCE: '1'
+                FORCE_COLOR: '1'
+                ATMOS_FORCE_TTY: 'true'
+                ATMOS_KEYRING_TYPE: memory
+              duration: 450ms
+              interval: 750ms
+              command: atmos list stacks --format tree
+            - type: simulate
+              mode: typed
+              prompt: *1
+              rate: 35ms
+              text: "# station is a Terraform component instance in all three stacks"
+            - type: simulate
+              mode: typed
+              prompt: *1
+              rate: 35ms
+              text: atmos list components
+            - type: shell
+              name: list-components
+              working_directory: "../../.context/cast-fixtures/quick-start-simple"
+              env: *2
+              duration: 450ms
+              interval: 750ms
+              command: atmos list components
+            - type: simulate
+              mode: typed
+              prompt: *1
+              rate: 35ms
+              text: "# plan the dev station instance"
+            - type: simulate
+              mode: typed
+              prompt: *1
+              rate: 35ms
+              text: atmos terraform plan station -s dev
+            - type: shell
+              name: terraform-plan
+              working_directory: "../../.context/cast-fixtures/quick-start-simple"
+              env: *2
+              duration: 550ms
+              interval: 900ms
+              command: atmos terraform plan station -s dev
+          - type: shell
+            name: validate
+            command: atmos casts validate examples quick-start-simple list-and-plan
+  - name: validate
+    commands:
+    - name: examples
+      commands:
+      - name: quick-start-simple
+        commands:
+        - name: list-and-plan
+          description: Validate the Quick Start Simple example cast
+          steps:
+          - type: script
+            name: validate
+            interpreter: python3
+            script: |
+              import json
+              from pathlib import Path
+              raw = Path("../../website/static/casts/examples/quick-start-simple/list-and-plan.cast").read_text()
+              rows = raw.splitlines()
+              text = "".join(json.loads(line)[2] for line in rows[1:] if json.loads(line)[1] in ("o", "e"))
+              for needle in [
+                  "# see the stacks in this quick start",
+                  "atmos list stacks --format tree",
+                  "Stacks",
+                  "atmos list components",
+                  "station",
+                  "# plan the dev station instance",
+                  "atmos terraform plan station -s dev",
+                  "Terraform will perform the following actions",
+                  "local_file.cache",
+                  "https://wttr.in/Stockholm?0m",
+                  "lang=sv",
+                  "Plan:",
+              ]:
+                  if needle not in text:
+                      raise SystemExit(f"list-and-plan cast missing {needle!r}")
+              if "\\u001b[" not in raw:
+                  raise SystemExit("list-and-plan cast is missing ANSI color sequences")
+              for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[list-stacks]", "[list-components]", "completed"]:
+                  if bad in raw or bad in text:
+                      raise SystemExit(f"list-and-plan cast contains {bad!r}")

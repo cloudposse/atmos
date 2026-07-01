@@ -103,7 +103,7 @@ workflows:
         script: |
           from pathlib import Path
 
-          text = Path("../../website/static/casts/examples/sops-secrets.cast").read_text()
+          text = Path("../../website/static/casts/examples/sops-secrets/secret-lifecycle.cast").read_text()
           for needle in ["describe (masking on)", "encrypted at rest", "All proofs passed"]:
               if needle not in text:
                   raise SystemExit(f"missing {needle!r}")

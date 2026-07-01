@@ -1567,8 +1567,13 @@ func mergeCommandArrays(first, second interface{}) []interface{} {
 				orderedNames = append(orderedNames, name)
 			}
 
-			// Store or override the command.
-			commandMap[name] = cmd
+			// Store or merge the command. Nested command groups are merged
+			// recursively so imports can extend a shared command tree.
+			if existing, exists := commandMap[name]; exists {
+				commandMap[name] = mergeCommandDefinitions(existing, cmd)
+			} else {
+				commandMap[name] = cmd
+			}
 		}
 	}
 
@@ -1587,6 +1592,32 @@ func mergeCommandArrays(first, second interface{}) []interface{} {
 	}
 
 	return result
+}
+
+func mergeCommandDefinitions(first, second interface{}) interface{} {
+	firstMap, ok := first.(map[string]interface{})
+	if !ok {
+		return second
+	}
+	secondMap, ok := second.(map[string]interface{})
+	if !ok {
+		return second
+	}
+
+	merged := make(map[string]interface{}, len(firstMap)+len(secondMap))
+	for key, value := range firstMap {
+		merged[key] = value
+	}
+	for key, value := range secondMap {
+		if key == commandsKey {
+			if existing, ok := merged[key]; ok {
+				merged[key] = mergeCommandArrays(existing, value)
+				continue
+			}
+		}
+		merged[key] = value
+	}
+	return merged
 }
 
 // loadEmbeddedConfig loads the embedded atmos.yaml configuration.

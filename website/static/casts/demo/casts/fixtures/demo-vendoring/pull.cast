@@ -1,0 +1,5 @@
+{"version":2,"width":120,"height":36,"timestamp":1782944774,"command":"atmos vendor pull --everything","env":{"SHELL":"/bin/zsh","TERM":"xterm-256color"}}
+[0.005044834,"e","[pull]\n"]
+[16.95727675,"e","INFO Vendoring from 'vendor.yaml'\nINFO ✓ package=github/stargazers version=(main)\nINFO ✓ package=weather version=(main)\nINFO ✓ package=ipinfo version=(main)\nINFO Vendored components success=3\n"]
+[16.9573355,"e","✓ pull completed\n"]
+[17.658433375,"o","\u003e "]

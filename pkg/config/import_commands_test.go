@@ -384,3 +384,108 @@ commands:
 		})
 	}
 }
+
+func TestImportCommandMergingNestedCommands(t *testing.T) {
+	setupTestAdapters()
+
+	tempDir := t.TempDir()
+	files := map[string]string{
+		"atmos.yaml": `
+base_path: "."
+import:
+  - "commands/*.yaml"
+commands:
+  - name: "casts"
+    description: "Root command from main"
+    commands:
+      - name: "setup"
+        description: "Prepare fixtures"
+        steps:
+          - echo setup
+`,
+		"commands/examples.yaml": `
+commands:
+  - name: "casts"
+    commands:
+      - name: "generate"
+        commands:
+          - name: "examples"
+            commands:
+              - name: "quick-start-simple"
+                commands:
+                  - name: "list-and-plan"
+                    steps:
+                      - echo generate quick-start-simple
+`,
+		"commands/demo.yaml": `
+commands:
+  - name: "casts"
+    commands:
+      - name: "generate"
+        commands:
+          - name: "demo"
+            commands:
+              - name: "casts"
+                commands:
+                  - name: "fixtures"
+                    commands:
+                      - name: "native-terraform"
+                        commands:
+                          - name: "plan"
+                            steps:
+                              - echo generate native-terraform plan
+      - name: "validate"
+        commands:
+          - name: "all"
+            steps:
+              - echo validate all
+`,
+	}
+	for relativePath, content := range files {
+		fullPath := filepath.Join(tempDir, relativePath)
+		require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0o755))
+		require.NoError(t, os.WriteFile(fullPath, []byte(content), 0o644))
+	}
+	t.Chdir(tempDir)
+
+	configInfo := schema.ConfigAndStacksInfo{
+		AtmosBasePath:      tempDir,
+		AtmosCliConfigPath: filepath.Join(tempDir, "atmos.yaml"),
+	}
+	cfg, err := InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+	require.Len(t, cfg.Commands, 1)
+
+	casts := cfg.Commands[0]
+	require.Equal(t, "casts", casts.Name)
+	assert.Equal(t, "Root command from main", casts.Description)
+
+	setup := findCommand(t, casts.Commands, "setup")
+	assert.Equal(t, "Prepare fixtures", setup.Description)
+
+	generate := findCommand(t, casts.Commands, "generate")
+	examples := findCommand(t, generate.Commands, "examples")
+	quickStartSimple := findCommand(t, examples.Commands, "quick-start-simple")
+	findCommand(t, quickStartSimple.Commands, "list-and-plan")
+
+	demo := findCommand(t, generate.Commands, "demo")
+	demoCasts := findCommand(t, demo.Commands, "casts")
+	fixtures := findCommand(t, demoCasts.Commands, "fixtures")
+	nativeTerraform := findCommand(t, fixtures.Commands, "native-terraform")
+	findCommand(t, nativeTerraform.Commands, "plan")
+
+	validate := findCommand(t, casts.Commands, "validate")
+	findCommand(t, validate.Commands, "all")
+}
+
+func findCommand(t *testing.T, commands []schema.Command, name string) schema.Command {
+	t.Helper()
+	for i := range commands {
+		command := commands[i]
+		if command.Name == name {
+			return command
+		}
+	}
+	t.Fatalf("command %q not found", name)
+	return schema.Command{}
+}
