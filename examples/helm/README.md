@@ -3,6 +3,16 @@
 A minimal, credential-free example of a native Helm component. The chart lives in
 `components/helm/demo` and is configured by `stacks/deploy/dev.yaml`.
 
+## Test
+
+`atmos test` is the CI-backed smoke test for this example. It starts a local
+K3s emulator, deploys the Helm release into it, verifies the Deployment and
+Service, uninstalls the release, and tears the emulator down.
+
+```shell
+atmos test
+```
+
 ## Render (no cluster, no credentials)
 
 ```shell
@@ -33,6 +43,10 @@ atmos helm diff demo -s dev --against=target
 ```shell
 # Install/upgrade the release on the current kubecontext.
 atmos helm apply demo -s dev
+
+# Or deploy directly to the local K3s emulator used by `atmos test`.
+atmos emulator up kubernetes -s dev
+atmos helm apply demo -s dev --identity local-k3s
 ```
 
 See the [`atmos helm`](https://atmos.tools/cli/commands/helm/usage) docs for the full

@@ -15,6 +15,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"golang.org/x/term"
 )
 
 const defaultProtocol = "tcp"
@@ -26,6 +27,10 @@ type Manager struct {
 	runtime     container.Runtime // injected for tests; detected per call when nil.
 	runtimePref string
 	autoStart   bool
+}
+
+var stdinIsTerminal = func() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 // NewManager returns a Manager that detects the container runtime using the given
@@ -517,11 +522,12 @@ func (m *Manager) Exec(ctx context.Context, stack, name string, command []string
 	if len(command) == 0 {
 		command = []string{"/bin/sh"}
 	}
+	interactive := stdinIsTerminal()
 	return runtime.Exec(ctx, info.ID, command, &container.ExecOptions{
-		AttachStdin:  true,
+		AttachStdin:  interactive,
 		AttachStdout: true,
 		AttachStderr: true,
-		Tty:          true,
+		Tty:          interactive,
 	})
 }
 

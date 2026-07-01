@@ -174,6 +174,10 @@ func TestManager_Exec_DefaultsToShell(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	runtime := NewMockRuntime(ctrl)
 	info := runningEmulatorInfo(54321)
+	originalStdinIsTerminal := stdinIsTerminal
+	stdinIsTerminal = func() bool { return true }
+	t.Cleanup(func() { stdinIsTerminal = originalStdinIsTerminal })
+
 	runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return([]container.Info{info}, nil)
 	runtime.EXPECT().
 		Exec(gomock.Any(), info.ID, []string{"/bin/sh"}, gomock.AssignableToTypeOf(&container.ExecOptions{})).
@@ -187,6 +191,29 @@ func TestManager_Exec_DefaultsToShell(t *testing.T) {
 
 	m := newManagerWithRuntime(runtime)
 	require.NoError(t, m.Exec(context.Background(), "dev", "aws", nil))
+}
+
+func TestManager_Exec_NonInteractiveDisablesTTYAndStdin(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	runtime := NewMockRuntime(ctrl)
+	info := runningEmulatorInfo(54321)
+	originalStdinIsTerminal := stdinIsTerminal
+	stdinIsTerminal = func() bool { return false }
+	t.Cleanup(func() { stdinIsTerminal = originalStdinIsTerminal })
+
+	runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return([]container.Info{info}, nil)
+	runtime.EXPECT().
+		Exec(gomock.Any(), info.ID, []string{"env"}, gomock.AssignableToTypeOf(&container.ExecOptions{})).
+		DoAndReturn(func(_ context.Context, _ string, _ []string, opts *container.ExecOptions) error {
+			assert.False(t, opts.Tty)
+			assert.False(t, opts.AttachStdin)
+			assert.True(t, opts.AttachStdout)
+			assert.True(t, opts.AttachStderr)
+			return nil
+		})
+
+	m := newManagerWithRuntime(runtime)
+	require.NoError(t, m.Exec(context.Background(), "dev", "aws", []string{"env"}))
 }
 
 func TestManager_Exec_UsesProvidedCommand(t *testing.T) {

@@ -124,7 +124,15 @@ func executeSingle(
 		return err
 	}
 	envRestore := applyEnvironment(info.ComponentEnvSection, tenv.EnvVars())
-	defer envRestore()
+	authEnvRestore, err := applyAuthEnvironment(info)
+	if err != nil {
+		envRestore()
+		return err
+	}
+	defer func() {
+		authEnvRestore()
+		envRestore()
+	}()
 
 	return runWithHooks(ctx, atmosConfig, info, operation, componentPath)
 }

@@ -2,6 +2,11 @@ vars:
   stage: dev
 
 components:
+  emulator:
+    kubernetes:
+      driver: k3s
+      ephemeral: true
+
   helm:
     demo:
       metadata:

@@ -3,6 +3,7 @@ package helm
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -18,6 +19,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	release "helm.sh/helm/v4/pkg/release/v1"
 )
+
+type fakeHelmAuthManager struct {
+	auth.AuthManager
+	env []string
+	err error
+}
+
+func (f fakeHelmAuthManager) PrepareShellEnvironment(_ context.Context, _ string, _ []string) ([]string, error) {
+	return f.env, f.err
+}
 
 func TestExecuteSingle_HappyPath(t *testing.T) {
 	originalInit := initCliConfig
@@ -363,4 +374,30 @@ func TestProcessStacksWithAuth(t *testing.T) {
 	}
 	err := processStacksWithAuth(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{Identity: "admin"})
 	require.ErrorIs(t, err, sentinel)
+}
+
+func TestApplyAuthEnvironment(t *testing.T) {
+	const key = "ATMOS_HELM_TEST_KUBECONFIG"
+	previous, hadPrevious := os.LookupEnv(key)
+	t.Cleanup(func() {
+		if hadPrevious {
+			_ = os.Setenv(key, previous)
+		} else {
+			_ = os.Unsetenv(key)
+		}
+	})
+	_ = os.Unsetenv(key)
+
+	restore, err := applyAuthEnvironment(&schema.ConfigAndStacksInfo{
+		Identity: "local-k3s",
+		AuthManager: fakeHelmAuthManager{
+			env: append(os.Environ(), key+"=/tmp/kubeconfig"),
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "/tmp/kubeconfig", os.Getenv(key))
+
+	restore()
+	_, exists := os.LookupEnv(key)
+	assert.False(t, exists)
 }

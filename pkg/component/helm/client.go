@@ -10,6 +10,7 @@ import (
 	"helm.sh/helm/v4/pkg/action"
 	"helm.sh/helm/v4/pkg/chart/loader"
 	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/kube"
 	"helm.sh/helm/v4/pkg/registry"
 	release "helm.sh/helm/v4/pkg/release/v1"
 	"helm.sh/helm/v4/pkg/storage/driver"
@@ -76,6 +77,7 @@ func installRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	client.Namespace = spec.Namespace
 	client.CreateNamespace = true
 	client.Version = spec.Version
+	client.WaitStrategy = kube.HookOnlyStrategy
 	if dryRun {
 		client.DryRunStrategy = action.DryRunServer
 	}
@@ -87,6 +89,7 @@ func upgradeRelease(ctx context.Context, actx *actionContext, spec *chartSpec, d
 	client.SetRegistryClient(actx.cfg.RegistryClient)
 	client.Namespace = spec.Namespace
 	client.Version = spec.Version
+	client.WaitStrategy = kube.HookOnlyStrategy
 	if dryRun {
 		client.DryRunStrategy = action.DryRunServer
 	}
@@ -167,6 +170,7 @@ func deleteRelease(releaseName, namespace string) error {
 	}
 
 	client := action.NewUninstall(actx.cfg)
+	client.WaitStrategy = kube.HookOnlyStrategy
 	if _, err := client.Run(releaseName); err != nil {
 		if errors.Is(err, driver.ErrReleaseNotFound) {
 			return nil
