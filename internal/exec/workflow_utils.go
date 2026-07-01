@@ -731,15 +731,18 @@ func ExecuteWorkflow(
 			if errors.As(err, &silentExit) && silentExit.Silent {
 				return err
 			}
-			stepErr := buildWorkflowStepError(err, &workflowStepErrorContext{
-				WorkflowPath:     workflowPath,
-				WorkflowBasePath: atmosConfig.Workflows.BasePath,
-				Workflow:         workflow,
-				StepName:         step.Name,
-				Command:          command,
-				CommandType:      commandType,
-				FinalStack:       finalStack,
-			})
+			stepErr := err
+			if !errors.Is(err, errUtils.ErrInvalidWorkflowStepType) {
+				stepErr = buildWorkflowStepError(err, &workflowStepErrorContext{
+					WorkflowPath:     workflowPath,
+					WorkflowBasePath: atmosConfig.Workflows.BasePath,
+					Workflow:         workflow,
+					StepName:         step.Name,
+					Command:          command,
+					CommandType:      commandType,
+					FinalStack:       finalStack,
+				})
+			}
 			if workflowErr == nil {
 				workflowErr = stepErr
 			} else {

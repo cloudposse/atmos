@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -123,6 +124,22 @@ func TestVendorSourceSupportsRelativeLocalPath(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(targetDir, "README.md"))
 	require.NoError(t, err)
 	assert.Equal(t, "demo\n", string(content))
+}
+
+func TestVendorSourceSupportsFileURIDirectory(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(sourceDir, "nested"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "nested", "main.tf"), []byte("# source\n"), 0o644))
+
+	sourceURL := url.URL{Scheme: "file", Path: filepath.ToSlash(sourceDir)}
+	targetDir := filepath.Join(t.TempDir(), "workdir")
+
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceURL.String()}, targetDir)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(targetDir, "nested", "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# source\n", string(content))
 }
 
 func TestVendorSourceRejectsNilAndEmptySource(t *testing.T) {

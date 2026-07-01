@@ -182,15 +182,15 @@ func (e *Executor) prepareSteps(params *WorkflowParams, result *ExecutionResult)
 // runSteps executes each workflow step in order, updating result. It returns the
 // first failing step's error (if any) and marks progress as done.
 func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep, progressRenderer *ProgressRenderer, result *ExecutionResult) error {
+	conditionContext := workflowConditionContext()
 	for stepIdx := range steps {
 		step := &steps[stepIdx]
-		conditionContext := workflowConditionContext()
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			result.Success = false
 			result.Error = err
 			return err
 		}
-		if !step.When.Evaluate(conditionContext) {
+		if !step.When.EvaluateWithImplicitSuccess(conditionContext) {
 			log.Debug("Skipping workflow step, `when` condition did not match", "step", step.Name)
 			result.Steps = append(result.Steps, StepResult{
 				StepName: step.Name,
@@ -213,6 +213,7 @@ func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep,
 			result.Success = false
 			result.Error = stepResult.Error
 			result.ResumeCommand = e.buildResumeCommand(params.Workflow, params.WorkflowPath, step.Name, stepResult.finalStack, params.AtmosConfig)
+			conditionContext.Status = schema.ConditionPredicateFailure
 			if progressRenderer.IsEnabled() {
 				progressRenderer.Done()
 			}

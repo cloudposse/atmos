@@ -137,7 +137,7 @@ func TestExecutor_Execute_SkipsStepWhenConditionIsFalse(t *testing.T) {
 	assert.Equal(t, "run", result.Steps[1].StepName)
 }
 
-func TestExecutor_Execute_RejectsFailureStepCondition(t *testing.T) {
+func TestExecutor_Execute_SkipsInitialFailureStepCondition(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -155,9 +155,12 @@ func TestExecutor_Execute_RejectsFailureStepCondition(t *testing.T) {
 
 	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
 
-	require.Error(t, err)
-	assert.ErrorIs(t, err, schema.ErrInvalidWhenCondition)
-	assert.False(t, result.Success)
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+	require.Len(t, result.Steps, 1)
+	assert.True(t, result.Steps[0].Skipped)
+	assert.True(t, result.Steps[0].Success)
+	assert.Equal(t, "failure-only", result.Steps[0].StepName)
 }
 
 // TestExecutor_Execute_BasicAtmosWorkflow tests executing a simple atmos workflow.
