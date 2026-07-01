@@ -20,45 +20,6 @@
     "kubernetes": {
       "$ref": "#/definitions/kubernetes"
     },
-    "helm_repository": {
-      "title": "helm_repository",
-      "description": "Helm chart repository",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "url": {
-          "type": "string"
-        },
-        "username": {
-          "type": "string"
-        },
-        "password": {
-          "type": "string"
-        },
-        "pass_credentials_all": {
-          "type": "boolean"
-        },
-        "cert_file": {
-          "type": "string"
-        },
-        "key_file": {
-          "type": "string"
-        },
-        "ca_file": {
-          "type": "string"
-        },
-        "insecure_skip_tls_verify": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "name",
-        "url"
-      ]
-    },
     "helm": {
       "$ref": "#/definitions/helm"
     },
@@ -177,6 +138,45 @@
     }
   ],
   "definitions": {
+    "helm_repository": {
+      "title": "helm_repository",
+      "description": "Helm chart repository",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "pass_credentials_all": {
+          "type": "boolean"
+        },
+        "cert_file": {
+          "type": "string"
+        },
+        "key_file": {
+          "type": "string"
+        },
+        "ca_file": {
+          "type": "string"
+        },
+        "insecure_skip_tls_verify": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "url"
+      ]
+    },
     "condition_predicate": {
       "type": "string",
       "description": "Built-in condition predicate for step and hook execution.",
