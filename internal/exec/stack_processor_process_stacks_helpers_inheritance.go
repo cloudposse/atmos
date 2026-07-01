@@ -27,6 +27,7 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentRequiredProviders = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentTest = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentBackendSection = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentRemoteStateBackendSection = make(map[string]any, componentSmallMapCapacity)
 	}
@@ -245,6 +246,7 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 		result.BaseComponentProviders = baseComponentConfig.BaseComponentProviders
 		result.BaseComponentRequiredProviders = baseComponentConfig.BaseComponentRequiredProviders
 		result.BaseComponentRequiredVersion = baseComponentConfig.BaseComponentRequiredVersion
+		result.BaseComponentTest = baseComponentConfig.BaseComponentTest
 		result.BaseComponentBackendType = baseComponentConfig.BaseComponentBackendType
 		result.BaseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
 		result.BaseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType

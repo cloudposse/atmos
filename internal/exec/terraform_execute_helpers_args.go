@@ -150,7 +150,7 @@ func buildTerraformCommandArgs(
 	case "plan":
 		allArgsAndFlags = buildPlanSubcommandArgs(atmosConfig, info, allArgsAndFlags, varFile, planFile, uploadStatusFlag)
 
-	case "destroy", "import", "refresh":
+	case "destroy", "import", "refresh", "test":
 		allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 
 	case subcommandApply:

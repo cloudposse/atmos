@@ -393,6 +393,7 @@ func minimalComponentResult() *ComponentProcessorResult {
 		BaseComponentAuth:                      map[string]any{},
 		ComponentProviders:                     map[string]any{},
 		ComponentHooks:                         map[string]any{},
+		ComponentTest:                          map[string]any{},
 		ComponentBackendType:                   "",
 		ComponentBackendSection:                map[string]any{},
 		ComponentRemoteStateBackendType:        "",
@@ -401,6 +402,7 @@ func minimalComponentResult() *ComponentProcessorResult {
 		ComponentOverridesHooks:                map[string]any{},
 		BaseComponentProviders:                 map[string]any{},
 		BaseComponentHooks:                     map[string]any{},
+		BaseComponentTest:                      map[string]any{},
 		BaseComponentBackendType:               "",
 		BaseComponentBackendSection:            map[string]any{},
 		BaseComponentRemoteStateBackendType:    "",
@@ -469,6 +471,60 @@ func TestMergeComponentConfigurations_Plugins(t *testing.T) {
 		_, present := comp[cfg.PluginsSectionName]
 		assert.False(t, present, "terraform components must not emit a plugins section")
 	})
+}
+
+func TestMergeComponentConfigurations_TerraformTestSection(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "app",
+		AtmosConfig:   atmosCfg,
+	}
+	res := minimalComponentResult()
+	res.BaseComponentTest = map[string]any{
+		cfg.VarsSectionName: map[string]any{
+			"fixture_vpc_id": "vpc-from-base",
+			"base_only":      "base",
+		},
+	}
+	res.ComponentTest = map[string]any{
+		cfg.VarsSectionName: map[string]any{
+			"fixture_vpc_id": "vpc-from-component",
+		},
+	}
+
+	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+
+	testSection, ok := comp[cfg.TestSectionName].(map[string]any)
+	require.True(t, ok)
+	testVars, ok := testSection[cfg.VarsSectionName].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "vpc-from-component", testVars["fixture_vpc_id"])
+	assert.Equal(t, "base", testVars["base_only"])
+
+	testVars["fixture_vpc_id"] = "merged-mutated"
+	assert.Equal(t, "vpc-from-component", res.ComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"],
+		"mutating merged test vars must not mutate the component source map")
+
+	res.BaseComponentTest[cfg.VarsSectionName].(map[string]any)["base_only"] = "source-mutated"
+	res.ComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"] = "source-mutated"
+	assert.Equal(t, "base", testVars["base_only"], "mutating source maps after merge must not mutate merged test vars")
+	assert.Equal(t, "merged-mutated", testVars["fixture_vpc_id"], "mutating source maps after merge must not mutate merged test vars")
+}
+
+func TestMergeComponentConfigurations_TerraformTestSectionOmittedWhenEmpty(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "app",
+		AtmosConfig:   atmosCfg,
+	}
+	res := minimalComponentResult()
+
+	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+	assert.NotContains(t, comp, cfg.TestSectionName)
 }
 
 // TestMergeComponentConfigurations_GlobalKubernetesDefaults verifies stack-global

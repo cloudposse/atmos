@@ -30,6 +30,7 @@ type componentSections struct {
 	auth        map[string]any
 	providers   map[string]any
 	hooks       map[string]any
+	test        map[string]any
 	overrides   map[string]any
 	backend     map[string]any
 	backendType string
@@ -531,6 +532,12 @@ func extractDescribeComponentSections(componentSection map[string]any) component
 		s.hooks = map[string]any{}
 	}
 
+	if v, ok := componentSection[cfg.TestSectionName].(map[string]any); ok {
+		s.test = v
+	} else {
+		s.test = map[string]any{}
+	}
+
 	if v, ok := componentSection[cfg.OverridesSectionName].(map[string]any); ok {
 		s.overrides = v
 	} else {
@@ -577,6 +584,7 @@ func buildConfigAndStacksInfo(
 			cfg.AuthSectionName:        secs.auth,
 			cfg.ProvidersSectionName:   secs.providers,
 			cfg.HooksSectionName:       secs.hooks,
+			cfg.TestSectionName:        secs.test,
 			cfg.OverridesSectionName:   secs.overrides,
 			cfg.BackendSectionName:     secs.backend,
 			cfg.BackendTypeSectionName: secs.backendType,

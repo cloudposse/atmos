@@ -110,6 +110,17 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Terraform-specific: extract test section.
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.TestSectionName]; ok {
+			componentTest, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.test' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentTest = componentTest
+		}
+	}
+
 	// Extract secrets section (declarations). Available for all component types.
 	if i, ok := opts.ComponentMap[cfg.SecretsSectionName]; ok {
 		componentSecrets, ok := i.(map[string]any)

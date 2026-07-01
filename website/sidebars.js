@@ -389,6 +389,7 @@ module.exports = {
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/shell', label: 'shell'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/exec', label: 'exec'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/container', label: 'container'},
+                                        {type: 'doc', id: 'workflows/workflows/workflow/steps/type/emulator', label: 'emulator'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/parallel', label: 'parallel'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/matrix', label: 'matrix'},
                                         {type: 'doc', id: 'workflows/workflows/workflow/steps/type/input', label: 'input'},

@@ -50,6 +50,7 @@ func TestManifestSchema_HookWhenConditionForms(t *testing.T) {
 		"website":       loadWebsiteSchemaBytes(t),
 		"fixture":       loadFixtureSchemaBytes(t),
 		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
+		"stack-config":  loadStackConfigSchemaBytes(t),
 	}
 
 	validConditions := map[string]any{
@@ -81,6 +82,7 @@ func TestManifestSchema_HookRetryUsesWorkflowRetrySchema(t *testing.T) {
 		"website":       loadWebsiteSchemaBytes(t),
 		"fixture":       loadFixtureSchemaBytes(t),
 		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
+		"stack-config":  loadStackConfigSchemaBytes(t),
 	}
 
 	for schemaName, schemaData := range schemas {
@@ -95,6 +97,22 @@ func TestManifestSchema_HookRetryUsesWorkflowRetrySchema(t *testing.T) {
 			assertSchemaInvalid(t, schemaData, hookManifestWithRetry(map[string]any{
 				"unknown": true,
 			}))
+		})
+	}
+}
+
+func TestManifestSchema_TerraformTestFixturesHookShape(t *testing.T) {
+	schemas := map[string][]byte{
+		"embedded":      loadEmbeddedSchemaBytes(t),
+		"website":       loadWebsiteSchemaBytes(t),
+		"fixture":       loadFixtureSchemaBytes(t),
+		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
+		"stack-config":  loadStackConfigSchemaBytes(t),
+	}
+
+	for schemaName, schemaData := range schemas {
+		t.Run(schemaName, func(t *testing.T) {
+			assertSchemaValid(t, schemaData, terraformTestFixturesManifest())
 		})
 	}
 }
@@ -132,6 +150,44 @@ func hookManifestWithRetry(retry any) map[string]any {
 	return manifest
 }
 
+func terraformTestFixturesManifest() map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"app": map[string]any{
+					"metadata": map[string]any{
+						"type": "real",
+					},
+					"hooks": map[string]any{
+						"test-fixtures-up": map[string]any{
+							"kind": "steps",
+							"events": []any{
+								"before.terraform.test",
+							},
+							"with": []any{
+								map[string]any{
+									"type":      "emulator",
+									"component": "aws",
+									"action":    "up",
+								},
+								map[string]any{
+									"type":    "atmos",
+									"command": "terraform apply vpc -s fixtures -auto-approve",
+								},
+							},
+						},
+					},
+					"test": map[string]any{
+						"vars": map[string]any{
+							"fixture_vpc_id": "vpc-123",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func loadEmbeddedSchemaBytes(t *testing.T) []byte {
 	t.Helper()
 
@@ -148,6 +204,11 @@ func loadWebsiteSchemaBytes(t *testing.T) []byte {
 func loadFixtureSchemaBytes(t *testing.T) []byte {
 	t.Helper()
 	return loadSchemaFile(t, "../../tests/fixtures/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json")
+}
+
+func loadStackConfigSchemaBytes(t *testing.T) []byte {
+	t.Helper()
+	return loadSchemaFile(t, "schema/stacks/stack-config/1.0.json")
 }
 
 func loadSchemaFile(t *testing.T, path string) []byte {

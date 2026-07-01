@@ -122,6 +122,14 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	return executeUp(ctx, info, false)
 }
 
+// ExecuteUpEphemeral starts the emulator without persistence for this run,
+// overriding the component's `ephemeral:` config (mirrors the `--ephemeral` flag).
+func ExecuteUpEphemeral(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "componentemulator.ExecuteUpEphemeral")()
+
+	return executeUp(ctx, info, true)
+}
+
 // executeUp starts (or reuses) the emulator's container. When ephemeralOverride
 // is true (the `--ephemeral` CLI flag), the instance runs without persistence for
 // this `up`, overriding the component's `ephemeral:` config.
