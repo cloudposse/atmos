@@ -514,7 +514,9 @@ func TestMergeComponentConfigurations_GlobalKubernetesDefaults(t *testing.T) {
 }
 
 // TestMergeComponentConfigurations_Kubernetes verifies the full three-level precedence
-// for kubernetes-native sections and supported lifecycle sections.
+// (stack-global Kubernetes defaults → base component → component instance) for the
+// kubernetes-native sections (provider/paths/manifests/render), and that hooks, generate,
+// source, and provision flow through for the kubernetes component type.
 func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 	atmosCfg := &schema.AtmosConfiguration{}
 
@@ -530,7 +532,8 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res.ComponentProvider = "kustomize-component"
 		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
-		assert.Equal(t, "kustomize-component", comp[cfg.ProviderSectionName])
+		assert.Equal(t, "kustomize-component", comp[cfg.ProviderSectionName],
+			"component provider must win over base and global")
 	})
 
 	t.Run("provider-base-wins-over-global", func(t *testing.T) {
@@ -544,7 +547,8 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		res.BaseComponentProvider = "kubectl"
 		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
-		assert.Equal(t, "kubectl", comp[cfg.ProviderSectionName])
+		assert.Equal(t, "kubectl", comp[cfg.ProviderSectionName],
+			"base provider must win over the global default when the component sets nothing")
 	})
 
 	t.Run("paths-and-manifests-merge-across-three-levels", func(t *testing.T) {
@@ -564,13 +568,13 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		require.NoError(t, err)
 
 		paths, ok := comp[cfg.PathsSectionName].(map[string]any)
-		require.True(t, ok)
+		require.True(t, ok, "paths section must be a merged map")
 		assert.Equal(t, "g.yaml", paths["global"])
 		assert.Equal(t, "b.yaml", paths["base"])
 		assert.Equal(t, "c.yaml", paths["component"])
 
 		manifests, ok := comp[cfg.ManifestsSectionName].(map[string]any)
-		require.True(t, ok)
+		require.True(t, ok, "manifests section must be a merged map")
 		assert.Equal(t, "gm.yaml", manifests["global"])
 		assert.Equal(t, "bm.yaml", manifests["base"])
 		assert.Equal(t, "cm.yaml", manifests["component"])
@@ -590,8 +594,8 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		require.NoError(t, err)
 
 		render, ok := comp[cfg.RenderSectionName].(map[string]any)
-		require.True(t, ok)
-		assert.Equal(t, "component", render["engine"])
+		require.True(t, ok, "render section must be a merged map")
+		assert.Equal(t, "component", render["engine"], "component render must win on conflicting keys")
 		assert.Equal(t, true, render["from_global"])
 		assert.Equal(t, true, render["from_base"])
 		assert.Equal(t, true, render["from_component"])
@@ -615,10 +619,25 @@ func TestMergeComponentConfigurations_Kubernetes(t *testing.T) {
 		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
 		require.NoError(t, err)
 
-		assert.Contains(t, comp[cfg.HooksSectionName], "before")
-		assert.Contains(t, comp[cfg.GenerateSectionName], "file.yaml")
-		assert.Equal(t, "global-uri", comp[cfg.SourceSectionName].(map[string]any)["uri"])
-		assert.Equal(t, "5m", comp[cfg.ProvisionSectionName].(map[string]any)["timeout"])
+		hooks, ok := comp[cfg.HooksSectionName].(map[string]any)
+		require.True(t, ok, "hooks section must be present for kubernetes")
+		assert.Contains(t, hooks, "before")
+		assert.Contains(t, hooks, "after")
+
+		generate, ok := comp[cfg.GenerateSectionName].(map[string]any)
+		require.True(t, ok, "generate section must be present for kubernetes")
+		assert.Contains(t, generate, "file.yaml")
+		assert.Contains(t, generate, "comp.yaml")
+
+		source, ok := comp[cfg.SourceSectionName].(map[string]any)
+		require.True(t, ok, "source section must be present for kubernetes")
+		assert.Equal(t, "global-uri", source["uri"])
+		assert.Equal(t, "1.2.3", source["version"])
+
+		provision, ok := comp[cfg.ProvisionSectionName].(map[string]any)
+		require.True(t, ok, "provision section must be present for kubernetes")
+		assert.Equal(t, "global-wd", provision["workdir"])
+		assert.Equal(t, "5m", provision["timeout"])
 	})
 }
 

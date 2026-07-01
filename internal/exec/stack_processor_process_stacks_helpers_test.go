@@ -684,7 +684,8 @@ var (
 )
 
 // TestExtractComponentSections_Kubernetes covers the kubernetes-specific extraction
-// branch: provider, paths, manifests, render, and lifecycle sections.
+// branch: provider (scalar), paths/manifests (passed through verbatim as `any`), render
+// (map), plus the hooks/generate/source/provision sections that kubernetes supports.
 func TestExtractComponentSections_Kubernetes(t *testing.T) {
 	t.Run("all-kubernetes-sections-extracted", func(t *testing.T) {
 		opts := ComponentProcessorOptions{
@@ -710,12 +711,12 @@ func TestExtractComponentSections_Kubernetes(t *testing.T) {
 		assert.Equal(t, map[string]any{"replicas": 3}, result.ComponentVars)
 		assert.Equal(t, "kustomize", result.ComponentProvider)
 		paths, ok := result.ComponentPaths.([]any)
-		require.True(t, ok)
+		require.True(t, ok, "paths must round-trip as []any")
 		require.Len(t, paths, 2)
 		assert.Equal(t, "base/deployment.yaml", paths[0])
 		assert.Equal(t, "base/service.yaml", paths[len(paths)-1])
 		manifests, ok := result.ComponentManifests.(map[string]any)
-		require.True(t, ok)
+		require.True(t, ok, "manifests must round-trip as map")
 		assert.Equal(t, "d.yaml", manifests["deployment"])
 		assert.Equal(t, map[string]any{"engine": "kustomize"}, result.ComponentRender)
 		assert.Equal(t, map[string]any{"before": []any{"echo hi"}}, result.ComponentHooks)
@@ -759,7 +760,8 @@ func TestExtractComponentSections_Kubernetes(t *testing.T) {
 	})
 }
 
-// TestSupportsComponentTypeHelpers is a truth-table for the supports* capability helpers.
+// TestSupportsComponentTypeHelpers is a truth-table for the supports* capability helpers
+// that gate which sections each component type extracts and merges.
 func TestSupportsComponentTypeHelpers(t *testing.T) {
 	tests := []struct {
 		componentType   string
