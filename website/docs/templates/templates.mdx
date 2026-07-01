@@ -242,6 +242,119 @@ Note that the `config-1` datasource from `atmos.yaml` was overridden with the `c
 
 You can now use the `datasources` in `Go` templates in all Atmos sections that support `Go` templates.
 
+### Practical AWS example: loading environment configuration with Gomplate datasources
+
+A common use case is to keep repeated environment-specific values outside of stack manifests and load them with a Gomplate datasource.
+
+For example, an Atmos project may need to reuse values such as the AWS account ID, region, Terraform backend bucket, DynamoDB lock table, VPC ID, subnet IDs, security group IDs, ECS cluster ARN, ALB target group name, and common tags across many components.
+
+One way to do this is to store non-sensitive environment configuration in a YAML file and load it as a datasource.
+
+<File title="atmos.yaml">
+```yaml
+templates:
+  settings:
+    enabled: true
+
+    # Use more than one evaluation when datasource URLs themselves contain
+    # template expressions such as {{ .vars.environment }}.
+    evaluations: 2
+
+    gomplate:
+      enabled: true
+      timeout: 10
+      datasources: {}
+```
+</File>
+
+<File title="config/dev/service.yaml">
+```yaml
+aws:
+  account_id: "111111111111"
+  region: us-east-2
+
+terraform_state:
+  bucket: example-terraform-state-dev
+  region: us-east-2
+  dynamodb_table: example-terraform-locks-dev
+
+network:
+  vpc_id: vpc-xxxxxxxx
+  subnet_ids:
+    - subnet-aaaaaaaa
+    - subnet-bbbbbbbb
+  security_group_ids:
+    - sg-aaaaaaaa
+
+ecs:
+  cluster_arn: arn:aws:ecs:us-east-2:111111111111:cluster/example-cluster
+
+alb:
+  target_group_name: example-service-tg
+
+tags:
+  Project: example-service
+  Environment: dev
+```
+</File>
+
+<File title="stacks/acme/dev/default/service.yaml">
+```yaml
+vars:
+  tenant: acme
+  environment: dev
+  stage: default
+  region: us-east-2
+
+settings:
+  templates:
+    settings:
+      gomplate:
+        datasources:
+          environment:
+            url: "./config/{{ .vars.environment }}/service.yaml"
+
+backend:
+  s3:
+    bucket: '{{ (datasource "environment").terraform_state.bucket }}'
+    region: '{{ (datasource "environment").terraform_state.region }}'
+    dynamodb_table: '{{ (datasource "environment").terraform_state.dynamodb_table }}'
+    encrypt: true
+    workspace_key_prefix: "aws"
+
+components:
+  terraform:
+    aws/example-service:
+      vars:
+        region: '{{ (datasource "environment").aws.region }}'
+        account_id: '{{ (datasource "environment").aws.account_id }}'
+        cluster_arn: '{{ (datasource "environment").ecs.cluster_arn }}'
+        alb_target_group_name: '{{ (datasource "environment").alb.target_group_name }}'
+        subnet_ids:
+{{ (datasource "environment").network.subnet_ids | toYAML | indent 10 }}
+        security_group_ids:
+{{ (datasource "environment").network.security_group_ids | toYAML | indent 10 }}
+        tags:
+{{ (datasource "environment").tags | toYAML | indent 10 }}
+```
+</File>
+
+You can verify the rendered component configuration with:
+
+<Terminal title="Verify rendered component configuration">
+```shell
+atmos describe component aws/example-service -s acme-dev-default
+```
+</Terminal>
+
+:::tip
+Use datasources for non-sensitive platform configuration, shared metadata, and values that are safe to render into generated stack configuration.
+:::
+
+:::warning
+Avoid rendering sensitive secret values directly into stack manifests or Terraform state unless that exposure is intentional and understood. For AWS workloads, prefer passing secrets to runtime systems using native mechanisms such as AWS Secrets Manager references in ECS task definitions.
+:::
+
 ## Atmos sections supporting `Go` templates
 
 You can use `Go` templates in the following Atmos sections to refer to values in the same or other sections:
