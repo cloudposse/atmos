@@ -1,6 +1,11 @@
 {
   "label": "cast",
+  "className": "command",
   "position": 11,
   "collapsible": true,
-  "collapsed": true
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "usage"
+  }
 }
