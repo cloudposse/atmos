@@ -1,0 +1,33 @@
+---
+slug: native-container-image-ci-summaries
+title: "Native Container Image Summaries in CI"
+authors: [osterman]
+tags: [feature, ci]
+date: 2026-07-02
+---
+
+Atmos container builds and pushes now write rich image summaries directly to the CI job summary when
+native CI is enabled. Use `type: container` workflow steps or `atmos container build/push` component
+commands and GitHub Actions gets a readable image report without adding a separate Docker summary
+action.
+
+<!--truncate-->
+
+The summary includes the image reference, digest, image ID, OCI metadata, runtime configuration,
+environment variables, labels, layer digests, and the formatted raw inspect JSON. Push summaries use
+the pushed digest when the registry returns one, so reviewers can see the canonical artifact that was
+published.
+
+```yaml
+ci:
+  enabled: true
+  summary:
+    enabled: true
+```
+
+Summaries are best-effort. A successful build or push is not failed just because image inspection or
+job-summary writing is unavailable. When `ci.summary.enabled: false` is set, Atmos skips the image
+summary entirely.
+
+This keeps native Atmos container pipelines self-contained: build, push, and review the image metadata
+from the same workflow or component command you already run locally.
