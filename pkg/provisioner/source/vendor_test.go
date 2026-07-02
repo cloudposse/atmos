@@ -142,11 +142,37 @@ func TestVendorSourceSupportsFileURIDirectory(t *testing.T) {
 	assert.Equal(t, "# source\n", string(content))
 }
 
-func TestFileURIPathSupportsOpaqueWindowsDrivePath(t *testing.T) {
-	path, err := fileURIPath("file:C:/Users/runneradmin/AppData/Local/Temp/atmos-source")
-	require.NoError(t, err)
+func TestFileURIPathSupportsWindowsDrivePaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		uri      string
+		expected string
+	}{
+		{
+			name:     "opaque drive path",
+			uri:      "file:C:/Users/runneradmin/AppData/Local/Temp/atmos-source",
+			expected: "C:/Users/runneradmin/AppData/Local/Temp/atmos-source",
+		},
+		{
+			name:     "drive path as host",
+			uri:      "file://D:/Temp/atmos-source",
+			expected: "D:/Temp/atmos-source",
+		},
+		{
+			name:     "drive path with leading slash",
+			uri:      "file:///D:/Temp/atmos-source",
+			expected: "D:/Temp/atmos-source",
+		},
+	}
 
-	assert.Equal(t, filepath.FromSlash("C:/Users/runneradmin/AppData/Local/Temp/atmos-source"), path)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, err := fileURIPath(tt.uri)
+			require.NoError(t, err)
+
+			assert.Equal(t, filepath.FromSlash(tt.expected), path)
+		})
+	}
 }
 
 func TestVendorSourceRejectsNilAndEmptySource(t *testing.T) {

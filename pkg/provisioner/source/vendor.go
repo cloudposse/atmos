@@ -224,6 +224,9 @@ func fileURIPath(uri string) (string, error) {
 			WithContext("uri", uri).
 			Err()
 	}
+	if isWindowsDriveHost(parsed.Host) {
+		return filepath.FromSlash(parsed.Host + parsed.Path), nil
+	}
 	if parsed.Host != "" && parsed.Host != "localhost" {
 		return "", nil
 	}
@@ -235,6 +238,13 @@ func fileURIPath(uri string) (string, error) {
 		path = path[1:]
 	}
 	return filepath.FromSlash(path), nil
+}
+
+func isWindowsDriveHost(host string) bool {
+	if len(host) != 2 || host[1] != ':' {
+		return false
+	}
+	return (host[0] >= 'A' && host[0] <= 'Z') || (host[0] >= 'a' && host[0] <= 'z')
 }
 
 func existingDirectory(path string) (string, bool, error) {

@@ -7,14 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"regexp"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/creack/pty"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -53,23 +50,30 @@ func RunSession(ctx context.Context, opts SessionOptions) error {
 	defer perf.Track(nil, "asciicast.RunSession")()
 
 	opts = normalizeSessionOptions(opts)
-	cmd := exec.CommandContext(ctx, sessionShell(opts.Shell)) //nolint:gosec // The shell is user/config supplied for an explicit interactive cast session.
-	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: safePTYSize(opts.Width), Rows: safePTYSize(opts.Height)})
+	proc, err := startSessionShell(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("start cast session shell: %w", err)
 	}
-	defer func() { _ = ptmx.Close() }()
+	defer func() { _ = proc.close() }()
 
-	state := newSessionState(ctx, ptmx)
+	state := newSessionState(ctx, proc.output, proc.close)
 	defer state.stop()
 
 	for i := range opts.Actions {
-		if err := runAction(ctx, ptmx, state, &opts.Actions[i], opts); err != nil {
-			_ = cmd.Process.Kill()
+		if err := runAction(ctx, proc.input, state, &opts.Actions[i], opts); err != nil {
+			proc.kill()
 			return err
 		}
 	}
-	return finishSession(ctx, cmd, ptmx, state.done)
+	return finishSession(ctx, proc, state.done)
+}
+
+type sessionProcess struct {
+	input              io.WriteCloser
+	output             io.Reader
+	closeInputOnFinish bool
+	close              func() error
+	kill               func()
 }
 
 type sessionState struct {
@@ -118,7 +122,7 @@ func safePTYSize(value int) uint16 {
 	return uint16(value)
 }
 
-func newSessionState(ctx context.Context, ptmx *os.File) *sessionState {
+func newSessionState(ctx context.Context, output io.Reader, closeOutput func() error) *sessionState {
 	state := &sessionState{
 		changed: make(chan struct{}, 1),
 		done:    make(chan error, 1),
@@ -126,7 +130,7 @@ func newSessionState(ctx context.Context, ptmx *os.File) *sessionState {
 	go func() {
 		buf := make([]byte, 4096)
 		for {
-			n, readErr := ptmx.Read(buf)
+			n, readErr := output.Read(buf)
 			if n > 0 {
 				chunk := append([]byte(nil), buf[:n]...)
 				state.mu.Lock()
@@ -139,7 +143,7 @@ func newSessionState(ctx context.Context, ptmx *os.File) *sessionState {
 				_, _ = iolib.GetContext().Data().Write(chunk)
 			}
 			if readErr != nil {
-				if readErr == io.EOF || strings.Contains(readErr.Error(), "input/output error") {
+				if isExpectedSessionReadError(readErr) {
 					state.done <- nil
 				} else {
 					state.done <- readErr
@@ -150,35 +154,44 @@ func newSessionState(ctx context.Context, ptmx *os.File) *sessionState {
 	}()
 	go func() {
 		<-ctx.Done()
-		_ = ptmx.Close()
+		if closeOutput != nil {
+			_ = closeOutput()
+		}
 	}()
 	return state
 }
 
 func (s *sessionState) stop() {}
 
-func finishSession(ctx context.Context, cmd *exec.Cmd, ptmx *os.File, done <-chan error) error {
+func isExpectedSessionReadError(err error) bool {
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) || strings.Contains(err.Error(), "input/output error")
+}
+
+func finishSession(ctx context.Context, proc *sessionProcess, done <-chan error) error {
 	// Send EOT so interactive shells exit without echoing an artificial
 	// "exit" command into the recording.
-	_, _ = ptmx.Write([]byte{4})
+	_, _ = proc.input.Write([]byte{4})
+	if proc.closeInputOnFinish {
+		_ = proc.input.Close()
+	}
 	select {
 	case err := <-done:
 		return err
 	case <-ctx.Done():
-		_ = cmd.Process.Kill()
+		proc.kill()
 		return ctx.Err()
 	case <-time.After(2 * time.Second):
-		_ = cmd.Process.Kill()
+		proc.kill()
 		return nil
 	}
 }
 
-func runAction(ctx context.Context, ptyFile *os.File, state *sessionState, action *SessionAction, opts SessionOptions) error {
+func runAction(ctx context.Context, input io.Writer, state *sessionState, action *SessionAction, opts SessionOptions) error {
 	switch action.Type {
 	case "write":
-		return runWriteAction(ptyFile, action, opts.WriteRate)
+		return runWriteAction(input, action, opts.WriteRate)
 	case "key":
-		return runKeyAction(ptyFile, action, opts.KeyInterval)
+		return runKeyAction(input, action, opts.KeyInterval)
 	case "pause":
 		return runPauseAction(ctx, action)
 	case "wait":
@@ -188,7 +201,7 @@ func runAction(ctx context.Context, ptyFile *os.File, state *sessionState, actio
 	}
 }
 
-func runWriteAction(ptyFile *os.File, action *SessionAction, fallback time.Duration) error {
+func runWriteAction(input io.Writer, action *SessionAction, fallback time.Duration) error {
 	rate := fallback
 	if action.Rate != "" {
 		parsed, err := time.ParseDuration(action.Rate)
@@ -198,7 +211,7 @@ func runWriteAction(ptyFile *os.File, action *SessionAction, fallback time.Durat
 		rate = parsed
 	}
 	for _, r := range action.Text {
-		if _, err := ptyFile.Write([]byte(string(r))); err != nil {
+		if _, err := input.Write([]byte(string(r))); err != nil {
 			return err
 		}
 		if rate > 0 {
@@ -208,7 +221,7 @@ func runWriteAction(ptyFile *os.File, action *SessionAction, fallback time.Durat
 	return nil
 }
 
-func runKeyAction(ptyFile *os.File, action *SessionAction, fallback time.Duration) error {
+func runKeyAction(input io.Writer, action *SessionAction, fallback time.Duration) error {
 	repeat := action.Repeat
 	if repeat <= 0 {
 		repeat = 1
@@ -222,7 +235,7 @@ func runKeyAction(ptyFile *os.File, action *SessionAction, fallback time.Duratio
 		return err
 	}
 	for i := 0; i < repeat; i++ {
-		if _, err := ptyFile.Write([]byte(seq)); err != nil {
+		if _, err := input.Write([]byte(seq)); err != nil {
 			return err
 		}
 		if interval > 0 && i < repeat-1 {

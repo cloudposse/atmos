@@ -292,7 +292,7 @@ func TestNewSessionStateCapturesOutputAndEOF(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	state := newSessionState(ctx, reader)
+	state := newSessionState(ctx, reader, reader.Close)
 
 	if _, err := writer.WriteString("hello session"); err != nil {
 		t.Fatal(err)
