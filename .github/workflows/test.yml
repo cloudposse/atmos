@@ -410,7 +410,7 @@ jobs:
           - 4588:4588
       floci-az:
         # Pin by immutable digest for reproducibility/supply-chain safety. Comment tracks the human-readable tag.
-        image: floci/floci-az@sha256:1e514c57db14dc41938f7925bbc1aca0293aa4da272c7014d98f1fba378cedb2 # latest
+        image: floci/floci-az@sha256:0fcf34d02adc5e3e1cb30a031267f589a150d6df8d2c5b0617aeca4586c73b00 # latest
         ports:
           - 4577:4577
 
