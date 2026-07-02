@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -42,6 +43,8 @@ func RegisterRecordingFlag(flags *pflag.FlagSet) {
 
 // StartRecordingIfRequested starts the root-command cast recorder when enabled by config or flag.
 func StartRecordingIfRequested(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, args []string) error {
+	defer perf.Track(atmosConfig, "cmd.cast.StartRecordingIfRequested")()
+
 	if isCompletionCommand(cmd) || cmd.Name() == "help" || cmd.Flags().Changed("help") {
 		return nil
 	}
@@ -166,6 +169,8 @@ func recordedCommandArgs(args []string) []string {
 
 // FinalizeRecording closes the active root-command cast recorder, if one is running.
 func FinalizeRecording() {
+	defer perf.Track(nil, "cmd.cast.FinalizeRecording")()
+
 	if activeCast == nil {
 		return
 	}

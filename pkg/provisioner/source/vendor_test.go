@@ -174,7 +174,7 @@ func TestVendorSourceRejectsUnsafeTargets(t *testing.T) {
 	sourceDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# source\n"), 0o644))
 
-	for _, target := range []string{"", ".", "./", string(filepath.Separator)} {
+	for _, target := range []string{"", ".", "./", "..", "../..", filepath.Join("..", "target"), string(filepath.Separator)} {
 		t.Run(target, func(t *testing.T) {
 			err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceDir}, target)
 			require.Error(t, err)

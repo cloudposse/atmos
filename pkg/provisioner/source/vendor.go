@@ -221,7 +221,8 @@ func localDirectorySource(uri string) (string, bool, error) {
 func validateVendorTargetDir(targetDir string) error {
 	trimmed := strings.TrimSpace(targetDir)
 	cleaned := filepath.Clean(trimmed)
-	if trimmed == "" || cleaned == "." || isFilesystemRoot(cleaned) {
+	if trimmed == "" || cleaned == "." || isFilesystemRoot(cleaned) ||
+		cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
 		return errUtils.Build(errUtils.ErrUnsafeVendorTarget).
 			WithContext("target", targetDir).
 			WithExplanation("Refusing to provision source into an unsafe target directory").

@@ -565,6 +565,8 @@ commands:
 	nativeTerraform := findCommand(t, fixtures.Commands, "native-terraform")
 	plan := findCommand(t, nativeTerraform.Commands, "plan")
 	assert.Equal(t, "Local native terraform plan", plan.Description)
+	require.Len(t, plan.Steps, 1)
+	assert.Equal(t, "echo local native-terraform plan", plan.Steps[0].Command)
 }
 
 func findCommand(t *testing.T, commands []schema.Command, name string) schema.Command {

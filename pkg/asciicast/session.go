@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -21,11 +22,11 @@ const defaultWaitTimeout = 30 * time.Second
 
 var (
 	// ErrUnknownSessionAction indicates an unsupported scripted session action type.
-	ErrUnknownSessionAction = errors.New("unknown cast session action type")
+	ErrUnknownSessionAction = errUtils.ErrUnknownSessionAction
 	// ErrWaitTimeout indicates that a wait action did not observe the expected output before its deadline.
-	ErrWaitTimeout = errors.New("timed out waiting for cast output")
+	ErrWaitTimeout = errUtils.ErrWaitTimeout
 	// ErrUnsupportedCastKey indicates that a key action requested an unknown key sequence.
-	ErrUnsupportedCastKey = errors.New("unsupported cast key")
+	ErrUnsupportedCastKey = errUtils.ErrUnsupportedCastKey
 )
 
 // SessionAction describes one scripted action to perform in an interactive cast session.

@@ -632,7 +632,7 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 			// Set the value in Viper.
 			v.Set(currentPath, data)
 			if err := node.Encode(data); err != nil {
-				return err
+				return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
 			}
 		} else {
 			log.Warn(
