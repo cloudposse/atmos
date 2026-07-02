@@ -4,9 +4,171 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
+
+func runnableCommand(use, short string, annotations map[string]string) *cobra.Command {
+	return &cobra.Command{
+		Use:         use,
+		Short:       short,
+		Annotations: annotations,
+		Run: func(cmd *cobra.Command, args []string) {
+		},
+	}
+}
+
+func TestCommandAnnotationHelpers(t *testing.T) {
+	assert.False(t, isConfigAlias(&cobra.Command{}))
+	assert.True(t, isConfigAlias(&cobra.Command{
+		Annotations: map[string]string{annotationConfigAlias: "terraform"},
+	}))
+
+	assert.False(t, isCustomCommand(&cobra.Command{
+		Annotations: map[string]string{annotationCustomCommand: "false"},
+	}))
+	assert.True(t, isCustomCommand(&cobra.Command{
+		Annotations: map[string]string{annotationCustomCommand: annotationValueTrue},
+	}))
+
+	assert.False(t, isNativeCommand(&cobra.Command{
+		Annotations: map[string]string{annotationNativeCommand: "false"},
+	}))
+	assert.True(t, isNativeCommand(&cobra.Command{
+		Annotations: map[string]string{annotationNativeCommand: annotationValueTrue},
+	}))
+}
+
+func TestHasCommandsBySection(t *testing.T) {
+	commands := []*cobra.Command{
+		runnableCommand("builtin", "Built in", nil),
+		runnableCommand("custom", "Custom", map[string]string{
+			annotationCustomCommand: annotationValueTrue,
+		}),
+		runnableCommand("native", "Native", map[string]string{
+			annotationNativeCommand: annotationValueTrue,
+		}),
+		runnableCommand("alias", "Alias", map[string]string{
+			annotationConfigAlias: "terraform",
+		}),
+	}
+
+	assert.True(t, hasCommands(commands, "builtInCommands"))
+	assert.True(t, hasCommands(commands, "customCommands"))
+	assert.True(t, hasCommands(commands, "native"))
+	assert.True(t, hasCommands(commands, ""))
+	assert.False(t, hasCommands([]*cobra.Command{
+		runnableCommand("alias", "Alias", map[string]string{annotationConfigAlias: "terraform"}),
+	}, "builtInCommands"))
+	assert.False(t, hasCommands([]*cobra.Command{
+		runnableCommand("alias", "Alias", map[string]string{
+			annotationConfigAlias:   "terraform",
+			annotationCustomCommand: annotationValueTrue,
+		}),
+	}, "customCommands"))
+}
+
+func TestHasCommandsIncludesHelpCommand(t *testing.T) {
+	commands := []*cobra.Command{
+		{Use: helpCommandName, Short: "Cobra help command"},
+	}
+
+	assert.True(t, hasCommands(commands, "builtInCommands"))
+}
+
+func TestFilterCommandsReturnsAliasesOnlyWhenRequested(t *testing.T) {
+	commands := []*cobra.Command{
+		runnableCommand("terraform", "Terraform", nil),
+		runnableCommand("plan", "Plan", nil),
+	}
+	commands[0].Aliases = []string{"tf", "plan"}
+
+	filtered := filterCommands(commands, false)
+	assert.Equal(t, commands, filtered)
+
+	aliases := filterCommands(commands, true)
+	assert.Len(t, aliases, 1)
+	assert.Equal(t, "tf", aliases[0].Use)
+	assert.Equal(t, `Alias of "terraform" command`, aliases[0].Short)
+}
+
+func TestCommandAvailabilityHelpers(t *testing.T) {
+	commands := []*cobra.Command{
+		runnableCommand("terraform", "Terraform", map[string]string{
+			annotationNativeCommand: annotationValueTrue,
+		}),
+		runnableCommand("deploy", "Deploy", nil),
+	}
+	commands[1].Aliases = []string{"dep"}
+
+	assert.True(t, isNativeCommandsAvailable(commands))
+	assert.True(t, isAliasesPresent(commands))
+
+	assert.False(t, isNativeCommandsAvailable([]*cobra.Command{
+		runnableCommand("deploy", "Deploy", nil),
+	}))
+	assert.False(t, isAliasesPresent([]*cobra.Command{
+		runnableCommand("deploy", "Deploy", nil),
+	}))
+}
+
+func TestFormatCommandsSeparatesBuiltInCustomAndNativeCommands(t *testing.T) {
+	commands := []*cobra.Command{
+		runnableCommand("builtin", "Built in command", nil),
+		runnableCommand("custom", "Custom command", map[string]string{
+			annotationCustomCommand: annotationValueTrue,
+		}),
+		runnableCommand("native", "Native command", map[string]string{
+			annotationNativeCommand: annotationValueTrue,
+		}),
+		runnableCommand("alias", "Config alias", map[string]string{
+			annotationConfigAlias: "terraform",
+		}),
+	}
+
+	builtIns := formatCommands(commands, "builtInCommands")
+	assert.Contains(t, builtIns, "builtin")
+	assert.NotContains(t, builtIns, "custom")
+	assert.NotContains(t, builtIns, "native")
+	assert.NotContains(t, builtIns, "alias")
+
+	custom := formatCommands(commands, "customCommands")
+	assert.Contains(t, custom, "custom")
+	assert.NotContains(t, custom, "builtin")
+	assert.NotContains(t, custom, "native")
+	assert.NotContains(t, custom, "alias")
+
+	native := formatCommands(commands, "native")
+	assert.Contains(t, native, "native")
+	assert.NotContains(t, native, "builtin")
+	assert.NotContains(t, native, "custom")
+	assert.NotContains(t, native, "alias")
+}
+
+func TestFormatCommandsSubcommandAliasesUsesAliasHelp(t *testing.T) {
+	command := runnableCommand("terraform", "Terraform", nil)
+	command.Aliases = []string{"tf"}
+
+	output := formatCommands([]*cobra.Command{command}, "subcommandAliases")
+
+	assert.Contains(t, output, "tf")
+	assert.Contains(t, output, `Alias of "terraform" command`)
+	assert.NotContains(t, output, "Terraform")
+}
+
+func TestSetCustomUsageFunc(t *testing.T) {
+	assert.ErrorIs(t, SetCustomUsageFunc(nil), errUtils.ErrCommandNil)
+
+	cmd := &cobra.Command{Use: "atmos", Short: "Atmos"}
+	err := SetCustomUsageFunc(cmd)
+
+	assert.NoError(t, err)
+	assert.Contains(t, cmd.UsageTemplate(), "CUSTOM COMMANDS")
+	assert.Contains(t, cmd.UsageTemplate(), `{{formatCommands .Commands "customCommands"}}`)
+}
 
 func TestWrappedFlagUsages_DoubleDashAtEnd(t *testing.T) {
 	// Create a new FlagSet with various flags

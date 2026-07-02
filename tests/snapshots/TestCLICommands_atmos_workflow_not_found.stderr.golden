@@ -5,8 +5,9 @@
 
 No workflow exists with name no-workflow-exists
 
-Available workflows in test.yaml: - double-hyphen-multiple-flags
+💡 Available workflows in test.yaml:
 
+  • double-hyphen-multiple-flags
   • double-hyphen-stack-precedence
   • double-hyphen-step-stack
   • double-hyphen-with-stack

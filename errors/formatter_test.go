@@ -69,6 +69,20 @@ func TestFormat_ErrorWithHint(t *testing.T) {
 	assert.Contains(t, result, "Try running --help")
 }
 
+func TestFormat_ErrorWithMultilineHintList(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	err := Build(errors.New("test error")).
+		WithHint("Available workflows in test.yaml:\n\n- `workflow-a`\n- `workflow-b`\n").
+		Err()
+
+	result := Format(err, DefaultFormatterConfig())
+
+	assert.Contains(t, result, "💡 Available workflows in test.yaml:")
+	assert.Contains(t, result, "• workflow-a")
+	assert.Contains(t, result, "• workflow-b")
+	assert.NotContains(t, result, "Available workflows in test.yaml: -")
+}
+
 func TestFormat_ErrorWithMultipleHints(t *testing.T) {
 	err := errors.WithHint(
 		errors.WithHint(

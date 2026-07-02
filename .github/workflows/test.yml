@@ -328,7 +328,7 @@ jobs:
           ignore: DL3008
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4
         if: always()
         with:
           # Path to SARIF file relative to the root of the repository
@@ -542,6 +542,19 @@ jobs:
         run: |
           cd examples/${{ matrix.demo-folder }}
           atmos test
+
+  k3s-demo-helmfile-required-check:
+    name: "[k3s] demo-helmfile"
+    needs: k3s
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - name: Verify k3s demo matrix
+        run: |
+          if [ "${{ needs.k3s.result }}" != "success" ]; then
+            echo "k3s matrix result: ${{ needs.k3s.result }}"
+            exit 1
+          fi
 
   # Exercise the Kubernetes native component against a real kube-apiserver+etcd
   # control plane (started by controller-runtime envtest): server-side apply,

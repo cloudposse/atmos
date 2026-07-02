@@ -185,7 +185,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 		return errUtils.Build(errUtils.ErrWorkflowNoWorkflow).
 			WithExplanationf("No workflow exists with name `%s`", workflowName).
-			WithExplanationf("Available workflows in %s: %s", filepath.Base(workflowPath), u.FormatList(validWorkflows)).
+			WithHintf("Available workflows in %s:\n\n%s", filepath.Base(workflowPath), u.FormatList(validWorkflows)).
 			WithExitCode(1).
 			Err()
 	} else {
