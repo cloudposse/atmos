@@ -9,6 +9,9 @@ on:
   # • Eastern Time (ET): 7:35 PM (previous day)
     - cron: "35 0 * * *"
 
+env:
+  ATMOS_BOOTSTRAP_VERSION: "1.222.0"
+
 jobs:
   cache-warmup:
     name: Cache warmup (${{ matrix.target }})
@@ -38,5 +41,11 @@ jobs:
           go-version-file: "go.mod"
         id: go
 
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@822766b3aaa9a3b4aa2628baaccb58dd576ad0ff # v2
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
+
       - name: Get deps
-        run: make deps
+        run: atmos build deps

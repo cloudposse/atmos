@@ -2,6 +2,7 @@
 
 # Default method to auto
 method="${1:-auto}"
+installed_atmos_path=""
 
 # Function to check if command exists
 command_exists() {
@@ -56,13 +57,36 @@ install_via_binary_download() {
 			echo "curl is required but not installed. Please install curl and try again."
 			exit 1
 		fi
-    latest_release=$(curl -s https://api.github.com/repos/cloudposse/atmos/releases/latest | grep 'tag_name' | cut -d '"' -f 4  | tr -d v)
-		os=$(uname -s| tr '[:upper:]' '[:lower:]')
+    if [ -n "${ATMOS_VERSION:-}" ]; then
+      release="${ATMOS_VERSION#v}"
+    else
+      release=$(curl -s https://api.github.com/repos/cloudposse/atmos/releases/latest | grep 'tag_name' | cut -d '"' -f 4 | tr -d v)
+    fi
+
+		os=$(uname -s | tr '[:upper:]' '[:lower:]')
+		case "$os" in
+			mingw*|msys*|cygwin*) os="windows" ;;
+		esac
+
 		arch=$(uname -m)
-    binary_url="https://github.com/cloudposse/atmos/releases/download/v${latest_release}/atmos_${latest_release}_${os}_${arch}"
-    curl -fsSL "${binary_url}" -o atmos
-    chmod +x atmos
-		echo "Atmos installed into "./atmos", make sure to move it into a directory in your PATH"
+		case "$arch" in
+			x86_64) arch="amd64" ;;
+			aarch64|arm64) arch="arm64" ;;
+			i386|i686) arch="386" ;;
+		esac
+
+    output="atmos"
+    extension=""
+    if [ "$os" = "windows" ]; then
+      output="atmos.exe"
+      extension=".exe"
+    fi
+
+    binary_url="https://github.com/cloudposse/atmos/releases/download/v${release}/atmos_${release}_${os}_${arch}${extension}"
+    curl -fsSL "${binary_url}" -o "$output"
+    chmod +x "$output"
+    installed_atmos_path="./$output"
+    echo "Atmos installed into $installed_atmos_path, make sure to move it into a directory in your PATH"
 }
 
 # Function to install via Homebrew
@@ -117,8 +141,15 @@ install_atmos() {
 install_atmos
 
 # Check if atmos is installed properly
-atmos=$(PATH=.:$PATH command -v atmos)
-$atmos version
+if [ -n "$installed_atmos_path" ]; then
+	atmos="$(pwd)/${installed_atmos_path#./}"
+else
+	atmos=$(PATH=.:$PATH command -v atmos)
+fi
+
+verify_dir=$(mktemp -d 2>/dev/null || mktemp -d -t atmos-verify)
+(cd "$verify_dir" && "$atmos" version)
+rm -rf "$verify_dir"
 
 echo "Atmos has been successfully installed to ${atmos}"
 exit 0

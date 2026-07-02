@@ -24,6 +24,7 @@ permissions:
   statuses: write
 
 env:
+  ATMOS_BOOTSTRAP_VERSION: "1.222.0"
   ATMOS_NATIVE_CI_WORKDIR: tests/fixtures/scenarios/native-ci-e2e
   ATMOS_VERSION_CHECK_ENABLED: "false"
   NATIVE_CI_TRIVY_VERSION: "0.70.0"
@@ -52,9 +53,15 @@ jobs:
         with:
           go-version-file: "go.mod"
 
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@822766b3aaa9a3b4aa2628baaccb58dd576ad0ff # v2
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
+
       - name: Build Atmos
         run: |
-          make build-linux
+          atmos build --target linux
           echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
 
       - name: Restore Atmos native CI cache
@@ -142,9 +149,15 @@ jobs:
         with:
           go-version-file: "go.mod"
 
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@822766b3aaa9a3b4aa2628baaccb58dd576ad0ff # v2
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
+
       - name: Build Atmos
         run: |
-          make build-linux
+          atmos build --target linux
           echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
 
       - name: Restore Atmos native CI cache

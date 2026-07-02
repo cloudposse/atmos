@@ -26,6 +26,57 @@ func stepsFromStrings(commands ...string) schema.Tasks {
 	return tasks
 }
 
+func TestCustomCommandIntegration_DefaultSubcommand(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "default-subcommand.txt")
+
+	targetFlag := schema.CommandFlag{
+		Name:        "target",
+		Type:        "string",
+		Description: "Build target",
+		Default:     "default",
+	}
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{
+			{
+				Name:        "build",
+				Description: "Build commands",
+				Default:     "binary",
+				Flags:       []schema.CommandFlag{targetFlag},
+				Commands: []schema.Command{
+					{
+						Name:             "binary",
+						Description:      "Build binary",
+						WorkingDirectory: ".",
+						Flags:            []schema.CommandFlag{targetFlag},
+						Steps: stepsFromStrings(
+							fmt.Sprintf("printf %%s \"{{ .Flags.target }}:{{ .cwd }}\" > %q", outputPath),
+						),
+					},
+				},
+			},
+		},
+	}
+
+	parentCmd := &cobra.Command{Use: "atmos"}
+	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd))
+
+	buildCmd := findSubcommand(parentCmd, "build")
+	require.NotNil(t, buildCmd)
+	require.NoError(t, buildCmd.PersistentFlags().Set("target", "linux"))
+
+	buildCmd.PreRun(buildCmd, nil)
+	buildCmd.Run(buildCmd, nil)
+
+	output, err := os.ReadFile(outputPath)
+	require.NoError(t, err)
+	assert.Equal(t, "linux:"+tmpDir, string(output))
+}
+
 // TestCustomCommandIntegration_MockProviderEnvironment tests that custom commands with mock provider
 // actually set the correct environment variables for subprocesses.
 func TestCustomCommandIntegration_MockProviderEnvironment(t *testing.T) {
@@ -302,6 +353,48 @@ func TestCustomCommandIntegration_SkipsStepWhenConditionIsFalse(t *testing.T) {
 
 	assert.NoFileExists(t, skippedFile)
 	assert.FileExists(t, ranFile)
+}
+
+func TestCustomCommandIntegration_DoesNotInstallToolVersionsTools(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	installDir := filepath.Join(tmpDir, "toolchain")
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".tool-versions"), []byte("hashicorp/terraform 1.15.6\n"), 0o644))
+
+	_ = NewTestKit(t)
+
+	ranFile := filepath.Join(tmpDir, "ran.txt")
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Toolchain: schema.Toolchain{
+			InstallPath: installDir,
+		},
+		Commands: []schema.Command{
+			{
+				Name:        "test-no-tool-install",
+				Description: "Test custom command does not install .tool-versions tools",
+				Steps:       stepsFromStrings(customCommandWriteHelperCommand(t, ranFile, "ran")),
+			},
+		},
+	}
+
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-no-tool-install" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
+
+	assert.FileExists(t, ranFile)
+	assert.NoDirExists(t, installDir)
 }
 
 func customCommandWriteHelperCommand(t *testing.T, path, value string) string {

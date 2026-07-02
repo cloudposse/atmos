@@ -1138,11 +1138,13 @@ func TestCloneCommand(t *testing.T) {
 			input: &schema.Command{
 				Name:        "test",
 				Description: "Test command",
+				Default:     "run",
 			},
 			wantErr: false,
 			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
 				assert.Equal(t, orig.Name, clone.Name)
 				assert.Equal(t, orig.Description, clone.Description)
+				assert.Equal(t, orig.Default, clone.Default)
 			},
 		},
 		{
@@ -1746,6 +1748,33 @@ func TestProcessCommandAliases_DoesNotOverrideExistingCommands(t *testing.T) {
 		}
 	}
 	assert.True(t, newAliasFound, "test-alias-new2 should be added")
+}
+
+func TestProcessCommandAliases_OverridesConfigCustomCommand(t *testing.T) {
+	_ = NewTestKit(t)
+
+	customCommand := &cobra.Command{
+		Use:   "test-alias-custom",
+		Short: "custom command",
+		Annotations: map[string]string{
+			customCommandAnnotation: "true",
+		},
+	}
+	RootCmd.AddCommand(customCommand)
+
+	aliases := schema.CommandAliases{
+		"test-alias-custom": "terraform plan",
+	}
+
+	err := processCommandAliases(schema.AtmosConfiguration{}, aliases, RootCmd, true)
+	require.NoError(t, err)
+
+	cmd, _, err := RootCmd.Find([]string{"test-alias-custom"})
+	require.NoError(t, err)
+	require.NotNil(t, cmd)
+	assert.Contains(t, cmd.Short, "alias for")
+	assert.Equal(t, "terraform plan", cmd.Annotations["configAlias"])
+	assert.NotEqual(t, "true", cmd.Annotations[customCommandAnnotation])
 }
 
 // TestProcessCommandAliases_NonTopLevel tests that non-top-level aliases are NOT added.

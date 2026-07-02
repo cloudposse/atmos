@@ -1,0 +1,60 @@
+commands:
+  - name: lint
+    description: Linting commands for Atmos development
+    commands:
+      - name: changed
+        description: Run lint checks for changes from origin/main
+        steps:
+          - |
+            set -euo pipefail
+            atmos build deps
+            atmos lint lintroller
+            atmos lint gomodcheck
+            atmos lint custom-gcl
+            scripts/run-custom-golangci-lint.sh
+
+      - name: custom-gcl
+        description: Build the custom golangci-lint binary with the lintroller plugin
+        steps:
+          - |
+            set -euo pipefail
+            echo "Building custom golangci-lint binary with lintroller plugin..."
+            GOFLAGS="-buildvcs=false" GOTOOLCHAIN="go$(go env GOVERSION | sed 's/^go//')" golangci-lint custom
+            echo "Custom golangci-lint binary built successfully: ./custom-gcl"
+
+      - name: lintroller
+        description: Build and run Atmos custom lintroller rules
+        steps:
+          - |
+            set -euo pipefail
+            if [ ! -x tools/lintroller/.lintroller ] || \
+              [ "$(find tools/lintroller -name '*.go' -newer tools/lintroller/.lintroller -print -quit)" ]; then
+              echo "Building lintroller..."
+              (cd tools/lintroller && go build -o .lintroller ./cmd/lintroller)
+              chmod +x tools/lintroller/.lintroller
+            fi
+            test -x tools/lintroller/.lintroller || { echo "Error: Failed to make lintroller executable"; exit 1; }
+            echo "Running lintroller (Atmos custom rules)..."
+            tools/lintroller/.lintroller $(go list ./... | grep -v '/testdata')
+
+      - name: gomodcheck
+        description: Check go.mod for replace/exclude directives that break go install
+        steps:
+          - |
+            set -euo pipefail
+            if [ ! -x tools/gomodcheck/.gomodcheck ] || \
+              [ "$(find tools/gomodcheck -name '*.go' -newer tools/gomodcheck/.gomodcheck -print -quit)" ]; then
+              echo "Building gomodcheck..."
+              (cd tools/gomodcheck && go build -o .gomodcheck .)
+              chmod +x tools/gomodcheck/.gomodcheck
+            fi
+            test -x tools/gomodcheck/.gomodcheck || { echo "Error: Failed to make gomodcheck executable"; exit 1; }
+            tools/gomodcheck/.gomodcheck go.mod
+
+      - name: link-check
+        description: Check markdown links with lychee
+        steps:
+          - |
+            set -euo pipefail
+            command -v lychee >/dev/null 2>&1 || { echo "Install lychee: brew install lychee"; exit 1; }
+            lychee --config lychee.toml --root-dir "$PWD" '**/*.md'

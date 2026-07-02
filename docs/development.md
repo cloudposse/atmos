@@ -5,7 +5,7 @@ This guide covers the development workflow for contributing to Atmos.
 ## Prerequisites
 
 - Go 1.26+ (see go.mod for exact version)
-- Make
+- Atmos
 - Git
 
 ## Quick Start
@@ -29,31 +29,31 @@ We use Atmos custom commands for development (dogfooding our own tool). This ens
 
 ```bash
 # Checking Commands (Read-only, no modifications)
-atmos dev check        # Check staged files for issues
-atmos dev check-pr     # Check PR changes for issues
-atmos dev check-all    # Check all files for issues
-atmos dev lint         # Run golangci-lint
+atmos check staged     # Check staged files for issues
+atmos check pr         # Check PR changes for issues
+atmos check all        # Check all files for issues
+atmos lint changed     # Run repository lint checks for changed files
 
 # Formatting Commands (Modifies files)
-atmos dev format       # Auto-format staged files
-atmos dev format-pr    # Auto-format PR changes
-atmos dev format-all   # ⚠️ DANGEROUS: Auto-format ALL files
+atmos format staged    # Auto-format staged files
+atmos format pr        # Auto-format PR changes
+atmos format all       # Auto-format all files
 
 # Build and Test Commands
-atmos dev test         # Run tests
-atmos dev build        # Build the Atmos binary
+atmos test short       # Run short tests
+atmos build     # Build the Atmos binary
 atmos dev quick        # Quick build and test
-atmos dev help         # Show all available dev commands
+atmos dev --help       # Show all available dev commands
 ```
 
-### Alternative Make Commands
+### Build, Test, and Lint Commands
 
-Traditional make commands are also available:
+Use grouped Atmos commands for repository tasks:
 
 ```bash
-make build             # Build the Atmos binary
-make test              # Run tests
-make lint              # Run golangci-lint on changed files
+atmos build     # Build the Atmos binary
+atmos test acc         # Run tests
+atmos lint changed     # Run golangci-lint on changed files
 ```
 
 ## Pre-commit Hooks
@@ -67,14 +67,14 @@ We use pre-commit hooks to ensure code quality. The following hooks run automati
 - **Format commands** WILL modify files to fix issues automatically.
 
 #### Check Commands (Safe, read-only)
-- **`atmos dev check`** - Checks only staged files (best before committing)
-- **`atmos dev check-pr`** - Checks files changed from main branch (best for PR reviews)
-- **`atmos dev check-all`** - Checks all files in the repository
+- **`atmos check staged`** - Checks only staged files (best before committing)
+- **`atmos check pr`** - Checks files changed from main branch (best for PR reviews)
+- **`atmos check all`** - Checks all files in the repository
 
 #### Format Commands (Modifies files)
-- **`atmos dev format`** - Auto-formats only staged files
-- **`atmos dev format-pr`** - Auto-formats files changed from main branch
-- **`atmos dev format-all`** - ⚠️ **DANGEROUS**: Auto-formats ALL files (use with extreme caution)
+- **`atmos format staged`** - Auto-formats only staged files
+- **`atmos format pr`** - Auto-formats files changed from main branch
+- **`atmos format all`** - Auto-formats all files (use with caution)
 
 **Note:** Golden snapshots and test fixtures are always protected from formatting.
 

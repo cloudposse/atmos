@@ -1,0 +1,107 @@
+commands:
+  - name: screengrabs
+    description: Generate and install website screengrab artifacts
+    commands:
+      - name: build
+        description: Generate screengrabs
+        arguments:
+          - name: target
+            description: Screengrab command or artifact slug to generate
+        flags:
+          - name: all
+            type: bool
+            description: Generate all screengrabs
+        steps:
+          - |
+            set -euo pipefail
+            target="{{ .Arguments.target }}"
+            if [ "{{ .Flags.all }}" = "true" ]; then
+              if [ -n "$target" ]; then
+                echo "Use either --all or a single target, not both" >&2
+                exit 1
+              fi
+              target_arg=()
+            else
+              if [ -z "$target" ]; then
+                echo "Usage: atmos screengrabs build --all" >&2
+                echo "   or: atmos screengrabs build <command-or-slug>" >&2
+                exit 1
+              fi
+              target_arg=("$target")
+            fi
+
+            cd demo/screengrabs
+            ./build-all.sh demo-stacks.txt "${target_arg[@]}"
+            echo "Validating screengrabs..."
+            ! grep -r "atmos: not found" artifacts/ || { echo "ERROR: Found 'atmos: not found' in screengrabs"; exit 1; }
+            ! grep -r "COMMAND_EXIT_CODE" artifacts/ || { echo "ERROR: Found 'COMMAND_EXIT_CODE' in screengrabs"; exit 1; }
+            ! grep -r "Script started" artifacts/ || { echo "ERROR: Found 'Script started' messages in screengrabs"; exit 1; }
+            ! grep -r "Script done" artifacts/ || { echo "ERROR: Found 'Script done' messages in screengrabs"; exit 1; }
+            echo "All screengrabs validated successfully"
+
+      - name: install
+        description: Install generated screengrabs into the website source tree
+        flags:
+          - name: install-path
+            description: Destination path for generated screengrabs
+            default: website/src/components/Screengrabs
+        steps:
+          - |
+            set -euo pipefail
+            install_path="{{ .Flags.install-path }}"
+            echo "Installing screengrabs to $install_path"
+            mkdir -p "$install_path"
+            cp -a demo/screengrabs/artifacts/* "$install_path"
+
+      - name: all
+        description: Generate and install all screengrabs
+        flags:
+          - name: install-path
+            description: Destination path for generated screengrabs
+            default: website/src/components/Screengrabs
+        steps:
+          - type: atmos
+            command: screengrabs build --all
+          - type: atmos
+            command: screengrabs install --install-path "{{ .Flags.install-path }}"
+
+      - name: docker-build
+        description: Generate screengrabs using Podman
+        steps:
+          - |
+            set -euo pipefail
+            echo "Generating screengrabs using Podman (Linux container)..."
+            podman run --rm -v "$PWD:/workspace" -w /workspace/demo/screengrabs \
+              --memory=4g \
+              -e ATMOS_TELEMETRY=false \
+              -e ATMOS_FORCE_COLOR=true \
+              -e FORCE_COLOR=1 \
+              ubuntu:22.04 bash -c '
+              set -euo pipefail
+              apt-get update -qq
+              DEBIAN_FRONTEND=noninteractive apt-get install -y -qq aha curl wget tar tree
+              echo "Installing Go 1.26..."
+              ARCH=$(uname -m | sed "s/x86_64/amd64/; s/aarch64/arm64/")
+              wget -q https://go.dev/dl/go1.26.0.linux-$ARCH.tar.gz
+              tar -C /usr/local -xzf go1.26.0.linux-$ARCH.tar.gz
+              export PATH=/usr/local/go/bin:$PATH
+              go version
+              echo "Building atmos from source..."
+              cd /workspace
+              GOMEMLIMIT=3GiB go build -p 2 -o /usr/local/bin/atmos .
+              atmos version
+              atmos screengrabs build --all
+              '
+            echo "Screengrabs generated and validated successfully in demo/screengrabs/artifacts/"
+
+      - name: docker-all
+        description: Generate screengrabs using Podman and install them into the website source tree
+        flags:
+          - name: install-path
+            description: Destination path for generated screengrabs
+            default: website/src/components/Screengrabs
+        steps:
+          - type: atmos
+            command: screengrabs docker-build
+          - type: atmos
+            command: screengrabs install --install-path "{{ .Flags.install-path }}"

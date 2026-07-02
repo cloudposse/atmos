@@ -1441,11 +1441,20 @@ func mergeConfigFile(
 	if err = tempViper.ReadConfig(bytes.NewReader(content)); err != nil {
 		return err
 	}
+
+	if err = preprocessAtmosYamlFunc(content, tempViper); err != nil {
+		return err
+	}
 	newCommands := tempViper.Get(commandsKey)
 
 	// Do the normal merge for all other settings (non-array values).
 	// This preserves viper's merge behavior for nested maps.
 	err = v.MergeConfig(bytes.NewReader(content))
+	if err != nil {
+		return err
+	}
+
+	err = preprocessAtmosYamlFunc(content, v)
 	if err != nil {
 		return err
 	}
@@ -1457,11 +1466,6 @@ func mergeConfigFile(
 		// Second parameter wins on duplicates, so new commands override existing
 		merged := mergeCommandArrays(existingCommands, newCommands)
 		v.Set(commandsKey, merged)
-	}
-
-	err = preprocessAtmosYamlFunc(content, v)
-	if err != nil {
-		return err
 	}
 
 	return nil
@@ -1541,18 +1545,8 @@ func mergeCommandArrays(first, second interface{}) []interface{} {
 
 	// Helper function to process a command list.
 	processCommands := func(commands interface{}) {
-		cmdSlice, ok := commands.([]interface{})
-		if !ok {
-			return
-		}
-
-		for _, cmd := range cmdSlice {
-			cmdMap, ok := cmd.(map[string]interface{})
-			if !ok {
-				continue
-			}
-
-			name, ok := cmdMap["name"].(string)
+		for _, cmd := range normalizeCommandArray(commands) {
+			name, ok := commandName(cmd)
 			if !ok {
 				continue
 			}
@@ -1582,6 +1576,44 @@ func mergeCommandArrays(first, second interface{}) []interface{} {
 	}
 
 	return result
+}
+
+func normalizeCommandArray(commands interface{}) []interface{} {
+	switch c := commands.(type) {
+	case nil:
+		return nil
+	case []interface{}:
+		return c
+	case []map[string]interface{}:
+		result := make([]interface{}, 0, len(c))
+		for _, cmd := range c {
+			result = append(result, cmd)
+		}
+		return result
+	case []schema.Command:
+		result := make([]interface{}, 0, len(c))
+		for i := range c {
+			result = append(result, c[i])
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
+func commandName(command interface{}) (string, bool) {
+	switch cmd := command.(type) {
+	case map[string]interface{}:
+		name, ok := cmd["name"].(string)
+		return name, ok && name != ""
+	case map[interface{}]interface{}:
+		name, ok := cmd["name"].(string)
+		return name, ok && name != ""
+	case schema.Command:
+		return cmd.Name, cmd.Name != ""
+	default:
+		return "", false
+	}
 }
 
 // loadEmbeddedConfig loads the embedded atmos.yaml configuration.

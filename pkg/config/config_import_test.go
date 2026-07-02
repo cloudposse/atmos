@@ -129,13 +129,14 @@ logs:
 func TestMergeConfig_AtmosDCommandsMerging(t *testing.T) {
 	// Test that commands from .atmos.d are merged with main config commands.
 	tempDir := t.TempDir()
+	t.Chdir(tempDir)
 
-	// Create .atmos.d directory with a command file.
+	// Create .atmos.d directory with command files split by command group.
 	atmosDDir := filepath.Join(tempDir, ".atmos.d")
 	err := os.Mkdir(atmosDDir, 0o755)
 	require.NoError(t, err)
 
-	atmosDContent := `
+	devContent := `
 commands:
   - name: "dev"
     description: "Development workflow commands"
@@ -145,7 +146,20 @@ commands:
         steps:
           - echo "Setting up..."
 `
-	createConfigFile(t, atmosDDir, "dev.yaml", atmosDContent)
+	createConfigFile(t, atmosDDir, "dev.yaml", devContent)
+
+	buildContent := `
+commands:
+  - name: "build"
+    description: "Build workflow commands"
+    default: "binary"
+    commands:
+      - name: "binary"
+        description: "Build binary"
+        steps:
+          - echo "Building..."
+`
+	createConfigFile(t, atmosDDir, "build.yaml", buildContent)
 
 	// Create main config with its own commands.
 	mainContent := `
@@ -169,7 +183,7 @@ commands:
 
 	commandsList, ok := commands.([]interface{})
 	assert.True(t, ok, "commands should be a slice")
-	assert.Equal(t, 3, len(commandsList), "should have all 3 commands (1 from .atmos.d + 2 from main)")
+	assert.Equal(t, 4, len(commandsList), "should have all 4 commands (2 from .atmos.d + 2 from main)")
 
 	// Verify all commands are present.
 	commandNames := make(map[string]bool)
@@ -183,6 +197,7 @@ commands:
 	}
 
 	assert.True(t, commandNames["dev"], "dev command from .atmos.d should be present")
+	assert.True(t, commandNames["build"], "build command from .atmos.d should be present")
 	assert.True(t, commandNames["terraform"], "terraform command from main config should be present")
 	assert.True(t, commandNames["helmfile"], "helmfile command from main config should be present")
 }

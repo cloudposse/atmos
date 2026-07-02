@@ -48,6 +48,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  ATMOS_BOOTSTRAP_VERSION: "1.222.0"
   # Pin the SHA so the plan upload and the deploy download derive the identical
   # planfile key across jobs.
   ATMOS_CI_SHA: ${{ github.sha }}
@@ -67,9 +68,14 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: "go.mod"
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@822766b3aaa9a3b4aa2628baaccb58dd576ad0ff # v2
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
       - name: Build atmos
         run: |
-          make build
+          atmos build
           echo "$PWD/build" >> "$GITHUB_PATH"
       - name: Expose GitHub Actions runtime credentials
         uses: ./actions/github-runtime
@@ -105,9 +111,14 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: "go.mod"
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@822766b3aaa9a3b4aa2628baaccb58dd576ad0ff # v2
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
       - name: Build atmos
         run: |
-          make build
+          atmos build
           echo "$PWD/build" >> "$GITHUB_PATH"
       - name: Expose GitHub Actions runtime credentials
         uses: ./actions/github-runtime
@@ -135,9 +146,14 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: "go.mod"
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@822766b3aaa9a3b4aa2628baaccb58dd576ad0ff # v2
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
       - name: Build atmos
         run: |
-          make build
+          atmos build
           echo "$PWD/build" >> "$GITHUB_PATH"
       - name: Expose GitHub Actions runtime credentials
         uses: ./actions/github-runtime

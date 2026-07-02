@@ -55,6 +55,7 @@ var missingConfigFoundMarkdown string
 const currentDirPath = "."
 
 const (
+	customCommandAnnotation  = "customCommand"
 	customCommandKeyCommand  = "command"
 	customCommandKeyIdentity = "identity"
 )
@@ -159,7 +160,14 @@ func processCommandAliases(
 	for k, v := range aliases {
 		alias := strings.TrimSpace(k)
 
-		if _, exist := existingTopLevelCommands[alias]; !exist && topLevel {
+		if existing, exist := existingTopLevelCommands[alias]; exist && topLevel {
+			if !isConfigCustomCommand(existing) {
+				continue
+			}
+			parentCommand.RemoveCommand(existing)
+		}
+
+		if topLevel {
 			aliasCmd := strings.TrimSpace(v)
 			aliasFor := fmt.Sprintf("alias for `%s`", aliasCmd)
 
@@ -226,6 +234,13 @@ func processCommandAliases(
 	return nil
 }
 
+func isConfigCustomCommand(cmd *cobra.Command) bool {
+	if cmd == nil || cmd.Annotations == nil {
+		return false
+	}
+	return cmd.Annotations[customCommandAnnotation] == "true"
+}
+
 // preCustomCommand is run before a custom command is executed.
 func preCustomCommand(
 	cmd *cobra.Command,
@@ -234,6 +249,10 @@ func preCustomCommand(
 	commandConfig *schema.Command,
 ) {
 	var sb strings.Builder
+
+	if shouldRunDefaultSubcommand(args, commandConfig) {
+		return
+	}
 
 	// checking for zero arguments in config
 	if len(commandConfig.Arguments) == 0 {
@@ -316,6 +335,47 @@ func preCustomCommand(
 	}
 }
 
+func shouldRunDefaultSubcommand(args []string, commandConfig *schema.Command) bool {
+	return len(args) == 0 &&
+		strings.TrimSpace(commandConfig.Default) != "" &&
+		len(commandConfig.Commands) > 0
+}
+
+func runDefaultSubcommand(cmd *cobra.Command, commandConfig *schema.Command) bool {
+	defaultName := strings.TrimSpace(commandConfig.Default)
+	if defaultName == "" {
+		return false
+	}
+
+	subcommand := findSubcommand(cmd, defaultName)
+	if subcommand == nil {
+		err := errUtils.Build(errUtils.ErrInvalidConfig).
+			WithExplanationf("Custom command %q declares default subcommand %q, but no matching subcommand exists", commandConfig.Name, defaultName).
+			WithHint("Set `default` to one of the command's configured subcommands").
+			WithContext(customCommandKeyCommand, commandConfig.Name).
+			WithContext("default", defaultName).
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "Invalid Command", "https://atmos.tools/cli/configuration/commands")
+		return true
+	}
+
+	if subcommand.PreRunE != nil {
+		errUtils.CheckErrorPrintAndExit(subcommand.PreRunE(subcommand, nil), "", "")
+	} else if subcommand.PreRun != nil {
+		subcommand.PreRun(subcommand, nil)
+	}
+
+	if subcommand.RunE != nil {
+		errUtils.CheckErrorPrintAndExit(subcommand.RunE(subcommand, nil), "", "")
+	} else if subcommand.Run != nil {
+		subcommand.Run(subcommand, nil)
+	} else if err := subcommand.Help(); err != nil {
+		log.Trace("Failed to display default subcommand help", "error", err, customCommandKeyCommand, subcommand.Name())
+	}
+
+	return true
+}
+
 // findSubcommand returns the existing subcommand of parent with the given name, or nil.
 func findSubcommand(parent *cobra.Command, name string) *cobra.Command {
 	for _, c := range parent.Commands() {
@@ -364,10 +424,16 @@ func createCustomCommand(
 		Use:   commandConfig.Name,
 		Short: commandConfig.Description,
 		Long:  commandConfig.Description,
+		Annotations: map[string]string{
+			customCommandAnnotation: "true",
+		},
 		PreRun: func(cmd *cobra.Command, args []string) {
 			preCustomCommand(cmd, args, parentCommand, commandConfig)
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+			if len(args) == 0 && runDefaultSubcommand(cmd, commandConfig) {
+				return
+			}
 			executeCustomCommand(*atmosConfig, cmd, args, parentCommand, commandConfig)
 		},
 	}
@@ -678,22 +744,12 @@ func executeCustomCommand(
 	}
 
 	if len(deps) > 0 {
-		log.Debug("Installing command dependencies", customCommandKeyCommand, commandConfig.Name, "tools", deps)
-		installer := dependencies.NewInstaller(&atmosConfig)
-		if err := installer.EnsureTools(deps); err != nil {
-			err = errUtils.Build(errUtils.ErrToolInstall).
-				WithCause(err).
-				WithExplanationf("Failed to install dependencies for command '%s'", commandConfig.Name).
-				Err()
-			errUtils.CheckErrorPrintAndExit(err, "", "")
-		}
-
-		// Update PATH to include installed tools.
+		log.Debug("Adding configured command dependencies to PATH", customCommandKeyCommand, commandConfig.Name, "tools", deps)
 		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
 			err = errUtils.Build(errUtils.ErrDependencyResolution).
 				WithCause(err).
 				WithExplanationf("Failed to update PATH for command '%s'", commandConfig.Name).
-				WithHint("Check that toolchain install_path is writable").
+				WithHint("Run `atmos toolchain install` to install tools from .tool-versions").
 				WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
 				Err()
 			errUtils.CheckErrorPrintAndExit(err, "", "")
@@ -773,6 +829,8 @@ func executeCustomCommand(
 		// Prepare template data
 		data := map[string]any{
 			"Arguments":    argumentsData,
+			"Cwd":          workDir,
+			"cwd":          workDir,
 			"Flags":        flagsData,
 			"flags":        flagsData,
 			"TrailingArgs": trailingArgs,

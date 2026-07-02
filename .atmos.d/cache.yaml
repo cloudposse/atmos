@@ -1,0 +1,159 @@
+commands:
+  - name: cache
+    description: GitHub Actions cache maintenance
+    commands:
+      - name: list
+        description: List GitHub Actions cache entries over 1GB
+        steps:
+          - |
+            echo "Checking GitHub Actions cache for entries over 1GB..."
+
+            if ! command -v gh >/dev/null 2>&1; then
+              echo "GitHub CLI (gh) is not installed. Please install it first."
+              echo "Visit: https://cli.github.com/"
+              exit 1
+            fi
+
+            if ! gh auth status >/dev/null 2>&1; then
+              echo "Not authenticated with GitHub. Please run: gh auth login"
+              exit 1
+            fi
+
+            if ! gh actions-cache --help >/dev/null 2>&1; then
+              echo "Installing gh actions-cache extension..."
+              gh extension install actions/gh-actions-cache
+            fi
+
+            CACHE_ENTRIES=$(gh actions-cache list -R cloudposse/atmos | grep GB)
+
+            if [ -z "$CACHE_ENTRIES" ]; then
+              echo "No cache entries over 1GB found."
+              exit 0
+            fi
+
+            echo "Found cache entries over 1GB:"
+            echo ""
+            echo "$CACHE_ENTRIES" | column -t -s$'\t'
+            echo ""
+
+            TOTAL_SIZE=$(echo "$CACHE_ENTRIES" | awk '{print $2}' | grep -o '[0-9.]*' | awk '{s+=$1} END {printf "%.2f", s}')
+            ENTRY_COUNT=$(echo "$CACHE_ENTRIES" | wc -l | xargs)
+            UNIQUE_KEY_COUNT=$(echo "$CACHE_ENTRIES" | awk '{print $1}' | sort -u | wc -l | xargs)
+
+            echo "Summary:"
+            echo "  Total entries: $ENTRY_COUNT"
+            echo "  Unique keys: $UNIQUE_KEY_COUNT"
+            echo "  Total size: ${TOTAL_SIZE} GB"
+            echo ""
+            echo "Note: Each key may have multiple entries across different branches."
+            echo "To delete these caches, run: atmos cache clear"
+
+      - name: clear
+        description: Clear GitHub Actions cache entries over 1GB
+        steps:
+          - |
+            echo "Checking GitHub Actions cache for entries over 1GB..."
+
+            if ! command -v gh >/dev/null 2>&1; then
+              echo "GitHub CLI (gh) is not installed. Please install it first."
+              echo "Visit: https://cli.github.com/"
+              exit 1
+            fi
+
+            if ! gh auth status >/dev/null 2>&1; then
+              echo "Not authenticated with GitHub. Please run: gh auth login"
+              exit 1
+            fi
+
+            if ! gh actions-cache --help >/dev/null 2>&1; then
+              echo "Installing gh actions-cache extension..."
+              gh extension install actions/gh-actions-cache
+            fi
+
+            CACHE_ENTRIES=$(gh actions-cache list -R cloudposse/atmos | grep GB)
+
+            if [ -z "$CACHE_ENTRIES" ]; then
+              echo "No cache entries over 1GB found."
+              exit 0
+            fi
+
+            echo "Found cache entries over 1GB:"
+            echo "$CACHE_ENTRIES"
+            echo ""
+
+            ENTRY_COUNT=$(echo "$CACHE_ENTRIES" | wc -l | xargs)
+            echo "Total entries to delete: $ENTRY_COUNT"
+            echo ""
+
+            printf "Do you want to delete these cache entries? (y/N): "
+            read -r REPLY
+
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+              echo "Cancelled."
+              exit 0
+            fi
+
+            echo "Deleting cache entries..."
+            echo "Note: Each key may match multiple cache entries across different branches."
+            echo ""
+
+            FAILED_KEYS=0
+            SUCCESS_KEYS=0
+            TOTAL_DELETED=0
+            FAILED_LIST=""
+
+            UNIQUE_KEYS=$(echo "$CACHE_ENTRIES" | awk '{print $1}' | sort -u)
+            UNIQUE_KEY_COUNT=$(echo "$UNIQUE_KEYS" | wc -l | xargs)
+
+            echo "Found $UNIQUE_KEY_COUNT unique cache key(s) to process"
+            echo ""
+
+            while read -r cache_key; do
+              if [ -n "$cache_key" ]; then
+                echo "Processing key: ${cache_key:0:50}..."
+
+                DELETE_OUTPUT=$(gh actions-cache delete "$cache_key" -R cloudposse/atmos --confirm 2>&1)
+                DELETE_EXIT=$?
+
+                if [ $DELETE_EXIT -eq 0 ]; then
+                  DELETED_COUNT=$(echo "$DELETE_OUTPUT" | grep -oE "Deleted [0-9]+ cache" | grep -oE "[0-9]+" || echo "1")
+                  echo "$DELETE_OUTPUT" | head -1
+                  echo "Successfully processed key"
+                  SUCCESS_KEYS=$((SUCCESS_KEYS + 1))
+                  TOTAL_DELETED=$((TOTAL_DELETED + DELETED_COUNT))
+                else
+                  echo "Failed to delete key"
+                  FAILED_KEYS=$((FAILED_KEYS + 1))
+                  FAILED_LIST="${FAILED_LIST}    ${cache_key:0:50}...\n"
+                fi
+              fi
+            done <<< "$UNIQUE_KEYS"
+
+            echo ""
+            if [ "$FAILED_KEYS" -eq 0 ] && [ "$SUCCESS_KEYS" -gt 0 ]; then
+              echo "Cache cleanup complete."
+              echo "Processed $SUCCESS_KEYS unique key(s)"
+              echo "Total cache entries deleted: $TOTAL_DELETED"
+            elif [ "$SUCCESS_KEYS" -eq 0 ] && [ "$FAILED_KEYS" -gt 0 ]; then
+              echo "Cache cleanup failed. Could not delete any keys."
+              echo ""
+              echo "Failed keys:"
+              printf "$FAILED_LIST"
+              echo ""
+              echo "Try:"
+              echo "  1. Update gh CLI: brew upgrade gh"
+              echo "  2. Re-authenticate: gh auth refresh"
+              echo "  3. Delete manually: gh actions-cache delete <key> -R cloudposse/atmos --confirm"
+            else
+              echo "Cache cleanup finished with mixed results."
+              echo "Successful keys: $SUCCESS_KEYS"
+              echo "Failed keys: $FAILED_KEYS"
+              echo "Total cache entries deleted: $TOTAL_DELETED"
+              if [ -n "$FAILED_LIST" ]; then
+                echo ""
+                echo "Failed keys:"
+                printf "$FAILED_LIST"
+              fi
+              echo ""
+              echo "For failed keys, try updating gh CLI: brew upgrade gh"
+            fi

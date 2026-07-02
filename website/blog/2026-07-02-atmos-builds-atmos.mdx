@@ -1,0 +1,46 @@
+---
+slug: atmos-builds-atmos
+title: "Atmos Builds Atmos Now"
+authors: [osterman]
+tags: [dx, core]
+---
+
+import EmbedFile from '@site/src/components/EmbedFile'
+
+Atmos no longer uses Make as the active development interface for the Atmos repository. The same custom command system users rely on for project workflows now builds, tests, lints, validates, and publishes the Atmos CLI itself.
+
+<!--truncate-->
+
+## What Changed
+
+The repository's development commands now live in `.atmos.d/` command groups instead of Make targets. The root `atmos.yaml` stays focused on project configuration, while the command surface is split by concern:
+
+- `atmos build ...` for dependencies, binaries, versions, and docs generation.
+- `atmos test ...` for short, acceptance, coverage, and race-test workflows.
+- `atmos lint ...` for changed-file linting, custom lintroller rules, go.mod checks, and link checks.
+- `atmos check ...`, `atmos format ...`, and `atmos cache ...` for repository maintenance workflows.
+- `atmos screengrabs ...` for website screengrab generation.
+
+Makefiles remain only as migration guards. If someone runs an old target, the Makefile exits and points them to the Atmos command that replaced it.
+
+## A Real Command Group
+
+The build commands below are not copied into this post. They are embedded directly from the repository's `.atmos.d/build.yaml`, so the docs move with the code.
+
+<EmbedFile filePath=".atmos.d/build.yaml" />
+
+The same pattern is used for tests:
+
+<EmbedFile filePath=".atmos.d/test.yaml" />
+
+## Why It Matters
+
+This is dogfooding in the useful sense: Atmos exercises its own custom command engine for the daily loops that maintain Atmos. That gives contributors one command vocabulary locally and in CI, and it gives us immediate feedback when custom commands need to become better.
+
+It also removes a layer. CI now calls grouped Atmos commands such as `atmos build deps`, `atmos build --target linux`, and `atmos test acc-cover`. The screengrab workflow calls `atmos screengrabs all`. The install script has its own Linux, macOS, and Windows smoke test, so the installer path gets exercised directly too.
+
+## Try the Pattern
+
+If you are maintaining a repo with an aging Makefile, `.atmos.d/` is a good place to split the command surface by concern. Keep project configuration in `atmos.yaml`; keep operational commands in grouped files such as `.atmos.d/build.yaml`, `.atmos.d/test.yaml`, and `.atmos.d/lint.yaml`.
+
+For the general command schema, see the [custom commands documentation](/cli/configuration/commands). For a smaller standalone example, browse the [custom commands example](/examples/custom-commands).

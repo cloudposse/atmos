@@ -1,0 +1,13 @@
+commands:
+  - name: shell
+    description: Start a development shell with build/ first on PATH
+    working_directory: !repo-root .
+    env:
+      - key: PATH
+        value: "{{ .cwd }}/build:{{ .env.PATH }}"
+    steps:
+      - type: toast
+        level: info
+        content: Entering shell
+      - type: exec
+        command: exec "${SHELL:-/bin/sh}"
