@@ -9,6 +9,61 @@ commands:
       - name: version
         description: Version string to embed in the binary
         default: test
+    steps:
+      - &build_binary_step
+        type: spin
+        title: Building Atmos
+        command: |
+          set -euo pipefail
+
+          target="{{ .Flags.target }}"
+          version="{{ .Flags.version }}"
+
+          case "$target" in
+            default)
+              goos="${GOOS:-}"
+              goarch="${GOARCH:-}"
+              output="build/atmos"
+              ;;
+            linux)
+              goos="linux"
+              goarch="${GOARCH:-}"
+              output="build/atmos"
+              ;;
+            windows)
+              goos="windows"
+              goarch="${GOARCH:-}"
+              output="build/atmos.exe"
+              ;;
+            macos)
+              goos="darwin"
+              goarch="${GOARCH:-}"
+              output="build/atmos"
+              ;;
+            macos-intel)
+              goos="darwin"
+              goarch="amd64"
+              output="build/atmos"
+              ;;
+            *)
+              echo "Unsupported build target: $target" >&2
+              echo "Expected one of: default, linux, windows, macos, macos-intel" >&2
+              exit 1
+              ;;
+          esac
+
+          export CGO_ENABLED="${CGO_ENABLED:-0}"
+          if [ "$(git rev-parse --git-dir 2>/dev/null)" != "$(git rev-parse --git-common-dir 2>/dev/null)" ]; then
+            export GOFLAGS="${GOFLAGS:--buildvcs=false}"
+          fi
+
+          go mod download
+
+          mkdir -p build
+
+          env ${goos:+GOOS=$goos} ${goarch:+GOARCH=$goarch} \
+            go build -o "$output" -v \
+            -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$version'"
     commands:
       - name: deps
         description: Download Go module dependencies
@@ -25,59 +80,7 @@ commands:
             description: Version string to embed in the binary
             default: test
         steps:
-          - type: spin
-            title: Building Atmos
-            command: |
-              set -euo pipefail
-
-              target="{{ .Flags.target }}"
-              version="{{ .Flags.version }}"
-
-              case "$target" in
-                default)
-                  goos="${GOOS:-}"
-                  goarch="${GOARCH:-}"
-                  output="build/atmos"
-                  ;;
-                linux)
-                  goos="linux"
-                  goarch="${GOARCH:-}"
-                  output="build/atmos"
-                  ;;
-                windows)
-                  goos="windows"
-                  goarch="${GOARCH:-}"
-                  output="build/atmos.exe"
-                  ;;
-                macos)
-                  goos="darwin"
-                  goarch="${GOARCH:-}"
-                  output="build/atmos"
-                  ;;
-                macos-intel)
-                  goos="darwin"
-                  goarch="amd64"
-                  output="build/atmos"
-                  ;;
-                *)
-                  echo "Unsupported build target: $target" >&2
-                  echo "Expected one of: default, linux, windows, macos, macos-intel" >&2
-                  exit 1
-                  ;;
-              esac
-
-              export CGO_ENABLED="${CGO_ENABLED:-0}"
-              if [ "$(git rev-parse --git-dir 2>/dev/null)" != "$(git rev-parse --git-common-dir 2>/dev/null)" ]; then
-                export GOFLAGS="${GOFLAGS:--buildvcs=false}"
-              fi
-
-              go mod download
-
-              mkdir -p build
-
-              env ${goos:+GOOS=$goos} ${goarch:+GOARCH=$goarch} \
-                go build -o "$output" -v \
-                -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$version'"
+          - *build_binary_step
 
       - name: version
         description: Print the version from an already-built Atmos binary
