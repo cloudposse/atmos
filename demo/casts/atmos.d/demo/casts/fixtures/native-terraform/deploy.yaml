@@ -1,74 +1,51 @@
 commands:
-- name: casts
-  commands:
-  - name: generate
-    commands:
-    - name: demo
-      commands:
-      - name: casts
-        commands:
-        - name: fixtures
-          commands:
-          - name: native-terraform
-            commands:
-            - name: deploy
-              description: Regenerate the Terraform deploy cast
-              env:
-                PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-              steps:
-              - type: shell
-                name: setup
-                command: atmos casts setup
-              - type: shell
-                name: clean
-                command: rm -f ../../website/static/casts/demo/casts/fixtures/native-terraform/deploy.cast
-              - type: cast
-                name: deploy
-                working_directory: "../../.context/cast-fixtures/native-terraform"
-                command: atmos terraform deploy vpc -s dev -auto-approve
-                mode: steps
-                width: 120
-                height: 36
-                output:
-                  cast: "../../website/static/casts/demo/casts/fixtures/native-terraform/deploy.cast"
-                steps:
-                - type: shell
-                  name: deploy
-                  env:
-                    TERM: xterm-256color
-                    COLORTERM: truecolor
-                    ATMOS_FORCE_COLOR: '1'
-                    CLICOLOR_FORCE: '1'
-                    FORCE_COLOR: '1'
-                    ATMOS_FORCE_TTY: 'true'
-                    ATMOS_KEYRING_TYPE: memory
-                  command: atmos terraform deploy vpc -s dev -auto-approve
-              - type: shell
-                name: validate
-                command: atmos casts validate demo casts fixtures native-terraform
-                  deploy
-  - name: validate
-    commands:
-    - name: demo
-      commands:
-      - name: casts
-        commands:
-        - name: fixtures
-          commands:
-          - name: native-terraform
-            commands:
-            - name: deploy
-              description: Validate the Terraform deploy cast
-              steps:
-              - type: script
-                name: validate
-                interpreter: python3
-                script: |
-                  from pathlib import Path
-                  text = Path("../../website/static/casts/demo/casts/fixtures/native-terraform/deploy.cast").read_text()
-                  for needle in ["Apply complete!", "Resources: 1 added", "vpc_cidr"]:
-                      if needle not in text:
-                          raise SystemExit(f"terraform deploy cast missing {needle!r}")
-                  for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found"]:
-                      if bad in text:
-                          raise SystemExit(f"terraform deploy cast contains {bad!r}")
+  - name: casts generate demo casts fixtures native-terraform deploy
+    description: Regenerate the Terraform deploy cast
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: clean
+        command: rm -f ../../website/static/casts/demo/casts/fixtures/native-terraform/deploy.cast
+      - type: cast
+        name: deploy
+        working_directory: "../../.context/cast-fixtures/native-terraform"
+        command: atmos terraform deploy vpc -s dev -auto-approve
+        mode: steps
+        width: 120
+        height: 36
+        output:
+          cast: "../../website/static/casts/demo/casts/fixtures/native-terraform/deploy.cast"
+        env:
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+        steps:
+          - type: shell
+            name: deploy
+            command: atmos terraform deploy vpc -s dev -auto-approve
+      - type: shell
+        name: validate
+        command: atmos casts validate demo casts fixtures native-terraform deploy
+  - name: casts validate demo casts fixtures native-terraform deploy
+    description: Validate the Terraform deploy cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          from pathlib import Path
+          text = Path("../../website/static/casts/demo/casts/fixtures/native-terraform/deploy.cast").read_text()
+          for needle in ["Apply complete!", "Resources: 1 added", "vpc_cidr"]:
+              if needle not in text:
+                  raise SystemExit(f"terraform deploy cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found"]:
+              if bad in text:
+                  raise SystemExit(f"terraform deploy cast contains {bad!r}")

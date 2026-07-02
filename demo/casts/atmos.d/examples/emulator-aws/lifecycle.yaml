@@ -1,98 +1,80 @@
 commands:
-- name: casts
-  commands:
-  - name: generate
-    commands:
-    - name: examples
-      commands:
-      - name: emulator-aws
-        commands:
-        - name: lifecycle
-          description: Regenerate the AWS emulator lifecycle cast
-          env:
-            PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-          steps:
+  - name: casts generate examples emulator-aws lifecycle
+    description: Regenerate the AWS emulator lifecycle cast
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-stale-state
+        working_directory: "../../.context/cast-fixtures/emulator-aws"
+        env: &1
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+        output: none
+        command: |
+          atmos --logs-level=Off emulator down aws -s dev || true
+          atmos --logs-level=Off terraform reset || true
+      - type: shell
+        name: clean
+        command: rm -f ../../website/static/casts/examples/emulator-aws/lifecycle.cast
+      - type: cast
+        name: lifecycle
+        working_directory: "../../.context/cast-fixtures/emulator-aws"
+        command: atmos emulator up aws -s dev --ephemeral
+        mode: steps
+        width: 120
+        height: 36
+        output:
+          cast: "../../website/static/casts/examples/emulator-aws/lifecycle.cast"
+        env: *1
+        steps:
           - type: shell
-            name: setup
-            command: atmos casts setup
-          - type: shell
-            name: reset-stale-state
-            working_directory: "../../.context/cast-fixtures/emulator-aws"
-            env: &1
-              TERM: xterm-256color
-              COLORTERM: truecolor
-              ATMOS_FORCE_COLOR: '1'
-              CLICOLOR_FORCE: '1'
-              FORCE_COLOR: '1'
-              ATMOS_FORCE_TTY: 'true'
-              ATMOS_KEYRING_TYPE: memory
-            output: none
-            command: |
-              atmos --logs-level Off emulator down aws -s dev || true
-              atmos --logs-level Off terraform reset || true
-          - type: shell
-            name: clean
-            command: rm -f ../../website/static/casts/examples/emulator-aws/lifecycle.cast
-          - type: cast
-            name: lifecycle
-            working_directory: "../../.context/cast-fixtures/emulator-aws"
+            name: emulator-up
             command: atmos emulator up aws -s dev --ephemeral
-            mode: steps
-            width: 120
-            height: 36
-            output:
-              cast: "../../website/static/casts/examples/emulator-aws/lifecycle.cast"
-            steps:
-            - type: shell
-              name: emulator-up
-              env: *1
-              command: atmos emulator up aws -s dev --ephemeral
-            - type: shell
-              name: emulator-ps
-              env: *1
-              command: atmos emulator ps aws -s dev
-            - type: shell
-              name: terraform-apply
-              env: *1
-              command: atmos terraform apply demo -s dev -auto-approve
-            - type: shell
-              name: terraform-output
-              env: *1
-              command: atmos terraform output demo -s dev
-            - type: shell
-              name: emulator-down
-              when: always
-              env: *1
-              command: atmos emulator down aws -s dev
           - type: shell
-            name: validate
-            command: atmos casts validate examples emulator-aws lifecycle
-  - name: validate
-    commands:
-    - name: examples
-      commands:
-      - name: emulator-aws
-        commands:
-        - name: lifecycle
-          description: Validate the AWS emulator lifecycle cast
-          steps:
-          - type: script
-            name: validate
-            interpreter: python3
-            script: |
-              from pathlib import Path
-              text = Path("../../website/static/casts/examples/emulator-aws/lifecycle.cast").read_text()
-              for needle in [
-                  "emulator aws is up",
-                  "c88ec20bf221",
-                  "running",
-                  "Apply complete!",
-                  "stage =",
-                  "dev",
-                  "emulator aws is down",
-              ]:
-                  if needle not in text:
-                      raise SystemExit(f"emulator aws lifecycle cast missing {needle!r}")
-              for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "Error:"]:
-                  if bad in text:
-                      raise SystemExit(f"emulator aws lifecycle cast contains {bad!r}")
+            name: emulator-ps
+            command: atmos emulator ps aws -s dev
+          - type: shell
+            name: terraform-apply
+            command: atmos terraform apply demo -s dev -auto-approve
+          - type: shell
+            name: terraform-output
+            command: atmos terraform output demo -s dev
+          - type: shell
+            name: emulator-down
+            when: always
+            command: atmos emulator down aws -s dev
+      - type: shell
+        name: validate
+        command: atmos casts validate examples emulator-aws lifecycle
+  - name: casts validate examples emulator-aws lifecycle
+    description: Validate the AWS emulator lifecycle cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          from pathlib import Path
+          text = Path("../../website/static/casts/examples/emulator-aws/lifecycle.cast").read_text()
+          for needle in [
+              "emulator aws is up",
+              "c88ec20bf221",
+              "running",
+              "Apply complete!",
+              "stage =",
+              "dev",
+              "emulator aws is down",
+          ]:
+              if needle not in text:
+                  raise SystemExit(f"emulator aws lifecycle cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "Error:"]:
+              if bad in text:
+                  raise SystemExit(f"emulator aws lifecycle cast contains {bad!r}")

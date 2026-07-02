@@ -1,71 +1,57 @@
 commands:
-- name: casts
-  commands:
-  - name: generate
-    commands:
-    - name: examples
-      commands:
-      - name: toolchain
-        commands:
-        - name: demo-convert
-          description: Regenerate the Toolchain example cast
-          env:
-            PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-          steps:
+  - name: casts generate examples toolchain demo-convert
+    description: Regenerate the Toolchain example cast
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: prepare-tools
+        working_directory: "../../.context/cast-fixtures/toolchain"
+        env: &1
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+        output: none
+        command: atmos --logs-level=Off toolchain install
+      - type: shell
+        name: clean
+        command: rm -f ../../website/static/casts/examples/toolchain/demo-convert.cast
+      - type: cast
+        name: demo-convert
+        working_directory: "../../.context/cast-fixtures/toolchain"
+        command: atmos demo convert
+        mode: steps
+        width: 120
+        height: 36
+        output:
+          cast: "../../website/static/casts/examples/toolchain/demo-convert.cast"
+        env: *1
+        steps:
           - type: shell
-            name: setup
-            command: atmos casts setup
-          - type: shell
-            name: prepare-tools
-            working_directory: "../../.context/cast-fixtures/toolchain"
-            env: &1
-              TERM: xterm-256color
-              COLORTERM: truecolor
-              ATMOS_FORCE_COLOR: '1'
-              CLICOLOR_FORCE: '1'
-              FORCE_COLOR: '1'
-              ATMOS_FORCE_TTY: 'true'
-              ATMOS_KEYRING_TYPE: memory
-            output: none
-            command: atmos --logs-level Off toolchain install
-          - type: shell
-            name: clean
-            command: rm -f ../../website/static/casts/examples/toolchain/demo-convert.cast
-          - type: cast
             name: demo-convert
-            working_directory: "../../.context/cast-fixtures/toolchain"
             command: atmos demo convert
-            mode: steps
-            width: 120
-            height: 36
-            output:
-              cast: "../../website/static/casts/examples/toolchain/demo-convert.cast"
-            steps:
-            - type: shell
-              name: demo-convert
-              env: *1
-              command: atmos demo convert
-          - type: shell
-            name: validate
-            command: atmos casts validate examples toolchain demo-convert
-  - name: validate
-    commands:
-    - name: examples
-      commands:
-      - name: toolchain
-        commands:
-        - name: demo-convert
-          description: Validate the Toolchain example cast
-          steps:
-          - type: script
-            name: validate
-            interpreter: python3
-            script: |
-              from pathlib import Path
-              text = Path("../../website/static/casts/examples/toolchain/demo-convert.cast").read_text()
-              for needle in ["Converting YAML to formatted JSON", "name", "atmos"]:
-                  if needle not in text:
-                      raise SystemExit(f"demo-convert cast missing {needle!r}")
-              for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
-                  if bad in text:
-                      raise SystemExit(f"demo-convert cast contains {bad!r}")
+      - type: shell
+        name: validate
+        command: atmos casts validate examples toolchain demo-convert
+  - name: casts validate examples toolchain demo-convert
+    description: Validate the Toolchain example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          from pathlib import Path
+          text = Path("../../website/static/casts/examples/toolchain/demo-convert.cast").read_text()
+          for needle in ["Converting YAML to formatted JSON", "name", "atmos"]:
+              if needle not in text:
+                  raise SystemExit(f"demo-convert cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
+              if bad in text:
+                  raise SystemExit(f"demo-convert cast contains {bad!r}")

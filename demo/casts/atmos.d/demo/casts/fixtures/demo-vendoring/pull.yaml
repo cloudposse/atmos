@@ -1,73 +1,51 @@
 commands:
-- name: casts
-  commands:
-  - name: generate
-    commands:
-    - name: demo
-      commands:
-      - name: casts
-        commands:
-        - name: fixtures
-          commands:
-          - name: demo-vendoring
-            commands:
-            - name: pull
-              description: Regenerate the vendor pull cast
-              env:
-                PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-              steps:
-              - type: shell
-                name: setup
-                command: atmos casts setup
-              - type: shell
-                name: clean
-                command: rm -f ../../website/static/casts/demo/casts/fixtures/demo-vendoring/pull.cast
-              - type: cast
-                name: pull
-                working_directory: "../../.context/cast-fixtures/demo-vendoring"
-                command: atmos vendor pull --everything
-                mode: steps
-                width: 120
-                height: 36
-                output:
-                  cast: "../../website/static/casts/demo/casts/fixtures/demo-vendoring/pull.cast"
-                steps:
-                - type: shell
-                  name: pull
-                  env:
-                    TERM: xterm-256color
-                    COLORTERM: truecolor
-                    ATMOS_FORCE_COLOR: '1'
-                    CLICOLOR_FORCE: '1'
-                    FORCE_COLOR: '1'
-                    ATMOS_FORCE_TTY: 'true'
-                    ATMOS_KEYRING_TYPE: memory
-                  command: atmos vendor pull --everything
-              - type: shell
-                name: validate
-                command: atmos casts validate demo casts fixtures demo-vendoring pull
-  - name: validate
-    commands:
-    - name: demo
-      commands:
-      - name: casts
-        commands:
-        - name: fixtures
-          commands:
-          - name: demo-vendoring
-            commands:
-            - name: pull
-              description: Validate the vendor pull cast
-              steps:
-              - type: script
-                name: validate
-                interpreter: python3
-                script: |
-                  from pathlib import Path
-                  text = Path("../../website/static/casts/demo/casts/fixtures/demo-vendoring/pull.cast").read_text()
-                  for needle in ["Vendoring from", "Vendored components success=3", "github/stargazers"]:
-                      if needle not in text:
-                          raise SystemExit(f"vendor pull cast missing {needle!r}")
-                  for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic"]:
-                      if bad in text:
-                          raise SystemExit(f"vendor pull cast contains {bad!r}")
+  - name: casts generate demo casts fixtures demo-vendoring pull
+    description: Regenerate the vendor pull cast
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: clean
+        command: rm -f ../../website/static/casts/demo/casts/fixtures/demo-vendoring/pull.cast
+      - type: cast
+        name: pull
+        working_directory: "../../.context/cast-fixtures/demo-vendoring"
+        command: atmos vendor pull --everything
+        mode: steps
+        width: 120
+        height: 36
+        output:
+          cast: "../../website/static/casts/demo/casts/fixtures/demo-vendoring/pull.cast"
+        env:
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+        steps:
+          - type: shell
+            name: pull
+            command: atmos vendor pull --everything
+      - type: shell
+        name: validate
+        command: atmos casts validate demo casts fixtures demo-vendoring pull
+  - name: casts validate demo casts fixtures demo-vendoring pull
+    description: Validate the vendor pull cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          from pathlib import Path
+          text = Path("../../website/static/casts/demo/casts/fixtures/demo-vendoring/pull.cast").read_text()
+          for needle in ["Vendoring from", "Vendored components success=3", "github/stargazers"]:
+              if needle not in text:
+                  raise SystemExit(f"vendor pull cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic"]:
+              if bad in text:
+                  raise SystemExit(f"vendor pull cast contains {bad!r}")

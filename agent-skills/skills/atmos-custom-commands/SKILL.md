@@ -282,9 +282,9 @@ steps:
   - "echo Hello {{ .Arguments.name }}"
   - >
     {{ if .Flags.stack }}
-    atmos describe stacks --stack {{ .Flags.stack }} --format json
+    atmos describe stacks --stack={{ .Flags.stack }} --format=json
     {{ else }}
-    atmos describe stacks --format json
+    atmos describe stacks --format=json
     {{ end }}
 ```
 
@@ -424,7 +424,7 @@ commands:
         description: List all Atmos stacks
         steps:
           - >
-            atmos describe stacks --process-templates=false --sections none | grep -e "^\S" | sed s/://g
+            atmos describe stacks --process-templates=false --sections=none | grep -e "^\S" | sed s/://g
 ```
 
 ### Quick Example: Security Scan with Dependencies

@@ -401,7 +401,7 @@ commands:
       - name: stacks
         description: List all stacks
         steps:
-          - atmos describe stacks --sections none | grep -e "^\S" | sed s/://g
+          - atmos describe stacks --sections=none | grep -e "^\S" | sed s/://g
       - name: components
         description: List components
         flags:
@@ -411,10 +411,10 @@ commands:
         steps:
           - >
             {{ if .Flags.stack }}
-            atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none |
+            atmos describe stacks --stack={{ .Flags.stack }} --format=json --sections=none |
               jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
             {{ else }}
-            atmos describe stacks --format json --sections none |
+            atmos describe stacks --format=json --sections=none |
               jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
             {{ end }}
 ```

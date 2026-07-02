@@ -169,6 +169,107 @@ func TestPrepareCastChildStepInheritsOutputMode(t *testing.T) {
 	}
 }
 
+func TestPrepareCastChildStepAppliesSimulateDefaults(t *testing.T) {
+	cursor := true
+	castStep := &schema.WorkflowStep{
+		Name: "demo",
+		Defaults: &schema.CastDefaults{
+			Simulate: &schema.CastSimulateDefaults{
+				Mode:     "typed",
+				Cursor:   &cursor,
+				Rate:     "35ms",
+				Jitter:   0.25,
+				Duration: "10ms",
+				Interval: "20ms",
+				Prompt: &schema.SimulatePrompt{
+					Text:  "> ",
+					Style: "command",
+				},
+			},
+		},
+	}
+	child := &schema.WorkflowStep{
+		Type: schema.TaskTypeSimulate,
+		Text: "atmos version",
+	}
+
+	prepareCastChildStep(castStep, child, 0)
+
+	if child.Mode != "typed" {
+		t.Fatalf("child mode = %q, want typed", child.Mode)
+	}
+	if !child.Cursor || !child.CursorSet {
+		t.Fatalf("child cursor = %v cursorSet = %v, want true/true", child.Cursor, child.CursorSet)
+	}
+	if child.Rate != "35ms" || child.Jitter != 0.25 || child.Duration != "10ms" || child.Interval != "20ms" {
+		t.Fatalf("child timing defaults not applied: %#v", child)
+	}
+	if child.SimulatePrompt == nil || child.SimulatePrompt.Text != "> " || child.SimulatePrompt.Style != "command" {
+		t.Fatalf("child prompt = %#v, want command prompt", child.SimulatePrompt)
+	}
+}
+
+func TestPrepareCastChildStepSimulateDefaultsRespectOverrides(t *testing.T) {
+	cursor := true
+	castStep := &schema.WorkflowStep{
+		Name: "demo",
+		Defaults: &schema.CastDefaults{
+			Simulate: &schema.CastSimulateDefaults{
+				Cursor: &cursor,
+				Rate:   "35ms",
+				Prompt: &schema.SimulatePrompt{
+					Text:  "> ",
+					Style: "command",
+				},
+			},
+		},
+	}
+	child := &schema.WorkflowStep{
+		Type:      schema.TaskTypeSimulate,
+		Cursor:    false,
+		CursorSet: true,
+		Rate:      "5ms",
+		SimulatePrompt: &schema.SimulatePrompt{
+			Text: "$ ",
+		},
+		Text: "atmos version",
+	}
+
+	prepareCastChildStep(castStep, child, 0)
+
+	if child.Cursor {
+		t.Fatal("child cursor should keep explicit false override")
+	}
+	if child.Rate != "5ms" {
+		t.Fatalf("child rate = %q, want override 5ms", child.Rate)
+	}
+	if child.SimulatePrompt == nil || child.SimulatePrompt.Text != "$ " || child.SimulatePrompt.Style != "command" {
+		t.Fatalf("child prompt = %#v, want text override with default style", child.SimulatePrompt)
+	}
+}
+
+func TestPrepareCastChildStepDoesNotApplySimulateDefaultsToShell(t *testing.T) {
+	cursor := true
+	castStep := &schema.WorkflowStep{
+		Name: "demo",
+		Defaults: &schema.CastDefaults{
+			Simulate: &schema.CastSimulateDefaults{
+				Cursor: &cursor,
+				Rate:   "35ms",
+			},
+		},
+	}
+	child := &schema.WorkflowStep{
+		Type: schema.TaskTypeShell,
+	}
+
+	prepareCastChildStep(castStep, child, 0)
+
+	if child.Cursor || child.CursorSet || child.Rate != "" {
+		t.Fatalf("simulate defaults leaked to shell child: %#v", child)
+	}
+}
+
 func TestCastHandlerStepsInheritWorkingDirectory(t *testing.T) {
 	if err := iolib.Initialize(); err != nil {
 		t.Fatalf("initialize io: %v", err)
@@ -207,6 +308,46 @@ func TestCastHandlerStepsInheritWorkingDirectory(t *testing.T) {
 	}
 	if strings.TrimSpace(string(actual)) != expectedDir {
 		t.Fatalf("child working directory = %q, want %q", strings.TrimSpace(string(actual)), expectedDir)
+	}
+}
+
+func TestCastHandlerStepsInheritEnv(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	tmpDir := t.TempDir()
+	castPath := filepath.Join(tmpDir, "demo.cast")
+	envPath := filepath.Join(tmpDir, "env.txt")
+
+	_, err := (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+		Name:             "demo",
+		Type:             schema.TaskTypeCast,
+		WorkingDirectory: tmpDir,
+		Output:           string(OutputModeNone),
+		Env: map[string]string{
+			"CAST_SHARED_ENV": "from-cast",
+		},
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "env",
+				Type:    schema.TaskTypeShell,
+				Command: `printf %s "$CAST_SHARED_ENV" > env.txt`,
+			},
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("execute cast: %v", err)
+	}
+
+	actual, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatalf("read inherited env: %v", err)
+	}
+	if string(actual) != "from-cast" {
+		t.Fatalf("child env = %q, want from-cast", actual)
 	}
 }
 

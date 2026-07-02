@@ -1,85 +1,59 @@
 commands:
-- name: casts
-  commands:
-  - name: generate
-    commands:
-    - name: examples
-      commands:
-      - name: quick-start-advanced
-        commands:
-        - name: list-instances
-          description: Regenerate the Quick Start Advanced example cast
-          env:
-            PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-          steps:
+  - name: casts generate examples quick-start-advanced list-instances
+    description: Regenerate the Quick Start Advanced example cast
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: clean
+        command: rm -f ../../website/static/casts/examples/quick-start-advanced/list-instances.cast
+      - type: cast
+        name: list-instances
+        working_directory: "../../.context/cast-fixtures/quick-start-advanced"
+        command: atmos list stacks --format=tree
+        mode: steps
+        width: 120
+        height: 36
+        env:
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/quick-start-advanced/list-instances.cast"
+        steps:
           - type: shell
-            name: setup
-            command: atmos casts setup
+            name: list-stacks
+            command: atmos list stacks --format=tree
           - type: shell
-            name: clean
-            command: rm -f ../../website/static/casts/examples/quick-start-advanced/list-instances.cast
-          - type: cast
             name: list-instances
-            working_directory: "../../.context/cast-fixtures/quick-start-advanced"
-            command: atmos list stacks --format tree
-            mode: steps
-            width: 120
-            height: 36
-            env:
-              TERM: xterm-256color
-              COLORTERM: truecolor
-              ATMOS_FORCE_COLOR: '1'
-              CLICOLOR_FORCE: '1'
-              FORCE_COLOR: '1'
-              ATMOS_FORCE_TTY: 'true'
-              ATMOS_KEYRING_TYPE: memory
-              ATMOS_STACKS_BASE_PATH: stacks
-              ATMOS_STACKS_INCLUDED_PATHS: orgs/**/*
-              ATMOS_STACKS_EXCLUDED_PATHS: "**/_defaults.yaml"
-            show:
-              labels: false
-            output:
-              mode: raw
-              cast: "../../website/static/casts/examples/quick-start-advanced/list-instances.cast"
-            steps:
-            - type: shell
-              name: list-stacks
-              env: &1
-                TERM: xterm-256color
-                COLORTERM: truecolor
-                ATMOS_FORCE_COLOR: '1'
-                CLICOLOR_FORCE: '1'
-                FORCE_COLOR: '1'
-                ATMOS_FORCE_TTY: 'true'
-                ATMOS_KEYRING_TYPE: memory
-              command: atmos list stacks --format tree
-            - type: shell
-              name: list-instances
-              env: *1
-              command: atmos list instances --stack plat-ue2-dev --format tree
-          - type: shell
-            name: validate
-            command: atmos casts validate examples quick-start-advanced list-instances
-  - name: validate
-    commands:
-    - name: examples
-      commands:
-      - name: quick-start-advanced
-        commands:
-        - name: list-instances
-          description: Validate the Quick Start Advanced example cast
-          steps:
-          - type: script
-            name: validate
-            interpreter: python3
-            script: |
-              from pathlib import Path
-              text = Path("../../website/static/casts/examples/quick-start-advanced/list-instances.cast").read_text()
-              for needle in ["Stacks", "plat-ue2-dev", "Component Instances", "s3-bucket", "app-config"]:
-                  if needle not in text:
-                      raise SystemExit(f"list-instances cast missing {needle!r}")
-              if "\\u001b[" not in text:
-                  raise SystemExit("list-instances cast is missing ANSI color sequences")
-              for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[list-stacks]", "[list-instances]", "completed"]:
-                  if bad in text:
-                      raise SystemExit(f"list-instances cast contains {bad!r}")
+            command: atmos list instances --stack=plat-ue2-dev --format=tree
+      - type: shell
+        name: validate
+        command: atmos casts validate examples quick-start-advanced list-instances
+  - name: casts validate examples quick-start-advanced list-instances
+    description: Validate the Quick Start Advanced example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          from pathlib import Path
+          text = Path("../../website/static/casts/examples/quick-start-advanced/list-instances.cast").read_text()
+          for needle in ["Stacks", "plat-ue2-dev", "Component Instances", "s3-bucket", "app-config"]:
+              if needle not in text:
+                  raise SystemExit(f"list-instances cast missing {needle!r}")
+          if "\\u001b[" not in text:
+              raise SystemExit("list-instances cast is missing ANSI color sequences")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[list-stacks]", "[list-instances]", "completed"]:
+              if bad in text:
+                  raise SystemExit(f"list-instances cast contains {bad!r}")

@@ -1,13 +1,9 @@
 commands:
-- name: casts
-  commands:
-  - name: generate
-    commands:
-    - name: all
-      description: Regenerate every committed website cast demo
-      env:
-        PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-      steps:
+  - name: casts generate all
+    description: Regenerate every committed website cast demo
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
       - type: shell
         name: native-terraform
         command: atmos casts generate demo casts fixtures native-terraform
@@ -26,13 +22,11 @@ commands:
       - type: shell
         name: validate
         command: atmos casts validate all
-  - name: generate
-    commands:
-    - name: examples
-      description: Regenerate every example-sourced cast
-      env:
-        PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-      steps:
+  - name: casts generate examples
+    description: Regenerate every example-sourced cast
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
       - type: shell
         name: emulator-aws-lifecycle
         command: atmos casts generate examples emulator-aws lifecycle
@@ -51,13 +45,11 @@ commands:
       - type: shell
         name: custom-commands-hello-greet
         command: atmos casts generate examples custom-commands hello-greet
-  - name: generate
-    commands:
-    - name: demo
-      description: Regenerate casts sourced from demo fixtures
-      env:
-        PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-      steps:
+  - name: casts generate demo
+    description: Regenerate casts sourced from demo fixtures
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
       - type: shell
         name: casts-fixtures-native-terraform-plan
         command: atmos casts generate demo casts fixtures native-terraform plan
@@ -79,135 +71,99 @@ commands:
       - type: shell
         name: casts-fixtures-basic-describe-stacks
         command: atmos casts generate demo casts fixtures basic describe-stacks
-  - name: generate
-    commands:
-    - name: demo
-      commands:
-      - name: casts
-        description: Regenerate casts sourced from demo/casts
-        env:
-          PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-        steps:
-        - type: shell
-          name: casts-fixtures-native-terraform-plan
-          command: atmos casts generate demo casts fixtures native-terraform plan
-        - type: shell
-          name: casts-fixtures-native-terraform-deploy
-          command: atmos casts generate demo casts fixtures native-terraform deploy
-        - type: shell
-          name: casts-fixtures-native-terraform-output
-          command: atmos casts generate demo casts fixtures native-terraform output
-        - type: shell
-          name: casts-fixtures-demo-vendoring-pull
-          command: atmos casts generate demo casts fixtures demo-vendoring pull
-        - type: shell
-          name: casts-fixtures-basic-list-stacks
-          command: atmos casts generate demo casts fixtures basic list-stacks
-        - type: shell
-          name: casts-fixtures-basic-describe-component
-          command: atmos casts generate demo casts fixtures basic describe-component
-        - type: shell
-          name: casts-fixtures-basic-describe-stacks
-          command: atmos casts generate demo casts fixtures basic describe-stacks
-  - name: generate
-    commands:
-    - name: demo
-      commands:
-      - name: casts
-        commands:
-        - name: fixtures
-          description: Regenerate casts sourced from demo/casts/fixtures
-          env:
-            PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-          steps:
-          - type: shell
-            name: casts-fixtures-native-terraform-plan
-            command: atmos casts generate demo casts fixtures native-terraform plan
-          - type: shell
-            name: casts-fixtures-native-terraform-deploy
-            command: atmos casts generate demo casts fixtures native-terraform deploy
-          - type: shell
-            name: casts-fixtures-native-terraform-output
-            command: atmos casts generate demo casts fixtures native-terraform output
-          - type: shell
-            name: casts-fixtures-demo-vendoring-pull
-            command: atmos casts generate demo casts fixtures demo-vendoring pull
-          - type: shell
-            name: casts-fixtures-basic-list-stacks
-            command: atmos casts generate demo casts fixtures basic list-stacks
-          - type: shell
-            name: casts-fixtures-basic-describe-component
-            command: atmos casts generate demo casts fixtures basic describe-component
-          - type: shell
-            name: casts-fixtures-basic-describe-stacks
-            command: atmos casts generate demo casts fixtures basic describe-stacks
-  - name: generate
-    commands:
-    - name: demo
-      commands:
-      - name: casts
-        commands:
-        - name: fixtures
-          commands:
-          - name: basic
-            description: Regenerate casts sourced from demo/casts/fixtures/basic
-            env:
-              PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-            steps:
-            - type: shell
-              name: casts-fixtures-basic-list-stacks
-              command: atmos casts generate demo casts fixtures basic list-stacks
-            - type: shell
-              name: casts-fixtures-basic-describe-component
-              command: atmos casts generate demo casts fixtures basic describe-component
-            - type: shell
-              name: casts-fixtures-basic-describe-stacks
-              command: atmos casts generate demo casts fixtures basic describe-stacks
-  - name: generate
-    commands:
-    - name: demo
-      commands:
-      - name: casts
-        commands:
-        - name: fixtures
-          commands:
-          - name: demo-vendoring
-            description: Regenerate casts sourced from demo/casts/fixtures/demo-vendoring
-            env:
-              PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-            steps:
-            - type: shell
-              name: casts-fixtures-demo-vendoring-pull
-              command: atmos casts generate demo casts fixtures demo-vendoring pull
-  - name: generate
-    commands:
-    - name: demo
-      commands:
-      - name: casts
-        commands:
-        - name: fixtures
-          commands:
-          - name: native-terraform
-            description: Regenerate casts sourced from demo/casts/fixtures/native-terraform
-            env:
-              PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-            steps:
-            - type: shell
-              name: casts-fixtures-native-terraform-plan
-              command: atmos casts generate demo casts fixtures native-terraform plan
-            - type: shell
-              name: casts-fixtures-native-terraform-deploy
-              command: atmos casts generate demo casts fixtures native-terraform deploy
-            - type: shell
-              name: casts-fixtures-native-terraform-output
-              command: atmos casts generate demo casts fixtures native-terraform output
-  - name: validate
-    commands:
-    - name: all
-      description: Validate every committed website cast demo
-      env:
-        PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-      steps:
+  - name: casts generate demo casts
+    description: Regenerate casts sourced from demo/casts
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: casts-fixtures-native-terraform-plan
+        command: atmos casts generate demo casts fixtures native-terraform plan
+      - type: shell
+        name: casts-fixtures-native-terraform-deploy
+        command: atmos casts generate demo casts fixtures native-terraform deploy
+      - type: shell
+        name: casts-fixtures-native-terraform-output
+        command: atmos casts generate demo casts fixtures native-terraform output
+      - type: shell
+        name: casts-fixtures-demo-vendoring-pull
+        command: atmos casts generate demo casts fixtures demo-vendoring pull
+      - type: shell
+        name: casts-fixtures-basic-list-stacks
+        command: atmos casts generate demo casts fixtures basic list-stacks
+      - type: shell
+        name: casts-fixtures-basic-describe-component
+        command: atmos casts generate demo casts fixtures basic describe-component
+      - type: shell
+        name: casts-fixtures-basic-describe-stacks
+        command: atmos casts generate demo casts fixtures basic describe-stacks
+  - name: casts generate demo casts fixtures
+    description: Regenerate casts sourced from demo/casts/fixtures
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: casts-fixtures-native-terraform-plan
+        command: atmos casts generate demo casts fixtures native-terraform plan
+      - type: shell
+        name: casts-fixtures-native-terraform-deploy
+        command: atmos casts generate demo casts fixtures native-terraform deploy
+      - type: shell
+        name: casts-fixtures-native-terraform-output
+        command: atmos casts generate demo casts fixtures native-terraform output
+      - type: shell
+        name: casts-fixtures-demo-vendoring-pull
+        command: atmos casts generate demo casts fixtures demo-vendoring pull
+      - type: shell
+        name: casts-fixtures-basic-list-stacks
+        command: atmos casts generate demo casts fixtures basic list-stacks
+      - type: shell
+        name: casts-fixtures-basic-describe-component
+        command: atmos casts generate demo casts fixtures basic describe-component
+      - type: shell
+        name: casts-fixtures-basic-describe-stacks
+        command: atmos casts generate demo casts fixtures basic describe-stacks
+  - name: casts generate demo casts fixtures basic
+    description: Regenerate casts sourced from demo/casts/fixtures/basic
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: casts-fixtures-basic-list-stacks
+        command: atmos casts generate demo casts fixtures basic list-stacks
+      - type: shell
+        name: casts-fixtures-basic-describe-component
+        command: atmos casts generate demo casts fixtures basic describe-component
+      - type: shell
+        name: casts-fixtures-basic-describe-stacks
+        command: atmos casts generate demo casts fixtures basic describe-stacks
+  - name: casts generate demo casts fixtures demo-vendoring
+    description: Regenerate casts sourced from demo/casts/fixtures/demo-vendoring
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: casts-fixtures-demo-vendoring-pull
+        command: atmos casts generate demo casts fixtures demo-vendoring pull
+  - name: casts generate demo casts fixtures native-terraform
+    description: Regenerate casts sourced from demo/casts/fixtures/native-terraform
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: casts-fixtures-native-terraform-plan
+        command: atmos casts generate demo casts fixtures native-terraform plan
+      - type: shell
+        name: casts-fixtures-native-terraform-deploy
+        command: atmos casts generate demo casts fixtures native-terraform deploy
+      - type: shell
+        name: casts-fixtures-native-terraform-output
+        command: atmos casts generate demo casts fixtures native-terraform output
+  - name: casts validate all
+    description: Validate every committed website cast demo
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
       - type: shell
         name: native-terraform
         command: atmos casts validate demo casts fixtures native-terraform
@@ -223,13 +179,11 @@ commands:
       - type: shell
         name: cli-commands-cast
         command: atmos casts validate cli commands cast
-  - name: validate
-    commands:
-    - name: examples
-      description: Validate every example-sourced cast
-      env:
-        PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-      steps:
+  - name: casts validate examples
+    description: Validate every example-sourced cast
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
       - type: shell
         name: emulator-aws-lifecycle
         command: atmos casts validate examples emulator-aws lifecycle
@@ -248,13 +202,11 @@ commands:
       - type: shell
         name: custom-commands-hello-greet
         command: atmos casts validate examples custom-commands hello-greet
-  - name: validate
-    commands:
-    - name: demo
-      description: Validate casts sourced from demo fixtures
-      env:
-        PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-      steps:
+  - name: casts validate demo
+    description: Validate casts sourced from demo fixtures
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
       - type: shell
         name: casts-fixtures-native-terraform-plan
         command: atmos casts validate demo casts fixtures native-terraform plan
@@ -276,125 +228,91 @@ commands:
       - type: shell
         name: casts-fixtures-basic-describe-stacks
         command: atmos casts validate demo casts fixtures basic describe-stacks
-  - name: validate
-    commands:
-    - name: demo
-      commands:
-      - name: casts
-        description: Validate casts sourced from demo/casts
-        env:
-          PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-        steps:
-        - type: shell
-          name: casts-fixtures-native-terraform-plan
-          command: atmos casts validate demo casts fixtures native-terraform plan
-        - type: shell
-          name: casts-fixtures-native-terraform-deploy
-          command: atmos casts validate demo casts fixtures native-terraform deploy
-        - type: shell
-          name: casts-fixtures-native-terraform-output
-          command: atmos casts validate demo casts fixtures native-terraform output
-        - type: shell
-          name: casts-fixtures-demo-vendoring-pull
-          command: atmos casts validate demo casts fixtures demo-vendoring pull
-        - type: shell
-          name: casts-fixtures-basic-list-stacks
-          command: atmos casts validate demo casts fixtures basic list-stacks
-        - type: shell
-          name: casts-fixtures-basic-describe-component
-          command: atmos casts validate demo casts fixtures basic describe-component
-        - type: shell
-          name: casts-fixtures-basic-describe-stacks
-          command: atmos casts validate demo casts fixtures basic describe-stacks
-  - name: validate
-    commands:
-    - name: demo
-      commands:
-      - name: casts
-        commands:
-        - name: fixtures
-          description: Validate casts sourced from demo/casts/fixtures
-          env:
-            PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-          steps:
-          - type: shell
-            name: casts-fixtures-native-terraform-plan
-            command: atmos casts validate demo casts fixtures native-terraform plan
-          - type: shell
-            name: casts-fixtures-native-terraform-deploy
-            command: atmos casts validate demo casts fixtures native-terraform deploy
-          - type: shell
-            name: casts-fixtures-native-terraform-output
-            command: atmos casts validate demo casts fixtures native-terraform output
-          - type: shell
-            name: casts-fixtures-demo-vendoring-pull
-            command: atmos casts validate demo casts fixtures demo-vendoring pull
-          - type: shell
-            name: casts-fixtures-basic-list-stacks
-            command: atmos casts validate demo casts fixtures basic list-stacks
-          - type: shell
-            name: casts-fixtures-basic-describe-component
-            command: atmos casts validate demo casts fixtures basic describe-component
-          - type: shell
-            name: casts-fixtures-basic-describe-stacks
-            command: atmos casts validate demo casts fixtures basic describe-stacks
-  - name: validate
-    commands:
-    - name: demo
-      commands:
-      - name: casts
-        commands:
-        - name: fixtures
-          commands:
-          - name: basic
-            description: Validate casts sourced from demo/casts/fixtures/basic
-            env:
-              PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-            steps:
-            - type: shell
-              name: casts-fixtures-basic-list-stacks
-              command: atmos casts validate demo casts fixtures basic list-stacks
-            - type: shell
-              name: casts-fixtures-basic-describe-component
-              command: atmos casts validate demo casts fixtures basic describe-component
-            - type: shell
-              name: casts-fixtures-basic-describe-stacks
-              command: atmos casts validate demo casts fixtures basic describe-stacks
-  - name: validate
-    commands:
-    - name: demo
-      commands:
-      - name: casts
-        commands:
-        - name: fixtures
-          commands:
-          - name: demo-vendoring
-            description: Validate casts sourced from demo/casts/fixtures/demo-vendoring
-            env:
-              PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-            steps:
-            - type: shell
-              name: casts-fixtures-demo-vendoring-pull
-              command: atmos casts validate demo casts fixtures demo-vendoring pull
-  - name: validate
-    commands:
-    - name: demo
-      commands:
-      - name: casts
-        commands:
-        - name: fixtures
-          commands:
-          - name: native-terraform
-            description: Validate casts sourced from demo/casts/fixtures/native-terraform
-            env:
-              PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
-            steps:
-            - type: shell
-              name: casts-fixtures-native-terraform-plan
-              command: atmos casts validate demo casts fixtures native-terraform plan
-            - type: shell
-              name: casts-fixtures-native-terraform-deploy
-              command: atmos casts validate demo casts fixtures native-terraform deploy
-            - type: shell
-              name: casts-fixtures-native-terraform-output
-              command: atmos casts validate demo casts fixtures native-terraform output
+  - name: casts validate demo casts
+    description: Validate casts sourced from demo/casts
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: casts-fixtures-native-terraform-plan
+        command: atmos casts validate demo casts fixtures native-terraform plan
+      - type: shell
+        name: casts-fixtures-native-terraform-deploy
+        command: atmos casts validate demo casts fixtures native-terraform deploy
+      - type: shell
+        name: casts-fixtures-native-terraform-output
+        command: atmos casts validate demo casts fixtures native-terraform output
+      - type: shell
+        name: casts-fixtures-demo-vendoring-pull
+        command: atmos casts validate demo casts fixtures demo-vendoring pull
+      - type: shell
+        name: casts-fixtures-basic-list-stacks
+        command: atmos casts validate demo casts fixtures basic list-stacks
+      - type: shell
+        name: casts-fixtures-basic-describe-component
+        command: atmos casts validate demo casts fixtures basic describe-component
+      - type: shell
+        name: casts-fixtures-basic-describe-stacks
+        command: atmos casts validate demo casts fixtures basic describe-stacks
+  - name: casts validate demo casts fixtures
+    description: Validate casts sourced from demo/casts/fixtures
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: casts-fixtures-native-terraform-plan
+        command: atmos casts validate demo casts fixtures native-terraform plan
+      - type: shell
+        name: casts-fixtures-native-terraform-deploy
+        command: atmos casts validate demo casts fixtures native-terraform deploy
+      - type: shell
+        name: casts-fixtures-native-terraform-output
+        command: atmos casts validate demo casts fixtures native-terraform output
+      - type: shell
+        name: casts-fixtures-demo-vendoring-pull
+        command: atmos casts validate demo casts fixtures demo-vendoring pull
+      - type: shell
+        name: casts-fixtures-basic-list-stacks
+        command: atmos casts validate demo casts fixtures basic list-stacks
+      - type: shell
+        name: casts-fixtures-basic-describe-component
+        command: atmos casts validate demo casts fixtures basic describe-component
+      - type: shell
+        name: casts-fixtures-basic-describe-stacks
+        command: atmos casts validate demo casts fixtures basic describe-stacks
+  - name: casts validate demo casts fixtures basic
+    description: Validate casts sourced from demo/casts/fixtures/basic
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: casts-fixtures-basic-list-stacks
+        command: atmos casts validate demo casts fixtures basic list-stacks
+      - type: shell
+        name: casts-fixtures-basic-describe-component
+        command: atmos casts validate demo casts fixtures basic describe-component
+      - type: shell
+        name: casts-fixtures-basic-describe-stacks
+        command: atmos casts validate demo casts fixtures basic describe-stacks
+  - name: casts validate demo casts fixtures demo-vendoring
+    description: Validate casts sourced from demo/casts/fixtures/demo-vendoring
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: casts-fixtures-demo-vendoring-pull
+        command: atmos casts validate demo casts fixtures demo-vendoring pull
+  - name: casts validate demo casts fixtures native-terraform
+    description: Validate casts sourced from demo/casts/fixtures/native-terraform
+    env:
+      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    steps:
+      - type: shell
+        name: casts-fixtures-native-terraform-plan
+        command: atmos casts validate demo casts fixtures native-terraform plan
+      - type: shell
+        name: casts-fixtures-native-terraform-deploy
+        command: atmos casts validate demo casts fixtures native-terraform deploy
+      - type: shell
+        name: casts-fixtures-native-terraform-output
+        command: atmos casts validate demo casts fixtures native-terraform output

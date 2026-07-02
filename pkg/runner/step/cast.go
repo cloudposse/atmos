@@ -99,7 +99,9 @@ func validateCastStepsMode(step *schema.WorkflowStep) error {
 	}
 	for i := range step.Steps {
 		if step.Steps[i].Type == schema.TaskTypeSimulate {
-			if err := validateCastSimulateStep(&step.Steps[i]); err != nil {
+			child := step.Steps[i]
+			applyCastSimulateDefaults(step, &child)
+			if err := validateCastSimulateStep(&child); err != nil {
 				return fmt.Errorf("cast simulate step %d: %w", i+1, err)
 			}
 		}
@@ -296,6 +298,64 @@ func prepareCastChildStep(castStep, child *schema.WorkflowStep, index int) {
 	if child.Show == nil {
 		child.Show = castStep.Show
 	}
+	if child.Type == schema.TaskTypeSimulate {
+		applyCastSimulateDefaults(castStep, child)
+	}
+}
+
+func applyCastSimulateDefaults(castStep, child *schema.WorkflowStep) {
+	if castStep.Defaults == nil || castStep.Defaults.Simulate == nil || child.Type != schema.TaskTypeSimulate {
+		return
+	}
+	defaults := castStep.Defaults.Simulate
+	if child.Mode == "" {
+		child.Mode = defaults.Mode
+	}
+	if !child.CursorSet && defaults.Cursor != nil {
+		child.Cursor = *defaults.Cursor
+		child.CursorSet = true
+	}
+	applyCastSimulatePromptDefault(defaults.Prompt, child)
+	applyCastSimulateTimingDefaults(defaults, child)
+}
+
+func applyCastSimulatePromptDefault(prompt *schema.SimulatePrompt, child *schema.WorkflowStep) {
+	if child.SimulatePrompt == nil {
+		child.SimulatePrompt = cloneSimulatePrompt(prompt)
+		return
+	}
+	if prompt == nil {
+		return
+	}
+	if child.SimulatePrompt.Text == "" {
+		child.SimulatePrompt.Text = prompt.Text
+	}
+	if child.SimulatePrompt.Style == "" {
+		child.SimulatePrompt.Style = prompt.Style
+	}
+}
+
+func applyCastSimulateTimingDefaults(defaults *schema.CastSimulateDefaults, child *schema.WorkflowStep) {
+	if child.Rate == "" {
+		child.Rate = defaults.Rate
+	}
+	if child.Jitter == 0 {
+		child.Jitter = defaults.Jitter
+	}
+	if child.Duration == "" {
+		child.Duration = defaults.Duration
+	}
+	if child.Interval == "" {
+		child.Interval = defaults.Interval
+	}
+}
+
+func cloneSimulatePrompt(prompt *schema.SimulatePrompt) *schema.SimulatePrompt {
+	if prompt == nil {
+		return nil
+	}
+	clone := *prompt
+	return &clone
 }
 
 func runCastSimulateStep(ctx context.Context, castStep, child *schema.WorkflowStep, vars *Variables) error {

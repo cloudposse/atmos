@@ -166,18 +166,20 @@ type Task struct {
 	Expect  *HTTPExpect       `yaml:"expect,omitempty" json:"expect,omitempty" mapstructure:"expect"`    // Success criteria; defaults to any 2xx.
 
 	// Cast step and session action fields.
-	Mode        string  `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
-	Shell       string  `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
-	WriteRate   string  `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
-	KeyInterval string  `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
-	Jitter      float64 `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`                   // Deterministic typing delay variance for simulated typed cast steps.
-	Cursor      bool    `yaml:"cursor,omitempty" json:"cursor,omitempty" mapstructure:"cursor"`                   // Show a simulated cursor for cast simulate steps.
-	Text        string  `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`                         // Text for write/wait actions.
-	Regex       string  `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`                      // Regex for wait actions.
-	Key         string  `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`                            // Key name for key actions.
-	Duration    string  `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`             // Duration for pause/wait actions.
-	Interval    string  `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`             // Per-key repeat delay override.
-	Repeat      int     `yaml:"repeat,omitempty" json:"repeat,omitempty" mapstructure:"repeat"`                   // Key repeat count.
+	Mode        string        `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
+	Shell       string        `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
+	WriteRate   string        `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
+	KeyInterval string        `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
+	Jitter      float64       `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`                   // Deterministic typing delay variance for simulated typed cast steps.
+	Cursor      bool          `yaml:"cursor,omitempty" json:"cursor,omitempty" mapstructure:"cursor"`                   // Show a simulated cursor for cast simulate steps.
+	CursorSet   bool          `yaml:"-" json:"-" mapstructure:"cursor_set"`                                             // Internal marker for explicit cursor values.
+	Text        string        `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`                         // Text for write/wait actions.
+	Regex       string        `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`                      // Regex for wait actions.
+	Key         string        `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`                            // Key name for key actions.
+	Duration    string        `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`             // Duration for pause/wait actions.
+	Interval    string        `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`             // Per-key repeat delay override.
+	Repeat      int           `yaml:"repeat,omitempty" json:"repeat,omitempty" mapstructure:"repeat"`                   // Key repeat count.
+	Defaults    *CastDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty" mapstructure:"defaults"`             // Cast child defaults.
 
 	// Container step fields.
 	//
@@ -242,6 +244,7 @@ func (task *Task) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	*task = Task(fresh)
+	task.CursorSet = mappingHasField(value, "cursor")
 	return applyStepPolymorphicNodes(nodes, task.Type, task.Action, &stepPolyTargets{
 		output:    &task.Output,
 		prompt:    &task.Prompt,
@@ -421,12 +424,14 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		KeyInterval: task.KeyInterval,
 		Jitter:      task.Jitter,
 		Cursor:      task.Cursor,
+		CursorSet:   task.CursorSet,
 		Text:        task.Text,
 		Regex:       task.Regex,
 		Key:         task.Key,
 		Duration:    task.Duration,
 		Interval:    task.Interval,
 		Repeat:      task.Repeat,
+		Defaults:    task.Defaults,
 
 		// Container step fields.
 		Action:           task.Action,
@@ -570,12 +575,14 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		KeyInterval: step.KeyInterval,
 		Jitter:      step.Jitter,
 		Cursor:      step.Cursor,
+		CursorSet:   step.CursorSet,
 		Text:        step.Text,
 		Regex:       step.Regex,
 		Key:         step.Key,
 		Duration:    step.Duration,
 		Interval:    step.Interval,
 		Repeat:      step.Repeat,
+		Defaults:    step.Defaults,
 
 		// Container step fields.
 		Action:           step.Action,
@@ -738,6 +745,7 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	if err := decoder.Decode(m); err != nil {
 		return Task{}, fmt.Errorf("failed to decode task at index %d: %w", index, err)
 	}
+	task.CursorSet = task.CursorSet || mapHasKey(m, "cursor")
 	// Default type to TaskTypeShell if not specified.
 	if task.Type == "" {
 		task.Type = TaskTypeShell
@@ -803,6 +811,9 @@ func normalizeWorkflowStepMap(m map[string]any) (map[string]any, error) {
 	copied := make(map[string]any, len(m))
 	for key, val := range m {
 		copied[key] = val
+	}
+	if mapHasKey(copied, "cursor") {
+		copied["cursor_set"] = true
 	}
 	if prompt, ok := copied[taskMapKeyPrompt]; ok {
 		switch v := prompt.(type) {

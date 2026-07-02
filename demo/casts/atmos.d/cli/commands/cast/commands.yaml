@@ -7,13 +7,13 @@ commands:
     steps:
       - type: shell
         name: usage
-        command: cd demo/casts && atmos casts generate cli commands cast usage
+        command: atmos --chdir=demo/casts casts generate cli commands cast usage
       - type: shell
         name: play
-        command: cd demo/casts && atmos casts generate cli commands cast play
+        command: atmos --chdir=demo/casts casts generate cli commands cast play
       - type: shell
         name: render
-        command: cd demo/casts && atmos casts generate cli commands cast render
+        command: atmos --chdir=demo/casts casts generate cli commands cast render
   - name: casts generate cli commands cast usage
     description: Regenerate the cast command usage demo
     working_directory: *repo_root
@@ -22,7 +22,7 @@ commands:
     steps:
       - type: shell
         name: setup
-        command: cd demo/casts && atmos casts setup
+        command: atmos --chdir=demo/casts casts setup
       - type: shell
         name: clean
         command: |
@@ -32,30 +32,32 @@ commands:
         name: usage
         command: atmos about --cast=.context/cast-command-demo/about.cast
         mode: steps
+        defaults:
+          simulate:
+            mode: typed
+            cursor: true
+            prompt:
+              text: '> '
+              style: command
+            rate: 35ms
         width: 120
         height: 36
         output:
           cast: "../../website/static/casts/cli/commands/cast/usage.cast"
+        env: &cast_env
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
         steps:
           - type: simulate
-            mode: typed
-            cursor: true
-            prompt: &prompt
-              text: "> "
-              style: command
-            rate: 35ms
             text: atmos about --cast=.context/cast-command-demo/about.cast
           - type: shell
             name: usage
             output: raw
-            env: &cast_env
-              TERM: xterm-256color
-              COLORTERM: truecolor
-              ATMOS_FORCE_COLOR: '1'
-              CLICOLOR_FORCE: '1'
-              FORCE_COLOR: '1'
-              ATMOS_FORCE_TTY: 'true'
-              ATMOS_KEYRING_TYPE: memory
             command: |
               atmos about --cast=.context/cast-command-demo/about.cast
               test -s .context/cast-command-demo/about.cast
@@ -63,7 +65,7 @@ commands:
               printf '  .context/cast-command-demo/about.cast\n'
       - type: shell
         name: validate
-        command: cd demo/casts && atmos casts validate cli commands cast usage
+        command: atmos --chdir=demo/casts casts validate cli commands cast usage
   - name: casts generate cli commands cast play
     description: Regenerate the cast play command demo
     working_directory: *repo_root
@@ -72,7 +74,7 @@ commands:
     steps:
       - type: shell
         name: setup
-        command: cd demo/casts && atmos casts setup
+        command: atmos --chdir=demo/casts casts setup
       - type: shell
         name: clean
         command: rm -f website/static/casts/cli/commands/cast/play.cast
@@ -80,25 +82,29 @@ commands:
         name: play
         command: atmos cast play website/static/casts/examples/custom-commands/hello-greet.cast
         mode: steps
+        defaults:
+          simulate:
+            mode: typed
+            cursor: true
+            prompt:
+              text: '> '
+              style: command
+            rate: 35ms
         width: 120
         height: 36
         output:
           cast: "../../website/static/casts/cli/commands/cast/play.cast"
+        env: *cast_env
         steps:
           - type: simulate
-            mode: typed
-            cursor: true
-            prompt: *prompt
-            rate: 35ms
-            text: atmos cast play website/static/casts/examples/custom-commands/hello-greet.cast
+            text: &play_cmd atmos cast play website/static/casts/examples/custom-commands/hello-greet.cast
           - type: shell
             name: play
             output: raw
-            env: *cast_env
-            command: atmos cast play website/static/casts/examples/custom-commands/hello-greet.cast
+            command: *play_cmd
       - type: shell
         name: validate
-        command: cd demo/casts && atmos casts validate cli commands cast play
+        command: atmos --chdir=demo/casts casts validate cli commands cast play
   - name: casts generate cli commands cast render
     description: Regenerate the cast render command demo
     working_directory: *repo_root
@@ -107,7 +113,7 @@ commands:
     steps:
       - type: shell
         name: setup
-        command: cd demo/casts && atmos casts setup
+        command: atmos --chdir=demo/casts casts setup
       - type: shell
         name: prepare-renderer
         output: none
@@ -131,28 +137,32 @@ commands:
         name: render
         command: atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --gif=.context/cast-render/hello-greet.gif
         mode: steps
+        defaults:
+          simulate:
+            mode: typed
+            cursor: true
+            prompt:
+              text: '> '
+              style: command
+            rate: 35ms
         width: 120
         height: 36
         output:
           cast: "../../website/static/casts/cli/commands/cast/render.cast"
+        env: *cast_env
         steps:
           - type: simulate
-            mode: typed
-            cursor: true
-            prompt: *prompt
-            rate: 35ms
             text: atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --gif=.context/cast-render/hello-greet.gif
           - type: shell
             name: render
             output: raw
-            env: *cast_env
             command: |
               atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --gif=.context/cast-render/hello-greet.gif
               test -s .context/cast-render/hello-greet.gif
               printf 'rendered .context/cast-render/hello-greet.gif\n'
       - type: shell
         name: validate
-        command: cd demo/casts && atmos casts validate cli commands cast render
+        command: atmos --chdir=demo/casts casts validate cli commands cast render
   - name: casts validate cli commands cast
     description: Validate cast command demos
     working_directory: *repo_root
@@ -161,13 +171,13 @@ commands:
     steps:
       - type: shell
         name: usage
-        command: cd demo/casts && atmos casts validate cli commands cast usage
+        command: atmos --chdir=demo/casts casts validate cli commands cast usage
       - type: shell
         name: play
-        command: cd demo/casts && atmos casts validate cli commands cast play
+        command: atmos --chdir=demo/casts casts validate cli commands cast play
       - type: shell
         name: render
-        command: cd demo/casts && atmos casts validate cli commands cast render
+        command: atmos --chdir=demo/casts casts validate cli commands cast render
   - name: casts validate cli commands cast usage
     description: Validate the cast command usage demo
     working_directory: *repo_root

@@ -91,6 +91,45 @@ steps:
 	assert.Equal(t, "command", step.Steps[2].SimulatePrompt.Style)
 }
 
+func TestWorkflowStep_UnmarshalYAML_CastSimulateDefaults(t *testing.T) {
+	input := `
+type: cast
+defaults:
+  simulate:
+    mode: typed
+    cursor: true
+    rate: 35ms
+    jitter: 0.25
+    duration: 10ms
+    interval: 20ms
+    prompt:
+      text: "> "
+      style: command
+steps:
+  - type: simulate
+    cursor: false
+    text: atmos version
+`
+	var step WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte(input), &step))
+
+	require.NotNil(t, step.Defaults)
+	require.NotNil(t, step.Defaults.Simulate)
+	assert.Equal(t, "typed", step.Defaults.Simulate.Mode)
+	require.NotNil(t, step.Defaults.Simulate.Cursor)
+	assert.True(t, *step.Defaults.Simulate.Cursor)
+	assert.Equal(t, "35ms", step.Defaults.Simulate.Rate)
+	assert.Equal(t, 0.25, step.Defaults.Simulate.Jitter)
+	assert.Equal(t, "10ms", step.Defaults.Simulate.Duration)
+	assert.Equal(t, "20ms", step.Defaults.Simulate.Interval)
+	require.NotNil(t, step.Defaults.Simulate.Prompt)
+	assert.Equal(t, "> ", step.Defaults.Simulate.Prompt.Text)
+	assert.Equal(t, "command", step.Defaults.Simulate.Prompt.Style)
+	require.Len(t, step.Steps, 1)
+	assert.False(t, step.Steps[0].Cursor)
+	assert.True(t, step.Steps[0].CursorSet)
+}
+
 func TestWorkflowStep_UnmarshalYAML_ScalarPromptStillDecodesForInteractiveStep(t *testing.T) {
 	input := `
 type: input

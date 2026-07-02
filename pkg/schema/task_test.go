@@ -502,6 +502,57 @@ func TestTasksDecodeHook_StructuredSimulatePrompt(t *testing.T) {
 	assert.Equal(t, "atmos version", result.Steps[0].Text)
 }
 
+func TestTasksDecodeHook_CastSimulateDefaults(t *testing.T) {
+	input := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"type": TaskTypeCast,
+				"defaults": map[string]any{
+					"simulate": map[string]any{
+						"mode":   "typed",
+						"cursor": true,
+						"rate":   "35ms",
+						"prompt": map[string]any{
+							"text":  "> ",
+							"style": "command",
+						},
+					},
+				},
+				"steps": []any{
+					map[string]any{
+						"type":   TaskTypeSimulate,
+						"cursor": false,
+						"text":   "atmos version",
+					},
+				},
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	defaults := result.Steps[0].Defaults
+	require.NotNil(t, defaults)
+	require.NotNil(t, defaults.Simulate)
+	require.NotNil(t, defaults.Simulate.Cursor)
+	assert.True(t, *defaults.Simulate.Cursor)
+	assert.Equal(t, "35ms", defaults.Simulate.Rate)
+	require.NotNil(t, defaults.Simulate.Prompt)
+	assert.Equal(t, "> ", defaults.Simulate.Prompt.Text)
+	assert.Equal(t, "command", defaults.Simulate.Prompt.Style)
+	require.Len(t, result.Steps[0].Steps, 1)
+	assert.False(t, result.Steps[0].Steps[0].Cursor)
+	assert.True(t, result.Steps[0].Steps[0].CursorSet)
+}
+
 func TestTasksDecodeHook_NestedCastSimulatePrompt(t *testing.T) {
 	input := map[string]any{
 		"steps": []any{

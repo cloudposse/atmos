@@ -28,7 +28,7 @@ atmos vendor list
 atmos vendor pull
 
 # Pull a specific component
-atmos vendor pull --component weather
+atmos vendor pull --component=weather
 ```
 
 ## Key Files

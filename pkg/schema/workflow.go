@@ -47,6 +47,22 @@ type SimulatePrompt struct {
 	Style string `yaml:"style,omitempty" json:"style,omitempty" mapstructure:"style"`
 }
 
+// CastDefaults configures defaults applied to child steps inside a cast step.
+type CastDefaults struct {
+	Simulate *CastSimulateDefaults `yaml:"simulate,omitempty" json:"simulate,omitempty" mapstructure:"simulate"`
+}
+
+// CastSimulateDefaults configures defaults for direct child type: simulate steps.
+type CastSimulateDefaults struct {
+	Mode     string          `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+	Cursor   *bool           `yaml:"cursor,omitempty" json:"cursor,omitempty" mapstructure:"cursor"`
+	Prompt   *SimulatePrompt `yaml:"prompt,omitempty" json:"prompt,omitempty" mapstructure:"prompt"`
+	Rate     string          `yaml:"rate,omitempty" json:"rate,omitempty" mapstructure:"rate"`
+	Jitter   float64         `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`
+	Duration string          `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`
+	Interval string          `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`
+}
+
 // ParallelFailConfig configures failure behavior for parallel and matrix steps.
 type ParallelFailConfig struct {
 	Mode        string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
@@ -310,18 +326,20 @@ type WorkflowStep struct {
 	Expect  *HTTPExpect       `yaml:"expect,omitempty" json:"expect,omitempty" mapstructure:"expect"`    // Success criteria; defaults to any 2xx.
 
 	// Cast step and session action fields.
-	Mode        string  `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
-	Shell       string  `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
-	WriteRate   string  `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
-	KeyInterval string  `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
-	Jitter      float64 `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`                   // Deterministic typing delay variance for simulated typed cast steps.
-	Cursor      bool    `yaml:"cursor,omitempty" json:"cursor,omitempty" mapstructure:"cursor"`                   // Show a simulated cursor for cast simulate steps.
-	Text        string  `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`                         // Text for write/wait actions.
-	Regex       string  `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`                      // Regex for wait actions.
-	Key         string  `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`                            // Key name for key actions.
-	Duration    string  `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`             // Duration for pause/wait actions.
-	Interval    string  `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`             // Per-key repeat delay override.
-	Repeat      int     `yaml:"repeat,omitempty" json:"repeat,omitempty" mapstructure:"repeat"`                   // Key repeat count.
+	Mode        string        `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
+	Shell       string        `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
+	WriteRate   string        `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
+	KeyInterval string        `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
+	Jitter      float64       `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`                   // Deterministic typing delay variance for simulated typed cast steps.
+	Cursor      bool          `yaml:"cursor,omitempty" json:"cursor,omitempty" mapstructure:"cursor"`                   // Show a simulated cursor for cast simulate steps.
+	CursorSet   bool          `yaml:"-" json:"-" mapstructure:"cursor_set"`                                             // Internal marker for explicit cursor values.
+	Text        string        `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`                         // Text for write/wait actions.
+	Regex       string        `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`                      // Regex for wait actions.
+	Key         string        `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`                            // Key name for key actions.
+	Duration    string        `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`             // Duration for pause/wait actions.
+	Interval    string        `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`             // Per-key repeat delay override.
+	Repeat      int           `yaml:"repeat,omitempty" json:"repeat,omitempty" mapstructure:"repeat"`                   // Key repeat count.
+	Defaults    *CastDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty" mapstructure:"defaults"`             // Cast child defaults.
 
 	// Container step fields.
 	//
@@ -397,6 +415,7 @@ func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	*step = WorkflowStep(fresh)
+	step.CursorSet = mappingHasField(value, "cursor")
 	return applyStepPolymorphicNodes(nodes, step.Type, step.Action, &stepPolyTargets{
 		output:    &step.Output,
 		prompt:    &step.Prompt,
@@ -645,6 +664,23 @@ func splitMappingField(value *yaml.Node, field string) (*yaml.Node, *yaml.Node) 
 		copied.Content = append(copied.Content, key, val)
 	}
 	return fieldNode, &copied
+}
+
+func mappingHasField(value *yaml.Node, field string) bool {
+	if value == nil || value.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		if value.Content[i].Value == field {
+			return true
+		}
+	}
+	return false
+}
+
+func mapHasKey(m map[string]any, key string) bool {
+	_, ok := m[key]
+	return ok
 }
 
 // HTTPExpect defines success criteria for an http step.
