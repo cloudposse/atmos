@@ -5,8 +5,7 @@ commands:
       - name: changed
         description: Run lint checks for changes from origin/main
         env: &go_auto_env
-          - key: GOTOOLCHAIN
-            value: auto
+          GOTOOLCHAIN: auto
         steps:
           - |
             set -eu
@@ -19,9 +18,8 @@ commands:
       - name: custom-gcl
         description: Build the custom golangci-lint binary with the lintroller plugin
         env:
-          - key: GOFLAGS
-            value: -buildvcs=false
-          - key: GOTOOLCHAIN
+          GOFLAGS: -buildvcs=false
+          GOTOOLCHAIN:
             valueCommand: printf 'go%s' "$(go env GOVERSION | sed 's/^go//')"
         steps:
           - type: toast

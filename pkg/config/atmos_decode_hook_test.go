@@ -86,6 +86,42 @@ steps:
 	assert.Equal(t, time.Minute, result.Steps[1].Timeout)
 }
 
+func TestAtmosDecodeHook_CommandEnvMap(t *testing.T) {
+	type config struct {
+		Commands []schema.Command `mapstructure:"commands"`
+	}
+
+	yamlContent := `
+commands:
+  - name: map-env
+    env:
+      CGO_ENABLED: "0"
+      GOTOOLCHAIN: auto
+      FROM_COMMAND:
+        valueCommand: printf dynamic
+    steps:
+      - "echo ok"
+`
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	err := v.ReadConfig(bytes.NewReader([]byte(yamlContent)))
+	require.NoError(t, err)
+
+	var result config
+	err = v.Unmarshal(&result, atmosDecodeHook())
+	require.NoError(t, err)
+
+	require.Len(t, result.Commands, 1)
+	// Viper lowercases map keys before the decode hook sees them. LoadConfig restores
+	// command env key case from CaseMaps after unmarshaling.
+	assert.ElementsMatch(t, []schema.CommandEnv{
+		{Key: "cgo_enabled", Value: "0"},
+		{Key: "from_command", ValueCommand: "printf dynamic"},
+		{Key: "gotoolchain", Value: "auto"},
+	}, result.Commands[0].Env)
+}
+
 // TestAtmosDecodeHook_Combined tests that all decode hooks work together.
 func TestAtmosDecodeHook_Combined(t *testing.T) {
 	type config struct {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -50,7 +51,11 @@ const (
 
 var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 
-var ErrResolvedConfigFileNotFound = errors.New("resolved config file not found")
+var (
+	ErrResolvedConfigFileNotFound    = errors.New("resolved config file not found")
+	errUnsupportedCommandEnvValue    = errors.New("unsupported command env value")
+	errUnsupportedCommandEnvValueKey = errors.New("unsupported command env value key")
+)
 
 // osGetwd wraps os.Getwd, allowing tests to simulate CWD errors.
 var osGetwd = os.Getwd
@@ -382,6 +387,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// for identity names and environment variables.
 	preserveCaseSensitiveMaps(v, &atmosConfig)
 	restoreCaseSensitiveEnvMaps(&atmosConfig)
+	restoreCaseSensitiveCommandEnvMaps(&atmosConfig)
 
 	// Apply git root discovery for default base path.
 	// This enables running Atmos from any subdirectory, similar to Git.
@@ -1732,9 +1738,111 @@ func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
+		commandEnvMapDecodeHook(),
 		schema.ConditionDecodeHook(),
 		schema.TasksDecodeHook(),
 	)
+}
+
+func commandEnvMapDecodeHook() mapstructure.DecodeHookFuncType {
+	commandEnvSliceType := reflect.TypeOf([]schema.CommandEnv{})
+
+	return func(from reflect.Type, to reflect.Type, data any) (any, error) {
+		if to != commandEnvSliceType || from.Kind() != reflect.Map {
+			return data, nil
+		}
+
+		envMap, ok := commandEnvMapFromAny(data)
+		if !ok {
+			return data, nil
+		}
+
+		keys := make([]string, 0, len(envMap))
+		for key := range envMap {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+
+		result := make([]schema.CommandEnv, 0, len(keys))
+		for _, key := range keys {
+			envVar, err := commandEnvFromMapEntry(key, envMap[key])
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, envVar)
+		}
+		return result, nil
+	}
+}
+
+func commandEnvMapFromAny(data any) (map[string]any, bool) {
+	mapValue := reflect.ValueOf(data)
+	if mapValue.Kind() != reflect.Map {
+		return nil, false
+	}
+
+	envMap := make(map[string]any, mapValue.Len())
+	for _, mapKey := range mapValue.MapKeys() {
+		key, ok := mapKey.Interface().(string)
+		if !ok {
+			return nil, false
+		}
+		envMap[key] = mapValue.MapIndex(mapKey).Interface()
+	}
+	return envMap, true
+}
+
+func commandEnvFromMapEntry(key string, value any) (schema.CommandEnv, error) {
+	envVar := schema.CommandEnv{Key: key}
+	switch v := value.(type) {
+	case nil:
+		return envVar, nil
+	case string:
+		envVar.Value = v
+		return envVar, nil
+	case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+		envVar.Value = fmt.Sprint(v)
+		return envVar, nil
+	case map[string]any:
+		return commandEnvFromValueMap(envVar, v), nil
+	case map[string]string:
+		valueMap := make(map[string]any, len(v))
+		for mapKey, mapValue := range v {
+			valueMap[mapKey] = mapValue
+		}
+		return commandEnvFromValueMap(envVar, valueMap), nil
+	case map[any]any:
+		valueMap := make(map[string]any, len(v))
+		for mapKey, mapValue := range v {
+			stringKey, ok := mapKey.(string)
+			if !ok {
+				return envVar, fmt.Errorf("%w for %q: %T", errUnsupportedCommandEnvValueKey, key, mapKey)
+			}
+			valueMap[stringKey] = mapValue
+		}
+		return commandEnvFromValueMap(envVar, valueMap), nil
+	default:
+		return envVar, fmt.Errorf("%w for %q: %T", errUnsupportedCommandEnvValue, key, value)
+	}
+}
+
+func commandEnvFromValueMap(envVar schema.CommandEnv, value map[string]any) schema.CommandEnv {
+	if rawValue, ok := value["value"]; ok && rawValue != nil {
+		envVar.Value = fmt.Sprint(rawValue)
+	}
+	if rawValueCommand, ok := commandEnvValueCommand(value); ok && rawValueCommand != nil {
+		envVar.ValueCommand = fmt.Sprint(rawValueCommand)
+	}
+	return envVar
+}
+
+func commandEnvValueCommand(value map[string]any) (any, bool) {
+	for _, key := range []string{"valueCommand", "valuecommand", "value_command"} {
+		if raw, ok := value[key]; ok {
+			return raw, true
+		}
+	}
+	return nil, false
 }
 
 // preserveCaseSensitiveMaps extracts original case for registered paths from raw YAML files.
@@ -1816,6 +1924,28 @@ func restoreCaseSensitiveEnvMaps(atmosConfig *schema.AtmosConfiguration) {
 	}
 	if caseSensitiveEnv := atmosConfig.GetCaseSensitiveMap("templates.settings.env"); len(caseSensitiveEnv) > 0 {
 		atmosConfig.Templates.Settings.Env = caseSensitiveEnv
+	}
+}
+
+func restoreCaseSensitiveCommandEnvMaps(atmosConfig *schema.AtmosConfiguration) {
+	if atmosConfig.CaseMaps == nil {
+		return
+	}
+	envCaseMap := atmosConfig.CaseMaps.Get(envKey)
+	if len(envCaseMap) == 0 {
+		return
+	}
+	restoreCaseSensitiveCommandEnvKeys(atmosConfig.Commands, envCaseMap)
+}
+
+func restoreCaseSensitiveCommandEnvKeys(commands []schema.Command, envCaseMap casemap.CaseMap) {
+	for i := range commands {
+		for j := range commands[i].Env {
+			if key, ok := envCaseMap[strings.ToLower(commands[i].Env[j].Key)]; ok {
+				commands[i].Env[j].Key = key
+			}
+		}
+		restoreCaseSensitiveCommandEnvKeys(commands[i].Commands, envCaseMap)
 	}
 }
 

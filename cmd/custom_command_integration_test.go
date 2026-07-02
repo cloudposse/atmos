@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -75,6 +76,48 @@ func TestCustomCommandIntegration_DefaultSubcommand(t *testing.T) {
 	output, err := os.ReadFile(outputPath)
 	require.NoError(t, err)
 	assert.Equal(t, "linux:"+tmpDir, string(output))
+}
+
+func TestCustomCommandIntegration_MapEnvExported(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tmpDir := t.TempDir()
+	envOutputFile := filepath.Join(tmpDir, "map-env.txt")
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	configContent := fmt.Sprintf(`
+base_path: .
+commands:
+  - name: dump-map-env
+    description: Dump map-form command env
+    env:
+      _ATMOS_TEST_DUMP_ENV: %s
+      MIXED_CASE_TEST_VAR: expected
+      FROM_COMMAND:
+        valueCommand: printf dynamic
+    steps:
+      - %s
+`, strconv.Quote(envOutputFile), strconv.Quote(exePath))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, cfg.AtmosConfigFileName), []byte(configContent), 0o644))
+	t.Chdir(tmpDir)
+
+	atmosConfig, err := cfg.LoadConfig(&schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+
+	parentCmd := &cobra.Command{Use: "atmos"}
+	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd))
+	parentCmd.SetArgs([]string{"dump-map-env"})
+	require.NoError(t, parentCmd.Execute())
+
+	envContent, err := os.ReadFile(envOutputFile)
+	require.NoError(t, err, "map-form env must be exported with original key case")
+	envVars := string(envContent)
+
+	assert.Equal(t, "expected", extractEnvVar(envVars, "MIXED_CASE_TEST_VAR"))
+	assert.Equal(t, "dynamic", extractEnvVar(envVars, "FROM_COMMAND"))
+	assert.Empty(t, extractEnvVar(envVars, "mixed_case_test_var"))
+	assert.Empty(t, extractEnvVar(envVars, "from_command"))
 }
 
 // TestCustomCommandIntegration_MockProviderEnvironment tests that custom commands with mock provider
