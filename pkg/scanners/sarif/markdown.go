@@ -157,7 +157,7 @@ func severityCountBadge(sev Severity, count int) string {
 func severityBadgeColor(sev Severity) string {
 	switch sev {
 	case SeverityCritical:
-		return "ff0000"
+		return "8b0000"
 	case SeverityHigh:
 		return "critical"
 	case SeverityMedium:
