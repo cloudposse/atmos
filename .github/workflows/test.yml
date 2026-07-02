@@ -500,10 +500,14 @@ jobs:
 
           # Colima/Lima occasionally leaves the VM half-started on macOS runners
           # (SSH/DHCP timeout while QEMU is still exiting). Start from a clean
-          # instance and retry once before failing the job.
+          # instance and retry once before failing the job. Also preflight Docker
+          # and pull the k3s image here so emulator startup does not discover a
+          # broken runtime halfway through `atmos test`.
           colima delete --data --force || true
           for attempt in 1 2; do
-            if colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20; then
+            if colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20 \
+              && docker info \
+              && docker pull rancher/k3s:latest; then
               break
             fi
             if [ "$attempt" -eq 2 ]; then
