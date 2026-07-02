@@ -16,7 +16,7 @@ Atmos no longer uses Make as the active development interface for the Atmos repo
 The repository's development commands now live in `.atmos.d/` command groups instead of Make targets. The root `atmos.yaml` stays focused on project configuration, while the command surface is split by concern:
 
 - `atmos build ...` for dependencies, binaries, versions, and docs generation.
-- `atmos test ...` for short, acceptance, coverage, and race-test workflows.
+- `atmos test` plus mode flags for short, acceptance, coverage, and race-test workflows.
 - `atmos lint ...` for changed-file linting, custom lintroller rules, go.mod checks, and link checks.
 - `atmos check ...`, `atmos format ...`, and `atmos cache ...` for repository maintenance workflows.
 - `atmos screengrabs ...` for website screengrab generation.

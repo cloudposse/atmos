@@ -36,8 +36,9 @@ Multiple Claude sessions may be working on the same branch or worktree simultane
 ```bash
 # Build & Test
 atmos build           # Build to ./build/atmos
-atmos test acc               # Run tests
-atmos test acc-cover         # Tests with coverage
+atmos test                   # Run short tests
+atmos test --full            # Run full tests
+atmos test --coverage        # Tests with coverage
 atmos lint changed           # golangci-lint on changed files
 ```
 
@@ -233,7 +234,7 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 
 **Preconditions**: Tests skip gracefully with helpers from `tests/test_preconditions.go`. See `docs/prd/testing-strategy.md`.
 
-**Commands**: `atmos test short` (quick), `atmos test acc` (all), `atmos test acc-cover` (coverage)
+**Commands**: `atmos test` (quick), `atmos test --full` (all), `atmos test --coverage` (coverage)
 
 **Fixtures**: `tests/test-cases/` for integration tests
 

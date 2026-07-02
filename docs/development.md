@@ -40,7 +40,8 @@ atmos format pr        # Auto-format PR changes
 atmos format all       # Auto-format all files
 
 # Build and Test Commands
-atmos test short       # Run short tests
+atmos test             # Run short tests
+atmos test --full      # Run full tests
 atmos build     # Build the Atmos binary
 atmos dev quick        # Quick build and test
 atmos dev --help       # Show all available dev commands
@@ -52,7 +53,8 @@ Use grouped Atmos commands for repository tasks:
 
 ```bash
 atmos build     # Build the Atmos binary
-atmos test acc         # Run tests
+atmos test             # Run short tests
+atmos test --full      # Run full tests
 atmos lint changed     # Run golangci-lint on changed files
 ```
 
