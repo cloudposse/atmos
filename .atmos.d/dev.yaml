@@ -57,6 +57,17 @@ commands:
         steps:
           - atmos build
 
+      - name: shell
+        description: Start a development shell with build/ first on PATH
+        steps:
+          - type: exec
+            command: |
+              set -euo pipefail
+              root="$(git rev-parse --show-toplevel)"
+              cd "$root"
+              export PATH="$root/build:$PATH"
+              exec "${SHELL:-/bin/sh}"
+
       - name: validate
         description: Validate code by running build, lint, and tests
         steps:

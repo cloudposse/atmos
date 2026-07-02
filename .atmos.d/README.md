@@ -4,13 +4,12 @@ This directory contains custom Atmos commands that are automatically loaded when
 
 ## Command Groups
 
-- `dev.yaml` - local setup and quick validation workflow commands
+- `dev.yaml` - local setup, `atmos dev shell`, and quick validation workflow commands
 - `build.yaml` - `atmos build deps`, `atmos build`, `atmos build version`, and README generation
 - `check.yaml` - `atmos check staged`, `atmos check pr`, `atmos check all`, and Codecov validation
 - `format.yaml` - `atmos format staged`, `atmos format pr`, and `atmos format all`
 - `cache.yaml` - `atmos cache list` and `atmos cache clear`
 - `lint.yaml` - `atmos lint changed`, lintroller, gomodcheck, custom golangci-lint, and link checks
-- `shell.yaml` - `atmos shell` development shell with `build/` first on `PATH`
 - `test.yaml` - `atmos test acc`, `atmos test short`, `atmos test coverage`, race, and mock generation commands
 - `screengrabs.yaml` - `atmos screengrabs ...` commands for generating website screengrabs
 - `toolchain.yaml` - toolchain aliases and registries

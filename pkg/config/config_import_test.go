@@ -145,6 +145,11 @@ commands:
         description: "Set up development environment"
         steps:
           - echo "Setting up..."
+      - name: "shell"
+        description: "Start a development shell"
+        working_directory: !repo-root .
+        steps:
+          - echo "Entering shell..."
 `
 	createConfigFile(t, atmosDDir, "dev.yaml", devContent)
 
