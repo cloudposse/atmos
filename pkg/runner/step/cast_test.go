@@ -411,8 +411,9 @@ func TestCastHandlerExecuteWithWorkflowRecordsSimulatedSteps(t *testing.T) {
 	if !strings.Contains(castOutputText(t, content), "atmos terraform plan app -s dev") {
 		t.Fatalf("recorded cast missing resolved command:\n%s", content)
 	}
-	if !strings.HasSuffix(strings.TrimSpace(string(content)), `"\u001b[?25h"]`) {
-		t.Fatalf("recorded cast should end with cursor show after final prompt:\n%s", content)
+	finalLine := strings.Split(strings.TrimSpace(string(content)), "\n")
+	if !strings.Contains(finalLine[len(finalLine)-1], `\u003e \u001b[0m\u001b[?25h"`) {
+		t.Fatalf("recorded cast should end with prompt and cursor show in one event:\n%s", content)
 	}
 }
 

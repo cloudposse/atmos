@@ -311,10 +311,7 @@ func runCastSimulateStep(ctx context.Context, castStep, child *schema.WorkflowSt
 }
 
 func recordCastTypedLine(ctx context.Context, opts castTypedLineOptions) error {
-	if err := recordCastPrompt(opts.Prompt); err != nil {
-		return err
-	}
-	if err := recordCastCursorShowIf(opts.Cursor); err != nil {
+	if err := recordCastPromptWithCursor(opts.Prompt, opts.Cursor); err != nil {
 		return err
 	}
 	if err := sleepCastInput(ctx, defaultCastPromptDelay); err != nil {
@@ -487,22 +484,15 @@ func recordCastPrompt(prompt *schema.SimulatePrompt) error {
 }
 
 func recordCastPromptWithCursor(prompt *schema.SimulatePrompt, cursor bool) error {
-	if err := recordCastPrompt(prompt); err != nil {
+	rendered, err := renderCastPrompt(prompt)
+	if err != nil {
 		return err
 	}
-	return recordCastCursorShowIf(cursor)
-}
-
-func recordCastCursorShow() error {
-	_, err := fmt.Fprint(iolib.GetContext().Data(), castCursorShow)
-	return err
-}
-
-func recordCastCursorShowIf(enabled bool) error {
-	if !enabled {
-		return nil
+	if cursor {
+		rendered += castCursorShow
 	}
-	return recordCastCursorShow()
+	_, err = fmt.Fprint(iolib.GetContext().Data(), rendered)
+	return err
 }
 
 func castStepHasVisibleCursor(step *schema.WorkflowStep) bool {
