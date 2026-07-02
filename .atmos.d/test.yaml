@@ -51,8 +51,12 @@ commands:
       - name: acc
         description: Run acceptance tests
         env: &go_auto_env
-          - key: GOTOOLCHAIN
+          - &go_auto_toolchain
+            key: GOTOOLCHAIN
             value: auto
+          - &go_cgo_disabled
+            key: CGO_ENABLED
+            value: "0"
         steps:
           - type: atmos
             command: build deps
@@ -88,12 +92,16 @@ commands:
 
       - name: short-cover
         description: Run quick tests with coverage
-        env: *go_auto_env
+        env:
+          - *go_auto_toolchain
+          - *go_cgo_disabled
+          - key: GOCOVERDIR
+            value: coverage
         steps:
           - type: atmos
             command: build deps
           - type: shell
-            command: GOCOVERDIR=coverage go test -short -cover ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 5m
+            command: go test -short -cover ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 5m
 
       - name: coverage
         description: Run tests with coverage report
