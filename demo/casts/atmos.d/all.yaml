@@ -1,0 +1,42 @@
+commands:
+  - name: casts generate all
+    description: Regenerate every committed website cast demo
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: native-terraform
+        command: atmos casts generate demo fixtures native-terraform
+      - type: shell
+        name: demo-vendoring
+        command: atmos casts generate demo fixtures demo-vendoring
+      - type: shell
+        name: basic
+        command: atmos casts generate demo fixtures basic
+      - type: shell
+        name: examples
+        command: atmos casts generate examples
+      - type: shell
+        name: cli-commands-cast
+        command: atmos casts generate cli commands cast
+      - type: shell
+        name: validate
+        command: atmos casts validate all
+  - name: casts validate all
+    description: Validate every committed website cast demo
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: native-terraform
+        command: atmos casts validate demo fixtures native-terraform
+      - type: shell
+        name: demo-vendoring
+        command: atmos casts validate demo fixtures demo-vendoring
+      - type: shell
+        name: basic
+        command: atmos casts validate demo fixtures basic
+      - type: shell
+        name: examples
+        command: atmos casts validate examples
+      - type: shell
+        name: cli-commands-cast
+        command: atmos casts validate cli commands cast

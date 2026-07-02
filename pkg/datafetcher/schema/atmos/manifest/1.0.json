@@ -2029,7 +2029,8 @@
                       },
                       "mode": {
                         "type": "string",
-                        "description": "Mode for cast and simulate steps. Simulate supports typed and prompt."
+                        "enum": ["steps", "session", "typed", "prompt"],
+                        "description": "Mode for cast and simulate steps. Cast supports steps and session; simulate supports typed and prompt."
                       },
                       "rate": {
                         "type": "string",

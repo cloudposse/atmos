@@ -112,6 +112,7 @@ export default function CastPlayer({
           playbackEvents,
           initialPosition,
         );
+        setPlaying(autoplay);
         setSeekVersion((version) => version + 1);
       })
       .catch(() => {
@@ -120,6 +121,7 @@ export default function CastPlayer({
         setContent("");
         setPosition(0);
         renderedEventTime.current = -1;
+        setPlaying(false);
         setSeekVersion((version) => version + 1);
       });
     return () => {

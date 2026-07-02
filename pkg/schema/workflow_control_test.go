@@ -55,6 +55,27 @@ steps:
 	assert.Equal(t, "demo.gif", step.CastOutput.GIF)
 }
 
+func TestWorkflowStep_UnmarshalYAML_AliasedStructuredCastOutput(t *testing.T) {
+	input := `
+output: &demo_output
+  mode: raw
+  cast: demo.cast
+type: cast
+steps:
+  - name: nested
+    type: cast
+    output: *demo_output
+`
+	var step WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte(input), &step))
+
+	require.Len(t, step.Steps, 1)
+	assert.Equal(t, "raw", step.Steps[0].Output)
+	require.NotNil(t, step.Steps[0].CastOutput)
+	assert.Equal(t, "raw", step.Steps[0].CastOutput.Mode)
+	assert.Equal(t, "demo.cast", step.Steps[0].CastOutput.Cast)
+}
+
 func TestWorkflowStep_UnmarshalYAML_StructuredSimulatePromptAndCommandAnchor(t *testing.T) {
 	input := `
 type: cast

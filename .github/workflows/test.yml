@@ -490,12 +490,16 @@ jobs:
       # kubernetes`), which runs the privileged k3s container itself on the runner's
       # Docker, and the helmfile component harvests its kubeconfig via `!emulator`.
 
-      - name: Start Docker-compatible runtime on macOS
+      - name: Remove conflicting Homebrew tap on macOS
         if: matrix.flavor.target == 'macos'
         run: |
           if brew tap | grep -qx 'aws/tap'; then
             brew untap aws/tap
           fi
+
+      - name: Start Docker-compatible runtime on macOS
+        if: matrix.flavor.target == 'macos'
+        run: |
           brew install colima docker
           colima start --runtime docker --vm-type vz --cpu 2 --memory 4 --disk 20
           docker version
@@ -519,11 +523,7 @@ jobs:
 
       - name: Install kubectl and helmfile on macOS
         if: matrix.flavor.target == 'macos'
-        run: |
-          if brew tap | grep -qx 'aws/tap'; then
-            brew untap aws/tap
-          fi
-          brew install kubectl helmfile
+        run: brew install kubectl helmfile
 
       - name: Install Helm
         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0

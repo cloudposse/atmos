@@ -40,6 +40,6 @@ commands:
           for needle in ["component: vpc", "stack: dev", "cidr_block"]:
               if needle not in text:
                   raise SystemExit(f"describe component cast missing {needle!r}")
-          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found"]:
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
               if bad in text:
                   raise SystemExit(f"describe component cast contains {bad!r}")

@@ -118,6 +118,21 @@ func TestShellHandlerExecution(t *testing.T) {
 		assert.Contains(t, result.Value, "from_step")
 	})
 
+	t.Run("preserves baseline OS environment", func(t *testing.T) {
+		t.Setenv("BASELINE_OS_ENV", "from_os")
+		step := &schema.WorkflowStep{
+			Name:    "test_baseline_env",
+			Type:    "shell",
+			Command: "echo $BASELINE_OS_ENV",
+			Output:  "capture",
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		require.NoError(t, err)
+		assert.Contains(t, result.Value, "from_os")
+	})
+
 	t.Run("command with template in command", func(t *testing.T) {
 		step := &schema.WorkflowStep{
 			Name:    "test_template",

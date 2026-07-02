@@ -67,7 +67,7 @@ type Task struct {
 	Script string `yaml:"script,omitempty" json:"script,omitempty" mapstructure:"script"`
 	// Interpreter is the executable used to run Script for TaskTypeScript.
 	Interpreter string `yaml:"interpreter,omitempty" json:"interpreter,omitempty" mapstructure:"interpreter"`
-	// Type specifies the command type: TaskTypeShell, TaskTypeScript, TaskTypeAtmos, or TaskTypeExec. Defaults to TaskTypeShell.
+	// Type specifies the step type: shell, script, atmos, exec, cast, simulate, workdir, or another registered step kind. Defaults to shell.
 	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 	// Timeout specifies the maximum duration for the task. Zero means no timeout.
 	Timeout time.Duration `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`

@@ -45,6 +45,22 @@ commands:
             name: emulator-down
             when: always
             command: atmos emulator down aws -s dev
+      - type: script
+        name: sanitize-runtime-values
+        interpreter: python3
+        script: |
+          from pathlib import Path
+          import re
+
+          path = Path("../../website/static/casts/examples/emulator-aws/lifecycle.cast")
+          text = path.read_text()
+          text = re.sub(r"http://127\.0\.0\.1:\d+", "http://127.0.0.1:<port>", text)
+          text = re.sub(
+              r"aws\\t[^\\t\\n]+\\trunning\\t[^\\n\"]+",
+              r"aws\\t<image>\\trunning\\t<container>",
+              text,
+          )
+          path.write_text(text)
       - type: shell
         name: validate
         command: atmos casts validate examples emulator-aws lifecycle
@@ -59,7 +75,7 @@ commands:
           text = Path("../../website/static/casts/examples/emulator-aws/lifecycle.cast").read_text()
           for needle in [
               "emulator aws is up",
-              "c88ec20bf221",
+              r"aws\t<image>\trunning\t<container>",
               "running",
               "Apply complete!",
               "stage =",

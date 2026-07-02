@@ -71,7 +71,7 @@ func ExecuteShellAndReturnOutput(
 	return b.String(), nil
 }
 
-// ShellRunner uses mvdan.cc/sh/v3's parser and interpreter to run a shell script and divert its stdout .
+// ShellRunner uses mvdan.cc/sh/v3's parser and interpreter to run a shell script and divert its stdout.
 func ShellRunner(command string, name string, dir string, env []string, out io.Writer) error {
 	defer perf.Track(nil, "utils.ShellRunner")()
 

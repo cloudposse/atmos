@@ -39,6 +39,6 @@ commands:
           for needle in ["Vendoring from", "Vendored components success=3", "github/stargazers"]:
               if needle not in text:
                   raise SystemExit(f"vendor pull cast missing {needle!r}")
-          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found"]:
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
               if bad in text:
                   raise SystemExit(f"vendor pull cast contains {bad!r}")

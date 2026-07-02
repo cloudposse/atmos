@@ -788,6 +788,7 @@ func TestWorkflowStepDecodeHookNormalizesNestedTypedSlices(t *testing.T) {
 	require.Len(t, result.Steps[0].Steps, 1)
 	require.NotNil(t, result.Steps[0].Steps[0].SimulatePrompt)
 	assert.Equal(t, "$ ", result.Steps[0].Steps[0].SimulatePrompt.Text)
+	assert.Equal(t, "command", result.Steps[0].Steps[0].SimulatePrompt.Style)
 	assert.Equal(t, "atmos version", result.Steps[0].Steps[0].Text)
 }
 

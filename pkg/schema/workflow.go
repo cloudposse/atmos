@@ -630,6 +630,9 @@ func decodeWorkflowStepOutput(node *yaml.Node, stepType string, scalar *string, 
 	if node == nil {
 		return nil
 	}
+	if node.Kind == yaml.AliasNode {
+		node = node.Alias
+	}
 	switch node.Kind {
 	case yaml.ScalarNode:
 		*scalar = node.Value

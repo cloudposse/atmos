@@ -1,0 +1,45 @@
+commands:
+  - name: casts generate examples
+    description: Regenerate every example-sourced cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: emulator-aws-lifecycle
+        command: atmos casts generate examples emulator-aws lifecycle
+      - type: shell
+        name: quick-start-simple-list-and-plan
+        command: atmos casts generate examples quick-start-simple list-and-plan
+      - type: shell
+        name: quick-start-advanced-list-instances
+        command: atmos casts generate examples quick-start-advanced list-instances
+      - type: shell
+        name: sops-secrets-secret-lifecycle
+        command: atmos casts generate examples sops-secrets secret-lifecycle
+      - type: shell
+        name: toolchain-demo-convert
+        command: atmos casts generate examples toolchain demo-convert
+      - type: shell
+        name: custom-commands-hello-greet
+        command: atmos casts generate examples custom-commands hello-greet
+  - name: casts validate examples
+    description: Validate every example-sourced cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: emulator-aws-lifecycle
+        command: atmos casts validate examples emulator-aws lifecycle
+      - type: shell
+        name: quick-start-simple-list-and-plan
+        command: atmos casts validate examples quick-start-simple list-and-plan
+      - type: shell
+        name: quick-start-advanced-list-instances
+        command: atmos casts validate examples quick-start-advanced list-instances
+      - type: shell
+        name: sops-secrets-secret-lifecycle
+        command: atmos casts validate examples sops-secrets secret-lifecycle
+      - type: shell
+        name: toolchain-demo-convert
+        command: atmos casts validate examples toolchain demo-convert
+      - type: shell
+        name: custom-commands-hello-greet
+        command: atmos casts validate examples custom-commands hello-greet

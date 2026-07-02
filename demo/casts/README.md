@@ -22,12 +22,24 @@ For example, the quick start simple list-and-plan recording is generated with
 `website/static/casts/examples/quick-start-simple/list-and-plan.cast`.
 These fixtures are intentionally separate from `examples/` and `tests/fixtures/`.
 
-`atmos.yaml` only defines shared setup. Per-cast generate and validate commands
-live under the default-imported `atmos.d` tree:
+`atmos.yaml` only defines shared setup. Generate and validate commands live
+under the default-imported `atmos.d` tree. Per-cast command files mirror the
+cast source path and cast name:
 
 ```text
 atmos.d/<source-path>/<cast-name>.yaml
 ```
+
+Aggregate commands live next to the demos they group:
+
+```text
+atmos.d/<source-path>/all.yaml
+```
+
+For example, `atmos.d/examples/all.yaml` defines `casts generate examples`,
+and `atmos.d/demo/fixtures/basic/all.yaml` defines
+`casts generate demo fixtures basic`. Do not use numbered filenames for cast
+commands; the file path should describe the command group or demo it owns.
 
 Run these commands with the process working directory set to `demo/casts`.
 
