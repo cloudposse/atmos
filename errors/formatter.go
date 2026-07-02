@@ -371,7 +371,7 @@ func renderMarkdownSections(sections markdownSections, config FormatterConfig, u
 	}
 
 	if strings.TrimSpace(sections.explanationMarkdown) != "" {
-		renderedExplanation, ok := renderMarkdown(sections.explanationMarkdown, config.MaxLineLength)
+		renderedExplanation, ok := renderMarkdown(sections.explanationMarkdown, explanationMarkdownLineLength(config.MaxLineLength, useColor))
 		if !ok {
 			return "", false
 		}
@@ -388,6 +388,13 @@ func renderMarkdownSections(sections markdownSections, config FormatterConfig, u
 	}
 
 	return strings.TrimRight(out.String(), " \t\n") + newline, true
+}
+
+func explanationMarkdownLineLength(maxLineLength int, useColor bool) int {
+	if !useColor || maxLineLength <= 2 {
+		return maxLineLength
+	}
+	return maxLineLength - 2
 }
 
 func appendRenderedMarkdownSection(out *strings.Builder, md string, maxLineLength int, useColor bool) bool {

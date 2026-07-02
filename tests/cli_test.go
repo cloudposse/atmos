@@ -1670,6 +1670,14 @@ func normalizeLineEndings(s string) string {
 	return strings.ReplaceAll(s, "\r\n", "\n")
 }
 
+func normalizeSnapshotOutput(input string, ignoreTrailingWhitespace bool) string {
+	normalized := normalizeLineEndings(input)
+	if ignoreTrailingWhitespace {
+		return stripTrailingWhitespace(normalized)
+	}
+	return normalized
+}
+
 // Generate a unified diff using gotextdiff.
 func generateUnifiedDiff(actual, expected string) string {
 	edits := myers.ComputeEdits(span.URIFromPath("actual"), expected, actual)
@@ -1746,7 +1754,7 @@ func getSnapshotFilenames(testName string, isTty bool) (stdout, stderr, tty stri
 
 // verifyTTYSnapshot handles snapshot verification for TTY mode tests.
 func verifyTTYSnapshot(t *testing.T, tc *TestCase, ttyPath, combinedOutput string, regenerate bool) bool {
-	combinedOutput = stripTrailingWhitespace(combinedOutput)
+	combinedOutput = normalizeSnapshotOutput(combinedOutput, tc.Expect.IgnoreTrailingWhitespace)
 
 	if regenerate {
 		t.Logf("Updating TTY snapshot at %q", ttyPath)
@@ -1761,7 +1769,7 @@ $ go test ./tests -run %q -regenerate-snapshots`, ttyPath, t.Name())
 	}
 
 	filteredActual := applyIgnorePatterns(combinedOutput, tc.Expect.Diff)
-	filteredExpected := applyIgnorePatterns(stripTrailingWhitespace(readSnapshot(t, ttyPath)), tc.Expect.Diff)
+	filteredExpected := applyIgnorePatterns(normalizeSnapshotOutput(readSnapshot(t, ttyPath), tc.Expect.IgnoreTrailingWhitespace), tc.Expect.Diff)
 
 	if filteredExpected != filteredActual {
 		var diff string
@@ -1819,8 +1827,8 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Normalize line endings in actual output for cross-platform consistency.
 	// This handles cases where CLI might output CRLF on Windows but snapshots use LF.
-	stdoutOutput = stripTrailingWhitespace(normalizeLineEndings(stdoutOutput))
-	stderrOutput = stripTrailingWhitespace(normalizeLineEndings(stderrOutput))
+	stdoutOutput = normalizeSnapshotOutput(stdoutOutput, tc.Expect.IgnoreTrailingWhitespace)
+	stderrOutput = normalizeSnapshotOutput(stderrOutput, tc.Expect.IgnoreTrailingWhitespace)
 
 	stdoutPath, stderrPath, ttyPath := getSnapshotFilenames(t.Name(), tc.Tty)
 
@@ -1847,7 +1855,7 @@ $ go test ./tests -run %q -regenerate-snapshots`, stdoutPath, t.Name())
 	}
 
 	filteredStdoutActual := applyIgnorePatterns(stdoutOutput, tc.Expect.Diff)
-	filteredStdoutExpected := applyIgnorePatterns(stripTrailingWhitespace(readSnapshot(t, stdoutPath)), tc.Expect.Diff)
+	filteredStdoutExpected := applyIgnorePatterns(normalizeSnapshotOutput(readSnapshot(t, stdoutPath), tc.Expect.IgnoreTrailingWhitespace), tc.Expect.Diff)
 
 	if filteredStdoutExpected != filteredStdoutActual {
 		var diff string
@@ -1868,7 +1876,7 @@ Run the following command to create it:
 $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	}
 	filteredStderrActual := applyIgnorePatterns(stderrOutput, tc.Expect.Diff)
-	filteredStderrExpected := applyIgnorePatterns(stripTrailingWhitespace(readSnapshot(t, stderrPath)), tc.Expect.Diff)
+	filteredStderrExpected := applyIgnorePatterns(normalizeSnapshotOutput(readSnapshot(t, stderrPath), tc.Expect.IgnoreTrailingWhitespace), tc.Expect.Diff)
 
 	if filteredStderrExpected != filteredStderrActual {
 		var diff string

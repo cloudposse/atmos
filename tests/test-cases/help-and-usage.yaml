@@ -35,6 +35,7 @@ tests:
       - "terraform"
       - "help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -55,6 +56,7 @@ tests:
       - "terraform"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -76,6 +78,7 @@ tests:
       - "apply"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -97,6 +100,7 @@ tests:
       - "apply"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -185,6 +189,7 @@ tests:
       - "helmfile"
       - "help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -205,6 +210,7 @@ tests:
       - "helmfile"
       - "help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -252,6 +258,7 @@ tests:
       - "apply"
       - "help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -273,6 +280,7 @@ tests:
       - "apply"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -305,6 +313,7 @@ tests:
       - "atlantis"
       - "help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -325,6 +334,7 @@ tests:
       - "atlantis"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -360,6 +370,7 @@ tests:
       - "generate"
       - "help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -381,6 +392,7 @@ tests:
       - "generate"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -422,6 +434,7 @@ tests:
       - "repo-config"
       - "help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -444,6 +457,7 @@ tests:
       - "repo-config"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -483,6 +497,7 @@ tests:
       - "editorconfig"
       - "help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -504,6 +519,7 @@ tests:
       - "editorconfig"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -550,6 +566,7 @@ tests:
       - "about"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -676,6 +693,7 @@ tests:
       - "tp"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       sanitize:
         "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
@@ -691,6 +709,7 @@ tests:
       - "tr"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       sanitize:
         "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0

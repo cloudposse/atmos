@@ -258,7 +258,7 @@ func (r *Resolver) loadStackConfig(
 	if !ok {
 		notFoundErr := errUtils.Build(errUtils.ErrStackNotFound).
 			WithExplanationf("Stack `%s` not found", stack).
-			WithHint("Run `atmos list stacks` to see all available stacks\nVerify the stack name matches your stack manifest files").
+			WithHint("Run `atmos list stacks` to see all available stacks.\nVerify the stack name matches your stack manifest files").
 			WithContext("stack", stack).
 			WithContext("component", componentName).
 			WithExitCode(2).
@@ -453,7 +453,7 @@ func buildAmbiguousComponentError(matches []string, componentName, stack, compon
 	exampleComponent := matches[0]
 
 	return errUtils.Build(errUtils.ErrAmbiguousComponentPath).
-		WithExplanationf("Path resolves to `%s` which is referenced by multiple components in stack `%s`\nMatching components: %s",
+		WithExplanationf("Path resolves to `%s` which is referenced by multiple components in stack `%s`\n\nMatching components: %s",
 			componentName, stack, matchesStr).
 		WithHintf("Use the exact component name instead of a path\nExample: `atmos %s <command> %s --stack %s`",
 			componentType, exampleComponent, stack).

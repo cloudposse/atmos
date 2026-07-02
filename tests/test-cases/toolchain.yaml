@@ -15,6 +15,7 @@ tests:
       - "toolchain"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -37,6 +38,7 @@ tests:
       - "install"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -59,6 +61,7 @@ tests:
       - "info"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"

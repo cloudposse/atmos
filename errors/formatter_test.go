@@ -376,6 +376,13 @@ func TestRenderExplanationCallout_ColorAddsGradientBackground(t *testing.T) {
 	assert.Contains(t, callout, "48;2;18;60;92")
 }
 
+func TestExplanationMarkdownLineLength_ReservesPaddingForColor(t *testing.T) {
+	assert.Equal(t, 78, explanationMarkdownLineLength(80, true))
+	assert.Equal(t, 80, explanationMarkdownLineLength(80, false))
+	assert.Equal(t, 2, explanationMarkdownLineLength(2, true))
+	assert.Equal(t, 0, explanationMarkdownLineLength(0, true))
+}
+
 func TestFormat_WithExample(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	exampleContent := "```yaml\nworkflows:\n  deploy:\n    steps:\n      - command: terraform apply\n```"

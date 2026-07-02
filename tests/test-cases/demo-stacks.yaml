@@ -9,6 +9,7 @@ tests:
     args:
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff: []
       stdout:
         - "BUILT-IN COMMANDS"
