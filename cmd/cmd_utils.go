@@ -1004,10 +1004,18 @@ func configureCustomCommandScannerContext(vars *stepPkg.Variables, atmosConfig *
 		info := schema.ConfigAndStacksInfo{
 			ComponentFromArg: component,
 			ComponentType:    componentType,
+			StackFromArg:     stack,
 			Stack:            stack,
-			ComponentSection: make(map[string]any),
 		}
-		resolved, err := e.ProcessStacks(atmosConfig, info, true, true, true, nil, authManager)
+		stackConfig, err := cfg.InitCliConfig(info, true)
+		if err != nil {
+			return nil, err
+		}
+		var authForStack auth.AuthManager
+		if stackConfig.CliConfigPath == atmosConfig.CliConfigPath {
+			authForStack = authManager
+		}
+		resolved, err := e.ProcessStacks(&stackConfig, info, true, true, false, nil, authForStack)
 		if err != nil {
 			return nil, err
 		}

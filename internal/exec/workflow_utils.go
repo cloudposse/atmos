@@ -758,10 +758,18 @@ func configureStepScannerContext(vars *stepPkg.Variables, atmosConfig *schema.At
 		info := schema.ConfigAndStacksInfo{
 			ComponentFromArg: component,
 			ComponentType:    componentType,
+			StackFromArg:     stack,
 			Stack:            stack,
-			ComponentSection: make(map[string]any),
 		}
-		resolved, err := ProcessStacks(atmosConfig, info, true, true, true, nil, authManager)
+		stackConfig, err := config.InitCliConfig(info, true)
+		if err != nil {
+			return nil, err
+		}
+		var authForStack auth.AuthManager
+		if stackConfig.CliConfigPath == atmosConfig.CliConfigPath {
+			authForStack = authManager
+		}
+		resolved, err := ProcessStacks(&stackConfig, info, true, true, false, nil, authForStack)
 		if err != nil {
 			return nil, err
 		}

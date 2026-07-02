@@ -151,7 +151,7 @@ commands:
                 - "--enable-rule=terraform_unused_declarations"
                 - "--disable-rule=terraform_typed_variables"
                 - "--minimum-failure-severity=warning"
-                - "--config=../.tflint.hcl"
+                - "--config=$ATMOS_COMPONENT_PATH/../../../../.tflint.hcl"
   - name: test
     description: Run the advanced quick-start stack end to end
     flags:
