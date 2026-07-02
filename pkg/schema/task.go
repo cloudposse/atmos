@@ -166,17 +166,18 @@ type Task struct {
 	Expect  *HTTPExpect       `yaml:"expect,omitempty" json:"expect,omitempty" mapstructure:"expect"`    // Success criteria; defaults to any 2xx.
 
 	// Cast step and session action fields.
-	Mode        string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
-	Shell       string `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`
-	WriteRate   string `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`
-	KeyInterval string `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"`
-	Cursor      bool   `yaml:"cursor,omitempty" json:"cursor,omitempty" mapstructure:"cursor"`
-	Text        string `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`
-	Regex       string `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`
-	Key         string `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`
-	Duration    string `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`
-	Interval    string `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`
-	Repeat      int    `yaml:"repeat,omitempty" json:"repeat,omitempty" mapstructure:"repeat"`
+	Mode        string  `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+	Shell       string  `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`
+	WriteRate   string  `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`
+	KeyInterval string  `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"`
+	Jitter      float64 `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`
+	Cursor      bool    `yaml:"cursor,omitempty" json:"cursor,omitempty" mapstructure:"cursor"`
+	Text        string  `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`
+	Regex       string  `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`
+	Key         string  `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`
+	Duration    string  `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`
+	Interval    string  `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`
+	Repeat      int     `yaml:"repeat,omitempty" json:"repeat,omitempty" mapstructure:"repeat"`
 
 	// Container step fields.
 	//
@@ -418,6 +419,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Shell:       task.Shell,
 		WriteRate:   task.WriteRate,
 		KeyInterval: task.KeyInterval,
+		Jitter:      task.Jitter,
 		Cursor:      task.Cursor,
 		Text:        task.Text,
 		Regex:       task.Regex,
@@ -566,6 +568,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Shell:       step.Shell,
 		WriteRate:   step.WriteRate,
 		KeyInterval: step.KeyInterval,
+		Jitter:      step.Jitter,
 		Cursor:      step.Cursor,
 		Text:        step.Text,
 		Regex:       step.Regex,

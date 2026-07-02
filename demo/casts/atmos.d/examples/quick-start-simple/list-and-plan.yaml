@@ -25,6 +25,7 @@ commands:
             mode: steps
             rate: 12ms
             write_rate: 35ms
+            jitter: 0.25
             width: 120
             height: 36
             env:

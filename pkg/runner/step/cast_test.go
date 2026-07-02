@@ -282,6 +282,27 @@ func TestRecordCastTypedLineKeepsCursorVisibleWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestCastTypedCharDelayUsesDeterministicJitter(t *testing.T) {
+	base := 100 * time.Millisecond
+	line := "atmos plan"
+	chars := []rune(line)
+
+	for i := range chars {
+		first := castTypedCharDelay(line, chars, i, base, 0.25)
+		second := castTypedCharDelay(line, chars, i, base, 0.25)
+		if first != second {
+			t.Fatalf("delay for index %d was not deterministic: %s != %s", i, first, second)
+		}
+	}
+
+	if got := castTypedCharDelay(line, chars, 1, base, 0); got != base {
+		t.Fatalf("jitter disabled delay = %s, want %s", got, base)
+	}
+	if got := castTypedCharDelay(line, chars, 6, base, 0.25); got <= base {
+		t.Fatalf("word boundary delay = %s, want greater than %s", got, base)
+	}
+}
+
 func TestRecordCastPromptWritesPromptEvent(t *testing.T) {
 	if err := iolib.Initialize(); err != nil {
 		t.Fatalf("initialize io: %v", err)
@@ -673,6 +694,7 @@ func TestValidateCastSimulateStepModesAndDurations(t *testing.T) {
 		{name: "prompt valid", step: schema.WorkflowStep{Mode: "prompt"}},
 		{name: "typed rate invalid", step: schema.WorkflowStep{Mode: "typed", Text: "x", Rate: "bad"}, expectErr: true},
 		{name: "typed duration invalid", step: schema.WorkflowStep{Mode: "typed", Text: "x", Duration: "bad"}, expectErr: true},
+		{name: "typed jitter invalid", step: schema.WorkflowStep{Mode: "typed", Text: "x", Jitter: 1.25}, want: ErrInvalidSimulateJitter, expectErr: true},
 		{name: "invalid mode", step: schema.WorkflowStep{Mode: "movie"}, want: ErrInvalidSimulateMode, expectErr: true},
 	}
 

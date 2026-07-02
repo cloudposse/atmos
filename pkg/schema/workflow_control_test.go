@@ -63,6 +63,7 @@ steps:
   - type: simulate
     mode: typed
     cursor: true
+    jitter: 0.25
     prompt: &demo_prompt
       text: "> "
       style: command
@@ -82,6 +83,7 @@ steps:
 	assert.Equal(t, "> ", step.Steps[0].SimulatePrompt.Text)
 	assert.Equal(t, "command", step.Steps[0].SimulatePrompt.Style)
 	assert.True(t, step.Steps[0].Cursor)
+	assert.Equal(t, 0.25, step.Steps[0].Jitter)
 	assert.Equal(t, "atmos secret list --stack dev --component api", step.Steps[0].Text)
 	assert.Equal(t, "atmos secret list --stack dev --component api", step.Steps[1].Command)
 	require.NotNil(t, step.Steps[2].SimulatePrompt)

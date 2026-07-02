@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +32,7 @@ var (
 	ErrUnsupportedSessionAction      = errors.New("unsupported session action type")
 	ErrInvalidSimulateMode           = errors.New("simulate step has invalid mode")
 	ErrSimulateTypedRequiresText     = errors.New("simulate typed step requires text")
+	ErrInvalidSimulateJitter         = errors.New("simulate typed step jitter must be between 0 and 1")
 	ErrUnsupportedPromptStyle        = errors.New("unsupported simulate prompt style")
 )
 
@@ -42,6 +44,16 @@ const (
 	defaultCastEnterDelay     = 550 * time.Millisecond
 	defaultCastStepPauseDelay = 700 * time.Millisecond
 	castCursorShow            = "\x1b[?25h"
+
+	castWhitespaceBoundaryMinFactor     = 1.6
+	castWhitespaceBoundaryJitterFactor  = 0.5
+	castPunctuationBoundaryMinFactor    = 1.3
+	castPunctuationBoundaryJitterFactor = 0.4
+	castCommentTypingFactor             = 1.1
+	castJitterHashOffset                = uint64(14695981039346656037)
+	castJitterHashPrime                 = uint64(1099511628211)
+	castJitterScale                     = uint64(1000)
+	castJitterScaleMax                  = castJitterScale - 1
 )
 
 type CastHandler struct {
@@ -52,6 +64,7 @@ type castTypedLineOptions struct {
 	Prompt     *schema.SimulatePrompt
 	Line       string
 	WriteRate  time.Duration
+	Jitter     float64
 	EnterDelay time.Duration
 	Cursor     bool
 }
@@ -79,6 +92,9 @@ func (h *CastHandler) Validate(step *schema.WorkflowStep) error {
 func validateCastStepsMode(step *schema.WorkflowStep) error {
 	if len(step.Steps) == 0 {
 		return fmt.Errorf(wrappedQuotedErrorFormat, ErrCastStepRequiresSteps, step.Name)
+	}
+	if step.Jitter < 0 || step.Jitter > 1 {
+		return fmt.Errorf("%w: %v", ErrInvalidSimulateJitter, step.Jitter)
 	}
 	for i := range step.Steps {
 		if step.Steps[i].Type == schema.TaskTypeSimulate {
@@ -292,6 +308,7 @@ func runCastSimulateStep(ctx context.Context, castStep, child *schema.WorkflowSt
 		if err != nil {
 			return err
 		}
+		jitter := firstNonZeroFloat(child.Jitter, castStep.Jitter)
 		enterDelay, err := castStepEnterDelay(child)
 		if err != nil {
 			return err
@@ -300,6 +317,7 @@ func runCastSimulateStep(ctx context.Context, castStep, child *schema.WorkflowSt
 			Prompt:     child.SimulatePrompt,
 			Line:       text,
 			WriteRate:  writeRate,
+			Jitter:     jitter,
 			EnterDelay: enterDelay,
 			Cursor:     child.Cursor,
 		})
@@ -317,7 +335,7 @@ func recordCastTypedLine(ctx context.Context, opts castTypedLineOptions) error {
 	if err := sleepCastInput(ctx, defaultCastPromptDelay); err != nil {
 		return err
 	}
-	if err := recordCastTypedText(ctx, opts.Prompt, opts.Line, opts.WriteRate); err != nil {
+	if err := recordCastTypedText(ctx, opts.Prompt, opts.Line, opts.WriteRate, opts.Jitter); err != nil {
 		return err
 	}
 	if err := sleepCastInput(ctx, opts.EnterDelay); err != nil {
@@ -327,7 +345,7 @@ func recordCastTypedLine(ctx context.Context, opts castTypedLineOptions) error {
 	return err
 }
 
-func recordCastTypedText(ctx context.Context, prompt *schema.SimulatePrompt, line string, writeRate time.Duration) error {
+func recordCastTypedText(ctx context.Context, prompt *schema.SimulatePrompt, line string, writeRate time.Duration, jitter float64) error {
 	stylePrefix, styleSuffix, err := renderCastTypedLineParts(prompt, line)
 	if err != nil {
 		return err
@@ -337,8 +355,9 @@ func recordCastTypedText(ctx context.Context, prompt *schema.SimulatePrompt, lin
 			return err
 		}
 	}
-	for _, char := range line {
-		if err := sleepCastInput(ctx, writeRate); err != nil {
+	chars := []rune(line)
+	for i, char := range chars {
+		if err := sleepCastInput(ctx, castTypedCharDelay(line, chars, i, writeRate, jitter)); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprint(iolib.GetContext().Data(), string(char)); err != nil {
@@ -350,6 +369,41 @@ func recordCastTypedText(ctx context.Context, prompt *schema.SimulatePrompt, lin
 	}
 	_, err = fmt.Fprint(iolib.GetContext().Data(), styleSuffix)
 	return err
+}
+
+func castTypedCharDelay(line string, chars []rune, index int, baseDelay time.Duration, jitter float64) time.Duration {
+	if baseDelay <= 0 || jitter <= 0 {
+		return baseDelay
+	}
+
+	unit := deterministicCastJitterUnit(line, index)
+	factor := 1 - jitter + (2 * jitter * unit)
+	if index > 0 {
+		switch prev := chars[index-1]; {
+		case prev == ' ' || prev == '\t':
+			factor *= castWhitespaceBoundaryMinFactor + (castWhitespaceBoundaryJitterFactor * unit)
+		case strings.ContainsRune("|&;=,:/", prev):
+			factor *= castPunctuationBoundaryMinFactor + (castPunctuationBoundaryJitterFactor * unit)
+		}
+	}
+	if strings.HasPrefix(strings.TrimSpace(line), "#") {
+		factor *= castCommentTypingFactor
+	}
+
+	return time.Duration(float64(baseDelay) * factor)
+}
+
+func deterministicCastJitterUnit(line string, index int) float64 {
+	hash := castJitterHashOffset
+	for _, char := range line {
+		hash ^= uint64(char)
+		hash *= castJitterHashPrime
+	}
+	for _, char := range strconv.Itoa(index) {
+		hash ^= uint64(char)
+		hash *= castJitterHashPrime
+	}
+	return float64(hash%castJitterScale) / float64(castJitterScaleMax)
 }
 
 func castPromptText(prompt *schema.SimulatePrompt) string {
@@ -449,6 +503,9 @@ func validateCastSimulateStep(step *schema.WorkflowStep) error {
 		if _, err := castStepEnterDelay(step); err != nil {
 			return err
 		}
+		if step.Jitter < 0 || step.Jitter > 1 {
+			return fmt.Errorf("%w: %v", ErrInvalidSimulateJitter, step.Jitter)
+		}
 	case "prompt":
 	default:
 		return fmt.Errorf(wrappedQuotedErrorFormat, ErrInvalidSimulateMode, step.Mode)
@@ -472,6 +529,15 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func firstNonZeroFloat(values ...float64) float64 {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
 }
 
 func recordCastPrompt(prompt *schema.SimulatePrompt) error {

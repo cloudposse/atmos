@@ -474,6 +474,7 @@ func TestTasksDecodeHook_StructuredSimulatePrompt(t *testing.T) {
 				"type":   TaskTypeSimulate,
 				"mode":   "typed",
 				"cursor": true,
+				"jitter": 0.25,
 				"prompt": map[string]any{
 					"text":  "> ",
 					"style": "command",
@@ -497,6 +498,7 @@ func TestTasksDecodeHook_StructuredSimulatePrompt(t *testing.T) {
 	assert.Equal(t, "> ", result.Steps[0].SimulatePrompt.Text)
 	assert.Equal(t, "command", result.Steps[0].SimulatePrompt.Style)
 	assert.True(t, result.Steps[0].Cursor)
+	assert.Equal(t, 0.25, result.Steps[0].Jitter)
 	assert.Equal(t, "atmos version", result.Steps[0].Text)
 }
 
