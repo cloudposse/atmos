@@ -624,6 +624,10 @@ func TestRenderCastPromptStylesAndInvalidStyle(t *testing.T) {
 func TestRenderCastTypedLinePartsStylesCommentsAsMuted(t *testing.T) {
 	prompt := &schema.SimulatePrompt{Text: "> ", Style: "command"}
 
+	promptText, err := renderCastPrompt(prompt)
+	if err != nil {
+		t.Fatalf("render prompt: %v", err)
+	}
 	commandPrefix, commandSuffix, err := renderCastTypedLineParts(prompt, "atmos version")
 	if err != nil {
 		t.Fatalf("render command parts: %v", err)
@@ -635,6 +639,9 @@ func TestRenderCastTypedLinePartsStylesCommentsAsMuted(t *testing.T) {
 
 	if commandPrefix == "" || commandSuffix == "" {
 		t.Fatalf("expected command ANSI parts, got prefix=%q suffix=%q", commandPrefix, commandSuffix)
+	}
+	if strings.HasPrefix(promptText, commandPrefix) {
+		t.Fatalf("expected typed command prefix %q to differ from prompt %q", commandPrefix, promptText)
 	}
 	if commentPrefix == "" || commentSuffix == "" {
 		t.Fatalf("expected comment ANSI parts, got prefix=%q suffix=%q", commentPrefix, commentSuffix)

@@ -383,11 +383,11 @@ func renderCastPrompt(prompt *schema.SimulatePrompt) (string, error) {
 	return renderCastStyledText(castPromptText(prompt), castPromptStyle(prompt), true)
 }
 
-func castTypedTextStyle(prompt *schema.SimulatePrompt, line string) string {
+func castTypedTextStyle(_ *schema.SimulatePrompt, line string) string {
 	if strings.HasPrefix(strings.TrimSpace(line), "#") {
 		return "muted"
 	}
-	return castPromptStyle(prompt)
+	return "body"
 }
 
 func renderCastTypedText(prompt *schema.SimulatePrompt, line, text string) (string, error) {
@@ -418,6 +418,8 @@ func renderCastStyledText(text, styleName string, bold bool) (string, error) {
 		return text, nil
 	}
 	switch styleName {
+	case "body":
+		return styles.Body.Render(text), nil
 	case "command":
 		style := styles.Command
 		if bold {
