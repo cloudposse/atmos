@@ -13,6 +13,8 @@ const (
 	AfterTerraformPlan             HookEvent = "after.terraform.plan"
 	AfterTerraformPlanAggregate    HookEvent = "after.terraform.plan.aggregate"
 	BeforeTerraformPlan            HookEvent = "before.terraform.plan"
+	BeforeTerraformTest            HookEvent = "before.terraform.test"
+	AfterTerraformTest             HookEvent = "after.terraform.test"
 	BeforeTerraformDeploy          HookEvent = "before.terraform.deploy"
 	AfterTerraformDeploy           HookEvent = "after.terraform.deploy"
 	AfterTerraformDestroyAggregate HookEvent = "after.terraform.destroy.aggregate"
@@ -30,6 +32,28 @@ const (
 	AfterKubernetesDelete          HookEvent = "after.kubernetes.delete"
 	BeforeKubernetesValidate       HookEvent = "before.kubernetes.validate"
 	AfterKubernetesValidate        HookEvent = "after.kubernetes.validate"
+	BeforeHelmTemplate             HookEvent = "before.helm.template"
+	AfterHelmTemplate              HookEvent = "after.helm.template"
+	BeforeHelmDiff                 HookEvent = "before.helm.diff"
+	AfterHelmDiff                  HookEvent = "after.helm.diff"
+	BeforeHelmApply                HookEvent = "before.helm.apply"
+	AfterHelmApply                 HookEvent = "after.helm.apply"
+	BeforeHelmDeploy               HookEvent = "before.helm.deploy"
+	AfterHelmDeploy                HookEvent = "after.helm.deploy"
+	BeforeHelmDelete               HookEvent = "before.helm.delete"
+	AfterHelmDelete                HookEvent = "after.helm.delete"
+	BeforeHelmfileTemplate         HookEvent = "before.helmfile.template"
+	AfterHelmfileTemplate          HookEvent = "after.helmfile.template"
+	BeforeHelmfileDiff             HookEvent = "before.helmfile.diff"
+	AfterHelmfileDiff              HookEvent = "after.helmfile.diff"
+	BeforeHelmfileApply            HookEvent = "before.helmfile.apply"
+	AfterHelmfileApply             HookEvent = "after.helmfile.apply"
+	BeforeHelmfileSync             HookEvent = "before.helmfile.sync"
+	AfterHelmfileSync              HookEvent = "after.helmfile.sync"
+	BeforeHelmfileDeploy           HookEvent = "before.helmfile.deploy"
+	AfterHelmfileDeploy            HookEvent = "after.helmfile.deploy"
+	BeforeHelmfileDestroy          HookEvent = "before.helmfile.destroy"
+	AfterHelmfileDestroy           HookEvent = "after.helmfile.destroy"
 )
 
 // Normalize returns the canonical form of a HookEvent, collapsing command
@@ -50,6 +74,14 @@ func (e HookEvent) Normalize() HookEvent {
 		return AfterKubernetesApply
 	case BeforeKubernetesDeploy:
 		return BeforeKubernetesApply
+	case AfterHelmDeploy:
+		return AfterHelmApply
+	case BeforeHelmDeploy:
+		return BeforeHelmApply
+	case AfterHelmfileDeploy, AfterHelmfileSync:
+		return AfterHelmfileApply
+	case BeforeHelmfileDeploy, BeforeHelmfileSync:
+		return BeforeHelmfileApply
 	default:
 		return e
 	}

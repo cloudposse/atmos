@@ -268,6 +268,9 @@ func parsePodmanContainer(containerJSON map[string]interface{}) Info {
 // endpoint resolution yields an empty URL (see pkg/emulator manager.endpoint), so
 // Terraform falls back to real cloud endpoints.
 func parsePodmanPorts(raw interface{}) []PortBinding {
+	if containerJSON, ok := raw.(map[string]interface{}); ok {
+		raw = containerJSON["Ports"]
+	}
 	entries, ok := raw.([]interface{})
 	if !ok {
 		return nil

@@ -472,6 +472,7 @@ func detectComponentType(
 		cfg.ContainerComponentType,
 		cfg.EmulatorComponentType,
 		cfg.KubernetesComponentType,
+		cfg.HelmComponentType,
 	}
 
 	var result schema.ConfigAndStacksInfo

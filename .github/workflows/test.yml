@@ -56,8 +56,13 @@ jobs:
             target: linux
           - os: "windows-latest"
             target: windows
-          - os: "macos-latest"
+          - os: "macos-15"
             target: macos
+          # Docker-backed macOS CI uses Colima. GitHub's M-series macOS runners
+          # do not support the virtualization path Colima needs, so build a
+          # separate Intel artifact for the k3s macOS jobs only.
+          - os: "macos-15-intel"
+            target: macos-intel
     runs-on: ${{ matrix.os }}
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
@@ -69,6 +74,7 @@ jobs:
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Check out code into the Go module directory
@@ -118,7 +124,7 @@ jobs:
         flavor:
           - { os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false", target: linux }
           - { os: "windows-latest", target: windows }
-          - { os: "macos-latest", target: macos }
+          - { os: "macos-15", target: macos }
     timeout-minutes: 60
     runs-on: ${{ matrix.flavor.os }}
     steps:
@@ -133,6 +139,7 @@ jobs:
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
@@ -145,7 +152,7 @@ jobs:
       - name: Add build artifacts directory to PATH for linux or macos
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
         run: |
-          echo "${{ github.workspace }}" >> $GITHUB_PATH
+          echo "${{ github.workspace }}" >> "$GITHUB_PATH"
           chmod +x "${{ github.workspace }}/atmos"
 
       - name: Add build artifacts directory to PATH for windows
@@ -345,6 +352,7 @@ jobs:
       matrix:
         demo-folder:
           - emulator-aws
+          - terraform-tests
 
     timeout-minutes: 30
     steps:
@@ -456,15 +464,20 @@ jobs:
 
   # run k3s demo tests
   k3s:
-    name: "[k3s] ${{ matrix.demo-folder }}"
+    name: "[k3s-${{ matrix.flavor.target }}] ${{ matrix.demo-folder }}"
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.flavor.os }}
     env:
       ATMOS_LOGS_LEVEL: Debug
     strategy:
+      fail-fast: false
       matrix:
+        flavor:
+          - { os: ubuntu-latest, target: linux, artifact: linux }
+          - { os: "macos-15-intel", target: macos, artifact: macos-intel }
         demo-folder:
           - demo-helmfile
+          - helm
 
     timeout-minutes: 20
     steps:
@@ -478,20 +491,40 @@ jobs:
       # kubernetes`), which runs the privileged k3s container itself on the runner's
       # Docker, and the helmfile component harvests its kubeconfig via `!emulator`.
 
+      - name: Start Docker-compatible runtime on macOS
+        if: matrix.flavor.target == 'macos'
+        run: |
+          if brew tap | grep -qx 'aws/tap'; then
+            brew untap aws/tap
+          fi
+          brew install colima docker qemu
+          colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20
+          docker version
+
       - name: Download build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: build-artifacts-linux
+          name: build-artifacts-${{ matrix.flavor.artifact }}
           path: /usr/local/bin
 
       - name: Set execute permissions on atmos
         run: chmod +x /usr/local/bin/atmos
 
       - name: Install the Cloud Posse package repository
+        if: matrix.flavor.target == 'linux'
         run: curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | sudo bash
 
-      - name: Install kubectl and helmfile
+      - name: Install kubectl and helmfile on Linux
+        if: matrix.flavor.target == 'linux'
         run: sudo apt-get -y install kubectl helmfile
+
+      - name: Install kubectl and helmfile on macOS
+        if: matrix.flavor.target == 'macos'
+        run: |
+          if brew tap | grep -qx 'aws/tap'; then
+            brew untap aws/tap
+          fi
+          brew install kubectl helmfile
 
       - name: Install Helm
         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
@@ -531,7 +564,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-latest
+          - macos-15
     timeout-minutes: 20
     steps:
       - name: Check out code into the Go module directory
@@ -543,10 +576,14 @@ jobs:
         # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
+          cache: false
           go-version-file: "go.mod"
 
       - name: Run Kubernetes end-to-end tests
         env:
+          GOCACHE: ${{ runner.temp }}/go-build
+          GOTMPDIR: ${{ runner.temp }}/go-tmp
+          TMPDIR: ${{ runner.temp }}/tmp
           # Atmos builds with CGO disabled (see Makefile). Match that here so the
           # toolchain's transitive CGO dependencies (e.g. bearsh/hid → libudev)
           # are not compiled — they are unused and libudev is absent on runners.
@@ -554,7 +591,9 @@ jobs:
           # Fail loudly if the control plane can't be provisioned/started, rather
           # than silently skipping all coverage.
           ATMOS_ENVTEST_REQUIRED: "true"
-        run: go test -tags envtest -count=1 ./pkg/component/kubernetes/... -run TestEnvtest
+        run: |
+          mkdir -p "$GOCACHE" "$GOTMPDIR" "$TMPDIR"
+          go test -tags envtest -count=1 ./pkg/component/kubernetes/... -run TestEnvtest
 
   # run other demo tests
   mock:
@@ -567,7 +606,7 @@ jobs:
         flavor:
           - { os: ubuntu-latest, target: linux }
           - { os: windows-latest, target: windows }
-          - { os: macos-latest, target: macos }
+          - { os: "macos-15", target: macos }
         demo-folder:
           - examples/demo-atlantis
           # - examples/demo-component-manifest
@@ -600,6 +639,7 @@ jobs:
 
       - name: Add GNU tar to flavor.target (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
@@ -612,7 +652,7 @@ jobs:
       - name: Add build artifacts directory to PATH for linux or macos
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
         run: |
-          echo "${{ github.workspace }}" >> $GITHUB_PATH
+          echo "${{ github.workspace }}" >> "$GITHUB_PATH"
           chmod +x "${{ github.workspace }}/atmos"
 
       - name: Add build artifacts directory to PATH for windows
@@ -762,6 +802,7 @@ jobs:
         demo-folder:
           - demo-context
           - emulator-aws
+          - terraform-tests
           - demo-stacks
           - quick-start-simple
           # Examples below use runtime Atmos YAML functions (`!terraform.state`, `!store`,

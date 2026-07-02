@@ -211,6 +211,8 @@ func getResolvedAbsPath(atmosConfig *schema.AtmosConfiguration, componentType st
 		return atmosConfig.PackerDirAbsolutePath
 	case "kubernetes":
 		return atmosConfig.KubernetesDirAbsolutePath
+	case "helm":
+		return atmosConfig.HelmDirAbsolutePath
 	default:
 		return ""
 	}

@@ -875,6 +875,71 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 				assert.Equal(t, map[string]any{"engine": "kustomize"}, app[cfg.RenderSectionName])
 			},
 		},
+		{
+			name: "config with helm section and component",
+			config: map[string]any{
+				cfg.HelmSectionName: map[string]any{
+					cfg.CommandSectionName: "helm",
+					cfg.VarsSectionName: map[string]any{
+						"namespace": "apps",
+					},
+					cfg.SettingsSectionName: map[string]any{
+						"enabled": true,
+					},
+					cfg.EnvSectionName: map[string]any{
+						"HELM_DEBUG": "true",
+					},
+					cfg.AuthSectionName: map[string]any{
+						"role": "helm-deployer",
+					},
+					cfg.DependenciesSectionName: map[string]any{
+						"file": []any{"deps.yaml"},
+					},
+					cfg.SourceSectionName: map[string]any{
+						"uri": "github.com/example/charts",
+					},
+					cfg.ProvisionSectionName: map[string]any{
+						"workdir": ".",
+					},
+					cfg.HooksSectionName: map[string]any{
+						"before": []any{"lint"},
+					},
+					cfg.GenerateSectionName: map[string]any{
+						"chart": map[string]any{"path": "generated"},
+					},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.HelmComponentType: map[string]any{
+						"app": map[string]any{
+							cfg.ChartSectionName: "bitnami/nginx",
+							cfg.ValuesSectionName: map[string]any{
+								"replicaCount": 2,
+							},
+							cfg.ValuesFilesSectionName: []any{"values.yaml"},
+							cfg.RepositoriesSectionName: []any{
+								map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"},
+							},
+							cfg.RenderSectionName: map[string]any{
+								"output": map[string]any{"path": "rendered.yaml"},
+							},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+				require.True(t, ok, "result must contain a components section")
+				helm, ok := components[cfg.HelmComponentType].(map[string]any)
+				require.True(t, ok, "result must contain helm components")
+				app, ok := helm["app"].(map[string]any)
+				require.True(t, ok, "helm component 'app' must exist")
+				assert.Equal(t, "bitnami/nginx", app[cfg.ChartSectionName])
+				assert.Equal(t, map[string]any{"replicaCount": 2}, app[cfg.ValuesSectionName])
+				assert.Equal(t, []any{"values.yaml"}, app[cfg.ValuesFilesSectionName])
+				assert.Equal(t, map[string]any{"output": map[string]any{"path": "rendered.yaml"}}, app[cfg.RenderSectionName])
+				assert.Equal(t, []any{map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"}}, app[cfg.RepositoriesSectionName])
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -897,6 +962,58 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 			)
 			require.NoError(t, err)
 			tt.validateResult(t, result)
+		})
+	}
+}
+
+func TestProcessStackConfig_HelmErrorPaths(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tests := []struct {
+		name          string
+		helmSection   map[string]any
+		expectedError error
+	}{
+		{"invalid helm section type", nil, errUtils.ErrInvalidConfig},
+		{"invalid command type", map[string]any{cfg.CommandSectionName: 123}, errUtils.ErrInvalidComponentCommand},
+		{"invalid vars type", map[string]any{cfg.VarsSectionName: "x"}, errUtils.ErrInvalidVarsSection},
+		{"invalid hooks type", map[string]any{cfg.HooksSectionName: "x"}, errUtils.ErrInvalidHooksSection},
+		{"invalid generate type", map[string]any{cfg.GenerateSectionName: "x"}, errUtils.ErrInvalidGenerateSection},
+		{"invalid settings type", map[string]any{cfg.SettingsSectionName: "x"}, errUtils.ErrInvalidSettingsSection},
+		{"invalid env type", map[string]any{cfg.EnvSectionName: "x"}, errUtils.ErrInvalidEnvSection},
+		{"invalid auth type", map[string]any{cfg.AuthSectionName: "x"}, errUtils.ErrInvalidAuthSection},
+		{"invalid dependencies type", map[string]any{cfg.DependenciesSectionName: "x"}, errUtils.ErrInvalidDependenciesSection},
+		{"invalid source type", map[string]any{cfg.SourceSectionName: "x"}, errUtils.ErrInvalidComponentSource},
+		{"invalid provision type", map[string]any{cfg.ProvisionSectionName: "x"}, errUtils.ErrInvalidComponentProvision},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config map[string]any
+			if tt.helmSection == nil {
+				config = map[string]any{cfg.HelmSectionName: "invalid-not-a-map"}
+			} else {
+				config = map[string]any{cfg.HelmSectionName: tt.helmSection}
+			}
+
+			_, err := ProcessStackConfig(
+				atmosConfig,
+				"/test/stacks",
+				"/test/terraform",
+				"/test/helmfile",
+				"/test/packer",
+				"/test/ansible",
+				"test-stack.yaml",
+				config,
+				false,
+				false,
+				"",
+				map[string]map[string][]string{},
+				map[string]map[string]any{},
+				false,
+			)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, tt.expectedError)
 		})
 	}
 }

@@ -28,7 +28,7 @@ function Home() {
       <div className={`landing-page${scrolled ? ' landing-page--scrolled' : ''}`}>
         <Layout
           title="The runtime for infrastructure"
-          description="Atmos is the runtime for infrastructure — one consistent way to build, ship, and run Terraform, Kubernetes, and containers, identically on your laptop and in CI. Auth, secrets, vendoring, and CI included."
+          description="Atmos is the runtime for infrastructure - one consistent way to build, ship, and run Terraform, Kubernetes, and containers, identically on your laptop and in CI. Auth, secrets, vendoring, and CI included."
         >
           <Hero />
           <AISection />

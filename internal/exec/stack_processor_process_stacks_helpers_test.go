@@ -620,6 +620,69 @@ func TestExtractComponentSections_Retry(t *testing.T) {
 	})
 }
 
+// TestExtractComponentSections_Plugins covers the Helm CLI plugins list extraction:
+// helm and helmfile components capture the raw list, terraform ignores it, and an
+// absent section leaves the result nil.
+func TestExtractComponentSections_Plugins(t *testing.T) {
+	plugins := []any{"diff@v3.9.4", "secrets"}
+
+	for _, componentType := range []string{cfg.HelmfileComponentType, cfg.HelmComponentType} {
+		t.Run(componentType+"-captures-plugins", func(t *testing.T) {
+			opts := ComponentProcessorOptions{
+				ComponentType: componentType,
+				Component:     "app",
+				StackName:     "test-stack",
+				ComponentMap: map[string]any{
+					cfg.PluginsSectionName: plugins,
+				},
+				AtmosConfig: &schema.AtmosConfiguration{},
+			}
+			result := &ComponentProcessorResult{}
+			require.NoError(t, extractComponentSections(&opts, result))
+			require.NotNil(t, result.ComponentPlugins)
+			got, ok := result.ComponentPlugins.([]any)
+			require.True(t, ok)
+			require.Len(t, got, 2)
+			assert.Equal(t, "diff@v3.9.4", got[0])
+			assert.Equal(t, "secrets", got[1])
+		})
+	}
+
+	t.Run("terraform-ignores-plugins", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.PluginsSectionName: plugins,
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+		assert.Nil(t, result.ComponentPlugins)
+	})
+
+	t.Run("absent-plugins-leaves-result-nil", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.HelmfileComponentType,
+			Component:     "app",
+			StackName:     "test-stack",
+			ComponentMap:  map[string]any{},
+			AtmosConfig:   &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+		assert.Nil(t, result.ComponentPlugins)
+	})
+}
+
+// Compile-time guard: a rename of the schema Plugins fields fails the build.
+var (
+	_ = schema.Helm{Plugins: []string{"diff@v3.9.4"}}
+	_ = schema.Helmfile{Plugins: []string{"diff@v3.9.4"}}
+)
+
 // TestExtractComponentSections_Kubernetes covers the kubernetes-specific extraction
 // branch: provider (scalar), paths/manifests (passed through verbatim as `any`), render
 // (map), plus the hooks/generate/source/provision sections that kubernetes supports.
@@ -708,6 +771,7 @@ func TestSupportsComponentTypeHelpers(t *testing.T) {
 	}{
 		{cfg.TerraformComponentType, true, true, true},
 		{cfg.KubernetesComponentType, true, true, true},
+		{cfg.HelmComponentType, true, true, true},
 		{cfg.HelmfileComponentType, false, false, true},
 		{cfg.PackerComponentType, false, false, true},
 		{"unknown-type", false, false, false},

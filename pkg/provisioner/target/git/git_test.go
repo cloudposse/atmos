@@ -102,6 +102,42 @@ func TestWriteArtifactReplacesManagedSubtree(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(workdir, "clusters", "dev", "argocd", "deployment.yaml"))
 }
 
+func TestReadManagedTreeRoundTrip(t *testing.T) {
+	workdir := t.TempDir()
+	path := "clusters/dev/argocd"
+
+	written := target.ProvisionArtifact{Files: map[string][]byte{
+		"namespace.yaml":      []byte("kind: Namespace\n"),
+		"app/deployment.yaml": []byte("kind: Deployment\n"),
+	}}
+	require.NoError(t, writeArtifact(workdir, path, &written))
+
+	got, err := readManagedTree(workdir, path)
+	require.NoError(t, err)
+	assert.Equal(t, "kind: Namespace\n", string(got["namespace.yaml"]))
+	// Nested files use forward-slash keys regardless of OS.
+	assert.Equal(t, "kind: Deployment\n", string(got["app/deployment.yaml"]))
+	assert.Len(t, got, 2)
+}
+
+func TestReadManagedTreeMissingPathIsEmpty(t *testing.T) {
+	workdir := t.TempDir()
+
+	got, err := readManagedTree(workdir, filepath.Join("clusters", "absent"))
+	require.NoError(t, err)
+	assert.Empty(t, got, "an unpublished path must be an empty baseline, not an error")
+}
+
+func TestReadManagedTreeSingleFile(t *testing.T) {
+	workdir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(workdir, "clusters", "dev"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "clusters", "dev", "rendered.yaml"), []byte("kind: ConfigMap\n"), 0o600))
+
+	got, err := readManagedTree(workdir, filepath.Join("clusters", "dev", "rendered.yaml"))
+	require.NoError(t, err)
+	assert.Equal(t, map[string][]byte{"rendered.yaml": []byte("kind: ConfigMap\n")}, got)
+}
+
 func TestWriteArtifactRejectsPathEscape(t *testing.T) {
 	workdir := t.TempDir()
 	err := writeArtifact(workdir, "../escape", &target.ProvisionArtifact{Files: map[string][]byte{"x.yaml": []byte("x")}})
@@ -148,6 +184,25 @@ func TestSigningMode(t *testing.T) {
 	// Empty target signing falls back to the repository default.
 	fallback := signingMode(&config{}, resolved)
 	assert.Equal(t, atmosgit.SigningMode("auto"), fallback)
+}
+
+func TestTrailersSortedKeysAndStringField(t *testing.T) {
+	assert.Equal(t, map[string]string{}, trailers(&target.ProvisionArtifact{}))
+	assert.Equal(t, map[string]string{
+		"Atmos-Stack":     "dev",
+		"Atmos-Component": "app",
+	}, trailers(&target.ProvisionArtifact{
+		Metadata: target.ArtifactMetadata{Stack: "dev", Component: "app"},
+	}))
+
+	assert.Equal(t, []string{"a.yaml", "b.yaml", "nested/c.yaml"}, sortedFileKeys(map[string][]byte{
+		"b.yaml":        []byte("b"),
+		"nested/c.yaml": []byte("c"),
+		"a.yaml":        []byte("a"),
+	}))
+	assert.Equal(t, "value", stringField(map[string]any{"key": "value"}, "key"))
+	assert.Empty(t, stringField(map[string]any{"key": 1}, "key"))
+	assert.Empty(t, stringField(nil, "missing"))
 }
 
 func TestWriteArtifactRejectsFilePathEscape(t *testing.T) {

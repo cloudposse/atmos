@@ -26,6 +26,16 @@ ci:
     terraform:
       plan: "plan.md"
       apply: "apply.md"
+    helm:
+      template: "helm-template.md"
+      diff: "helm-diff.md"
+      apply: "helm-apply.md"
+      delete: "helm-delete.md"
+    helmfile:
+      template: "helmfile-template.md"
+      diff: "helmfile-diff.md"
+      apply: "helmfile-apply.md"
+      destroy: "helmfile-destroy.md"
 ```
 </File>
 
@@ -50,13 +60,49 @@ ci:
 
     **Default:** Built-in template
   </dd>
+
+  <dt>`ci.templates.helm.template`</dt>
+  <dd>Filename of the custom native Helm template/render summary template within the base path.</dd>
+
+  <dt>`ci.templates.helm.diff`</dt>
+  <dd>Filename of the custom native Helm diff/plan summary template within the base path.</dd>
+
+  <dt>`ci.templates.helm.apply`</dt>
+  <dd>Filename of the custom native Helm apply/deploy summary template within the base path.</dd>
+
+  <dt>`ci.templates.helm.delete`</dt>
+  <dd>Filename of the custom native Helm delete/destroy summary template within the base path.</dd>
+
+  <dt>`ci.templates.helmfile.template`</dt>
+  <dd>Filename of the custom Helmfile template summary template within the base path.</dd>
+
+  <dt>`ci.templates.helmfile.diff`</dt>
+  <dd>Filename of the custom Helmfile diff summary template within the base path.</dd>
+
+  <dt>`ci.templates.helmfile.apply`</dt>
+  <dd>Filename of the custom Helmfile apply/sync/deploy summary template within the base path.</dd>
+
+  <dt>`ci.templates.helmfile.destroy`</dt>
+  <dd>Filename of the custom Helmfile destroy summary template within the base path.</dd>
 </dl>
 
 ## Template Context
 
-Templates receive a context object with plan/apply data.
+Templates receive a context object for the operation being summarized.
 
-### Plan Template Variables
+All native CI summary templates receive these common fields when available:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `.Component` | string | Component name |
+| `.Stack` | string | Stack name |
+| `.Command` | string | Normalized command name used for template selection |
+| `.Success` | bool | Whether the operation succeeded |
+| `.ExitCode` | int | Command exit code |
+| `.Error` | string | Error message when the command failed |
+| `.ReproductionCommand` | string | Local command to reproduce the operation |
+
+### Terraform Plan Template Variables
 
 | Variable | Type | Description |
 |----------|------|-------------|
@@ -72,7 +118,7 @@ Templates receive a context object with plan/apply data.
 | `.Resources` | object | Resource lists by action type |
 | `.Warnings` | []string | Terraform warning messages |
 
-### Apply Template Variables
+### Terraform Apply Template Variables
 
 | Variable | Type | Description |
 |----------|------|-------------|
@@ -84,6 +130,33 @@ Templates receive a context object with plan/apply data.
 | `.Resources` | object | Resource lists by action type |
 | `.Outputs` | map | Terraform outputs |
 | `.Warnings` | []string | Terraform warning messages |
+
+### Helm Template Variables
+
+Native Helm summary templates also receive Helm metadata when available:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `.ReleaseName` | string | Helm release name |
+| `.Namespace` | string | Kubernetes namespace |
+| `.Chart` | string | Chart reference |
+| `.Target` | string | Provision target, when one was selected |
+| `.ObjectCount` | int | Number of rendered or applied Kubernetes objects |
+| `.Kinds` | map | Rendered or applied Kubernetes object counts by kind |
+| `.ManifestBytes` | int | Rendered manifest size in bytes |
+| `.Diff` | string | Unified diff produced by `diff`/`plan` (rendered as a collapsible diff block; Secret values redacted) |
+
+`render` uses the `template` template, `plan` uses `diff`, `deploy` uses `apply`, and `destroy` uses `delete`.
+
+### Helmfile Template Variables
+
+Helmfile summary templates also receive captured command output:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `.Output` | string | Combined masked stdout/stderr captured from the Helmfile command |
+
+`sync` and `deploy` use the `apply` template.
 
 ### Kubernetes Summary Template Variables
 
@@ -143,8 +216,14 @@ No changes. Infrastructure is up-to-date.
 
 ## Built-in Templates
 
-The default templates are embedded in the Atmos binary at `pkg/ci/plugins/terraform/templates/`
-and `pkg/ci/plugins/kubernetes/templates/`. You can use these as a starting point for customization.
+The default templates are embedded in the Atmos binary:
+
+- Terraform: `pkg/ci/plugins/terraform/templates/`
+- Helm: `pkg/ci/plugins/helm/templates/`
+- Helmfile: `pkg/ci/plugins/helmfile/templates/`
+- Kubernetes: `pkg/ci/plugins/kubernetes/templates/`
+
+You can use these as a starting point for customization.
 
 ## Related
 

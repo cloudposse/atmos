@@ -324,7 +324,7 @@ func buildBakeArgs(config *BuildConfig) []string {
 }
 
 func appendFile(first string, rest []string) []string {
-	values := make([]string, 0, len(rest)+1)
+	values := make([]string, 0, len(rest))
 	if first != "" {
 		values = append(values, first)
 	}
