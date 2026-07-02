@@ -71,7 +71,8 @@ commands:
       - name: validate
         description: Validate code by running build, lint, and tests
         env: &go_auto_env
-          GOTOOLCHAIN: auto
+          - key: GOTOOLCHAIN
+            value: auto
         steps:
           - type: toast
             level: info

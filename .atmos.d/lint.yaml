@@ -5,7 +5,8 @@ commands:
       - name: changed
         description: Run lint checks for changes from origin/main
         env: &go_auto_env
-          GOTOOLCHAIN: auto
+          - key: GOTOOLCHAIN
+            value: auto
         steps:
           - |
             set -eu
