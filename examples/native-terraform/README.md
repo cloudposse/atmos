@@ -1,6 +1,7 @@
 ---
-asciicast: /casts/terraform/plan.cast
-asciicastTitle: atmos terraform plan
+cast:
+  file: /casts/demo/fixtures/native-terraform/plan.cast
+  title: atmos terraform plan
 ---
 
 # Native Terraform Migration Example

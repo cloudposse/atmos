@@ -1,6 +1,7 @@
 ---
-asciicast: /casts/examples/quick-start-simple.cast
-asciicastTitle: atmos quick start simple
+cast:
+  file: /casts/examples/quick-start-simple/list-and-plan.cast
+  title: atmos quick start simple
 ---
 
 # Example: Quick Start Simple

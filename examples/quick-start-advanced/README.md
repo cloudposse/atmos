@@ -1,6 +1,7 @@
 ---
-asciicast: /casts/examples/quick-start-advanced.cast
-asciicastTitle: atmos quick start advanced
+cast:
+  file: /casts/examples/quick-start-advanced/list-instances.cast
+  title: atmos quick start advanced
 ---
 
 # Atmos Quick Start (Advanced)

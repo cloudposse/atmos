@@ -1,6 +1,7 @@
 ---
-asciicast: /casts/emulator/aws-lifecycle.cast
-asciicastTitle: atmos emulator aws lifecycle
+cast:
+  file: /casts/examples/emulator-aws/lifecycle.cast
+  title: atmos emulator aws lifecycle
 ---
 
 ## Notes

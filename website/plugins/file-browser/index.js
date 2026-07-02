@@ -459,6 +459,7 @@ function scanExamples(sourceDir, options) {
 
     // Get description from README.
     const description = tree.readme ? extractDescription(tree.readme.content) : '';
+    const cast = readmeMetadata.data.cast || {};
 
     // Check for atmos.yaml.
     const hasAtmosYaml = tree.children.some(
@@ -475,8 +476,10 @@ function scanExamples(sourceDir, options) {
       featured: FEATURED.includes(entry.name),
       tags: TAGS_MAP[entry.name] || [],
       docs: DOCS_MAP[entry.name] || [],
-      asciicast: readmeMetadata.data.asciicast || '',
-      asciicastTitle: readmeMetadata.data.asciicastTitle || '',
+      cast: {
+        file: cast.file || '',
+        title: cast.title || '',
+      },
       root: tree,
     });
 

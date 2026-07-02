@@ -47,7 +47,7 @@ export default function DirectoryPage({
     ? `${exampleName} - ${sectionName}`
     : `${dirData.name} - ${exampleName}`;
   const isExampleRoot = dirData.path === exampleName;
-  const showCast = isExampleRoot && !!example.asciicast;
+  const showCast = isExampleRoot && !!example.cast?.file;
 
   return (
     <Layout title={pageTitle}>
@@ -67,8 +67,8 @@ export default function DirectoryPage({
           {showCast && (
             <div className={styles.castSection}>
               <CastPlayer
-                src={example.asciicast!}
-                title={example.asciicastTitle || example.name}
+                src={example.cast!.file!}
+                title={example.cast!.title || example.name}
                 chrome
                 controls
                 scrubber

@@ -29,21 +29,19 @@ var playCmd = &cobra.Command{
 
 var renderCmd = &cobra.Command{
 	Use:   "render <input.cast>",
-	Short: "Render an asciicast recording to SVG, GIF, or MP4",
+	Short: "Render an asciicast recording to GIF or MP4",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		svg, _ := cmd.Flags().GetString("svg")
 		gif, _ := cmd.Flags().GetString("gif")
 		mp4, _ := cmd.Flags().GetString("mp4")
-		if svg == "" && gif == "" && mp4 == "" {
+		if gif == "" && mp4 == "" {
 			return fmt.Errorf("%w", errUtils.ErrMissingRenderOutput)
 		}
-		return asciicast.Render(args[0], asciicast.RenderOptions{SVG: svg, GIF: gif, MP4: mp4})
+		return asciicast.Render(args[0], asciicast.RenderOptions{GIF: gif, MP4: mp4})
 	},
 }
 
 func init() {
-	renderCmd.Flags().String("svg", "", "Write animated SVG output to this path")
 	renderCmd.Flags().String("gif", "", "Write animated GIF output to this path")
 	renderCmd.Flags().String("mp4", "", "Write MP4 output to this path")
 	castCmd.AddCommand(playCmd, renderCmd)

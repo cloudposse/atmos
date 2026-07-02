@@ -150,7 +150,6 @@ func (h *CastHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Work
 	}
 	result := NewStepResult(rec.Path()).WithMetadata("cast", rec.Path())
 	if step.CastOutput != nil {
-		result.WithMetadata("svg", step.CastOutput.SVG)
 		result.WithMetadata("gif", step.CastOutput.GIF)
 		result.WithMetadata("mp4", step.CastOutput.MP4)
 	}
@@ -728,7 +727,6 @@ func renderCastOutputs(step *schema.WorkflowStep, castPath string) error {
 		return nil
 	}
 	return asciicast.Render(castPath, asciicast.RenderOptions{
-		SVG: step.CastOutput.SVG,
 		GIF: step.CastOutput.GIF,
 		MP4: step.CastOutput.MP4,
 	})

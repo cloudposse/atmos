@@ -1,6 +1,7 @@
 ---
-asciicast: /casts/vendor/pull.cast
-asciicastTitle: atmos vendor pull
+cast:
+  file: /casts/demo/fixtures/demo-vendoring/pull.cast
+  title: atmos vendor pull
 ---
 
 # Example: Demo Vendoring

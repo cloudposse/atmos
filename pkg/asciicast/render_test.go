@@ -26,19 +26,19 @@ func TestRenderNoTargetsSucceeds(t *testing.T) {
 }
 
 func TestRenderRejectsExistingOutputBeforeRendering(t *testing.T) {
-	output := filepath.Join(t.TempDir(), "out.svg")
+	output := filepath.Join(t.TempDir(), "out.gif")
 	if err := os.WriteFile(output, []byte("exists"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	err := Render("input.cast", RenderOptions{SVG: output})
+	err := Render("input.cast", RenderOptions{GIF: output})
 	if !errors.Is(err, ErrRenderOutputExists) {
 		t.Fatalf("expected output exists error, got %v", err)
 	}
 }
 
 func TestPrepareRenderOutputCreatesParentDirectories(t *testing.T) {
-	output := filepath.Join(t.TempDir(), "nested", "out.svg")
+	output := filepath.Join(t.TempDir(), "nested", "out.gif")
 	if err := prepareRenderOutput(output); err != nil {
 		t.Fatal(err)
 	}
@@ -48,11 +48,11 @@ func TestPrepareRenderOutputCreatesParentDirectories(t *testing.T) {
 }
 
 func TestRenderTargetsOrderAndTypes(t *testing.T) {
-	targets := renderTargets(RenderOptions{SVG: "out.svg", GIF: "out.gif", MP4: "out.mp4"})
-	if len(targets) != 3 {
+	targets := renderTargets(RenderOptions{GIF: "out.gif", MP4: "out.mp4"})
+	if len(targets) != 2 {
 		t.Fatalf("target count = %d", len(targets))
 	}
-	for i, want := range []string{"out.svg", "out.gif", "out.mp4"} {
+	for i, want := range []string{"out.gif", "out.mp4"} {
 		if targets[i].output != want {
 			t.Fatalf("target[%d] = %q, want %q", i, targets[i].output, want)
 		}
@@ -75,13 +75,6 @@ func TestRenderWithFakeAgg(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "agg:input.cast:") {
 		t.Fatalf("fake agg output = %q", content)
-	}
-}
-
-func TestRenderSVGReportsMissingRenderer(t *testing.T) {
-	err := Render("input.cast", RenderOptions{SVG: filepath.Join(t.TempDir(), "out.svg")})
-	if !errors.Is(err, ErrMissingSVGRenderer) {
-		t.Fatalf("expected missing svg renderer, got %v", err)
 	}
 }
 

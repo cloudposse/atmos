@@ -27,7 +27,7 @@ interface EmbedExampleProps {
   showReadme?: boolean;
   /** Whether to show the file listing. Default: true. */
   showFiles?: boolean;
-  /** Whether to show the example asciicast from README front matter. Default: true. */
+  /** Whether to show the example cast from README frontmatter. Default: true. */
   showCast?: boolean;
   /** Override the display title. */
   title?: string;
@@ -121,7 +121,7 @@ export default function EmbedExample({
   const readmeContent = exampleData.root.readme?.content;
   const files = collectFiles(exampleData.root, maxFiles);
   const exampleUrl = `${options.routeBasePath}/${exampleData.name}`;
-  const shouldShowCast = showCast && !!exampleData.asciicast;
+  const shouldShowCast = showCast && !!exampleData.cast?.file;
 
   return (
     <div className={styles.embedExample}>
@@ -141,8 +141,8 @@ export default function EmbedExample({
       {shouldShowCast && (
         <div className={styles.castSection}>
           <CastPlayer
-            src={exampleData.asciicast!}
-            title={exampleData.asciicastTitle || displayTitle}
+            src={exampleData.cast!.file!}
+            title={exampleData.cast!.title || displayTitle}
             chrome
             controls
             scrubber

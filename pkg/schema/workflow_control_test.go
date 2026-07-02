@@ -40,7 +40,7 @@ type: cast
 output:
   mode: raw
   cast: demo.cast
-  svg: demo.svg
+  gif: demo.gif
 steps:
   - name: list
     command: atmos list stacks
@@ -52,7 +52,7 @@ steps:
 	require.NotNil(t, step.CastOutput)
 	assert.Equal(t, "raw", step.CastOutput.Mode)
 	assert.Equal(t, "demo.cast", step.CastOutput.Cast)
-	assert.Equal(t, "demo.svg", step.CastOutput.SVG)
+	assert.Equal(t, "demo.gif", step.CastOutput.GIF)
 }
 
 func TestWorkflowStep_UnmarshalYAML_StructuredSimulatePromptAndCommandAnchor(t *testing.T) {

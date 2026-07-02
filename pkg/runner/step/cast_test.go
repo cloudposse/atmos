@@ -824,24 +824,24 @@ func TestCastHandlerExecuteReturnsRenderErrorsWithMetadata(t *testing.T) {
 	}
 	t.Setenv("PATH", t.TempDir())
 	castPath := filepath.Join(t.TempDir(), "demo.cast")
-	svgPath := filepath.Join(t.TempDir(), "demo.svg")
+	gifPath := filepath.Join(t.TempDir(), "demo.gif")
 
 	result, err := (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
 		Name: "demo",
 		Type: schema.TaskTypeCast,
 		CastOutput: &schema.CastOutput{
 			Cast: castPath,
-			SVG:  svgPath,
+			GIF:  gifPath,
 		},
 		Steps: []schema.WorkflowStep{{
 			Type: schema.TaskTypeSimulate,
 			Mode: "prompt",
 		}},
 	}, NewVariables())
-	if !errors.Is(err, asciicast.ErrMissingSVGRenderer) {
+	if !errors.Is(err, asciicast.ErrMissingAgg) {
 		t.Fatalf("expected render error, got %v", err)
 	}
-	if result == nil || result.Metadata["cast"] != castPath || result.Metadata["svg"] != svgPath {
+	if result == nil || result.Metadata["cast"] != castPath || result.Metadata["gif"] != gifPath {
 		t.Fatalf("unexpected result metadata: %#v", result)
 	}
 }
@@ -1213,9 +1213,9 @@ func TestRenderCastOutputs(t *testing.T) {
 		t.Fatalf("nil cast output should not render: %v", err)
 	}
 
-	err := renderCastOutputs(&schema.WorkflowStep{CastOutput: &schema.CastOutput{SVG: filepath.Join(t.TempDir(), "out.svg")}}, "input.cast")
-	if !errors.Is(err, asciicast.ErrMissingSVGRenderer) {
-		t.Fatalf("expected missing svg renderer, got %v", err)
+	err := renderCastOutputs(&schema.WorkflowStep{CastOutput: &schema.CastOutput{GIF: filepath.Join(t.TempDir(), "out.gif")}}, "input.cast")
+	if !errors.Is(err, asciicast.ErrMissingAgg) {
+		t.Fatalf("expected missing agg renderer, got %v", err)
 	}
 }
 

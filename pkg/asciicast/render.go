@@ -23,8 +23,6 @@ var (
 	ErrMissingAgg = errUtils.ErrMissingAgg
 	// ErrMissingFFmpeg indicates that the ffmpeg executable was not found.
 	ErrMissingFFmpeg = errUtils.ErrMissingFFmpeg
-	// ErrMissingSVGRenderer indicates that SVG output was requested without a supported renderer.
-	ErrMissingSVGRenderer = errUtils.ErrMissingSVGRenderer
 )
 
 // Event is one asciicast v2 event entry.
@@ -98,7 +96,6 @@ func Play(path string, out io.Writer) error {
 
 // RenderOptions selects the render outputs to generate from a cast file.
 type RenderOptions struct {
-	SVG string
 	GIF string
 	MP4 string
 }
@@ -127,10 +124,7 @@ type renderTarget struct {
 }
 
 func renderTargets(opts RenderOptions) []renderTarget {
-	targets := make([]renderTarget, 0, 3)
-	if opts.SVG != "" {
-		targets = append(targets, renderTarget{output: opts.SVG, render: renderSVG})
-	}
+	targets := make([]renderTarget, 0, 2)
 	if opts.GIF != "" {
 		targets = append(targets, renderTarget{output: opts.GIF, render: renderWithAgg})
 	}
@@ -149,10 +143,6 @@ func prepareRenderOutput(output string) error {
 		return nil
 	}
 	return os.MkdirAll(dir, castDirPerm)
-}
-
-func renderSVG(_, output string) error {
-	return fmt.Errorf("render %s: %w", output, ErrMissingSVGRenderer)
 }
 
 func renderWithAgg(input, output string) error {

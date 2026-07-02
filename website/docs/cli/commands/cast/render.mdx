@@ -3,7 +3,7 @@ title: atmos cast render
 sidebar_label: render
 sidebar_class_name: command
 id: render
-description: Render an asciicast recording to SVG, GIF, or MP4.
+description: Render an asciicast recording to GIF or MP4.
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
@@ -20,7 +20,7 @@ Use this command to render an asciicast recording to a publishable media file.
 ## Usage
 
 ```shell
-atmos cast render <input.cast> [--svg <file>] [--gif <file>] [--mp4 <file>]
+atmos cast render <input.cast> [--gif <file>] [--mp4 <file>]
 ```
 
 At least one output flag is required.
@@ -35,9 +35,6 @@ At least one output flag is required.
 ## Flags
 
 <dl>
-  <dt>`--svg`</dt>
-  <dd>Write animated SVG output to this path.</dd>
-
   <dt>`--gif`</dt>
   <dd>Write animated GIF output to this path.</dd>
 

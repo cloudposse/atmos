@@ -1,6 +1,7 @@
 ---
-asciicast: /casts/examples/custom-commands.cast
-asciicastTitle: atmos custom commands
+cast:
+  file: /casts/examples/custom-commands/hello-greet.cast
+  title: atmos custom commands
 ---
 
 # Custom Commands

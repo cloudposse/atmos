@@ -45,6 +45,14 @@ export interface DocLink {
 }
 
 /**
+ * Represents an asciicast demo associated with an example.
+ */
+export interface ExampleCast {
+  file?: string;
+  title?: string;
+}
+
+/**
  * Represents an example project.
  */
 export interface ExampleProject {
@@ -59,8 +67,7 @@ export interface ExampleProject {
   featured?: boolean;
   tags: string[];
   docs: DocLink[];
-  asciicast?: string;
-  asciicastTitle?: string;
+  cast?: ExampleCast;
   root: DirectoryNode;
 }
 

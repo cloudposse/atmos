@@ -1,6 +1,7 @@
 ---
-asciicast: /casts/examples/sops-secrets.cast
-asciicastTitle: atmos sops secrets lifecycle
+cast:
+  file: /casts/examples/sops-secrets/secret-lifecycle.cast
+  title: atmos sops secrets lifecycle
 ---
 
 # SOPS Secrets Example

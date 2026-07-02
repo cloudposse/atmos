@@ -1,6 +1,7 @@
 ---
-asciicast: /casts/examples/toolchain.cast
-asciicastTitle: atmos toolchain demo
+cast:
+  file: /casts/examples/toolchain/demo-convert.cast
+  title: atmos toolchain demo
 ---
 
 # Example: Toolchain
