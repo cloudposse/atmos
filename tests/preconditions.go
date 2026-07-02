@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -340,16 +341,13 @@ func RequireNetworkAccess(t *testing.T, url string) {
 func RequireExecutable(t *testing.T, name string, purpose string) {
 	t.Helper()
 
+	prependCachedTestTool(name)
+
 	if !ShouldCheckPreconditions() {
 		return
 	}
 
 	_, err := exec.LookPath(name)
-	if err != nil {
-		prependCachedTestTool(name)
-	}
-
-	_, err = exec.LookPath(name)
 	if err != nil {
 		t.Skipf("'%s' not found in PATH: required for %s. Install the tool or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
 			name, purpose)
@@ -573,5 +571,110 @@ func SkipOnDarwinARM64(t *testing.T, reason string) {
 	// Check if we're on darwin/arm64
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
 		t.Skipf("Skipping on darwin/arm64: %s. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to override", reason)
+	}
+}
+
+const (
+	// Container runtime names.
+	containerRuntimeDocker = "docker"
+	containerRuntimePodman = "podman"
+)
+
+// RequireContainerRuntime checks if a container runtime (Docker or Podman) is available.
+// It prefers Docker but will accept Podman if Docker is not available.
+// Returns the name of the available runtime ("docker" or "podman").
+func RequireContainerRuntime(t *testing.T) string {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return containerRuntimeDocker // Default assumption when checks are disabled
+	}
+
+	// Try Docker first
+	if cmd := exec.Command(containerRuntimeDocker, "version"); cmd.Run() == nil {
+		t.Logf("Container runtime available: Docker")
+		return containerRuntimeDocker
+	}
+
+	// Try Podman as fallback
+	if cmd := exec.Command(containerRuntimePodman, "version"); cmd.Run() == nil {
+		t.Logf("Container runtime available: Podman")
+		return containerRuntimePodman
+	}
+
+	t.Skipf("No container runtime available. Install Docker (https://docs.docker.com/get-docker/) or Podman (https://podman.io/getting-started/installation), or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	return ""
+}
+
+// RequireDocker checks if Docker is available and running.
+// Use this for tests that specifically require Docker (not Podman).
+func RequireDocker(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	// Check if docker command exists
+	_, err := exec.LookPath(containerRuntimeDocker)
+	if err != nil {
+		t.Skipf("Docker not found in PATH. Install Docker (https://docs.docker.com/get-docker/) or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	// Check if Docker daemon is running
+	cmd := exec.Command(containerRuntimeDocker, "info")
+	if err := cmd.Run(); err != nil {
+		t.Skipf("Docker daemon not running. Start Docker or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	t.Logf("Docker is available and running")
+}
+
+// RequirePodman checks if Podman is available and running.
+// Use this for tests that specifically require Podman (not Docker).
+func RequirePodman(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	// Check if podman command exists
+	_, err := exec.LookPath(containerRuntimePodman)
+	if err != nil {
+		t.Skipf("Podman not found in PATH. Install Podman (https://podman.io/getting-started/installation) or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	// Check if Podman is working
+	cmd := exec.Command(containerRuntimePodman, "info")
+	if err := cmd.Run(); err != nil {
+		t.Skipf("Podman not working properly. Check Podman installation or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	t.Logf("Podman is available and working")
+}
+
+// terraformRegistryErrorSignatures are substrings emitted by Terraform/OpenTofu when a
+// provider install fails because of a transient registry problem (HTTP 429 rate limiting,
+// registry unreachable) rather than a defect in the code under test.
+var terraformRegistryErrorSignatures = []string{
+	"Failed to install provider",
+	"Failed to query available provider packages",
+	"could not query provider registry",
+	"Too Many Requests",
+}
+
+// SkipIfTerraformRegistryError skips the test when the captured Terraform/OpenTofu output
+// shows a transient provider-registry failure (for example, an HTTP 429 rate limit from
+// registry.terraform.io). These failures are environmental, not regressions, so the repo
+// treats them as skips, mirroring the Packer init network-failure handling. Pass the
+// captured command output (stdout/stderr) collected while running the Terraform subcommand.
+func SkipIfTerraformRegistryError(t *testing.T, output string) {
+	t.Helper()
+
+	for _, sig := range terraformRegistryErrorSignatures {
+		if strings.Contains(output, sig) {
+			t.Skipf("Skipping: transient Terraform provider registry error detected in output (%q)", sig)
+		}
 	}
 }

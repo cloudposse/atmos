@@ -152,13 +152,14 @@ func injectTerraformStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, in
 	storeAutoDetectedIdentity(authManager, info)
 
 	resolver := authbridge.NewResolver(authManager, info)
-	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, storeDefaultIdentity(info.Identity))
+	defaultIdentity := resolveStoreDefaultIdentity(info.Identity, authManager)
+	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, defaultIdentity)
 
 	// Also expose the resolver to cloud-KMS SOPS providers so `!secret` resolution during terraform
 	// authenticates KMS decrypt as the component's effective identity (issue #2637).
 	atmosConfig.SecretsAuth = &store.SecretsAuthContext{
 		Resolver:        resolver,
-		DefaultIdentity: storeDefaultIdentity(info.Identity),
+		DefaultIdentity: defaultIdentity,
 	}
 }
 
@@ -169,6 +170,49 @@ func storeDefaultIdentity(identity string) string {
 	default:
 		return identity
 	}
+}
+
+// resolveStoreDefaultIdentity returns the identity that stores without their own
+// `identity:` should authenticate as. An explicit `--identity`/`ATMOS_IDENTITY`
+// wins; otherwise we fall back to the stack's `default: true` identity so
+// in-process store/secret reads use the same principal (and emulator endpoint) as
+// the Terraform subprocess. When there is no default identity (or auth is
+// disabled), this returns "" — stores then use the AWS/GCP/Azure default
+// credential chain exactly as before (back-compat for ambient real-cloud creds).
+func resolveStoreDefaultIdentity(identity string, authManager auth.AuthManager) string {
+	if identity == cfg.IdentityFlagDisabledValue {
+		return ""
+	}
+	if explicit := storeDefaultIdentity(identity); explicit != "" {
+		return explicit
+	}
+	if authManager == nil {
+		return ""
+	}
+	defaultIdentity, err := authManager.GetDefaultIdentity(false)
+	if err != nil {
+		return ""
+	}
+	return defaultIdentity
+}
+
+// HookStoreDefaultIdentity resolves the identity that identity-less stores invoked by terraform
+// lifecycle hooks (e.g. the after-apply `store-outputs` hook) should inherit. It mirrors the main
+// terraform path (injectTerraformStoreAuthResolver): it auto-detects the active identity from the
+// auth manager's chain when info carries no explicit identity, then normalizes empty/select/disabled
+// to "" (meaning "no inheritance — keep ambient/default SDK credentials"). It returns "" when no auth
+// manager is present, preserving the prior behavior for runs without Atmos auth.
+//
+// The hook executes in a freshly loaded config (prepareHookContext), so it must re-derive this from
+// the persisted auth manager rather than relying on the apply-phase config.
+func HookStoreDefaultIdentity(authManager auth.AuthManager, info *schema.ConfigAndStacksInfo) string {
+	defer perf.Track(nil, "exec.HookStoreDefaultIdentity")()
+
+	if authManager == nil || info == nil {
+		return ""
+	}
+	storeAutoDetectedIdentity(authManager, info)
+	return storeDefaultIdentity(info.Identity)
 }
 
 // SetupTerraformAuthForCLI exposes terraform auth setup to command-layer callers
@@ -289,6 +333,9 @@ func printAndWriteVarFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 	if err := logAndWriteComponentVars(atmosConfig, info); err != nil {
 		return err
 	}
+	if err := writeTerraformTestVars(atmosConfig, info); err != nil {
+		return err
+	}
 
 	return logCliVarsOverrides(atmosConfig, info)
 }
@@ -315,12 +362,16 @@ func computeTerraformSecretVarKeys(info *schema.ConfigAndStacksInfo) {
 // so resolved secrets are never written to the on-disk varfile. Returns the original map
 // unchanged when no secret-bearing variables were detected.
 func diskSafeVars(info *schema.ConfigAndStacksInfo) map[string]any {
-	if len(info.TerraformSecretVarKeys) == 0 {
+	testSecretVars := terraformTestSecretVars(info)
+	if len(info.TerraformSecretVarKeys) == 0 && len(testSecretVars) == 0 {
 		return info.ComponentVarsSection
 	}
 	safe := make(map[string]any, len(info.ComponentVarsSection))
 	for k, v := range info.ComponentVarsSection {
 		if info.TerraformSecretVarKeys[k] {
+			continue
+		}
+		if _, collidesWithSecretTestVar := testSecretVars[k]; collidesWithSecretTestVar {
 			continue
 		}
 		safe[k] = v
@@ -339,6 +390,51 @@ func secretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
 		if v, ok := info.ComponentVarsSection[k]; ok {
 			secret[k] = v
 		}
+	}
+	return tfvars.SecretEnv(secret)
+}
+
+func terraformTestVars(info *schema.ConfigAndStacksInfo) map[string]any {
+	if info == nil || info.SubCommand != "test" {
+		return nil
+	}
+	testSection, ok := info.ComponentSection[cfg.TestSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+	vars, ok := testSection[cfg.VarsSectionName].(map[string]any)
+	if !ok || len(vars) == 0 {
+		return nil
+	}
+	return vars
+}
+
+func hasTerraformTestVars(info *schema.ConfigAndStacksInfo) bool {
+	return len(terraformTestVars(info)) > 0
+}
+
+func diskSafeTerraformTestVars(info *schema.ConfigAndStacksInfo) map[string]any {
+	vars := terraformTestVars(info)
+	if len(vars) == 0 {
+		return nil
+	}
+	safe, _ := tfvars.Partition(vars, atmosio.ContainsSecret)
+	return safe
+}
+
+func terraformTestSecretVars(info *schema.ConfigAndStacksInfo) map[string]any {
+	vars := terraformTestVars(info)
+	if len(vars) == 0 {
+		return nil
+	}
+	_, secret := tfvars.Partition(vars, atmosio.ContainsSecret)
+	return secret
+}
+
+func terraformTestSecretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
+	secret := terraformTestSecretVars(info)
+	if len(secret) == 0 {
+		return nil, nil
 	}
 	return tfvars.SecretEnv(secret)
 }
@@ -364,6 +460,18 @@ func logAndWriteComponentVars(atmosConfig *schema.AtmosConfiguration, info *sche
 		}
 	}
 	return nil
+}
+
+func writeTerraformTestVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if !hasTerraformTestVars(info) {
+		return nil
+	}
+	varFilePath := constructTerraformComponentTestVarfilePath(atmosConfig, info)
+	log.Debug("Writing Terraform test variables", "file", varFilePath)
+	if info.DryRun {
+		return nil
+	}
+	return u.WriteToFileAsJSON(varFilePath, diskSafeTerraformTestVars(info), filePermissions)
 }
 
 // logCliVarsOverrides logs CLI variable overrides when present at debug/trace level.
@@ -519,6 +627,15 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 	if len(secretEnv) > 0 {
 		info.ComponentEnvList = append(info.ComponentEnvList, secretEnv...)
 		log.Debug("Injecting secret variables as TF_VAR_* environment variables", "count", len(secretEnv))
+	}
+
+	testSecretEnv, err := terraformTestSecretVarEnv(info)
+	if err != nil {
+		return err
+	}
+	if len(testSecretEnv) > 0 {
+		info.ComponentEnvList = append(info.ComponentEnvList, testSecretEnv...)
+		log.Debug("Injecting secret Terraform test variables as TF_VAR_* environment variables", "count", len(testSecretEnv))
 	}
 
 	return nil

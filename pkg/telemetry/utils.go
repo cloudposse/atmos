@@ -35,7 +35,7 @@ func CaptureCmd(cmd *cobra.Command, err ...error) {
 // formatting if a message is returned.
 func PrintTelemetryDisclosure() {
 	if message := disclosureMessage(); message != "" {
-		utils.PrintfMarkdownToTUI("%s", message)
+		utils.PrintfMarkdownToTUIWithoutWordWrap("%s", message)
 	}
 }
 

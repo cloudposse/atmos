@@ -6,11 +6,15 @@ sidebar_class_name: command
 description: Configure Ansible components in your Atmos stack manifests for configuration management and automation.
 id: ansible
 ---
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
 
 <Intro>
-Ansible components run Ansible playbooks for configuration management and infrastructure automation. They allow you to manage playbook execution with the same stack-based configuration approach used for Terraform, Helmfile, and Packer.
+  Ansible components run Ansible playbooks for configuration management and
+  infrastructure automation. They allow you to manage playbook execution with
+  the same stack-based configuration approach used for Terraform, Helmfile, and
+  Packer.
 </Intro>
 
 ## Available Configuration Sections
@@ -21,17 +25,20 @@ Ansible components support the common configuration sections:
   <dt>[`vars`](/stacks/vars)</dt>
   <dd>Variables passed to ansible via `--extra-vars`.</dd>
 
-  <dt>[`env`](/stacks/env)</dt>
-  <dd>Environment variables during execution.</dd>
+<dt>[`env`](/stacks/env)</dt>
+<dd>Environment variables during execution.</dd>
 
-  <dt>[`settings`](/stacks/settings)</dt>
-  <dd>Integrations, metadata, and Ansible-specific settings like playbook and inventory.</dd>
+<dt>[`settings`](/stacks/settings)</dt>
+<dd>
+  Integrations, metadata, and Ansible-specific settings like playbook and
+  inventory.
+</dd>
 
-  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
-  <dd>Component behavior and inheritance.</dd>
+<dt>[`metadata`](/stacks/components/component-metadata)</dt>
+<dd>Component behavior and inheritance.</dd>
 
-  <dt>[`command`](/stacks/command)</dt>
-  <dd>Override ansible binary.</dd>
+<dt>[`command`](/stacks/command)</dt>
+<dd>Override ansible binary.</dd>
 
   <dt>[`hooks`](/stacks/hooks)</dt>
   <dd>Lifecycle event handlers.</dd>
@@ -118,8 +125,8 @@ components:
     webserver:
       settings:
         ansible:
-          playbook: site.yml            # Default playbook
-          inventory: inventory/production  # Default inventory
+          playbook: site.yml # Default playbook
+          inventory: inventory/production # Default inventory
 ```
 
 ## Component-Type Defaults
@@ -185,6 +192,7 @@ components:
           inventory: inventory/production
         depends_on:
           - component: webserver
+
 ```
 </File>
 
@@ -230,17 +238,17 @@ Common environment variables for Ansible components:
   <dt>`ANSIBLE_HOST_KEY_CHECKING`</dt>
   <dd>Disable SSH host key checking (set to `false`).</dd>
 
-  <dt>`ANSIBLE_FORCE_COLOR`</dt>
-  <dd>Force colored output (set to `true`).</dd>
+<dt>`ANSIBLE_FORCE_COLOR`</dt>
+<dd>Force colored output (set to `true`).</dd>
 
-  <dt>`ANSIBLE_CONFIG`</dt>
-  <dd>Path to Ansible configuration file.</dd>
+<dt>`ANSIBLE_CONFIG`</dt>
+<dd>Path to Ansible configuration file.</dd>
 
-  <dt>`ANSIBLE_VAULT_PASSWORD_FILE`</dt>
-  <dd>Path to Ansible Vault password file.</dd>
+<dt>`ANSIBLE_VAULT_PASSWORD_FILE`</dt>
+<dd>Path to Ansible Vault password file.</dd>
 
-  <dt>`ANSIBLE_ROLES_PATH`</dt>
-  <dd>Additional paths to search for roles.</dd>
+<dt>`ANSIBLE_ROLES_PATH`</dt>
+<dd>Additional paths to search for roles.</dd>
 
   <dt>`ANSIBLE_COLLECTIONS_PATH`</dt>
   <dd>Paths to search for collections.</dd>

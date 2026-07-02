@@ -79,9 +79,24 @@ func (p *PodmanRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	return nil
 }
 
+// EnsureNetwork idempotently creates a user-defined podman network. It implements
+// NetworkEnsurer so emulators in a stack can share a network and resolve each
+// other by component name.
+func (p *PodmanRuntime) EnsureNetwork(ctx context.Context, name string) error {
+	defer perf.Track(nil, "container.PodmanRuntime.EnsureNetwork")()
+
+	cmd := p.command(ctx, "network", "create", name)
+	output, err := cmd.CombinedOutput()
+	return networkCreateResult(err, string(output))
+}
+
 // Create creates a new container.
 func (p *PodmanRuntime) Create(ctx context.Context, config *CreateConfig) (string, error) {
 	defer perf.Track(nil, "container.PodmanRuntime.Create")()
+
+	if err := prepareHostRuntime(ctx, p, config); err != nil {
+		return "", err
+	}
 
 	args := buildCreateArgs(config)
 
@@ -239,8 +254,95 @@ func parsePodmanContainer(containerJSON map[string]interface{}) Info {
 	if labels, ok := containerJSON["Labels"].(map[string]interface{}); ok {
 		info.Labels = parseLabelsMap(labels)
 	}
+	if raw, ok := containerJSON["Ports"]; ok {
+		info.Ports = parsePodmanPorts(raw)
+	}
 
 	return info
+}
+
+// parsePodmanPorts extracts published port bindings from a podman `ps --format json`
+// record. Podman represents ports as a structured array with snake_case keys
+// (host_port/container_port/protocol), unlike docker's `ps` string column parsed by
+// parseDockerPorts. Without this, Info.Ports is empty under podman and emulator
+// endpoint resolution yields an empty URL (see pkg/emulator manager.endpoint), so
+// Terraform falls back to real cloud endpoints.
+func parsePodmanPorts(raw interface{}) []PortBinding {
+	if containerJSON, ok := raw.(map[string]interface{}); ok {
+		raw = containerJSON["Ports"]
+	}
+	entries, ok := raw.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	var ports []PortBinding
+	seen := make(map[PortBinding]struct{})
+	for _, entry := range entries {
+		binding, span, ok := parsePodmanPort(entry)
+		if !ok {
+			continue
+		}
+		if span <= 0 {
+			span = 1
+		}
+		// Expand consecutive host/container ports within the range.
+		for i := 0; i < span; i++ {
+			expanded := PortBinding{
+				ContainerPort: binding.ContainerPort + i,
+				HostPort:      binding.HostPort + i,
+				Protocol:      binding.Protocol,
+			}
+			if _, dup := seen[expanded]; dup {
+				continue
+			}
+			seen[expanded] = struct{}{}
+			ports = append(ports, expanded)
+		}
+	}
+
+	return ports
+}
+
+// parsePodmanPort converts one podman port entry into a PortBinding and the
+// port range span. Unpublished ports (host_port 0) are skipped; a missing
+// protocol defaults to tcp. The span field reflects Podman's `range` key for
+// consecutive port ranges; callers must expand [base, base+span) themselves.
+func parsePodmanPort(entry interface{}) (PortBinding, int, bool) {
+	m, ok := entry.(map[string]interface{})
+	if !ok {
+		return PortBinding{}, 0, false
+	}
+	hostPort := jsonFieldInt(m["host_port"])
+	containerPort := jsonFieldInt(m["container_port"])
+	if hostPort == 0 || containerPort == 0 {
+		return PortBinding{}, 0, false
+	}
+	protocol, _ := m["protocol"].(string)
+	if protocol == "" {
+		protocol = "tcp"
+	}
+	span := jsonFieldInt(m["range"])
+	if span <= 0 {
+		span = 1
+	}
+	return PortBinding{ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, span, true
+}
+
+// JsonFieldInt coerces a JSON-decoded numeric field to an int. The json.Unmarshal
+// call into interface{} yields float64 for numbers; int and json.Number are handled defensively.
+func jsonFieldInt(v interface{}) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case json.Number:
+		i, _ := n.Int64()
+		return int(i)
+	default:
+		return 0
+	}
 }
 
 // podmanHealth extracts the health state from a podman ps record. Podman embeds

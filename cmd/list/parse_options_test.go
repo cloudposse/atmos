@@ -172,6 +172,61 @@ func TestParseSourcesOptions(t *testing.T) {
 	})
 }
 
+// TestParseDependenciesOptions verifies the viper→options mapping for
+// `list dependencies`, including the optional positional component arg and the
+// --direction default.
+func TestParseDependenciesOptions(t *testing.T) {
+	buildCmd := func() *cobra.Command {
+		cmd := &cobra.Command{Use: "dependencies"}
+		dependenciesParser.RegisterFlags(cmd)
+		return cmd
+	}
+
+	t.Run("defaults_no_args", func(t *testing.T) {
+		cmd := buildCmd()
+		v := bindFlagsToViper(t, cmd, dependenciesParser)
+
+		opts := parseDependenciesOptions(cmd, v, nil)
+
+		assert.Equal(t, "", opts.Format)
+		assert.Equal(t, "both", opts.Direction, "direction defaults to both")
+		assert.Equal(t, "", opts.Component, "no positional arg → empty component filter")
+		assert.True(t, opts.ProcessTemplates)
+		assert.True(t, opts.ProcessFunctions)
+		assert.Empty(t, opts.Skip)
+	})
+
+	t.Run("component_from_args", func(t *testing.T) {
+		cmd := buildCmd()
+		v := bindFlagsToViper(t, cmd, dependenciesParser)
+
+		opts := parseDependenciesOptions(cmd, v, []string{"vpc"})
+
+		assert.Equal(t, "vpc", opts.Component, "args[0] becomes the component filter")
+	})
+
+	t.Run("explicit_flags", func(t *testing.T) {
+		cmd := buildCmd()
+		setFlag(t, cmd, "format", "json")
+		setFlag(t, cmd, "direction", "forward")
+		setFlag(t, cmd, "stack", "plat-ue2-dev")
+		setFlag(t, cmd, "process-templates", "false")
+		setFlag(t, cmd, "process-functions", "false")
+		setFlag(t, cmd, "skip", "terraform.state")
+		v := bindFlagsToViper(t, cmd, dependenciesParser)
+
+		opts := parseDependenciesOptions(cmd, v, []string{"app"})
+
+		assert.Equal(t, "json", opts.Format)
+		assert.Equal(t, "forward", opts.Direction)
+		assert.Equal(t, "plat-ue2-dev", opts.Stack)
+		assert.Equal(t, "app", opts.Component)
+		assert.False(t, opts.ProcessTemplates)
+		assert.False(t, opts.ProcessFunctions)
+		assert.Equal(t, []string{"terraform.state"}, opts.Skip)
+	})
+}
+
 // TestParseStacksOptions verifies the viper→options mapping for
 // `list stacks`.
 func TestParseStacksOptions(t *testing.T) {

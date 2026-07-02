@@ -125,18 +125,33 @@ func containerStepAction(step *schema.WorkflowStep) string {
 	return action
 }
 
+// effectiveBuildStep resolves the build config from the step's `with:` block
+// (step.Build), falling the cross-cutting execution modifiers (provider,
+// runtime_auto_start) through from the step level — consistent with run/inspect.
 func effectiveBuildStep(step *schema.WorkflowStep) schema.ContainerBuildStep {
-	if step.Build == nil {
-		return schema.ContainerBuildStep{}
+	build := schema.ContainerBuildStep{}
+	if step.Build != nil {
+		build = *step.Build
 	}
-	return *step.Build
+	if build.Provider == "" {
+		build.Provider = step.Provider
+	}
+	build.RuntimeAutoStart = build.RuntimeAutoStart || step.RuntimeAutoStart
+	return build
 }
 
+// effectivePushStep resolves the push config from the step's `with:` block
+// (step.Push), falling provider/runtime_auto_start through from the step level.
 func effectivePushStep(step *schema.WorkflowStep) schema.ContainerPushStep {
-	if step.Push == nil {
-		return schema.ContainerPushStep{}
+	push := schema.ContainerPushStep{}
+	if step.Push != nil {
+		push = *step.Push
 	}
-	return *step.Push
+	if push.Provider == "" {
+		push.Provider = step.Provider
+	}
+	push.RuntimeAutoStart = push.RuntimeAutoStart || step.RuntimeAutoStart
+	return push
 }
 
 func defaultString(value, fallback string) string {

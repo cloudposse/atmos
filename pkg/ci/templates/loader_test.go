@@ -221,6 +221,7 @@ func TestLoaderGetComponentOverrides(t *testing.T) {
 		CI: schema.CIConfig{
 			Templates: schema.CITemplatesConfig{
 				Terraform: map[string]string{"plan": "custom-plan.md"},
+				Helm:      map[string]string{"apply": "custom-helm-apply.md"},
 				Helmfile:  map[string]string{"diff": "custom-diff.md"},
 			},
 		},
@@ -234,6 +235,7 @@ func TestLoaderGetComponentOverrides(t *testing.T) {
 		wantValue     string
 	}{
 		{"terraform", "plan", "custom-plan.md"},
+		{"helm", "apply", "custom-helm-apply.md"},
 		{"helmfile", "diff", "custom-diff.md"},
 		{"unknown", "", ""},
 	}

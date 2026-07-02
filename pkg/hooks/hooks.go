@@ -13,9 +13,12 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform" // Register terraform CI plugin.
-	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic" // Register generic CI provider.
-	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"  // Register GitHub Actions CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helm"       // Register helm CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helmfile"   // Register helmfile CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/kubernetes" // Register kubernetes CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"  // Register terraform CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic"  // Register generic CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"   // Register GitHub Actions CI provider.
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -73,8 +76,9 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 	// here would fail. The hooks section itself is static config (event names,
 	// commands, store names) and does not use YAML functions.
 	sections, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
-		Component: info.ComponentFromArg,
-		Stack:     info.Stack,
+		Component:     info.ComponentFromArg,
+		Stack:         info.Stack,
+		ComponentType: info.ComponentType,
 		// Hook discovery only needs static hook metadata; avoid template rendering
 		// here to prevent pre-auth side effects during command preflight.
 		ProcessTemplates:     false,
@@ -590,8 +594,12 @@ func (h *Hooks) resolveDeps(atmosConfig *schema.AtmosConfiguration, info *schema
 	}
 
 	resolver := dependencies.NewResolver(atmosConfig)
+	componentType := info.ComponentType
+	if componentType == "" {
+		componentType = cfg.TerraformComponentType
+	}
 	deps, err := resolver.ResolveComponentDependencies(
-		cfg.TerraformComponentType,
+		componentType,
 		stackSection,
 		componentSection,
 	)
@@ -679,6 +687,9 @@ func (h *Hooks) verifyHookBinary(name string, hook *Hook) error {
 	// rather than mid-lifecycle.
 	if hook.Kind == stepKindName {
 		return verifyStepHookType(name, hook.Type)
+	}
+	if hook.Kind == stepsKindName {
+		return verifyStepsHookTypes(name, hook)
 	}
 	resolved := kind.ResolveDefaults(hook)
 	if resolved.Command == "" {

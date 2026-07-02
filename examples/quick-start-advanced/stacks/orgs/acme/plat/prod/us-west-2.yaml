@@ -1,3 +1,23 @@
 import:
+  - catalog/backend
   - orgs/acme/plat/prod/_defaults
   - mixins/region/us-west-2
+
+components:
+  terraform:
+    s3-bucket:
+      vars:
+        # Never let `terraform destroy` silently delete a non-empty prod bucket.
+        force_destroy: false
+        # Required in prod (enforced by the s3-bucket OPA policy; see configure-validation).
+        versioning_enabled: true
+    kms-key:
+      vars:
+        # Longest window AWS allows, so an accidental key deletion is recoverable.
+        deletion_window_in_days: 30
+        # Rotate prod keys annually.
+        enable_key_rotation: true
+    sqs-queue:
+      vars:
+        # Retain messages for 14 days (AWS maximum) to survive prod incidents.
+        message_retention_seconds: 1209600

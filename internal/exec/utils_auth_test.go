@@ -441,6 +441,90 @@ func TestStoreAutoDetectedIdentity(t *testing.T) {
 	}
 }
 
+func TestHookStoreDefaultIdentity(t *testing.T) {
+	tests := []struct {
+		name             string
+		setupMock        func(ctrl *gomock.Controller) *mockTypes.MockAuthManager
+		nilManager       bool
+		initialIdentity  string
+		expectedReturn   string
+		expectedIdentity string // info.Identity after the call (auto-detect may populate it).
+	}{
+		{
+			name:             "nil manager returns empty (ambient/default credentials preserved)",
+			nilManager:       true,
+			initialIdentity:  "",
+			expectedReturn:   "",
+			expectedIdentity: "",
+		},
+		{
+			name:            "no explicit identity inherits the auto-detected chain leaf",
+			initialIdentity: "",
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{"permission-set", "core-identity/devops"})
+				return m
+			},
+			expectedReturn:   "core-identity/devops",
+			expectedIdentity: "core-identity/devops",
+		},
+		{
+			name:            "empty chain yields no inheritance",
+			initialIdentity: "",
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{})
+				return m
+			},
+			expectedReturn:   "",
+			expectedIdentity: "",
+		},
+		{
+			name:             "explicit identity is preserved without consulting the chain",
+			initialIdentity:  "cli-admin",
+			setupMock:        mockTypes.NewMockAuthManager, // GetChain must NOT be called.
+			expectedReturn:   "cli-admin",
+			expectedIdentity: "cli-admin",
+		},
+		{
+			name:            "interactive select sentinel resolves to the chain leaf",
+			initialIdentity: cfg.IdentityFlagSelectValue,
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{"core-identity/managers"})
+				return m
+			},
+			expectedReturn:   "core-identity/managers",
+			expectedIdentity: "core-identity/managers",
+		},
+		{
+			name:             "disabled sentinel yields no inheritance",
+			initialIdentity:  cfg.IdentityFlagDisabledValue,
+			setupMock:        mockTypes.NewMockAuthManager, // GetChain must NOT be called.
+			expectedReturn:   "",
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+
+			info := &schema.ConfigAndStacksInfo{Identity: tt.initialIdentity}
+
+			var got string
+			if tt.nilManager {
+				got = HookStoreDefaultIdentity(nil, info)
+			} else {
+				got = HookStoreDefaultIdentity(tt.setupMock(ctrl), info)
+			}
+
+			assert.Equal(t, tt.expectedReturn, got, "returned default identity")
+			assert.Equal(t, tt.expectedIdentity, info.Identity, "info.Identity after call")
+		})
+	}
+}
+
 func TestGetMergedAuthConfig_EmptyStackOrComponent(t *testing.T) {
 	// When stack is empty, should return global auth config without calling ExecuteDescribeComponent.
 	atmosConfig := &schema.AtmosConfiguration{
@@ -606,6 +690,24 @@ func TestGetMergedAuthConfigWithFetcher_ComponentConfigSuccess(t *testing.T) {
 				},
 			},
 		}, nil
+	}
+
+	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
+func TestGetMergedAuthConfigWithFetcher_PassesComponentType(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		ComponentFromArg: "demo",
+		ComponentType:    cfg.HelmComponentType,
+	}
+
+	mockFetcher := func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+		assert.Equal(t, cfg.HelmComponentType, params.ComponentType)
+		return map[string]any{}, nil
 	}
 
 	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)

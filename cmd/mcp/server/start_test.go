@@ -2,9 +2,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	stdio "io"
 	"net"
 	"net/http"
 	"os"
@@ -24,9 +26,42 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/mcp"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+type mcpServerTestStreams struct {
+	stdin  stdio.Reader
+	stdout stdio.Writer
+	stderr stdio.Writer
+}
+
+func (s *mcpServerTestStreams) Input() stdio.Reader     { return s.stdin }
+func (s *mcpServerTestStreams) Output() stdio.Writer    { return s.stdout }
+func (s *mcpServerTestStreams) Error() stdio.Writer     { return s.stderr }
+func (s *mcpServerTestStreams) RawOutput() stdio.Writer { return s.stdout }
+func (s *mcpServerTestStreams) RawError() stdio.Writer  { return s.stderr }
+
+func setupMCPServerCapturedUI(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	stderr := &bytes.Buffer{}
+	streams := &mcpServerTestStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: &bytes.Buffer{},
+		stderr: stderr,
+	}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(func() {
+		ui.Reset()
+	})
+
+	return stderr
+}
 
 // createTestAtmosConfig creates a test AtmosConfiguration with the given AI tool settings.
 func createTestAtmosConfig(yoloMode bool, requireConfirmation *bool) *schema.AtmosConfiguration {
@@ -61,7 +96,17 @@ func TestStartCmd_BasicProperties(t *testing.T) {
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Long)
 	assert.NotEmpty(t, cmd.Example)
+	assert.NotNil(t, cmd.Args)
 	assert.NotNil(t, cmd.RunE)
+}
+
+func TestStartCmd_RejectsTrailingArgs(t *testing.T) {
+	require.NotNil(t, startCmd.Args)
+
+	err := startCmd.Args(startCmd, []string{"list", "dependencies"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unknown command "list" for "mcp start"`)
 }
 
 // TestStartCmd_Flags tests that all expected flags are properly defined.
@@ -368,6 +413,42 @@ func TestWaitForShutdown_SignalReceived(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.True(t, cancelCalled, "cancel function should have been called")
+}
+
+func TestWaitForShutdownWithStopMessage_SignalReceived(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	errChan := make(chan error, 1)
+	cancelCalled := false
+	stopCalled := false
+	cancel := func() { cancelCalled = true }
+
+	sigChan <- os.Interrupt
+
+	err := waitForShutdownWithStopMessage(sigChan, errChan, cancel, func() {
+		stopCalled = true
+	})
+
+	assert.NoError(t, err)
+	assert.True(t, cancelCalled)
+	assert.True(t, stopCalled)
+}
+
+func TestWaitForShutdownWithStopMessage_ServerReturn(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	errChan := make(chan error, 1)
+	cancelCalled := false
+	stopCalled := false
+	cancel := func() { cancelCalled = true }
+
+	errChan <- nil
+
+	err := waitForShutdownWithStopMessage(sigChan, errChan, cancel, func() {
+		stopCalled = true
+	})
+
+	assert.NoError(t, err)
+	assert.False(t, cancelCalled)
+	assert.True(t, stopCalled)
 }
 
 // TestWaitForShutdown_SIGTERMReceived tests waitForShutdown when SIGTERM is received.
@@ -1287,11 +1368,12 @@ func TestWaitForShutdown_RaceCondition(t *testing.T) {
 	// The function should handle one of them.
 	err := waitForShutdown(sigChan, errChan, cancel)
 
-	// Either signal or error should be handled.
-	// If signal was handled, cancel should be true and err should be nil.
-	// If error was handled, cancel should be false and err should contain the error.
+	// Either signal or error should be handled. If signal is handled first, the
+	// graceful shutdown wait may still return the buffered server error.
 	if cancelCalled {
-		assert.NoError(t, err)
+		if err != nil {
+			assert.Contains(t, err.Error(), "test error")
+		}
 	} else {
 		assert.Error(t, err)
 	}
@@ -2384,10 +2466,13 @@ func TestWaitForShutdown_ConcurrentSignalAndError(t *testing.T) {
 			err := waitForShutdown(sigChan, errChan, cancel)
 
 			// Either:
-			// 1. Signal was handled: cancelCalled=true, err=nil
-			// 2. Error was handled: cancelCalled=false, err!=nil
+			// 1. Signal was handled first: cancelCalled=true. The graceful
+			//    shutdown wait may still observe the queued server error.
+			// 2. Error was handled first: cancelCalled=false, err!=nil.
 			if cancelCalled {
-				assert.NoError(t, err)
+				if err != nil {
+					assert.Contains(t, err.Error(), "concurrent error")
+				}
 			} else {
 				assert.Error(t, err)
 			}
@@ -2992,7 +3077,14 @@ func createTestAtmosDir(t *testing.T, aiEnabled, toolsEnabled bool) string {
 // Returns the temp directory path.
 func createTestAtmosDirWithMCP(t *testing.T, mcpEnabled, aiEnabled, toolsEnabled bool) string {
 	t.Helper()
+	stackContent := `components:
+  terraform: {}
+`
+	return createTestAtmosDirWithMCPStackContent(t, mcpEnabled, aiEnabled, toolsEnabled, &stackContent)
+}
 
+func createTestAtmosDirWithMCPStackContent(t *testing.T, mcpEnabled, aiEnabled, toolsEnabled bool, stackContent *string) string {
+	t.Helper()
 	tmpDir := t.TempDir()
 
 	// Create directories for stacks and components.
@@ -3003,12 +3095,10 @@ func createTestAtmosDirWithMCP(t *testing.T, mcpEnabled, aiEnabled, toolsEnabled
 	err = os.MkdirAll(componentsDir, 0o755)
 	require.NoError(t, err)
 
-	// Create a minimal valid stack file.
-	stackContent := `components:
-  terraform: {}
-`
-	err = os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(stackContent), 0o644)
-	require.NoError(t, err)
+	if stackContent != nil {
+		err = os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(*stackContent), 0o644)
+		require.NoError(t, err)
+	}
 
 	// Create atmos.yaml.
 	atmosConfig := fmt.Sprintf(`
@@ -3036,6 +3126,22 @@ components:
 	return tmpDir
 }
 
+func createTestAtmosDirWithNoStacks(t *testing.T) string {
+	t.Helper()
+	return createTestAtmosDirWithMCPStackContent(t, true, true, true, nil)
+}
+
+func createTestAtmosDirWithBrokenStackImport(t *testing.T) string {
+	t.Helper()
+	stackContent := `import:
+  - catalog/missing
+
+components:
+  terraform: {}
+`
+	return createTestAtmosDirWithMCPStackContent(t, true, true, true, &stackContent)
+}
+
 // TestSetupMCPServer_MCPNotEnabled tests setupMCPServer when MCP is not enabled.
 func TestSetupMCPServer_MCPNotEnabled(t *testing.T) {
 	tmpDir := createTestAtmosDirWithMCP(t, false, true, true)
@@ -3060,6 +3166,26 @@ func TestSetupMCPServer_AINotEnabled(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, server)
 	assert.True(t, errors.Is(err, errUtils.ErrAINotEnabled))
+}
+
+func TestSetupMCPServer_StartsWithoutStackManifests(t *testing.T) {
+	tmpDir := createTestAtmosDirWithNoStacks(t)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+
+	server, err := setupMCPServer()
+
+	require.NoError(t, err)
+	assert.NotNil(t, server)
+}
+
+func TestSetupMCPServer_StartsWithBrokenStackImport(t *testing.T) {
+	tmpDir := createTestAtmosDirWithBrokenStackImport(t)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+
+	server, err := setupMCPServer()
+
+	require.NoError(t, err)
+	assert.NotNil(t, server)
 }
 
 // TestSetupMCPServer_ToolsDisabled tests setupMCPServer when AI tools are disabled.
@@ -3149,6 +3275,23 @@ func TestExecuteMCPServer_AINotEnabledError(t *testing.T) {
 	// Should fail because AI is not enabled.
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrAINotEnabled))
+}
+
+func TestExecuteMCPServer_DoesNotPrintStoppedWhenSetupFails(t *testing.T) {
+	stderr := setupMCPServerCapturedUI(t)
+	tmpDir := createTestAtmosDir(t, false, true)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("transport", "stdio", "")
+	cmd.Flags().String("host", "localhost", "")
+	cmd.Flags().Int("port", 8080, "")
+
+	err := executeMCPServer(cmd, nil)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrAINotEnabled))
+	assert.NotContains(t, stderr.String(), "MCP server stopped")
 }
 
 // TestSetupMCPServer_ConfigLoadError tests setupMCPServer when config loading fails.

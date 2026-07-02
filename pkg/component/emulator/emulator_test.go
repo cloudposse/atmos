@@ -16,7 +16,7 @@ func TestProvider_TypeAndGroup(t *testing.T) {
 	p := &EmulatorComponentProvider{}
 	assert.Equal(t, cfg.EmulatorComponentType, p.GetType())
 	assert.Equal(t, "Emulators", p.GetGroup())
-	assert.Equal(t, []string{"up", "down", "reset", "ps", "logs", "exec"}, p.GetAvailableCommands())
+	assert.Equal(t, []string{"up", "down", "reset", "ps", "list", "logs", "exec"}, p.GetAvailableCommands())
 }
 
 func TestProvider_GetBasePath_Default(t *testing.T) {

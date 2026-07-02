@@ -39,3 +39,17 @@ tools:
     asset: "kics_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz"
     format: tar.gz
     binary_name: kics
+
+  # Kustomize — Kubernetes native configuration management.
+  #
+  # Kustomize tags live under the `kustomize/` namespace inside the
+  # kubernetes-sigs/kustomize repo, and release archives include that
+  # prefix in their versioned asset names. Keep the mapping here so
+  # projects can declare `kustomize: "<version>"` without carrying a
+  # per-project registry override.
+  kubernetes-sigs/kustomize:
+    type: github_release
+    version_prefix: "kustomize/v"
+    asset: "kustomize_v{{.SemVer}}_{{.OS}}_{{.Arch}}.tar.gz"
+    format: tar.gz
+    binary_name: kustomize

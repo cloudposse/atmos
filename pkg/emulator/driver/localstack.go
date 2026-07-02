@@ -10,7 +10,7 @@ import (
 // (its community edition was paywalled / BSL-relicensed in March 2026). All AWS
 // emulators share the AWSProfile builder.
 const (
-	ministackImage  = "ministack/ministack:latest"
+	ministackImage  = "ministackorg/ministack:latest"
 	localstackImage = "localstack/localstack:3"
 	awsEdgePort     = 4566
 
