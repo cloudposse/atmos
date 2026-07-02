@@ -67,7 +67,7 @@ Here are a few representative examples.
 
 Atmos understands the stack and component context around Terraform and OpenTofu, so the workflow can demonstrate real infrastructure operations without making the viewer learn the fixture first.
 
-<CastPlayer src="/casts/demo/casts/fixtures/native-terraform/plan.cast" title="atmos terraform plan" chrome controls scrubber />
+<CastPlayer src="/casts/demo/fixtures/native-terraform/plan.cast" title="atmos terraform plan" chrome controls scrubber />
 
 The same demo workflow also records deploy and output flows. That matters because the lifecycle is bigger than "run plan." Teams need repeatable setup, execution, state-aware context, output handling, and validation.
 
@@ -75,7 +75,7 @@ The same demo workflow also records deploy and output flows. That matters becaus
 
 Vendoring is another place where teams often accumulate scripts. Atmos makes source acquisition part of the declared project workflow instead of a tribal-knowledge step before the real work starts.
 
-<CastPlayer src="/casts/demo/casts/fixtures/demo-vendoring/pull.cast" title="atmos vendor pull" chrome controls scrubber />
+<CastPlayer src="/casts/demo/fixtures/demo-vendoring/pull.cast" title="atmos vendor pull" chrome controls scrubber />
 
 This is a good example of Atmos not being limited to one domain. Vendoring is not Terraform execution. It is operational project maintenance. But it belongs in the same runtime because it participates in the same broader workflow.
 
@@ -83,7 +83,7 @@ This is a good example of Atmos not being limited to one domain. Vendoring is no
 
 Operations depend on knowing what exists. Atmos can describe stacks and components with the same context it uses to run them.
 
-<CastPlayer src="/casts/demo/casts/fixtures/basic/list-stacks.cast" title="atmos list stacks" chrome controls scrubber />
+<CastPlayer src="/casts/demo/fixtures/basic/list-stacks.cast" title="atmos list stacks" chrome controls scrubber />
 
 That is the connective tissue developers usually have to rebuild in separate scripts: understand the project model, select the right targets, render useful output, and keep it consistent with the commands that actually perform the work.
 

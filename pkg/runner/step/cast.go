@@ -79,6 +79,7 @@ func init() {
 func (h *CastHandler) Validate(step *schema.WorkflowStep) error {
 	defer perf.Track(nil, "step.CastHandler.Validate")()
 
+	applyCastRecordingDefaults(step)
 	mode := castMode(step)
 	switch mode {
 	case "steps":
@@ -130,6 +131,7 @@ func (h *CastHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 func (h *CastHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) (*StepResult, error) {
 	defer perf.Track(nil, "step.CastHandler.ExecuteWithWorkflow")()
 
+	applyCastRecordingDefaults(step)
 	rec, restore, err := startStepRecorder(step)
 	if err != nil {
 		return nil, err
@@ -156,6 +158,7 @@ func (h *CastHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Work
 }
 
 func startStepRecorder(step *schema.WorkflowStep) (*asciicast.Recorder, func(), error) {
+	applyCastRecordingDefaults(step)
 	path := ""
 	if step.CastOutput != nil {
 		path = step.CastOutput.Cast
@@ -194,6 +197,22 @@ func startStepRecorder(step *schema.WorkflowStep) (*asciicast.Recorder, func(), 
 		return nil, nil, err
 	}
 	return rec, iolib.SetRecorder(rec), nil
+}
+
+func applyCastRecordingDefaults(step *schema.WorkflowStep) {
+	if step.Defaults == nil || step.Defaults.Cast == nil {
+		return
+	}
+	defaults := step.Defaults.Cast
+	if step.Rate == "" {
+		step.Rate = defaults.Rate
+	}
+	if step.Width <= 0 {
+		step.Width = defaults.Width
+	}
+	if step.Height <= 0 {
+		step.Height = defaults.Height
+	}
 }
 
 func runCastBody(ctx context.Context, castStep *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) error {

@@ -1,3 +1,7 @@
+cast:
+  rate: 12ms
+  width: 120
+  height: 36
 simulate:
   mode: typed
   cursor: true

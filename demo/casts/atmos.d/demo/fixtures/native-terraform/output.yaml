@@ -1,5 +1,5 @@
 commands:
-  - name: casts generate demo casts fixtures native-terraform output
+  - name: casts generate demo fixtures native-terraform output
     description: Regenerate the Terraform output cast
     env: !include cast-defaults.yaml .env.command
     steps:
@@ -14,19 +14,17 @@ commands:
         command: atmos --logs-level=Off terraform deploy vpc -s dev -auto-approve
       - type: shell
         name: clean
-        command: rm -f ../../website/static/casts/demo/casts/fixtures/native-terraform/output.cast
+        command: rm -f ../../website/static/casts/demo/fixtures/native-terraform/output.cast
       - type: cast
         name: output
         working_directory: *native_terraform_fixture
         command: atmos terraform output vpc -s dev
         mode: steps
         defaults:
+          cast: !include cast-defaults.yaml .cast
           simulate: !include cast-defaults.yaml .simulate
-        rate: 12ms
-        width: 120
-        height: 36
         output:
-          cast: "../../website/static/casts/demo/casts/fixtures/native-terraform/output.cast"
+          cast: "../../website/static/casts/demo/fixtures/native-terraform/output.cast"
         env: !include cast-defaults.yaml .env.recording
         steps:
           - type: shell
@@ -34,8 +32,8 @@ commands:
             command: atmos terraform output vpc -s dev
       - type: shell
         name: validate
-        command: atmos casts validate demo casts fixtures native-terraform output
-  - name: casts validate demo casts fixtures native-terraform output
+        command: atmos casts validate demo fixtures native-terraform output
+  - name: casts validate demo fixtures native-terraform output
     description: Validate the Terraform output cast
     steps:
       - type: script
@@ -43,7 +41,7 @@ commands:
         interpreter: python3
         script: |
           from pathlib import Path
-          text = Path("../../website/static/casts/demo/casts/fixtures/native-terraform/output.cast").read_text()
+          text = Path("../../website/static/casts/demo/fixtures/native-terraform/output.cast").read_text()
           for needle in ["environment =", "dev", "vpc_cidr", "10.0.0.0/16"]:
               if needle not in text:
                   raise SystemExit(f"terraform output cast missing {needle!r}")

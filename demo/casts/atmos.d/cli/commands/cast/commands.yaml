@@ -31,10 +31,8 @@ commands:
         command: atmos about --cast=.context/cast-command-demo/about.cast
         mode: steps
         defaults:
+          cast: !include cast-defaults.yaml .cast
           simulate: !include cast-defaults.yaml .simulate
-        rate: 12ms
-        width: 120
-        height: 36
         output:
           cast: "../../website/static/casts/cli/commands/cast/usage.cast"
         env: !include cast-defaults.yaml .env.recording
@@ -47,8 +45,10 @@ commands:
             command: |
               atmos about --cast=.context/cast-command-demo/about.cast
               test -s .context/cast-command-demo/about.cast
-              printf '\nRecorded cast:\n'
-              printf '  .context/cast-command-demo/about.cast\n'
+          - type: toast
+            name: recorded-cast
+            level: info
+            content: "Recorded cast: .context/cast-command-demo/about.cast"
       - type: shell
         name: validate
         command: atmos --chdir=demo/casts casts validate cli commands cast usage
@@ -68,10 +68,8 @@ commands:
         command: atmos cast play website/static/casts/examples/custom-commands/hello-greet.cast
         mode: steps
         defaults:
+          cast: !include cast-defaults.yaml .cast
           simulate: !include cast-defaults.yaml .simulate
-        rate: 12ms
-        width: 120
-        height: 36
         output:
           cast: "../../website/static/casts/cli/commands/cast/play.cast"
         env: !include cast-defaults.yaml .env.recording
@@ -117,10 +115,8 @@ commands:
         command: atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --gif=.context/cast-render/hello-greet.gif
         mode: steps
         defaults:
+          cast: !include cast-defaults.yaml .cast
           simulate: !include cast-defaults.yaml .simulate
-        rate: 12ms
-        width: 120
-        height: 36
         output:
           cast: "../../website/static/casts/cli/commands/cast/render.cast"
         env: !include cast-defaults.yaml .env.recording
@@ -133,7 +129,10 @@ commands:
             command: |
               atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --gif=.context/cast-render/hello-greet.gif
               test -s .context/cast-render/hello-greet.gif
-              printf 'rendered .context/cast-render/hello-greet.gif\n'
+          - type: toast
+            name: rendered-gif
+            level: success
+            content: "rendered .context/cast-render/hello-greet.gif"
       - type: shell
         name: validate
         command: atmos --chdir=demo/casts casts validate cli commands cast render

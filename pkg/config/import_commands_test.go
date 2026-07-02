@@ -425,15 +425,13 @@ commands:
         commands:
           - name: "demo"
             commands:
-              - name: "casts"
+              - name: "fixtures"
                 commands:
-                  - name: "fixtures"
+                  - name: "native-terraform"
                     commands:
-                      - name: "native-terraform"
-                        commands:
-                          - name: "plan"
-                            steps:
-                              - echo generate native-terraform plan
+                      - name: "plan"
+                        steps:
+                          - echo generate native-terraform plan
       - name: "validate"
         commands:
           - name: "all"
@@ -469,8 +467,7 @@ commands:
 	findCommand(t, quickStartSimple.Commands, "list-and-plan")
 
 	demo := findCommand(t, generate.Commands, "demo")
-	demoCasts := findCommand(t, demo.Commands, "casts")
-	fixtures := findCommand(t, demoCasts.Commands, "fixtures")
+	fixtures := findCommand(t, demo.Commands, "fixtures")
 	nativeTerraform := findCommand(t, fixtures.Commands, "native-terraform")
 	findCommand(t, nativeTerraform.Commands, "plan")
 
@@ -488,11 +485,11 @@ base_path: "."
 import:
   - "base.yaml"
 commands:
-  - name: "casts generate demo casts fixtures basic list-stacks"
+  - name: "casts generate demo fixtures basic list-stacks"
     description: "Local list stacks"
     steps:
       - echo local list-stacks
-  - name: "casts generate demo casts fixtures native-terraform plan"
+  - name: "casts generate demo fixtures native-terraform plan"
     description: "Local native terraform plan"
     steps:
       - echo local native-terraform plan
@@ -507,20 +504,18 @@ commands:
         commands:
           - name: "demo"
             commands:
-              - name: "casts"
+              - name: "fixtures"
                 commands:
-                  - name: "fixtures"
+                  - name: "basic"
                     commands:
-                      - name: "basic"
-                        commands:
-                          - name: "list-stacks"
-                            description: "Base list stacks"
-                            steps:
-                              - echo base list-stacks
-                          - name: "describe-component"
-                            description: "Base describe component"
-                            steps:
-                              - echo base describe-component
+                      - name: "list-stacks"
+                        description: "Base list stacks"
+                        steps:
+                          - echo base list-stacks
+                      - name: "describe-component"
+                        description: "Base describe component"
+                        steps:
+                          - echo base describe-component
           - name: "examples"
             commands:
               - name: "quick-start-simple"
@@ -558,8 +553,7 @@ commands:
 	findCommand(t, examples.Commands, "quick-start-simple")
 
 	demo := findCommand(t, generate.Commands, "demo")
-	demoCasts := findCommand(t, demo.Commands, "casts")
-	fixtures := findCommand(t, demoCasts.Commands, "fixtures")
+	fixtures := findCommand(t, demo.Commands, "fixtures")
 	basic := findCommand(t, fixtures.Commands, "basic")
 	listStacks := findCommand(t, basic.Commands, "list-stacks")
 	describeComponent := findCommand(t, basic.Commands, "describe-component")

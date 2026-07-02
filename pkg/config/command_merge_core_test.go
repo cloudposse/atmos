@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -94,6 +95,67 @@ func TestMergeCommandArraysPathNamesSharePrefix(t *testing.T) {
 	examples := requireCommandMap(t, generate[commandsKey], "examples")
 	assert.Equal(t, "Demo command", demo["description"])
 	assert.Equal(t, "Examples command", examples["description"])
+}
+
+func TestMergeConfigFilePathCommandsAcrossFiles(t *testing.T) {
+	tempDir := t.TempDir()
+	files := map[string]string{
+		"basic.yaml": `
+commands:
+  - name: casts generate demo fixtures basic list-stacks
+    description: List stacks
+`,
+		"native.yaml": `
+commands:
+  - name: casts generate demo fixtures native-terraform plan
+    description: Terraform plan
+`,
+	}
+	for name, content := range files {
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, name), []byte(content), 0o644))
+	}
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	require.NoError(t, mergeConfigFile(filepath.Join(tempDir, "basic.yaml"), v))
+	require.NoError(t, mergeConfigFile(filepath.Join(tempDir, "native.yaml"), v))
+
+	casts := requireCommandMap(t, v.Get(commandsKey), "casts")
+	generate := requireCommandMap(t, casts[commandsKey], "generate")
+	demo := requireCommandMap(t, generate[commandsKey], "demo")
+	fixtures := requireCommandMap(t, demo[commandsKey], "fixtures")
+	basic := requireCommandMap(t, fixtures[commandsKey], "basic")
+	listStacks := requireCommandMap(t, basic[commandsKey], "list-stacks")
+	nativeTerraform := requireCommandMap(t, fixtures[commandsKey], "native-terraform")
+	plan := requireCommandMap(t, nativeTerraform[commandsKey], "plan")
+	assert.Equal(t, "List stacks", listStacks["description"])
+	assert.Equal(t, "Terraform plan", plan["description"])
+}
+
+func TestLoadDemoCastPathCommandsPreservesSiblings(t *testing.T) {
+	t.Chdir(filepath.Join("..", "..", "demo", "casts"))
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+
+	absAtmosD, err := filepath.Abs("atmos.d")
+	require.NoError(t, err)
+	pattern := filepath.Join(absAtmosD, "**", "*")
+	require.NoError(t, loadAtmosConfigsFromDirectory(pattern, v, "demo casts atmos.d"))
+
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("commands: %#v", v.Get(commandsKey))
+		}
+	})
+	casts := requireCommandMap(t, v.Get(commandsKey), "casts")
+	generate := requireCommandMap(t, casts[commandsKey], "generate")
+	requireCommandMap(t, generate[commandsKey], "cli")
+	requireCommandMap(t, generate[commandsKey], "examples")
+	demo := requireCommandMap(t, generate[commandsKey], "demo")
+	fixtures := requireCommandMap(t, demo[commandsKey], "fixtures")
+	basic := requireCommandMap(t, fixtures[commandsKey], "basic")
+	requireCommandMap(t, basic[commandsKey], "list-stacks")
 }
 
 func TestMergeCommandArraysPathLeafOverridesNestedAndPreservesSiblings(t *testing.T) {

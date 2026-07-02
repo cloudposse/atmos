@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -1035,14 +1036,17 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	if err = mainViper.ReadConfig(bytes.NewReader(content)); err != nil {
 		return fmt.Errorf("%w: parse main config: %w", errUtils.ErrMergeConfiguration, err)
 	}
-	mainCommands := mainViper.Get(commandsKey)
+	if err = preprocessAtmosYamlFunc(content, mainViper); err != nil {
+		return fmt.Errorf("%w: preprocess main config: %w", errUtils.ErrMergeConfiguration, err)
+	}
+	mainCommands := normalizeCommandArray(mainViper.Get(commandsKey))
 
 	// Process default imports (e.g., .atmos.d) first.
 	// These don't need the main config to be loaded.
 	if err := mergeDefaultImports(configDir, tempViper); err != nil {
 		log.Debug("error process default imports", "path", configDir, "error", err)
 	}
-	defaultCommands := tempViper.Get(commandsKey)
+	defaultCommands := normalizeCommandArray(tempViper.Get(commandsKey))
 
 	// Now load the main config temporarily to process explicit imports.
 	// We need this because the import paths are defined in the main config.
@@ -1060,7 +1064,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	}
 
 	// Get imported commands (without main commands).
-	importedCommands := tempViper.Get(commandsKey)
+	importedCommands := normalizeCommandArray(tempViper.Get(commandsKey))
 
 	// Re-apply this config file's content after processing its imports.
 	// This ensures proper precedence: each config file's own settings override
@@ -1436,7 +1440,7 @@ func mergeConfigFile(
 	trackMergedConfigFile(path)
 
 	// Save existing commands before merge.
-	existingCommands := v.Get(commandsKey)
+	existingCommands := normalizeCommandArray(v.Get(commandsKey))
 
 	// Parse the new file to get its commands.
 	// We need to do this because viper.MergeConfig doesn't overwrite arrays.
@@ -1446,7 +1450,10 @@ func mergeConfigFile(
 	if err = tempViper.ReadConfig(bytes.NewReader(content)); err != nil {
 		return err
 	}
-	newCommands := tempViper.Get(commandsKey)
+	if err = preprocessAtmosYamlFunc(content, tempViper); err != nil {
+		return err
+	}
+	newCommands := normalizeCommandArray(tempViper.Get(commandsKey))
 
 	// Do the normal merge for all other settings (non-array values).
 	// This preserves viper's merge behavior for nested maps.
@@ -1455,18 +1462,17 @@ func mergeConfigFile(
 		return err
 	}
 
-	// Now handle command merging manually.
-	// Merge commands: when duplicates exist, the file being processed (new) takes precedence.
-	// This ensures local/main config can override imported/remote commands.
-	if existingCommands != nil || newCommands != nil {
-		// Second parameter wins on duplicates, so new commands override existing
-		merged := mergeCommandArrays(existingCommands, newCommands)
-		v.Set(commandsKey, merged)
-	}
-
 	err = preprocessAtmosYamlFunc(content, v)
 	if err != nil {
 		return err
+	}
+
+	// Now handle command merging manually after YAML functions have been processed.
+	// Processing can set the commands key when command entries contain tags like !include.
+	// Re-applying the merged command tree preserves sibling commands across files.
+	if existingCommands != nil || newCommands != nil {
+		merged := mergeCommandArrays(existingCommands, newCommands)
+		v.Set(commandsKey, merged)
 	}
 
 	return nil
@@ -1544,8 +1550,8 @@ func mergeCommandArrays(first, second interface{}) []interface{} {
 }
 
 func normalizeCommandArray(commands interface{}) []interface{} {
-	cmdSlice, ok := commands.([]interface{})
-	if !ok {
+	cmdSlice := commandSlice(commands)
+	if len(cmdSlice) == 0 {
 		return nil
 	}
 
@@ -1558,6 +1564,26 @@ func normalizeCommandArray(commands interface{}) []interface{} {
 		result = mergeNormalizedCommandArrays(result, []interface{}{normalized})
 	}
 
+	return result
+}
+
+func commandSlice(commands interface{}) []interface{} {
+	if commands == nil {
+		return nil
+	}
+	if cmdSlice, ok := commands.([]interface{}); ok {
+		return cmdSlice
+	}
+
+	value := reflect.ValueOf(commands)
+	if value.Kind() != reflect.Slice {
+		return nil
+	}
+
+	result := make([]interface{}, 0, value.Len())
+	for i := 0; i < value.Len(); i++ {
+		result = append(result, value.Index(i).Interface())
+	}
 	return result
 }
 

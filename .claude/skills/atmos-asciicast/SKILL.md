@@ -21,7 +21,16 @@ Atmos casts are product demos, regression evidence, and documentation examples a
 
 ## Defaults
 
-- Use `width: 120` and `height: 36` unless the target docs page needs a narrower recording.
+- Use shared cast defaults when available instead of repeating terminal settings on each cast step:
+
+  ```yaml
+  defaults:
+    cast: !include cast-defaults.yaml .cast
+    simulate: !include cast-defaults.yaml .simulate
+  env: !include cast-defaults.yaml .env.recording
+  ```
+
+- Keep common recording settings in `cast-defaults.yaml` under `cast`, `simulate`, and `env` (`env.command` for command setup, `env.recording` for the recorded process).
 - Write curated Atmos docs casts under `website/static/casts/...`; they are served from `/casts/...`.
 - Use `type: cast` with `mode: steps` for deterministic command demos that need exit-code propagation.
 - Use `mode: session` only when the demo must show typed input, prompts, key presses, or terminal timing.
@@ -41,7 +50,9 @@ Atmos casts are product demos, regression evidence, and documentation examples a
 - Leave validation steps success-only so validation runs only after recording and required cleanup complete successfully.
 - Use `output: none` for noisy setup, reset, and cleanup commands that should not be part of the story.
 - Prefer `type: cast` `mode: steps` with nested `type: shell` steps for command demos; add `type: simulate` steps only when typed prompts make a longer story easier to follow.
+- Use `type: toast` for short recorded status narration instead of shell `printf` output.
 - Keep large shell scripts out of recorded casts. If unavoidable, hide them in setup/cleanup and explain the user-facing result with lightweight Atmos commands in the recording.
+- Use path-based custom command names for demo casts, for example `casts generate demo fixtures native-terraform plan`, and publish fixture casts under `/casts/demo/fixtures/...`.
 
 ## Authoring Checklist
 

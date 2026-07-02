@@ -9,7 +9,7 @@ export default function CastDemoPage() {
       <main className={styles.page}>
         <section className={styles.hero}>
           <CastPlayer
-            src="/casts/demo/casts/fixtures/basic/list-stacks.cast"
+            src="/casts/demo/fixtures/basic/list-stacks.cast"
             title="Config in, infrastructure out"
             chrome
             controls
@@ -21,7 +21,7 @@ export default function CastDemoPage() {
         <section className={styles.gallery} aria-label="Cast gallery">
           <div className={styles.galleryItem}>
             <CastPlayer
-              src="/casts/demo/casts/fixtures/basic/list-stacks.cast"
+              src="/casts/demo/fixtures/basic/list-stacks.cast"
               title="List stacks"
               chrome
               autoplay
@@ -31,7 +31,7 @@ export default function CastDemoPage() {
           </div>
           <div className={styles.galleryItem}>
             <CastPlayer
-              src="/casts/demo/casts/fixtures/native-terraform/plan.cast"
+              src="/casts/demo/fixtures/native-terraform/plan.cast"
               title="Terraform plan"
               chrome
               autoplay
@@ -41,7 +41,7 @@ export default function CastDemoPage() {
           </div>
           <div className={styles.galleryItem}>
             <CastPlayer
-              src="/casts/demo/casts/fixtures/demo-vendoring/pull.cast"
+              src="/casts/demo/fixtures/demo-vendoring/pull.cast"
               command="atmos vendor pull --everything"
               title="Vendor pull"
               chrome

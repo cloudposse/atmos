@@ -39,9 +39,9 @@ atmos casts generate examples sops-secrets secret-lifecycle
 atmos casts generate cli commands cast usage
 atmos casts generate cli commands cast play
 atmos casts generate cli commands cast render
-atmos casts generate demo casts fixtures native-terraform plan
-atmos casts generate demo casts fixtures demo-vendoring pull
-atmos casts generate demo casts fixtures basic list-stacks
+atmos casts generate demo fixtures native-terraform plan
+atmos casts generate demo fixtures demo-vendoring pull
+atmos casts generate demo fixtures basic list-stacks
 ```
 
 Regenerate every committed cast:

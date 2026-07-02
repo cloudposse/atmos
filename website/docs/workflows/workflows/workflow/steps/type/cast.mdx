@@ -1,0 +1,75 @@
+---
+title: cast
+sidebar_label: cast
+slug: /workflows/steps/type/cast
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `cast` step type records deterministic terminal demos as asciicast files. It can run nested workflow steps, simulate typed commands, and render additional outputs from the same recording.
+</Intro>
+
+```yaml
+steps:
+  - name: list-stacks
+    type: cast
+    mode: steps
+    command: atmos list stacks --format=tree
+    defaults:
+      cast:
+        rate: 12ms
+        width: 120
+        height: 36
+      simulate:
+        mode: typed
+        cursor: true
+        rate: 35ms
+        prompt:
+          text: "> "
+          style: command
+    output:
+      cast: website/static/casts/list-stacks.cast
+    steps:
+      - type: simulate
+        text: atmos list stacks --format=tree
+      - type: shell
+        output: raw
+        command: atmos list stacks --format=tree
+      - type: toast
+        level: success
+        content: Cast recorded.
+```
+
+## Fields
+
+<dl>
+  <dt>`mode`</dt>
+  <dd>Recording mode. Use `steps` for deterministic nested workflow steps, or `session` for interactive terminal sessions.</dd>
+
+  <dt>`command`</dt>
+  <dd>Optional command string stored in the asciicast header.</dd>
+
+  <dt>`output.cast`</dt>
+  <dd>Path for the generated `.cast` file.</dd>
+
+  <dt>`output.svg`, `output.gif`, `output.mp4`</dt>
+  <dd>Optional rendered outputs generated after the cast recording succeeds.</dd>
+
+  <dt>`defaults.cast`</dt>
+  <dd>Recording defaults for the cast step. Supports `rate`, `width`, and `height`. Explicit top-level `rate`, `width`, or `height` fields on the cast step override these defaults.</dd>
+
+  <dt>`defaults.simulate`</dt>
+  <dd>Defaults applied to direct child `type: simulate` steps. Supports `mode`, `cursor`, `prompt`, `rate`, `jitter`, `duration`, and `interval`. Explicit fields on the child simulate step override these defaults, including `cursor: false`.</dd>
+
+  <dt>`env`</dt>
+  <dd>Environment variables available to nested cast steps.</dd>
+
+  <dt>`working_directory`</dt>
+  <dd>Directory inherited by nested steps that do not define their own working directory.</dd>
+
+  <dt>`steps`</dt>
+  <dd>Nested workflow steps to execute while the recorder is active. In `steps` mode, `shell`, `simulate`, `toast`, and other normal workflow steps can be recorded.</dd>
+</dl>
+
+Use shared YAML includes for repeated recording settings when multiple casts should have the same terminal dimensions, playback rate, simulated prompt, or recording environment.

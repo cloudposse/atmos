@@ -1,5 +1,5 @@
 commands:
-  - name: casts generate demo casts fixtures demo-vendoring pull
+  - name: casts generate demo fixtures demo-vendoring pull
     description: Regenerate the vendor pull cast
     env: !include cast-defaults.yaml .env.command
     steps:
@@ -8,19 +8,17 @@ commands:
         command: atmos casts setup
       - type: shell
         name: clean
-        command: rm -f ../../website/static/casts/demo/casts/fixtures/demo-vendoring/pull.cast
+        command: rm -f ../../website/static/casts/demo/fixtures/demo-vendoring/pull.cast
       - type: cast
         name: pull
         working_directory: "../../.context/cast-fixtures/demo-vendoring"
         command: atmos vendor pull --everything
         mode: steps
         defaults:
+          cast: !include cast-defaults.yaml .cast
           simulate: !include cast-defaults.yaml .simulate
-        rate: 12ms
-        width: 120
-        height: 36
         output:
-          cast: "../../website/static/casts/demo/casts/fixtures/demo-vendoring/pull.cast"
+          cast: "../../website/static/casts/demo/fixtures/demo-vendoring/pull.cast"
         env: !include cast-defaults.yaml .env.recording
         steps:
           - type: shell
@@ -28,8 +26,8 @@ commands:
             command: atmos vendor pull --everything
       - type: shell
         name: validate
-        command: atmos casts validate demo casts fixtures demo-vendoring pull
-  - name: casts validate demo casts fixtures demo-vendoring pull
+        command: atmos casts validate demo fixtures demo-vendoring pull
+  - name: casts validate demo fixtures demo-vendoring pull
     description: Validate the vendor pull cast
     steps:
       - type: script
@@ -37,7 +35,7 @@ commands:
         interpreter: python3
         script: |
           from pathlib import Path
-          text = Path("../../website/static/casts/demo/casts/fixtures/demo-vendoring/pull.cast").read_text()
+          text = Path("../../website/static/casts/demo/fixtures/demo-vendoring/pull.cast").read_text()
           for needle in ["Vendoring from", "Vendored components success=3", "github/stargazers"]:
               if needle not in text:
                   raise SystemExit(f"vendor pull cast missing {needle!r}")

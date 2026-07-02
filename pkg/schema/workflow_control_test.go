@@ -95,6 +95,10 @@ func TestWorkflowStep_UnmarshalYAML_CastSimulateDefaults(t *testing.T) {
 	input := `
 type: cast
 defaults:
+  cast:
+    rate: 12ms
+    width: 120
+    height: 36
   simulate:
     mode: typed
     cursor: true
@@ -114,6 +118,10 @@ steps:
 	require.NoError(t, yaml.Unmarshal([]byte(input), &step))
 
 	require.NotNil(t, step.Defaults)
+	require.NotNil(t, step.Defaults.Cast)
+	assert.Equal(t, "12ms", step.Defaults.Cast.Rate)
+	assert.Equal(t, 120, step.Defaults.Cast.Width)
+	assert.Equal(t, 36, step.Defaults.Cast.Height)
 	require.NotNil(t, step.Defaults.Simulate)
 	assert.Equal(t, "typed", step.Defaults.Simulate.Mode)
 	require.NotNil(t, step.Defaults.Simulate.Cursor)

@@ -5,13 +5,13 @@ commands:
     steps:
       - type: shell
         name: native-terraform
-        command: atmos casts generate demo casts fixtures native-terraform
+        command: atmos casts generate demo fixtures native-terraform
       - type: shell
         name: demo-vendoring
-        command: atmos casts generate demo casts fixtures demo-vendoring
+        command: atmos casts generate demo fixtures demo-vendoring
       - type: shell
         name: basic
-        command: atmos casts generate demo casts fixtures basic
+        command: atmos casts generate demo fixtures basic
       - type: shell
         name: examples
         command: atmos casts generate examples
@@ -49,121 +49,121 @@ commands:
     steps:
       - type: shell
         name: casts-fixtures-native-terraform-plan
-        command: atmos casts generate demo casts fixtures native-terraform plan
+        command: atmos casts generate demo fixtures native-terraform plan
       - type: shell
         name: casts-fixtures-native-terraform-deploy
-        command: atmos casts generate demo casts fixtures native-terraform deploy
+        command: atmos casts generate demo fixtures native-terraform deploy
       - type: shell
         name: casts-fixtures-native-terraform-output
-        command: atmos casts generate demo casts fixtures native-terraform output
+        command: atmos casts generate demo fixtures native-terraform output
       - type: shell
         name: casts-fixtures-demo-vendoring-pull
-        command: atmos casts generate demo casts fixtures demo-vendoring pull
+        command: atmos casts generate demo fixtures demo-vendoring pull
       - type: shell
         name: casts-fixtures-basic-list-stacks
-        command: atmos casts generate demo casts fixtures basic list-stacks
+        command: atmos casts generate demo fixtures basic list-stacks
       - type: shell
         name: casts-fixtures-basic-describe-component
-        command: atmos casts generate demo casts fixtures basic describe-component
+        command: atmos casts generate demo fixtures basic describe-component
       - type: shell
         name: casts-fixtures-basic-describe-stacks
-        command: atmos casts generate demo casts fixtures basic describe-stacks
+        command: atmos casts generate demo fixtures basic describe-stacks
   - name: casts generate demo casts
     description: Regenerate casts sourced from demo/casts
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: casts-fixtures-native-terraform-plan
-        command: atmos casts generate demo casts fixtures native-terraform plan
+        command: atmos casts generate demo fixtures native-terraform plan
       - type: shell
         name: casts-fixtures-native-terraform-deploy
-        command: atmos casts generate demo casts fixtures native-terraform deploy
+        command: atmos casts generate demo fixtures native-terraform deploy
       - type: shell
         name: casts-fixtures-native-terraform-output
-        command: atmos casts generate demo casts fixtures native-terraform output
+        command: atmos casts generate demo fixtures native-terraform output
       - type: shell
         name: casts-fixtures-demo-vendoring-pull
-        command: atmos casts generate demo casts fixtures demo-vendoring pull
+        command: atmos casts generate demo fixtures demo-vendoring pull
       - type: shell
         name: casts-fixtures-basic-list-stacks
-        command: atmos casts generate demo casts fixtures basic list-stacks
+        command: atmos casts generate demo fixtures basic list-stacks
       - type: shell
         name: casts-fixtures-basic-describe-component
-        command: atmos casts generate demo casts fixtures basic describe-component
+        command: atmos casts generate demo fixtures basic describe-component
       - type: shell
         name: casts-fixtures-basic-describe-stacks
-        command: atmos casts generate demo casts fixtures basic describe-stacks
-  - name: casts generate demo casts fixtures
+        command: atmos casts generate demo fixtures basic describe-stacks
+  - name: casts generate demo fixtures
     description: Regenerate casts sourced from demo/casts/fixtures
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: casts-fixtures-native-terraform-plan
-        command: atmos casts generate demo casts fixtures native-terraform plan
+        command: atmos casts generate demo fixtures native-terraform plan
       - type: shell
         name: casts-fixtures-native-terraform-deploy
-        command: atmos casts generate demo casts fixtures native-terraform deploy
+        command: atmos casts generate demo fixtures native-terraform deploy
       - type: shell
         name: casts-fixtures-native-terraform-output
-        command: atmos casts generate demo casts fixtures native-terraform output
+        command: atmos casts generate demo fixtures native-terraform output
       - type: shell
         name: casts-fixtures-demo-vendoring-pull
-        command: atmos casts generate demo casts fixtures demo-vendoring pull
+        command: atmos casts generate demo fixtures demo-vendoring pull
       - type: shell
         name: casts-fixtures-basic-list-stacks
-        command: atmos casts generate demo casts fixtures basic list-stacks
+        command: atmos casts generate demo fixtures basic list-stacks
       - type: shell
         name: casts-fixtures-basic-describe-component
-        command: atmos casts generate demo casts fixtures basic describe-component
+        command: atmos casts generate demo fixtures basic describe-component
       - type: shell
         name: casts-fixtures-basic-describe-stacks
-        command: atmos casts generate demo casts fixtures basic describe-stacks
-  - name: casts generate demo casts fixtures basic
+        command: atmos casts generate demo fixtures basic describe-stacks
+  - name: casts generate demo fixtures basic
     description: Regenerate casts sourced from demo/casts/fixtures/basic
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: casts-fixtures-basic-list-stacks
-        command: atmos casts generate demo casts fixtures basic list-stacks
+        command: atmos casts generate demo fixtures basic list-stacks
       - type: shell
         name: casts-fixtures-basic-describe-component
-        command: atmos casts generate demo casts fixtures basic describe-component
+        command: atmos casts generate demo fixtures basic describe-component
       - type: shell
         name: casts-fixtures-basic-describe-stacks
-        command: atmos casts generate demo casts fixtures basic describe-stacks
-  - name: casts generate demo casts fixtures demo-vendoring
+        command: atmos casts generate demo fixtures basic describe-stacks
+  - name: casts generate demo fixtures demo-vendoring
     description: Regenerate casts sourced from demo/casts/fixtures/demo-vendoring
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: casts-fixtures-demo-vendoring-pull
-        command: atmos casts generate demo casts fixtures demo-vendoring pull
-  - name: casts generate demo casts fixtures native-terraform
+        command: atmos casts generate demo fixtures demo-vendoring pull
+  - name: casts generate demo fixtures native-terraform
     description: Regenerate casts sourced from demo/casts/fixtures/native-terraform
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: casts-fixtures-native-terraform-plan
-        command: atmos casts generate demo casts fixtures native-terraform plan
+        command: atmos casts generate demo fixtures native-terraform plan
       - type: shell
         name: casts-fixtures-native-terraform-deploy
-        command: atmos casts generate demo casts fixtures native-terraform deploy
+        command: atmos casts generate demo fixtures native-terraform deploy
       - type: shell
         name: casts-fixtures-native-terraform-output
-        command: atmos casts generate demo casts fixtures native-terraform output
+        command: atmos casts generate demo fixtures native-terraform output
   - name: casts validate all
     description: Validate every committed website cast demo
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: native-terraform
-        command: atmos casts validate demo casts fixtures native-terraform
+        command: atmos casts validate demo fixtures native-terraform
       - type: shell
         name: demo-vendoring
-        command: atmos casts validate demo casts fixtures demo-vendoring
+        command: atmos casts validate demo fixtures demo-vendoring
       - type: shell
         name: basic
-        command: atmos casts validate demo casts fixtures basic
+        command: atmos casts validate demo fixtures basic
       - type: shell
         name: examples
         command: atmos casts validate examples
@@ -198,105 +198,105 @@ commands:
     steps:
       - type: shell
         name: casts-fixtures-native-terraform-plan
-        command: atmos casts validate demo casts fixtures native-terraform plan
+        command: atmos casts validate demo fixtures native-terraform plan
       - type: shell
         name: casts-fixtures-native-terraform-deploy
-        command: atmos casts validate demo casts fixtures native-terraform deploy
+        command: atmos casts validate demo fixtures native-terraform deploy
       - type: shell
         name: casts-fixtures-native-terraform-output
-        command: atmos casts validate demo casts fixtures native-terraform output
+        command: atmos casts validate demo fixtures native-terraform output
       - type: shell
         name: casts-fixtures-demo-vendoring-pull
-        command: atmos casts validate demo casts fixtures demo-vendoring pull
+        command: atmos casts validate demo fixtures demo-vendoring pull
       - type: shell
         name: casts-fixtures-basic-list-stacks
-        command: atmos casts validate demo casts fixtures basic list-stacks
+        command: atmos casts validate demo fixtures basic list-stacks
       - type: shell
         name: casts-fixtures-basic-describe-component
-        command: atmos casts validate demo casts fixtures basic describe-component
+        command: atmos casts validate demo fixtures basic describe-component
       - type: shell
         name: casts-fixtures-basic-describe-stacks
-        command: atmos casts validate demo casts fixtures basic describe-stacks
+        command: atmos casts validate demo fixtures basic describe-stacks
   - name: casts validate demo casts
     description: Validate casts sourced from demo/casts
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: casts-fixtures-native-terraform-plan
-        command: atmos casts validate demo casts fixtures native-terraform plan
+        command: atmos casts validate demo fixtures native-terraform plan
       - type: shell
         name: casts-fixtures-native-terraform-deploy
-        command: atmos casts validate demo casts fixtures native-terraform deploy
+        command: atmos casts validate demo fixtures native-terraform deploy
       - type: shell
         name: casts-fixtures-native-terraform-output
-        command: atmos casts validate demo casts fixtures native-terraform output
+        command: atmos casts validate demo fixtures native-terraform output
       - type: shell
         name: casts-fixtures-demo-vendoring-pull
-        command: atmos casts validate demo casts fixtures demo-vendoring pull
+        command: atmos casts validate demo fixtures demo-vendoring pull
       - type: shell
         name: casts-fixtures-basic-list-stacks
-        command: atmos casts validate demo casts fixtures basic list-stacks
+        command: atmos casts validate demo fixtures basic list-stacks
       - type: shell
         name: casts-fixtures-basic-describe-component
-        command: atmos casts validate demo casts fixtures basic describe-component
+        command: atmos casts validate demo fixtures basic describe-component
       - type: shell
         name: casts-fixtures-basic-describe-stacks
-        command: atmos casts validate demo casts fixtures basic describe-stacks
-  - name: casts validate demo casts fixtures
+        command: atmos casts validate demo fixtures basic describe-stacks
+  - name: casts validate demo fixtures
     description: Validate casts sourced from demo/casts/fixtures
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: casts-fixtures-native-terraform-plan
-        command: atmos casts validate demo casts fixtures native-terraform plan
+        command: atmos casts validate demo fixtures native-terraform plan
       - type: shell
         name: casts-fixtures-native-terraform-deploy
-        command: atmos casts validate demo casts fixtures native-terraform deploy
+        command: atmos casts validate demo fixtures native-terraform deploy
       - type: shell
         name: casts-fixtures-native-terraform-output
-        command: atmos casts validate demo casts fixtures native-terraform output
+        command: atmos casts validate demo fixtures native-terraform output
       - type: shell
         name: casts-fixtures-demo-vendoring-pull
-        command: atmos casts validate demo casts fixtures demo-vendoring pull
+        command: atmos casts validate demo fixtures demo-vendoring pull
       - type: shell
         name: casts-fixtures-basic-list-stacks
-        command: atmos casts validate demo casts fixtures basic list-stacks
+        command: atmos casts validate demo fixtures basic list-stacks
       - type: shell
         name: casts-fixtures-basic-describe-component
-        command: atmos casts validate demo casts fixtures basic describe-component
+        command: atmos casts validate demo fixtures basic describe-component
       - type: shell
         name: casts-fixtures-basic-describe-stacks
-        command: atmos casts validate demo casts fixtures basic describe-stacks
-  - name: casts validate demo casts fixtures basic
+        command: atmos casts validate demo fixtures basic describe-stacks
+  - name: casts validate demo fixtures basic
     description: Validate casts sourced from demo/casts/fixtures/basic
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: casts-fixtures-basic-list-stacks
-        command: atmos casts validate demo casts fixtures basic list-stacks
+        command: atmos casts validate demo fixtures basic list-stacks
       - type: shell
         name: casts-fixtures-basic-describe-component
-        command: atmos casts validate demo casts fixtures basic describe-component
+        command: atmos casts validate demo fixtures basic describe-component
       - type: shell
         name: casts-fixtures-basic-describe-stacks
-        command: atmos casts validate demo casts fixtures basic describe-stacks
-  - name: casts validate demo casts fixtures demo-vendoring
+        command: atmos casts validate demo fixtures basic describe-stacks
+  - name: casts validate demo fixtures demo-vendoring
     description: Validate casts sourced from demo/casts/fixtures/demo-vendoring
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: casts-fixtures-demo-vendoring-pull
-        command: atmos casts validate demo casts fixtures demo-vendoring pull
-  - name: casts validate demo casts fixtures native-terraform
+        command: atmos casts validate demo fixtures demo-vendoring pull
+  - name: casts validate demo fixtures native-terraform
     description: Validate casts sourced from demo/casts/fixtures/native-terraform
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: casts-fixtures-native-terraform-plan
-        command: atmos casts validate demo casts fixtures native-terraform plan
+        command: atmos casts validate demo fixtures native-terraform plan
       - type: shell
         name: casts-fixtures-native-terraform-deploy
-        command: atmos casts validate demo casts fixtures native-terraform deploy
+        command: atmos casts validate demo fixtures native-terraform deploy
       - type: shell
         name: casts-fixtures-native-terraform-output
-        command: atmos casts validate demo casts fixtures native-terraform output
+        command: atmos casts validate demo fixtures native-terraform output

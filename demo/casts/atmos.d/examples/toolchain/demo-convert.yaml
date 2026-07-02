@@ -21,10 +21,8 @@ commands:
         command: atmos demo convert
         mode: steps
         defaults:
+          cast: !include cast-defaults.yaml .cast
           simulate: !include cast-defaults.yaml .simulate
-        rate: 12ms
-        width: 120
-        height: 36
         output:
           cast: "../../website/static/casts/examples/toolchain/demo-convert.cast"
         env: !include cast-defaults.yaml .env.recording

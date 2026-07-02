@@ -2,7 +2,8 @@
 
 ## Defaults
 
-- Use `width: 120` and `height: 36` unless the target docs page needs a narrower recording.
+- Use shared cast defaults when the host project supports YAML includes or reusable workflow configuration. Keep terminal settings such as `rate`, `width`, and `height` together instead of repeating them on every cast step.
+- Keep simulated input defaults such as prompt text, cursor behavior, typing rate, and jitter together with the cast defaults when the project has several recordings.
 - Use `type: cast` with `mode: steps` for deterministic command demos that need exit-code propagation.
 - Use `mode: session` only when the demo must show typed input, prompts, key presses, or terminal timing.
 - Keep ad hoc local recordings in the XDG cache via `--cast`; do not commit cache recordings.
@@ -22,6 +23,8 @@
 4. Review the cast as plain text for secrets, local paths, unstable timestamps, noisy logs, and project-specific assumptions.
 5. Embed or link the cast using the host project's documentation conventions.
 6. Prefer committing only `.cast` files unless the host project explicitly documents additional generated artifacts.
+
+Prefer first-class workflow steps over shell output for recorded narration. For example, use `type: toast` for short status messages instead of `printf` in a recorded shell step.
 
 ## Boundaries
 

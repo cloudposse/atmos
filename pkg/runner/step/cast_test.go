@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestCastValidateSessionWaitRequiresTextOrRegex(t *testing.T) {
@@ -139,6 +140,74 @@ func TestCastRecorderUsesStepCommandInHeader(t *testing.T) {
 	}
 	if header.Command != "atmos terraform deploy vpc -s dev -auto-approve" {
 		t.Fatalf("header command = %q", header.Command)
+	}
+}
+
+func TestCastRecorderUsesCastDefaultsForTerminalSettings(t *testing.T) {
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	rec, restore, err := startStepRecorder(&schema.WorkflowStep{
+		Name: "terraform-plan",
+		Type: schema.TaskTypeCast,
+		Defaults: &schema.CastDefaults{
+			Cast: &schema.CastRecordingDefaults{
+				Rate:   "12ms",
+				Width:  100,
+				Height: 32,
+			},
+		},
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("start recorder: %v", err)
+	}
+	restore()
+	if err := rec.Close(); err != nil {
+		t.Fatalf("close recorder: %v", err)
+	}
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatalf("read cast: %v", err)
+	}
+	headerLine := content
+	for i, b := range content {
+		if b == '\n' {
+			headerLine = content[:i]
+			break
+		}
+	}
+	var header struct {
+		Width  int `json:"width"`
+		Height int `json:"height"`
+	}
+	if err := json.Unmarshal(headerLine, &header); err != nil {
+		t.Fatalf("parse header: %v", err)
+	}
+	if header.Width != 100 || header.Height != 32 {
+		t.Fatalf("header dimensions = %dx%d, want 100x32", header.Width, header.Height)
+	}
+}
+
+func TestCastRecordingDefaultsRespectExplicitOverrides(t *testing.T) {
+	step := &schema.WorkflowStep{
+		Rate:   "7ms",
+		Width:  90,
+		Height: 28,
+		Defaults: &schema.CastDefaults{
+			Cast: &schema.CastRecordingDefaults{
+				Rate:   "12ms",
+				Width:  100,
+				Height: 32,
+			},
+		},
+	}
+
+	applyCastRecordingDefaults(step)
+
+	if step.Rate != "7ms" || step.Width != 90 || step.Height != 28 {
+		t.Fatalf("explicit cast fields were overwritten: %#v", step)
 	}
 }
 
@@ -274,6 +343,7 @@ func TestCastHandlerStepsInheritWorkingDirectory(t *testing.T) {
 	if err := iolib.Initialize(); err != nil {
 		t.Fatalf("initialize io: %v", err)
 	}
+	ui.InitFormatter(iolib.GetContext())
 	tmpDir := t.TempDir()
 	castPath := filepath.Join(tmpDir, "demo.cast")
 	pwdPath := filepath.Join(tmpDir, "pwd.txt")
@@ -348,6 +418,43 @@ func TestCastHandlerStepsInheritEnv(t *testing.T) {
 	}
 	if string(actual) != "from-cast" {
 		t.Fatalf("child env = %q, want from-cast", actual)
+	}
+}
+
+func TestCastHandlerRecordsToastStep(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	ui.InitFormatter(iolib.GetContext())
+	tmpDir := t.TempDir()
+	castPath := filepath.Join(tmpDir, "demo.cast")
+
+	_, err := (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+		Name:   "demo",
+		Type:   schema.TaskTypeCast,
+		Output: string(OutputModeNone),
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "notice",
+				Type:    "toast",
+				Level:   "info",
+				Content: "Recorded cast: .context/cast-command-demo/about.cast",
+			},
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("execute cast: %v", err)
+	}
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatalf("read cast: %v", err)
+	}
+	if !strings.Contains(string(content), "Recorded cast: .context/cast-command-demo/about.cast") {
+		t.Fatalf("toast output was not recorded in cast:\n%s", content)
 	}
 }
 

@@ -508,6 +508,11 @@ func TestTasksDecodeHook_CastSimulateDefaults(t *testing.T) {
 			map[string]any{
 				"type": TaskTypeCast,
 				"defaults": map[string]any{
+					"cast": map[string]any{
+						"rate":   "12ms",
+						"width":  120,
+						"height": 36,
+					},
 					"simulate": map[string]any{
 						"mode":   "typed",
 						"cursor": true,
@@ -541,6 +546,10 @@ func TestTasksDecodeHook_CastSimulateDefaults(t *testing.T) {
 	require.Len(t, result.Steps, 1)
 	defaults := result.Steps[0].Defaults
 	require.NotNil(t, defaults)
+	require.NotNil(t, defaults.Cast)
+	assert.Equal(t, "12ms", defaults.Cast.Rate)
+	assert.Equal(t, 120, defaults.Cast.Width)
+	assert.Equal(t, 36, defaults.Cast.Height)
 	require.NotNil(t, defaults.Simulate)
 	require.NotNil(t, defaults.Simulate.Cursor)
 	assert.True(t, *defaults.Simulate.Cursor)

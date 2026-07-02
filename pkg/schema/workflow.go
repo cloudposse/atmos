@@ -49,7 +49,15 @@ type SimulatePrompt struct {
 
 // CastDefaults configures defaults applied to child steps inside a cast step.
 type CastDefaults struct {
-	Simulate *CastSimulateDefaults `yaml:"simulate,omitempty" json:"simulate,omitempty" mapstructure:"simulate"`
+	Cast     *CastRecordingDefaults `yaml:"cast,omitempty" json:"cast,omitempty" mapstructure:"cast"`
+	Simulate *CastSimulateDefaults  `yaml:"simulate,omitempty" json:"simulate,omitempty" mapstructure:"simulate"`
+}
+
+// CastRecordingDefaults configures defaults for the cast recording itself.
+type CastRecordingDefaults struct {
+	Rate   string `yaml:"rate,omitempty" json:"rate,omitempty" mapstructure:"rate"`
+	Width  int    `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`
+	Height int    `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`
 }
 
 // CastSimulateDefaults configures defaults for direct child type: simulate steps.

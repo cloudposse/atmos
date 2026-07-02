@@ -1,5 +1,5 @@
 commands:
-  - name: casts generate demo casts fixtures basic describe-stacks
+  - name: casts generate demo fixtures basic describe-stacks
     description: Regenerate the describe stacks cast
     env: !include cast-defaults.yaml .env.command
     steps:
@@ -8,19 +8,17 @@ commands:
         command: atmos casts setup
       - type: shell
         name: clean
-        command: rm -f ../../website/static/casts/demo/casts/fixtures/basic/describe-stacks.cast
+        command: rm -f ../../website/static/casts/demo/fixtures/basic/describe-stacks.cast
       - type: cast
         name: describe-stacks
         working_directory: "../../.context/cast-fixtures/basic"
         command: atmos describe stacks --components=mycomponent
         mode: steps
         defaults:
+          cast: !include cast-defaults.yaml .cast
           simulate: !include cast-defaults.yaml .simulate
-        rate: 12ms
-        width: 120
-        height: 36
         output:
-          cast: "../../website/static/casts/demo/casts/fixtures/basic/describe-stacks.cast"
+          cast: "../../website/static/casts/demo/fixtures/basic/describe-stacks.cast"
         env: !include cast-defaults.yaml .env.recording
         steps:
           - type: shell
@@ -29,8 +27,8 @@ commands:
             command: atmos describe stacks --components=mycomponent
       - type: shell
         name: validate
-        command: atmos casts validate demo casts fixtures basic describe-stacks
-  - name: casts validate demo casts fixtures basic describe-stacks
+        command: atmos casts validate demo fixtures basic describe-stacks
+  - name: casts validate demo fixtures basic describe-stacks
     description: Validate the describe stacks cast
     steps:
       - type: script
@@ -38,7 +36,7 @@ commands:
         interpreter: python3
         script: |
           from pathlib import Path
-          text = Path("../../website/static/casts/demo/casts/fixtures/basic/describe-stacks.cast").read_text()
+          text = Path("../../website/static/casts/demo/fixtures/basic/describe-stacks.cast").read_text()
           for needle in ["nonprod", "prod", "mycomponent"]:
               if needle not in text:
                   raise SystemExit(f"describe stacks cast missing {needle!r}")
