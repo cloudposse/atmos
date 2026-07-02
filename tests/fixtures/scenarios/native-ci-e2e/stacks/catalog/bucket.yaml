@@ -8,7 +8,21 @@ components:
           terraform: "1.9.7"
           checkov: "3.2.529"
           kics: "2.1.20"
+          tflint: "0.59.1"
       hooks:
+        # Linter runs before init so bad HCL fails fast, and dogfoods the
+        # tflint kind's stdout SARIF capture through the native-CI outputs
+        # (step summary, PR annotations, Code Scanning). Scoped with --filter
+        # so only tflint_target.tf reports.
+        tflint-lint:
+          events:
+            - before-terraform-init
+          kind: tflint
+          args:
+            - "--chdir=$ATMOS_COMPONENT_PATH"
+            - "--format=sarif"
+            - "--filter=tflint_target.tf"
+          on_failure: warn
         checkov-policy:
           events:
             - after-terraform-plan
