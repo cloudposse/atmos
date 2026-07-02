@@ -631,6 +631,9 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 		if ok {
 			// Set the value in Viper.
 			v.Set(currentPath, data)
+			if err := node.Encode(data); err != nil {
+				return err
+			}
 		} else {
 			log.Warn(
 				"Invalid value returned from the YAML function",
@@ -640,8 +643,8 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 		}
 	} else {
 		log.Debug(emptyValueWarning, functionKey, strFunc)
+		node.Tag = "" // Avoid re-processing
 	}
-	node.Tag = "" // Avoid re-processing
 	return nil
 }
 

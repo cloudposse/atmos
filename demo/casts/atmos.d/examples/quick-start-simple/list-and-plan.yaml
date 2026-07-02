@@ -16,13 +16,7 @@ commands:
         command: atmos terraform plan station -s dev
         mode: steps
         defaults:
-          simulate:
-            mode: typed
-            cursor: true
-            prompt:
-              text: '> '
-              style: command
-            rate: 35ms
+          simulate: !include cast-defaults.yaml .simulate
         rate: 12ms
         write_rate: 35ms
         jitter: 0.25

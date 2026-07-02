@@ -15,6 +15,9 @@ commands:
         working_directory: "../../.context/cast-fixtures/native-terraform"
         command: atmos describe component vpc -s dev
         mode: steps
+        defaults:
+          simulate: !include cast-defaults.yaml .simulate
+        rate: 12ms
         width: 120
         height: 36
         output:

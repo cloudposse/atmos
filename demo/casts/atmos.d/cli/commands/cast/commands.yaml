@@ -33,13 +33,8 @@ commands:
         command: atmos about --cast=.context/cast-command-demo/about.cast
         mode: steps
         defaults:
-          simulate:
-            mode: typed
-            cursor: true
-            prompt:
-              text: '> '
-              style: command
-            rate: 35ms
+          simulate: !include cast-defaults.yaml .simulate
+        rate: 12ms
         width: 120
         height: 36
         output:
@@ -83,13 +78,8 @@ commands:
         command: atmos cast play website/static/casts/examples/custom-commands/hello-greet.cast
         mode: steps
         defaults:
-          simulate:
-            mode: typed
-            cursor: true
-            prompt:
-              text: '> '
-              style: command
-            rate: 35ms
+          simulate: !include cast-defaults.yaml .simulate
+        rate: 12ms
         width: 120
         height: 36
         output:
@@ -138,13 +128,8 @@ commands:
         command: atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --gif=.context/cast-render/hello-greet.gif
         mode: steps
         defaults:
-          simulate:
-            mode: typed
-            cursor: true
-            prompt:
-              text: '> '
-              style: command
-            rate: 35ms
+          simulate: !include cast-defaults.yaml .simulate
+        rate: 12ms
         width: 120
         height: 36
         output:

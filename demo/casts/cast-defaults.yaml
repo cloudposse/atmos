@@ -1,0 +1,7 @@
+simulate:
+  mode: typed
+  cursor: true
+  prompt:
+    text: '> '
+    style: command
+  rate: 35ms

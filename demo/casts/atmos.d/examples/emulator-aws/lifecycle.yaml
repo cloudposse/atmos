@@ -30,6 +30,9 @@ commands:
         working_directory: "../../.context/cast-fixtures/emulator-aws"
         command: atmos emulator up aws -s dev --ephemeral
         mode: steps
+        defaults:
+          simulate: !include cast-defaults.yaml .simulate
+        rate: 12ms
         width: 120
         height: 36
         output:
