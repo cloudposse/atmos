@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -346,7 +347,7 @@ func TestCastHandlerStepsInheritWorkingDirectory(t *testing.T) {
 	ui.InitFormatter(iolib.GetContext())
 	tmpDir := t.TempDir()
 	castPath := filepath.Join(tmpDir, "demo.cast")
-	pwdPath := filepath.Join(tmpDir, "pwd.txt")
+	markerPath := filepath.Join(tmpDir, "child.cwd")
 
 	_, err := (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
 		Name:             "demo",
@@ -360,7 +361,7 @@ func TestCastHandlerStepsInheritWorkingDirectory(t *testing.T) {
 			{
 				Name:    "pwd",
 				Type:    schema.TaskTypeShell,
-				Command: "pwd > pwd.txt",
+				Command: "printf inherited > child.cwd",
 			},
 		},
 	}, NewVariables())
@@ -368,16 +369,12 @@ func TestCastHandlerStepsInheritWorkingDirectory(t *testing.T) {
 		t.Fatalf("execute cast: %v", err)
 	}
 
-	actual, err := os.ReadFile(pwdPath)
+	actual, err := os.ReadFile(markerPath)
 	if err != nil {
-		t.Fatalf("read inherited pwd: %v", err)
+		t.Fatalf("read inherited marker: %v", err)
 	}
-	expectedDir := tmpDir
-	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
-		expectedDir = resolved
-	}
-	if strings.TrimSpace(string(actual)) != expectedDir {
-		t.Fatalf("child working directory = %q, want %q", strings.TrimSpace(string(actual)), expectedDir)
+	if string(actual) != "inherited" {
+		t.Fatalf("child marker = %q, want inherited", actual)
 	}
 }
 
@@ -453,7 +450,7 @@ func TestCastHandlerRecordsToastStep(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read cast: %v", err)
 	}
-	if !strings.Contains(string(content), "Recorded cast: .context/cast-command-demo/about.cast") {
+	if !strings.Contains(ansi.Strip(castEventText(t, content)), "Recorded cast: .context/cast-command-demo/about.cast") {
 		t.Fatalf("toast output was not recorded in cast:\n%s", content)
 	}
 }
@@ -1229,6 +1226,26 @@ func castOutputText(t *testing.T, content []byte) string {
 			t.Fatalf("parse cast event: %v", err)
 		}
 		if len(event) < 3 || event[1] != "o" {
+			continue
+		}
+		text, ok := event[2].(string)
+		if ok {
+			out.WriteString(text)
+		}
+	}
+	return out.String()
+}
+
+func castEventText(t *testing.T, content []byte) string {
+	t.Helper()
+	var out strings.Builder
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	for _, line := range lines[1:] {
+		var event []any
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("parse cast event: %v", err)
+		}
+		if len(event) < 3 {
 			continue
 		}
 		text, ok := event[2].(string)
