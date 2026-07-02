@@ -9,15 +9,8 @@ commands:
         command: atmos casts setup
       - type: shell
         name: prepare-tools
-        working_directory: "../../.context/cast-fixtures/toolchain"
-        env: &1
-          TERM: xterm-256color
-          COLORTERM: truecolor
-          ATMOS_FORCE_COLOR: '1'
-          CLICOLOR_FORCE: '1'
-          FORCE_COLOR: '1'
-          ATMOS_FORCE_TTY: 'true'
-          ATMOS_KEYRING_TYPE: memory
+        working_directory: &toolchain_fixture "../../.context/cast-fixtures/toolchain"
+        env: !include cast-defaults.yaml .env
         output: none
         command: atmos --logs-level=Off toolchain install
       - type: shell
@@ -25,7 +18,7 @@ commands:
         command: rm -f ../../website/static/casts/examples/toolchain/demo-convert.cast
       - type: cast
         name: demo-convert
-        working_directory: "../../.context/cast-fixtures/toolchain"
+        working_directory: *toolchain_fixture
         command: atmos demo convert
         mode: steps
         defaults:
@@ -35,7 +28,7 @@ commands:
         height: 36
         output:
           cast: "../../website/static/casts/examples/toolchain/demo-convert.cast"
-        env: *1
+        env: !include cast-defaults.yaml .env
         steps:
           - type: shell
             name: demo-convert

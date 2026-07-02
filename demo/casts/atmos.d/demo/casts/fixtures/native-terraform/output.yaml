@@ -9,15 +9,8 @@ commands:
         command: atmos casts setup
       - type: shell
         name: prepare-state
-        working_directory: "../../.context/cast-fixtures/native-terraform"
-        env: &1
-          TERM: xterm-256color
-          COLORTERM: truecolor
-          ATMOS_FORCE_COLOR: '1'
-          CLICOLOR_FORCE: '1'
-          FORCE_COLOR: '1'
-          ATMOS_FORCE_TTY: 'true'
-          ATMOS_KEYRING_TYPE: memory
+        working_directory: &native_terraform_fixture "../../.context/cast-fixtures/native-terraform"
+        env: !include cast-defaults.yaml .env
         output: none
         command: atmos --logs-level=Off terraform deploy vpc -s dev -auto-approve
       - type: shell
@@ -25,7 +18,7 @@ commands:
         command: rm -f ../../website/static/casts/demo/casts/fixtures/native-terraform/output.cast
       - type: cast
         name: output
-        working_directory: "../../.context/cast-fixtures/native-terraform"
+        working_directory: *native_terraform_fixture
         command: atmos terraform output vpc -s dev
         mode: steps
         defaults:
@@ -35,7 +28,7 @@ commands:
         height: 36
         output:
           cast: "../../website/static/casts/demo/casts/fixtures/native-terraform/output.cast"
-        env: *1
+        env: !include cast-defaults.yaml .env
         steps:
           - type: shell
             name: output

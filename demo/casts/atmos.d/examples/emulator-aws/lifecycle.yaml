@@ -9,15 +9,8 @@ commands:
         command: atmos casts setup
       - type: shell
         name: reset-stale-state
-        working_directory: "../../.context/cast-fixtures/emulator-aws"
-        env: &1
-          TERM: xterm-256color
-          COLORTERM: truecolor
-          ATMOS_FORCE_COLOR: '1'
-          CLICOLOR_FORCE: '1'
-          FORCE_COLOR: '1'
-          ATMOS_FORCE_TTY: 'true'
-          ATMOS_KEYRING_TYPE: memory
+        working_directory: &emulator_aws_fixture "../../.context/cast-fixtures/emulator-aws"
+        env: !include cast-defaults.yaml .env
         output: none
         command: |
           atmos --logs-level=Off emulator down aws -s dev || true
@@ -27,7 +20,7 @@ commands:
         command: rm -f ../../website/static/casts/examples/emulator-aws/lifecycle.cast
       - type: cast
         name: lifecycle
-        working_directory: "../../.context/cast-fixtures/emulator-aws"
+        working_directory: *emulator_aws_fixture
         command: atmos emulator up aws -s dev --ephemeral
         mode: steps
         defaults:
@@ -37,7 +30,7 @@ commands:
         height: 36
         output:
           cast: "../../website/static/casts/examples/emulator-aws/lifecycle.cast"
-        env: *1
+        env: !include cast-defaults.yaml .env
         steps:
           - type: shell
             name: emulator-up
