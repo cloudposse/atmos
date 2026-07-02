@@ -478,6 +478,101 @@ commands:
 	findCommand(t, validate.Commands, "all")
 }
 
+func TestImportCommandMergingPathNamesPreserveDeepMerge(t *testing.T) {
+	setupTestAdapters()
+
+	tempDir := t.TempDir()
+	files := map[string]string{
+		"atmos.yaml": `
+base_path: "."
+import:
+  - "base.yaml"
+commands:
+  - name: "casts generate demo casts fixtures basic list-stacks"
+    description: "Local list stacks"
+    steps:
+      - echo local list-stacks
+  - name: "casts generate demo casts fixtures native-terraform plan"
+    description: "Local native terraform plan"
+    steps:
+      - echo local native-terraform plan
+`,
+		"base.yaml": `
+commands:
+  - name: "casts"
+    description: "Base casts root"
+    commands:
+      - name: "generate"
+        description: "Base generate"
+        commands:
+          - name: "demo"
+            commands:
+              - name: "casts"
+                commands:
+                  - name: "fixtures"
+                    commands:
+                      - name: "basic"
+                        commands:
+                          - name: "list-stacks"
+                            description: "Base list stacks"
+                            steps:
+                              - echo base list-stacks
+                          - name: "describe-component"
+                            description: "Base describe component"
+                            steps:
+                              - echo base describe-component
+          - name: "examples"
+            commands:
+              - name: "quick-start-simple"
+                steps:
+                  - echo base example
+      - name: "setup"
+        description: "Base setup"
+        steps:
+          - echo setup
+`,
+	}
+	for relativePath, content := range files {
+		fullPath := filepath.Join(tempDir, relativePath)
+		require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0o755))
+		require.NoError(t, os.WriteFile(fullPath, []byte(content), 0o644))
+	}
+	t.Chdir(tempDir)
+
+	configInfo := schema.ConfigAndStacksInfo{
+		AtmosBasePath:      tempDir,
+		AtmosCliConfigPath: filepath.Join(tempDir, "atmos.yaml"),
+	}
+	cfg, err := InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+	require.Len(t, cfg.Commands, 1)
+
+	casts := cfg.Commands[0]
+	require.Equal(t, "casts", casts.Name)
+	assert.Equal(t, "Base casts root", casts.Description)
+	findCommand(t, casts.Commands, "setup")
+
+	generate := findCommand(t, casts.Commands, "generate")
+	assert.Equal(t, "Base generate", generate.Description)
+	examples := findCommand(t, generate.Commands, "examples")
+	findCommand(t, examples.Commands, "quick-start-simple")
+
+	demo := findCommand(t, generate.Commands, "demo")
+	demoCasts := findCommand(t, demo.Commands, "casts")
+	fixtures := findCommand(t, demoCasts.Commands, "fixtures")
+	basic := findCommand(t, fixtures.Commands, "basic")
+	listStacks := findCommand(t, basic.Commands, "list-stacks")
+	describeComponent := findCommand(t, basic.Commands, "describe-component")
+	assert.Equal(t, "Local list stacks", listStacks.Description)
+	require.Len(t, listStacks.Steps, 1)
+	assert.Equal(t, "echo local list-stacks", listStacks.Steps[0].Command)
+	assert.Equal(t, "Base describe component", describeComponent.Description)
+
+	nativeTerraform := findCommand(t, fixtures.Commands, "native-terraform")
+	plan := findCommand(t, nativeTerraform.Commands, "plan")
+	assert.Equal(t, "Local native terraform plan", plan.Description)
+}
+
 func findCommand(t *testing.T, commands []schema.Command, name string) schema.Command {
 	t.Helper()
 	for i := range commands {

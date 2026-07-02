@@ -1540,18 +1540,77 @@ func overlayProfileSettings(v *viper.Viper, settings map[string]any, prefix stri
 // When duplicates exist based on name, the second parameter takes precedence (override behavior).
 // This ensures local commands can override imported/remote commands.
 func mergeCommandArrays(first, second interface{}) []interface{} {
+	return mergeNormalizedCommandArrays(normalizeCommandArray(first), normalizeCommandArray(second))
+}
+
+func normalizeCommandArray(commands interface{}) []interface{} {
+	cmdSlice, ok := commands.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	var result []interface{}
+	for _, cmd := range cmdSlice {
+		normalized := normalizeCommandDefinition(cmd)
+		if normalized == nil {
+			continue
+		}
+		result = mergeNormalizedCommandArrays(result, []interface{}{normalized})
+	}
+
+	return result
+}
+
+func normalizeCommandDefinition(cmd interface{}) interface{} {
+	cmdMap, ok := cmd.(map[string]interface{})
+	if !ok {
+		return cmd
+	}
+
+	normalized := make(map[string]interface{}, len(cmdMap))
+	for key, value := range cmdMap {
+		if key == commandsKey {
+			normalized[key] = normalizeCommandArray(value)
+			continue
+		}
+		normalized[key] = value
+	}
+
+	name, ok := normalized["name"].(string)
+	if !ok {
+		return normalized
+	}
+
+	path := strings.Fields(name)
+	if len(path) <= 1 {
+		return normalized
+	}
+
+	leaf := make(map[string]interface{}, len(normalized))
+	for key, value := range normalized {
+		leaf[key] = value
+	}
+	leaf["name"] = path[len(path)-1]
+
+	var current interface{} = leaf
+	for i := len(path) - 2; i >= 0; i-- {
+		current = map[string]interface{}{
+			"name":      path[i],
+			commandsKey: []interface{}{current},
+		}
+	}
+
+	return current
+}
+
+func mergeNormalizedCommandArrays(first, second []interface{}) []interface{} {
 	// Build a map of commands by name, with later entries overriding earlier ones.
 	commandMap := make(map[string]interface{})
 	var orderedNames []string
 
 	// Helper function to process a command list.
-	processCommands := func(commands interface{}) {
-		cmdSlice, ok := commands.([]interface{})
-		if !ok {
-			return
-		}
-
-		for _, cmd := range cmdSlice {
+	processCommands := func(commands []interface{}) {
+		for _, cmd := range commands {
 			cmdMap, ok := cmd.(map[string]interface{})
 			if !ok {
 				continue
