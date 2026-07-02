@@ -20,6 +20,8 @@ type pushRuntime struct {
 	tagErr      error
 	pushResults map[string]*container.PushResult
 	pushErrs    map[string]error
+	imageInfos  map[string]*container.ImageInfo
+	inspectErrs map[string]error
 }
 
 func (r *pushRuntime) Build(context.Context, *container.BuildConfig) error { return nil }
@@ -62,8 +64,8 @@ func (r *pushRuntime) Push(_ context.Context, image string) (*container.PushResu
 	return r.pushResults[image], r.pushErrs[image]
 }
 
-func (r *pushRuntime) ImageInspect(context.Context, string) (*container.ImageInfo, error) {
-	return nil, nil
+func (r *pushRuntime) ImageInspect(_ context.Context, image string) (*container.ImageInfo, error) {
+	return r.imageInfos[image], r.inspectErrs[image]
 }
 
 func (r *pushRuntime) Logs(context.Context, string, bool, string, io.Writer, io.Writer) error {

@@ -122,6 +122,70 @@ func TestContainerHandlerExecuteBuildSkipsCISummaryWhenDisabled(t *testing.T) {
 	assert.False(t, called)
 }
 
+func TestWriteContainerImageSummarySkipsWhenCIUnavailable(t *testing.T) {
+	prev := writeStepSummaryFn
+	called := false
+	writeStepSummaryFn = func(string) error {
+		called = true
+		return nil
+	}
+	defer func() { writeStepSummaryFn = prev }()
+
+	writeContainerImageSummary(nil, &container.ImageInfo{RepoTags: []string{"app:local"}}, container.ImageSummaryOptions{Image: "app:local"})
+	writeContainerImageSummary(&schema.AtmosConfiguration{}, &container.ImageInfo{RepoTags: []string{"app:local"}}, container.ImageSummaryOptions{Image: "app:local"})
+	writeContainerImageSummary(&schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, nil, container.ImageSummaryOptions{Image: "app:local"})
+
+	assert.False(t, called)
+}
+
+func TestWriteContainerImageSummaryIgnoresWriteError(t *testing.T) {
+	prev := writeStepSummaryFn
+	writeStepSummaryFn = func(string) error {
+		return assert.AnError
+	}
+	defer func() { writeStepSummaryFn = prev }()
+
+	assert.NotPanics(t, func() {
+		writeContainerImageSummary(
+			&schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+			&container.ImageInfo{RepoTags: []string{"app:local"}},
+			container.ImageSummaryOptions{Image: "app:local"},
+		)
+	})
+}
+
+func TestWritePushedImageSummariesSkipsInvalidAndInspectFailures(t *testing.T) {
+	var summaries []string
+	prev := writeStepSummaryFn
+	writeStepSummaryFn = func(content string) error {
+		summaries = append(summaries, content)
+		return nil
+	}
+	defer func() { writeStepSummaryFn = prev }()
+	runtime := &pushRuntime{
+		imageInfos: map[string]*container.ImageInfo{
+			"registry.example.com/app:ok": {
+				ID:       "sha256:img",
+				RepoTags: []string{"registry.example.com/app:ok"},
+			},
+		},
+		inspectErrs: map[string]error{
+			"registry.example.com/app:missing": assert.AnError,
+		},
+	}
+
+	writePushedImageSummaries(context.Background(), runtime, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, []*container.PushResult{
+		nil,
+		{},
+		{Image: "registry.example.com/app:missing", Digest: "sha256:missing"},
+		{Image: "registry.example.com/app:ok", Digest: "sha256:ok"},
+	})
+
+	require.Len(t, summaries, 1)
+	assert.Contains(t, summaries[0], "## 🐳 registry.example.com/app:ok")
+	assert.Contains(t, summaries[0], "| Digest | `sha256:ok` |")
+}
+
 func TestContainerHandlerExecuteInspectWithFakeDocker(t *testing.T) {
 	installStepFakeDocker(t)
 	h := &ContainerHandler{}

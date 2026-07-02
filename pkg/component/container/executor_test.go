@@ -196,6 +196,57 @@ func TestExecuteBuild_SkipsCISummaryWhenDisabled(t *testing.T) {
 	require.NoError(t, ExecuteBuild(context.Background(), infoFor("api")))
 }
 
+func TestWriteImageSummarySkipsWhenCIUnavailable(t *testing.T) {
+	prev := writeComponentStepSummary
+	called := false
+	writeComponentStepSummary = func(string) error {
+		called = true
+		return nil
+	}
+	t.Cleanup(func() { writeComponentStepSummary = prev })
+
+	writeImageSummary(nil, &ctr.ImageInfo{RepoTags: []string{"img:1"}}, ctr.ImageSummaryOptions{Image: "img:1"})
+	writeImageSummary(&schema.AtmosConfiguration{}, &ctr.ImageInfo{RepoTags: []string{"img:1"}}, ctr.ImageSummaryOptions{Image: "img:1"})
+	writeImageSummary(&schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, nil, ctr.ImageSummaryOptions{Image: "img:1"})
+
+	assert.False(t, called)
+}
+
+func TestWriteImageSummaryIgnoresWriteError(t *testing.T) {
+	prev := writeComponentStepSummary
+	writeComponentStepSummary = func(string) error {
+		return assert.AnError
+	}
+	t.Cleanup(func() { writeComponentStepSummary = prev })
+
+	assert.NotPanics(t, func() {
+		writeImageSummary(
+			&schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+			&ctr.ImageInfo{RepoTags: []string{"img:1"}},
+			ctr.ImageSummaryOptions{Image: "img:1"},
+		)
+	})
+}
+
+func TestInspectAndWriteImageSummarySkipsInspectFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	rt := NewMockRuntime(ctrl)
+	prev := writeComponentStepSummary
+	called := false
+	writeComponentStepSummary = func(string) error {
+		called = true
+		return nil
+	}
+	t.Cleanup(func() { writeComponentStepSummary = prev })
+
+	rt.EXPECT().ImageInspect(gomock.Any(), "img:1").Return(nil, assert.AnError)
+
+	inspectAndWriteImageSummary(context.Background(), rt, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, "img:1", "sha256:digest")
+
+	assert.False(t, called)
+}
+
 func TestExecutePush_CallsRuntime(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

@@ -74,3 +74,32 @@ func TestRenderImageSummaryMarkdownFallsBackToRepoDigest(t *testing.T) {
 	assert.Contains(t, md, "| Tag | `latest` |")
 	assert.Contains(t, md, "| Digest | `sha256:repo` |")
 }
+
+func TestRenderImageSummaryMarkdownEdgeFallbacks(t *testing.T) {
+	assert.Empty(t, RenderImageSummaryMarkdown(nil, ImageSummaryOptions{}))
+	assert.Empty(t, summaryBadges(&ImageInfo{}, nil))
+	assert.Equal(t, "app@sha256:digest", summaryTag("app@sha256:digest", nil))
+	assert.Equal(t, "n/a", summaryDigest(&ImageInfo{}, ""))
+	assert.Equal(t, "sha256:inline", digestFromRepoDigest("sha256:inline"))
+	assert.Empty(t, digestFromRepoDigest("not-a-digest"))
+	assert.Equal(t, "999 B", humanizeDecimalBytes(999))
+	assert.Empty(t, humanizeDecimalBytes(0))
+	assert.Equal(t, "n/a", joinOrNA(nil))
+
+	md := RenderImageSummaryMarkdown(&ImageInfo{
+		ID:       "sha256:id",
+		RepoTags: []string{"example.com/app"},
+		Labels: map[string]string{
+			labelOCISource: "not a url with *markdown*",
+		},
+		Env: []string{"EMPTY"},
+	}, ImageSummaryOptions{})
+
+	assert.Contains(t, md, "## 🐳 example.com/app")
+	assert.Contains(t, md, "| Tag | `example.com/app` |")
+	assert.Contains(t, md, "| Digest | `n/a` |")
+	assert.Contains(t, md, "| Source | not a url with \\*markdown\\* |")
+	assert.Contains(t, md, "| `EMPTY` | `n/a` |")
+	assert.NotContains(t, md, "Layers (")
+	assert.NotContains(t, md, "Raw JSON")
+}
