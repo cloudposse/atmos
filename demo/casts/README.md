@@ -36,6 +36,9 @@ Regenerate one cast:
 ```sh
 atmos casts generate examples quick-start-simple list-and-plan
 atmos casts generate examples sops-secrets secret-lifecycle
+atmos casts generate cli commands cast usage
+atmos casts generate cli commands cast play
+atmos casts generate cli commands cast render
 atmos casts generate demo casts fixtures native-terraform plan
 atmos casts generate demo casts fixtures demo-vendoring pull
 atmos casts generate demo casts fixtures basic list-stacks

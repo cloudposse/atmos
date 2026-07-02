@@ -53,6 +53,9 @@ atmos auth user --help
 atmos auth user configure --help
 atmos auth validate --help
 atmos auth whoami --help
+atmos cast --help
+atmos cast play --help
+atmos cast render --help
 atmos aws --help
 atmos aws compliance --help
 atmos aws compliance report --help

@@ -1,0 +1,57 @@
+---
+title: atmos cast render
+sidebar_label: render
+sidebar_class_name: command
+id: render
+description: Render an asciicast recording to SVG, GIF, or MP4.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Use this command to render an asciicast recording to a publishable media file.
+</Intro>
+
+<CastPlayer src="/casts/cli/commands/cast/render.cast" title="atmos cast render" chrome controls scrubber />
+
+<Screengrab title="atmos cast render --help" slug="atmos-cast-render--help" />
+
+## Usage
+
+```shell
+atmos cast render <input.cast> [--svg <file>] [--gif <file>] [--mp4 <file>]
+```
+
+At least one output flag is required.
+
+## Arguments
+
+<dl>
+  <dt>`input.cast`</dt>
+  <dd>**Required.** Path to the asciicast recording to render.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--svg`</dt>
+  <dd>Write animated SVG output to this path.</dd>
+
+  <dt>`--gif`</dt>
+  <dd>Write animated GIF output to this path.</dd>
+
+  <dt>`--mp4`</dt>
+  <dd>Write MP4 output to this path.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos cast render ./artifacts/demo.cast --gif ./artifacts/demo.gif
+atmos cast render ./artifacts/demo.cast --gif ./artifacts/demo.gif --mp4 ./artifacts/demo.mp4
+```
+
+## See Also
+
+- [`atmos cast play`](/cli/commands/cast/play) — Replay a cast recording in the terminal

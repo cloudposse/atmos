@@ -21,6 +21,9 @@ commands:
         name: examples
         command: atmos casts generate examples
       - type: shell
+        name: cli-commands-cast
+        command: atmos casts generate cli commands cast
+      - type: shell
         name: validate
         command: atmos casts validate all
   - name: generate
@@ -217,6 +220,9 @@ commands:
       - type: shell
         name: examples
         command: atmos casts validate examples
+      - type: shell
+        name: cli-commands-cast
+        command: atmos casts validate cli commands cast
   - name: validate
     commands:
     - name: examples

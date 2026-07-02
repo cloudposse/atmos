@@ -1,0 +1,11 @@
+{"version":2,"width":120,"height":36,"timestamp":1782997586,"command":"atmos cast play website/static/casts/examples/custom-commands/hello-greet.cast","env":{"SHELL":"/bin/zsh","TERM":"xterm-256color"}}
+[0.014261625,"e","[play]\n"]
+[2.207174,"o","[hello]\n"]
+[5.239205333,"o","Hello world!\n"]
+[5.239283292,"o","✓ hello completed\n"]
+[5.9411735,"o","[greet]\n"]
+[6.30130525,"o","Hello, Alice\n"]
+[6.301406667,"o","✓ greet completed\n"]
+[7.004342125,"o","\u003e "]
+[7.251679917,"e","✓ play completed\n"]
+[7.954525875,"o","\u001b[1;38;2;0;163;224m\u003e \u001b[0m"]
