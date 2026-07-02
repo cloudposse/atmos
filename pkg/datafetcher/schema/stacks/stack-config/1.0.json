@@ -20,6 +20,9 @@
     "kubernetes": {
       "$ref": "#/definitions/kubernetes"
     },
+    "helm": {
+      "$ref": "#/definitions/helm"
+    },
     "packer": {
       "$ref": "#/definitions/packer"
     },
@@ -88,6 +91,11 @@
         },
         {
           "required": [
+            "helm"
+          ]
+        },
+        {
+          "required": [
             "packer"
           ]
         },
@@ -130,6 +138,45 @@
     }
   ],
   "definitions": {
+    "helm_repository": {
+      "title": "helm_repository",
+      "description": "Helm chart repository",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "pass_credentials_all": {
+          "type": "boolean"
+        },
+        "cert_file": {
+          "type": "string"
+        },
+        "key_file": {
+          "type": "string"
+        },
+        "ca_file": {
+          "type": "string"
+        },
+        "insecure_skip_tls_verify": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "url"
+      ]
+    },
     "condition_predicate": {
       "type": "string",
       "description": "Built-in condition predicate for step and hook execution.",
@@ -339,6 +386,9 @@
             "kubernetes": {
               "$ref": "#/definitions/kubernetes_components"
             },
+            "helm": {
+              "$ref": "#/definitions/helm_components"
+            },
             "packer": {
               "$ref": "#/definitions/packer_components"
             }
@@ -545,6 +595,9 @@
             "command": {
               "$ref": "#/definitions/command"
             },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
             "overrides": {
               "$ref": "#/definitions/overrides"
             }
@@ -601,6 +654,9 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
             }
           },
           "required": []
@@ -726,6 +782,155 @@
             },
             "dependencies": {
               "$ref": "#/definitions/dependencies"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helm": {
+      "title": "helm",
+      "description": "Helm component type defaults",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/helm_repository"
+              }
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "helm_components": {
+      "title": "helm_components",
+      "description": "Helm components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/helm_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "helm_component_manifest": {
+      "title": "helm_component_manifest",
+      "description": "Helm component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "chart": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "repository": {
+              "type": "string"
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/helm_repository"
+              }
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "values": {
+              "type": "object"
+            },
+            "values_files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
             }
           },
           "required": []
@@ -2000,6 +2205,22 @@
         {
           "type": "object",
           "additionalProperties": true
+        }
+      ]
+    },
+    "plugins": {
+      "title": "plugins",
+      "description": "Helm CLI plugins (e.g. helm-diff, helm-secrets) to install into the managed HELM_PLUGINS directory. Each entry is a compact spec: a short alias (e.g. \"diff@3.9.x\"), an \"owner/repo@version\", or a full plugin URL.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       ]
     },

@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -27,6 +29,11 @@ var (
 	kubeconfigReadyTimeout = 90 * time.Second
 	// Poll interval while waiting for the kubeconfig to be written.
 	kubeconfigPollInterval = time.Second
+	// KubernetesReadyTimeout bounds how long `emulator up` waits for k3s to
+	// register a Ready node after kubeconfig is harvestable.
+	kubernetesReadyTimeout = 2 * time.Minute
+	// Poll interval while waiting for the k3s node to become Ready.
+	kubernetesReadyPollInterval = 2 * time.Second
 )
 
 // kubeconfigServerPattern matches the `server:` line in a kubeconfig.
@@ -131,4 +138,73 @@ func apiServerHostPort(info *container.Info) int {
 		}
 	}
 	return 0
+}
+
+// waitKubernetesReady waits for k3s to register at least one Ready node. A
+// harvestable kubeconfig is necessary but not sufficient: on slower runtimes the
+// API can still reject immediate Helm release lookups while controllers settle.
+func (m *Manager) waitKubernetesReady(ctx context.Context, runtime container.Runtime, stack, name string) error {
+	deadline := time.Now().Add(kubernetesReadyTimeout)
+	var lastErr error
+	for {
+		ready, err := m.kubernetesNodeReady(ctx, runtime, stack, name)
+		if err == nil && ready {
+			return nil
+		}
+		if err != nil {
+			lastErr = err
+		} else {
+			lastErr = fmt.Errorf("%w: %s/emulator/%s Kubernetes node is not ready yet", errUtils.ErrEmulatorNotRunning, stack, name)
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if !time.Now().Before(deadline) {
+			return lastErr
+		}
+		wait := time.Until(deadline)
+		if wait > kubernetesReadyPollInterval {
+			wait = kubernetesReadyPollInterval
+		}
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func (m *Manager) kubernetesNodeReady(ctx context.Context, runtime container.Runtime, stack, name string) (bool, error) {
+	info, found, err := container.FindInstance(ctx, runtime, stack, cfg.EmulatorComponentType, name)
+	if err != nil {
+		return false, err
+	}
+	if !found || !container.IsContainerRunning(info.Status) {
+		return false, fmt.Errorf("%w: %s/emulator/%s is not running", errUtils.ErrEmulatorNotRunning, stack, name)
+	}
+	var buf bytes.Buffer
+	if err := runtime.Exec(ctx, info.ID, []string{"kubectl", "get", "nodes", "--no-headers"}, &container.ExecOptions{
+		AttachStdout: true,
+		Stdout:       &buf,
+	}); err != nil {
+		return false, err
+	}
+	return kubernetesNodeListHasReadyNode(buf.String()), nil
+}
+
+func kubernetesNodeListHasReadyNode(output string) bool {
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		for _, condition := range strings.Split(fields[1], ",") {
+			if condition == "Ready" {
+				return true
+			}
+		}
+	}
+	return false
 }

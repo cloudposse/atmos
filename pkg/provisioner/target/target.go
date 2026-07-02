@@ -20,6 +20,34 @@ type Provisioner interface {
 	Deliver(ctx context.Context, in *DeliverInput) error
 }
 
+// Fetcher is an optional capability a Provisioner may implement to read the
+// CURRENT state already published at the destination, so a producer can diff a
+// freshly rendered artifact against what is live there (e.g. the manifests
+// currently committed in a Git deployment repository). It is intentionally
+// separate from Provisioner so write-only targets need not implement it.
+type Fetcher interface {
+	// Fetch returns the artifact currently published at the destination. A
+	// destination that holds nothing yet returns an artifact with no Files (not an
+	// error), so the caller treats it as an empty baseline.
+	Fetch(ctx context.Context, in *FetchInput) (ProvisionArtifact, error)
+}
+
+// FetchInput carries everything a target needs to read its current state. It
+// mirrors DeliverInput without an artifact (nothing is being published).
+type FetchInput struct {
+	// AtmosConfig is the fully merged Atmos configuration.
+	AtmosConfig *schema.AtmosConfiguration
+	// TargetName is the configured name of the selected target.
+	TargetName string
+	// TargetConfig is the merged provision.targets.<name> block.
+	TargetConfig map[string]any
+	// AuthContext is the resolved auth context for the component, if any.
+	AuthContext *schema.AuthContext
+	// EnvProvider composes the identity environment for targets that authenticate
+	// via Atmos Auth. May be nil, in which case ambient credentials apply.
+	EnvProvider IdentityEnvironmentProvider
+}
+
 // IdentityEnvironmentProvider supplies the composed identity environment for an
 // Atmos Auth identity (including linked auto-provision integrations such as
 // github/sts, which materializes GIT_CONFIG_* variables). The auth.AuthManager
@@ -114,4 +142,22 @@ func Deliver(ctx context.Context, kind string, in *DeliverInput) error {
 		return fmt.Errorf("%w: %q (registered: %v)", errUtils.ErrProvisionTargetKindUnknown, kind, RegisteredKinds())
 	}
 	return p.Deliver(ctx, in)
+}
+
+// Fetch resolves the registered provisioner for the kind and reads its current
+// state. It returns ErrProvisionTargetKindUnknown when no provisioner is
+// registered for the kind, and ErrProvisionTargetNoFetch when the provisioner
+// does not implement the Fetcher capability.
+func Fetch(ctx context.Context, kind string, in *FetchInput) (ProvisionArtifact, error) {
+	defer perf.Track(in.AtmosConfig, "target.Fetch")()
+
+	p, ok := Get(kind)
+	if !ok {
+		return ProvisionArtifact{}, fmt.Errorf("%w: %q (registered: %v)", errUtils.ErrProvisionTargetKindUnknown, kind, RegisteredKinds())
+	}
+	fetcher, ok := p.(Fetcher)
+	if !ok {
+		return ProvisionArtifact{}, fmt.Errorf("%w: %q", errUtils.ErrProvisionTargetNoFetch, kind)
+	}
+	return fetcher.Fetch(ctx, in)
 }

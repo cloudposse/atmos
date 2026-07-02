@@ -54,6 +54,10 @@
         "provider": "",
         "auto_generate_files": false
       },
+      "helm": {
+        "base_path": "",
+        "auto_generate_files": false
+      },
       "list": {
         "format": "",
         "columns": null

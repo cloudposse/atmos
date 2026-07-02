@@ -7,6 +7,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
 func TestDefaultFormatterConfig(t *testing.T) {
@@ -31,6 +34,22 @@ func TestFormat_SimpleError(t *testing.T) {
 
 	assert.Contains(t, result, "test error")
 	assert.NotContains(t, result, "💡") // No hints.
+}
+
+func TestFormat_RendererFailureFallsBackToStructuredPlainError(t *testing.T) {
+	original := newTerminalMarkdownRenderer
+	newTerminalMarkdownRenderer = func(schema.AtmosConfiguration) (*markdown.Renderer, error) {
+		return nil, errors.New("renderer init failed")
+	}
+	defer func() {
+		newTerminalMarkdownRenderer = original
+	}()
+
+	result := Format(errors.New("user aborted"), DefaultFormatterConfig())
+
+	assert.Contains(t, result, "Error: user aborted")
+	assert.NotContains(t, result, "# Error")
+	assert.NotContains(t, result, "**Error**")
 }
 
 func TestFormat_ErrorWithHint(t *testing.T) {

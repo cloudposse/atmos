@@ -45,6 +45,10 @@ jobs:
 
           # Fail on moderate or higher severity vulnerabilities
           fail-on-severity: moderate
+          # Temporary allowlist: oras-go v2.6.1 is pulled in by Helm v4.2.1 and is
+          # currently the latest tagged v2 release. Remove after Helm/ORAS ships a
+          # fixed version for GHSA-fxhp-mv3v-67qp.
+          allow-ghsas: GHSA-fxhp-mv3v-67qp
 
           # Comment on PR with details
           comment-summary-in-pr: always

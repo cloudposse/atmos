@@ -547,6 +547,9 @@
             "command": {
               "$ref": "#/definitions/command"
             },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
             "overrides": {
               "$ref": "#/definitions/overrides"
             }
@@ -862,6 +865,9 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
             },
             "auth": {
               "$ref": "#/definitions/component_auth"
@@ -1191,6 +1197,22 @@
             }
           },
           "required": []
+        }
+      ]
+    },
+    "plugins": {
+      "title": "plugins",
+      "description": "Helm CLI plugins (e.g. helm-diff, helm-secrets) to install into the managed HELM_PLUGINS directory. Each entry is a compact spec: a short alias (e.g. \"diff@3.9.x\"), an \"owner/repo@version\", or a full plugin URL.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       ]
     },

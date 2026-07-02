@@ -6,6 +6,12 @@ components:
       metadata:
         type: abstract
         component: nginx
+      # Helm CLI plugins required by helmfile. Atmos installs these into a managed
+      # HELM_PLUGINS directory before running helmfile. helmfile uses helm-diff for
+      # `diff` and `apply`. Concrete components inherit this list from the abstract
+      # `demo` base component.
+      plugins:
+        - diff@v3.9.14
       # Atmos installs these CLIs and puts them on PATH for `atmos helmfile *`:
       # helmfile (the orchestrator), helm (the chart engine it drives), and kubectl
       # (the nginx release's presync/postuninstall hooks shell out to it). Resolved
@@ -18,7 +24,7 @@ components:
           helm: "v3.21.2"
           kubectl: "1.31.3"
           # The nginx release's AnnotationsTransformer runs through kustomize.
-          kustomize: "v5.4.3"
+          kustomize: "5.4.3"
       vars:
         image:
           tag: "latest"

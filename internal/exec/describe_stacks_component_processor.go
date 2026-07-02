@@ -269,6 +269,8 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 		{cfg.HelmfileSectionName, processComponentTypeOpts{}},
 		{cfg.PackerSectionName, processComponentTypeOpts{}},
 		{cfg.AnsibleSectionName, processComponentTypeOpts{}},
+		{cfg.KubernetesSectionName, processComponentTypeOpts{applyMetadataInheritance: true}},
+		{cfg.HelmSectionName, processComponentTypeOpts{applyMetadataInheritance: true}},
 		{cfg.ContainerSectionName, processComponentTypeOpts{}},
 		{cfg.EmulatorSectionName, processComponentTypeOpts{}},
 	}
@@ -896,6 +898,8 @@ func hasStackExplicitComponents(stackSection map[string]any) bool {
 		cfg.HelmfileSectionName,
 		cfg.PackerSectionName,
 		cfg.AnsibleSectionName,
+		cfg.KubernetesSectionName,
+		cfg.HelmSectionName,
 		cfg.ContainerSectionName,
 		cfg.EmulatorSectionName,
 	} {

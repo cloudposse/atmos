@@ -35,6 +35,8 @@ GLOBAL FLAGS
   -C, --chdir string                         Change working directory before executing the command (run as if Atmos
                                              started in this directory)
 
+      --ci                                   Enable CI mode for automated pipelines (writes job summary).
+
       --config strings                       Paths to configuration files (comma-separated or repeated flag)
 
       --config-path strings                  Paths to search for Atmos configuration (comma-separated or repeated flag)

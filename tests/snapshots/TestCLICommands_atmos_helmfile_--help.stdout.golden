@@ -23,12 +23,15 @@ AVAILABLE COMMANDS
       source [command]    Manage Helmfile component sources (JIT vendoring)
       sync                Synchronize the state of Helm releases by reconciling the actual state with the desired state
                           (applies changes as needed).
+      template            Render Helm releases defined in a helmfile to Kubernetes manifests.
       version             Get Helmfile version
 
 FLAGS
 
       --              Use double dashes to separate Atmos-specific options from native arguments and flags for the
                       command.
+
+      --ci            Enable CI mode for automated pipelines (writes job summary).
 
   -h, --help          help for helmfile
 
