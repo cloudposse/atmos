@@ -744,6 +744,17 @@ func executeCustomCommand(
 	}
 
 	if len(deps) > 0 {
+		installer := dependencies.NewInstaller(&atmosConfig)
+		if err := installer.EnsureTools(deps); err != nil {
+			err = errUtils.Build(errUtils.ErrDependencyResolution).
+				WithCause(err).
+				WithExplanationf("Failed to install dependencies for command '%s'", commandConfig.Name).
+				WithHint("Check the command's dependencies section for valid tool specifications").
+				WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
+				Err()
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+
 		log.Debug("Adding configured command dependencies to PATH", customCommandKeyCommand, commandConfig.Name, "tools", deps)
 		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
 			err = errUtils.Build(errUtils.ErrDependencyResolution).
