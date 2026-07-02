@@ -127,6 +127,19 @@ func TestSanitizeOutput(t *testing.T) {
 			input:    "TRCE  Checking for atmos.yaml in home directory path=/absolute/path/to/repo/some/subdir/.atmos",
 			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
 		},
+		{
+			name: "GitHub auth debug logs should be removed",
+			input: strings.Join([]string{
+				"DEBU  before",
+				"DEBU  GitHub CLI token lookup failed (CLI may not be installed or authenticated) cli=gh error=\"exit status 1\"",
+				"DEBU  No GitHub token resolved; using anonymous (unauthenticated) GitHub access (subject to rate limits)",
+				"DEBU  after",
+			}, "\n"),
+			expected: strings.Join([]string{
+				"DEBU  before",
+				"DEBU  after",
+			}, "\n"),
+		},
 	}
 
 	for _, tt := range tests {

@@ -517,6 +517,14 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	terraformCommandEnvLogRegex := regexp.MustCompile(`(?m)^.*Found ENV variable ATMOS_COMPONENTS_TERRAFORM_COMMAND=[^\n]*\n?`)
 	result = terraformCommandEnvLogRegex.ReplaceAllString(result, "")
 
+	// 16. Drop environment-dependent GitHub authentication debug logs.
+	// These lines depend on whether gh is installed/authenticated in the runner and do not affect
+	// the command behavior under test.
+	githubCLITokenLookupLogRegex := regexp.MustCompile(`(?m)^.*GitHub CLI token lookup failed \(CLI may not be installed or authenticated\)[^\n]*\n?`)
+	result = githubCLITokenLookupLogRegex.ReplaceAllString(result, "")
+	anonymousGitHubAccessLogRegex := regexp.MustCompile(`(?m)^.*No GitHub token resolved; using anonymous \(unauthenticated\) GitHub access \(subject to rate limits\)[^\n]*\n?`)
+	result = anonymousGitHubAccessLogRegex.ReplaceAllString(result, "")
+
 	// 16. Apply custom replacements if provided.
 	// These are test-specific patterns that don't need to be part of the global sanitization.
 	// IMPORTANT: This must run LAST so it can override any built-in sanitization results.
@@ -1738,15 +1746,11 @@ func getSnapshotFilenames(testName string, isTty bool) (stdout, stderr, tty stri
 
 // verifyTTYSnapshot handles snapshot verification for TTY mode tests.
 func verifyTTYSnapshot(t *testing.T, tc *TestCase, ttyPath, combinedOutput string, regenerate bool) bool {
-	if regenerate {
-		// Strip trailing whitespace from output before saving snapshot if requested.
-		outputToSave := combinedOutput
-		if tc.Expect.IgnoreTrailingWhitespace {
-			outputToSave = stripTrailingWhitespace(combinedOutput)
-		}
+	combinedOutput = stripTrailingWhitespace(combinedOutput)
 
+	if regenerate {
 		t.Logf("Updating TTY snapshot at %q", ttyPath)
-		updateSnapshot(ttyPath, outputToSave)
+		updateSnapshot(ttyPath, combinedOutput)
 		return true
 	}
 
@@ -1757,13 +1761,7 @@ $ go test ./tests -run %q -regenerate-snapshots`, ttyPath, t.Name())
 	}
 
 	filteredActual := applyIgnorePatterns(combinedOutput, tc.Expect.Diff)
-	filteredExpected := applyIgnorePatterns(readSnapshot(t, ttyPath), tc.Expect.Diff)
-
-	// Strip trailing whitespace if requested.
-	if tc.Expect.IgnoreTrailingWhitespace {
-		filteredActual = stripTrailingWhitespace(filteredActual)
-		filteredExpected = stripTrailingWhitespace(filteredExpected)
-	}
+	filteredExpected := applyIgnorePatterns(stripTrailingWhitespace(readSnapshot(t, ttyPath)), tc.Expect.Diff)
 
 	if filteredExpected != filteredActual {
 		var diff string
@@ -1821,8 +1819,8 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Normalize line endings in actual output for cross-platform consistency.
 	// This handles cases where CLI might output CRLF on Windows but snapshots use LF.
-	stdoutOutput = normalizeLineEndings(stdoutOutput)
-	stderrOutput = normalizeLineEndings(stderrOutput)
+	stdoutOutput = stripTrailingWhitespace(normalizeLineEndings(stdoutOutput))
+	stderrOutput = stripTrailingWhitespace(normalizeLineEndings(stderrOutput))
 
 	stdoutPath, stderrPath, ttyPath := getSnapshotFilenames(t.Name(), tc.Tty)
 
@@ -1834,18 +1832,10 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Non-TTY mode: separate stdout and stderr snapshots
 	if regenerate {
-		// Strip trailing whitespace from output before saving snapshot if requested.
-		stdoutToSave := stdoutOutput
-		stderrToSave := stderrOutput
-		if tc.Expect.IgnoreTrailingWhitespace {
-			stdoutToSave = stripTrailingWhitespace(stdoutOutput)
-			stderrToSave = stripTrailingWhitespace(stderrOutput)
-		}
-
 		t.Logf("Updating stdout snapshot at %q", stdoutPath)
-		updateSnapshot(stdoutPath, stdoutToSave)
+		updateSnapshot(stdoutPath, stdoutOutput)
 		t.Logf("Updating stderr snapshot at %q", stderrPath)
-		updateSnapshot(stderrPath, stderrToSave)
+		updateSnapshot(stderrPath, stderrOutput)
 		return true
 	}
 
@@ -1857,13 +1847,7 @@ $ go test ./tests -run %q -regenerate-snapshots`, stdoutPath, t.Name())
 	}
 
 	filteredStdoutActual := applyIgnorePatterns(stdoutOutput, tc.Expect.Diff)
-	filteredStdoutExpected := applyIgnorePatterns(readSnapshot(t, stdoutPath), tc.Expect.Diff)
-
-	// Strip trailing whitespace if requested.
-	if tc.Expect.IgnoreTrailingWhitespace {
-		filteredStdoutActual = stripTrailingWhitespace(filteredStdoutActual)
-		filteredStdoutExpected = stripTrailingWhitespace(filteredStdoutExpected)
-	}
+	filteredStdoutExpected := applyIgnorePatterns(stripTrailingWhitespace(readSnapshot(t, stdoutPath)), tc.Expect.Diff)
 
 	if filteredStdoutExpected != filteredStdoutActual {
 		var diff string
@@ -1884,13 +1868,7 @@ Run the following command to create it:
 $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	}
 	filteredStderrActual := applyIgnorePatterns(stderrOutput, tc.Expect.Diff)
-	filteredStderrExpected := applyIgnorePatterns(readSnapshot(t, stderrPath), tc.Expect.Diff)
-
-	// Strip trailing whitespace if requested.
-	if tc.Expect.IgnoreTrailingWhitespace {
-		filteredStderrActual = stripTrailingWhitespace(filteredStderrActual)
-		filteredStderrExpected = stripTrailingWhitespace(filteredStderrExpected)
-	}
+	filteredStderrExpected := applyIgnorePatterns(stripTrailingWhitespace(readSnapshot(t, stderrPath)), tc.Expect.Diff)
 
 	if filteredStderrExpected != filteredStderrActual {
 		var diff string
