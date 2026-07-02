@@ -224,6 +224,7 @@ var (
 	ErrGitWorkdirNotInitialized    = errors.New("git repository not cloned or initialized")
 	ErrGitTargetPathInvalid        = errors.New("git target path must not be empty or the repository root")
 	ErrGitArtifactWrite            = errors.New("failed to write provision artifact")
+	ErrGitArtifactRead             = errors.New("failed to read provision artifact")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")
@@ -262,6 +263,11 @@ var (
 	ErrDependencyConstraint = errors.New("dependency constraint validation failed")
 	ErrDependencyResolution = errors.New("dependency resolution failed")
 	ErrToolInstall          = errors.New("tool installation failed")
+
+	// Helm plugin errors.
+	ErrInvalidHelmPluginSpec = errors.New("invalid helm plugin specification")
+	ErrHelmPluginInstall     = errors.New("helm plugin installation failed")
+	ErrHelmBinaryNotFound    = errors.New("helm binary not found")
 
 	// Toolchain errors.
 	ErrToolNotFound                 = errors.New("tool not found")
@@ -961,6 +967,7 @@ var (
 	ErrProvisionTargetNotFound    = errors.New("provision target not found")
 	ErrProvisionTargetKindUnknown = errors.New("provision target kind is not registered")
 	ErrProvisionTargetKindMissing = errors.New("provision target is missing a kind")
+	ErrProvisionTargetNoFetch     = errors.New("provision target kind does not support reading current state")
 	ErrGitPullRequestNotSupported = errors.New("git pull request publishing is not supported by the cli provider")
 
 	// Backend provisioning errors.
@@ -1297,6 +1304,19 @@ var (
 	ErrKubernetesValidationFailed           = errors.New("kubernetes manifest validation failed")
 	ErrKubernetesManifestInvalidName        = errors.New("object metadata.name is not a valid DNS-1123 subdomain")
 	ErrKubernetesValidate                   = errors.New("failed to validate kubernetes object")
+
+	// Helm-native component errors.
+	ErrHelmFlagsMutuallyExclusive    = errors.New("--all and --affected are mutually exclusive")
+	ErrHelmComponentArgWithSelection = errors.New("component argument cannot be used with --all or --affected")
+	ErrHelmOutputSingleComponentOnly = errors.New("--output and --output-dir are only supported when rendering one component")
+	ErrHelmComponentArgRequired      = errors.New("requires exactly one component argument unless --all or --affected is set")
+	ErrHelmUnsupportedOperation      = errors.New("unsupported helm operation")
+	ErrHelmUnsupportedSubcommand     = errors.New("unsupported helm subcommand")
+	ErrHelmChartNotConfigured        = errors.New("helm component is missing a 'chart' reference")
+	ErrHelmRenderFailed              = errors.New("failed to render helm chart")
+	ErrHelmReleaseNameRequired       = errors.New("helm component is missing a release name")
+	ErrHelmDiffFailed                = errors.New("failed to compute helm diff")
+	ErrHelmBaselineRead              = errors.New("failed to read helm diff baseline")
 )
 
 // Stack dependency (`depends_on`) resolution errors.
