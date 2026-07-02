@@ -1,8 +1,7 @@
 commands:
   - name: casts generate examples emulator-aws lifecycle
     description: Regenerate the AWS emulator lifecycle cast
-    env:
-      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: setup
@@ -10,7 +9,7 @@ commands:
       - type: shell
         name: reset-stale-state
         working_directory: &emulator_aws_fixture "../../.context/cast-fixtures/emulator-aws"
-        env: !include cast-defaults.yaml .env
+        env: !include cast-defaults.yaml .env.recording
         output: none
         command: |
           atmos --logs-level=Off emulator down aws -s dev || true
@@ -30,7 +29,7 @@ commands:
         height: 36
         output:
           cast: "../../website/static/casts/examples/emulator-aws/lifecycle.cast"
-        env: !include cast-defaults.yaml .env
+        env: !include cast-defaults.yaml .env.recording
         steps:
           - type: shell
             name: emulator-up

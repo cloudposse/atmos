@@ -1,8 +1,7 @@
 commands:
   - name: casts generate demo casts fixtures native-terraform output
     description: Regenerate the Terraform output cast
-    env:
-      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: setup
@@ -10,7 +9,7 @@ commands:
       - type: shell
         name: prepare-state
         working_directory: &native_terraform_fixture "../../.context/cast-fixtures/native-terraform"
-        env: !include cast-defaults.yaml .env
+        env: !include cast-defaults.yaml .env.recording
         output: none
         command: atmos --logs-level=Off terraform deploy vpc -s dev -auto-approve
       - type: shell
@@ -28,7 +27,7 @@ commands:
         height: 36
         output:
           cast: "../../website/static/casts/demo/casts/fixtures/native-terraform/output.cast"
-        env: !include cast-defaults.yaml .env
+        env: !include cast-defaults.yaml .env.recording
         steps:
           - type: shell
             name: output

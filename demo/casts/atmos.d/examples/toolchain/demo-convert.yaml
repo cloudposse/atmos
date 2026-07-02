@@ -1,8 +1,7 @@
 commands:
   - name: casts generate examples toolchain demo-convert
     description: Regenerate the Toolchain example cast
-    env:
-      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: setup
@@ -10,7 +9,7 @@ commands:
       - type: shell
         name: prepare-tools
         working_directory: &toolchain_fixture "../../.context/cast-fixtures/toolchain"
-        env: !include cast-defaults.yaml .env
+        env: !include cast-defaults.yaml .env.recording
         output: none
         command: atmos --logs-level=Off toolchain install
       - type: shell
@@ -28,7 +27,7 @@ commands:
         height: 36
         output:
           cast: "../../website/static/casts/examples/toolchain/demo-convert.cast"
-        env: !include cast-defaults.yaml .env
+        env: !include cast-defaults.yaml .env.recording
         steps:
           - type: shell
             name: demo-convert

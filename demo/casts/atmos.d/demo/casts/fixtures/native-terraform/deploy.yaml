@@ -1,8 +1,7 @@
 commands:
   - name: casts generate demo casts fixtures native-terraform deploy
     description: Regenerate the Terraform deploy cast
-    env:
-      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: setup
@@ -22,7 +21,7 @@ commands:
         height: 36
         output:
           cast: "../../website/static/casts/demo/casts/fixtures/native-terraform/deploy.cast"
-        env: !include cast-defaults.yaml .env
+        env: !include cast-defaults.yaml .env.recording
         steps:
           - type: shell
             name: deploy

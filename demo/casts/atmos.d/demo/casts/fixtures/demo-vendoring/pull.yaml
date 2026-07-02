@@ -1,8 +1,7 @@
 commands:
   - name: casts generate demo casts fixtures demo-vendoring pull
     description: Regenerate the vendor pull cast
-    env:
-      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: setup
@@ -22,7 +21,7 @@ commands:
         height: 36
         output:
           cast: "../../website/static/casts/demo/casts/fixtures/demo-vendoring/pull.cast"
-        env: !include cast-defaults.yaml .env
+        env: !include cast-defaults.yaml .env.recording
         steps:
           - type: shell
             name: pull

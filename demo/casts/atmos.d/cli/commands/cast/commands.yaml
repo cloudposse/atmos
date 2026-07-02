@@ -2,8 +2,7 @@ commands:
   - name: casts generate cli commands cast
     description: Regenerate cast command demos
     working_directory: &repo_root "../.."
-    env:
-      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: usage
@@ -17,8 +16,7 @@ commands:
   - name: casts generate cli commands cast usage
     description: Regenerate the cast command usage demo
     working_directory: *repo_root
-    env:
-      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: setup
@@ -39,7 +37,7 @@ commands:
         height: 36
         output:
           cast: "../../website/static/casts/cli/commands/cast/usage.cast"
-        env: !include cast-defaults.yaml .env
+        env: !include cast-defaults.yaml .env.recording
         steps:
           - type: simulate
             text: atmos about --cast=.context/cast-command-demo/about.cast
@@ -57,8 +55,7 @@ commands:
   - name: casts generate cli commands cast play
     description: Regenerate the cast play command demo
     working_directory: *repo_root
-    env:
-      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: setup
@@ -77,7 +74,7 @@ commands:
         height: 36
         output:
           cast: "../../website/static/casts/cli/commands/cast/play.cast"
-        env: !include cast-defaults.yaml .env
+        env: !include cast-defaults.yaml .env.recording
         steps:
           - type: simulate
             text: &play_cmd atmos cast play website/static/casts/examples/custom-commands/hello-greet.cast
@@ -91,8 +88,7 @@ commands:
   - name: casts generate cli commands cast render
     description: Regenerate the cast render command demo
     working_directory: *repo_root
-    env:
-      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: setup
@@ -127,7 +123,7 @@ commands:
         height: 36
         output:
           cast: "../../website/static/casts/cli/commands/cast/render.cast"
-        env: !include cast-defaults.yaml .env
+        env: !include cast-defaults.yaml .env.recording
         steps:
           - type: simulate
             text: atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --gif=.context/cast-render/hello-greet.gif
@@ -144,8 +140,7 @@ commands:
   - name: casts validate cli commands cast
     description: Validate cast command demos
     working_directory: *repo_root
-    env:
-      PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+    env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
         name: usage
