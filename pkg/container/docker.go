@@ -208,6 +208,7 @@ func (d *DockerRuntime) parseInspectData(data map[string]interface{}) *Info {
 
 	// Parse labels.
 	info.Labels = getLabelsFromInspect(data)
+	info.Networks = getNetworksFromInspect(data)
 
 	return info
 }
@@ -252,6 +253,25 @@ func getLabelsFromInspect(data map[string]interface{}) map[string]string {
 	for k, v := range labels {
 		if s, ok := v.(string); ok {
 			result[k] = s
+		}
+	}
+	return result
+}
+
+func getNetworksFromInspect(data map[string]interface{}) []string {
+	settings, ok := data["NetworkSettings"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	networks, ok := settings["Networks"].(map[string]interface{})
+	if !ok || len(networks) == 0 {
+		return nil
+	}
+
+	result := make([]string, 0, len(networks))
+	for name := range networks {
+		if name != "" {
+			result = append(result, name)
 		}
 	}
 	return result

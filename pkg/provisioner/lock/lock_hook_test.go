@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/provisioner"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -79,6 +80,32 @@ func TestAutoLockProviders_PersistsForSourceComponent(t *testing.T) {
 	got, err := os.ReadFile(filepath.Join(dir, provisioner.InstanceLockFilename(cc)))
 	require.NoError(t, err)
 	assert.Equal(t, "locked\n", string(got))
+}
+
+func TestAutoLockProviders_SkipsRemoteWorkdirSource(t *testing.T) {
+	dir := t.TempDir()
+	workdirPath := filepath.Join(dir, ".workdir", "terraform", "dev-vpc")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+	require.NoError(t, provWorkdir.WriteMetadata(workdirPath, &provWorkdir.WorkdirMetadata{
+		Component:  "vpc",
+		Stack:      "dev",
+		SourceType: provWorkdir.SourceTypeRemote,
+		Source:     "github.com/cloudposse/terraform-aws-vpc//src",
+	}))
+
+	var calls [][]string
+	cfg := cfgWith([]string{"linux_amd64", "darwin_arm64"}, true, false)
+	cc := map[string]any{
+		"atmos_stack":              "dev",
+		"atmos_component":          "vpc",
+		provWorkdir.WorkdirPathKey: workdirPath,
+	}
+
+	require.NoError(t, autoLockProviders(context.Background(), cfg, cc, nil, recordingExecCtx(workdirPath, &calls)))
+	require.Len(t, calls, 1)
+
+	_, err := os.Stat(filepath.Join("github.com", "cloudposse", "terraform-aws-vpc", "src", provisioner.InstanceLockFilename(cc)))
+	assert.True(t, os.IsNotExist(err), "remote source identifiers must not be treated as local persistence paths")
 }
 
 func TestAutoLockProviders_Skips(t *testing.T) {

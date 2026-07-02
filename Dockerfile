@@ -18,8 +18,8 @@ SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
 RUN set -ex; \
     # Update the package list
     apt-get update; \
-    # Install curl and git
-    apt-get -y install  --no-install-recommends curl git ca-certificates; \
+    # Install runtime dependencies required by Atmos-managed tools.
+    apt-get -y install  --no-install-recommends curl git ca-certificates python3; \
     # Install the Cloud Posse Debian repository
     curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash -x; \
     # Install OpenTofu

@@ -654,3 +654,18 @@ func TestParseDockerPorts(t *testing.T) {
 		})
 	}
 }
+
+func TestGetNetworksFromInspect(t *testing.T) {
+	data := map[string]interface{}{
+		"NetworkSettings": map[string]interface{}{
+			"Networks": map[string]interface{}{
+				"github_network_123": map[string]interface{}{},
+				"bridge":             map[string]interface{}{},
+			},
+		},
+	}
+
+	got := getNetworksFromInspect(data)
+
+	assert.ElementsMatch(t, []string{"github_network_123", "bridge"}, got)
+}
