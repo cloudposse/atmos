@@ -25,16 +25,26 @@ commands:
         command: cd demo/casts && atmos casts setup
       - type: shell
         name: clean
-        command: rm -f website/static/casts/cli/commands/cast/usage.cast
+        command: |
+          rm -f website/static/casts/cli/commands/cast/usage.cast
+          rm -rf .context/cast-command-demo
       - type: cast
         name: usage
-        command: atmos cast --help
+        command: atmos about --cast=.context/cast-command-demo/about.cast
         mode: steps
         width: 120
         height: 36
         output:
           cast: "../../website/static/casts/cli/commands/cast/usage.cast"
         steps:
+          - type: simulate
+            mode: typed
+            cursor: true
+            prompt: &prompt
+              text: "> "
+              style: command
+            rate: 35ms
+            text: atmos about --cast=.context/cast-command-demo/about.cast
           - type: shell
             name: usage
             output: raw
@@ -46,7 +56,11 @@ commands:
               FORCE_COLOR: '1'
               ATMOS_FORCE_TTY: 'true'
               ATMOS_KEYRING_TYPE: memory
-            command: atmos cast --help
+            command: |
+              atmos about --cast=.context/cast-command-demo/about.cast
+              test -s .context/cast-command-demo/about.cast
+              printf '\nRecorded cast:\n'
+              printf '  .context/cast-command-demo/about.cast\n'
       - type: shell
         name: validate
         command: cd demo/casts && atmos casts validate cli commands cast usage
@@ -71,6 +85,12 @@ commands:
         output:
           cast: "../../website/static/casts/cli/commands/cast/play.cast"
         steps:
+          - type: simulate
+            mode: typed
+            cursor: true
+            prompt: *prompt
+            rate: 35ms
+            text: atmos cast play website/static/casts/examples/custom-commands/hello-greet.cast
           - type: shell
             name: play
             output: raw
@@ -119,9 +139,7 @@ commands:
           - type: simulate
             mode: typed
             cursor: true
-            prompt: &prompt
-              text: "> "
-              style: command
+            prompt: *prompt
             rate: 35ms
             text: atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --gif=.context/cast-render/hello-greet.gif
           - type: shell
@@ -160,9 +178,11 @@ commands:
         script: |
           from pathlib import Path
           text = Path("website/static/casts/cli/commands/cast/usage.cast").read_text()
-          for needle in ["atmos cast --help", "Play and render Atmos asciicast recordings", "play", "render"]:
+          for needle in ["atmos about --cast=.context/cast-command-demo/about.cast", "About Atmos", "Cast recorded: .context/cast-command-demo/about.cast", "Recorded cast:"]:
               if needle not in text:
                   raise SystemExit(f"cast usage demo missing {needle!r}")
+          if "atmos cast --help" in text:
+              raise SystemExit("cast usage demo should demonstrate recording, not help output")
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
               if bad in text:
                   raise SystemExit(f"cast usage demo contains {bad!r}")

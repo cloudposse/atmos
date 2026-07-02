@@ -11,16 +11,17 @@ import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
-Use these commands to play and render asciicast recordings created by Atmos.
+Use the global `--cast` flag to record Atmos command output, then use `atmos cast` commands to replay or render the recording.
 </Intro>
 
-<CastPlayer src="/casts/cli/commands/cast/usage.cast" title="atmos cast" chrome controls scrubber />
+<CastPlayer src="/casts/cli/commands/cast/usage.cast" title="record a cast with --cast" chrome controls scrubber />
 
 <Screengrab title="atmos cast --help" slug="atmos-cast--help" />
 
 ## Usage
 
 ```shell
+atmos <command> --cast=<output.cast>
 atmos cast <subcommand> [arguments] [flags]
 ```
 
