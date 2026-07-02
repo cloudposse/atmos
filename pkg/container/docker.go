@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -274,6 +275,7 @@ func getNetworksFromInspect(data map[string]interface{}) []string {
 			result = append(result, name)
 		}
 	}
+	sort.Strings(result)
 	return result
 }
 

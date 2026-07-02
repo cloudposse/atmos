@@ -5,8 +5,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/container"
 )
 
 func TestReachableHostForPublishedPorts_HostNativeUsesLocalhost(t *testing.T) {

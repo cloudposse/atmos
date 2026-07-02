@@ -115,7 +115,7 @@ func TestManager_Up_GitHubJobContainerAttachesCurrentNetworkAlias(t *testing.T) 
 			DoAndReturn(func(_ context.Context, create *container.CreateConfig) (string, error) {
 				require.Len(t, create.Networks, 1)
 				assert.Equal(t, "github_network_123", create.Networks[0].Name)
-				assert.Equal(t, []string{"aws"}, create.Networks[0].Aliases)
+				assert.Equal(t, []string{"dev-aws"}, create.Networks[0].Aliases)
 				return "new-id", nil
 			}),
 		runtime.EXPECT().Start(gomock.Any(), "new-id").Return(nil),
@@ -127,7 +127,7 @@ func TestManager_Up_GitHubJobContainerAttachesCurrentNetworkAlias(t *testing.T) 
 	m := newManagerWithRuntime(runtime)
 	endpoint, err := m.Up(context.Background(), &Spec{Driver: testDriverName}, "dev", "aws", nil)
 	require.NoError(t, err)
-	assert.Equal(t, "aws", endpoint.Host)
+	assert.Equal(t, "dev-aws", endpoint.Host)
 	assert.Equal(t, 4566, endpoint.Ports[4566])
 }
 

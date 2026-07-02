@@ -667,5 +667,5 @@ func TestGetNetworksFromInspect(t *testing.T) {
 
 	got := getNetworksFromInspect(data)
 
-	assert.ElementsMatch(t, []string{"github_network_123", "bridge"}, got)
+	assert.Equal(t, []string{"bridge", "github_network_123"}, got)
 }

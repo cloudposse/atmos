@@ -84,6 +84,7 @@ func TestAutoLockProviders_PersistsForSourceComponent(t *testing.T) {
 
 func TestAutoLockProviders_SkipsRemoteWorkdirSource(t *testing.T) {
 	dir := t.TempDir()
+	t.Chdir(dir)
 	workdirPath := filepath.Join(dir, ".workdir", "terraform", "dev-vpc")
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 	require.NoError(t, provWorkdir.WriteMetadata(workdirPath, &provWorkdir.WorkdirMetadata{

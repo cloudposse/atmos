@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -273,6 +274,7 @@ func parsePodmanNetworks(raw interface{}) []string {
 				networks = append(networks, name)
 			}
 		}
+		sort.Strings(networks)
 		return networks
 	case map[string]interface{}:
 		networks := make([]string, 0, len(v))
@@ -281,6 +283,7 @@ func parsePodmanNetworks(raw interface{}) []string {
 				networks = append(networks, name)
 			}
 		}
+		sort.Strings(networks)
 		return networks
 	default:
 		return nil

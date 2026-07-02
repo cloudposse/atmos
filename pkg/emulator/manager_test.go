@@ -62,9 +62,9 @@ func TestManager_Resolve_GitHubJobContainerUsesNetworkAliasEndpoint(t *testing.T
 	endpoint, profile, err := m.Resolve(context.Background(), &Spec{Driver: testDriverName}, "dev", "aws")
 	require.NoError(t, err)
 
-	assert.Equal(t, "aws", endpoint.Host)
+	assert.Equal(t, "dev-aws", endpoint.Host)
 	assert.Equal(t, 4566, endpoint.Ports[4566])
-	assert.Equal(t, "http://aws:4566", profile.Env["AWS_ENDPOINT_URL"])
+	assert.Equal(t, "http://dev-aws:4566", profile.Env["AWS_ENDPOINT_URL"])
 }
 
 func TestManager_Resolve_NotRunning(t *testing.T) {

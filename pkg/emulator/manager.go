@@ -254,8 +254,8 @@ func emulatorNetworkName(stack string) string {
 	return "atmos-emulator-" + sanitizeNetworkToken(stack)
 }
 
-func emulatorNetworkAlias(name string) string {
-	return sanitizeNetworkToken(name)
+func emulatorNetworkAlias(stack, name string) string {
+	return sanitizeNetworkToken(stack + "-" + name)
 }
 
 // sanitizeNetworkToken reduces a stack name to characters valid in a docker/podman
@@ -284,7 +284,7 @@ func sanitizeNetworkToken(s string) string {
 func (m *Manager) attachSharedNetwork(ctx context.Context, runtime container.Runtime, namedConfig *container.NamedConfig, stack, name string) {
 	defer perf.Track(nil, "emulator.Manager.attachSharedNetwork")()
 
-	alias := emulatorNetworkAlias(name)
+	alias := emulatorNetworkAlias(stack, name)
 	if network := currentContainerNetwork(ctx, runtime); network != "" {
 		namedConfig.Networks = append(namedConfig.Networks, container.NetworkAttachment{
 			Name:    network,
@@ -440,7 +440,7 @@ func (m *Manager) endpoint(ctx context.Context, runtime container.Runtime, spec 
 		if ok {
 			return Endpoint{
 				Target:   target,
-				Host:     emulatorNetworkAlias(name),
+				Host:     emulatorNetworkAlias(stack, name),
 				Ports:    ports,
 				Region:   spec.Region,
 				Project:  spec.Project,

@@ -7,15 +7,15 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/viper"
+
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/spf13/viper"
 )
 
 const (
 	envEmulatorEndpointHost               = "ATMOS_EMULATOR_ENDPOINT_HOST"
 	envEmulatorUseCurrentContainerNetwork = "ATMOS_EMULATOR_USE_CURRENT_CONTAINER_NETWORK"
-	linuxRouteGatewayBase                 = 16
 	linuxRouteGatewayBytes                = 4
 )
 
