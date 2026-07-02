@@ -28,6 +28,8 @@ const (
 	defaultAWSRegion = "us-east-1"
 	// PrincipalDurationKey is the key name for duration in the Principal map.
 	principalDurationKey = "duration"
+	// Key name for the STS role session name in the Principal map.
+	principalSessionNameKey = "session_name"
 )
 
 // assumeRoleIdentity implements AWS assume role identity.
@@ -98,11 +100,9 @@ func (i *assumeRoleIdentity) toAWSCredentials(result *sts.AssumeRoleOutput) (typ
 // buildAssumeRoleInput constructs the STS AssumeRoleInput including optional external ID and duration.
 
 func (i *assumeRoleIdentity) buildAssumeRoleInput() *sts.AssumeRoleInput {
-	raw := fmt.Sprintf("atmos-%s-%d", i.name, time.Now().Unix())
-	sessionName := sanitizeRoleSessionName(raw)
 	input := &sts.AssumeRoleInput{
 		RoleArn:         aws.String(i.roleArn),
-		RoleSessionName: aws.String(sessionName),
+		RoleSessionName: aws.String(i.resolveRoleSessionName()),
 	}
 	if externalID, ok := i.config.Principal["external_id"].(string); ok && externalID != "" {
 		input.ExternalId = aws.String(externalID)
@@ -285,12 +285,9 @@ func (i *assumeRoleIdentity) assumeRoleWithWebIdentity(ctx context.Context, oidc
 
 // buildAssumeRoleWithWebIdentityInput constructs the STS AssumeRoleWithWebIdentityInput.
 func (i *assumeRoleIdentity) buildAssumeRoleWithWebIdentityInput(oidcCreds *types.OIDCCredentials) *sts.AssumeRoleWithWebIdentityInput {
-	raw := fmt.Sprintf("atmos-%s-%d", i.name, time.Now().Unix())
-	sessionName := sanitizeRoleSessionName(raw)
-
 	input := &sts.AssumeRoleWithWebIdentityInput{
 		RoleArn:          aws.String(i.roleArn),
-		RoleSessionName:  aws.String(sessionName),
+		RoleSessionName:  aws.String(i.resolveRoleSessionName()),
 		WebIdentityToken: aws.String(oidcCreds.Token),
 	}
 
@@ -559,6 +556,19 @@ func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, params *types
 	}
 
 	return nil
+}
+
+// resolveRoleSessionName returns the STS role session name for this identity. When the
+// identity declares `principal.session_name` it is honored (sanitized to STS's allowed
+// characters and 64-char limit); otherwise a unique name is generated from the identity
+// name and the current Unix time. Used for both AssumeRole and AssumeRoleWithWebIdentity.
+func (i *assumeRoleIdentity) resolveRoleSessionName() string {
+	if i.config != nil {
+		if name, ok := i.config.Principal[principalSessionNameKey].(string); ok && name != "" {
+			return sanitizeRoleSessionName(name)
+		}
+	}
+	return sanitizeRoleSessionName(fmt.Sprintf("atmos-%s-%d", i.name, time.Now().Unix()))
 }
 
 // sanitizeRoleSessionName sanitizes the role session name to be used in AssumeRole.

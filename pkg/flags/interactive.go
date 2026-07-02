@@ -3,6 +3,8 @@ package flags
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
@@ -10,11 +12,11 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	atmosterm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -35,7 +37,34 @@ func isInteractive() bool {
 	}
 
 	// Check if stdin is a TTY and not in CI.
-	return atmosterm.IsTTYSupportForStdin() && !telemetry.IsCI()
+	return isTTYForPromptInput() && !telemetry.IsCI()
+}
+
+func isTTYForPromptInput() bool {
+	if terminal.New().IsTTY(terminal.Stdin) {
+		return true
+	}
+
+	forceTTY, ok := os.LookupEnv("ATMOS_FORCE_TTY")
+	if !ok {
+		return false
+	}
+
+	enabled, err := strconv.ParseBool(forceTTY)
+	if err != nil {
+		return false
+	}
+	return enabled
+}
+
+// IsInteractive reports whether interactive prompts should be shown (interactive
+// mode enabled, stdin is a TTY, and not running in CI). Callers that load their
+// own options before prompting use this to gate that work and to surface a clear
+// error instead of silently falling through when options can't be loaded.
+func IsInteractive() bool {
+	defer perf.Track(nil, "flags.IsInteractive")()
+
+	return isInteractive()
 }
 
 // PromptForValue shows an interactive Huh selector with the given options.
@@ -270,7 +299,7 @@ func PromptForConfirmation(title string, force bool) (bool, error) {
 	}
 
 	// Check if stdin is a TTY.
-	if !atmosterm.IsTTYSupportForStdin() {
+	if !isTTYForPromptInput() {
 		return false, errUtils.ErrInteractiveNotAvailable
 	}
 

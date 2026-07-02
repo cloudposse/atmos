@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -572,6 +573,28 @@ func TestHasNonAffectedMultiFlags(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestIsMultiComponentInvocationUsesViperValues(t *testing.T) {
+	v := viper.GetViper()
+	t.Cleanup(func() {
+		v.Set("all", false)
+		v.Set("affected", false)
+		v.Set("components", []string{})
+		v.Set("query", "")
+	})
+	v.Set("all", false)
+	v.Set("affected", false)
+	v.Set("components", []string{"vpc", "eks"})
+	v.Set("query", "")
+
+	cmd := &cobra.Command{Use: "plan"}
+	cmd.Flags().Bool("all", false, "")
+	cmd.Flags().Bool("affected", false, "")
+	cmd.Flags().StringSlice("components", nil, "")
+	cmd.Flags().String("query", "", "")
+
+	assert.True(t, isMultiComponentInvocation(cmd))
 }
 
 // TestHasSingleComponentFlags tests the hasSingleComponentFlags function.

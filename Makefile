@@ -75,9 +75,15 @@ build-windows: deps
 build-macos: GOOS=darwin
 build-macos: build-default
 
+build-macos-intel: GOOS=darwin
+build-macos-intel: GOARCH=amd64
+build-macos-intel: build-default
+
 version-linux: version-default
 
 version-macos: version-default
+
+version-macos-intel: version-default
 
 version-default:
 	chmod +x ./build/atmos
@@ -136,4 +142,4 @@ test-race: deps
 	@echo "Running tests with -race -shuffle=on"
 	CGO_ENABLED=1 go test -race -shuffle=on $(TEST) $(TESTARGS) -timeout 10m
 
-.PHONY: all clean test readme lint lintroller gomodcheck build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover test-race generate-mocks link-check
+.PHONY: all clean test readme lint lintroller gomodcheck build version build-linux build-windows build-macos build-macos-intel deps version-linux version-windows version-macos version-macos-intel testacc testacc-cover testacc-coverage test-short test-short-cover test-race generate-mocks link-check

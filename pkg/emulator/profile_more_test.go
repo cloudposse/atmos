@@ -24,13 +24,15 @@ func TestEndpoint_PrimaryHostPort_Empty(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestEndpoint_URL_DefaultsHostToLocalhost(t *testing.T) {
-	// No Host set -> URL falls back to "localhost".
+func TestEndpoint_URL_DefaultsHostToLoopbackIPv4(t *testing.T) {
+	// No Host set -> URL falls back to the IPv4 loopback literal (see
+	// loopbackHostToIPv4): "localhost" can resolve to IPv6 ::1, which hangs
+	// against an IPv4-only published port on Linux.
 	ep := Endpoint{Ports: map[int]int{4566: 54321}}
-	assert.Equal(t, "http://localhost:54321", ep.URL("http"))
+	assert.Equal(t, "http://127.0.0.1:54321", ep.URL("http"))
 }
 
-func TestEndpoint_Authority_DefaultsHostToLocalhost(t *testing.T) {
+func TestEndpoint_Authority_DefaultsHostToLoopbackIPv4(t *testing.T) {
 	ep := Endpoint{Ports: map[int]int{5000: 35000}}
-	assert.Equal(t, "localhost:35000", ep.Authority())
+	assert.Equal(t, "127.0.0.1:35000", ep.Authority())
 }

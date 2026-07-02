@@ -40,7 +40,7 @@ func TestManager_Resolve_Running(t *testing.T) {
 
 	assert.Equal(t, TargetAWS, endpoint.Target)
 	assert.Equal(t, 54321, endpoint.Ports[4566])
-	assert.Equal(t, "http://localhost:54321", profile.Env["AWS_ENDPOINT_URL"])
+	assert.Equal(t, "http://127.0.0.1:54321", profile.Env["AWS_ENDPOINT_URL"])
 	assert.Equal(t, "1", profile.Env["TEST_DRIVER"], "manager returns the resolved driver's profile env")
 	assert.Equal(t, true, profile.Provider["test_flag"], "manager returns the resolved driver's provider fragment")
 }

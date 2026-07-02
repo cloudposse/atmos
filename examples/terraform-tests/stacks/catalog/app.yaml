@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        type: abstract
+        component: vpc
+      vars:
+        name: atmos-fixture-vpc
+        cidr_block: 10.99.0.0/16
+
+    app:
+      metadata:
+        type: abstract
+        component: app
+      # Declarative fixture lifecycle: the app component owns the test fixture
+      # it needs. The ordered `kind: steps` hooks bring the emulator up, apply
+      # the VPC fixture, and tear both down after the Terraform tests.
+      hooks:
+        test-fixtures-up:
+          kind: steps
+          on_failure: fail
+          events:
+            - before.terraform.test
+          with:
+            - type: emulator
+              component: aws
+              action: up
+
+            - type: atmos
+              command: terraform apply vpc -s fixtures -auto-approve
+
+        test-fixtures-down:
+          kind: steps
+          events:
+            - after.terraform.test
+          when: always
+          with:
+            - type: atmos
+              command: terraform destroy vpc -s fixtures -auto-approve
+
+            - type: emulator
+              component: aws
+              action: down
+      vars:
+        name: atmos-demo
+      test:
+        vars:
+          fixture_vpc_name: atmos-fixture-vpc

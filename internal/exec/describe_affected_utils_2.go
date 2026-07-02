@@ -319,6 +319,8 @@ func isComponentFolderChanged(
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, component)
 	case cfg.PackerComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, component)
+	case cfg.KubernetesComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Kubernetes.BasePath, component)
 	default:
 		return false, fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
 	}

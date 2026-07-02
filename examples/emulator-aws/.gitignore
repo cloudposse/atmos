@@ -7,6 +7,10 @@
 **/terraform.tfstate
 **/terraform.tfstate.backup
 **/terraform.tfstate.d/**
+
+# Keep the landing demo provider lock pinned so recordings do not generate
+# Terraform lock-file warnings.
+!components/terraform/bucket/.terraform.lock.hcl
 **/cache.*.txt
 **/*.tf.json
 volume/**

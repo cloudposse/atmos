@@ -17,6 +17,9 @@
     "helmfile": {
       "$ref": "#/definitions/helmfile"
     },
+    "kubernetes": {
+      "$ref": "#/definitions/kubernetes"
+    },
     "packer": {
       "$ref": "#/definitions/packer"
     },
@@ -81,6 +84,11 @@
         {
           "required": [
             "helmfile"
+          ]
+        },
+        {
+          "required": [
+            "kubernetes"
           ]
         },
         {
@@ -335,7 +343,7 @@
     },
     "components": {
       "title": "components",
-      "description": "Components section",
+      "description": "Components section. Supports built-in types (terraform, helmfile, kubernetes, packer) and custom component types defined in custom commands.",
       "oneOf": [
         {
           "type": "string",
@@ -350,6 +358,9 @@
             },
             "helmfile": {
               "$ref": "#/definitions/helmfile_components"
+            },
+            "kubernetes": {
+              "$ref": "#/definitions/kubernetes_components"
             },
             "packer": {
               "$ref": "#/definitions/packer_components"
@@ -458,6 +469,16 @@
             "vars": {
               "$ref": "#/definitions/vars"
             },
+            "test": {
+              "type": "object",
+              "description": "Terraform test configuration. `vars` are passed only to `terraform test` as test-scope variables.",
+              "additionalProperties": false,
+              "properties": {
+                "vars": {
+                  "$ref": "#/definitions/vars"
+                }
+              }
+            },
             "env": {
               "$ref": "#/definitions/env"
             },
@@ -526,6 +547,9 @@
             "command": {
               "$ref": "#/definitions/command"
             },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
             "overrides": {
               "$ref": "#/definitions/overrides"
             }
@@ -592,6 +616,27 @@
         "disable": { "type": "boolean", "description": "Disable any health check baked into the image." }
       }
     },
+    "container_runtime": {
+      "title": "container_runtime",
+      "type": "object",
+      "description": "Per-instance container runtime block. Shared by the container and emulator component kinds.",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "description": "Container runtime provider: docker, podman, or empty for auto-detect.",
+          "enum": ["", "docker", "podman"]
+        },
+        "auto_start": {
+          "type": "boolean",
+          "description": "Auto-init/start the Podman machine when no running runtime is found."
+        },
+        "host": {
+          "type": "boolean",
+          "description": "Grant the container access to the host container runtime (Docker-out-of-Docker): mount the runtime socket, run as root, relabel for SELinux, set DOCKER_HOST. Opt-in; effectively host-root. On rootless podman the socket is unreachable in-container — use Docker or `podman machine set --rootful`."
+        }
+      }
+    },
     "emulator_components": {
       "title": "emulator_components",
       "description": "Emulator components section",
@@ -625,7 +670,7 @@
           "properties": {
             "driver": {
               "type": "string",
-              "description": "Built-in emulator driver, e.g. `floci/aws`, `k3s`, `openbao`, `registry`."
+              "description": "Built-in emulator driver, e.g. `floci/aws`, `k3s`, `openbao`, `registry`, `gitea`."
             },
             "cloud": {
               "type": "string",
@@ -653,6 +698,9 @@
               "description": "Container overrides for the emulator (image, ports, mounts, env, restart, healthcheck). Reuses the container kind's run shape; the driver supplies defaults.",
               "additionalProperties": true,
               "properties": {
+                "runtime": {
+                  "$ref": "#/definitions/container_runtime"
+                },
                 "restart": {
                   "$ref": "#/definitions/container_restart"
                 },
@@ -723,6 +771,9 @@
               "description": "Container run configuration (command, ports, mounts, user, restart, healthcheck, etc.).",
               "additionalProperties": true,
               "properties": {
+                "runtime": {
+                  "$ref": "#/definitions/container_runtime"
+                },
                 "restart": {
                   "$ref": "#/definitions/container_restart"
                 },
@@ -815,11 +866,142 @@
             "command": {
               "$ref": "#/definitions/command"
             },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
             "auth": {
               "$ref": "#/definitions/component_auth"
             },
             "secrets": {
               "$ref": "#/definitions/component_secrets"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "kubernetes": {
+      "title": "kubernetes",
+      "description": "Kubernetes component type defaults",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "provider": {
+              "$ref": "#/definitions/kubernetes_provider"
+            },
+            "paths": {
+              "$ref": "#/definitions/kubernetes_paths"
+            },
+            "manifests": {
+              "$ref": "#/definitions/kubernetes_manifests"
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "kubernetes_components": {
+      "title": "kubernetes_components",
+      "description": "Kubernetes components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/kubernetes_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "kubernetes_component_manifest": {
+      "title": "kubernetes_component_manifest",
+      "description": "Kubernetes component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "provider": {
+              "$ref": "#/definitions/kubernetes_provider"
+            },
+            "paths": {
+              "$ref": "#/definitions/kubernetes_paths"
+            },
+            "manifests": {
+              "$ref": "#/definitions/kubernetes_manifests"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
             }
           },
           "required": []
@@ -921,6 +1103,241 @@
             }
           },
           "required": []
+        }
+      ]
+    },
+    "kubernetes_provider": {
+      "title": "kubernetes_provider",
+      "description": "SDK-backed Kubernetes manifest provider",
+      "type": "string",
+      "enum": ["kubectl", "kustomize"]
+    },
+    "kubernetes_paths": {
+      "title": "kubernetes_paths",
+      "description": "Manifest files or directories relative to the Kubernetes component directory",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "kubernetes_manifests": {
+      "title": "kubernetes_manifests",
+      "description": "Inline Kubernetes manifests rendered and deployed with the component",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/definitions/kubernetes_manifest"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "kubernetes_manifest": {
+      "title": "kubernetes_manifest",
+      "description": "Kubernetes API object. Atmos validates only the structural fields it requires before passing the object to the Kubernetes API.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["apiVersion", "kind"],
+      "properties": {
+        "apiVersion": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "kubernetes_render": {
+      "title": "kubernetes_render",
+      "description": "Render output configuration for Kubernetes manifests",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "output": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "split": {
+                  "type": "boolean"
+                }
+              },
+              "required": []
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "plugins": {
+      "title": "plugins",
+      "description": "Helm CLI plugins (e.g. helm-diff, helm-secrets) to install into the managed HELM_PLUGINS directory. Each entry is a compact spec: a short alias (e.g. \"diff@3.9.x\"), an \"owner/repo@version\", or a full plugin URL.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "generate": {
+      "title": "generate",
+      "description": "Generate section for declarative file generation.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
+    },
+    "source": {
+      "title": "source",
+      "description": "Source configuration for JIT-vendored components",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
+    },
+    "provision": {
+      "title": "provision",
+      "description": "Provisioning configuration such as workdir or delivery targets",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "workdir": {
+              "type": "object",
+              "description": "Working directory provisioning settings for this component",
+              "additionalProperties": true
+            },
+            "default": {
+              "type": "string",
+              "description": "Name of the provision target used by apply/deploy when --target is not given"
+            },
+            "targets": {
+              "type": "object",
+              "description": "Named delivery destinations for rendered artifacts, keyed by target name",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "description": "Target provisioner kind (e.g. 'git' or 'kubernetes')"
+                  },
+                  "repository": {
+                    "type": "string",
+                    "description": "For kind 'git': name of a top-level git.repositories.<name> to publish to"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "For kind 'git': destination path inside the deployment repository (supports Go templates)"
+                  },
+                  "auth": {
+                    "type": "object",
+                    "properties": {
+                      "identity": {
+                        "type": "string",
+                        "description": "Atmos Auth identity used for the delivery"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "commit": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "description": "Commit message (supports Go templates)"
+                      },
+                      "signing": {
+                        "type": "string",
+                        "enum": ["auto", "always", "never"],
+                        "description": "Commit signing mode"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "pull_request": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean",
+                        "description": "Publish via pull request (not yet supported by the cli git provider)"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["kind"],
+                "additionalProperties": true
+              }
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "dependencies": {
+      "title": "dependencies",
+      "description": "Component, file, or folder dependencies used by affected detection and DAG execution",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
         }
       ]
     },
@@ -1596,7 +2013,8 @@
                         "type": "string"
                       },
                       "type": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Step type (step kind): any registered workflow/custom-command step type, e.g. shell, container, http, log, wait, wait-all, cancel. Omitted defaults to a command step."
                       },
                       "retry": {
                         "title": "retry",
@@ -1682,11 +2100,87 @@
                           "type": "string"
                         },
                         "description": "Environment variables for the workflow step"
+                      },
+                      "tools": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Require step (type: require/assert): executables that must be found on PATH"
+                      },
+                      "files": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Require step (type: require/assert): paths that must exist"
+                      },
+                      "dirs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Require step (type: require/assert): directories that must exist"
+                      },
+                      "hint": {
+                        "type": "string",
+                        "description": "Require step (type: require/assert): extra remediation note appended to the failure error"
+                      },
+                      "needs": {
+                        "description": "Names of earlier steps that must complete before this step runs.",
+                        "oneOf": [
+                          { "type": "string" },
+                          { "type": "array", "items": { "type": "string" } }
+                        ]
+                      },
+                      "outputs": {
+                        "type": "object",
+                        "description": "Named outputs exported by the step for use by later steps.",
+                        "additionalProperties": { "type": "string" }
+                      },
+                      "timeout": {
+                        "type": "string",
+                        "description": "Maximum duration the step may run (e.g. '30s', '5m')."
+                      },
+                      "background": {
+                        "description": "Run the step asynchronously in the background (boolean; v1 supports this only for container steps). A string value instead sets the step's background style color.",
+                        "oneOf": [
+                          { "type": "boolean" },
+                          { "type": "string" }
+                        ]
+                      },
+                      "for": {
+                        "description": "Fan the step out over a list of values (string expression or explicit array of strings).",
+                        "oneOf": [
+                          { "type": "string" },
+                          { "type": "array", "items": { "type": "string" } }
+                        ]
+                      },
+                      "action": {
+                        "type": "string",
+                        "description": "Action selector for action-bearing step kinds (e.g. container: run, build, push, inspect). Selects which params 'with' holds."
+                      },
+                      "provider": {
+                        "type": "string",
+                        "description": "Provider/runtime backend for the step kind (e.g. container: docker, podman)."
+                      },
+                      "container": {
+                        "description": "Container sandbox control for the step. Boolean to enable/disable, or an object with sandbox settings.",
+                        "oneOf": [
+                          { "type": "boolean" },
+                          { "type": "object", "additionalProperties": true }
+                        ]
+                      },
+                      "runtime_auto_start": {
+                        "type": "boolean",
+                        "description": "Automatically start the container runtime if it is not already running."
+                      },
+                      "with": {
+                        "type": "object",
+                        "description": "Parameters for the step named by 'type' (and 'action' where applicable). Validated by the step handler at run time. For container steps this holds image, command, ports, mounts, build context, etc.",
+                        "additionalProperties": true
                       }
-                    },
-                    "required": [
-                      "command"
-                    ]
+                    }
                   }
                 }
               ]
@@ -1812,6 +2306,7 @@
                   "trivy",
                   "git",
                   "step",
+                  "steps",
                   "ci.check",
                   "ci.output",
                   "ci.summary",
@@ -1867,9 +2362,20 @@
                 "description": "Step type to run (step kind): any registered workflow/custom-command step type, e.g. container, http, toast, log."
               },
               "with": {
-                "type": "object",
-                "description": "Parameters for the step named by 'type' (step kind). Validated by the step handler at run time.",
-                "additionalProperties": true
+                "description": "Parameters for the step named by 'type' (step kind), or an ordered list of steps (steps kind). Validated by the step handler at run time.",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                ]
               },
               "retry": {
                 "$ref": "#/definitions/workflow_retry"

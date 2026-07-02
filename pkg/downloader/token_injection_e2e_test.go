@@ -113,6 +113,26 @@ func TestCustomGitDetector_EndToEnd_GitHubTokenFallback(t *testing.T) {
 	}
 }
 
+func TestCustomGitDetector_NormalizesNativeGitHubFileImport(t *testing.T) {
+	sourceURL := "github.com/cloudposse/infra-live//profiles/managers/atmos.yaml?ref=main"
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			InjectGithubToken: true,
+		},
+	}
+
+	detector := NewCustomGitDetector(atmosConfig, sourceURL)
+	finalURL, detected, err := detector.Detect(sourceURL, "")
+
+	require.NoError(t, err)
+	require.True(t, detected)
+	assert.Equal(t,
+		"git::https://github.com/cloudposse/infra-live.git//profiles/managers/atmos.yaml?depth=1&ref=main",
+		finalURL,
+		"native GitHub file imports should stay native externally but become unambiguous go-getter git sources internally")
+	assert.NotContains(t, finalURL, "raw.githubusercontent.com")
+}
+
 // TestCustomGitDetector_EndToEnd_PreExistingCredentials tests that when
 // credentials are already in the URL (from template processing), user-provided
 // credentials take precedence and automatic injection is skipped.
