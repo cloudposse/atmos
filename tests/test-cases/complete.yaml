@@ -10,7 +10,10 @@ tests:
     args:
       - "loop"
     expect:
-      diff: []
+      diff:
+        - "^Hello world!$"
+        - "^# Error$"
+        - "^\\*\\*Error:\\*\\* subcommand exited with code 1$"
       stderr:
         - 'ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion\?'
         - 'current=11, max=10'
