@@ -40,9 +40,9 @@ const (
 )
 
 const (
-	terraformLogOrderStream      = "stream"
-	terraformLogOrderGrouped     = "grouped"
-	terraformPlanHideNoChanges   = "no-changes"
+	terraformLogOrderStream    = "stream"
+	terraformLogOrderGrouped   = "grouped"
+	terraformPlanHideNoChanges = "no-changes"
 )
 
 const (

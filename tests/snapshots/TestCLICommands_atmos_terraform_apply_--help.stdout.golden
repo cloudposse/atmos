@@ -44,6 +44,9 @@ FLAGS
 
       --init-run-reconfigure string        Override init_run_reconfigure setting from atmos.yaml (true/false)
 
+      --log-order string                   Order concurrent Terraform apply logs. Supported values: stream, grouped
+                                           (default stream)
+
       --max-concurrency int                Maximum number of Terraform apply components to execute concurrently
                                            (default 1)
 

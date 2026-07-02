@@ -1249,9 +1249,9 @@ func TestExecuteTerraformConcurrentStreamLogOrderInjectsStreams(t *testing.T) {
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info: &schema.ConfigAndStacksInfo{
-			All:                   true,
-			SubCommand:            "plan",
-			MaxConcurrency:        2,
+			All:               true,
+			SubCommand:        "plan",
+			MaxConcurrency:    2,
 			TerraformLogOrder: terraformLogOrderStream,
 		},
 		Stacks: stacks,
@@ -1282,9 +1282,9 @@ func TestExecuteTerraformConcurrentGroupedLogOrderCapturesOutput(t *testing.T) {
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info: &schema.ConfigAndStacksInfo{
-			All:                   true,
-			SubCommand:            "plan",
-			MaxConcurrency:        2,
+			All:               true,
+			SubCommand:        "plan",
+			MaxConcurrency:    2,
 			TerraformLogOrder: terraformLogOrderGrouped,
 		},
 		Stacks: stacks,
@@ -1311,9 +1311,9 @@ func TestExecuteTerraformRejectsUnsupportedLogOrder(t *testing.T) {
 	err := ExecuteTerraform(context.Background(), TerraformOptions{
 		AtmosConfig: &schema.AtmosConfiguration{},
 		Info: &schema.ConfigAndStacksInfo{
-			All:                   true,
-			SubCommand:            "plan",
-			MaxConcurrency:        2,
+			All:               true,
+			SubCommand:        "plan",
+			MaxConcurrency:    2,
 			TerraformLogOrder: "unknown",
 		},
 		Stacks: stacks,
@@ -1348,7 +1348,7 @@ func TestTerraformHideNoChangesForcesGroupedLogOrder(t *testing.T) {
 	output, err := newTerraformOutput(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{
 		SubCommand:                 "plan",
 		MaxConcurrency:             2,
-		TerraformLogOrder:      terraformLogOrderStream,
+		TerraformLogOrder:          terraformLogOrderStream,
 		TerraformPlanHideNoChanges: true,
 	}, 2)
 
