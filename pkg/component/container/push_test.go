@@ -61,7 +61,7 @@ func TestExecutePush_WritesSummaryForEveryPushedRefWhenEnabled(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	rt := NewMockRuntime(ctrl)
-	withStubsConfig(t, schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+	withStubsConfig(t, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		buildSection("app:v1", "reg1.example.com/app:v1", "reg2.example.com/app:v1"), nil, rt)
 	var summaries []string
 	prev := writeComponentStepSummary

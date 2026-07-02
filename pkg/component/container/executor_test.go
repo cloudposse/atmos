@@ -20,10 +20,10 @@ import (
 // component section.
 func withStubs(t *testing.T, section map[string]any, env []string, rt ctr.Runtime) {
 	t.Helper()
-	withStubsConfig(t, schema.AtmosConfiguration{}, section, env, rt)
+	withStubsConfig(t, &schema.AtmosConfiguration{}, section, env, rt)
 }
 
-func withStubsConfig(t *testing.T, cfg schema.AtmosConfiguration, section map[string]any, env []string, rt ctr.Runtime) {
+func withStubsConfig(t *testing.T, cfg *schema.AtmosConfiguration, section map[string]any, env []string, rt ctr.Runtime) {
 	t.Helper()
 
 	origInit, origProcess, origDetect := initCliConfig, processStacks, detectRuntime
@@ -32,7 +32,10 @@ func withStubsConfig(t *testing.T, cfg schema.AtmosConfiguration, section map[st
 	})
 
 	initCliConfig = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
-		return cfg, nil
+		if cfg == nil {
+			return schema.AtmosConfiguration{}, nil
+		}
+		return *cfg, nil
 	}
 	processStacks = func(_ *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, _, _, _ bool, _ []string, _ auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 		info.ComponentSection = section
@@ -150,7 +153,7 @@ func TestExecuteBuild_WritesCISummaryWhenEnabled(t *testing.T) {
 	section := map[string]any{
 		"build": map[string]any{"context": "app", "dockerfile": "Dockerfile", "tags": []any{"img:1"}},
 	}
-	withStubsConfig(t, schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, section, nil, rt)
+	withStubsConfig(t, &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, section, nil, rt)
 	var summaries []string
 	prev := writeComponentStepSummary
 	writeComponentStepSummary = func(content string) error {
@@ -182,7 +185,7 @@ func TestExecuteBuild_SkipsCISummaryWhenDisabled(t *testing.T) {
 	section := map[string]any{
 		"build": map[string]any{"context": "app", "dockerfile": "Dockerfile", "tags": []any{"img:1"}},
 	}
-	withStubsConfig(t, schema.AtmosConfiguration{
+	withStubsConfig(t, &schema.AtmosConfiguration{
 		CI: schema.CIConfig{
 			Enabled: true,
 			Summary: schema.CISummaryConfig{

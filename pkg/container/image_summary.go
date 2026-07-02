@@ -17,6 +17,8 @@ const (
 	labelOCISource      = labelOCIBase + "source"
 	labelOCITitle       = labelOCIBase + "title"
 	labelOCIVersion     = labelOCIBase + "version"
+	markdownBacktick    = "`"
+	markdownLineBreak   = "\n"
 )
 
 // ImageSummaryOptions controls the rich CI Markdown summary for a built or
@@ -61,7 +63,7 @@ func RenderImageSummaryMarkdown(info *ImageInfo, opts ImageSummaryOptions) strin
 		{"Revision", codeOrNA(labels[labelOCIRevision])},
 		{"Source", linkOrText(labels[labelOCISource])},
 	}))
-	b.WriteString("\n")
+	b.WriteString(markdownLineBreak)
 
 	b.WriteString(detailsSection("⚙️ Runtime", markdownTable([][2]string{
 		{"Field", "Value"},
@@ -71,23 +73,23 @@ func RenderImageSummaryMarkdown(info *ImageInfo, opts ImageSummaryOptions) strin
 		{"Storage driver", codeOrNA(firstNonEmpty(info.StorageDriver, "n/a"))},
 		{"Exposed ports", codeOrNA(joinOrNA(info.ExposedPorts))},
 	})))
-	b.WriteString("\n")
+	b.WriteString(markdownLineBreak)
 
 	if len(info.Env) > 0 {
 		b.WriteString(detailsSection("🌱 Environment variables", envTable(info.Env)))
-		b.WriteString("\n")
+		b.WriteString(markdownLineBreak)
 	}
 	if len(labels) > 0 {
 		b.WriteString(detailsSection("🔖 Labels", labelsTable(labels)))
-		b.WriteString("\n")
+		b.WriteString(markdownLineBreak)
 	}
 	if len(info.LayerDigests) > 0 {
 		b.WriteString(detailsSection(fmt.Sprintf("📦 Layers (%d)", len(info.LayerDigests)), layersTable(info.LayerDigests)))
-		b.WriteString("\n")
+		b.WriteString(markdownLineBreak)
 	}
 	if info.RawInspectJSON != "" {
-		b.WriteString(detailsSection("📄 Raw JSON", "```json\n"+info.RawInspectJSON+"\n```"))
-		b.WriteString("\n")
+		b.WriteString(detailsSection("📄 Raw JSON", "```json"+markdownLineBreak+info.RawInspectJSON+markdownLineBreak+"```"))
+		b.WriteString(markdownLineBreak)
 	}
 	return b.String()
 }
@@ -226,7 +228,7 @@ func codeOrNA(value string) string {
 	if value == "" {
 		value = "n/a"
 	}
-	return "`" + markdownCodeText(value) + "`"
+	return markdownBacktick + markdownCodeText(value) + markdownBacktick
 }
 
 func linkOrText(value string) string {
@@ -242,7 +244,7 @@ func linkOrText(value string) string {
 func markdownCell(value string) string {
 	value = strings.ReplaceAll(value, "\r\n", "\n")
 	value = strings.ReplaceAll(value, "\r", "\n")
-	value = strings.ReplaceAll(value, "\n", "<br>")
+	value = strings.ReplaceAll(value, markdownLineBreak, "<br>")
 	value = strings.ReplaceAll(value, "|", "\\|")
 	return value
 }
@@ -252,7 +254,7 @@ func markdownText(value string) string {
 		"\\", "\\\\",
 		"*", "\\*",
 		"_", "\\_",
-		"`", "\\`",
+		markdownBacktick, "\\`",
 		"[", "\\[",
 		"]", "\\]",
 		"<", "&lt;",
@@ -263,7 +265,7 @@ func markdownText(value string) string {
 }
 
 func markdownCodeText(value string) string {
-	return strings.ReplaceAll(value, "`", "'")
+	return strings.ReplaceAll(value, markdownBacktick, "'")
 }
 
 func firstNonEmpty(values ...string) string {
