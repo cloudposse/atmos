@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	ctr "github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -54,6 +55,39 @@ func TestExecutePush_PushesEveryBuildTagInOrder(t *testing.T) {
 		rt.EXPECT().Push(gomock.Any(), "reg2.example.com/app:v1").Return(nil, nil),
 	)
 	require.NoError(t, ExecutePush(context.Background(), infoFor("app")))
+}
+
+func TestExecutePush_WritesSummaryForEveryPushedRefWhenEnabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	rt := NewMockRuntime(ctrl)
+	withStubsConfig(t, schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		buildSection("app:v1", "reg1.example.com/app:v1", "reg2.example.com/app:v1"), nil, rt)
+	var summaries []string
+	prev := writeComponentStepSummary
+	writeComponentStepSummary = func(content string) error {
+		summaries = append(summaries, content)
+		return nil
+	}
+	t.Cleanup(func() { writeComponentStepSummary = prev })
+
+	gomock.InOrder(
+		rt.EXPECT().Push(gomock.Any(), "reg1.example.com/app:v1").
+			Return(&ctr.PushResult{Image: "reg1.example.com/app:v1", Digest: "sha256:111"}, nil),
+		rt.EXPECT().ImageInspect(gomock.Any(), "reg1.example.com/app:v1").
+			Return(&ctr.ImageInfo{ID: "sha256:img", RepoTags: []string{"reg1.example.com/app:v1"}}, nil),
+		rt.EXPECT().Push(gomock.Any(), "reg2.example.com/app:v1").
+			Return(&ctr.PushResult{Image: "reg2.example.com/app:v1", Digest: "sha256:222"}, nil),
+		rt.EXPECT().ImageInspect(gomock.Any(), "reg2.example.com/app:v1").
+			Return(&ctr.ImageInfo{ID: "sha256:img", RepoTags: []string{"reg2.example.com/app:v1"}}, nil),
+	)
+
+	require.NoError(t, ExecutePush(context.Background(), infoFor("app")))
+	require.Len(t, summaries, 2)
+	assert.Contains(t, summaries[0], "## 🐳 reg1.example.com/app:v1")
+	assert.Contains(t, summaries[0], "| Digest | `sha256:111` |")
+	assert.Contains(t, summaries[1], "## 🐳 reg2.example.com/app:v1")
+	assert.Contains(t, summaries[1], "| Digest | `sha256:222` |")
 }
 
 func TestExecutePush_FailFast(t *testing.T) {

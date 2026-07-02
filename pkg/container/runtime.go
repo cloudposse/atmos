@@ -85,16 +85,24 @@ type BakeConfig struct {
 
 // ImageInfo contains metadata about a local container image.
 type ImageInfo struct {
-	ID           string
-	RepoTags     []string
-	RepoDigests  []string
-	Size         int64
-	Created      string
-	Architecture string
-	Os           string
-	Author       string
-	Labels       map[string]string
-	Layers       int
+	ID             string
+	RepoTags       []string
+	RepoDigests    []string
+	Size           int64
+	Created        string
+	Architecture   string
+	Os             string
+	Author         string
+	Labels         map[string]string
+	Env            []string
+	Cmd            []string
+	Entrypoint     []string
+	ExposedPorts   []string
+	StopSignal     string
+	StorageDriver  string
+	LayerDigests   []string
+	Layers         int
+	RawInspectJSON string
 }
 
 // PushResult contains metadata returned by a container image push.

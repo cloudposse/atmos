@@ -60,6 +60,68 @@ func TestContainerHandlerExecuteBuildWithFakeDocker(t *testing.T) {
 	assert.Equal(t, []string{"app:local"}, res.Metadata["repo_tags"])
 }
 
+func TestContainerHandlerExecuteBuildWritesCISummaryWhenEnabled(t *testing.T) {
+	installStepFakeDocker(t)
+	h := &ContainerHandler{}
+	var summaries []string
+	prev := writeStepSummaryFn
+	writeStepSummaryFn = func(content string) error {
+		summaries = append(summaries, content)
+		return nil
+	}
+	defer func() { writeStepSummaryFn = prev }()
+	vars := NewVariables()
+	vars.SetAtmosConfig(&schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}})
+
+	_, err := h.executeBuild(context.Background(), &schema.WorkflowStep{
+		Name: "build",
+		Build: &schema.ContainerBuildStep{
+			Provider: string(container.TypeDocker),
+			Context:  ".",
+			Tags:     []string{"app:local"},
+		},
+	}, vars)
+
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	assert.Contains(t, summaries[0], "## 🐳 app:local")
+	assert.Contains(t, summaries[0], "| Digest | `sha256:built` |")
+}
+
+func TestContainerHandlerExecuteBuildSkipsCISummaryWhenDisabled(t *testing.T) {
+	installStepFakeDocker(t)
+	h := &ContainerHandler{}
+	called := false
+	prev := writeStepSummaryFn
+	writeStepSummaryFn = func(string) error {
+		called = true
+		return nil
+	}
+	defer func() { writeStepSummaryFn = prev }()
+	disabled := false
+	vars := NewVariables()
+	vars.SetAtmosConfig(&schema.AtmosConfiguration{
+		CI: schema.CIConfig{
+			Enabled: true,
+			Summary: schema.CISummaryConfig{
+				Enabled: &disabled,
+			},
+		},
+	})
+
+	_, err := h.executeBuild(context.Background(), &schema.WorkflowStep{
+		Name: "build",
+		Build: &schema.ContainerBuildStep{
+			Provider: string(container.TypeDocker),
+			Context:  ".",
+			Tags:     []string{"app:local"},
+		},
+	}, vars)
+
+	require.NoError(t, err)
+	assert.False(t, called)
+}
+
 func TestContainerHandlerExecuteInspectWithFakeDocker(t *testing.T) {
 	installStepFakeDocker(t)
 	h := &ContainerHandler{}

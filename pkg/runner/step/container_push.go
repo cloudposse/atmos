@@ -39,7 +39,11 @@ func (h *ContainerHandler) executePush(ctx context.Context, step *schema.Workflo
 	}
 	applyRuntimeEnv(runtime, vars)
 
-	return runPushImages(ctx, runtime, pushConfig, tags)
+	result, err := runPushImages(ctx, runtime, pushConfig, tags)
+	if err == nil && result != nil {
+		writePushedImageSummaries(ctx, runtime, vars.AtmosConfig, pushResultsFromMetadata(result.Metadata))
+	}
+	return result, err
 }
 
 // previewPush renders the dry-run output for a push step.
@@ -67,6 +71,7 @@ func runPushImages(ctx context.Context, runtime container.Runtime, pushConfig *r
 	}
 
 	var last *container.PushResult
+	pushes := make([]*container.PushResult, 0, len(images))
 	outputs := make([]string, 0, len(images))
 	for _, image := range images {
 		if image != pushConfig.Image {
@@ -77,6 +82,7 @@ func runPushImages(ctx context.Context, runtime container.Runtime, pushConfig *r
 		pushed, err := runtime.Push(ctx, image)
 		if pushed != nil {
 			last = pushed
+			pushes = append(pushes, pushed)
 			outputs = append(outputs, pushed.Output)
 		}
 		if err != nil {
@@ -99,9 +105,18 @@ func runPushImages(ctx context.Context, runtime container.Runtime, pushConfig *r
 	return NewStepResult(image).
 		WithMetadata("image", image).
 		WithMetadata("digest", digest).
+		WithMetadata("push_results", pushes).
 		WithMetadata("stdout", strings.Join(outputs, "\n")).
 		WithMetadata("stderr", "").
 		WithMetadata(exitCodeMetadata, 0), nil
+}
+
+func pushResultsFromMetadata(metadata map[string]any) []*container.PushResult {
+	if metadata == nil {
+		return nil
+	}
+	pushes, _ := metadata["push_results"].([]*container.PushResult)
+	return pushes
 }
 
 type resolvedPushConfig struct {
