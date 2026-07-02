@@ -163,6 +163,11 @@ func TestRunPushImagesPushErrorKeepsPartialResultMetadata(t *testing.T) {
 	assert.Equal(t, "app:local", result.Metadata["image"])
 	assert.Equal(t, "sha256:partial", result.Metadata["digest"])
 	assert.Equal(t, "partial output", result.Metadata["stdout"])
+	assert.Equal(t, []*container.PushResult{{
+		Image:  "app:local",
+		Digest: "sha256:partial",
+		Output: "partial output",
+	}}, pushResultsFromMetadata(result.Metadata))
 	assert.Equal(t, 1, result.Metadata[exitCodeMetadata])
 	assert.Equal(t, "push failed", result.Error)
 }

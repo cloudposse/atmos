@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const (
@@ -29,6 +31,8 @@ type ImageSummaryOptions struct {
 // Cloud Posse's Docker build action so native Atmos container builds have the
 // same CI polish without an extra GitHub Action.
 func RenderImageSummaryMarkdown(info *ImageInfo, opts ImageSummaryOptions) string {
+	defer perf.Track(nil, "container.RenderImageSummaryMarkdown")()
+
 	if info == nil {
 		return ""
 	}
@@ -222,7 +226,7 @@ func codeOrNA(value string) string {
 	if value == "" {
 		value = "n/a"
 	}
-	return "`" + strings.ReplaceAll(value, "`", "\\`") + "`"
+	return "`" + markdownCodeText(value) + "`"
 }
 
 func linkOrText(value string) string {
@@ -259,7 +263,7 @@ func markdownText(value string) string {
 }
 
 func markdownCodeText(value string) string {
-	return strings.ReplaceAll(value, "`", "\\`")
+	return strings.ReplaceAll(value, "`", "'")
 }
 
 func firstNonEmpty(values ...string) string {

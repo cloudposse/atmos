@@ -40,7 +40,7 @@ func (h *ContainerHandler) executePush(ctx context.Context, step *schema.Workflo
 	applyRuntimeEnv(runtime, vars)
 
 	result, err := runPushImages(ctx, runtime, pushConfig, tags)
-	if err == nil && result != nil {
+	if result != nil {
 		writePushedImageSummaries(ctx, runtime, vars.AtmosConfig, pushResultsFromMetadata(result.Metadata))
 	}
 	return result, err
@@ -76,7 +76,10 @@ func runPushImages(ctx context.Context, runtime container.Runtime, pushConfig *r
 	for _, image := range images {
 		if image != pushConfig.Image {
 			if err := runtime.Tag(ctx, pushConfig.Image, image); err != nil {
-				return NewStepResult(image).WithMetadata(exitCodeMetadata, 1).WithError(err.Error()), err
+				return NewStepResult(image).
+					WithMetadata("push_results", pushes).
+					WithMetadata(exitCodeMetadata, 1).
+					WithError(err.Error()), err
 			}
 		}
 		pushed, err := runtime.Push(ctx, image)
@@ -90,6 +93,7 @@ func runPushImages(ctx context.Context, runtime container.Runtime, pushConfig *r
 				WithMetadata("image", image).
 				WithMetadata("digest", metadataString(pushed, "digest")).
 				WithMetadata("stdout", strings.Join(outputs, "\n")).
+				WithMetadata("push_results", pushes).
 				WithMetadata(exitCodeMetadata, 1).
 				WithError(err.Error()), err
 		}

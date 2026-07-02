@@ -23,6 +23,7 @@ func TestRenderImageSummaryMarkdown(t *testing.T) {
 			labelOCIVersion:     "sha-abc",
 			"z":                 "last",
 			"a":                 "first|pipe",
+			"backtick":          "run `cmd`",
 		},
 		Env:           []string{"PATH=/bin", "APP_ENV=test"},
 		Cmd:           []string{"./app"},
@@ -56,6 +57,7 @@ func TestRenderImageSummaryMarkdown(t *testing.T) {
 	assert.Contains(t, md, "| `APP_ENV` | `test` |")
 	assert.Contains(t, md, "<summary>🔖 Labels</summary>")
 	assert.Contains(t, md, "| `a` | `first\\|pipe` |")
+	assert.Contains(t, md, "| `backtick` | `run 'cmd'` |")
 	assert.Contains(t, md, "<summary>📦 Layers (2)</summary>")
 	assert.Contains(t, md, "| 2 | `sha256:l2` |")
 	assert.Contains(t, md, "<summary>📄 Raw JSON</summary>")
