@@ -88,7 +88,9 @@
   overflow: auto;
   background: var(--atmos-terminal-bg);
   color: var(--atmos-terminal-text);
-  font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-family:
+    "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   font-size: 1.12rem;
   line-height: 1.04;
   white-space: pre-wrap;
@@ -101,18 +103,18 @@
   margin-left: 0.08em;
   vertical-align: -0.12em;
   background: color-mix(in srgb, var(--atmos-terminal-text) 72%, transparent);
-  animation: cursorBlink 1s steps(1, end) infinite;
+  animation: cursorPulse 1.05s ease-in-out infinite;
 }
 
-@keyframes cursorBlink {
+@keyframes cursorPulse {
   0%,
-  49% {
+  100% {
     opacity: 1;
   }
 
   50%,
-  100% {
-    opacity: 0;
+  65% {
+    opacity: 0.32;
   }
 }
 
@@ -136,7 +138,9 @@
   opacity: 0;
   pointer-events: none;
   transform: translateY(4px);
-  transition: opacity 150ms ease, transform 150ms ease;
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease;
 }
 
 .plain:hover .controls,

@@ -41,10 +41,20 @@ const (
 	defaultCastPromptDelay    = 350 * time.Millisecond
 	defaultCastEnterDelay     = 550 * time.Millisecond
 	defaultCastStepPauseDelay = 700 * time.Millisecond
+	castCursorShow            = "\x1b[?25h"
+	castCursorHide            = "\x1b[?25l"
 )
 
 type CastHandler struct {
 	BaseHandler
+}
+
+type castTypedLineOptions struct {
+	Prompt     *schema.SimulatePrompt
+	Line       string
+	WriteRate  time.Duration
+	EnterDelay time.Duration
+	Cursor     bool
 }
 
 func init() {
@@ -287,7 +297,13 @@ func runCastSimulateStep(ctx context.Context, castStep, child *schema.WorkflowSt
 		if err != nil {
 			return err
 		}
-		return recordCastTypedLine(ctx, child.SimulatePrompt, text, writeRate, enterDelay)
+		return recordCastTypedLine(ctx, castTypedLineOptions{
+			Prompt:     child.SimulatePrompt,
+			Line:       text,
+			WriteRate:  writeRate,
+			EnterDelay: enterDelay,
+			Cursor:     child.Cursor,
+		})
 	case "prompt":
 		return recordCastPrompt(child.SimulatePrompt)
 	default:
@@ -295,13 +311,36 @@ func runCastSimulateStep(ctx context.Context, castStep, child *schema.WorkflowSt
 	}
 }
 
-func recordCastTypedLine(ctx context.Context, prompt *schema.SimulatePrompt, line string, writeRate, enterDelay time.Duration) error {
-	if err := recordCastPrompt(prompt); err != nil {
+func recordCastTypedLine(ctx context.Context, opts castTypedLineOptions) error {
+	if err := recordCastPrompt(opts.Prompt); err != nil {
+		return err
+	}
+	if err := recordCastCursorIf(opts.Cursor, true); err != nil {
 		return err
 	}
 	if err := sleepCastInput(ctx, defaultCastPromptDelay); err != nil {
 		return err
 	}
+	if err := recordCastCursorIf(opts.Cursor, false); err != nil {
+		return err
+	}
+	if err := recordCastTypedText(ctx, opts.Prompt, opts.Line, opts.WriteRate); err != nil {
+		return err
+	}
+	if err := recordCastCursorIf(opts.Cursor, true); err != nil {
+		return err
+	}
+	if err := sleepCastInput(ctx, opts.EnterDelay); err != nil {
+		return err
+	}
+	if err := recordCastCursorIf(opts.Cursor, false); err != nil {
+		return err
+	}
+	_, err := fmt.Fprint(iolib.GetContext().Data(), "\n")
+	return err
+}
+
+func recordCastTypedText(ctx context.Context, prompt *schema.SimulatePrompt, line string, writeRate time.Duration) error {
 	stylePrefix, styleSuffix, err := renderCastTypedLineParts(prompt, line)
 	if err != nil {
 		return err
@@ -319,15 +358,10 @@ func recordCastTypedLine(ctx context.Context, prompt *schema.SimulatePrompt, lin
 			return err
 		}
 	}
-	if styleSuffix != "" {
-		if _, err := fmt.Fprint(iolib.GetContext().Data(), styleSuffix); err != nil {
-			return err
-		}
+	if styleSuffix == "" {
+		return nil
 	}
-	if err := sleepCastInput(ctx, enterDelay); err != nil {
-		return err
-	}
-	_, err = fmt.Fprint(iolib.GetContext().Data(), "\n")
+	_, err = fmt.Fprint(iolib.GetContext().Data(), styleSuffix)
 	return err
 }
 
@@ -458,6 +492,22 @@ func recordCastPrompt(prompt *schema.SimulatePrompt) error {
 	}
 	_, err = fmt.Fprint(iolib.GetContext().Data(), rendered)
 	return err
+}
+
+func recordCastCursor(show bool) error {
+	sequence := castCursorHide
+	if show {
+		sequence = castCursorShow
+	}
+	_, err := fmt.Fprint(iolib.GetContext().Data(), sequence)
+	return err
+}
+
+func recordCastCursorIf(enabled, show bool) error {
+	if !enabled {
+		return nil
+	}
+	return recordCastCursor(show)
 }
 
 func castStepEnterDelay(child *schema.WorkflowStep) (time.Duration, error) {

@@ -1,7 +1,7 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {RiPauseFill, RiPlayFill} from 'react-icons/ri';
-import styles from './styles.module.css';
-import {applyIdleSkip} from './playback.mjs';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { RiPauseFill, RiPlayFill } from "react-icons/ri";
+import styles from "./styles.module.css";
+import { applyIdleSkip } from "./playback.mjs";
 
 type CastEvent = [number, string, string];
 
@@ -32,7 +32,7 @@ type Props = {
 export default function CastPlayer({
   src,
   command,
-  title = 'Atmos',
+  title = "Atmos",
   chrome = false,
   controls,
   scrubber = true,
@@ -43,13 +43,13 @@ export default function CastPlayer({
   idleSkip = true,
   thumbnail = false,
   showCommand = true,
-  prompt = '\x1b[1;38;2;0;95;135m>\x1b[0m ',
+  prompt = "\x1b[1;38;2;0;95;135m>\x1b[0m ",
   typeRate = 0.035,
   enterDelay = 0.5,
   exitDelay = 0.6,
 }: Props) {
   const [events, setEvents] = useState<CastEvent[]>([]);
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState("");
   const [playing, setPlaying] = useState(autoplay);
   const [position, setPosition] = useState(0);
   const animationFrame = useRef<number | undefined>();
@@ -60,17 +60,27 @@ export default function CastPlayer({
 
   useEffect(() => {
     let cancelled = false;
-    fetch(src, {cache: 'no-store'})
+    fetch(src, { cache: "no-store" })
       .then((response) => response.text())
       .then((text) => {
         if (cancelled) return;
-        const rows = text.trim().split('\n');
-        const header = JSON.parse(rows[0] || '{}') as CastHeader;
+        const rows = text.trim().split("\n");
+        const header = JSON.parse(rows[0] || "{}") as CastHeader;
         const lines = rows.slice(1);
         const parsed = lines
           .map((line) => JSON.parse(line) as CastEvent)
-          .map((event) => [event[0], event[1], normalizeTerminalText(event[2])] as CastEvent)
-          .filter((event) => (event[1] === 'o' || event[1] === 'e') && event[2] !== '');
+          .map(
+            (event) =>
+              [
+                event[0],
+                event[1],
+                normalizeTerminalText(event[2]),
+              ] as CastEvent,
+          )
+          .filter(
+            (event) =>
+              (event[1] === "o" || event[1] === "e") && event[2] !== "",
+          );
         const withIntro = addCommandIntro(parsed, {
           command: command ?? header.command,
           enabled: showCommand,
@@ -84,13 +94,26 @@ export default function CastPlayer({
         setEvents(playbackEvents);
         setContent(renderAt(playbackEvents, initialPosition));
         setPosition(initialPosition);
-        renderedEventTime.current = latestEventTimeAt(playbackEvents, initialPosition);
+        renderedEventTime.current = latestEventTimeAt(
+          playbackEvents,
+          initialPosition,
+        );
         setSeekVersion((version) => version + 1);
       });
     return () => {
       cancelled = true;
     };
-  }, [src, command, showCommand, prompt, typeRate, enterDelay, exitDelay, idleSkip, autoplay]);
+  }, [
+    src,
+    command,
+    showCommand,
+    prompt,
+    typeRate,
+    enterDelay,
+    exitDelay,
+    idleSkip,
+    autoplay,
+  ]);
 
   const duration = useMemo(() => events.at(-1)?.[0] ?? 0, [events]);
 
@@ -105,13 +128,27 @@ export default function CastPlayer({
     if (!playing || events.length === 0) return;
 
     if (duration <= 0 || position >= duration) {
-      handlePlaybackEnd(events, loop, loopDelay, setContent, setPosition, setPlaying, setSeekVersion, renderedEventTime, loopTimer);
+      handlePlaybackEnd(
+        events,
+        loop,
+        loopDelay,
+        setContent,
+        setPosition,
+        setPlaying,
+        setSeekVersion,
+        renderedEventTime,
+        loopTimer,
+      );
       return;
     }
 
-    const startedAt = performance.now() - (position * 1000) / Math.max(speed, 0.1);
+    const startedAt =
+      performance.now() - (position * 1000) / Math.max(speed, 0.1);
     const tick = (now: number) => {
-      const nextPosition = Math.min(duration, ((now - startedAt) / 1000) * Math.max(speed, 0.1));
+      const nextPosition = Math.min(
+        duration,
+        ((now - startedAt) / 1000) * Math.max(speed, 0.1),
+      );
       setPosition(nextPosition);
 
       const eventTime = latestEventTimeAt(events, nextPosition);
@@ -121,7 +158,17 @@ export default function CastPlayer({
       }
 
       if (nextPosition >= duration) {
-        handlePlaybackEnd(events, loop, loopDelay, setContent, setPosition, setPlaying, setSeekVersion, renderedEventTime, loopTimer);
+        handlePlaybackEnd(
+          events,
+          loop,
+          loopDelay,
+          setContent,
+          setPosition,
+          setPlaying,
+          setSeekVersion,
+          renderedEventTime,
+          loopTimer,
+        );
         return;
       }
       animationFrame.current = window.requestAnimationFrame(tick);
@@ -148,17 +195,17 @@ export default function CastPlayer({
     setPlaying(true);
   };
 
-  const showCursor = isPromptLine(content);
   const terminal = (
     <pre className={styles.screen} ref={screenRef}>
-      {renderAnsi(content || ' ')}
-      {showCursor && <span className={styles.cursor} aria-hidden="true" />}
+      {renderAnsi(content || " ")}
     </pre>
   );
   const rootClassName = [
     chrome ? styles.window : styles.plain,
-    thumbnail ? styles.thumbnail : '',
-  ].filter(Boolean).join(' ');
+    thumbnail ? styles.thumbnail : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   const showControls = controls ?? !thumbnail;
 
   return (
@@ -179,10 +226,14 @@ export default function CastPlayer({
           <button
             type="button"
             className={styles.playButton}
-            aria-label={playing ? 'Pause cast' : 'Play cast'}
+            aria-label={playing ? "Pause cast" : "Play cast"}
             onClick={togglePlayback}
           >
-            {playing ? <RiPauseFill aria-hidden="true" /> : <RiPlayFill aria-hidden="true" />}
+            {playing ? (
+              <RiPauseFill aria-hidden="true" />
+            ) : (
+              <RiPlayFill aria-hidden="true" />
+            )}
           </button>
           {scrubber && (
             <input
@@ -201,7 +252,9 @@ export default function CastPlayer({
               }}
             />
           )}
-          <span>{formatTime(position)} / {formatTime(duration)}</span>
+          <span>
+            {formatTime(position)} / {formatTime(duration)}
+          </span>
         </div>
       )}
     </div>
@@ -211,57 +264,78 @@ export default function CastPlayer({
 type Segment = {
   text: string;
   style?: React.CSSProperties;
+  cursor?: boolean;
 };
 
+const CURSOR_MARKER = "\uE000";
+
 const ANSI_COLORS: Record<number, string> = {
-  30: '#111111',
-  31: '#ff5f57',
-  32: '#28c840',
-  33: '#ffbd2e',
-  34: '#6c73ff',
-  35: '#d670d6',
-  36: '#00d1b2',
-  37: '#f5f5f5',
-  90: '#666a73',
-  91: '#ff8f87',
-  92: '#6ee787',
-  93: '#ffd866',
-  94: '#9aa2ff',
-  95: '#f0a6f0',
-  96: '#55e7d0',
-  97: '#ffffff',
+  30: "#111111",
+  31: "#ff5f57",
+  32: "#28c840",
+  33: "#ffbd2e",
+  34: "#6c73ff",
+  35: "#d670d6",
+  36: "#00d1b2",
+  37: "#f5f5f5",
+  90: "#666a73",
+  91: "#ff8f87",
+  92: "#6ee787",
+  93: "#ffd866",
+  94: "#9aa2ff",
+  95: "#f0a6f0",
+  96: "#55e7d0",
+  97: "#ffffff",
 };
 
 const ANSI_BACKGROUNDS: Record<number, string> = {
-  40: '#111111',
-  41: '#ff5f57',
-  42: '#28c840',
-  43: '#ffbd2e',
-  44: '#6c73ff',
-  45: '#d670d6',
-  46: '#00d1b2',
-  47: '#f5f5f5',
-  100: '#3a3f4b',
-  101: '#ff8f87',
-  102: '#6ee787',
-  103: '#ffd866',
-  104: '#848cff',
-  105: '#f0a6f0',
-  106: '#55e7d0',
-  107: '#ffffff',
+  40: "#111111",
+  41: "#ff5f57",
+  42: "#28c840",
+  43: "#ffbd2e",
+  44: "#6c73ff",
+  45: "#d670d6",
+  46: "#00d1b2",
+  47: "#f5f5f5",
+  100: "#3a3f4b",
+  101: "#ff8f87",
+  102: "#6ee787",
+  103: "#ffd866",
+  104: "#848cff",
+  105: "#f0a6f0",
+  106: "#55e7d0",
+  107: "#ffffff",
 };
 
 const ANSI_256_COLORS = [
-  '#000000', '#800000', '#008000', '#808000', '#000080', '#800080', '#008080', '#c0c0c0',
-  '#808080', '#ff0000', '#00ff00', '#ffff00', '#0000ff', '#ff00ff', '#00ffff', '#ffffff',
+  "#000000",
+  "#800000",
+  "#008000",
+  "#808000",
+  "#000080",
+  "#800080",
+  "#008080",
+  "#c0c0c0",
+  "#808080",
+  "#ff0000",
+  "#00ff00",
+  "#ffff00",
+  "#0000ff",
+  "#ff00ff",
+  "#00ffff",
+  "#ffffff",
 ];
 
 function renderAnsi(input: string) {
-  return parseAnsi(input).map((segment, index) => (
-    <span key={index} style={segment.style}>
-      {segment.text}
-    </span>
-  ));
+  return parseAnsi(input).map((segment, index) =>
+    segment.cursor ? (
+      <span key={index} className={styles.cursor} aria-hidden="true" />
+    ) : (
+      <span key={index} style={segment.style}>
+        {segment.text}
+      </span>
+    ),
+  );
 }
 
 function parseAnsi(input: string): Segment[] {
@@ -270,23 +344,39 @@ function parseAnsi(input: string): Segment[] {
   let lastIndex = 0;
   let style: React.CSSProperties = {};
   let match: RegExpExecArray | null;
+  const pushText = (text: string) => {
+    if (text === "") return;
+    const parts = text.split(CURSOR_MARKER);
+    parts.forEach((part, index) => {
+      if (part !== "") {
+        segments.push({ text: part, style: { ...style } });
+      }
+      if (index < parts.length - 1) {
+        segments.push({ text: "", cursor: true });
+      }
+    });
+  };
 
   while ((match = sgr.exec(input)) !== null) {
     if (match.index > lastIndex) {
-      segments.push({text: input.slice(lastIndex, match.index), style: {...style}});
+      pushText(input.slice(lastIndex, match.index));
     }
     style = applySgr(style, match[1]);
     lastIndex = sgr.lastIndex;
   }
   if (lastIndex < input.length) {
-    segments.push({text: input.slice(lastIndex), style: {...style}});
+    pushText(input.slice(lastIndex));
   }
   return segments;
 }
 
-function applySgr(current: React.CSSProperties, sequence: string): React.CSSProperties {
-  const codes = sequence === '' ? [0] : sequence.split(';').map((code) => Number(code));
-  let next = {...current};
+function applySgr(
+  current: React.CSSProperties,
+  sequence: string,
+): React.CSSProperties {
+  const codes =
+    sequence === "" ? [0] : sequence.split(";").map((code) => Number(code));
+  let next = { ...current };
   for (let i = 0; i < codes.length; i += 1) {
     const code = codes[i];
     if (code === 0) {
@@ -303,7 +393,11 @@ function applySgr(current: React.CSSProperties, sequence: string): React.CSSProp
       next.color = ANSI_COLORS[code];
     } else if (ANSI_BACKGROUNDS[code]) {
       next.backgroundColor = ANSI_BACKGROUNDS[code];
-    } else if ((code === 38 || code === 48) && codes[i + 1] === 5 && Number.isFinite(codes[i + 2])) {
+    } else if (
+      (code === 38 || code === 48) &&
+      codes[i + 1] === 5 &&
+      Number.isFinite(codes[i + 2])
+    ) {
       const color = color256(codes[i + 2]);
       if (code === 38) {
         next.color = color;
@@ -332,7 +426,7 @@ function applySgr(current: React.CSSProperties, sequence: string): React.CSSProp
 
 function color256(code: number) {
   if (code < 16) {
-    return ANSI_256_COLORS[code] ?? '#ffffff';
+    return ANSI_256_COLORS[code] ?? "#ffffff";
   }
   if (code >= 16 && code <= 231) {
     const n = code - 16;
@@ -345,7 +439,7 @@ function color256(code: number) {
     const gray = 8 + (code - 232) * 10;
     return `rgb(${gray}, ${gray}, ${gray})`;
   }
-  return '#ffffff';
+  return "#ffffff";
 }
 
 function cubeColor(value: number) {
@@ -357,10 +451,12 @@ function clampColor(value: number) {
 }
 
 function renderAt(events: CastEvent[], seconds: number) {
-  return replayTerminal(events
-    .filter((event) => event[0] <= seconds)
-    .map((event) => event[2])
-    .join(''));
+  return replayTerminal(
+    events
+      .filter((event) => event[0] <= seconds)
+      .map((event) => event[2])
+      .join(""),
+  );
 }
 
 function latestEventTimeAt(events: CastEvent[], seconds: number) {
@@ -417,23 +513,32 @@ function addCommandIntro(
     return events;
   }
 
-  const intro: CastEvent[] = [[0, 'o', options.prompt]];
+  const intro: CastEvent[] = [[0, "o", options.prompt]];
   let cursor = Math.max(options.typeRate, 0.001);
   for (const char of command) {
-    intro.push([cursor, 'o', char]);
+    intro.push([cursor, "o", char]);
     cursor += Math.max(options.typeRate, 0.001);
   }
   cursor += Math.max(options.enterDelay, 0);
-  intro.push([cursor, 'o', '\n']);
+  intro.push([cursor, "o", "\n"]);
   const offset = cursor + 0.05;
-  const shiftedEvents = events.map((event) => [event[0] + offset, event[1], event[2]] as CastEvent);
-  const finalText = events.map((event) => event[2]).join('');
-  const finalPrompt = finalText.endsWith('\n') || finalText === '' ? options.prompt : `\n${options.prompt}`;
+  const shiftedEvents = events.map(
+    (event) => [event[0] + offset, event[1], event[2]] as CastEvent,
+  );
+  const finalText = events.map((event) => event[2]).join("");
+  const finalPrompt =
+    finalText.endsWith("\n") || finalText === ""
+      ? options.prompt
+      : `\n${options.prompt}`;
 
   return [
     ...intro,
     ...shiftedEvents,
-    [lastEventTime(events) + offset + Math.max(options.exitDelay, 0), 'o', finalPrompt],
+    [
+      lastEventTime(events) + offset + Math.max(options.exitDelay, 0),
+      "o",
+      finalPrompt,
+    ],
   ];
 }
 
@@ -443,80 +548,107 @@ function lastEventTime(events: CastEvent[]) {
 
 function eventsStartWithPrompt(events: CastEvent[]) {
   const firstText = events
-    .filter((event) => event[1] === 'o' || event[1] === 'e')
+    .filter((event) => event[1] === "o" || event[1] === "e")
     .map((event) => event[2])
-    .join('')
+    .join("")
     .trimStart();
-  return stripAnsi(firstText).startsWith('> ');
+  return stripAnsi(firstText).startsWith("> ");
 }
 
 function stripAnsi(input: string) {
-  return input.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
+  return input.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
 }
 
 function normalizeTerminalText(input: string) {
-  return input.replace(/\r\n/g, '\n');
+  return input.replace(/\r\n/g, "\n");
 }
 
 function replayTerminal(input: string) {
-  const lines = [''];
+  const lines = [""];
   let row = 0;
   let carriageReturnPending = false;
+  let cursorVisible = false;
 
-  const currentLine = () => lines[row] ?? '';
+  const currentLine = () => lines[row] ?? "";
   const setCurrentLine = (line: string) => {
     lines[row] = line;
+  };
+  const removeCursor = () => {
+    setCurrentLine(currentLine().split(CURSOR_MARKER).join(""));
+  };
+  const syncCursor = () => {
+    removeCursor();
+    if (cursorVisible) {
+      setCurrentLine(currentLine() + CURSOR_MARKER);
+    }
   };
   const append = (text: string) => {
     if (carriageReturnPending) {
       clearLine();
       carriageReturnPending = false;
     }
+    removeCursor();
     setCurrentLine(currentLine() + text);
-  };
-  const clearLine = () => {
-    setCurrentLine('');
-  };
-  const moveToNextLine = () => {
-    row += 1;
-    if (lines[row] === undefined) {
-      lines[row] = '';
+    if (cursorVisible) {
+      setCurrentLine(currentLine() + CURSOR_MARKER);
     }
   };
+  const clearLine = () => {
+    setCurrentLine("");
+    if (cursorVisible) {
+      setCurrentLine(CURSOR_MARKER);
+    }
+  };
+  const moveToNextLine = () => {
+    removeCursor();
+    row += 1;
+    if (lines[row] === undefined) {
+      lines[row] = "";
+    }
+    syncCursor();
+  };
 
-  for (let index = 0; index < input.length;) {
+  for (let index = 0; index < input.length; ) {
     const char = input[index];
 
-    if (char === '\x1b') {
+    if (char === "\x1b") {
       const parsed = parseEscape(input, index);
       if (!parsed) {
         index += 1;
         continue;
       }
-      if (parsed.kind === 'sgr') {
+      if (parsed.kind === "sgr") {
         append(parsed.sequence);
-      } else if (parsed.kind === 'clearLine') {
+      } else if (parsed.kind === "clearLine") {
         clearLine();
+      } else if (parsed.kind === "cursorShow") {
+        cursorVisible = true;
+        syncCursor();
+      } else if (parsed.kind === "cursorHide") {
+        cursorVisible = false;
+        removeCursor();
       }
       index = parsed.nextIndex;
       continue;
     }
 
-    if (char === '\r') {
+    if (char === "\r") {
       carriageReturnPending = true;
       index += 1;
       continue;
     }
 
-    if (char === '\n') {
+    if (char === "\n") {
       carriageReturnPending = false;
       moveToNextLine();
       index += 1;
       continue;
     }
 
-    if (char === '\b') {
+    if (char === "\b") {
+      removeCursor();
       setCurrentLine(removeLastVisibleChar(currentLine()));
+      syncCursor();
       index += 1;
       continue;
     }
@@ -525,29 +657,37 @@ function replayTerminal(input: string) {
     index += 1;
   }
 
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 type ParsedEscape = {
-  kind: 'sgr' | 'clearLine' | 'ignore';
+  kind: "sgr" | "clearLine" | "cursorShow" | "cursorHide" | "ignore";
   sequence: string;
   nextIndex: number;
 };
 
 function parseEscape(input: string, start: number): ParsedEscape | null {
   const next = input[start + 1];
-  if (next === ']') {
-    const bel = input.indexOf('\x07', start + 2);
-    const st = input.indexOf('\x1b\\', start + 2);
+  if (next === "]") {
+    const bel = input.indexOf("\x07", start + 2);
+    const st = input.indexOf("\x1b\\", start + 2);
     const end = bel === -1 ? st : st === -1 ? bel : Math.min(bel, st);
     if (end === -1) {
       return null;
     }
-    return {kind: 'ignore', sequence: input.slice(start, end + (end === st ? 2 : 1)), nextIndex: end + (end === st ? 2 : 1)};
+    return {
+      kind: "ignore",
+      sequence: input.slice(start, end + (end === st ? 2 : 1)),
+      nextIndex: end + (end === st ? 2 : 1),
+    };
   }
 
-  if (next !== '[') {
-    return {kind: 'ignore', sequence: input.slice(start, start + 2), nextIndex: start + 2};
+  if (next !== "[") {
+    return {
+      kind: "ignore",
+      sequence: input.slice(start, start + 2),
+      nextIndex: start + 2,
+    };
   }
 
   const match = /\x1b\[[0-?]*[ -/]*[@-~]/.exec(input.slice(start));
@@ -557,13 +697,19 @@ function parseEscape(input: string, start: number): ParsedEscape | null {
 
   const sequence = match[0];
   const final = sequence.at(-1);
-  if (final === 'm') {
-    return {kind: 'sgr', sequence, nextIndex: start + sequence.length};
+  if (final === "m") {
+    return { kind: "sgr", sequence, nextIndex: start + sequence.length };
   }
-  if (final === 'K') {
-    return {kind: 'clearLine', sequence, nextIndex: start + sequence.length};
+  if (sequence === "\x1b[?25h") {
+    return { kind: "cursorShow", sequence, nextIndex: start + sequence.length };
   }
-  return {kind: 'ignore', sequence, nextIndex: start + sequence.length};
+  if (sequence === "\x1b[?25l") {
+    return { kind: "cursorHide", sequence, nextIndex: start + sequence.length };
+  }
+  if (final === "K") {
+    return { kind: "clearLine", sequence, nextIndex: start + sequence.length };
+  }
+  return { kind: "ignore", sequence, nextIndex: start + sequence.length };
 }
 
 function removeLastVisibleChar(input: string) {
@@ -574,22 +720,14 @@ function removeLastVisibleChar(input: string) {
   return input.slice(0, -1);
 }
 
-function isPromptLine(input: string) {
-  const text = stripControlSequences(input);
-  const lastLine = text.split('\n').at(-1) ?? '';
-  return /^(>|[$#])\s/.test(lastLine);
-}
-
-function stripControlSequences(input: string) {
-  return input
-    .replace(/\x1b\][\s\S]*?(?:\x07|\x1b\\)/g, '')
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
-}
-
 function formatTime(seconds: number) {
   const safe = Math.max(0, seconds);
-  const mins = Math.floor(safe / 60).toString().padStart(2, '0');
-  const secs = Math.floor(safe % 60).toString().padStart(2, '0');
+  const mins = Math.floor(safe / 60)
+    .toString()
+    .padStart(2, "0");
+  const secs = Math.floor(safe % 60)
+    .toString()
+    .padStart(2, "0");
   const tenths = Math.floor((safe % 1) * 10);
   return `${mins}:${secs}.${tenths}`;
 }

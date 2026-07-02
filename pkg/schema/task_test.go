@@ -471,8 +471,9 @@ func TestTasksDecodeHook_StructuredSimulatePrompt(t *testing.T) {
 	input := map[string]any{
 		"steps": []any{
 			map[string]any{
-				"type": TaskTypeSimulate,
-				"mode": "typed",
+				"type":   TaskTypeSimulate,
+				"mode":   "typed",
+				"cursor": true,
 				"prompt": map[string]any{
 					"text":  "> ",
 					"style": "command",
@@ -495,6 +496,7 @@ func TestTasksDecodeHook_StructuredSimulatePrompt(t *testing.T) {
 	require.NotNil(t, result.Steps[0].SimulatePrompt)
 	assert.Equal(t, "> ", result.Steps[0].SimulatePrompt.Text)
 	assert.Equal(t, "command", result.Steps[0].SimulatePrompt.Style)
+	assert.True(t, result.Steps[0].Cursor)
 	assert.Equal(t, "atmos version", result.Steps[0].Text)
 }
 

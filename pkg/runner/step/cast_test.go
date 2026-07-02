@@ -209,7 +209,10 @@ func TestRecordCastTypedLineWritesPromptAndCharactersAsEvents(t *testing.T) {
 	}
 	t.Cleanup(restore)
 
-	if err := recordCastTypedLine(context.Background(), &schema.SimulatePrompt{Text: "> ", Style: "command"}, "# inspect", 0, 0); err != nil {
+	if err := recordCastTypedLine(context.Background(), castTypedLineOptions{
+		Prompt: &schema.SimulatePrompt{Text: "> ", Style: "command"},
+		Line:   "# inspect",
+	}); err != nil {
 		t.Fatalf("record typed line: %v", err)
 	}
 	restore()
@@ -229,6 +232,47 @@ func TestRecordCastTypedLineWritesPromptAndCharactersAsEvents(t *testing.T) {
 		if !strings.Contains(string(content), want) {
 			t.Fatalf("typed cast event missing %s in:\n%s", want, content)
 		}
+	}
+}
+
+func TestRecordCastTypedLineWritesCursorEventsWhenEnabled(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	rec, restore, err := startStepRecorder(&schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("start recorder: %v", err)
+	}
+	t.Cleanup(restore)
+
+	if err := recordCastTypedLine(context.Background(), castTypedLineOptions{
+		Prompt: &schema.SimulatePrompt{Text: "> ", Style: "command"},
+		Line:   "atmos version",
+		Cursor: true,
+	}); err != nil {
+		t.Fatalf("record typed line: %v", err)
+	}
+	restore()
+	if err := rec.Close(); err != nil {
+		t.Fatalf("close recorder: %v", err)
+	}
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatalf("read cast: %v", err)
+	}
+	if strings.Count(string(content), `\u001b[?25h`) != 2 {
+		t.Fatalf("cursor show events missing in:\n%s", content)
+	}
+	if strings.Count(string(content), `\u001b[?25l`) != 2 {
+		t.Fatalf("cursor hide events missing in:\n%s", content)
 	}
 }
 

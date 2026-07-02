@@ -46,6 +46,7 @@ commands:
             steps:
             - type: simulate
               mode: typed
+              cursor: true
               prompt: &1
                 text: "> "
                 style: command
@@ -53,6 +54,7 @@ commands:
               text: "# see the stacks in this quick start"
             - type: simulate
               mode: typed
+              cursor: true
               prompt: *1
               rate: 35ms
               text: atmos list stacks --format tree
@@ -72,11 +74,13 @@ commands:
               command: atmos list stacks --format tree
             - type: simulate
               mode: typed
+              cursor: true
               prompt: *1
               rate: 35ms
               text: "# station is a Terraform component instance in all three stacks"
             - type: simulate
               mode: typed
+              cursor: true
               prompt: *1
               rate: 35ms
               text: atmos list components
@@ -89,11 +93,13 @@ commands:
               command: atmos list components
             - type: simulate
               mode: typed
+              cursor: true
               prompt: *1
               rate: 35ms
               text: "# plan the dev station instance"
             - type: simulate
               mode: typed
+              cursor: true
               prompt: *1
               rate: 35ms
               text: atmos terraform plan station -s dev

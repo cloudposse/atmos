@@ -170,6 +170,7 @@ type Task struct {
 	Shell       string `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`
 	WriteRate   string `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`
 	KeyInterval string `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"`
+	Cursor      bool   `yaml:"cursor,omitempty" json:"cursor,omitempty" mapstructure:"cursor"`
 	Text        string `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`
 	Regex       string `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`
 	Key         string `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`
@@ -417,6 +418,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Shell:       task.Shell,
 		WriteRate:   task.WriteRate,
 		KeyInterval: task.KeyInterval,
+		Cursor:      task.Cursor,
 		Text:        task.Text,
 		Regex:       task.Regex,
 		Key:         task.Key,
@@ -564,6 +566,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Shell:       step.Shell,
 		WriteRate:   step.WriteRate,
 		KeyInterval: step.KeyInterval,
+		Cursor:      step.Cursor,
 		Text:        step.Text,
 		Regex:       step.Regex,
 		Key:         step.Key,
