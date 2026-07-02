@@ -9,6 +9,7 @@ const (
 	SubCommandAliases
 	Examples
 	AvailableCommands
+	CustomCommands
 	Flags
 	GlobalFlags
 	AdditionalHelpTopics
@@ -49,12 +50,19 @@ func getSection(section HelpTemplateSections) string {
 
 {{formatCommands .Commands "subcommandAliases"}}{{end}}`
 	case AvailableCommands:
-		return `{{if .HasAvailableSubCommands}}
+		return `{{if (hasCommands .Commands "builtInCommands")}}
 
 
-{{HeadingStyle "Available Commands:"}}
+{{HeadingStyle "BUILT-IN COMMANDS"}}
 
-{{formatCommands .Commands "availableCommands"}}{{end}}`
+{{formatCommands .Commands "builtInCommands"}}{{end}}`
+	case CustomCommands:
+		return `{{if (hasCommands .Commands "customCommands")}}
+
+
+{{HeadingStyle "CUSTOM COMMANDS"}}
+
+{{formatCommands .Commands "customCommands"}}{{end}}`
 	case Examples:
 		return `{{if .HasExample}}
 

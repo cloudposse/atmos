@@ -3,9 +3,7 @@
 
 **Error:** path is not within Atmos component directories
 
-## Hints
-
-💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks
+Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks
 
 Stacks directory: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks
 

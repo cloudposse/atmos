@@ -77,7 +77,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			switch {
 			case len(matches) == 0:
 				return errUtils.Build(errUtils.ErrWorkflowNoWorkflow).
-					WithHintf("No workflow found with name `%s`", workflowName).
+					WithExplanationf("No workflow found with name `%s`", workflowName).
 					WithHint("Use 'atmos describe workflows' to see all available workflows").
 					WithExitCode(1).
 					Err()
@@ -95,8 +95,8 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 					// Sort for deterministic output (important for tests and snapshots).
 					sort.Strings(fileList)
 					return errUtils.Build(errUtils.ErrWorkflowNoWorkflow).
-						WithHintf("Multiple workflow files contain workflow `%s`", workflowName).
-						WithHintf("Matching files: %s", strings.Join(fileList, ", ")).
+						WithExplanationf("Multiple workflow files contain workflow `%s`", workflowName).
+						WithExplanationf("Matching files: %s", strings.Join(fileList, ", ")).
 						WithHintf("Use --file flag to specify which one: atmos workflow %s --file <file>", workflowName).
 						WithExitCode(1).
 						Err()
@@ -146,7 +146,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	if !u.FileExists(workflowPath) {
 		return errUtils.Build(errUtils.ErrWorkflowFileNotFound).
-			WithHintf("The workflow manifest file `%s` does not exist", filepath.ToSlash(workflowPath)).
+			WithExplanationf("The workflow manifest file `%s` does not exist", filepath.ToSlash(workflowPath)).
 			WithExitCode(1).
 			Err()
 	}
@@ -184,8 +184,8 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		sort.Strings(validWorkflows)
 
 		return errUtils.Build(errUtils.ErrWorkflowNoWorkflow).
-			WithHintf("No workflow exists with name `%s`", workflowName).
-			WithHintf("Available workflows in %s: %s", filepath.Base(workflowPath), u.FormatList(validWorkflows)).
+			WithExplanationf("No workflow exists with name `%s`", workflowName).
+			WithExplanationf("Available workflows in %s: %s", filepath.Base(workflowPath), u.FormatList(validWorkflows)).
 			WithExitCode(1).
 			Err()
 	} else {

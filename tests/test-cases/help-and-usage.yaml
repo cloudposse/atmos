@@ -584,6 +584,7 @@ tests:
       - "terraform"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       sanitize:
         "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
@@ -659,6 +660,7 @@ tests:
     args:
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       sanitize:
         "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0

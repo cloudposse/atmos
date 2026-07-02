@@ -2,8 +2,10 @@ package errors
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -34,6 +36,19 @@ const (
 )
 
 var newTerminalMarkdownRenderer = markdown.NewTerminalMarkdownRenderer
+
+const (
+	explanationGradientStart = "#33204f"
+	explanationGradientEnd   = "#123c5c"
+	hexColorLength           = 6
+	hexColorBase             = 16
+)
+
+type markdownSections struct {
+	errorMarkdown       string
+	explanationMarkdown string
+	remainderMarkdown   string
+}
 
 // FormatterConfig controls error formatting behavior.
 type FormatterConfig struct {
@@ -130,26 +145,20 @@ func Format(err error, config FormatterConfig) string {
 	// This respects --no-color, --force-color, NO_COLOR env var, and terminal.color config.
 	useColor := shouldUseColor()
 
-	// Build structured markdown document with sections.
-	md := buildMarkdownSections(err, config, useColor)
+	sections := buildMarkdownSections(err, config, useColor)
 
-	// Render markdown through Glamour with configured width.
-	rendered, ok := renderMarkdown(md, config.MaxLineLength)
+	rendered, ok := renderMarkdownSections(sections, config, useColor)
 	if !ok {
 		return formatStructuredPlainError(err, config.Title, "")
-	}
-
-	// Strip ANSI codes if color is disabled.
-	if !useColor {
-		rendered = stripANSI(rendered)
 	}
 
 	return rendered
 }
 
 // buildMarkdownSections builds the complete markdown document with all sections.
-func buildMarkdownSections(err error, config FormatterConfig, useColor bool) string {
-	var md strings.Builder
+func buildMarkdownSections(err error, config FormatterConfig, useColor bool) markdownSections {
+	var errorMarkdown strings.Builder
+	var remainderMarkdown strings.Builder
 
 	// Section 1: Error header + message.
 	// Prefer config.Title, then extract custom title, or use default.
@@ -160,7 +169,7 @@ func buildMarkdownSections(err error, config FormatterConfig, useColor bool) str
 	if title == "" {
 		title = "Error"
 	}
-	md.WriteString("# " + title + newline + newline)
+	errorMarkdown.WriteString("# " + title + newline + newline)
 
 	// Extract sentinel error and wrapped message.
 	sentinelMsg, wrappedMsg := extractSentinelAndWrappedMessage(err)
@@ -173,35 +182,39 @@ func buildMarkdownSections(err error, config FormatterConfig, useColor bool) str
 	switch {
 	case errors.As(err, &workflowErr):
 		// Workflow orchestration failures - show workflow-specific message with exit code.
-		md.WriteString(fmt.Sprintf("**Error:** %s%s%s", workflowErr.WorkflowStepMessage(), newline, newline))
+		fmt.Fprintf(&errorMarkdown, "**Error:** %s%s%s", workflowErr.WorkflowStepMessage(), newline, newline)
 	case errors.As(err, &execErr):
 		// External command execution failures - show command and exit code.
-		md.WriteString(fmt.Sprintf("**Error:** %s with exit code %d%s%s", sentinelMsg, execErr.ExitCode, newline, newline))
+		fmt.Fprintf(&errorMarkdown, "**Error:** %s with exit code %d%s%s", sentinelMsg, execErr.ExitCode, newline, newline)
 	default:
 		// All other errors - just show the sentinel message without exit code.
-		md.WriteString("**Error:** " + sentinelMsg + newline + newline)
+		errorMarkdown.WriteString("**Error:** " + sentinelMsg + newline + newline)
 	}
 
 	// Section 2: Explanation.
-	addExplanationSection(&md, err, wrappedMsg, config.MaxLineLength)
+	explanationMarkdown := buildExplanationMarkdown(err, wrappedMsg, config.MaxLineLength)
 
 	// Section 3 & 4: Examples and Hints.
-	addExampleAndHintsSection(&md, err, config.MaxLineLength)
+	addExampleAndHintsSection(&remainderMarkdown, err, config.MaxLineLength)
 
 	// Section 4.5: Command Output (for ExecError with stderr).
-	addCommandOutputSection(&md, err)
+	addCommandOutputSection(&remainderMarkdown, err)
 
 	// Section 5: Context (verbose mode only).
 	if config.Verbose {
-		addContextSection(&md, err, useColor)
+		addContextSection(&remainderMarkdown, err, useColor)
 	}
 
 	// Section 6: Stack trace (verbose mode only).
 	if config.Verbose {
-		addStackTraceSection(&md, err, useColor)
+		addStackTraceSection(&remainderMarkdown, err, useColor)
 	}
 
-	return md.String()
+	return markdownSections{
+		errorMarkdown:       errorMarkdown.String(),
+		explanationMarkdown: explanationMarkdown,
+		remainderMarkdown:   remainderMarkdown.String(),
+	}
 }
 
 // extractSentinelAndWrappedMessage extracts the root sentinel error message
@@ -240,33 +253,37 @@ func extractSentinelAndWrappedMessage(err error) (sentinelMsg string, wrappedMsg
 	return sentinelMsg, wrappedMsg
 }
 
-// addExplanationSection adds the explanation section if details or wrapped message exist.
-func addExplanationSection(md *strings.Builder, err error, wrappedMsg string, maxLineLength int) {
+// buildExplanationMarkdown builds explanation content without a visible section heading.
+func buildExplanationMarkdown(err error, wrappedMsg string, maxLineLength int) string {
 	// maxLineLength is unused here because the markdown renderer handles wrapping.
 	_ = maxLineLength
 
 	details := errors.GetAllDetails(err)
 	hasContent := len(details) > 0 || wrappedMsg != ""
 
-	if hasContent {
-		md.WriteString(newline + newline + "## Explanation" + newline + newline)
-
-		// Add wrapped message first if present.
-		// Don't wrap - let the markdown renderer handle it to preserve structure.
-		if wrappedMsg != "" {
-			md.WriteString(wrappedMsg + newline + newline)
-		}
-
-		// Add details from error chain.
-		// Don't wrap - let the markdown renderer handle it to preserve code blocks and newlines.
-		for _, detail := range details {
-			md.WriteString(fmt.Sprintf("%v", detail) + newline)
-		}
-
-		if len(details) > 0 {
-			md.WriteString(newline)
-		}
+	if !hasContent {
+		return ""
 	}
+
+	var md strings.Builder
+
+	// Add wrapped message first if present.
+	// Don't wrap - let the markdown renderer handle it to preserve structure.
+	if wrappedMsg != "" {
+		md.WriteString(wrappedMsg + newline + newline)
+	}
+
+	// Add details from error chain.
+	// Don't wrap - let the markdown renderer handle it to preserve code blocks and newlines.
+	for _, detail := range details {
+		detailText := strings.TrimSpace(fmt.Sprintf("%v", detail))
+		if detailText == "" {
+			continue
+		}
+		md.WriteString(detailText + newline + newline)
+	}
+
+	return md.String()
 }
 
 // extractCustomTitle extracts the custom title from error hints.
@@ -336,7 +353,7 @@ func addExampleAndHintsSection(md *strings.Builder, err error, maxLineLength int
 	//   - Markdown stylesheets (renderer configuration)
 	//   - NOT by post-processing that removes newlines
 	if len(hints) > 0 {
-		md.WriteString(newline + newline + "## Hints" + newline + newline)
+		md.WriteString(newline + newline)
 		for _, hint := range hints {
 			// Don't wrap - let the markdown renderer handle it to preserve structure.
 			// The maxLineLength parameter is unused here.
@@ -344,6 +361,145 @@ func addExampleAndHintsSection(md *strings.Builder, err error, maxLineLength int
 			md.WriteString("💡 " + hint + newline + newline)
 		}
 	}
+}
+
+func renderMarkdownSections(sections markdownSections, config FormatterConfig, useColor bool) (string, bool) {
+	var out strings.Builder
+
+	if !appendRenderedMarkdownSection(&out, sections.errorMarkdown, config.MaxLineLength, useColor) {
+		return "", false
+	}
+
+	if strings.TrimSpace(sections.explanationMarkdown) != "" {
+		renderedExplanation, ok := renderMarkdown(sections.explanationMarkdown, config.MaxLineLength)
+		if !ok {
+			return "", false
+		}
+		if !useColor {
+			renderedExplanation = stripANSI(renderedExplanation)
+		}
+		appendRenderedSection(&out, renderExplanationCallout(renderedExplanation, config.MaxLineLength, useColor))
+	}
+
+	if strings.TrimSpace(sections.remainderMarkdown) != "" {
+		if !appendRenderedMarkdownSection(&out, sections.remainderMarkdown, config.MaxLineLength, useColor) {
+			return "", false
+		}
+	}
+
+	return strings.TrimRight(out.String(), " \t\n") + newline, true
+}
+
+func appendRenderedMarkdownSection(out *strings.Builder, md string, maxLineLength int, useColor bool) bool {
+	if strings.TrimSpace(md) == "" {
+		return true
+	}
+	rendered, ok := renderMarkdown(md, maxLineLength)
+	if !ok {
+		return false
+	}
+	if !useColor {
+		rendered = stripANSI(rendered)
+	}
+	appendRenderedSection(out, rendered)
+	return true
+}
+
+func appendRenderedSection(out *strings.Builder, section string) {
+	section = strings.Trim(section, "\n")
+	if strings.TrimSpace(section) == "" {
+		return
+	}
+	if out.Len() > 0 {
+		out.WriteString(newline + newline)
+	}
+	out.WriteString(section)
+}
+
+func renderExplanationCallout(rendered string, maxLineLength int, useColor bool) string {
+	rendered = strings.Trim(rendered, "\n")
+	if strings.TrimSpace(rendered) == "" {
+		return ""
+	}
+	if !useColor {
+		return rendered
+	}
+
+	lines := strings.Split(rendered, newline)
+	width := maxRenderedLineWidth(lines) + 2
+	if maxLineLength > 0 && width > maxLineLength {
+		width = maxLineLength
+	}
+	if width < 4 {
+		width = 4
+	}
+
+	var out strings.Builder
+	for i, line := range lines {
+		if i > 0 {
+			out.WriteString(newline)
+		}
+		color := interpolateHexColor(explanationGradientStart, explanationGradientEnd, gradientRatio(i, len(lines)))
+		style := lipgloss.NewStyle().
+			Background(lipgloss.Color(color)).
+			PaddingLeft(1).
+			PaddingRight(1).
+			Width(width)
+		out.WriteString(style.Render(line))
+	}
+	return out.String()
+}
+
+func maxRenderedLineWidth(lines []string) int {
+	maxWidth := 0
+	for _, line := range lines {
+		if width := lipgloss.Width(line); width > maxWidth {
+			maxWidth = width
+		}
+	}
+	return maxWidth
+}
+
+func gradientRatio(index int, total int) float64 {
+	if total <= 1 {
+		return 0
+	}
+	return float64(index) / float64(total-1)
+}
+
+func interpolateHexColor(start string, end string, ratio float64) string {
+	sr, sg, sb := parseHexColor(start)
+	er, eg, eb := parseHexColor(end)
+
+	r := interpolateColorChannel(sr, er, ratio)
+	g := interpolateColorChannel(sg, eg, ratio)
+	b := interpolateColorChannel(sb, eb, ratio)
+
+	return fmt.Sprintf("#%02X%02X%02X", r, g, b)
+}
+
+func interpolateColorChannel(start int, end int, ratio float64) int {
+	return start + int(math.Round(float64(end-start)*ratio))
+}
+
+func parseHexColor(hex string) (int, int, int) {
+	hex = strings.TrimPrefix(hex, "#")
+	if len(hex) != hexColorLength {
+		return 0, 0, 0
+	}
+	r, err := strconv.ParseInt(hex[0:2], hexColorBase, 0)
+	if err != nil {
+		return 0, 0, 0
+	}
+	g, err := strconv.ParseInt(hex[2:4], hexColorBase, 0)
+	if err != nil {
+		return 0, 0, 0
+	}
+	b, err := strconv.ParseInt(hex[4:6], hexColorBase, 0)
+	if err != nil {
+		return 0, 0, 0
+	}
+	return int(r), int(g), int(b)
 }
 
 // addCommandOutputSection adds the command output section for ExecError with stderr.

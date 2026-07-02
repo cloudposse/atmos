@@ -4,7 +4,5 @@
 
 **Error:** OPA policy violations detected
 
-## Explanation
-
 In 'dev', only 2 Availability Zones are allowed VPC name must be a valid string
 from 2 to 20 alphanumeric chars

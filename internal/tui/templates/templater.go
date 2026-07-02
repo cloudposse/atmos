@@ -18,6 +18,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
+const helpCommandName = "help"
+
 // Templater handles the generation and management of command usage templates.
 type Templater struct {
 	UsageTemplate string
@@ -52,6 +54,13 @@ var customHelpShortMessage = map[string]string{
 	"help": "Display help information for Atmos commands",
 }
 
+const (
+	annotationConfigAlias   = "configAlias"
+	annotationCustomCommand = "customCommand"
+	annotationNativeCommand = "nativeCommand"
+	annotationValueTrue     = "true"
+)
+
 // filterCommands returns only commands or aliases based on returnOnlyAliases boolean
 func filterCommands(commands []*cobra.Command, returnOnlyAliases bool) []*cobra.Command {
 	if !returnOnlyAliases {
@@ -74,6 +83,18 @@ func filterCommands(commands []*cobra.Command, returnOnlyAliases bool) []*cobra.
 		}
 	}
 	return filtered
+}
+
+func isConfigAlias(cmd *cobra.Command) bool {
+	return cmd.Annotations != nil && cmd.Annotations[annotationConfigAlias] != ""
+}
+
+func isCustomCommand(cmd *cobra.Command) bool {
+	return cmd.Annotations != nil && cmd.Annotations[annotationCustomCommand] == annotationValueTrue
+}
+
+func isNativeCommand(cmd *cobra.Command) bool {
+	return cmd.Annotations != nil && cmd.Annotations[annotationNativeCommand] == annotationValueTrue
 }
 
 func renderHelpMarkdown(cmd *cobra.Command) string {
@@ -100,7 +121,7 @@ func renderHelpMarkdown(cmd *cobra.Command) string {
 
 func isNativeCommandsAvailable(cmds []*cobra.Command) bool {
 	for _, cmd := range cmds {
-		if cmd.Annotations["nativeCommand"] == "true" {
+		if isNativeCommand(cmd) {
 			return true
 		}
 	}
@@ -132,6 +153,35 @@ func renderMarkdown(example string) string {
 	return ""
 }
 
+func hasCommands(cmds []*cobra.Command, listType string) bool {
+	cmds = filterCommands(cmds, listType == "subcommandAliases")
+	for _, cmd := range cmds {
+		if shouldIncludeCommand(cmd, listType) {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldIncludeCommand(cmd *cobra.Command, listType string) bool {
+	if !isCommandVisible(cmd) {
+		return false
+	}
+
+	switch listType {
+	case "builtInCommands":
+		return !isNativeCommand(cmd) && !isConfigAlias(cmd) && !isCustomCommand(cmd)
+	case "customCommands":
+		return !isConfigAlias(cmd) && isCustomCommand(cmd)
+	default:
+		return true
+	}
+}
+
+func isCommandVisible(cmd *cobra.Command) bool {
+	return cmd.IsAvailableCommand() || cmd.Name() == helpCommandName
+}
+
 // formatCommands formats a slice of cobra commands with proper styling
 func formatCommands(cmds []*cobra.Command, listType string) string {
 	var maxLen int
@@ -153,7 +203,23 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 				continue
 			}
 		case "native":
-			if cmd.Annotations["nativeCommand"] == "true" {
+			if isNativeCommand(cmd) {
+				availableCmds = append(availableCmds, cmd)
+				if len(cmd.Name()) > maxLen {
+					maxLen = len(cmd.Name())
+				}
+				continue
+			}
+		case "customCommands":
+			if !isConfigAlias(cmd) && isCustomCommand(cmd) && isCommandVisible(cmd) {
+				availableCmds = append(availableCmds, cmd)
+				if len(cmd.Name()) > maxLen {
+					maxLen = len(cmd.Name())
+				}
+				continue
+			}
+		case "builtInCommands":
+			if !isNativeCommand(cmd) && !isConfigAlias(cmd) && !isCustomCommand(cmd) && isCommandVisible(cmd) {
 				availableCmds = append(availableCmds, cmd)
 				if len(cmd.Name()) > maxLen {
 					maxLen = len(cmd.Name())
@@ -165,17 +231,17 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 			// 	continue
 			// }
 
-			if cmd.IsAvailableCommand() || cmd.Name() == "help" {
+			if isCommandVisible(cmd) {
 				availableCmds = append(availableCmds, cmd)
 				if len(cmd.Name()) > maxLen {
 					maxLen = len(cmd.Name())
 				}
 			}
 		default:
-			if cmd.Annotations["nativeCommand"] == "true" {
+			if isNativeCommand(cmd) || isConfigAlias(cmd) || isCustomCommand(cmd) {
 				continue
 			}
-			if cmd.IsAvailableCommand() || cmd.Name() == "help" {
+			if isCommandVisible(cmd) {
 				availableCmds = append(availableCmds, cmd)
 				if len(cmd.Name()) > maxLen {
 					maxLen = len(cmd.Name())
@@ -220,6 +286,7 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 			Usage,
 			Aliases,
 			AvailableCommands,
+			CustomCommands,
 			NativeCommands,
 			SubCommandAliases,
 			Flags,
@@ -233,6 +300,7 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	cmd.SetUsageTemplate(t.UsageTemplate)
 	cobra.AddTemplateFunc("isAliasesPresent", isAliasesPresent)
 	cobra.AddTemplateFunc("isNativeCommandsAvailable", isNativeCommandsAvailable)
+	cobra.AddTemplateFunc("hasCommands", hasCommands)
 	cobra.AddTemplateFunc("formatCommands", formatCommands)
 	cobra.AddTemplateFunc("renderMarkdown", renderMarkdown)
 	cobra.AddTemplateFunc("renderHelpMarkdown", renderHelpMarkdown)

@@ -11,7 +11,7 @@ tests:
     expect:
       diff: []
       stdout:
-        - "AVAILABLE COMMANDS"
+        - "BUILT-IN COMMANDS"
         - "\\bauth\\b"
         - "\\batlantis\\b"
         - "\\baws\\b"

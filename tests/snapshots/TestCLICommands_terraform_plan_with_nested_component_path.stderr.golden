@@ -3,10 +3,8 @@
 
 **Error:** ambiguous component path
 
-## Hints
-
-💡 Path resolves to infra/vpc which is referenced by multiple components in
-stack tenant1-ue2-dev Matching components: infra/vpc, vpc, vpc/new
+Path resolves to infra/vpc which is referenced by multiple components in stack
+tenant1-ue2-dev Matching components: infra/vpc, vpc, vpc/new
 
 💡 Use the exact component name instead of a path Example: atmos terraform
 <command> infra/vpc --stack tenant1-ue2-dev

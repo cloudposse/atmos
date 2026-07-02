@@ -435,13 +435,13 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 		return groups[1] + fixedRemainder
 	})
 
-	// 5b. Join hint paths that may be split across lines due to terminal width wrapping.
+	// 5b. Join diagnostic paths that may be split across lines due to terminal width wrapping.
 	// This ensures consistent snapshots across platforms with different terminal widths.
 	// Example:
 	//   Input:  "💡 Path points to the stacks configuration directory, not a component:\n/absolute/path/to/repo/..."
 	//   Output: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/..."
-	hintPathRegex := regexp.MustCompile(`(💡[^:]+:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
-	result = hintPathRegex.ReplaceAllString(result, "$1 $2")
+	diagnosticPathRegex := regexp.MustCompile(`((?:💡\s*)?[^:\n]+:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
+	result = diagnosticPathRegex.ReplaceAllString(result, "$1 $2")
 
 	// Also handle "Stacks directory:" and "Workflows directory:" patterns.
 	// Example:
@@ -553,12 +553,12 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
 	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
 
-	// 17. Join hint messages where the sanitized path ended up on the next line.
+	// 17. Join diagnostic messages where the sanitized path ended up on the next line.
 	// This must run AFTER path sanitization because it matches the sanitized path pattern.
-	// E.g., "💡 Stacks directory not found:\n/absolute/path" vs "💡 Stacks directory not found: /absolute/path"
+	// E.g., "Stacks directory not found:\n/absolute/path" vs "Stacks directory not found: /absolute/path"
 	// Also handles plain labels like "Stacks directory:\n/path"
-	hintPathRegex2 := regexp.MustCompile(`(?m)(💡[^\n]{0,200}?:|^[A-Z][^\n]{0,200}?directory:)\s*\n(/absolute/path/to/repo[^\s\n]*)`)
-	result = hintPathRegex2.ReplaceAllString(result, "$1 $2")
+	diagnosticPathRegex2 := regexp.MustCompile(`(?m)((?:💡\s*)?[A-Z][^\n]{0,200}?:)\s*\n(/absolute/path/to/repo[^\s\n]*)`)
+	result = diagnosticPathRegex2.ReplaceAllString(result, "$1 $2")
 
 	return result, nil
 }

@@ -5,13 +5,9 @@
 **Error:** workflow step execution failed: max attempts (1) exceeded, last
 error: subcommand exited with code 127
 
-## Explanation
-
 The following command failed to execute:
 
  nonexistentcommand
-
-## Hints
 
 💡 To resume the workflow from this step, run:
 
