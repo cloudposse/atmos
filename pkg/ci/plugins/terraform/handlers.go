@@ -14,8 +14,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -772,11 +775,37 @@ func (p *Plugin) resolveArtifactPath(ctx *plugin.HookContext) string {
 	ctx.Info.ComponentFolderPrefixReplaced = resolved.ComponentFolderPrefixReplaced
 	ctx.Info.ComponentSection = resolved.ComponentSection
 
+	if !applyResolvedWorkdirArtifactPath(ctx.Config, &resolved) {
+		return ""
+	}
+	ctx.Info.ComponentSection = resolved.ComponentSection
+
 	path := e.ConstructTerraformComponentPlanfilePath(ctx.Config, &resolved)
 	if path != "" {
 		ctx.Info.PlanFile = path
 	}
 	return path
+}
+
+func applyResolvedWorkdirArtifactPath(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
+	if !provWorkdir.IsWorkdirEnabled(info.ComponentSection) {
+		return true
+	}
+
+	candidate, exists, err := component.BuildAndResolveWorkdirPath(config, info, cfg.TerraformComponentType)
+	if err != nil {
+		log.Debug("Failed to resolve workdir artifact path", "error", err)
+		return false
+	}
+	if !exists {
+		return true
+	}
+
+	if info.ComponentSection == nil {
+		info.ComponentSection = map[string]any{}
+	}
+	info.ComponentSection[provWorkdir.WorkdirPathKey] = candidate
+	return true
 }
 
 // buildPlanfileMetadata builds metadata for a planfile.

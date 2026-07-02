@@ -108,6 +108,7 @@ func operationFlagOptions(name string) []flags.Option {
 	options := []flags.Option{
 		flags.WithBoolFlag("all", "", false, "Process all Kubernetes components in dependency order."),
 		flags.WithBoolFlag("affected", "", false, "Process affected Kubernetes components in dependency order."),
+		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary)."),
 		flags.WithBoolFlag("include-dependents", "", false, "Include dependent components when processing affected Kubernetes components."),
 		flags.WithStringFlag("repo-path", "", "", "Path to the already cloned target repository to use as the affected baseline."),
 		flags.WithStringFlag("base", "", "", "Git base ref or SHA to compare against for affected detection."),

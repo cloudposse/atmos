@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -27,7 +28,8 @@ func TestResolveHelmBinary(t *testing.T) {
 			assert.False(t, processStacks)
 			return schema.AtmosConfiguration{}, nil
 		}
-		dependenciesForHelmComponent = func(*schema.AtmosConfiguration, string, map[string]any, map[string]any) (*dependencies.ToolchainEnvironment, error) {
+		dependenciesForHelmComponent = func(_ *schema.AtmosConfiguration, componentType string, _ map[string]any, _ map[string]any) (*dependencies.ToolchainEnvironment, error) {
+			assert.Equal(t, cfg.HelmComponentType, componentType)
 			return &dependencies.ToolchainEnvironment{}, nil
 		}
 		got, err := resolveHelmBinary(&cobra.Command{Use: "list"})
