@@ -14,6 +14,22 @@ All formats will ultimately be translated into a common internal representation 
 4. **High Test Coverage**: Target >90% unit test coverage for the new packages.
 5. **Backward Compatibility**: Existing YAML-based configurations continue to work unchanged.
 
+## Stakeholder Feedback
+
+Recent user feedback highlighted a preference for one primary configuration language rather than multiple equivalent
+backends. Multiple backends increase documentation, examples, and maintenance overhead, and can create bugs that only
+exist in one format.
+
+The same feedback favors HCL when choosing a full configuration language because it is familiar in the Terraform
+ecosystem, well maintained, and used by adjacent tools such as Terragrunt and Terramate. It raised concerns about PKL
+because of trust in long-term stewardship, Starlark because of perceived lower adoption and project-abandonment risk,
+and JavaScript because a general-purpose language can encourage overly complex DSL behavior.
+
+A follow-up specifically called out the Kubernetes ecosystem as useful prior art: YAML manifests plus CEL are becoming a
+common pattern for validation, policy, predicates, and conditional logic in tools such as Kubernetes, Kyverno, Cilium,
+ACK, and KRO. This suggests CEL should be evaluated as an embedded expression option before adding more full file
+formats.
+
 ## Current Architecture Analysis
 
 ### Pain Points Identified
@@ -412,6 +428,17 @@ vars {
 
 Each handler is responsible for detecting its format's function syntax and normalizing it to a common representation for the processor.
 
+### CEL Consideration
+
+CEL should be considered an embedded expression language, not a full file handler backend. It is a strong candidate for
+validation rules, policy expressions, predicates, and simple conditional logic inside YAML or another primary file
+format. This keeps the file-format surface area small while still providing a standard expression language with strong
+Kubernetes ecosystem precedent.
+
+The current implementation scope remains YAML, JSON, and HCL handlers, with HCL as the primary non-YAML full
+configuration language. Before investing in future full-language handlers such as TypeScript or PKL, evaluate whether
+YAML plus CEL covers the required expression use cases with less maintenance overhead.
+
 ## Implementation Plan
 
 ### Phase 1: Foundation (Core Infrastructure)
@@ -667,7 +694,17 @@ func (a *legacyProcessorAdapter) ProcessYAMLFunctionString(value string) (any, e
 
 ### Phase 6: Future Format Support
 
-#### 6.1 TypeScript/Deno Handler (Future)
+#### 6.1 CEL Evaluation (Future)
+
+Evaluate CEL as a portable embedded expression layer for YAML-first configurations before adding additional full file
+handlers. The evaluation should answer:
+
+1. Whether CEL can replace most proposed TypeScript/PKL expression use cases without making configuration Turing-complete.
+2. How CEL expressions would access stack, component, environment, and function context safely.
+3. Whether CEL validation and policy expressions should be processed pre-merge, post-merge, or both.
+4. Which CEL Go implementation should be used and how custom Atmos libraries would be registered.
+
+#### 6.2 TypeScript/Deno Handler (Future)
 
 ```go
 // pkg/filehandler/typescript/handler.go
@@ -687,7 +724,7 @@ func (h *TypeScriptHandler) Parse(ctx context.Context, data []byte, opts ...Pars
 }
 ```
 
-#### 6.2 PKL Handler (Future)
+#### 6.3 PKL Handler (Future)
 
 ```go
 // pkg/filehandler/pkl/handler.go
@@ -781,6 +818,7 @@ settings:
 | Performance regression | Medium | Benchmark tests, lazy loading, caching |
 | Complex format interactions | Medium | Clear format-specific documentation |
 | Incomplete function support | Medium | Phased rollout, format capability flags |
+| Too many full-language backends | Medium | Prefer one primary format plus embedded expression support where possible |
 
 ## Timeline Estimate
 
@@ -789,9 +827,16 @@ settings:
 - **Phase 3 (JSON Handler)**: 2-3 days
 - **Phase 4 (HCL Handler)**: 2-3 days
 - **Phase 5 (Integration)**: 3-4 days
-- **Phase 6 (Future Formats)**: As needed
+- **Phase 6 (CEL and Future Formats)**: As needed
 
 **Total**: ~2-3 weeks for core functionality.
+
+## References
+
+- [CEL](https://cel.dev/)
+- [CEL specification](https://github.com/cel-expr/cel-spec)
+- [Common Expression Language in Kubernetes](https://kubernetes.io/docs/reference/using-api/cel/)
+- [Kyverno CEL libraries](https://kyverno.io/docs/policy-types/cel-libraries/)
 
 ## Appendix: Package Dependencies
 
