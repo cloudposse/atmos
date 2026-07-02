@@ -496,8 +496,8 @@ jobs:
           if brew tap | grep -qx 'aws/tap'; then
             brew untap aws/tap
           fi
-          brew install colima docker qemu
-          colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20
+          brew install colima docker
+          colima start --runtime docker --vm-type vz --cpu 2 --memory 4 --disk 20
           docker version
 
       - name: Download build artifacts
