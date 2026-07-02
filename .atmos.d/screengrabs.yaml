@@ -53,7 +53,7 @@ commands:
         steps:
           - |
             set -eu
-            install_path="{{ .Flags.install-path }}"
+            install_path="{{ index .Flags "install-path" }}"
             echo "Installing screengrabs to $install_path"
             mkdir -p "$install_path"
             cp -a demo/screengrabs/artifacts/* "$install_path"
@@ -68,7 +68,7 @@ commands:
           - type: atmos
             command: screengrabs build --all
           - type: atmos
-            command: screengrabs install --install-path "{{ .Flags.install-path }}"
+            command: screengrabs install --install-path "{{ index .Flags "install-path" }}"
 
       - name: docker-build
         description: Generate screengrabs using Podman
@@ -109,4 +109,4 @@ commands:
           - type: atmos
             command: screengrabs docker-build
           - type: atmos
-            command: screengrabs install --install-path "{{ .Flags.install-path }}"
+            command: screengrabs install --install-path "{{ index .Flags "install-path" }}"
