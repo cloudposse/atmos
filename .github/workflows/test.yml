@@ -92,11 +92,40 @@ jobs:
         id: go
 
       - name: Set up Atmos
-        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: matrix.target != 'windows'
         uses: cloudposse/github-action-setup-atmos@822766b3aaa9a3b4aa2628baaccb58dd576ad0ff # v2
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
           install-wrapper: false
+
+      - name: Set up Atmos on Windows
+        if: matrix.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
+        run: |
+          $version = "${{ env.ATMOS_BOOTSTRAP_VERSION }}"
+          $toolsDir = Join-Path $Env:RUNNER_TEMP "atmos-bootstrap"
+          New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
+
+          $url = "https://github.com/cloudposse/atmos/releases/download/v$version/atmos_${version}_windows_amd64.exe"
+          $destination = Join-Path $toolsDir "atmos.exe"
+          Invoke-WebRequest -Uri $url -OutFile $destination
+
+          $checksumsUrl = "https://github.com/cloudposse/atmos/releases/download/v$version/atmos_${version}_SHA256SUMS"
+          $checksums = Invoke-RestMethod -Uri $checksumsUrl
+          $expected = ($checksums -split "`n" |
+            Where-Object { $_ -match "atmos_${version}_windows_amd64\.exe$" } |
+            ForEach-Object { ($_ -split '\s+')[0] })
+          if (-not $expected) {
+            throw "Unable to find checksum for atmos_${version}_windows_amd64.exe"
+          }
+
+          $actual = (Get-FileHash -Algorithm SHA256 $destination).Hash.ToLowerInvariant()
+          if ($actual -ne $expected.ToLowerInvariant()) {
+            throw "Checksum mismatch for $destination"
+          }
+
+          & $destination version
+          echo $toolsDir >> $Env:GITHUB_PATH
 
       - name: Get dependencies
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
