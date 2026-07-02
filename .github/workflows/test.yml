@@ -799,6 +799,8 @@ jobs:
 
       - name: Lint ${{ matrix.demo-folder }}/${{ matrix.component }}
         working-directory: examples/${{ matrix.demo-folder }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: atmos lint terraform ${{ matrix.component }} -s ${{ matrix.stack }}
 
   # run other demo tests
