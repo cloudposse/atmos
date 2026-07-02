@@ -50,6 +50,7 @@ var (
 	ErrMarkdownRender                        = errors.New("failed to render markdown content")
 	ErrCastOutputExists                      = errors.New("cast output already exists")
 	ErrEmptyCastFile                         = errors.New("empty cast file")
+	ErrUnsupportedCastOutputExtension        = errors.New("unsupported cast output extension")
 	ErrRenderOutputExists                    = errors.New("render output already exists")
 	ErrMissingAgg                            = errors.New("missing required tool `agg`; install asciinema agg and retry")
 	ErrMissingFFmpeg                         = errors.New("missing required tool `ffmpeg`; install FFmpeg and retry")

@@ -2,6 +2,7 @@ package cast
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/asciicast"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -126,16 +129,41 @@ func TestStartRecordingWithConfigEnabledUsesBasePath(t *testing.T) {
 	if !strings.HasPrefix(path, basePath) {
 		t.Fatalf("cast path = %q, want under %q", path, basePath)
 	}
-	if explicitPathValue("demo.cast", false) != "" {
-		t.Fatal("non-explicit path should be empty")
-	}
-	if explicitPathValue("demo.cast", true) != "demo.cast" {
-		t.Fatal("explicit path not preserved")
-	}
 	if len(environment()) == 0 {
 		t.Fatal("expected process environment to be captured")
 	}
 	FinalizeRecording()
+}
+
+func TestPlanRecordingOutputUsesExtension(t *testing.T) {
+	if plan, err := planRecordingOutput("demo.cast", true); err != nil {
+		t.Fatal(err)
+	} else if plan.castPath != "demo.cast" || plan.renderOutput != "" || plan.removeCast {
+		t.Fatalf("unexpected cast plan: %#v", plan)
+	}
+
+	gifPath := filepath.Join(t.TempDir(), "demo.gif")
+	plan, err := planRecordingOutput(gifPath, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.castPath != "" || plan.castBasePath != os.TempDir() || plan.renderOutput != gifPath || !plan.removeCast || plan.explicitCast {
+		t.Fatalf("unexpected gif plan: %#v", plan)
+	}
+
+	if _, err := planRecordingOutput(filepath.Join(t.TempDir(), "demo.txt"), true); !errors.Is(err, errUtils.ErrUnsupportedCastOutputExtension) {
+		t.Fatalf("expected unsupported extension error, got %v", err)
+	}
+}
+
+func TestPlanRecordingOutputRejectsExistingRenderedOutput(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "demo.gif")
+	if err := os.WriteFile(output, []byte("exists"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := planRecordingOutput(output, true); !errors.Is(err, asciicast.ErrRenderOutputExists) {
+		t.Fatalf("expected output exists error, got %v", err)
+	}
 }
 
 func newRecordingTestCommand(name string) *cobra.Command {

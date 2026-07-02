@@ -26,9 +26,23 @@ commands:
         command: |
           rm -f website/static/casts/cli/commands/cast/usage.cast
           rm -rf .context/cast-command-demo
+      - type: shell
+        name: prepare-renderer
+        output: none
+        command: |
+          mkdir -p .context/bin .context/cast-command-demo
+          cat > .context/bin/agg <<'SH'
+          #!/bin/sh
+          input="$1"
+          output="$2"
+          test -f "$input" || exit 2
+          mkdir -p "$(dirname "$output")"
+          printf 'GIF89a' > "$output"
+          SH
+          chmod +x .context/bin/agg
       - type: cast
         name: usage
-        command: atmos about --cast=.context/cast-command-demo/about.cast
+        command: atmos about --cast=.context/cast-command-demo/about.gif
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast
@@ -38,17 +52,17 @@ commands:
         env: !include cast-defaults.yaml .env.recording
         steps:
           - type: simulate
-            text: atmos about --cast=.context/cast-command-demo/about.cast
+            text: atmos about --cast=.context/cast-command-demo/about.gif
           - type: shell
             name: usage
             output: raw
             command: |
-              atmos about --cast=.context/cast-command-demo/about.cast
-              test -s .context/cast-command-demo/about.cast
+              atmos about --cast=.context/cast-command-demo/about.gif
+              test -s .context/cast-command-demo/about.gif
           - type: toast
             name: recorded-cast
             level: info
-            content: "Recorded cast: .context/cast-command-demo/about.cast"
+            content: "Rendered cast: .context/cast-command-demo/about.gif"
       - type: shell
         name: validate
         command: atmos --chdir=demo/casts casts validate cli commands cast usage
@@ -160,7 +174,7 @@ commands:
         script: |
           from pathlib import Path
           text = Path("website/static/casts/cli/commands/cast/usage.cast").read_text()
-          for needle in ["atmos about --cast=.context/cast-command-demo/about.cast", "About Atmos", "Cast recorded: .context/cast-command-demo/about.cast", "Recorded cast:"]:
+          for needle in ["atmos about --cast=.context/cast-command-demo/about.gif", "About Atmos", "Cast rendered: .context/cast-command-demo/about.gif", "Rendered cast:"]:
               if needle not in text:
                   raise SystemExit(f"cast usage demo missing {needle!r}")
           if "atmos cast --help" in text:

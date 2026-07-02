@@ -13,73 +13,109 @@ commands:
       - key: ATMOS_EXPERIMENTAL
         value: silence
     steps:
-      - name: lifecycle
+      - name: prepare-test-dir
+        type: shell
+        output: none
+        command: mkdir -p .context/test/empty-home .context/test/empty-xdg
+
+      - name: backup-secret-file
+        type: shell
+        output: none
+        command: cp secrets/dev.enc.yaml .context/test/dev.enc.yaml.bak
+
+      - name: describe-masked-secrets
+        type: shell
+        command: atmos describe component api --stack=dev | grep -E '^  (datadog_api_key|redis_url):'
+
+      - name: set-datadog-api-key
+        type: atmos
+        command: secret set DATADOG_API_KEY=dd-abc123secret --stack=dev --component=api
+
+      - name: set-redis-url
+        type: atmos
+        command: secret set REDIS_URL=redis://prod:6379 --stack=dev --component=api
+
+      - name: show-encrypted-values
+        type: shell
+        command: grep -E 'DATADOG_API_KEY|REDIS_URL' secrets/dev.enc.yaml | sed 's/,iv:.*//'
+
+      - name: list-secret-status
+        type: atmos
+        command: secret list --stack=dev --component=api
+
+      - name: validate-secrets
+        type: atmos
+        command: secret validate --stack=dev --component=api
+
+      - name: prepare-workspace
+        type: shell
+        output: none
+        command: atmos terraform workspace new api --stack=dev >/dev/null 2>&1 || atmos terraform workspace select api --stack=dev >/dev/null 2>&1
+
+      - name: deploy-api
+        type: atmos
+        command: terraform deploy api --stack=dev
+
+      - name: output-api
+        type: atmos
+        command: terraform output api --stack=dev
+
+      - name: reveal-datadog-api-key
+        type: atmos
+        command: secret get DATADOG_API_KEY --stack=dev --component=api --mask=false
+
+      - name: hide-age-key
+        type: shell
+        output: none
+        command: mv secrets/keys.txt secrets/keys.txt.bak
+
+      - name: reveal-without-key-fails
         type: shell
         command: |
-          set -euo pipefail
-
-          secret_file="secrets/dev.enc.yaml"
-          backup_file="$(mktemp)"
-          empty_home=""
-          empty_xdg_config=""
-          cp "${secret_file}" "${backup_file}"
-
-          cleanup() {
-            set +e
-            [ -f secrets/keys.txt.bak ] && mv -f secrets/keys.txt.bak secrets/keys.txt
-            atmos terraform destroy api --stack=dev -auto-approve >/dev/null 2>&1
-            atmos terraform clean api --stack=dev --everything --force >/dev/null 2>&1
-            cp "${backup_file}" "${secret_file}"
-            rm -f "${backup_file}"
-            [ -n "${empty_home:-}" ] && rm -rf "${empty_home}"
-            [ -n "${empty_xdg_config:-}" ] && rm -rf "${empty_xdg_config}"
-          }
-          trap cleanup EXIT
-
-          echo "[1/8] describe (masking on): !secret resolves to <MASKED>, no retrieval"
-          atmos describe component api --stack=dev | grep -E '^  (datadog_api_key|redis_url):'
-
-          echo "[2/8] set values (encrypted in place)"
-          atmos secret set DATADOG_API_KEY=dd-abc123secret --stack=dev --component=api
-          atmos secret set REDIS_URL=redis://prod:6379 --stack=dev --component=api
-          grep -E 'DATADOG_API_KEY|REDIS_URL' "${secret_file}" | sed 's/,iv:.*//'
-
-          echo "[3/8] list status"
-          atmos secret list --stack=dev --component=api
-
-          echo "[4/8] validate (CI gate)"
-          atmos secret validate --stack=dev --component=api
-
-          atmos terraform workspace new api --stack=dev >/dev/null 2>&1 \
-            || atmos terraform workspace select api --stack=dev >/dev/null 2>&1
-
-          echo "[5/8] deploy the component that consumes the secrets"
-          atmos terraform deploy api --stack=dev
-
-          echo "[6/8] inspect deployed output"
-          atmos terraform output api --stack=dev
-
-          echo "[7/8] reveal real value (needs key)"
-          atmos secret get DATADOG_API_KEY --stack=dev --component=api --mask=false
-
-          echo "[8/8] reveal with the key removed must FAIL"
-          mv secrets/keys.txt secrets/keys.txt.bak
-          empty_home="$(mktemp -d)"
-          empty_xdg_config="$(mktemp -d)"
           if env \
             -u SOPS_AGE_KEY \
             -u SOPS_AGE_KEY_FILE \
             -u SOPS_AGE_KEY_CMD \
             -u SOPS_AGE_SSH_PRIVATE_KEY_FILE \
             -u SOPS_AGE_SSH_PRIVATE_KEY_CMD \
-            HOME="${empty_home}" \
-            XDG_CONFIG_HOME="${empty_xdg_config}" \
+            HOME="$PWD/.context/test/empty-home" \
+            XDG_CONFIG_HOME="$PWD/.context/test/empty-xdg" \
             atmos describe component api --stack=dev --mask=false >/dev/null 2>&1; then
             echo "UNEXPECTED: reveal without key succeeded"
             exit 1
           fi
-          mv -f secrets/keys.txt.bak secrets/keys.txt
           echo "OK: reveal without key failed as expected"
+
+      - name: restore-age-key
+        type: shell
+        when: always
+        output: none
+        command: '[ ! -f secrets/keys.txt.bak ] || mv -f secrets/keys.txt.bak secrets/keys.txt'
+
+      - name: destroy-api
+        type: shell
+        when: always
+        output: none
+        command: atmos terraform destroy api --stack=dev -auto-approve >/dev/null 2>&1 || true
+
+      - name: clean-api
+        type: shell
+        when: always
+        output: none
+        command: atmos terraform clean api --stack=dev --everything --force >/dev/null 2>&1 || true
+
+      - name: restore-secret-file
+        type: shell
+        when: always
+        output: none
+        command: '[ ! -f .context/test/dev.enc.yaml.bak ] || mv -f .context/test/dev.enc.yaml.bak secrets/dev.enc.yaml'
+
+      - name: remove-test-dir
+        type: shell
+        when: always
+        output: none
+        command: rm -rf .context/test
+
       - name: done
         type: toast
         level: success

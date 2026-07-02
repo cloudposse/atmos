@@ -1,13 +1,16 @@
 package cast
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -21,15 +24,17 @@ const (
 )
 
 type activeRecording struct {
-	recorder *asciicast.Recorder
-	restore  func()
+	recorder     *asciicast.Recorder
+	restore      func()
+	renderOutput string
+	removeCast   bool
 }
 
 var activeCast *activeRecording
 
 // RegisterRecordingFlag registers the global --cast flag on the root command.
 func RegisterRecordingFlag(flags *pflag.FlagSet) {
-	flags.String(FlagName, "", "Record command output as an asciinema cast (--cast for generated path, --cast=path for explicit output)")
+	flags.String(FlagName, "", "Record command output as an asciinema cast (--cast for generated path, --cast=path.cast|path.gif|path.mp4 for explicit output)")
 	if castFlag := flags.Lookup(FlagName); castFlag != nil {
 		castFlag.NoOptDefVal = autoFlagValue
 	}
@@ -56,30 +61,51 @@ func StartRecordingIfRequested(cmd *cobra.Command, atmosConfig *schema.AtmosConf
 			return err
 		}
 	}
-	rec, err := startRecorder(flagValue, flagChanged, atmosConfig, args)
+	rec, plan, err := startRecorder(flagValue, flagChanged, atmosConfig, args)
 	if err != nil {
 		return err
 	}
 
 	activeCast = &activeRecording{
-		recorder: rec,
-		restore:  iolib.SetRecorder(rec),
+		recorder:     rec,
+		restore:      iolib.SetRecorder(rec),
+		renderOutput: plan.renderOutput,
+		removeCast:   plan.removeCast,
 	}
 	return nil
 }
 
-func startRecorder(flagValue string, flagChanged bool, atmosConfig *schema.AtmosConfiguration, args []string) (*asciicast.Recorder, error) {
+type recordingOutputPlan struct {
+	castPath     string
+	castBasePath string
+	renderOutput string
+	removeCast   bool
+	explicitCast bool
+}
+
+func startRecorder(flagValue string, flagChanged bool, atmosConfig *schema.AtmosConfiguration, args []string) (*asciicast.Recorder, recordingOutputPlan, error) {
 	explicitPath := flagChanged && flagValue != "" && flagValue != autoFlagValue
-	return asciicast.Start(&asciicast.Options{
-		Path:     explicitPathValue(flagValue, explicitPath),
-		BasePath: atmosConfig.Cast.Recording.BasePath,
+	plan, err := planRecordingOutput(flagValue, explicitPath)
+	if err != nil {
+		return nil, recordingOutputPlan{}, err
+	}
+	rec, err := asciicast.Start(&asciicast.Options{
+		Path:     plan.castPath,
+		BasePath: recordingBasePath(plan, atmosConfig),
 		Command:  recordedCommandArgs(args),
 		Width:    atmosConfig.Cast.Recording.Width,
 		Height:   atmosConfig.Cast.Recording.Height,
 		RecordIn: atmosConfig.Cast.Recording.Input,
-		Explicit: explicitPath,
+		Explicit: plan.explicitCast,
 		Env:      environment(),
 	})
+	if err != nil {
+		if plan.removeCast && plan.castPath != "" {
+			_ = os.Remove(plan.castPath)
+		}
+		return nil, recordingOutputPlan{}, err
+	}
+	return rec, plan, nil
 }
 
 func environment() map[string]string {
@@ -93,11 +119,38 @@ func environment() map[string]string {
 	return env
 }
 
-func explicitPathValue(value string, explicit bool) string {
+func planRecordingOutput(value string, explicit bool) (recordingOutputPlan, error) {
 	if !explicit {
+		return recordingOutputPlan{}, nil
+	}
+	ext := strings.ToLower(filepath.Ext(value))
+	switch ext {
+	case ".cast":
+		return recordingOutputPlan{castPath: value, explicitCast: true}, nil
+	case ".gif", ".mp4":
+		return planRenderedRecordingOutput(value)
+	default:
+		return recordingOutputPlan{}, fmt.Errorf("%w: %s", errUtils.ErrUnsupportedCastOutputExtension, value)
+	}
+}
+
+func planRenderedRecordingOutput(output string) (recordingOutputPlan, error) {
+	if _, err := os.Stat(output); err == nil {
+		return recordingOutputPlan{}, fmt.Errorf("%w: %s", asciicast.ErrRenderOutputExists, output)
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return recordingOutputPlan{}, err
+	}
+	return recordingOutputPlan{castBasePath: os.TempDir(), renderOutput: output, removeCast: true}, nil
+}
+
+func recordingBasePath(plan recordingOutputPlan, atmosConfig *schema.AtmosConfiguration) string {
+	if plan.castBasePath != "" {
+		return plan.castBasePath
+	}
+	if atmosConfig == nil {
 		return ""
 	}
-	return value
+	return atmosConfig.Cast.Recording.BasePath
 }
 
 func recordedCommandArgs(args []string) []string {
@@ -117,15 +170,41 @@ func FinalizeRecording() {
 		return
 	}
 	rec := activeCast.recorder
+	renderOutput := activeCast.renderOutput
+	removeCast := activeCast.removeCast
 	if activeCast.restore != nil {
 		activeCast.restore()
 	}
+	// Clear activeCast before rendering so renderer output is not captured
+	// back into the recording.
 	activeCast = nil
 	if err := rec.Close(); err != nil {
 		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Failed to close cast recording: %v\n", err)
 		return
 	}
+	if removeCast {
+		defer func() { _ = os.Remove(rec.Path()) }()
+	}
+	if renderOutput != "" {
+		if err := renderRecordedCast(rec.Path(), renderOutput); err != nil {
+			_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Failed to render cast: %v\n", err)
+			return
+		}
+		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast rendered: %s\n", renderOutput)
+		return
+	}
 	_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast recorded: %s\n", rec.Path())
+}
+
+func renderRecordedCast(castPath, output string) error {
+	switch strings.ToLower(filepath.Ext(output)) {
+	case ".gif":
+		return asciicast.Render(castPath, asciicast.RenderOptions{GIF: output})
+	case ".mp4":
+		return asciicast.Render(castPath, asciicast.RenderOptions{MP4: output})
+	default:
+		return fmt.Errorf("%w: %s", errUtils.ErrUnsupportedCastOutputExtension, output)
+	}
 }
 
 func isCompletionCommand(cmd *cobra.Command) bool {
