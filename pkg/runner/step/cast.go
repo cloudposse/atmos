@@ -13,6 +13,7 @@ import (
 	"github.com/muesli/termenv"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -22,18 +23,18 @@ import (
 )
 
 var (
-	ErrCastStepRequiresSteps         = errors.New("cast step requires nested steps")
-	ErrCastSessionRequiresActions    = errors.New("cast session step requires session actions")
-	ErrInvalidCastMode               = errors.New("cast step has invalid mode")
-	ErrWriteActionRequiresText       = errors.New("write action requires text")
-	ErrKeyActionRequiresKey          = errors.New("key action requires key")
-	ErrPauseActionRequiresDuration   = errors.New("pause action requires duration")
-	ErrWaitActionRequiresTextOrRegex = errors.New("wait action requires exactly one of text or regex")
-	ErrUnsupportedSessionAction      = errors.New("unsupported session action type")
-	ErrInvalidSimulateMode           = errors.New("simulate step has invalid mode")
-	ErrSimulateTypedRequiresText     = errors.New("simulate typed step requires text")
-	ErrInvalidSimulateJitter         = errors.New("simulate typed step jitter must be between 0 and 1")
-	ErrUnsupportedPromptStyle        = errors.New("unsupported simulate prompt style")
+	ErrCastStepRequiresSteps         = errUtils.ErrCastStepRequiresSteps
+	ErrCastSessionRequiresActions    = errUtils.ErrCastSessionRequiresActions
+	ErrInvalidCastMode               = errUtils.ErrInvalidCastMode
+	ErrWriteActionRequiresText       = errUtils.ErrWriteActionRequiresText
+	ErrKeyActionRequiresKey          = errUtils.ErrKeyActionRequiresKey
+	ErrPauseActionRequiresDuration   = errUtils.ErrPauseActionRequiresDuration
+	ErrWaitActionRequiresTextOrRegex = errUtils.ErrWaitActionRequiresTextOrRegex
+	ErrUnsupportedSessionAction      = errUtils.ErrUnsupportedSessionAction
+	ErrInvalidSimulateMode           = errUtils.ErrInvalidSimulateMode
+	ErrSimulateTypedRequiresText     = errUtils.ErrSimulateTypedRequiresText
+	ErrInvalidSimulateJitter         = errUtils.ErrInvalidSimulateJitter
+	ErrUnsupportedPromptStyle        = errUtils.ErrUnsupportedPromptStyle
 )
 
 const wrappedQuotedErrorFormat = "%w: %q"
@@ -134,8 +135,8 @@ func (h *CastHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Work
 	runErr := runCastBody(ctx, step, vars, workflow)
 	restore()
 	closeErr := rec.Close()
-	if runErr == nil && closeErr != nil {
-		runErr = closeErr
+	if closeErr != nil {
+		runErr = errors.Join(runErr, closeErr)
 	}
 	if closeErr == nil {
 		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast recorded: %s\n", rec.Path())
@@ -694,16 +695,20 @@ func validateKeyAction(action *schema.WorkflowStep) error {
 	if action.Interval == "" {
 		return nil
 	}
-	_, err := time.ParseDuration(action.Interval)
-	return err
+	if _, err := time.ParseDuration(action.Interval); err != nil {
+		return fmt.Errorf("key interval: %w", err)
+	}
+	return nil
 }
 
 func validatePauseAction(action *schema.WorkflowStep) error {
 	if action.Duration == "" {
 		return ErrPauseActionRequiresDuration
 	}
-	_, err := time.ParseDuration(action.Duration)
-	return err
+	if _, err := time.ParseDuration(action.Duration); err != nil {
+		return fmt.Errorf("pause duration: %w", err)
+	}
+	return nil
 }
 
 func validateWaitAction(action *schema.WorkflowStep) error {
@@ -714,14 +719,16 @@ func validateWaitAction(action *schema.WorkflowStep) error {
 	}
 	if hasRegex {
 		if _, err := regexp.Compile(action.Regex); err != nil {
-			return err
+			return fmt.Errorf("wait regex: %w", err)
 		}
 	}
 	if action.Timeout == "" {
 		return nil
 	}
-	_, err := time.ParseDuration(action.Timeout)
-	return err
+	if _, err := time.ParseDuration(action.Timeout); err != nil {
+		return fmt.Errorf("wait timeout: %w", err)
+	}
+	return nil
 }
 
 func parseDurationDefault(value string, fallback time.Duration) (time.Duration, error) {

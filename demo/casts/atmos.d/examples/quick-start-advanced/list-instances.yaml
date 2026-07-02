@@ -44,7 +44,6 @@ commands:
             steps:
             - type: shell
               name: list-stacks
-              working_directory: "../../.context/cast-fixtures/quick-start-advanced"
               env: &1
                 TERM: xterm-256color
                 COLORTERM: truecolor
@@ -56,7 +55,6 @@ commands:
               command: atmos list stacks --format tree
             - type: shell
               name: list-instances
-              working_directory: "../../.context/cast-fixtures/quick-start-advanced"
               env: *1
               command: atmos list instances --stack plat-ue2-dev --format tree
           - type: shell

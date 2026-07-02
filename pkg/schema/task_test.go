@@ -640,6 +640,97 @@ func TestTasksDecodeHook_InvalidOutputType(t *testing.T) {
 	require.Error(t, decoder.Decode(input))
 }
 
+func TestTasksDecodeHook_TypedRootSlice(t *testing.T) {
+	input := map[string]any{
+		"steps": []map[string]any{
+			{
+				"name":    "typed",
+				"command": "echo typed",
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	assert.Equal(t, "typed", result.Steps[0].Name)
+	assert.Equal(t, "echo typed", result.Steps[0].Command)
+	assert.Equal(t, TaskTypeShell, result.Steps[0].Type)
+}
+
+func TestWorkflowStepDecodeHookRejectsStructuredPromptForShellStep(t *testing.T) {
+	input := map[string]any{
+		"step": map[string]any{
+			"type": TaskTypeShell,
+			"prompt": map[string]any{
+				"text":  "> ",
+				"style": "command",
+			},
+			"command": "echo no",
+		},
+	}
+
+	var result struct {
+		Step WorkflowStep `mapstructure:"step"`
+	}
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       WorkflowStepDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	err = decoder.Decode(input)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWorkflowControlStepInvalid)
+}
+
+func TestWorkflowStepDecodeHookNormalizesNestedTypedSlices(t *testing.T) {
+	input := map[string]any{
+		"steps": []map[string]any{
+			{
+				"type": TaskTypeCast,
+				"mode": "steps",
+				"steps": []map[string]any{
+					{
+						"type": TaskTypeSimulate,
+						"mode": "typed",
+						"prompt": map[string]any{
+							"text":  "$ ",
+							"style": "command",
+						},
+						"text": "atmos version",
+					},
+				},
+			},
+		},
+	}
+
+	var result struct {
+		Steps []WorkflowStep `mapstructure:"steps"`
+	}
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       WorkflowStepDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	require.Len(t, result.Steps[0].Steps, 1)
+	require.NotNil(t, result.Steps[0].Steps[0].SimulatePrompt)
+	assert.Equal(t, "$ ", result.Steps[0].Steps[0].SimulatePrompt.Text)
+	assert.Equal(t, "atmos version", result.Steps[0].Steps[0].Text)
+}
+
 // Tests for TasksDecodeHook and related functions.
 // These tests use mapstructure.Decode with the TasksDecodeHook to test the hook behavior.
 

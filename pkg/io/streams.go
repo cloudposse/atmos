@@ -95,13 +95,15 @@ func (dw *dynamicWriter) Write(p []byte) (n int, err error) {
 	defer perf.Track(nil, "io.dynamicWriter.Write")()
 
 	written, err := dw.getWriter().Write(p)
+	if written > 0 {
+		recordOutput(dw.stream, string(p[:min(written, len(p))]))
+	}
 	if err != nil {
 		return written, err
 	}
 	if written < len(p) {
 		return written, stdio.ErrShortWrite
 	}
-	recordOutput(dw.stream, string(p))
 	return written, nil
 }
 
@@ -121,6 +123,15 @@ func (mw *maskedWriter) Write(p []byte) (n int, err error) {
 	maskedBytes := []byte(masked)
 
 	written, err := mw.underlying.Write(maskedBytes)
+	if written > 0 {
+		recorded := string(maskedBytes[:min(written, len(maskedBytes))])
+		switch mw.underlying {
+		case os.Stdout:
+			recordOutput(DataStream, recorded)
+		case os.Stderr:
+			recordOutput(UIStream, recorded)
+		}
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -128,13 +139,6 @@ func (mw *maskedWriter) Write(p []byte) (n int, err error) {
 	// Check for partial write.
 	if written < len(maskedBytes) {
 		return 0, stdio.ErrShortWrite
-	}
-
-	switch mw.underlying {
-	case os.Stdout:
-		recordOutput(DataStream, masked)
-	case os.Stderr:
-		recordOutput(UIStream, masked)
 	}
 
 	// Return original length to maintain write semantics.
@@ -159,6 +163,9 @@ func (dmw *dynamicMaskedWriter) Write(p []byte) (n int, err error) {
 	maskedBytes := []byte(masked)
 
 	written, err := dmw.getWriter().Write(maskedBytes)
+	if written > 0 {
+		recordOutput(dmw.stream, string(maskedBytes[:min(written, len(maskedBytes))]))
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -167,8 +174,6 @@ func (dmw *dynamicMaskedWriter) Write(p []byte) (n int, err error) {
 	if written < len(maskedBytes) {
 		return 0, stdio.ErrShortWrite
 	}
-
-	recordOutput(dmw.stream, masked)
 
 	// Return original length to maintain write semantics.
 	return len(p), nil

@@ -77,11 +77,19 @@ func (c *context) Write(stream Stream, content string) error {
 	}
 
 	// Write to stream
-	_, err := fmt.Fprint(writer, masked)
+	written, err := stdio.WriteString(writer, masked)
+	if written > 0 {
+		if written > len(masked) {
+			written = len(masked)
+		}
+		recordOutput(stream, masked[:written])
+	}
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrWriteToStream, err)
 	}
-	recordOutput(stream, masked)
+	if written < len(masked) {
+		return fmt.Errorf("%w: %w", errUtils.ErrWriteToStream, stdio.ErrShortWrite)
+	}
 	return nil
 }
 

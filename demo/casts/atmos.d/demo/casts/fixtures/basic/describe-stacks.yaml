@@ -34,7 +34,6 @@ commands:
                 steps:
                 - type: shell
                   name: describe-stacks
-                  working_directory: "../../.context/cast-fixtures/basic"
                   output: raw
                   env:
                     TERM: xterm-256color

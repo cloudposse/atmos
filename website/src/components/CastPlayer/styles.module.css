@@ -89,7 +89,7 @@
   background: var(--atmos-terminal-bg);
   color: var(--atmos-terminal-text);
   font-family:
-    "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
     monospace;
   font-size: 1.12rem;
   line-height: 1.04;
@@ -103,10 +103,10 @@
   margin-left: 0.08em;
   vertical-align: -0.12em;
   background: color-mix(in srgb, var(--atmos-terminal-text) 72%, transparent);
-  animation: cursorPulse 1.05s ease-in-out infinite;
+  animation: cursor-pulse 1.05s ease-in-out infinite;
 }
 
-@keyframes cursorPulse {
+@keyframes cursor-pulse {
   0%,
   100% {
     opacity: 1;

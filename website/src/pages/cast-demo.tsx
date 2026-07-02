@@ -42,7 +42,7 @@ export default function CastDemoPage() {
           <div className={styles.galleryItem}>
             <CastPlayer
               src="/casts/demo/casts/fixtures/demo-vendoring/pull.cast"
-              command="vendor pull --everything"
+              command="atmos vendor pull --everything"
               title="Vendor pull"
               chrome
               autoplay

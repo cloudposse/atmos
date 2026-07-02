@@ -65,8 +65,8 @@ func TestRenderWithFakeAgg(t *testing.T) {
 	t.Setenv("PATH", bin)
 	t.Setenv(asciicastHelperEnv, "1")
 
-	output := filepath.Join(t.TempDir(), "out.svg")
-	if err := Render("input.cast", RenderOptions{SVG: output}); err != nil {
+	output := filepath.Join(t.TempDir(), "out.gif")
+	if err := Render("input.cast", RenderOptions{GIF: output}); err != nil {
 		t.Fatal(err)
 	}
 	content, err := os.ReadFile(output)
@@ -75,6 +75,13 @@ func TestRenderWithFakeAgg(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "agg:input.cast:") {
 		t.Fatalf("fake agg output = %q", content)
+	}
+}
+
+func TestRenderSVGReportsMissingRenderer(t *testing.T) {
+	err := Render("input.cast", RenderOptions{SVG: filepath.Join(t.TempDir(), "out.svg")})
+	if !errors.Is(err, ErrMissingSVGRenderer) {
+		t.Fatalf("expected missing svg renderer, got %v", err)
 	}
 }
 

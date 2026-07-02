@@ -28,6 +28,7 @@ func startSessionShell(ctx context.Context, opts SessionOptions) (*sessionProces
 	}
 
 	var once sync.Once
+	waitCh := make(chan error, 1)
 	closeAll := func() error {
 		once.Do(func() {
 			_ = stdin.Close()
@@ -38,7 +39,7 @@ func startSessionShell(ctx context.Context, opts SessionOptions) (*sessionProces
 	}
 
 	go func() {
-		_ = cmd.Wait()
+		waitCh <- cmd.Wait()
 		_ = outputWriter.Close()
 	}()
 
@@ -51,6 +52,9 @@ func startSessionShell(ctx context.Context, opts SessionOptions) (*sessionProces
 			if cmd.Process != nil {
 				_ = cmd.Process.Kill()
 			}
+		},
+		wait: func() error {
+			return <-waitCh
 		},
 	}, nil
 }

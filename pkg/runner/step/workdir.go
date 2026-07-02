@@ -2,18 +2,18 @@ package step
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	sourceprov "github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 var (
-	ErrWorkdirPathRequired     = errors.New("workdir path is required")
-	ErrWorkdirSourceRequired   = errors.New("workdir source is required")
-	ErrWorkdirSourceKeyInvalid = errors.New("workdir source map keys must be strings")
+	ErrWorkdirPathRequired     = errUtils.ErrWorkdirPathRequired
+	ErrWorkdirSourceRequired   = errUtils.ErrWorkdirSourceRequired
+	ErrWorkdirSourceKeyInvalid = errUtils.ErrWorkdirSourceKeyInvalid
 )
 
 // WorkdirHandler provisions a mutable working directory from a source.
@@ -49,7 +49,9 @@ func (h *WorkdirHandler) Execute(ctx context.Context, step *schema.WorkflowStep,
 		return nil, fmt.Errorf("step '%s': failed to resolve path: %w", step.Name, err)
 	}
 	if targetPath == "" {
-		return nil, fmt.Errorf("%w: step %q", ErrWorkdirPathRequired, step.Name)
+		return nil, errUtils.Build(ErrWorkdirPathRequired).
+			WithContext("step", step.Name).
+			Err()
 	}
 
 	sourceSpec, err := h.resolveSourceSpec(step, vars)
@@ -79,7 +81,9 @@ func (h *WorkdirHandler) resolveSourceSpec(step *schema.WorkflowStep, vars *Vari
 		return nil, fmt.Errorf("step '%s': invalid source: %w", step.Name, err)
 	}
 	if spec == nil || spec.Uri == "" {
-		return nil, fmt.Errorf("%w: step %q", ErrWorkdirSourceRequired, step.Name)
+		return nil, errUtils.Build(ErrWorkdirSourceRequired).
+			WithContext("step", step.Name).
+			Err()
 	}
 	return spec, nil
 }
@@ -116,7 +120,7 @@ func resolveAnySourceMap(input map[any]any, vars *Variables) (map[string]any, er
 	for key, val := range input {
 		keyString, ok := key.(string)
 		if !ok {
-			return nil, ErrWorkdirSourceKeyInvalid
+			return nil, errUtils.Build(ErrWorkdirSourceKeyInvalid).Err()
 		}
 		resolved, err := resolveWorkdirSourceValue(val, vars)
 		if err != nil {

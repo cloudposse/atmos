@@ -29,6 +29,15 @@ func TestResolvePathUsesXDGCacheBase(t *testing.T) {
 	}
 }
 
+func TestCommandSlugSkipsOnlyExactAtmosBinary(t *testing.T) {
+	if got := CommandSlug([]string{"atmos.exe", "workflow", "run"}); got != "workflow-run" {
+		t.Fatalf("slug = %q, want workflow-run", got)
+	}
+	if got := CommandSlug([]string{"atmosphere", "workflow"}); got != "atmosphere-workflow" {
+		t.Fatalf("slug = %q, want atmosphere-workflow", got)
+	}
+}
+
 func TestStartFailsWhenExplicitPathExists(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "demo.cast")
 	if err := os.WriteFile(path, []byte("exists"), 0o644); err != nil {
@@ -39,7 +48,7 @@ func TestStartFailsWhenExplicitPathExists(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected explicit path collision error")
 	}
-	if !strings.Contains(err.Error(), "already exists") {
+	if !errors.Is(err, ErrCastOutputExists) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

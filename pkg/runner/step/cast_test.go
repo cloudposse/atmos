@@ -83,6 +83,23 @@ func TestCastValidateStepsSimulateTypedRequiresText(t *testing.T) {
 	}
 }
 
+func TestCastValidateStepsRejectsCastLevelJitter(t *testing.T) {
+	h := &CastHandler{}
+	err := h.Validate(&schema.WorkflowStep{
+		Name:   "demo",
+		Type:   schema.TaskTypeCast,
+		Mode:   "steps",
+		Jitter: 1.5,
+		Steps: []schema.WorkflowStep{{
+			Type: schema.TaskTypeSimulate,
+			Mode: "prompt",
+		}},
+	})
+	if !errors.Is(err, ErrInvalidSimulateJitter) {
+		t.Fatalf("expected jitter validation error, got %v", err)
+	}
+}
+
 func TestCastRecorderUsesStepCommandInHeader(t *testing.T) {
 	castPath := filepath.Join(t.TempDir(), "demo.cast")
 	rec, restore, err := startStepRecorder(&schema.WorkflowStep{
@@ -149,6 +166,47 @@ func TestPrepareCastChildStepInheritsOutputMode(t *testing.T) {
 	}
 	if child.Show == nil || child.Show.Labels == nil || *child.Show.Labels {
 		t.Fatalf("child show.labels = %#v, want false", child.Show)
+	}
+}
+
+func TestCastHandlerStepsInheritWorkingDirectory(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	tmpDir := t.TempDir()
+	castPath := filepath.Join(tmpDir, "demo.cast")
+	pwdPath := filepath.Join(tmpDir, "pwd.txt")
+
+	_, err := (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+		Name:             "demo",
+		Type:             schema.TaskTypeCast,
+		WorkingDirectory: tmpDir,
+		Output:           string(OutputModeNone),
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "pwd",
+				Type:    schema.TaskTypeShell,
+				Command: "pwd > pwd.txt",
+			},
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("execute cast: %v", err)
+	}
+
+	actual, err := os.ReadFile(pwdPath)
+	if err != nil {
+		t.Fatalf("read inherited pwd: %v", err)
+	}
+	expectedDir := tmpDir
+	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		expectedDir = resolved
+	}
+	if strings.TrimSpace(string(actual)) != expectedDir {
+		t.Fatalf("child working directory = %q, want %q", strings.TrimSpace(string(actual)), expectedDir)
 	}
 }
 
@@ -382,6 +440,80 @@ func TestRunCastSimulateStepResolvesTextTemplate(t *testing.T) {
 	}
 }
 
+func TestRunCastSimulateStepPromptModeWritesPrompt(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	rec, restore, err := startStepRecorder(&schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("start recorder: %v", err)
+	}
+	t.Cleanup(restore)
+
+	err = runCastSimulateStep(context.Background(), &schema.WorkflowStep{}, &schema.WorkflowStep{
+		Type: schema.TaskTypeSimulate,
+		Mode: "prompt",
+		SimulatePrompt: &schema.SimulatePrompt{
+			Text:  "ready> ",
+			Style: "info",
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("run prompt simulate: %v", err)
+	}
+	restore()
+	if err := rec.Close(); err != nil {
+		t.Fatalf("close recorder: %v", err)
+	}
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatalf("read cast: %v", err)
+	}
+	if !strings.Contains(castOutputText(t, content), "ready> ") {
+		t.Fatalf("prompt output missing in:\n%s", content)
+	}
+}
+
+func TestRecordCastTypedLineReturnsContextCancellation(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	rec, restore, err := startStepRecorder(&schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("start recorder: %v", err)
+	}
+	t.Cleanup(restore)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err = recordCastTypedLine(ctx, castTypedLineOptions{
+		Prompt: &schema.SimulatePrompt{Text: "> ", Style: "command"},
+		Line:   "atmos version",
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got %v", err)
+	}
+	restore()
+	if err := rec.Close(); err != nil {
+		t.Fatalf("close recorder: %v", err)
+	}
+}
+
 func TestCastHandlerExecuteWithWorkflowRecordsSimulatedSteps(t *testing.T) {
 	if err := iolib.Initialize(); err != nil {
 		t.Fatalf("initialize io: %v", err)
@@ -458,7 +590,7 @@ func TestCastHandlerExecuteReturnsRenderErrorsWithMetadata(t *testing.T) {
 			Mode: "prompt",
 		}},
 	}, NewVariables())
-	if !errors.Is(err, asciicast.ErrMissingAgg) {
+	if !errors.Is(err, asciicast.ErrMissingSVGRenderer) {
 		t.Fatalf("expected render error, got %v", err)
 	}
 	if result == nil || result.Metadata["cast"] != castPath || result.Metadata["svg"] != svgPath {
@@ -519,6 +651,70 @@ func TestCastHandlerStepsRunAlwaysCleanupAfterFailure(t *testing.T) {
 	}
 	if _, readErr := os.Stat(afterPath); !errors.Is(readErr, os.ErrNotExist) {
 		t.Fatalf("expected success-only step after failure to be skipped, stat err: %v", readErr)
+	}
+}
+
+func TestRunCastStepModeRunsFailureConditionAfterSimulateError(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	rec, restore, err := startStepRecorder(&schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("start recorder: %v", err)
+	}
+	t.Cleanup(restore)
+
+	err = runCastStepMode(context.Background(), &schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		Steps: []schema.WorkflowStep{
+			{
+				Type: schema.TaskTypeSimulate,
+				Mode: "invalid",
+			},
+			{
+				Type: schema.TaskTypeSimulate,
+				Mode: "prompt",
+				When: schema.MustCondition(schema.ConditionPredicateFailure),
+				SimulatePrompt: &schema.SimulatePrompt{
+					Text:  "failed> ",
+					Style: "notice",
+				},
+			},
+			{
+				Type: schema.TaskTypeSimulate,
+				Mode: "prompt",
+				SimulatePrompt: &schema.SimulatePrompt{
+					Text: "skipped> ",
+				},
+			},
+		},
+	}, NewVariables(), &schema.WorkflowDefinition{})
+	if !errors.Is(err, ErrInvalidSimulateMode) {
+		t.Fatalf("expected invalid simulate mode, got %v", err)
+	}
+	restore()
+	if err := rec.Close(); err != nil {
+		t.Fatalf("close recorder: %v", err)
+	}
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatalf("read cast: %v", err)
+	}
+	output := castOutputText(t, content)
+	if !strings.Contains(output, "failed> ") {
+		t.Fatalf("failure prompt did not run after simulate error:\n%s", content)
+	}
+	if strings.Contains(output, "skipped> ") {
+		t.Fatalf("implicit-success prompt should be skipped after failure:\n%s", content)
 	}
 }
 
@@ -770,8 +966,8 @@ func TestRenderCastOutputs(t *testing.T) {
 	}
 
 	err := renderCastOutputs(&schema.WorkflowStep{CastOutput: &schema.CastOutput{SVG: filepath.Join(t.TempDir(), "out.svg")}}, "input.cast")
-	if !errors.Is(err, asciicast.ErrMissingAgg) {
-		t.Fatalf("expected missing agg, got %v", err)
+	if !errors.Is(err, asciicast.ErrMissingSVGRenderer) {
+		t.Fatalf("expected missing svg renderer, got %v", err)
 	}
 }
 

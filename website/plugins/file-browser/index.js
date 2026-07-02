@@ -315,6 +315,9 @@ function parseReadmeFrontmatter(content) {
     }
     data[match[1]] = value;
   }
+  if (Object.keys(data).length === 0) {
+    return { data: {}, body: content };
+  }
 
   return {
     data,

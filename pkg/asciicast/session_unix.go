@@ -24,5 +24,6 @@ func startSessionShell(ctx context.Context, opts SessionOptions) (*sessionProces
 				_ = cmd.Process.Kill()
 			}
 		},
+		wait: cmd.Wait,
 	}, nil
 }

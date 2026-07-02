@@ -13,12 +13,15 @@ import (
 	"sync"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
-	DefaultWidth  = 120
+	// DefaultWidth is the fallback terminal width for cast recordings.
+	DefaultWidth = 120
+	// DefaultHeight is the fallback terminal height for cast recordings.
 	DefaultHeight = 36
 
 	castDirPerm    = 0o755
@@ -29,8 +32,10 @@ const (
 	defaultCastCmd = "atmos"
 )
 
-var ErrCastOutputExists = errors.New("cast output already exists")
+// ErrCastOutputExists indicates that a requested cast output path already exists.
+var ErrCastOutputExists = errUtils.ErrCastOutputExists
 
+// Options configures an asciicast recorder.
 type Options struct {
 	Path       string
 	BasePath   string
@@ -45,6 +50,7 @@ type Options struct {
 	OutputRate time.Duration
 }
 
+// Recorder writes asciicast v2 header and event records to a file.
 type Recorder struct {
 	mu            sync.Mutex
 	file          *os.File
@@ -60,6 +66,7 @@ type Recorder struct {
 	lastEventTime time.Duration
 }
 
+// Header is the asciicast v2 header written as the first line of a recording.
 type Header struct {
 	Version   int               `json:"version"`
 	Width     int               `json:"width"`
@@ -69,6 +76,7 @@ type Header struct {
 	Env       map[string]string `json:"env,omitempty"`
 }
 
+// Start creates a new recorder and writes its asciicast header.
 func Start(opts *Options) (*Recorder, error) {
 	defer perf.Track(nil, "asciicast.Start")()
 
@@ -130,6 +138,7 @@ func Start(opts *Options) (*Recorder, error) {
 	return rec, nil
 }
 
+// Path returns the cast file path used by the recorder.
 func (r *Recorder) Path() string {
 	defer perf.Track(nil, "asciicast.Recorder.Path")()
 
@@ -139,6 +148,7 @@ func (r *Recorder) Path() string {
 	return r.path
 }
 
+// Record writes stream content as an asciicast event, applying input-recording rules.
 func (r *Recorder) Record(stream, content string) {
 	defer perf.Track(nil, "asciicast.Recorder.Record")()
 
@@ -154,6 +164,7 @@ func (r *Recorder) Record(stream, content string) {
 	_ = r.Event(stream, content)
 }
 
+// Event writes a single asciicast event to the recording.
 func (r *Recorder) Event(stream, content string) error {
 	defer perf.Track(nil, "asciicast.Recorder.Event")()
 
@@ -165,6 +176,7 @@ func (r *Recorder) Event(stream, content string) error {
 	return r.writeEventLocked(stream, content)
 }
 
+// Resize records a terminal resize event.
 func (r *Recorder) Resize(width, height int) error {
 	defer perf.Track(nil, "asciicast.Recorder.Resize")()
 
@@ -176,6 +188,7 @@ func (r *Recorder) Resize(width, height int) error {
 	return r.writeEventLocked("r", fmt.Sprintf("%dx%d", width, height))
 }
 
+// Close flushes and closes the underlying cast file.
 func (r *Recorder) Close() error {
 	defer perf.Track(nil, "asciicast.Recorder.Close")()
 
@@ -258,6 +271,7 @@ func maxDuration(a, b time.Duration) time.Duration {
 	return b
 }
 
+// ResolvePath returns the cast output path for the supplied options and start time.
 func ResolvePath(opts *Options, started time.Time) (string, error) {
 	defer perf.Track(nil, "asciicast.ResolvePath")()
 
@@ -284,6 +298,7 @@ func ResolvePath(opts *Options, started time.Time) (string, error) {
 	return filepath.Join(base, started.Format("2006"), started.Format("01"), started.Format("02"), name), nil
 }
 
+// CommandSlug converts command arguments into a filesystem-safe cast filename slug.
 func CommandSlug(args []string) string {
 	defer perf.Track(nil, "asciicast.CommandSlug")()
 
@@ -293,11 +308,11 @@ func CommandSlug(args []string) string {
 		if arg == "" || strings.HasPrefix(arg, "-") {
 			continue
 		}
-		arg = strings.TrimPrefix(filepath.Base(arg), "atmos")
-		if arg == "" {
+		base := filepath.Base(arg)
+		if strings.TrimSuffix(base, ".exe") == defaultCastCmd {
 			continue
 		}
-		parts = append(parts, arg)
+		parts = append(parts, base)
 		if len(parts) == 4 {
 			break
 		}
@@ -311,6 +326,7 @@ func CommandSlug(args []string) string {
 	return slug
 }
 
+// RandomID returns a short lowercase hexadecimal identifier.
 func RandomID(n int) string {
 	defer perf.Track(nil, "asciicast.RandomID")()
 

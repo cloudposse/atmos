@@ -24,7 +24,7 @@ commands:
                 command: rm -f ../../website/static/casts/demo/casts/fixtures/basic/describe-component.cast
               - type: cast
                 name: describe-component
-                working_directory: "../../.context/cast-fixtures/basic"
+                working_directory: "../../.context/cast-fixtures/native-terraform"
                 command: atmos describe component vpc -s dev
                 mode: steps
                 width: 120
@@ -34,7 +34,6 @@ commands:
                 steps:
                 - type: shell
                   name: describe-component
-                  working_directory: "../../.context/cast-fixtures/native-terraform"
                   output: raw
                   env:
                     TERM: xterm-256color

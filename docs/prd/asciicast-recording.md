@@ -194,9 +194,9 @@ Session waits:
 
 - `type: wait` is valid only inside `mode: session` cast steps.
 - `wait.text` waits until the active PTY output contains the literal text.
-- `wait.regex` waits until the active PTY output matches a Go regular expression.
+- `wait.regex` waits until the active PTY output matches a regex.
 - Exactly one of `text` or `regex` must be set.
-- Regex syntax uses Go's `regexp` package.
+- Regex syntax follows Go's `regexp` package.
 - Invalid regex patterns fail validation before the session starts.
 - `wait.timeout` overrides the cast-level wait timeout for that wait action.
 - A wait timeout fails the cast step.

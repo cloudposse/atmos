@@ -43,7 +43,6 @@ commands:
             steps:
             - type: shell
               name: demo-convert
-              working_directory: "../../.context/cast-fixtures/toolchain"
               env: *1
               command: atmos demo convert
           - type: shell

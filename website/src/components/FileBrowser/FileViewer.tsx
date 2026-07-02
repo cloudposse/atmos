@@ -7,6 +7,7 @@ import Mermaid from '@theme/Mermaid';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { remarkAlert } from 'remark-github-blockquote-alert';
+import { stripFrontmatter } from '../frontmatter';
 import SourceLink from './SourceLink';
 import { formatFileSize, isBinaryFile, isMarkdownFile } from './utils';
 import type { FileNode } from './types';
@@ -14,18 +15,6 @@ import styles from './styles.module.css';
 
 interface FileViewerProps {
   file: FileNode;
-}
-
-function stripFrontmatter(content: string): string {
-  if (!content.startsWith('---')) return content;
-
-  const lines = content.split(/\r?\n/);
-  if (lines[0].trim() !== '---') return content;
-
-  const endIndex = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
-  if (endIndex === -1) return content;
-
-  return lines.slice(endIndex + 1).join('\n').trim();
 }
 
 export default function FileViewer({ file }: FileViewerProps): JSX.Element {

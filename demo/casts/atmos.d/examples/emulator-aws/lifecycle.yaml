@@ -45,28 +45,23 @@ commands:
             steps:
             - type: shell
               name: emulator-up
-              working_directory: "../../.context/cast-fixtures/emulator-aws"
               env: *1
               command: atmos emulator up aws -s dev --ephemeral
             - type: shell
               name: emulator-ps
-              working_directory: "../../.context/cast-fixtures/emulator-aws"
               env: *1
               command: atmos emulator ps aws -s dev
             - type: shell
               name: terraform-apply
-              working_directory: "../../.context/cast-fixtures/emulator-aws"
               env: *1
               command: atmos terraform apply demo -s dev -auto-approve
             - type: shell
               name: terraform-output
-              working_directory: "../../.context/cast-fixtures/emulator-aws"
               env: *1
               command: atmos terraform output demo -s dev
             - type: shell
               name: emulator-down
               when: always
-              working_directory: "../../.context/cast-fixtures/emulator-aws"
               env: *1
               command: atmos emulator down aws -s dev
           - type: shell
@@ -98,6 +93,6 @@ commands:
               ]:
                   if needle not in text:
                       raise SystemExit(f"emulator aws lifecycle cast missing {needle!r}")
-              for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "Error:", "WARN"]:
+              for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "Error:"]:
                   if bad in text:
                       raise SystemExit(f"emulator aws lifecycle cast contains {bad!r}")

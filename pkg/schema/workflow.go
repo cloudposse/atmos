@@ -657,6 +657,7 @@ type HTTPExpect struct {
 	Response []string `yaml:"response,omitempty" json:"response,omitempty" mapstructure:"response"`
 }
 
+// CastOutput defines output artifact paths for a cast workflow step.
 type CastOutput struct {
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
 	Cast string `yaml:"cast,omitempty" json:"cast,omitempty" mapstructure:"cast"`

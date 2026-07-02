@@ -3,7 +3,6 @@ package asciicast
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,22 +10,31 @@ import (
 	"path/filepath"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var (
-	ErrEmptyCastFile      = errors.New("empty cast file")
-	ErrRenderOutputExists = errors.New("render output already exists")
-	ErrMissingAgg         = errors.New("missing required tool `agg`; install asciinema agg and retry")
-	ErrMissingFFmpeg      = errors.New("missing required tool `ffmpeg`; install FFmpeg and retry")
+	// ErrEmptyCastFile indicates that a cast file had no header line.
+	ErrEmptyCastFile = errUtils.ErrEmptyCastFile
+	// ErrRenderOutputExists indicates that a render target already exists.
+	ErrRenderOutputExists = errUtils.ErrRenderOutputExists
+	// ErrMissingAgg indicates that the agg renderer executable was not found.
+	ErrMissingAgg = errUtils.ErrMissingAgg
+	// ErrMissingFFmpeg indicates that the ffmpeg executable was not found.
+	ErrMissingFFmpeg = errUtils.ErrMissingFFmpeg
+	// ErrMissingSVGRenderer indicates that SVG output was requested without a supported renderer.
+	ErrMissingSVGRenderer = errUtils.ErrMissingSVGRenderer
 )
 
+// Event is one asciicast v2 event entry.
 type Event struct {
 	Time   float64
 	Stream string
 	Data   string
 }
 
+// ReadEvents reads an asciicast file header and event stream.
 func ReadEvents(path string) (Header, []Event, error) {
 	defer perf.Track(nil, "asciicast.ReadEvents")()
 
@@ -64,6 +72,7 @@ func ReadEvents(path string) (Header, []Event, error) {
 	return header, events, nil
 }
 
+// Play replays an asciicast file to the provided writer.
 func Play(path string, out io.Writer) error {
 	defer perf.Track(nil, "asciicast.Play")()
 
@@ -87,12 +96,14 @@ func Play(path string, out io.Writer) error {
 	return nil
 }
 
+// RenderOptions selects the render outputs to generate from a cast file.
 type RenderOptions struct {
 	SVG string
 	GIF string
 	MP4 string
 }
 
+// Render generates requested media outputs from an asciicast file.
 func Render(input string, opts RenderOptions) error {
 	defer perf.Track(nil, "asciicast.Render")()
 
@@ -118,7 +129,7 @@ type renderTarget struct {
 func renderTargets(opts RenderOptions) []renderTarget {
 	targets := make([]renderTarget, 0, 3)
 	if opts.SVG != "" {
-		targets = append(targets, renderTarget{output: opts.SVG, render: renderWithAgg})
+		targets = append(targets, renderTarget{output: opts.SVG, render: renderSVG})
 	}
 	if opts.GIF != "" {
 		targets = append(targets, renderTarget{output: opts.GIF, render: renderWithAgg})
@@ -138,6 +149,10 @@ func prepareRenderOutput(output string) error {
 		return nil
 	}
 	return os.MkdirAll(dir, castDirPerm)
+}
+
+func renderSVG(_, output string) error {
+	return fmt.Errorf("render %s: %w", output, ErrMissingSVGRenderer)
 }
 
 func renderWithAgg(input, output string) error {

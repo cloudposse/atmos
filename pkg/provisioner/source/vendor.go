@@ -67,6 +67,9 @@ func VendorSource(
 			WithExplanation("source URI is required").
 			Err()
 	}
+	if err := validateVendorTargetDir(targetDir); err != nil {
+		return err
+	}
 
 	// Resolve version into URI if specified separately.
 	uri := resolveSourceURI(sourceSpec)
@@ -213,6 +216,29 @@ func localDirectorySource(uri string) (string, bool, error) {
 	default:
 		return "", false, nil
 	}
+}
+
+func validateVendorTargetDir(targetDir string) error {
+	trimmed := strings.TrimSpace(targetDir)
+	cleaned := filepath.Clean(trimmed)
+	if trimmed == "" || cleaned == "." || isFilesystemRoot(cleaned) {
+		return errUtils.Build(errUtils.ErrUnsafeVendorTarget).
+			WithContext("target", targetDir).
+			WithExplanation("Refusing to provision source into an unsafe target directory").
+			Err()
+	}
+	return nil
+}
+
+func isFilesystemRoot(path string) bool {
+	if path == string(filepath.Separator) {
+		return true
+	}
+	volume := filepath.VolumeName(path)
+	if volume == "" {
+		return filepath.IsAbs(path) && filepath.Dir(path) == path
+	}
+	return filepath.Clean(path) == filepath.Clean(volume+string(filepath.Separator))
 }
 
 func fileURIPath(uri string) (string, error) {

@@ -1,12 +1,13 @@
 package cast
 
 import (
-	"errors"
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -16,8 +17,6 @@ var castCmd = &cobra.Command{
 	Use:   "cast",
 	Short: "Play and render Atmos asciicast recordings",
 }
-
-var ErrMissingRenderOutput = errors.New("specify at least one output flag: --svg, --gif, or --mp4")
 
 var playCmd = &cobra.Command{
 	Use:   "play <input.cast>",
@@ -37,7 +36,7 @@ var renderCmd = &cobra.Command{
 		gif, _ := cmd.Flags().GetString("gif")
 		mp4, _ := cmd.Flags().GetString("mp4")
 		if svg == "" && gif == "" && mp4 == "" {
-			return ErrMissingRenderOutput
+			return fmt.Errorf("%w", errUtils.ErrMissingRenderOutput)
 		}
 		return asciicast.Render(args[0], asciicast.RenderOptions{SVG: svg, GIF: gif, MP4: mp4})
 	},

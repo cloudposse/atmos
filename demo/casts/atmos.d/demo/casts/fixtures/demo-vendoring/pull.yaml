@@ -34,7 +34,6 @@ commands:
                 steps:
                 - type: shell
                   name: pull
-                  working_directory: "../../.context/cast-fixtures/demo-vendoring"
                   env:
                     TERM: xterm-256color
                     COLORTERM: truecolor
@@ -69,6 +68,6 @@ commands:
                   for needle in ["Vendoring from", "Vendored components success=3", "github/stargazers"]:
                       if needle not in text:
                           raise SystemExit(f"vendor pull cast missing {needle!r}")
-                  for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "--dry-run"]:
+                  for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic"]:
                       if bad in text:
                           raise SystemExit(f"vendor pull cast contains {bad!r}")

@@ -166,18 +166,18 @@ type Task struct {
 	Expect  *HTTPExpect       `yaml:"expect,omitempty" json:"expect,omitempty" mapstructure:"expect"`    // Success criteria; defaults to any 2xx.
 
 	// Cast step and session action fields.
-	Mode        string  `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
-	Shell       string  `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`
-	WriteRate   string  `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`
-	KeyInterval string  `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"`
-	Jitter      float64 `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`
-	Cursor      bool    `yaml:"cursor,omitempty" json:"cursor,omitempty" mapstructure:"cursor"`
-	Text        string  `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`
-	Regex       string  `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`
-	Key         string  `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`
-	Duration    string  `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`
-	Interval    string  `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`
-	Repeat      int     `yaml:"repeat,omitempty" json:"repeat,omitempty" mapstructure:"repeat"`
+	Mode        string  `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
+	Shell       string  `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
+	WriteRate   string  `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
+	KeyInterval string  `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
+	Jitter      float64 `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`                   // Deterministic typing delay variance for simulated typed cast steps.
+	Cursor      bool    `yaml:"cursor,omitempty" json:"cursor,omitempty" mapstructure:"cursor"`                   // Show a simulated cursor for cast simulate steps.
+	Text        string  `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`                         // Text for write/wait actions.
+	Regex       string  `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`                      // Regex for wait actions.
+	Key         string  `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`                            // Key name for key actions.
+	Duration    string  `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`             // Duration for pause/wait actions.
+	Interval    string  `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`             // Per-key repeat delay override.
+	Repeat      int     `yaml:"repeat,omitempty" json:"repeat,omitempty" mapstructure:"repeat"`                   // Key repeat count.
 
 	// Container step fields.
 	//

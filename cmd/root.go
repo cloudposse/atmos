@@ -378,10 +378,10 @@ func finalizeCastRecording() {
 	}
 	activeCast = nil
 	if err := rec.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to close cast recording: %v\n", err)
+		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Failed to close cast recording: %v\n", err)
 		return
 	}
-	fmt.Fprintf(os.Stderr, "Cast recorded: %s\n", rec.Path())
+	_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast recorded: %s\n", rec.Path())
 }
 
 // processChdirFlag processes the --chdir flag and ATMOS_CHDIR environment variable,
@@ -712,7 +712,10 @@ var RootCmd = &cobra.Command{
 			theme.InvalidateStyleCache()
 		} else {
 			term := terminal.New()
-			lipgloss.SetColorProfile(convertToTermenvProfile(term.ColorProfile()))
+			profile := convertToTermenvProfile(term.ColorProfile())
+			lipgloss.SetColorProfile(profile)
+			log.SetColorProfile(profile)
+			theme.InvalidateStyleCache()
 		}
 
 		// Automatic CI cache restore-on-start (and register save-on-exit) when

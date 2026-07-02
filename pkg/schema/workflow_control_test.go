@@ -121,6 +121,16 @@ func TestValidateWorkflowSteps_ControlSteps(t *testing.T) {
 			}},
 		},
 		{
+			name: "valid parallel script child",
+			steps: []WorkflowStep{{
+				Name: "checks",
+				Type: TaskTypeParallel,
+				Steps: []WorkflowStep{
+					{Name: "script", Type: TaskTypeScript, Interpreter: "python3", Script: "print('ok')"},
+				},
+			}},
+		},
+		{
 			name: "missing need",
 			steps: []WorkflowStep{{
 				Name:  "checks",

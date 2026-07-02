@@ -142,6 +142,47 @@ func TestVendorSourceSupportsFileURIDirectory(t *testing.T) {
 	assert.Equal(t, "# source\n", string(content))
 }
 
+func TestLocalDirectorySourceHandlesLocalhostFileURIAndNonDirectories(t *testing.T) {
+	sourceDir := t.TempDir()
+	sourceURL := url.URL{Scheme: "file", Host: "localhost", Path: filepath.ToSlash(sourceDir)}
+
+	localDir, ok, err := localDirectorySource(sourceURL.String())
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, filepath.Clean(sourceDir), localDir)
+
+	sourceFile := filepath.Join(t.TempDir(), "main.tf")
+	require.NoError(t, os.WriteFile(sourceFile, []byte("# source\n"), 0o644))
+	localDir, ok, err = localDirectorySource(sourceFile)
+	require.NoError(t, err)
+	assert.False(t, ok)
+	assert.Empty(t, localDir)
+
+	localDir, ok, err = localDirectorySource("file://example.com/tmp/source")
+	require.NoError(t, err)
+	assert.False(t, ok)
+	assert.Empty(t, localDir)
+}
+
+func TestFileURIPathRejectsMalformedURI(t *testing.T) {
+	_, err := fileURIPath("file://[::1")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceInvalidSpec))
+}
+
+func TestVendorSourceRejectsUnsafeTargets(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# source\n"), 0o644))
+
+	for _, target := range []string{"", ".", "./", string(filepath.Separator)} {
+		t.Run(target, func(t *testing.T) {
+			err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{Uri: sourceDir}, target)
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, errUtils.ErrUnsafeVendorTarget))
+		})
+	}
+}
+
 func TestFileURIPathSupportsWindowsDrivePaths(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -171,6 +212,14 @@ func TestFileURIPathSupportsWindowsDrivePaths(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, filepath.FromSlash(tt.expected), path)
+		})
+	}
+}
+
+func TestIsWindowsDriveHostFalseCases(t *testing.T) {
+	for _, host := range []string{"", "C", "1:", "server", "C::"} {
+		t.Run(host, func(t *testing.T) {
+			assert.False(t, isWindowsDriveHost(host))
 		})
 	}
 }
@@ -213,6 +262,20 @@ func TestCopyToTargetCreatesParentDirectoryAndWrapsCopyErrors(t *testing.T) {
 	targetDir := filepath.Join(t.TempDir(), "nested", "target")
 	err := copyToTarget(filepath.Join(t.TempDir(), "missing"), targetDir, &schema.VendorComponentSource{})
 	require.Error(t, err)
+}
+
+func TestCopySourceToTargetWrapsCopyErrors(t *testing.T) {
+	targetDir := filepath.Join(t.TempDir(), "target")
+	err := copySourceToTarget(filepath.Join(t.TempDir(), "missing"), targetDir, &schema.VendorComponentSource{}, vendorSourceOptions{replaceTarget: true})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
+}
+
+func TestPrepareVendorTargetRejectsExistingTargetWithoutReplace(t *testing.T) {
+	targetDir := t.TempDir()
+	err := prepareVendorTarget(targetDir, vendorSourceOptions{replaceTarget: false})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceCopyFailed))
 }
 
 func TestNormalizeURI(t *testing.T) {

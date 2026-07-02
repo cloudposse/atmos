@@ -23,7 +23,7 @@ vendor:
   # Directory with multiple files
   #base_path: "./vendor"
 
-  # Absolute path
+  # Specific manifest file
   #base_path: "vendor.d/vendor1.yaml"
 
 logs:

@@ -5,7 +5,8 @@ metadata:
   description: Atmos vendoring manifest for Atmos demo component library
 spec:
   # Import other vendor manifests, if necessary
-  imports: []
+  imports:
+    - vendor.d/vendor1.yaml
 
   sources:
     - component: "github/stargazers"
@@ -22,14 +23,6 @@ spec:
         - github
 
     - component: "weather"
-      source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
-      version: "main"
-      targets:
-        - "components/terraform/{{ .Component }}/{{.Version}}"
-      tags:
-        - demo
-
-    - component: "ipinfo"
       source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
       version: "main"
       targets:

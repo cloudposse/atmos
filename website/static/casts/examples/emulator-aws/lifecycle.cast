@@ -1,6 +1,6 @@
 {"version":2,"width":120,"height":36,"timestamp":1782944812,"command":"atmos emulator up aws -s dev --ephemeral","env":{"SHELL":"/bin/zsh","TERM":"xterm-256color"}}
 [0.007113291,"e","[emulator-up]\n"]
-[5.883451208,"e","🧪 emulator is an experimental feature. Learn more https://atmos.tools/experimental\n✓ emulator aws is up at http://127.0.0.1:49871\n"]
+[5.883451208,"e","🧪 emulator is an experimental feature. Learn more https://atmos.tools/experimental\n✓ emulator aws is up at http://127.0.0.1:<port>\n"]
 [5.88358775,"e","✓ emulator-up completed\n"]
 [6.585696708,"e","[emulator-ps]\n"]
 [7.040719375,"e","🧪 emulator is an experimental feature. Learn more https://atmos.tools/experimental\naws\tc88ec20bf221\trunning\t60de9e6e8fee\n"]

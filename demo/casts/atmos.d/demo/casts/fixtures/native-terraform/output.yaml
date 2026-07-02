@@ -47,7 +47,6 @@ commands:
                 steps:
                 - type: shell
                   name: output
-                  working_directory: "../../.context/cast-fixtures/native-terraform"
                   env: *1
                   command: atmos terraform output vpc -s dev
               - type: shell

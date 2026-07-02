@@ -61,26 +61,40 @@ export default function CastPlayer({
   useEffect(() => {
     let cancelled = false;
     fetch(src, { cache: "no-store" })
-      .then((response) => response.text())
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to load cast: ${response.status}`);
+        }
+        return response.text();
+      })
       .then((text) => {
         if (cancelled) return;
         const rows = text.trim().split("\n");
-        const header = JSON.parse(rows[0] || "{}") as CastHeader;
+        let header: CastHeader;
+        try {
+          header = JSON.parse(rows[0] || "{}") as CastHeader;
+        } catch {
+          throw new Error("Malformed cast header");
+        }
         const lines = rows.slice(1);
-        const parsed = lines
-          .map((line) => JSON.parse(line) as CastEvent)
-          .map(
-            (event) =>
-              [
-                event[0],
-                event[1],
-                normalizeTerminalText(event[2]),
-              ] as CastEvent,
-          )
-          .filter(
-            (event) =>
-              (event[1] === "o" || event[1] === "e") && event[2] !== "",
-          );
+        const parsed = lines.reduce<CastEvent[]>((events, line) => {
+          if (!line.trim()) return events;
+          let event: CastEvent;
+          try {
+            event = JSON.parse(line) as CastEvent;
+          } catch {
+            throw new Error("Malformed cast event");
+          }
+          const normalized: CastEvent = [
+            event[0],
+            event[1],
+            normalizeTerminalText(event[2]),
+          ];
+          if ((normalized[1] === "o" || normalized[1] === "e") && normalized[2] !== "") {
+            events.push(normalized);
+          }
+          return events;
+        }, []);
         const withIntro = addCommandIntro(parsed, {
           command: command ?? header.command,
           enabled: showCommand,
@@ -98,6 +112,14 @@ export default function CastPlayer({
           playbackEvents,
           initialPosition,
         );
+        setSeekVersion((version) => version + 1);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setEvents([]);
+        setContent("");
+        setPosition(0);
+        renderedEventTime.current = -1;
         setSeekVersion((version) => version + 1);
       });
     return () => {

@@ -61,7 +61,6 @@ commands:
               text: atmos list stacks --format tree
             - type: shell
               name: list-stacks
-              working_directory: "../../.context/cast-fixtures/quick-start-simple"
               env: &2
                 TERM: xterm-256color
                 COLORTERM: truecolor
@@ -87,7 +86,6 @@ commands:
               text: atmos list components
             - type: shell
               name: list-components
-              working_directory: "../../.context/cast-fixtures/quick-start-simple"
               env: *2
               duration: 450ms
               interval: 750ms
@@ -106,7 +104,6 @@ commands:
               text: atmos terraform plan station -s dev
             - type: shell
               name: terraform-plan
-              working_directory: "../../.context/cast-fixtures/quick-start-simple"
               env: *2
               duration: 550ms
               interval: 900ms

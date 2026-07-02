@@ -1277,6 +1277,61 @@ func TestExecuteWorkflow_SkipsStepWhenConditionIsFalse(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestExecuteWorkflowContinuesWithFailureConditionAfterStepError(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test failure condition continuation",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:             "fail-step",
+				Command:          "echo fail > fail.txt && exit 7",
+				Type:             "shell",
+				WorkingDirectory: tmpDir,
+			},
+			{
+				Name:             "implicit-success",
+				Command:          "echo skipped > skipped.txt",
+				Type:             "shell",
+				WorkingDirectory: tmpDir,
+			},
+			{
+				Name:             "failure-handler",
+				Command:          "echo failure > failure.txt",
+				Type:             "shell",
+				When:             schema.MustCondition(schema.ConditionPredicateFailure),
+				WorkingDirectory: tmpDir,
+			},
+			{
+				Name:             "always-handler",
+				Command:          "echo always > always.txt",
+				Type:             "shell",
+				When:             schema.MustCondition(schema.ConditionPredicateAlways),
+				WorkingDirectory: tmpDir,
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-failure-continuation", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkflowStepFailed)
+	formattedErr := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+	assert.Contains(t, strings.ReplaceAll(formattedErr, "\n", ""), "fail-step")
+
+	for _, name := range []string{"fail.txt", "failure.txt", "always.txt"} {
+		_, statErr := os.Stat(filepath.Join(tmpDir, name))
+		assert.NoError(t, statErr, "expected %s to be written", name)
+	}
+	_, statErr := os.Stat(filepath.Join(tmpDir, "skipped.txt"))
+	assert.True(t, os.IsNotExist(statErr), "implicit success step should be skipped after failure")
+}
+
 // TestExecuteWorkflow_ShellFieldsFallbackWithMalformedCommand tests the fallback path
 // with a command that shell.Fields cannot parse but strings.Fields can handle.
 func TestExecuteWorkflow_ShellFieldsFallbackWithMalformedCommand(t *testing.T) {

@@ -2,6 +2,7 @@ package io
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -42,7 +43,10 @@ func TestContextWriteRecordsMaskedOutput(t *testing.T) {
 	if rec.stream != "o" {
 		t.Fatalf("expected stdout stream, got %q", rec.stream)
 	}
-	if rec.data == "value=super-secret" {
+	if strings.Contains(rec.data, "super-secret") {
 		t.Fatal("recorder received unmasked output")
+	}
+	if !strings.Contains(rec.data, MaskReplacement) {
+		t.Fatalf("recorder did not receive mask replacement: %q", rec.data)
 	}
 }

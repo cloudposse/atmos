@@ -140,10 +140,12 @@ type AtmosConfiguration struct {
 	LSP LSPSettings `yaml:"lsp,omitempty" json:"lsp,omitempty" mapstructure:"lsp"`
 }
 
+// CastConfig configures Atmos cast recording behavior.
 type CastConfig struct {
 	Recording CastRecordingConfig `yaml:"recording,omitempty" json:"recording,omitempty" mapstructure:"recording"`
 }
 
+// CastRecordingConfig configures automatic cast recording options.
 type CastRecordingConfig struct {
 	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`

@@ -20,11 +20,15 @@ import (
 const defaultWaitTimeout = 30 * time.Second
 
 var (
+	// ErrUnknownSessionAction indicates an unsupported scripted session action type.
 	ErrUnknownSessionAction = errors.New("unknown cast session action type")
-	ErrWaitTimeout          = errors.New("timed out waiting for cast output")
-	ErrUnsupportedCastKey   = errors.New("unsupported cast key")
+	// ErrWaitTimeout indicates that a wait action did not observe the expected output before its deadline.
+	ErrWaitTimeout = errors.New("timed out waiting for cast output")
+	// ErrUnsupportedCastKey indicates that a key action requested an unknown key sequence.
+	ErrUnsupportedCastKey = errors.New("unsupported cast key")
 )
 
+// SessionAction describes one scripted action to perform in an interactive cast session.
 type SessionAction struct {
 	Type     string
 	Text     string
@@ -37,6 +41,7 @@ type SessionAction struct {
 	Repeat   int
 }
 
+// SessionOptions configures a scripted shell session used to generate cast output.
 type SessionOptions struct {
 	Shell       string
 	Width       int
@@ -46,6 +51,7 @@ type SessionOptions struct {
 	Actions     []SessionAction
 }
 
+// RunSession executes scripted session actions against an interactive shell.
 func RunSession(ctx context.Context, opts SessionOptions) error {
 	defer perf.Track(nil, "asciicast.RunSession")()
 
@@ -62,7 +68,7 @@ func RunSession(ctx context.Context, opts SessionOptions) error {
 	for i := range opts.Actions {
 		if err := runAction(ctx, proc.input, state, &opts.Actions[i], opts); err != nil {
 			proc.kill()
-			return err
+			return errors.Join(err, proc.wait())
 		}
 	}
 	return finishSession(ctx, proc, state.done)
@@ -74,6 +80,7 @@ type sessionProcess struct {
 	closeInputOnFinish bool
 	close              func() error
 	kill               func()
+	wait               func() error
 }
 
 type sessionState struct {
@@ -81,6 +88,7 @@ type sessionState struct {
 	output  bytes.Buffer
 	changed chan struct{}
 	done    chan error
+	cancel  context.CancelFunc
 }
 
 func normalizeSessionOptions(opts SessionOptions) SessionOptions {
@@ -123,9 +131,11 @@ func safePTYSize(value int) uint16 {
 }
 
 func newSessionState(ctx context.Context, output io.Reader, closeOutput func() error) *sessionState {
+	watchCtx, cancel := context.WithCancel(ctx)
 	state := &sessionState{
 		changed: make(chan struct{}, 1),
 		done:    make(chan error, 1),
+		cancel:  cancel,
 	}
 	go func() {
 		buf := make([]byte, 4096)
@@ -153,7 +163,7 @@ func newSessionState(ctx context.Context, output io.Reader, closeOutput func() e
 		}
 	}()
 	go func() {
-		<-ctx.Done()
+		<-watchCtx.Done()
 		if closeOutput != nil {
 			_ = closeOutput()
 		}
@@ -161,7 +171,11 @@ func newSessionState(ctx context.Context, output io.Reader, closeOutput func() e
 	return state
 }
 
-func (s *sessionState) stop() {}
+func (s *sessionState) stop() {
+	if s != nil && s.cancel != nil {
+		s.cancel()
+	}
+}
 
 func isExpectedSessionReadError(err error) bool {
 	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) || strings.Contains(err.Error(), "input/output error")
@@ -176,13 +190,20 @@ func finishSession(ctx context.Context, proc *sessionProcess, done <-chan error)
 	}
 	select {
 	case err := <-done:
+		waitErr := proc.wait()
+		if err == nil {
+			return waitErr
+		}
+		if waitErr != nil {
+			return errors.Join(err, waitErr)
+		}
 		return err
 	case <-ctx.Done():
 		proc.kill()
-		return ctx.Err()
+		return errors.Join(ctx.Err(), proc.wait())
 	case <-time.After(2 * time.Second):
 		proc.kill()
-		return nil
+		return proc.wait()
 	}
 }
 

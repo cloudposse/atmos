@@ -24,7 +24,7 @@ commands:
                 command: rm -f ../../website/static/casts/demo/casts/fixtures/basic/list-stacks.cast
               - type: cast
                 name: list-stacks
-                working_directory: "../../.context/cast-fixtures/basic"
+                working_directory: "../../.context/cast-fixtures/native-terraform"
                 command: atmos list stacks --format tree
                 mode: steps
                 width: 120
@@ -34,7 +34,6 @@ commands:
                 steps:
                 - type: shell
                   name: list-stacks
-                  working_directory: "../../.context/cast-fixtures/native-terraform"
                   output: raw
                   env:
                     TERM: xterm-256color

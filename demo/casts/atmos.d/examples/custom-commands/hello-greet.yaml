@@ -30,7 +30,6 @@ commands:
             steps:
             - type: shell
               name: hello
-              working_directory: "../../.context/cast-fixtures/custom-commands"
               env: &1
                 TERM: xterm-256color
                 COLORTERM: truecolor
@@ -42,7 +41,6 @@ commands:
               command: atmos hello
             - type: shell
               name: greet
-              working_directory: "../../.context/cast-fixtures/custom-commands"
               env: *1
               command: atmos greet Alice
           - type: shell

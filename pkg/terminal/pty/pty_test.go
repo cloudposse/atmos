@@ -389,6 +389,9 @@ func TestRecordingWriterMasksOutput(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
+	recorder := &ptyTestRecorder{}
+	restore := iolib.SetRecorder(recorder)
+	defer restore()
 
 	writer := &recordingWriter{
 		underlying: &buf,
@@ -418,6 +421,15 @@ func TestRecordingWriterMasksOutput(t *testing.T) {
 	// Output should contain the mask replacement.
 	if !strings.Contains(output, iolib.MaskReplacement) {
 		t.Errorf("Output does not contain mask replacement: %s", output)
+	}
+	if len(recorder.events) != 1 {
+		t.Fatalf("expected one recorded event, got %d", len(recorder.events))
+	}
+	if strings.Contains(recorder.events[0], secretKey) {
+		t.Errorf("Recorded event contains unmasked secret: %s", recorder.events[0])
+	}
+	if !strings.Contains(recorder.events[0], iolib.MaskReplacement) {
+		t.Errorf("Recorded event does not contain mask replacement: %s", recorder.events[0])
 	}
 }
 

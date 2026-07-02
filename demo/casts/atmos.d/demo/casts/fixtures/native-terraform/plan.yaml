@@ -34,7 +34,6 @@ commands:
                 steps:
                 - type: shell
                   name: plan
-                  working_directory: "../../.context/cast-fixtures/native-terraform"
                   env:
                     TERM: xterm-256color
                     COLORTERM: truecolor

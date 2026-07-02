@@ -16,6 +16,7 @@ import {
   faArrowRight,
 } from '@fortawesome/free-solid-svg-icons';
 import CastPlayer from '@site/src/components/CastPlayer';
+import { stripFrontmatter } from '@site/src/components/frontmatter';
 import type { ExampleProject, TreeNode, FileBrowserOptions } from '../FileBrowser/types';
 import styles from './styles.module.css';
 
@@ -55,18 +56,6 @@ function collectFiles(node: TreeNode, limit: number, collected: TreeNode[] = [])
   }
 
   return collected;
-}
-
-/**
- * Strips frontmatter from README content.
- */
-function stripFrontmatter(content: string): string {
-  if (!content.startsWith('---')) return content;
-
-  const endIndex = content.indexOf('---', 3);
-  if (endIndex === -1) return content;
-
-  return content.slice(endIndex + 3).trim();
 }
 
 /**

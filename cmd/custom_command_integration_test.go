@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -102,6 +104,63 @@ func TestCustomCommandStepWorkingDirectory(t *testing.T) {
 	actual, err := os.ReadFile(outputFile)
 	require.NoError(t, err)
 	assert.Equal(t, stepDir, strings.TrimSpace(string(actual)))
+}
+
+func TestCustomCommandCastStepInheritsWorkingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell redirection")
+	}
+	require.NoError(t, iolib.Initialize())
+
+	_ = NewTestKit(t)
+
+	tmpDir := t.TempDir()
+	castPath := filepath.Join(tmpDir, "demo.cast")
+	outputFile := filepath.Join(tmpDir, "pwd.txt")
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{
+			{
+				Name:             "test-cast-workdir-inheritance",
+				Description:      "Exercise command working_directory inheritance through cast steps",
+				WorkingDirectory: tmpDir,
+				Steps: schema.Tasks{
+					{
+						Type:   schema.TaskTypeCast,
+						Name:   "record",
+						Output: string(stepPkg.OutputModeNone),
+						CastOutput: &schema.CastOutput{
+							Cast: castPath,
+						},
+						Steps: []schema.WorkflowStep{
+							{
+								Type:    schema.TaskTypeShell,
+								Name:    "pwd",
+								Command: "pwd > pwd.txt",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	customCmd, _, err := RootCmd.Find([]string{"test-cast-workdir-inheritance"})
+	require.NoError(t, err)
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
+
+	actual, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	expectedDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, expectedDir, strings.TrimSpace(string(actual)))
+	require.FileExists(t, castPath)
 }
 
 func TestCustomCommandEnvValueCanUseEnvTemplateAlias(t *testing.T) {
