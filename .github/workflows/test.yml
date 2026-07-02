@@ -400,7 +400,7 @@ jobs:
     services:
       floci:
         # Pin by immutable digest for reproducibility/supply-chain safety (matches our SHA-pinned actions). Comment tracks the human-readable tag.
-        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2 # 1.5.23
+        image: floci/floci@sha256:794407b5deee9b7a10d8ecc1af5296ed95b0c735df5406708440bc0b0c46839d # 1.5.23
         ports:
           - 4566:4566
       floci-gcp:
