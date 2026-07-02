@@ -27,7 +27,6 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
-	"github.com/cloudposse/atmos/pkg/asciicast"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	// Import adapters to register them with the config package.
 	_ "github.com/cloudposse/atmos/pkg/config/adapters"
@@ -78,7 +77,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/ansible"
 	_ "github.com/cloudposse/atmos/cmd/auth"
 	_ "github.com/cloudposse/atmos/cmd/aws"
-	_ "github.com/cloudposse/atmos/cmd/cast"
+	castcmd "github.com/cloudposse/atmos/cmd/cast"
 	_ "github.com/cloudposse/atmos/cmd/ci"
 	cicache "github.com/cloudposse/atmos/cmd/ci/cache"
 	_ "github.com/cloudposse/atmos/cmd/composition"
@@ -123,18 +122,6 @@ var atmosConfig schema.AtmosConfiguration
 
 // profilerServer holds the global profiler server instance.
 var profilerServer *profiler.Server
-
-var activeCast *activeCastRecording
-
-const (
-	castFlagName    = "cast"
-	castAutoFlagVal = "__AUTO__"
-)
-
-type activeCastRecording struct {
-	recorder *asciicast.Recorder
-	restore  func()
-}
 
 // checkAndReexec performs Atmos version switching. It is a package variable so
 // tests can replace it without installing or execing another Atmos binary.
@@ -291,97 +278,6 @@ func syncGlobalFlagsToViper(cmd *cobra.Command) {
 			v.Set("identity", identity)
 		}
 	}
-}
-
-func startCastRecordingIfRequested(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) error {
-	if isCompletionCommand(cmd) || cmd.Name() == "help" || cmd.Flags().Changed("help") {
-		return nil
-	}
-
-	castFlag := cmd.Flags().Lookup(castFlagName)
-	flagChanged := castFlag != nil && castFlag.Changed
-	enabled := atmosConfig.Cast.Recording.Enabled || flagChanged
-	if !enabled {
-		return nil
-	}
-
-	flagValue := ""
-	if flagChanged {
-		var err error
-		flagValue, err = cmd.Flags().GetString(castFlagName)
-		if err != nil {
-			return err
-		}
-	}
-	rec, err := startCastRecorder(flagValue, flagChanged, atmosConfig)
-	if err != nil {
-		return err
-	}
-
-	activeCast = &activeCastRecording{
-		recorder: rec,
-		restore:  iolib.SetRecorder(rec),
-	}
-	return nil
-}
-
-func startCastRecorder(flagValue string, flagChanged bool, atmosConfig *schema.AtmosConfiguration) (*asciicast.Recorder, error) {
-	explicitPath := flagChanged && flagValue != "" && flagValue != castAutoFlagVal
-	return asciicast.Start(&asciicast.Options{
-		Path:     explicitPathValue(flagValue, explicitPath),
-		BasePath: atmosConfig.Cast.Recording.BasePath,
-		Command:  castRecordedCommandArgs(os.Args[1:]),
-		Width:    atmosConfig.Cast.Recording.Width,
-		Height:   atmosConfig.Cast.Recording.Height,
-		RecordIn: atmosConfig.Cast.Recording.Input,
-		Explicit: explicitPath,
-		Env:      castEnvironment(),
-	})
-}
-
-func castEnvironment() map[string]string {
-	env := make(map[string]string)
-	for _, pair := range os.Environ() {
-		k, v, ok := strings.Cut(pair, "=")
-		if ok {
-			env[k] = v
-		}
-	}
-	return env
-}
-
-func explicitPathValue(value string, explicit bool) string {
-	if !explicit {
-		return ""
-	}
-	return value
-}
-
-func castRecordedCommandArgs(args []string) []string {
-	result := make([]string, 0, len(args))
-	for _, arg := range args {
-		if arg == "--"+castFlagName || strings.HasPrefix(arg, "--"+castFlagName+"=") {
-			continue
-		}
-		result = append(result, arg)
-	}
-	return result
-}
-
-func finalizeCastRecording() {
-	if activeCast == nil {
-		return
-	}
-	rec := activeCast.recorder
-	if activeCast.restore != nil {
-		activeCast.restore()
-	}
-	activeCast = nil
-	if err := rec.Close(); err != nil {
-		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Failed to close cast recording: %v\n", err)
-		return
-	}
-	_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast recorded: %s\n", rec.Path())
 }
 
 // processChdirFlag processes the --chdir flag and ATMOS_CHDIR environment variable,
@@ -662,7 +558,7 @@ var RootCmd = &cobra.Command{
 		data.InitWriter(ioCtx)
 		data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
 
-		if castErr := startCastRecordingIfRequested(cmd, &tmpConfig); castErr != nil {
+		if castErr := castcmd.StartRecordingIfRequested(cmd, &tmpConfig, os.Args[1:]); castErr != nil {
 			errUtils.CheckErrorPrintAndExit(castErr, "Failed to start cast recording", "")
 		}
 
@@ -725,7 +621,7 @@ var RootCmd = &cobra.Command{
 		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
-		finalizeCastRecording()
+		castcmd.FinalizeRecording()
 
 		// Stop profiler after command execution.
 		if profilerServer != nil {
@@ -1602,7 +1498,7 @@ func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration
 // command, captures telemetry, and handles unknown-command errors by showing usage.
 // This function is invoked once from main.main.
 func Execute() error {
-	defer finalizeCastRecording()
+	defer castcmd.FinalizeRecording()
 
 	// CRITICAL: Process --chdir flag BEFORE loading config.
 	// This ensures atmos.yaml is loaded from the correct directory when using --chdir.
@@ -1928,10 +1824,7 @@ func init() {
 	if err := globalParser.BindToViper(viper.GetViper()); err != nil {
 		log.Error("Failed to bind global flags to viper", "error", err)
 	}
-	RootCmd.PersistentFlags().String(castFlagName, "", "Record command output as an asciinema cast (--cast for generated path, --cast=path for explicit output)")
-	if castFlag := RootCmd.PersistentFlags().Lookup(castFlagName); castFlag != nil {
-		castFlag.NoOptDefVal = castAutoFlagVal
-	}
+	castcmd.RegisterRecordingFlag(RootCmd.PersistentFlags())
 
 	// Register --version as a LOCAL flag (not inherited by subcommands).
 	// This allows custom commands to define their own --version flag (e.g., for tool versions).
