@@ -22,6 +22,9 @@ reviewers to catch them.
 - Linting on `before.terraform.init` — a linter should **fail fast**, before
   any init/plan work. tflint reads static HCL, so it needs no prior init or
   plan (and no cloud credentials).
+- CI jobs that only run `atmos terraform plan`, `apply`, or `deploy` should use
+  the matching before event (for example `before.terraform.plan`) so the tflint
+  section appears in that job's summary.
 - The component is a provider-free `terraform_data` resource, so it lints and
   plans fully offline. The intentionally-unused `unused` variable gives tflint
   a deterministic finding (`terraform_unused_declarations`).

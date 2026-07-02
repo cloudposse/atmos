@@ -380,7 +380,10 @@ func TestRenderMarkdown_WithFindings(t *testing.T) {
 	}
 	out := RenderMarkdown(f, RenderMarkdownOptions{})
 	assert.Contains(t, out, "checkov")
-	assert.Contains(t, out, "1 HIGH, 1 LOW")
+	assert.Contains(t, out, "https://shields.io/badge/HIGH-1-critical?style=for-the-badge")
+	assert.Contains(t, out, "https://shields.io/badge/LOW-1-yellow?style=for-the-badge")
+	assert.Contains(t, out, "https://shields.io/badge/-HIGH-critical?style=for-the-badge")
+	assert.Contains(t, out, "https://shields.io/badge/-LOW-yellow?style=for-the-badge")
 	assert.Contains(t, out, "CKV_AWS_19")
 	assert.Contains(t, out, "[main.tf:5](main.tf#L5)")
 }

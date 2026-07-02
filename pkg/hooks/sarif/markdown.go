@@ -74,7 +74,7 @@ func renderCountsTable(b *strings.Builder, counts map[string]int) {
 	b.WriteString("|---|---|\n")
 	for _, sev := range []Severity{SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow, SeverityInfo} {
 		if c, ok := counts[sev.String()]; ok && c > 0 {
-			fmt.Fprintf(b, "| %s | %d |\n", sev, c)
+			fmt.Fprintf(b, "| %s | %d |\n", severityBadge(sev), c)
 		}
 	}
 	b.WriteString("\n")
@@ -99,7 +99,7 @@ func renderFindingsTable(b *strings.Builder, sorted []Finding, limit int) {
 			ruleCell = fmt.Sprintf("[%s](%s)", escapeMD(fd.RuleID), fd.HelpURI)
 		}
 		fmt.Fprintf(b, "| %s | %s | %s | %s |\n",
-			fd.Severity, ruleCell, escapeMD(truncate(fd.Message, maxMessageLength)), locationCell(&fd))
+			severityBadge(fd.Severity), ruleCell, escapeMD(truncate(fd.Message, maxMessageLength)), locationCell(&fd))
 	}
 
 	if len(sorted) > limit {
@@ -107,7 +107,7 @@ func renderFindingsTable(b *strings.Builder, sorted []Finding, limit int) {
 	}
 }
 
-// countsTitle builds a compact severity headline like "2 HIGH, 5 MED".
+// countsTitle builds a compact severity headline from count badges.
 // Falls back to the total count when no severity buckets are populated.
 func countsTitle(counts map[string]int) string {
 	if len(counts) == 0 {
@@ -117,13 +117,13 @@ func countsTitle(counts map[string]int) string {
 	for _, sev := range []Severity{SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow, SeverityInfo} {
 		name := sev.String()
 		if c, ok := counts[name]; ok && c > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", c, strings.ToUpper(shortSeverity(name))))
+			parts = append(parts, severityCountBadge(sev, c))
 		}
 	}
 	if len(parts) == 0 {
 		return "no findings"
 	}
-	return strings.Join(parts, ", ")
+	return strings.Join(parts, " ")
 }
 
 // shortSeverity returns a compact severity label for headlines.
@@ -135,6 +135,35 @@ func shortSeverity(s string) string {
 		return "med"
 	default:
 		return s
+	}
+}
+
+func severityBadge(sev Severity) string {
+	label := strings.ToUpper(shortSeverity(sev.String()))
+	return fmt.Sprintf("[![%s](https://shields.io/badge/-%s-%s?style=for-the-badge)](#)",
+		strings.ToLower(label), label, severityBadgeColor(sev))
+}
+
+func severityCountBadge(sev Severity, count int) string {
+	label := strings.ToUpper(shortSeverity(sev.String()))
+	return fmt.Sprintf("[![%s](https://shields.io/badge/%s-%d-%s?style=for-the-badge)](#)",
+		strings.ToLower(label), label, count, severityBadgeColor(sev))
+}
+
+func severityBadgeColor(sev Severity) string {
+	switch sev {
+	case SeverityCritical:
+		return "ff0000"
+	case SeverityHigh:
+		return "critical"
+	case SeverityMedium:
+		return "important"
+	case SeverityLow:
+		return "yellow"
+	case SeverityInfo:
+		return "blue"
+	default:
+		return "inactive"
 	}
 }
 

@@ -10,13 +10,14 @@ components:
           kics: "2.1.20"
           tflint: "0.59.1"
       hooks:
-        # Linter runs before init so bad HCL fails fast, and dogfoods the
-        # tflint kind's stdout SARIF capture through the native-CI outputs
+        # The native CI workflow runs `atmos terraform plan`, so dogfood tflint
+        # on before.terraform.plan. This still runs before Terraform init/plan
+        # work and exercises stdout SARIF capture through the native-CI outputs
         # (step summary, PR annotations, Code Scanning). Scoped with --filter
         # so only tflint_target.tf reports.
         tflint-lint:
           events:
-            - before-terraform-init
+            - before.terraform.plan
           kind: tflint
           args:
             - "--chdir=$ATMOS_COMPONENT_PATH"

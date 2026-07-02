@@ -228,6 +228,11 @@ hooks:
     kind: tflint
 ```
 
+If your CI job only runs `atmos terraform plan`, `apply`, or `deploy` and does
+not run an explicit `atmos terraform init` step, attach the hook to that command
+instead (for example `before.terraform.plan`) so the lint summary appears in the
+same job.
+
 <dl>
   <dt>`command` (default)</dt>
   <dd>`tflint`.</dd>

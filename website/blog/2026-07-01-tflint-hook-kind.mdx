@@ -35,6 +35,11 @@ components:
           kind: tflint
 ```
 
+For CI workflows that only run `atmos terraform plan`, `apply`, or `deploy`
+and do not call `atmos terraform init` explicitly, use that command's before
+event instead (for example `before.terraform.plan`) so the lint summary is
+written in the same job.
+
 The kind ships sane defaults (`tflint --chdir=$ATMOS_COMPONENT_PATH --format=sarif`, `on_failure: warn`) and runs against the same directory Terraform does — including the provisioned workdir when that feature is enabled.
 
 Under the hood, hook kinds can now opt into **stdout capture**: Atmos redirects the tool's stdout into its structured-output side channel, so a tool that only prints to stdout is handled identically to one that writes a file. From there, tflint rides the exact same path as the other scanners — a single markdown summary in your terminal and on the Atmos Pro run page.
