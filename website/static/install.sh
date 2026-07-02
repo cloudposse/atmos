@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 # Default method to auto
 method="${1:-auto}"
@@ -60,7 +61,13 @@ install_via_binary_download() {
     if [ -n "${ATMOS_VERSION:-}" ]; then
       release="${ATMOS_VERSION#v}"
     else
-      release=$(curl -s https://api.github.com/repos/cloudposse/atmos/releases/latest | grep 'tag_name' | cut -d '"' -f 4 | tr -d v)
+      latest_url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/cloudposse/atmos/releases/latest)
+      release="${latest_url##*/}"
+      release="${release#v}"
+    fi
+    if [ -z "$release" ]; then
+      echo "Unable to determine the latest Atmos release version." >&2
+      exit 1
     fi
 
 		os=$(uname -s | tr '[:upper:]' '[:lower:]')
