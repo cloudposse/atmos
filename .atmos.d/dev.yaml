@@ -62,7 +62,7 @@ commands:
         steps:
           - type: exec
             command: |
-              set -euo pipefail
+              set -eu
               root="$(git rev-parse --show-toplevel)"
               cd "$root"
               export PATH="$root/build:$PATH"
@@ -70,9 +70,12 @@ commands:
 
       - name: validate
         description: Validate code by running build, lint, and tests
+        env: &go_auto_env
+          - key: GOTOOLCHAIN
+            value: auto
         steps:
           - |
-            set -euo pipefail
+            set -eu
             echo "Building..."
             atmos build
 
@@ -91,9 +94,10 @@ commands:
 
       - name: quick
         description: Quick build and test
+        env: *go_auto_env
         steps:
           - |
-            set -euo pipefail
+            set -eu
             echo "Running quick build and test..."
             atmos build
             atmos test short

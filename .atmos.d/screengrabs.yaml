@@ -7,31 +7,36 @@ commands:
         arguments:
           - name: target
             description: Screengrab command or artifact slug to generate
+            default: __all__
         flags:
           - name: all
             type: bool
             description: Generate all screengrabs
         steps:
           - |
-            set -euo pipefail
+            set -eu
             target="{{ .Arguments.target }}"
+            if [ "$target" = "__all__" ]; then
+              target=""
+            fi
+
             if [ "{{ .Flags.all }}" = "true" ]; then
               if [ -n "$target" ]; then
                 echo "Use either --all or a single target, not both" >&2
                 exit 1
               fi
-              target_arg=()
+              set --
             else
               if [ -z "$target" ]; then
                 echo "Usage: atmos screengrabs build --all" >&2
                 echo "   or: atmos screengrabs build <command-or-slug>" >&2
                 exit 1
               fi
-              target_arg=("$target")
+              set -- "$target"
             fi
 
             cd demo/screengrabs
-            ./build-all.sh demo-stacks.txt "${target_arg[@]}"
+            ./build-all.sh demo-stacks.txt "$@"
             echo "Validating screengrabs..."
             ! grep -r "atmos: not found" artifacts/ || { echo "ERROR: Found 'atmos: not found' in screengrabs"; exit 1; }
             ! grep -r "COMMAND_EXIT_CODE" artifacts/ || { echo "ERROR: Found 'COMMAND_EXIT_CODE' in screengrabs"; exit 1; }
@@ -47,7 +52,7 @@ commands:
             default: website/src/components/Screengrabs
         steps:
           - |
-            set -euo pipefail
+            set -eu
             install_path="{{ .Flags.install-path }}"
             echo "Installing screengrabs to $install_path"
             mkdir -p "$install_path"
@@ -69,7 +74,7 @@ commands:
         description: Generate screengrabs using Podman
         steps:
           - |
-            set -euo pipefail
+            set -eu
             echo "Generating screengrabs using Podman (Linux container)..."
             podman run --rm -v "$PWD:/workspace" -w /workspace/demo/screengrabs \
               --memory=4g \

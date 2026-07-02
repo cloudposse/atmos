@@ -4,53 +4,61 @@ commands:
     commands:
       - name: acc
         description: Run acceptance tests
+        env: &go_auto_env
+          - key: GOTOOLCHAIN
+            value: auto
         steps:
           - |
-            set -euo pipefail
+            set -eu
             atmos build deps
             echo "Running acceptance tests"
             go test ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 40m
 
       - name: acc-cover
         description: Run acceptance tests with subprocess coverage collection
+        env: *go_auto_env
         steps:
           - |
-            set -euo pipefail
+            set -eu
             atmos build deps
             scripts/collect-coverage.sh "${TEST:-$(go list ./...)}" "${TESTARGS:-}"
 
       - name: acc-coverage
         description: Run acceptance tests and generate an HTML coverage report
+        env: *go_auto_env
         steps:
           - |
-            set -euo pipefail
+            set -eu
             atmos test acc-cover
             go tool cover -html=coverage.out -o coverage.html
             echo "Coverage report generated: coverage.html"
 
       - name: short
         description: Run quick tests only
+        env: *go_auto_env
         steps:
           - |
-            set -euo pipefail
+            set -eu
             atmos build deps
             echo "Running quick tests (skipping long-running tests)"
             go test -short ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 5m
 
       - name: short-cover
         description: Run quick tests with coverage
+        env: *go_auto_env
         steps:
           - |
-            set -euo pipefail
+            set -eu
             atmos build deps
             echo "Running quick tests with coverage (skipping long-running tests)"
             GOCOVERDIR=coverage go test -short -cover ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 5m
 
       - name: coverage
         description: Run tests with coverage report
+        env: *go_auto_env
         steps:
           - |
-            set -euo pipefail
+            set -eu
             atmos build deps
             echo "Running tests with coverage"
             go test -coverprofile=coverage.out ${TEST:-$(go list ./...)} ${TESTARGS:-}
@@ -59,18 +67,20 @@ commands:
 
       - name: race
         description: Run quick tests with race detector and shuffled order
+        env: *go_auto_env
         steps:
           - |
-            set -euo pipefail
+            set -eu
             atmos build deps
             echo "Running tests with -race -shuffle=on"
             CGO_ENABLED=1 go test -race -shuffle=on ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 10m
 
       - name: generate-mocks
         description: Regenerate mocks using go:generate directives
+        env: *go_auto_env
         steps:
           - |
-            set -euo pipefail
+            set -eu
             echo "Regenerating mocks using go:generate directives..."
             go generate ./pkg/auth/types/...
             go generate ./pkg/http/...
