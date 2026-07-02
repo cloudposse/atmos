@@ -5,6 +5,7 @@ simulate:
     text: '> '
     style: command
   rate: 35ms
+  jitter: 0.25
 env:
   TERM: xterm-256color
   COLORTERM: truecolor

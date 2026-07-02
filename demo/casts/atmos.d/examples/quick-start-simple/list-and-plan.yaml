@@ -18,8 +18,6 @@ commands:
         defaults:
           simulate: !include cast-defaults.yaml .simulate
         rate: 12ms
-        write_rate: 35ms
-        jitter: 0.25
         width: 120
         height: 36
         env: !include cast-defaults.yaml .env

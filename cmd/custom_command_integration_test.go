@@ -208,6 +208,56 @@ func TestCustomCommandEnvValueCanUseEnvTemplateAlias(t *testing.T) {
 	assert.Equal(t, "from-env-alias", string(actual))
 }
 
+func TestCustomCommandEnvironmentIncludesCurrentExecutable(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tmpDir := t.TempDir()
+	envOutputFile := filepath.Join(tmpDir, "env.txt")
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	exeDir := filepath.Dir(exePath)
+	pathEntries := filepath.SplitList(os.Getenv("PATH"))
+	filteredPathEntries := make([]string, 0, len(pathEntries))
+	for _, entry := range pathEntries {
+		if entry != exeDir {
+			filteredPathEntries = append(filteredPathEntries, entry)
+		}
+	}
+	t.Setenv("PATH", strings.Join(filteredPathEntries, string(os.PathListSeparator)))
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{
+			{
+				Name:        "test-current-executable-env",
+				Description: "Dump custom command environment",
+				Env: []schema.CommandEnv{
+					{Key: "_ATMOS_TEST_DUMP_ENV", Value: envOutputFile},
+				},
+				Steps: stepsFromStrings(fmt.Sprintf("%q", exePath)),
+			},
+		},
+	}
+
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	customCmd, _, err := RootCmd.Find([]string{"test-current-executable-env"})
+	require.NoError(t, err)
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
+
+	envContent, err := os.ReadFile(envOutputFile)
+	require.NoError(t, err)
+	envVars := string(envContent)
+
+	assert.Equal(t, exePath, extractEnvVar(envVars, "ATMOS_CLI_PATH"))
+	actualPathEntries := filepath.SplitList(extractEnvVar(envVars, "PATH"))
+	require.NotEmpty(t, actualPathEntries)
+	assert.Equal(t, exeDir, actualPathEntries[0])
+}
+
 func TestCustomCommandShellOutputNoneSuppressesOutput(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses POSIX shell redirection")
