@@ -21,8 +21,8 @@ renders identically in your terminal and on Atmos Pro.
 ## Hooks Schema
 
 Each hook has a `kind` that selects an engine and a set of defaults. The
-generic `command` kind runs any binary; named kinds like `infracost` and
-`trivy` ship sane defaults so you don't need to write any wiring.
+generic `command` kind runs any binary; named kinds like `infracost`,
+`trivy`, and `tflint` ship sane defaults so you don't need to write any wiring.
 
 ```yaml
 components:
@@ -207,11 +207,52 @@ hooks:
   <dd>Required at runtime. The KICS release tarball does not include the query library. Homebrew install: `export KICS_QUERIES_PATH=$(brew --prefix kics)/share/kics/assets/queries`. For toolchain installs, point at the unpacked `assets/queries` directory shipped alongside the release archive.</dd>
 </dl>
 
-All three scanner kinds emit SARIF and share a result handler that renders
-findings as a compact markdown table — severity, rule ID (linked to the
-upstream remediation guide when available), short description, and
-`file:line` location. The same markdown body flows to your terminal, the
-Atmos Pro run page, and PR comments.
+### `kind: tflint`
+
+[tflint](https://github.com/terraform-linters/tflint) is an open-source
+Terraform/OpenTofu linter. Where `terraform validate` only proves your config
+parses, tflint enforces **code consistency and conventions** and catches
+**hygiene** problems — unused declarations, deprecated syntax, missing version
+constraints, and invalid provider-specific arguments — so those standards hold
+uniformly across every component instead of relying on reviewers. The `tflint`
+kind runs tflint over the component's sources and feeds the SARIF output
+through Atmos's shared scanner result handler.
+
+Wire it on `before.terraform.init` so a lint failure stops you before any
+init/plan work — a linter should fail fast:
+
+```yaml
+hooks:
+  lint:
+    events: [before.terraform.init]
+    kind: tflint
+```
+
+<dl>
+  <dt>`command` (default)</dt>
+  <dd>`tflint`.</dd>
+
+  <dt>`args` (default)</dt>
+  <dd>`--chdir=$ATMOS_COMPONENT_PATH --format=sarif`.</dd>
+
+  <dt>Output</dt>
+  <dd>SARIF on **stdout** — tflint has no file-output flag. The kind opts into stdout capture, so Atmos redirects tflint's stdout into `$ATMOS_OUTPUT_FILE` before parsing (transparent to you; the result is identical to the file-output scanners).</dd>
+
+  <dt>`on_failure` (default)</dt>
+  <dd>`warn` — a lint finding does not block your plan unless you override this. (tflint exits non-zero when it finds issues; the SARIF is still captured and summarized regardless.)</dd>
+
+  <dt>Runtime requirements</dt>
+  <dd>The `tflint` binary on PATH. Declare it in `dependencies.tools` (e.g. `tflint: "0.59.1"`) to have Atmos auto-install through the toolchain. The builtin `terraform` ruleset runs with no configuration; provider rulesets (aws/google/azurerm) require a `.tflint.hcl` plus a one-time `tflint --init` (run it via a separate `kind: command` hook if you need plugins).</dd>
+</dl>
+
+All four SARIF scanner kinds (`trivy`, `checkov`, `kics`, `tflint`) share a
+result handler that renders findings as a compact markdown table — severity,
+rule ID (linked to the upstream remediation guide when available), short
+description, and `file:line` location. The same markdown body flows to your
+terminal, the Atmos Pro run page, and PR comments. In CI it additionally
+becomes a step summary, inline PR annotations (`::error`/`::warning` on the
+diff), and a GitHub Code Scanning upload — all automatic, gated by your `ci.*`
+config.
 
 ### `kind: store`
 
@@ -603,7 +644,7 @@ outcome is only meaningful on `after-*` events; `before-*` events always run as
 
 ## Overriding Kind Defaults
 
-Every named kind (`infracost`, `trivy`, `checkov`, `kics`, `store`)
+Every named kind (`infracost`, `trivy`, `checkov`, `kics`, `tflint`, `store`)
 ships defaults for `command`, `args`, `env`, and `on_failure`. Any
 field you set on the hook overrides the kind's default for that field.
 

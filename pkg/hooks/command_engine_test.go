@@ -110,6 +110,77 @@ func TestCommandEngine_CapturesOutputFile(t *testing.T) {
 	assert.Equal(t, "test-component", out.Artifact.Metadata["component"])
 }
 
+// runEngineWithKind runs the CommandEngine for a hook under a caller-supplied
+// kind, so tests can exercise kind-level behavior such as CaptureStdout.
+func runEngineWithKind(t *testing.T, kind *Kind, hook *Hook) (*Output, error) {
+	t.Helper()
+	resolved := kind.ResolveDefaults(hook)
+	ctx := &ExecContext{
+		Hook: resolved,
+		Kind: kind,
+		AtmosConfig: &schema.AtmosConfiguration{
+			TerraformDirAbsolutePath: t.TempDir(),
+		},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "test-stack",
+			ComponentFromArg: "test-component",
+		},
+	}
+	return kind.Engine.Run(ctx)
+}
+
+func TestCommandEngine_CaptureStdoutWritesToOutputFile(t *testing.T) {
+	// A tool (tflint) that emits structured output to STDOUT with no
+	// file-output flag: with CaptureStdout the engine redirects stdout into
+	// ATMOS_OUTPUT_FILE, so captureOutput reads it back as the artifact body.
+	const body = `{"runs":[{"tool":{"driver":{"name":"tflint"}}}]}`
+	exe := testExePath(t)
+	kind := &Kind{
+		Name:          "command",
+		OnFailure:     OnFailureWarn,
+		Engine:        &CommandEngine{},
+		CaptureStdout: true,
+	}
+	hook := &Hook{
+		Kind:    "command",
+		Command: exe,
+		Args:    []string{"-test.run", "^$"},
+		Env: map[string]string{
+			"_ATMOS_TEST_ECHO_STDOUT": "1",
+			"_ATMOS_TEST_STDOUT_BODY": body,
+		},
+	}
+	out, err := runEngineWithKind(t, kind, hook)
+	require.NoError(t, err)
+	require.NotNil(t, out.Artifact, "stdout should have been captured into the output file")
+	assert.Equal(t, body, string(out.Artifact.Body))
+}
+
+func TestCommandEngine_NoCaptureStdoutLeavesOutputFileEmpty(t *testing.T) {
+	// Negative path: without CaptureStdout the same stdout streams to the
+	// terminal and never reaches the output file, so no artifact is produced.
+	const body = `should not be captured`
+	exe := testExePath(t)
+	kind := &Kind{
+		Name:      "command",
+		OnFailure: OnFailureWarn,
+		Engine:    &CommandEngine{},
+		// CaptureStdout intentionally left false.
+	}
+	hook := &Hook{
+		Kind:    "command",
+		Command: exe,
+		Args:    []string{"-test.run", "^$"},
+		Env: map[string]string{
+			"_ATMOS_TEST_ECHO_STDOUT": "1",
+			"_ATMOS_TEST_STDOUT_BODY": body,
+		},
+	}
+	out, err := runEngineWithKind(t, kind, hook)
+	require.NoError(t, err)
+	assert.Nil(t, out.Artifact, "without CaptureStdout, stdout must not be written to the output file")
+}
+
 func TestCaptureOutput_AllowsNilInfo(t *testing.T) {
 	outputFile := filepath.Join(t.TempDir(), "output")
 	require.NoError(t, os.WriteFile(outputFile, []byte("hello"), 0o600))

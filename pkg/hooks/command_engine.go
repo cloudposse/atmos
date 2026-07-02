@@ -146,6 +146,11 @@ type subprocessPrep struct {
 	binary string
 	args   []string
 	env    []string
+	// captureStdoutPath, when non-empty, is the file the subprocess's stdout
+	// is redirected into (instead of the terminal). Set for kinds with
+	// CaptureStdout — tools that emit structured output to stdout and have no
+	// file-output flag (tflint). Points at the same file ATMOS_OUTPUT_FILE does.
+	captureStdoutPath string
 }
 
 // prepareSubprocess renders args / env (with $ATMOS_* expansion) and
@@ -186,21 +191,45 @@ func prepareSubprocess(ctx *ExecContext, tmpDir, outputFile string) (*subprocess
 			Err()
 	}
 
+	captureStdoutPath := ""
+	if ctx.Kind != nil && ctx.Kind.CaptureStdout {
+		// Redirect stdout into the same file ATMOS_OUTPUT_FILE points at, so
+		// the kind's ResultHandler reads it via sarif.DefaultOutputFile — no
+		// difference from a tool that writes the file itself (trivy/checkov).
+		captureStdoutPath = outputFile
+	}
+
 	return &subprocessPrep{
-		binary: resolved,
-		args:   args,
-		env:    mergeEnv(prependToolchainPATH(os.Environ(), ctx.ToolchainPATH), envVars, hookEnv),
+		binary:            resolved,
+		args:              args,
+		env:               mergeEnv(prependToolchainPATH(os.Environ(), ctx.ToolchainPATH), envVars, hookEnv),
+		captureStdoutPath: captureStdoutPath,
 	}, nil
 }
 
 // runSubprocess executes the prepared command, wiring stdin/stdout/stderr
-// to the host process so the user sees tool output in real time.
+// to the host process so the user sees tool output in real time. When the kind
+// opts into stdout capture (p.captureStdoutPath set), stdout is redirected into
+// that file instead of the terminal — for tools that emit structured output
+// (SARIF) to stdout with no file-output flag. Stderr still streams so the
+// tool's diagnostics/errors remain visible.
 func runSubprocess(p *subprocessPrep) error {
 	cmd := exec.Command(p.binary, p.args...) // #nosec G204 -- intentional: this is the whole point of a hook
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = p.env
+
+	if p.captureStdoutPath != "" {
+		f, err := os.Create(p.captureStdoutPath) // #nosec G304 -- engine-controlled temp path (makeOutputDir)
+		if err != nil {
+			return fmt.Errorf("%w: hook stdout capture file: %w", errUtils.ErrCreateFile, err)
+		}
+		defer f.Close()
+		cmd.Stdout = f
+	} else {
+		cmd.Stdout = os.Stdout
+	}
+
 	return cmd.Run()
 }
 
