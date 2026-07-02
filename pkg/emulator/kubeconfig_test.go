@@ -97,6 +97,18 @@ func shrinkKubeconfigTimers(t *testing.T) {
 	})
 }
 
+func shrinkKubernetesReadyTimers(t *testing.T) {
+	t.Helper()
+	oldTimeout := kubernetesReadyTimeout
+	oldInterval := kubernetesReadyPollInterval
+	kubernetesReadyTimeout = 50 * time.Millisecond
+	kubernetesReadyPollInterval = time.Millisecond
+	t.Cleanup(func() {
+		kubernetesReadyTimeout = oldTimeout
+		kubernetesReadyPollInterval = oldInterval
+	})
+}
+
 // errExec is a sentinel used to assert the Exec-failure branch wraps ErrEmulatorConfigInvalid.
 var errExec = errors.New("exec boom")
 
@@ -183,6 +195,50 @@ func TestAPIServerHostPort(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestKubernetesNodeListHasReadyNode(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		want   bool
+	}{
+		{name: "empty", output: "", want: false},
+		{name: "no resources", output: "No resources found\n", want: false},
+		{name: "not ready", output: "k3s-node   NotReady   <none>   8s   v1.34.1+k3s1\n", want: false},
+		{name: "ready", output: "k3s-node   Ready   <none>   12s   v1.34.1+k3s1\n", want: true},
+		{name: "ready with extra condition", output: "k3s-node   Ready,SchedulingDisabled   <none>   12s   v1.34.1+k3s1\n", want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, kubernetesNodeListHasReadyNode(tt.output))
+		})
+	}
+}
+
+func TestManager_WaitKubernetesReady_RetriesUntilReady(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	runtime := NewMockRuntime(ctrl)
+	info := k3sEmulatorInfo(36443)
+	runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return([]container.Info{info}, nil).AnyTimes()
+	gomock.InOrder(
+		runtime.EXPECT().
+			Exec(gomock.Any(), "k3s-abc", []string{"kubectl", "get", "nodes", "--no-headers"}, gomock.Any()).
+			DoAndReturn(func(_ context.Context, _ string, _ []string, opts *container.ExecOptions) error {
+				_, err := opts.Stdout.Write([]byte("No resources found\n"))
+				return err
+			}),
+		runtime.EXPECT().
+			Exec(gomock.Any(), "k3s-abc", []string{"kubectl", "get", "nodes", "--no-headers"}, gomock.Any()).
+			DoAndReturn(func(_ context.Context, _ string, _ []string, opts *container.ExecOptions) error {
+				_, err := opts.Stdout.Write([]byte("k3s-node   Ready   <none>   12s   v1.34.1+k3s1\n"))
+				return err
+			}),
+	)
+	shrinkKubernetesReadyTimers(t)
+
+	m := newManagerWithRuntime(runtime)
+	require.NoError(t, m.waitKubernetesReady(context.Background(), runtime, "dev", "k3s"))
 }
 
 func TestManager_Kubeconfig_NotRunning(t *testing.T) {

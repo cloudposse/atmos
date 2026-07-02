@@ -245,6 +245,26 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
+	// Terraform-specific: merge test configuration.
+	var finalComponentTest map[string]any
+	if opts.ComponentType == cfg.TerraformComponentType {
+		var testCtx *m.DeferredMergeContext
+		finalComponentTest, testCtx, err = m.MergeWithDeferred(
+			mergeConfig,
+			[]map[string]any{
+				result.BaseComponentTest,
+				result.ComponentTest,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := m.ApplyDeferredMerges(testCtx, finalComponentTest, mergeConfig, nil); err != nil {
+			return nil, err
+		}
+	}
+
 	// Merge secrets declarations (global stack → base → component → overrides). Available for
 	// all component types; inherits through the stack hierarchy like other sections. The
 	// stack-level (global) `secrets:` block lets providers/declarations be defined once per stack.
@@ -547,6 +567,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.RequiredProvidersSectionName] = finalComponentRequiredProviders
 		comp[cfg.RequiredVersionSectionName] = finalComponentRequiredVersion
 		comp[cfg.HooksSectionName] = finalComponentHooks
+		if len(finalComponentTest) > 0 {
+			comp[cfg.TestSectionName] = finalComponentTest
+		}
 		comp[cfg.GenerateSectionName] = finalComponentGenerate
 		comp[cfg.BackendTypeSectionName] = finalComponentBackendType
 		comp[cfg.BackendSectionName] = finalComponentBackend
@@ -570,6 +593,43 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 		comp[cfg.HooksSectionName] = finalComponentHooks
 		comp[cfg.GenerateSectionName] = finalComponentGenerate
+	}
+
+	if opts.ComponentType == cfg.HelmComponentType {
+		finalComponentHelm, err := m.Merge(
+			mergeConfig,
+			[]map[string]any{
+				result.BaseComponentHelm,
+				result.ComponentHelm,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		for key, value := range finalComponentHelm {
+			comp[key] = value
+		}
+		comp[cfg.HooksSectionName] = finalComponentHooks
+		comp[cfg.GenerateSectionName] = finalComponentGenerate
+	}
+
+	// Merge the Helm CLI plugins list (helm and helmfile components).
+	// Base-component plugins (e.g. from an abstract/catalog component) are merged
+	// with the concrete component's plugins; the configured list_merge_strategy
+	// (default: replace) governs how the lists combine.
+	if supportsPlugins(opts.ComponentType) {
+		finalComponentPlugins, err := mergeComponentAnySection(
+			mergeConfig,
+			cfg.PluginsSectionName,
+			result.BaseComponentPlugins,
+			result.ComponentPlugins,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if finalComponentPlugins != nil {
+			comp[cfg.PluginsSectionName] = finalComponentPlugins
+		}
 	}
 
 	// Process source and provision configuration.

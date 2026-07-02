@@ -103,6 +103,115 @@ func (g *gitProvisioner) Deliver(ctx context.Context, in *target.DeliverInput) e
 	return commitAndPush(ctx, session, &cfg, &in.Artifact)
 }
 
+// Fetch reconciles the deployment repository and reads the files currently
+// committed under the configured path, so a producer can diff a fresh render
+// against the live GitOps state. It never writes, commits, or pushes. A path that
+// does not exist yet yields an artifact with no Files (an empty baseline).
+func (g *gitProvisioner) Fetch(ctx context.Context, in *target.FetchInput) (target.ProvisionArtifact, error) {
+	defer perf.Track(in.AtmosConfig, "target.git.Fetch")()
+
+	cfg := parseConfig(in.TargetConfig)
+
+	resolved, err := atmosgit.ResolveRepository(&in.AtmosConfig.Git, cfg.Repository)
+	if err != nil {
+		return target.ProvisionArtifact{}, err
+	}
+
+	env, err := atmosgit.ComposeEnvironment(ctx, os.Environ(), identityFor(&cfg, resolved), in.EnvProvider)
+	if err != nil {
+		return target.ProvisionArtifact{}, err
+	}
+
+	provider, err := atmosgit.NewProvider(resolved.Provider)
+	if err != nil {
+		return target.ProvisionArtifact{}, err
+	}
+
+	session := &repoSession{
+		provider: provider,
+		rc: atmosgit.RepoContext{
+			Workdir: resolved.Workdir,
+			Remote:  resolved.Remote,
+			Branch:  resolved.Branch,
+			Env:     env,
+		},
+		resolved: resolved,
+	}
+
+	if err := reconcile(ctx, session); err != nil {
+		return target.ProvisionArtifact{}, err
+	}
+
+	files, err := readManagedTree(resolved.Workdir, cfg.Path)
+	if err != nil {
+		return target.ProvisionArtifact{}, err
+	}
+
+	return target.ProvisionArtifact{
+		Kind:   target.ArtifactKindKubernetesManifests,
+		Format: target.FormatYAML,
+		Files:  files,
+		Metadata: target.ArtifactMetadata{
+			Target: in.TargetName,
+		},
+	}, nil
+}
+
+// readManagedTree reads every file under <workdir>/<path> into a map keyed by the
+// path-relative filename. A missing managed path returns an empty map (the path
+// has not been published yet), never an error.
+func readManagedTree(workdir, path string) (map[string][]byte, error) {
+	absPath, err := atmosgit.ValidateRepoRelativePath(workdir, path)
+	if err != nil {
+		return nil, err
+	}
+
+	info, err := os.Stat(absPath)
+	if os.IsNotExist(err) {
+		return map[string][]byte{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%w: reading managed path %q: %w", errUtils.ErrGitArtifactRead, path, err)
+	}
+	if !info.IsDir() {
+		data, readErr := os.ReadFile(absPath)
+		if readErr != nil {
+			return nil, fmt.Errorf("%w: reading %q: %w", errUtils.ErrGitArtifactRead, path, readErr)
+		}
+		return map[string][]byte{filepath.Base(absPath): data}, nil
+	}
+
+	return walkManagedDir(absPath)
+}
+
+// walkManagedDir reads every file under root into a map keyed by the
+// forward-slash path relative to root.
+func walkManagedDir(root string) (map[string][]byte, error) {
+	files := map[string][]byte{}
+	walkErr := filepath.WalkDir(root, func(p string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, relErr := filepath.Rel(root, p)
+		if relErr != nil {
+			return relErr
+		}
+		data, readErr := os.ReadFile(p)
+		if readErr != nil {
+			return fmt.Errorf("%w: reading %q: %w", errUtils.ErrGitArtifactRead, rel, readErr)
+		}
+		files[filepath.ToSlash(rel)] = data
+		return nil
+	})
+	if walkErr != nil {
+		return nil, walkErr
+	}
+	return files, nil
+}
+
 // reconcile clones the repository if absent, otherwise fetches and fast-forwards.
 func reconcile(ctx context.Context, s *repoSession) error {
 	return s.provider.Clone(ctx, &atmosgit.CloneOptions{

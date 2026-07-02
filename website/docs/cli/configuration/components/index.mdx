@@ -61,6 +61,10 @@ components:
     command: helmfile
     # ... helmfile-specific settings
 
+  helm:
+    base_path: components/helm
+    # ... native Helm-specific settings
+
   kubernetes:
     base_path: components/kubernetes
     provider: kubectl
@@ -93,6 +97,7 @@ All component types share these common configuration options:
 ## Related
 
 - [Terraform Configuration](/cli/configuration/components/terraform)
+- [Helm Configuration](/cli/configuration/components/helm)
 - [Helmfile Configuration](/cli/configuration/components/helmfile)
 - [Kubernetes Configuration](/cli/configuration/components/kubernetes)
 - [Packer Configuration](/cli/configuration/components/packer)

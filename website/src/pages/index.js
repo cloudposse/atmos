@@ -10,7 +10,7 @@ import Workloads from '@site/src/components/landing/Workloads';
 import Extensibility from '@site/src/components/landing/Extensibility';
 import FinalCta from '@site/src/components/landing/FinalCta';
 import '../css/landing-page.css';
-import '../css/landing-redesign.css';
+import '../css/landing-runtime.css';
 
 function Home() {
   const [scrolled, setScrolled] = useState(false);
@@ -28,7 +28,7 @@ function Home() {
       <div className={`landing-page${scrolled ? ' landing-page--scrolled' : ''}`}>
         <Layout
           title="The runtime for infrastructure"
-          description="Atmos is the runtime for infrastructure — one consistent way to build, ship, and run Terraform, Kubernetes, and containers, identically on your laptop and in CI. Auth, secrets, vendoring, and CI included."
+          description="Atmos is the runtime for infrastructure - one consistent way to build, ship, and run Terraform, Kubernetes, and containers, identically on your laptop and in CI. Auth, secrets, vendoring, and CI included."
         >
           <Hero />
           <AISection />

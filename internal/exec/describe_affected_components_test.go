@@ -400,6 +400,271 @@ func TestProcessKubernetesComponentsIndexed_SkipsAbstract(t *testing.T) {
 	assert.Empty(t, affected)
 }
 
+const (
+	helmTestStack     = "dev"
+	helmTestComponent = "app"
+)
+
+func helmRemoteStacksWith(remoteComp map[string]any) map[string]any {
+	return map[string]any{
+		helmTestStack: map[string]any{
+			"components": map[string]any{
+				cfg.HelmComponentType: map[string]any{
+					helmTestComponent: remoteComp,
+				},
+			},
+		},
+	}
+}
+
+func helmAtmosConfig() *schema.AtmosConfiguration {
+	return &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Helm: schema.Helm{BasePath: "components/helm"},
+		},
+	}
+}
+
+func TestAddHelmSectionAffected(t *testing.T) {
+	tests := []struct {
+		name       string
+		section    string
+		localVal   any
+		remoteVal  any
+		wantReason string
+	}{
+		{"vars", sectionNameVars, map[string]any{"a": "1"}, map[string]any{"a": "2"}, affectedReasonStackVars},
+		{"env", sectionNameEnv, map[string]any{"K": "1"}, map[string]any{"K": "2"}, affectedReasonStackEnv},
+		{"source", sectionNameSource, map[string]any{"uri": "a"}, map[string]any{"uri": "b"}, affectedReasonStackSource},
+		{"provision", sectionNameProvision, map[string]any{"target": "a"}, map[string]any{"target": "b"}, affectedReasonStackProvision},
+		{"generate", sectionNameGenerate, map[string]any{"backend": map[string]any{"enabled": true}}, map[string]any{"backend": map[string]any{"enabled": false}}, affectedReasonStackGenerate},
+		{"render", sectionNameRender, map[string]any{"output": "a.yaml"}, map[string]any{"output": "b.yaml"}, affectedReasonStackRender},
+		{"values", sectionNameValues, map[string]any{"image": "a"}, map[string]any{"image": "b"}, affectedReasonStackValues},
+		{"values_files", sectionNameValuesF, []any{"a.yaml"}, []any{"b.yaml"}, affectedReasonStackValuesFile},
+		{"chart", sectionNameChart, "bitnami/nginx", "bitnami/redis", affectedReasonStackChart},
+		{"repositories", sectionNameRepos, []any{map[string]any{"name": "a"}}, []any{map[string]any{"name": "b"}}, affectedReasonStackRepos},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			componentSection := map[string]any{tt.section: tt.localVal}
+			remoteStacks := helmRemoteStacksWith(map[string]any{tt.section: tt.remoteVal})
+
+			var affected []schema.Affected
+			err := addHelmSectionAffected(
+				&affected, helmAtmosConfig(), helmTestComponent, helmTestStack,
+				&componentSection, &remoteStacks, &remoteStacks,
+				false, false,
+			)
+			require.NoError(t, err)
+
+			require.Len(t, affected, 1)
+			assert.Equal(t, helmTestComponent, affected[0].Component)
+			assert.Equal(t, cfg.HelmComponentType, affected[0].ComponentType)
+			assert.Equal(t, tt.wantReason, affected[0].Affected)
+			assert.Contains(t, affected[0].AffectedAll, tt.wantReason)
+		})
+	}
+}
+
+func TestAddHelmSectionAffected_NoFalsePositives(t *testing.T) {
+	cases := []struct {
+		name    string
+		section string
+		val     any
+	}{
+		{"identical chart", sectionNameChart, "bitnami/nginx"},
+		{"identical values", sectionNameValues, map[string]any{"image": "nginx"}},
+		{"identical values files", sectionNameValuesF, []any{"values.yaml"}},
+		{"identical repositories", sectionNameRepos, []any{map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"}}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			componentSection := map[string]any{tc.section: tc.val}
+			remoteStacks := helmRemoteStacksWith(map[string]any{tc.section: tc.val})
+
+			var affected []schema.Affected
+			err := addHelmSectionAffected(
+				&affected, helmAtmosConfig(), helmTestComponent, helmTestStack,
+				&componentSection, &remoteStacks, &remoteStacks,
+				false, false,
+			)
+			require.NoError(t, err)
+			assert.Empty(t, affected)
+		})
+	}
+
+	t.Run("section absent locally is skipped", func(t *testing.T) {
+		componentSection := map[string]any{}
+		remoteStacks := helmRemoteStacksWith(map[string]any{sectionNameChart: "bitnami/nginx"})
+
+		var affected []schema.Affected
+		err := addHelmSectionAffected(
+			&affected, helmAtmosConfig(), helmTestComponent, helmTestStack,
+			&componentSection, &remoteStacks, &remoteStacks,
+			false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+}
+
+func TestIsComponentSectionEqual(t *testing.T) {
+	remoteStacks := helmRemoteStacksWith(map[string]any{
+		sectionNameChart:  "bitnami/nginx",
+		sectionNameValues: map[string]any{"image": "nginx"},
+	})
+
+	assert.True(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.HelmComponentType, helmTestComponent, "bitnami/nginx", sectionNameChart))
+	assert.True(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.HelmComponentType, helmTestComponent, map[string]any{"image": "nginx"}, sectionNameValues))
+	assert.False(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.HelmComponentType, helmTestComponent, "bitnami/redis", sectionNameChart))
+	assert.False(t, isComponentSectionEqual(&remoteStacks, "prod", cfg.HelmComponentType, helmTestComponent, "bitnami/nginx", sectionNameChart))
+	assert.False(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.TerraformComponentType, helmTestComponent, "bitnami/nginx", sectionNameChart))
+	assert.False(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.HelmComponentType, "missing", "bitnami/nginx", sectionNameChart))
+	assert.False(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.HelmComponentType, helmTestComponent, "x", "missing"))
+}
+
+func TestProcessHelmComponentsIndexed(t *testing.T) {
+	atmosConfig := helmAtmosConfig()
+	helmSection := map[string]any{
+		helmTestComponent: map[string]any{
+			sectionNameMetadata:     map[string]any{"component": "app-v1"},
+			sectionNameChart:        "bitnami/nginx",
+			cfg.SettingsSectionName: map[string]any{"s": "1"},
+		},
+	}
+	remoteStacks := helmRemoteStacksWith(map[string]any{
+		sectionNameMetadata:     map[string]any{"component": "app-v2"},
+		sectionNameChart:        "bitnami/redis",
+		cfg.SettingsSectionName: map[string]any{"s": "2"},
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processHelmComponentsIndexed(
+		helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, true, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, helmTestComponent, affected[0].Component)
+	assert.Equal(t, cfg.HelmComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackMetadata)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackChart)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+}
+
+func TestProcessHelmComponentsIndexed_NotAffected(t *testing.T) {
+	atmosConfig := helmAtmosConfig()
+	identical := map[string]any{
+		sectionNameMetadata: map[string]any{"component": "app-v1"},
+		sectionNameChart:    "bitnami/nginx",
+	}
+	helmSection := map[string]any{helmTestComponent: identical}
+	remoteStacks := helmRemoteStacksWith(map[string]any{
+		sectionNameMetadata: map[string]any{"component": "app-v1"},
+		sectionNameChart:    "bitnami/nginx",
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processHelmComponentsIndexed(
+		helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, false,
+	)
+	require.NoError(t, err)
+	assert.Empty(t, affected)
+}
+
+func TestProcessHelmComponentsIndexed_FolderChanged(t *testing.T) {
+	atmosConfig := helmAtmosConfig()
+	helmSection := map[string]any{
+		helmTestComponent: map[string]any{
+			sectionNameChart: "bitnami/nginx",
+		},
+	}
+	remoteStacks := helmRemoteStacksWith(map[string]any{
+		sectionNameChart: "bitnami/nginx",
+	})
+
+	changedFile, err := filepath.Abs(filepath.Join("components", "helm", helmTestComponent, "Chart.yaml"))
+	require.NoError(t, err)
+
+	filesIndex := newChangedFilesIndex(atmosConfig, []string{changedFile}, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processHelmComponentsIndexed(
+		helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, helmTestComponent, affected[0].Component)
+	assert.Equal(t, cfg.HelmComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonComponent)
+}
+
+func TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *testing.T) {
+	atmosConfig := helmAtmosConfig()
+	remoteStacks := helmRemoteStacksWith(map[string]any{
+		sectionNameChart: "bitnami/redis",
+	})
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	t.Run("abstract skipped", func(t *testing.T) {
+		helmSection := map[string]any{
+			helmTestComponent: map[string]any{
+				sectionNameMetadata: map[string]any{"type": "abstract"},
+				sectionNameChart:    "bitnami/nginx",
+			},
+		}
+
+		affected, err := processHelmComponentsIndexed(
+			helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("locked skipped when excluded", func(t *testing.T) {
+		helmSection := map[string]any{
+			helmTestComponent: map[string]any{
+				sectionNameMetadata: map[string]any{"locked": true},
+				sectionNameChart:    "bitnami/nginx",
+			},
+		}
+
+		affected, err := processHelmComponentsIndexed(
+			helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, true,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("non-map component section skipped", func(t *testing.T) {
+		affected, err := processHelmComponentsIndexed(
+			helmTestStack, map[string]any{helmTestComponent: "invalid"}, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+}
+
 // TestFindAffected_NoFalsePositives guards against spurious affected results.
 func TestFindAffected_NoFalsePositives(t *testing.T) {
 	t.Run("identical section is not affected", func(t *testing.T) {

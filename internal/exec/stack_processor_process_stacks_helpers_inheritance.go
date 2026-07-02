@@ -27,6 +27,7 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentRequiredProviders = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentTest = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentBackendSection = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentRemoteStateBackendSection = make(map[string]any, componentSmallMapCapacity)
 	}
@@ -234,6 +235,7 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentPaths = baseComponentConfig.BaseComponentPaths
 	result.BaseComponentManifests = baseComponentConfig.BaseComponentManifests
 	result.BaseComponentRender = baseComponentConfig.BaseComponentRender
+	result.BaseComponentHelm = baseComponentConfig.BaseComponentHelm
 	// BaseComponentRetry flows from the inheritance chain through to merge — see
 	// mergeComponentConfigurations for the final deep-merge with concrete + overrides.
 	result.BaseComponentRetry = baseComponentConfig.BaseComponentRetry
@@ -244,6 +246,7 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 		result.BaseComponentProviders = baseComponentConfig.BaseComponentProviders
 		result.BaseComponentRequiredProviders = baseComponentConfig.BaseComponentRequiredProviders
 		result.BaseComponentRequiredVersion = baseComponentConfig.BaseComponentRequiredVersion
+		result.BaseComponentTest = baseComponentConfig.BaseComponentTest
 		result.BaseComponentBackendType = baseComponentConfig.BaseComponentBackendType
 		result.BaseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
 		result.BaseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
@@ -254,6 +257,9 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	}
 	if supportsGenerate(opts.ComponentType) {
 		result.BaseComponentGenerate = baseComponentConfig.BaseComponentGenerate
+	}
+	if supportsPlugins(opts.ComponentType) {
+		result.BaseComponentPlugins = baseComponentConfig.BaseComponentPlugins
 	}
 	if supportsSourceProvision(opts.ComponentType) {
 		result.BaseComponentSourceSection = baseComponentConfig.BaseComponentSourceSection

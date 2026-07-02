@@ -393,6 +393,7 @@ func minimalComponentResult() *ComponentProcessorResult {
 		BaseComponentAuth:                      map[string]any{},
 		ComponentProviders:                     map[string]any{},
 		ComponentHooks:                         map[string]any{},
+		ComponentTest:                          map[string]any{},
 		ComponentBackendType:                   "",
 		ComponentBackendSection:                map[string]any{},
 		ComponentRemoteStateBackendType:        "",
@@ -401,11 +402,129 @@ func minimalComponentResult() *ComponentProcessorResult {
 		ComponentOverridesHooks:                map[string]any{},
 		BaseComponentProviders:                 map[string]any{},
 		BaseComponentHooks:                     map[string]any{},
+		BaseComponentTest:                      map[string]any{},
 		BaseComponentBackendType:               "",
 		BaseComponentBackendSection:            map[string]any{},
 		BaseComponentRemoteStateBackendType:    "",
 		BaseComponentRemoteStateBackendSection: map[string]any{},
 	}
+}
+
+// TestMergeComponentConfigurations_Plugins covers the Helm CLI plugins list merge:
+// it is omitted when unset, flows through from base-only and component-only, and the
+// concrete component's list replaces the inherited one under the default strategy.
+func TestMergeComponentConfigurations_Plugins(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+
+	t.Run("absent-omits-section", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.HelmfileComponentType, Component: "app", AtmosConfig: atmosCfg}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, minimalComponentResult())
+		require.NoError(t, err)
+		_, present := comp[cfg.PluginsSectionName]
+		assert.False(t, present, "plugins must be absent when neither base nor component set it")
+	})
+
+	t.Run("component-only-flows-through", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.HelmfileComponentType, Component: "app", AtmosConfig: atmosCfg}
+		res := minimalComponentResult()
+		res.ComponentPlugins = []any{"diff@v3.9.4", "secrets"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got, ok := comp[cfg.PluginsSectionName].([]any)
+		require.True(t, ok, "plugins must be present and a list")
+		require.Len(t, got, 2)
+		assert.Equal(t, "diff@v3.9.4", got[0])
+		assert.Equal(t, "secrets", got[1])
+	})
+
+	t.Run("base-only-flows-through", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.HelmComponentType, Component: "app", AtmosConfig: atmosCfg}
+		res := minimalComponentResult()
+		res.BaseComponentPlugins = []any{"diff@v3.9.4"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got, ok := comp[cfg.PluginsSectionName].([]any)
+		require.True(t, ok)
+		require.Len(t, got, 1)
+		assert.Equal(t, "diff@v3.9.4", got[0])
+	})
+
+	t.Run("component-replaces-base-by-default", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.HelmfileComponentType, Component: "app", AtmosConfig: atmosCfg}
+		res := minimalComponentResult()
+		res.BaseComponentPlugins = []any{"diff@v3.8.0"}
+		res.ComponentPlugins = []any{"diff@v3.9.4", "secrets"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		got := comp[cfg.PluginsSectionName].([]any)
+		require.Len(t, got, 2, "default replace strategy keeps the concrete component's list")
+		assert.Equal(t, "diff@v3.9.4", got[0])
+		assert.Equal(t, "secrets", got[1])
+	})
+
+	t.Run("terraform-ignores-plugins", func(t *testing.T) {
+		opts := ComponentProcessorOptions{ComponentType: cfg.TerraformComponentType, Component: "vpc", AtmosConfig: atmosCfg}
+		res := minimalComponentResult()
+		res.ComponentPlugins = []any{"diff@v3.9.4"}
+		comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+		require.NoError(t, err)
+		_, present := comp[cfg.PluginsSectionName]
+		assert.False(t, present, "terraform components must not emit a plugins section")
+	})
+}
+
+func TestMergeComponentConfigurations_TerraformTestSection(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "app",
+		AtmosConfig:   atmosCfg,
+	}
+	res := minimalComponentResult()
+	res.BaseComponentTest = map[string]any{
+		cfg.VarsSectionName: map[string]any{
+			"fixture_vpc_id": "vpc-from-base",
+			"base_only":      "base",
+		},
+	}
+	res.ComponentTest = map[string]any{
+		cfg.VarsSectionName: map[string]any{
+			"fixture_vpc_id": "vpc-from-component",
+		},
+	}
+
+	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+
+	testSection, ok := comp[cfg.TestSectionName].(map[string]any)
+	require.True(t, ok)
+	testVars, ok := testSection[cfg.VarsSectionName].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "vpc-from-component", testVars["fixture_vpc_id"])
+	assert.Equal(t, "base", testVars["base_only"])
+
+	testVars["fixture_vpc_id"] = "merged-mutated"
+	assert.Equal(t, "vpc-from-component", res.ComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"],
+		"mutating merged test vars must not mutate the component source map")
+
+	res.BaseComponentTest[cfg.VarsSectionName].(map[string]any)["base_only"] = "source-mutated"
+	res.ComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"] = "source-mutated"
+	assert.Equal(t, "base", testVars["base_only"], "mutating source maps after merge must not mutate merged test vars")
+	assert.Equal(t, "merged-mutated", testVars["fixture_vpc_id"], "mutating source maps after merge must not mutate merged test vars")
+}
+
+func TestMergeComponentConfigurations_TerraformTestSectionOmittedWhenEmpty(t *testing.T) {
+	atmosCfg := &schema.AtmosConfiguration{}
+	opts := ComponentProcessorOptions{
+		ComponentType: cfg.TerraformComponentType,
+		Component:     "app",
+		AtmosConfig:   atmosCfg,
+	}
+	res := minimalComponentResult()
+
+	comp, err := mergeComponentConfigurations(atmosCfg, &opts, res)
+	require.NoError(t, err)
+	assert.NotContains(t, comp, cfg.TestSectionName)
 }
 
 // TestMergeComponentConfigurations_GlobalKubernetesDefaults verifies stack-global

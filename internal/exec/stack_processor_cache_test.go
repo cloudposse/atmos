@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -633,6 +634,7 @@ func TestCacheBaseComponentConfig_EmptyNonNilFieldsStayNonNil(t *testing.T) {
 		BaseComponentProviders:                 map[string]any{},
 		BaseComponentRequiredProviders:         map[string]any{},
 		BaseComponentHooks:                     map[string]any{},
+		BaseComponentTest:                      map[string]any{},
 		BaseComponentGenerate:                  map[string]any{},
 		BaseComponentBackendSection:            map[string]any{},
 		BaseComponentRemoteStateBackendSection: map[string]any{},
@@ -660,6 +662,7 @@ func TestCacheBaseComponentConfig_EmptyNonNilFieldsStayNonNil(t *testing.T) {
 		"Providers":                 cached.BaseComponentProviders,
 		"RequiredProviders":         cached.BaseComponentRequiredProviders,
 		"Hooks":                     cached.BaseComponentHooks,
+		"Test":                      cached.BaseComponentTest,
 		"Generate":                  cached.BaseComponentGenerate,
 		"BackendSection":            cached.BaseComponentBackendSection,
 		"RemoteStateBackendSection": cached.BaseComponentRemoteStateBackendSection,
@@ -704,6 +707,7 @@ func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
 		BaseComponentProviders:                 map[string]any{"aws": map[string]any{"region": "us-east-1"}},
 		BaseComponentRequiredProviders:         map[string]any{"aws": map[string]any{"source": "hashicorp/aws"}},
 		BaseComponentHooks:                     map[string]any{"pre_plan": []any{"echo hello", "echo world"}},
+		BaseComponentTest:                      map[string]any{cfg.VarsSectionName: map[string]any{"fixture_vpc_id": "vpc-123"}},
 		BaseComponentGenerate:                  map[string]any{"backend.tf.json": map[string]any{"format": "json"}},
 		BaseComponentBackendSection:            map[string]any{"s3": map[string]any{"bucket": "tfstate"}},
 		BaseComponentRemoteStateBackendSection: map[string]any{"s3": map[string]any{"bucket": "tfstate-remote"}},
@@ -718,6 +722,7 @@ func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
 		ComponentInheritanceChain: []string{"base", "abstract"},
 	}
 	cacheBaseComponentConfig("roundtrip-key", src)
+	src.BaseComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"] = "source-mutated"
 
 	cached, chain, found := getCachedBaseComponentConfig("roundtrip-key")
 	require.True(t, found)
@@ -754,6 +759,7 @@ func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
 	require.Len(t, prePlanHooks, 2)
 	assert.Equal(t, "echo hello", prePlanHooks[0])
 	assert.Equal(t, "echo world", prePlanHooks[len(prePlanHooks)-1])
+	assert.Equal(t, "vpc-123", cached.BaseComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"])
 	assert.Equal(t, "json", cached.BaseComponentGenerate["backend.tf.json"].(map[string]any)["format"])
 	assert.Equal(t, "tfstate", cached.BaseComponentBackendSection["s3"].(map[string]any)["bucket"])
 	assert.Equal(t, "tfstate-remote", cached.BaseComponentRemoteStateBackendSection["s3"].(map[string]any)["bucket"])
@@ -780,10 +786,13 @@ func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
 	// Deep-copy contract: mutating the cached value does not affect a
 	// subsequent retrieval. Pick a representative previously-dropped field.
 	cached.BaseComponentLocals["stage"] = "MUTATED"
+	cached.BaseComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"] = "retrieved-mutated"
 	second, _, _ := getCachedBaseComponentConfig("roundtrip-key")
 	require.NotNil(t, second)
 	assert.Equal(t, "prod", second.BaseComponentLocals["stage"],
 		"mutating a retrieved cached value must not affect subsequent retrievals")
+	assert.Equal(t, "vpc-123", second.BaseComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"],
+		"mutating a retrieved nested test var must not affect subsequent retrievals")
 }
 
 // TestDeepCopyComponentAnySection exercises every branch of

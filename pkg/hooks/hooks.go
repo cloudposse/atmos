@@ -13,6 +13,8 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helm"       // Register helm CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helmfile"   // Register helmfile CI plugin.
 	_ "github.com/cloudposse/atmos/pkg/ci/plugins/kubernetes" // Register kubernetes CI plugin.
 	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"  // Register terraform CI plugin.
 	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic"  // Register generic CI provider.
@@ -685,6 +687,9 @@ func (h *Hooks) verifyHookBinary(name string, hook *Hook) error {
 	// rather than mid-lifecycle.
 	if hook.Kind == stepKindName {
 		return verifyStepHookType(name, hook.Type)
+	}
+	if hook.Kind == stepsKindName {
+		return verifyStepsHookTypes(name, hook)
 	}
 	resolved := kind.ResolveDefaults(hook)
 	if resolved.Command == "" {

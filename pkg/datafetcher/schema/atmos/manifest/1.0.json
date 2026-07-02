@@ -469,6 +469,16 @@
             "vars": {
               "$ref": "#/definitions/vars"
             },
+            "test": {
+              "type": "object",
+              "description": "Terraform test configuration. `vars` are passed only to `terraform test` as test-scope variables.",
+              "additionalProperties": false,
+              "properties": {
+                "vars": {
+                  "$ref": "#/definitions/vars"
+                }
+              }
+            },
             "env": {
               "$ref": "#/definitions/env"
             },
@@ -536,6 +546,9 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
             },
             "overrides": {
               "$ref": "#/definitions/overrides"
@@ -852,6 +865,9 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
             },
             "auth": {
               "$ref": "#/definitions/component_auth"
@@ -1181,6 +1197,22 @@
             }
           },
           "required": []
+        }
+      ]
+    },
+    "plugins": {
+      "title": "plugins",
+      "description": "Helm CLI plugins (e.g. helm-diff, helm-secrets) to install into the managed HELM_PLUGINS directory. Each entry is a compact spec: a short alias (e.g. \"diff@3.9.x\"), an \"owner/repo@version\", or a full plugin URL.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       ]
     },
@@ -2274,6 +2306,7 @@
                   "trivy",
                   "git",
                   "step",
+                  "steps",
                   "ci.check",
                   "ci.output",
                   "ci.summary",
@@ -2329,9 +2362,20 @@
                 "description": "Step type to run (step kind): any registered workflow/custom-command step type, e.g. container, http, toast, log."
               },
               "with": {
-                "type": "object",
-                "description": "Parameters for the step named by 'type' (step kind). Validated by the step handler at run time.",
-                "additionalProperties": true
+                "description": "Parameters for the step named by 'type' (step kind), or an ordered list of steps (steps kind). Validated by the step handler at run time.",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                ]
               },
               "retry": {
                 "$ref": "#/definitions/workflow_retry"

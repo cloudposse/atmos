@@ -9,6 +9,19 @@ import Intro from '@site/src/components/Intro'
 Atmos natively supports opinionated workflows for [Helmfile](https://github.com/helmfile/helmfile). Helmfile provides a declarative specification for deploying helm charts.
 </Intro>
 
+:::tip Native Helm is the simpler default for most Atmos projects
+Helmfile has been an important part of the Kubernetes ecosystem, and Atmos has
+long supported it because it solves real orchestration problems well. Native
+Helm components build on that same workflow, but bring the common case directly
+into Atmos: stack-based values, inheritance, secrets, dependencies, hooks,
+provisioning targets, and CI summaries without an additional orchestration layer.
+
+For most new chart deployments, prefer [`atmos helm`](/cli/commands/helm/usage).
+Keep using Helmfile when you rely on Helmfile-specific capabilities such as
+advanced multi-release state files, selectors, `needs`, Helmfile environments,
+hooks, or Kustomize integration.
+:::
+
 For a complete list of supported commands, please see the Atmos [helmfile](/cli/commands/helmfile/usage) documentation.
 
 ## Stack Configuration
@@ -96,6 +109,35 @@ To provision a helmfile component using the `atmos` CLI, run the following comma
 atmos helmfile diff nginx-ingress --stack=ue2-dev
 atmos helmfile apply nginx-ingress --stack=ue2-dev
 ```
+
+:::note Prerequisite: the `helm-diff` plugin
+`atmos helmfile diff`, `apply`, and `deploy` shell out to `helm diff`, so they require the
+[`helm-diff`](https://github.com/databus23/helm-diff) plugin. (`atmos helmfile sync` does not.)
+You can satisfy it in either of two ways:
+
+- **Let Atmos manage it** — declare the plugin on the component and Atmos installs it into a
+  managed `HELM_PLUGINS` directory before running helmfile:
+
+  ```yaml
+  components:
+    helmfile:
+      nginx-ingress:
+        plugins:
+          - diff@v3.9.14
+  ```
+
+  See [`atmos helm plugin`](/cli/commands/helm/plugin) for the full plugin spec syntax.
+
+- **Manage it yourself** — if you aren't using the Atmos toolchain, install the plugin with Helm
+  directly:
+
+  ```shell
+  helm plugin install https://github.com/databus23/helm-diff
+  ```
+
+  When a component declares no `plugins:`, Atmos leaves your `HELM_PLUGINS` untouched and uses the
+  plugins already installed in your Helm environment.
+:::
 
 where:
 

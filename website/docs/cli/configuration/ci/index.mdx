@@ -118,6 +118,16 @@ ci:
     terraform:
       plan: "plan.md"
       apply: "apply.md"
+    helm:
+      template: "helm-template.md"
+      diff: "helm-diff.md"
+      apply: "helm-apply.md"
+      delete: "helm-delete.md"
+    helmfile:
+      template: "helmfile-template.md"
+      diff: "helmfile-diff.md"
+      apply: "helmfile-apply.md"
+      destroy: "helmfile-destroy.md"
 ```
 </File>
 
@@ -128,7 +138,10 @@ CI mode is auto-enabled when any of these environment variables are set:
 - `CI=true` (set by most CI providers)
 - `GITHUB_ACTIONS=true` (set by GitHub Actions)
 
-Override with the `--ci` flag or `ci.enabled` configuration.
+Override with the `--ci` flag, `ATMOS_CI`, or `ci.enabled` configuration.
+
+Terraform commands use native CI for summaries, outputs, checks, comments, and planfile storage.
+Native Helm and Helmfile commands use native CI for job summaries only.
 
 ## Environment Variables
 
