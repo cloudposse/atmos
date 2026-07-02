@@ -228,6 +228,9 @@ func fileURIPath(uri string) (string, error) {
 		return "", nil
 	}
 	path := parsed.Path
+	if path == "" {
+		path = parsed.Opaque
+	}
 	if len(path) >= 3 && path[0] == '/' && path[2] == ':' {
 		path = path[1:]
 	}

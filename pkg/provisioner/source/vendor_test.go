@@ -142,6 +142,13 @@ func TestVendorSourceSupportsFileURIDirectory(t *testing.T) {
 	assert.Equal(t, "# source\n", string(content))
 }
 
+func TestFileURIPathSupportsOpaqueWindowsDrivePath(t *testing.T) {
+	path, err := fileURIPath("file:C:/Users/runneradmin/AppData/Local/Temp/atmos-source")
+	require.NoError(t, err)
+
+	assert.Equal(t, filepath.FromSlash("C:/Users/runneradmin/AppData/Local/Temp/atmos-source"), path)
+}
+
 func TestVendorSourceRejectsNilAndEmptySource(t *testing.T) {
 	err := VendorSource(context.Background(), nil, nil, filepath.Join(t.TempDir(), "target"))
 	require.Error(t, err)
