@@ -76,6 +76,8 @@ type Header struct {
 	Env       map[string]string `json:"env,omitempty"`
 }
 
+var writeRecorderHeader = (*Recorder).writeJSON
+
 // Start creates a new recorder and writes its asciicast header.
 func Start(opts *Options) (*Recorder, error) {
 	defer perf.Track(nil, "asciicast.Start")()
@@ -131,8 +133,9 @@ func Start(opts *Options) (*Recorder, error) {
 		Command:   rec.command,
 		Env:       safeEnv(opts.Env),
 	}
-	if err := rec.writeJSON(header); err != nil {
+	if err := writeRecorderHeader(rec, header); err != nil {
 		_ = rec.Close()
+		_ = os.Remove(path)
 		return nil, err
 	}
 	return rec, nil

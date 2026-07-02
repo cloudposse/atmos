@@ -141,7 +141,7 @@ func planRenderedRecordingOutput(output string) (recordingOutputPlan, error) {
 	if _, err := os.Stat(output); err == nil {
 		return recordingOutputPlan{}, fmt.Errorf("%w: %s", asciicast.ErrRenderOutputExists, output)
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return recordingOutputPlan{}, err
+		return recordingOutputPlan{}, fmt.Errorf("%w: %s: %w", errUtils.ErrStatFile, output, err)
 	}
 	return recordingOutputPlan{castBasePath: os.TempDir(), renderOutput: output, removeCast: true}, nil
 }

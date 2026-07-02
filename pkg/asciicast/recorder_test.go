@@ -53,6 +53,26 @@ func TestStartFailsWhenExplicitPathExists(t *testing.T) {
 	}
 }
 
+func TestStartRemovesCastFileWhenHeaderWriteFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "demo.cast")
+	errHeader := errors.New("header write failed")
+	oldWriteRecorderHeader := writeRecorderHeader
+	writeRecorderHeader = func(_ *Recorder, _ any) error {
+		return errHeader
+	}
+	t.Cleanup(func() {
+		writeRecorderHeader = oldWriteRecorderHeader
+	})
+
+	_, err := Start(&Options{Path: path, Explicit: true})
+	if !errors.Is(err, errHeader) {
+		t.Fatalf("expected header error, got %v", err)
+	}
+	if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("cast file was not removed after failed start: %v", statErr)
+	}
+}
+
 func TestRecorderOmitsInputUnlessEnabled(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "demo.cast")
 	rec, err := Start(&Options{Path: path, Explicit: true, Now: func() time.Time {
