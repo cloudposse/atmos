@@ -736,6 +736,7 @@ func executeCustomCommand(
 	})
 	stepVars.SetTemplatePasses(3)
 	stepVars.ProtectTemplateRoots("Arguments", "Flags", "flags", "TrailingArgs")
+	configureCustomCommandScannerContext(stepVars, &atmosConfig, authManager)
 
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
@@ -992,6 +993,26 @@ func executeCustomCommand(
 		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
+}
+
+func configureCustomCommandScannerContext(vars *stepPkg.Variables, atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) {
+	if vars == nil {
+		return
+	}
+	vars.SetAtmosConfig(atmosConfig)
+	vars.SetComponentInfoResolver(func(_ context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error) {
+		info := schema.ConfigAndStacksInfo{
+			ComponentFromArg: component,
+			ComponentType:    componentType,
+			Stack:            stack,
+			ComponentSection: make(map[string]any),
+		}
+		resolved, err := e.ProcessStacks(atmosConfig, info, true, true, true, nil, authManager)
+		if err != nil {
+			return nil, err
+		}
+		return &resolved, nil
+	})
 }
 
 func customCommandConditionContext() schema.ConditionContext {

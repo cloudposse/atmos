@@ -59,6 +59,22 @@ run:
 `), &step))
 		assert.Nil(t, step.Run, "legacy run: block must be ignored after the with: hard-cut")
 	})
+
+	t.Run("non-container with is preserved as generic payload", func(t *testing.T) {
+		var step WorkflowStep
+		require.NoError(t, yaml.Unmarshal([]byte(`
+type: tflint
+with:
+  component: vpc
+  stack: plat-ue2-dev
+  args: [--minimum-failure-severity=error]
+`), &step))
+		assert.Equal(t, "tflint", step.Type)
+		require.NotNil(t, step.With)
+		assert.Equal(t, "vpc", step.With["component"])
+		assert.Equal(t, "plat-ue2-dev", step.With["stack"])
+		assert.Nil(t, step.Run)
+	})
 }
 
 // TestWorkflowStep_DecodeBackground verifies the polymorphic `background:` key:
@@ -96,8 +112,9 @@ func TestWorkflowStep_DecodeFor(t *testing.T) {
 
 // TestTask_DecodeWith confirms the custom-command Task flavor shares the same vocabulary.
 func TestTask_DecodeWith(t *testing.T) {
-	var tasks Tasks
-	require.NoError(t, yaml.Unmarshal([]byte(`
+	t.Run("container with decodes into selected action", func(t *testing.T) {
+		var tasks Tasks
+		require.NoError(t, yaml.Unmarshal([]byte(`
 - type: container
   action: run
   background: true
@@ -105,9 +122,25 @@ func TestTask_DecodeWith(t *testing.T) {
     image: postgres:16
     command: ./migrate.sh
 `), &tasks))
-	require.Len(t, tasks, 1)
-	assert.True(t, tasks[0].BackgroundAsync)
-	require.NotNil(t, tasks[0].Run)
-	assert.Equal(t, "postgres:16", tasks[0].Run.Image)
-	assert.Equal(t, "./migrate.sh", tasks[0].Run.Command)
+		require.Len(t, tasks, 1)
+		assert.True(t, tasks[0].BackgroundAsync)
+		require.NotNil(t, tasks[0].Run)
+		assert.Equal(t, "postgres:16", tasks[0].Run.Image)
+		assert.Equal(t, "./migrate.sh", tasks[0].Run.Command)
+	})
+
+	t.Run("non-container with is preserved", func(t *testing.T) {
+		var tasks Tasks
+		require.NoError(t, yaml.Unmarshal([]byte(`
+- type: tflint
+  with:
+    component: vpc
+    stack: plat-ue2-dev
+`), &tasks))
+		require.Len(t, tasks, 1)
+		assert.Equal(t, "vpc", tasks[0].With["component"])
+		assert.Nil(t, tasks[0].Run)
+		step := tasks[0].ToWorkflowStep()
+		assert.Equal(t, "vpc", step.With["component"])
+	})
 }

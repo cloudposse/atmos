@@ -43,3 +43,30 @@ commands:
   - atmos terraform apply demo -s acme-west-dev -auto-approve
   - atmos terraform apply demo -s acme-west-staging -auto-approve
   - atmos terraform apply demo -s acme-west-prod -auto-approve
+- name: "lint"
+  description: "Lint example components"
+  commands:
+  - name: "terraform"
+    description: "Lint one Terraform component with tflint"
+    dependencies:
+      tools:
+        tflint: "0.59.1"
+    arguments:
+    - name: "component"
+      description: "Terraform component to lint"
+      required: true
+    flags:
+    - name: "stack"
+      shorthand: "s"
+      description: "Stack containing the component"
+      required: true
+    steps:
+    - type: tflint
+      with:
+        component: "{{ .Arguments.component }}"
+        stack: "{{ .Flags.stack }}"
+        args:
+        - "--enable-rule=terraform_unused_declarations"
+        - "--disable-rule=terraform_typed_variables"
+        - "--minimum-failure-severity=warning"
+        - "--config=../.tflint.hcl"

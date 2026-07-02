@@ -125,6 +125,33 @@ logs:
 
 # Custom CLI commands
 commands:
+  - name: lint
+    description: Lint quick-start components
+    commands:
+      - name: terraform
+        description: Lint one Terraform component with tflint
+        dependencies:
+          tools:
+            tflint: "0.59.1"
+        arguments:
+          - name: component
+            description: Terraform component to lint
+            required: true
+        flags:
+          - name: stack
+            shorthand: s
+            description: Target stack (for example, plat-ue2-dev)
+            required: true
+        steps:
+          - type: tflint
+            with:
+              component: "{{ .Arguments.component }}"
+              stack: "{{ .Flags.stack }}"
+              args:
+                - "--enable-rule=terraform_unused_declarations"
+                - "--disable-rule=terraform_typed_variables"
+                - "--minimum-failure-severity=warning"
+                - "--config=../.tflint.hcl"
   - name: test
     description: Run the advanced quick-start stack end to end
     flags:

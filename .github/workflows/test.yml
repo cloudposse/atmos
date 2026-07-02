@@ -748,26 +748,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        demo-folder:
-          # - demo-component-manifest
-          - demo-context
-          # - demo-custom-command
-          # - demo-json-validation
-          # - demo-library
-          # - demo-floci
-          # - demo-opa-validation
-          # - demo-opentofu
-          # - demo-project
-          # - demo-stacks
-          # - demo-terraform
-          # - demo-terraform-overrides
-          # - demo-workflows
-          # - demo-yaml-anchors
-          # - demo-mock-architecture
-          # - demo-stack-templating
-          # - demo-multi-cloud
-          - quick-start-advanced
-          #- quick-start-simple
+        include:
+          - demo-folder: demo-context
+            component: demo
+            stack: acme-west-dev
+          - demo-folder: quick-start-advanced
+            component: kms-key
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: s3-bucket
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: dynamodb-table
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: sns-topic
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: sqs-queue
+            stack: plat-ue2-dev
+          - demo-folder: quick-start-advanced
+            component: app-config
+            stack: plat-ue2-dev
 
     timeout-minutes: 20
     steps:
@@ -795,18 +797,9 @@ jobs:
       - name: Verify OpenTofu
         run: tofu version
 
-      - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
-        uses: reviewdog/action-tflint@54a5e5aed57dcfbb4662ec548de876df33d6288d # v1
-        with:
-          github_token: ${{ github.token }}
-          working_directory: examples/${{ matrix.demo-folder }}/components/terraform
-          flags: >-
-            --enable-rule=terraform_unused_declarations
-            --disable-rule=terraform_typed_variables
-            --minimum-failure-severity=warning
-            --recursive
-            --config=${{ github.workspace }}/examples/.tflint.hcl
-          fail_level: error
+      - name: Lint ${{ matrix.demo-folder }}/${{ matrix.component }}
+        working-directory: examples/${{ matrix.demo-folder }}
+        run: atmos lint terraform ${{ matrix.component }} -s ${{ matrix.stack }}
 
   # run other demo tests
   validate:

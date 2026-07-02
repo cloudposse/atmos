@@ -659,8 +659,11 @@ func ExecuteWorkflow(
 					Err()
 			}
 			err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
-				DryRun:     dryRun,
-				FinalStack: finalStack,
+				DryRun:        dryRun,
+				FinalStack:    finalStack,
+				AtmosConfig:   &atmosConfig,
+				ToolchainPATH: tenv.PATH(),
+				AuthManager:   authManager,
 			})
 		}
 
@@ -708,8 +711,11 @@ func workflowConditionContext() schema.ConditionContext {
 var stepExecutorState *stepPkg.StepExecutor
 
 type extendedStepOptions struct {
-	DryRun     bool
-	FinalStack string
+	DryRun        bool
+	FinalStack    string
+	AtmosConfig   *schema.AtmosConfiguration
+	ToolchainPATH string
+	AuthManager   auth.AuthManager
 }
 
 // executeExtendedStep runs an extended step type (input, confirm, choose, etc.).
@@ -721,6 +727,7 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 
 	// Set workflow context for output mode inheritance.
 	stepExecutorState.SetWorkflow(workflow)
+	configureStepScannerContext(stepExecutorState.Variables(), opts.AtmosConfig, opts.ToolchainPATH, opts.AuthManager)
 
 	// Add environment variables to the executor.
 	for _, env := range envVars {
@@ -739,6 +746,27 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 	stepCopy.Stack = opts.FinalStack
 	_, err := stepExecutorState.Execute(ctx, &stepCopy)
 	return err
+}
+
+func configureStepScannerContext(vars *stepPkg.Variables, atmosConfig *schema.AtmosConfiguration, toolchainPATH string, authManager auth.AuthManager) {
+	if vars == nil {
+		return
+	}
+	vars.SetAtmosConfig(atmosConfig)
+	vars.SetToolchainPATH(toolchainPATH)
+	vars.SetComponentInfoResolver(func(_ context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error) {
+		info := schema.ConfigAndStacksInfo{
+			ComponentFromArg: component,
+			ComponentType:    componentType,
+			Stack:            stack,
+			ComponentSection: make(map[string]any),
+		}
+		resolved, err := ProcessStacks(atmosConfig, info, true, true, true, nil, authManager)
+		if err != nil {
+			return nil, err
+		}
+		return &resolved, nil
+	})
 }
 
 // ResetStepExecutorState resets the step executor state.

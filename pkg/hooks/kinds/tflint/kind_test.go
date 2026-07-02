@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/hooks"
+	"github.com/cloudposse/atmos/pkg/scanners"
+	"github.com/cloudposse/atmos/pkg/scanners/sarif"
 )
 
 func TestKindIsRegistered(t *testing.T) {
@@ -21,17 +23,13 @@ func TestKindIsRegistered(t *testing.T) {
 		"--chdir=$ATMOS_COMPONENT_PATH",
 		"--format=sarif",
 	}, kind.DefaultArgs)
-	assert.True(t, kind.CaptureStdout, "tflint writes SARIF to stdout; the kind must opt into stdout capture")
 	assert.Equal(t, hooks.OnFailureWarn, kind.OnFailure)
-	assert.NotNil(t, kind.ResultHandler)
-	_, ok = kind.Engine.(*hooks.CommandEngine)
+	assert.Nil(t, kind.ResultHandler)
+	_, ok = kind.Engine.(tflintEngine)
 	assert.True(t, ok)
 }
 
 func TestResultHandlerReadsTflintSARIFFromOutputFile(t *testing.T) {
-	kind, ok := hooks.GetKind(kindName)
-	require.True(t, ok)
-
 	// tflint --format=sarif output captured (by the engine) into ATMOS_OUTPUT_FILE.
 	outputFile := filepath.Join(t.TempDir(), "tflint.sarif")
 	require.NoError(t, os.WriteFile(outputFile, []byte(`{
@@ -51,8 +49,13 @@ func TestResultHandlerReadsTflintSARIFFromOutputFile(t *testing.T) {
 		}]
 	}`), 0o600))
 
-	summary, err := kind.ResultHandler(&hooks.ExecContext{OutputFile: outputFile})
+	handler := sarif.NewResultHandler(sarif.HandlerOptions{
+		Kind:       kindName,
+		OutputPath: sarif.DefaultOutputFile,
+	})
+	scannerSummary, err := handler(&scanners.Context{OutputFile: outputFile})
 	require.NoError(t, err)
+	summary := toHookSummary(scannerSummary)
 	require.NotNil(t, summary)
 	assert.Equal(t, kindName, summary.Kind)
 	assert.Equal(t, hooks.StatusWarning, summary.Status)

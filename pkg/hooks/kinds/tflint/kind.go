@@ -1,42 +1,106 @@
-// Package tflint registers the built-in `tflint` hook kind.
-//
-// Defaults invoke `tflint --chdir=$ATMOS_COMPONENT_PATH --format=sarif`.
-// Unlike checkov/trivy/kics, tflint has no file-output flag — it writes SARIF
-// to stdout — so the kind sets CaptureStdout and the engine redirects stdout
-// into $ATMOS_OUTPUT_FILE. Findings then flow through the shared SARIF parser,
-// rendering identically in the terminal, Atmos Pro, and PR comments, and
-// (in CI) as a step summary, inline PR annotations, and a GitHub Code
-// Scanning upload — all via the shared handler, no tflint-specific wiring.
 package tflint
 
 import (
+	"context"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/hooks"
-	"github.com/cloudposse/atmos/pkg/hooks/sarif"
+	"github.com/cloudposse/atmos/pkg/scanners"
+	tflintscanner "github.com/cloudposse/atmos/pkg/scanners/tflint"
 )
 
-const kindName = "tflint"
+const kindName = tflintscanner.Name
 
 func init() {
 	if err := hooks.RegisterKind(&hooks.Kind{
-		Name:    kindName,
-		Command: "tflint",
-		DefaultArgs: []string{
-			// --chdir points tflint at the component dir (the engine expands
-			// $ATMOS_COMPONENT_PATH, which resolves to the provisioned workdir
-			// when the workdir feature is enabled). tflint lints the builtin
-			// terraform ruleset with no plugins, so no `tflint --init` is needed.
-			"--chdir=$ATMOS_COMPONENT_PATH",
-			"--format=sarif",
-		},
-		// tflint has no file-output flag: `--format=sarif` writes to stdout.
-		CaptureStdout: true,
-		OnFailure:     hooks.OnFailureWarn,
-		Engine:        &hooks.CommandEngine{},
-		ResultHandler: sarif.NewResultHandler(sarif.HandlerOptions{
-			Kind:       kindName,
-			OutputPath: sarif.DefaultOutputFile,
-		}),
+		Name:        kindName,
+		Command:     tflintscanner.Command,
+		DefaultArgs: tflintscanner.DefaultArgs(),
+		OnFailure:   hooks.OnFailureWarn,
+		Engine:      tflintEngine{},
 	}); err != nil {
 		panic("failed to register built-in tflint kind: " + err.Error())
 	}
+}
+
+type tflintEngine struct{}
+
+func (tflintEngine) Run(ctx *hooks.ExecContext) (*hooks.Output, error) {
+	if ctx == nil || ctx.Hook == nil {
+		return nil, errUtils.ErrNilParam
+	}
+	out, scan, err := tflintscanner.Run(context.Background(), &tflintscanner.Options{
+		Args:          ctx.Hook.Args,
+		Env:           ctx.Hook.Env,
+		OnFailure:     ctx.Hook.OnFailure,
+		AtmosConfig:   ctx.AtmosConfig,
+		Info:          ctx.Info,
+		ToolchainPATH: ctx.ToolchainPATH,
+	})
+	copyScanState(ctx, scan)
+	return toHookOutput(out), err
+}
+
+func copyScanState(ctx *hooks.ExecContext, scan *scanners.Context) {
+	if ctx == nil || scan == nil {
+		return
+	}
+	ctx.OutputFile = scan.OutputFile
+	ctx.OutputDir = scan.OutputDir
+	ctx.ExitCode = scan.ExitCode
+	ctx.CommandError = scan.CommandError
+}
+
+func toHookOutput(out *scanners.Output) *hooks.Output {
+	if out == nil {
+		return nil
+	}
+	return &hooks.Output{
+		Artifact: toHookArtifact(out.Artifact),
+		Summary:  toHookSummary(out.Summary),
+	}
+}
+
+func toHookArtifact(a *scanners.Artifact) *hooks.Artifact {
+	if a == nil {
+		return nil
+	}
+	return &hooks.Artifact{
+		Name:     a.Name,
+		Body:     a.Body,
+		Format:   a.Format,
+		Metadata: a.Metadata,
+	}
+}
+
+func toHookSummary(s *scanners.Summary) *hooks.Summary {
+	if s == nil {
+		return nil
+	}
+	return &hooks.Summary{
+		Kind:     s.Kind,
+		Status:   hooks.SummaryStatus(s.Status),
+		Title:    s.Title,
+		Counts:   s.Counts,
+		Body:     s.Body,
+		Findings: toHookFindings(s.Findings),
+		SARIF:    s.SARIF,
+	}
+}
+
+func toHookFindings(findings []scanners.Finding) []hooks.Finding {
+	if len(findings) == 0 {
+		return nil
+	}
+	out := make([]hooks.Finding, 0, len(findings))
+	for _, f := range findings {
+		out = append(out, hooks.Finding{
+			Path:     f.Path,
+			Line:     f.Line,
+			Severity: f.Severity,
+			RuleID:   f.RuleID,
+			Message:  f.Message,
+		})
+	}
+	return out
 }
