@@ -16,6 +16,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // stepsFromStrings is a helper to convert []string to schema.Tasks for tests.
@@ -403,15 +404,19 @@ func TestCustomCommandIntegration_DoesNotInstallToolVersionsTools(t *testing.T) 
 	t.Chdir(tmpDir)
 
 	installDir := filepath.Join(tmpDir, "toolchain")
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".tool-versions"), []byte("hashicorp/terraform 1.15.6\n"), 0o644))
+	toolVersionsPath := filepath.Join(tmpDir, ".tool-versions")
+	require.NoError(t, os.WriteFile(toolVersionsPath, []byte("hashicorp/terraform 1.15.6\n"), 0o644))
 
 	_ = NewTestKit(t)
+	previousToolchainConfig := toolchain.GetAtmosConfig()
+	t.Cleanup(func() { toolchain.SetAtmosConfig(previousToolchainConfig) })
 
 	ranFile := filepath.Join(tmpDir, "ran.txt")
 	atmosConfig := schema.AtmosConfiguration{
 		BasePath: tmpDir,
 		Toolchain: schema.Toolchain{
-			InstallPath: installDir,
+			InstallPath:  installDir,
+			VersionsFile: toolVersionsPath,
 		},
 		Commands: []schema.Command{
 			{
@@ -421,6 +426,7 @@ func TestCustomCommandIntegration_DoesNotInstallToolVersionsTools(t *testing.T) 
 			},
 		},
 	}
+	toolchain.SetAtmosConfig(&atmosConfig)
 
 	err := processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err)

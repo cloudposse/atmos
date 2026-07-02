@@ -702,42 +702,16 @@ func executeCustomCommand(
 		return
 	}
 
-	// Resolve and install command dependencies.
-	// First, load tools from .tool-versions (project-wide defaults).
-	// Then merge with command-specific dependencies (command deps override .tool-versions).
+	// Resolve and install dependencies declared by this command.
 	resolver := dependencies.NewResolver(&atmosConfig)
 
-	// Load project-wide tools from .tool-versions.
-	toolVersionsDeps, err := dependencies.LoadToolVersionsDependencies(&atmosConfig)
-	if err != nil {
-		err = errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
-			WithExplanationf("Failed to load .tool-versions for command '%s'", commandConfig.Name).
-			WithHint("Check that .tool-versions file exists and is readable").
-			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
-			Err()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-	}
-
 	// Get command-specific dependencies.
-	commandDeps, err := resolver.ResolveCommandDependencies(commandConfig)
+	deps, err := resolver.ResolveCommandDependencies(commandConfig)
 	if err != nil {
 		err = errUtils.Build(errUtils.ErrDependencyResolution).
 			WithCause(err).
 			WithExplanationf("Failed to resolve dependencies for command '%s'", commandConfig.Name).
 			WithHint("Check the command's dependencies section for valid tool specifications").
-			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
-			Err()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-	}
-
-	// Merge: .tool-versions as base, command deps override.
-	deps, err := dependencies.MergeDependencies(toolVersionsDeps, commandDeps)
-	if err != nil {
-		err = errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
-			WithExplanationf("Failed to merge dependencies for command '%s'", commandConfig.Name).
-			WithHint("Check that command dependency versions satisfy constraints from .tool-versions").
 			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
 			Err()
 		errUtils.CheckErrorPrintAndExit(err, "", "")
