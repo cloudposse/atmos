@@ -10,6 +10,7 @@ import FileViewer from './FileViewer';
 import RelatedDocs from './RelatedDocs';
 import { findExampleByName, getExampleNameFromPath } from './utils';
 import GistDisclaimer from '@site/src/components/GistDisclaimer';
+import CastPlayer from '@site/src/components/CastPlayer';
 import type { ExamplesTree, FileBrowserOptions, DirectoryNode } from './types';
 import styles from './styles.module.css';
 
@@ -45,6 +46,8 @@ export default function DirectoryPage({
   const pageTitle = dirData.path === exampleName
     ? `${exampleName} - ${sectionName}`
     : `${dirData.name} - ${exampleName}`;
+  const isExampleRoot = dirData.path === exampleName;
+  const showCast = isExampleRoot && !!example.asciicast;
 
   return (
     <Layout title={pageTitle}>
@@ -59,6 +62,18 @@ export default function DirectoryPage({
 
           {optionsData.disclaimer && (
             <GistDisclaimer text={optionsData.disclaimer} />
+          )}
+
+          {showCast && (
+            <div className={styles.castSection}>
+              <CastPlayer
+                src={example.asciicast!}
+                title={example.asciicastTitle || example.name}
+                chrome
+                controls
+                scrubber
+              />
+            </div>
           )}
 
           {/* Show README if present */}

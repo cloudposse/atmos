@@ -18,6 +18,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/retry"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -181,15 +182,15 @@ func (e *Executor) prepareSteps(params *WorkflowParams, result *ExecutionResult)
 // runSteps executes each workflow step in order, updating result. It returns the
 // first failing step's error (if any) and marks progress as done.
 func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep, progressRenderer *ProgressRenderer, result *ExecutionResult) error {
+	conditionContext := workflowConditionContext()
 	for stepIdx := range steps {
 		step := &steps[stepIdx]
-		conditionContext := workflowConditionContext()
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			result.Success = false
 			result.Error = err
 			return err
 		}
-		if !step.When.Evaluate(conditionContext) {
+		if !step.When.EvaluateWithImplicitSuccess(conditionContext) {
 			log.Debug("Skipping workflow step, `when` condition did not match", "step", step.Name)
 			result.Steps = append(result.Steps, StepResult{
 				StepName: step.Name,
@@ -212,6 +213,7 @@ func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep,
 			result.Success = false
 			result.Error = stepResult.Error
 			result.ResumeCommand = e.buildResumeCommand(params.Workflow, params.WorkflowPath, step.Name, stepResult.finalStack, params.AtmosConfig)
+			conditionContext.Status = schema.ConditionPredicateFailure
 			if progressRenderer.IsEnabled() {
 				progressRenderer.Done()
 			}
@@ -317,6 +319,9 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 	if commandType == "" {
 		commandType = "atmos"
 	}
+	if commandType == schema.TaskTypeScript {
+		command = process.FormatScriptDisplay(step.Interpreter, step.Script)
+	}
 
 	// Prepare environment: workflow + step env vars, plus auth if needed.
 	// Note: The runners merge with system env + global env from atmos.yaml.
@@ -352,6 +357,23 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 		finalStack:       finalStack,
 		stepEnv:          stepEnv,
 		workingDirectory: workDir,
+	}
+	if commandType == schema.TaskTypeScript && (StepContainerOverride(step) || (params.WorkflowDefinition.Container != nil && params.WorkflowDefinition.Container.IsEnabled() && !StepContainerDisabled(step))) {
+		err = e.runShellStep(params, step, cmdParams, workDir)
+		if err != nil {
+			return e.handleStepError(params, step.Name, cmdParams, err)
+		}
+		if e.stepVars != nil {
+			_ = e.stepVars.SetWithOutputs(step.Name, stepPkg.NewStepResult("").WithMetadata("exit_code", 0), step.Outputs)
+		}
+		return stepResultInternal{
+			StepResult: StepResult{
+				StepName: step.Name,
+				Command:  command,
+				Success:  true,
+			},
+			finalStack: finalStack,
+		}
 	}
 	if stepPkg.IsExtendedStepType(commandType) {
 		return e.executeRegisteredStep(params, step, cmdParams)
@@ -618,7 +640,7 @@ func (e *Executor) runCommand(params *WorkflowParams, step *schema.WorkflowStep,
 		// Return error without printing - handleStepError will print it with resume context.
 		return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
 			WithExplanationf("Step type `%s` is not supported. Each step must specify a valid type.", cmdParams.commandType).
-			WithHintf("Available types:\n%s", u.FormatList([]string{"atmos", "shell"})).
+			WithHintf("Available types:\n%s", u.FormatList([]string{"atmos", "shell", "script"})).
 			Err()
 	}
 }

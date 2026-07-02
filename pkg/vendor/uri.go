@@ -78,9 +78,13 @@ func normalizeTripleSlash(uri string) string {
 	return normalized
 }
 
-// IsFileURI checks if the URI is a file:// scheme.
+// IsFileURI checks if the URI uses the file scheme.
 func IsFileURI(uri string) bool {
-	return strings.HasPrefix(uri, "file://")
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return false
+	}
+	return parsed.Scheme == "file"
 }
 
 // IsOCIURI checks if the URI is an OCI registry URI.

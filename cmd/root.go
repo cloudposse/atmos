@@ -27,6 +27,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
+	"github.com/cloudposse/atmos/pkg/asciicast"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	// Import adapters to register them with the config package.
 	_ "github.com/cloudposse/atmos/pkg/config/adapters"
@@ -77,6 +78,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/ansible"
 	_ "github.com/cloudposse/atmos/cmd/auth"
 	_ "github.com/cloudposse/atmos/cmd/aws"
+	_ "github.com/cloudposse/atmos/cmd/cast"
 	_ "github.com/cloudposse/atmos/cmd/ci"
 	cicache "github.com/cloudposse/atmos/cmd/ci/cache"
 	_ "github.com/cloudposse/atmos/cmd/composition"
@@ -121,6 +123,18 @@ var atmosConfig schema.AtmosConfiguration
 
 // profilerServer holds the global profiler server instance.
 var profilerServer *profiler.Server
+
+var activeCast *activeCastRecording
+
+const (
+	castFlagName    = "cast"
+	castAutoFlagVal = "__AUTO__"
+)
+
+type activeCastRecording struct {
+	recorder *asciicast.Recorder
+	restore  func()
+}
 
 // checkAndReexec performs Atmos version switching. It is a package variable so
 // tests can replace it without installing or execing another Atmos binary.
@@ -277,6 +291,97 @@ func syncGlobalFlagsToViper(cmd *cobra.Command) {
 			v.Set("identity", identity)
 		}
 	}
+}
+
+func startCastRecordingIfRequested(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) error {
+	if isCompletionCommand(cmd) || cmd.Name() == "help" || cmd.Flags().Changed("help") {
+		return nil
+	}
+
+	castFlag := cmd.Flags().Lookup(castFlagName)
+	flagChanged := castFlag != nil && castFlag.Changed
+	enabled := atmosConfig.Cast.Recording.Enabled || flagChanged
+	if !enabled {
+		return nil
+	}
+
+	flagValue := ""
+	if flagChanged {
+		var err error
+		flagValue, err = cmd.Flags().GetString(castFlagName)
+		if err != nil {
+			return err
+		}
+	}
+	rec, err := startCastRecorder(flagValue, flagChanged, atmosConfig)
+	if err != nil {
+		return err
+	}
+
+	activeCast = &activeCastRecording{
+		recorder: rec,
+		restore:  iolib.SetRecorder(rec),
+	}
+	return nil
+}
+
+func startCastRecorder(flagValue string, flagChanged bool, atmosConfig *schema.AtmosConfiguration) (*asciicast.Recorder, error) {
+	explicitPath := flagChanged && flagValue != "" && flagValue != castAutoFlagVal
+	return asciicast.Start(&asciicast.Options{
+		Path:     explicitPathValue(flagValue, explicitPath),
+		BasePath: atmosConfig.Cast.Recording.BasePath,
+		Command:  castRecordedCommandArgs(os.Args[1:]),
+		Width:    atmosConfig.Cast.Recording.Width,
+		Height:   atmosConfig.Cast.Recording.Height,
+		RecordIn: atmosConfig.Cast.Recording.Input,
+		Explicit: explicitPath,
+		Env:      castEnvironment(),
+	})
+}
+
+func castEnvironment() map[string]string {
+	env := make(map[string]string)
+	for _, pair := range os.Environ() {
+		k, v, ok := strings.Cut(pair, "=")
+		if ok {
+			env[k] = v
+		}
+	}
+	return env
+}
+
+func explicitPathValue(value string, explicit bool) string {
+	if !explicit {
+		return ""
+	}
+	return value
+}
+
+func castRecordedCommandArgs(args []string) []string {
+	result := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--"+castFlagName || strings.HasPrefix(arg, "--"+castFlagName+"=") {
+			continue
+		}
+		result = append(result, arg)
+	}
+	return result
+}
+
+func finalizeCastRecording() {
+	if activeCast == nil {
+		return
+	}
+	rec := activeCast.recorder
+	if activeCast.restore != nil {
+		activeCast.restore()
+	}
+	activeCast = nil
+	if err := rec.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to close cast recording: %v\n", err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "Cast recorded: %s\n", rec.Path())
 }
 
 // processChdirFlag processes the --chdir flag and ATMOS_CHDIR environment variable,
@@ -557,6 +662,10 @@ var RootCmd = &cobra.Command{
 		data.InitWriter(ioCtx)
 		data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
 
+		if castErr := startCastRecordingIfRequested(cmd, &tmpConfig); castErr != nil {
+			errUtils.CheckErrorPrintAndExit(castErr, "Failed to start cast recording", "")
+		}
+
 		// Check if running an experimental command.
 		// This happens after I/O init so ui.Experimental() can output properly.
 		// Walk up the command tree to find if any parent is experimental.
@@ -595,9 +704,16 @@ var RootCmd = &cobra.Command{
 		}
 
 		// Configure lipgloss color profile based on terminal capabilities.
-		// This ensures tables and styled output degrade gracefully when piped or in non-TTY environments.
-		term := terminal.New()
-		lipgloss.SetColorProfile(convertToTermenvProfile(term.ColorProfile()))
+		// Forced color is intentionally honored even when stdout is non-TTY,
+		// which is how deterministic asciicast generation runs in CI.
+		if tmpConfig.Settings.Terminal.ForceColor || viper.GetBool("force-color") {
+			lipgloss.SetColorProfile(termenv.TrueColor)
+			log.SetColorProfile(termenv.TrueColor)
+			theme.InvalidateStyleCache()
+		} else {
+			term := terminal.New()
+			lipgloss.SetColorProfile(convertToTermenvProfile(term.ColorProfile()))
+		}
 
 		// Automatic CI cache restore-on-start (and register save-on-exit) when
 		// enabled. No-op outside a supported CI provider or for help commands.
@@ -606,6 +722,8 @@ var RootCmd = &cobra.Command{
 		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		finalizeCastRecording()
+
 		// Stop profiler after command execution.
 		if profilerServer != nil {
 			if stopErr := profilerServer.Stop(); stopErr != nil {
@@ -669,6 +787,12 @@ func maybePromoteLogLevelForDebugMode(atmosConfig *schema.AtmosConfiguration, co
 //
 //nolint:revive,cyclop // Function complexity is acceptable for logger configuration.
 func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
+	forceColor := atmosConfig.Settings.Terminal.ForceColor || viper.GetBool("force-color")
+	if forceColor {
+		lipgloss.SetColorProfile(termenv.TrueColor)
+		log.SetColorProfile(termenv.TrueColor)
+		theme.InvalidateStyleCache()
+	}
 	diagnostics.Configure(atmosConfig.Diagnostics)
 
 	switch atmosConfig.Logs.Level {
@@ -688,7 +812,7 @@ func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 
 	// Get theme-aware log styles.
 	var styles *log.Styles
-	if atmosConfig.Settings.Terminal.IsColorEnabled(term.IsTTYSupportForStderr()) {
+	if forceColor || atmosConfig.Settings.Terminal.IsColorEnabled(term.IsTTYSupportForStderr()) {
 		// Get color scheme for the configured theme.
 		scheme, err := theme.GetColorSchemeForTheme(atmosConfig.Settings.Terminal.Theme)
 		if err == nil && scheme != nil {
@@ -805,7 +929,7 @@ func setupColorProfileFromEnv() {
 
 	// Check environment variable first using global viper.
 	// Note: ATMOS env prefix and AutomaticEnv are configured in init().
-	forceColor := viper.GetBool("FORCE_COLOR")
+	forceColor := viper.GetBool("force-color")
 
 	// Also check --force-color CLI flag by manually parsing os.Args.
 	// This is needed because Cobra hasn't parsed flags yet during init().
@@ -1475,6 +1599,8 @@ func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration
 // command, captures telemetry, and handles unknown-command errors by showing usage.
 // This function is invoked once from main.main.
 func Execute() error {
+	defer finalizeCastRecording()
+
 	// CRITICAL: Process --chdir flag BEFORE loading config.
 	// This ensures atmos.yaml is loaded from the correct directory when using --chdir.
 	// We must process chdir early because aliases depend on the config, and the config
@@ -1798,6 +1924,10 @@ func init() {
 	globalParser.RegisterPersistentFlags(RootCmd)
 	if err := globalParser.BindToViper(viper.GetViper()); err != nil {
 		log.Error("Failed to bind global flags to viper", "error", err)
+	}
+	RootCmd.PersistentFlags().String(castFlagName, "", "Record command output as an asciinema cast (--cast for generated path, --cast=path for explicit output)")
+	if castFlag := RootCmd.PersistentFlags().Lookup(castFlagName); castFlag != nil {
+		castFlag.NoOptDefVal = castAutoFlagVal
 	}
 
 	// Register --version as a LOCAL flag (not inherited by subcommands).

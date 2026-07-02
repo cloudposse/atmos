@@ -81,6 +81,7 @@ func (c *context) Write(stream Stream, content string) error {
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrWriteToStream, err)
 	}
+	recordOutput(stream, masked)
 	return nil
 }
 

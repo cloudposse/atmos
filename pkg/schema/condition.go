@@ -304,12 +304,10 @@ func (c Condition) MentionsAny(names ...string) bool {
 	return c.node.mentionsAny(wanted)
 }
 
-// ValidateStepCondition rejects predicates that workflow and custom command
-// steps cannot evaluate because they do not run against a failure lifecycle.
+// ValidateStepCondition validates predicates used by workflow and custom command
+// steps. Lifecycle predicates such as success, failure, and always are evaluated
+// by the step runner against the current run status.
 func ValidateStepCondition(condition Condition) error {
-	if condition.MentionsAny(ConditionPredicateFailure) {
-		return fmt.Errorf("%w: step when cannot use %q", ErrInvalidWhenCondition, ConditionPredicateFailure)
-	}
 	return nil
 }
 

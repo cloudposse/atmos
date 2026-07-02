@@ -70,6 +70,7 @@ type ConfigMetadata struct {
 type AtmosConfiguration struct {
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	BasePathSource                string             `yaml:"-" json:"-" mapstructure:"-"` // "runtime" if from env var/CLI/provider, "" if from config file.
+	Cast                          CastConfig         `yaml:"cast,omitempty" json:"cast,omitempty" mapstructure:"cast"`
 	Components                    Components         `yaml:"components" json:"components" mapstructure:"components"`
 	Stacks                        Stacks             `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
 	Imports                       ImportsSettings    `yaml:"imports,omitempty" json:"imports,omitempty" mapstructure:"imports"`
@@ -137,6 +138,18 @@ type AtmosConfiguration struct {
 	MCP MCPSettings `yaml:"mcp,omitempty" json:"mcp,omitempty" mapstructure:"mcp"`
 	// LSP settings.
 	LSP LSPSettings `yaml:"lsp,omitempty" json:"lsp,omitempty" mapstructure:"lsp"`
+}
+
+type CastConfig struct {
+	Recording CastRecordingConfig `yaml:"recording,omitempty" json:"recording,omitempty" mapstructure:"recording"`
+}
+
+type CastRecordingConfig struct {
+	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+	Input    bool   `yaml:"input,omitempty" json:"input,omitempty" mapstructure:"input"`
+	Width    int    `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`
+	Height   int    `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {

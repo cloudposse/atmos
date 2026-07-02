@@ -1,0 +1,5 @@
+{"version":2,"width":120,"height":36,"timestamp":1782944795,"command":"atmos list stacks --format tree","env":{"SHELL":"/bin/zsh","TERM":"xterm-256color"}}
+[0.005147958,"e","[list-stacks]\n"]
+[0.124460208,"o"," Stacks \n│\n├──dev\n│\n└──production\n\n"]
+[0.346268625,"e","✓ list-stacks completed\n"]
+[1.047422542,"o","\u003e "]

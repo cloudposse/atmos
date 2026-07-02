@@ -1,3 +1,8 @@
+---
+asciicast: /casts/examples/toolchain.cast
+asciicastTitle: atmos toolchain demo
+---
+
 # Example: Toolchain
 
 Configure tool registries and use toolchain-managed tools in custom commands and workflows.

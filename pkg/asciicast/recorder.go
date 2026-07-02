@@ -1,0 +1,347 @@
+package asciicast
+
+import (
+	"bufio"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/xdg"
+)
+
+const (
+	DefaultWidth  = 120
+	DefaultHeight = 36
+
+	castDirPerm    = 0o755
+	castFilePerm   = 0o644
+	defaultIDLen   = 6
+	slugMaxLen     = 64
+	slugSeparator  = "-"
+	defaultCastCmd = "atmos"
+)
+
+var ErrCastOutputExists = errors.New("cast output already exists")
+
+type Options struct {
+	Path       string
+	BasePath   string
+	Command    []string
+	Width      int
+	Height     int
+	RecordIn   bool
+	Explicit   bool
+	Env        map[string]string
+	Now        func() time.Time
+	Executable string
+	OutputRate time.Duration
+}
+
+type Recorder struct {
+	mu            sync.Mutex
+	file          *os.File
+	writer        *bufio.Writer
+	started       time.Time
+	closed        bool
+	path          string
+	recordIn      bool
+	width         int
+	height        int
+	command       string
+	outputRate    time.Duration
+	lastEventTime time.Duration
+}
+
+type Header struct {
+	Version   int               `json:"version"`
+	Width     int               `json:"width"`
+	Height    int               `json:"height"`
+	Timestamp int64             `json:"timestamp"`
+	Command   string            `json:"command,omitempty"`
+	Env       map[string]string `json:"env,omitempty"`
+}
+
+func Start(opts *Options) (*Recorder, error) {
+	defer perf.Track(nil, "asciicast.Start")()
+
+	now := time.Now
+	if opts == nil {
+		opts = &Options{}
+	}
+	if opts.Now != nil {
+		now = opts.Now
+	}
+	started := now()
+	width := opts.Width
+	if width <= 0 {
+		width = DefaultWidth
+	}
+	height := opts.Height
+	if height <= 0 {
+		height = DefaultHeight
+	}
+
+	path, err := ResolvePath(opts, started)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), castDirPerm); err != nil {
+		return nil, fmt.Errorf("create cast directory: %w", err)
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, castFilePerm)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return nil, fmt.Errorf("%w: %s", ErrCastOutputExists, path)
+		}
+		return nil, fmt.Errorf("create cast file: %w", err)
+	}
+
+	rec := &Recorder{
+		file:       file,
+		writer:     bufio.NewWriter(file),
+		started:    started,
+		path:       path,
+		recordIn:   opts.RecordIn,
+		width:      width,
+		height:     height,
+		command:    strings.Join(opts.Command, " "),
+		outputRate: opts.OutputRate,
+	}
+	header := Header{
+		Version:   2,
+		Width:     width,
+		Height:    height,
+		Timestamp: started.Unix(),
+		Command:   rec.command,
+		Env:       safeEnv(opts.Env),
+	}
+	if err := rec.writeJSON(header); err != nil {
+		_ = rec.Close()
+		return nil, err
+	}
+	return rec, nil
+}
+
+func (r *Recorder) Path() string {
+	defer perf.Track(nil, "asciicast.Recorder.Path")()
+
+	if r == nil {
+		return ""
+	}
+	return r.path
+}
+
+func (r *Recorder) Record(stream, content string) {
+	defer perf.Track(nil, "asciicast.Recorder.Record")()
+
+	if r == nil || content == "" {
+		return
+	}
+	if stream == "i" && !r.recordIn {
+		return
+	}
+	if stream != "i" && stream != "o" && stream != "e" {
+		stream = "o"
+	}
+	_ = r.Event(stream, content)
+}
+
+func (r *Recorder) Event(stream, content string) error {
+	defer perf.Track(nil, "asciicast.Recorder.Event")()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return nil
+	}
+	return r.writeEventLocked(stream, content)
+}
+
+func (r *Recorder) Resize(width, height int) error {
+	defer perf.Track(nil, "asciicast.Recorder.Resize")()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return nil
+	}
+	return r.writeEventLocked("r", fmt.Sprintf("%dx%d", width, height))
+}
+
+func (r *Recorder) Close() error {
+	defer perf.Track(nil, "asciicast.Recorder.Close")()
+
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return nil
+	}
+	r.closed = true
+	var err error
+	if r.writer != nil {
+		err = r.writer.Flush()
+	}
+	if closeErr := r.file.Close(); err == nil {
+		err = closeErr
+	}
+	return err
+}
+
+func (r *Recorder) writeJSON(v any) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	if _, err := r.writer.Write(b); err != nil {
+		return err
+	}
+	if err := r.writer.WriteByte('\n'); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *Recorder) writeEventLocked(stream, content string) error {
+	now := time.Since(r.started)
+	if r.outputRate <= 0 || stream == "i" || stream == "r" {
+		r.lastEventTime = maxDuration(now, r.lastEventTime)
+		return r.writeJSON([]any{r.lastEventTime.Seconds(), stream, content})
+	}
+
+	eventTime := maxDuration(now, r.lastEventTime)
+	for _, chunk := range splitTerminalLines(content) {
+		if err := r.writeJSON([]any{eventTime.Seconds(), stream, chunk}); err != nil {
+			return err
+		}
+		if strings.HasSuffix(chunk, "\n") {
+			eventTime += r.outputRate
+		}
+	}
+	r.lastEventTime = eventTime
+	return nil
+}
+
+func splitTerminalLines(content string) []string {
+	if !strings.Contains(content, "\n") {
+		return []string{content}
+	}
+	chunks := make([]string, 0, strings.Count(content, "\n")+1)
+	start := 0
+	for index, r := range content {
+		if r != '\n' {
+			continue
+		}
+		chunks = append(chunks, content[start:index+1])
+		start = index + 1
+	}
+	if start < len(content) {
+		chunks = append(chunks, content[start:])
+	}
+	return chunks
+}
+
+func maxDuration(a, b time.Duration) time.Duration {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func ResolvePath(opts *Options, started time.Time) (string, error) {
+	defer perf.Track(nil, "asciicast.ResolvePath")()
+
+	if opts == nil {
+		opts = &Options{}
+	}
+	if opts.Path != "" {
+		return filepath.Clean(opts.Path), nil
+	}
+	base := opts.BasePath
+	if base == "" {
+		var err error
+		base, err = xdg.GetXDGCacheDir("casts", xdg.DefaultCacheDirPerm)
+		if err != nil {
+			return "", err
+		}
+	}
+	slug := CommandSlug(opts.Command)
+	if slug == "" {
+		slug = defaultCastCmd
+	}
+	runID := strings.ToLower(RandomID(defaultIDLen))
+	name := fmt.Sprintf("%s-%s-%s.cast", started.Format("150405"), slug, runID)
+	return filepath.Join(base, started.Format("2006"), started.Format("01"), started.Format("02"), name), nil
+}
+
+func CommandSlug(args []string) string {
+	defer perf.Track(nil, "asciicast.CommandSlug")()
+
+	parts := make([]string, 0, len(args))
+	for _, arg := range args {
+		arg = strings.TrimSpace(arg)
+		if arg == "" || strings.HasPrefix(arg, "-") {
+			continue
+		}
+		arg = strings.TrimPrefix(filepath.Base(arg), "atmos")
+		if arg == "" {
+			continue
+		}
+		parts = append(parts, arg)
+		if len(parts) == 4 {
+			break
+		}
+	}
+	slug := strings.ToLower(strings.Join(parts, slugSeparator))
+	slug = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(slug, slugSeparator)
+	slug = strings.Trim(slug, slugSeparator)
+	if len(slug) > slugMaxLen {
+		slug = strings.Trim(slug[:slugMaxLen], slugSeparator)
+	}
+	return slug
+}
+
+func RandomID(n int) string {
+	defer perf.Track(nil, "asciicast.RandomID")()
+
+	const letters = "0123456789abcdef"
+	b := make([]byte, n)
+	f, err := os.Open("/dev/urandom")
+	if err == nil {
+		defer func() { _ = f.Close() }()
+		if _, err := io.ReadFull(f, b); err == nil {
+			for i := range b {
+				b[i] = letters[int(b[i])%len(letters)]
+			}
+			return string(b)
+		}
+	}
+	t := time.Now().UnixNano()
+	for i := range b {
+		b[i] = letters[int(t>>uint(i*4))%len(letters)]
+	}
+	return string(b)
+}
+
+func safeEnv(env map[string]string) map[string]string {
+	result := map[string]string{}
+	for _, key := range []string{"SHELL", "TERM", "COLORTERM"} {
+		if value := env[key]; value != "" {
+			result[key] = value
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}

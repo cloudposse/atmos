@@ -15,7 +15,7 @@ so if you run &quot;terraform plan&quot; Terraform will not see any existing sta
 for this configuration.</span>
 <span style="font-weight:bold;">data.http.weather: Reading...</span>
 <span style="font-weight:bold;">data.http.weather: Read complete after 2s 
-    [id=https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m]</span>
+    [id=https://wttr.in/Los+Angeles?0m&amp;lang=en]</span>
 
 Terraform used the selected providers to generate the following execution
 plan. 
@@ -55,7 +55,7 @@ Changes to Outputs:
   <span style="color:green;">+</span> location = &quot;Los Angeles&quot;
   <span style="color:green;">+</span> stage    = &quot;staging&quot;
   <span style="color:green;">+</span> units    = &quot;m&quot;
-  <span style="color:green;">+</span> url      = &quot;https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m&quot;
+  <span style="color:green;">+</span> url      = &quot;https://wttr.in/Los+Angeles?0m&amp;lang=en&quot;
   <span style="color:green;">+</span> weather  =
 
         Weather report: Los+Angeles
@@ -78,7 +78,7 @@ Outputs:
 location = &quot;Los Angeles&quot;
 stage = &quot;staging&quot;
 units = &quot;m&quot;
-url = &quot;https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m&quot;
+url = &quot;https://wttr.in/Los+Angeles?0m&amp;lang=en&quot;
 weather =
 
 Weather report: Los+Angeles

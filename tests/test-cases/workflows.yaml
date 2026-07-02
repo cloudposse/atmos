@@ -143,7 +143,7 @@ tests:
         - "invalid workflow step type"
         - "## Hints"
         - "Step type 'invalid' is not supported"
-        - "Each step must specify a valid type: 'atmos', 'shell', 'exec', or an"
+        - "Each step must specify a valid type: 'atmos', 'shell', 'script', 'exec'"
       exit_code: 1
 
   - name: atmos workflow invalid from step

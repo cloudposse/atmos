@@ -1,3 +1,8 @@
+---
+asciicast: /casts/examples/sops-secrets.cast
+asciicastTitle: atmos sops secrets lifecycle
+---
+
 # SOPS Secrets Example
 
 Atmos **declarative secrets management** end to end with a **SOPS** backend (age encryption) — the
@@ -13,9 +18,10 @@ example works out of the box.
 
 ## Give it a spin
 
-Run the bundled `atmos test` command and watch the whole lifecycle — it sets values, reads them back,
-lists and validates status, shows masked-without-credentials inspection, then resets the encrypted
-file to its clean committed state:
+Run the bundled `atmos test` command and watch the whole lifecycle — it sets values, lists and
+validates status, deploys the `api` component that consumes the secrets, reads the output back,
+shows masked-without-credentials inspection, then resets the encrypted file to its clean committed
+state:
 
 ```shell
 atmos test

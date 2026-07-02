@@ -1,0 +1,75 @@
+commands:
+- name: casts
+  commands:
+  - name: generate
+    commands:
+    - name: demo
+      commands:
+      - name: casts
+        commands:
+        - name: fixtures
+          commands:
+          - name: basic
+            commands:
+            - name: list-stacks
+              description: Regenerate the list stacks cast
+              env:
+                PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+              steps:
+              - type: shell
+                name: setup
+                command: atmos casts setup
+              - type: shell
+                name: clean
+                command: rm -f ../../website/static/casts/demo/casts/fixtures/basic/list-stacks.cast
+              - type: cast
+                name: list-stacks
+                working_directory: "../../.context/cast-fixtures/basic"
+                command: atmos list stacks --format tree
+                mode: steps
+                width: 120
+                height: 36
+                output:
+                  cast: "../../website/static/casts/demo/casts/fixtures/basic/list-stacks.cast"
+                steps:
+                - type: shell
+                  name: list-stacks
+                  working_directory: "../../.context/cast-fixtures/native-terraform"
+                  output: raw
+                  env:
+                    TERM: xterm-256color
+                    COLORTERM: truecolor
+                    ATMOS_FORCE_COLOR: '1'
+                    CLICOLOR_FORCE: '1'
+                    FORCE_COLOR: '1'
+                    ATMOS_FORCE_TTY: 'true'
+                    ATMOS_KEYRING_TYPE: memory
+                  command: atmos list stacks --format tree
+              - type: shell
+                name: validate
+                command: atmos casts validate demo casts fixtures basic list-stacks
+  - name: validate
+    commands:
+    - name: demo
+      commands:
+      - name: casts
+        commands:
+        - name: fixtures
+          commands:
+          - name: basic
+            commands:
+            - name: list-stacks
+              description: Validate the list stacks cast
+              steps:
+              - type: script
+                name: validate
+                interpreter: python3
+                script: |
+                  from pathlib import Path
+                  text = Path("../../website/static/casts/demo/casts/fixtures/basic/list-stacks.cast").read_text()
+                  for needle in ["Stacks", "dev", "production"]:
+                      if needle not in text:
+                          raise SystemExit(f"list stacks cast missing {needle!r}")
+                  for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found"]:
+                      if bad in text:
+                          raise SystemExit(f"list stacks cast contains {bad!r}")

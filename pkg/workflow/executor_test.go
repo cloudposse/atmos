@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -25,6 +26,37 @@ func newTestParams(workflowDef *schema.WorkflowDefinition, opts ExecuteOptions) 
 		WorkflowDefinition: workflowDef,
 		Opts:               opts,
 	}
+}
+
+func TestExecutor_Execute_ScriptWorkflow(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not found on PATH")
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+	executor := NewExecutor(mockRunner, nil, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{
+				Name:        "validate",
+				Type:        schema.TaskTypeScript,
+				Interpreter: "python3",
+				Script:      "from pathlib import Path\nprint(Path('.').resolve())\n",
+				Output:      "none",
+			},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	require.Len(t, result.Steps, 1)
+	assert.Equal(t, "validate", result.Steps[0].StepName)
 }
 
 // TestExecutor_Execute_BasicShellWorkflow tests executing a simple shell workflow.
@@ -105,7 +137,7 @@ func TestExecutor_Execute_SkipsStepWhenConditionIsFalse(t *testing.T) {
 	assert.Equal(t, "run", result.Steps[1].StepName)
 }
 
-func TestExecutor_Execute_RejectsFailureStepCondition(t *testing.T) {
+func TestExecutor_Execute_SkipsInitialFailureStepCondition(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -123,9 +155,12 @@ func TestExecutor_Execute_RejectsFailureStepCondition(t *testing.T) {
 
 	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
 
-	require.Error(t, err)
-	assert.ErrorIs(t, err, schema.ErrInvalidWhenCondition)
-	assert.False(t, result.Success)
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+	require.Len(t, result.Steps, 1)
+	assert.True(t, result.Steps[0].Skipped)
+	assert.True(t, result.Steps[0].Success)
+	assert.Equal(t, "failure-only", result.Steps[0].StepName)
 }
 
 // TestExecutor_Execute_BasicAtmosWorkflow tests executing a simple atmos workflow.
@@ -1849,6 +1884,39 @@ func TestExecutor_Execute_EnvWithIdentity(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, result.Success)
+}
+
+func TestExecutor_Execute_ContainerScriptRegistersOutputs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+	executor := NewExecutor(mockRunner, nil, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{
+				Name:        "script",
+				Type:        schema.TaskTypeScript,
+				Interpreter: "python3",
+				Script:      "print('ok')",
+				Container:   &schema.WorkflowContainer{Image: "alpine"},
+				Outputs: map[string]string{
+					"code": "{{ .exit_code }}",
+				},
+			},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{DryRun: true}))
+
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	require.NotNil(t, executor.stepVars)
+	stored := executor.stepVars.Steps["script"]
+	require.NotNil(t, stored)
+	assert.Equal(t, "0", stored.Outputs["code"])
 }
 
 // TestExecutor_Execute_AtmosCommandWithEnv tests atmos command type with env vars.

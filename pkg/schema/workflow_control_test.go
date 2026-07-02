@@ -33,6 +33,76 @@ steps:
 	assert.Equal(t, "{{ .step.name }}", step.ParallelOutput.Prefix)
 }
 
+func TestWorkflowStep_UnmarshalYAML_StructuredCastOutputMode(t *testing.T) {
+	input := `
+name: demo
+type: cast
+output:
+  mode: raw
+  cast: demo.cast
+  svg: demo.svg
+steps:
+  - name: list
+    command: atmos list stacks
+`
+	var step WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte(input), &step))
+
+	assert.Equal(t, "raw", step.Output)
+	require.NotNil(t, step.CastOutput)
+	assert.Equal(t, "raw", step.CastOutput.Mode)
+	assert.Equal(t, "demo.cast", step.CastOutput.Cast)
+	assert.Equal(t, "demo.svg", step.CastOutput.SVG)
+}
+
+func TestWorkflowStep_UnmarshalYAML_StructuredSimulatePromptAndCommandAnchor(t *testing.T) {
+	input := `
+type: cast
+mode: steps
+steps:
+  - type: simulate
+    mode: typed
+    cursor: true
+    jitter: 0.25
+    prompt: &demo_prompt
+      text: "> "
+      style: command
+    text: &list_cmd atmos secret list --stack dev --component api
+  - type: shell
+    name: list-secrets
+    command: *list_cmd
+  - type: simulate
+    mode: prompt
+    prompt: *demo_prompt
+`
+	var step WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte(input), &step))
+
+	require.Len(t, step.Steps, 3)
+	require.NotNil(t, step.Steps[0].SimulatePrompt)
+	assert.Equal(t, "> ", step.Steps[0].SimulatePrompt.Text)
+	assert.Equal(t, "command", step.Steps[0].SimulatePrompt.Style)
+	assert.True(t, step.Steps[0].Cursor)
+	assert.Equal(t, 0.25, step.Steps[0].Jitter)
+	assert.Equal(t, "atmos secret list --stack dev --component api", step.Steps[0].Text)
+	assert.Equal(t, "atmos secret list --stack dev --component api", step.Steps[1].Command)
+	require.NotNil(t, step.Steps[2].SimulatePrompt)
+	assert.Equal(t, "> ", step.Steps[2].SimulatePrompt.Text)
+	assert.Equal(t, "command", step.Steps[2].SimulatePrompt.Style)
+}
+
+func TestWorkflowStep_UnmarshalYAML_ScalarPromptStillDecodesForInteractiveStep(t *testing.T) {
+	input := `
+type: input
+prompt: Continue?
+`
+	var step WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte(input), &step))
+
+	assert.Equal(t, "Continue?", step.Prompt)
+	assert.Nil(t, step.SimulatePrompt)
+}
+
 func TestValidateWorkflowSteps_ControlSteps(t *testing.T) {
 	tests := []struct {
 		name    string

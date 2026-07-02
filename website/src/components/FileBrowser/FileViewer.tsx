@@ -16,6 +16,18 @@ interface FileViewerProps {
   file: FileNode;
 }
 
+function stripFrontmatter(content: string): string {
+  if (!content.startsWith('---')) return content;
+
+  const lines = content.split(/\r?\n/);
+  if (lines[0].trim() !== '---') return content;
+
+  const endIndex = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
+  if (endIndex === -1) return content;
+
+  return lines.slice(endIndex + 1).join('\n').trim();
+}
+
 export default function FileViewer({ file }: FileViewerProps): JSX.Element {
   const showGithubLink = !!file.githubUrl;
 
@@ -121,7 +133,7 @@ export default function FileViewer({ file }: FileViewerProps): JSX.Element {
               },
             }}
           >
-            {file.content}
+            {stripFrontmatter(file.content)}
           </Markdown>
         </div>
       </div>

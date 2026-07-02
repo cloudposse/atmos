@@ -522,6 +522,11 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.terminal.pager", "false") // String value to match the field type
 	v.SetDefault("settings.terminal.speed", 0.0)
 	v.SetDefault("settings.experimental", "warn") // Experimental feature handling: silence, disable, warn, error
+	v.SetDefault("cast.recording.enabled", false)
+	v.SetDefault("cast.recording.base_path", "")
+	v.SetDefault("cast.recording.input", false)
+	v.SetDefault("cast.recording.width", 120)
+	v.SetDefault("cast.recording.height", 36)
 	// Note: force_color is ENV-only (ATMOS_FORCE_COLOR), no config default
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 
@@ -1562,8 +1567,13 @@ func mergeCommandArrays(first, second interface{}) []interface{} {
 				orderedNames = append(orderedNames, name)
 			}
 
-			// Store or override the command.
-			commandMap[name] = cmd
+			// Store or merge the command. Nested command groups are merged
+			// recursively so imports can extend a shared command tree.
+			if existing, exists := commandMap[name]; exists {
+				commandMap[name] = mergeCommandDefinitions(existing, cmd)
+			} else {
+				commandMap[name] = cmd
+			}
 		}
 	}
 
@@ -1582,6 +1592,32 @@ func mergeCommandArrays(first, second interface{}) []interface{} {
 	}
 
 	return result
+}
+
+func mergeCommandDefinitions(first, second interface{}) interface{} {
+	firstMap, ok := first.(map[string]interface{})
+	if !ok {
+		return second
+	}
+	secondMap, ok := second.(map[string]interface{})
+	if !ok {
+		return second
+	}
+
+	merged := make(map[string]interface{}, len(firstMap)+len(secondMap))
+	for key, value := range firstMap {
+		merged[key] = value
+	}
+	for key, value := range secondMap {
+		if key == commandsKey {
+			if existing, ok := merged[key]; ok {
+				merged[key] = mergeCommandArrays(existing, value)
+				continue
+			}
+		}
+		merged[key] = value
+	}
+	return merged
 }
 
 // loadEmbeddedConfig loads the embedded atmos.yaml configuration.
@@ -1701,6 +1737,8 @@ func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
 		schema.ConditionDecodeHook(),
+		schema.CommandEnvDecodeHook(),
+		schema.WorkflowStepDecodeHook(),
 		schema.TasksDecodeHook(),
 	)
 }
@@ -1784,6 +1822,25 @@ func restoreCaseSensitiveEnvMaps(atmosConfig *schema.AtmosConfiguration) {
 	}
 	if caseSensitiveEnv := atmosConfig.GetCaseSensitiveMap("templates.settings.env"); len(caseSensitiveEnv) > 0 {
 		atmosConfig.Templates.Settings.Env = caseSensitiveEnv
+	}
+	restoreCommandEnvCase(atmosConfig.Commands, atmosConfig.CaseMaps)
+}
+
+func restoreCommandEnvCase(commands []schema.Command, caseMaps *casemap.CaseMaps) {
+	if len(commands) == 0 || caseMaps == nil {
+		return
+	}
+	envCaseMap := caseMaps.Get(envKey)
+	if len(envCaseMap) == 0 {
+		return
+	}
+	for i := range commands {
+		for j := range commands[i].Env {
+			if original, ok := envCaseMap[strings.ToLower(commands[i].Env[j].Key)]; ok {
+				commands[i].Env[j].Key = original
+			}
+		}
+		restoreCommandEnvCase(commands[i].Commands, caseMaps)
 	}
 }
 

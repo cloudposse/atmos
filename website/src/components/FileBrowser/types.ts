@@ -59,6 +59,8 @@ export interface ExampleProject {
   featured?: boolean;
   tags: string[];
   docs: DocLink[];
+  asciicast?: string;
+  asciicastTitle?: string;
   root: DirectoryNode;
 }
 

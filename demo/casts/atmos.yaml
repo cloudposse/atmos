@@ -1,0 +1,57 @@
+commands:
+- name: casts
+  description: Generate published website asciicast demos
+  commands:
+  - name: setup
+    description: Prepare isolated fixtures and build the local Atmos binary
+    env:
+      GOBIN: '{{ env "PWD" }}/../../.context/bin'
+    steps:
+    - type: workdir
+      name: native-terraform-fixture
+      source: fixtures/native-terraform
+      path: "../../.context/cast-fixtures/native-terraform"
+      reset: true
+    - type: workdir
+      name: demo-vendoring-fixture
+      source: fixtures/demo-vendoring
+      path: "../../.context/cast-fixtures/demo-vendoring"
+      reset: true
+    - type: workdir
+      name: basic-fixture
+      source: fixtures/basic
+      path: "../../.context/cast-fixtures/basic"
+      reset: true
+    - type: workdir
+      name: emulator-aws-fixture
+      source: "../../examples/emulator-aws"
+      path: "../../.context/cast-fixtures/emulator-aws"
+      reset: true
+    - type: workdir
+      name: quick-start-simple-fixture
+      source: "../../examples/quick-start-simple"
+      path: "../../.context/cast-fixtures/quick-start-simple"
+      reset: true
+    - type: workdir
+      name: quick-start-advanced-fixture
+      source: "../../examples/quick-start-advanced"
+      path: "../../.context/cast-fixtures/quick-start-advanced"
+      reset: true
+    - type: workdir
+      name: sops-secrets-fixture
+      source: "../../examples/sops-secrets"
+      path: "../../.context/cast-fixtures/sops-secrets"
+      reset: true
+    - type: workdir
+      name: toolchain-fixture
+      source: "../../examples/toolchain"
+      path: "../../.context/cast-fixtures/toolchain"
+      reset: true
+    - type: workdir
+      name: custom-commands-fixture
+      source: "../../examples/custom-commands"
+      path: "../../.context/cast-fixtures/custom-commands"
+      reset: true
+    - type: shell
+      name: build-atmos
+      command: go install ../..

@@ -11,12 +11,15 @@ import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Use these commands to manage emulator components: stack-scoped, long-running containers that stand in for a cloud API (AWS, GCP, Azure), Kubernetes, or a backing service (Vault) during local development and testing.
 
 An emulator container outlives the `atmos` process and is discovered by labels derived from the canonical component instance address, so subsequent commands (`ps`, `logs`, `exec`, `down`) reattach to the already-running container.
 </Intro>
+
+<CastPlayer src="/casts/examples/emulator-aws/lifecycle.cast" title="atmos emulator aws lifecycle" chrome controls scrubber />
 
 <Experimental />
 

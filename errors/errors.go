@@ -3,6 +3,8 @@ package errors
 import (
 	"errors"
 	"fmt"
+
+	schemaPkg "github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -57,6 +59,7 @@ var (
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
 	ErrInvalidTemplateSettings               = errors.New("invalid template settings")
 	ErrTemplateEvaluation                    = errors.New("template evaluation failed")
+	ErrCommandEnvDecodeFailed                = schemaPkg.ErrCommandEnvDecodeFailed
 	ErrInvalidConfig                         = errors.New("invalid configuration")
 	ErrRefuseDeleteSymbolicLink              = errors.New("refusing to delete symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")

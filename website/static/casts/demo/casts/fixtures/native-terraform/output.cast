@@ -1,0 +1,6 @@
+{"version":2,"width":120,"height":36,"timestamp":1782944769,"command":"atmos terraform output vpc -s dev","env":{"SHELL":"/bin/zsh","TERM":"xterm-256color"}}
+[0.004969709,"e","[output]\n"]
+[0.557311834,"o","\u001b[0m\u001b[1mInitializing provider plugins found in the configuration...\u001b[0m\n- Reusing previous version of hashicorp/null from the dependency lock file\n- Using previously-installed hashicorp/null v3.3.0\n\n\u001b[0m\u001b[1mInitializing the backend...\u001b[0m\n\n\n\n\u001b[0m\u001b[1m\u001b[32mTerraform has been successfully initialized!\u001b[0m\u001b[32m\u001b[0m\nenvironment = \"dev\"\nvpc_cidr = \"10.0.0.0/16\"\n"]
+[0.557354667,"e","\u001b[0m\u001b[32mSwitched to workspace \"dev\".\u001b[0m\n"]
+[0.557389875,"e","✓ output completed\n"]
+[1.258526917,"o","\u003e "]

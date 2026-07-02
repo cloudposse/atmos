@@ -20,6 +20,16 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
+type ptyTestRecorder struct {
+	streams []string
+	events  []string
+}
+
+func (r *ptyTestRecorder) Record(stream, content string) {
+	r.streams = append(r.streams, stream)
+	r.events = append(r.events, content)
+}
+
 func ptyHelperCommand(t *testing.T, args ...string) *exec.Cmd {
 	t.Helper()
 	exe, err := os.Executable()
@@ -89,6 +99,48 @@ func readLineWithTimeout(timeout time.Duration) (string, bool) {
 		return line, line != ""
 	case <-time.After(timeout):
 		return "", false
+	}
+}
+
+func TestRecordingWriterRecordsPTYOutput(t *testing.T) {
+	rec := &ptyTestRecorder{}
+	restore := iolib.SetRecorder(rec)
+	defer restore()
+
+	var stdout bytes.Buffer
+	writer := &recordingWriter{underlying: &stdout}
+
+	n, err := writer.Write([]byte("pty output"))
+	if err != nil {
+		t.Fatalf("recordingWriter.Write() error = %v", err)
+	}
+
+	if n != len("pty output") {
+		t.Fatalf("recordingWriter.Write() wrote %d bytes, want %d", n, len("pty output"))
+	}
+	if stdout.String() != "pty output" {
+		t.Fatalf("stdout = %q, want pty output", stdout.String())
+	}
+	if len(rec.events) != 1 || rec.streams[0] != "o" || rec.events[0] != "pty output" {
+		t.Fatalf("recorded events = %#v streams = %#v", rec.events, rec.streams)
+	}
+}
+
+func TestTerminalResponseReaderAnswersSplitQueries(t *testing.T) {
+	src := iotest.OneByteReader(strings.NewReader("\x1b]11;?\x1b\\\x1b[6n"))
+	var responses bytes.Buffer
+	reader := &terminalResponseReader{src: src, responder: &responses}
+
+	var out bytes.Buffer
+	if _, err := io.Copy(&out, reader); err != nil {
+		t.Fatalf("io.Copy() error = %v", err)
+	}
+
+	if out.String() != "\x1b]11;?\x1b\\\x1b[6n" {
+		t.Fatalf("output = %q", out.String())
+	}
+	if got := responses.String(); got != "\x1b]11;rgb:0000/0000/0000\x1b\\\x1b[1;1R" {
+		t.Fatalf("responses = %q", got)
 	}
 }
 
@@ -329,7 +381,7 @@ func TestExecWithPTY_DefaultOptions(t *testing.T) {
 	}
 }
 
-func TestMaskedWriter_Write(t *testing.T) {
+func TestRecordingWriterMasksOutput(t *testing.T) {
 	// Create IO context with masking enabled.
 	ioCtx, err := iolib.NewContext()
 	if err != nil {
@@ -338,7 +390,7 @@ func TestMaskedWriter_Write(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	writer := &maskedWriter{
+	writer := &recordingWriter{
 		underlying: &buf,
 		masker:     ioCtx.Masker(),
 	}
@@ -369,7 +421,7 @@ func TestMaskedWriter_Write(t *testing.T) {
 	}
 }
 
-func TestMaskedWriter_PreservesByteCount(t *testing.T) {
+func TestRecordingWriterPreservesByteCount(t *testing.T) {
 	// Create IO context with masking enabled.
 	ioCtx, err := iolib.NewContext()
 	if err != nil {
@@ -378,7 +430,7 @@ func TestMaskedWriter_PreservesByteCount(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	writer := &maskedWriter{
+	writer := &recordingWriter{
 		underlying: &buf,
 		masker:     ioCtx.Masker(),
 	}

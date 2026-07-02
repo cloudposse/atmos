@@ -408,6 +408,17 @@ func (w *synchronizedWriter) Write(p []byte) (int, error) {
 	return w.w.Write(p)
 }
 
+// ExecuteShellSpec configures shell execution.
+type ExecuteShellSpec struct {
+	Command string
+	Name    string
+	Dir     string
+	EnvVars []string
+	DryRun  bool
+	Stdout  io.Writer
+	Stderr  io.Writer
+}
+
 // ExecuteShell runs a shell script.
 func ExecuteShell(
 	command string,
@@ -417,6 +428,21 @@ func ExecuteShell(
 	dryRun bool,
 ) error {
 	defer perf.Track(nil, "exec.ExecuteShell")()
+
+	return ExecuteShellWithWriters(&ExecuteShellSpec{
+		Command: command,
+		Name:    name,
+		Dir:     dir,
+		EnvVars: envVars,
+		DryRun:  dryRun,
+		Stdout:  ioLayer.MaskWriter(os.Stdout),
+		Stderr:  os.Stderr,
+	})
+}
+
+// ExecuteShellWithWriters runs a shell script with explicit stdout/stderr writers.
+func ExecuteShellWithWriters(spec *ExecuteShellSpec) error {
+	defer perf.Track(nil, "exec.ExecuteShellWithWriters")()
 
 	newShellLevel, err := u.GetNextShellLevel()
 	if err != nil {
@@ -429,19 +455,26 @@ func ExecuteShell(
 	// This matches the behavior before commit 9fd7d156a where the environment
 	// was merged rather than replaced.
 	mergedEnv := os.Environ()
-	for _, envVar := range envVars {
+	for _, envVar := range spec.EnvVars {
 		mergedEnv = envpkg.UpdateEnvVar(mergedEnv, parseEnvVarKey(envVar), parseEnvVarValue(envVar))
 	}
 
 	mergedEnv = append(mergedEnv, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
-	log.Debug("Executing", "command", command)
+	log.Debug("Executing", "command", spec.Command)
 
-	if dryRun {
+	if spec.DryRun {
 		return nil
 	}
 
-	return u.ShellRunner(command, name, dir, mergedEnv, ioLayer.MaskWriter(os.Stdout))
+	return u.ShellRunnerWithWriters(&u.ShellRunnerSpec{
+		Command: spec.Command,
+		Name:    spec.Name,
+		Dir:     spec.Dir,
+		Env:     mergedEnv,
+		Stdout:  spec.Stdout,
+		Stderr:  spec.Stderr,
+	})
 }
 
 // parseEnvVarKey extracts the key from an environment variable string (KEY=value).

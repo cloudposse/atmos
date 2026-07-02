@@ -1,3 +1,8 @@
+---
+asciicast: /casts/terraform/plan.cast
+asciicastTitle: atmos terraform plan
+---
+
 # Native Terraform Migration Example
 
 This example demonstrates migrating from native Terraform (with `.tfvars` files) to Atmos.

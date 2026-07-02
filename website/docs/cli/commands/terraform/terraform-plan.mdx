@@ -7,14 +7,14 @@ id: plan
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
-import DemoVideo from '@site/src/components/Video/DemoVideo'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Use this command to generate a Terraform execution plan for an Atmos component in a stack, showing what changes would be made to your infrastructure.
 </Intro>
 
-<DemoVideo id="terraform-plan" title="atmos terraform plan" showCaption={false} />
+<CastPlayer src="/casts/demo/casts/fixtures/native-terraform/plan.cast" title="atmos terraform plan" chrome controls scrubber />
 
 <Screengrab title="atmos terraform plan --help" slug="atmos-terraform-plan--help" />
 

@@ -7,6 +7,10 @@ website/** linguist-documentation
 # Screengrabs are binary HTML files that are automatically generated
 website/src/components/Screengrabs/**/*.html linguist-generated=true binary
 
+# Asciinema casts are line-delimited JSON terminal recordings. Keep them
+# reviewable as text, but make whitespace damage visible in local checks.
+*.cast text eol=lf diff whitespace
+
 # Golden snapshots should be treated a raw output to prevent line-ending conversions
 tests/snapshots/**/*.golden linguist-generated=true -text
 

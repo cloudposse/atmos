@@ -49,8 +49,10 @@ A structured step is the same object documented for workflows. See the
 ## Conditional steps
 
 Structured custom command steps support the same `when` condition syntax as
-workflow steps. Omitted `when` means run; a false condition skips the step
-without failing the command.
+workflow steps. Omitted `when` means the step runs while the command status is
+still `success`. After a step fails, Atmos keeps evaluating later structured
+steps so `when: failure` and `when: always` steps can run. A false condition
+skips the step without failing the command.
 
 ```yaml
 commands:
@@ -69,6 +71,32 @@ commands:
 String shorthand steps remain plain shell commands and always run. Use the
 structured form when a custom command step needs a condition.
 
+Use `when: always` for cleanup that must run even when an earlier step fails:
+
+```yaml
+commands:
+  - name: preview
+    description: Start a local service, run a preview, then tear it down
+    steps:
+      - type: shell
+        name: start-emulator
+        command: atmos emulator up aws -s dev --ephemeral
+      - type: shell
+        name: run-preview
+        command: atmos terraform apply demo -s dev -auto-approve
+      - type: shell
+        name: stop-emulator
+        when: always
+        command: atmos emulator down aws -s dev
+      - type: shell
+        name: validate
+        command: atmos terraform output demo -s dev
+```
+
+If `run-preview` fails, `stop-emulator` still runs and `validate` is skipped
+because its omitted `when` is equivalent to success-only. The command still
+returns the original preview failure; cleanup does not hide it.
+
 Step predicates are:
 
 <dl>
@@ -79,17 +107,17 @@ Step predicates are:
   <dd>Run only outside CI.</dd>
 
   <dt>`always`</dt>
-  <dd>Always run.</dd>
+  <dd>Run after success or failure. Use this for teardown and cleanup steps.</dd>
 
   <dt>`never`</dt>
   <dd>Never run.</dd>
 
   <dt>`success`</dt>
   <dd>Run when the step condition is evaluated with success status.</dd>
-</dl>
 
-`failure` is supported for hooks, which evaluate against a lifecycle outcome,
-but not for workflow or custom command steps.
+  <dt>`failure`</dt>
+  <dd>Run only after an earlier step has failed.</dd>
+</dl>
 
 ## Step types
 

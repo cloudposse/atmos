@@ -26,6 +26,16 @@ var (
 	ErrBindingShellLevelEnv  = errors.New("binding ATMOS_SHLVL env var error")
 )
 
+// ShellRunnerSpec configures a shell script execution.
+type ShellRunnerSpec struct {
+	Command string
+	Name    string
+	Dir     string
+	Env     []string
+	Stdout  io.Writer
+	Stderr  io.Writer
+}
+
 // MaxShellDepth is the maximum number of nested shell commands that can be executed .
 const MaxShellDepth = 10
 
@@ -65,23 +75,37 @@ func ExecuteShellAndReturnOutput(
 func ShellRunner(command string, name string, dir string, env []string, out io.Writer) error {
 	defer perf.Track(nil, "utils.ShellRunner")()
 
-	parser, err := syntax.NewParser().Parse(strings.NewReader(command), name)
+	return ShellRunnerWithWriters(&ShellRunnerSpec{
+		Command: command,
+		Name:    name,
+		Dir:     dir,
+		Env:     env,
+		Stdout:  out,
+		Stderr:  os.Stderr,
+	})
+}
+
+// ShellRunnerWithWriters uses mvdan.cc/sh/v3's parser and interpreter to run a shell script with explicit stdout/stderr writers.
+func ShellRunnerWithWriters(spec *ShellRunnerSpec) error {
+	defer perf.Track(nil, "utils.ShellRunnerWithWriters")()
+
+	parser, err := syntax.NewParser().Parse(strings.NewReader(spec.Command), spec.Name)
 	if err != nil {
 		return err
 	}
 
-	// Use provided environment directly to preserve PATH modifications
-	// If no environment provided, fall back to current process environment
-	environ := env
+	// Use provided environment directly to preserve PATH modifications.
+	// If no environment provided, fall back to current process environment.
+	environ := spec.Env
 	if len(environ) == 0 {
 		environ = os.Environ()
 	}
 
 	listEnviron := expand.ListEnviron(environ...)
 	runner, err := interp.New(
-		interp.Dir(dir),
+		interp.Dir(spec.Dir),
 		interp.Env(listEnviron),
-		interp.StdIO(os.Stdin, out, os.Stderr),
+		interp.StdIO(os.Stdin, spec.Stdout, spec.Stderr),
 	)
 	if err != nil {
 		return err
