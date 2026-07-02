@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -42,7 +44,6 @@ const (
 	proInstallScopeFlag      = "scope"
 	proInstallGlobalFlag     = "global"
 	proInstallGitignoreFlag  = "gitignore"
-	installPreviewFileFormat = "%s `%s`"
 )
 
 var (
@@ -328,39 +329,144 @@ func reportResult(result *install.InstallResult) {
 }
 
 func reportInstallPreview(result *install.InstallResult, basePath, stacksBasePath string, force bool) {
-	ui.Infof("Atmos Pro install preview")
-	ui.Infof("Target directory: %s", displayPath(basePath))
-	ui.Infof("Stacks configuration path: %s", filepath.Join(stacksBasePath, "mixins", "atmos-pro.yaml"))
-	ui.Infof("This installs GitHub Actions workflows, GitHub OIDC auth profiles, Atmos Pro drop-in config, and an Atmos Pro stack mixin.")
-	if force {
-		ui.Warning("Existing files may be overwritten because --force is set.")
-	} else {
-		ui.Infof("Existing files are skipped unless you confirm an overwrite prompt.")
-	}
-	reportPlannedFiles(result, "Will create", "Will update", "Will skip")
-	ui.Infof("Run `atmos pro install --dry-run` to preview this without a confirmation prompt.")
+	ui.MarkdownMessage(buildInstallPreviewMarkdown(
+		installPreviewOptions{
+			title:          "Atmos Pro install preview",
+			result:         result,
+			basePath:       basePath,
+			stacksBasePath: stacksBasePath,
+			force:          force,
+		},
+	))
 }
 
 // reportDryRun displays what would happen during installation.
 func reportDryRun(result *install.InstallResult, basePath, stacksBasePath string, force bool) {
-	ui.Infof("Dry run - no files will be written")
-	ui.Infof("Target directory: %s", displayPath(basePath))
-	ui.Infof("Stacks configuration path: %s", filepath.Join(stacksBasePath, "mixins", "atmos-pro.yaml"))
-	if force {
-		ui.Warning("Existing files would be overwritten because --force is set.")
-	}
-	reportPlannedFiles(result, "Would create", "Would update", "Would skip")
+	ui.MarkdownMessage(buildInstallPreviewMarkdown(
+		installPreviewOptions{
+			title:          "Dry run - no files will be written",
+			result:         result,
+			basePath:       basePath,
+			stacksBasePath: stacksBasePath,
+			force:          force,
+			dryRun:         true,
+		},
+	))
 }
 
-func reportPlannedFiles(result *install.InstallResult, createPrefix, updatePrefix, skipPrefix string) {
+type installPreviewOptions struct {
+	title          string
+	result         *install.InstallResult
+	basePath       string
+	stacksBasePath string
+	force          bool
+	dryRun         bool
+}
+
+func buildInstallPreviewMarkdown(opts installPreviewOptions) string {
+	var b strings.Builder
+	b.WriteString("**")
+	b.WriteString(opts.title)
+	b.WriteString("**\n\n")
+	b.WriteString("- Target directory: `")
+	b.WriteString(displayPath(opts.basePath))
+	b.WriteString("`\n")
+	b.WriteString("- Stacks configuration: `")
+	b.WriteString(filepath.Join(opts.stacksBasePath, "mixins", "atmos-pro.yaml"))
+	b.WriteString("`\n")
+	b.WriteString("- Installs: GitHub Actions workflows, GitHub OIDC auth profiles, Atmos Pro drop-in config, and an Atmos Pro stack mixin.\n")
+	if opts.force {
+		b.WriteString("- Existing files: may be overwritten because `--force` is set.\n")
+	} else {
+		b.WriteString("- Existing files: skipped unless you confirm an overwrite prompt.\n")
+	}
+	if !opts.dryRun {
+		b.WriteString("- Preview only: run `atmos pro install --dry-run`.\n")
+	}
+	b.WriteString("\n**Planned file tree**\n\n```text\n")
+	b.WriteString(buildPlannedFilesTree(opts.result, opts.dryRun))
+	b.WriteString("```\n")
+	return b.String()
+}
+
+type installPreviewTreeNode struct {
+	children map[string]*installPreviewTreeNode
+	status   string
+}
+
+func buildPlannedFilesTree(result *install.InstallResult, dryRun bool) string {
+	root := &installPreviewTreeNode{children: make(map[string]*installPreviewTreeNode)}
+	createStatus := "create"
+	updateStatus := "update"
+	if dryRun {
+		createStatus = "would create"
+		updateStatus = "would update"
+	}
 	for _, f := range result.CreatedFiles {
-		ui.Infof(installPreviewFileFormat, createPrefix, f)
+		addInstallPreviewTreePath(root, f, createStatus)
 	}
 	for _, f := range result.UpdatedFiles {
-		ui.Infof(installPreviewFileFormat, updatePrefix, f)
+		addInstallPreviewTreePath(root, f, updateStatus)
 	}
 	for _, f := range result.SkippedFiles {
-		ui.Warningf("%s `%s` (already exists)", skipPrefix, f)
+		addInstallPreviewTreePath(root, f, "skip: already exists")
+	}
+
+	var b strings.Builder
+	b.WriteString(".\n")
+	if len(root.children) == 0 {
+		b.WriteString("(no file changes)\n")
+		return b.String()
+	}
+	writeInstallPreviewTree(&b, root, "")
+	return b.String()
+}
+
+func addInstallPreviewTreePath(root *installPreviewTreeNode, path, status string) {
+	cleanPath := strings.Trim(filepath.ToSlash(filepath.Clean(path)), "/")
+	if cleanPath == "." || cleanPath == "" {
+		return
+	}
+	node := root
+	for _, part := range strings.Split(cleanPath, "/") {
+		if node.children == nil {
+			node.children = make(map[string]*installPreviewTreeNode)
+		}
+		child, ok := node.children[part]
+		if !ok {
+			child = &installPreviewTreeNode{children: make(map[string]*installPreviewTreeNode)}
+			node.children[part] = child
+		}
+		node = child
+	}
+	node.status = status
+}
+
+func writeInstallPreviewTree(b *strings.Builder, node *installPreviewTreeNode, prefix string) {
+	names := make([]string, 0, len(node.children))
+	for name := range node.children {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for i, name := range names {
+		child := node.children[name]
+		last := i == len(names)-1
+		connector := "|-- "
+		nextPrefix := prefix + "|   "
+		if last {
+			connector = "\\-- "
+			nextPrefix = prefix + "    "
+		}
+		b.WriteString(prefix)
+		b.WriteString(connector)
+		b.WriteString(name)
+		if child.status != "" {
+			b.WriteString(" [")
+			b.WriteString(child.status)
+			b.WriteString("]")
+		}
+		b.WriteByte('\n')
+		writeInstallPreviewTree(b, child, nextPrefix)
 	}
 }
 

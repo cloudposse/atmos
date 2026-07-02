@@ -218,6 +218,56 @@ func TestReportDryRun(t *testing.T) {
 	})
 }
 
+func TestBuildInstallPreviewMarkdown(t *testing.T) {
+	result := &install.InstallResult{
+		CreatedFiles: []string{filepath.Join(".github", "workflows", "atmos-pro-terraform-plan.yaml")},
+		UpdatedFiles: []string{filepath.Join(".atmos.d", "atmos-pro.yaml")},
+		SkippedFiles: []string{"atmos.yaml"},
+	}
+
+	message := buildInstallPreviewMarkdown(
+		installPreviewOptions{
+			title:          "Atmos Pro install preview",
+			result:         result,
+			basePath:       ".",
+			stacksBasePath: "stacks",
+		},
+	)
+
+	assert.Contains(t, message, "**Atmos Pro install preview**")
+	assert.Contains(t, message, "- Target directory: `.")
+	assert.Contains(t, message, "- Stacks configuration: `"+filepath.Join("stacks", "mixins", "atmos-pro.yaml")+"`")
+	assert.Contains(t, message, "GitHub Actions workflows")
+	assert.Contains(t, message, "Existing files: skipped unless you confirm an overwrite prompt.")
+	assert.Contains(t, message, "```text\n.\n")
+	assert.Contains(t, message, ".github")
+	assert.Contains(t, message, "atmos-pro-terraform-plan.yaml [create]")
+	assert.Contains(t, message, "atmos-pro.yaml [update]")
+	assert.Contains(t, message, "atmos.yaml [skip: already exists]")
+}
+
+func TestBuildInstallPreviewMarkdown_DryRunForce(t *testing.T) {
+	result := &install.InstallResult{
+		CreatedFiles: []string{"atmos.yaml"},
+	}
+
+	message := buildInstallPreviewMarkdown(
+		installPreviewOptions{
+			title:          "Dry run - no files will be written",
+			result:         result,
+			basePath:       ".",
+			stacksBasePath: "stacks",
+			force:          true,
+			dryRun:         true,
+		},
+	)
+
+	assert.Contains(t, message, "**Dry run - no files will be written**")
+	assert.Contains(t, message, "Existing files: may be overwritten because `--force` is set.")
+	assert.Contains(t, message, "atmos.yaml [would create]")
+	assert.NotContains(t, message, "Preview only:")
+}
+
 func TestResolveInstallPaths_DefaultPaths(t *testing.T) {
 	// When config cannot be loaded (no atmos.yaml), defaults should be returned.
 	origDir, err := os.Getwd()
