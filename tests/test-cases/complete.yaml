@@ -11,6 +11,7 @@ tests:
       - "loop"
     expect:
       diff:
+        - "^$"
         - "^Hello world!$"
         - "^# Error$"
         - "^\\*\\*Error:\\*\\* subcommand exited with code 1$"

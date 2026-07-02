@@ -71,37 +71,47 @@ commands:
       - name: validate
         description: Validate code by running build, lint, and tests
         env: &go_auto_env
-          - key: GOTOOLCHAIN
-            value: auto
+          GOTOOLCHAIN: auto
         steps:
+          - type: toast
+            level: info
+            content: Building...
+          - type: atmos
+            command: build
+          - type: toast
+            level: info
+            content: Linting...
           - |
             set -eu
-            echo "Building..."
-            atmos build
-
-            echo "Linting..."
             if command -v golangci-lint >/dev/null 2>&1; then
               golangci-lint run --config=.golangci.yml
             else
               echo "golangci-lint not found, falling back to go vet..."
               go vet ./...
             fi
-
-            echo "Testing..."
-            atmos test short
-
-            echo "Validation complete."
+          - type: toast
+            level: info
+            content: Testing...
+          - type: atmos
+            command: test short
+          - type: toast
+            level: success
+            content: Validation complete.
 
       - name: quick
         description: Quick build and test
         env: *go_auto_env
         steps:
-          - |
-            set -eu
-            echo "Running quick build and test..."
-            atmos build
-            atmos test short
-            echo "Quick check complete."
+          - type: toast
+            level: info
+            content: Running quick build and test...
+          - type: atmos
+            command: build
+          - type: atmos
+            command: test short
+          - type: toast
+            level: success
+            content: Quick check complete.
 
       - name: coverage
         description: Run tests with coverage report

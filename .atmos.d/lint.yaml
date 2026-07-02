@@ -5,8 +5,7 @@ commands:
       - name: changed
         description: Run lint checks for changes from origin/main
         env: &go_auto_env
-          - key: GOTOOLCHAIN
-            value: auto
+          GOTOOLCHAIN: auto
         steps:
           - |
             set -eu
@@ -24,11 +23,15 @@ commands:
           - key: GOTOOLCHAIN
             valueCommand: printf 'go%s' "$(go env GOVERSION | sed 's/^go//')"
         steps:
+          - type: toast
+            level: info
+            content: Building custom golangci-lint binary with lintroller plugin...
           - |
             set -eu
-            echo "Building custom golangci-lint binary with lintroller plugin..."
             golangci-lint custom
-            echo "Custom golangci-lint binary built successfully: ./custom-gcl"
+          - type: toast
+            level: success
+            content: "Custom golangci-lint binary built successfully: ./custom-gcl"
 
       - name: lintroller
         description: Build and run Atmos custom lintroller rules
@@ -43,8 +46,11 @@ commands:
               chmod +x tools/lintroller/.lintroller
             fi
             test -x tools/lintroller/.lintroller || { echo "Error: Failed to make lintroller executable"; exit 1; }
-            echo "Running lintroller (Atmos custom rules)..."
-            tools/lintroller/.lintroller $(go list ./... | grep -v '/testdata')
+          - type: toast
+            level: info
+            content: Running lintroller (Atmos custom rules)...
+          - type: shell
+            command: tools/lintroller/.lintroller $(go list ./... | grep -v '/testdata')
 
       - name: gomodcheck
         description: Check go.mod for replace/exclude directives that break go install

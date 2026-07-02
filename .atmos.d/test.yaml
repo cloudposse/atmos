@@ -51,12 +51,8 @@ commands:
       - name: acc
         description: Run acceptance tests
         env: &go_auto_env
-          - &go_auto_toolchain
-            key: GOTOOLCHAIN
-            value: auto
-          - &go_cgo_disabled
-            key: CGO_ENABLED
-            value: "0"
+          GOTOOLCHAIN: &go_auto_toolchain auto
+          CGO_ENABLED: &go_cgo_disabled "0"
         steps:
           - type: atmos
             command: build deps
@@ -93,10 +89,9 @@ commands:
       - name: short-cover
         description: Run quick tests with coverage
         env:
-          - *go_auto_toolchain
-          - *go_cgo_disabled
-          - key: GOCOVERDIR
-            value: coverage
+          GOTOOLCHAIN: *go_auto_toolchain
+          CGO_ENABLED: *go_cgo_disabled
+          GOCOVERDIR: coverage
         steps:
           - type: atmos
             command: build deps
@@ -117,10 +112,8 @@ commands:
       - name: race
         description: Run quick tests with race detector and shuffled order
         env:
-          - key: GOTOOLCHAIN
-            value: auto
-          - key: CGO_ENABLED
-            value: "1"
+          GOTOOLCHAIN: auto
+          CGO_ENABLED: "1"
         steps:
           - type: atmos
             command: build deps

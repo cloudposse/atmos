@@ -3,8 +3,7 @@ commands:
     description: Build and documentation commands for Atmos development
     default: binary
     env: &go_auto_env
-      - key: GOTOOLCHAIN
-        value: auto
+      GOTOOLCHAIN: auto
     flags:
       - name: target
         description: "Build target: default, linux, windows, macos, or macos-intel"
@@ -13,10 +12,11 @@ commands:
         description: Version string to embed in the binary
         default: test
     steps:
+      - type: toast
+        level: info
+        content: Building Atmos...
       - &build_binary_step |
           set -eu
-
-          echo "Building Atmos..."
 
           target="{{ .Flags.target }}"
           version="{{ .Flags.version }}"
@@ -84,6 +84,9 @@ commands:
             description: Version string to embed in the binary
             default: test
         steps:
+          - type: toast
+            level: info
+            content: Building Atmos...
           - *build_binary_step
 
       - name: version
