@@ -10,6 +10,7 @@ Valid subcommands are:
   • generate
   • source
   • sync
+  • template
   • version
 
 ## Usage
