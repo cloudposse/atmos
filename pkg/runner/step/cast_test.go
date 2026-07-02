@@ -235,7 +235,7 @@ func TestRecordCastTypedLineWritesPromptAndCharactersAsEvents(t *testing.T) {
 	}
 }
 
-func TestRecordCastTypedLineWritesCursorEventsWhenEnabled(t *testing.T) {
+func TestRecordCastTypedLineKeepsCursorVisibleWhenEnabled(t *testing.T) {
 	if err := iolib.Initialize(); err != nil {
 		t.Fatalf("initialize io: %v", err)
 	}
@@ -268,11 +268,17 @@ func TestRecordCastTypedLineWritesCursorEventsWhenEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read cast: %v", err)
 	}
-	if strings.Count(string(content), `\u001b[?25h`) != 2 {
+	castContent := string(content)
+	if strings.Count(castContent, `\u001b[?25h`) != 1 {
 		t.Fatalf("cursor show events missing in:\n%s", content)
 	}
-	if strings.Count(string(content), `\u001b[?25l`) != 2 {
-		t.Fatalf("cursor hide events missing in:\n%s", content)
+	if strings.Contains(castContent, `\u001b[?25l`) {
+		t.Fatalf("cursor hide event should not span typed input:\n%s", content)
+	}
+	showIndex := strings.Index(castContent, `\u001b[?25h`)
+	firstCharIndex := strings.Index(castContent, `"a"`)
+	if showIndex == -1 || firstCharIndex == -1 || showIndex > firstCharIndex {
+		t.Fatalf("cursor show must appear before typed characters:\n%s", content)
 	}
 }
 
@@ -378,9 +384,10 @@ func TestCastHandlerExecuteWithWorkflowRecordsSimulatedSteps(t *testing.T) {
 			Mode: string(OutputModeRaw),
 		},
 		Steps: []schema.WorkflowStep{{
-			Type: schema.TaskTypeSimulate,
-			Mode: "typed",
-			Text: "atmos terraform plan app -s {{ .env.DEPLOY_STACK }}",
+			Type:   schema.TaskTypeSimulate,
+			Mode:   "typed",
+			Cursor: true,
+			Text:   "atmos terraform plan app -s {{ .env.DEPLOY_STACK }}",
 			SimulatePrompt: &schema.SimulatePrompt{
 				Text:  "$ ",
 				Style: "command",
@@ -403,6 +410,9 @@ func TestCastHandlerExecuteWithWorkflowRecordsSimulatedSteps(t *testing.T) {
 	}
 	if !strings.Contains(castOutputText(t, content), "atmos terraform plan app -s dev") {
 		t.Fatalf("recorded cast missing resolved command:\n%s", content)
+	}
+	if !strings.HasSuffix(strings.TrimSpace(string(content)), `"\u001b[?25h"]`) {
+		t.Fatalf("recorded cast should end with cursor show after final prompt:\n%s", content)
 	}
 }
 

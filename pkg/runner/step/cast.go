@@ -42,7 +42,6 @@ const (
 	defaultCastEnterDelay     = 550 * time.Millisecond
 	defaultCastStepPauseDelay = 700 * time.Millisecond
 	castCursorShow            = "\x1b[?25h"
-	castCursorHide            = "\x1b[?25l"
 )
 
 type CastHandler struct {
@@ -235,7 +234,7 @@ func runCastStepMode(ctx context.Context, castStep *schema.WorkflowStep, vars *V
 			conditionContext.Status = schema.ConditionPredicateFailure
 		}
 	}
-	if err := recordCastPrompt(nil); err != nil {
+	if err := recordCastPromptWithCursor(nil, castStepHasVisibleCursor(castStep)); err != nil {
 		if runErr == nil {
 			return err
 		}
@@ -305,7 +304,7 @@ func runCastSimulateStep(ctx context.Context, castStep, child *schema.WorkflowSt
 			Cursor:     child.Cursor,
 		})
 	case "prompt":
-		return recordCastPrompt(child.SimulatePrompt)
+		return recordCastPromptWithCursor(child.SimulatePrompt, child.Cursor)
 	default:
 		return fmt.Errorf(wrappedQuotedErrorFormat, ErrInvalidSimulateMode, child.Mode)
 	}
@@ -315,25 +314,16 @@ func recordCastTypedLine(ctx context.Context, opts castTypedLineOptions) error {
 	if err := recordCastPrompt(opts.Prompt); err != nil {
 		return err
 	}
-	if err := recordCastCursorIf(opts.Cursor, true); err != nil {
+	if err := recordCastCursorShowIf(opts.Cursor); err != nil {
 		return err
 	}
 	if err := sleepCastInput(ctx, defaultCastPromptDelay); err != nil {
 		return err
 	}
-	if err := recordCastCursorIf(opts.Cursor, false); err != nil {
-		return err
-	}
 	if err := recordCastTypedText(ctx, opts.Prompt, opts.Line, opts.WriteRate); err != nil {
 		return err
 	}
-	if err := recordCastCursorIf(opts.Cursor, true); err != nil {
-		return err
-	}
 	if err := sleepCastInput(ctx, opts.EnterDelay); err != nil {
-		return err
-	}
-	if err := recordCastCursorIf(opts.Cursor, false); err != nil {
 		return err
 	}
 	_, err := fmt.Fprint(iolib.GetContext().Data(), "\n")
@@ -496,20 +486,33 @@ func recordCastPrompt(prompt *schema.SimulatePrompt) error {
 	return err
 }
 
-func recordCastCursor(show bool) error {
-	sequence := castCursorHide
-	if show {
-		sequence = castCursorShow
+func recordCastPromptWithCursor(prompt *schema.SimulatePrompt, cursor bool) error {
+	if err := recordCastPrompt(prompt); err != nil {
+		return err
 	}
-	_, err := fmt.Fprint(iolib.GetContext().Data(), sequence)
+	return recordCastCursorShowIf(cursor)
+}
+
+func recordCastCursorShow() error {
+	_, err := fmt.Fprint(iolib.GetContext().Data(), castCursorShow)
 	return err
 }
 
-func recordCastCursorIf(enabled, show bool) error {
+func recordCastCursorShowIf(enabled bool) error {
 	if !enabled {
 		return nil
 	}
-	return recordCastCursor(show)
+	return recordCastCursorShow()
+}
+
+func castStepHasVisibleCursor(step *schema.WorkflowStep) bool {
+	for i := range step.Steps {
+		child := &step.Steps[i]
+		if child.Type == schema.TaskTypeSimulate && child.Cursor {
+			return true
+		}
+	}
+	return false
 }
 
 func castStepEnterDelay(child *schema.WorkflowStep) (time.Duration, error) {
