@@ -283,7 +283,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/docker/cli/cli/config
     License: Apache-2.0
-    URL: https://github.com/docker/cli/blob/v29.5.2/LICENSE
+    URL: https://github.com/docker/cli/blob/v29.5.3/LICENSE
 
   - github.com/docker/libkv
     License: Apache-2.0
@@ -407,7 +407,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/google/go-containerregistry
     License: Apache-2.0
-    URL: https://github.com/google/go-containerregistry/blob/v0.21.6/LICENSE
+    URL: https://github.com/google/go-containerregistry/blob/v0.21.7/LICENSE
 
   - github.com/google/renameio/v2
     License: Apache-2.0
@@ -1080,11 +1080,11 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/mod/semver
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/mod/+/v0.36.0:LICENSE
+    URL: https://cs.opensource.google/go/x/mod/+/v0.37.0:LICENSE
 
   - golang.org/x/net
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/net/+/v0.55.0:LICENSE
+    URL: https://cs.opensource.google/go/x/net/+/v0.56.0:LICENSE
 
   - golang.org/x/oauth2
     License: BSD-3-Clause
