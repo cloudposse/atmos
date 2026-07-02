@@ -3,6 +3,7 @@
 package exec
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,9 +16,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	helmplugin "github.com/cloudposse/atmos/pkg/helm/plugin"
 	"github.com/cloudposse/atmos/pkg/helmfile"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -154,6 +157,19 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 	info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
 
+	// Ensure declared Helm plugins (e.g. helm-diff) are installed into the managed
+	// HELM_PLUGINS directory and expose it to the helmfile subprocess. Helmfile
+	// shells out to helm, which requires plugins like helm-diff for diff/apply.
+	if pluginSpecs := helmplugin.ExtractSpecs(info.ComponentSection); len(pluginSpecs) > 0 {
+		pluginsDir, perr := helmplugin.EnsureForComponent(context.Background(), tenv.Resolve("helm"), pluginSpecs)
+		if perr != nil {
+			return perr
+		}
+		if pluginsDir != "" {
+			info.ComponentEnvList = append(info.ComponentEnvList, "HELM_PLUGINS="+pluginsDir)
+		}
+	}
+
 	// Print component variables.
 	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
 
@@ -194,6 +210,19 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	// Handle `helmfile deploy` custom command.
 	if info.SubCommand == "deploy" {
 		info.SubCommand = "sync"
+	}
+
+	// Extract the Atmos-specific `--target` flag (provision delivery) so it is not
+	// forwarded to the helmfile binary, and resolve the selected target.
+	flagTarget, strippedArgs := helmfile.ExtractTargetFlag(info.AdditionalArgsAndFlags)
+	info.AdditionalArgsAndFlags = strippedArgs
+	var selectedTarget *target.SelectedTarget
+	if flagTarget != "" {
+		provisionSection, _ := info.ComponentSection[cfg.ProvisionSectionName].(map[string]any)
+		selectedTarget, err = target.SelectTarget(provisionSection, flagTarget)
+		if err != nil {
+			return err
+		}
 	}
 
 	stackContext := cfg.GetContextFromVars(info.ComponentVarsSection)
@@ -378,6 +407,37 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		log.Debug(v)
 	}
 
+	// Provision-target delivery: when a non-cluster target is selected (e.g. a git
+	// deployment repository), render the helmfile to manifests with `helmfile
+	// template` and deliver them to the target instead of applying to a cluster.
+	if selectedTarget != nil && selectedTarget.Kind != target.KindKubernetes {
+		defer func() {
+			if rmErr := os.Remove(varFilePath); rmErr != nil {
+				log.Warn(rmErr.Error())
+			}
+		}()
+		rendered, deliverErr := deliverHelmfileToTarget(&atmosConfig, &info, helmfileTargetDelivery{
+			varFile:       varFile,
+			componentPath: componentPath,
+			envVars:       envVars,
+			flagTarget:    flagTarget,
+		})
+		if info.PerComponentHook != nil {
+			info.PerComponentHook(&info, rendered, deliverErr)
+		}
+		return deliverErr
+	}
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	shellOpts := []ShellCommandOption{WithEnvironment(info.SanitizedEnv)}
+	if info.PerComponentHook != nil {
+		shellOpts = append(shellOpts, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
+	}
+
+	// Resolve the helmfile binary through the toolchain environment so a
+	// toolchain-installed helmfile (under the install path, not the system PATH)
+	// is found — mirroring the `version` subcommand above. Falls back to the bare
+	// command name when no toolchain dependency provides it.
 	err = ExecuteShellCommand(
 		atmosConfig,
 		tenv.Resolve(info.Command),
@@ -386,8 +446,11 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		envVars,
 		info.DryRun,
 		info.RedirectStdErr,
-		WithEnvironment(info.SanitizedEnv),
+		shellOpts...,
 	)
+	if info.PerComponentHook != nil {
+		info.PerComponentHook(&info, stdoutBuf.String()+stderrBuf.String(), err)
+	}
 	if err != nil {
 		return err
 	}
@@ -399,6 +462,51 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	return nil
+}
+
+// renderAndDeliver is a seam over helmfile.RenderAndDeliver so the inline
+// call-site can be unit-tested without invoking the helmfile binary.
+var renderAndDeliver = helmfile.RenderAndDeliver
+
+// helmfileTargetDelivery bundles the inputs for rendering a helmfile and
+// delivering the result to a provision target.
+type helmfileTargetDelivery struct {
+	varFile       string
+	componentPath string
+	envVars       []string
+	flagTarget    string
+}
+
+// deliverHelmfileToTarget renders the helmfile to manifests and delivers them to
+// the selected provision target. The feature logic lives in pkg/helmfile; this is
+// the thin inline call-site.
+func deliverHelmfileToTarget(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	d helmfileTargetDelivery,
+) (string, error) {
+	templateArgs := []string{"--state-values-file", d.varFile}
+	templateArgs = append(templateArgs, info.GlobalOptions...)
+	templateArgs = append(templateArgs, "template")
+	templateArgs = append(templateArgs, info.AdditionalArgsAndFlags...)
+
+	var envProvider target.IdentityEnvironmentProvider
+	if mgr, ok := info.AuthManager.(auth.AuthManager); ok {
+		envProvider = mgr
+	}
+	provisionSection, _ := info.ComponentSection[cfg.ProvisionSectionName].(map[string]any)
+
+	return renderAndDeliver(context.Background(), &helmfile.RenderDeliverInput{
+		AtmosConfig:      atmosConfig,
+		Info:             info,
+		Command:          info.Command,
+		Args:             templateArgs,
+		WorkingDir:       d.componentPath,
+		EnvVars:          d.envVars,
+		ProvisionSection: provisionSection,
+		FlagTarget:       d.flagTarget,
+		EnvProvider:      envProvider,
+	})
 }
 
 // resolveDefaultIdentity resolves the default identity. A lookup failure is fatal

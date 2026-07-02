@@ -150,6 +150,57 @@ func TestBuildTerraformCommandArgs_Refresh(t *testing.T) {
 	assert.Contains(t, args, varFileFlag)
 }
 
+func TestBuildTerraformCommandArgs_Test(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{SubCommand: "test"}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test", varFileFlag, "vars.json"}, args)
+}
+
+func TestBuildTerraformCommandArgs_TestAdditionalVarFileOverridesGeneratedVarFile(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:             "test",
+		AdditionalArgsAndFlags: []string{varFileFlag, "override.tfvars"},
+	}
+	componentPath := "/tmp/my-component"
+
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test", varFileFlag, "vars.json", varFileFlag, "override.tfvars"}, args)
+}
+
+func TestBuildTerraformCommandArgs_TestAddsTestVarFileBeforeUserArgs(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:             "test",
+		AdditionalArgsAndFlags: []string{varFileFlag, "override.tfvars"},
+	}
+	componentPath := "/tmp/my-component"
+
+	addTerraformTestVarfileArg(&info, "test-vars.json")
+	args, _, err := buildTerraformCommandArgs(&atmosConfig, &info, "vars.json", "plan.tfplan", &componentPath)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test", varFileFlag, "vars.json", varFileFlag, "test-vars.json", varFileFlag, "override.tfvars"}, args)
+}
+
+func TestAddTerraformTestVarfileArgIgnoresNonTestCommands(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:             "plan",
+		AdditionalArgsAndFlags: []string{"-compact-warnings"},
+	}
+
+	addTerraformTestVarfileArg(&info, "test-vars.json")
+
+	assert.Equal(t, []string{"-compact-warnings"}, info.AdditionalArgsAndFlags)
+}
+
 func TestBuildTerraformCommandArgs_Apply_WithoutPlan(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{

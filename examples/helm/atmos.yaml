@@ -1,0 +1,41 @@
+# Atmos configuration for the native Helm component demo.
+# See https://atmos.tools for documentation.
+
+base_path: "."
+
+components:
+  helm:
+    # Base path for native Helm components (local charts live here).
+    base_path: "components/helm"
+
+auth:
+  identities:
+    local-k3s:
+      kind: kubernetes/emulator
+      emulator: kubernetes
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+commands:
+  - name: "test"
+    description: "Render the local Helm chart, deploy it to the k3s emulator, verify it, then tear it down"
+    steps:
+      - atmos validate stacks
+      - atmos helm template demo -s dev
+      - atmos emulator up kubernetes -s dev
+      - atmos helm diff demo -s dev --identity local-k3s
+      - atmos helm apply demo -s dev --identity local-k3s
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
+      - atmos helm delete demo -s dev --identity local-k3s
+      - atmos emulator down kubernetes -s dev

@@ -79,9 +79,24 @@ func (p *PodmanRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	return nil
 }
 
+// EnsureNetwork idempotently creates a user-defined podman network. It implements
+// NetworkEnsurer so emulators in a stack can share a network and resolve each
+// other by component name.
+func (p *PodmanRuntime) EnsureNetwork(ctx context.Context, name string) error {
+	defer perf.Track(nil, "container.PodmanRuntime.EnsureNetwork")()
+
+	cmd := p.command(ctx, "network", "create", name)
+	output, err := cmd.CombinedOutput()
+	return networkCreateResult(err, string(output))
+}
+
 // Create creates a new container.
 func (p *PodmanRuntime) Create(ctx context.Context, config *CreateConfig) (string, error) {
 	defer perf.Track(nil, "container.PodmanRuntime.Create")()
+
+	if err := prepareHostRuntime(ctx, p, config); err != nil {
+		return "", err
+	}
 
 	args := buildCreateArgs(config)
 
@@ -253,6 +268,9 @@ func parsePodmanContainer(containerJSON map[string]interface{}) Info {
 // endpoint resolution yields an empty URL (see pkg/emulator manager.endpoint), so
 // Terraform falls back to real cloud endpoints.
 func parsePodmanPorts(raw interface{}) []PortBinding {
+	if containerJSON, ok := raw.(map[string]interface{}); ok {
+		raw = containerJSON["Ports"]
+	}
 	entries, ok := raw.([]interface{})
 	if !ok {
 		return nil

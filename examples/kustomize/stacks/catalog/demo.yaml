@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+components:
+  kubernetes:
+    demo/defaults:
+      metadata:
+        type: abstract
+        component: demo
+      provider: kustomize
+      vars:
+        overlay: dev
+      paths:
+        - overlays/{{ .vars.overlay }}

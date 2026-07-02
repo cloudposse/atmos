@@ -35,6 +35,13 @@ components:
     base_path: ""
     command: ""
     auto_generate_files: false
+  kubernetes:
+    base_path: ""
+    provider: ""
+    auto_generate_files: false
+  helm:
+    base_path: ""
+    auto_generate_files: false
 stacks:
   base_path: stacks
   included_paths:
@@ -104,6 +111,8 @@ terraformDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-
 helmfileDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 packerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 ansibleDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
+kubernetesDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
+helmDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 default: false
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 import:

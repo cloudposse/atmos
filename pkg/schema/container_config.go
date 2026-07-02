@@ -29,4 +29,10 @@ type ContainerRuntimeConfig struct {
 	// is found, instead of failing. A global default for the per-step
 	// `runtime_auto_start:` field; also settable via ATMOS_CONTAINER_RUNTIME_AUTO_START.
 	AutoStart bool `yaml:"auto_start,omitempty" json:"auto_start,omitempty" mapstructure:"auto_start"`
+	// Host grants the container access to the host container runtime (Docker-out-of-Docker):
+	// Atmos mounts the runtime socket, runs the container as root, relabels it for SELinux,
+	// and sets DOCKER_HOST so the container can launch and manage sibling containers. Opt-in
+	// and effectively host-root; independent of `privileged` (kernel caps). On rootless
+	// podman the socket is unreachable in-container — use Docker or `podman machine set --rootful`.
+	Host bool `yaml:"host,omitempty" json:"host,omitempty" mapstructure:"host"`
 }

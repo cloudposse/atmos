@@ -231,6 +231,34 @@ func TestEffectiveRunStepMergesShorthand(t *testing.T) {
 	assert.Equal(t, "explicit", run.Image)
 }
 
+func TestEffectiveRunStepHostRuntime(t *testing.T) {
+	// Inline step-level runtime.host folds in.
+	run := effectiveRunStep(&schema.WorkflowStep{
+		Runtime: &schema.ContainerRuntimeConfig{Host: true},
+	})
+	assert.True(t, runtimeHost(run.Runtime))
+
+	// run.runtime.host folds in.
+	run = effectiveRunStep(&schema.WorkflowStep{
+		Run: &schema.ContainerRunStep{Runtime: &schema.ContainerRuntimeConfig{Host: true}},
+	})
+	assert.True(t, runtimeHost(run.Runtime))
+
+	// Merging the inline host must not mutate the shared run.runtime pointer.
+	stepRuntime := &schema.ContainerRuntimeConfig{}
+	step := &schema.WorkflowStep{
+		Runtime: &schema.ContainerRuntimeConfig{Host: true},
+		Run:     &schema.ContainerRunStep{Runtime: stepRuntime},
+	}
+	run = effectiveRunStep(step)
+	assert.True(t, runtimeHost(run.Runtime))
+	assert.False(t, stepRuntime.Host, "the original run.runtime must stay unmodified")
+
+	// No runtime block → no host access.
+	run = effectiveRunStep(&schema.WorkflowStep{})
+	assert.False(t, runtimeHost(run.Runtime))
+}
+
 func TestConvertContainerPorts(t *testing.T) {
 	ports := convertContainerPorts([]schema.ContainerPort{
 		{Host: 8080, Container: 80},

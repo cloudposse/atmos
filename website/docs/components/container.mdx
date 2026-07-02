@@ -51,6 +51,25 @@ components:
 Inheritance (`metadata.inherits`), catalogs, mixins, and deep-merge work exactly like other component
 kinds — define abstract base components with shared `run`/`build` defaults and inherit them.
 
+## Host runtime access (Docker-out-of-Docker)
+
+A container that must launch and manage **sibling** containers (Testcontainers-style suites, tools that
+shell out to `docker`) can drive the host container runtime with `run.runtime.host`:
+
+```yaml
+components:
+  container:
+    integration-tests:
+      run:
+        runtime:
+          host: true        # mount the host runtime socket, run as root, set DOCKER_HOST
+```
+
+This is the same `runtime.host` flag available on [emulator components](/stacks/components/emulator) and
+`type: container` workflow steps. It is opt-in and effectively host-root; it works on Docker and
+**rootful** podman (on rootless podman the socket is unreachable in-container — use
+`podman machine set --rootful` or Docker). It is independent of kernel-capability `privileged`.
+
 ## Lifecycle
 
 ```bash

@@ -8,9 +8,9 @@ components:
     aws:
       driver: floci/aws
       region: us-east-1
-      # Pin the Floci image to the known-good release the test suite verifies
-      # (1.5.23). The driver default is `floci/floci:latest`, which can drift to a
-      # newer build that rejects the dummy `test`/`test` credentials (403
-      # InvalidAccessKeyId). Keep this digest in sync with tests/floci_containers_test.go.
       container:
-        image: floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2
+        # Pull Floci from Google's Docker Hub mirror to avoid Docker Hub rate
+        # limits/timeouts in CI, and pin the image to the known-good release the
+        # test suite verifies (1.5.23). Keep this digest in sync with
+        # tests/floci_containers_test.go.
+        image: mirror.gcr.io/floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2

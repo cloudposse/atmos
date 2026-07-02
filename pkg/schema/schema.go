@@ -96,6 +96,8 @@ type AtmosConfiguration struct {
 	HelmfileDirAbsolutePath       string             `yaml:"helmfileDirAbsolutePath,omitempty" json:"helmfileDirAbsolutePath,omitempty" mapstructure:"helmfileDirAbsolutePath"`
 	PackerDirAbsolutePath         string             `yaml:"packerDirAbsolutePath,omitempty" json:"packerDirAbsolutePath,omitempty" mapstructure:"packerDirAbsolutePath"`
 	AnsibleDirAbsolutePath        string             `yaml:"ansibleDirAbsolutePath,omitempty" json:"ansibleDirAbsolutePath,omitempty" mapstructure:"ansibleDirAbsolutePath"`
+	KubernetesDirAbsolutePath     string             `yaml:"kubernetesDirAbsolutePath,omitempty" json:"kubernetesDirAbsolutePath,omitempty" mapstructure:"kubernetesDirAbsolutePath"`
+	HelmDirAbsolutePath           string             `yaml:"helmDirAbsolutePath,omitempty" json:"helmDirAbsolutePath,omitempty" mapstructure:"helmDirAbsolutePath"`
 	StackConfigFilesRelativePaths []string           `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
 	StackConfigFilesAbsolutePaths []string           `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string             `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
@@ -444,6 +446,47 @@ type TelemetrySettings struct {
 // ProvisionSettings contains global defaults for provisioning.
 type ProvisionSettings struct {
 	Workdir ProvisionWorkdirSettings `yaml:"workdir,omitempty" json:"workdir,omitempty" mapstructure:"workdir"`
+	// Default is the name of the target used by apply/deploy when no --target is given.
+	Default string `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	// Targets maps target names to delivery destinations for rendered artifacts.
+	Targets map[string]ProvisionTarget `yaml:"targets,omitempty" json:"targets,omitempty" mapstructure:"targets"`
+}
+
+// ProvisionTarget is a delivery destination for a rendered artifact, selected by
+// its kind (e.g. "git", "kubernetes"). Kind-specific fields below are interpreted
+// by the registered target provisioner for that kind.
+type ProvisionTarget struct {
+	// Kind selects the target provisioner (e.g. "git", "kubernetes").
+	Kind string `yaml:"kind" json:"kind" mapstructure:"kind"`
+	// Repository references a top-level git.repositories.<name> (git kind).
+	Repository string `yaml:"repository,omitempty" json:"repository,omitempty" mapstructure:"repository"`
+	// Path is the destination path inside the deployment repository (git kind, supports templates).
+	Path string `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`
+	// Auth selects the Atmos Auth identity used for the delivery (overrides the repository default).
+	Auth ProvisionTargetAuth `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	// Commit controls the commit message and signing for the delivery (git kind).
+	Commit ProvisionTargetCommit `yaml:"commit,omitempty" json:"commit,omitempty" mapstructure:"commit"`
+	// PullRequest configures pull-request publishing (git kind; not yet supported by the cli provider).
+	PullRequest ProvisionTargetPullRequest `yaml:"pull_request,omitempty" json:"pull_request,omitempty" mapstructure:"pull_request"`
+}
+
+// ProvisionTargetAuth selects the Atmos Auth identity for a delivery.
+type ProvisionTargetAuth struct {
+	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+}
+
+// ProvisionTargetCommit controls commit message and signing for a git delivery.
+type ProvisionTargetCommit struct {
+	// Message is the commit message (supports templates).
+	Message string `yaml:"message,omitempty" json:"message,omitempty" mapstructure:"message"`
+	// Signing mode: "auto" (git config decides), "always" (-S), or "never" (--no-gpg-sign).
+	Signing string `yaml:"signing,omitempty" json:"signing,omitempty" mapstructure:"signing"`
+}
+
+// ProvisionTargetPullRequest configures pull-request publishing for a git delivery.
+type ProvisionTargetPullRequest struct {
+	// Enabled requests pull-request publishing (not yet supported by the cli provider).
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 }
 
 // ProvisionWorkdirSettings contains default settings for workdir provisioning.
@@ -721,6 +764,31 @@ type TerraformPlanCIResult struct {
 	Error      string
 }
 
+// KubernetesCIResult contains the compact result data rendered into native CI
+// job summaries for one Kubernetes component command.
+type KubernetesCIResult struct {
+	Stack        string
+	Component    string
+	Command      string
+	ExitCode     int
+	Error        string
+	ObjectsTotal int
+	Actions      []KubernetesObjectCIResult
+	ActionCounts map[string]int
+}
+
+// KubernetesObjectCIResult contains one Kubernetes object action row.
+type KubernetesObjectCIResult struct {
+	Action    string
+	Resource  string
+	Namespace string
+	Name      string
+	// Diff holds the unified diff for this object (plan/diff only). Empty for
+	// no-change objects, Secret objects (deliberately omitted), and operations
+	// that do not produce a diff.
+	Diff string
+}
+
 // CIConfig contains CI/CD integration configuration.
 // Uses provider-agnostic naming to support GitHub Actions, GitLab CI, and other providers.
 type CIConfig struct {
@@ -887,6 +955,10 @@ type CITemplatesConfig struct {
 	// Keys are command names (e.g., "plan", "apply"), values are template file paths.
 	Terraform map[string]string `yaml:"terraform,omitempty" json:"terraform,omitempty" mapstructure:"terraform"`
 
+	// Helm contains template overrides for native Helm commands.
+	// Keys are command names (e.g., "diff", "apply"), values are template file paths.
+	Helm map[string]string `yaml:"helm,omitempty" json:"helm,omitempty" mapstructure:"helm"`
+
 	// Helmfile contains template overrides for helmfile commands.
 	// Keys are command names (e.g., "diff", "apply"), values are template file paths.
 	Helmfile map[string]string `yaml:"helmfile,omitempty" json:"helmfile,omitempty" mapstructure:"helmfile"`
@@ -907,6 +979,13 @@ type Helmfile struct {
 	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
 	// Source holds global source configuration defaults for JIT-vendored components.
 	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	// Plugins lists Helm CLI plugins (e.g. helm-diff, helm-secrets) required by
+	// helmfile components. Each entry is a compact spec: a short alias
+	// (e.g. "diff@3.9.x"), an "owner/repo@version", or a full plugin URL.
+	// Atmos installs them into a managed HELM_PLUGINS directory before invoking
+	// the helmfile binary. Type-level defaults declared here inherit down to
+	// component instances via normal stack deep-merge.
+	Plugins []string `yaml:"plugins,omitempty" json:"plugins,omitempty" mapstructure:"plugins"`
 }
 
 type Packer struct {
@@ -930,12 +1009,63 @@ type Ansible struct {
 	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
 }
 
+// Kubernetes defines configuration for Kubernetes components.
+type Kubernetes struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	// Provider selects the SDK-backed renderer/loader. Supported values are kubectl and kustomize.
+	Provider string `yaml:"provider" json:"provider" mapstructure:"provider"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// during Kubernetes operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+}
+
+// HelmRepository describes an HTTP Helm chart repository.
+type HelmRepository struct {
+	Name                  string `yaml:"name" json:"name" mapstructure:"name"`
+	URL                   string `yaml:"url" json:"url" mapstructure:"url"`
+	Username              string `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
+	Password              string `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"` // #nosec G117 -- Helm repository credentials are part of user configuration.
+	PassCredentialsAll    bool   `yaml:"pass_credentials_all,omitempty" json:"pass_credentials_all,omitempty" mapstructure:"pass_credentials_all"`
+	CertFile              string `yaml:"cert_file,omitempty" json:"cert_file,omitempty" mapstructure:"cert_file"`
+	KeyFile               string `yaml:"key_file,omitempty" json:"key_file,omitempty" mapstructure:"key_file"`
+	CAFile                string `yaml:"ca_file,omitempty" json:"ca_file,omitempty" mapstructure:"ca_file"`
+	InsecureSkipTLSVerify bool   `yaml:"insecure_skip_tls_verify,omitempty" json:"insecure_skip_tls_verify,omitempty" mapstructure:"insecure_skip_tls_verify"`
+}
+
+// Helm defines configuration for native Helm components.
+// Helm components render and deploy Helm charts (local, remote-repo, or OCI)
+// using the Helm Go SDK, and can deliver rendered manifests to provision targets.
+type Helm struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// during Helm operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	// Plugins lists Helm CLI plugins (e.g. helm-diff, helm-secrets) to install
+	// into the managed HELM_PLUGINS directory. Each entry is a compact spec: a
+	// short alias (e.g. "diff@3.9.x"), an "owner/repo@version", or a full plugin
+	// URL. Native Helm SDK operations do not use plugins; these apply only to
+	// helm-binary passthrough. Type-level defaults inherit down to instances via
+	// normal stack deep-merge.
+	Plugins []string `yaml:"plugins,omitempty" json:"plugins,omitempty" mapstructure:"plugins"`
+	// Repositories lists reusable Helm chart repositories available to native
+	// Helm components. Component-level repositories override entries by name.
+	Repositories []HelmRepository `yaml:"repositories,omitempty" json:"repositories,omitempty" mapstructure:"repositories"`
+}
+
 type Components struct {
 	// Built-in component types (legacy - will migrate to plugin model in future phases).
-	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
-	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
-	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
-	Ansible   Ansible   `yaml:"ansible" json:"ansible" mapstructure:"ansible"`
+	Terraform  Terraform  `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
+	Helmfile   Helmfile   `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
+	Packer     Packer     `yaml:"packer" json:"packer" mapstructure:"packer"`
+	Ansible    Ansible    `yaml:"ansible" json:"ansible" mapstructure:"ansible"`
+	Kubernetes Kubernetes `yaml:"kubernetes" json:"kubernetes" mapstructure:"kubernetes"`
+	Helm       Helm       `yaml:"helm" json:"helm" mapstructure:"helm"`
 
 	// List configuration for component listing.
 	List ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
@@ -961,6 +1091,10 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 		return c.Packer, true
 	case "ansible":
 		return c.Ansible, true
+	case "kubernetes":
+		return c.Kubernetes, true
+	case "helm":
+		return c.Helm, true
 	default:
 		// Check plugin types.
 		if config, ok := c.Plugins[componentType]; ok {
@@ -1559,9 +1693,16 @@ type BaseComponentConfig struct {
 	BaseComponentRequiredProviders AtmosSectionMapType
 	BaseComponentRequiredVersion   string
 	BaseComponentHooks             AtmosSectionMapType
+	BaseComponentTest              AtmosSectionMapType
 	// BaseComponentGenerate holds the generate section configuration from the base component,
 	// defining auxiliary files to be generated for this component.
 	BaseComponentGenerate                  AtmosSectionMapType
+	BaseComponentProvider                  string
+	BaseComponentPaths                     any
+	BaseComponentManifests                 any
+	BaseComponentPlugins                   any
+	BaseComponentRender                    AtmosSectionMapType
+	BaseComponentHelm                      AtmosSectionMapType
 	FinalBaseComponentName                 string
 	BaseComponentCommand                   string
 	BaseComponentBackendType               string

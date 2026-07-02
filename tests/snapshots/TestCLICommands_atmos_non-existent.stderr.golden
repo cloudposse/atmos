@@ -20,8 +20,10 @@ Valid subcommands are:
   • emulator
   • env
   • git
+  • helm
   • helmfile
   • help
+  • kubernetes
   • list
   • lsp
   • mcp

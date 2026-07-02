@@ -18,7 +18,8 @@ Atmos brings first-class CI/CD support directly into the CLI. Run Atmos commands
 GitHub Actions and get rich job summaries, status checks, output variables, and stored planfile
 verification — no extra actions required. And because every command is **git-aware**, the same
 CLI powers GitOps end to end: plan and apply only what changed, vendor reusable catalogs across
-repositories, and commit results back to your source of truth.
+repositories, and commit results back to your source of truth. Kubernetes components also write
+native job summaries, with a deliberately smaller v1 surface.
 </Intro>
 
 <Experimental />
@@ -67,6 +68,10 @@ ci:
 ## GitHub Actions Workflows
 
 Running Atmos in GitHub Actions reduces to two steps: **check out the repository, then run an `atmos` command.** Atmos detects the CI environment automatically and produces job summaries, output variables, status checks, and stored planfiles without any wrapper actions.
+
+Terraform commands use the full native CI feature set. Kubernetes commands currently emit
+human-readable job summaries only; they do not write `$GITHUB_OUTPUT` values, commit statuses,
+PR comments, or stored artifacts.
 
 The examples below pin the Atmos version via a [repository variable](https://docs.github.com/en/actions/learn-github-actions/variables) named `ATMOS_VERSION` (e.g. set to `1.200.0`). We don't publish a `latest` tag, so always pin to a specific release.
 
@@ -380,14 +385,20 @@ For deeper auth reference: [Profiles](/cli/configuration/profiles), [Auth concep
 
 ### [Job Summaries](/ci/job-summaries)
 
-Rich Markdown summaries with resource counts, inline badges, and collapsible diffs written
-to `$GITHUB_STEP_SUMMARY`. Includes separate templates for plan and apply results. Templates
-are fully customizable with Go template syntax.
+Rich Markdown summaries with resource counts, inline badges, collapsible diffs, and captured
+command output written to `$GITHUB_STEP_SUMMARY`. Terraform includes plan/apply summaries plus
+the broader native CI features below. Helm and Helmfile currently write summaries only.
+Templates are fully customizable with Go template syntax.
+
+Kubernetes summaries are intentionally compact: `plan`/`diff` show created, changed, and
+no-change objects; `apply`/`deploy` show applied or delivered objects; `delete` shows deleted
+and not-found objects; `validate` shows valid and invalid objects plus errors.
 
 ### [Outputs](/cli/configuration/ci/output)
 
 Terraform plan and apply results exported as CI output variables for use in downstream jobs.
-On GitHub Actions, these are written to `$GITHUB_OUTPUT`.
+On GitHub Actions, these are written to `$GITHUB_OUTPUT`. Kubernetes commands do not emit
+output variables in v1.
 
 ### [Checks](/cli/configuration/ci/checks)
 
@@ -428,7 +439,7 @@ truth, and the pipeline reconciles only what changed.
 
 ## Commands
 
-CI features are activated with the `--ci` flag on existing Terraform commands or automatically when running in a CI environment (e.g. GitHub Actions):
+CI features are activated with the `--ci` flag on supported commands or automatically when running in a CI environment (e.g. GitHub Actions):
 
 <dl>
   <dt>[`atmos terraform plan [--ci]`](/cli/commands/terraform/plan)</dt>
@@ -440,11 +451,20 @@ CI features are activated with the `--ci` flag on existing Terraform commands or
   <dt>[`atmos terraform deploy [--ci]`](/cli/commands/terraform/deploy)</dt>
   <dd>Deploy with stored planfile verification, drift detection, and full CI reporting.</dd>
 
+  <dt>[`atmos helm template|diff|apply|deploy|delete [--ci]`](/cli/commands/helm/usage)</dt>
+  <dd>Run native Helm components with job summaries for rendered/applied object metadata.</dd>
+
+  <dt>[`atmos helmfile template|diff|apply|sync|deploy|destroy [--ci]`](/cli/commands/helmfile/usage)</dt>
+  <dd>Run Helmfile components with job summaries that include captured masked command output.</dd>
+
   <dt>[`atmos terraform planfile`](/cli/commands/terraform/planfile)</dt>
   <dd>Manage stored planfiles: upload, download, list, delete, and show.</dd>
 
   <dt>[`atmos describe affected --format=matrix`](/cli/commands/describe/affected)</dt>
   <dd>Generate GitHub Actions matrix strategy from affected components.</dd>
+
+  <dt>[`atmos kubernetes render|plan|diff|apply|deploy|delete|validate [--ci]`](/cli/commands/kubernetes/usage)</dt>
+  <dd>Run Kubernetes operations with a native job summary only. No output variables, status checks, comments, or artifacts are emitted.</dd>
 </dl>
 
 ## Providers

@@ -14,7 +14,8 @@ import DocCardList from '@theme/DocCardList'
 
 <Intro>
 The `ci` section of `atmos.yaml` configures native CI/CD integration, including output variables,
-job summaries, status checks, PR comments, and template overrides.
+job summaries, status checks, PR comments, and template overrides. Terraform supports the full
+feature set; Kubernetes v1 CI support writes job summaries only.
 </Intro>
 
 <Experimental />
@@ -58,6 +59,16 @@ ci:
 
 <DocCardList />
 
+## Component Support
+
+| Component type | Job summaries | Output variables | Status checks | PR comments | Artifacts |
+| --- | --- | --- | --- | --- | --- |
+| Terraform | Yes | Yes | Yes | Yes | Planfiles |
+| Kubernetes | Yes | No | No | No | No |
+
+Kubernetes summaries cover render, plan/diff, apply/deploy, delete, validate, and command failures.
+They intentionally do not create a machine-readable output contract in v1.
+
 ## Full Example
 
 <File title="atmos.yaml">
@@ -96,6 +107,16 @@ ci:
     terraform:
       plan: "plan.md"
       apply: "apply.md"
+    helm:
+      template: "helm-template.md"
+      diff: "helm-diff.md"
+      apply: "helm-apply.md"
+      delete: "helm-delete.md"
+    helmfile:
+      template: "helmfile-template.md"
+      diff: "helmfile-diff.md"
+      apply: "helmfile-apply.md"
+      destroy: "helmfile-destroy.md"
 ```
 </File>
 
@@ -106,7 +127,10 @@ CI mode is auto-enabled when any of these environment variables are set:
 - `CI=true` (set by most CI providers)
 - `GITHUB_ACTIONS=true` (set by GitHub Actions)
 
-Override with the `--ci` flag or `ci.enabled` configuration.
+Override with the `--ci` flag, `ATMOS_CI`, or `ci.enabled` configuration.
+
+Terraform commands use native CI for summaries, outputs, checks, comments, and planfile storage.
+Native Helm and Helmfile commands use native CI for job summaries only.
 
 ## Environment Variables
 

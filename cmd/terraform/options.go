@@ -54,6 +54,12 @@ type TerraformRunOptions struct {
 
 	// Status upload flag.
 	UploadStatus bool
+
+	// AppendArgs are extra terraform pass-through flags injected by the caller
+	// (e.g. `-json` for `terraform test` in CI). They are appended to
+	// info.AdditionalArgsAndFlags so they reach the terraform command directly,
+	// bypassing Cobra positional-arg parsing.
+	AppendArgs []string
 }
 
 // ParseTerraformRunOptions parses and validates shared terraform flags from Viper.

@@ -34,6 +34,7 @@ import (
 type componentExecContext struct {
 	componentPath string
 	varFile       string
+	testVarFile   string
 	planFile      string
 	workingDir    string
 	tenv          *dependencies.ToolchainEnvironment
@@ -71,6 +72,10 @@ func prepareComponentExecution(
 	}
 
 	varFile := constructTerraformComponentVarfileName(info)
+	testVarFile := ""
+	if hasTerraformTestVars(info) {
+		testVarFile = constructTerraformComponentTestVarfileName(info)
+	}
 	planFile := constructTerraformComponentPlanfileName(info)
 	workingDir := constructTerraformComponentWorkingDir(atmosConfig, info)
 
@@ -81,6 +86,7 @@ func prepareComponentExecution(
 	return &componentExecContext{
 		componentPath: componentPath,
 		varFile:       varFile,
+		testVarFile:   testVarFile,
 		planFile:      planFile,
 		workingDir:    workingDir,
 		tenv:          tenv,
@@ -171,6 +177,7 @@ func executeCommandPipeline(
 
 	handleDeploySubcommand(atmosConfig, info)
 	logTerraformContext(info, execCtx.workingDir)
+	addTerraformTestVarfileArg(info, execCtx.testVarFile)
 
 	allArgsAndFlags, uploadStatusFlag, err := buildTerraformCommandArgs(atmosConfig, info, execCtx.varFile, execCtx.planFile, &componentPath)
 	if err != nil {
@@ -198,6 +205,13 @@ func executeCommandPipeline(
 
 	cleanupTerraformFiles(atmosConfig, info)
 	return nil
+}
+
+func addTerraformTestVarfileArg(info *schema.ConfigAndStacksInfo, testVarFile string) {
+	if info.SubCommand != "test" || testVarFile == "" {
+		return
+	}
+	info.AdditionalArgsAndFlags = append([]string{varFileFlag, testVarFile}, info.AdditionalArgsAndFlags...)
 }
 
 // shouldSkipWorkspaceSetup returns true when workspace setup should be skipped.
@@ -439,6 +453,13 @@ func cleanupTerraformFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 		varFilePath := constructTerraformComponentVarfilePath(atmosConfig, info)
 		if err := os.Remove(varFilePath); err != nil && !os.IsNotExist(err) {
 			log.Trace("Failed to remove var file during cleanup", "error", err, "file", varFilePath)
+		}
+	}
+
+	if info.SubCommand == "test" {
+		testVarFilePath := constructTerraformComponentTestVarfilePath(atmosConfig, info)
+		if err := os.Remove(testVarFilePath); err != nil && !os.IsNotExist(err) {
+			log.Trace("Failed to remove Terraform test var file during cleanup", "error", err, "file", testVarFilePath)
 		}
 	}
 }

@@ -697,6 +697,24 @@ func TestGetMergedAuthConfigWithFetcher_ComponentConfigSuccess(t *testing.T) {
 	assert.NotNil(t, result)
 }
 
+func TestGetMergedAuthConfigWithFetcher_PassesComponentType(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		ComponentFromArg: "demo",
+		ComponentType:    cfg.HelmComponentType,
+	}
+
+	mockFetcher := func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+		assert.Equal(t, cfg.HelmComponentType, params.ComponentType)
+		return map[string]any{}, nil
+	}
+
+	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
 func TestGetMergedAuthConfigWithFetcher_InvalidComponentError(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	info := &schema.ConfigAndStacksInfo{

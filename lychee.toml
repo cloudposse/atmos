@@ -96,14 +96,23 @@ exclude = [
   # Anthropic's clau.de URL shortener is Cloudflare-fronted and returns 525
   # (SSL handshake failed) to non-browser/CI requests; it resolves in a real browser.
   "clau\\.de",
+  # Anthropic docs intermittently return 503 Service Unavailable from CI runners.
+  "docs\\.anthropic\\.com",
   # luigi.readthedocs.io (intermittent 502 Bad Gateway in CI)
   "luigi\\.readthedocs\\.io",
   # tldp.org (intermittent 502 Bad Gateway in CI; sibling exit-code references
   # like gnu.org, man.openbsd.org, and refspecs.linuxfoundation.org are excluded for the same reason)
   "tldp\\.org",
   # no-color.org (intermittent connection failures / unreachable from CI runners;
-  # it is the canonical NO_COLOR spec site and resolves in a real browser)
+  # it is the canonical NO_COLOR spec site referenced from the help-system and
+  # io-handling PRDs, and resolves in a real browser)
   "no-color\\.org",
+  # Algolia DocSearch docs (intermittent timeouts from CI runners)
+  "docsearch\\.algolia\\.com",
+  # Open Group POSIX specs (intermittent timeouts from CI runners)
+  "pubs\\.opengroup\\.org",
+  # Pact docs (intermittent timeouts from CI runners)
+  "docs\\.pact\\.io",
   # google-gemini/gemini-cli repo deep-links intermittently return 502 Bad Gateway
   # from GitHub's gateway in CI; the pages are valid and load in a browser.
   "github\\.com/google-gemini/gemini-cli",

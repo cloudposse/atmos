@@ -110,6 +110,7 @@ func getMergedAuthConfigWithFetcher(
 	componentConfig, err := configFetcher(&ExecuteDescribeComponentParams{
 		Component:            info.ComponentFromArg,
 		Stack:                info.Stack,
+		ComponentType:        info.ComponentType,
 		ProcessTemplates:     false,
 		ProcessYamlFunctions: false, // Critical: avoid circular dependency with YAML functions that need auth.
 		Skip:                 nil,

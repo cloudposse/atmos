@@ -73,45 +73,70 @@ func InitializeMarkdown(config *schema.AtmosConfiguration) {
 // in a structured plain text format. This is used when the markdown renderer
 // is not available (e.g., during early startup errors before config is loaded).
 func printStructuredPlainError(err error, title string, suggestion string) {
+	_, writeErr := os.Stderr.WriteString(formatStructuredPlainError(err, title, suggestion))
+	if writeErr != nil {
+		log.Error(writeErr)
+		log.Error(err)
+	}
+}
+
+func formatStructuredPlainError(err error, title string, suggestion string) string {
 	if title == "" {
 		title = "Error"
 	}
 	title = cases.Title(language.English).String(title)
-	maskedStderr := os.Stderr
+	var out strings.Builder
 
 	// Print title and base error message.
-	fmt.Fprintf(maskedStderr, "\n%s: %v\n", title, err)
+	fmt.Fprintf(&out, "\n%s: %v\n", title, err)
 
 	// Extract and print explanations (from WithDetail/WithExplanation).
-	printErrorDetails(err)
+	appendErrorDetails(&out, err)
 
 	// Extract and print hints (skip TITLE: and EXAMPLE: prefixes).
-	printErrorHints(err)
+	appendErrorHints(&out, err)
 
 	// Extract and print context (from WithContext).
-	printErrorContext(err)
+	appendErrorContext(&out, err)
 
 	// Legacy suggestion fallback.
 	if suggestion != "" {
-		fmt.Fprintf(maskedStderr, "\n%s\n", suggestion)
+		fmt.Fprintf(&out, "\n%s\n", suggestion)
 	}
+
+	return out.String()
 }
 
 // printErrorDetails prints the explanation section from error details.
 func printErrorDetails(err error) {
+	var out strings.Builder
+	appendErrorDetails(&out, err)
+	if out.Len() > 0 {
+		_, _ = os.Stderr.WriteString(out.String())
+	}
+}
+
+func appendErrorDetails(out *strings.Builder, err error) {
 	details := errors.GetAllDetails(err)
 	if len(details) == 0 {
 		return
 	}
-	maskedStderr := os.Stderr
-	fmt.Fprintf(maskedStderr, "\nExplanation:\n")
+	fmt.Fprintf(out, "\nExplanation:\n")
 	for _, d := range details {
-		fmt.Fprintf(maskedStderr, "  • %s\n", d)
+		fmt.Fprintf(out, "  • %s\n", d)
 	}
 }
 
 // printErrorHints prints the hints section, filtering out internal prefixes.
 func printErrorHints(err error) {
+	var out strings.Builder
+	appendErrorHints(&out, err)
+	if out.Len() > 0 {
+		_, _ = os.Stderr.WriteString(out.String())
+	}
+}
+
+func appendErrorHints(out *strings.Builder, err error) {
 	allHints := errors.GetAllHints(err)
 	var userHints []string
 	for _, h := range allHints {
@@ -122,25 +147,31 @@ func printErrorHints(err error) {
 	if len(userHints) == 0 {
 		return
 	}
-	maskedStderr := os.Stderr
-	fmt.Fprintf(maskedStderr, "\nHints:\n")
+	fmt.Fprintf(out, "\nHints:\n")
 	for _, h := range userHints {
-		fmt.Fprintf(maskedStderr, "  • %s\n", h)
+		fmt.Fprintf(out, "  • %s\n", h)
 	}
 }
 
 // printErrorContext prints the context section from safe details.
 func printErrorContext(err error) {
+	var out strings.Builder
+	appendErrorContext(&out, err)
+	if out.Len() > 0 {
+		_, _ = os.Stderr.WriteString(out.String())
+	}
+}
+
+func appendErrorContext(out *strings.Builder, err error) {
 	contextPairs := extractContextPairs(err)
 	if len(contextPairs) == 0 {
 		return
 	}
-	maskedStderr := os.Stderr
-	fmt.Fprintf(maskedStderr, "\nContext:\n")
+	fmt.Fprintf(out, "\nContext:\n")
 	for _, pair := range contextPairs {
 		parts := strings.SplitN(pair, "=", 2)
 		if len(parts) == 2 {
-			fmt.Fprintf(maskedStderr, "  %s: %s\n", parts[0], parts[1])
+			fmt.Fprintf(out, "  %s: %s\n", parts[0], parts[1])
 		}
 	}
 }
