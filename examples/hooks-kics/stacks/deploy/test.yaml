@@ -23,7 +23,7 @@ components:
       hooks:
         security:
           events:
-            - after-terraform-plan
+            - after.terraform.plan
           kind: kics
           # KICS doesn't ship its query library alongside the binary in
           # most installs, so it can't autodetect the path. Tell it where

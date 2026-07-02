@@ -29,15 +29,8 @@ func TestYamlFuncTerraformState(t *testing.T) {
 			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for !terraform.state integration test)")
 		}
 	}
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
-	}
-
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
-	}
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
@@ -73,6 +66,7 @@ func TestYamlFuncTerraformState(t *testing.T) {
 
 	// Define the working directory.
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function"
+	setupTerraformYamlFunctionSandbox(t, workDir)
 	t.Chdir(workDir)
 
 	// Pre-test cleanup: remove any stale terraform state left by previously-run tests that

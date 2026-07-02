@@ -1,0 +1,44 @@
+---
+title: table
+sidebar_label: table
+slug: /workflows/steps/type/table
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `table` step type renders tabular data with the same themed tables Atmos uses for its own list output, giving your custom commands and workflows a clean way to present structured results.
+</Intro>
+
+```yaml
+steps:
+  - name: environments
+    type: table
+    title: Available Environments
+    columns:
+      - name
+      - region
+    data:
+      - name: dev
+        region: us-east-1
+      - name: prod
+        region: us-east-2
+```
+
+## Fields
+
+<dl>
+  <dt>`data`</dt>
+  <dd>Array of row objects to render.</dd>
+
+  <dt>`columns`</dt>
+  <dd>Optional column order. When omitted, Atmos infers columns from the first row.</dd>
+
+  <dt>`title`</dt>
+  <dd>Optional table title.</dd>
+
+  <dt>`content`</dt>
+  <dd>Alternative tab-delimited table source.</dd>
+</dl>
+
+The step result value contains the rendered table text.

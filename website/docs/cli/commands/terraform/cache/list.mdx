@@ -1,0 +1,44 @@
+---
+title: atmos terraform cache list
+sidebar_label: cache list
+sidebar_class_name: command
+id: list
+description: List cached Terraform providers and modules.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+List every cached provider and module object, with its cache key, group, kind, size, and age.
+</Intro>
+
+<Screengrab title="atmos terraform cache list --help" slug="atmos-terraform-cache-list--help" />
+
+## Usage
+
+```shell
+atmos terraform cache list [flags]
+```
+
+## Flags
+
+<dl>
+  <dt>`--format` / `-f`</dt>
+  <dd>Output format: `table` (default), `json`, or `yaml`.</dd>
+</dl>
+
+## Examples
+
+```shell
+# List cached objects (table)
+atmos terraform cache list
+
+# Machine-readable output
+atmos terraform cache list --format=json
+```
+
+## Related Commands
+
+- [`atmos terraform cache stats`](/cli/commands/terraform/cache/stats)
+- [`atmos terraform cache prune`](/cli/commands/terraform/cache/prune)
+- [`atmos terraform cache delete`](/cli/commands/terraform/cache/delete)

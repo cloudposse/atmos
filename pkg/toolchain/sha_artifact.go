@@ -97,11 +97,8 @@ func InstallFromSHA(sha string, showProgress bool) (string, error) {
 
 	ctx := context.Background()
 
-	// Check for GitHub token (required for artifact downloads).
-	token, err := github.GetGitHubTokenOrError()
-	if err != nil {
-		return "", buildTokenRequiredError()
-	}
+	// Get GitHub token if available (not required for public repos).
+	token := github.GetGitHubToken()
 
 	shortSHA := sha
 	if len(shortSHA) > shortSHALength {

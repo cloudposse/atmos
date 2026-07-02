@@ -526,7 +526,7 @@ func TestFormatter_AutomaticIcons(t *testing.T) {
 		{
 			name:         "Info includes info icon",
 			method:       func(f Formatter, text string) string { return f.Info(text) },
-			expectedIcon: "ℹ",
+			expectedIcon: "▶",
 			text:         "information message",
 		},
 	}
@@ -592,7 +592,7 @@ func TestFormatter_FormattedMethods(t *testing.T) {
 		{
 			name:         "Infof formats with arguments",
 			method:       func(f Formatter) string { return f.Infof("Loading configuration from %s", "/etc/atmos.yaml") },
-			expectedIcon: "ℹ",
+			expectedIcon: "▶",
 			expectedText: "Loading configuration from /etc/atmos.yaml",
 		},
 	}
@@ -1144,7 +1144,7 @@ func TestFormatter_ConvenienceFunctions_Multiline(t *testing.T) {
 			name:    "Info multiline",
 			fn:      func(f *formatter, msg string) string { return f.Info(msg) },
 			message: "Processing\nStep 1 of 3",
-			icon:    "ℹ",
+			icon:    "▶",
 		},
 	}
 
@@ -1878,6 +1878,71 @@ func TestFormatExperimentalBadge_NoColorSupport(t *testing.T) {
 	expected := "[EXPERIMENTAL]"
 	if result != expected {
 		t.Errorf("FormatExperimentalBadge() with no color = %q, want %q", result, expected)
+	}
+}
+
+func TestFormatComponentLabel_FormatterNotInitialized(t *testing.T) {
+	formatterMu.Lock()
+	oldFormatter, oldFormat, oldTerminal := globalFormatter, Format, globalTerminal
+	globalFormatter, Format, globalTerminal = nil, nil, nil
+	formatterMu.Unlock()
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter, Format, globalTerminal = oldFormatter, oldFormat, oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// Degrades to a plain [name] label when the formatter is not initialized.
+	if got := FormatComponentLabel("api", 0); got != "[api]" {
+		t.Errorf("FormatComponentLabel() fallback = %q, want %q", got, "[api]")
+	}
+}
+
+func TestFormatComponentLabel_NoColorSupport(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	formatterMu.Lock()
+	oldFormatter, oldFormat, oldTerminal := globalFormatter, Format, globalTerminal
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+	Format = globalFormatter
+	globalTerminal = term
+	formatterMu.Unlock()
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter, Format, globalTerminal = oldFormatter, oldFormat, oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// No color support => plain [name], no ANSI escapes.
+	got := FormatComponentLabel("worker", 2)
+	if got != "[worker]" {
+		t.Errorf("FormatComponentLabel() no-color = %q, want %q", got, "[worker]")
+	}
+}
+
+func TestFormatComponentLabel_WithColor(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorTrue)
+	formatterMu.Lock()
+	oldFormatter, oldFormat, oldTerminal := globalFormatter, Format, globalTerminal
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+	Format = globalFormatter
+	globalTerminal = term
+	formatterMu.Unlock()
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter, Format, globalTerminal = oldFormatter, oldFormat, oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// With color support the name is present and styled (contains ANSI escapes),
+	// not the plain bracketed fallback.
+	got := FormatComponentLabel("api", 0)
+	if !strings.Contains(got, "api") {
+		t.Errorf("FormatComponentLabel() = %q, want it to contain %q", got, "api")
+	}
+	if got == "[api]" {
+		t.Errorf("FormatComponentLabel() with color should be styled, got plain %q", got)
 	}
 }
 

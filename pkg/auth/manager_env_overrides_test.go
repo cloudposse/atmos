@@ -488,6 +488,53 @@ func TestFilterAtmosOverrides(t *testing.T) {
 				"ATMOS_PROFILE": "",
 			},
 		},
+		// Regression tests for cloudposse/atmos#2349.
+		// Viper lowercases YAML map keys, so MCP servers that author
+		// `ATMOS_PROFILE: managers` under `env:` hand this function
+		// `atmos_profile: managers`. Without case-folding, the entry was
+		// silently dropped and auth manager construction fell back to the
+		// default profile, surfacing as "identity not found".
+		{
+			name: "viper-lowercased atmos key is normalized to uppercase",
+			in: map[string]string{
+				"atmos_profile": "managers",
+			},
+			want: map[string]string{
+				"ATMOS_PROFILE": "managers",
+			},
+		},
+		{
+			name: "mixed-case atmos key is normalized to uppercase",
+			in: map[string]string{
+				"Atmos_Profile": "managers",
+			},
+			want: map[string]string{
+				"ATMOS_PROFILE": "managers",
+			},
+		},
+		{
+			name: "viper-lowercased non-atmos key is dropped",
+			in: map[string]string{
+				"aws_profile": "p",
+				"foo":         "bar",
+			},
+			want: map[string]string{},
+		},
+		{
+			name: "mixed casings across atmos and non-atmos keys",
+			in: map[string]string{
+				"atmos_profile":         "managers",
+				"ATMOS_CLI_CONFIG_PATH": "/e",
+				"Atmos_Base_Path":       "/s",
+				"aws_profile":           "p",
+				"FOO":                   "bar",
+			},
+			want: map[string]string{
+				"ATMOS_PROFILE":         "managers",
+				"ATMOS_CLI_CONFIG_PATH": "/e",
+				"ATMOS_BASE_PATH":       "/s",
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

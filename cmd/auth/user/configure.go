@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -85,12 +86,21 @@ func executeAuthUserConfigureCommand(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Resolve the realm the same way pkg/auth/manager.go does so configure writes
+	// to the same keyring slot the login resolver reads from. Without this, a user
+	// who sets auth.realm or ATMOS_AUTH_REALM would have configure store under one
+	// key while login reads another — making the keyring lookup silently miss.
+	realmInfo, err := realm.GetRealm(atmosConfig.Auth.Realm, atmosConfig.CliConfigPath)
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrInvalidAuthConfig, err)
+	}
+
 	// Prompt and save credentials.
-	return promptAndSaveCredentials(yamlInfo, alias)
+	return promptAndSaveCredentials(yamlInfo, alias, realmInfo.Value)
 }
 
 // promptAndSaveCredentials prompts for credentials and saves them to keyring.
-func promptAndSaveCredentials(yamlInfo awsUserIdentityInfo, alias string) error {
+func promptAndSaveCredentials(yamlInfo awsUserIdentityInfo, alias, authRealm string) error {
 	defer perf.Track(nil, "auth.user.promptAndSaveCredentials")()
 
 	// Prompt user for credentials.
@@ -99,9 +109,10 @@ func promptAndSaveCredentials(yamlInfo awsUserIdentityInfo, alias string) error 
 		return err
 	}
 
-	// Save credentials to keyring.
+	// Save credentials to keyring under the resolved realm so the login resolver
+	// finds the same entry.
 	store := credentials.NewCredentialStore()
-	if err := store.Store(alias, creds, ""); err != nil {
+	if err := store.Store(alias, creds, authRealm); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAwsAuth, err)
 	}
 	ui.Writef("Saved credentials to keyring: %s\n", alias)

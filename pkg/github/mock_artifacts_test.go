@@ -128,3 +128,43 @@ func (mr *MockActionsServiceMockRecorder) ListWorkflowRunArtifacts(ctx, owner, r
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkflowRunArtifacts", reflect.TypeOf((*MockActionsService)(nil).ListWorkflowRunArtifacts), ctx, owner, repo, runID, opts)
 }
+
+// MockRepositoriesService is a mock of RepositoriesService interface.
+type MockRepositoriesService struct {
+	ctrl     *gomock.Controller
+	recorder *MockRepositoriesServiceMockRecorder
+	isgomock struct{}
+}
+
+// MockRepositoriesServiceMockRecorder is the mock recorder for MockRepositoriesService.
+type MockRepositoriesServiceMockRecorder struct {
+	mock *MockRepositoriesService
+}
+
+// NewMockRepositoriesService creates a new mock instance.
+func NewMockRepositoriesService(ctrl *gomock.Controller) *MockRepositoriesService {
+	mock := &MockRepositoriesService{ctrl: ctrl}
+	mock.recorder = &MockRepositoriesServiceMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockRepositoriesService) EXPECT() *MockRepositoriesServiceMockRecorder {
+	return m.recorder
+}
+
+// GetCommitSHA1 mocks base method.
+func (m *MockRepositoriesService) GetCommitSHA1(ctx context.Context, owner, repo, ref, lastSHA string) (string, *github.Response, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCommitSHA1", ctx, owner, repo, ref, lastSHA)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(*github.Response)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetCommitSHA1 indicates an expected call of GetCommitSHA1.
+func (mr *MockRepositoriesServiceMockRecorder) GetCommitSHA1(ctx, owner, repo, ref, lastSHA any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCommitSHA1", reflect.TypeOf((*MockRepositoriesService)(nil).GetCommitSHA1), ctx, owner, repo, ref, lastSHA)
+}

@@ -1,6 +1,6 @@
 # `hooks-trivy`
 
-Demonstrates the **`trivy`** hook kind: a `before-terraform-plan` hook that
+Demonstrates the **`trivy`** hook kind: an `after.terraform.plan` hook that
 runs `trivy config` against the component and renders a SARIF findings
 summary in the terminal.
 

@@ -34,9 +34,12 @@ func convertCobraError(err error) error {
 	errMsg := err.Error()
 
 	// Cobra's "unknown command" error format: `unknown command "xyz" for "atmos"`.
+	// Use ErrUnknownSubcommand (not ErrCommandNotFound) so the root error handler
+	// only treats genuine unknown Atmos subcommands as such. ErrCommandNotFound is
+	// reserved for missing external executables (e.g. `atmos auth exec -- <cmd>`).
 	if strings.Contains(errMsg, "unknown command") {
 		command := extractCommandName(errMsg)
-		return errUtils.Build(errUtils.ErrCommandNotFound).
+		return errUtils.Build(errUtils.ErrUnknownSubcommand).
 			WithCause(err).
 			WithContext("command", command).
 			WithHint("Run 'atmos --help' to see available commands").

@@ -67,6 +67,27 @@ settings:
 ## Configuration Reference
 
 <dl>
+  <dt>`settings.pro.enabled`</dt>
+  <dd>
+    Master switch for Atmos Pro on a component or stack. When `atmos list instances --upload`
+    sends the inventory to Atmos Pro, this value controls whether the instance is tracked as
+    active or shown as disabled.
+
+    Atmos collapses an enabled hierarchy before upload, so an outer disable always wins:
+
+    ```
+    metadata.enabled  >  settings.pro.enabled  >  settings.pro.drift_detection.enabled
+    ```
+
+    Disabling a component with [`metadata.enabled: false`](/stacks/components/component-metadata#enabled)
+    forces `settings.pro.enabled` (and therefore `settings.pro.drift_detection.enabled`) off in the
+    uploaded payload — a disabled component is never dispatched for drift detection or workflow runs,
+    regardless of its `pro` settings.
+
+    - **Type:** `boolean`
+    - **Default:** `true` (when a `settings.pro` block is present)
+  </dd>
+
   <dt>`settings.pro.base_url`</dt>
   <dd>
     Base URL for the Atmos Pro API.
@@ -337,6 +358,12 @@ settings:
   <dt>`settings.pro.drift_detection.enabled`</dt>
   <dd>
     Enable Atmos Pro drift detection for this stack.
+
+    Effective drift detection also requires the component to be effectively Pro-enabled. An outer
+    [`metadata.enabled: false`](/stacks/components/component-metadata#enabled) or
+    `settings.pro.enabled: false` disables drift detection regardless of this value — Atmos
+    collapses the hierarchy (`metadata.enabled` &gt; `pro.enabled` &gt; `drift_detection.enabled`)
+    before upload so a disabled component is never dispatched for drift.
 
     - **Type:** `boolean`
     - **Default:** `false`

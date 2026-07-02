@@ -1,0 +1,68 @@
+---
+title: "!git.repository"
+sidebar_position: 10
+sidebar_label: "!git.repository"
+sidebar_class_name: command
+description: Get the repository slug (owner/name) of the current Git repository
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `!git.repository` Atmos YAML function returns the repository slug of the current Git
+    repository in `<owner>/<name>` form (for example, `cloudposse/atmos`) — the same format as
+    GitHub's `GITHUB_REPOSITORY` environment variable. The value is derived from the `origin`
+    remote URL and works for GitHub, GitLab, Bitbucket, and Azure DevOps.
+</Intro>
+
+## Usage
+
+```yaml
+  # Get the repository slug (`<owner>/<name>`).
+  # If the repository cannot be resolved, it returns a default value if specified; otherwise, it returns an error.
+  !git.repository <default-value>
+```
+
+## Examples
+
+```yaml
+vars:
+  # Tag resources with the repository that produced the plan.
+  git_repo: !git.repository
+```
+
+```yaml
+vars:
+  # Fall back to a literal value when there is no remote (e.g. a fresh checkout).
+  git_repo: !git.repository my-org/my-repo
+```
+
+### Composing with other values
+
+A YAML tag owns the entire scalar, so you cannot combine `!git.repository` with additional
+text on the same line (e.g. `"!git.repository/{{ ... }}"` is not valid). Atmos also evaluates
+Go templates **before** YAML functions, so referencing `!git.repository` through an
+intermediate variable in a plain template does not work either.
+
+To compose the slug with a path segment in a single value — for example, prefixing a
+`workspace_key_prefix` — use the [`atmos.Resolve`](/functions/template/atmos.Resolve) template
+function, which evaluates a YAML function at template-render time:
+
+```yaml
+settings:
+  context:
+    repo: "!git.repository"
+components:
+  terraform:
+    vpc:
+      backend:
+        s3:
+          workspace_key_prefix: '{{ atmos.Resolve .settings.context.repo }}/{{ or .metadata.name .metadata.component }}'
+```
+
+## Related Functions
+
+- [`!git.owner`](/functions/yaml/git.owner) — the repository owner / organization
+- [`!git.name`](/functions/yaml/git.name) — the bare repository name
+- [`!git.host`](/functions/yaml/git.host) — the repository host (e.g. `github.com`)
+- [`!git.url`](/functions/yaml/git.url) — the remote URL
+- [`atmos.Resolve`](/functions/template/atmos.Resolve) — evaluate a YAML function inside a template

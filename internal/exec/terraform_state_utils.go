@@ -16,8 +16,11 @@ import (
 
 var terraformStateCache = sync.Map{}
 
-// ResetStateCache clears the terraform state cache.
-// This is exported for use in tests to ensure cache isolation between test functions.
+// ResetStateCache clears the terraform state cache and the nested-component AuthManager cache.
+// This is exported for use in tests to ensure cache isolation between test functions. The two caches
+// are cleared together because the managers in nestedAuthManagerCache are what read the state held in
+// terraformStateCache: clearing state to force a fresh backend read while reusing a stale auth manager
+// would be inconsistent. Neither cache is reset in production.
 func ResetStateCache() {
 	defer perf.Track(nil, "exec.ResetStateCache")()
 
@@ -25,6 +28,8 @@ func ResetStateCache() {
 		terraformStateCache.Delete(key)
 		return true
 	})
+
+	ResetNestedAuthManagerCache()
 }
 
 // GetTerraformState retrieves a specified Terraform output variable for a given component within a stack.
@@ -132,7 +137,10 @@ func GetTerraformState(
 		AuthDisabled:         authDisabled,
 	})
 	if err != nil {
-		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
+		// Use double %w so that errors.Is can match both ErrDescribeComponent and
+		// any sentinel propagated from the inner describe (e.g., ErrCircularDependency
+		// from a !terraform.state cycle — see #2457).
+		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
 		return nil, er
 	}
 

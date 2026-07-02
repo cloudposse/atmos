@@ -5,6 +5,7 @@ package aws
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -150,4 +151,7 @@ type exchangeCodeParams struct {
 	code         string
 	codeVerifier string
 	redirectURI  string
+	// dpopKey signs the RFC 9449 DPoP proof attached to the token request
+	// (issue #2542). The same key must later be reused for refresh.
+	dpopKey *ecdsa.PrivateKey
 }

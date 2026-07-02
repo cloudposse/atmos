@@ -1,0 +1,21 @@
+**/.terraform/**
+# The canonical .terraform.lock.hcl is transient scratch for ephemeral or vendored
+# (workdir / JIT source) components; their committed source of truth is the per-instance
+# .<stack>-<component>.terraform.lock.hcl that Atmos restores before init and persists after.
+# (For plain in-repo components you would instead commit this canonical file.)
+**/.terraform.lock.hcl
+# Always keep per-instance locks tracked, even if a broader rule above would ignore them.
+!**/.*-*.terraform.lock.hcl
+# ...except the `dev` stack, which is a local scratch instance, not a committed example
+# fixture, so its per-instance lock is not tracked.
+**/.dev-*.terraform.lock.hcl
+**/.terraform.tfstate/**
+**/.terraform.tfstate.backup/**
+**/*.tfvars.json
+**/*.planfile
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/terraform.tfstate.d/**
+**/cache.*.txt
+**/pet.*.txt
+.tools/

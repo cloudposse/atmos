@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -23,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
 
 // TestCleanupLogFile tests log file cleanup functionality.
@@ -281,6 +283,46 @@ func TestApplyProfilerEnvironmentOverrides(t *testing.T) {
 				Enabled:     true,
 			},
 		},
+		{
+			name: "profile type override is parsed",
+			atmosConfig: schema.AtmosConfiguration{
+				Profiler: profiler.Config{
+					ProfileType: profiler.ProfileTypeHeap,
+				},
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Host:        profiler.DefaultConfig().Host,
+				Port:        profiler.DefaultConfig().Port,
+				ProfileType: profiler.ProfileTypeHeap,
+				Enabled:     false,
+			},
+		},
+		{
+			name: "enabled override is applied",
+			atmosConfig: schema.AtmosConfiguration{
+				Profiler: profiler.Config{
+					Enabled: true,
+				},
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Host:        profiler.DefaultConfig().Host,
+				Port:        profiler.DefaultConfig().Port,
+				ProfileType: profiler.DefaultConfig().ProfileType,
+				Enabled:     true,
+			},
+		},
+		{
+			name: "invalid profile type returns parse error",
+			atmosConfig: schema.AtmosConfiguration{
+				Profiler: profiler.Config{
+					ProfileType: "invalid",
+				},
+			},
+			initial:     profiler.DefaultConfig(),
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -290,11 +332,13 @@ func TestApplyProfilerEnvironmentOverrides(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrParseFlag)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected.Host, config.Host)
 				assert.Equal(t, tt.expected.Port, config.Port)
 				assert.Equal(t, tt.expected.Enabled, config.Enabled)
+				assert.Equal(t, tt.expected.ProfileType, config.ProfileType)
 				if tt.expected.File != "" {
 					assert.Equal(t, tt.expected.File, config.File)
 				}
@@ -341,6 +385,58 @@ func TestApplyCLIFlagOverrides(t *testing.T) {
 			},
 		},
 		{
+			name: "override host flag",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("profiler-host", "", "")
+				cmd.Flags().Set("profiler-host", "127.0.0.1")
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Enabled:     false,
+				Host:        "127.0.0.1",
+				Port:        profiler.DefaultConfig().Port,
+				ProfileType: profiler.DefaultConfig().ProfileType,
+			},
+		},
+		{
+			name: "profile file flag enables file profiler",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("profile-file", "", "")
+				cmd.Flags().Set("profile-file", filepath.Join(os.TempDir(), "heap.prof"))
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Enabled:     true,
+				Host:        profiler.DefaultConfig().Host,
+				Port:        profiler.DefaultConfig().Port,
+				File:        filepath.Join(os.TempDir(), "heap.prof"),
+				ProfileType: profiler.DefaultConfig().ProfileType,
+			},
+		},
+		{
+			name: "profile type flag overrides type",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("profile-type", "", "")
+				cmd.Flags().Set("profile-type", "goroutine")
+			},
+			initial: profiler.DefaultConfig(),
+			expected: profiler.Config{
+				Enabled:     false,
+				Host:        profiler.DefaultConfig().Host,
+				Port:        profiler.DefaultConfig().Port,
+				ProfileType: profiler.ProfileTypeGoroutine,
+			},
+		},
+		{
+			name: "invalid profile type flag returns parse error",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("profile-type", "", "")
+				cmd.Flags().Set("profile-type", "invalid")
+			},
+			initial:     profiler.DefaultConfig(),
+			expectError: true,
+		},
+		{
 			name: "no flags changed",
 			setupCmd: func(cmd *cobra.Command) {
 				cmd.Flags().Bool("profiler-enabled", false, "")
@@ -366,13 +462,57 @@ func TestApplyCLIFlagOverrides(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrParseFlag)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected.Enabled, config.Enabled)
 				assert.Equal(t, tt.expected.Port, config.Port)
+				assert.Equal(t, tt.expected.Host, config.Host)
+				assert.Equal(t, tt.expected.File, config.File)
+				assert.Equal(t, tt.expected.ProfileType, config.ProfileType)
 			}
 		})
 	}
+}
+
+func TestBuildProfilerConfigComposesConfigAndFlags(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("profiler-enabled", false, "")
+	cmd.Flags().Int("profiler-port", 0, "")
+	cmd.Flags().String("profiler-host", "", "")
+	cmd.Flags().String("profile-file", "", "")
+	cmd.Flags().String("profile-type", "", "")
+
+	assert.NoError(t, cmd.Flags().Set("profiler-port", "7070"))
+	assert.NoError(t, cmd.Flags().Set("profiler-host", "0.0.0.0"))
+	assert.NoError(t, cmd.Flags().Set("profile-file", filepath.Join(os.TempDir(), "trace.out")))
+	assert.NoError(t, cmd.Flags().Set("profile-type", "trace"))
+
+	config, err := buildProfilerConfig(cmd, &schema.AtmosConfiguration{
+		Profiler: profiler.Config{
+			Host:        "localhost",
+			Port:        6061,
+			ProfileType: profiler.ProfileTypeHeap,
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.True(t, config.Enabled)
+	assert.Equal(t, "0.0.0.0", config.Host)
+	assert.Equal(t, 7070, config.Port)
+	assert.Equal(t, filepath.Join(os.TempDir(), "trace.out"), config.File)
+	assert.Equal(t, profiler.ProfileTypeTrace, config.ProfileType)
+}
+
+func TestSetupProfilerSkipsWhenDisabledWithoutFile(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("profiler-enabled", false, "")
+	cmd.Flags().Int("profiler-port", 0, "")
+	cmd.Flags().String("profiler-host", "", "")
+	cmd.Flags().String("profile-file", "", "")
+	cmd.Flags().String("profile-type", "", "")
+
+	assert.NoError(t, setupProfiler(cmd, &schema.AtmosConfiguration{}))
 }
 
 // TestApplyProfileFileFlag tests profile file flag handling.
@@ -1084,8 +1224,8 @@ func TestIsTopLevelCommand(t *testing.T) {
 	assert.False(t, isTopLevelCommand(orphan), "command with no parent should not be top-level")
 }
 
-// TestParseUseVersionFromArgsInternal tests --use-version flag parsing.
-func TestParseUseVersionFromArgsInternal(t *testing.T) {
+// TestParseUseVersionFromArgs tests --use-version flag parsing.
+func TestParseUseVersionFromArgs(t *testing.T) {
 	tests := []struct {
 		name     string
 		args     []string
@@ -1117,6 +1257,11 @@ func TestParseUseVersionFromArgsInternal(t *testing.T) {
 			expected: "",
 		},
 		{
+			name:     "use-version with bare separator value returns empty",
+			args:     []string{"terraform", "--use-version", "--"},
+			expected: "",
+		},
+		{
 			name:     "use-version after bare -- is ignored",
 			args:     []string{"terraform", "--", "--use-version=1.2.3"},
 			expected: "",
@@ -1130,10 +1275,94 @@ func TestParseUseVersionFromArgsInternal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseUseVersionFromArgsInternal(tt.args)
+			result := pkgversion.ParseUseVersionFromArgs(tt.args)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestExecute_ReexecsExplicitUseVersionBeforeUnknownCommandResolution(t *testing.T) {
+	tests := []struct {
+		name  string
+		args  []string
+		env   string
+		value string
+	}{
+		{
+			name:  "env var",
+			args:  []string{"atmos", "future-secret", "list"},
+			env:   "ref:main",
+			value: "ref:main",
+		},
+		{
+			name:  "equals flag",
+			args:  []string{"atmos", "future-secret", "list", "--use-version=ref:main"},
+			value: "ref:main",
+		},
+		{
+			name:  "separate flag",
+			args:  []string{"atmos", "future-secret", "list", "--use-version", "ref:main"},
+			value: "ref:main",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			oldCheckAndReexec := checkAndReexec
+			t.Cleanup(func() {
+				checkAndReexec = oldCheckAndReexec
+			})
+
+			t.Setenv(pkgversion.VersionUseEnvVar, "")
+			if tt.env != "" {
+				t.Setenv(pkgversion.UseVersionEnvVar, tt.env)
+			} else {
+				t.Setenv(pkgversion.UseVersionEnvVar, "")
+			}
+
+			oldArgs := os.Args
+			t.Cleanup(func() {
+				os.Args = oldArgs
+			})
+
+			os.Args = tt.args
+			RootCmd.SetArgs(tt.args[1:])
+
+			reexecCalled := false
+			sentinel := errors.New("simulated re-exec")
+			checkAndReexec = func(config *schema.AtmosConfiguration) bool {
+				reexecCalled = true
+				assert.NotNil(t, config)
+				assert.Equal(t, tt.value, os.Getenv(pkgversion.VersionUseEnvVar))
+				panic(sentinel)
+			}
+
+			var recovered any
+			func() {
+				defer func() {
+					recovered = recover()
+				}()
+				_ = Execute()
+			}()
+
+			assert.Same(t, sentinel, recovered)
+			assert.True(t, reexecCalled)
+		})
+	}
+}
+
+func TestExecuteVersionSmoke(t *testing.T) {
+	_ = NewTestKit(t)
+
+	oldArgs := os.Args
+	t.Cleanup(func() {
+		os.Args = oldArgs
+	})
+	os.Args = []string{"atmos", "--version"}
+
+	assert.NoError(t, ExecuteVersion())
 }
 
 // TestBuildFlagDescription tests flag description building.
@@ -1616,6 +1845,65 @@ func TestExperimentalModeHandling(t *testing.T) {
 				}, "Expected no os.Exit call")
 				assert.False(t, exitCalled, "Expected exit not to be called")
 			}
+		})
+	}
+}
+
+// TestUnknownSubcommand verifies that only genuine unknown-subcommand errors
+// (ErrUnknownSubcommand, as produced by the registry executor's Cobra-error
+// conversion) are classified as such — and that a missing external executable
+// (ErrCommandNotFound, e.g. from `atmos auth exec -- <cmd>`) is NOT, so it never
+// gets rendered as "the command atmos requires a subcommand".
+func TestUnknownSubcommand(t *testing.T) {
+	tests := []struct {
+		name        string
+		err         error
+		wantCommand string
+		wantOK      bool
+	}{
+		{
+			name:   "nil error is not an unknown subcommand",
+			err:    nil,
+			wantOK: false,
+		},
+		{
+			name: "unknown subcommand with command context",
+			err: errUtils.Build(errUtils.ErrUnknownSubcommand).
+				WithContext("command", "foobar").
+				Err(),
+			wantCommand: "foobar",
+			wantOK:      true,
+		},
+		{
+			name: "wrapped unknown subcommand is still detected",
+			err: fmt.Errorf("wrapped: %w", errUtils.Build(errUtils.ErrUnknownSubcommand).
+				WithContext("command", "terrafrom").
+				Err()),
+			wantCommand: "terrafrom",
+			wantOK:      true,
+		},
+		{
+			// Regression: the reported bug. `atmos auth exec -- <missing-binary>`
+			// returns ErrCommandNotFound, which must NOT be treated as an unknown
+			// Atmos subcommand.
+			name: "missing external executable is not an unknown subcommand",
+			err: errUtils.Build(errUtils.ErrCommandNotFound).
+				WithContext("command", "uvx").
+				Err(),
+			wantOK: false,
+		},
+		{
+			name:   "unrelated error is not an unknown subcommand",
+			err:    errors.New("some other failure"),
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			command, ok := unknownSubcommand(tt.err)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantCommand, command)
 		})
 	}
 }

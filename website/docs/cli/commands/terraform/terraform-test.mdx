@@ -7,6 +7,7 @@ id: test
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import EmbedFile from '@site/src/components/EmbedFile'
 
 <Intro>
 Use this command to run Terraform tests for an Atmos component, validating the component's configuration and behavior.
@@ -25,7 +26,7 @@ atmos terraform test <component> -s <stack> [options]
 This command runs tests for Terraform modules. Tests are written in `.tftest.hcl` or `.tftest.json` files and can validate that your infrastructure code works as expected.
 
 :::info Atmos Behavior
-Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The test execution is handled by native Terraform.
+Atmos provides standard setup for this command including automatic `terraform init`, workspace selection, a generated component varfile for module inputs, and an optional generated test varfile from `test.vars`. The test execution itself is handled by native Terraform.
 :::
 ## Examples
 
@@ -49,6 +50,42 @@ atmos terraform test vpc -s dev -filter=tests/vpc_test.tftest.hcl
 # Run with verbose output
 atmos terraform test vpc -s dev -verbose
 ```
+
+### Use Fixture Components with Hooks
+
+Use component hooks when a Terraform test needs fixture infrastructure that the
+component under test should not provision itself. The tested component owns the
+fixture lifecycle, and Atmos runs it around `terraform test`.
+
+For example, the `terraform-tests` example has an `app` component that requires
+a VPC but leaves VPC creation to a fixture component in a `fixtures` stack. The
+catalog declares the `vpc` fixture and the app-owned ordered hooks:
+
+<EmbedFile filePath="examples/terraform-tests/stacks/catalog/app.yaml" />
+
+The deployable `fixtures` stack makes both components real for the test run:
+
+<EmbedFile filePath="examples/terraform-tests/stacks/deploy/fixtures/app.yaml" />
+
+The app's Terraform test then looks up the VPC during the test instead of
+provisioning it. The `fixtures` stack uses `test.vars` with `!terraform.state`
+to pass the fixture VPC ID into Terraform test after the hook applies the VPC.
+The test file declares only the test-scope variables it references, so other
+test files can ignore those values without Terraform undeclared-variable
+warnings.
+
+<EmbedFile filePath="examples/terraform-tests/components/terraform/app/tests/app.tftest.hcl" />
+
+Then run the component test against the fixture stack:
+
+```shell
+atmos terraform test app -s fixtures
+```
+
+The ordered `kind: steps` hooks start the emulator, apply the VPC fixture,
+execute the app test, destroy the fixture, and stop the emulator. The app can
+look up the VPC during Terraform test with a data source, proving it uses the
+fixture without provisioning the VPC itself.
 
 ## Arguments
 

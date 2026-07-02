@@ -79,6 +79,9 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		// System configuration.
 		RedirectStderr: v.GetString("redirect-stderr"),
 		Version:        v.GetBool("version"),
+
+		// Settings overrides.
+		SettingsListMergeStrategy: v.GetString("settings-list-merge-strategy"),
 	}
 }
 
@@ -222,6 +225,7 @@ func GlobalFlagsRegistry() *FlagRegistry {
 	registerProfilingFlags(registry)
 	registerPerformanceFlags(registry)
 	registerAIFlags(registry)
+	registerSettingsFlags(registry)
 
 	return registry
 }
@@ -416,6 +420,19 @@ func registerAIFlags(registry *FlagRegistry) {
 		Default:     []string{},
 		Description: "Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)",
 		EnvVars:     []string{"ATMOS_SKILL"},
+	})
+}
+
+// registerSettingsFlags registers stack/settings configuration flags.
+func registerSettingsFlags(registry *FlagRegistry) {
+	defer perf.Track(nil, "flags.registerSettingsFlags")()
+
+	registry.Register(&StringFlag{
+		Name:        "settings-list-merge-strategy",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Override settings.list_merge_strategy for this invocation (replace, append, merge)",
+		EnvVars:     []string{"ATMOS_SETTINGS_LIST_MERGE_STRATEGY"},
 	})
 }
 

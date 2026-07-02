@@ -1,0 +1,86 @@
+base_path: "./"
+
+schemas:
+  atmos:
+    manifest: "schemas/atmos-manifest.json"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# A single aws/emulator identity binds every component to the local sandbox.
+# `atmos emulator up aws -s <stack>` starts the emulator; the provider-config
+# contributor and this identity wire Terraform to it — no providers.tf, no
+# endpoint configuration, no hand-rolled docker-compose.
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: aws
+      default: true
+
+# Custom CLI commands
+commands:
+  - name: "sandbox"
+    description: "Developer-friendly shortcuts for the local AWS sandbox"
+    commands:
+      - name: "deploy"
+        description: "Apply the demo component and print the resulting outputs"
+        flags:
+          - name: stack
+            shorthand: s
+            description: Target stack.
+            required: true
+        steps:
+          - type: shell
+            name: apply
+            command: atmos terraform apply demo -s {{ .Flags.stack }} -auto-approve > .demo-apply.log
+            output: none
+          - type: shell
+            name: outputs
+            command: atmos terraform output demo -s {{ .Flags.stack }}
+            output: raw
+
+  - name: "test"
+    description: "Bring up the sandbox, apply and destroy the demo in each stage, then tear it down"
+    steps:
+      - atmos validate stacks
+      # dev
+      - atmos emulator up aws -s dev
+      - atmos terraform apply demo -s dev -auto-approve
+      - atmos terraform destroy demo -s dev -auto-approve
+      - atmos emulator down aws -s dev
+      # staging
+      - atmos emulator up aws -s staging
+      - atmos terraform apply demo -s staging -auto-approve
+      - atmos terraform destroy demo -s staging -auto-approve
+      - atmos emulator down aws -s staging
+      # prod
+      - atmos emulator up aws -s prod
+      - atmos terraform apply demo -s prod -auto-approve
+      - atmos terraform destroy demo -s prod -auto-approve
+      - atmos emulator down aws -s prod
+
+  - name: "terraform"
+    commands:
+      - name: "reset"
+        description: Delete all local state files
+        steps:
+          - 'find . \( -name "*.tfstate" -o -name "*.tfstate.backup" -o -path "*/terraform.tfstate.d/*" -o -path "*/.terraform.tfstate/*" -o -path "*/.terraform.tfstate.backup/*" \) -delete'
+          - echo "Deleted all state files"

@@ -3,7 +3,7 @@
 Configure MCP servers ([Atmos MCP server](https://atmos.tools/ai/mcp-server) plus the
 [AWS MCP server suite](https://github.com/awslabs/mcp)) **once** in `atmos.yaml`, then use
 the same set of tools — with the same AWS credentials managed by Atmos Auth — from
-[Claude Code](https://www.anthropic.com/claude-code),
+[Claude Code](https://claude.com/product/claude-code),
 [OpenAI Codex CLI](https://github.com/openai/codex), and
 [Google Gemini CLI](https://github.com/google-gemini/gemini-cli).
 
@@ -74,6 +74,17 @@ out of sync?"* in a single prompt — pulling deployment history from
 from `aws-api`.
 
 ## Wiring the MCP Servers Into Your AI CLI
+
+To smoke-test the Atmos MCP server from this example:
+
+```bash
+cd examples/mcp-for-ai-coding-assistants
+atmos mcp start
+```
+
+The server starts even before stack manifests exist. Stack-dependent tools load
+stacks when they are called, so newly added or fixed stack files are picked up by
+the next tool call.
 
 ### Claude Code
 

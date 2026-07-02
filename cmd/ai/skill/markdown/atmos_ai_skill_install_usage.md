@@ -1,4 +1,10 @@
-- Install all Atmos agent skills (21 skills)
+- Install an official skill by name (offline, no network)
+
+```
+$ atmos ai skill install atmos-terraform
+```
+
+- Install all Atmos agent skills
 
 ```
 $ atmos ai skill install cloudposse/atmos

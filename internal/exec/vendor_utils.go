@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -141,7 +142,6 @@ func getConfigFiles(path string) ([]string, error) {
 	}
 
 	if fileInfo.IsDir() {
-		path = filepath.ToSlash(path)
 		matches, err := doublestar.Glob(os.DirFS(path), "*.{yaml,yml}")
 		if err != nil {
 			return nil, err
@@ -273,7 +273,7 @@ func validateTagsAndComponents(
 			ErrDuplicateComponents, duplicates, vendorConfigFileName)
 	}
 
-	if component != "" && !u.SliceContainsString(components, component) {
+	if component != "" && !slices.Contains(components, component) {
 		return fmt.Errorf("%w component '%s', file '%s'",
 			ErrComponentNotDefined, component, vendorConfigFileName)
 	}
@@ -464,8 +464,9 @@ func processVendorImports(
 ) ([]schema.AtmosVendorSource, []string, error) {
 	var mergedSources []schema.AtmosVendorSource
 	for _, imp := range imports {
-		if u.SliceContainsString(allImports, imp) {
-			return nil, nil, fmt.Errorf("%w '%s' in the vendor config file '%s'. It was already imported in the import chain",
+		if slices.Contains(allImports, imp) {
+			return nil, nil, fmt.Errorf(
+				"%w '%s' in the vendor config file '%s'. It was already imported in the import chain",
 				ErrDuplicateImport,
 				imp,
 				vendorConfigFile,
@@ -479,7 +480,7 @@ func processVendorImports(
 			return nil, nil, err
 		}
 
-		if u.SliceContainsString(vendorConfig.Spec.Imports, imp) {
+		if slices.Contains(vendorConfig.Spec.Imports, imp) {
 			return nil, nil, fmt.Errorf("%w file '%s'", ErrVendorConfigSelfImport, imp)
 		}
 
@@ -547,7 +548,7 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 	}
 
-	absPath, err := u.JoinPathAndValidate(filepath.ToSlash(vendorConfigFilePath), *uri)
+	absPath, err := u.JoinPathAndValidate(vendorConfigFilePath, *uri)
 	// if URI contain path traversal is path should be resolved
 	if err != nil && strings.Contains(*uri, "..") && !strings.HasPrefix(*uri, "file://") {
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
@@ -583,10 +584,4 @@ func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.F
 // Delegates to pkg/vendor for the shared implementation.
 func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (bool, error) {
 	return vendor.ShouldExcludeFile(excludedPaths, trimmedSrc)
-}
-
-// shouldIncludeFile checks if the file matches any of the included patterns.
-// Delegates to pkg/vendor for the shared implementation.
-func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (bool, error) {
-	return vendor.ShouldIncludeFile(includedPaths, trimmedSrc)
 }

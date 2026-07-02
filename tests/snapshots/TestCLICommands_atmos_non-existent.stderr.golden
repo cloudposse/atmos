@@ -12,18 +12,25 @@ Valid subcommands are:
   • aws
   • ci
   • completion
+  • composition
+  • container
   • describe
   • devcontainer
   • docs
+  • emulator
   • env
+  • git
+  • helm
   • helmfile
   • help
+  • kubernetes
   • list
   • lsp
   • mcp
   • packer
   • pro
   • profile
+  • secret
   • show
   • support
   • terraform
@@ -35,6 +42,11 @@ Valid subcommands are:
   • vendor
   • version
   • workflow
+
+## Usage
+
+ atmos [flags]
+ atmos [sub-command] [flags]
 
 ## Hints
 

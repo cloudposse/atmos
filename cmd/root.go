@@ -31,13 +31,25 @@ import (
 	// Import adapters to register them with the config package.
 	_ "github.com/cloudposse/atmos/pkg/config/adapters"
 
+	// Import hook format handlers to register them with the hooks package.
+	_ "github.com/cloudposse/atmos/pkg/hooks/sarif"
+
 	// Import component providers to register them with the component registry.
 	// The init() function in each package registers the provider.
 	_ "github.com/cloudposse/atmos/pkg/component/ansible"
+	_ "github.com/cloudposse/atmos/pkg/component/container"
+	_ "github.com/cloudposse/atmos/pkg/component/emulator"
+	_ "github.com/cloudposse/atmos/pkg/component/helm"
+	_ "github.com/cloudposse/atmos/pkg/component/kubernetes"
 	_ "github.com/cloudposse/atmos/pkg/component/mock"
+
+	// Import the Atmos Pro credential broker so it registers itself (init) and is consulted
+	// before the first remote read in CI (lazily provisions the github/sts integration).
+	_ "github.com/cloudposse/atmos/pkg/auth/providers/atmospro/broker"
 
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/diagnostics"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -67,17 +79,26 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/auth"
 	_ "github.com/cloudposse/atmos/cmd/aws"
 	_ "github.com/cloudposse/atmos/cmd/ci"
+	cicache "github.com/cloudposse/atmos/cmd/ci/cache"
+	_ "github.com/cloudposse/atmos/cmd/composition"
+	_ "github.com/cloudposse/atmos/cmd/container"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
+	_ "github.com/cloudposse/atmos/cmd/emulator"
 	_ "github.com/cloudposse/atmos/cmd/env"
+	gitcmd "github.com/cloudposse/atmos/cmd/git"
+	_ "github.com/cloudposse/atmos/cmd/helm"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"
 	"github.com/cloudposse/atmos/cmd/internal"
+	_ "github.com/cloudposse/atmos/cmd/kubernetes"
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/lsp"
 	_ "github.com/cloudposse/atmos/cmd/mcp"
 	_ "github.com/cloudposse/atmos/cmd/pro"
 	_ "github.com/cloudposse/atmos/cmd/profile"
+	_ "github.com/cloudposse/atmos/cmd/secret"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
+	terraformcache "github.com/cloudposse/atmos/cmd/terraform/cache"
 	"github.com/cloudposse/atmos/cmd/terraform/workdir"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
 	toolchainCmd "github.com/cloudposse/atmos/cmd/toolchain"
@@ -104,6 +125,10 @@ var atmosConfig schema.AtmosConfiguration
 // profilerServer holds the global profiler server instance.
 var profilerServer *profiler.Server
 
+// checkAndReexec performs Atmos version switching. It is a package variable so
+// tests can replace it without installing or execing another Atmos binary.
+var checkAndReexec = pkgversion.CheckAndReexec
+
 // logFileHandle holds the opened log file for the lifetime of the program.
 var logFileHandle *os.File
 
@@ -125,33 +150,7 @@ func parseChdirFromArgs() string {
 // It recognizes `--use-version=value` and `--use-version value` forms.
 // If no --use-version flag is found, it returns an empty string.
 func parseUseVersionFromArgs() string {
-	return parseUseVersionFromArgsInternal(os.Args)
-}
-
-// parseUseVersionFromArgsInternal manually parses --use-version flag from the provided args.
-// This internal version accepts args as a parameter for testability.
-func parseUseVersionFromArgsInternal(args []string) string {
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-
-		// Stop scanning after bare "--" (end-of-flags delimiter).
-		if arg == "--" {
-			break
-		}
-
-		// Check for --use-version=value format.
-		if strings.HasPrefix(arg, "--use-version=") {
-			return strings.TrimPrefix(arg, "--use-version=")
-		}
-
-		// Check for --use-version value format (next arg is the value).
-		if arg == "--use-version" {
-			if i+1 < len(args) {
-				return args[i+1]
-			}
-		}
-	}
-	return ""
+	return pkgversion.ParseUseVersionFromArgs(os.Args)
 }
 
 // parseChdirFromArgsInternal manually parses --chdir or -C flag from the provided args.
@@ -359,6 +358,23 @@ func processChdirFlag(cmd *cobra.Command) error {
 	return nil
 }
 
+// maybeReexecExplicitUseVersion handles explicit --use-version / ATMOS_USE_VERSION
+// requests before Cobra resolves the command tree. This lets a currently
+// installed binary switch to a newer binary for commands it does not know about.
+func maybeReexecExplicitUseVersion(atmosConfig *schema.AtmosConfiguration) bool {
+	explicitVersion := parseUseVersionFromArgs()
+	if explicitVersion == "" {
+		//nolint:forbidigo // Must use os.Getenv before Cobra/Viper command parsing.
+		explicitVersion = os.Getenv(pkgversion.UseVersionEnvVar)
+	}
+	if explicitVersion == "" {
+		return false
+	}
+
+	_ = os.Setenv(pkgversion.VersionUseEnvVar, explicitVersion)
+	return checkAndReexec(atmosConfig)
+}
+
 // RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
 	Use:   "atmos",
@@ -480,6 +496,17 @@ var RootCmd = &cobra.Command{
 				}
 			}
 
+			// Honor the public ATMOS_USE_VERSION env var (bound to --use-version)
+			// so version-management commands re-exec on it just like the CLI flag.
+			// An env-populated flag is not marked Changed(), so it isn't caught above.
+			if !explicitVersionRequested {
+				//nolint:forbidigo // Must use os.Getenv: re-exec decision is made before Viper flag binding resolves.
+				if useVersion := os.Getenv(pkgversion.UseVersionEnvVar); useVersion != "" {
+					explicitVersion = useVersion
+					explicitVersionRequested = true
+				}
+			}
+
 			// Set ATMOS_VERSION_USE env var if explicit flag was provided.
 			if explicitVersionRequested {
 				_ = os.Setenv(pkgversion.VersionUseEnvVar, explicitVersion)
@@ -492,7 +519,7 @@ var RootCmd = &cobra.Command{
 				// CheckAndReexec returns true only on successful syscall.Exec, which replaces
 				// the current process entirely. This means true is never returned in practice
 				// since exec doesn't return. We call it for its side effects.
-				_ = pkgversion.CheckAndReexec(&tmpConfig)
+				_ = checkAndReexec(&tmpConfig)
 			}
 		}
 
@@ -524,6 +551,10 @@ var RootCmd = &cobra.Command{
 		if ioErr := iolib.Initialize(); ioErr != nil {
 			errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize I/O context: %w", ioErr), "", "")
 		}
+		// The global masker may have been created before CLI flags were parsed (e.g. by early
+		// output), so its enabled state reflects the `--mask` default, not the parsed flag.
+		// Reconcile it now that flags are available so `--mask=false` reliably disables masking.
+		iolib.ReconcileMasking()
 		ioCtx := iolib.GetContext()
 		ui.InitFormatter(ioCtx)
 		data.InitWriter(ioCtx)
@@ -570,6 +601,12 @@ var RootCmd = &cobra.Command{
 		// This ensures tables and styled output degrade gracefully when piped or in non-TTY environments.
 		term := terminal.New()
 		lipgloss.SetColorProfile(convertToTermenvProfile(term.ColorProfile()))
+
+		// Automatic CI cache restore-on-start (and register save-on-exit) when
+		// enabled. No-op outside a supported CI provider or for help commands.
+		if !isHelpRequested && !isCompletionCommand(cmd) {
+			cicache.AutoRestore(cmd, &tmpConfig)
+		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
@@ -635,6 +672,8 @@ func maybePromoteLogLevelForDebugMode(atmosConfig *schema.AtmosConfiguration, co
 //
 //nolint:revive,cyclop // Function complexity is acceptable for logger configuration.
 func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
+	diagnostics.Configure(atmosConfig.Diagnostics)
+
 	switch atmosConfig.Logs.Level {
 	case "Trace":
 		log.SetLevel(log.TraceLevel)
@@ -803,6 +842,9 @@ func cleanupLogFile() {
 // Cleanup performs cleanup operations before the program exits.
 // This should be called by main when the program is terminating.
 func Cleanup() {
+	// Run the automatic CI cache save-on-exit (if registered during PreRun)
+	// before closing the log file, so it runs on normal exit and on signals.
+	cicache.RunPendingSave()
 	cleanupLogFile()
 }
 
@@ -1457,12 +1499,14 @@ func Execute() error {
 
 	// Set atmosConfig for commands that need access to config.
 	version.SetAtmosConfig(&atmosConfig)
+	gitcmd.SetAtmosConfig(&atmosConfig)
 	devcontainer.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
 	backend.SetAtmosConfig(&atmosConfig)
 	toolchainCmd.SetAtmosConfig(&atmosConfig)
 	toolchain.SetAtmosConfig(&atmosConfig)
 	workdir.SetAtmosConfig(&atmosConfig)
+	terraformcache.SetAtmosConfig(&atmosConfig)
 
 	if initErr != nil {
 		// Handle config initialization errors based on command context.
@@ -1476,6 +1520,10 @@ func Execute() error {
 			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		}
 	}
+
+	// Explicit --use-version / ATMOS_USE_VERSION must run before Cobra command
+	// resolution so unknown commands can be delegated to the requested binary.
+	maybeReexecExplicitUseVersion(&atmosConfig)
 
 	// Initialize markdown renderers only if config loaded successfully
 	// This prevents deep exits in InitializeMarkdown when config is invalid
@@ -1547,14 +1595,26 @@ func Execute() error {
 	}
 
 	// Handle sentinel errors with errors.Is().
-	if err != nil {
-		if errors.Is(err, errUtils.ErrCommandNotFound) {
-			command, _ := errUtils.GetContext(err, "command")
-			showUsageAndExit(RootCmd, []string{command})
-		}
+	// Only an unknown Atmos subcommand should fall back to root usage. A missing
+	// external executable (ErrCommandNotFound, e.g. `atmos auth exec -- <cmd>`)
+	// must surface its own error, not "the command atmos requires a subcommand".
+	if command, ok := unknownSubcommand(err); ok {
+		showUsageAndExit(RootCmd, []string{command})
 	}
 
 	return err
+}
+
+// unknownSubcommand reports whether err represents an unknown Atmos subcommand
+// (as converted from Cobra in cmd/internal/executor.go) and returns the offending
+// command name. It deliberately does NOT match ErrCommandNotFound, which is used
+// for missing external executables referenced by the user.
+func unknownSubcommand(err error) (string, bool) {
+	if err == nil || !errors.Is(err, errUtils.ErrUnknownSubcommand) {
+		return "", false
+	}
+	command, _ := errUtils.GetContext(err, "command")
+	return command, true
 }
 
 // preprocessArgs runs all argument preprocessing before Cobra parses.
@@ -1913,7 +1973,7 @@ func initCobraConfig() {
 				command.SetOut(&buf)
 				applyColoredHelpTemplate(command)
 				_ = command.Help()
-				pager := pager.NewWithAtmosConfig(true)
+				pager := pager.NewWithAtmosConfig(true, atmosConfig.Settings.Terminal.Speed)
 				_ = pager.Run("Atmos CLI Help", buf.String())
 			} else {
 				// Default: render help directly to stdout without pager.
@@ -1940,7 +2000,7 @@ func initCobraConfig() {
 				}
 			}
 
-			pager := pager.NewWithAtmosConfig(pagerEnabled)
+			pager := pager.NewWithAtmosConfig(pagerEnabled, atmosConfig.Settings.Terminal.Speed)
 			if err := pager.Run("Atmos CLI Help", buf.String()); err != nil {
 				// Pager already falls back to direct output (pkg/pager/pager.go:88-92).
 				// Just log a warning - help was still shown successfully.

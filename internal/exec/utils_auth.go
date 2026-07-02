@@ -28,14 +28,17 @@ import (
 type componentConfigFetcher func(params *ExecuteDescribeComponentParams) (map[string]any, error)
 
 // authManagerCreator is a function type for creating and authenticating an AuthManager.
-// This allows dependency injection for testing.
-type authManagerCreator func(identity string, authConfig *schema.AuthConfig, selectValue string, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error)
+// The trailing stack is threaded into manager construction so stack-scoped identities
+// (e.g. kind: <target>/emulator) receive it before authentication and can populate the
+// in-process auth context. This allows dependency injection for testing.
+type authManagerCreator func(identity string, authConfig *schema.AuthConfig, selectValue string, atmosConfig *schema.AtmosConfiguration, stack string) (auth.AuthManager, error)
 
 // defaultComponentConfigFetcher is the default implementation that calls ExecuteDescribeComponent.
 var defaultComponentConfigFetcher componentConfigFetcher = ExecuteDescribeComponent
 
-// defaultAuthManagerCreator is the default implementation that calls auth.CreateAndAuthenticateManagerWithAtmosConfig.
-var defaultAuthManagerCreator authManagerCreator = auth.CreateAndAuthenticateManagerWithAtmosConfig
+// defaultAuthManagerCreator is the default implementation that calls the stack-aware
+// auth.CreateAndAuthenticateManagerWithAtmosConfigForStack.
+var defaultAuthManagerCreator authManagerCreator = auth.CreateAndAuthenticateManagerWithAtmosConfigForStack
 
 // createAndAuthenticateAuthManager creates an AuthManager by merging global auth config with
 // component-specific auth config, then authenticating using the identity from info.Identity.
@@ -68,7 +71,7 @@ func createAndAuthenticateAuthManagerWithDeps(
 	// Create and authenticate AuthManager from --identity flag if specified.
 	// Uses merged auth config that includes both global and component-specific identities/defaults.
 	// This enables YAML template functions like !terraform.state to use authenticated credentials.
-	authManager, err := authCreator(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig)
+	authManager, err := authCreator(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, info.Stack)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
 	}
@@ -107,6 +110,7 @@ func getMergedAuthConfigWithFetcher(
 	componentConfig, err := configFetcher(&ExecuteDescribeComponentParams{
 		Component:            info.ComponentFromArg,
 		Stack:                info.Stack,
+		ComponentType:        info.ComponentType,
 		ProcessTemplates:     false,
 		ProcessYamlFunctions: false, // Critical: avoid circular dependency with YAML functions that need auth.
 		Skip:                 nil,
@@ -133,7 +137,7 @@ func getMergedAuthConfigWithFetcher(
 // to reuse the identity without re-prompting for credentials.
 // The chain is ordered from base to final identity, so we take the last element.
 func storeAutoDetectedIdentity(authManager auth.AuthManager, info *schema.ConfigAndStacksInfo) {
-	if authManager == nil || info.Identity != "" {
+	if authManager == nil || (info.Identity != "" && info.Identity != cfg.IdentityFlagSelectValue) {
 		return
 	}
 

@@ -2,6 +2,9 @@ package flags
 
 import (
 	"context"
+	"os"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -257,4 +260,68 @@ func (p *StandardParser) buildStandardOptions(parsedConfig *ParsedConfig, compon
 		Output:                      GetString(parsedConfig.Flags, "output"),
 		positionalArgs:              parsedConfig.PositionalArgs,
 	}
+}
+
+// IsBoolFlagExplicitlySet reports whether the named boolean flag was explicitly set
+// by the user via CLI or via an environment variable registered with the flag.
+//
+// This is the idiomatic way to implement a tri-state boolean flag in the flags
+// infrastructure. Unlike viper.IsSet(), which returns true for any key that has
+// a default (including flags where SetDefault was called), this method:
+//   - Checks cmd.Flags().Changed for CLI detection (reliable: true only when the
+//     user actually passed the flag)
+//   - Falls back to os.LookupEnv over the flag's registered env var names to detect
+//     explicit env var presence without false-positives from viper defaults
+//
+// Returns (set=true, value=<parsed value>) when the flag was explicitly provided,
+// or (set=false, value=false) when neither CLI flag nor env var was set.
+//
+// Example usage for a tri-state --verify-plan flag:
+//
+//	set, val := deployParser.IsBoolFlagExplicitlySet(cmd, "verify-plan")
+//	if !set {
+//	    return "" // unset: defer to config / CI defaults
+//	}
+//	if val {
+//	    return "fail"
+//	}
+//	return "off"
+func (p *StandardParser) IsBoolFlagExplicitlySet(cmd *cobra.Command, flagName string) (set bool, value bool) {
+	defer perf.Track(nil, "flags.StandardParser.IsBoolFlagExplicitlySet")()
+
+	// CLI flag has highest priority. Changed is the reliable "was it passed" signal.
+	if flag, changed := lookupCommandFlag(cmd, flagName); changed {
+		if flag != nil {
+			parsed, err := strconv.ParseBool(flag.Value.String())
+			if err == nil {
+				return true, parsed
+			}
+		}
+		return true, false
+	}
+
+	// No CLI flag — check env vars registered with the flag in the registry.
+	// We use os.LookupEnv rather than viper.Get/viper.IsSet because Viper's
+	// SetDefault registers a default that makes IsSet return true even when no
+	// env var was set. LookupEnv accurately distinguishes "var present" from
+	// "var absent".
+	reg := p.parser.registry.Get(flagName)
+	if reg == nil {
+		return false, false
+	}
+	for _, envVar := range reg.GetEnvVars() {
+		raw, ok := os.LookupEnv(envVar)
+		if !ok {
+			continue
+		}
+		parsed, err := strconv.ParseBool(strings.TrimSpace(raw))
+		if err != nil {
+			// Env var is set but not parseable as bool — treat as not set so
+			// the caller can fall through to defaults.
+			continue
+		}
+		return true, parsed
+	}
+
+	return false, false
 }

@@ -9,6 +9,7 @@ const (
 	// Flag names.
 	flagColumns = "columns"
 	flagSkip    = "skip"
+	flagFormat  = "format"
 
 	// Environment variables.
 	envListColumns = "ATMOS_LIST_COLUMNS"
@@ -35,9 +36,39 @@ func WithFormatFlag(options *[]flags.Option) {
 
 	*options = append(
 		*options,
-		flags.WithStringFlag("format", "f", "", "Output format: table, json, yaml, csv, tsv, tree, matrix"),
-		flags.WithEnvVars("format", "ATMOS_LIST_FORMAT"),
-		flags.WithValidValues("format", "table", "json", "yaml", "csv", "tsv", "tree", "matrix"),
+		flags.WithStringFlag(flagFormat, "f", "", "Output format: table, json, yaml, csv, tsv, tree, matrix"),
+		flags.WithEnvVars(flagFormat, "ATMOS_LIST_FORMAT"),
+		flags.WithValidValues(flagFormat, "table", "json", "yaml", "csv", "tsv", "tree", "matrix"),
+	)
+}
+
+// WithDependenciesFormatFlag adds the output format flag for the dependencies
+// command, which supports only tree (default), json, and yaml.
+// Uses ATMOS_LIST_DEPENDENCIES_FORMAT (not ATMOS_LIST_FORMAT) so that users
+// who export ATMOS_LIST_FORMAT=table/csv/matrix for other list verbs are not
+// affected; the dependencies subcommand rejects those values.
+// Used by: dependencies.
+func WithDependenciesFormatFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithDependenciesFormatFlag")()
+
+	*options = append(
+		*options,
+		flags.WithStringFlag(flagFormat, "f", "", "Output format: tree (default), json, yaml"),
+		flags.WithEnvVars(flagFormat, "ATMOS_LIST_DEPENDENCIES_FORMAT"),
+		flags.WithValidValues(flagFormat, "tree", "json", "yaml"),
+	)
+}
+
+// WithDirectionFlag adds the dependency direction flag.
+// Used by: dependencies.
+func WithDirectionFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithDirectionFlag")()
+
+	*options = append(
+		*options,
+		flags.WithStringFlag("direction", "d", "both", "Dependency direction to show: both, forward (what it depends on), or reverse (what depends on it)"),
+		flags.WithEnvVars("direction", "ATMOS_LIST_DIRECTION"),
+		flags.WithValidValues("direction", "both", "forward", "reverse"),
 	)
 }
 

@@ -33,6 +33,8 @@ const (
 	newline = "\n"
 )
 
+var newTerminalMarkdownRenderer = markdown.NewTerminalMarkdownRenderer
+
 // FormatterConfig controls error formatting behavior.
 type FormatterConfig struct {
 	// Verbose enables detailed error chain output.
@@ -132,7 +134,10 @@ func Format(err error, config FormatterConfig) string {
 	md := buildMarkdownSections(err, config, useColor)
 
 	// Render markdown through Glamour with configured width.
-	rendered := renderMarkdown(md, config.MaxLineLength)
+	rendered, ok := renderMarkdown(md, config.MaxLineLength)
+	if !ok {
+		return formatStructuredPlainError(err, config.Title, "")
+	}
 
 	// Strip ANSI codes if color is disabled.
 	if !useColor {
@@ -386,7 +391,7 @@ func addStackTraceSection(md *strings.Builder, err error, useColor bool) {
 // 1. The FormatterConfig.MaxLineLength parameter is respected (global renderer may have different width)
 // 2. Error formatting works before the UI system is initialized (early startup errors)
 // 3. No circular dependencies (pkg/ui imports errors package)
-func renderMarkdown(md string, maxLineLength int) string {
+func renderMarkdown(md string, maxLineLength int) (string, bool) {
 	// Use provided maxLineLength, or fall back to default if not set.
 	width := maxLineLength
 	if width <= 0 {
@@ -404,19 +409,17 @@ func renderMarkdown(md string, maxLineLength int) string {
 		},
 	}
 
-	renderer, err := markdown.NewTerminalMarkdownRenderer(config)
+	renderer, err := newTerminalMarkdownRenderer(config)
 	if err != nil {
-		// Fallback: return plain markdown if renderer creation fails.
-		return md
+		return "", false
 	}
 
 	rendered, renderErr := renderer.RenderErrorf(md)
 	if renderErr == nil {
-		return rendered
+		return rendered, true
 	}
 
-	// Fallback to plain markdown.
-	return md
+	return "", false
 }
 
 // formatContextForMarkdown formats context as a markdown table.

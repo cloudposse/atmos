@@ -11,6 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 func TestRun_ShellTask(t *testing.T) {
@@ -510,4 +511,85 @@ func TestTaskName_WithoutName(t *testing.T) {
 	task := &Task{}
 	assert.Equal(t, "step1", taskName(task, 0))
 	assert.Equal(t, "step5", taskName(task, 4))
+}
+
+func TestRun_ShellTaskTty(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	task := Task{
+		Name:        "session-task",
+		Command:     "aws ssm start-session",
+		Type:        "shell",
+		Tty:         true,
+		Interactive: true,
+	}
+	// Dry-run exercises the terminal-session routing without executing.
+	// The CommandRunner must NOT be called for tty tasks.
+	opts := Options{DryRun: true}
+
+	err := Run(ctx, &task, mockRunner, opts)
+	require.NoError(t, err)
+}
+
+func TestRun_ShellTaskInteractiveUsesSession(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	task := Task{
+		Name:        "interactive-task",
+		Command:     "read answer",
+		Type:        "shell",
+		Interactive: true,
+	}
+	// Interactive tasks route to the terminal session path, NOT the
+	// CommandRunner (no mock expectations). Dry-run avoids real execution;
+	// suspension/attachment behavior is covered by pkg/process tests.
+	opts := Options{Dir: "/app", DryRun: true}
+
+	err := Run(ctx, &task, mockRunner, opts)
+	require.NoError(t, err)
+	assert.False(t, signals.InterruptExitSuspended(), "suspension must be released after the task")
+}
+
+func TestRun_ExecTaskDryRun(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	task := Task{
+		Name:    "session-task",
+		Command: "aws ssm start-session",
+		Type:    schema.TaskTypeExec,
+	}
+	// Dry-run exercises the exec routing without replacing the process.
+	// The CommandRunner must NOT be called for exec tasks.
+	err := Run(ctx, &task, mockRunner, Options{DryRun: true})
+	require.NoError(t, err)
+}
+
+func TestRunAll_RejectsNonFinalExecTask(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	tasks := Tasks{
+		{Name: "session", Command: "ssh host", Type: schema.TaskTypeExec},
+		{Name: "after", Command: "echo never runs", Type: schema.TaskTypeShell},
+	}
+
+	// Validation must fail before any task executes (no mock expectations).
+	err := RunAll(ctx, tasks, mockRunner, Options{DryRun: true})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, schema.ErrExecStepNotLast)
 }

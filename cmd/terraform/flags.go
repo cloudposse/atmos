@@ -63,6 +63,17 @@ func registerExecutionFlags(registry *flags.FlagRegistry) {
 		Description: "Customize User-Agent string in Terraform provider requests (sets TF_APPEND_USER_AGENT)",
 		EnvVars:     []string{"ATMOS_APPEND_USER_AGENT"},
 	})
+	// Skip hooks at runtime. --skip-hooks (no value) skips all hooks for the
+	// current invocation; --skip-hooks=name1,name2 skips only the named hooks.
+	// Per-invocation only — does not propagate to nested commands.
+	registry.Register(&flags.StringFlag{
+		Name:        "skip-hooks",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --skip-hooks=name1,name2 to skip specific hooks by name",
+		EnvVars:     []string{"ATMOS_SKIP_HOOKS"},
+		NoOptDefVal: "*", // bare --skip-hooks means "skip all".
+	})
 }
 
 // BackendExecutionFlags returns flags for commands that generate backend files or run init.

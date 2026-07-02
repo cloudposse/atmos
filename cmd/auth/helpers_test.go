@@ -16,8 +16,33 @@ import (
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/flags"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// Compile-time guard: a rename of the Keyring/Type schema fields must break the build.
+var _ = schema.AuthConfig{Keyring: schema.KeyringConfig{Type: "memory"}}
+
+// TestCreateAuthManager_HonorsKeyringTypeMemory reproduces issue #2544:
+// `auth.keyring.type: memory` set in atmos.yaml must select the in-memory
+// keyring backend. On unpatched code CreateAuthManager calls the no-arg
+// credential-store constructor, dropping the config, so the default "system"
+// keyring is chosen instead (which hangs on a broken-but-present keyring).
+func TestCreateAuthManager_HonorsKeyringTypeMemory(t *testing.T) {
+	// Ensure the env var does not mask the config under test (config, not env,
+	// must drive the selection here).
+	t.Setenv("ATMOS_KEYRING_TYPE", "")
+
+	authConfig := &schema.AuthConfig{
+		Keyring: schema.KeyringConfig{Type: authTypes.CredentialStoreTypeMemory},
+	}
+
+	mgr, err := CreateAuthManager(authConfig, t.TempDir())
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr)
+	assert.Equal(t, authTypes.CredentialStoreTypeMemory, mgr.CredentialStoreType(),
+		"keyring.type: memory must select the in-memory credential store")
+}
 
 // initTestUI initializes the UI formatter for tests and returns a cleanup function.
 func initTestUI(t *testing.T) {
