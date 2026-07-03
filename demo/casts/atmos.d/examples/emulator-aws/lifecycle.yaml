@@ -56,7 +56,7 @@ commands:
           text = path.read_text()
           text = re.sub(r"http://127\.0\.0\.1:\d+", "http://127.0.0.1:<port>", text)
           text = re.sub(
-              r"aws\\t[^\\t\\n]+\\trunning\\t[^\\n\"]+",
+              r"aws\\t.*?\\trunning\\t.*?(?=\\n|\")",
               r"aws\\t<image>\\trunning\\t<container>",
               text,
           )

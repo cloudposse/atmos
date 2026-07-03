@@ -7,6 +7,7 @@ import Link from '@docusaurus/Link';
 import Markdown from 'react-markdown';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFolder } from '@fortawesome/free-solid-svg-icons';
+import CastPlayer from '@site/src/components/CastPlayer';
 import type { ExamplesTree, FileBrowserOptions } from './types';
 import styles from './styles.module.css';
 
@@ -38,17 +39,31 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
   // Render a single example card. Featured cards use the friendly title; the full grid keeps
   // the directory name so it stays scannable alongside the URL path.
   const renderCard = (example: ExamplesTree['examples'][number], displayName: string) => (
-    <Link
+    <article
       key={example.name}
-      to={`${routeBasePath}/${example.name}`}
       className={styles.exampleCard}
     >
-      <div className={styles.exampleCardHeader}>
-        <div className={styles.exampleCardIcon}>
-          <FontAwesomeIcon icon={faFolder} />
+      <Link to={`${routeBasePath}/${example.name}`} className={styles.exampleCardLink}>
+        <div className={styles.exampleCardHeader}>
+          <div className={styles.exampleCardIcon}>
+            <FontAwesomeIcon icon={faFolder} />
+          </div>
+          <h2 className={styles.exampleCardTitle}>{displayName}</h2>
         </div>
-        <h2 className={styles.exampleCardTitle}>{displayName}</h2>
-      </div>
+      </Link>
+      {example.cast?.file && (
+        <div className={styles.exampleCardCast}>
+          <CastPlayer
+            src={example.cast.file}
+            title={example.cast.title || displayName}
+            chrome
+            thumbnail
+            controls={false}
+            scrubber={false}
+            showCommand={false}
+          />
+        </div>
+      )}
       <div className={styles.exampleCardDescription}>
         <Markdown components={cardMarkdownComponents}>
           {example.description || 'Explore this example project'}
@@ -60,8 +75,11 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
             <span key={tag} className={styles.tagBadge}>{tag}</span>
           ))}
         </div>
+        <Link to={`${routeBasePath}/${example.name}`} className={styles.exampleCardCta}>
+          Open
+        </Link>
       </div>
-    </Link>
+    </article>
   );
 
   return (

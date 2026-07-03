@@ -1,9 +1,9 @@
-{"version":3,"term":{"cols":120,"rows":36,"type":"dumb"},"timestamp":1783039387,"title":"atmos vendor pull","env":{"SHELL":"/bin/zsh"}}
-[0.009019875,"e","[pull]\n"]
-[16.054835375,"e","INFO Vendoring from 'vendor.yaml'\n"]
-[0.012,"e","INFO ✓ package=ipinfo version=(main)\n"]
+{"version":3,"term":{"cols":120,"rows":36,"type":"dumb"},"timestamp":1783044721,"title":"atmos vendor pull","env":{"SHELL":"/bin/zsh"}}
+[0.009321,"e","[pull]\n"]
+[14.903117375,"e","INFO Vendoring from 'vendor.yaml'\n"]
+[0.012,"e","INFO ✓ package=ipinfo version=(v1.196.0)\n"]
 [0.012,"e","INFO ✓ package=github/stargazers version=(main)\n"]
 [0.012,"e","INFO ✓ package=weather version=(main)\n"]
 [0.012,"e","INFO Vendored components success=3\n"]
 [0,"e","✓ pull completed\n"]
-[0.654909667,"o","\u001b[1;38;2;0;163;224m\u003e \u001b[0m"]
+[0.65425375,"o","\u001b[1;38;2;0;163;224m\u003e \u001b[0m"]

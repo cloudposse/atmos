@@ -113,9 +113,9 @@
 }
 
 .castSection {
-  padding: 1rem;
+  padding: 0;
   border-bottom: 1px solid var(--atmos-docs-border);
-  background: var(--atmos-docs-surface);
+  background: transparent;
 }
 
 /* README Content */
