@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	// DefaultMaxLineLength is the default maximum line length before wrapping.
+	// DefaultMaxLineLength is the legacy default maximum line length before wrapping.
 	DefaultMaxLineLength = 80
 
 	// DefaultMarkdownWidth is the default width for markdown rendering when config is not available.
@@ -55,7 +55,8 @@ type FormatterConfig struct {
 	// Verbose enables detailed error chain output.
 	Verbose bool
 
-	// MaxLineLength is the maximum length before wrapping (default: 80).
+	// MaxLineLength is the maximum length before wrapping.
+	// A value of 0 means auto-detect from configuration or terminal width.
 	// This controls both the width passed to the markdown renderer and the
 	// wrapping of text in explanation and hint sections.
 	MaxLineLength int
@@ -69,8 +70,7 @@ type FormatterConfig struct {
 func DefaultFormatterConfig() FormatterConfig {
 	verbose := viper.GetBool("verbose")
 	return FormatterConfig{
-		Verbose:       verbose,
-		MaxLineLength: DefaultMaxLineLength,
+		Verbose: verbose,
 	}
 }
 
@@ -365,29 +365,71 @@ func addExampleAndHintsSection(md *strings.Builder, err error, maxLineLength int
 
 func renderMarkdownSections(sections markdownSections, config FormatterConfig, useColor bool) (string, bool) {
 	var out strings.Builder
+	width := resolveFormatterWidth(config)
 
-	if !appendRenderedMarkdownSection(&out, sections.errorMarkdown, config.MaxLineLength, useColor) {
+	if !appendRenderedMarkdownSection(&out, sections.errorMarkdown, width, useColor) {
 		return "", false
 	}
 
 	if strings.TrimSpace(sections.explanationMarkdown) != "" {
-		renderedExplanation, ok := renderMarkdown(sections.explanationMarkdown, explanationMarkdownLineLength(config.MaxLineLength, useColor))
+		renderedExplanation, ok := renderMarkdown(sections.explanationMarkdown, explanationMarkdownLineLength(width, useColor))
 		if !ok {
 			return "", false
 		}
 		if !useColor {
 			renderedExplanation = stripANSI(renderedExplanation)
 		}
-		appendRenderedSection(&out, renderExplanationCallout(renderedExplanation, config.MaxLineLength, useColor))
+		appendRenderedSection(&out, renderExplanationCallout(renderedExplanation, width, useColor))
 	}
 
 	if strings.TrimSpace(sections.remainderMarkdown) != "" {
-		if !appendRenderedMarkdownSection(&out, sections.remainderMarkdown, config.MaxLineLength, useColor) {
+		if !appendRenderedMarkdownSection(&out, sections.remainderMarkdown, width, useColor) {
 			return "", false
 		}
 	}
 
 	return strings.TrimRight(out.String(), " \t\n") + newline, true
+}
+
+func resolveFormatterWidth(config FormatterConfig) int {
+	if config.MaxLineLength > 0 {
+		return config.MaxLineLength
+	}
+
+	configuredWidth := configuredFormatterWidth()
+	detectedWidth := detectFormatterTerminalWidth()
+
+	if configuredWidth > 0 {
+		if detectedWidth > 0 {
+			return min(configuredWidth, detectedWidth)
+		}
+		return configuredWidth
+	}
+
+	if detectedWidth > 0 {
+		return detectedWidth
+	}
+
+	return DefaultMarkdownWidth
+}
+
+func configuredFormatterWidth() int {
+	if atmosConfig == nil {
+		return 0
+	}
+	if atmosConfig.Settings.Terminal.MaxWidth > 0 {
+		return atmosConfig.Settings.Terminal.MaxWidth
+	}
+	//nolint:staticcheck // Deprecated docs max-width remains supported as a compatibility fallback.
+	return atmosConfig.Settings.Docs.MaxWidth
+}
+
+var detectFormatterTerminalWidth = func() int {
+	termProvider := terminal.New()
+	if width := termProvider.Width(terminal.Stderr); width > 0 {
+		return width
+	}
+	return termProvider.Width(terminal.Stdout)
 }
 
 func explanationMarkdownLineLength(maxLineLength int, useColor bool) int {

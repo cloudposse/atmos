@@ -18,7 +18,7 @@ func TestDefaultFormatterConfig(t *testing.T) {
 	config := DefaultFormatterConfig()
 
 	assert.False(t, config.Verbose)
-	assert.Equal(t, 80, config.MaxLineLength)
+	assert.Zero(t, config.MaxLineLength)
 }
 
 func TestFormat_NilError(t *testing.T) {
@@ -822,6 +822,102 @@ func TestFormat_MaxLineLength_ControlsWrapping(t *testing.T) {
 
 	// Narrow config should produce more line breaks than wide config.
 	assert.Greater(t, narrowLines, wideLines, "Narrow MaxLineLength should produce more line breaks")
+}
+
+func TestResolveFormatterWidth(t *testing.T) {
+	originalConfig := atmosConfig
+	originalDetectWidth := detectFormatterTerminalWidth
+	defer func() {
+		atmosConfig = originalConfig
+		detectFormatterTerminalWidth = originalDetectWidth
+	}()
+	detectFormatterTerminalWidth = func() int {
+		return 0
+	}
+
+	tests := []struct {
+		name          string
+		config        FormatterConfig
+		atmosConfig   *schema.AtmosConfiguration
+		expectedWidth int
+	}{
+		{
+			name: "explicit max line length wins",
+			config: FormatterConfig{
+				MaxLineLength: 72,
+			},
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{MaxWidth: 160},
+				},
+			},
+			expectedWidth: 72,
+		},
+		{
+			name:   "terminal max width config sets auto width",
+			config: FormatterConfig{},
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{MaxWidth: 160},
+				},
+			},
+			expectedWidth: 160,
+		},
+		{
+			name:   "deprecated docs max width config is fallback",
+			config: FormatterConfig{},
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Docs: schema.Docs{MaxWidth: 140},
+				},
+			},
+			expectedWidth: 140,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig = tt.atmosConfig
+
+			assert.Equal(t, tt.expectedWidth, resolveFormatterWidth(tt.config))
+		})
+	}
+}
+
+func TestResolveFormatterWidth_CapsConfiguredWidthToDetectedTerminal(t *testing.T) {
+	originalConfig := atmosConfig
+	originalDetectWidth := detectFormatterTerminalWidth
+	defer func() {
+		atmosConfig = originalConfig
+		detectFormatterTerminalWidth = originalDetectWidth
+	}()
+
+	atmosConfig = &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{MaxWidth: 160},
+		},
+	}
+	detectFormatterTerminalWidth = func() int {
+		return 100
+	}
+
+	assert.Equal(t, 100, resolveFormatterWidth(DefaultFormatterConfig()))
+}
+
+func TestResolveFormatterWidth_FallsBackToDefaultMarkdownWidth(t *testing.T) {
+	originalConfig := atmosConfig
+	originalDetectWidth := detectFormatterTerminalWidth
+	defer func() {
+		atmosConfig = originalConfig
+		detectFormatterTerminalWidth = originalDetectWidth
+	}()
+
+	atmosConfig = nil
+	detectFormatterTerminalWidth = func() int {
+		return 0
+	}
+
+	assert.Equal(t, DefaultMarkdownWidth, resolveFormatterWidth(DefaultFormatterConfig()))
 }
 
 func TestFormat_UseColor_ThreadedThrough(t *testing.T) {

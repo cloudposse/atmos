@@ -20,6 +20,14 @@ import (
 
 const helpCommandName = "help"
 
+const (
+	commandListTypeAdditionalHelpTopics = "additionalHelpTopics"
+	commandListTypeBuiltInCommands      = "builtInCommands"
+	commandListTypeCustomCommands       = "customCommands"
+	commandListTypeNative               = "native"
+	commandListTypeSubcommandAliases    = "subcommandAliases"
+)
+
 // Templater handles the generation and management of command usage templates.
 type Templater struct {
 	UsageTemplate string
@@ -154,7 +162,7 @@ func renderMarkdown(example string) string {
 }
 
 func hasCommands(cmds []*cobra.Command, listType string) bool {
-	cmds = filterCommands(cmds, listType == "subcommandAliases")
+	cmds = filterCommands(cmds, listType == commandListTypeSubcommandAliases)
 	for _, cmd := range cmds {
 		if shouldIncludeCommand(cmd, listType) {
 			return true
@@ -169,9 +177,9 @@ func shouldIncludeCommand(cmd *cobra.Command, listType string) bool {
 	}
 
 	switch listType {
-	case "builtInCommands":
+	case commandListTypeBuiltInCommands:
 		return !isNativeCommand(cmd) && !isConfigAlias(cmd) && !isCustomCommand(cmd)
-	case "customCommands":
+	case commandListTypeCustomCommands:
 		return !isConfigAlias(cmd) && isCustomCommand(cmd)
 	default:
 		return true
@@ -188,13 +196,13 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 	availableCmds := make([]*cobra.Command, 0)
 
 	// First pass: collect available commands and find max length
-	cmds = filterCommands(cmds, listType == "subcommandAliases")
+	cmds = filterCommands(cmds, listType == commandListTypeSubcommandAliases)
 	for _, cmd := range cmds {
 		if v, ok := customHelpShortMessage[cmd.Name()]; ok {
 			cmd.Short = v
 		}
 		switch listType {
-		case "additionalHelpTopics":
+		case commandListTypeAdditionalHelpTopics:
 			if cmd.IsAdditionalHelpTopicCommand() {
 				availableCmds = append(availableCmds, cmd)
 				if len(cmd.Name()) > maxLen {
@@ -202,7 +210,7 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 				}
 				continue
 			}
-		case "native":
+		case commandListTypeNative:
 			if isNativeCommand(cmd) {
 				availableCmds = append(availableCmds, cmd)
 				if len(cmd.Name()) > maxLen {
@@ -210,7 +218,7 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 				}
 				continue
 			}
-		case "customCommands":
+		case commandListTypeCustomCommands:
 			if !isConfigAlias(cmd) && isCustomCommand(cmd) && isCommandVisible(cmd) {
 				availableCmds = append(availableCmds, cmd)
 				if len(cmd.Name()) > maxLen {
@@ -218,7 +226,7 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 				}
 				continue
 			}
-		case "builtInCommands":
+		case commandListTypeBuiltInCommands:
 			if !isNativeCommand(cmd) && !isConfigAlias(cmd) && !isCustomCommand(cmd) && isCommandVisible(cmd) {
 				availableCmds = append(availableCmds, cmd)
 				if len(cmd.Name()) > maxLen {
@@ -226,7 +234,7 @@ func formatCommands(cmds []*cobra.Command, listType string) string {
 				}
 				continue
 			}
-		case "subcommandAliases":
+		case commandListTypeSubcommandAliases:
 			// if cmd.Annotations["nativeCommand"] == "true" {
 			// 	continue
 			// }

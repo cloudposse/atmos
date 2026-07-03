@@ -56,19 +56,19 @@ func TestHasCommandsBySection(t *testing.T) {
 		}),
 	}
 
-	assert.True(t, hasCommands(commands, "builtInCommands"))
-	assert.True(t, hasCommands(commands, "customCommands"))
-	assert.True(t, hasCommands(commands, "native"))
+	assert.True(t, hasCommands(commands, commandListTypeBuiltInCommands))
+	assert.True(t, hasCommands(commands, commandListTypeCustomCommands))
+	assert.True(t, hasCommands(commands, commandListTypeNative))
 	assert.True(t, hasCommands(commands, ""))
 	assert.False(t, hasCommands([]*cobra.Command{
 		runnableCommand("alias", "Alias", map[string]string{annotationConfigAlias: "terraform"}),
-	}, "builtInCommands"))
+	}, commandListTypeBuiltInCommands))
 	assert.False(t, hasCommands([]*cobra.Command{
 		runnableCommand("alias", "Alias", map[string]string{
 			annotationConfigAlias:   "terraform",
 			annotationCustomCommand: annotationValueTrue,
 		}),
-	}, "customCommands"))
+	}, commandListTypeCustomCommands))
 }
 
 func TestHasCommandsIncludesHelpCommand(t *testing.T) {
@@ -76,7 +76,7 @@ func TestHasCommandsIncludesHelpCommand(t *testing.T) {
 		{Use: helpCommandName, Short: "Cobra help command"},
 	}
 
-	assert.True(t, hasCommands(commands, "builtInCommands"))
+	assert.True(t, hasCommands(commands, commandListTypeBuiltInCommands))
 }
 
 func TestFilterCommandsReturnsAliasesOnlyWhenRequested(t *testing.T) {
@@ -129,19 +129,19 @@ func TestFormatCommandsSeparatesBuiltInCustomAndNativeCommands(t *testing.T) {
 		}),
 	}
 
-	builtIns := formatCommands(commands, "builtInCommands")
+	builtIns := formatCommands(commands, commandListTypeBuiltInCommands)
 	assert.Contains(t, builtIns, "builtin")
 	assert.NotContains(t, builtIns, "custom")
 	assert.NotContains(t, builtIns, "native")
 	assert.NotContains(t, builtIns, "alias")
 
-	custom := formatCommands(commands, "customCommands")
+	custom := formatCommands(commands, commandListTypeCustomCommands)
 	assert.Contains(t, custom, "custom")
 	assert.NotContains(t, custom, "builtin")
 	assert.NotContains(t, custom, "native")
 	assert.NotContains(t, custom, "alias")
 
-	native := formatCommands(commands, "native")
+	native := formatCommands(commands, commandListTypeNative)
 	assert.Contains(t, native, "native")
 	assert.NotContains(t, native, "builtin")
 	assert.NotContains(t, native, "custom")
@@ -152,7 +152,7 @@ func TestFormatCommandsSubcommandAliasesUsesAliasHelp(t *testing.T) {
 	command := runnableCommand("terraform", "Terraform", nil)
 	command.Aliases = []string{"tf"}
 
-	output := formatCommands([]*cobra.Command{command}, "subcommandAliases")
+	output := formatCommands([]*cobra.Command{command}, commandListTypeSubcommandAliases)
 
 	assert.Contains(t, output, "tf")
 	assert.Contains(t, output, `Alias of "terraform" command`)

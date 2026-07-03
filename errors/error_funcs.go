@@ -271,11 +271,9 @@ func printFormattedError(err error, title string, suggestion string) {
 
 	// Color mode is now determined by terminal settings (--no-color, --force-color, etc.)
 	// and does not need to be configured here.
-	config := FormatterConfig{
-		Verbose:       verbose,
-		MaxLineLength: DefaultMaxLineLength,
-		Title:         title, // Use provided title if any.
-	}
+	config := DefaultFormatterConfig()
+	config.Verbose = verbose
+	config.Title = title // Use provided title if any.
 	formatted := Format(err, config)
 
 	// Write directly to os.Stderr instead of using ui.MarkdownMessage() to avoid
