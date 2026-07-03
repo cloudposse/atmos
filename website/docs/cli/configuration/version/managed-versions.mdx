@@ -1,0 +1,172 @@
+---
+title: Managed Versions
+sidebar_position: 40
+sidebar_label: managed versions
+description: Configure Atmos-managed external versions, tracks, providers, groups, and lock files.
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use `version` in `atmos.yaml` to manage external versions with Atmos-native tracks, policies, groups, and lock files.
+</Intro>
+
+Managed versions are for external artifacts that Atmos needs to resolve consistently: toolchain tools, GitHub Actions, OCI and Docker images, Helm charts, Terraform or OpenTofu-related dependencies, and other package versions. Human-authored policy lives in `atmos.yaml`; resolved versions live in `versions.lock.yaml`.
+
+This is separate from `version.use`, `version.check`, and `version.constraint`, which manage the Atmos CLI itself.
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+version:
+  track: prod
+  lock_file: versions.lock.yaml
+
+  providers:
+    dockerhub:
+      type: docker
+      url: registry-1.docker.io
+
+    ecr_prod:
+      type: ecr
+      region: us-east-1
+      registry_id: "123456789012"
+
+    ghcr:
+      type: oci
+      url: ghcr.io
+
+  defaults:
+    update:
+      strategy: patch
+      cooldown: 14d
+      automerge: true
+    allow: [stable]
+    labels: [dependencies]
+
+  groups:
+    infrastructure:
+      ecosystems: [docker, oci, helm, terraform, opentofu, github-actions]
+      patterns: ["terraform*", "opentofu", "actions/*", "nginx"]
+      update:
+        strategy: minor
+        cooldown: 14d
+      labels: [infrastructure]
+
+  tracks:
+    prod:
+      defaults:
+        update:
+          cooldown: 30d
+
+      versions:
+        opentofu:
+          ecosystem: toolchain
+          datasource: toolchain
+          package: opentofu
+          desired: "~1.10"
+
+        checkout:
+          ecosystem: github-actions
+          datasource: github-tags
+          provider: github
+          package: actions/checkout
+          desired: "v6"
+
+        nginx:
+          ecosystem: oci
+          datasource: oci-tags
+          provider: dockerhub
+          package: library/nginx
+          desired: "1.28.0"
+```
+</File>
+
+## Core Concepts
+
+| Field | Description |
+|-------|-------------|
+| `ecosystem` | Dependency domain, such as `toolchain`, `github-actions`, `docker`, `oci`, `helm`, `terraform`, or `opentofu`. |
+| `datasource` | Version lookup strategy, such as `toolchain`, `github-tags`, `github-releases`, `docker-tags`, `oci-tags`, or `helm`. |
+| `provider` | Concrete backend or auth target, such as `github`, `dockerhub`, `ecr_prod`, or `ghcr`. |
+| `track` | Named version lane, such as `dev`, `staging`, or `prod`. |
+| `group` | Batch of related updates with shared match rules and policy. |
+| `lock_file` | File that stores resolved versions. Defaults to `versions.lock.yaml`. |
+
+## Tracks
+
+Tracks let different environments converge at different speeds without putting version definitions in every stack.
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+version:
+  track: prod
+```
+</File>
+
+When a stack asserts a track, `!version` and `{{ .version.name }}` resolve from that track. If a stack does not assert a track, Atmos uses `version.track` from `atmos.yaml`, then falls back to `default`.
+
+## Runtime Usage
+
+Use `!version` when the value is YAML data:
+
+```yaml
+dependencies:
+  tools:
+    opentofu: !version opentofu
+```
+
+Use `.version` in Go templates when the value is embedded inside a string:
+
+```yaml
+vars:
+  image:
+    uri: "public.ecr.aws/datadog/lambda-extension:{{ .version.dd_forwarder }}"
+```
+
+GitHub Actions workflow templates can also use `.version`:
+
+```yaml
+uses: "actions/checkout@{{ .version.checkout }}"
+```
+
+Render them with [`atmos version tracks render`](/cli/commands/version/tracks) so committed workflow files contain literal refs.
+
+## Lock File
+
+<File title="versions.lock.yaml">
+```yaml
+version: 1
+tracks:
+  prod:
+    opentofu:
+      version: 1.10.6
+      ecosystem: toolchain
+      datasource: toolchain
+      package: opentofu
+      resolved_at: "2026-07-03T00:00:00Z"
+
+    checkout:
+      version: v6
+      ecosystem: github-actions
+      datasource: github-tags
+      provider: github
+      package: actions/checkout
+      resolved_at: "2026-07-03T00:00:00Z"
+```
+</File>
+
+Atmos runtime resolution reads from the lock file. This keeps local runs and CI deterministic.
+
+## Resolver Support
+
+The schema supports multiple ecosystems, datasources, and providers. Exact `desired` versions can be locked for any datasource. SemVer constraint resolution is currently implemented for `datasource: toolchain`; additional provider-specific resolvers can be added behind the same schema without changing stack usage.
+
+## See Also
+
+- [`atmos version tracks`](/cli/commands/version/tracks)
+- [`!version`](/functions/yaml/version)
+- [Version Management Patterns](/design-patterns/version-management)
+- [Toolchain Configuration](/cli/configuration/toolchain)

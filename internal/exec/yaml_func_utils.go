@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version/manager"
 )
 
 // UnsetMarker is a special type to mark values that should be deleted from the configuration.
@@ -324,6 +325,18 @@ func processSimpleTags(
 			return nil, true, err
 		}
 		res, err := emulator.ResolveYAMLFunc(atmosConfig, args, currentStack, stackInfo)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncVersion, skip) {
+		name, err := getStringAfterTag(input, u.AtmosYamlFuncVersion)
+		if err != nil {
+			return nil, true, err
+		}
+		track := manager.EffectiveTrackFromStack(atmosConfig, stackInfo)
+		res, err := manager.ResolveLocked(atmosConfig, track, name)
 		if err != nil {
 			return nil, true, err
 		}

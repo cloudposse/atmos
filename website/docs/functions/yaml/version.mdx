@@ -1,0 +1,77 @@
+---
+title: "!version"
+sidebar_position: 90
+sidebar_label: "!version"
+description: Resolve an Atmos-managed version from the active version track lock file.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use `!version` to read a locked version from the active Atmos version track.
+</Intro>
+
+The `!version` YAML function resolves a name from `versions.lock.yaml`. It uses the stack's asserted `version.track`, then `version.track` from `atmos.yaml`, then `default`.
+
+## Usage
+
+```yaml
+!version <name>
+```
+
+## Example
+
+```yaml
+version:
+  track: prod
+
+components:
+  terraform:
+    datadog-forwarder:
+      dependencies:
+        tools:
+          opentofu: !version opentofu
+      vars:
+        image:
+          tag: !version dd_forwarder
+```
+
+With this lock file:
+
+```yaml
+version: 1
+tracks:
+  prod:
+    opentofu:
+      version: 1.10.6
+    dd_forwarder:
+      version: 5.4.5
+```
+
+Atmos resolves:
+
+```yaml
+dependencies:
+  tools:
+    opentofu: 1.10.6
+vars:
+  image:
+    tag: 5.4.5
+```
+
+## Embedded Strings
+
+Use Go template context for embedded values:
+
+```yaml
+vars:
+  image:
+    uri: "public.ecr.aws/datadog/lambda-extension:{{ .version.dd_forwarder }}"
+```
+
+Use `!version` when the whole YAML value is the version. Use `{{ .version.name }}` when the version is part of a larger string.
+
+## See Also
+
+- [Managed Versions Configuration](/cli/configuration/version/managed-versions)
+- [`atmos version tracks`](/cli/commands/version/tracks)

@@ -3,7 +3,7 @@ title: Version
 sidebar_position: 90
 sidebar_label: version
 sidebar_class_name: command
-description: Configure version checking, update notifications, and version constraints for Atmos CLI.
+description: Configure Atmos CLI version behavior and Atmos-managed external versions.
 id: version
 slug: /cli/configuration/version
 ---
@@ -11,7 +11,7 @@ import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 
 <Intro>
-The `version` section configures how Atmos handles version management, including automatic update checking and version constraint enforcement to ensure consistent behavior across teams and environments.
+The `version` section configures how Atmos handles version management, including automatic update checking, version constraint enforcement, Atmos self-management, and Atmos-managed external versions.
 </Intro>
 
 ## Configuration
@@ -32,6 +32,18 @@ version:
     require: ">=1.100.0"
     enforcement: fatal
     message: "Please upgrade Atmos to use this configuration."
+
+  # Managed external versions
+  track: prod
+  lock_file: versions.lock.yaml
+  tracks:
+    prod:
+      versions:
+        opentofu:
+          ecosystem: toolchain
+          datasource: toolchain
+          package: opentofu
+          desired: "~1.10"
 ```
 </File>
 
@@ -42,6 +54,7 @@ version:
 | [Use](/cli/configuration/version/use) | Pin project to a specific Atmos version |
 | [Check](/cli/configuration/version/check) | Automatic version checking and update notifications |
 | [Constraint](/cli/configuration/version/constraint) | Enforce Atmos version requirements for your configuration |
+| [Managed Versions](/cli/configuration/version/managed-versions) | Manage external version tracks, groups, providers, and lock files |
 
 ## Environment Variables
 
@@ -66,4 +79,5 @@ version:
 
 - [CLI Configuration](/cli/configuration) — Overview of CLI configuration
 - [`atmos version`](/cli/commands/version/usage) — Display version and check for updates
+- [`atmos version tracks`](/cli/commands/version/tracks) — Manage external version tracks and locks
 - [Atmos Version Management](/howto/atmos-version-management) — How-to guide with profiles

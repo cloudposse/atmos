@@ -188,6 +188,24 @@ Use Git Flow when you need version control to represent **current state versus d
 
 **Remember**: The best approach is what your engineering organization already follows. If your team has established Git Flow practices, extending them to infrastructure management keeps the mental model consistent. This isn't about one approach being universally better—it's about alignment with your team's workflows and culture.
 
+### Complementary Technique: Atmos-Managed Version Tracks
+
+Atmos-managed version tracks are a complementary technique for external artifacts and runtime dependencies. They do not replace component source versioning patterns such as folder-based versioning, release channels, or strict component pinning. Instead, they give Atmos a native catalog and lock file for versions that appear throughout configuration and CI:
+
+- Toolchain dependencies such as OpenTofu, Terraform, Helmfile, `kubectl`, and `jq`
+- GitHub Actions refs such as `actions/checkout@v6`
+- Docker, OCI, ECR, GHCR, Helm, GitHub, and GitLab package versions
+- Image tags, Lambda layer tags, provider-side helper versions, and other external artifact refs
+
+The pattern is:
+
+1. Define policy and desired ranges in `atmos.yaml` under [`version.tracks`](/cli/configuration/version/managed-versions).
+2. Commit deterministic resolved versions in `versions.lock.yaml`.
+3. Use `!version name` for YAML values and `{{ .version.name }}` for embedded strings.
+4. Use [`atmos version tracks`](/cli/commands/version/tracks) in CI to check status, update locks, verify locks, and render files that must contain literal refs.
+
+This is congruent with the Atmos version-management philosophy: humans declare desired convergence and policy; Atmos owns deterministic resolution, locking, and CI-native rendering. It avoids scattering pins throughout stacks while still making the actual runtime versions explicit and reviewable in Git.
+
 ### Complementary Technique: [Vendoring Component Versions](/design-patterns/version-management/vendoring-components)
 
 A technique that works with any deployment strategy to automate copying component versions from multiple external sources. Maintains a manifest tracking origin and lineage, providing strong local control with predictable update windows. Can be combined with any folder organization approach.
@@ -213,6 +231,8 @@ A technique that works with any deployment strategy to automate copying componen
 ### Complementary Technique
 
 **Vendoring Component Versions**: Works with any deployment strategy and folder approach. Automates copying external component versions locally with manifest tracking for origin/lineage.
+
+**Atmos-Managed Version Tracks**: Works with any deployment strategy and folder approach. Manages external artifact versions through `atmos.yaml`, `versions.lock.yaml`, `!version`, `.version`, and CI-native `atmos version tracks` commands.
 
 ## Choosing a Pattern
 

@@ -37,7 +37,65 @@ type VersionConstraint struct {
 	Message string `yaml:"message,omitempty" mapstructure:"message" json:"message,omitempty"`
 }
 
-// Version configures version checking, constraint validation, and self-management.
+// VersionProvider configures a concrete backend used to discover versions.
+type VersionProvider struct {
+	Type       string `yaml:"type,omitempty" mapstructure:"type" json:"type,omitempty"`
+	URL        string `yaml:"url,omitempty" mapstructure:"url" json:"url,omitempty"`
+	Region     string `yaml:"region,omitempty" mapstructure:"region" json:"region,omitempty"`
+	RegistryID string `yaml:"registry_id,omitempty" mapstructure:"registry_id" json:"registry_id,omitempty"`
+}
+
+// VersionUpdatePolicy configures update intent for managed versions.
+type VersionUpdatePolicy struct {
+	Strategy  string   `yaml:"strategy,omitempty" mapstructure:"strategy" json:"strategy,omitempty"`
+	Cooldown  string   `yaml:"cooldown,omitempty" mapstructure:"cooldown" json:"cooldown,omitempty"`
+	Schedule  []string `yaml:"schedule,omitempty" mapstructure:"schedule" json:"schedule,omitempty"`
+	Automerge *bool    `yaml:"automerge,omitempty" mapstructure:"automerge" json:"automerge,omitempty"`
+}
+
+// VersionPolicy configures shared defaults for managed versions.
+type VersionPolicy struct {
+	Update VersionUpdatePolicy `yaml:"update,omitempty" mapstructure:"update" json:"update,omitempty"`
+	Allow  []string            `yaml:"allow,omitempty" mapstructure:"allow" json:"allow,omitempty"`
+	Ignore []string            `yaml:"ignore,omitempty" mapstructure:"ignore" json:"ignore,omitempty"`
+	Labels []string            `yaml:"labels,omitempty" mapstructure:"labels" json:"labels,omitempty"`
+}
+
+// VersionGroup configures a Dependabot/Renovate-style batch of updates.
+type VersionGroup struct {
+	Ecosystems      []string            `yaml:"ecosystems,omitempty" mapstructure:"ecosystems" json:"ecosystems,omitempty"`
+	Datasources     []string            `yaml:"datasources,omitempty" mapstructure:"datasources" json:"datasources,omitempty"`
+	Providers       []string            `yaml:"providers,omitempty" mapstructure:"providers" json:"providers,omitempty"`
+	Patterns        []string            `yaml:"patterns,omitempty" mapstructure:"patterns" json:"patterns,omitempty"`
+	ExcludePatterns []string            `yaml:"exclude_patterns,omitempty" mapstructure:"exclude_patterns" json:"exclude_patterns,omitempty"`
+	Update          VersionUpdatePolicy `yaml:"update,omitempty" mapstructure:"update" json:"update,omitempty"`
+	Allow           []string            `yaml:"allow,omitempty" mapstructure:"allow" json:"allow,omitempty"`
+	Ignore          []string            `yaml:"ignore,omitempty" mapstructure:"ignore" json:"ignore,omitempty"`
+	Labels          []string            `yaml:"labels,omitempty" mapstructure:"labels" json:"labels,omitempty"`
+}
+
+// VersionEntry configures one externally managed version.
+type VersionEntry struct {
+	Ecosystem  string              `yaml:"ecosystem,omitempty" mapstructure:"ecosystem" json:"ecosystem,omitempty"`
+	Datasource string              `yaml:"datasource,omitempty" mapstructure:"datasource" json:"datasource,omitempty"`
+	Provider   string              `yaml:"provider,omitempty" mapstructure:"provider" json:"provider,omitempty"`
+	Package    string              `yaml:"package,omitempty" mapstructure:"package" json:"package,omitempty"`
+	Desired    string              `yaml:"desired,omitempty" mapstructure:"desired" json:"desired,omitempty"`
+	Group      string              `yaml:"group,omitempty" mapstructure:"group" json:"group,omitempty"`
+	Update     VersionUpdatePolicy `yaml:"update,omitempty" mapstructure:"update" json:"update,omitempty"`
+	Allow      []string            `yaml:"allow,omitempty" mapstructure:"allow" json:"allow,omitempty"`
+	Ignore     []string            `yaml:"ignore,omitempty" mapstructure:"ignore" json:"ignore,omitempty"`
+	Labels     []string            `yaml:"labels,omitempty" mapstructure:"labels" json:"labels,omitempty"`
+}
+
+// VersionTrack configures a named version lane such as dev, staging, or prod.
+type VersionTrack struct {
+	Extends  string                  `yaml:"extends,omitempty" mapstructure:"extends" json:"extends,omitempty"`
+	Defaults VersionPolicy           `yaml:"defaults,omitempty" mapstructure:"defaults" json:"defaults,omitempty"`
+	Versions map[string]VersionEntry `yaml:"versions,omitempty" mapstructure:"versions" json:"versions,omitempty"`
+}
+
+// Version configures version checking, constraint validation, self-management, and managed external versions.
 type Version struct {
 	Check      VersionCheck      `yaml:"check,omitempty" mapstructure:"check" json:"check,omitempty"`
 	Constraint VersionConstraint `yaml:"constraint,omitempty" mapstructure:"constraint" json:"constraint,omitempty"`
@@ -52,4 +110,16 @@ type Version struct {
 	//
 	// The re-exec uses the toolchain installer, storing versions in ~/.atmos/bin/cloudposse/atmos/{version}/.
 	Use string `yaml:"use,omitempty" mapstructure:"use" json:"use,omitempty"`
+
+	// Track is the default managed version track.
+	Track string `yaml:"track,omitempty" mapstructure:"track" json:"track,omitempty"`
+
+	// LockFile is the path to the managed versions lock file. Relative paths are
+	// resolved from the Atmos base path.
+	LockFile string `yaml:"lock_file,omitempty" mapstructure:"lock_file" json:"lock_file,omitempty"`
+
+	Providers map[string]VersionProvider `yaml:"providers,omitempty" mapstructure:"providers" json:"providers,omitempty"`
+	Defaults  VersionPolicy              `yaml:"defaults,omitempty" mapstructure:"defaults" json:"defaults,omitempty"`
+	Groups    map[string]VersionGroup    `yaml:"groups,omitempty" mapstructure:"groups" json:"groups,omitempty"`
+	Tracks    map[string]VersionTrack    `yaml:"tracks,omitempty" mapstructure:"tracks" json:"tracks,omitempty"`
 }
