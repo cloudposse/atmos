@@ -29,6 +29,11 @@ func TestSanitizeNetworkToken(t *testing.T) {
 	assert.Equal(t, "default", sanitizeNetworkToken(""))
 }
 
+func TestEmulatorNetworkAliasScopesByStack(t *testing.T) {
+	assert.Equal(t, "dev-aws", emulatorNetworkAlias("dev", "aws"))
+	assert.Equal(t, "deploy-prod-aws", emulatorNetworkAlias("deploy/prod", "aws"))
+}
+
 // fakeNetworkRuntime is a container.Runtime that also implements
 // container.NetworkEnsurer, recording EnsureNetwork calls.
 type fakeNetworkRuntime struct {
@@ -50,24 +55,31 @@ type plainRuntime struct {
 func TestAttachSharedNetwork(t *testing.T) {
 	m := &Manager{}
 
-	t.Run("attaches network and alias on success", func(t *testing.T) {
+	// Force the shared-network path even when the test binary itself runs inside
+	// a container (e.g. CI), where attachSharedNetwork would otherwise join the
+	// runner's own network instead of ensuring the per-stack one.
+	t.Setenv(envEmulatorUseCurrentContainerNetwork, "false")
+
+	t.Run("attaches network with stack-scoped alias on success", func(t *testing.T) {
 		rt := &fakeNetworkRuntime{}
 		namedConfig := &container.NamedConfig{}
 		m.attachSharedNetwork(context.Background(), rt, namedConfig, "dev", "gitserver")
 		assert.Equal(t, []string{"atmos-emulator-dev"}, rt.ensured)
-		assert.Equal(t, []string{"--network", "atmos-emulator-dev", "--network-alias", "gitserver"}, namedConfig.RunArgs)
+		assert.Equal(t, []container.NetworkAttachment{
+			{Name: "atmos-emulator-dev", Aliases: []string{"dev-gitserver"}},
+		}, namedConfig.Networks)
 	})
 
-	t.Run("network creation failure leaves run args unchanged", func(t *testing.T) {
+	t.Run("network creation failure leaves networks unchanged", func(t *testing.T) {
 		rt := &fakeNetworkRuntime{err: errors.New("network create failed")}
 		namedConfig := &container.NamedConfig{}
 		m.attachSharedNetwork(context.Background(), rt, namedConfig, "dev", "gitserver")
-		assert.Empty(t, namedConfig.RunArgs)
+		assert.Empty(t, namedConfig.Networks)
 	})
 
 	t.Run("runtime without NetworkEnsurer is a no-op", func(t *testing.T) {
 		namedConfig := &container.NamedConfig{}
 		m.attachSharedNetwork(context.Background(), &plainRuntime{}, namedConfig, "dev", "gitserver")
-		assert.Empty(t, namedConfig.RunArgs)
+		assert.Empty(t, namedConfig.Networks)
 	})
 }

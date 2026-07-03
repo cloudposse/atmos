@@ -143,6 +143,14 @@ func persistDir(componentConfig map[string]any, workingDir string) string {
 			log.Debug("Skipping per-instance lock persist: workdir source unknown", "workdir", wp)
 			return ""
 		}
+		if md.SourceType == workdir.SourceTypeRemote {
+			log.Debug("Skipping per-instance lock persist: remote workdir source is not a local directory", "workdir", wp, "source", md.Source)
+			return ""
+		}
+		if info, statErr := os.Stat(md.Source); statErr != nil || !info.IsDir() {
+			log.Debug("Skipping per-instance lock persist: workdir source is not an existing local directory", "workdir", wp, "source", md.Source, "error", statErr)
+			return ""
+		}
 		return md.Source
 	}
 	if _, ok := componentConfig["source"]; ok {
