@@ -4,10 +4,6 @@
 
 **Error:** identity not found
 
-## Explanation
-
 Identity nonexistent is not defined in the currently loaded auth config.
-
-## Hints
 
 💡 Run atmos auth list to see available identities
