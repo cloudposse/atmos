@@ -219,6 +219,59 @@ func TestInvocationGroupLabel(t *testing.T) {
 	assert.Equal(t, "atmos orphan", invocationGroupLabel(&cobra.Command{}, []string{"orphan"}))
 }
 
+func TestArgsRequestNoArgGitClone(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{
+			name: "no arg git clone",
+			args: []string{"git", "clone"},
+			want: true,
+		},
+		{
+			name: "global profile flag is ignored for bootstrap detection",
+			args: []string{"--profile", "github", "git", "clone", "--depth", "1", "--filter=blob:none"},
+			want: true,
+		},
+		{
+			name: "positional repository is not CI bootstrap",
+			args: []string{"git", "clone", "repo"},
+			want: false,
+		},
+		{
+			name: "native git args imply explicit clone",
+			args: []string{"git", "clone", "--", "--no-tags"},
+			want: false,
+		},
+		{
+			name: "all flag is not CI bootstrap",
+			args: []string{"git", "clone", "--all"},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, argsRequestNoArgGitClone(tt.args))
+		})
+	}
+}
+
+func TestHandleConfigInitError_AllowsCIGitCloneBootstrap(t *testing.T) {
+	origArgs := os.Args
+	t.Cleanup(func() { os.Args = origArgs })
+	os.Args = []string{"atmos", "--profile", "github", "git", "clone"}
+	t.Setenv("GITHUB_ACTIONS", "true")
+
+	cfg := &schema.AtmosConfiguration{}
+	err := handleConfigInitError(assert.AnError, cfg)
+
+	assert.NoError(t, err)
+	assert.True(t, cfg.CI.Enabled, "CI clone bootstrap must enable the no-arg CI checkout path without repo-local config")
+}
+
 func TestPreprocessArgs_NoArgs(t *testing.T) {
 	originalArgs := os.Args
 	t.Cleanup(func() { os.Args = originalArgs })

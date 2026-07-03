@@ -24,3 +24,8 @@ func TestSanitizeNetworkToken(t *testing.T) {
 	assert.Equal(t, "x--y", sanitizeNetworkToken("x/?y"))
 	assert.Equal(t, "default", sanitizeNetworkToken(""))
 }
+
+func TestEmulatorNetworkAliasScopesByStack(t *testing.T) {
+	assert.Equal(t, "dev-aws", emulatorNetworkAlias("dev", "aws"))
+	assert.Equal(t, "deploy-prod-aws", emulatorNetworkAlias("deploy/prod", "aws"))
+}
