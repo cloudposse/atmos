@@ -2,8 +2,10 @@ commands:
   - name: build
     description: Build and documentation commands for Atmos development
     default: binary
-    env: &go_auto_env
+    env: &build_env
       GOTOOLCHAIN: auto
+      ATMOS_BUILD_TARGET: "{{ .Flags.target }}"
+      ATMOS_BUILD_VERSION: "{{ .Flags.version }}"
     flags:
       - name: target
         description: "Build target: default, linux, windows, macos, or macos-intel"
@@ -15,12 +17,7 @@ commands:
       - type: toast
         level: info
         content: Building Atmos...
-      - &build_binary_step
-        type: shell
-        env:
-          ATMOS_BUILD_TARGET: "{{ .Flags.target }}"
-          ATMOS_BUILD_VERSION: "{{ .Flags.version }}"
-        command: |
+      - &build_binary_step |
           set -eu
 
           target="${ATMOS_BUILD_TARGET:-default}"
@@ -74,13 +71,14 @@ commands:
     commands:
       - name: deps
         description: Download Go module dependencies
-        env: *go_auto_env
+        env:
+          GOTOOLCHAIN: auto
         steps:
           - go mod download
 
       - name: binary
         description: Build the Atmos binary
-        env: *go_auto_env
+        env: *build_env
         flags:
           - name: target
             description: "Build target: default, linux, windows, macos, or macos-intel"
@@ -96,37 +94,37 @@ commands:
 
       - name: version
         description: Print the version from an already-built Atmos binary
+        env:
+          ATMOS_BUILD_TARGET: "{{ .Flags.target }}"
         flags:
           - name: target
             description: "Build target: default, linux, windows, macos, or macos-intel"
             default: default
         steps:
-          - type: shell
-            env:
-              ATMOS_BUILD_TARGET: "{{ .Flags.target }}"
-            command: |
-              set -eu
+          - |
+            set -eu
 
-              target="${ATMOS_BUILD_TARGET:-default}"
+            target="${ATMOS_BUILD_TARGET:-default}"
 
-              case "$target" in
-                windows)
-                  ./build/atmos.exe version
-                  ;;
-                default|linux|macos|macos-intel)
-                  chmod +x ./build/atmos
-                  ./build/atmos version
-                  ;;
-                *)
-                  echo "Unsupported version target: $target" >&2
-                  echo "Expected one of: default, linux, windows, macos, macos-intel" >&2
-                  exit 1
-                  ;;
-              esac
+            case "$target" in
+              windows)
+                ./build/atmos.exe version
+                ;;
+              default|linux|macos|macos-intel)
+                chmod +x ./build/atmos
+                ./build/atmos version
+                ;;
+              *)
+                echo "Unsupported version target: $target" >&2
+                echo "Expected one of: default, linux, windows, macos, macos-intel" >&2
+                exit 1
+                ;;
+            esac
 
       - name: readme
         description: Regenerate README.md from README.yaml
-        env: *go_auto_env
+        env:
+          GOTOOLCHAIN: auto
         steps:
           - |
             set -eu
