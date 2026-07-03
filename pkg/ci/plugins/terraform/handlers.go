@@ -801,9 +801,8 @@ func applyResolvedWorkdirArtifactPath(config *schema.AtmosConfiguration, info *s
 		return true
 	}
 
-	if info.ComponentSection == nil {
-		info.ComponentSection = map[string]any{}
-	}
+	// ComponentSection is never nil here: IsWorkdirEnabled above requires a
+	// populated provision.workdir map inside it.
 	info.ComponentSection[provWorkdir.WorkdirPathKey] = candidate
 	return true
 }

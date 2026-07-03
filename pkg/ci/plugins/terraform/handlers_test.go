@@ -1729,6 +1729,60 @@ components:
 	assert.Equal(t, workdirPath, ctx.Info.ComponentSection[provWorkdir.WorkdirPathKey])
 }
 
+func TestResolveArtifactPath_WorkdirResolutionFailure(t *testing.T) {
+	basePath := t.TempDir()
+	writeTestFile(t, filepath.Join(basePath, "atmos.yaml"), `
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+logs:
+  file: "/dev/stderr"
+  level: Info
+`)
+	writeTestFile(t, filepath.Join(basePath, "stacks", "deploy", "dev.yaml"), `
+vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        enabled: true
+`)
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, "components", "terraform", "vpc"), 0o755))
+	// The workdir path exists as a regular file, so workdir resolution fails and
+	// resolveArtifactPath must return "" instead of a bogus planfile path.
+	workdirPath := filepath.Join(provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, filepath.Dir(workdirPath)), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(basePath, workdirPath), []byte("not a directory"), 0o644))
+	t.Chdir(basePath)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	ctx := &plugin.HookContext{
+		Config: &atmosConfig,
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+			ComponentType:    cfg.TerraformComponentType,
+		},
+	}
+
+	path := (&Plugin{}).resolveArtifactPath(ctx)
+
+	assert.Empty(t, path)
+	assert.Empty(t, ctx.Info.PlanFile)
+}
+
 func TestApplyResolvedWorkdirArtifactPath(t *testing.T) {
 	t.Run("disabled workdir leaves section unchanged", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{

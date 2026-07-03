@@ -734,7 +734,7 @@ func (s *Store) downloadArtifactContent(ctx context.Context, artifactID int64) (
 		return nil, fmt.Errorf("%w: failed to create download request: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 
-	resp, err := s.httpClient.Do(req)
+	resp, err := s.httpClient.Do(req) //nolint:gosec // G704: downloadURL is the redirect Location issued by the GitHub REST API, not user input.
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to download artifact: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
