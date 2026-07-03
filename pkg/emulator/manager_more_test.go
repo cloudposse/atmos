@@ -100,6 +100,37 @@ func TestManager_Up_CreatesAndStartsContainer(t *testing.T) {
 	assert.Equal(t, 40001, endpoint.Ports[4566])
 }
 
+func TestManager_Up_GitHubJobContainerAttachesCurrentNetworkAlias(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv(envEmulatorUseCurrentContainerNetwork, "")
+	restore := stubEndpointHostDetection(t, true, "")
+	defer restore()
+
+	ctrl := gomock.NewController(t)
+	runtime := NewMockRuntime(ctrl)
+	gomock.InOrder(
+		runtime.EXPECT().Inspect(gomock.Any(), gomock.Any()).Return(&container.Info{Networks: []string{"github_network_123"}}, nil),
+		runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, nil),
+		runtime.EXPECT().Create(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, create *container.CreateConfig) (string, error) {
+				require.Len(t, create.Networks, 1)
+				assert.Equal(t, "github_network_123", create.Networks[0].Name)
+				assert.Equal(t, []string{"dev-aws"}, create.Networks[0].Aliases)
+				return "new-id", nil
+			}),
+		runtime.EXPECT().Start(gomock.Any(), "new-id").Return(nil),
+		runtime.EXPECT().List(gomock.Any(), gomock.Any()).
+			Return([]container.Info{runningEmulatorInfo(40001)}, nil),
+		runtime.EXPECT().Inspect(gomock.Any(), gomock.Any()).Return(&container.Info{Networks: []string{"github_network_123"}}, nil),
+	)
+
+	m := newManagerWithRuntime(runtime)
+	endpoint, err := m.Up(context.Background(), &Spec{Driver: testDriverName}, "dev", "aws", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "dev-aws", endpoint.Host)
+	assert.Equal(t, 4566, endpoint.Ports[4566])
+}
+
 func TestManager_Up_UpWithRuntimeError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	runtime := NewMockRuntime(ctrl)

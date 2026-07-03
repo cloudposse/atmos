@@ -328,7 +328,7 @@ jobs:
           ignore: DL3008
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         if: always()
         with:
           # Path to SARIF file relative to the root of the repository
@@ -468,6 +468,8 @@ jobs:
     runs-on: ${{ matrix.flavor.os }}
     env:
       ATMOS_LOGS_LEVEL: Debug
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -478,7 +480,7 @@ jobs:
           - demo-helmfile
           - helm
 
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -542,6 +544,19 @@ jobs:
         run: |
           cd examples/${{ matrix.demo-folder }}
           atmos test
+
+  k3s-required:
+    name: "[k3s] demo-helmfile"
+    needs: k3s
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - name: Check k3s matrix result
+        run: |
+          if [ "${{ needs.k3s.result }}" != "success" ]; then
+            echo "k3s matrix result was '${{ needs.k3s.result }}'"
+            exit 1
+          fi
 
   # Exercise the Kubernetes native component against a real kube-apiserver+etcd
   # control plane (started by controller-runtime envtest): server-side apply,
@@ -893,6 +908,11 @@ jobs:
           atmos workflow push-local-registry -f container-step
           atmos workflow workspace -f container-step
           atmos workflow env -f container-step
+          grep -q "## .*atmos-container-step:local" "$GITHUB_STEP_SUMMARY"
+          grep -q "## .*localhost:5000/atmos-container-step:local" "$GITHUB_STEP_SUMMARY"
+          grep -q '| Digest | `sha256:' "$GITHUB_STEP_SUMMARY"
+          grep -q "<summary>.*Layers (" "$GITHUB_STEP_SUMMARY"
+          grep -q "<summary>.*Raw JSON</summary>" "$GITHUB_STEP_SUMMARY"
 
       - name: Verify a failing container step propagates a non-zero exit code
         working-directory: examples/container-step
