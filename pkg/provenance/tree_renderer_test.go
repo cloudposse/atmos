@@ -5,6 +5,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
+	m "github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestBuildYAMLPathMap_MultilineSupport(t *testing.T) {
@@ -171,9 +176,191 @@ func TestNormalizeProvenancePath(t *testing.T) {
 }
 
 func TestGetCommentColumn(t *testing.T) {
-	// Test default column when not a TTY
-	// Since tests don't run with a TTY, this should return default
+	// Test default column when not a TTY.
+	// Since tests don't run with a TTY, this should return default.
 	column := getCommentColumn()
 	assert.GreaterOrEqual(t, column, 40, "Comment column should be at least 40")
 	assert.LessOrEqual(t, column, 200, "Comment column should not be unreasonably large")
+}
+
+func TestIsProvenanceColorEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *schema.AtmosConfiguration
+		expected bool
+	}{
+		{
+			name:     "nil config returns false",
+			config:   nil,
+			expected: false,
+		},
+		{
+			name: "NoColor wins over everything",
+			config: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{
+						NoColor:    true,
+						ForceColor: true,
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "ForceColor enables color",
+			config: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{
+						ForceColor: true,
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "default config follows stdout TTY detection",
+			config: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{},
+				},
+			},
+			expected: termUtils.IsTTYSupportForStdout(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isProvenanceColorEnabled(tt.config)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFormatProvenanceCommentWithStackFile_NoColor(t *testing.T) {
+	tests := []struct {
+		name     string
+		entry    *m.ProvenanceEntry
+		expected string
+	}{
+		{
+			name:     "nil entry returns empty",
+			entry:    nil,
+			expected: "",
+		},
+		{
+			name: "defined entry depth 1",
+			entry: &m.ProvenanceEntry{
+				File:  "stacks/orgs/acme/dev.yaml",
+				Line:  10,
+				Depth: 1,
+				Type:  m.ProvenanceTypeInline,
+			},
+			expected: "# ● [1] orgs/acme/dev.yaml:10",
+		},
+		{
+			name: "inherited entry depth 3",
+			entry: &m.ProvenanceEntry{
+				File:  "stacks/catalog/defaults.yaml",
+				Line:  5,
+				Depth: 3,
+				Type:  m.ProvenanceTypeImport,
+			},
+			expected: "# ○ [3] catalog/defaults.yaml:5",
+		},
+		{
+			name: "computed entry",
+			entry: &m.ProvenanceEntry{
+				File:  "stacks/orgs/acme/dev.yaml",
+				Line:  20,
+				Depth: 1,
+				Type:  m.ProvenanceTypeComputed,
+			},
+			expected: "# ∴ [1] orgs/acme/dev.yaml:20",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatProvenanceCommentWithStackFile(tt.entry, false)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestRenderProvenanceLegend_NoColor(t *testing.T) {
+	t.Run("without stack file", func(t *testing.T) {
+		var buf strings.Builder
+		renderProvenanceLegend(&buf, "", false)
+		result := buf.String()
+		assert.Contains(t, result, "# Provenance Legend:")
+		assert.Contains(t, result, "● [1] Defined in parent stack")
+		assert.NotContains(t, result, "# Stack:")
+	})
+
+	t.Run("with stack file", func(t *testing.T) {
+		var buf strings.Builder
+		renderProvenanceLegend(&buf, "orgs/acme/dev/us-east-2.yaml", false)
+		result := buf.String()
+		assert.Contains(t, result, "# Provenance Legend:")
+		assert.Contains(t, result, "# Stack: orgs/acme/dev/us-east-2.yaml")
+	})
+}
+
+func TestAddProvenanceToLine_NoColor(t *testing.T) {
+	entry := &m.ProvenanceEntry{
+		File:  "stacks/orgs/acme/dev.yaml",
+		Line:  10,
+		Depth: 1,
+		Type:  m.ProvenanceTypeInline,
+	}
+
+	t.Run("short line gets padded comment", func(t *testing.T) {
+		var buf strings.Builder
+		addProvenanceToLine(&buf, "vars:", entry, 50, false)
+		result := buf.String()
+		require.Contains(t, result, "vars:")
+		require.Contains(t, result, "# ● [1]")
+		// Should be on single line (only one newline at end).
+		lines := strings.Split(strings.TrimRight(result, "\n"), "\n")
+		assert.Len(t, lines, 1)
+	})
+
+	t.Run("long line wraps comment to next line", func(t *testing.T) {
+		var buf strings.Builder
+		longLine := "very_long_key: " + strings.Repeat("x", 60)
+		addProvenanceToLine(&buf, longLine, entry, 50, false)
+		result := buf.String()
+		// Comment should be on a separate line.
+		lines := strings.Split(strings.TrimRight(result, "\n"), "\n")
+		assert.Len(t, lines, 2)
+		assert.Contains(t, lines[1], "# ● [1]")
+	})
+
+	t.Run("nil entry produces no comment", func(t *testing.T) {
+		var buf strings.Builder
+		addProvenanceToLine(&buf, "vars:", nil, 50, false)
+		assert.Equal(t, "vars:\n", buf.String())
+	})
+}
+
+func TestFormatProvenanceCommentWithStackFile(t *testing.T) {
+	t.Run("nil entry returns empty string", func(t *testing.T) {
+		assert.Empty(t, formatProvenanceCommentWithStackFile(nil, false))
+	})
+
+	t.Run("no color trims stacks/ prefix and shows defined symbol", func(t *testing.T) {
+		entry := &m.ProvenanceEntry{File: "stacks/orgs/acme/dev.yaml", Line: 12, Depth: 1}
+		out := formatProvenanceCommentWithStackFile(entry, false)
+		assert.Equal(t, "# "+SymbolDefined+" [1] orgs/acme/dev.yaml:12", out)
+	})
+
+	t.Run("color path renders all parts for a computed entry", func(t *testing.T) {
+		entry := &m.ProvenanceEntry{File: "stacks/catalog/vpc.yaml", Line: 5, Depth: 3, Type: m.ProvenanceTypeComputed}
+		out := formatProvenanceCommentWithStackFile(entry, true)
+		assert.NotEmpty(t, out)
+		// Color output wraps parts in ANSI escapes, but the literal symbol, file, and line remain.
+		assert.Contains(t, out, SymbolComputed)
+		assert.Contains(t, out, "catalog/vpc.yaml")
+		assert.Contains(t, out, "[3]")
+	})
 }

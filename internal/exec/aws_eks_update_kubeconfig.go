@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -193,7 +194,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 			if atmosConfig.Components.Helmfile.ClusterName != "" {
 				clusterName = atmosConfig.Components.Helmfile.ClusterName
 			} else if atmosConfig.Components.Helmfile.ClusterNameTemplate != "" {
-				clusterName, err = ProcessTmpl(&atmosConfig, "cluster_name_template", atmosConfig.Components.Helmfile.ClusterNameTemplate, configAndStacksInfo.ComponentSection, false)
+				clusterName, err = ProcessTmpl(&atmosConfig, "cluster_name_template", atmosConfig.Components.Helmfile.ClusterNameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 				if err != nil {
 					return fmt.Errorf("failed to process cluster_name_template: %w", err)
 				}
@@ -247,7 +248,12 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 		args = append(args, fmt.Sprintf("--region=%s", region))
 	}
 
-	err = ExecuteShellCommand(atmosConfig, "aws", args, shellCommandWorkingDir, nil, dryRun, "")
+	// Resolve aws through toolchain so it works when installed via `atmos toolchain install`.
+	tenv, tenvErr := dependencies.ForComponent(&atmosConfig, configAndStacksInfo.ComponentType, configAndStacksInfo.StackSection, configAndStacksInfo.ComponentSection)
+	if tenvErr != nil {
+		return tenvErr
+	}
+	err = ExecuteShellCommand(atmosConfig, tenv.Resolve("aws"), args, shellCommandWorkingDir, tenv.EnvVars(), dryRun, "")
 	if err != nil {
 		return err
 	}

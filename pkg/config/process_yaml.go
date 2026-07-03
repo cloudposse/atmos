@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 	"go.yaml.in/yaml/v3"
 
+	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -21,6 +22,92 @@ const (
 )
 
 var ErrExecuteYamlFunctions = errors.New("failed to execute yaml function")
+
+// deleteViperKey removes a key from Viper's configuration by walking the dotted path
+// and deleting the final segment from its parent map. This is necessary because
+// v.Set(path, nil) leaves the key present (reported as null), which doesn't truly
+// remove it from the configuration.
+//
+// Note: Viper's internal config from ReadConfig cannot be modified by Set(key, nil).
+// We must re-read the modified configuration as YAML to truly remove keys.
+func deleteViperKey(v *viper.Viper, path string) {
+	if path == "" {
+		return
+	}
+
+	// Get all settings as a map (this returns a deep copy).
+	allSettings := v.AllSettings()
+	if len(allSettings) == 0 {
+		return
+	}
+
+	// Split the path into segments.
+	segments := strings.Split(path, ".")
+	if len(segments) == 0 {
+		return
+	}
+
+	// Delete the key from the nested map structure.
+	if !deleteNestedKey(allSettings, segments) {
+		return // Key didn't exist or couldn't be deleted.
+	}
+
+	// Re-read the modified settings as YAML.
+	// This is necessary because Viper's Set(key, nil) doesn't truly remove keys
+	// when the config was loaded via ReadConfig - it maintains the original values.
+	yamlBytes, err := yaml.Marshal(allSettings)
+	if err != nil {
+		log.Debug("Failed to marshal settings to YAML for key deletion", "error", err)
+		return
+	}
+
+	// Read the modified config back into Viper.
+	v.SetConfigType("yaml")
+	if err := v.ReadConfig(strings.NewReader(string(yamlBytes))); err != nil {
+		log.Debug("Failed to re-read config after key deletion", "error", err)
+	}
+}
+
+// deleteNestedKey deletes a key from a nested map structure given a path of segments.
+// Returns true if the key was found and deleted, false otherwise.
+func deleteNestedKey(m map[string]any, segments []string) bool {
+	if len(segments) == 0 {
+		return false
+	}
+
+	// If it's a top-level key, delete it directly.
+	if len(segments) == 1 {
+		key := strings.ToLower(segments[0])
+		if _, exists := m[key]; exists {
+			delete(m, key)
+			return true
+		}
+		return false
+	}
+
+	// Walk to the parent map.
+	current := m
+	for i := 0; i < len(segments)-1; i++ {
+		key := strings.ToLower(segments[i])
+		next, ok := current[key]
+		if !ok {
+			return false // Path doesn't exist.
+		}
+		nextMap, ok := next.(map[string]any)
+		if !ok {
+			return false // Not a map, can't traverse further.
+		}
+		current = nextMap
+	}
+
+	// Delete the final key from the parent map.
+	finalKey := strings.ToLower(segments[len(segments)-1])
+	if _, exists := current[finalKey]; exists {
+		delete(current, finalKey)
+		return true
+	}
+	return false
+}
 
 // PreprocessYAML processes the given YAML content, replacing specific directives
 // (such as !env,!include,!exec,!repo-root) with their corresponding values.
@@ -104,6 +191,17 @@ func processMappingNode(node *yaml.Node, v *viper.Viper, currentPath string) err
 			newPath = currentPath + "." + newPath
 		}
 
+		// Check if the value node has the !unset tag.
+		if valueNode.Tag == u.AtmosYamlFuncUnset {
+			// Remove this key from Viper. The key may have been loaded by Viper's
+			// ReadConfig before preprocessing, so we need to explicitly delete it.
+			// Using deleteViperKey ensures the key is truly removed (not just set to nil),
+			// so IsSet returns false and AllSettings doesn't include it.
+			deleteViperKey(v, newPath)
+			log.Debug("Unsetting configuration key", "path", newPath)
+			continue
+		}
+
 		if err := processNode(valueNode, v, newPath); err != nil {
 			return err
 		}
@@ -136,6 +234,11 @@ func sequenceNeedsProcessing(node *yaml.Node) bool {
 }
 
 func processSequenceNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	// Handle !append tag for list concatenation during merging.
+	if node.Tag == u.AtmosYamlFuncAppend {
+		return handleAppend(node, v, currentPath)
+	}
+
 	if !sequenceNeedsProcessing(node) {
 		return nil
 	}
@@ -201,6 +304,15 @@ func hasCustomTag(tag string) bool {
 		strings.HasPrefix(tag, u.AtmosYamlFuncExec) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncInclude) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncGitRoot) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitRootAlias) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitSha) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitBranch) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitRef) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitRepository) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitOwner) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitName) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitHost) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitUrl) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncCwd) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncRandom)
 }
@@ -264,12 +376,43 @@ func processIncludeTag(nodeTag, nodeValue, strFunc string) (any, error) {
 
 // processGitRootTag processes the !repo-root tag.
 func processGitRootTag(strFunc, nodeValue string) (any, error) {
-	gitRootValue, err := u.ProcessTagGitRoot(strFunc)
+	gitRootValue, err := atmosGit.ProcessTagRoot(strFunc)
 	if err != nil {
 		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
-		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncGitRoot, nodeValue, err)
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, strFunc, nodeValue, err)
 	}
 	return strings.TrimSpace(gitRootValue), nil
+}
+
+// processGitShaTag processes the !git.sha and !git.ref tags.
+func processGitShaTag(strFunc, nodeValue string) (any, error) {
+	gitShaValue, err := atmosGit.ProcessTagSHA(strFunc)
+	if err != nil {
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, strFunc, nodeValue, err)
+	}
+	return strings.TrimSpace(gitShaValue), nil
+}
+
+// processGitBranchTag processes the !git.branch tag.
+func processGitBranchTag(strFunc, nodeValue string) (any, error) {
+	gitBranchValue, err := atmosGit.ProcessTagBranch(strFunc)
+	if err != nil {
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, strFunc, nodeValue, err)
+	}
+	return strings.TrimSpace(gitBranchValue), nil
+}
+
+// processGitRepoInfoTag processes the repository-metadata tags (!git.repository,
+// !git.owner, !git.name, !git.host, !git.url) using the supplied processor.
+func processGitRepoInfoTag(strFunc, nodeValue string, process func(string) (string, error)) (any, error) {
+	value, err := process(strFunc)
+	if err != nil {
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, strFunc, nodeValue, err)
+	}
+	return strings.TrimSpace(value), nil
 }
 
 // processCwdTag processes the !cwd tag.
@@ -304,8 +447,22 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 		return processExecTag(strFunc, node.Value)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncInclude):
 		return processIncludeTag(node.Tag, node.Value, strFunc)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot):
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot), strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRootAlias):
 		return processGitRootTag(strFunc, node.Value)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitSha), strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRef):
+		return processGitShaTag(strFunc, node.Value)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitBranch):
+		return processGitBranchTag(strFunc, node.Value)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRepository):
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagRepository)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitOwner):
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagOwner)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitName):
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagName)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitHost):
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagHost)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitUrl):
+		return processGitRepoInfoTag(strFunc, node.Value, atmosGit.ProcessTagURL)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncCwd):
 		return processCwdTag(strFunc, node.Value)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncRandom):
@@ -319,6 +476,62 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 	}
 }
 
+// decodeNodeWithYamlFunctions decodes a YAML node into plain Go values while
+// evaluating Atmos YAML functions on scalar nodes. It is used by config paths
+// that must read raw YAML directly instead of Viper's normalized settings.
+//
+//nolint:gocognit,revive // YAML AST decoding is necessarily branch-heavy by node kind.
+func decodeNodeWithYamlFunctions(node *yaml.Node) (any, error) {
+	if node == nil {
+		return nil, nil
+	}
+
+	switch node.Kind {
+	case yaml.DocumentNode:
+		if len(node.Content) == 0 {
+			return nil, nil
+		}
+		return decodeNodeWithYamlFunctions(node.Content[0])
+	case yaml.MappingNode:
+		result := make(map[string]interface{}, len(node.Content)/2)
+		for i := 0; i < len(node.Content); i += 2 {
+			keyNode := node.Content[i]
+			valueNode := node.Content[i+1]
+			value, err := decodeNodeWithYamlFunctions(valueNode)
+			if err != nil {
+				return nil, err
+			}
+			result[keyNode.Value] = value
+		}
+		return result, nil
+	case yaml.SequenceNode:
+		result := make([]interface{}, 0, len(node.Content))
+		for _, child := range node.Content {
+			value, err := decodeNodeWithYamlFunctions(child)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, value)
+		}
+		return result, nil
+	case yaml.ScalarNode:
+		if hasCustomTag(node.Tag) {
+			return processScalarNodeValue(node)
+		}
+		var value any
+		if err := node.Decode(&value); err != nil {
+			return nil, err
+		}
+		return value, nil
+	default:
+		var value any
+		if err := node.Decode(&value); err != nil {
+			return nil, err
+		}
+		return value, nil
+	}
+}
+
 // processScalarNode processes a YAML scalar node tagged with an Atmos custom function and stores the resolved value in v.
 // It dispatches handling for !env, !exec, !include, !repo-root, !cwd, and !random tags to their respective handlers.
 // If the node has no tag or the tag is not one of the recognized Atmos functions, the function is a no-op.
@@ -329,14 +542,36 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 	}
 
 	switch {
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncUnset):
+		// The !unset tag is handled in processMappingNode by skipping the key.
+		// If we reach here, it means !unset was used in a context where it can't
+		// prevent the key from being added (e.g., scalar value context).
+		// In this case, we simply don't set any value and clear the tag.
+		log.Debug("Unsetting configuration key", "path", currentPath)
+		node.Tag = "" // Avoid re-processing.
+		return nil
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncEnv):
 		return handleEnv(node, v, currentPath)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncExec):
 		return handleExec(node, v, currentPath)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncInclude):
 		return handleInclude(node, v, currentPath)
-	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot):
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot), strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRootAlias):
 		return handleGitRoot(node, v, currentPath)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitSha), strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRef):
+		return handleGitSha(node, v, currentPath)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitBranch):
+		return handleGitBranch(node, v, currentPath)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRepository):
+		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagRepository)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitOwner):
+		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagOwner)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitName):
+		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagName)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitHost):
+		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagHost)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitUrl):
+		return handleGitRepoInfo(node, v, currentPath, atmosGit.ProcessTagURL)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncCwd):
 		return handleCwd(node, v, currentPath)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncRandom):
@@ -397,7 +632,8 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 			// Set the value in Viper.
 			v.Set(currentPath, data)
 		} else {
-			log.Warn("Invalid value returned from the YAML function",
+			log.Warn(
+				"Invalid value returned from the YAML function",
 				functionKey, strFunc,
 				"value", includeValue,
 			)
@@ -406,25 +642,6 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 		log.Debug(emptyValueWarning, functionKey, strFunc)
 	}
 	node.Tag = "" // Avoid re-processing
-	return nil
-}
-
-// handleGitRoot evaluates an `!repo-root` YAML tag and stores the resulting repository root string into Viper at the given path.
-// If evaluation fails, it returns an error wrapped with ErrExecuteYamlFunctions; if the result is empty it logs a debug warning but still sets the value.
-func handleGitRoot(node *yaml.Node, v *viper.Viper, currentPath string) error {
-	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
-	gitRootValue, err := u.ProcessTagGitRoot(strFunc)
-	if err != nil {
-		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
-		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncGitRoot, node.Value, err)
-	}
-	gitRootValue = strings.TrimSpace(gitRootValue)
-	if gitRootValue == "" {
-		log.Debug(emptyValueWarning, functionKey, strFunc)
-	}
-	// Set the value in Viper .
-	v.Set(currentPath, gitRootValue)
-	node.Tag = "" // Avoid re-processing .
 	return nil
 }
 

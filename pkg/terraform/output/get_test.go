@@ -62,10 +62,11 @@ func TestGetComponentOutputs_PanicWhenNoExecutor(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	assert.PanicsWithValue(t,
+	assert.PanicsWithValue(
+		t,
 		"output.SetDefaultExecutor must be called before GetComponentOutputs",
 		func() {
-			_, _ = GetComponentOutputs(atmosConfig, "component", "stack", false, nil)
+			_, _ = GetComponentOutputs(atmosConfig, "component", "stack", false, nil, nil)
 		},
 	)
 }
@@ -82,7 +83,8 @@ func TestExecuteWithSections_PanicWhenNoExecutor(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	sections := map[string]any{}
 
-	assert.PanicsWithValue(t,
+	assert.PanicsWithValue(
+		t,
 		"output.SetDefaultExecutor must be called before ExecuteWithSections",
 		func() {
 			_, _ = ExecuteWithSections(atmosConfig, "component", "stack", sections, nil)
@@ -101,7 +103,8 @@ func TestGetOutput_PanicWhenNoExecutor(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	assert.PanicsWithValue(t,
+	assert.PanicsWithValue(
+		t,
 		"output.SetDefaultExecutor must be called before GetOutput",
 		func() {
 			_, _, _ = GetOutput(atmosConfig, "stack", "component", "output", false, nil, nil)
@@ -130,7 +133,7 @@ func TestGetComponentOutputsWithExecutor(t *testing.T) {
 		Logs: schema.Logs{Level: "debug"},
 	}
 
-	outputs, err := GetComponentOutputsWithExecutor(exec, atmosConfig, "component", "stack", false, nil)
+	outputs, err := GetComponentOutputsWithExecutor(exec, atmosConfig, "component", "stack", false, nil, nil)
 	require.NoError(t, err)
 	assert.Empty(t, outputs)
 }

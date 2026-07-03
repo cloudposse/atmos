@@ -284,7 +284,7 @@ func TestRunUninstall(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{}})
-			err := RunUninstall(tc.toolSpec) // might need to allow DI of installer
+			err := RunUninstall(tc.toolSpec, false) // might need to allow DI of installer
 			if tc.expectErr && err == nil {
 				t.Errorf("expected error but got nil")
 			}
@@ -333,7 +333,7 @@ func TestRunUninstall_InvalidToolSpecFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := RunUninstall(tt.toolSpec)
+			err := RunUninstall(tt.toolSpec, false)
 			// Empty toolSpec is handled differently - it triggers uninstall from tool-versions.
 			if tt.toolSpec == "" {
 				// This tests the no-args path which may succeed if no .tool-versions exists.

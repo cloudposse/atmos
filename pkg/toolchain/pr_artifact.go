@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -135,11 +136,8 @@ func CheckPRCacheAndUpdate(ctx context.Context, prNumber int, showProgress bool)
 		return true, nil
 	}
 
-	// Check for GitHub token.
-	token, err := github.GetGitHubTokenOrError()
-	if err != nil {
-		return false, buildTokenRequiredError()
-	}
+	// Get GitHub token if available (not required for public repos).
+	token := github.GetGitHubToken()
 
 	// Get current PR head SHA.
 	currentSHA, err := github.GetPRHeadSHA(ctx, atmosOwner, atmosRepo, prNumber, token)
@@ -229,11 +227,8 @@ func InstallFromPR(prNumber int, showProgress bool) (string, error) {
 
 	ctx := context.Background()
 
-	// Check for GitHub token (required for artifact downloads).
-	token, err := github.GetGitHubTokenOrError()
-	if err != nil {
-		return "", buildTokenRequiredError()
-	}
+	// Get GitHub token if available (not required for public repos).
+	token := github.GetGitHubToken()
 
 	// Show progress if requested.
 	if showProgress {
@@ -303,7 +298,10 @@ func downloadPRArtifact(ctx context.Context, token string, info *github.PRArtifa
 		return "", fmt.Errorf("%w: failed to create request: %w", ErrPRArtifactDownloadFailed, err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+token)
+	// Only set Authorization header when a token is available.
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	client := &http.Client{
@@ -327,7 +325,7 @@ func downloadPRArtifact(ctx context.Context, token string, info *github.PRArtifa
 
 	if resp.StatusCode != http.StatusOK {
 		os.Remove(tempPath)
-		return "", fmt.Errorf("%w: HTTP %d", ErrPRArtifactDownloadFailed, resp.StatusCode)
+		return "", buildDownloadHTTPError(resp, token)
 	}
 
 	// Copy response to temp file.
@@ -594,16 +592,95 @@ func listFiles(dir string) ([]string, error) {
 	return files, err
 }
 
-// buildTokenRequiredError creates a user-friendly error when GitHub token is missing.
-func buildTokenRequiredError() error {
+// buildDownloadHTTPError creates a descriptive error for artifact download HTTP failures.
+// It distinguishes between auth errors, rate limits, and other failures.
+func buildDownloadHTTPError(resp *http.Response, token string) error {
+	switch resp.StatusCode {
+	case http.StatusUnauthorized:
+		return buildDownloadAuthError(token)
+
+	case http.StatusForbidden:
+		// GitHub returns rate-limit errors as 403 as well as 429, so inspect the
+		// rate-limit headers before assuming this is an authentication failure.
+		if isRateLimitResponse(resp) {
+			return buildDownloadRateLimitError(resp, token)
+		}
+		return buildDownloadAuthError(token)
+
+	case http.StatusTooManyRequests:
+		return buildDownloadRateLimitError(resp, token)
+
+	default:
+		return fmt.Errorf("%w: HTTP %d", ErrPRArtifactDownloadFailed, resp.StatusCode)
+	}
+}
+
+// isRateLimitResponse reports whether an HTTP response indicates a GitHub rate
+// limit rather than an authentication failure. Primary rate limits set
+// `X-RateLimit-Remaining: 0`, while secondary rate limits include `Retry-After`.
+func isRateLimitResponse(resp *http.Response) bool {
+	if resp.Header.Get("X-RateLimit-Remaining") == "0" {
+		return true
+	}
+	return resp.Header.Get("Retry-After") != ""
+}
+
+// buildDownloadAuthError creates a user-friendly authentication error for artifact downloads.
+func buildDownloadAuthError(token string) error {
+	if token == "" {
+		return buildTokenRequiredError()
+	}
+	// Token was provided but rejected.
 	return errUtils.Build(errUtils.ErrAuthenticationFailed).
-		WithExplanation("GitHub token required to download PR artifacts").
-		WithHint("Option 1: Use GitHub CLI (recommended)\n  brew install gh && gh auth login").
-		WithHint("Option 2: Set environment variable\n  export GITHUB_TOKEN=ghp_xxx").
-		WithHint("Generate a token at: https://github.com/settings/tokens").
-		WithHint("Required scope: public_repo (for public repositories)").
+		WithExplanation("GitHub rejected the provided authentication token").
+		WithHint("Your token may be invalid or expired").
+		WithHint("Verify your token: `gh auth status`").
+		WithHint("Try re-authenticating: `gh auth login`").
 		WithExitCode(1).
 		Err()
+}
+
+// buildDownloadRateLimitError creates a user-friendly rate-limit error for artifact downloads.
+func buildDownloadRateLimitError(resp *http.Response, token string) error {
+	b := errUtils.Build(errUtils.ErrGitHubRateLimitExceeded).
+		WithExplanation("GitHub API rate limit exceeded while downloading artifact")
+	if token == "" {
+		b = b.WithHint("Unauthenticated requests are limited to 60/hour").
+			WithHint("Authenticate to increase limit to 5,000/hour: `gh auth login`").
+			WithHint("Or set `GITHUB_TOKEN` or `ATMOS_GITHUB_TOKEN` environment variable")
+	} else {
+		b = b.WithHint("Authenticated requests are limited to 5,000/hour").
+			WithHint("Wait a few minutes and try again")
+	}
+	// Try to extract reset time from response headers.
+	if resetHeader := resp.Header.Get("X-RateLimit-Reset"); resetHeader != "" {
+		b = b.WithHintf("Rate limit info: X-RateLimit-Reset=%s", resetHeader)
+	}
+	return b.WithExitCode(1).Err()
+}
+
+// buildTokenRequiredError creates a user-friendly error when GitHub token is missing.
+func buildTokenRequiredError() error {
+	b := errUtils.Build(errUtils.ErrAuthenticationFailed).
+		WithExplanation("GitHub requires authentication to download this artifact").
+		WithHint("Authenticate with GitHub CLI: `gh auth login`")
+
+	// Show brew install hint on macOS or when brew is available.
+	if runtime.GOOS == "darwin" || isBrewAvailable() {
+		b = b.WithHint("Install GitHub CLI: `brew install gh`")
+	}
+
+	return b.
+		WithHint("Or set the GITHUB_TOKEN environment variable in your shell/session").
+		WithHint("Generate a token at: https://github.com/settings/tokens (scope: public_repo)").
+		WithExitCode(1).
+		Err()
+}
+
+// isBrewAvailable reports whether the brew command is on the PATH.
+func isBrewAvailable() bool {
+	_, err := exec.LookPath("brew")
+	return err == nil
 }
 
 // handlePRArtifactError converts GitHub errors to user-friendly errors.
@@ -621,11 +698,10 @@ func handlePRArtifactError(err error, prNumber int) error {
 
 	if errors.Is(err, github.ErrNoWorkflowRunFound) {
 		return errUtils.Build(errUtils.ErrToolNotFound).
-			WithExplanationf("No successful CI run found for PR #%d", prNumber).
-			WithHint("Possible reasons:").
-			WithHint("  - CI workflow hasn't completed yet").
-			WithHint("  - CI tests are failing").
-			WithHint("  - PR is from a fork (artifacts not accessible)").
+			WithExplanationf("No completed CI run found for PR #%d", prNumber).
+			WithHint("CI workflow may not have completed yet").
+			WithHint("CI build may be failing on this PR").
+			WithHint("Artifacts from fork PRs are not accessible").
 			WithHintf("Check PR status: %s", prURL).
 			WithExitCode(1).
 			Err()
@@ -634,9 +710,8 @@ func handlePRArtifactError(err error, prNumber int) error {
 	if errors.Is(err, github.ErrNoArtifactFound) {
 		return errUtils.Build(errUtils.ErrToolNotFound).
 			WithExplanationf("Build artifact not found for PR #%d", prNumber).
-			WithHint("Possible reasons:").
-			WithHint("  - Artifacts expired (90-day retention)").
-			WithHint("  - Build job was skipped").
+			WithHint("Artifacts may have expired (90-day retention)").
+			WithHint("Build job may have been skipped").
 			WithHintf("Check PR status: %s", prURL).
 			WithExitCode(1).
 			Err()
@@ -647,9 +722,8 @@ func handlePRArtifactError(err error, prNumber int) error {
 		return errUtils.Build(errUtils.ErrToolPlatformNotSupported).
 			WithExplanationf("No PR artifact available for %s/%s", runtime.GOOS, runtime.GOARCH).
 			WithHintf("PR builds currently only support: %s", strings.Join(platforms, ", ")).
-			WithHint("For unsupported platforms, try:").
-			WithHint("  - Download the release version: atmos --use-version <version>").
-			WithHint("  - Build from source: go install github.com/cloudposse/atmos@<branch>").
+			WithHint("Use a release version instead: atmos --use-version <version>").
+			WithHint("Or build from source: go install github.com/cloudposse/atmos@<branch>").
 			WithExitCode(1).
 			Err()
 	}

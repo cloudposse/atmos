@@ -670,5 +670,72 @@ func TestExtractSource_MapWithEmptyURI(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+// TestExtractSource_WithTTL verifies that a valid TTL value is correctly extracted from source config.
+func TestExtractSource_WithTTL(t *testing.T) {
+	componentConfig := map[string]any{
+		"source": map[string]any{
+			"uri":     "github.com/example/repo//module",
+			"version": "main",
+			"ttl":     "1h",
+		},
+	}
+
+	result, err := ExtractSource(componentConfig)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, "github.com/example/repo//module", result.Uri)
+	assert.Equal(t, "main", result.Version)
+	assert.Equal(t, "1h", result.TTL)
+}
+
+// TestExtractSource_WithoutTTL verifies that missing TTL results in an empty TTL field.
+func TestExtractSource_WithoutTTL(t *testing.T) {
+	componentConfig := map[string]any{
+		"source": map[string]any{
+			"uri":     "github.com/example/repo//module",
+			"version": "1.0.0",
+		},
+	}
+
+	result, err := ExtractSource(componentConfig)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Empty(t, result.TTL)
+}
+
+// TestExtractSource_WithInvalidTTL verifies that an invalid TTL format returns ErrSourceInvalidSpec.
+func TestExtractSource_WithInvalidTTL(t *testing.T) {
+	componentConfig := map[string]any{
+		"source": map[string]any{
+			"uri":     "github.com/example/repo//module",
+			"version": "main",
+			"ttl":     "invalid-ttl",
+		},
+	}
+
+	result, err := ExtractSource(componentConfig)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrSourceInvalidSpec)
+}
+
+// TestExtractSource_WithZeroTTL verifies that zero TTL values are accepted without validation errors.
+func TestExtractSource_WithZeroTTL(t *testing.T) {
+	componentConfig := map[string]any{
+		"source": map[string]any{
+			"uri":     "github.com/example/repo//module",
+			"version": "main",
+			"ttl":     "0s",
+		},
+	}
+
+	result, err := ExtractSource(componentConfig)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "0s", result.TTL)
+}
+
 func intPtr(i int) *int             { return &i }
 func float64Ptr(f float64) *float64 { return &f }

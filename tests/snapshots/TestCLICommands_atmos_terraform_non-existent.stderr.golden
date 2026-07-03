@@ -6,6 +6,7 @@ Valid subcommands are:
 
   • apply
   • backend
+  • cache
   • clean
   • console
   • deploy
@@ -25,6 +26,7 @@ Valid subcommands are:
   • output
   • plan
   • plan-diff
+  • planfile
   • providers
   • refresh
   • shell
@@ -41,12 +43,15 @@ Valid subcommands are:
   • workspace
   • write
 
+## Usage
+
+ atmos terraform [flags]
+ atmos terraform [sub-command] [flags]
+
 ## Usage Examples:
 
 – Execute a terraform subcommand
 
   $ atmos terraform [subcommand] <component-name> -s <stack-name>
-
-## Hints
 
 💡 https://atmos.tools/cli/commands/terraform/usage

@@ -1,0 +1,31 @@
+vars:
+  stage: dev
+
+# Track 2: SOPS/age secret backend declared at the stack level. The age private key is referenced
+# inline via `age_key_file`, so this fixture resolves secrets in-process without exporting
+# SOPS_AGE_KEY_FILE. Atmos decrypts via the getsops SDK (no `sops` binary required).
+secrets:
+  providers:
+    dev-sops:
+      kind: sops/age
+      spec:
+        file: secrets/dev.enc.yaml
+        age_key_file: secrets/keys.txt
+
+components:
+  helmfile:
+    redis:
+      metadata:
+        component: redis
+      secrets:
+        vars:
+          REDIS_URL:
+            description: "Redis connection string"
+            sops: dev-sops
+            required: true
+      env:
+        # Secret resolved at runtime via the SOPS-backed !secret function. Passed to the helmfile
+        # subprocess through the environment; never written to the on-disk varfile.
+        REDIS_URL: !secret REDIS_URL
+      vars:
+        chart_version: "1.0.0"

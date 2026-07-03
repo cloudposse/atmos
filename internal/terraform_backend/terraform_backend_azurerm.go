@@ -2,6 +2,8 @@ package terraform_backend
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -81,7 +83,7 @@ func (w *azureBlobClientWrapper) DownloadStream(
 // azureBlobClientCache caches the Azure Blob Storage clients based on a deterministic cache key.
 var azureBlobClientCache sync.Map
 
-func getCachedAzureBlobClient(backend *map[string]any) (AzureBlobAPI, error) {
+func getCachedAzureBlobClient(backend *map[string]any, authContext *schema.AuthContext) (AzureBlobAPI, error) {
 	defer perf.Track(nil, "terraform_backend.getCachedAzureBlobClient")()
 
 	storageAccountName := GetBackendAttribute(backend, "storage_account_name")
@@ -91,26 +93,29 @@ func getCachedAzureBlobClient(backend *map[string]any) (AzureBlobAPI, error) {
 		return nil, errUtils.ErrStorageAccountRequired
 	}
 
-	// Cache by storage account only (client can access any container in the account).
-	cacheKey := storageAccountName
+	// Determine blob storage suffix from the backend "environment" field.
+	// This matches Terraform's azurerm backend "environment" field for sovereign clouds.
+	blobSuffix := resolveAzureBlobSuffix(GetBackendAttribute(backend, "environment"))
+
+	// When the active identity carries an Azurite storage connection string (a local
+	// emulator), the connection string carries the blob endpoint + account credentials,
+	// so in-process reads target the emulator instead of real Azure. Mirrors how the S3
+	// reader honors authContext.AWS.EndpointURL.
+	connectionString := identityAzureConnectionString(authContext)
+
+	// Cache by storage account + suffix (different clouds use different endpoints).
+	// Append a hash of the connection string only when one is present so an
+	// emulator-backed read and a real-Azure read never alias to the same client; the
+	// real-cloud key format is preserved unchanged.
+	cacheKey := storageAccountName + ":" + blobSuffix
+	if connectionString != "" {
+		h := sha256.Sum256([]byte(connectionString))
+		cacheKey += ":conn=" + hex.EncodeToString(h[:8])
+	}
 
 	// Check the cache.
 	if cached, ok := azureBlobClientCache.Load(cacheKey); ok {
 		return cached.(AzureBlobAPI), nil
-	}
-
-	// Construct the blob service URL.
-	serviceURL := fmt.Sprintf("https://%s.blob.core.windows.net/", storageAccountName)
-
-	// Use DefaultAzureCredential for authentication.
-	// This supports multiple authentication methods:
-	// 1. Environment variables (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)
-	// 2. Managed Identity (when running in Azure)
-	// 3. Azure CLI credentials
-	// 4. Visual Studio Code credentials
-	cred, err := azidentity.NewDefaultAzureCredential(nil)
-	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, errUtils.ErrCreateAzureCredential, err)
 	}
 
 	// Configure client options with telemetry.
@@ -122,14 +127,61 @@ func getCachedAzureBlobClient(backend *map[string]any) (AzureBlobAPI, error) {
 		},
 	}
 
-	client, err := azblob.NewClient(serviceURL, cred, clientOptions)
+	client, err := newAzureBlobClient(storageAccountName, blobSuffix, connectionString, clientOptions)
 	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, errUtils.ErrCreateAzureClient, err)
+		return nil, err
 	}
 
 	wrappedClient := &azureBlobClientWrapper{client: client}
 	azureBlobClientCache.Store(cacheKey, wrappedClient)
 	return wrappedClient, nil
+}
+
+// identityAzureConnectionString returns the active Azure identity's storage connection
+// string (e.g. an Azurite emulator), or "" when no identity connection string is set.
+func identityAzureConnectionString(authContext *schema.AuthContext) string {
+	if authContext == nil || authContext.Azure == nil {
+		return ""
+	}
+	return authContext.Azure.StorageConnectionString
+}
+
+// newAzureBlobClient builds an Azure Blob client. With an identity-provided storage
+// connection string (a local emulator like Azurite), it constructs the client from the
+// connection string, which carries the blob endpoint + account key. Otherwise it uses
+// the real-Azure service URL + DefaultAzureCredential, which supports environment
+// variables, Managed Identity, Azure CLI, and Visual Studio Code credentials.
+func newAzureBlobClient(
+	storageAccountName, blobSuffix, connectionString string,
+	clientOptions *azblob.ClientOptions,
+) (*azblob.Client, error) {
+	if connectionString != "" {
+		// Azurite's default connection string uses http:// endpoints. The Azure SDK
+		// rejects authenticated requests over plain HTTP by default, so we must opt in
+		// to authenticated HTTP for the local emulator path only. This flag is scoped
+		// to a copy of the options so the caller's struct is never mutated.
+		emulatorOptions := *clientOptions
+		emulatorOptions.InsecureAllowCredentialWithHTTP = true
+		client, err := azblob.NewClientFromConnectionString(connectionString, &emulatorOptions)
+		if err != nil {
+			return nil, fmt.Errorf(errWrapFormat, errUtils.ErrCreateAzureClient, err)
+		}
+		return client, nil
+	}
+
+	// Construct the blob service URL using the correct suffix for the cloud environment.
+	serviceURL := fmt.Sprintf("https://%s.%s/", storageAccountName, blobSuffix)
+
+	cred, err := azidentity.NewDefaultAzureCredential(nil)
+	if err != nil {
+		return nil, fmt.Errorf(errWrapFormat, errUtils.ErrCreateAzureCredential, err)
+	}
+
+	client, err := azblob.NewClient(serviceURL, cred, clientOptions)
+	if err != nil {
+		return nil, fmt.Errorf(errWrapFormat, errUtils.ErrCreateAzureClient, err)
+	}
+	return client, nil
 }
 
 // ReadTerraformBackendAzurerm reads the Terraform state file from the configured Azure Blob Storage backend.
@@ -146,7 +198,7 @@ func ReadTerraformBackendAzurerm(
 		return nil, errUtils.ErrBackendConfigRequired
 	}
 
-	azureClient, err := getCachedAzureBlobClient(&backend)
+	azureClient, err := getCachedAzureBlobClient(&backend, authContext)
 	if err != nil {
 		return nil, err
 	}
@@ -271,6 +323,24 @@ func ReadTerraformBackendAzurermInternal(
 	}
 
 	return nil, fmt.Errorf(errWrapFormat, errUtils.ErrGetBlobFromAzure, lastErr)
+}
+
+// azureBlobSuffixMap maps Terraform azurerm backend "environment" values to blob storage suffixes.
+// These match the environment names accepted by the Terraform azurerm backend provider.
+var azureBlobSuffixMap = map[string]string{
+	"public":       "blob.core.windows.net",
+	"usgovernment": "blob.core.usgovcloudapi.net",
+	"german":       "blob.core.cloudapi.de",
+	"china":        "blob.core.chinacloudapi.cn",
+}
+
+// resolveAzureBlobSuffix returns the blob storage suffix for the given Terraform azurerm backend environment.
+// If empty or unknown, defaults to the Azure public cloud suffix.
+func resolveAzureBlobSuffix(environment string) string {
+	if suffix, ok := azureBlobSuffixMap[environment]; ok {
+		return suffix
+	}
+	return "blob.core.windows.net"
 }
 
 // logAzureRetryExhausted logs a warning when all retries are exhausted for Azure Blob operations.

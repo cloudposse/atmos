@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -151,6 +152,24 @@ func TestStoreFunction_Execute_NilContext(t *testing.T) {
 	assert.ErrorIs(t, err, ErrExecutionFailed)
 }
 
+func TestStoreFunction_Execute_RejectsSecretStore(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockStore := store.NewMockStore(ctrl)
+	atmosConfig := &schema.AtmosConfiguration{
+		StoresConfig: store.StoresConfig{
+			"secret-store": {Kind: "aws/ssm", Secret: true},
+		},
+		Stores: map[string]store.Store{
+			"secret-store": mockStore,
+		},
+	}
+
+	fn := NewStoreFunction()
+	_, err := fn.Execute(context.Background(), "secret-store stack comp key", &ExecutionContext{AtmosConfig: atmosConfig})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStoreIsSecret)
+}
+
 func TestStoreGetFunction_Execute(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -262,6 +281,24 @@ func TestStoreGetFunction_Execute_NilContext(t *testing.T) {
 	_, err = fn.Execute(context.Background(), "mystore mykey", execCtx)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrExecutionFailed)
+}
+
+func TestStoreGetFunction_Execute_RejectsSecretStore(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockStore := store.NewMockStore(ctrl)
+	atmosConfig := &schema.AtmosConfiguration{
+		StoresConfig: store.StoresConfig{
+			"secret-store": {Kind: "aws/asm", Secret: true},
+		},
+		Stores: map[string]store.Store{
+			"secret-store": mockStore,
+		},
+	}
+
+	fn := NewStoreGetFunction()
+	_, err := fn.Execute(context.Background(), "secret-store raw/key", &ExecutionContext{AtmosConfig: atmosConfig})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStoreIsSecret)
 }
 
 func TestParseStoreParams(t *testing.T) {

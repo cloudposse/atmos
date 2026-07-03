@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -133,6 +134,51 @@ func isEqual(
 		}
 	}
 	return false
+}
+
+// remoteComponentLocator identifies a single component within the remote (target ref)
+// stacks map, so section lookups don't need to thread the navigation keys as separate
+// function arguments.
+type remoteComponentLocator struct {
+	remoteStacks  *map[string]any
+	stackName     string
+	componentType string
+	componentName string
+}
+
+// section returns the raw value of the named section for the located remote component,
+// and whether it was found.
+func (l remoteComponentLocator) section(sectionName string) (any, bool) {
+	remoteStackSection, ok := (*l.remoteStacks)[l.stackName].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentsSection, ok := remoteStackSection["components"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentTypeSection, ok := remoteComponentsSection[l.componentType].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	remoteComponentSection, ok := remoteComponentTypeSection[l.componentName].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	return remoteComponentSection[sectionName], true
+}
+
+// isSectionValueEqual compares a local component section value with the corresponding value
+// on the located remote component. Unlike isEqual, it accepts a value of any type, so it also
+// handles scalar sections such as `backend_type`, `required_version`, and `command` (not just
+// map sections). When the remote component path is absent it returns false (treated as
+// changed/affected), matching isEqual semantics.
+func isSectionValueEqual(locator remoteComponentLocator, localValue any, sectionName string) bool {
+	remoteValue, ok := locator.section(sectionName)
+	if !ok {
+		return false
+	}
+	return deepEqualValues(localValue, remoteValue)
 }
 
 // deepEqualMaps performs optimized deep comparison of two maps.
@@ -273,6 +319,8 @@ func isComponentFolderChanged(
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, component)
 	case cfg.PackerComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, component)
+	case cfg.KubernetesComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Kubernetes.BasePath, component)
 	default:
 		return false, fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
 	}
@@ -335,7 +383,7 @@ func areTerraformComponentModulesChanged(
 		}
 
 		// For other errors (syntax errors, permission issues, etc.), return error.
-		return false, errors.Join(errUtils.ErrFailedToLoadTerraformComponent, diagErr)
+		return false, componentLoadError(component, diags)
 	}
 
 	// If no configuration, there are no modules to check.
@@ -424,7 +472,7 @@ func addAffectedSpaceliftAdminStack(
 	var adminStackContextPrefix string
 
 	if atmosConfig.Stacks.NameTemplate != "" {
-		adminStackContextPrefix, err = ProcessTmpl(atmosConfig, "spacelift-admin-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		adminStackContextPrefix, err = ProcessTmpl(atmosConfig, "spacelift-admin-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 		if err != nil {
 			return nil, err
 		}
@@ -463,7 +511,7 @@ func addAffectedSpaceliftAdminStack(
 							var contextPrefix string
 
 							if atmosConfig.Stacks.NameTemplate != "" {
-								contextPrefix, err = ProcessTmpl(atmosConfig, "spacelift-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+								contextPrefix, err = ProcessTmpl(atmosConfig, "spacelift-stack-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 								if err != nil {
 									return nil, err
 								}
@@ -530,6 +578,8 @@ func addAffectedSpaceliftAdminStack(
 }
 
 // addDependentsToAffected adds dependent components and stacks to each affected component.
+// It resolves all stacks once upfront and reuses the result for every affected component,
+// avoiding O(N) full stack resolutions that made --upload hang on large infrastructures.
 func addDependentsToAffected(
 	atmosConfig *schema.AtmosConfiguration,
 	affected *[]schema.Affected,
@@ -538,9 +588,44 @@ func addDependentsToAffected(
 	processYamlFunctions bool,
 	skip []string,
 	onlyInStack string,
+	authManager auth.AuthManager,
+	authDisabled bool,
 ) error {
+	// Resolve all stacks once and build a reverse dependency index — these are the expensive
+	// operations (~1s for large infras). Previously ExecuteDescribeStacks was called inside
+	// ExecuteDescribeDependents for every affected component, causing O(N) full resolutions
+	// (e.g., 2,422 × ~1s = 40+ minutes). The dependency index further eliminates the
+	// O(stacks × components) scan per affected item.
+	stacks, err := ExecuteDescribeStacksWithAuthDisabled(
+		atmosConfig,
+		onlyInStack,
+		nil,
+		nil,
+		nil,
+		false,
+		processTemplates,
+		processYamlFunctions,
+		false,
+		skip,
+		authManager,
+		authDisabled,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Build the reverse dependency index once from the cached stacks.
+	depIdx := buildDependencyIndex(stacks)
+
 	for i := 0; i < len(*affected); i++ {
 		a := &(*affected)[i]
+
+		// Skip deleted components — they don't exist in HEAD and can't have dependents.
+		// Attempting to resolve them would cause "invalid component" errors.
+		if a.Deleted {
+			a.Dependents = []schema.Dependent{}
+			continue
+		}
 
 		// Skip if `onlyInStack` is specified and the affected component is not in the specified stack.
 		if onlyInStack != "" && a.Stack != onlyInStack {
@@ -557,6 +642,8 @@ func addDependentsToAffected(
 				ProcessYamlFunctions: processYamlFunctions,
 				Skip:                 skip,
 				OnlyInStack:          onlyInStack,
+				Stacks:               stacks,
+				DepIndex:             depIdx,
 			},
 		)
 		if err != nil {
@@ -573,6 +660,8 @@ func addDependentsToAffected(
 				processYamlFunctions,
 				skip,
 				onlyInStack,
+				stacks,
+				depIdx,
 			)
 			if err != nil {
 				return err
@@ -587,6 +676,7 @@ func addDependentsToAffected(
 }
 
 // addDependentsToDependents recursively adds dependent components and stacks to each dependent component.
+// The stacks and depIdx parameters are pre-computed and shared across all calls.
 func addDependentsToDependents(
 	atmosConfig *schema.AtmosConfiguration,
 	dependents *[]schema.Dependent,
@@ -595,6 +685,8 @@ func addDependentsToDependents(
 	processYamlFunctions bool,
 	skip []string,
 	onlyInStack string,
+	stacks map[string]any,
+	depIdx dependencyIndex,
 ) error {
 	for i := 0; i < len(*dependents); i++ {
 		d := &(*dependents)[i]
@@ -609,6 +701,8 @@ func addDependentsToDependents(
 				ProcessYamlFunctions: processYamlFunctions,
 				Skip:                 skip,
 				OnlyInStack:          onlyInStack,
+				Stacks:               stacks,
+				DepIndex:             depIdx,
 			},
 		)
 		if err != nil {
@@ -625,6 +719,8 @@ func addDependentsToDependents(
 				processYamlFunctions,
 				skip,
 				onlyInStack,
+				stacks,
+				depIdx,
 			)
 			if err != nil {
 				return err
@@ -639,7 +735,7 @@ func addDependentsToDependents(
 
 func processIncludedInDependencies(affected *[]schema.Affected) {
 	for i := 0; i < len(*affected); i++ {
-		a := &((*affected)[i])
+		a := &(*affected)[i]
 		a.IncludedInDependents = processIncludedInDependenciesForAffected(affected, a.StackSlug, i)
 		if !a.IncludedInDependents {
 			processPeerDependencies(&a.Dependents)
@@ -653,7 +749,7 @@ func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stack
 			continue
 		}
 
-		a := &((*affected)[i])
+		a := &(*affected)[i]
 
 		if len(a.Dependents) > 0 {
 			includedInDeps := processIncludedInDependenciesForDependents(&a.Dependents, stackSlug)
@@ -667,7 +763,7 @@ func processIncludedInDependenciesForAffected(affected *[]schema.Affected, stack
 
 func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, stackSlug string) bool {
 	for i := 0; i < len(*dependents); i++ {
-		d := &((*dependents)[i])
+		d := &(*dependents)[i]
 
 		if d.StackSlug == stackSlug {
 			return true
@@ -685,7 +781,7 @@ func processIncludedInDependenciesForDependents(dependents *[]schema.Dependent, 
 
 func processPeerDependencies(dependents *[]schema.Dependent) {
 	for i := 0; i < len(*dependents); i++ {
-		d := &((*dependents)[i])
+		d := &(*dependents)[i]
 		d.IncludedInDependents = processIncludedInDependenciesForPeerDependencies(dependents, d.StackSlug, i)
 		processPeerDependencies(&d.Dependents)
 	}
@@ -697,7 +793,7 @@ func processIncludedInDependenciesForPeerDependencies(dependents *[]schema.Depen
 			continue
 		}
 
-		d := &((*dependents)[i])
+		d := &(*dependents)[i]
 
 		if d.StackSlug == stackSlug {
 			return true

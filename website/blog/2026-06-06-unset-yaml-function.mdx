@@ -1,0 +1,89 @@
+---
+slug: unset-yaml-function
+title: "New !unset YAML Function to Delete Inherited Keys"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports the `!unset` YAML function, which **removes a key entirely** from a stack configuration during inheritance and merging. It's the clean way to drop a value that a parent stack or import defined, without resorting to workarounds.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos configuration is built from layered imports and inheritance. That's a strength — until you need to *remove* something a base layer set. Setting a key to `null` doesn't remove it; it keeps the key with a null value, which downstream merges (and Terraform) still see:
+
+```yaml
+import:
+  - base   # defines vpc.vars.enable_vpn_gateway: true
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # Keeps the key, now as null — not the same as "not set".
+        enable_vpn_gateway: null
+```
+
+There was no first-class way to say "pretend the parent never set this."
+
+## The Solution
+
+The `!unset` function marks a key for deletion. After processing, the key is gone — `IsSet` returns false and it never reaches the merged config:
+
+```yaml
+import:
+  - base
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # Remove the inherited value entirely.
+        enable_vpn_gateway: !unset
+
+        # Override a sibling as usual.
+        enable_nat_gateway: false
+```
+
+The `dev` stack ends up with `enable_nat_gateway: false`, **no** `enable_vpn_gateway` key, and everything else inherited from `base`.
+
+## Use Cases
+
+### Clean overrides by exception
+
+Keep a rich base catalog and remove only what a specific environment shouldn't have:
+
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        config:
+          database:
+            # Drop the inherited backup config for dev.
+            backup_enabled: !unset
+            host: "dev.db.example.com"
+```
+
+### Removing whole sections
+
+`!unset` works at any depth, including entire mapping sections:
+
+```yaml
+settings:
+  # Remove an inherited integration block wholesale.
+  spacelift: !unset
+```
+
+### Trimming inherited lists
+
+Use it to drop a list item that inheritance brought in, alongside the values you keep.
+
+## How It Works
+
+`!unset` is handled during YAML preprocessing and stack merging. The key is truly removed from the underlying configuration store rather than being set to null, so it does not appear in `AllSettings()` and won't be re-introduced by later merges. Sibling and ancestor keys are preserved.
+
+## Get Started
+
+The `!unset` function is available now. Check out the [documentation](/functions/yaml/unset) for more examples and details, and browse the full set of [Atmos YAML functions](/functions/yaml).

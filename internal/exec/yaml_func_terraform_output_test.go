@@ -2,7 +2,7 @@ package exec
 
 import (
 	"os"
-	"path/filepath"
+	"os/exec"
 	"testing"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -10,36 +10,31 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestYamlFuncTerraformOutput(t *testing.T) {
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
-	}
+	// Clear caches to ensure isolation from other tests that may have run first.
+	tfoutput.ResetOutputsCache()
+	t.Cleanup(func() {
+		tfoutput.ResetOutputsCache()
+	})
 
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
+	if _, err := exec.LookPath("tofu"); err != nil {
+		t.Skip("skipping: 'tofu' binary not found in PATH (required because the fixture components use command: tofu)")
 	}
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
 	stack := "nonprod"
 
-	defer func() {
-		// Delete the generated files and folders after the test
-		err := os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", ".terraform"))
-		assert.NoError(t, err)
-
-		err = os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", "terraform.tfstate.d"))
-		assert.NoError(t, err)
-	}()
-
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-output-yaml-function"
+	setupTerraformYamlFunctionSandbox(t, workDir)
 	t.Chdir(workDir)
 
 	info := schema.ConfigAndStacksInfo{
@@ -48,12 +43,13 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		StackFile:        "",
 		ComponentType:    "terraform",
 		ComponentFromArg: "component-1",
+		Command:          "tofu",
 		SubCommand:       "deploy",
 		ProcessTemplates: true,
 		ProcessFunctions: true,
 	}
 
-	err = ExecuteTerraform(info)
+	err := ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
@@ -95,6 +91,7 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		StackFile:        "",
 		ComponentType:    "terraform",
 		ComponentFromArg: "component-2",
+		Command:          "tofu",
 		SubCommand:       "deploy",
 		ProcessTemplates: true,
 		ProcessFunctions: true,

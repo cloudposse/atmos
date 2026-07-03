@@ -57,6 +57,8 @@ func TestResolveToken_GitHub(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Clear the live broker-set env so this test exercises struct-field precedence only.
+			t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
 			detector := &CustomGitDetector{
 				atmosConfig: &schema.AtmosConfiguration{
 					Settings: schema.AtmosSettings{

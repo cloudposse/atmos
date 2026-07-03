@@ -1,0 +1,85 @@
+---
+slug: terraform-component-retry
+title: "Recover from transient Terraform errors automatically with component retry"
+authors: [osterman]
+tags: [feature]
+---
+
+Provider downloads fail. Registries return 502s. State backends time out. None of that is your code's fault, but when it happens during `atmos terraform plan` in CI, the only recovery has always been a manual re-run. With this release you can configure per-component retry so transient failures recover automatically — without retrying real Terraform errors.
+
+<!--truncate-->
+
+## What changed
+
+Components now accept a top-level `retry:` block. When the captured subprocess output matches one of your `conditions` regex patterns after a failure, Atmos retries the command with the configured backoff. Without `conditions`, no retry happens — a deliberate safety default so a typo never silently retries a real failure.
+
+```yaml
+components:
+  terraform:
+    vpc:
+      retry:
+        max_attempts: 5
+        backoff_strategy: exponential
+        initial_delay: 2s
+        max_delay: 30s
+        conditions:
+          - /Bad Gateway/
+          - /5\d\d /
+          - /connection reset/
+          - /TLS handshake timeout/
+          - /could not query provider registry/
+```
+
+## Why this matters
+
+This pattern hits hardest in unattended runs — GitOps pipelines, scheduled compliance scans, fleet operations across many accounts. A single 502 during `terraform init` shouldn't fail your pipeline when a 30-second retry would have succeeded.
+
+The implementation is intentionally narrow:
+
+- Retries are **pattern-driven**, not blanket. A `terraform plan` exit-code-2 caused by a real configuration error fails immediately because it does not match any pattern you listed.
+- Each subprocess invocation has its own retry loop. Retrying `init` does not consume the `apply` budget.
+- The retry block participates in component inheritance, so an abstract component can establish a default policy and concrete components extend or override it.
+- Output streams normally while it is captured for matching — you still see live terraform progress.
+
+## How to use it
+
+Add a `retry:` block to any Terraform component. The minimum useful config is `conditions:` plus `max_attempts:`:
+
+```yaml
+components:
+  terraform:
+    my-component:
+      retry:
+        max_attempts: 3
+        conditions:
+          - /Bad Gateway/
+```
+
+Define a default in an abstract component to apply retry across many components without copy-paste:
+
+```yaml
+components:
+  terraform:
+    base/aws:
+      metadata:
+        type: abstract
+      retry:
+        max_attempts: 3
+        initial_delay: 2s
+        backoff_strategy: exponential
+        conditions:
+          - /Bad Gateway/
+          - /5\d\d /
+          - /TLS handshake timeout/
+
+    vpc:
+      metadata:
+        component: base/aws
+      # vpc inherits the base retry policy.
+```
+
+See the [component retry docs](/stacks/components/terraform/retry) for the full configuration reference, inheritance semantics, and tradeoffs.
+
+## Get involved
+
+We'd love to hear which transient error patterns you find yourself adding most often — that signal helps us think about a future "well-known patterns" preset. Open a discussion in the [Atmos repo](https://github.com/cloudposse/atmos) or drop a note in the SweetOps Slack.

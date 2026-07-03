@@ -11,6 +11,9 @@ const (
 	// TagExec executes a shell command and returns the output.
 	TagExec = "exec"
 
+	// TagSecret resolves a declared secret from its configured backend.
+	TagSecret = "secret"
+
 	// TagStore retrieves a value from a configured store.
 	TagStore = "store"
 
@@ -37,6 +40,18 @@ const (
 
 	// TagRepoRoot returns the git repository root path.
 	TagRepoRoot = "repo-root"
+
+	// TagGitRoot returns the git repository root path.
+	TagGitRoot = "git.root"
+
+	// TagGitSha returns the current Git HEAD commit SHA.
+	TagGitSha = "git.sha"
+
+	// TagGitBranch returns the current Git branch name.
+	TagGitBranch = "git.branch"
+
+	// TagGitRef returns the immutable Git ref used for source pinning.
+	TagGitRef = "git.ref"
 
 	// TagRandom generates a random number.
 	TagRandom = "random"
@@ -69,6 +84,7 @@ func AllTags() []string {
 
 	return []string{
 		TagExec,
+		TagSecret,
 		TagStore,
 		TagStoreGet,
 		TagTemplate,
@@ -78,6 +94,10 @@ func AllTags() []string {
 		TagInclude,
 		TagIncludeRaw,
 		TagRepoRoot,
+		TagGitRoot,
+		TagGitSha,
+		TagGitBranch,
+		TagGitRef,
 		TagRandom,
 		TagLiteral,
 		TagAwsAccountID,
@@ -91,6 +111,7 @@ func AllTags() []string {
 // tagsMap provides O(1) lookup for tag names.
 var tagsMap = map[string]bool{
 	TagExec:                    true,
+	TagSecret:                  true,
 	TagStore:                   true,
 	TagStoreGet:                true,
 	TagTemplate:                true,
@@ -100,6 +121,10 @@ var tagsMap = map[string]bool{
 	TagInclude:                 true,
 	TagIncludeRaw:              true,
 	TagRepoRoot:                true,
+	TagGitRoot:                 true,
+	TagGitSha:                  true,
+	TagGitBranch:               true,
+	TagGitRef:                  true,
 	TagRandom:                  true,
 	TagLiteral:                 true,
 	TagAwsAccountID:            true,

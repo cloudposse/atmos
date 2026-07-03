@@ -126,6 +126,14 @@ terraform:
 
 Configure multiple AWS regions using provider aliases:
 
+:::tip Dot-notation shorthand
+
+Atmos recognizes dot-notation provider keys (for example `aws.uswest2`) as aliased configurations of the same provider. When generating `providers_override.tf.json`, all keys that share a base provider name are grouped into a JSON array — the format Terraform requires for [multiple provider configurations](https://developer.hashicorp.com/terraform/language/providers/configuration#alias-multiple-provider-configurations).
+
+Atmos also automatically derives the `alias` field from the portion of the key after the first dot, so `aws.uswest2` implies `alias: uswest2`. You can still set `alias:` explicitly inside the block — an explicit value always wins.
+
+:::
+
 <Tabs>
   <TabItem value="yaml" label="Stack Configuration" default>
     ```yaml title="stacks/orgs/acme/plat/prod/global.yaml"
@@ -135,9 +143,10 @@ Configure multiple AWS regions using provider aliases:
           providers:
             aws:
               region: us-east-1
+            # `alias: uswest2` is auto-derived from the key suffix.
             aws.uswest2:
               region: us-west-2
-              alias: uswest2
+            # You can also set `alias` explicitly to override the derived value.
             aws.euwest1:
               region: eu-west-1
               alias: euwest1

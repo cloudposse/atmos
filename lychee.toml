@@ -11,7 +11,7 @@ verbose = "info"
 no_progress = true
 
 # Timeout for each request (seconds)
-timeout = 30
+timeout = 60
 
 # Retry failed requests
 max_retries = 3
@@ -40,14 +40,25 @@ exclude = [
   "wttr\\.in",
   # GNU.org (rate limits and connection resets)
   "gnu\\.org",
+  # The Linux Documentation Project (intermittent 502 Bad Gateway in CI)
+  "tldp\\.org",
+  # Linux Foundation specs (slow response times)
+  "refspecs\\.linuxfoundation\\.org",
+  # OpenBSD man pages (slow response times, intermittent timeouts in CI)
+  "man\\.openbsd\\.org",
   # Kubernetes.io (rate limits and connection resets in CI)
   "kubernetes\\.io",
+  # runatlantis.io (connection resets on automated requests)
+  "runatlantis\\.io",
+  # GitHub docs (intermittent 503s in CI)
+  "docs\\.github\\.com",
   # Cloudinary image resizing proxy
   "img\\.cloudposse\\.com",
   # atmos.tools URLs (can't verify website links locally)
   "atmos\\.tools",
   # Root-relative paths converted to file:// URLs (atmos.tools website paths)
   "file://.*/cli/",
+  "file://.*/functions/",
   # Files that don't exist yet (planned documentation)
   "website/docs/cli/errors\\.mdx",
   "website/docs/cli/configuration/mask\\.mdx",
@@ -62,6 +73,47 @@ exclude = [
   "img\\.shields\\.io/github/release/",
   # Atmos Pro redirects to sign-in page for unauthenticated users
   "atmos-pro\\.com",
-  # Kubernetes.io (frequent connection failures/timeouts)
-  "kubernetes\\.io",
+  # LF AI Foundation blog links (may change or be unavailable)
+  "lfaidata\\.foundation",
+  # Taskfile.dev (connection resets in CI)
+  "taskfile\\.dev",
+  # regex101.com (intermittent timeouts in CI)
+  "regex101\\.com",
+  # nx.dev (intermittent connection failures in CI)
+  "nx\\.dev",
+  # Test data placeholder URLs (intentional)
+  "github\\.com/test/",
+  # Planned documentation paths (not yet published)
+  "file://.*/ai/skills",
+  "file://.*/ai/skill-marketplace",
+  # Example/placeholder URLs in usage documentation
+  "github\\.com/user/repo",
+  # Claude Code product page (claude.com edge returns 500 to non-browser/CI requests;
+  # the docs subdomain code.claude.com is reachable and is intentionally not excluded)
+  "claude\\.com/product/",
+  # regex101.com (intermittent 504 Gateway Timeout in CI)
+  "regex101\\.com",
+  # Anthropic's clau.de URL shortener is Cloudflare-fronted and returns 525
+  # (SSL handshake failed) to non-browser/CI requests; it resolves in a real browser.
+  "clau\\.de",
+  # Anthropic docs intermittently return 503 Service Unavailable from CI runners.
+  "docs\\.anthropic\\.com",
+  # luigi.readthedocs.io (intermittent 502 Bad Gateway in CI)
+  "luigi\\.readthedocs\\.io",
+  # tldp.org (intermittent 502 Bad Gateway in CI; sibling exit-code references
+  # like gnu.org, man.openbsd.org, and refspecs.linuxfoundation.org are excluded for the same reason)
+  "tldp\\.org",
+  # no-color.org (intermittent connection failures / unreachable from CI runners;
+  # it is the canonical NO_COLOR spec site referenced from the help-system and
+  # io-handling PRDs, and resolves in a real browser)
+  "no-color\\.org",
+  # Algolia DocSearch docs (intermittent timeouts from CI runners)
+  "docsearch\\.algolia\\.com",
+  # Open Group POSIX specs (intermittent timeouts from CI runners)
+  "pubs\\.opengroup\\.org",
+  # Pact docs (intermittent timeouts from CI runners)
+  "docs\\.pact\\.io",
+  # google-gemini/gemini-cli repo deep-links intermittently return 502 Bad Gateway
+  # from GitHub's gateway in CI; the pages are valid and load in a browser.
+  "github\\.com/google-gemini/gemini-cli",
 ]

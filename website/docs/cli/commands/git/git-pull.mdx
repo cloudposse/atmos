@@ -1,0 +1,124 @@
+---
+title: atmos git pull
+sidebar_label: pull
+sidebar_class_name: command
+id: pull
+description: Fast-forward pull a managed Git repository or a local path.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Pull the latest changes for a repository configured under [`git.repositories`](/cli/configuration/git), or for any local path. Pulls are **always fast-forward-only** — Atmos never creates merge commits or rebases on pull, so a diverged branch fails fast instead of producing surprise history.
+</Intro>
+
+<Screengrab title="atmos git pull --help" slug="atmos-git-pull--help" />
+
+## Usage
+
+```shell
+atmos git pull [name-or-path] [flags] [-- <native git args>]
+```
+
+With a configured repository:
+
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      uri: https://github.com/acme/flux-deploy.git
+      branch: main
+```
+
+```shell
+atmos git pull flux-deploy
+```
+
+## Examples
+
+```shell
+# Pull a named managed repository
+atmos git pull flux-deploy
+
+# Pull the single configured repository
+atmos git pull
+
+# Clone the single configured repository first when its workdir is missing
+atmos git pull --clone
+
+# Pull a repository at a local path
+atmos git pull ./deployments
+
+# Pull all configured repositories concurrently
+atmos git pull --all
+
+# Clone missing configured workdirs before pulling all repositories
+atmos git pull --all --clone
+
+# Pull a specific branch from a specific remote
+atmos git pull flux-deploy --remote=origin --branch=main
+
+# Pass native arguments to the underlying git pull invocation
+atmos git pull flux-deploy -- --no-tags
+```
+
+## Argument Resolution
+
+The positional argument is resolved as: configured repository **name** → **URI** (rejected — pull needs a local workdir) → **path**. To force path interpretation for an argument that collides with a repository name, use an explicit path prefix (`./deployments`).
+
+## Arguments
+
+<dl>
+    <dt>`name-or-path` <em>(required unless exactly one repository is configured, or `--all` is set)</em></dt>
+    <dd>
+        A repository name configured under `git.repositories`, or a filesystem path to an existing Git working tree. When exactly one repository is configured, omitting this argument pulls that repository.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--all` <em>(optional)</em></dt>
+    <dd>
+        Fast-forward pull every repository configured under `git.repositories`, concurrently. Every repository is attempted; failures are aggregated and reported at the end. Mutually exclusive with a positional argument.
+        Environment variable: `ATMOS_GIT_PULL_ALL`
+    </dd>
+
+    <dt>`--clone` <em>(optional)</em></dt>
+    <dd>
+        Clone a configured repository when its workdir is missing. This flag only applies to configured repository names, including no-arg single-repository pull and `--all`; it is rejected for local path arguments.
+        Environment variable: `ATMOS_GIT_PULL_CLONE`
+    </dd>
+
+    <dt>`--branch` / `-b` <em>(optional)</em></dt>
+    <dd>
+        Branch to pull. Defaults to the repository's configured branch, or the current branch.
+        Environment variable: `ATMOS_GIT_BRANCH`
+    </dd>
+
+    <dt>`--remote` <em>(optional)</em></dt>
+    <dd>
+        Remote name. Default: `origin`.
+        Environment variable: `ATMOS_GIT_REMOTE`
+    </dd>
+
+    <dt>`--identity` <em>(optional)</em></dt>
+    <dd>
+        Atmos Auth identity to use for this operation (global flag). Overrides the repository's `auth.identity`.
+        Environment variable: `ATMOS_IDENTITY`
+    </dd>
+</dl>
+
+## Native Git Arguments
+
+Arguments after `--` are passed verbatim to the underlying `git pull --ff-only` invocation.
+
+```shell
+atmos git pull flux-deploy -- --no-tags
+```
+
+## Related
+
+- [`atmos git clone`](/cli/commands/git/clone) — clone or reconcile a workdir
+- [`atmos git status`](/cli/commands/git/status) — inspect the working tree before pulling
+- [Git Configuration](/cli/configuration/git) — repository fields and defaults

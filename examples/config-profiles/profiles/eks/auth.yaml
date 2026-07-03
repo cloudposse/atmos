@@ -1,0 +1,31 @@
+# EKS Profile - Authentication
+# Ambient credential support for IRSA (IAM Roles for Service Accounts)
+
+auth:
+  identities:
+    # Use the pod's IRSA credentials directly
+    # This trusts the AWS SDK's default credential chain
+    # (env vars → shared config → IRSA web identity → IMDS)
+    eks-pod:
+      kind: aws/ambient
+      principal:
+        region: us-east-1
+
+    # Chain: use IRSA credentials to assume a role in another account
+    cross-account-deployer:
+      kind: aws/assume-role
+      via:
+        identity: eks-pod
+      principal:
+        assume_role: "arn:aws:iam::999999999999:role/TerraformDeployRole"
+      session:
+        duration: "1h"
+
+# Note: Unlike other identity kinds, aws/ambient does NOT:
+# - Clear credential environment variables (AWS_ACCESS_KEY_ID, etc.)
+# - Disable IMDS (AWS_EC2_METADATA_DISABLED is NOT set)
+# - Write to credential files
+#
+# This makes it suitable for environments where credentials are
+# already available: EKS pods (IRSA), EC2 instances (instance profiles),
+# and ECS tasks (task roles).

@@ -1,0 +1,82 @@
+base_path: "./"
+
+toolchain:
+  registries:
+    - name: aqua
+      type: aqua
+      priority: 10
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+    plugin_cache: true
+    platforms:
+      - linux_amd64
+    cache:
+      enabled: true
+      mirror:
+        enabled: true
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+auth:
+  identities:
+    floci-superuser:
+      kind: aws/user
+      credentials:
+        access_key_id: test
+        secret_access_key: test
+        region: us-east-1
+      spec:
+        endpoint_url: "http://localhost:4566"
+      default: true
+
+ci:
+  enabled: true
+  cache:
+    enabled: true
+    key: "native-ci-e2e-{{.OS}}-{{.Arch}}-v1"
+    restore_keys:
+      - "native-ci-e2e-{{.OS}}-{{.Arch}}-"
+  output:
+    enabled: true
+    variables:
+      - has_changes
+      - has_additions
+      - has_destructions
+      - has_errors
+      - exit_code
+      - artifact_key
+      - plan_summary
+      - summary
+  summary:
+    enabled: true
+  annotations:
+    enabled: false
+  results:
+    enabled: true
+  checks:
+    enabled: true
+    context_prefix: "native-ci/terraform"
+    statuses:
+      component: true
+      add: true
+      change: true
+      destroy: true
+  comments:
+    enabled: true
+    behavior: upsert

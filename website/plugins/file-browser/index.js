@@ -22,6 +22,30 @@ const DEFAULT_EXCLUDE_PATTERNS = [
   '**/.envrc',
 ];
 
+// Curated ("featured") examples, in display order. This list is editorial — like the
+// roadmap's featured[] it is hand-maintained and never auto-promoted. These are pinned to the
+// top of the /examples index page so the gallery leads with the demos we want people to try
+// first. Edit deliberately.
+const FEATURED = [
+  'quick-start-simple',
+  'quick-start-advanced',
+  'sops-secrets',
+  'toolchain',
+  'custom-commands',
+  'emulator-aws',
+];
+
+// Friendly display titles for examples (falls back to the directory name when absent).
+const TITLES_MAP = {
+  'quick-start-simple': 'Quick Start (Simple)',
+  'quick-start-advanced': 'Quick Start (Advanced)',
+  'sops-secrets': 'SOPS Secrets',
+  toolchain: 'Toolchain',
+  'custom-commands': 'Custom Commands',
+  'emulator-aws': 'AWS Emulator',
+  'emulator-k8s': 'Kubernetes Emulator',
+};
+
 // Tags mapping for examples (an example can have multiple tags).
 const TAGS_MAP = {
   'quick-start-simple': ['Quickstart'],
@@ -38,15 +62,22 @@ const TAGS_MAP = {
   'demo-library': ['Components'],
   'demo-workflows': ['Automation'],
   'demo-atlantis': ['Automation'],
+  'custom-commands': ['Automation'],
+  'interactive-workflows': ['Automation'],
   'demo-custom-command': ['Automation'],
+  'custom-components': ['Components'],
   'generate-files': ['Automation'],
   toolchain: ['DX'],
   devcontainer: ['DX'],
   'devcontainer-build': ['DX'],
-  'demo-localstack': ['DX'],
+  'emulator-aws': ['DX'],
+  'emulator-k8s': ['DX'],
   'demo-helmfile': ['DX'],
   'stack-names': ['Stacks'],
   'demo-ansible': ['Automation'],
+  'mcp-with-aws': ['DX', 'Automation'],
+  'aws-ami-packer-github-actions': ['Automation'],
+  'sops-secrets': ['Stacks'],
 };
 
 // Documentation pages mapping for examples.
@@ -96,8 +127,17 @@ const DOCS_MAP = {
   'demo-atlantis': [
     { label: 'Atlantis Integration', url: '/cli/configuration/integrations/atlantis' },
   ],
-  'demo-custom-command': [
+  'custom-commands': [
     { label: 'Custom Commands', url: '/cli/configuration/commands' },
+  ],
+  'custom-components': [
+    { label: 'Custom Component Types', url: '/components/custom' },
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Custom Component Types Reference', url: '/cli/configuration/commands/component#custom-component-types' },
+  ],
+  'interactive-workflows': [
+    { label: 'Workflows', url: '/workflows' },
+    { label: 'CLI Configuration', url: '/cli/configuration/workflows' },
   ],
   'generate-files': [
     { label: 'Generate Files', url: '/cli/commands/terraform/generate/files' },
@@ -124,6 +164,17 @@ const DOCS_MAP = {
   ],
   'demo-ansible': [
     { label: 'Ansible Playbook', url: '/cli/commands/ansible/playbook' },
+  ],
+  'mcp-with-aws': [
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Authentication', url: '/stacks/auth' },
+    { label: 'Toolchain', url: '/cli/configuration/toolchain' },
+  ],
+  'aws-ami-packer-github-actions': [
+    { label: 'Packer Build', url: '/cli/commands/packer/build' },
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Go Templates', url: '/templates' },
+    { label: 'GitHub Actions', url: '/integrations/github-actions/setup-atmos' },
   ],
 };
 
@@ -383,9 +434,11 @@ function scanExamples(sourceDir, options) {
     examples.push({
       name: entry.name,
       path: entry.name,
+      title: TITLES_MAP[entry.name] || entry.name,
       description,
       hasReadme: !!tree.readme,
       hasAtmosYaml,
+      featured: FEATURED.includes(entry.name),
       tags: TAGS_MAP[entry.name] || [],
       docs: DOCS_MAP[entry.name] || [],
       root: tree,
@@ -401,8 +454,12 @@ function scanExamples(sourceDir, options) {
   const tagOrder = ['Quickstart', 'Stacks', 'Components', 'Automation', 'DX'];
   const tags = tagOrder.filter((tag) => examples.some((ex) => ex.tags.includes(tag)));
 
+  // Build the curated featured list in FEATURED order (skip any that don't resolve).
+  const featured = FEATURED.map((name) => examples.find((ex) => ex.name === name)).filter(Boolean);
+
   return {
     examples,
+    featured,
     tags,
     generatedAt: new Date().toISOString(),
     totalFiles,
@@ -468,6 +525,7 @@ module.exports = function fileBrowserPlugin(context, options) {
     githubRepo = '',
     githubBranch = 'main',
     githubPath = '',
+    disclaimer = '',
     excludePatterns = [],
     maxFileSize = 100 * 1024, // 100KB default.
   } = options;
@@ -481,7 +539,7 @@ module.exports = function fileBrowserPlugin(context, options) {
     async loadContent() {
       if (!fs.existsSync(absoluteSourceDir)) {
         console.warn(`[file-browser] Source directory not found: ${absoluteSourceDir}`);
-        return { tree: { examples: [], totalFiles: 0, totalExamples: 0 } };
+        return { tree: { examples: [], featured: [], tags: [], totalFiles: 0, totalExamples: 0 } };
       }
 
       const tree = scanExamples(absoluteSourceDir, {
@@ -505,6 +563,7 @@ module.exports = function fileBrowserPlugin(context, options) {
           githubRepo,
           githubBranch,
           githubPath,
+          disclaimer,
         },
       };
     },

@@ -544,8 +544,14 @@ func processVendorManifest(path string) []extract.VendorInfo {
 				relativeManifestPath = filepath.Base(path)
 			}
 
+			// Use the target's version if set, otherwise fall back to the source-level version.
+			effectiveVersion := source.Version
+			if target.Version != "" {
+				effectiveVersion = target.Version
+			}
+
 			// Format the folder path.
-			formattedFolder := formatTargetFolder(*target, source.Component, source.Version)
+			formattedFolder := formatTargetFolder(target.Path, source.Component, effectiveVersion)
 
 			// Add to vendor infos.
 			vendorInfos = append(vendorInfos, extract.VendorInfo{

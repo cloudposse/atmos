@@ -8,6 +8,7 @@ import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
+import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Use this command to generate a Terraform execution plan for an Atmos component in a stack, showing what changes would be made to your infrastructure.
@@ -85,6 +86,59 @@ Generate a plan to destroy infrastructure:
 ```shell
 atmos terraform plan vpc -s dev -destroy
 ```
+
+### Graph-backed Multi-component Planning
+
+Run plans for multiple components through the Terraform dependency graph:
+
+```shell
+# Plan every Terraform component in dependency order
+atmos terraform plan --all -s dev
+
+# Plan a named subset, preserving dependency edges between selected components
+atmos terraform plan --components vpc,eks/cluster,eks/apps -s dev
+
+# Plan components selected by query
+atmos terraform plan --query '.settings.tier == "network"' -s dev
+```
+
+The graph is built from [`dependencies.components`](/stacks/dependencies/components) first, with `settings.depends_on` as a fallback. Components that are independent at the same point in the graph can run concurrently when `--max-concurrency` is greater than `1`.
+
+```shell
+atmos terraform plan --all -s dev --max-concurrency 4
+```
+
+Concurrent plan output is isolated per component. Use `--log-order grouped` to print each component's logs together after it finishes, or keep the default `stream` mode to see logs as they arrive. To reduce noise from unchanged components, use `--hide=no-changes`.
+
+```shell
+atmos terraform plan --all -s dev \
+  --max-concurrency 4 \
+  --failure-mode keep-going \
+  --log-order grouped \
+  --hide=no-changes \
+  --execution-summary-file /tmp/atmos-plan-summary.json
+```
+
+### GitHub Actions CI Output
+
+When CI mode is enabled with `--ci`, `ci.enabled: true`, or GitHub Actions auto-detection,
+graph-backed multi-component `plan` runs write a single aggregate CI result after the scheduler
+finishes. This applies to `--all`, `--components`, and `--query` plan runs. Single-component
+`plan`, `apply`, and `deploy` keep their existing per-command CI output.
+
+In GitHub Actions, the aggregate result writes once to `$GITHUB_STEP_SUMMARY` and `$GITHUB_OUTPUT`.
+The job summary includes component counts, total resource counts, failed/changed/no-change/skipped
+groups, a per-component table, and details for failed or changed components. Output variables include
+`has_changes`, `has_errors`, `exit_code`, resource totals, component totals, `summary`, `command`,
+`stack`, and `component`.
+
+Aggregate exit codes follow Terraform plan semantics across the whole graph:
+
+| Exit Code | Meaning |
+| ---: | --- |
+| `1` | At least one component failed |
+| `2` | No failures, but at least one component has changes |
+| `0` | No failures and no changes |
 
 ## Planfile Management
 
@@ -208,6 +262,19 @@ components:
 
         ```shell
         atmos terraform plan vpc -s dev --process-templates=false
+        ```
+    </dd>
+
+    <dt>`--ci` <em>(optional)</em></dt>
+    <dd>
+        Enable CI mode for automated pipelines. When enabled, Atmos writes job summaries, CI output variables, and status checks based on the [`ci` configuration](/cli/configuration/ci) in `atmos.yaml`.
+
+        CI mode is auto-detected when `CI=true` or `GITHUB_ACTIONS=true` environment variables are set. Use this flag to explicitly enable CI mode in environments where auto-detection is not available.
+
+        **Environment variables:** `ATMOS_CI`, `CI`
+
+        ```shell
+        atmos terraform plan vpc -s dev --ci
         ```
     </dd>
 </dl>
@@ -366,13 +433,33 @@ atmos terraform plan --query '.vars.tags.team == "eks"' --stack prod
     <dd>Clone the target reference instead of checking it out locally.</dd>
 </dl>
 
+## CI Integration
+
+<Experimental/>
+
+When running in CI mode (`--ci` flag or auto-detected), Atmos produces rich CI artifacts:
+
+- **Job summaries** with resource badges, collapsible diffs, and warnings written to `$GITHUB_STEP_SUMMARY`
+- **Output variables** (`has_changes`, `has_errors`, `exit_code`, etc.) written to `$GITHUB_OUTPUT`
+- **Status checks** showing plan progress and results (requires `ci.checks.enabled: true`)
+
+```shell
+# In GitHub Actions (auto-detected)
+atmos terraform plan vpc -s dev
+
+# Explicit CI mode
+atmos terraform plan vpc -s dev --ci
+```
+
+:::info
+See [CI Configuration](/cli/configuration/ci) for full configuration options including custom templates, status checks, and output variables.
+:::
+
 ## Related Commands
 
 - [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply the changes from a plan
 - [`atmos terraform deploy`](/cli/commands/terraform/deploy) - Deploy with auto-approval
 - [`atmos terraform plan-diff`](/cli/commands/terraform/plan-diff) - Compare two plan files
-- [`atmos terraform generate planfile`](/cli/commands/terraform/generate/planfile) - Generate a planfile in JSON/YAML format
-
 ## Configuration
 
 Configure default behavior for `terraform plan` in your `atmos.yaml`:

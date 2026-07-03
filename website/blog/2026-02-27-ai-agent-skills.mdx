@@ -51,6 +51,16 @@ Install from the Cloud Posse plugin marketplace:
 
 One plugin, one install command, all 21 skills. The `cloudposse/atmos` GitHub repo serves as the marketplace -- Claude Code fetches the plugin manifest directly from the repo. No central registry or approval is involved. Once installed, the plugin is cached locally and skills activate automatically when you ask Atmos-related questions.
 
+To uninstall:
+
+```bash
+# Remove the plugin
+/plugin uninstall atmos@cloudposse
+
+# Remove the marketplace (optional)
+/plugin marketplace remove cloudposse
+```
+
 For Atmos contributors working directly in the repo, skills are also auto-discovered via `.claude/skills/` symlinks.
 
 ### OpenAI Codex
@@ -118,7 +128,7 @@ atmos vendor pull --component agent-skills
 
 This downloads the `agent-skills/` directory with the correct structure intact. To update skills later, run the same command again.
 
-See the [AI Agent Skills documentation](/integrations/ai/agent-skills) for the full skill reference and [Configure AI Assistants](/projects/setup-editor/ai-assistants) for tool-specific setup instructions.
+See the [AI Agent Skills documentation](/ai/agent-skills) for the full skill reference and [Configure AI Assistants](/projects/setup-editor/ai-assistants) for tool-specific setup instructions.
 
 ## How Skills Are Activated
 

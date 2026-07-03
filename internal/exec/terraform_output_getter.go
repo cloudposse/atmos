@@ -72,11 +72,12 @@ func GetAllTerraformOutputs(
 	component string,
 	stack string,
 	skipInit bool,
+	authContext *schema.AuthContext,
 	authManager any,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.GetAllTerraformOutputs")()
 
-	return tfoutput.GetComponentOutputs(atmosConfig, component, stack, skipInit, authManager)
+	return tfoutput.GetComponentOutputs(atmosConfig, component, stack, skipInit, authContext, authManager)
 }
 
 // GetStaticRemoteStateOutput is a backward-compatible wrapper that delegates to pkg/terraform/output.

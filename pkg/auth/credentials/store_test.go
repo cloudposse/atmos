@@ -3,6 +3,7 @@ package credentials
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,7 +11,54 @@ import (
 	"github.com/zalando/go-keyring"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// Compile-time guard: a rename of the Keyring/Type schema fields must break the build.
+var _ = schema.AuthConfig{Keyring: schema.KeyringConfig{Type: "memory"}}
+
+// TestNewCredentialStoreWithConfig_SelectsBackendByPriority verifies the
+// env > config > default priority used to choose the keyring backend. The
+// config-driven case is the regression guard for issue #2544: a non-nil
+// authConfig with Keyring.Type must select that backend.
+func TestNewCredentialStoreWithConfig_SelectsBackendByPriority(t *testing.T) {
+	tests := []struct {
+		name       string
+		envType    string
+		authConfig *schema.AuthConfig
+		wantType   string
+	}{
+		{
+			name:       "config memory is honored (issue #2544)",
+			envType:    "",
+			authConfig: &schema.AuthConfig{Keyring: schema.KeyringConfig{Type: types.CredentialStoreTypeMemory}},
+			wantType:   types.CredentialStoreTypeMemory,
+		},
+		{
+			name:       "env var overrides config",
+			envType:    types.CredentialStoreTypeMemory,
+			authConfig: &schema.AuthConfig{Keyring: schema.KeyringConfig{Type: "system"}},
+			wantType:   types.CredentialStoreTypeMemory,
+		},
+		{
+			name:       "nil config defaults to system in test environment",
+			envType:    "",
+			authConfig: nil,
+			wantType:   types.CredentialStoreTypeSystemKeyring,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setenv with empty string clears any inherited value for this test.
+			t.Setenv("ATMOS_KEYRING_TYPE", tt.envType)
+
+			store := NewCredentialStoreWithConfig(tt.authConfig)
+			assert.NotNil(t, store)
+			assert.Equal(t, tt.wantType, store.Type())
+		})
+	}
+}
 
 // Ensure the keyring uses an in-memory mock backend for tests.
 func init() {
@@ -52,6 +100,25 @@ func TestStoreRetrieve_OIDC(t *testing.T) {
 		assert.Equal(t, in.Token, out.Token)
 		assert.Equal(t, in.Provider, out.Provider)
 		assert.Equal(t, in.Audience, out.Audience)
+	}
+}
+
+func TestStoreRetrieve_Pro(t *testing.T) {
+	t.Setenv("ATMOS_KEYRING_TYPE", "memory")
+	s := NewCredentialStore()
+	alias := "atmos-pro-1"
+	in := &types.ProCredentials{Token: "hdr.payload.", BaseURL: "https://pro", Endpoint: "api/v1", WorkspaceID: "ws-1", Provider: "atmos-pro"}
+	assert.NoError(t, s.Store(alias, in, "realmA"))
+
+	got, err := s.Retrieve(alias, "realmA")
+	assert.NoError(t, err)
+	out, ok := got.(*types.ProCredentials)
+	if assert.True(t, ok) {
+		assert.Equal(t, in.Token, out.Token)
+		assert.Equal(t, in.BaseURL, out.BaseURL)
+		assert.Equal(t, in.Endpoint, out.Endpoint)
+		assert.Equal(t, in.WorkspaceID, out.WorkspaceID)
+		assert.Equal(t, in.Provider, out.Provider)
 	}
 }
 
@@ -101,6 +168,69 @@ func TestDefaultStore_Suite(t *testing.T) {
 	}
 
 	RunCredentialStoreTests(t, factory)
+}
+
+func TestResolveKeyringType(t *testing.T) {
+	t.Run("environment overrides auth config", func(t *testing.T) {
+		t.Setenv("ATMOS_KEYRING_TYPE", "memory")
+		authConfig := &schema.AuthConfig{
+			Keyring: schema.KeyringConfig{Type: "file"},
+		}
+
+		assert.Equal(t, "memory", resolveKeyringType(authConfig))
+	})
+
+	t.Run("auth config overrides default", func(t *testing.T) {
+		t.Setenv("ATMOS_KEYRING_TYPE", "")
+
+		authConfig := &schema.AuthConfig{
+			Keyring: schema.KeyringConfig{Type: "file"},
+		}
+
+		assert.Equal(t, "file", resolveKeyringType(authConfig))
+	})
+
+	t.Run("default remains system", func(t *testing.T) {
+		t.Setenv("ATMOS_KEYRING_TYPE", "")
+
+		assert.Equal(t, "system", resolveKeyringType(nil))
+	})
+}
+
+func TestNewCredentialStoreWithConfig_ConcurrentInitialization(t *testing.T) {
+	t.Setenv("ATMOS_KEYRING_TYPE", "memory")
+
+	authConfig := &schema.AuthConfig{
+		Keyring: schema.KeyringConfig{Type: "system"},
+	}
+
+	const (
+		workers    = 32
+		iterations = 50
+	)
+
+	errs := make(chan error, workers*iterations)
+	var wg sync.WaitGroup
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				store := NewCredentialStoreWithConfig(authConfig)
+				if store == nil {
+					errs <- errors.New("credential store is nil")
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		assert.NoError(t, err)
+	}
 }
 
 // TestNewCredentialStoreWithConfig_NoopFallback tests that credential store uses no-op keyring when system keyring is unavailable.

@@ -1,0 +1,18 @@
+# Test: Go template conditionals with !env when env var IS set.
+vars:
+  stage: pr-set
+
+locals:
+  pr_number: !env ATMOS_TEST_CONDITIONAL_PR_SET
+  datastream_name: '{{ if .locals.pr_number }}datastreampr{{ .locals.pr_number }}{{ else }}datastream{{ end }}'
+  deploy_env: '{{ if .locals.pr_number }}preview{{ else }}production{{ end }}'
+
+components:
+  terraform:
+    conditional-pr-set:
+      metadata:
+        component: mock
+      vars:
+        datastream_name: "{{ .locals.datastream_name }}"
+        deploy_env: "{{ .locals.deploy_env }}"
+        pr_number: "{{ .locals.pr_number }}"

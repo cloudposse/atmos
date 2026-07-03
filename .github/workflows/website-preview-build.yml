@@ -25,17 +25,18 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version-file: "website/.nvmrc"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           version: 9
 
@@ -48,9 +49,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEPLOYMENT_HOST: ${{ github.event.pull_request.number && format('pr-{0}.atmos-docs.ue2.dev.plat.cloudposse.org', github.event.pull_request.number) || '' }}
+          # Landing-page demo videos are published out-of-band to the prod docs-origin
+          # bucket (see .github/workflows/landing-demos.yaml) and are NOT in the git
+          # checkout, so they're absent from this build. Point DemoVideo at the public
+          # production copies so preview players aren't blank. Reflects current prod;
+          # demo *changes* won't preview until published. See DemoVideo/index.js.
+          ATMOS_DEMOS_BASE_URL: https://atmos.tools/img/demos
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: website
           path: website/build

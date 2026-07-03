@@ -1,0 +1,27 @@
+---
+title: sleep
+sidebar_label: sleep
+slug: /workflows/steps/type/sleep
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `sleep` step type pauses execution for a set duration, a simple building block for pacing custom commands and workflows around external systems that need time to settle.
+</Intro>
+
+```yaml
+steps:
+  - name: wait_for_api
+    type: sleep
+    timeout: 30s
+```
+
+## Fields
+
+<dl>
+  <dt>`timeout`</dt>
+  <dd>Optional sleep duration, such as `5s`, `1m`, or `2m30s`. Defaults to `1s`.</dd>
+</dl>
+
+The step result value is the resolved duration.

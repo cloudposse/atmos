@@ -1,0 +1,440 @@
+---
+title: Component Dependencies
+sidebar_position: 2
+sidebar_label: components
+sidebar_class_name: command
+description: Define dependencies between components, files, and folders to control execution order and detect affected components.
+id: components
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+The `dependencies` section has four sibling keys: `tools` (tool versions), `components` (other components this one depends on), `files` (file paths to watch), and `folders` (folder paths to watch). Use them to declare ordering, propagate impact through `atmos describe affected`, and drive CI/CD orchestration.
+</Intro>
+
+## Use Cases
+
+- **Execution Order:** Ensure VPC is created before subnets
+- **CI/CD Orchestration:** Spacelift and other integrations use dependencies to order stack runs
+- **Impact Analysis:** The `atmos describe affected` command uses dependencies to find impacted components
+- **File/Folder Watching:** Trigger component redeployment when external files or folders change
+
+## Configuration
+
+The `dependencies` section is an object with up to four sibling keys. Each key is independently optional.
+
+### Sibling Keys
+
+<dl>
+  <dt>tools <em>(map)</em></dt>
+  <dd>Required CLI tool versions (e.g., `terraform: "1.9.8"`). See the [overview page](/stacks/dependencies) for details.</dd>
+
+  <dt>components <em>(list)</em></dt>
+  <dd>Other Atmos components this component depends on. Used for ordering and dependency-graph traversal.</dd>
+
+  <dt>files <em>(list of strings)</em></dt>
+  <dd>File paths whose changes mark this component as affected. Use when external configuration or source files belong logically to this component but live outside the component directory.</dd>
+
+  <dt>folders <em>(list of strings)</em></dt>
+  <dd>Folder paths whose recursive contents mark this component as affected. Typical use: pointing at a Lambda source tree or a templates directory.</dd>
+</dl>
+
+### `dependencies.components[]` Entry Schema
+
+Each entry in `dependencies.components` is an object with these fields:
+
+<dl>
+  <dt>name <em>(string, preferred)</em></dt>
+  <dd>The component instance name as defined in the stack (e.g., `vpc`, `subnet`, `tgw/hub`). This is the name under `components.<kind>.<name>`, not the Terraform module path.</dd>
+
+  <dt>component <em>(string, legacy alias)</em></dt>
+  <dd>Older alias for `name`. Still parses for backward compatibility with configurations from Atmos &lt; v1.211.0. New configurations should use `name`. Setting both `name` and `component` to different values is a configuration error.</dd>
+
+  <dt>stack <em>(string, optional)</em></dt>
+  <dd>The Atmos stack name where the component is provisioned (e.g., `tenant1-ue2-prod`). If omitted, the component is assumed to be in the same stack. Use Go templates to construct stack names dynamically.</dd>
+
+  <dt>kind <em>(string, optional)</em></dt>
+  <dd>The dependency type: `terraform`, `helmfile`, `packer`, or a registered plugin type. Defaults to the declaring component's type for component dependencies.</dd>
+</dl>
+
+:::info Migrating from `settings.depends_on`?
+The legacy `namespace`, `tenant`, `environment`, and `stage` fields are **not supported** in `dependencies.components`. Use the `stack` field with a Go template instead — for example, `stack: "{{ .vars.tenant }}-{{ .vars.environment }}-prod"`.
+:::
+
+## Examples
+
+### Same-Stack Component Dependency
+
+The simplest case: a component depends on another component in the same stack.
+
+<File title="stacks/catalog/network.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+
+    subnet:
+      dependencies:
+        components:
+          - name: vpc
+      vars:
+        vpc_id: !terraform.output vpc.vpc_id
+```
+</File>
+
+### Cross-Stack Component Dependencies
+
+Use the `stack` field or templates to depend on components in different stacks.
+
+<File title="stacks/orgs/acme/plat/dev/us-east-1.yaml">
+```yaml
+vars:
+  tenant: acme
+  environment: ue1
+  stage: dev
+
+components:
+  terraform:
+    app:
+      dependencies:
+        components:
+          # Depend on vpc in the same stack (no stack field needed)
+          - name: vpc
+
+          # Depend on shared-services in a specific stack
+          - name: shared-services
+            stack: acme-ue1-network
+
+          # Depend on rds in prod using a template
+          - name: rds
+            stack: "{{ .vars.tenant }}-{{ .vars.environment }}-prod"
+
+          # Depend on tgw/hub in a different region using a template
+          - name: tgw/hub
+            stack: "{{ .vars.tenant }}-uw2-{{ .vars.stage }}"
+```
+</File>
+
+### File and Folder Dependencies
+
+Trigger `atmos describe affected` when external files or folders change. Use the sibling `dependencies.files` and `dependencies.folders` keys.
+
+<File title="stacks/catalog/lambda.yaml">
+```yaml
+components:
+  terraform:
+    lambda-function:
+      dependencies:
+        # Re-deploy when the Lambda source code changes
+        folders:
+          - src/lambda/my-function
+
+        # Re-deploy when a specific config file changes
+        files:
+          - configs/lambda-settings.json
+
+        # Also depend on the vpc component
+        components:
+          - name: vpc
+```
+</File>
+
+### Cross-Type Dependencies
+
+Depend on components of a different type using the `kind` field.
+
+<File title="stacks/catalog/app.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      dependencies:
+        components:
+          # Terraform component (default kind for terraform components)
+          - name: vpc
+
+          # Helmfile component in a different stack
+          - name: nginx-ingress
+            kind: helmfile
+            stack: platform-stack
+
+          # Packer component
+          - name: base-ami
+            kind: packer
+```
+</File>
+
+## Merge Behavior
+
+By default, `dependencies.components` uses **replace merge** behavior during stack inheritance: a child stack's list of dependencies replaces (does not extend) the parent's list. To opt into append-merge behavior across imports, set `settings.list_merge_strategy: append` in `atmos.yaml`. The same rule applies to `dependencies.files` and `dependencies.folders`.
+
+### Default (replace)
+
+<File title="stacks/catalog/base.yaml">
+```yaml
+# Parent stack defines base dependencies
+components:
+  terraform:
+    vpc:
+      dependencies:
+        components:
+          - name: account-settings
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/base
+
+components:
+  terraform:
+    vpc:
+      dependencies:
+        components:
+          # This REPLACES the parent's list
+          - name: network-baseline
+
+# Result: vpc depends on network-baseline only.
+# `account-settings` from the parent is NOT inherited.
+```
+</File>
+
+### Opt-in append
+
+Configure list-merge once globally in `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  list_merge_strategy: append
+```
+</File>
+
+With that set, child `dependencies.components` lists extend the parent's list — in the example above, `vpc` would depend on both `account-settings` and `network-baseline`.
+
+:::tip
+Other valid `list_merge_strategy` values are `replace` (default), `append`, and `merge`. See the [`settings` reference](/cli/configuration/settings) for full semantics.
+:::
+
+## Integration with `atmos describe affected`
+
+`dependencies.components`, `dependencies.files`, and `dependencies.folders` are all consumed by [`atmos describe affected`](/cli/commands/describe/affected) to determine which components are impacted by changes.
+
+### How It Works
+
+When you run `atmos describe affected`:
+
+1. Atmos compares the current branch to the target branch (e.g., `main`)
+2. It identifies changed files (stack configs, component code)
+3. It checks `dependencies.files` / `dependencies.folders` for path-based matches against the changed file set
+4. It walks `dependencies.components` to propagate impact through the dependency graph
+5. Components touched directly or transitively are marked as "affected"
+
+### Example: File Dependency
+
+<File title="stacks/catalog/lambda.yaml">
+```yaml
+components:
+  terraform:
+    my-lambda:
+      dependencies:
+        folders:
+          - src/lambda/handler
+```
+</File>
+
+```bash
+# If src/lambda/handler/index.js changed:
+atmos describe affected --ref refs/heads/main
+
+# Output includes my-lambda because its dependency folder changed
+```
+
+### Example: Component Dependency
+
+If component A depends on component B, and component B is affected by changes, component A is also marked as affected (transitive dependency).
+
+## Viewing Dependencies
+
+### List Dependents
+
+Find all components that depend on a specific component:
+
+<Terminal title="atmos describe dependents vpc -s tenant1-ue1-dev --pager off">
+```shell
+> atmos describe dependents vpc -s tenant1-ue1-dev --pager off
+```
+
+```json
+[
+  {
+    "component": "subnet",
+    "component_type": "terraform",
+    "stack": "tenant1-ue1-dev",
+    "stack_slug": "tenant1-ue1-dev-subnet"
+  },
+  {
+    "component": "security-group",
+    "component_type": "terraform",
+    "stack": "tenant1-ue1-dev",
+    "stack_slug": "tenant1-ue1-dev-security-group"
+  }
+]
+```
+</Terminal>
+
+### List Affected Components
+
+Find all components affected by changes in a branch:
+
+<Terminal title="atmos describe affected --ref refs/heads/main">
+```shell
+> atmos describe affected --ref refs/heads/main
+```
+
+```json
+[
+  {
+    "component": "vpc",
+    "stack": "tenant1-ue1-dev",
+    "affected": "component"
+  },
+  {
+    "component": "subnet",
+    "stack": "tenant1-ue1-dev",
+    "affected": "folder"
+  }
+]
+```
+</Terminal>
+
+## Best Practices
+
+1. **Declare All Dependencies** - Be explicit about dependencies, even if the order seems obvious
+2. **Avoid Circular Dependencies** - Component A cannot depend on B if B depends on A
+3. **Use Templates for Cross-Stack** - Use `{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}` instead of hardcoded stack names
+4. **Combine with YAML Functions** - Use `!terraform.output` to pass data between dependent components
+5. **Test with `describe affected`** - Verify your dependencies work correctly in CI/CD
+6. **Prefer `name:` over `component:`** - In new configurations, use `name:` inside `dependencies.components[]` for clarity
+7. **Prefer `dependencies.files` / `dependencies.folders` over inline `kind: file/folder`** - Cleaner separation between component-graph dependencies and path-watch dependencies
+
+## Legacy entry shapes (still supported)
+
+These older shapes shipped in v1.210.0 and continue to parse for backward compatibility. They are still fully supported, but new configurations should use the canonical shapes shown above.
+
+### Legacy: `component:` instead of `name:`
+
+The `component:` field is the older spelling of `name:`. Both refer to the same value:
+
+<File title="Legacy form (still works)">
+```yaml
+components:
+  terraform:
+    subnet:
+      dependencies:
+        components:
+          - component: vpc      # legacy spelling — equivalent to `name: vpc`
+```
+</File>
+
+<File title="Canonical form (preferred)">
+```yaml
+components:
+  terraform:
+    subnet:
+      dependencies:
+        components:
+          - name: vpc
+```
+</File>
+
+Setting `name:` and `component:` to different values on the same entry is a configuration error.
+
+### Legacy: inline `kind: file` / `kind: folder`
+
+Path-based dependencies originally had to be declared inside `dependencies.components[]` using `kind: file` or `kind: folder` with a `path:` field. This still works, but the sibling keys are clearer:
+
+<File title="Legacy inline form (still works)">
+```yaml
+components:
+  terraform:
+    lambda:
+      dependencies:
+        components:
+          - kind: file
+            path: configs/lambda-settings.json
+          - kind: folder
+            path: src/lambda/handler
+          - component: vpc
+```
+</File>
+
+<File title="Canonical sibling-key form (preferred)">
+```yaml
+components:
+  terraform:
+    lambda:
+      dependencies:
+        files:
+          - configs/lambda-settings.json
+        folders:
+          - src/lambda/handler
+        components:
+          - name: vpc
+```
+</File>
+
+Both forms produce identical behavior in `atmos describe affected` and `atmos describe dependents`. They can also be mixed within the same component.
+
+## Migration from `settings.depends_on`
+
+If you're using the much older `settings.depends_on` format:
+
+<File title="Old format (deprecated)">
+```yaml
+settings:
+  depends_on:
+    1:
+      component: vpc
+    2:
+      component: rds
+      stage: prod
+```
+</File>
+
+<File title="New format (recommended)">
+```yaml
+dependencies:
+  components:
+    - name: vpc
+    - name: rds
+      stack: "{{ .vars.tenant }}-{{ .vars.environment }}-prod"
+```
+</File>
+
+### Key Differences
+
+| Feature | `settings.depends_on` | `dependencies.*` (current) |
+|---------|----------------------|---------------------------|
+| Format | Map with numeric keys | List(s) under sibling keys |
+| Merge behavior | Deep merge (complex) | Per-list (replace by default, append opt-in) |
+| Location | Under `settings` | Under `dependencies` |
+| Cross-stack | `namespace`, `tenant`, `environment`, `stage` fields | `stack` field only (use templates) |
+| Cross-type | Not supported | Use `kind` field on `components[]` (terraform, helmfile, packer, etc.) |
+| File/folder deps | `file` and `folder` fields per entry | `dependencies.files` and `dependencies.folders` sibling keys |
+
+Both formats continue to work. The new format is recommended for new configurations.
+
+## Related Documentation
+
+- [Dependencies Overview](/stacks/dependencies) - Tool and component dependencies overview
+- [describe dependents](/cli/commands/describe/dependents) - List components that depend on a component
+- [describe affected](/cli/commands/describe/affected) - List components affected by changes
+- [YAML Functions](/functions/yaml) - Using `!terraform.output` for cross-component data
+- [Spacelift Integration](/cli/configuration/integrations/spacelift) - CI/CD integration with dependency ordering

@@ -1,0 +1,20 @@
+# Defaults file for the acme/dev environment.
+#
+# This file is listed under `stacks.excluded_paths` in atmos.yaml so it is
+# NOT processed as a standalone stack. It is only reachable via `import:` from
+# stack manifests below this directory.
+#
+# The `auth:` block here declares the default identity that every stack under
+# acme/dev/** should authenticate as. Per issue #2293, the current
+# pre-scanner in pkg/config/stack_auth_loader.go cannot see this block because
+# it never opens this file (it is filtered out by the exclude glob), and it
+# does not follow `import:` chains from the files it does open.
+
+vars:
+  tenant: acme
+  stage: dev
+
+auth:
+  identities:
+    dev-identity:
+      default: true

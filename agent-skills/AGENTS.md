@@ -73,6 +73,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Toolchain management: install/exec/search tools, .tool-versions, Aqua registries, custom registries, aliases         | `atmos-toolchain`       | `agent-skills/skills/atmos-toolchain/SKILL.md`       |
 | Introspection: describe component/stacks/affected/dependents, list stacks/components/instances, querying, provenance | `atmos-introspection`   | `agent-skills/skills/atmos-introspection/SKILL.md`   |
 | Devcontainers: start/stop/attach/exec/shell, Docker/Podman, identity integration, instance management (experimental) | `atmos-devcontainer`    | `agent-skills/skills/atmos-devcontainer/SKILL.md`    |
+| AWS security: analyze findings, map to components/stacks, structured remediation, compliance reports                  | `atmos-aws-security`    | `agent-skills/skills/atmos-aws-security/SKILL.md`    |
 
 ## Common Patterns
 

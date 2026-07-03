@@ -1,9 +1,9 @@
 package env
 
 import (
-	"fmt"
 	"os"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -19,12 +19,18 @@ func WriteToFile(path string, content string) error {
 
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFileMode)
 	if err != nil {
-		return fmt.Errorf("failed to open file '%s': %w", path, err)
+		return errUtils.Build(errUtils.ErrOpenFile).
+			WithCause(err).
+			WithContext("path", path).
+			Err()
 	}
 	defer f.Close()
 
 	if _, err := f.WriteString(content); err != nil {
-		return fmt.Errorf("failed to write to file '%s': %w", path, err)
+		return errUtils.Build(errUtils.ErrWriteFile).
+			WithCause(err).
+			WithContext("path", path).
+			Err()
 	}
 
 	return nil
