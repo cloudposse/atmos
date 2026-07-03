@@ -1,7 +1,5 @@
 # Required dependencies for generating screengrabs
-
-# ANSI HTML Adapter - converts ANSI terminal output to HTML
-brew "aha"
+# (ANSI-to-HTML conversion is native now — no aha required.)
 
 # Bat - cat clone with syntax highlighting (aliased as cat in demo scripts)
 brew "bat"

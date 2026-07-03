@@ -706,10 +706,14 @@ type HTTPExpect struct {
 
 // CastOutput defines output artifact paths for a cast workflow step.
 type CastOutput struct {
-	Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
-	Cast string `yaml:"cast,omitempty" json:"cast,omitempty" mapstructure:"cast"`
-	GIF  string `yaml:"gif,omitempty" json:"gif,omitempty" mapstructure:"gif"`
-	MP4  string `yaml:"mp4,omitempty" json:"mp4,omitempty" mapstructure:"mp4"`
+	Mode  string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+	Cast  string `yaml:"cast,omitempty" json:"cast,omitempty" mapstructure:"cast"`
+	GIF   string `yaml:"gif,omitempty" json:"gif,omitempty" mapstructure:"gif"`
+	MP4   string `yaml:"mp4,omitempty" json:"mp4,omitempty" mapstructure:"mp4"`
+	HTML  string `yaml:"html,omitempty" json:"html,omitempty" mapstructure:"html"`
+	ASCII string `yaml:"ascii,omitempty" json:"ascii,omitempty" mapstructure:"ascii"`
+	PNG   string `yaml:"png,omitempty" json:"png,omitempty" mapstructure:"png"`
+	JPG   string `yaml:"jpg,omitempty" json:"jpg,omitempty" mapstructure:"jpg"`
 }
 
 // WorkflowDefinition represents a complete workflow with steps.

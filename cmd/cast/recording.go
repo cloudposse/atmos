@@ -3,6 +3,7 @@ package cast
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,7 +36,7 @@ var activeCast *activeRecording
 
 // RegisterRecordingFlag registers the global --cast flag on the root command.
 func RegisterRecordingFlag(flags *pflag.FlagSet) {
-	flags.String(FlagName, "", "Record command output as an asciinema cast (--cast for generated path, --cast=path.cast|path.gif|path.mp4 for explicit output)")
+	flags.String(FlagName, "", "Record command output as an asciinema cast (--cast for generated path, --cast=path with a .cast, .gif, .mp4, .html, .ascii, .png, .jpg, or .jpeg extension for explicit output)")
 	if castFlag := flags.Lookup(FlagName); castFlag != nil {
 		castFlag.NoOptDefVal = autoFlagValue
 	}
@@ -45,14 +46,9 @@ func RegisterRecordingFlag(flags *pflag.FlagSet) {
 func StartRecordingIfRequested(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, args []string) error {
 	defer perf.Track(atmosConfig, "cmd.cast.StartRecordingIfRequested")()
 
-	if isCompletionCommand(cmd) || cmd.Name() == "help" || cmd.Flags().Changed("help") {
-		return nil
-	}
-
 	castFlag := cmd.Flags().Lookup(FlagName)
 	flagChanged := castFlag != nil && castFlag.Changed
-	enabled := atmosConfig.Cast.Recording.Enabled || flagChanged
-	if !enabled {
+	if skipRecording(cmd, atmosConfig, flagChanged) {
 		return nil
 	}
 
@@ -76,6 +72,21 @@ func StartRecordingIfRequested(cmd *cobra.Command, atmosConfig *schema.AtmosConf
 		removeCast:   plan.removeCast,
 	}
 	return nil
+}
+
+// skipRecording reports whether cast recording should not start for this
+// invocation. Help output is recorded only when --cast is passed explicitly;
+// implicit (config-enabled) recording skips it so casual `--help` calls are
+// not captured. Explicit help recording powers the docs screengrab pipeline.
+func skipRecording(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, flagChanged bool) bool {
+	if isCompletionCommand(cmd) {
+		return true
+	}
+	isHelp := cmd.Name() == "help" || cmd.Flags().Changed("help")
+	if isHelp && !flagChanged {
+		return true
+	}
+	return !atmosConfig.Cast.Recording.Enabled && !flagChanged
 }
 
 type recordingOutputPlan struct {
@@ -130,7 +141,7 @@ func planRecordingOutput(value string, explicit bool) (recordingOutputPlan, erro
 	switch ext {
 	case ".cast":
 		return recordingOutputPlan{castPath: value, explicitCast: true}, nil
-	case ".gif", ".mp4":
+	case ".gif", ".mp4", ".html", ".ascii", ".png", ".jpg", ".jpeg":
 		return planRenderedRecordingOutput(value)
 	default:
 		return recordingOutputPlan{}, fmt.Errorf("%w: %s", errUtils.ErrUnsupportedCastOutputExtension, value)
@@ -165,6 +176,37 @@ func recordedCommandArgs(args []string) []string {
 		result = append(result, arg)
 	}
 	return result
+}
+
+// StartHelpRecording starts a cast recording for help output when an explicit
+// --cast flag requests one, and returns a writer that records what is written
+// to it as cast output events. Cobra renders help before the persistent
+// pre-run hooks fire, so the custom help function starts the recording itself
+// and tees the rendered help through the returned writer. It returns nil when
+// no recording is active or requested.
+func StartHelpRecording(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) io.Writer {
+	defer perf.Track(atmosConfig, "cmd.cast.StartHelpRecording")()
+
+	if activeCast == nil {
+		if err := StartRecordingIfRequested(cmd, atmosConfig, os.Args[1:]); err != nil {
+			_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Failed to start cast recording: %v\n", err)
+			return nil
+		}
+	}
+	if activeCast == nil {
+		return nil
+	}
+	return &recorderOutputWriter{rec: activeCast.recorder}
+}
+
+// recorderOutputWriter records writes as cast output events.
+type recorderOutputWriter struct {
+	rec *asciicast.Recorder
+}
+
+func (w *recorderOutputWriter) Write(p []byte) (int, error) {
+	w.rec.Record("o", string(p))
+	return len(p), nil
 }
 
 // FinalizeRecording closes the active root-command cast recorder, if one is running.
@@ -204,9 +246,17 @@ func FinalizeRecording() {
 func renderRecordedCast(castPath, output string) error {
 	switch strings.ToLower(filepath.Ext(output)) {
 	case ".gif":
-		return asciicast.Render(castPath, asciicast.RenderOptions{GIF: output})
+		return asciicast.Render(castPath, &asciicast.RenderOptions{GIF: output})
 	case ".mp4":
-		return asciicast.Render(castPath, asciicast.RenderOptions{MP4: output})
+		return asciicast.Render(castPath, &asciicast.RenderOptions{MP4: output})
+	case ".html":
+		return asciicast.Render(castPath, &asciicast.RenderOptions{HTML: output})
+	case ".ascii":
+		return asciicast.Render(castPath, &asciicast.RenderOptions{ASCII: output})
+	case ".png":
+		return asciicast.Render(castPath, &asciicast.RenderOptions{PNG: output})
+	case ".jpg", ".jpeg":
+		return asciicast.Render(castPath, &asciicast.RenderOptions{JPEG: output})
 	default:
 		return fmt.Errorf("%w: %s", errUtils.ErrUnsupportedCastOutputExtension, output)
 	}

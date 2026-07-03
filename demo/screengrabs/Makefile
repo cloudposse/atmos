@@ -8,12 +8,9 @@ install:
 	@cp -a artifacts/* $(INSTALL_PATH)
 
 build-all:
-	@./build-all.sh demo-stacks.txt
+	@go run . demo-stacks.txt
 	@echo "Validating screengrabs..."
 	@! grep -r "atmos: not found" artifacts/ || (echo "ERROR: Found 'atmos: not found' in screengrabs" && exit 1)
-	@! grep -r "COMMAND_EXIT_CODE" artifacts/ || (echo "ERROR: Found 'COMMAND_EXIT_CODE' in screengrabs" && exit 1)
-	@! grep -r "Script started" artifacts/ || (echo "ERROR: Found 'Script started' messages in screengrabs" && exit 1)
-	@! grep -r "Script done" artifacts/ || (echo "ERROR: Found 'Script done' messages in screengrabs" && exit 1)
 	@echo "✓ All screengrabs validated successfully"
 
 # Generate screengrabs using Docker (cross-platform, recommended)
@@ -27,7 +24,8 @@ docker-build:
 		ubuntu:22.04 bash -c ' \
 		set -e && \
 		apt-get update -qq && \
-		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq aha make wget tar tree && \
+		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq make wget tar tree bat && \
+		ln -sf /usr/bin/batcat /usr/local/bin/bat && \
 		echo "Installing Go 1.26..." && \
 		ARCH=$$(uname -m | sed "s/x86_64/amd64/; s/aarch64/arm64/") && \
 		wget -q https://go.dev/dl/go1.26.0.linux-$$ARCH.tar.gz && \
@@ -38,13 +36,10 @@ docker-build:
 		cd /workspace && \
 		GOMEMLIMIT=3GiB go build -p 2 -o /usr/local/bin/atmos . && \
 		atmos version && \
+		atmos toolchain install hashicorp/terraform && \
+		eval "$$(atmos toolchain env --format=bash)" && \
 		cd /workspace/demo/screengrabs && \
-		make build-all && \
-		echo "Validating screengrabs..." && \
-		! grep -r "atmos: not found" artifacts/ && \
-		! grep -r "COMMAND_EXIT_CODE" artifacts/ && \
-		! grep -r "Script started" artifacts/ && \
-		! grep -r "Script done" artifacts/ \
+		make build-all \
 		'
 	@echo "Screengrabs generated and validated successfully in artifacts/"
 

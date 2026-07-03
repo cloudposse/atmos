@@ -139,11 +139,21 @@ func Start(opts *Options) (*Recorder, error) {
 		command:    strings.Join(opts.Command, " "),
 		outputRate: opts.OutputRate,
 	}
-	header := Header{
+	if err := writeRecorderHeader(rec, newRecorderHeader(rec, opts, started)); err != nil {
+		_ = rec.Close()
+		_ = os.Remove(path)
+		return nil, err
+	}
+	return rec, nil
+}
+
+// newRecorderHeader builds the asciicast v3 header for a new recording.
+func newRecorderHeader(rec *Recorder, opts *Options, started time.Time) Header {
+	return Header{
 		Version: 3,
 		Term: &Term{
-			Cols: width,
-			Rows: height,
+			Cols: rec.width,
+			Rows: rec.height,
 			Type: terminalType(opts.Env),
 		},
 		Timestamp: started.Unix(),
@@ -151,12 +161,6 @@ func Start(opts *Options) (*Recorder, error) {
 		Command:   rec.command,
 		Env:       safeEnvV3(opts.Env),
 	}
-	if err := writeRecorderHeader(rec, header); err != nil {
-		_ = rec.Close()
-		_ = os.Remove(path)
-		return nil, err
-	}
-	return rec, nil
 }
 
 // Path returns the cast file path used by the recorder.

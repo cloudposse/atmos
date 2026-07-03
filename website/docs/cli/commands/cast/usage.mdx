@@ -24,8 +24,14 @@ Use the global `--cast` flag to record Atmos command output, then use `atmos cas
 atmos <command> --cast=<output.cast>
 atmos <command> --cast=<output.gif>
 atmos <command> --cast=<output.mp4>
+atmos <command> --cast=<output.html>
+atmos <command> --cast=<output.ascii>
+atmos <command> --cast=<output.png>
+atmos <command> --cast=<output.jpg>
 atmos cast <subcommand> [arguments] [flags]
 ```
+
+When the output extension is a rendered format (anything other than `.cast`), Atmos records to a temporary cast and renders it when the command finishes. The static formats (`.html`, `.ascii`, `.png`, `.jpg`) are rendered natively with no external tools.
 
 ## Subcommands
 

@@ -1963,6 +1963,14 @@ func initCobraConfig() {
 			showUsageAndExit(command, arguments)
 		}
 
+		// Cobra renders help before the persistent pre-run hooks fire, so an
+		// explicit --cast flag starts its recording here and tees the rendered
+		// help output into the cast (used by the docs screengrab pipeline).
+		if recordWriter := castcmd.StartHelpRecording(command, &atmosConfig); recordWriter != nil {
+			command.SetOut(io.MultiWriter(command.OutOrStdout(), recordWriter))
+			defer castcmd.FinalizeRecording()
+		}
+
 		// Distinguish between interactive 'atmos help' and flag-based '--help':
 		// - 'atmos help' (Contains "help" but NOT "--help" or "-h") → interactive, may use pager
 		// - 'atmos --help' or 'atmos cmd --help' → simple output, NO pager unless --pager explicitly set

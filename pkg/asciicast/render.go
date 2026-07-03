@@ -25,6 +25,12 @@ var (
 	ErrMissingFFmpeg = errUtils.ErrMissingFFmpeg
 )
 
+const (
+	initialScanBuffer = 64 * 1024
+	// MaxEventTokenSize bounds a single cast event line (16 MiB).
+	maxEventTokenSize = 16 * 1024 * 1024
+)
+
 // Event is one asciicast v2 event entry.
 type Event struct {
 	Time   float64
@@ -43,6 +49,9 @@ func ReadEvents(path string) (Header, []Event, error) {
 	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
+	// A single event can carry large payloads (e.g. a shell completion script
+	// in one write); the default 64 KiB token limit is too small.
+	scanner.Buffer(make([]byte, 0, initialScanBuffer), maxEventTokenSize)
 	if !scanner.Scan() {
 		return Header{}, nil, fmt.Errorf("%w: %s", ErrEmptyCastFile, path)
 	}
@@ -53,33 +62,55 @@ func ReadEvents(path string) (Header, []Event, error) {
 	var events []Event
 	var absoluteTime float64
 	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) > 0 && line[0] == '#' {
+		event, ok, err := parseEventLine(scanner.Bytes())
+		if err != nil {
+			return Header{}, nil, err
+		}
+		if !ok {
 			continue
 		}
-		var raw []any
-		if err := json.Unmarshal(line, &raw); err != nil {
-			return Header{}, nil, fmt.Errorf("decode cast event: %w", err)
-		}
-		if len(raw) != 3 {
-			continue
-		}
-		t, _ := raw[0].(float64)
-		stream, _ := raw[1].(string)
-		data, _ := raw[2].(string)
+		// Unknown streams are excluded from the result but still advance the
+		// v3 relative-time accumulator so later event times stay correct.
 		if header.Version == 3 {
-			absoluteTime += t
-			t = absoluteTime
+			absoluteTime += event.Time
+			event.Time = absoluteTime
 		}
-		if stream != "o" && stream != "i" && stream != "e" && stream != "r" && stream != "m" {
-			continue
+		if isKnownStream(event.Stream) {
+			events = append(events, event)
 		}
-		events = append(events, Event{Time: t, Stream: stream, Data: data})
 	}
 	if err := scanner.Err(); err != nil {
 		return Header{}, nil, err
 	}
 	return header, events, nil
+}
+
+// parseEventLine decodes one asciicast event line. It returns ok=false for
+// comments and structurally malformed records.
+func parseEventLine(line []byte) (Event, bool, error) {
+	if len(line) > 0 && line[0] == '#' {
+		return Event{}, false, nil
+	}
+	var raw []any
+	if err := json.Unmarshal(line, &raw); err != nil {
+		return Event{}, false, fmt.Errorf("decode cast event: %w", err)
+	}
+	if len(raw) != 3 {
+		return Event{}, false, nil
+	}
+	t, _ := raw[0].(float64)
+	stream, _ := raw[1].(string)
+	data, _ := raw[2].(string)
+	return Event{Time: t, Stream: stream, Data: data}, true, nil
+}
+
+func isKnownStream(stream string) bool {
+	switch stream {
+	case "o", "i", "e", "r", "m":
+		return true
+	default:
+		return false
+	}
 }
 
 // Play replays an asciicast file to the provided writer.
@@ -108,14 +139,21 @@ func Play(path string, out io.Writer) error {
 
 // RenderOptions selects the render outputs to generate from a cast file.
 type RenderOptions struct {
-	GIF string
-	MP4 string
+	GIF   string
+	MP4   string
+	HTML  string
+	ASCII string
+	PNG   string
+	JPEG  string
 }
 
 // Render generates requested media outputs from an asciicast file.
-func Render(input string, opts RenderOptions) error {
+func Render(input string, opts *RenderOptions) error {
 	defer perf.Track(nil, "asciicast.Render")()
 
+	if opts == nil {
+		return nil
+	}
 	targets := renderTargets(opts)
 	for _, target := range targets {
 		if err := prepareRenderOutput(target.output); err != nil {
@@ -135,13 +173,23 @@ type renderTarget struct {
 	render func(input, output string) error
 }
 
-func renderTargets(opts RenderOptions) []renderTarget {
-	targets := make([]renderTarget, 0, 2)
-	if opts.GIF != "" {
-		targets = append(targets, renderTarget{output: opts.GIF, render: renderWithAgg})
+func renderTargets(opts *RenderOptions) []renderTarget {
+	specs := []struct {
+		output string
+		render func(input, output string) error
+	}{
+		{opts.GIF, renderWithAgg},
+		{opts.MP4, renderMP4},
+		{opts.HTML, RenderHTML},
+		{opts.ASCII, RenderASCII},
+		{opts.PNG, RenderPNG},
+		{opts.JPEG, RenderJPEG},
 	}
-	if opts.MP4 != "" {
-		targets = append(targets, renderTarget{output: opts.MP4, render: renderMP4})
+	targets := make([]renderTarget, 0, len(specs))
+	for _, spec := range specs {
+		if spec.output != "" {
+			targets = append(targets, renderTarget{output: spec.output, render: spec.render})
+		}
 	}
 	return targets
 }

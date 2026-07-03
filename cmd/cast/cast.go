@@ -29,21 +29,34 @@ var playCmd = &cobra.Command{
 
 var renderCmd = &cobra.Command{
 	Use:   "render <input.cast>",
-	Short: "Render an asciicast recording to GIF or MP4",
+	Short: "Render an asciicast recording to GIF, MP4, HTML, ASCII, PNG, or JPEG",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		gif, _ := cmd.Flags().GetString("gif")
-		mp4, _ := cmd.Flags().GetString("mp4")
-		if gif == "" && mp4 == "" {
+		opts := asciicast.RenderOptions{}
+		for flag, target := range map[string]*string{
+			"gif":   &opts.GIF,
+			"mp4":   &opts.MP4,
+			"html":  &opts.HTML,
+			"ascii": &opts.ASCII,
+			"png":   &opts.PNG,
+			"jpg":   &opts.JPEG,
+		} {
+			*target, _ = cmd.Flags().GetString(flag)
+		}
+		if opts == (asciicast.RenderOptions{}) {
 			return fmt.Errorf("%w", errUtils.ErrMissingRenderOutput)
 		}
-		return asciicast.Render(args[0], asciicast.RenderOptions{GIF: gif, MP4: mp4})
+		return asciicast.Render(args[0], &opts)
 	},
 }
 
 func init() {
 	renderCmd.Flags().String("gif", "", "Write animated GIF output to this path")
 	renderCmd.Flags().String("mp4", "", "Write MP4 output to this path")
+	renderCmd.Flags().String("html", "", "Write a static HTML fragment of the final terminal content to this path")
+	renderCmd.Flags().String("ascii", "", "Write the final terminal content as plain text (no ANSI codes) to this path")
+	renderCmd.Flags().String("png", "", "Write a static PNG image of the final terminal content to this path")
+	renderCmd.Flags().String("jpg", "", "Write a static JPEG image of the final terminal content to this path")
 	castCmd.AddCommand(playCmd, renderCmd)
 	internal.Register(&CommandProvider{})
 }

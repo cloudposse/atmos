@@ -68,7 +68,8 @@ FLAGS
       --base-path string                     Base path for Atmos project
 
       --cast string                          Record command output as an asciinema cast (--cast for generated path, --
-                                             cast=path.cast|path.gif|path.mp4 for explicit output)
+                                             cast=path with a .cast, .gif, .mp4, .html, .ascii, .png, .jpg, or .jpeg
+                                             extension for explicit output)
 
   -C, --chdir string                         Change working directory before executing the command (run as if Atmos
                                              started in this directory)

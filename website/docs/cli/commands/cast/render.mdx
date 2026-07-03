@@ -3,14 +3,14 @@ title: atmos cast render
 sidebar_label: render
 sidebar_class_name: command
 id: render
-description: Render an asciicast recording to GIF or MP4.
+description: Render an asciicast recording to GIF, MP4, HTML, ASCII, PNG, or JPEG.
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
-Use this command to render an asciicast recording to a publishable media file.
+Use this command to render an asciicast recording to a publishable media file: animated GIF/MP4, a static HTML fragment, plain text with no ANSI codes, or a static PNG/JPEG image.
 </Intro>
 
 <CastPlayer src="/casts/cli/commands/cast/render.cast" title="atmos cast render" chrome controls scrubber />
@@ -20,10 +20,14 @@ Use this command to render an asciicast recording to a publishable media file.
 ## Usage
 
 ```shell
-atmos cast render <input.cast> [--gif <file>] [--mp4 <file>]
+atmos cast render <input.cast> [--gif <file>] [--mp4 <file>] [--html <file>] [--ascii <file>] [--png <file>] [--jpg <file>]
 ```
 
 At least one output flag is required.
+
+The animated formats (GIF, MP4) replay the recording over time and require external tools (`agg`, and `ffmpeg` for MP4). The static formats (HTML, ASCII, PNG, JPEG) are rendered natively by Atmos with no external dependencies: the recording's output is laid out on a terminal cell grid, and the final content is emitted in the requested format.
+
+ASCII output is a durable, diffable artifact: it is cheap to commit to git and can be consumed directly by other tooling (such as Atmos Pro) without an asciicast player.
 
 ## Arguments
 
@@ -36,17 +40,38 @@ At least one output flag is required.
 
 <dl>
   <dt>`--gif`</dt>
-  <dd>Write animated GIF output to this path.</dd>
+  <dd>Write animated GIF output to this path (requires `agg`).</dd>
 
   <dt>`--mp4`</dt>
-  <dd>Write MP4 output to this path.</dd>
+  <dd>Write MP4 output to this path (requires `agg` and `ffmpeg`).</dd>
+
+  <dt>`--html`</dt>
+  <dd>Write a static HTML fragment of the final terminal content to this path. The fragment contains inline-styled `<span>` elements suitable for embedding inside a `<pre>` block.</dd>
+
+  <dt>`--ascii`</dt>
+  <dd>Write the final terminal content as plain text (no ANSI escape codes) to this path.</dd>
+
+  <dt>`--png`</dt>
+  <dd>Write a static PNG image of the final terminal content to this path.</dd>
+
+  <dt>`--jpg`</dt>
+  <dd>Write a static JPEG image of the final terminal content to this path.</dd>
 </dl>
 
 ## Examples
 
 ```shell
-atmos cast render ./artifacts/demo.cast --gif ./artifacts/demo.gif
-atmos cast render ./artifacts/demo.cast --gif ./artifacts/demo.gif --mp4 ./artifacts/demo.mp4
+atmos cast render ./artifacts/demo.cast --gif=./artifacts/demo.gif
+atmos cast render ./artifacts/demo.cast --gif=./artifacts/demo.gif --mp4=./artifacts/demo.mp4
+atmos cast render ./artifacts/demo.cast --html=./artifacts/demo.html --ascii=./artifacts/demo.ascii
+atmos cast render ./artifacts/demo.cast --png=./artifacts/demo.png --jpg=./artifacts/demo.jpg
+```
+
+You can also record and render in one step with the global `--cast` flag; the format is chosen by the file extension:
+
+```shell
+atmos list stacks --cast=stacks.png
+atmos about --help --cast=about-help.html
 ```
 
 ## See Also

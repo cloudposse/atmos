@@ -158,6 +158,97 @@ func TestPlanRecordingOutputUsesExtension(t *testing.T) {
 	}
 }
 
+func TestStartRecordingRecordsHelpWhenCastFlagExplicit(t *testing.T) {
+	activeCast = nil
+	castPath := filepath.Join(t.TempDir(), "help.cast")
+	t.Cleanup(func() {
+		if activeCast != nil {
+			FinalizeRecording()
+		}
+	})
+
+	cmd := newRecordingTestCommand("about")
+	cmd.Flags().Bool("help", false, "")
+	if err := cmd.Flags().Set("help", "true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set(FlagName, castPath); err != nil {
+		t.Fatal(err)
+	}
+
+	err := StartRecordingIfRequested(cmd, &schema.AtmosConfiguration{}, []string{"about", "--help", "--cast=" + castPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if activeCast == nil {
+		t.Fatal("explicit --cast should record help output")
+	}
+	FinalizeRecording()
+	if _, err := os.Stat(castPath); err != nil {
+		t.Fatalf("cast file missing: %v", err)
+	}
+}
+
+func TestStartRecordingStillSkipsHelpWithImplicitRecording(t *testing.T) {
+	activeCast = nil
+	t.Cleanup(func() {
+		if activeCast != nil {
+			FinalizeRecording()
+		}
+	})
+
+	cmd := newRecordingTestCommand("about")
+	cmd.Flags().Bool("help", false, "")
+	if err := cmd.Flags().Set("help", "true"); err != nil {
+		t.Fatal(err)
+	}
+
+	err := StartRecordingIfRequested(
+		cmd,
+		&schema.AtmosConfiguration{
+			Cast: schema.CastConfig{Recording: schema.CastRecordingConfig{Enabled: true, BasePath: t.TempDir()}},
+		},
+		[]string{"about", "--help"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if activeCast != nil {
+		t.Fatal("config-enabled recording must not capture help output")
+	}
+}
+
+func TestPlanRecordingOutputAcceptsStaticRenderExtensions(t *testing.T) {
+	for _, ext := range []string{".html", ".ascii", ".png", ".jpg", ".jpeg"} {
+		output := filepath.Join(t.TempDir(), "demo"+ext)
+		plan, err := planRecordingOutput(output, true)
+		if err != nil {
+			t.Fatalf("%s: %v", ext, err)
+		}
+		if plan.renderOutput != output || !plan.removeCast {
+			t.Fatalf("%s: unexpected plan: %#v", ext, plan)
+		}
+	}
+}
+
+func TestRenderRecordedCastDispatchesStaticFormats(t *testing.T) {
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	castContent := `{"version":3,"term":{"cols":10,"rows":2}}` + "\n" + `[0.1,"o","hello\n"]` + "\n"
+	if err := os.WriteFile(castPath, []byte(castContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, ext := range []string{".html", ".ascii", ".png", ".jpg", ".jpeg"} {
+		output := filepath.Join(t.TempDir(), "out"+ext)
+		if err := renderRecordedCast(castPath, output); err != nil {
+			t.Fatalf("%s: %v", ext, err)
+		}
+		info, err := os.Stat(output)
+		if err != nil || info.Size() == 0 {
+			t.Fatalf("%s: output missing or empty: %v", ext, err)
+		}
+	}
+}
+
 func TestPlanRecordingOutputRejectsExistingRenderedOutput(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "demo.gif")
 	if err := os.WriteFile(output, []byte("exists"), 0o644); err != nil {

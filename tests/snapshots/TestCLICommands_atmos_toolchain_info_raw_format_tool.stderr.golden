@@ -10,6 +10,7 @@ Available Versions (latest 10):
                VERSION      DATE         TITLE                          
 ────────────────────────────────────────────────────────────────────────
                jq-X.X     YYYY-MM-DD   Security fixes                 
+               jq-X.X     YYYY-MM-DD   Security fixes                 
                jq-X.X     YYYY-MM-DD   Releasing                      
                jq-X.X     YYYY-MM-DD   Security                       
                jq-X.X       YYYY-MM-DD   What's Changed                 
@@ -18,6 +19,5 @@ Available Versions (latest 10):
                jq-X.X       YYYY-MM-DD   jq 1.4                         
                jq-X.X       YYYY-MM-DD   jq 1.3                         
                jq-X.X       YYYY-MM-DD   jq 1.2                         
-               jq-X.X       YYYY-MM-DD   jq 1.1                         
 
 💡 Use atmos toolchain install jqlang/jq@<version> to install

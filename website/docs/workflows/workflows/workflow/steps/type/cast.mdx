@@ -54,7 +54,10 @@ steps:
   <dd>Path for the generated `.cast` file.</dd>
 
   <dt>`output.gif`, `output.mp4`</dt>
-  <dd>Optional rendered outputs generated after the cast recording succeeds.</dd>
+  <dd>Optional animated outputs rendered after the cast recording succeeds (require external tools: `agg`, and `ffmpeg` for MP4).</dd>
+
+  <dt>`output.html`, `output.ascii`, `output.png`, `output.jpg`</dt>
+  <dd>Optional static outputs rendered natively from the recording's final terminal content — an inline-styled HTML fragment, plain text with no ANSI codes, or a terminal screenshot image. No external tools required. `.ascii` artifacts are cheap to commit and diff, and can be consumed by other tooling without an asciicast player.</dd>
 
   <dt>`defaults.cast`</dt>
   <dd>Recording defaults for the cast step. Supports `rate`, `width`, and `height`. Explicit top-level `rate`, `width`, or `height` fields on the cast step override these defaults.</dd>

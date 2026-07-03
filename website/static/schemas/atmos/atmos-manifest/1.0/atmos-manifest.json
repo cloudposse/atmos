@@ -1825,7 +1825,8 @@
                   "enum": [
                     "grouped",
                     "prefixed",
-                    "none"
+                    "none",
+                    "raw"
                   ]
                 },
                 "order": {
@@ -1840,6 +1841,34 @@
                 },
                 "prefix": {
                   "type": "string"
+                },
+                "cast": {
+                  "type": "string",
+                  "description": "Path to write the asciicast recording (cast steps)."
+                },
+                "gif": {
+                  "type": "string",
+                  "description": "Path to render an animated GIF from the cast recording (requires agg)."
+                },
+                "mp4": {
+                  "type": "string",
+                  "description": "Path to render an MP4 from the cast recording (requires agg and ffmpeg)."
+                },
+                "html": {
+                  "type": "string",
+                  "description": "Path to render a static HTML fragment of the final terminal content (native)."
+                },
+                "ascii": {
+                  "type": "string",
+                  "description": "Path to render the final terminal content as plain text with no ANSI codes (native)."
+                },
+                "png": {
+                  "type": "string",
+                  "description": "Path to render a static PNG image of the final terminal content (native)."
+                },
+                "jpg": {
+                  "type": "string",
+                  "description": "Path to render a static JPEG image of the final terminal content (native)."
                 }
               }
             }

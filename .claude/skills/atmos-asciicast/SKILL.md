@@ -66,4 +66,8 @@ Atmos casts are product demos, regression evidence, and documentation examples a
    <CastPlayer src="/casts/cli/describe-component.cast" title="describe component" chrome controls scrubber />
    ```
 
-6. Prefer committing only `.cast` files. Commit GIF/MP4/SVG derivatives only when a publishing target cannot consume the player.
+6. Prefer committing `.cast` files, optionally alongside `.ascii` derivatives (`atmos cast render <input.cast> --ascii=<output.ascii>`): plain text is cheap to commit, diffs cleanly in PRs, and is consumable by tooling like Atmos Pro without a player. Commit GIF/MP4/PNG/JPEG derivatives only when a publishing target cannot consume the player.
+
+## Static Render Formats
+
+`atmos cast render` supports native static outputs in addition to GIF/MP4: `--html` (inline-styled span fragment), `--ascii` (plain text, no ANSI), `--png`, and `--jpg`. These are rendered in-process from the recording's final terminal content — no `aha`, `agg`, or `ffmpeg` required. The global `--cast` flag accepts the same extensions (`--cast=out.png`), including on `--help` invocations, which is how the docs screengrab pipeline (`demo/screengrabs`, Go driver) generates the website's `.html`/`.ascii` artifacts.

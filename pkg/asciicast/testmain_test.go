@@ -13,6 +13,7 @@ import (
 const (
 	asciicastHelperEnv        = "_ATMOS_ASCIICAST_HELPER"
 	asciicastSessionHelperEnv = "_ATMOS_ASCIICAST_SESSION_HELPER"
+	asciicastExecHelperEnv    = "_ATMOS_ASCIICAST_EXEC_HELPER"
 )
 
 func TestMain(m *testing.M) {
@@ -24,7 +25,24 @@ func TestMain(m *testing.M) {
 		runAsciicastSessionHelper()
 		os.Exit(0)
 	}
+	if mode := os.Getenv(asciicastExecHelperEnv); mode != "" {
+		runAsciicastExecHelper(mode)
+		os.Exit(0)
+	}
 	os.Exit(m.Run())
+}
+
+// runAsciicastExecHelper lets exec tests use the test binary itself as a
+// cross-platform recorded command.
+func runAsciicastExecHelper(mode string) {
+	switch mode {
+	case "ok":
+		_, _ = os.Stdout.WriteString("stdout line\n")
+		_, _ = os.Stderr.WriteString("stderr line\n")
+	case "fail":
+		_, _ = os.Stdout.WriteString("about to fail\n")
+		os.Exit(3)
+	}
 }
 
 func runAsciicastToolHelper() {
