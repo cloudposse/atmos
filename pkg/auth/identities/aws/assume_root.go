@@ -202,6 +202,7 @@ func (i *assumeRootIdentity) Authenticate(ctx context.Context, baseCreds types.I
 	result, err := stsClient.AssumeRoot(ctx, assumeRootInput)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithCause(err).
 			WithExplanationf("Failed to assume root on account '%s'", i.targetPrincipal).
 			WithHint("Verify the target account is a member of your organization").
 			WithHint("Ensure centralized root access is enabled for the target account").
@@ -467,6 +468,7 @@ func (i *assumeRootIdentity) PostAuthenticate(ctx context.Context, params *types
 		IdentityName: params.IdentityName,
 		Credentials:  params.Credentials,
 		BasePath:     "",
+		Manager:      params.Manager,
 		Realm:        params.Realm,
 	}); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)

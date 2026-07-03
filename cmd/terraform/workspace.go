@@ -44,7 +44,10 @@ For complete Terraform/OpenTofu documentation, see:
 		}
 
 		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		opts, err := ParseTerraformRunOptions(v)
+		if err != nil {
+			return err
+		}
 
 		return terraformRunWithOptions(terraformCmd, cmd, args, opts)
 	},
@@ -85,7 +88,10 @@ func newWorkspacePassthroughSubcommand(name, short string) *cobra.Command {
 				return err
 			}
 
-			opts := ParseTerraformRunOptions(v)
+			opts, err := ParseTerraformRunOptions(v)
+			if err != nil {
+				return err
+			}
 			argsForWorkspace := append([]string{name}, args...)
 			return terraformRunWithOptions(terraformCmd, workspaceCmd, argsForWorkspace, opts)
 		},

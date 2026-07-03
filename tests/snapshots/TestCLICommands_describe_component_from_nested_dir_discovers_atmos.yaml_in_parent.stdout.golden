@@ -17,6 +17,7 @@ atmos_cli_config:
       plan:
         skip_planfile: false
       plugin_cache: true
+      auto_provision_workdir_for_outputs: true
     helmfile:
       base_path: ""
       use_eks: true
@@ -34,6 +35,13 @@ atmos_cli_config:
     ansible:
       base_path: ""
       command: ""
+      auto_generate_files: false
+    kubernetes:
+      base_path: ""
+      provider: ""
+      auto_generate_files: false
+    helm:
+      base_path: ""
       auto_generate_files: false
   stacks:
     base_path: stacks
@@ -80,6 +88,8 @@ providers: {}
 provision: {}
 remote_state_backend: {}
 remote_state_backend_type: ""
+required_providers: {}
+required_version: ""
 settings: {}
 source: {}
 sources:

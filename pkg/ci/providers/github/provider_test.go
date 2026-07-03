@@ -1,6 +1,10 @@
 package github
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"testing"
 
@@ -48,6 +52,30 @@ func TestProvider_Detect(t *testing.T) {
 func TestProvider_Name(t *testing.T) {
 	p := NewProvider()
 	assert.Equal(t, "github-actions", p.Name())
+}
+
+func TestProvider_Cache(t *testing.T) {
+	t.Run("returns an admin-capable backend outside a runner", func(t *testing.T) {
+		// Outside a runner the backend is still constructed so cache
+		// administration (list/delete) works; only save/restore are gated.
+		t.Setenv("ACTIONS_RUNTIME_TOKEN", "")
+		t.Setenv("ACTIONS_RESULTS_URL", "")
+		t.Setenv("GITHUB_REPOSITORY", "octo/cat")
+		p := NewProvider()
+		backend, err := p.Cache()
+		require.NoError(t, err)
+		assert.Equal(t, "github/actions", backend.Name())
+	})
+
+	t.Run("returns a backend inside a runner", func(t *testing.T) {
+		t.Setenv("ACTIONS_RUNTIME_TOKEN", "runtime-token")
+		t.Setenv("ACTIONS_RESULTS_URL", "https://results.example.com/")
+		t.Setenv("GITHUB_REPOSITORY", "octo/cat")
+		p := NewProvider()
+		backend, err := p.Cache()
+		require.NoError(t, err)
+		assert.Equal(t, "github/actions", backend.Name())
+	})
 }
 
 func TestProvider_Context(t *testing.T) {
@@ -107,7 +135,45 @@ func TestResolveGitSHA(t *testing.T) {
 }
 
 func TestProvider_EnsureClient(t *testing.T) {
+	t.Run("succeeds when ATMOS_CI_GITHUB_TOKEN is set", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "ci-token")
+		t.Setenv("GITHUB_TOKEN", "")
+		t.Setenv("GH_TOKEN", "")
+		p := NewProvider()
+		err := p.ensureClient()
+		require.NoError(t, err)
+		assert.NotNil(t, p.client)
+	})
+
+	t.Run("ATMOS_CI_GITHUB_TOKEN takes precedence over GITHUB_TOKEN", func(t *testing.T) {
+		// Verify the CI token is actually used by checking the Authorization header.
+		var capturedAuth string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedAuth = r.Header.Get("Authorization")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"login":"test"}`))
+		}))
+		defer server.Close()
+
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "ci-token")
+		t.Setenv("GITHUB_TOKEN", "github-token")
+		t.Setenv("GH_TOKEN", "gh-token")
+		p := NewProvider()
+		err := p.ensureClient()
+		require.NoError(t, err)
+
+		// Point the client at our test server and make a request.
+		serverURL, err := url.Parse(server.URL + "/")
+		require.NoError(t, err)
+		p.client.GitHub().BaseURL = serverURL
+		_, _, _ = p.client.GitHub().Users.Get(context.Background(), "")
+
+		assert.Equal(t, "Bearer ci-token", capturedAuth, "should use ATMOS_CI_GITHUB_TOKEN, not GITHUB_TOKEN")
+	})
+
 	t.Run("succeeds when GITHUB_TOKEN is set", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
 		t.Setenv("GITHUB_TOKEN", "test-token")
 		p := NewProvider()
 		err := p.ensureClient()
@@ -116,7 +182,8 @@ func TestProvider_EnsureClient(t *testing.T) {
 	})
 
 	t.Run("succeeds when GH_TOKEN is set", func(t *testing.T) {
-		// Clear GITHUB_TOKEN to ensure GH_TOKEN fallback works.
+		// Clear higher-priority tokens to ensure GH_TOKEN fallback works.
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
 		t.Setenv("GITHUB_TOKEN", "")
 		t.Setenv("GH_TOKEN", "test-token")
 		p := NewProvider()
@@ -126,6 +193,7 @@ func TestProvider_EnsureClient(t *testing.T) {
 	})
 
 	t.Run("fails when no token is available", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
 		t.Setenv("GITHUB_TOKEN", "")
 		t.Setenv("GH_TOKEN", "")
 		p := NewProvider()
@@ -193,4 +261,37 @@ func TestProvider_OutputWriter_IndependentOfToken(t *testing.T) {
 	p := NewProvider()
 	writer := p.OutputWriter()
 	assert.NotNil(t, writer)
+}
+
+func TestProviderContextCloneURL(t *testing.T) {
+	t.Setenv("GITHUB_REPOSITORY", "acme/deploy")
+	t.Setenv("GITHUB_SERVER_URL", "")
+
+	p := NewProvider()
+	ctx, err := p.Context()
+	require.NoError(t, err)
+	assert.Equal(t, "https://github.com", ctx.ServerURL)
+	assert.Equal(t, "https://github.com/acme/deploy.git", ctx.CloneURL)
+}
+
+func TestProviderContextCloneURLEnterprise(t *testing.T) {
+	// GitHub Enterprise: GITHUB_SERVER_URL points at the enterprise host and
+	// the clone URL must follow it — never hardcoded github.com.
+	t.Setenv("GITHUB_REPOSITORY", "acme/deploy")
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.acme.com")
+
+	p := NewProvider()
+	ctx, err := p.Context()
+	require.NoError(t, err)
+	assert.Equal(t, "https://ghe.acme.com", ctx.ServerURL)
+	assert.Equal(t, "https://ghe.acme.com/acme/deploy.git", ctx.CloneURL)
+}
+
+func TestProviderContextCloneURLEmptyWithoutRepository(t *testing.T) {
+	t.Setenv("GITHUB_REPOSITORY", "")
+
+	p := NewProvider()
+	ctx, err := p.Context()
+	require.NoError(t, err)
+	assert.Empty(t, ctx.CloneURL)
 }

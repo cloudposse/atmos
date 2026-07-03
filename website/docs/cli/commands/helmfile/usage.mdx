@@ -13,6 +13,14 @@ import ActionCard from '@site/src/components/ActionCard'
 Use these subcommands to run `helmfile` commands.
 </Intro>
 
+:::info Native Helm and Helmfile
+Atmos continues to support Helmfile, which remains a great choice when you need
+its advanced orchestration features. For most new chart deployments, native
+[`atmos helm`](/cli/commands/helm/usage) is now the simpler Atmos-native path:
+the common Helmfile use cases are handled directly by Atmos with one less layer
+to configure and debug.
+:::
+
 <Screengrab title="atmos helmfile --help" slug="atmos-helmfile--help" />
 
 # Usage
@@ -24,6 +32,7 @@ Executes `helmfile` commands.
 ```shell
 atmos helmfile <command> <component> -s <stack> [options]
 atmos helmfile <command> <component> --stack <stack> [options]
+atmos helmfile <command> <component> --stack <stack> --ci [options]
 ```
 
 ## Path-Based Component Resolution
@@ -89,6 +98,26 @@ In addition, the `component` argument and `stack` flag are required to generate 
 
 - double-dash `--` can be used to signify the end of the options for Atmos and the start of the additional native arguments and flags for
   the `helmfile` commands.
+
+- `--ci` enables Atmos native CI mode for supported Helmfile operations and is not forwarded to the `helmfile` binary.
+
+## Native CI Summaries
+
+When `ci.enabled: true` and CI is detected, or when CI mode is forced with `--ci` or `ATMOS_CI`,
+Helmfile commands write a Markdown step summary through Atmos native CI. Helmfile CI support is
+summaries-only; it does not write output variables, commit statuses, PR comments, or artifacts.
+
+Supported summaries:
+
+| Command | Summary template |
+|---------|------------------|
+| `template` | `ci.templates.helmfile.template` |
+| `diff` | `ci.templates.helmfile.diff` |
+| `apply`, `sync`, `deploy` | `ci.templates.helmfile.apply` |
+| `destroy` | `ci.templates.helmfile.destroy` |
+
+Summaries include component, stack, command status, a local reproduction command, and captured
+masked stdout/stderr in a collapsible section.
 
 :::tip
 Run `atmos helmfile --help` to see all the available options

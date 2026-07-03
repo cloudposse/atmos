@@ -17,7 +17,9 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Check for vhs label
         id: labeled
@@ -40,12 +42,17 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           IS_LABELED: ${{ steps.labeled.outputs.labeled }}
         run: |
+          # Landing-page tapes (demo/landing/**) are rendered by landing-demos.yaml,
+          # not here — exclude them so they never enter this matrix.
           if [[ "$IS_LABELED" == "true" ]]; then
-            echo "files=$(find . -path './build-harness' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)" >> $GITHUB_OUTPUT
+            files=$(find . -path './build-harness' -prune -o -path './demo/landing' -prune -o -type f -name '*.tape' ! -name 'style.tape' ! -name 'defaults.tape' -print | cut -d/ -f2-)
           else
-            files=$(gh pr diff --name-only "$PR_NUMBER" | (grep '\.tape$' | grep -v '(style|defaults)\.tape$' || true) | cut -d/ -f2-)
-            echo "files=$files" >> $GITHUB_OUTPUT
+            files=$(gh pr diff --name-only "$PR_NUMBER" | grep '\.tape$' | grep -vE '(^|/)(style|defaults)\.tape$' | grep -v '^demo/landing/' | cut -d/ -f2- || true)
           fi
+          # A multi-line value is invalid for $GITHUB_OUTPUT and would break the matrix
+          # split; collapse to a single space-separated line.
+          files=$(printf '%s' "$files" | tr '\n' ' ' | sed -E 's/ +/ /g; s/^ //; s/ $//')
+          echo "files=$files" >> "$GITHUB_OUTPUT"
 
       - name: Set up matrix
         id: create-matrix
@@ -69,7 +76,9 @@ jobs:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ matrix.file }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Install atmos
         uses: jaxxstorm/action-install-gh-release@v1.14.0

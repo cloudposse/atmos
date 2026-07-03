@@ -37,6 +37,20 @@ type HookContext struct {
 	// CommandError is the error from the command execution, if any.
 	CommandError error
 
+	// ExitCode is the exit code from the command execution. This is the
+	// authoritative signal for success/failure and (for `terraform plan` with
+	// -detailed-exitcode) for change detection:
+	//   - apply/deploy: 0 = success; non-zero = error.
+	//   - plan: 0 = no changes; 1 = error; 2 = changes detected.
+	// Plugins should prefer this over text parsing of Output, which is
+	// fragile against terraform/OpenTofu output drift and against errors
+	// that occur before terraform itself runs (e.g., authentication failures).
+	ExitCode int
+
+	// Aggregate carries command-specific aggregate result data for hook events
+	// that summarize more than one component.
+	Aggregate any
+
 	// Provider is the detected CI platform provider.
 	Provider provider.Provider
 
@@ -135,11 +149,97 @@ type TerraformOutputData struct {
 	// Outputs contains terraform output values (after apply).
 	Outputs map[string]TerraformOutput
 
+	// HasOutputChanges indicates whether a plan includes output value changes.
+	HasOutputChanges bool
+
 	// ChangedResult contains the plan summary text.
 	ChangedResult string
 
 	// Warnings contains full warning block text extracted from terraform output.
 	Warnings []string
+}
+
+// TerraformTestOutputData contains terraform test-specific output data
+// parsed from `terraform test` stdout.
+type TerraformTestOutputData struct {
+	// Total is the number of run blocks executed.
+	Total int
+
+	// Pass is the number of run blocks that passed.
+	Pass int
+
+	// Fail is the number of run blocks that failed.
+	Fail int
+
+	// Error is the number of run blocks that errored.
+	Error int
+
+	// Skip is the number of run blocks that were skipped.
+	Skip int
+
+	// Files contains per-test-file results in execution order.
+	Files []TerraformTestFile
+
+	// Runs contains the per-run results in execution order.
+	Runs []TerraformTestRun
+
+	// CleanupFailures contains resources Terraform could not destroy after tests.
+	CleanupFailures []TerraformTestCleanupFailure
+}
+
+// TerraformTestFile represents the result of a single `.tftest.hcl` file.
+type TerraformTestFile struct {
+	// Path is the test file path.
+	Path string
+
+	// Status is the file outcome: "pass", "fail", "error", or "skip".
+	Status string
+
+	// Pass is the number of run blocks in this file that passed.
+	Pass int
+
+	// Fail is the number of run blocks in this file that failed.
+	Fail int
+
+	// Error is the number of run blocks in this file that errored.
+	Error int
+
+	// Skip is the number of run blocks in this file that were skipped.
+	Skip int
+}
+
+// TerraformTestCleanupFailure represents resources left behind after a test run.
+type TerraformTestCleanupFailure struct {
+	// File is the test file path.
+	File string
+
+	// Run is the run block associated with the cleanup failure.
+	Run string
+
+	// Resources contains Terraform resource instance addresses that need cleanup.
+	Resources []string
+}
+
+// TerraformTestRun represents the result of a single `terraform test` run block.
+type TerraformTestRun struct {
+	// Name is the run block name (the identifier in `run "<name>" { ... }`).
+	Name string
+
+	// File is the .tftest.hcl file the run belongs to (the JUnit testsuite).
+	File string
+
+	// Status is the run outcome: "pass", "fail", "error", or "skip".
+	Status string
+
+	// Error contains failure detail when Status is "fail"/"error" (best-effort; may be empty).
+	Error string
+
+	// Line is the 1-based source line of the failing assertion (0 = unknown).
+	// Populated from `terraform test -json` diagnostic ranges.
+	Line int
+
+	// Duration is the run's wall-clock time in seconds (0 = unknown).
+	Duration float64
 }
 
 // TerraformOutput represents a single terraform output value.

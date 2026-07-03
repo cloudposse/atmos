@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -33,7 +34,7 @@ func (p *Plugin) onBeforePlan(ctx *plugin.HookContext) error {
 }
 
 // onAfterPlan handles the after.terraform.plan event.
-// Writes summary, outputs, uploads planfile, and updates check run.
+// Writes summary, outputs, uploads planfile, updates check run, and posts PR comment.
 func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterPlan")()
 
@@ -68,6 +69,14 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	if isCheckEnabled(ctx.Config) {
 		if err := p.updateCheckRun(ctx, result); err != nil {
 			logCheckRunError("CI check run update skipped", err)
+		}
+	}
+
+	// PR comment -- warn-only. Reuses the summary already rendered above
+	// to honor user template overrides in ci.templates.terraform.plan.
+	if isCommentsEnabled(ctx.Config) {
+		if err := p.postComment(ctx, renderedSummary); err != nil {
+			logCommentError("CI PR comment skipped", err)
 		}
 	}
 
@@ -121,6 +130,60 @@ func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 	return nil
 }
 
+// onBeforeTest handles the before.terraform.test event.
+// Creates a check run with in_progress status.
+func (p *Plugin) onBeforeTest(ctx *plugin.HookContext) error {
+	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeTest")()
+
+	if isCheckEnabled(ctx.Config) {
+		if err := p.createCheckRun(ctx); err != nil {
+			logCheckRunError("CI check run creation skipped", err)
+		}
+	}
+	return nil
+}
+
+// onAfterTest handles the after.terraform.test event.
+// Writes the pass/fail summary, outputs, and updates the check run. There is no
+// planfile to upload and no PR comment for tests.
+func (p *Plugin) onAfterTest(ctx *plugin.HookContext) error {
+	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterTest")()
+
+	result := p.parseOutputWithError(ctx)
+
+	// Summary -- warn-only.
+	var renderedSummary string
+	if isSummaryEnabled(ctx.Config) {
+		var err error
+		renderedSummary, err = p.writeSummary(ctx, result)
+		if err != nil {
+			log.Warn("CI summary failed", "error", err)
+		}
+	}
+
+	// Output -- warn-only. Also write a JUnit report (file + `junit_report` path).
+	if isOutputEnabled(ctx.Config) {
+		if err := p.writeOutputs(ctx, result, renderedSummary); err != nil {
+			log.Warn("CI output failed", "error", err)
+		}
+		p.writeJUnitReport(ctx, result)
+	}
+
+	// Annotations -- warn-only. Inline `::error file:line` per failing assertion.
+	if isAnnotationsEnabled(ctx.Config) {
+		p.emitTestAnnotations(ctx, result)
+	}
+
+	// Check -- warn-only.
+	if isCheckEnabled(ctx.Config) {
+		if err := p.updateCheckRun(ctx, result); err != nil {
+			logCheckRunError("CI check run update skipped", err)
+		}
+	}
+
+	return nil
+}
+
 // onBeforeDeploy handles the before.terraform.deploy event.
 // Downloads planfile from storage with stored prefix for verification.
 // Download is warn-only: deploy can proceed without a stored planfile.
@@ -136,9 +199,17 @@ func (p *Plugin) onBeforeDeploy(ctx *plugin.HookContext) error {
 	}
 
 	// Download -- warn-only (deploy works without a stored planfile).
-	// Skip if planfile storage is not configured.
+	// Skip if planfile storage is not configured, or if verification resolves to
+	// off (the downloaded stored plan would never be used). This hook only runs
+	// under CI, so resolve with ciEnabled=true.
 	if isPlanfileStorageEnabled(ctx.Config) {
-		if err := p.downloadPlanfileForVerification(ctx); err != nil {
+		var cliOverride schema.PlanfileVerifyMode
+		if ctx.Info != nil {
+			cliOverride = ctx.Info.VerifyPlanMode
+		}
+		if planfile.ResolveVerifyMode(ctx.Config, true, cliOverride) == schema.PlanfileVerifyOff {
+			log.Debug("Planfile verification is off; skipping stored-plan download", "event", "before.terraform.deploy")
+		} else if err := p.downloadPlanfileForVerification(ctx); err != nil {
 			log.Warn("CI hook handler failed", "event", "before.terraform.deploy", "error", err)
 		}
 	}
@@ -249,26 +320,79 @@ func (p *Plugin) downloadPlanfileForVerification(ctx *plugin.HookContext) error 
 	return nil
 }
 
-// parseOutputWithError parses command output and enriches with command error info.
+// parseOutputWithError reconciles parsed command output with the authoritative
+// exit code and command error from the hook context. The exit code is the
+// source of truth for success/failure (and, for `terraform plan` with
+// -detailed-exitcode, for change detection); text parsing supplements with
+// resource counts, output values, and error message bodies.
+//
+// Semantics by command:
+//   - apply/deploy/destroy: HasErrors = (exitCode != 0).
+//   - plan: HasErrors = (exitCode == 1); exitCode == 2 implies HasChanges.
+//   - other commands: HasErrors = (exitCode != 0).
+//
+// This makes the hook robust against errors that occur before terraform
+// itself runs (e.g., authentication failures), which leave no parseable
+// "Error:" line in the captured output.
 func (p *Plugin) parseOutputWithError(ctx *plugin.HookContext) *plugin.OutputResult {
 	result := ParseOutput(ctx.Output, ctx.Command)
+	result.ExitCode = ctx.ExitCode
 
-	// If the command had an error, ensure the result reflects that.
-	if ctx.CommandError != nil {
-		result.HasErrors = true
+	// Derive HasErrors from exit code semantics. `terraform plan` uses
+	// -detailed-exitcode (0 = no change, 1 = error, 2 = change);
+	// apply/deploy/destroy and other commands treat any non-zero code as
+	// failure.
+	hasErrors := false
+	switch ctx.Command {
+	case "plan":
+		hasErrors = ctx.ExitCode == 1
+		if ctx.ExitCode == 2 {
+			// Belt-and-suspenders for plan with -detailed-exitcode: even if
+			// text parsing missed the change markers (e.g., empty/captured
+			// output), the exit code tells us changes exist.
+			result.HasChanges = true
+		}
+	default:
+		hasErrors = ctx.ExitCode != 0
+	}
+
+	// Defensive: a non-nil CommandError indicates failure unless the exit
+	// code has command-specific success semantics. Specifically, `terraform
+	// plan -detailed-exitcode` returns 2 to signal "changes detected", and
+	// ExecuteShellCommand wraps that non-zero exit in an ExitCodeError —
+	// so CommandError is non-nil for the success case. Skip the override in
+	// that scenario; otherwise, treat CommandError as authoritative for
+	// failure even if the exit code is unset or zero (callers should set
+	// both).
+	planChangesDetected := ctx.Command == "plan" && ctx.ExitCode == 2
+	if ctx.CommandError != nil && !planChangesDetected {
+		hasErrors = true
 		if result.ExitCode == 0 {
 			result.ExitCode = 1
 		}
-		if len(result.Errors) == 0 {
+	}
+
+	// Exit code is authoritative both ways: when it says success, discard any
+	// spurious "Error:" lines that text parsing may have matched (warnings,
+	// recovered errors, log noise). When it says failure, prefer text-parsed
+	// error bodies but fall back to the CommandError message.
+	result.HasErrors = hasErrors
+	if hasErrors {
+		if len(result.Errors) == 0 && ctx.CommandError != nil {
 			result.Errors = []string{ctx.CommandError.Error()}
 		}
+	} else {
+		result.Errors = nil
 	}
 
 	return result
 }
 
 // writeSummary renders and writes the CI job summary.
-func (p *Plugin) writeSummary(ctx *plugin.HookContext, _ *plugin.OutputResult) (string, error) {
+// The result parameter must be the enriched result from parseOutputWithError so
+// that command errors (e.g., auth failures before terraform runs) propagate into
+// the template's .Result.HasErrors branch instead of being lost in a re-parse.
+func (p *Plugin) writeSummary(ctx *plugin.HookContext, result *plugin.OutputResult) (string, error) {
 	defer perf.Track(ctx.Config, "terraform.Plugin.writeSummary")()
 
 	// Get template name - prefer config override, fall back to command name.
@@ -288,7 +412,7 @@ func (p *Plugin) writeSummary(ctx *plugin.HookContext, _ *plugin.OutputResult) (
 	}
 
 	// Build template context.
-	tmplCtx, err := p.buildTemplateContext(ctx.Info, ctx.CICtx, ctx.Output, ctx.Command)
+	tmplCtx, err := p.buildTemplateContext(ctx.Info, ctx.CICtx, ctx.Output, ctx.Command, result)
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
 			WithCause(err).
@@ -319,7 +443,8 @@ func (p *Plugin) writeSummary(ctx *plugin.HookContext, _ *plugin.OutputResult) (
 			Err()
 	}
 
-	log.Debug("Wrote CI summary",
+	log.Debug(
+		"Wrote CI summary",
 		"stack", ctx.Info.Stack,
 		"component", ctx.Info.ComponentFromArg,
 		"template", templateName,
@@ -715,6 +840,18 @@ func isOutputEnabled(cfg *schema.AtmosConfiguration) bool {
 	return *cfg.CI.Output.Enabled
 }
 
+// isAnnotationsEnabled checks if inline CI annotations are enabled. Defaults to
+// true (nil) under ci.enabled, mirroring the scanner-hook behavior.
+func isAnnotationsEnabled(cfg *schema.AtmosConfiguration) bool {
+	if cfg == nil {
+		return true
+	}
+	if cfg.CI.Annotations.Enabled == nil {
+		return true
+	}
+	return *cfg.CI.Annotations.Enabled
+}
+
 // isPlanfileStorageEnabled checks if planfile storage is configured.
 // Returns true only when explicit planfile stores are defined
 // (via default store, priority list, or named stores).
@@ -739,6 +876,19 @@ func isCheckEnabled(cfg *schema.AtmosConfiguration) bool {
 	return *cfg.CI.Checks.Enabled
 }
 
+// isCommentsEnabled returns whether PR comment posting is enabled. Nil means
+// "unset" and defaults to false so that upgrading installations don't start
+// posting comments until the feature is explicitly opted into.
+func isCommentsEnabled(cfg *schema.AtmosConfiguration) bool {
+	if cfg == nil {
+		return false
+	}
+	if cfg.CI.Comments.Enabled == nil {
+		return false
+	}
+	return *cfg.CI.Comments.Enabled
+}
+
 // filterVariables filters a map of variables to only include those in the allowed list.
 func filterVariables(vars map[string]string, allowed []string) map[string]string {
 	if len(allowed) == 0 {
@@ -758,8 +908,15 @@ func filterVariables(vars map[string]string, allowed []string) map[string]string
 }
 
 // resolveCheckResult determines the check run status and conclusion from the hook context.
+// Exit code is authoritative: any non-zero code (or non-nil CommandError) signals failure,
+// except for `terraform plan -detailed-exitcode` exit code 2 which means "changes detected".
+// This mirrors the summary-rendering logic in parseOutputWithError so the check run and
+// summary cannot disagree.
 func resolveCheckResult(ctx *plugin.HookContext) (provider.CheckRunState, string) {
-	if ctx.CommandError != nil {
+	if ctx.Command == "plan" && ctx.ExitCode == 2 {
+		return provider.CheckRunStateSuccess, "success"
+	}
+	if ctx.CommandError != nil || ctx.ExitCode != 0 {
 		return provider.CheckRunStateFailure, "failure"
 	}
 	return provider.CheckRunStateSuccess, "success"
@@ -771,6 +928,11 @@ func resolveCheckResult(ctx *plugin.HookContext) (provider.CheckRunState, string
 func buildStatusDescription(command string, result *plugin.OutputResult) string {
 	if result == nil {
 		return "No changes"
+	}
+
+	// Terraform test reports pass/fail counts rather than resource changes.
+	if testData, ok := result.Data.(*plugin.TerraformTestOutputData); ok {
+		return buildTerraformTestStatusDescription(testData)
 	}
 
 	if result.HasErrors {
@@ -786,6 +948,23 @@ func buildStatusDescription(command string, result *plugin.OutputResult) string 
 	}
 
 	return "No changes"
+}
+
+func buildTerraformTestStatusDescription(testData *plugin.TerraformTestOutputData) string {
+	parts := []string{fmt.Sprintf("%d passed", testData.Pass)}
+	if testData.Fail > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed", testData.Fail))
+	}
+	if testData.Error > 0 {
+		parts = append(parts, fmt.Sprintf("%d errored", testData.Error))
+	}
+	if testData.Skip > 0 {
+		parts = append(parts, fmt.Sprintf("%d skipped", testData.Skip))
+	}
+	if len(testData.CleanupFailures) > 0 {
+		parts = append(parts, fmt.Sprintf("%d cleanup failed", len(testData.CleanupFailures)))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // getContextPrefix returns the context prefix from configuration, defaulting to "atmos".

@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	goversion "github.com/hashicorp/go-version"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -426,6 +428,17 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		}
 	}
 
+	ciCommentsEnabled := os.Getenv("ATMOS_CI_COMMENTS_ENABLED")
+	if len(ciCommentsEnabled) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_CI_COMMENTS_ENABLED", ciCommentsEnabled)
+		enabled, err := strconv.ParseBool(ciCommentsEnabled)
+		if err != nil {
+			log.Warn("Invalid boolean value for ENV variable; using default.", "ATMOS_CI_COMMENTS_ENABLED", ciCommentsEnabled)
+		} else {
+			atmosConfig.CI.Comments.Enabled = &enabled
+		}
+	}
+
 	return nil
 }
 
@@ -470,6 +483,10 @@ func getVersionEnforcement(configEnforcement string) string {
 	return configEnforcement
 }
 
+func explicitVersionOverride() string {
+	return version.ExplicitVersionOverride(os.Args)
+}
+
 // buildVersionConstraintError builds the error for unsatisfied version constraint.
 func buildVersionConstraintError(constraint schema.VersionConstraint) error {
 	builder := errUtils.Build(errUtils.ErrVersionConstraint).
@@ -487,6 +504,15 @@ func buildVersionConstraintError(constraint schema.VersionConstraint) error {
 	return builder.Err()
 }
 
+func buildInvalidVersionConstraintError(constraint schema.VersionConstraint, err error) error {
+	return errUtils.Build(errors.Join(errUtils.ErrInvalidVersionConstraint, err)).
+		WithHint("Please use valid semver constraint syntax").
+		WithHint("Reference: https://github.com/hashicorp/go-version").
+		WithContext("constraint", constraint.Require).
+		WithExitCode(1).
+		Err()
+}
+
 // warnVersionConstraint logs a warning for unsatisfied version constraint.
 func warnVersionConstraint(constraint schema.VersionConstraint) {
 	ui.Warning(fmt.Sprintf(
@@ -497,6 +523,26 @@ func warnVersionConstraint(constraint schema.VersionConstraint) {
 	if constraint.Message != "" {
 		ui.Warning(constraint.Message)
 	}
+}
+
+// warnVersionConstraintOverride logs a warning when an explicit version override
+// bypasses a failed or non-evaluable version constraint.
+func warnVersionConstraintOverride(constraint schema.VersionConstraint, requestedVersion string, validationErr error) {
+	message := "Atmos version constraint not satisfied; explicit override bypasses enforcement"
+	keyvals := []interface{}{
+		"required", constraint.Require,
+		"current", version.Version,
+		"override", requestedVersion,
+	}
+	if validationErr != nil {
+		message = "Atmos version constraint could not be evaluated; explicit override bypasses enforcement"
+		keyvals = append(keyvals, "error", validationErr)
+	}
+	if constraint.Message != "" {
+		keyvals = append(keyvals, "configured_message", constraint.Message)
+	}
+
+	log.Warn(message, keyvals...)
 }
 
 // validateVersionConstraint validates the current Atmos version against the constraint
@@ -511,17 +557,27 @@ func validateVersionConstraint(constraint schema.VersionConstraint) error {
 		return nil
 	}
 
+	if _, err := goversion.NewConstraint(constraint.Require); err != nil {
+		return buildInvalidVersionConstraintError(constraint, fmt.Errorf("invalid version constraint %q: %w", constraint.Require, err))
+	}
+
+	requestedVersion := explicitVersionOverride()
+
 	satisfied, err := version.ValidateConstraint(constraint.Require)
 	if err != nil {
-		return errUtils.Build(errors.Join(errUtils.ErrInvalidVersionConstraint, err)).
-			WithHint("Please use valid semver constraint syntax").
-			WithHint("Reference: https://github.com/hashicorp/go-version").
-			WithContext("constraint", constraint.Require).
-			WithExitCode(1).
-			Err()
+		if requestedVersion != "" {
+			warnVersionConstraintOverride(constraint, requestedVersion, err)
+			return nil
+		}
+		return buildInvalidVersionConstraintError(constraint, err)
 	}
 
 	if satisfied {
+		return nil
+	}
+
+	if requestedVersion != "" {
+		warnVersionConstraintOverride(constraint, requestedVersion, nil)
 		return nil
 	}
 
@@ -715,6 +771,17 @@ func setSettingsConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksIn
 	if len(configAndStacksInfo.SettingsListMergeStrategy) > 0 {
 		atmosConfig.Settings.ListMergeStrategy = configAndStacksInfo.SettingsListMergeStrategy
 		log.Debug(cmdLineArg, SettingsListMergeStrategyFlag, configAndStacksInfo.SettingsListMergeStrategy)
+		return nil
+	}
+
+	// Fallback: command paths that call InitCliConfig directly (e.g. `describe
+	// config`) populate ConfigAndStacksInfo with the zero value, so the CLI
+	// flag never reaches the assignment above. Scan os.Args ourselves to
+	// honor `--settings-list-merge-strategy=...` on those paths, mirroring how
+	// setLogConfig handles `--logs-level`.
+	if v, ok := parseFlags()["settings-list-merge-strategy"]; ok && v != "" {
+		atmosConfig.Settings.ListMergeStrategy = v
+		log.Debug(cmdLineArg, SettingsListMergeStrategyFlag, v)
 	}
 
 	return nil
@@ -725,6 +792,10 @@ func processStoreConfig(atmosConfig *schema.AtmosConfiguration) error {
 	if len(atmosConfig.StoresConfig) > 0 {
 		log.Debug("processStoreConfig", "atmosConfig.StoresConfig", fmt.Sprintf("%v", atmosConfig.StoresConfig))
 	}
+
+	// Mark secret-by-default backends (e.g. 1Password) as `secret: true` before building the
+	// registry, so the secrets subsystem (which reads StoreConfig.Secret) sees them as secret.
+	store.ApplySecretDefaults(atmosConfig.StoresConfig)
 
 	storeRegistry, err := store.NewStoreRegistry(&atmosConfig.StoresConfig)
 	if err != nil {
@@ -779,12 +850,8 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 	for _, part := range stackNamePatternParts {
 		if part == "{namespace}" {
 			if len(context.Namespace) == 0 {
-				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'namespace', but the stack '%s' does not have a namespace defined in the stack file '%s'",
-						stackNamePattern,
-						stack,
-						stackFile,
-					)
+				return "", fmt.Errorf("%w: the stack name pattern '%s' specifies 'namespace', but the stack '%s' does not have a namespace defined in the stack file '%s'",
+					errUtils.ErrStackNamePatternPartMissing, stackNamePattern, stack, stackFile)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Namespace
@@ -793,12 +860,8 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 			}
 		} else if part == "{tenant}" {
 			if len(context.Tenant) == 0 {
-				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'tenant', but the stack '%s' does not have a tenant defined in the stack file '%s'",
-						stackNamePattern,
-						stack,
-						stackFile,
-					)
+				return "", fmt.Errorf("%w: the stack name pattern '%s' specifies 'tenant', but the stack '%s' does not have a tenant defined in the stack file '%s'",
+					errUtils.ErrStackNamePatternPartMissing, stackNamePattern, stack, stackFile)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Tenant
@@ -807,12 +870,8 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 			}
 		} else if part == "{environment}" {
 			if len(context.Environment) == 0 {
-				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'environment', but the stack '%s' does not have an environment defined in the stack file '%s'",
-						stackNamePattern,
-						stack,
-						stackFile,
-					)
+				return "", fmt.Errorf("%w: the stack name pattern '%s' specifies 'environment', but the stack '%s' does not have an environment defined in the stack file '%s'",
+					errUtils.ErrStackNamePatternPartMissing, stackNamePattern, stack, stackFile)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Environment
@@ -821,12 +880,8 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 			}
 		} else if part == "{stage}" {
 			if len(context.Stage) == 0 {
-				return "",
-					fmt.Errorf("the stack name pattern '%s' specifies 'stage', but the stack '%s' does not have a stage defined in the stack file '%s'",
-						stackNamePattern,
-						stack,
-						stackFile,
-					)
+				return "", fmt.Errorf("%w: the stack name pattern '%s' specifies 'stage', but the stack '%s' does not have a stage defined in the stack file '%s'",
+					errUtils.ErrStackNamePatternPartMissing, stackNamePattern, stack, stackFile)
 			}
 			if len(contextPrefix) == 0 {
 				contextPrefix = context.Stage
@@ -924,7 +979,8 @@ func getStackFilePatterns(basePath string, includeTemplates bool) []string {
 	}
 
 	if includeTemplates {
-		patterns = append(patterns,
+		patterns = append(
+			patterns,
 			basePath+u.YamlTemplateExtension,
 			basePath+u.YmlTemplateExtension,
 		)

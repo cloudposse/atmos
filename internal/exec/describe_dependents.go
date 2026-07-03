@@ -30,6 +30,7 @@ type DescribeDependentsExecProps struct {
 	ProcessYamlFunctions bool
 	Skip                 []string
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled         bool             // True when --identity=false (or alias) explicitly disables authentication; forwarded to DescribeDependentsArgs.
 }
 
 // DescribeDependentsArgs holds arguments for ExecuteDescribeDependents.
@@ -42,6 +43,7 @@ type DescribeDependentsArgs struct {
 	Skip                 []string
 	OnlyInStack          string
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled         bool             // True when --identity=false (or alias) explicitly disables authentication; routes inner stack resolution to ExecuteDescribeStacksWithAuthDisabled.
 	// Stacks is an optional pre-computed result from ExecuteDescribeStacks.
 	// When provided, ExecuteDescribeDependents skips the expensive stack resolution
 	// and uses this cached result instead. This avoids O(N) full stack resolutions
@@ -100,6 +102,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 			Skip:                 describeDependentsExecProps.Skip,
 			OnlyInStack:          "", // empty string means process all stacks for direct CLI usage
 			AuthManager:          describeDependentsExecProps.AuthManager,
+			AuthDisabled:         describeDependentsExecProps.AuthDisabled,
 		},
 	)
 	if err != nil {
@@ -148,7 +151,7 @@ func ExecuteDescribeDependents(
 	stacks := args.Stacks
 	if stacks == nil {
 		var err error
-		stacks, err = ExecuteDescribeStacks(
+		stacks, err = ExecuteDescribeStacksWithAuthDisabled(
 			atmosConfig,
 			args.OnlyInStack,
 			nil,
@@ -160,6 +163,7 @@ func ExecuteDescribeDependents(
 			false,
 			args.Skip,
 			args.AuthManager,
+			args.AuthDisabled,
 		)
 		if err != nil {
 			return nil, err
@@ -469,8 +473,14 @@ func getComponentDependencies(componentMap map[string]any) ([]schema.ComponentDe
 	if depsSection, ok := componentMap[cfg.DependenciesSectionName].(map[string]any); ok {
 		if _, hasComponents := depsSection["components"]; hasComponents {
 			var deps schema.Dependencies
-			if err := mapstructure.Decode(depsSection, &deps); err == nil && len(deps.Components) > 0 {
-				return deps.Components, settingsSection, dependencySourceDependenciesComponents
+			if err := mapstructure.Decode(depsSection, &deps); err == nil {
+				if normErr := deps.Normalize(); normErr != nil {
+					log.Warn("invalid dependencies section; entries may be silently ignored", "error", normErr)
+				}
+				componentDeps := filterComponentDependencies(deps.Components)
+				if len(componentDeps) > 0 {
+					return componentDeps, settingsSection, dependencySourceDependenciesComponents
+				}
 			}
 		}
 	}
@@ -493,6 +503,28 @@ func getComponentDependencies(componentMap map[string]any) ([]schema.ComponentDe
 	}
 
 	return nil, settingsSection, dependencySourceNone
+}
+
+// filterComponentDependencies removes file/folder path dependencies from the
+// dependents path. Those entries affect `describe affected`, but they are not
+// component-to-component relationships and must not suppress settings.depends_on
+// fallback during mixed migrations.
+func filterComponentDependencies(deps []schema.ComponentDependency) []schema.ComponentDependency {
+	if len(deps) == 0 {
+		return nil
+	}
+
+	result := make([]schema.ComponentDependency, 0, len(deps))
+	for i := range deps {
+		if !deps[i].IsComponentDependency() || deps[i].Component == "" {
+			continue
+		}
+		result = append(result, deps[i])
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 // contextToComponentDependency converts a legacy schema.Context to schema.ComponentDependency.
@@ -568,6 +600,23 @@ func matchContextField(depValue, providedValue, stackValue string) bool {
 		return providedValue == depValue
 	}
 	return providedValue == stackValue
+}
+
+// hasDependencyEntries reports whether a `dependencies` section declares any
+// non-tool dependency entries. Tools alone is intentionally excluded because
+// file/folder and component dependency extraction paths do not return tool
+// dependencies.
+func hasDependencyEntries(depsSection map[string]any) bool {
+	if _, ok := depsSection["components"]; ok {
+		return true
+	}
+	if _, ok := depsSection["files"]; ok {
+		return true
+	}
+	if _, ok := depsSection["folders"]; ok {
+		return true
+	}
+	return false
 }
 
 // findComponentSectionInCachedStacks extracts a component section from pre-computed stacks.

@@ -1,17 +1,23 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
+	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -362,4 +368,212 @@ func (m *MockLayerWithDigestError) Size() (int64, error) {
 
 func (m *MockLayerWithDigestError) MediaType() (types.MediaType, error) {
 	return types.DockerLayer, nil
+}
+
+// pullImageShim records calls and returns a programmed sequence of results from
+// remote.Get. Tests reassign the package-level remoteGet to one of these shims
+// and restore it on teardown.
+type pullImageShim struct {
+	results []pullImageResult
+	calls   int
+}
+
+type pullImageResult struct {
+	descriptor *remote.Descriptor
+	err        error
+}
+
+func (s *pullImageShim) get(_ name.Reference, _ ...remote.Option) (*remote.Descriptor, error) {
+	idx := s.calls
+	s.calls++
+	if idx >= len(s.results) {
+		// Defensive: an unexpected extra call should fail the test loudly.
+		return nil, fmt.Errorf("pullImageShim: unexpected call %d (only %d programmed)", idx+1, len(s.results))
+	}
+	r := s.results[idx]
+	return r.descriptor, r.err
+}
+
+// installPullImageShim swaps remoteGet for the duration of the test.
+func installPullImageShim(t *testing.T, shim *pullImageShim) {
+	t.Helper()
+	original := remoteGet
+	remoteGet = shim.get
+	t.Cleanup(func() { remoteGet = original })
+}
+
+// ghcrConfigWithCreds returns a config that causes getGHCRAuth to resolve a
+// non-anonymous Basic auth for ghcr.io.
+func ghcrConfigWithCreds() *schema.AtmosConfiguration {
+	return &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AtmosGithubToken: "ghp_test_token",
+			GithubUsername:   "tester",
+		},
+	}
+}
+
+// mustParseRef parses ref or fails the test. Uses a public reference so the
+// shim never actually hits the network even if a test misconfigures remoteGet.
+func mustParseRef(t *testing.T, ref string) name.Reference {
+	t.Helper()
+	r, err := name.ParseReference(ref)
+	require.NoError(t, err)
+	return r
+}
+
+func TestPullImage_AnonymousFallback_403(t *testing.T) {
+	shim := &pullImageShim{
+		results: []pullImageResult{
+			{err: &transport.Error{StatusCode: 403}},
+			{descriptor: &remote.Descriptor{}},
+		},
+	}
+	installPullImageShim(t, shim)
+
+	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
+	desc, err := pullImage(ghcrConfigWithCreds(), ref)
+	require.NoError(t, err)
+	assert.NotNil(t, desc)
+	assert.Equal(t, 2, shim.calls, "expected one authed attempt followed by one anonymous retry")
+}
+
+func TestPullImage_AnonymousFallback_401(t *testing.T) {
+	shim := &pullImageShim{
+		results: []pullImageResult{
+			{err: &transport.Error{StatusCode: 401}},
+			{descriptor: &remote.Descriptor{}},
+		},
+	}
+	installPullImageShim(t, shim)
+
+	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
+	desc, err := pullImage(ghcrConfigWithCreds(), ref)
+	require.NoError(t, err)
+	assert.NotNil(t, desc)
+	assert.Equal(t, 2, shim.calls)
+}
+
+func TestPullImage_AnonymousFallback_DeniedString(t *testing.T) {
+	// Token-endpoint denials surface as plain errors (not *transport.Error) with
+	// "DENIED" in the message. The retry path must still kick in.
+	shim := &pullImageShim{
+		results: []pullImageResult{
+			{err: errors.New("GET https://ghcr.io/token: DENIED: insufficient_scope")},
+			{descriptor: &remote.Descriptor{}},
+		},
+	}
+	installPullImageShim(t, shim)
+
+	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
+	desc, err := pullImage(ghcrConfigWithCreds(), ref)
+	require.NoError(t, err)
+	assert.NotNil(t, desc)
+	assert.Equal(t, 2, shim.calls)
+}
+
+func TestPullImage_NoFallback_DeadlineExceeded(t *testing.T) {
+	shim := &pullImageShim{
+		results: []pullImageResult{
+			{err: context.DeadlineExceeded},
+		},
+	}
+	installPullImageShim(t, shim)
+
+	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
+	_, err := pullImage(ghcrConfigWithCreds(), ref)
+	require.Error(t, err)
+	assert.Equal(t, 1, shim.calls, "deadline-exceeded must not trigger anonymous retry")
+	assert.True(t, errors.Is(err, errUtils.ErrPullImage), "error should wrap ErrPullImage")
+	assert.True(t, errors.Is(err, context.DeadlineExceeded), "original cause must be preserved")
+}
+
+func TestPullImage_NoFallback_500(t *testing.T) {
+	shim := &pullImageShim{
+		results: []pullImageResult{
+			{err: &transport.Error{StatusCode: 500}},
+		},
+	}
+	installPullImageShim(t, shim)
+
+	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
+	_, err := pullImage(ghcrConfigWithCreds(), ref)
+	require.Error(t, err)
+	assert.Equal(t, 1, shim.calls, "5xx must not trigger anonymous retry")
+	assert.True(t, errors.Is(err, errUtils.ErrPullImage))
+}
+
+func TestPullImage_NoFallback_NetOpError(t *testing.T) {
+	shim := &pullImageShim{
+		results: []pullImageResult{
+			{err: &net.OpError{Op: "dial", Err: errors.New("no such host")}},
+		},
+	}
+	installPullImageShim(t, shim)
+
+	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
+	_, err := pullImage(ghcrConfigWithCreds(), ref)
+	require.Error(t, err)
+	assert.Equal(t, 1, shim.calls, "DNS-style errors must not trigger anonymous retry")
+	assert.True(t, errors.Is(err, errUtils.ErrPullImage))
+}
+
+func TestPullImage_NoRetry_WhenAlreadyAnonymous(t *testing.T) {
+	// Empty config + non-ghcr.io registry yields anonymous auth; a 403 must not
+	// retry (would be infinite loop / duplicate attempt).
+	shim := &pullImageShim{
+		results: []pullImageResult{
+			{err: &transport.Error{StatusCode: 403}},
+		},
+	}
+	installPullImageShim(t, shim)
+
+	ref := mustParseRef(t, "registry.example.com/myimage:v1")
+	_, err := pullImage(&schema.AtmosConfiguration{}, ref)
+	require.Error(t, err)
+	assert.Equal(t, 1, shim.calls, "anonymous 403 must not retry anonymously again")
+	assert.True(t, errors.Is(err, errUtils.ErrPullImage))
+}
+
+func TestPullImage_RichError_ContextAndHints(t *testing.T) {
+	// Both attempts fail with 403 — final error must be the rich-builder error.
+	shim := &pullImageShim{
+		results: []pullImageResult{
+			{err: &transport.Error{StatusCode: 403}},
+			{err: &transport.Error{StatusCode: 403}},
+		},
+	}
+	installPullImageShim(t, shim)
+
+	ref := mustParseRef(t, "ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0")
+	_, err := pullImage(ghcrConfigWithCreds(), ref)
+	require.Error(t, err)
+	assert.Equal(t, 2, shim.calls, "expected authed + anonymous-retry attempts before failing")
+
+	// Sentinel and cause preserved.
+	assert.True(t, errors.Is(err, errUtils.ErrPullImage), "should wrap ErrPullImage sentinel")
+	var transportErr *transport.Error
+	assert.True(t, errors.As(err, &transportErr), "should preserve *transport.Error cause")
+	if transportErr != nil {
+		assert.Equal(t, 403, transportErr.StatusCode)
+	}
+
+	// All three required hints are attached, each self-contained.
+	hints := cockroachErrors.GetAllHints(err)
+	joinedHints := strings.Join(hints, "\n")
+	assert.Contains(t, joinedHints, "packages: read", "hint about GitHub Actions permissions missing")
+	assert.Contains(t, joinedHints, "ATMOS_GITHUB_USERNAME", "hint about username override missing")
+	assert.Contains(t, joinedHints, "docker logout ghcr.io", "hint about stale Docker credentials missing")
+
+	// Structured context captured for verbose render / Sentry.
+	var contextBlob string
+	for _, payload := range cockroachErrors.GetAllSafeDetails(err) {
+		for _, d := range payload.SafeDetails {
+			contextBlob += d + " "
+		}
+	}
+	assert.Contains(t, contextBlob, "image=")
+	assert.Contains(t, contextBlob, "registry=ghcr.io")
+	assert.Contains(t, contextBlob, "auth_attempted=")
+	assert.Contains(t, contextBlob, "status=403")
 }

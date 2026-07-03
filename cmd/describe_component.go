@@ -151,7 +151,7 @@ func resolveAuthManager(p *resolveAuthManagerParams) (auth.AuthManager, error) {
 		}
 	}
 
-	return CreateAuthManagerFromIdentityWithAtmosConfig(p.identityName, mergedAuthConfig, p.atmosConfig)
+	return CreateAuthManagerFromIdentityWithAtmosConfig(p.identityName, mergedAuthConfig, p.atmosConfig, p.stack)
 }
 
 func getRunnableDescribeComponentCmd(
@@ -187,7 +187,7 @@ func getRunnableDescribeComponentCmd(
 		}
 
 		identityName := GetIdentityFromFlags(cmd, os.Args)
-		identityExplicit := cmd.Flags().Changed(IdentityFlagName)
+		identityExplicit := cmd.Flags().Changed(cfg.IdentityFlagName)
 		authManager, err := resolveAuthManager(&resolveAuthManagerParams{
 			props:                &g,
 			atmosConfig:          &atmosConfig,

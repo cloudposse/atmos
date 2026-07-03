@@ -128,6 +128,46 @@ func ExecuteDescribeStacks(
 	skip []string,
 	authManager auth.AuthManager,
 ) (map[string]any, error) {
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, false)
+}
+
+// ExecuteDescribeStacksWithAuthDisabled processes stack manifests with auth explicitly disabled.
+//
+//nolint:revive // Signature intentionally mirrors ExecuteDescribeStacks with one compatibility parameter.
+func ExecuteDescribeStacksWithAuthDisabled(
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+	ignoreMissingFiles bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	authDisabled bool,
+) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacksWithAuthDisabled")()
+
+	return executeDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager, authDisabled)
+}
+
+//nolint:revive // Internal wrapper preserves the existing ExecuteDescribeStacks call shape.
+func executeDescribeStacks(
+	atmosConfig *schema.AtmosConfiguration,
+	filterByStack string,
+	components []string,
+	componentTypes []string,
+	sections []string,
+	ignoreMissingFiles bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	includeEmptyStacks bool,
+	skip []string,
+	authManager auth.AuthManager,
+	authDisabled bool,
+) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
 
 	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
@@ -135,13 +175,14 @@ func ExecuteDescribeStacks(
 		return nil, err
 	}
 
-	processor := newDescribeStacksProcessor(
+	processor := newDescribeStacksProcessorWithAuthDisabled(
 		atmosConfig,
 		filterByStack,
 		components, componentTypes, sections,
 		processTemplates, processYamlFunctions, includeEmptyStacks,
 		skip,
 		authManager,
+		authDisabled,
 	)
 
 	for stackFileName, stackSection := range stacksMap {
@@ -178,6 +219,16 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentKind 
 		return atmosConfig.Components.Packer.BasePath
 	case cfg.AnsibleSectionName:
 		return atmosConfig.Components.Ansible.BasePath
+	case cfg.ContainerSectionName:
+		// The typed `components.container` config (ContainerConfig) exposes no
+		// base_path field, so container components always use the conventional
+		// base path.
+		return "components/container"
+	case cfg.EmulatorSectionName:
+		// Emulator components are stack-defined services, not filesystem-backed
+		// component source trees. Leave component_path unset until a real source
+		// path is configured.
+		return ""
 	default:
 		return ""
 	}

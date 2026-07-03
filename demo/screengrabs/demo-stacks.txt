@@ -12,7 +12,13 @@ atmos ai skill --help
 atmos lsp --help
 atmos lsp start --help
 atmos mcp --help
+atmos mcp export --help
+atmos mcp list --help
+atmos mcp restart --help
 atmos mcp start --help
+atmos mcp status --help
+atmos mcp test --help
+atmos mcp tools --help
 atmos packer --help
 atmos packer build --help
 atmos packer init --help
@@ -23,6 +29,14 @@ atmos packer version --help
 atmos helmfile --help
 atmos helmfile generate --help
 atmos helmfile generate varfile --help
+atmos container --help
+atmos emulator --help
+atmos emulator up --help
+atmos emulator ps --help
+atmos emulator logs --help
+atmos emulator exec --help
+atmos emulator down --help
+atmos emulator reset --help
 atmos --help
 atmos atlantis --help
 atmos atlantis generate --help
@@ -40,8 +54,12 @@ atmos auth user configure --help
 atmos auth validate --help
 atmos auth whoami --help
 atmos aws --help
+atmos aws compliance --help
+atmos aws compliance report --help
 atmos aws eks --help
 atmos aws eks update-kubeconfig --help
+atmos aws security --help
+atmos aws security analyze --help
 atmos completion --help
 atmos completion bash
 atmos completion fish
@@ -56,9 +74,24 @@ atmos describe stacks --help
 atmos describe workflows --help
 atmos docs --help
 atmos docs generate --help
+atmos git --help
+atmos git init --help
+atmos git clone --help
+atmos git pull --help
+atmos git status --help
+atmos git diff --help
+atmos git commit --help
+atmos git push --help
+atmos git clean --help
+atmos git list --help
+atmos git hooks --help
+atmos git hooks install --help
+atmos git hooks run --help
+atmos git hooks uninstall --help
 atmos env --help
 atmos list --help
 atmos list components --help
+atmos list dependencies --help
 atmos list metadata --help
 atmos list settings --help
 atmos list stacks --help

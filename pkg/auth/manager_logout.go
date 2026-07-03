@@ -96,6 +96,7 @@ func (m *manager) cleanupIntegrations(ctx context.Context, identityName string) 
 		integration, err := integrations.Create(&integrations.IntegrationConfig{
 			Name:   integrationName,
 			Config: &integrationConfig,
+			Realm:  m.realm.Value,
 		})
 		if err != nil {
 			log.Warn("Failed to create integration for cleanup", "integration", integrationName, "error", err)

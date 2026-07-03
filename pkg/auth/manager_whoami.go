@@ -20,17 +20,28 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 		LastUpdated: time.Now(),
 	}
 
+	// Populate environment from the identity regardless of credentials.
+	// Callers (e.g. `atmos auth whoami`) rely on the environment surface
+	// even when Atmos is a pure passthrough (generic ambient kind).
+	if identity, exists := m.identities[identityName]; exists {
+		if env, err := identity.Environment(); err == nil {
+			info.Environment = env
+		}
+	}
+
+	// Generic ambient identities return nil credentials by design — they
+	// do not manage credentials; the cloud SDK resolves them at subprocess
+	// runtime. There is nothing to populate on WhoamiInfo from creds and
+	// nothing to cache in the keystore.
+	if creds == nil {
+		return info
+	}
+
 	// Populate high-level fields from the concrete credential type.
 	info.Credentials = creds
 	creds.BuildWhoamiInfo(info)
 	if expTime, err := creds.GetExpiration(); err == nil && expTime != nil {
 		info.Expiration = expTime
-	}
-	// Get environment variables.
-	if identity, exists := m.identities[identityName]; exists {
-		if env, err := identity.Environment(); err == nil {
-			info.Environment = env
-		}
 	}
 
 	// Store credentials in the keystore and set a reference handle.

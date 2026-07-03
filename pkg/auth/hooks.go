@@ -70,12 +70,13 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 	}
 
 	// Determine target identity and authenticate.
-	targetIdentityName, err := resolveTargetIdentityName(stackInfo, authManager)
+	ctx := context.Background()
+	targetIdentityName, err := resolveTargetIdentityName(ctx, stackInfo, authManager)
 	if err != nil {
 		return err
 	}
 
-	if err := authenticateAndWriteEnv(context.Background(), authManager, targetIdentityName, atmosConfig, stackInfo); err != nil {
+	if err := authenticateAndWriteEnv(ctx, authManager, targetIdentityName, atmosConfig, stackInfo); err != nil {
 		return err
 	}
 	return nil
@@ -90,7 +91,7 @@ func decodeAuthConfigFromStack(stackInfo *schema.ConfigAndStacksInfo) (schema.Au
 	return authConfig, nil
 }
 
-func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManager types.AuthManager) (string, error) {
+func resolveTargetIdentityName(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, authManager types.AuthManager) (string, error) {
 	// CLI --identity flag takes precedence.
 	if stackInfo.Identity != "" {
 		return stackInfo.Identity, nil
@@ -101,14 +102,35 @@ func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManage
 	if err == nil && name != "" {
 		return name, nil
 	}
-	if err != nil && !errors.Is(err, errUtils.ErrNoDefaultIdentity) {
+	if err != nil && !isNoAuthConfigError(err) {
 		return "", err
+	}
+
+	// "No auth config in base" terminal state — offer a profile-switch
+	// fallback before surfacing the fatal error. This mirrors the behavior
+	// of the auth commands (login, exec, shell, env, console, whoami).
+	// On successful interactive re-exec this call never returns. On an
+	// enriched non-interactive error, surface it. On nil, fall through to
+	// the original error path.
+	if fbErr := authManager.MaybeOfferAnyProfileFallback(ctx); fbErr != nil {
+		return "", fbErr
 	}
 
 	// No default identity found — error out.
 	// The "required" field is about auto-authentication, not primary selection.
 	errUtils.CheckErrorAndPrint(errUtils.ErrNoDefaultIdentity, hookOpTerraformPreHook, "Use the identity flag or specify an identity as default.")
 	return "", errUtils.ErrNoDefaultIdentity
+}
+
+// isNoAuthConfigError reports whether err indicates a terminal state where
+// the loaded configuration has no usable identities or providers — a state
+// that switching to a different profile may recover from. Mirrors the
+// dispatcher in cmd/auth_profile_fallback.go; duplicated here to avoid a
+// package cycle (cmd imports pkg/auth, not vice versa).
+func isNoAuthConfigError(err error) bool {
+	return errors.Is(err, errUtils.ErrNoProvidersAvailable) ||
+		errors.Is(err, errUtils.ErrNoIdentitiesAvailable) ||
+		errors.Is(err, errUtils.ErrNoDefaultIdentity)
 }
 
 // isAuthenticationDisabled checks if authentication has been explicitly disabled.
@@ -197,6 +219,24 @@ func isAuthManagedVar(key string) bool {
 		"AWS_REGION",
 		"AWS_DEFAULT_REGION",
 		"AWS_EC2_METADATA_DISABLED",
+		// Emulator-managed vars: emulator identities (kind: <target>/emulator) inject
+		// a live endpoint + static dummy credentials instead of a profile/creds file.
+		// These must reach the component subprocess so Terraform (and SDK clients) talk
+		// to the local emulator rather than the real cloud API.
+		"AWS_ENDPOINT_URL",
+		"AWS_ACCESS_KEY_ID",
+		"AWS_SECRET_ACCESS_KEY",
+		"AWS_SESSION_TOKEN",
+		// GCP emulator host vars (per-service; see pkg/emulator/target/gcp.go).
+		"STORAGE_EMULATOR_HOST",
+		"PUBSUB_EMULATOR_HOST",
+		"FIRESTORE_EMULATOR_HOST",
+		"BIGTABLE_EMULATOR_HOST",
+		"DATASTORE_EMULATOR_HOST",
+		// Azure (Azurite) emulator vars.
+		"AZURE_STORAGE_ACCOUNT",
+		"AZURE_STORAGE_KEY",
+		"AZURE_STORAGE_CONNECTION_STRING",
 		// Azure auth-managed vars.
 		"AZURE_CONFIG_DIR",
 		"AZURE_SUBSCRIPTION_ID",
@@ -256,7 +296,7 @@ func componentEnvSectionToList(envSection map[string]any) []string {
 
 func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndStacksInfo, cliConfigPath string) (types.AuthManager, error) {
 	// Create auth manager components.
-	credStore := credentials.NewCredentialStore()
+	credStore := credentials.NewCredentialStoreWithConfig(authConfig)
 	validator := validation.NewValidator()
 
 	// Create auth manager with merged configuration and stack info (so identities can mutate it).

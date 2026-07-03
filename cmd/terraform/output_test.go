@@ -9,8 +9,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+func initOutputTestIO(t *testing.T) {
+	t.Helper()
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(data.Reset)
+	t.Cleanup(ui.Reset)
+}
 
 // TestOutputCommandSetup verifies that the output command is properly configured.
 func TestOutputCommandSetup(t *testing.T) {
@@ -314,6 +329,72 @@ func TestFormatSingleOutput(t *testing.T) {
 	}
 }
 
+func TestExecuteOutputWithFormat_PassesAuthManager(t *testing.T) {
+	initOutputTestIO(t)
+	// executeOutputWithFormat reads "output-file", "skip-init", "uppercase", and "flatten"
+	// from the shared viper.GetViper() singleton. Snapshot every key we touch (or that the
+	// function under test reads) and restore the originals via t.Cleanup so this test
+	// cannot leak Viper state to — or inherit it from — sibling tests.
+	v := viper.GetViper()
+	origOutputFile := v.Get("output-file")
+	origSkipInit := v.Get("skip-init")
+	origUppercase := v.Get("uppercase")
+	origFlatten := v.Get("flatten")
+	v.Set("output-file", filepath.Join(t.TempDir(), "output.json"))
+	v.Set("skip-init", false)
+	v.Set("uppercase", false)
+	v.Set("flatten", false)
+	t.Cleanup(func() {
+		v.Set("output-file", origOutputFile)
+		v.Set("skip-init", origSkipInit)
+		v.Set("uppercase", origUppercase)
+		v.Set("flatten", origFlatten)
+	})
+
+	orig := outputGetComponentOutputs
+	t.Cleanup(func() {
+		outputGetComponentOutputs = orig
+	})
+
+	sentinelAuthManager := "sentinel-auth-manager"
+	sentinelAuthContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{Profile: "sentinel-profile"},
+	}
+	var receivedAuthManager any
+	var receivedAuthContext *schema.AuthContext
+
+	outputGetComponentOutputs = func(
+		_ *schema.AtmosConfiguration,
+		component string,
+		stack string,
+		skipInit bool,
+		authContext *schema.AuthContext,
+		authManager any,
+	) (map[string]any, error) {
+		assert.Equal(t, "test-component", component)
+		assert.Equal(t, "test-stack", stack)
+		assert.False(t, skipInit)
+		receivedAuthContext = authContext
+		receivedAuthManager = authManager
+		return map[string]any{"foo": "bar"}, nil
+	}
+
+	err := executeOutputWithFormat(
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{
+			ComponentFromArg: "test-component",
+			Stack:            "test-stack",
+			AuthContext:      sentinelAuthContext,
+		},
+		sentinelAuthManager,
+		"json",
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, sentinelAuthContext, receivedAuthContext)
+	assert.Equal(t, sentinelAuthManager, receivedAuthManager)
+}
+
 // TestOutputFlagShortcuts verifies that flags have the correct shortcuts.
 func TestOutputFlagShortcuts(t *testing.T) {
 	tests := []struct {
@@ -426,7 +507,6 @@ func TestExecuteGitHubOutput(t *testing.T) {
 		tmpDir := t.TempDir()
 		err := executeGitHubOutput(outputs, filepath.Join(tmpDir, "nonexistent", "file.txt"), "", opts)
 		require.Error(t, err)
-		// Error is wrapped: contains "failed to open file".
-		assert.Contains(t, err.Error(), "failed to open file")
+		assert.ErrorIs(t, err, errUtils.ErrOpenFile)
 	})
 }

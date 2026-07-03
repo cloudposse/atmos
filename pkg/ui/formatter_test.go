@@ -137,6 +137,7 @@ func TestFormatter_Success(t *testing.T) {
 }
 
 func TestFormatter_Warning(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := terminal.New()
 	f := NewFormatter(ioCtx, term)
@@ -151,6 +152,7 @@ func TestFormatter_Warning(t *testing.T) {
 }
 
 func TestFormatter_Error(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := terminal.New()
 	f := NewFormatter(ioCtx, term)
@@ -165,6 +167,7 @@ func TestFormatter_Error(t *testing.T) {
 }
 
 func TestFormatter_Info(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := terminal.New()
 	f := NewFormatter(ioCtx, term)
@@ -423,6 +426,10 @@ func (m *mockTerminal) IsTTY(stream terminal.Stream) bool {
 	return m.isTTY
 }
 
+func (m *mockTerminal) IsPiped(stream terminal.Stream) bool {
+	return false
+}
+
 func (m *mockTerminal) ColorProfile() terminal.ColorProfile {
 	return m.profile
 }
@@ -519,7 +526,7 @@ func TestFormatter_AutomaticIcons(t *testing.T) {
 		{
 			name:         "Info includes info icon",
 			method:       func(f Formatter, text string) string { return f.Info(text) },
-			expectedIcon: "ℹ",
+			expectedIcon: "▶",
 			text:         "information message",
 		},
 	}
@@ -585,7 +592,7 @@ func TestFormatter_FormattedMethods(t *testing.T) {
 		{
 			name:         "Infof formats with arguments",
 			method:       func(f Formatter) string { return f.Infof("Loading configuration from %s", "/etc/atmos.yaml") },
-			expectedIcon: "ℹ",
+			expectedIcon: "▶",
 			expectedText: "Loading configuration from /etc/atmos.yaml",
 		},
 	}
@@ -855,6 +862,7 @@ func TestToastf_Integration(t *testing.T) {
 }
 
 func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1136,7 +1144,7 @@ func TestFormatter_ConvenienceFunctions_Multiline(t *testing.T) {
 			name:    "Info multiline",
 			fn:      func(f *formatter, msg string) string { return f.Info(msg) },
 			message: "Processing\nStep 1 of 3",
-			icon:    "ℹ",
+			icon:    "▶",
 		},
 	}
 
@@ -1238,6 +1246,7 @@ func TestFormatter_LipglossWidth(t *testing.T) {
 }
 
 func TestFormatter_Successf_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1311,6 +1320,7 @@ func TestFormatter_Successf_ToolSpec(t *testing.T) {
 }
 
 func TestFormatter_Errorf_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1332,6 +1342,7 @@ func TestFormatter_Errorf_Multiline(t *testing.T) {
 }
 
 func TestFormatter_Warningf_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1353,6 +1364,7 @@ func TestFormatter_Warningf_Multiline(t *testing.T) {
 }
 
 func TestFormatter_Infof_Multiline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	ioCtx := createTestIOContext()
 	term := createMockTerminal(terminal.ColorNone)
 	f := NewFormatter(ioCtx, term).(*formatter)
@@ -1374,6 +1386,7 @@ func TestFormatter_Infof_Multiline(t *testing.T) {
 }
 
 func TestFormatSuccessAndError(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	tests := []struct {
 		name         string
 		text         string
@@ -1868,6 +1881,71 @@ func TestFormatExperimentalBadge_NoColorSupport(t *testing.T) {
 	}
 }
 
+func TestFormatComponentLabel_FormatterNotInitialized(t *testing.T) {
+	formatterMu.Lock()
+	oldFormatter, oldFormat, oldTerminal := globalFormatter, Format, globalTerminal
+	globalFormatter, Format, globalTerminal = nil, nil, nil
+	formatterMu.Unlock()
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter, Format, globalTerminal = oldFormatter, oldFormat, oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// Degrades to a plain [name] label when the formatter is not initialized.
+	if got := FormatComponentLabel("api", 0); got != "[api]" {
+		t.Errorf("FormatComponentLabel() fallback = %q, want %q", got, "[api]")
+	}
+}
+
+func TestFormatComponentLabel_NoColorSupport(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	formatterMu.Lock()
+	oldFormatter, oldFormat, oldTerminal := globalFormatter, Format, globalTerminal
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+	Format = globalFormatter
+	globalTerminal = term
+	formatterMu.Unlock()
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter, Format, globalTerminal = oldFormatter, oldFormat, oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// No color support => plain [name], no ANSI escapes.
+	got := FormatComponentLabel("worker", 2)
+	if got != "[worker]" {
+		t.Errorf("FormatComponentLabel() no-color = %q, want %q", got, "[worker]")
+	}
+}
+
+func TestFormatComponentLabel_WithColor(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorTrue)
+	formatterMu.Lock()
+	oldFormatter, oldFormat, oldTerminal := globalFormatter, Format, globalTerminal
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+	Format = globalFormatter
+	globalTerminal = term
+	formatterMu.Unlock()
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter, Format, globalTerminal = oldFormatter, oldFormat, oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// With color support the name is present and styled (contains ANSI escapes),
+	// not the plain bracketed fallback.
+	got := FormatComponentLabel("api", 0)
+	if !strings.Contains(got, "api") {
+		t.Errorf("FormatComponentLabel() = %q, want it to contain %q", got, "api")
+	}
+	if got == "[api]" {
+		t.Errorf("FormatComponentLabel() with color should be styled, got plain %q", got)
+	}
+}
+
 func TestClearLine_TerminalNotInitialized(t *testing.T) {
 	// Save original state.
 	formatterMu.Lock()
@@ -2256,6 +2334,7 @@ func TestWriteln_PackageLevel(t *testing.T) {
 
 // TestFormatInline tests the FormatInline package-level function.
 func TestFormatInline(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	t.Run("plain text passes through", func(t *testing.T) {
 		ioCtx := createTestIOContext()
 		term := createMockTerminal(terminal.ColorNone)

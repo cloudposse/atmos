@@ -21,17 +21,23 @@ func TestPlugin_GetHookBindings(t *testing.T) {
 	p := &Plugin{}
 	bindings := p.GetHookBindings()
 
-	// Should have 6 bindings: before/after for plan, apply, deploy.
-	require.Len(t, bindings, 6)
+	// Should have 11 bindings: before/after for plan/apply/test/deploy plus
+	// aggregate hooks for graph-backed plan/apply/destroy runs.
+	require.Len(t, bindings, 11)
 
 	// Verify all bindings have handlers.
 	expectedEvents := []string{
 		"before.terraform.plan",
 		"after.terraform.plan",
+		"after.terraform.plan.aggregate",
 		"before.terraform.apply",
 		"after.terraform.apply",
+		"after.terraform.apply.aggregate",
+		"before.terraform.test",
+		"after.terraform.test",
 		"before.terraform.deploy",
 		"after.terraform.deploy",
+		"after.terraform.destroy.aggregate",
 	}
 
 	for _, expectedEvent := range expectedEvents {
@@ -54,7 +60,7 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 	}
 	output := "Plan: 1 to add, 0 to change, 0 to destroy."
 
-	result, err := p.buildTemplateContext(info, ciCtx, output, "plan")
+	result, err := p.buildTemplateContext(info, ciCtx, output, "plan", nil)
 	require.NoError(t, err)
 
 	// Should return TerraformTemplateContext.
@@ -72,6 +78,35 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 	// Check terraform-specific fields.
 	assert.Equal(t, 1, ctx.Resources.Create)
 	assert.True(t, ctx.HasChanges())
+}
+
+func TestPlugin_BuildTemplateContext_Test(t *testing.T) {
+	p := &Plugin{}
+	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "app", Stack: "local"}
+	output := "  run \"a\"... pass\n  run \"b\"... pass\n\nSuccess! 2 passed, 0 failed.\n"
+
+	result, err := p.buildTemplateContext(info, nil, output, "test", nil)
+	require.NoError(t, err)
+
+	ctx, ok := result.(*TerraformTemplateContext)
+	require.True(t, ok)
+	assert.Equal(t, "test", ctx.Command)
+	require.NotNil(t, ctx.TestResult, "test command should populate TestResult")
+	assert.Equal(t, 2, ctx.TestResult.Total)
+	assert.Equal(t, 2, ctx.TestResult.Pass)
+}
+
+func TestPlugin_GetOutputVariables_Test(t *testing.T) {
+	p := &Plugin{}
+	result := ParseTestOutput("  run \"a\"... pass\n  run \"b\"... fail\n\nFailure! 1 passed, 1 failed.\n")
+	result.HasErrors = true
+
+	vars := p.getOutputVariables(result, "test")
+	assert.Equal(t, "2", vars["tests_total"])
+	assert.Equal(t, "1", vars["tests_passed"])
+	assert.Equal(t, "1", vars["tests_failed"])
+	assert.Equal(t, "0", vars["tests_errored"])
+	assert.Equal(t, "false", vars["success"])
 }
 
 func TestPlugin_BuildTemplateContext_StripsOutputBeforePlanActions(t *testing.T) {
@@ -98,7 +133,7 @@ Terraform will perform the following actions:
 
 Plan: 1 to add, 0 to change, 0 to destroy.`
 
-	result, err := p.buildTemplateContext(info, nil, output, "plan")
+	result, err := p.buildTemplateContext(info, nil, output, "plan", nil)
 	require.NoError(t, err)
 
 	ctx, ok := result.(*TerraformTemplateContext)
@@ -125,7 +160,7 @@ func TestPlugin_BuildTemplateContext_ClearsOutputForNoChanges(t *testing.T) {
 	// No-changes output has no plan to display in the summary section.
 	output := "No changes. Your infrastructure matches the configuration."
 
-	result, err := p.buildTemplateContext(info, nil, output, "plan")
+	result, err := p.buildTemplateContext(info, nil, output, "plan", nil)
 	require.NoError(t, err)
 
 	ctx, ok := result.(*TerraformTemplateContext)
@@ -144,7 +179,7 @@ func TestPlugin_BuildTemplateContext_ApplyKeepsOutputWithNoChanges(t *testing.T)
 	// Apply with no changes should still show the apply result.
 	output := "No changes. Your infrastructure matches the configuration.\n\nApply complete! Resources: 0 added, 0 changed, 0 destroyed."
 
-	result, err := p.buildTemplateContext(info, nil, output, "apply")
+	result, err := p.buildTemplateContext(info, nil, output, "apply", nil)
 	require.NoError(t, err)
 
 	ctx, ok := result.(*TerraformTemplateContext)
@@ -164,7 +199,7 @@ func TestPlugin_BuildTemplateContext_ApplyStripsProgressLines(t *testing.T) {
 	// Apply output with progress lines before the result.
 	output := "aws_instance.web: Creating...\naws_instance.web: Creation complete after 35s [id=i-12345678]\n\nApply complete! Resources: 1 added, 0 changed, 0 destroyed.\n\nOutputs:\n\ninstance_id = \"i-12345678\""
 
-	result, err := p.buildTemplateContext(info, nil, output, "apply")
+	result, err := p.buildTemplateContext(info, nil, output, "apply", nil)
 	require.NoError(t, err)
 
 	ctx, ok := result.(*TerraformTemplateContext)
@@ -212,7 +247,7 @@ Outputs:
 
 url = "http://app.example.com"`
 
-	result, err := p.buildTemplateContext(info, nil, output, "apply")
+	result, err := p.buildTemplateContext(info, nil, output, "apply", nil)
 	require.NoError(t, err)
 
 	ctx, ok := result.(*TerraformTemplateContext)
@@ -249,7 +284,7 @@ func TestPlugin_BuildTemplateContext_PreservesOutputWithoutMarkers(t *testing.T)
 	// Output without any known markers should be preserved as-is.
 	output := "Some unknown terraform output"
 
-	result, err := p.buildTemplateContext(info, nil, output, "plan")
+	result, err := p.buildTemplateContext(info, nil, output, "plan", nil)
 	require.NoError(t, err)
 
 	ctx, ok := result.(*TerraformTemplateContext)
@@ -355,6 +390,61 @@ func TestPlugin_GetArtifactKey(t *testing.T) {
 		_, err := p.getArtifactKey(info, nil)
 		assert.ErrorIs(t, err, errUtils.ErrPlanfileKeyInvalid)
 	})
+}
+
+// TestBuildTemplateContext_PreservesPassedResult ensures that when a caller
+// supplies an enriched *plugin.OutputResult (e.g., the result from
+// parseOutputWithError that has HasErrors=true because ctx.CommandError != nil),
+// buildTemplateContext propagates it into the template context instead of
+// re-parsing the raw output and dropping the error context.
+func TestBuildTemplateContext_PreservesPassedResult(t *testing.T) {
+	p := &Plugin{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "dev",
+	}
+
+	enriched := &plugin.OutputResult{
+		HasErrors: true,
+		ExitCode:  1,
+		Errors:    []string{"boom"},
+		Data:      &plugin.TerraformOutputData{},
+	}
+
+	result, err := p.buildTemplateContext(info, nil, "", "apply", enriched)
+	require.NoError(t, err)
+
+	ctx, ok := result.(*TerraformTemplateContext)
+	require.True(t, ok, "Expected *TerraformTemplateContext")
+	require.NotNil(t, ctx.Result)
+
+	assert.True(t, ctx.Result.HasErrors, "HasErrors must reflect the passed-in enriched result")
+	require.Len(t, ctx.Result.Errors, 1)
+	assert.Equal(t, "boom", ctx.Result.Errors[0])
+	assert.Equal(t, 1, ctx.Result.ExitCode)
+}
+
+// TestBuildTemplateContext_FallsBackToParseWhenNil verifies that legacy callers
+// passing nil for the result argument still get the old behavior (re-parse the
+// output). This guards backward compatibility for any future callers and makes
+// the fallback contract explicit.
+func TestBuildTemplateContext_FallsBackToParseWhenNil(t *testing.T) {
+	p := &Plugin{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "dev",
+	}
+
+	result, err := p.buildTemplateContext(info, nil, "Plan: 2 to add, 0 to change, 0 to destroy.", "plan", nil)
+	require.NoError(t, err)
+
+	ctx, ok := result.(*TerraformTemplateContext)
+	require.True(t, ok)
+	require.NotNil(t, ctx.Result)
+
+	assert.False(t, ctx.Result.HasErrors)
+	assert.Equal(t, 2, ctx.Resources.Create)
+	assert.True(t, ctx.HasChanges())
 }
 
 // Helper function to find a binding by event.

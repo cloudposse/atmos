@@ -528,6 +528,22 @@ func FormatExperimentalBadge() string {
 	return f.styles.ExperimentalBadge.Render("EXPERIMENTAL")
 }
 
+// FormatComponentLabel renders a short colored badge for a per-item label (e.g. a
+// container log prefix), cycling background colors by index so each item gets a
+// distinct, stable color in the log-level label style. When color is
+// unsupported (non-TTY, NO_COLOR, dumb terminal) it degrades to a plain `[name]`
+// label so output stays readable in pipes and CI.
+func FormatComponentLabel(name string, index int) string {
+	f, err := getFormatter()
+	if err != nil || !f.SupportsColor() {
+		return "[" + name + "]"
+	}
+	if index < 0 {
+		index = 0
+	}
+	return theme.ComponentLabelStyle(index).Render(name)
+}
+
 // Writef writes formatted text to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Writef() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Writef(format string, a ...interface{}) {
@@ -604,6 +620,22 @@ func (f *formatter) SupportsColor() bool {
 
 func (f *formatter) ColorProfile() terminal.ColorProfile {
 	return f.terminal.ColorProfile()
+}
+
+// termenvProfile maps the formatter's terminal color profile to a termenv.Profile.
+func (f *formatter) termenvProfile() termenv.Profile {
+	switch f.terminal.ColorProfile() {
+	case terminal.ColorNone:
+		return termenv.Ascii
+	case terminal.Color16:
+		return termenv.ANSI
+	case terminal.Color256:
+		return termenv.ANSI256
+	case terminal.ColorTrue:
+		return termenv.TrueColor
+	default:
+		return termenv.Ascii
+	}
 }
 
 // StatusMessage formats a message with an icon and color.
@@ -736,8 +768,8 @@ func (f *formatter) renderToastMarkdownFromStylesheet(content string, getStylesh
 		opts = append(opts, markdown.WithWordWrap(0))
 	}
 
-	// Set color profile using lipgloss's detected profile.
-	opts = append(opts, markdown.WithColorProfile(lipgloss.DefaultRenderer().ColorProfile()))
+	// Set color profile based on the formatter's terminal detection.
+	opts = append(opts, markdown.WithColorProfile(f.termenvProfile()))
 
 	if f.terminal.ColorProfile() != terminal.ColorNone {
 		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
@@ -819,7 +851,7 @@ func (f *formatter) Errorf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Info(text string) string {
-	result, _ := f.toastMarkdown("ℹ", &f.styles.Info, text)
+	result, _ := f.toastMarkdown(theme.IconInfo, &f.styles.Info, text)
 	return result
 }
 
@@ -970,7 +1002,11 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 		opts = append(opts, glamour.WithPreservedNewLines())
 	}
 
-	// Use theme-aware glamour styles
+	// Use atmos-configured color profile (not glamour's auto-detection) to ensure
+	// consistent color rendering across all output paths.
+	opts = append(opts, glamour.WithColorProfile(f.termenvProfile()))
+
+	// Use theme-aware glamour styles.
 	if f.terminal.ColorProfile() != terminal.ColorNone {
 		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
 		if themeName == "" {
@@ -980,7 +1016,7 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 		if err == nil {
 			opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
 		}
-		// Fallback to notty style if theme conversion fails
+		// Fallback to notty style if theme conversion fails.
 	} else {
 		opts = append(opts, glamour.WithStylePath("notty"))
 	}

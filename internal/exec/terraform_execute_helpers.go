@@ -10,21 +10,29 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
+	_ "github.com/cloudposse/atmos/pkg/provisioner/lock"   // register after.terraform.init providers-lock provisioner
 	_ "github.com/cloudposse/atmos/pkg/provisioner/source" // register source provisioner
-	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
+	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
+	"github.com/cloudposse/atmos/pkg/terraform/rc"
+	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -56,7 +64,8 @@ func handleVersionSubcommand(atmosConfig *schema.AtmosConfiguration, info *schem
 		"",
 		tenv.EnvVars(),
 		false,
-		info.RedirectStdErr)
+		info.RedirectStdErr,
+	)
 }
 
 // setupTerraformAuth builds the merged auth config (global + component-specific via
@@ -86,7 +95,7 @@ var defaultMergedAuthConfigGetter = getMergedAuthConfig
 
 func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 	// Log the identity-selection decision point for easy debugging.
-	log.Debug("Resolving auth config for terraform command",
+	log.Debug("Resolving auth config for component command",
 		"stack", info.Stack, "component", info.ComponentFromArg, "subcommand", info.SubCommand)
 
 	// Get merged auth config (global + component-specific if stack/component are set).
@@ -105,7 +114,8 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	// Create and authenticate the AuthManager using the same injectable creator as
 	// createAndAuthenticateAuthManagerWithDeps to keep injection points unified.
 	authManager, err := defaultAuthManagerCreator(
-		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig)
+		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, info.Stack,
+	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrUserAborted) {
 			errUtils.Exit(errUtils.ExitCodeSIGINT)
@@ -114,19 +124,111 @@ func setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Persist the auto-detected identity so downstream hooks don't re-prompt.
-	storeAutoDetectedIdentity(authManager, info)
-
 	// Store manager for nested YAML functions (e.g. !terraform.state).
 	info.AuthManager = authManager
 
-	// Bridge auth credentials into identity-aware stores (lazy resolution on first use).
+	// The manager is created with its own empty stackInfo; thread the target stack
+	// through so emulator identities can resolve the running emulator's endpoint
+	// when stores (`!store`, `!secret`, hooks) build their in-process auth context.
+	// authManager may be nil when no identity/auth is configured.
 	if authManager != nil {
-		resolver := authbridge.NewResolver(authManager, info)
-		atmosConfig.Stores.SetAuthContextResolver(resolver)
+		if si := authManager.GetStackInfo(); si != nil && si.Stack == "" {
+			si.Stack = info.Stack
+		}
 	}
 
+	injectTerraformStoreAuthResolver(atmosConfig, info, authManager)
+
 	return authManager, nil
+}
+
+func injectTerraformStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager) {
+	if authManager == nil {
+		return
+	}
+
+	// Persist the auto-detected identity so downstream hooks, nested operations,
+	// and stores without their own identity use the same authenticated principal.
+	storeAutoDetectedIdentity(authManager, info)
+
+	resolver := authbridge.NewResolver(authManager, info)
+	defaultIdentity := resolveStoreDefaultIdentity(info.Identity, authManager)
+	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, defaultIdentity)
+
+	// Also expose the resolver to cloud-KMS SOPS providers so `!secret` resolution during terraform
+	// authenticates KMS decrypt as the component's effective identity (issue #2637).
+	atmosConfig.SecretsAuth = &store.SecretsAuthContext{
+		Resolver:        resolver,
+		DefaultIdentity: defaultIdentity,
+	}
+}
+
+func storeDefaultIdentity(identity string) string {
+	switch identity {
+	case "", cfg.IdentityFlagSelectValue, cfg.IdentityFlagDisabledValue:
+		return ""
+	default:
+		return identity
+	}
+}
+
+// resolveStoreDefaultIdentity returns the identity that stores without their own
+// `identity:` should authenticate as. An explicit `--identity`/`ATMOS_IDENTITY`
+// wins; otherwise we fall back to the stack's `default: true` identity so
+// in-process store/secret reads use the same principal (and emulator endpoint) as
+// the Terraform subprocess. When there is no default identity (or auth is
+// disabled), this returns "" — stores then use the AWS/GCP/Azure default
+// credential chain exactly as before (back-compat for ambient real-cloud creds).
+func resolveStoreDefaultIdentity(identity string, authManager auth.AuthManager) string {
+	if identity == cfg.IdentityFlagDisabledValue {
+		return ""
+	}
+	if explicit := storeDefaultIdentity(identity); explicit != "" {
+		return explicit
+	}
+	if authManager == nil {
+		return ""
+	}
+	defaultIdentity, err := authManager.GetDefaultIdentity(false)
+	if err != nil {
+		return ""
+	}
+	return defaultIdentity
+}
+
+// HookStoreDefaultIdentity resolves the identity that identity-less stores invoked by terraform
+// lifecycle hooks (e.g. the after-apply `store-outputs` hook) should inherit. It mirrors the main
+// terraform path (injectTerraformStoreAuthResolver): it auto-detects the active identity from the
+// auth manager's chain when info carries no explicit identity, then normalizes empty/select/disabled
+// to "" (meaning "no inheritance — keep ambient/default SDK credentials"). It returns "" when no auth
+// manager is present, preserving the prior behavior for runs without Atmos auth.
+//
+// The hook executes in a freshly loaded config (prepareHookContext), so it must re-derive this from
+// the persisted auth manager rather than relying on the apply-phase config.
+func HookStoreDefaultIdentity(authManager auth.AuthManager, info *schema.ConfigAndStacksInfo) string {
+	defer perf.Track(nil, "exec.HookStoreDefaultIdentity")()
+
+	if authManager == nil || info == nil {
+		return ""
+	}
+	storeAutoDetectedIdentity(authManager, info)
+	return storeDefaultIdentity(info.Identity)
+}
+
+// SetupTerraformAuthForCLI exposes terraform auth setup to command-layer callers
+// that need the same merged-auth and explicit-identity behavior as ExecuteTerraform.
+func SetupTerraformAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (any, error) {
+	defer perf.Track(atmosConfig, "exec.SetupTerraformAuthForCLI")()
+
+	return setupTerraformAuth(atmosConfig, info)
+}
+
+// SetupComponentAuthForCLI exposes the shared component auth setup to non-Terraform
+// command layers that still need authenticated YAML functions such as !terraform.state.
+func SetupComponentAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+	defer perf.Track(atmosConfig, "exec.SetupComponentAuthForCLI")()
+
+	return setupTerraformAuth(atmosConfig, info)
 }
 
 // resolveAndProvisionComponentPath resolves the filesystem path for a terraform component,
@@ -138,12 +240,19 @@ func resolveAndProvisionComponentPath(atmosConfig *schema.AtmosConfiguration, in
 		return "", fmt.Errorf("failed to resolve component path: %w", err)
 	}
 
-	if err = autoGenerateComponentFiles(atmosConfig, info, componentPath); err != nil {
+	// Provision source before generating files: when provision.workdir.enabled
+	// is true the resolved path is the workdir, and generated files must land
+	// there rather than in the base component directory.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
+		ctx, atmosConfig, info, cfg.TerraformComponentType, componentPath,
+	)
+	if err != nil {
 		return "", err
 	}
 
-	componentPath, componentPathExists, err := provisionComponentSource(atmosConfig, info, componentPath)
-	if err != nil {
+	if err = autoGenerateComponentFiles(atmosConfig, info, componentPath); err != nil {
 		return "", err
 	}
 
@@ -175,35 +284,6 @@ func autoGenerateComponentFiles(atmosConfig *schema.AtmosConfiguration, info *sc
 		return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
 	}
 	return GenerateFilesForComponent(atmosConfig, info, componentPath)
-}
-
-// provisionComponentSource performs JIT source provisioning when configured, then
-// checks whether the component directory exists. Returns the (possibly updated)
-// component path, existence flag, and any error.
-func provisionComponentSource(
-	atmosConfig *schema.AtmosConfiguration,
-	info *schema.ConfigAndStacksInfo,
-	componentPath string,
-) (string, bool, error) {
-	exists, err := u.IsDirectory(componentPath)
-
-	if !provSource.HasSource(info.ComponentSection) {
-		return componentPath, exists, err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	if autoErr := provSource.AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, info.ComponentSection, info.AuthContext); autoErr != nil {
-		return "", false, fmt.Errorf("failed to auto-provision component source: %w", autoErr)
-	}
-
-	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
-		return workdirPath, true, nil
-	}
-
-	// Re-check existence after provisioning.
-	exists, err = u.IsDirectory(componentPath)
-	return componentPath, exists, err
 }
 
 // checkComponentRestrictions returns an error when the requested subcommand is not
@@ -253,12 +333,115 @@ func printAndWriteVarFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 	if err := logAndWriteComponentVars(atmosConfig, info); err != nil {
 		return err
 	}
+	if err := writeTerraformTestVars(atmosConfig, info); err != nil {
+		return err
+	}
 
 	return logCliVarsOverrides(atmosConfig, info)
 }
 
+// computeTerraformSecretVarKeys records the set of top-level variable keys whose value
+// contains a resolved secret, so they can be kept out of the on-disk varfile and injected
+// as TF_VAR_<name> environment variables instead. It must run after secret resolution
+// (ProcessStacks) and before auth credentials are registered with the masker, so that the
+// varfile-write and env-assembly steps partition the variables identically.
+func computeTerraformSecretVarKeys(info *schema.ConfigAndStacksInfo) {
+	_, secret := tfvars.Partition(info.ComponentVarsSection, atmosio.ContainsSecret)
+	if len(secret) == 0 {
+		info.TerraformSecretVarKeys = nil
+		return
+	}
+	keys := make(map[string]bool, len(secret))
+	for k := range secret {
+		keys[k] = true
+	}
+	info.TerraformSecretVarKeys = keys
+}
+
+// diskSafeVars returns ComponentVarsSection with secret-bearing top-level keys removed,
+// so resolved secrets are never written to the on-disk varfile. Returns the original map
+// unchanged when no secret-bearing variables were detected.
+func diskSafeVars(info *schema.ConfigAndStacksInfo) map[string]any {
+	testSecretVars := terraformTestSecretVars(info)
+	if len(info.TerraformSecretVarKeys) == 0 && len(testSecretVars) == 0 {
+		return info.ComponentVarsSection
+	}
+	safe := make(map[string]any, len(info.ComponentVarsSection))
+	for k, v := range info.ComponentVarsSection {
+		if info.TerraformSecretVarKeys[k] {
+			continue
+		}
+		if _, collidesWithSecretTestVar := testSecretVars[k]; collidesWithSecretTestVar {
+			continue
+		}
+		safe[k] = v
+	}
+	return safe
+}
+
+// secretVarEnv returns the TF_VAR_<name> environment entries for the component's
+// secret-bearing variables, for injection into the subprocess environment.
+func secretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
+	if len(info.TerraformSecretVarKeys) == 0 {
+		return nil, nil
+	}
+	secret := make(map[string]any, len(info.TerraformSecretVarKeys))
+	for k := range info.TerraformSecretVarKeys {
+		if v, ok := info.ComponentVarsSection[k]; ok {
+			secret[k] = v
+		}
+	}
+	return tfvars.SecretEnv(secret)
+}
+
+func terraformTestVars(info *schema.ConfigAndStacksInfo) map[string]any {
+	if info == nil || info.SubCommand != "test" {
+		return nil
+	}
+	testSection, ok := info.ComponentSection[cfg.TestSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+	vars, ok := testSection[cfg.VarsSectionName].(map[string]any)
+	if !ok || len(vars) == 0 {
+		return nil
+	}
+	return vars
+}
+
+func hasTerraformTestVars(info *schema.ConfigAndStacksInfo) bool {
+	return len(terraformTestVars(info)) > 0
+}
+
+func diskSafeTerraformTestVars(info *schema.ConfigAndStacksInfo) map[string]any {
+	vars := terraformTestVars(info)
+	if len(vars) == 0 {
+		return nil
+	}
+	safe, _ := tfvars.Partition(vars, atmosio.ContainsSecret)
+	return safe
+}
+
+func terraformTestSecretVars(info *schema.ConfigAndStacksInfo) map[string]any {
+	vars := terraformTestVars(info)
+	if len(vars) == 0 {
+		return nil
+	}
+	_, secret := tfvars.Partition(vars, atmosio.ContainsSecret)
+	return secret
+}
+
+func terraformTestSecretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
+	secret := terraformTestSecretVars(info)
+	if len(secret) == 0 {
+		return nil, nil
+	}
+	return tfvars.SecretEnv(secret)
+}
+
 // logAndWriteComponentVars logs component variables and writes the varfile to disk
-// when not using a pre-existing plan.
+// when not using a pre-existing plan. Secret-bearing variables are excluded from the
+// varfile (they are injected as TF_VAR_<name> env vars in assembleComponentEnvVars).
 func logAndWriteComponentVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	log.Debug("Variables for the component in the stack", logFieldComponent, info.ComponentFromArg, "stack", info.Stack)
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
@@ -271,12 +454,24 @@ func logAndWriteComponentVars(atmosConfig *schema.AtmosConfiguration, info *sche
 		varFilePath := constructTerraformComponentVarfilePath(atmosConfig, info)
 		log.Debug("Writing the variables", "file", varFilePath)
 		if !info.DryRun {
-			if err := u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, filePermissions); err != nil {
+			if err := u.WriteToFileAsJSON(varFilePath, diskSafeVars(info), filePermissions); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func writeTerraformTestVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if !hasTerraformTestVars(info) {
+		return nil
+	}
+	varFilePath := constructTerraformComponentTestVarfilePath(atmosConfig, info)
+	log.Debug("Writing Terraform test variables", "file", varFilePath)
+	if info.DryRun {
+		return nil
+	}
+	return u.WriteToFileAsJSON(varFilePath, diskSafeTerraformTestVars(info), filePermissions)
 }
 
 // logCliVarsOverrides logs CLI variable overrides when present at debug/trace level.
@@ -328,7 +523,11 @@ func generateConfigFiles(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	if err := GenerateFilesForComponent(atmosConfig, info, workingDir); err != nil {
 		return err
 	}
-	return generateProviderOverrides(atmosConfig, info, workingDir)
+	if err := generateProviderOverrides(atmosConfig, info, workingDir); err != nil {
+		return err
+	}
+	// Generate required_providers (terraform_override.tf.json) for version pinning (DEV-3124).
+	return generateRequiredProviders(atmosConfig, info, workingDir)
 }
 
 // warnOnConflictingEnvVars inspects the current process environment for variables
@@ -344,7 +543,7 @@ func warnOnConflictingEnvVars() {
 		if len(parts) != 2 {
 			continue
 		}
-		if u.SliceContainsString(warnOnExactVars, parts[0]) {
+		if slices.Contains(warnOnExactVars, parts[0]) {
 			problematicVars = append(problematicVars, parts[0])
 			continue
 		}
@@ -397,6 +596,15 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 	// Plugin cache directory.
 	info.ComponentEnvList = append(info.ComponentEnvList, configurePluginCache(atmosConfig)...)
 
+	// Terraform CLI configuration (.terraformrc) rendered by Atmos and exposed via
+	// TF_CLI_CONFIG_FILE / TOFU_CLI_CONFIG_FILE. Also the injection point for the
+	// registry cache's network_mirror/host directives. The cleanup closer is stashed
+	// on info and run (deferred) after the whole terraform pipeline so the temp file
+	// survives every subprocess (init, workspace, plan/apply).
+	if err := configureTerraformRC(atmosConfig, info); err != nil {
+		return err
+	}
+
 	// Toolchain PATH must come last so it takes precedence over all other PATH entries.
 	if tenv != nil {
 		info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
@@ -409,7 +617,116 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 		}
 	}
 
+	// Inject secret-bearing variables as TF_VAR_<name> so they reach Terraform via the
+	// (transient) process environment instead of the on-disk varfile. Appended AFTER the
+	// debug dump above so secret values are never written to logs.
+	secretEnv, err := secretVarEnv(info)
+	if err != nil {
+		return err
+	}
+	if len(secretEnv) > 0 {
+		info.ComponentEnvList = append(info.ComponentEnvList, secretEnv...)
+		log.Debug("Injecting secret variables as TF_VAR_* environment variables", "count", len(secretEnv))
+	}
+
+	testSecretEnv, err := terraformTestSecretVarEnv(info)
+	if err != nil {
+		return err
+	}
+	if len(testSecretEnv) > 0 {
+		info.ComponentEnvList = append(info.ComponentEnvList, testSecretEnv...)
+		log.Debug("Injecting secret Terraform test variables as TF_VAR_* environment variables", "count", len(testSecretEnv))
+	}
+
 	return nil
+}
+
+// configureTerraformRC builds the effective Terraform CLI-config map from the
+// user's components.terraform.rc plus any registry-cache contribution (network
+// mirror + module host overrides), renders it to a temp file, and appends
+// TF_CLI_CONFIG_FILE / TOFU_CLI_CONFIG_FILE. The cleanup closer is stashed on info
+// and deferred at the ExecuteTerraform level so the file outlives every subprocess.
+func configureTerraformRC(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	rcMap := map[string]any{}
+
+	if rcCfg := atmosConfig.Components.Terraform.RC; rcCfg != nil && rcCfg.Enabled {
+		for k, v := range rcCfg.Config {
+			// Deep-copy nested values: mergeCacheContribution mutates the "host" map in
+			// place, and a shallow copy would leak cache loopback overrides back into
+			// atmosConfig.Components.Terraform.RC.Config for later components/commands in
+			// the same process.
+			rcMap[k] = cloneRCValue(v)
+		}
+	}
+
+	if setup, ok := info.TerraformCache.(*tfcache.Setup); ok && setup != nil {
+		mergeCacheContribution(rcMap, setup.Contribute())
+
+		// Make the terraform/tofu subprocess trust the proxy's self-signed cert.
+		trustEnv, err := setup.TrustEnv()
+		if err != nil {
+			return err
+		}
+		info.ComponentEnvList = append(info.ComponentEnvList, trustEnv...)
+	}
+
+	if len(rcMap) == 0 {
+		return nil
+	}
+
+	rcEnv, rcCleanup, err := rc.Generate(rcMap, atmosConfig, info)
+	if err != nil {
+		return err
+	}
+	info.ComponentEnvList = append(info.ComponentEnvList, rcEnv...)
+	info.RCCleanup = rcCleanup
+	return nil
+}
+
+// mergeCacheContribution merges the registry cache's CLI-config directives into
+// rcMap. The cache owns provider_installation (it must be the single network-mirror
+// egress); host overrides are merged per-host so user-declared hosts are preserved.
+func mergeCacheContribution(rcMap, contribution map[string]any) {
+	const hostKey = "host"
+	for key, value := range contribution {
+		if key != hostKey {
+			rcMap[key] = value
+			continue
+		}
+		add, _ := value.(map[string]any)
+		existing, _ := rcMap[hostKey].(map[string]any)
+		if existing == nil {
+			rcMap[hostKey] = add
+			continue
+		}
+		for host, services := range add {
+			existing[host] = services
+		}
+		rcMap[hostKey] = existing
+	}
+}
+
+// cloneRCValue deep-copies a CLI-config value so callers can mutate the result without
+// affecting the source. Maps and slices are cloned recursively; scalars are returned
+// as-is. This protects atmosConfig.Components.Terraform.RC.Config from in-place mutation
+// when the registry cache contribution is merged.
+func cloneRCValue(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, item := range val {
+			out[k] = cloneRCValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, item := range val {
+			out[i] = cloneRCValue(item)
+		}
+		return out
+	default:
+		return val
+	}
 }
 
 // shouldRunTerraformInit returns true when a `terraform init` should be executed as a
@@ -431,10 +748,34 @@ func shouldRunTerraformInit(atmosConfig *schema.AtmosConfiguration, info *schema
 }
 
 // buildInitArgs constructs the argument list for `terraform init`.
-// It adds -reconfigure when the component uses the workspace subcommand or when
-// InitRunReconfigure is enabled, and appends the varfile flag when PassVars is set.
+//
+// For non-workdir components, -reconfigure is added when:
+//   - the component uses the workspace subcommand, or
+//   - InitRunReconfigure is explicitly enabled in atmos.yaml.
+//
+// For workdir components, InitRunReconfigure is intentionally ignored when the workdir
+// was not re-provisioned this invocation. The backend configuration for workdir
+// components is always generated deterministically from the same stack config, so it
+// never changes between runs of a preserved workdir. When -reconfigure is combined
+// with existing workspace state directories (terraform.tfstate.d/), OpenTofu treats
+// init as a fresh backend initialization and prompts "Do you want to migrate all
+// workspaces?" — even when the backend is unchanged. The correct signal to add
+// -reconfigure for workdir components is WorkdirReprovisionedKey, which is set only
+// when the workdir was actually wiped and re-downloaded (TTL expired or TTL=0s).
 func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, varFile string) []string {
-	if info.SubCommand == subcommandWorkspace || atmosConfig.Components.Terraform.InitRunReconfigure {
+	_, hasWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	_, wasReprovisioned := info.ComponentSection[provWorkdir.WorkdirReprovisionedKey]
+
+	var useReconfigure bool
+	if hasWorkdir {
+		// Workdir component: only reconfigure when the workdir was actually wiped.
+		useReconfigure = wasReprovisioned || info.SubCommand == subcommandWorkspace
+	} else {
+		// Non-workdir component: honour global InitRunReconfigure setting.
+		useReconfigure = info.SubCommand == subcommandWorkspace || atmosConfig.Components.Terraform.InitRunReconfigure
+	}
+
+	if useReconfigure {
 		if atmosConfig.Components.Terraform.Init.PassVars {
 			return []string{subcommandInit, "-reconfigure", varFileFlag, varFile}
 		}
@@ -447,11 +788,25 @@ func buildInitArgs(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAn
 }
 
 // prepareInitExecution performs the pre-init housekeeping:
-//  1. Deletes the .terraform/environment file so Terraform doesn't prompt for workspace selection.
+//  1. Deletes the .terraform/environment file so Terraform doesn't prompt for workspace selection
+//     (skipped for workdir-enabled components — see note below).
 //  2. Executes all provisioners registered for the before.terraform.init hook event.
 //  3. Returns the effective component path (which may be overridden by a workdir provisioner).
+//
+// NOTE on cleanTerraformWorkspace and workdir components:
+// cleanTerraformWorkspace was designed to prevent workspace-selection prompts when different
+// backends are used for the same component across runs.  For workdir-enabled components the
+// backend configuration is always consistent (generated fresh from the same stack config),
+// so deleting .terraform/environment is not only unnecessary — it is actively harmful:
+// when -reconfigure or init_run_reconfigure is also used, OpenTofu sees workspace state
+// directories (terraform.tfstate.d/) but no .terraform/environment file and interprets the
+// situation as a backend migration, producing the "Do you want to migrate all workspaces?"
+// prompt on every apply.  Skipping the cleanup for workdir components avoids this.
 func prepareInitExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
-	cleanTerraformWorkspace(*atmosConfig, componentPath)
+	_, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	if !isWorkdir {
+		cleanTerraformWorkspace(*atmosConfig, componentPath)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -489,21 +844,83 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 		return componentPath, err
 	}
 
-	initArgs := buildInitArgs(atmosConfig, info, varFile)
-	if err = ExecuteShellCommand(
-		*atmosConfig,
-		info.Command,
-		initArgs,
-		newPath,
-		info.ComponentEnvList,
-		info.DryRun,
-		info.RedirectStdErr,
-		opts...,
-	); err != nil {
+	if err = executeTerraformInitCommand(atmosConfig, info, newPath, varFile, opts...); err != nil {
 		return newPath, err
 	}
 
 	return newPath, nil
+}
+
+// executeTerraformInitCommand runs the `terraform init` subprocess against an already-resolved
+// componentPath and dispatches the after.terraform.init provisioners. Unlike
+// executeTerraformInitPhase it does NOT run prepareInitExecution — it skips cleanTerraformWorkspace,
+// the before.terraform.init provisioners, and workdir-path resolution. Callers that have already
+// performed that preparation (e.g. ExecuteTerraformShell, which fires the before.terraform.init
+// provisioners itself) use this directly to avoid running the provisioners twice.
+func executeTerraformInitCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...ShellCommandOption) error {
+	initArgs := buildInitArgs(atmosConfig, info, varFile)
+	err := executeShellCommandWithRetry(
+		atmosConfig,
+		info,
+		"init",
+		func(o ...ShellCommandOption) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				info.Command,
+				initArgs,
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+				o...,
+			)
+		},
+		opts...,
+	)
+	if err != nil {
+		return err
+	}
+
+	dispatchAfterInit(atmosConfig, info, componentPath)
+
+	return nil
+}
+
+// dispatchAfterInit fires the after.terraform.init provisioners (e.g. the multi-platform
+// providers-lock hook) once init has succeeded. It hands them a TerraformExecContext whose
+// runner reuses the same binary, env (incl. TF_CLI_CONFIG_FILE pointing at the live proxy),
+// and working directory as init, so a `providers lock` runs against the already-warm cache.
+// Lock completion is best-effort: a failure is logged, not propagated, so it never fails the
+// user's plan/apply.
+func dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) {
+	execCtx := &provisioner.TerraformExecContext{
+		WorkingDir: componentPath,
+		Run: func(args []string) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				info.Command,
+				args,
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+			)
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	if err := provisioner.ExecuteProvisioners(
+		ctx,
+		provisioner.HookEvent(afterTerraformInitEvent),
+		atmosConfig,
+		info.ComponentSection,
+		info.AuthContext,
+		execCtx,
+	); err != nil {
+		log.Warn("Failed to complete multi-platform provider lock", "error", err)
+	}
 }
 
 // handleDeploySubcommand converts `deploy` into `apply` and ensures -auto-approve is
@@ -512,13 +929,13 @@ func executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *sch
 func handleDeploySubcommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
 	if info.SubCommand == subcommandDeploy {
 		info.SubCommand = subcommandApply
-		if !info.UseTerraformPlan && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+		if !info.UseTerraformPlan && !slices.Contains(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
 	}
 
 	if info.SubCommand == subcommandApply && atmosConfig.Components.Terraform.ApplyAutoApprove && !info.UseTerraformPlan {
-		if !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+		if !slices.Contains(info.AdditionalArgsAndFlags, autoApproveFlag) {
 			info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, autoApproveFlag)
 		}
 	}
@@ -537,7 +954,8 @@ func logTerraformContext(info *schema.ConfigAndStacksInfo, workingDir string) {
 		inheritance = info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> ")
 	}
 
-	log.Debug("Terraform context",
+	log.Debug(
+		"Terraform context",
 		"executable", info.Command,
 		"command", command,
 		logFieldComponent, info.ComponentFromArg,

@@ -1,0 +1,24 @@
+vars:
+  # Drives the `name_template` in atmos.yaml, so this stack is `local`.
+  stage: local
+
+# The `local` stack fulfills `frontend` and `api` as containers. `database` is a
+# declared service of the composition but is NOT provided here — developers point
+# at a shared database — which is allowed (membership is closed, fulfillment open).
+components:
+  container:
+    frontend:
+      composition: storefront
+      image: nginx:alpine
+      run:
+        ports:
+          - host: 3000
+            container: 80
+
+    api:
+      composition: storefront
+      image: nginx:alpine
+      run:
+        ports:
+          - host: 8080
+            container: 80

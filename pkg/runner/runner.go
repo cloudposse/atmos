@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"mvdan.cc/sh/v3/shell"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -66,11 +70,15 @@ type Options struct {
 	AtmosConfig *schema.AtmosConfiguration
 	// Stack overrides the task's stack setting (for command-line override).
 	Stack string
+	// StepVars holds step output variables for template resolution across steps.
+	// If nil, step handlers will use a local Variables instance.
+	StepVars *step.Variables
 }
 
 // Run executes a single task with the given options.
 // It handles timeout enforcement via context and delegates to the appropriate
-// executor method based on task type.
+// executor method based on task type. Extended step types (input, choose, etc.)
+// are handled via the step handler registry.
 func Run(ctx context.Context, task *Task, runner CommandRunner, opts Options) error {
 	defer perf.Track(opts.AtmosConfig, "runner.Run")()
 
@@ -96,14 +104,98 @@ func Run(ctx context.Context, task *Task, runner CommandRunner, opts Options) er
 		taskType = schema.TaskTypeShell
 	}
 
+	// Handle core task types first via CommandRunner.
+	// These are the fundamental execution types.
 	switch taskType {
 	case schema.TaskTypeShell:
-		return runner.RunShell(ctx, task.Command, task.Name, dir, opts.Env, opts.DryRun)
+		return runShellTask(ctx, task, runner, &opts, dir)
 	case schema.TaskTypeAtmos:
 		return runAtmosTask(ctx, task, runner, opts, dir)
-	default:
-		return fmt.Errorf("%w: %s", ErrUnknownTaskType, taskType)
+	case schema.TaskTypeExec:
+		// Replace the Atmos process with the command (shell exec semantics).
+		// Validated by RunAll to be the final task.
+		return process.ReplaceShellSession(&process.ExecSpec{
+			Command: task.Command,
+			Name:    task.Name,
+			Dir:     dir,
+			Env:     append(os.Environ(), opts.Env...),
+			DryRun:  opts.DryRun,
+		})
 	}
+
+	// Check step handler registry for extended step types (input, choose, etc.).
+	if handler, ok := step.Get(taskType); ok {
+		return runStepHandler(ctx, task, handler, &opts)
+	}
+
+	return fmt.Errorf("%w: %s", ErrUnknownTaskType, taskType)
+}
+
+// runStepHandler executes an extended step type via the step handler registry.
+func runStepHandler(ctx context.Context, task *Task, handler step.StepHandler, opts *Options) error {
+	// Use provided variables or create new instance.
+	vars := opts.StepVars
+	if vars == nil {
+		vars = step.NewVariables()
+	}
+
+	// Convert Task to WorkflowStep for handler compatibility.
+	workflowStep := task.ToWorkflowStep()
+	workflowStep.DryRun = opts.DryRun
+	if task.Type == "container" && workflowStep.WorkingDirectory == "" && opts.Dir != "" {
+		workflowStep.WorkingDirectory = opts.Dir
+	}
+
+	// Validate step configuration.
+	if err := handler.Validate(&workflowStep); err != nil {
+		return fmt.Errorf("step validation failed: %w", err)
+	}
+
+	var result *step.StepResult
+	execute := func() error {
+		var execErr error
+		result, execErr = handler.Execute(ctx, &workflowStep, vars)
+		return execErr
+	}
+
+	var err error
+	if task.Retry != nil {
+		err = retry.Do(ctx, task.Retry, execute)
+	} else {
+		err = execute()
+	}
+	if err != nil {
+		return err
+	}
+
+	// Store result in variables if the step has a name.
+	if task.Name != "" && result != nil {
+		if outputErr := vars.SetWithOutputs(task.Name, result, workflowStep.Outputs); outputErr != nil {
+			return outputErr
+		}
+	}
+
+	return nil
+}
+
+// runShellTask executes a shell-type task.
+//
+// Tasks with `tty: true` attach to the user's terminal (PTY when supported).
+// Tasks with `interactive: true` let the child process own Ctrl-C: the Atmos
+// SIGINT-exit handler is suspended while the task runs. Plain tasks delegate
+// to the CommandRunner.
+func runShellTask(ctx context.Context, task *Task, runner CommandRunner, opts *Options, dir string) error {
+	return process.RunShellStep(ctx, &process.ShellSessionSpec{
+		Command:     task.Command,
+		Name:        task.Name,
+		Dir:         dir,
+		Env:         append(os.Environ(), opts.Env...),
+		TTY:         task.Tty,
+		Interactive: task.Interactive,
+		DryRun:      opts.DryRun,
+	}, func() error {
+		return runner.RunShell(ctx, task.Command, task.Name, dir, opts.Env, opts.DryRun)
+	})
 }
 
 // runAtmosTask executes an atmos-type task.
@@ -158,6 +250,12 @@ func appendStackArg(args []string, stack string) []string {
 // It stops at the first error and returns it.
 func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts Options) error {
 	defer perf.Track(opts.AtmosConfig, "runner.RunAll")()
+
+	// An exec task replaces the Atmos process, so it must be the final task
+	// and must not set supervisor-only fields.
+	if err := schema.ValidateExecTasks(tasks); err != nil {
+		return err
+	}
 
 	for i, task := range tasks {
 		if err := Run(ctx, &task, runner, opts); err != nil {

@@ -9,7 +9,7 @@ Each store references a named identity via the `identity` field. When the store 
 ```yaml
 stores:
   prod/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     identity: prod-admin          # Uses this identity for AWS credentials
     options:
       region: us-east-1
@@ -17,11 +17,11 @@ stores:
 
 ## Supported Stores
 
-| Store Type | Identity Kind |
+| Store Kind | Identity Kind |
 |---|---|
-| `aws-ssm-parameter-store` | Any AWS identity |
-| `azure-key-vault` | Any Azure identity |
-| `google-secret-manager` | Any GCP identity |
+| `aws/ssm` | Any AWS identity |
+| `azure/keyvault` | Any Azure identity |
+| `gcp/secretmanager` | Any GCP identity |
 
 ## Learn More
 

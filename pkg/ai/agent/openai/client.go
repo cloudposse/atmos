@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"time"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -56,9 +57,14 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 			Err()
 	}
 
-	// Create OpenAI client.
+	// Create OpenAI client with timeout matching atmos config.
+	requestTimeout := base.DefaultRequestTimeout
+	if atmosConfig != nil && atmosConfig.AI.TimeoutSeconds > 0 {
+		requestTimeout = time.Duration(atmosConfig.AI.TimeoutSeconds) * time.Second
+	}
 	client := openai.NewClient(
 		option.WithAPIKey(apiKey),
+		option.WithRequestTimeout(requestTimeout),
 	)
 
 	return &Client{

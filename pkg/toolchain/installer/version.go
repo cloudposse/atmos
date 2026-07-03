@@ -2,15 +2,12 @@ package installer
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
 	log "github.com/charmbracelet/log"
 
-	github "github.com/cloudposse/atmos/pkg/github"
-	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -141,77 +138,4 @@ func (i *Installer) ListAllInstalledTools() ([]InstalledTool, error) {
 	}
 
 	return tools, nil
-}
-
-// searchRegistryForTool searches the Aqua registry for a tool by name.
-func searchRegistryForTool(toolName string) (string, string, error) {
-	defer perf.Track(nil, "searchRegistryForTool")()
-
-	commonPaths := buildCommonRegistryPaths(toolName)
-	return tryRegistryPaths(commonPaths, toolName)
-}
-
-// buildCommonRegistryPaths builds a list of common registry paths to try for a tool.
-func buildCommonRegistryPaths(toolName string) []string {
-	return []string{
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/%s/%s/registry.yaml", toolName, toolName),
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/hashicorp/%s/registry.yaml", toolName),
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/cloudposse/%s/registry.yaml", toolName),
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/kubernetes/kubernetes/%s/registry.yaml", toolName),
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/helm/%s/registry.yaml", toolName),
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/opentofu/%s/registry.yaml", toolName),
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/derailed/%s/registry.yaml", toolName),
-		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/%s/registry.yaml", toolName),
-	}
-}
-
-// tryRegistryPaths attempts to find a tool in the given registry paths.
-func tryRegistryPaths(paths []string, toolName string) (string, string, error) {
-	defer perf.Track(nil, "tryRegistryPaths")()
-
-	client := httpClient.NewDefaultClient(
-		httpClient.WithGitHubToken(github.GetGitHubToken()),
-	)
-
-	for _, path := range paths {
-		owner, repo, found := tryRegistryPath(client, path)
-		if found {
-			return owner, repo, nil
-		}
-	}
-
-	return "", "", fmt.Errorf("%w: '%s' not found in registry", ErrToolNotFound, toolName)
-}
-
-// httpDoer is an interface for making HTTP requests.
-type httpDoer interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
-// tryRegistryPath attempts to fetch a single registry path.
-func tryRegistryPath(client httpDoer, path string) (owner, repo string, found bool) {
-	req, err := http.NewRequest("GET", path, nil)
-	if err != nil {
-		return "", "", false
-	}
-
-	resp, err := client.Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		if resp != nil {
-			resp.Body.Close()
-		}
-		return "", "", false
-	}
-	resp.Body.Close()
-
-	// Extract owner/repo from the URL.
-	// path format: .../pkgs/owner/repo/registry.yaml
-	parts := strings.Split(path, "/")
-	if len(parts) >= minRegistryPathSegments {
-		owner = parts[len(parts)-3]
-		repo = parts[len(parts)-2]
-		return owner, repo, true
-	}
-
-	return "", "", false
 }

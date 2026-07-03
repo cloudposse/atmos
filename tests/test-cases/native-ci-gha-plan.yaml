@@ -3,6 +3,7 @@
 tests:
   - name: "atmos terraform plan ci summary no changes"
     enabled: true
+    preconditions: ["tofu"]
     snapshot: false
     description: "Runs 'atmos terraform plan foobar -s plat-ue2-sandbox' with GitHub Actions env and verifies the CI summary matches the no-changes golden file."
     workdir: "fixtures/scenarios/native-ci-gha-plan"
@@ -29,7 +30,7 @@ tests:
       file_contains:
         "github-step-summary.txt":
           - '## No Changes for `foobar` in `plat-ue2-sandbox`'
-          - 'cloudposse.com/logo-300x69.svg'
+          - 'atmos.tools/img/atmos-ci-gradient.svg'
           - 'NO_CHANGE-inactive'
           - '<a id="result-plat-ue2-sandbox-foobar" />'
           - 'No changes. Your infrastructure matches the configuration.'
@@ -41,6 +42,7 @@ tests:
 
   - name: "atmos terraform plan ci summary with changes"
     enabled: true
+    preconditions: ["tofu"]
     snapshot: false
     description: "Runs 'atmos terraform plan foobar/changes -s plat-ue2-sandbox' with GitHub Actions env and verifies the CI summary matches the changes golden file."
     workdir: "fixtures/scenarios/native-ci-gha-plan"
@@ -66,8 +68,8 @@ tests:
         - "CI check run"
       file_contains:
         "github-step-summary.txt":
-          - '## Changes Found for `foobar/changes` in `plat-ue2-sandbox`'
-          - 'cloudposse.com/logo-300x69.svg'
+          - '## Resource Changes Found for `foobar/changes` in `plat-ue2-sandbox`'
+          - 'atmos.tools/img/atmos-ci-gradient.svg'
           - 'PLAN-CREATE-success'
           - '<a id="result-plat-ue2-sandbox-foobar_changes" />'
           - 'Plan: 1 to add, 0 to change, 0 to destroy.'
@@ -84,6 +86,7 @@ tests:
 
   - name: "atmos terraform plan ci summary with failure"
     enabled: true
+    preconditions: ["tofu"]
     snapshot: false
     description: "Runs 'atmos terraform plan foobar-fail -s plat-ue2-sandbox' with GitHub Actions env and verifies the CI summary matches the failure golden file."
     workdir: "fixtures/scenarios/native-ci-gha-plan"
@@ -110,7 +113,7 @@ tests:
       file_contains:
         "github-step-summary.txt":
           - '## Plan Failed for `foobar-fail` in `plat-ue2-sandbox`'
-          - 'cloudposse.com/logo-300x69.svg'
+          - 'atmos.tools/img/atmos-ci-gradient.svg'
           - 'PLAN-FAILED-ff0000'
           - '<a id="result-plat-ue2-sandbox-foobar-fail" />'
           - ':warning: Error summary'

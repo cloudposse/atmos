@@ -192,7 +192,7 @@ jobs:
       modified: ${{ steps.affected.outputs.modified }}
       deleted: ${{ steps.affected.outputs.deleted }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: cloudposse/github-action-setup-atmos@v2
@@ -218,7 +218,7 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.modified) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform apply ${{ matrix.component }} -s ${{ matrix.stack }}
 
@@ -232,7 +232,7 @@ jobs:
     steps:
       # IMPORTANT: Check out the BASE branch (target branch), not HEAD.
       # The deleted component's configuration only exists in BASE.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.base_ref }}
       - uses: cloudposse/github-action-setup-atmos@v2

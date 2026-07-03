@@ -1,0 +1,39 @@
+---
+title: "!git.owner"
+sidebar_position: 10
+sidebar_label: "!git.owner"
+sidebar_class_name: command
+description: Get the owner/organization of the current Git repository
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `!git.owner` Atmos YAML function returns the owner (organization or user) of the current
+    Git repository — for example, `cloudposse`. The value is derived from the `origin` remote URL
+    and works for GitHub, GitLab, Bitbucket, and Azure DevOps.
+</Intro>
+
+## Usage
+
+```yaml
+  # Get the repository owner / organization.
+  # If the repository cannot be resolved, it returns a default value if specified; otherwise, it returns an error.
+  !git.owner <default-value>
+```
+
+## Examples
+
+```yaml
+vars:
+  git_owner: !git.owner
+
+  # With a fallback value when there is no remote.
+  git_owner_safe: !git.owner my-org
+```
+
+## Related Functions
+
+- [`!git.repository`](/functions/yaml/git.repository) — the full `<owner>/<name>` slug
+- [`!git.name`](/functions/yaml/git.name) — the bare repository name
+- [`!git.host`](/functions/yaml/git.host) — the repository host (e.g. `github.com`)
+- [`!git.url`](/functions/yaml/git.url) — the remote URL

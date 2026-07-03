@@ -68,9 +68,23 @@ function stripFrontmatter(content: string): string {
 
 /**
  * Markdown components for rendering README content.
+ *
+ * Heading levels are demoted by one (h1→h2, h2→h3, …) so that an embedded
+ * README's top-level `# Heading` does not produce a second `<h1>` on the host
+ * page. The host page's own H1 (frontmatter title or first `#` directive)
+ * stays the only H1, preserving valid HTML5 semantics and clean Algolia
+ * hierarchy extraction.
  */
 const markdownComponents = {
-  code({ className, children, ...props }: { className?: string; children?: React.ReactNode }) {
+  h1: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => (
+    <h2 {...props} className={styles.embeddedH1}>{children}</h2>
+  ),
+  h2: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h3 {...props}>{children}</h3>,
+  h3: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h4 {...props}>{children}</h4>,
+  h4: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h5 {...props}>{children}</h5>,
+  h5: ({ children, node, ...props }: { children?: React.ReactNode; node?: unknown }) => <h6 {...props}>{children}</h6>,
+  pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  code({ className, children, node, ...props }: { className?: string; children?: React.ReactNode; node?: unknown }) {
     const match = /language-(\w+)/.exec(className || '');
     const isInline = !match;
     return isInline ? (

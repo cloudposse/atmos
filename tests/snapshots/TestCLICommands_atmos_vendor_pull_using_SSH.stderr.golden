@@ -4,7 +4,7 @@
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
  DEBU  ProcessCommandLineArgs input componentType=terraform args=[]
  DEBU  After ParseFlags identity.Value="" identity.Changed=false
-ℹ Vendoring from 'vendor.yaml'
+▶ Vendoring from 'vendor.yaml'
  DEBU  Added //. to Git URL without subdirectory normalized="git::git@github.com:cloudposse/terraform-null-label.git//.?ref=0.25.0"
  DEBU  Added //. to Git URL without subdirectory normalized="git::ssh://git@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0"
  DEBU  No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
@@ -21,6 +21,6 @@
  DEBU  Entering dry-run flow for generic (non component/mixin) vendoring  package=terraform-null-label-basic
  DEBU  Skipping custom detection; URI already supported by go getter uri="git::ssh://git@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0"
 ✓ terraform-null-label-basic (0.25.0)
-ℹ Done! Dry run completed. No components vendored
+▶ Done! Dry run completed. No components vendored
 ✓ Vendored components (success: 2)
  DEBU  Telemetry event enqueued

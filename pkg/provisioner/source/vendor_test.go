@@ -70,6 +70,14 @@ func TestResolveSourceURI(t *testing.T) {
 			},
 			expected: "github.com/cloudposse/terraform-aws-components//modules/vpc",
 		},
+		{
+			name: "URI without ref, git ref SHA version specified",
+			sourceSpec: &schema.VendorComponentSource{
+				Uri:     "github.com/my-org/my-repo//components/terraform/vpc",
+				Version: "0123456789abcdef0123456789abcdef01234567",
+			},
+			expected: "github.com/my-org/my-repo//components/terraform/vpc?ref=0123456789abcdef0123456789abcdef01234567",
+		},
 	}
 
 	for _, tt := range tests {

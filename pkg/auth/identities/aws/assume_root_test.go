@@ -1061,7 +1061,7 @@ func TestAssumeRootIdentity_PrepareEnvironment(t *testing.T) {
 	assert.Equal(t, "us-west-2", result["AWS_DEFAULT_REGION"])
 }
 
-func TestAssumeRootIdentity_WithCustomResolver(t *testing.T) {
+func TestAssumeRootIdentity_WithCustomEndpoint(t *testing.T) {
 	config := &schema.Identity{
 		Kind: "aws/assume-root",
 		Via:  &schema.IdentityVia{Provider: "test-provider"},
@@ -1070,12 +1070,8 @@ func TestAssumeRootIdentity_WithCustomResolver(t *testing.T) {
 			"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
 			"region":           "us-east-1",
 		},
-		Credentials: map[string]any{
-			"aws": map[string]any{
-				"resolver": map[string]any{
-					"url": "http://localhost:4566",
-				},
-			},
+		Spec: map[string]any{
+			"endpoint_url": "http://localhost:4566",
 		},
 	}
 
@@ -1087,12 +1083,10 @@ func TestAssumeRootIdentity_WithCustomResolver(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "test-root", ari.name)
 	assert.NotNil(t, ari.config)
-	assert.NotNil(t, ari.config.Credentials)
+	assert.NotNil(t, ari.config.Spec)
 
-	// Verify resolver config exists.
-	awsCreds, ok := ari.config.Credentials["aws"]
-	assert.True(t, ok)
-	assert.NotNil(t, awsCreds)
+	// Verify endpoint config exists.
+	assert.Equal(t, "http://localhost:4566", ari.config.Spec["endpoint_url"])
 }
 
 func TestAssumeRootIdentity_AllTaskPoliciesValidate(t *testing.T) {
@@ -1485,12 +1479,20 @@ func (m *mockAuthManager) ExecuteIdentityIntegrations(_ context.Context, _ strin
 	return nil
 }
 
+func (m *mockAuthManager) EnsureIdentityEnvironment(_ context.Context, _ string) (map[string]string, error) {
+	return nil, nil
+}
+
 func (m *mockAuthManager) ExecuteIntegration(_ context.Context, _ string) error {
 	return nil
 }
 
 func (m *mockAuthManager) GetIntegration(_ string) (*schema.Integration, error) {
 	return nil, nil
+}
+
+func (m *mockAuthManager) RevokeEphemeralIntegrations(_ context.Context, _ string, _ *bool) error {
+	return nil
 }
 
 func (m *mockAuthManager) ResolvePrincipalSetting(_ string, _ string) (interface{}, bool) {
@@ -1501,9 +1503,15 @@ func (m *mockAuthManager) ResolveProviderConfig(_ string) (*schema.Provider, boo
 	return nil, false
 }
 
+func (m *mockAuthManager) MaybeOfferAnyProfileFallback(_ context.Context) error {
+	return nil
+}
+
 func (m *mockAuthManager) GetRealm() realm.RealmInfo {
 	return realm.RealmInfo{}
 }
+
+func (m *mockAuthManager) CredentialStoreType() string { return "" }
 
 func TestAssumeRootIdentity_CredentialsExist_ProviderResolutionError(t *testing.T) {
 	// Test when we can't resolve the provider name.

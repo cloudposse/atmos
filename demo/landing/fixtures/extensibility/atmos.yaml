@@ -1,0 +1,26 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Warning
+
+# Expose Atmos to agents over the Model Context Protocol. With this enabled,
+# `atmos mcp start` runs a server any MCP client (Claude Code, Cursor, VS Code)
+# can connect to and drive Atmos as native tools.
+mcp:
+  enabled: true
+
+ai:
+  enabled: true
+  tools:
+    enabled: true

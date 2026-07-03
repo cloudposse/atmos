@@ -75,15 +75,26 @@ build-windows: deps
 build-macos: GOOS=darwin
 build-macos: build-default
 
+build-macos-intel: GOOS=darwin
+build-macos-intel: GOARCH=amd64
+build-macos-intel: build-default
+
 version-linux: version-default
 
 version-macos: version-default
+
+version-macos-intel: version-default
 
 version-default:
 	chmod +x ./build/atmos
 	./build/atmos version
 
-version-windows: build-windows
+# Run the already-built binary; do NOT depend on build-windows. The CI build
+# step runs `make build-windows` before this, so re-declaring the dependency
+# made Windows recompile and re-link the whole binary a second time per job —
+# work that version-linux/version-macos (via version-default) do not repeat.
+# On the slow windows-latest runner that doubled the build phase.
+version-windows:
 	./build/atmos.exe version
 
 deps:
@@ -124,4 +135,11 @@ link-check:
 	@command -v lychee >/dev/null 2>&1 || { echo "Install lychee: brew install lychee"; exit 1; }
 	lychee --config lychee.toml --root-dir "$(CURDIR)" '**/*.md'
 
-.PHONY: readme lint lintroller gomodcheck build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover generate-mocks link-check
+# Run quick tests with race detector and shuffled order.
+# This target is recommended for CI to catch data races and order-dependent failures.
+# Usage: make test-race
+test-race: deps
+	@echo "Running tests with -race -shuffle=on"
+	CGO_ENABLED=1 go test -race -shuffle=on $(TEST) $(TESTARGS) -timeout 10m
+
+.PHONY: all clean test readme lint lintroller gomodcheck build version build-linux build-windows build-macos build-macos-intel deps version-linux version-windows version-macos version-macos-intel testacc testacc-cover testacc-coverage test-short test-short-cover test-race generate-mocks link-check

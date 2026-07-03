@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo
+  namespace: atmos-kustomize
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

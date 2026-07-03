@@ -3,8 +3,10 @@ package exec
 import (
 	"errors"
 	"fmt"
+	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,7 +14,10 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -299,6 +304,151 @@ func TestBuildInitArgs_PassVarsWithWorkspaceAndReconfigure(t *testing.T) {
 	assert.Equal(t, []string{"init", "-reconfigure", varFileFlag, "my-component.tfvars.json"}, args)
 }
 
+// TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned verifies that -reconfigure is
+// added when the workdir was actually wiped and re-provisioned this invocation
+// (WorkdirReprovisionedKey set by the source/workdir provisioner).
+// This prevents "Do you want to migrate all workspaces?" on fresh workdirs.
+func TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "apply",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey:          "/tmp/.workdir/terraform/demo-consumer",
+			provWorkdir.WorkdirReprovisionedKey: struct{}{},
+		},
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init", "-reconfigure"}, args)
+}
+
+// TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned_WithPassVars verifies that both
+// -reconfigure and -var-file are added when workdir was re-provisioned and PassVars is enabled.
+func TestBuildInitArgs_ReconfigureWhenWorkdirReprovisioned_WithPassVars(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.Init.PassVars = true
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "apply",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey:          "/tmp/.workdir/terraform/demo-consumer",
+			provWorkdir.WorkdirReprovisionedKey: struct{}{},
+		},
+	}
+	args := buildInitArgs(&atmosConfig, &info, "my-component.tfvars.json")
+	assert.Equal(t, []string{"init", "-reconfigure", varFileFlag, "my-component.tfvars.json"}, args)
+}
+
+// TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved verifies that -reconfigure is NOT
+// added when the workdir exists but was not re-provisioned (TTL not expired).
+// Adding -reconfigure causes OpenTofu to treat init as fresh and prompt
+// "Do you want to migrate all workspaces?" even when the backend is unchanged.
+func TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "apply",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: "/tmp/.workdir/terraform/demo-consumer",
+			// WorkdirReprovisionedKey intentionally absent — TTL not expired
+		},
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init"}, args)
+}
+
+// TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved_InitRunReconfigureIgnored verifies
+// that InitRunReconfigure: true is ignored for workdir components with a preserved workdir.
+// -reconfigure + workspace state dirs causes the "migrate all workspaces?" prompt even
+// when the backend is unchanged; the global flag must not override this protection.
+func TestBuildInitArgs_NoReconfigureWhenWorkdirPreserved_InitRunReconfigureIgnored(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.InitRunReconfigure = true
+	info := schema.ConfigAndStacksInfo{
+		SubCommand: "apply",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: "/tmp/.workdir/terraform/demo-consumer",
+			// WorkdirReprovisionedKey intentionally absent — workdir was NOT wiped
+		},
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init"}, args)
+}
+
+// TestBuildInitArgs_ReconfigureForNonWorkdir_InitRunReconfigure verifies that
+// InitRunReconfigure: true still works as expected for non-workdir components.
+func TestBuildInitArgs_ReconfigureForNonWorkdir_InitRunReconfigure(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.InitRunReconfigure = true
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       "apply",
+		ComponentSection: map[string]any{}, // no WorkdirPathKey
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init", "-reconfigure"}, args)
+}
+
+// TestBuildInitArgs_NoReconfigureWithoutWorkdir verifies that -reconfigure is NOT
+// added for regular (non-workdir) components unless explicitly configured.
+func TestBuildInitArgs_NoReconfigureWithoutWorkdir(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:       "apply",
+		ComponentSection: map[string]any{},
+	}
+	args := buildInitArgs(&atmosConfig, &info, "vars.tfvars.json")
+	assert.Equal(t, []string{"init"}, args)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// prepareInitExecution — workspace file cleanup behaviour
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestPrepareInitExecution_SkipsCleanWorkspaceForWorkdir verifies that
+// .terraform/environment is NOT deleted for workdir-enabled components.
+// Deleting the file before init -reconfigure causes OpenTofu to prompt
+// "Do you want to migrate all workspaces?" because it sees workspace state
+// directories (terraform.tfstate.d/) but no active workspace recorded.
+// For workdir components the backend is always consistent so cleanup is wrong.
+func TestPrepareInitExecution_SkipsCleanWorkspaceForWorkdir(t *testing.T) {
+	tmpDir := t.TempDir()
+	tfDir := filepath.Join(tmpDir, ".terraform")
+	require.NoError(t, os.MkdirAll(tfDir, 0o755))
+	envFile := filepath.Join(tfDir, "environment")
+	require.NoError(t, os.WriteFile(envFile, []byte("myworkspace"), 0o644))
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: tmpDir,
+		},
+	}
+
+	_, err := prepareInitExecution(&atmosConfig, &info, tmpDir)
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(envFile)
+	assert.NoError(t, statErr, ".terraform/environment must not be deleted for workdir components")
+}
+
+// TestPrepareInitExecution_CleansWorkspaceForNonWorkdir verifies that the standard
+// .terraform/environment cleanup still runs for non-workdir components.
+func TestPrepareInitExecution_CleansWorkspaceForNonWorkdir(t *testing.T) {
+	tmpDir := t.TempDir()
+	tfDir := filepath.Join(tmpDir, ".terraform")
+	require.NoError(t, os.MkdirAll(tfDir, 0o755))
+	envFile := filepath.Join(tfDir, "environment")
+	require.NoError(t, os.WriteFile(envFile, []byte("myworkspace"), 0o644))
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{}, // no WorkdirPathKey
+	}
+
+	_, err := prepareInitExecution(&atmosConfig, &info, tmpDir)
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(envFile)
+	assert.True(t, os.IsNotExist(statErr), ".terraform/environment must be deleted for non-workdir components")
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // handleDeploySubcommand
 // ──────────────────────────────────────────────────────────────────────────────
@@ -462,6 +612,149 @@ func TestAddRegionEnvVarForImport_SkipsForNonImportSubcommands(t *testing.T) {
 			}
 			addRegionEnvVarForImport(&info)
 			assert.Empty(t, info.ComponentEnvList, "should not add AWS_REGION for %s", subCmd)
+		})
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Secret variables never hit disk (computeTerraformSecretVarKeys / diskSafeVars / secretVarEnv)
+// ──────────────────────────────────────────────────────────────────────────────
+
+func TestTerraformSecretVars_NeverHitDisk(t *testing.T) {
+	const secret = "tf-disk-guard-SECRET-abc123xyz"
+	atmosio.RegisterSecret(secret)
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{
+			"plain_password": secret,
+			"db_url":         "postgres://user:" + secret + "@db.example.com/app",
+			"nested":         map[string]any{"token": secret},
+			"region":         "us-east-1-tfdiskguard",
+		},
+	}
+
+	computeTerraformSecretVarKeys(info)
+
+	// Secret-bearing keys (direct, composed substring, nested) are flagged; the plain
+	// non-secret one is not.
+	require.NotNil(t, info.TerraformSecretVarKeys)
+	assert.True(t, info.TerraformSecretVarKeys["plain_password"], "direct secret must be flagged")
+	assert.True(t, info.TerraformSecretVarKeys["db_url"], "secret composed into a string must be flagged")
+	assert.True(t, info.TerraformSecretVarKeys["nested"], "secret nested in a map must be flagged")
+	assert.False(t, info.TerraformSecretVarKeys["region"], "non-secret var must not be flagged")
+
+	// Write the disk-safe vars exactly as logAndWriteComponentVars does, then assert the
+	// bytes on disk contain no representation of the secret.
+	dir := t.TempDir()
+	varFile := filepath.Join(dir, "test.terraform.tfvars.json")
+	require.NoError(t, u.WriteToFileAsJSON(varFile, diskSafeVars(info), 0o600))
+
+	onDisk, err := os.ReadFile(varFile)
+	require.NoError(t, err)
+	assert.NotContains(t, string(onDisk), secret, "secret must never be written to the varfile on disk")
+	assert.Contains(t, string(onDisk), "us-east-1-tfdiskguard", "non-secret vars must still be written")
+
+	// The secret-bearing vars are instead injected as TF_VAR_* env entries.
+	env, err := secretVarEnv(info)
+	require.NoError(t, err)
+	joined := strings.Join(env, "\n")
+	assert.Contains(t, joined, "TF_VAR_plain_password=")
+	assert.Contains(t, joined, "TF_VAR_db_url=")
+	assert.Contains(t, joined, secret, "secret value is carried in the TF_VAR_ env entry")
+}
+
+func TestTerraformSecretVars_NoSecrets(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{
+		ComponentVarsSection: map[string]any{"region": "us-west-2-nosecret-xyz", "count": 1},
+	}
+	computeTerraformSecretVarKeys(info)
+	assert.Nil(t, info.TerraformSecretVarKeys, "no secret keys expected when no secrets present")
+
+	env, err := secretVarEnv(info)
+	require.NoError(t, err)
+	assert.Empty(t, env, "no TF_VAR_ entries expected when no secrets present")
+}
+
+func TestHandleDeploySubcommand(t *testing.T) {
+	tests := []struct {
+		name             string
+		subCommand       string
+		useTerraformPlan bool
+		applyAutoApprove bool
+		initialArgs      []string
+		wantSubCommand   string
+		wantArgs         []string
+	}{
+		{
+			name:           "deploy rewrites to apply and adds auto-approve",
+			subCommand:     subcommandDeploy,
+			initialArgs:    []string{},
+			wantSubCommand: subcommandApply,
+			wantArgs:       []string{autoApproveFlag},
+		},
+		{
+			name:             "deploy with UseTerraformPlan does not add auto-approve",
+			subCommand:       subcommandDeploy,
+			useTerraformPlan: true,
+			initialArgs:      []string{},
+			wantSubCommand:   subcommandApply,
+			wantArgs:         []string{},
+		},
+		{
+			name:           "deploy does not duplicate an existing auto-approve flag",
+			subCommand:     subcommandDeploy,
+			initialArgs:    []string{autoApproveFlag},
+			wantSubCommand: subcommandApply,
+			wantArgs:       []string{autoApproveFlag},
+		},
+		{
+			name:             "apply with ApplyAutoApprove adds auto-approve",
+			subCommand:       subcommandApply,
+			applyAutoApprove: true,
+			initialArgs:      []string{},
+			wantSubCommand:   subcommandApply,
+			wantArgs:         []string{autoApproveFlag},
+		},
+		{
+			name:             "apply with ApplyAutoApprove does not duplicate auto-approve",
+			subCommand:       subcommandApply,
+			applyAutoApprove: true,
+			initialArgs:      []string{autoApproveFlag},
+			wantSubCommand:   subcommandApply,
+			wantArgs:         []string{autoApproveFlag},
+		},
+		{
+			name:             "apply with ApplyAutoApprove and UseTerraformPlan does not add auto-approve",
+			subCommand:       subcommandApply,
+			applyAutoApprove: true,
+			useTerraformPlan: true,
+			initialArgs:      []string{},
+			wantSubCommand:   subcommandApply,
+			wantArgs:         []string{},
+		},
+		{
+			name:           "plan is left untouched",
+			subCommand:     "plan",
+			initialArgs:    []string{},
+			wantSubCommand: "plan",
+			wantArgs:       []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+			atmosConfig.Components.Terraform.ApplyAutoApprove = tt.applyAutoApprove
+			info := &schema.ConfigAndStacksInfo{
+				SubCommand:             tt.subCommand,
+				UseTerraformPlan:       tt.useTerraformPlan,
+				AdditionalArgsAndFlags: tt.initialArgs,
+			}
+
+			handleDeploySubcommand(atmosConfig, info)
+
+			assert.Equal(t, tt.wantSubCommand, info.SubCommand)
+			assert.Equal(t, tt.wantArgs, info.AdditionalArgsAndFlags)
 		})
 	}
 }

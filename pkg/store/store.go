@@ -14,6 +14,49 @@ type Store interface {
 	GetKey(key string) (any, error)
 }
 
+// DeletableStore extends Store with the ability to remove a value. Backends that support
+// deletion (SSM, ASM, Vault, Azure Key Vault, GCP Secret Manager) implement this; backends
+// that don't may return ErrDeleteNotSupported. The secrets CLI (`atmos secret delete`)
+// requires it.
+type DeletableStore interface {
+	Store
+	// Delete removes the value for a specific stack, component, and key combination.
+	Delete(stack string, component string, key string) error
+}
+
+// StatusStore extends Store with an existence check used by `atmos secret list`/`validate`
+// to report whether a declared secret has been initialized.
+//
+// Has MUST determine existence without retrieving or decrypting the value: it uses a
+// metadata/describe API (e.g. SSM GetParameter with WithDecryption=false, Secrets Manager
+// DescribeSecret, GCP GetSecretVersion) so that listing never requires a decrypt-capable
+// identity (no kms:Decrypt) and never registers a plaintext value with the masker.
+type StatusStore interface {
+	Store
+	// Has reports whether a value exists for a specific stack, component, and key, without
+	// retrieving or decrypting the value.
+	Has(stack string, component string, key string) (bool, error)
+}
+
+// LocalStore is an optional marker for stores whose existence check (Has) needs no network
+// access and no authentication — e.g. the OS keychain. `atmos secret list` treats local
+// stores as always-safe to check (free), and reports non-local (remote) stores as Unknown
+// unless verification is explicitly requested (`--verify`). Remote stores must NOT implement it.
+type LocalStore interface {
+	Store
+	// IsLocal reports whether the store operates without network access or authentication.
+	IsLocal() bool
+}
+
+// SecretAwareStore is implemented by stores that change their at-rest behavior when used as
+// a secret backend (e.g. AWS SSM writes a SecureString instead of a String). The registry
+// calls SetSecret(true) for stores configured with `secret: true`.
+type SecretAwareStore interface {
+	Store
+	// SetSecret marks the store as a secret backend so writes use the sensitive at-rest variant.
+	SetSecret(secret bool)
+}
+
 // StoreFactory is a function type to initialize a new store.
 type StoreFactory func(options map[string]any) (Store, error)
 
@@ -22,12 +65,19 @@ type StoreFactory func(options map[string]any) (Store, error)
 // then it splits the component if it contains a "/",
 // then it appends the key to the parts,
 // then it joins the parts with the final delimiter.
+//
+// Empty segments are omitted entirely — independent of the final delimiter — so scoped secret
+// coordinates collapse cleanly: an empty component (a stack-scoped secret) yields
+// `prefix<delim>stack<delim>key`, and an empty stack and component (a global secret) yields
+// `prefix<delim>key`.
 func getKey(prefix string, stackDelimiter string, stack string, component string, key string, finalDelimiter string) (string, error) { //nolint
-	stackParts := strings.Split(stack, stackDelimiter)
-	componentParts := strings.Split(component, "/")
-
-	parts := append([]string{prefix}, stackParts...)
-	parts = append(parts, componentParts...)
+	parts := []string{prefix}
+	if stack != "" {
+		parts = append(parts, strings.Split(stack, stackDelimiter)...)
+	}
+	if component != "" {
+		parts = append(parts, strings.Split(component, "/")...)
+	}
 	parts = append(parts, key)
 
 	joinedKey := strings.Join(parts, finalDelimiter)

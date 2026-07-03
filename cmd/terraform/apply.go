@@ -31,18 +31,22 @@ This will prompt for confirmation before making changes unless -auto-approve is 
 
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/apply
-  https://opentofu.org/docs/cli/commands/apply`,
+	https://opentofu.org/docs/cli/commands/apply`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return runHooks(h.BeforeTerraformApply, cmd, args)
+		return runBeforeHooks(h.BeforeTerraformApply, cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
-		// Reset captured output for this run.
+		// Reset per-run globals. Both must be initialised before any early return
+		// so that the deferred hook and PostRunE read consistent state.
 		capturedApplyOutput = ""
+		wasMultiComponentExecution = false
 
 		// On failure, run after hooks with error context so CI check runs
 		// are updated to failure status. Cobra skips PostRunE on error.
+		// In multi-component mode the per-component hook already fired for each
+		// component, so the global error call is suppressed to avoid double-firing.
 		defer func() {
-			if runErr != nil {
+			if runErr != nil && !wasMultiComponentExecution {
 				runHooksOnErrorWithOutput(h.AfterTerraformApply, cmd, args, runErr, capturedApplyOutput)
 			}
 		}()
@@ -58,7 +62,10 @@ For complete Terraform/OpenTofu documentation, see:
 		}
 
 		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		opts, err := ParseTerraformRunOptions(v)
+		if err != nil {
+			return err
+		}
 
 		// Apply-specific flags (from-plan, planfile) flow through the
 		// legacy ProcessCommandLineArgs which sets info.UseTerraformPlan, info.PlanFile.
@@ -82,7 +89,7 @@ For complete Terraform/OpenTofu documentation, see:
 			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
 		}
 
-		err := terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
+		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 
 		// Strip ANSI escape codes so CI templates get clean text.
 		// Combine stdout and stderr so that error messages (which terraform
@@ -98,6 +105,12 @@ For complete Terraform/OpenTofu documentation, see:
 		return err
 	},
 	PostRunE: func(cmd *cobra.Command, args []string) error {
+		// In multi-component mode, CI hooks already fired per-component inside
+		// ExecuteTerraformQuery. Calling them again here would double-fire on the
+		// last component or fire with empty/misattributed output.
+		if wasMultiComponentExecution {
+			return nil
+		}
 		return runHooksWithOutput(h.AfterTerraformApply, cmd, args, capturedApplyOutput)
 	},
 }
@@ -111,9 +124,13 @@ func init() {
 		flags.WithStringFlag("planfile", "", "", "Set the plan file to use"),
 		flags.WithBoolFlag("affected", "", false, "Apply the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Apply all components in all stacks"),
+		flags.WithStringFlag("failure-mode", "", terraformFailureModeFailFast, "Terraform apply failure handling mode. Supported values: fail-fast, keep-going"),
+		flags.WithIntFlag("max-concurrency", "", 1, "Maximum number of Terraform apply components to execute concurrently"),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
 		flags.WithEnvVars("from-plan", "ATMOS_TERRAFORM_APPLY_FROM_PLAN"),
 		flags.WithEnvVars("planfile", "ATMOS_TERRAFORM_APPLY_PLANFILE"),
+		flags.WithEnvVars("failure-mode", "ATMOS_TERRAFORM_APPLY_FAILURE_MODE"),
+		flags.WithEnvVars("max-concurrency", "ATMOS_TERRAFORM_APPLY_MAX_CONCURRENCY"),
 		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 	)
 

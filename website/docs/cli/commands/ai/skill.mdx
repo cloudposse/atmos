@@ -28,8 +28,8 @@ Skills are specialized AI assistants that provide expert knowledge for specific 
 [Agent Skills](https://agentskills.io) open standard and can be installed from GitHub repositories.
 
 The `atmos ai skill` command lets you:
-- Install community-contributed skills from GitHub
-- List all installed skills and their status
+- Install official skills by name (offline) or community skills from GitHub
+- List the full catalog of available skills alongside what's installed
 - Remove skills you no longer need
 
 :::tip Global `--skill` Flag
@@ -53,7 +53,9 @@ atmos ai skill <subcommand> [flags]
 
 ### `atmos ai skill install`
 
-Install a skill from a GitHub repository.
+Install a skill by its bundled name (offline) or from a GitHub repository.
+
+The official Atmos skills are embedded in the binary, so installing one by its bare name (for example `atmos-terraform`) works fully offline — no network or Git clone required. Run `atmos ai skill list` to see every available skill. You can also install any skill from a GitHub repository.
 
 **Usage:**
 ```shell
@@ -72,6 +74,9 @@ atmos ai skill install <source> [flags]
 
 **Examples:**
 ```shell
+# Install an official skill by name (offline)
+atmos ai skill install atmos-terraform
+
 # Install a skill from GitHub
 atmos ai skill install github.com/user/skill-name
 
@@ -87,7 +92,7 @@ atmos ai skill install github.com/user/skill-name --yes
 
 ### `atmos ai skill list`
 
-List all installed skills with their status.
+List Atmos skills — both the official skills bundled with Atmos and any community skills installed on this system. A filled dot (`●`) marks an installed skill; a hollow dot (`○`) marks one that is available to install. The official catalog is embedded in the binary, so listing works offline.
 
 **Usage:**
 ```shell
@@ -99,12 +104,18 @@ atmos ai skill list [flags]
 <dl>
   <dt>`-d, --detailed`</dt>
   <dd>Show detailed information for each skill, including source, version, install date, and location.</dd>
+
+  <dt>`--installed`</dt>
+  <dd>Show only installed skills, hiding the rest of the available catalog.</dd>
 </dl>
 
 **Examples:**
 ```shell
-# List installed skills
+# List all skills (available and installed)
 atmos ai skill list
+
+# Show only installed skills
+atmos ai skill list --installed
 
 # Show detailed information
 atmos ai skill list --detailed

@@ -5,9 +5,11 @@ package exec
 // independently testable.
 
 import (
+	"slices"
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -24,8 +26,8 @@ func buildPlanSubcommandArgs( //nolint:revive // argument-limit: uploadStatusFla
 ) []string {
 	allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 
-	if !u.SliceContainsString(info.AdditionalArgsAndFlags, outFlag) &&
-		!u.SliceContainsStringHasPrefix(info.AdditionalArgsAndFlags, outFlag+"=") &&
+	if !slices.Contains(info.AdditionalArgsAndFlags, outFlag) &&
+		!slices.ContainsFunc(info.AdditionalArgsAndFlags, func(s string) bool { return strings.HasPrefix(s, outFlag+"=") }) &&
 		!atmosConfig.Components.Terraform.Plan.SkipPlanfile {
 		allArgsAndFlags = append(allArgsAndFlags, outFlag, planFile)
 	}
@@ -33,7 +35,7 @@ func buildPlanSubcommandArgs( //nolint:revive // argument-limit: uploadStatusFla
 	// Always remove the flag from AdditionalArgsAndFlags since it's only used internally by Atmos.
 	info.AdditionalArgsAndFlags = u.SliceRemoveFlag(info.AdditionalArgsAndFlags, cfg.UploadStatusFlag)
 
-	if uploadStatusFlag && !u.SliceContainsString(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
+	if uploadStatusFlag && !slices.Contains(info.AdditionalArgsAndFlags, detailedExitCodeFlag) {
 		allArgsAndFlags = append(allArgsAndFlags, detailedExitCodeFlag)
 	}
 
@@ -94,7 +96,15 @@ func buildInitSubcommandArgs(
 	}
 	*componentPath = newPath
 
-	if atmosConfig.Components.Terraform.InitRunReconfigure {
+	// For workdir components, ignore InitRunReconfigure when the workdir was not
+	// re-provisioned — see buildInitArgs for the full rationale.
+	_, hasWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	_, wasReprovisioned := info.ComponentSection[provWorkdir.WorkdirReprovisionedKey]
+	useReconfigure := wasReprovisioned
+	if !hasWorkdir {
+		useReconfigure = useReconfigure || atmosConfig.Components.Terraform.InitRunReconfigure
+	}
+	if useReconfigure {
 		allArgsAndFlags = append(allArgsAndFlags, "-reconfigure")
 	}
 	if atmosConfig.Components.Terraform.Init.PassVars {
@@ -140,7 +150,7 @@ func buildTerraformCommandArgs(
 	case "plan":
 		allArgsAndFlags = buildPlanSubcommandArgs(atmosConfig, info, allArgsAndFlags, varFile, planFile, uploadStatusFlag)
 
-	case "destroy", "import", "refresh":
+	case "destroy", "import", "refresh", "test":
 		allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 
 	case subcommandApply:

@@ -1,0 +1,14 @@
+# Minimal scenario proving the GCP emulator (floci/gcp) comes up via the emulator-component
+# path: `atmos emulator up gcp` (atmos manages the container). Used by
+# TestEmulatorGCPLifecycle (opt-in, runtime-gated).
+base_path: "./"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info

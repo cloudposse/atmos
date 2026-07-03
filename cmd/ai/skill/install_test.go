@@ -18,7 +18,7 @@ import (
 
 func TestInstallCmd_BasicProperties(t *testing.T) {
 	assert.Equal(t, "install <source>", installCmd.Use)
-	assert.Equal(t, "Install skills from a GitHub repository", installCmd.Short)
+	assert.Equal(t, "Install bundled or GitHub-hosted AI skills", installCmd.Short)
 	assert.NotEmpty(t, installCmd.Long)
 	assert.NotNil(t, installCmd.RunE)
 }
@@ -42,7 +42,9 @@ func TestInstallCmd_Flags(t *testing.T) {
 
 func TestInstallCmd_LongDescription(t *testing.T) {
 	// Verify long description contains important information.
-	assert.Contains(t, installCmd.Long, "Install AI skills from a GitHub repository")
+	assert.Contains(t, installCmd.Long, "Install AI skills")
+	assert.Contains(t, installCmd.Long, "bundled Atmos skill name")
+	assert.Contains(t, installCmd.Long, "atmos-terraform")
 	assert.Contains(t, installCmd.Long, "~/.atmos/skills/")
 	assert.Contains(t, installCmd.Long, "agentskills.io")
 	assert.Contains(t, installCmd.Long, "SKILL.md")
@@ -89,6 +91,7 @@ func TestInstallCmd_SecuritySection(t *testing.T) {
 
 func TestInstallCmd_SourceFormats(t *testing.T) {
 	// Verify all documented source formats are mentioned.
+	assert.Contains(t, installCmd.Long, "Bundled skill by name")
 	assert.Contains(t, installCmd.Long, "user/repo")
 	assert.Contains(t, installCmd.Long, "user/repo@v1.2.3")
 	assert.Contains(t, installCmd.Long, "github.com/user/repo")
@@ -418,6 +421,8 @@ func TestInstallCmd_CommandRegistration(t *testing.T) {
 }
 
 func TestInstallCmd_OutputDuringInstall(t *testing.T) {
+	uiOutput := setupSkillCommandUI(t)
+
 	// Reset flags.
 	forceFlag := installCmd.Flags().Lookup("force")
 	if forceFlag != nil {
@@ -428,23 +433,11 @@ func TestInstallCmd_OutputDuringInstall(t *testing.T) {
 		_ = yesFlag.Value.Set("false")
 	}
 
-	// Capture stdout.
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
 	// Run with valid source format.
 	_ = installCmd.RunE(installCmd, []string{"github.com/cloudposse/test-skill"})
 
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-	output := buf.String()
-
 	// Should print "Downloading skill from..." message.
-	assert.Contains(t, output, "Downloading skills from")
+	assert.Contains(t, uiOutput.String(), "Downloading skills from")
 }
 
 func TestInstallCmd_RunENotNil(t *testing.T) {
@@ -456,7 +449,7 @@ func TestInstallCmd_UseFieldCorrect(t *testing.T) {
 }
 
 func TestInstallCmd_ShortDescription(t *testing.T) {
-	assert.Equal(t, "Install skills from a GitHub repository", installCmd.Short)
+	assert.Equal(t, "Install bundled or GitHub-hosted AI skills", installCmd.Short)
 }
 
 func TestInstallCmd_LongDescriptionContainsExamples(t *testing.T) {
@@ -576,27 +569,16 @@ func TestInstallCmd_RunE_ContextUsage(t *testing.T) {
 	}
 
 	t.Run("uses context in installer", func(t *testing.T) {
+		uiOutput := setupSkillCommandUI(t)
 		resetFlags()
 		_ = installCmd.Flags().Set("yes", "true")
-
-		// Capture stdout.
-		oldStdout := os.Stdout
-		r, w, _ := os.Pipe()
-		os.Stdout = w
 
 		// Run with a valid source - it will fail at download but shows context is used.
 		err := installCmd.RunE(installCmd, []string{"github.com/nonexistent/repo@v1.0.0"})
 
-		w.Close()
-		os.Stdout = oldStdout
-
-		// Drain the pipe.
-		var buf bytes.Buffer
-		_, _ = io.Copy(&buf, r)
-
 		assert.Error(t, err)
 		// Verify output shows downloading started.
-		assert.Contains(t, buf.String(), "Downloading skills from")
+		assert.Contains(t, uiOutput.String(), "Downloading skills from")
 	})
 }
 
@@ -658,6 +640,8 @@ func TestInstallCmd_RunE_AllFlagCombinations(t *testing.T) {
 }
 
 func TestInstallCmd_RunE_InstallOptionsPassthrough(t *testing.T) {
+	uiOutput := setupSkillCommandUI(t)
+
 	// Reset flags before test.
 	forceFlag := installCmd.Flags().Lookup("force")
 	if forceFlag != nil {
@@ -668,32 +652,19 @@ func TestInstallCmd_RunE_InstallOptionsPassthrough(t *testing.T) {
 		_ = yesFlag.Value.Set("true")
 	}
 
-	// Capture stdout.
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
 	// Run the command.
 	err := installCmd.RunE(installCmd, []string{"github.com/cloudposse/test-skill@v2.0.0"})
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	// Drain the pipe.
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
 
 	// Should proceed to download stage.
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "download")
 
 	// Verify download message was printed.
-	output := buf.String()
-	assert.Contains(t, output, "Downloading skills from")
+	assert.Contains(t, uiOutput.String(), "Downloading skills from")
 }
 
 // TestInstallCmd_RunE_SuccessfulInstall tests the full successful install path.
-// This is more of an integration test since it sets up a mock download.
+// This is more of a server test since it sets up a mock download.
 // Note: This test requires mocking the downloader which is complex, so we focus
 // on testing other aspects of the RunE function.
 func TestInstallCmd_RunE_FlagParsingSuccess(t *testing.T) {

@@ -1,0 +1,95 @@
+---
+slug: container-components
+title: "Container Components and Compositions"
+authors: [osterman]
+tags: [feature, experimental]
+date: 2026-06-23
+---
+
+Atmos now has a first-class **container component kind**. Where a `type: container` workflow step is a
+procedural `docker run --rm`, a `components.container` entry is declarative, stack-scoped
+infrastructure: one component is one service, with an image artifact Atmos builds/pushes/pulls and an
+optional long-running named container you operate with `atmos container up/ps/logs/exec/restart/stop/rm/down`.
+A new `compositions` section groups the components that make up a system.
+
+<!--truncate-->
+
+This is the stack-scoped counterpart to the [native container steps](/changelog/native-container-steps) shipped
+earlier. The step is ephemeral and workflow-scoped; the component is addressable infrastructure that
+lives in your stacks alongside Terraform and Helmfile — same imports, inheritance, catalogs, deep-merge,
+templating, and secrets.
+
+## One Component, One Container
+
+Container components use **first-class sections** (`image`, `build`, `run`) — consistent with the
+container step, NOT nested under `vars`:
+
+```yaml
+components:
+  container:
+    api:
+      composition: storefront            # composition membership (optional)
+      image: nginx:alpine
+      env:
+        NGINX_ENTRYPOINT_QUIET_LOGS: "1"
+      run:
+        ports:
+          - host: 8080
+            container: 80
+        restart:
+          policy: unless-stopped         # Docker Compose-style restart policy
+        healthcheck:                      # first-class health check
+          test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+          interval: 30s
+          timeout: 5s
+          retries: 3
+          start_period: 10s
+```
+
+`build`, `run.command`, `mounts`, `ports`, `user`, `restart`, and `healthcheck` all map onto the Docker
+Compose shapes you already know. Inheritance (`metadata.inherits`), abstract base components, catalogs,
+and deep-merge work exactly like every other component kind, so shared `run`/`build` defaults live in
+one place.
+
+## Operated by Labels, Not State Files
+
+Each instance is named and labeled from its canonical address `<stack>/container/<component>` (e.g.,
+`atmos-dev-container-api`). Lifecycle commands discover the container by label — there are no local
+state files to drift or lose:
+
+```shell
+atmos container build api -s dev      # build the image from `build`
+atmos container up api -s dev         # create/start the long-running container (build-on-missing)
+atmos container list                  # all container components + running/health state
+atmos container ps|logs|exec api -s dev
+atmos container down api -s dev       # stop + rm
+```
+
+## Compositions
+
+A composition groups components into a system. Declare membership on the component with the
+`composition` field; the top-level `compositions` section declares the closed set of services:
+
+```yaml
+compositions:
+  storefront:
+    description: Storefront system
+    services: [api, worker, database]
+```
+
+Run `atmos composition validate storefront -s dev` to see which declared services are fulfilled vs. not
+yet provided in a given stack — a closed contract for membership, open for fulfillment.
+
+## Try It
+
+The new `examples/container-component` example defines an abstract base, a long-running web service with
+a health check, and a built-from-Dockerfile worker — all under one composition:
+
+```shell
+cd examples/container-component
+atmos container up api -s local
+atmos container list
+```
+
+Container components are experimental while the surface settles. The goal is unchanged: run the same
+declared system locally, in CI, and against real environments — without one-off shell scripts.
