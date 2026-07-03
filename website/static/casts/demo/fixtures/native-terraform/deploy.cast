@@ -1,6 +1,6 @@
-{"version":3,"term":{"cols":120,"rows":36,"type":"dumb"},"timestamp":1783039376,"title":"atmos terraform deploy","env":{"SHELL":"/bin/zsh"}}
-[0.007843167,"e","[deploy]\n"]
-[0.721277666,"o","\u001b[0m\u001b[1mInitializing provider plugins found in the configuration...\u001b[0m\n"]
+{"version":3,"term":{"cols":120,"rows":36,"type":"xterm-256color"},"timestamp":1783119795,"title":"atmos terraform deploy","env":{"COLORTERM":"truecolor","SHELL":"/bin/zsh"}}
+[0.006646708,"e","[deploy]\n"]
+[2.940476584,"o","\u001b[0m\u001b[1mInitializing provider plugins found in the configuration...\u001b[0m\n"]
 [0.012,"o","- Reusing previous version of hashicorp/null from the dependency lock file\n"]
 [0.012,"o","- Using hashicorp/null v3.3.0 from the shared cache directory\n"]
 [0.012,"o","\n"]
@@ -39,7 +39,7 @@
 [0.012,"o","  \u001b[32m+\u001b[0m\u001b[0m environment = \"dev\"\n"]
 [0.012,"o","  \u001b[32m+\u001b[0m\u001b[0m vpc_cidr    = \"10.0.0.0/16\"\n"]
 [0.012,"o","\u001b[0m\u001b[1mnull_resource.vpc: Creating...\u001b[0m\u001b[0m\n"]
-[0.012,"o","\u001b[0m\u001b[1mnull_resource.vpc: Creation complete after 0s [id=3869162934268780394]\u001b[0m\n"]
+[0.012,"o","\u001b[0m\u001b[1mnull_resource.vpc: Creation complete after 0s [id=7649693872691473085]\u001b[0m\n"]
 [0.012,"o","\u001b[0m\u001b[1m\u001b[32m\n"]
 [0.012,"o","Apply complete! Resources: 1 added, 0 changed, 0 destroyed.\u001b[0m\n"]
 [0.012,"o","\u001b[0m\u001b[1m\u001b[32m\n"]
@@ -48,4 +48,4 @@
 [0.012,"o","\u001b[0menvironment = \"dev\"\n"]
 [0.012,"o","vpc_cidr = \"10.0.0.0/16\"\n"]
 [0,"e","✓ deploy completed\n"]
-[0.150977,"o","\u001b[1;38;2;0;163;224m\u003e \u001b[0m"]
+[0.152149208,"o","\u001b[1;38;2;0;163;224m\u003e \u001b[0m"]

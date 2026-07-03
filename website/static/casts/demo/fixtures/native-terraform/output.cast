@@ -1,6 +1,6 @@
-{"version":3,"term":{"cols":120,"rows":36,"type":"dumb"},"timestamp":1783039382,"title":"atmos terraform output","env":{"SHELL":"/bin/zsh"}}
-[0.00702,"e","[output]\n"]
-[0.55253675,"o","\u001b[0m\u001b[1mInitializing provider plugins found in the configuration...\u001b[0m\n"]
+{"version":3,"term":{"cols":120,"rows":36,"type":"xterm-256color"},"timestamp":1783119806,"title":"atmos terraform output","env":{"COLORTERM":"truecolor","SHELL":"/bin/zsh"}}
+[0.010038166,"e","[output]\n"]
+[0.563820709,"o","\u001b[0m\u001b[1mInitializing provider plugins found in the configuration...\u001b[0m\n"]
 [0.012,"o","- Reusing previous version of hashicorp/null from the dependency lock file\n"]
 [0.012,"o","- Using previously-installed hashicorp/null v3.3.0\n"]
 [0.012,"o","\n"]
@@ -13,4 +13,4 @@
 [0.012,"o","vpc_cidr = \"10.0.0.0/16\"\n"]
 [0,"e","\u001b[0m\u001b[32mSwitched to workspace \"dev\".\u001b[0m\n"]
 [0,"e","✓ output completed\n"]
-[0.5833215,"o","\u001b[1;38;2;0;163;224m\u003e \u001b[0m"]
+[0.5866085,"o","\u001b[1;38;2;0;163;224m\u003e \u001b[0m"]
