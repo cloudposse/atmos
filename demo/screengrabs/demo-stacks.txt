@@ -182,7 +182,7 @@ atmos version list --help
 atmos version show --help
 atmos workflow --help
 tree
-tree -CAF --gitignore
+tree -CAF
 #
 # Additional commands referenced by docs pages (previously missing artifacts)
 #

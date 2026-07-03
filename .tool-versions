@@ -1,4 +1,6 @@
 hashicorp/terraform 1.15.6
 mvdan/gofumpt v0.7.0
 opentofu/opentofu 1.12.2
+peteretelej/tree v1.3.0
+sharkdp/bat v0.26.1
 tofu v1.11.6

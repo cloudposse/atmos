@@ -692,3 +692,65 @@ tests:
       sanitize:
         "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
+  # Help must emit TrueColor when color is forced on a pipe (the screengrab
+  # recording contract). The code-block background #2F2E36 must appear as the
+  # TrueColor sequence 48;2;47;46;54 — the historic bug degraded the help
+  # renderer to 16-color ANSI, turning it into a bright blue box (ESC[44m) in
+  # the docs casts. snapshot: false so ANSI never lands in golden files.
+  - name: atmos about --help force-color emits truecolor
+    enabled: true
+    snapshot: false
+    description: "Help with ATMOS_FORCE_COLOR on a pipe emits TrueColor codes, never 16-color ANSI blue"
+    workdir: "./"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_FORCE_COLOR: "true"
+    command: atmos
+    args:
+      - "about"
+      - "--help"
+    expect:
+      stdout:
+        - '\x1b\[48;2;47;46;54m'
+        - !not '\x1b\[44m'
+      exit_code: 0
+  # Help screens must always work, even when atmos.yaml is invalid; config is
+  # an optional refinement, never a prerequisite for help rendering.
+  - name: atmos about --help works with invalid atmos.yaml
+    enabled: true
+    snapshot: false
+    description: "Help renders with correct TrueColor output even when atmos.yaml fails to parse"
+    workdir: "fixtures/scenarios/invalid-config-yaml"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_FORCE_COLOR: "true"
+    command: atmos
+    args:
+      - "about"
+      - "--help"
+    expect:
+      stdout:
+        - "USAGE"
+        - '\x1b\[48;2;47;46;54m'
+        - !not '\x1b\[44m'
+      exit_code: 0
+  # Negative-path pairing: the same help renders identically with no
+  # atmos.yaml at all (built-in defaults are the zero-config baseline).
+  - name: atmos about --help works with no atmos.yaml
+    enabled: true
+    snapshot: false
+    description: "Help renders with correct TrueColor output with no atmos.yaml present"
+    workdir: "fixtures/scenarios/empty-dir"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_FORCE_COLOR: "true"
+    command: atmos
+    args:
+      - "about"
+      - "--help"
+    expect:
+      stdout:
+        - "USAGE"
+        - '\x1b\[48;2;47;46;54m'
+        - !not '\x1b\[44m'
+      exit_code: 0

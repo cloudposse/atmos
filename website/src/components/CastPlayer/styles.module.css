@@ -91,8 +91,13 @@
   font-family:
     SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
     monospace;
-  font-size: 1.12rem;
-  line-height: 1.04;
+  /* Integer-pixel metrics so terminal rows tile exactly: 1.125rem = 18px at
+     the default root size, and line-height: 1 keeps each row the height of
+     the glyph em box. Fractional row heights (the previous 1.12rem × 1.04)
+     round differently per row and leave 1-2px horizontal seams through ANSI
+     block art (█). */
+  font-size: 1.125rem;
+  line-height: 1;
   white-space: pre-wrap;
 }
 
@@ -234,7 +239,12 @@
 
 .staticFrame .screen {
   padding: 2rem 2.5rem 2rem;
-  overflow: visible;
+  /* Preserve the recorded terminal layout: never re-wrap lines at the
+     container edge (which shatters column-aligned CLI output); scroll
+     horizontally instead when the viewport is narrower than the cast. */
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 .thumbnail {
@@ -269,8 +279,10 @@
 .thumbnail .screen {
   padding: 1.1rem 0.95rem 0.8rem;
   overflow: hidden;
-  font-size: 0.43rem;
-  line-height: 1.08;
+  /* 0.4375rem = 7px at the default root size; see .screen for why terminal
+     rows need integer-pixel heights with line-height: 1. */
+  font-size: 0.4375rem;
+  line-height: 1;
 }
 
 .thumbnail .cursor {
@@ -280,7 +292,8 @@
 @media (max-width: 640px) {
   .screen {
     padding: 1.5rem 1rem 5.25rem;
-    font-size: 0.86rem;
+    /* 0.875rem = 14px at the default root size (integer-pixel rows). */
+    font-size: 0.875rem;
   }
 
   .controls {

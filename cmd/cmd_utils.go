@@ -1298,6 +1298,14 @@ func isVersionCommand() bool {
 	return len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version")
 }
 
+// isHelpRequestedInArgs reports whether this invocation is a help request.
+// Help screens must always render — even when atmos.yaml is missing or
+// invalid — so config-load failures are tolerated when this returns true.
+// Uses the same argument matching as the root help function.
+func isHelpRequestedInArgs() bool {
+	return Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")
+}
+
 // isVersionManagementCommand checks if the current command is a version management command.
 // These commands should not trigger re-exec to avoid infinite loops.
 func isVersionManagementCommand(cmd *cobra.Command) bool {

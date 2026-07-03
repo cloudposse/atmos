@@ -14,7 +14,6 @@ import (
 	"syscall"
 
 	"github.com/charmbracelet/lipgloss"
-	xterm "github.com/charmbracelet/x/term"
 	"github.com/elewis787/boa"
 	"github.com/muesli/reflow/wordwrap"
 	"github.com/muesli/termenv"
@@ -457,6 +456,9 @@ var RootCmd = &cobra.Command{
 				if !isHelpRequested {
 					log.Warn(err.Error())
 				}
+			} else if isHelpRequested {
+				// Help screens should always render, even with invalid config.
+				log.Debug("CLI configuration error (continuing for help)", "error", err)
 			} else if isCIGitCloneBootstrapRequested() {
 				tmpConfig.CI.Enabled = true
 				log.Debug("CLI configuration error (continuing for CI git clone bootstrap)", "error", err)
@@ -843,6 +845,11 @@ func setupColorProfileFromEnv() {
 				forceColor = true
 				break
 			}
+			if strings.HasPrefix(arg, "--force-color=") {
+				value := strings.TrimPrefix(arg, "--force-color=")
+				forceColor = value == "true" || value == "1"
+				break
+			}
 		}
 	}
 
@@ -1138,15 +1145,31 @@ func formatFlagName(f *pflag.Flag) string {
 	return flagName
 }
 
-// getTerminalWidth returns the current terminal width, with a fallback default.
+// getTerminalWidth returns the width used to lay out help output.
+//
+// Precedence: the active --cast recording width (so recorded output matches the
+// recorded terminal), then the detected terminal width (real TTY size, or the
+// COLUMNS environment variable on pipes), then the default. The result is
+// capped at the default for readability, or at Settings.Terminal.MaxWidth when
+// configured (config refines, but is never required — help must lay out
+// correctly with no atmos.yaml at all).
 func getTerminalWidth() int {
 	const defaultWidth = 120 // Fang's max width
-	width, _, err := xterm.GetSize(os.Stdout.Fd())
-	if err != nil || width <= 0 {
-		return defaultWidth
+
+	width := castcmd.ActiveRecordingWidth()
+	if width <= 0 {
+		width = ui.TerminalWidth()
 	}
-	if width > defaultWidth {
-		return defaultWidth // Cap at maximum for readability
+	if width <= 0 {
+		width = defaultWidth
+	}
+
+	maxWidth := defaultWidth
+	if atmosConfig.Settings.Terminal.MaxWidth > 0 {
+		maxWidth = atmosConfig.Settings.Terminal.MaxWidth
+	}
+	if width > maxWidth {
+		return maxWidth
 	}
 	return width
 }
@@ -1262,10 +1285,6 @@ func stripBackgroundCodes(s string) string {
 
 	return result
 }
-
-// applyColoredHelpTemplate applies a custom colored help template using colorprofile.Writer and lipgloss.
-// This approach ensures colors work in both interactive terminals and redirected output (screengrabs).
-// Colors are automatically enabled when ATMOS_FORCE_COLOR, CLICOLOR_FORCE, or FORCE_COLOR is set.
 
 // setupProfiler initializes and starts the profiler if enabled.
 func setupProfiler(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) error {
@@ -1463,6 +1482,12 @@ func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration
 	if isVersionCommand() {
 		// Version command should always work, even with invalid config.
 		log.Debug("Warning: CLI configuration error (continuing for version command)", "error", initErr)
+		return nil
+	}
+
+	if isHelpRequestedInArgs() {
+		// Help screens should always render, even with invalid config.
+		log.Debug("Warning: CLI configuration error (continuing for help)", "error", initErr)
 		return nil
 	}
 

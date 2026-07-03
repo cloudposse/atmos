@@ -105,6 +105,42 @@ func TestStartRecordingWithExplicitPath(t *testing.T) {
 	}
 }
 
+func TestActiveRecordingWidth(t *testing.T) {
+	activeCast = nil
+	if width := ActiveRecordingWidth(); width != 0 {
+		t.Fatalf("ActiveRecordingWidth() = %d with no active recording, want 0", width)
+	}
+
+	castPath := filepath.Join(t.TempDir(), "width.cast")
+	t.Cleanup(func() {
+		if activeCast != nil {
+			FinalizeRecording()
+		}
+	})
+
+	cmd := newRecordingTestCommand("terraform")
+	if err := cmd.Flags().Set(FlagName, castPath); err != nil {
+		t.Fatal(err)
+	}
+	err := StartRecordingIfRequested(
+		cmd,
+		&schema.AtmosConfiguration{
+			Cast: schema.CastConfig{Recording: schema.CastRecordingConfig{Width: 90, Height: 30}},
+		},
+		[]string{"--cast=" + castPath, "terraform", "plan"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if width := ActiveRecordingWidth(); width != 90 {
+		t.Fatalf("ActiveRecordingWidth() = %d during recording, want 90", width)
+	}
+	FinalizeRecording()
+	if width := ActiveRecordingWidth(); width != 0 {
+		t.Fatalf("ActiveRecordingWidth() = %d after FinalizeRecording, want 0", width)
+	}
+}
+
 func TestStartRecordingWithConfigEnabledUsesBasePath(t *testing.T) {
 	activeCast = nil
 	basePath := t.TempDir()

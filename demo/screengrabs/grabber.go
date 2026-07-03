@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/asciicast"
@@ -18,6 +19,15 @@ const (
 	artifactsDir     = "artifacts"
 	castFilePerm     = 0o600
 	artifactsDirPerm = 0o755
+
+	// Recorded terminal size in columns/rows (screengrabWidth x screengrabHeight).
+	// Kept narrow so casts render without re-wrapping inside the docs content
+	// column; Atmos help balances its layout to this width via the COLUMNS env
+	// var. 90 is the sweet spot: narrower widths force the flags table past its
+	// minimum description width (ragged overflow), wider ones exceed the docs
+	// column.
+	screengrabWidth  = 90
+	screengrabHeight = 36
 )
 
 var (
@@ -29,9 +39,12 @@ var (
 // The pipeline no longer needs aha: HTML is rendered natively by pkg/asciicast.
 var requiredTools = []string{"atmos", "bat", "tree", "terraform"}
 
-// recordingEnv forces color output and disables paging for recorded commands.
+// recordingEnv forces color output, fixes the layout width, and disables
+// paging for recorded commands. COLUMNS makes Atmos (and tools like bat/tree)
+// lay out output at the recorded terminal width on the non-TTY pipe.
 var recordingEnv = map[string]string{
 	"TERM":              "xterm-256color",
+	"COLUMNS":           strconv.Itoa(screengrabWidth),
 	"ATMOS_FORCE_COLOR": "true",
 	"FORCE_COLOR":       "1",
 	"CLICOLOR_FORCE":    "1",
@@ -77,7 +90,7 @@ func checkDependencies() error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("%w: %s (install them or use `make -C demo/screengrabs docker-all`)",
+		return fmt.Errorf("%w: %s (run `make -C demo/screengrabs deps` to install them via the Atmos toolchain)",
 			errMissingDependencies, strings.Join(missing, ", "))
 	}
 	return nil
@@ -127,6 +140,8 @@ func record(demo, command string, env []string) (bool, error) {
 		Dir:     commandDir(demo, command),
 		Env:     env,
 		Path:    castPath,
+		Width:   screengrabWidth,
+		Height:  screengrabHeight,
 	})
 	if err != nil {
 		return false, err

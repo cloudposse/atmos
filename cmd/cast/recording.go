@@ -209,6 +209,16 @@ func (w *recorderOutputWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// ActiveRecordingWidth returns the terminal width (in columns) of the active
+// cast recording, or 0 when no recording is running. Help rendering uses this
+// so recorded output is laid out at the recorded terminal width.
+func ActiveRecordingWidth() int {
+	if activeCast == nil {
+		return 0
+	}
+	return activeCast.recorder.Width()
+}
+
 // FinalizeRecording closes the active root-command cast recorder, if one is running.
 func FinalizeRecording() {
 	defer perf.Track(nil, "cmd.cast.FinalizeRecording")()

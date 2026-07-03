@@ -18,6 +18,11 @@ tests:
       diff:
         - "github_token"
         - "Failed to use pager"  # May or may not appear depending on environment
+        # GitHub token resolution logs vary by environment: CI resolves
+        # GITHUB_TOKEN silently, local machines fall back to the gh CLI.
+        - "GitHub CLI token lookup failed"
+        - "No GitHub token resolved"
+        - "Using GitHub token from gh CLI"
       sanitize:
         "basePathAbsolute: .+": "basePathAbsolute: /absolute/path/to/repo"
         # Normalize pager setting which varies by environment (PAGER env var)
@@ -42,6 +47,11 @@ tests:
       diff:
         - "github_token"
         - "Failed to use pager"  # May or may not appear depending on environment
+        # GitHub token resolution logs vary by environment: CI resolves
+        # GITHUB_TOKEN silently, local machines fall back to the gh CLI.
+        - "GitHub CLI token lookup failed"
+        - "No GitHub token resolved"
+        - "Using GitHub token from gh CLI"
       sanitize:
         "basePathAbsolute: .+": "basePathAbsolute: /absolute/path/to/repo"
         # Normalize pager setting which varies by environment (PAGER env var)

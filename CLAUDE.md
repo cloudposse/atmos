@@ -290,12 +290,11 @@ ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken
 ### Regenerating Screengrabs (IMPORTANT)
 **When:** After modifying CLI behavior/help/output, adding commands. NOT for doc-only changes.
 
-**How (Linux/CI only):**
-1. GitHub Actions: `gh workflow run screengrabs.yaml` (creates PR)
-2. Local Linux: `cd demo/screengrabs && make all`
-3. Docker (macOS): `make -C demo/screengrabs docker-all`
+**How (any OS — native, no containers):**
+1. Local: `make -C demo/screengrabs all` (builds atmos from the working tree, installs bat/tree/terraform via the Atmos toolchain, records, installs casts into `website/static/casts/screengrabs/`)
+2. GitHub Actions: `gh workflow run screengrabs.yaml` (creates PR; builds atmos from the checkout the same way)
 
-**Notes:** Captures exact output, ANSI→HTML, `script` syntax differs BSD/GNU, regenerate all together, no pipe indirection.
+**Notes:** Recording uses no PTY; correct TrueColor and layout width come from `ATMOS_FORCE_COLOR` and `COLUMNS` (recorded at 90 cols to fit the docs column). Regenerate all together; never pipe the output.
 
 ### PRD Documentation (MANDATORY)
 All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames.

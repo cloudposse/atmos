@@ -34,7 +34,12 @@ tests:
       - "validate"
       - "--verbose"
     expect:
-      diff: []
+      # GitHub token resolution logs vary by environment: CI resolves
+      # GITHUB_TOKEN silently, local machines fall back to the gh CLI.
+      diff:
+        - "GitHub CLI token lookup failed"
+        - "No GitHub token resolved"
+        - "Using GitHub token from gh CLI"
       stderr:
         - "Validating authentication configuration"
         - "Authentication configuration is valid"

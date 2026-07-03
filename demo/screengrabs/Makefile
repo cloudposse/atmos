@@ -1,4 +1,6 @@
 INSTALL_PATH ?= ../../website/static/casts/screengrabs
+ATMOS := ../../build/atmos
+
 all: build-all install
 
 # Write to website/static/casts/screengrabs/
@@ -7,41 +9,24 @@ install:
 	@mkdir -p $(INSTALL_PATH)
 	@cp -a artifacts/* $(INSTALL_PATH)
 
-build-all:
-	@go run . demo-stacks.txt
+# Build the working-tree atmos so recordings always reflect local changes.
+atmos-binary:
+	@echo "Building atmos from the working tree..."
+	@cd ../.. && go build -o build/atmos .
+
+# Install recording dependencies via the Atmos toolchain (cross-platform,
+# no Homebrew or containers required). Versions are pinned in the repo-root
+# .tool-versions (bat and tree appear in recorded output; terraform is needed
+# by demo commands), so casts are reproducible across machines.
+deps: atmos-binary
+	@cd ../.. && ./build/atmos toolchain install
+
+# Recording works natively on any OS: casts are captured without a PTY, and
+# Atmos renders correct TrueColor output and layout width via the
+# ATMOS_FORCE_COLOR and COLUMNS environment variables set by the grabber.
+build-all: deps
+	@eval "$$($(ATMOS) toolchain env --format=bash)" && \
+		PATH="$$(cd ../../build && pwd):$$PATH" go run . demo-stacks.txt
 	@echo "Validating screengrab casts..."
 	@! grep -r "atmos: not found" artifacts/ || (echo "ERROR: Found 'atmos: not found' in screengrab casts" && exit 1)
 	@echo "✓ All screengrab casts validated successfully"
-
-# Generate screengrabs using Docker (cross-platform, recommended)
-docker-build:
-	@echo "Generating screengrabs using Podman (Linux container)..."
-	@podman run --rm -v $$(pwd)/../..:/workspace -w /workspace/demo/screengrabs \
-		--memory=4g \
-		-e ATMOS_TELEMETRY=false \
-		-e ATMOS_FORCE_COLOR=true \
-		-e FORCE_COLOR=1 \
-		ubuntu:22.04 bash -c ' \
-		set -e && \
-		apt-get update -qq && \
-		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq make wget tar tree bat && \
-		ln -sf /usr/bin/batcat /usr/local/bin/bat && \
-		echo "Installing Go 1.26..." && \
-		ARCH=$$(uname -m | sed "s/x86_64/amd64/; s/aarch64/arm64/") && \
-		wget -q https://go.dev/dl/go1.26.0.linux-$$ARCH.tar.gz && \
-		tar -C /usr/local -xzf go1.26.0.linux-$$ARCH.tar.gz && \
-		export PATH=/usr/local/go/bin:$$PATH && \
-		go version && \
-		echo "Building atmos from source..." && \
-		cd /workspace && \
-		GOMEMLIMIT=3GiB go build -p 2 -o /usr/local/bin/atmos . && \
-		atmos version && \
-		atmos toolchain install hashicorp/terraform && \
-		eval "$$(atmos toolchain env --format=bash)" && \
-		cd /workspace/demo/screengrabs && \
-		make build-all \
-		'
-	@echo "Screengrabs generated and validated successfully in artifacts/"
-
-# Docker build and install in one step
-docker-all: docker-build install

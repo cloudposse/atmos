@@ -173,6 +173,16 @@ func (r *Recorder) Path() string {
 	return r.path
 }
 
+// Width returns the recorded terminal width in columns.
+func (r *Recorder) Width() int {
+	defer perf.Track(nil, "asciicast.Recorder.Width")()
+
+	if r == nil {
+		return 0
+	}
+	return r.width
+}
+
 // Record writes stream content as an asciicast event, applying input-recording rules.
 func (r *Recorder) Record(stream, content string) {
 	defer perf.Track(nil, "asciicast.Recorder.Record")()

@@ -17,25 +17,22 @@ demo-stacks` from `demo/casts`).
 
 Add all commands to `demo-stacks.txt` (use `#` to disable generation of the command).
 
-Build all casts by running:
+Recording runs natively on any OS — no containers or Homebrew required. Casts
+are captured without a PTY; Atmos produces correct TrueColor output and layout
+width from the `ATMOS_FORCE_COLOR` and `COLUMNS` environment variables the
+grabber sets. Recording dependencies (`bat`, `tree`, `terraform`) are installed
+via the Atmos toolchain, and the `atmos` binary is built from the working tree.
+
+Build all casts and install them into `../../website/static/casts/screengrabs`
+by running:
 
 ```shell
-make build-all
+make all
 ```
 
-Then install them into `../../website/static/casts/screengrabs` by running:
-
-```shell
-make install
-```
+(Or run the steps separately: `make deps`, `make build-all`, `make install`.)
 
 All the files in `website/static/casts/screengrabs` should be committed.
-
-On macOS (or if dependencies are missing), generate with a Linux container instead:
-
-```shell
-make docker-all
-```
 
 Embed a screengrab inside any MDX documentation file like this:
 

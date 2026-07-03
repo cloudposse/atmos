@@ -46,12 +46,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: screengrabs
     steps:
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y make jq bat tree
-          sudo ln -s /usr/bin/batcat /usr/bin/bat
-
       - name: Set Git Preferences for windows
         run: |
           git config --global core.autocrlf false
@@ -62,27 +56,13 @@ jobs:
         with:
           persist-credentials: false
 
-      # The screengrab driver (demo/screengrabs) is built from this repo with `go run`.
+      # The Makefile is self-contained: it builds atmos from this checkout and
+      # installs the recording dependencies (bat, tree, terraform) via the
+      # Atmos toolchain, so no apt packages or released atmos are needed.
       - name: Setup Go
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: go.mod
-
-      - name: Install Atmos
-        uses: jaxxstorm/action-install-gh-release@v2.1.0
-        with:
-          repo: cloudposse/atmos
-          tag: ${{ needs.prepare.outputs.version }}
-          chmod: 0755
-          extension-matching: disable
-          rename-to: atmos
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Add Terraform from Atmos toolchain to PATH
-        run: |
-          atmos toolchain install hashicorp/terraform
-          atmos toolchain env --format=github
 
       - name: Run make build-all install
         run: |
