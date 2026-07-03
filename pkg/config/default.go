@@ -64,6 +64,11 @@ var (
 				BasePath: "components/packer",
 				Command:  "packer",
 			},
+			Kubernetes: schema.Kubernetes{
+				BasePath:          "components/kubernetes",
+				Provider:          "kubectl",
+				AutoGenerateFiles: false,
+			},
 		},
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: "replace",

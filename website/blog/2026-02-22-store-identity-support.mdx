@@ -16,7 +16,7 @@ Stores (`!store` YAML function) can now reference an Atmos auth identity via a n
 ```yaml
 stores:
   prod/aws-ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     identity: prod-admin
     options:
       region: us-east-1
@@ -48,19 +48,19 @@ Previously, stores always used the default credential chain, which meant separat
 ```yaml
 stores:
   prod/aws-ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     identity: prod-admin
     options:
       region: us-east-1
 
   staging/azure-kv:
-    type: azure-key-vault
+    kind: azure/keyvault
     identity: staging-azure
     options:
       vault_url: https://staging-vault.vault.azure.net
 
   prod/gsm:
-    type: google-secret-manager
+    kind: gcp/secretmanager
     identity: gcp-prod
     options:
       project_id: my-gcp-project

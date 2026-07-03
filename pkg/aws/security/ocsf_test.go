@@ -78,6 +78,62 @@ func TestBuildOCSFEvents_MappingEnrichments(t *testing.T) {
 	assert.Equal(t, true, enrichmentByName["atmos.mapping.mapped"].Data, "boolean enrichments preserve typed data")
 }
 
+func TestBuildOCSFEvents_InvocationAttachedToUnmapped(t *testing.T) {
+	// Every event in a batch must carry the exact command + flags that
+	// produced it, under unmapped["atmos.invocation"]. This is the OCSF
+	// equivalent of SARIF's run.invocations[] and is the audit trail SIEMs
+	// use to answer "what command produced this finding?".
+	report := newTestSecurityReport()
+	report.Invocation = &ReportInvocation{
+		CommandLine:         "atmos aws security analyze --format ocsf --max-findings 0",
+		Arguments:           []string{"aws", "security", "analyze", "--format", "ocsf", "--max-findings", "0"},
+		StartTimeUTC:        time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC),
+		EndTimeUTC:          time.Date(2026, 5, 25, 12, 0, 42, 0, time.UTC),
+		ExitCode:            0,
+		ExitCodeDescription: "Success",
+		WorkingDirectory:    "/home/user/atmos-project",
+		ExecutionSuccessful: true,
+		AccountsScanned:     []string{"123456789012"},
+		RegionsScanned:      []string{"us-east-1"},
+		StacksScanned:       []string{"tenant1-ue1-prod"},
+	}
+
+	events := BuildOCSFEvents(report)
+	require.NotEmpty(t, events)
+
+	for i := range events {
+		require.Contains(t, events[i].Unmapped, "atmos.invocation",
+			"every event in a batch must carry atmos.invocation under unmapped")
+		inv, ok := events[i].Unmapped["atmos.invocation"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "atmos aws security analyze --format ocsf --max-findings 0", inv["command_line"])
+		assert.Equal(t,
+			[]string{"aws", "security", "analyze", "--format", "ocsf", "--max-findings", "0"},
+			inv["arguments"])
+		assert.Equal(t, 0, inv["exit_code"])
+		assert.Equal(t, true, inv["execution_successful"])
+		assert.Equal(t, "Success", inv["exit_code_description"])
+		assert.Equal(t, "/home/user/atmos-project", inv["working_directory"])
+		assert.Equal(t, "2026-05-25T12:00:00Z", inv["start_time_utc"])
+		assert.Equal(t, "2026-05-25T12:00:42Z", inv["end_time_utc"])
+		assert.Equal(t, []string{"123456789012"}, inv["accounts_scanned"])
+	}
+}
+
+func TestBuildOCSFEvents_NoInvocation_NoAtmosInvocationKey(t *testing.T) {
+	// When the report has no invocation context, the key must be absent so
+	// downstream consumers can distinguish "we don't know" from "we ran with
+	// no args" — never invent fake provenance.
+	report := newTestSecurityReport()
+	report.Invocation = nil
+	events := BuildOCSFEvents(report)
+	require.NotEmpty(t, events)
+	for i := range events {
+		_, present := events[i].Unmapped["atmos.invocation"]
+		assert.False(t, present, "atmos.invocation must not appear when ReportInvocation is nil")
+	}
+}
+
 func TestBuildOCSFEvents_NoMapping_NoAtmosEnrichments(t *testing.T) {
 	events := BuildOCSFEvents(newTestSecurityReport())
 	require.NotEmpty(t, events)

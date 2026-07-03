@@ -28,7 +28,7 @@ var deployCmd = &cobra.Command{
 
 This ensures that the changes defined in your Terraform configuration are applied without requiring manual confirmation, streamlining the deployment process.`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return runHooks(h.BeforeTerraformDeploy, cmd, args)
+		return runBeforeHooks(h.BeforeTerraformDeploy, cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		// Reset per-run globals. Both must be initialised before any early return
@@ -57,7 +57,10 @@ This ensures that the changes defined in your Terraform configuration are applie
 		}
 
 		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		opts, err := ParseTerraformRunOptions(v)
+		if err != nil {
+			return err
+		}
 
 		// Deploy-specific flags (deploy-run-init, from-plan, planfile) flow through
 		// the legacy ProcessCommandLineArgs which sets info.DeployRunInit, etc.
@@ -81,7 +84,7 @@ This ensures that the changes defined in your Terraform configuration are applie
 			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
 		}
 
-		err := terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
+		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 
 		// Strip ANSI escape codes so CI templates get clean text.
 		// Combine stdout and stderr so that error messages (which terraform
@@ -118,7 +121,7 @@ func init() {
 		flags.WithBoolFlag("affected", "", false, "Deploy the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Deploy all components in all stacks"),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
-		flags.WithBoolFlag("verify-plan", "", false, "Verify stored planfile matches current state before applying"),
+		flags.WithBoolFlag("verify-plan", "", false, "Force planfile drift verification before applying, overriding config (use --verify-plan=false to disable)"),
 		flags.WithEnvVars("deploy-run-init", "ATMOS_TERRAFORM_DEPLOY_RUN_INIT"),
 		flags.WithEnvVars("from-plan", "ATMOS_TERRAFORM_DEPLOY_FROM_PLAN"),
 		flags.WithEnvVars("planfile", "ATMOS_TERRAFORM_DEPLOY_PLANFILE"),

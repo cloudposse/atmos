@@ -5,6 +5,13 @@ aliases:
   tr: "terraform"
   ta: "terraform apply"
 
+commands:
+  - name: release
+    description: Run release automation
+    steps:
+      - type: shell
+        command: echo release
+
 components:
   terraform:
     base_path: "components/terraform"

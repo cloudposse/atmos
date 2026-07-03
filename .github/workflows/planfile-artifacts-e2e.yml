@@ -1,0 +1,126 @@
+# End-to-end test for the `github/artifacts` planfile store via the EXPLICIT CLI
+# (manual) path, across two separate jobs:
+#
+#   plan job   -> `atmos terraform plan --ci` uploads the planfile to GitHub
+#                 Actions Artifacts.
+#   apply job  -> explicitly `atmos terraform planfile download` the artifact
+#                 (cross-job, same run) and `atmos terraform apply --planfile=...`.
+#
+# The AUTOMATIC hook-driven flow (plan --ci upload -> deploy --ci auto download +
+# verify + apply) is tested separately in planfile-verify-e2e.yml.
+#
+# This is the one path no Go unit test can cover: the backend talks to the
+# GitHub Actions Artifacts API directly using the runner-only
+# ACTIONS_RUNTIME_TOKEN / ACTIONS_RESULTS_URL, which GitHub withholds from
+# `run:` steps. We dogfood the in-repo `actions/github-runtime` action
+# (mode: env) to surface them — exactly the wiring documented at
+# /ci/planfile-storage.
+#
+# The IaC binary is also dogfooded through the Atmos toolchain: the fixture
+# declares `dependencies.tools.opentofu` (+ `command: tofu`), so
+# `atmos terraform plan/apply` auto-installs OpenTofu and resolves it from the
+# toolchain PATH — no hashicorp/setup-terraform action required.
+name: Planfile Artifacts E2E
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'pkg/ci/artifact/**'
+      - 'cmd/terraform/planfile/**'
+      - 'pkg/ci/plugins/terraform/**'
+      - 'actions/github-runtime/**'
+      - 'tests/fixtures/scenarios/planfile-artifacts-e2e/**'
+      - '.github/workflows/planfile-artifacts-e2e.yml'
+
+permissions:
+  contents: read
+  actions: read # Required for the GITHUB_TOKEN to list/download artifacts via the REST API.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pin the SHA so the plan upload and the apply download derive the identical
+  # planfile key across both jobs.
+  ATMOS_CI_SHA: ${{ github.sha }}
+  GITHUB_TOKEN: ${{ github.token }}
+  FIXTURE_DIR: tests/fixtures/scenarios/planfile-artifacts-e2e
+
+jobs:
+  plan:
+    name: plan (upload planfile)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Build atmos
+        run: |
+          make build
+          echo "$PWD/build" >> "$GITHUB_PATH"
+
+      # Surface the runner's ACTIONS_* credentials to every later run step.
+      # This is the entire reason github/artifacts works from a `run:` step.
+      - name: Expose GitHub Actions runtime credentials
+        uses: ./actions/github-runtime
+        with:
+          mode: env
+
+      - name: Plan and upload the planfile
+        working-directory: tests/fixtures/scenarios/planfile-artifacts-e2e
+        run: atmos terraform plan mycomponent -s prod --ci
+
+  apply:
+    name: apply (consume planfile)
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Build atmos
+        run: |
+          make build
+          echo "$PWD/build" >> "$GITHUB_PATH"
+
+      - name: Expose GitHub Actions runtime credentials
+        uses: ./actions/github-runtime
+        with:
+          mode: env
+
+      - name: Download the planfile uploaded by the plan job
+        working-directory: tests/fixtures/scenarios/planfile-artifacts-e2e
+        run: |
+          set -euo pipefail
+          # The named "github" store carries prefix=planfile and resolves owner/repo
+          # from GITHUB_REPOSITORY — matching exactly what the plan job's --ci upload
+          # hook wrote (planfile-<stack>--<component>--<sha>.tfplan.tar in this run).
+          # Artifacts are run-scoped, so the plan job's upload is visible here.
+          atmos terraform planfile download mycomponent -s prod \
+            --store=github -o "$RUNNER_TEMP/downloaded.planfile"
+          test -s "$RUNNER_TEMP/downloaded.planfile"
+
+      - name: Apply the downloaded planfile
+        working-directory: tests/fixtures/scenarios/planfile-artifacts-e2e
+        run: |
+          set -euo pipefail
+          # Apply exactly the plan that was reviewed in the plan job — no re-plan.
+          atmos terraform apply mycomponent -s prod --planfile="$RUNNER_TEMP/downloaded.planfile"
+          echo "Round-trip OK: planfile uploaded by the plan job was applied by the apply job."

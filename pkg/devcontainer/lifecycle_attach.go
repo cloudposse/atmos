@@ -153,7 +153,8 @@ func startContainerForAttach(ctx context.Context, runtime container.Runtime, con
 					Err()
 			}
 			return nil
-		})
+		},
+	)
 }
 
 // attachParams holds parameters for attaching to a container.
@@ -196,10 +197,12 @@ func attachToContainer(params *attachParams) error {
 	}
 
 	shellArgs := getShellArgs(params.config.UserEnvProbe)
-	attachOpts := &container.AttachOptions{ShellArgs: shellArgs}
+	shellOpts := &container.ShellOptions{ShellArgs: shellArgs}
 
 	// IO streams are nil in opts, will default to iolib.Data/UI in runtime.
-	return params.runtime.Attach(params.ctx, params.containerInfo.ID, attachOpts)
+	// Devcontainer "attach" opens a shell (a new process), so it uses Shell, not
+	// the runtime's PID-1 Attach.
+	return params.runtime.Shell(params.ctx, params.containerInfo.ID, shellOpts)
 }
 
 // attachToContainerWithPTY attaches to a container using PTY mode with masking support.

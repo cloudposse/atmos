@@ -184,7 +184,17 @@ func (f *awsFindingFetcher) paginateFindings(
 			allFindings = append(allFindings, normalizeSecurityHubFinding(&output.Findings[i]))
 		}
 
-		if output.NextToken == nil || reachedLimit(allFindings, maxFindings) {
+		if reachedLimit(allFindings, maxFindings) {
+			if output.NextToken != nil {
+				log.Warn(
+					"Security Hub finding results truncated at --max-findings limit; more findings exist. Re-run with --max-findings 0 (or a higher value) to fetch all.",
+					"limit", maxFindings,
+					"fetched", len(allFindings),
+				)
+			}
+			break
+		}
+		if output.NextToken == nil {
 			break
 		}
 		nextToken = output.NextToken
@@ -243,7 +253,17 @@ func (f *awsFindingFetcher) paginateInspector2Findings(
 			allFindings = append(allFindings, normalizeInspector2Finding(&output.Findings[i]))
 		}
 
-		if output.NextToken == nil || reachedLimit(allFindings, maxFindings) {
+		if reachedLimit(allFindings, maxFindings) {
+			if output.NextToken != nil {
+				log.Warn(
+					"Inspector2 finding results truncated at --max-findings limit; more findings exist. Re-run with --max-findings 0 (or a higher value) to fetch all.",
+					"limit", maxFindings,
+					"fetched", len(allFindings),
+				)
+			}
+			break
+		}
+		if output.NextToken == nil {
 			break
 		}
 		nextToken = output.NextToken

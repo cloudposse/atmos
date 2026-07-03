@@ -3,6 +3,4 @@
 
 **Error:** workflow has no steps defined
 
-## Explanation
-
 Workflow no-steps is empty and requires at least one step to execute.

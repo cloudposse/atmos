@@ -3,6 +3,8 @@ package validator
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/xeipuuv/gojsonschema"
 	"go.yaml.in/yaml/v3"
@@ -32,13 +34,70 @@ func NewYAMLSchemaValidator(atmosConfig *schema.AtmosConfiguration) Validator {
 
 // yamlToJSON converts YAML data to JSON format in an optimized way.
 func yamlToJSON(yamlData []byte) ([]byte, error) {
-	var rawData any
-	err := yaml.Unmarshal(yamlData, &rawData)
+	var node yaml.Node
+	err := yaml.Unmarshal(yamlData, &node)
 	if err != nil {
 		return nil, err
 	}
+	rawData := yamlNodeToInterface(&node)
 	// Marshal the processed structure into JSON
 	return json.Marshal(rawData)
+}
+
+func yamlNodeToInterface(node *yaml.Node) any {
+	if node == nil {
+		return nil
+	}
+
+	switch node.Kind {
+	case yaml.DocumentNode:
+		if len(node.Content) == 0 {
+			return nil
+		}
+		return yamlNodeToInterface(node.Content[0])
+	case yaml.MappingNode:
+		return yamlMappingNodeToInterface(node)
+	case yaml.SequenceNode:
+		return yamlSequenceNodeToInterface(node)
+	case yaml.AliasNode:
+		return yamlNodeToInterface(node.Alias)
+	case yaml.ScalarNode:
+		return yamlScalarNodeToInterface(node)
+	default:
+		return nil
+	}
+}
+
+func yamlMappingNodeToInterface(node *yaml.Node) map[string]any {
+	result := make(map[string]any, len(node.Content)/2)
+	for i := 0; i < len(node.Content); i += 2 {
+		key := yamlNodeToInterface(node.Content[i])
+		result[fmt.Sprint(key)] = yamlNodeToInterface(node.Content[i+1])
+	}
+	return result
+}
+
+func yamlSequenceNodeToInterface(node *yaml.Node) []any {
+	result := make([]any, 0, len(node.Content))
+	for _, child := range node.Content {
+		result = append(result, yamlNodeToInterface(child))
+	}
+	return result
+}
+
+func yamlScalarNodeToInterface(node *yaml.Node) any {
+	if isCustomYAMLTag(node.Tag) {
+		return strings.TrimSpace(node.Tag + " " + node.Value)
+	}
+	var value any
+	if err := node.Decode(&value); err == nil {
+		return value
+	}
+	return node.Value
+}
+
+func isCustomYAMLTag(tag string) bool {
+	return tag != "" && !strings.HasPrefix(tag, "!!")
 }
 
 func (y yamlSchemaValidator) ValidateYAMLSchema(schemaSource, yamlSource string) ([]gojsonschema.ResultError, error) {

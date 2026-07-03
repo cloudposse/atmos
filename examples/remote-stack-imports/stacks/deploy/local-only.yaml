@@ -1,0 +1,18 @@
+# Local-only stack for testing.
+# This stack only uses local imports (no remote).
+
+import:
+  # Local import only
+  - catalog/base
+
+vars:
+  stage: local
+
+components:
+  terraform:
+    myapp:
+      metadata:
+        type: real
+      vars:
+        environment: "local"
+        imported_from: "local"

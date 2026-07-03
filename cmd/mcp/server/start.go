@@ -25,15 +25,17 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/mcp"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/signals"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
-	transportStdio     = "stdio"
-	transportHTTP      = "http"
-	defaultHTTPPort    = 8080
-	defaultHTTPHost    = "localhost"
-	mcpProtocolVersion = "2025-03-26"
+	transportStdio      = "stdio"
+	transportHTTP       = "http"
+	defaultHTTPPort     = 8080
+	defaultHTTPHost     = "localhost"
+	mcpProtocolVersion  = "2025-03-26"
+	shutdownGracePeriod = 250 * time.Millisecond
 )
 
 // transportConfig holds the validated transport configuration.
@@ -50,6 +52,7 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start Atmos MCP server",
 	Long:  startLongMarkdown,
+	Args:  cobra.NoArgs,
 	Example: `  # Start MCP server with stdio transport (default, for desktop clients)
   atmos mcp start
 
@@ -78,8 +81,6 @@ func init() {
 }
 
 func executeMCPServer(cmd *cobra.Command, args []string) error {
-	defer ui.Info("MCP server stopped")
-
 	// Get and validate transport flags.
 	config, err := getTransportConfig(cmd)
 	if err != nil {
@@ -92,6 +93,9 @@ func executeMCPServer(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	releaseInterruptExit := signals.SuspendInterruptExit()
+	defer releaseInterruptExit()
+
 	// Create context with cancellation for signal handling.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -99,6 +103,7 @@ func executeMCPServer(cmd *cobra.Command, args []string) error {
 	// Set up signal handling.
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
 
 	// Start server based on transport type.
 	errChan := make(chan error, 1)
@@ -113,7 +118,9 @@ func executeMCPServer(cmd *cobra.Command, args []string) error {
 	}
 
 	// Wait for signal or error.
-	return waitForShutdown(sigChan, errChan, cancel)
+	return waitForShutdownWithStopMessage(sigChan, errChan, cancel, func() {
+		ui.Info("MCP server stopped")
+	})
 }
 
 // getTransportConfig extracts and validates transport configuration from command flags.
@@ -136,16 +143,20 @@ func getTransportConfig(cmd *cobra.Command) (*transportConfig, error) {
 
 // setupMCPServer initializes the MCP server with all required components.
 func setupMCPServer() (*mcp.Server, error) {
-	// Load Atmos configuration.
+	// Load base Atmos configuration. Stack graph tools load stack manifests
+	// lazily so the MCP server can start before stacks exist or while stack
+	// imports are temporarily broken.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
 	// Check if MCP server is explicitly enabled.
 	if !atmosConfig.MCP.Enabled {
-		return nil, errUtils.ErrMCPNotEnabled
+		return nil, errUtils.Build(errUtils.ErrMCPNotEnabled).
+			WithHint("Add the following to atmos.yaml:\n\n```yaml\nmcp:\n  enabled: true\n```").
+			Err()
 	}
 
 	// Check if AI is enabled.
@@ -169,17 +180,42 @@ func setupMCPServer() (*mcp.Server, error) {
 
 // waitForShutdown waits for either a shutdown signal or server error.
 func waitForShutdown(sigChan chan os.Signal, errChan chan error, cancel context.CancelFunc) error {
+	return waitForShutdownWithStopMessage(sigChan, errChan, cancel, nil)
+}
+
+func waitForShutdownWithStopMessage(sigChan chan os.Signal, errChan chan error, cancel context.CancelFunc, onStop func()) error {
 	select {
-	case sig := <-sigChan:
-		ui.Infof("Received signal: %v", sig)
-		cancel()
-		return nil
-	case err := <-errChan:
-		if err != nil && !errors.Is(err, context.Canceled) {
-			return fmt.Errorf("MCP server error: %w", err)
+	case <-sigChan:
+		if onStop != nil {
+			onStop()
 		}
+		cancel()
+		return waitForServerStop(errChan)
+	case err := <-errChan:
+		if onStop != nil {
+			onStop()
+		}
+		return normalizeServerStopError(err)
+	}
+}
+
+func waitForServerStop(errChan chan error) error {
+	select {
+	case err, ok := <-errChan:
+		if !ok {
+			return nil
+		}
+		return normalizeServerStopError(err)
+	case <-time.After(shutdownGracePeriod):
 		return nil
 	}
+}
+
+func normalizeServerStopError(err error) error {
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return fmt.Errorf("MCP server error: %w", err)
+	}
+	return nil
 }
 
 // startStdioServer starts the MCP server with stdio transport.
@@ -225,7 +261,7 @@ func logServerInfo(server *mcp.Server, transportType, addr string) {
 	} else {
 		ui.Writeln("  Transport: stdio")
 	}
-	ui.Info("Waiting for client connection...")
+	ui.Success("MCP running. Waiting for an agent…")
 }
 
 // initializeAIComponents initializes the AI tool registry and executor.

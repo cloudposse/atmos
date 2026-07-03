@@ -33,59 +33,39 @@ logs:
   file: "/dev/stderr"
   level: Info
 
+# Toolchain: Atmos installs the CLIs this example needs (no manual setup). Helmfile
+# orchestrates Helm, and the nginx release's hooks shell out to kubectl, so all three
+# are declared as component dependencies (see stacks/catalog/demo.yaml) and resolved
+# from the Aqua public registry below.
+toolchain:
+  install_path: .tools
+  versions_file: .tool-versions
+  aliases:
+    helmfile: helmfile/helmfile
+    helm: helm/helm
+    kubectl: kubernetes/kubectl
+    kustomize: kubernetes-sigs/kustomize
+  registries:
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
 # Custom CLI commands
 
 # No arguments or flags are required
 commands:
 - name: "test"
-  description: "Run all tests"
+  description: "Bring up the local Kubernetes emulator, apply the demo, then tear it down"
   steps:
   - atmos validate stacks
+  - atmos emulator up kubernetes -s dev
   - atmos helmfile apply demo -s dev
+  - atmos emulator down kubernetes -s dev
 
-  # This is equivalent to the following commands:
+  # The apply step is equivalent to the following commands:
   #- atmos helmfile generate varfile demo -s dev
   #- helmfile -f components/helmfile/nginx/helmfile.yaml apply --values dev-demo.helmfile.vars.yaml
-
-# Use Nested Custom Commands to provide easier interface for Docker Compose
-- name: "k3s"
-  commands:
-  - name: "up"
-    description: Start k3s in the background
-    steps:
-      - |
-        container_running=$(docker ps -q -f "name=k3s")
-        if [ -n "$container_running" ]; then
-          echo "k3s is already running; run \`atmos k3s down\` to stop it"
-        else
-          docker compose up -d --wait
-        fi
-
-  - name: "down"
-    description: Stop k3s
-    steps:
-      - docker compose down
-
-  - name: "restart"
-    description: Restart k3s
-    steps:
-      - docker compose restart
-
-  - name: "reset"
-    description: Reset k3s (delete all data)
-    steps:
-      - docker compose down --volumes
-
-  - name: "status"
-    description: Show the status of k3s
-    steps:
-      - |
-        container_running=$(docker ps -q -f "name=k3s")
-        if [ -n "$container_running" ]; then
-          docker compose ps --format "{{`{{.Service}} is {{.State}}`}}"
-        else
-          echo "k3s is not running; run \`atmos k3s up\` to start it"
-        fi
 
 - name: "terraform"
   commands:

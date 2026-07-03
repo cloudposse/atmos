@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 var (
@@ -162,6 +163,7 @@ func (n *noopAdapter) Resolve(
 	_ string,
 	_ int,
 	_ int,
+	_ *schema.AtmosConfiguration,
 ) ([]ResolvedPaths, error) {
 	return nil, nil
 }

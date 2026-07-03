@@ -290,8 +290,8 @@ func (p *samlProvider) assumeRoleWithSAMLWithDeps(
 		config.WithRegion(p.region),
 	}
 
-	// Add custom endpoint resolver if configured
-	if resolverOpt := awsCloud.GetResolverConfigOption(nil, p.config); resolverOpt != nil {
+	// Add custom endpoint if configured.
+	if resolverOpt := awsCloud.GetBaseEndpointConfigOption(nil, p.config); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}
 
@@ -504,7 +504,8 @@ func (p *samlProvider) playwrightDriversInstalled() bool {
 	// Note: playwright-go does NOT respect XDG_CACHE_HOME, it uses its own hardcoded paths.
 	homeDir, err := homedir.Dir()
 	if err == nil {
-		playwrightPaths = append(playwrightPaths,
+		playwrightPaths = append(
+			playwrightPaths,
 			filepath.Join(homeDir, ".cache", playwrightCacheDir),            // Linux (playwright-go default).
 			filepath.Join(homeDir, "Library", "Caches", playwrightCacheDir), // macOS (playwright-go default).
 			filepath.Join(homeDir, "AppData", "Local", playwrightCacheDir),  // Windows (playwright-go default).

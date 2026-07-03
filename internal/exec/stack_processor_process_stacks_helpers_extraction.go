@@ -97,8 +97,8 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
-	// Terraform-specific: extract hooks section.
-	if opts.ComponentType == cfg.TerraformComponentType {
+	// Extract hooks section for component types with lifecycle hooks.
+	if supportsComponentHooks(opts.ComponentType) {
 		if i, ok := opts.ComponentMap[cfg.HooksSectionName]; ok {
 			componentHooks, ok := i.(map[string]any)
 			if !ok {
@@ -108,6 +108,26 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		} else {
 			result.ComponentHooks = make(map[string]any, componentSmallMapCapacity)
 		}
+	}
+
+	// Terraform-specific: extract test section.
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.TestSectionName]; ok {
+			componentTest, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.test' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentTest = componentTest
+		}
+	}
+
+	// Extract secrets section (declarations). Available for all component types.
+	if i, ok := opts.ComponentMap[cfg.SecretsSectionName]; ok {
+		componentSecrets, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.secrets' in the file '%s'", errUtils.ErrInvalidComponentSecrets, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentSecrets = componentSecrets
 	}
 
 	// Extract auth section.
@@ -121,10 +141,19 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentAuth = make(map[string]any, componentSmallMapCapacity)
 	}
 
-	// Extract provision section (for workdir provisioning) for terraform, helmfile, and packer.
-	if opts.ComponentType == cfg.TerraformComponentType ||
-		opts.ComponentType == cfg.HelmfileComponentType ||
-		opts.ComponentType == cfg.PackerComponentType {
+	// Extract retry section (component-level).  The value is kept as a raw map here so it
+	// can be deep-merged with any base-component retry config; decoding to the typed
+	// schema.RetryConfig happens after the final merge.
+	if i, ok := opts.ComponentMap[cfg.RetrySectionName]; ok {
+		componentRetry, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.retry' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentRetry = componentRetry
+	}
+
+	// Extract provision section (for workdir provisioning).
+	if supportsSourceProvision(opts.ComponentType) {
 		if i, ok := opts.ComponentMap[cfg.ProvisionSectionName]; ok {
 			componentProvision, ok := i.(map[string]any)
 			if !ok {
@@ -196,12 +225,10 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
-	// Extract source configuration for terraform, helmfile, and packer components.
-	if opts.ComponentType == cfg.TerraformComponentType ||
-		opts.ComponentType == cfg.HelmfileComponentType ||
-		opts.ComponentType == cfg.PackerComponentType {
+	// Extract source configuration.
+	if supportsSourceProvision(opts.ComponentType) {
 		if i, ok := opts.ComponentMap[cfg.SourceSectionName]; ok {
-			componentSourceSection, ok := i.(map[string]any)
+			componentSourceSection, ok := normalizeComponentSourceSection(i)
 			if !ok {
 				return fmt.Errorf("%w: 'components.%s.%s.source' in the file '%s'", errUtils.ErrInvalidComponentSource, opts.ComponentType, opts.Component, opts.StackName)
 			}
@@ -220,8 +247,8 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentCommand = componentCommand
 	}
 
-	// Terraform-specific: extract generate section for file generation.
-	if opts.ComponentType == cfg.TerraformComponentType {
+	// Extract generate section for file generation.
+	if supportsGenerate(opts.ComponentType) {
 		if i, ok := opts.ComponentMap[cfg.GenerateSectionName]; ok {
 			componentGenerate, ok := i.(map[string]any)
 			if !ok {
@@ -233,5 +260,124 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Kubernetes-specific manifest/render sections.
+	if opts.ComponentType == cfg.KubernetesComponentType {
+		if i, ok := opts.ComponentMap[cfg.ProviderSectionName]; ok {
+			componentProvider, ok := i.(string)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.provider' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentProvider = componentProvider
+		}
+
+		if i, ok := opts.ComponentMap[cfg.PathsSectionName]; ok {
+			result.ComponentPaths = i
+		}
+
+		if i, ok := opts.ComponentMap[cfg.ManifestsSectionName]; ok {
+			result.ComponentManifests = i
+		}
+
+		if i, ok := opts.ComponentMap[cfg.RenderSectionName]; ok {
+			componentRender, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.render' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentRender = componentRender
+		}
+	}
+
+	// Native Helm component fields are captured as a single bag and deep-merged
+	// with base-component inheritance in mergeComponentConfigurations.
+	if opts.ComponentType == cfg.HelmComponentType {
+		result.ComponentHelm = extractHelmComponentSection(opts.ComponentMap)
+	}
+
+	// Extract the Helm CLI plugins list (helm and helmfile components). The value
+	// is kept as a raw list (any) so it deep-merges/replaces correctly with
+	// base-component inheritance in mergeComponentConfigurations.
+	if supportsPlugins(opts.ComponentType) {
+		if i, ok := opts.ComponentMap[cfg.PluginsSectionName]; ok {
+			result.ComponentPlugins = i
+		}
+	}
+
 	return nil
+}
+
+// helmComponentSectionKeys are the native Helm component fields that participate
+// in base-component inheritance and flow through to the final component config.
+var helmComponentSectionKeys = []string{
+	cfg.ChartSectionName,
+	cfg.ValuesSectionName,
+	cfg.ValuesFilesSectionName,
+	cfg.RepositoriesSectionName,
+	cfg.RenderSectionName,
+	"version",
+	"repository",
+	"namespace",
+	"name",
+}
+
+// extractHelmComponentSection copies the recognized Helm fields out of a
+// component map into a standalone bag (nil-safe; only present keys are copied).
+func extractHelmComponentSection(componentMap map[string]any) map[string]any {
+	bag := make(map[string]any)
+	for _, key := range helmComponentSectionKeys {
+		if value, ok := componentMap[key]; ok {
+			bag[key] = value
+		}
+	}
+	return bag
+}
+
+func supportsComponentHooks(componentType string) bool {
+	return componentType == cfg.TerraformComponentType ||
+		componentType == cfg.KubernetesComponentType ||
+		componentType == cfg.HelmComponentType
+}
+
+func supportsGenerate(componentType string) bool {
+	return componentType == cfg.TerraformComponentType ||
+		componentType == cfg.KubernetesComponentType ||
+		componentType == cfg.HelmComponentType
+}
+
+// supportsPlugins reports whether a component type honors the `plugins` section
+// (Helm CLI plugins). Both helm and helmfile components support it: helmfile
+// requires plugins like helm-diff; helm honors them for helm-binary passthrough.
+func supportsPlugins(componentType string) bool {
+	return componentType == cfg.HelmComponentType || componentType == cfg.HelmfileComponentType
+}
+
+func supportsSourceProvision(componentType string) bool {
+	switch componentType {
+	case cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType, cfg.KubernetesComponentType, cfg.HelmComponentType:
+		return true
+	default:
+		return false
+	}
+}
+
+// sourceURIKey is the field name for the go-getter URI within a component `source` map.
+const sourceURIKey = "uri"
+
+// normalizeComponentSourceSection coerces a component `source` value into the map form used
+// throughout stack processing. It accepts the documented "simple form" — a bare go-getter URI
+// string, normalized to `{uri: <string>}` — as well as the full map form. An empty string means no
+// source (empty map). It returns ok=false for any other type so callers can raise
+// ErrInvalidComponentSource. This keeps the stack processor consistent with the JIT source
+// provisioner (pkg/provisioner/source), which has always accepted both forms.
+func normalizeComponentSourceSection(raw any) (map[string]any, bool) {
+	switch v := raw.(type) {
+	case map[string]any:
+		return v, true
+	case string:
+		if v == "" {
+			return map[string]any{}, true
+		}
+		return map[string]any{sourceURIKey: v}, true
+	default:
+		return nil, false
+	}
 }

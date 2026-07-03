@@ -1,0 +1,19 @@
+---
+title: clear
+sidebar_label: clear
+slug: /workflows/steps/type/clear
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `clear` step type clears the current terminal line, a building block for tidying up transient output before your custom command or workflow prints its next message.
+</Intro>
+
+```yaml
+steps:
+  - name: clear_line
+    type: clear
+```
+
+`clear` has no required fields. Use it to clean up transient terminal output before printing the next workflow message.

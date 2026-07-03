@@ -89,7 +89,7 @@ ci:
     #   - command
     #   - summary
 
-  # Job summary with plan/apply results
+  # Job summary with Terraform command results
   # GitHub: $GITHUB_STEP_SUMMARY, GitLab: job artifacts
   summary:
     enabled: true

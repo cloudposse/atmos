@@ -1,0 +1,20 @@
+vars:
+  # Drives the `name_template` in atmos.yaml, so this stack is `dev`.
+  stage: dev
+
+# The `dev` stack fulfills ALL three declared services — including `database`.
+# The same composition adapts per stack with no override syntax: `local` provides
+# 2 of 3 services, `dev` provides 3 of 3.
+components:
+  container:
+    frontend:
+      composition: storefront
+      image: nginx:alpine
+
+    api:
+      composition: storefront
+      image: nginx:alpine
+
+    database:
+      composition: storefront
+      image: postgres:16-alpine

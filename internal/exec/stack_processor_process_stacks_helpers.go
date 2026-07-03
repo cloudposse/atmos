@@ -29,6 +29,7 @@ type ComponentProcessorOptions struct {
 	GlobalSettings     map[string]any
 	GlobalEnv          map[string]any
 	GlobalAuth         map[string]any
+	GlobalSecrets      map[string]any
 	GlobalDependencies map[string]any
 	GlobalCommand      string
 	AtmosGlobalAuthMap map[string]any // Pre-converted atmosConfig.Auth to prevent race conditions
@@ -46,19 +47,34 @@ type ComponentProcessorOptions struct {
 	GlobalSourceSection             map[string]any
 	GlobalProvisionSection          map[string]any
 
+	// Kubernetes-specific global defaults (lowest precedence in the final merge).
+	GlobalKubernetesProvider  string
+	GlobalKubernetesPaths     any
+	GlobalKubernetesManifests any
+	GlobalKubernetesRender    map[string]any
+
 	// Atmos configuration.
 	AtmosConfig *schema.AtmosConfiguration
 }
 
 // ComponentProcessorResult contains the processed component data.
 type ComponentProcessorResult struct {
-	ComponentVars              map[string]any
-	ComponentSettings          map[string]any
-	ComponentEnv               map[string]any
-	ComponentMetadata          map[string]any
-	ComponentDependencies      map[string]any
-	ComponentLocals            map[string]any // Component-level locals for template processing.
-	ComponentCommand           string
+	ComponentVars         map[string]any
+	ComponentSettings     map[string]any
+	ComponentEnv          map[string]any
+	ComponentMetadata     map[string]any
+	ComponentDependencies map[string]any
+	ComponentLocals       map[string]any // Component-level locals for template processing.
+	ComponentCommand      string
+	ComponentProvider     string
+	ComponentPaths        any
+	ComponentManifests    any
+	// ComponentPlugins holds the Helm CLI plugins list (helm/helmfile components).
+	ComponentPlugins any
+	ComponentRender  map[string]any
+	// ComponentHelm holds native Helm component fields (chart, values, values_files,
+	// repositories, version, repository, namespace, name, render) as a single bag.
+	ComponentHelm              map[string]any
 	ComponentOverrides         map[string]any
 	ComponentOverridesVars     map[string]any
 	ComponentOverridesSettings map[string]any
@@ -74,16 +90,29 @@ type ComponentProcessorResult struct {
 	BaseComponentDependencies  map[string]any
 	BaseComponentLocals        map[string]any // Base component locals for inheritance.
 	BaseComponentCommand       string
-	ComponentInheritanceChain  []string
-	BaseComponents             []string
+	BaseComponentProvider      string
+	BaseComponentPaths         any
+	BaseComponentManifests     any
+	// BaseComponentPlugins holds the inherited Helm CLI plugins list from base components.
+	BaseComponentPlugins any
+	BaseComponentRender  map[string]any
+	// BaseComponentHelm holds the inherited native Helm fields from base components.
+	BaseComponentHelm         map[string]any
+	ComponentInheritanceChain []string
+	BaseComponents            []string
 
 	// Terraform-specific fields.
 	ComponentProviders         map[string]any
 	ComponentRequiredProviders map[string]any
 	ComponentRequiredVersion   string
 	ComponentHooks             map[string]any
-	ComponentGenerate          map[string]any
-	ComponentAuth              map[string]any
+	ComponentTest              map[string]any
+	// ComponentSecrets holds the component-level `secrets:` declaration section.
+	ComponentSecrets          map[string]any
+	ComponentOverridesSecrets map[string]any
+	BaseComponentSecrets      map[string]any
+	ComponentGenerate         map[string]any
+	ComponentAuth             map[string]any
 	// ComponentProvision holds provisioning configuration for the component (e.g., workdir settings).
 	ComponentProvision                     map[string]any
 	ComponentBackendType                   string
@@ -99,6 +128,7 @@ type ComponentProcessorResult struct {
 	BaseComponentRequiredProviders         map[string]any
 	BaseComponentRequiredVersion           string
 	BaseComponentHooks                     map[string]any
+	BaseComponentTest                      map[string]any
 	BaseComponentGenerate                  map[string]any
 	BaseComponentBackendType               string
 	BaseComponentBackendSection            map[string]any
@@ -107,6 +137,15 @@ type ComponentProcessorResult struct {
 	ComponentSourceSection                 map[string]any
 	BaseComponentSourceSection             map[string]any
 	BaseComponentProvisionSection          map[string]any
+	// ComponentRetry holds the raw retry configuration from the concrete component
+	// (decoded to a typed *schema.RetryConfig only after deep-merge with base + overrides).
+	ComponentRetry map[string]any
+	// ComponentOverridesRetry holds the retry section from the component's `overrides:`
+	// block, which wins over both base and concrete component retry config.
+	ComponentOverridesRetry map[string]any
+	// BaseComponentRetry holds the retry configuration inherited from base components
+	// (deep-merged across the full inheritance chain by ProcessBaseComponentConfig).
+	BaseComponentRetry map[string]any
 }
 
 // processComponent processes a component extracting common configuration sections.

@@ -12,6 +12,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -23,6 +24,8 @@ const (
 	CacheDirPermissions = 0o755
 )
 
+// CacheConfig holds persistent application state for version checks,
+// telemetry preferences, and session-level warnings.
 type CacheConfig struct {
 	LastChecked                int64  `mapstructure:"last_checked" yaml:"last_checked"`
 	InstallationId             string `mapstructure:"installation_id" yaml:"installation_id"`
@@ -42,14 +45,13 @@ func GetCacheFilePath() (string, error) {
 	return filepath.Join(cacheDir, "cache.yaml"), nil
 }
 
-// withCacheFileLock is a platform-specific function for file locking.
-// It is set during init() in cache_lock_unix.go or cache_lock_windows.go.
-var withCacheFileLock func(cacheFile string, fn func() error) error
+// getCacheFileLock returns a FileLock for the cache file.
+func getCacheFileLock(cacheFile string) cache.FileLock {
+	return cache.NewFileLock(cacheFile)
+}
 
-// loadCacheWithReadLock is a platform-specific function for loading cache with read locks.
-// It is set during init() in cache_lock_unix.go.
-var loadCacheWithReadLock func(cacheFile string) (CacheConfig, error)
-
+// LoadCache loads the cache configuration from the cache file.
+// Uses platform-specific file locking to prevent concurrent read/write issues.
 func LoadCache() (CacheConfig, error) {
 	cacheFile, err := GetCacheFilePath()
 	if err != nil {
@@ -58,27 +60,48 @@ func LoadCache() (CacheConfig, error) {
 
 	var cfg CacheConfig
 	if _, err := os.Stat(cacheFile); os.IsNotExist(err) {
-		// No file yet, return default
+		// No file yet, return default.
 		return cfg, nil
 	}
 
-	// On Windows, skip read locks entirely to avoid timeout issues.
-	if runtime.GOOS == "windows" {
+	var readErr error
+	lock := getCacheFileLock(cacheFile)
+	lockErr := lock.WithRLock(func() error {
 		v := viper.New()
 		v.SetConfigFile(cacheFile)
-		// Ignore read errors on Windows - cache is non-critical.
 		if err := v.ReadInConfig(); err != nil {
-			log.Trace("Failed to read cache file on Windows (non-critical)", "error", err, "file", cacheFile)
+			// If the config file doesn't exist, return empty config (no error).
+			var configNotFound viper.ConfigFileNotFoundError
+			if errors.As(err, &configNotFound) {
+				return nil
+			}
+			readErr = errors.Join(errUtils.ErrCacheRead, err)
+			return nil
 		}
-		// Ignore unmarshal errors on Windows - cache is non-critical.
 		if err := v.Unmarshal(&cfg); err != nil {
-			log.Trace("Failed to unmarshal cache on Windows (non-critical)", "error", err, "file", cacheFile)
+			readErr = errors.Join(errUtils.ErrCacheUnmarshal, err)
+			return nil
 		}
+		return nil
+	})
+
+	// Lock errors are non-critical for cache.
+	if lockErr != nil {
+		log.Trace("Failed to acquire cache lock (non-critical)", "error", lockErr, "file", cacheFile)
 		return cfg, nil
 	}
 
-	// Unix: Use the platform-specific read lock function
-	return loadCacheWithReadLock(cacheFile)
+	// On Windows, cache read errors are silently ignored because file locking
+	// is a no-op and corrupted cache files should not block normal operation.
+	if readErr != nil {
+		if runtime.GOOS == "windows" {
+			log.Trace("Cache read error ignored on Windows", "error", readErr, "file", cacheFile)
+			return CacheConfig{}, nil
+		}
+		return CacheConfig{}, readErr
+	}
+
+	return cfg, nil
 }
 
 // SaveCache writes the provided cache configuration to the cache file atomically.
@@ -99,13 +122,15 @@ func SaveCache(cfg CacheConfig) error {
 		return err
 	}
 
-	// Use file locking to prevent concurrent writes
-	return withCacheFileLock(cacheFile, func() error {
+	lock := getCacheFileLock(cacheFile)
+	// Use file locking to prevent concurrent writes.
+	return lock.WithLock(func() error {
 		// Prepare the config data.
 		data := map[string]interface{}{
-			"last_checked":               cfg.LastChecked,
-			"installation_id":            cfg.InstallationId,
-			"telemetry_disclosure_shown": cfg.TelemetryDisclosureShown,
+			"last_checked":                  cfg.LastChecked,
+			"installation_id":               cfg.InstallationId,
+			"telemetry_disclosure_shown":    cfg.TelemetryDisclosureShown,
+			"browser_session_warning_shown": cfg.BrowserSessionWarningShown,
 		}
 
 		// Marshal to YAML.
@@ -146,8 +171,9 @@ func UpdateCache(update func(*CacheConfig)) error {
 		return err
 	}
 
-	// Use file locking to prevent concurrent updates
-	return withCacheFileLock(cacheFile, func() error {
+	lock := getCacheFileLock(cacheFile)
+	// Use file locking to prevent concurrent updates.
+	return lock.WithLock(func() error {
 		// Load current configuration
 		var cfg CacheConfig
 		if _, err := os.Stat(cacheFile); err == nil {
@@ -166,9 +192,10 @@ func UpdateCache(update func(*CacheConfig)) error {
 
 		// Prepare the updated configuration data.
 		data := map[string]interface{}{
-			"last_checked":               cfg.LastChecked,
-			"installation_id":            cfg.InstallationId,
-			"telemetry_disclosure_shown": cfg.TelemetryDisclosureShown,
+			"last_checked":                  cfg.LastChecked,
+			"installation_id":               cfg.InstallationId,
+			"telemetry_disclosure_shown":    cfg.TelemetryDisclosureShown,
+			"browser_session_warning_shown": cfg.BrowserSessionWarningShown,
 		}
 
 		// Marshal to YAML.

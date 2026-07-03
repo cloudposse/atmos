@@ -1,0 +1,30 @@
+---
+title: atmos helm delete
+sidebar_label: delete
+sidebar_class_name: command
+id: delete
+---
+
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  Uninstall a Helm release (`helm uninstall`) for a component in a stack.
+  Deleting a release that does not exist is a no-op.
+</Intro>
+
+## Usage
+
+```shell
+atmos helm delete <component> --stack <stack> [options]
+atmos helm delete monitoring -s plat-ue2-dev
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--all` / `--affected` / `--include-dependents` <em>(optional)</em></dt>
+  <dd>Process multiple Helm components in dependency order.</dd>
+</dl>

@@ -1,5 +1,8 @@
-# Use a base image with platform specification
-FROM --platform=$BUILDPLATFORM debian:bookworm-slim
+# Use a base image with platform specification.
+# trixie (glibc 2.41) is required so PyInstaller-bundled tools installed via the
+# Atmos toolchain — notably Checkov, which needs GLIBC_2.38+ — can load their
+# frozen Python runtime. bookworm (glibc 2.36) fails with a missing-version error.
+FROM --platform=$BUILDPLATFORM debian:trixie-slim
 
 # Define the arguments for Atmos version and platforms
 ARG TARGETPLATFORM
@@ -15,14 +18,21 @@ SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
 RUN set -ex; \
     # Update the package list
     apt-get update; \
-    # Install curl and git
-    apt-get -y install  --no-install-recommends curl git ca-certificates; \
+    # Install runtime dependencies required by Atmos-managed tools.
+    apt-get -y install  --no-install-recommends curl git ca-certificates python3; \
     # Install the Cloud Posse Debian repository
     curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | bash -x; \
     # Install OpenTofu
     curl -1sSLf 'https://get.opentofu.org/install-opentofu.sh' | bash -s -- --root-method none --install-method deb; \
-    # Install Kustomize binary (required by Helmfile)
-    curl -1sSLf "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- /usr/local/bin; \
+    # Install Kustomize binary (required by Helmfile).
+    # Direct download instead of install_kustomize.sh which has known bugs (kubernetes-sigs/kustomize#5562).
+    KUSTOMIZE_VERSION=5.8.1; \
+    case ${TARGETPLATFORM} in \
+        "linux/amd64") KUSTOMIZE_ARCH=amd64 ;; \
+        "linux/arm64") KUSTOMIZE_ARCH=arm64 ;; \
+        *) echo "Unsupported platform: ${TARGETPLATFORM}" && exit 1 ;; \
+    esac; \
+    curl -1sSLf "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_${KUSTOMIZE_ARCH}.tar.gz" | tar xz -C /usr/local/bin; \
     # Install toolchain used with Atmos \
     apt-get -y install --no-install-recommends terraform kubectl helmfile helm; \
     # Install the helm-diff plugin required by Helmfile.

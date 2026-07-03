@@ -2,8 +2,10 @@ package security
 
 import (
 	"errors"
+	"strconv"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -402,7 +404,10 @@ func TestSecurityAnalyzeAllFlagsRegistered(t *testing.T) {
 		{"framework flag", "framework", "", "string"},
 		{"format flag", "format", "markdown", "string"},
 		{"file flag", "file", "", "string"},
-		{"max-findings flag", "max-findings", "500", "int"},
+		// Default is the "unset" sentinel; the effective default (500) is applied
+		// at runtime in resolveMaxFindings so we can distinguish "user passed 0"
+		// (unlimited) from "user did not pass --max-findings".
+		{"max-findings flag", "max-findings", "-1", "int"},
 		{"region flag", "region", "", "string"},
 		{"identity flag", "identity", "", "string"},
 		{"no-group flag", "no-group", "false", "bool"},
@@ -461,6 +466,100 @@ func TestSeverityMapCompleteness(t *testing.T) {
 func TestDefaultMaxFindings(t *testing.T) {
 	// Verify the default constant matches expectations.
 	assert.Equal(t, 500, defaultMaxFindings, "defaultMaxFindings should be 500")
+}
+
+func TestResolveMaxFindings(t *testing.T) {
+	// Precedence: explicit user flag (incl. 0) > env-overridden viper value (incl. 0)
+	// > config > defaultMaxFindings. A user-supplied 0 must survive as "unlimited".
+	tests := []struct {
+		name        string
+		flagSet     bool // simulate cmd.Flags().Changed("max-findings")
+		flagValue   int  // value Viper reports for the flag
+		configValue int  // value from atmosConfig.AWS.Security.MaxFindings
+		want        int
+	}{
+		{
+			name:        "user passes --max-findings 0 (unlimited wins over config and default)",
+			flagSet:     true,
+			flagValue:   0,
+			configValue: 200,
+			want:        0,
+		},
+		{
+			name:        "user passes --max-findings 25 (explicit positive)",
+			flagSet:     true,
+			flagValue:   25,
+			configValue: 200,
+			want:        25,
+		},
+		{
+			name:        "env var sets 0 (no flag, viper picked up 0 via env binding)",
+			flagSet:     false,
+			flagValue:   0,
+			configValue: 200,
+			want:        0,
+		},
+		{
+			name:        "env var sets 1000 (no flag, viper returns non-sentinel)",
+			flagSet:     false,
+			flagValue:   1000,
+			configValue: 200,
+			want:        1000,
+		},
+		{
+			name:        "no flag, no env, falls back to config",
+			flagSet:     false,
+			flagValue:   maxFindingsUnset,
+			configValue: 200,
+			want:        200,
+		},
+		{
+			name:        "no flag, no env, no config — defaultMaxFindings",
+			flagSet:     false,
+			flagValue:   maxFindingsUnset,
+			configValue: 0,
+			want:        defaultMaxFindings,
+		},
+		{
+			name:        "negative config value treated as unset, falls to default",
+			flagSet:     false,
+			flagValue:   maxFindingsUnset,
+			configValue: -5,
+			want:        defaultMaxFindings,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build a synthetic cobra command with the same flag wiring as
+			// production so cmd.Flags().Changed() reflects tt.flagSet.
+			cmd := newMaxFindingsTestCmd(t, tt.flagSet, tt.flagValue)
+			got := resolveMaxFindings(cmd, tt.flagValue, tt.configValue)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+
+	t.Run("nil cmd does not panic and falls back to flag value when not sentinel", func(t *testing.T) {
+		assert.Equal(t, 42, resolveMaxFindings(nil, 42, 200))
+	})
+
+	t.Run("nil cmd with sentinel falls back to config", func(t *testing.T) {
+		assert.Equal(t, 200, resolveMaxFindings(nil, maxFindingsUnset, 200))
+	})
+}
+
+// newMaxFindingsTestCmd builds a tiny cobra command that registers a single
+// --max-findings int flag with the same default sentinel as production, and
+// optionally marks it as user-set by parsing an args slice.
+func newMaxFindingsTestCmd(t *testing.T, flagSet bool, flagValue int) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{Use: "test", Run: func(*cobra.Command, []string) {}}
+	cmd.Flags().Int("max-findings", maxFindingsUnset, "")
+	if flagSet {
+		cmd.SetArgs([]string{"--max-findings", strconv.Itoa(flagValue)})
+		require.NoError(t, cmd.Execute())
+	}
+	return cmd
 }
 
 func TestBuildSecurityReport_TagMappingPreserved(t *testing.T) {

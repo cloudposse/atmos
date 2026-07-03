@@ -29,7 +29,7 @@ syntax and examples in the owning skill.
 | `templates` | Go template and Gomplate processing | `atmos-templates` |
 | `validate` | Validation behavior such as EditorConfig | `atmos-validation` |
 | `toolchain` | Tool registries, aliases, versions, install path | `atmos-toolchain` |
-| `dependencies` | Tool and component dependencies | `atmos-toolchain`, `atmos-components` |
+| `dependencies` | Tool, component, workflow, and command dependencies | `atmos-toolchain`, `atmos-components`, `atmos-workflows`, `atmos-custom-commands` |
 
 ## Platform Integrations
 
@@ -38,7 +38,7 @@ syntax and examples in the owning skill.
 | `auth` | Providers, identities, keyring, auth integrations | `atmos-auth` |
 | `stores` | External key-value stores | `atmos-stores` |
 | `integrations` | Atlantis, GitHub Actions, Atmos Pro integration settings | `atmos-ci` |
-| `ci` | Native CI outputs, summaries, checks, comments | `atmos-ci` |
+| `ci` | Native CI outputs, summaries, checks, comments, cache | `atmos-ci` |
 | `vendor` | Vendoring external components | `atmos-vendoring` |
 | `devcontainer` | Development containers | `atmos-devcontainer` |
 | `ai` / `mcp` | AI providers, skills, MCP server/client setup | `atmos-ai` |

@@ -18,6 +18,7 @@ tests:
 
   - name: atmos terraform deploy unlocked component
     enabled: true
+    preconditions: ["tofu"]
     snapshot: false
     description: "Verify terraform deploy works on unlocked component"
     workdir: "fixtures/scenarios/metadata"
@@ -52,6 +53,7 @@ tests:
 
   - name: atmos terraform plan locked component
     enabled: true
+    preconditions: ["tofu"]
     snapshot: false
     sandbox: "metadata"
     description: "Verify terraform plan works on locked component"

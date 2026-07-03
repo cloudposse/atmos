@@ -1,0 +1,422 @@
+---
+title: Emulator Components
+sidebar_position: 6
+sidebar_label: emulator
+sidebar_class_name: command
+description: Configure Emulator components in your Atmos stack manifests to run local cloud-API, Kubernetes, and backing-service emulators.
+id: emulator
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Emulator components are stack-scoped, long-running containers that stand in for a cloud API (AWS, GCP, Azure), Kubernetes, or a backing service (Vault/OpenBao, an OCI/Terraform registry) during local development and testing. You declare them with the same stack-based configuration used for Terraform, Helmfile, Packer, and Ansible, and operate them with the [`atmos emulator`](/cli/commands/emulator/usage) command group — letting the rest of your stack run offline, with no cloud account.
+</Intro>
+
+<Experimental />
+
+An emulator container outlives the `atmos` process and is discovered by labels derived from the canonical component instance address, so `atmos emulator ps`, `logs`, `exec`, and `down` reattach to the already-running container.
+
+## Available Configuration Sections
+
+Emulator components are declared under `components.emulator` and support these first-class sections (siblings of `metadata` — **not** nested under `vars`):
+
+<dl>
+  <dt>`driver`</dt>
+  <dd>**Required.** The built-in driver that selects the image and target, for example `floci/aws`, `k3s`, `openbao`, or `registry`. See [Supported Drivers & Targets](#supported-drivers--targets).</dd>
+
+  <dt>`cloud`</dt>
+  <dd>Optional explicit target (`aws`, `gcp`, `azure`, `kubernetes`, `vault`, `registry`). Derived from the driver when omitted; if set, it must match the driver's target.</dd>
+
+  <dt>`region`</dt>
+  <dd>Cloud region for the `aws`/`gcp`/`azure` targets.</dd>
+
+  <dt>`project`</dt>
+  <dd>GCP project id for the `gcp` target.</dd>
+
+  <dt>`services`</dt>
+  <dd>The emulated services to enable (informational; may drive the emulator's environment).</dd>
+
+  <dt>`ephemeral`</dt>
+  <dd>Set to `true` to run the emulator **without persisting state** — all data is discarded on `down`. Defaults to `false`, so emulators persist state by default (see [Persistence](#persistence)). The CLI `--ephemeral` flag overrides this for a single `up`.</dd>
+
+  <dt>`container`</dt>
+  <dd>Container overrides for the emulator — `image`, `command`, `ports`, `mounts`, `pull`, `user`, `run_args`, `restart`, `healthcheck`, and more. Reuses the same schema as the [container component](/components/container), so emulator and container configuration stay consistent. Anything you don't set falls back to the driver's defaults (see [Health Checks & Restart Policies](#health-checks--restart-policies)).</dd>
+
+  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
+  <dd>Component behavior and inheritance (e.g. `metadata.type: abstract` for catalog base components).</dd>
+</dl>
+
+## Component Structure
+
+A minimal emulator component selects a driver; everything else has a sensible default:
+
+```yaml
+components:
+  emulator:
+    aws:
+      driver: floci/aws
+      region: "{{ .vars.region }}"
+```
+
+With the configuration above, `atmos emulator up aws --stack=plat-ue2-dev` starts a local AWS sandbox for the `plat-ue2-dev` stack.
+
+## Supported Drivers & Targets
+
+Each driver maps to one target and supplies a default image and port. The host port is auto-assigned unless you pin it with `container.ports`.
+
+| Driver | Target | Default image | Container port |
+| --- | --- | --- | --- |
+| `floci/aws` *(default for AWS)* | `aws` | `floci/floci:latest` | 4566 |
+| `ministack/aws` | `aws` | `ministack/ministack:latest` | 4566 |
+| `localstack/aws` *(opt-in/legacy)* | `aws` | `localstack/localstack:3` | 4566 |
+| `floci/gcp` | `gcp` | `floci/floci-gcp:latest` | 4588 |
+| `floci/az` | `azure` | `floci/floci-az:latest` | 4577 |
+| `k3s` | `kubernetes` | `rancher/k3s:latest` | 6443 |
+| `openbao` *(default for Vault)* | `vault` | `openbao/openbao:latest` | 8200 |
+| `vault` *(opt-in)* | `vault` | `hashicorp/vault:latest` | 8200 |
+| `registry` | `registry` | `registry:2` | 5000 |
+
+:::info Two ways emulators are consumed
+The `aws`, `gcp`, `azure`, and `kubernetes` targets bind to your components automatically through an **emulator identity** (`kind: aws/emulator`, `gcp/emulator`, `azure/emulator`, `kubernetes/emulator`): the identity injects the live endpoint, dummy credentials, and provider configuration, so components need no `providers.tf` and no endpoint wiring.
+
+The `vault` and `registry` targets have no identity. You consume their live endpoint with the [`!emulator`](#the-emulator-function) YAML function in stack manifests, or — for a store declared in `atmos.yaml` — by pinning a host port and pointing at it with a static address (see [Vault/OpenBao](#vaultopenbao)).
+:::
+
+## Configuring Each Emulator Type
+
+### AWS
+
+The default `floci/aws` driver emulates the AWS control plane. Bind it with an `aws/emulator` identity; Terraform components then apply against the sandbox with no provider block:
+
+```yaml
+# atmos.yaml
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: aws       # the emulator component name
+      default: true       # every component runs under it
+```
+
+```yaml
+# stack manifest
+components:
+  emulator:
+    aws:
+      driver: floci/aws
+      region: us-east-1
+```
+
+The identity injects `AWS_ENDPOINT_URL`, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (`test`/`test`), and `AWS_REGION` into Terraform.
+
+### GCP
+
+```yaml
+components:
+  emulator:
+    gcp:
+      driver: floci/gcp
+      project: my-project
+      region: us-central1
+```
+
+A `gcp/emulator` identity exposes `STORAGE_EMULATOR_HOST`, `PUBSUB_EMULATOR_HOST`, `GOOGLE_CLOUD_PROJECT`, and disables credential lookups (`CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true`).
+
+### Azure
+
+```yaml
+components:
+  emulator:
+    azure:
+      driver: floci/az
+```
+
+An `azure/emulator` identity exposes an Azurite-compatible `AZURE_STORAGE_CONNECTION_STRING` and `AZURE_STORAGE_ACCOUNT`.
+
+### Kubernetes
+
+```yaml
+components:
+  emulator:
+    kubernetes:
+      driver: k3s
+```
+
+`k3s` runs a nested Kubernetes in a single privileged container. A `kubernetes/emulator` identity harvests the kubeconfig from the running container and sets `KUBECONFIG`; you can also materialize it explicitly with `KUBECONFIG: !emulator kubernetes kubeconfig`.
+
+### Vault/OpenBao
+
+`openbao` (the default) and `vault` run an API-compatible secret server backed by **file storage**, so secrets persist across `down`/`up` (see [Persistence](#persistence)). A fresh server boots sealed and uninitialized; Atmos automatically initializes it, unseals it, and enables the KV v2 engine at `secret/` on start, recording the unseal key and the **dynamically generated root token** under the data dir. Atmos's [`hashicorp-vault` store](/cli/configuration/stores) talks to it, so you can practice the full [secrets workflow](/cli/configuration/secrets) with no real Vault.
+
+A store lives in `atmos.yaml` (global config, no stack context), so it cannot use the stack-scoped `!emulator` function. Pin the port and point the store at it with a static address; omit `token` so the store reads the dynamic root token from the standard `VAULT_TOKEN` environment variable (surfaced by a Vault/OpenBao emulator identity, or exported manually from the recorded bootstrap):
+
+```yaml
+# atmos.yaml
+stores:
+  secrets/vault:
+    kind: hashicorp-vault
+    secret: true
+    options:
+      address: http://localhost:8200
+      # token omitted -> read from the VAULT_TOKEN environment variable
+      mount: secret
+```
+
+```yaml
+# stack manifest
+components:
+  emulator:
+    openbao:
+      driver: openbao
+      container:
+        ports:
+          - host: 8200      # pin so the store reaches it at a stable address
+            container: 8200
+
+  terraform:
+    app:
+      secrets:
+        vars:
+          APP_SECRET:
+            description: Application secret stored in the OpenBao (Vault KV v2) emulator.
+            store: secrets/vault
+            required: true
+      vars:
+        app_secret: !secret APP_SECRET
+```
+
+Then `atmos secret set APP_SECRET=… -c app`, `atmos secret list -c app`, and `atmos terraform apply app` round-trip the value through OpenBao — delivered to Terraform off-disk as `TF_VAR_app_secret`.
+
+### Registry
+
+`registry` runs the standard OCI / Terraform registry (`registry:2`) for vendoring and the registry cache. Consume its live host:port with `!emulator` in a stack manifest:
+
+```yaml
+components:
+  emulator:
+    registry:
+      driver: registry
+
+  terraform:
+    app:
+      vars:
+        registry_host: !emulator registry url   # e.g. http://localhost:5000
+```
+
+## The `!emulator` function
+
+For the `vault` and `registry` targets (which have no emulator identity), the `!emulator` YAML function resolves a running emulator's live connection details in stack manifests:
+
+```yaml
+vars:
+  url:        !emulator registry url        # endpoint URL (alias: endpoint)
+  host:       !emulator registry host       # host only
+  port:       !emulator registry port       # bound host port
+  vault_addr: !emulator openbao env.VAULT_ADDR  # a single SDK env var
+```
+
+The available keys are `endpoint`/`url`, `host`, `port`, `region`, `project`, `kubeconfig`, and `env.<VAR>`. The emulator must be running (`atmos emulator up`) for the function to resolve.
+
+## Health Checks & Restart Policies
+
+Emulators are long-lived local services, so they support the same `healthcheck` and `restart` configuration as the [container component](/components/container) — set under the `container` block (the shape is shared between the two kinds):
+
+```yaml
+components:
+  emulator:
+    aws:
+      driver: floci/aws
+      container:
+        restart:
+          policy: unless-stopped        # no | always | on-failure | unless-stopped
+          max_retries: 5                # on-failure only
+        healthcheck:
+          test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health || exit 1"]
+          interval: 10s
+          timeout: 5s
+          retries: 5
+          start_period: 10s
+```
+
+### Driver defaults
+
+You rarely need to write any of this — each built-in driver already supplies sensible defaults, which your `container.restart` / `container.healthcheck` override:
+
+<dl>
+  <dt>Restart policy</dt>
+  <dd>Every built-in driver defaults to `unless-stopped`, so an emulator comes back after a daemon restart or a crash. `atmos emulator down` still stops and removes it.</dd>
+
+  <dt>Health check</dt>
+  <dd>The lightweight emulators ship a default readiness probe: **Floci** (AWS/GCP/Azure) and the **registry** probe their listening port from inside the container. **Vault/OpenBao** and **k3s** ship no default probe — their readiness is handled by the automatic Vault bootstrap (init/unseal) and the Kubernetes identity's API wait, respectively. You can still set `container.healthcheck` explicitly on any emulator.</dd>
+</dl>
+
+### Readiness gating
+
+When a health check applies (yours or the driver default), `atmos emulator up` **blocks until the container reports healthy** before returning, so anything that depends on the emulator — the [emulator identity](#supported-drivers--targets), a `!emulator` lookup, or a follow-on `atmos terraform apply` — never races a not-yet-ready emulator. To opt a specific emulator out of the default probe (and the gating), disable it:
+
+```yaml
+container:
+  healthcheck:
+    disable: true        # or:  test: ["NONE"]
+```
+
+## Host runtime access (Docker-out-of-Docker)
+
+Some emulators need to drive the **host container runtime** themselves — they launch and manage *sibling* containers. The clearest example is the MiniStack AWS emulator's EKS service, which spawns a real `rancher/k3s` container per `eks:CreateCluster`. Grant that access with `container.runtime.host`:
+
+```yaml
+components:
+  emulator:
+    aws:
+      driver: ministack/aws
+      container:
+        runtime:
+          host: true        # MiniStack can spawn its k3s sibling for EKS
+```
+
+When `host: true`, Atmos mounts the host runtime socket into the container at `/var/run/docker.sock`, runs it as root, relabels the mount for SELinux, and sets `DOCKER_HOST` so tooling inside finds the runtime. It is the same `container.runtime.host` flag available on [container components](/components/container) and `type: container` workflow steps, and it mirrors the global [`container.runtime`](/cli/configuration) default.
+
+:::warning Privileged & runtime-dependent
+Host runtime access is effectively host-root — keep it opt-in. It works on Docker (Linux, Docker Desktop) and **rootful** podman. On **rootless podman** the mounted socket is unreachable inside the container; Atmos warns and you should switch with `podman machine set --rootful` (or use Docker). It is independent of `privileged` (kernel capabilities).
+:::
+
+## Component-Type Defaults
+
+Define defaults for all emulator components under the top-level `emulator` key:
+
+```yaml
+emulator:
+  vars:
+    managed_by: Atmos
+
+components:
+  emulator:
+    aws:
+      driver: floci/aws
+```
+
+## Complete Example
+
+This native scenario brings up an OpenBao emulator and round-trips a secret through it — the same fixture the end-to-end test exercises:
+
+<File title="tests/fixtures/scenarios/emulator-openbao/stacks/deploy/local.yaml">
+```yaml
+vars:
+  stage: local
+
+components:
+  emulator:
+    openbao:
+      driver: openbao
+      container:
+        ports:
+          - host: 8200
+            container: 8200
+
+  terraform:
+    consumer:
+      secrets:
+        vars:
+          APP_SECRET:
+            description: Application secret stored in the OpenBao (Vault KV v2) emulator.
+            store: secrets/vault
+            required: true
+      vars:
+        name: consumer
+        app_secret: !secret APP_SECRET
+```
+</File>
+
+## Running Emulator Commands
+
+```bash
+# Start (or reuse) the emulator for a stack
+atmos emulator up aws -s plat-ue2-dev
+
+# List running emulators in the stack
+atmos emulator ps -s plat-ue2-dev
+
+# Stream the emulator's logs
+atmos emulator logs aws -s plat-ue2-dev
+
+# Run a command inside the emulator container
+atmos emulator exec aws -s plat-ue2-dev -- aws s3 ls
+
+# Stop and remove the emulator container (persisted state is kept)
+atmos emulator down aws -s plat-ue2-dev
+
+# Stop the emulator and wipe its persisted state
+atmos emulator reset aws -s plat-ue2-dev --force
+```
+
+## Container Runtime
+
+Emulators run inside a container runtime selected by the global `container.runtime.provider` configuration and the `ATMOS_CONTAINER_RUNTIME` environment variable; Docker and Podman are auto-detected.
+
+## Persistence
+
+By default, emulators **persist their state** across `down`/`up`. Atmos bind-mounts a per-instance host directory under the XDG cache onto the emulator's in-container data directory, so resources you create (S3 buckets, registry images, the k3s cluster, OpenBao secrets, …) survive restarts.
+
+<dl>
+  <dt>Location</dt>
+  <dd>`$XDG_CACHE_HOME/atmos/emulator/<instance>` (defaulting to `~/.cache/atmos/emulator/…` on Linux/macOS). Override the base with `ATMOS_XDG_CACHE_HOME` or `XDG_CACHE_HOME`. The `<instance>` segment is the sanitized canonical instance name (`atmos-<stack>-emulator-<component>`), so instances never collide.</dd>
+
+  <dt>Disabling it</dt>
+  <dd>Set `ephemeral: true` on the component, or pass `--ephemeral` to a single `atmos emulator up`. Ephemeral instances mount nothing and discard all state on `down`.</dd>
+
+  <dt>Resetting it</dt>
+  <dd>[`atmos emulator reset`](/cli/commands/emulator/reset) stops the container and deletes its persisted state directory — the next `up` starts fresh. `down` always keeps state.</dd>
+
+  <dt>Scope</dt>
+  <dd>Persistence applies to every driver: Floci AWS/GCP/Azure, LocalStack, the registry, and k3s persist their data directories directly. OpenBao/Vault run a file-storage backend that Atmos auto-initializes and unseals on start (recording the unseal key and generated root token under the data dir), so secrets persist too. `reset` wipes the unseal key and token with the rest of the state.</dd>
+</dl>
+
+## Environment Variables
+
+Each target publishes the connection environment its SDKs and tools expect. The emulator identity (or the `!emulator` function) surfaces these from the live endpoint:
+
+<dl>
+  <dt>`AWS_ENDPOINT_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`</dt>
+  <dd>AWS target — the sandbox endpoint plus dummy credentials.</dd>
+
+  <dt>`STORAGE_EMULATOR_HOST`, `PUBSUB_EMULATOR_HOST`, `GOOGLE_CLOUD_PROJECT`, `CLOUDSDK_AUTH_DISABLE_CREDENTIALS`</dt>
+  <dd>GCP target.</dd>
+
+  <dt>`AZURE_STORAGE_CONNECTION_STRING`, `AZURE_STORAGE_ACCOUNT`</dt>
+  <dd>Azure target (Azurite-compatible).</dd>
+
+  <dt>`KUBECONFIG`</dt>
+  <dd>Kubernetes target — path to the kubeconfig harvested from the k3s container.</dd>
+
+  <dt>`VAULT_ADDR`, `VAULT_TOKEN`</dt>
+  <dd>Vault/OpenBao target — the server address and the root token harvested from the running emulator.</dd>
+
+  <dt>`ATMOS_REGISTRY_HOST`</dt>
+  <dd>Registry target — the live host:port of the OCI/Terraform registry.</dd>
+</dl>
+
+## Best Practices
+
+1. **Prefer the default drivers:** `floci/aws` and `openbao` are free and MIT/MPL-licensed; reach for `localstack/aws` or `vault` only when you specifically need them.
+
+2. **Bind cloud targets with an identity, not by hand:** an `aws/emulator` (or `gcp`/`azure`/`kubernetes`) identity removes the need for any `providers.tf` or endpoint wiring.
+
+3. **Pin a host port for `atmos.yaml` stores:** a store can't use `!emulator`, so pin the emulator's port and point the store at a static address.
+
+4. **Pin images by digest for reproducibility:** override `container.image` with a digest in CI to avoid pulling a drifting `:latest`.
+
+5. **Keep secrets off disk:** declare them in `secrets.vars` backed by an emulated store and reference them with [`!secret`](/functions/yaml/secret); the value is delivered as `TF_VAR_*`, never written to a varfile.
+
+## Related
+
+- [Using Emulators](/components/emulator) — Conceptual overview in the Component Library
+- [Component Types Overview](/stacks/components)
+- [Terraform Components](/stacks/components/terraform)
+- [Ansible Components](/stacks/components/ansible)
+- [Container Components](/components/container)
+- [atmos emulator](/cli/commands/emulator/usage)
+- [Configure Stores](/cli/configuration/stores)
+- [Passing Secrets](/cli/configuration/secrets)
+- [`!secret` function](/functions/yaml/secret)

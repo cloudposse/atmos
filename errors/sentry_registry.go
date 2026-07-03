@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -18,17 +18,6 @@ type SentryClientRegistry struct {
 	mu      sync.RWMutex
 	clients map[string]*sentry.Hub
 	configs map[string]*schema.SentryConfig
-}
-
-// globalRegistry is the singleton registry instance.
-var globalRegistry = &SentryClientRegistry{
-	clients: make(map[string]*sentry.Hub),
-	configs: make(map[string]*schema.SentryConfig),
-}
-
-// GetRegistry returns the global Sentry client registry.
-func GetRegistry() *SentryClientRegistry {
-	return globalRegistry
 }
 
 // configKey generates a unique key for a Sentry configuration.
@@ -136,20 +125,6 @@ func (r *SentryClientRegistry) GetOrCreateClient(config *schema.SentryConfig) (*
 	r.configs[key] = config
 
 	return hub, nil
-}
-
-// CloseAll flushes and closes all Sentry clients in the registry.
-func (r *SentryClientRegistry) CloseAll() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	for _, hub := range r.clients {
-		hub.Flush(CloseSentryTimeout)
-	}
-
-	// Clear the registry.
-	r.clients = make(map[string]*sentry.Hub)
-	r.configs = make(map[string]*schema.SentryConfig)
 }
 
 // componentErrorConfigWithMetadata holds both the decoded config and metadata about which fields were explicitly set.

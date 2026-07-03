@@ -19,6 +19,7 @@ auth:
       console:
         session_duration: 12h               # Optional: web console session (max 12h for AWS)
       spec:
+        endpoint_url: http://localhost:4566  # Optional: AWS-compatible base endpoint for Floci/LocalStack
         files:
           base_path: ~/.config/atmos/aws/   # Optional: custom credential file storage path
 ```
@@ -182,6 +183,8 @@ auth:
         secret_access_key: !env AWS_SECRET_ACCESS_KEY  # Use !env for env var references
         region: us-east-1                            # AWS region
         mfa_arn: arn:aws:iam::123456789012:mfa/user  # Optional: prompts for TOTP
+      spec:
+        endpoint_url: http://localhost:4566           # Optional: AWS-compatible base endpoint for Floci/LocalStack
       session:
         duration: 1h                        # Optional: 15m-12h (no MFA) or 15m-36h (with MFA)
 ```

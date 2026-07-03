@@ -26,7 +26,7 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig, cliConfigPath stri
 	tempStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{},
 	}
-	credStore := credentials.NewCredentialStore()
+	credStore := credentials.NewCredentialStoreWithConfig(authConfig)
 	validator := validation.NewValidator()
 	tempManager, err := NewAuthManager(authConfig, credStore, validator, tempStackInfo, cliConfigPath)
 	if err != nil {
@@ -105,12 +105,17 @@ func resolveIdentityName(identityName string, authConfig *schema.AuthConfig, cli
 // createAuthManagerInstance creates a new AuthManager instance with the given configuration.
 // Note: This function is used internally for temporary managers during identity resolution.
 // For persistent auth managers, use NewAuthManager directly with the proper cliConfigPath.
-func createAuthManagerInstance(authConfig *schema.AuthConfig, cliConfigPath string) (AuthManager, error) {
+func createAuthManagerInstance(authConfig *schema.AuthConfig, cliConfigPath string, stack string) (AuthManager, error) {
 	authStackInfo := &schema.ConfigAndStacksInfo{
+		// Seed the target stack so stack-scoped identities (e.g. kind: <target>/emulator)
+		// receive it via SetStack at construction, before Authenticate/PostAuthenticate run.
+		// Without this the emulator identity cannot resolve its endpoint and leaves
+		// AuthContext.AWS nil for in-process consumers (`!terraform.state`, stores).
+		Stack:       stack,
 		AuthContext: &schema.AuthContext{},
 	}
 
-	credStore := credentials.NewCredentialStore()
+	credStore := credentials.NewCredentialStoreWithConfig(authConfig)
 	validator := validation.NewValidator()
 	authManager, err := NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
 	if err != nil {
@@ -231,9 +236,28 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 	selectValue string,
 	atmosConfig *schema.AtmosConfiguration,
 ) (AuthManager, error) {
-	defer perf.Track(atmosConfig, "auth.CreateAndAuthenticateManagerWithAtmosConfig")()
+	// Delegate to the stack-aware variant with an empty stack to preserve the
+	// existing (no-stack) behavior for callers that don't have a target stack.
+	return CreateAndAuthenticateManagerWithAtmosConfigForStack(identityName, authConfig, selectValue, atmosConfig, "")
+}
 
-	log.Debug("CreateAndAuthenticateManager called", "identityName", identityName, "hasAuthConfig", authConfig != nil)
+// CreateAndAuthenticateManagerWithAtmosConfigForStack is the stack-aware variant of
+// CreateAndAuthenticateManagerWithAtmosConfig. The target stack is threaded into manager
+// construction so stack-scoped identities (e.g. kind: <target>/emulator) receive it via
+// SetStack before authentication, and their PostAuthenticate hook can populate the in-process
+// auth context (AuthContext.AWS, including the emulator endpoint) consumed by `!terraform.state`,
+// `!store`, `!secret`, and store hooks. Callers with a concrete (component, stack) pair should
+// use this variant; callers without a target stack can use the no-stack wrapper above.
+func CreateAndAuthenticateManagerWithAtmosConfigForStack(
+	identityName string,
+	authConfig *schema.AuthConfig,
+	selectValue string,
+	atmosConfig *schema.AtmosConfiguration,
+	stack string,
+) (AuthManager, error) {
+	defer perf.Track(atmosConfig, "auth.CreateAndAuthenticateManagerWithAtmosConfigForStack")()
+
+	log.Debug("CreateAndAuthenticateManager called", "identityName", identityName, "hasAuthConfig", authConfig != nil, "stack", stack)
 
 	// Check if authentication is explicitly disabled.
 	if shouldDisableAuth(identityName) {
@@ -264,8 +288,9 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 		return nil, fmt.Errorf("%w: authentication requires at least one identity configured in atmos.yaml", errUtils.ErrAuthNotConfigured)
 	}
 
-	// Create AuthManager instance.
-	authManager, err := createAuthManagerInstance(authConfig, cliConfigPath)
+	// Create AuthManager instance, seeding the target stack so stack-scoped identities
+	// receive it via SetStack before authentication.
+	authManager, err := createAuthManagerInstance(authConfig, cliConfigPath, stack)
 	if err != nil {
 		return nil, err
 	}

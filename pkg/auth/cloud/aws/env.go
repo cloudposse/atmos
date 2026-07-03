@@ -237,7 +237,8 @@ var environmentVarsToClear = []string{
 func PrepareEnvironment(environ map[string]string, profile, credentialsFile, configFile, region string) map[string]string {
 	defer perf.Track(nil, "pkg/auth/cloud/aws.PrepareEnvironment")()
 
-	log.Debug("Preparing AWS environment for Atmos-managed credentials",
+	log.Debug(
+		"Preparing AWS environment for Atmos-managed credentials",
 		"profile", profile,
 		"credentials_file", credentialsFile,
 		"config_file", configFile,

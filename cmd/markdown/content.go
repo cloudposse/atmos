@@ -61,3 +61,8 @@ var DevcontainerConfigUsageMarkdown string
 //
 //go:embed atmos_devcontainer_shell_usage.md
 var DevcontainerShellUsageMarkdown string
+
+// AtmosGitMarkdown contains the long description for the git command group.
+//
+//go:embed atmos_git_usage.md
+var AtmosGitMarkdown string

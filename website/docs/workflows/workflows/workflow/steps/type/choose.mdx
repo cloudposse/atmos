@@ -1,0 +1,38 @@
+---
+title: choose
+sidebar_label: choose
+slug: /workflows/steps/type/choose
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `choose` step type presents a single-select menu, letting your custom commands and workflows pick one value from a list of options at runtime.
+</Intro>
+
+```yaml
+steps:
+  - name: environment
+    type: choose
+    prompt: Select target environment
+    options:
+      - dev
+      - staging
+      - prod
+    default: dev
+```
+
+## Fields
+
+<dl>
+  <dt>`prompt`</dt>
+  <dd>Required. Prompt text shown to the user.</dd>
+
+  <dt>`options`</dt>
+  <dd>Required. List of choices.</dd>
+
+  <dt>`default`</dt>
+  <dd>Optional default option.</dd>
+</dl>
+
+Interactive steps require a TTY. Reference the selection later with `{{ .steps.environment.value }}`.
