@@ -3,9 +3,6 @@
 
 **Error:** stack not found
 
-## Hints
+Stack nonexistent-stack not found
 
-💡 Stack nonexistent-stack not found
-
-💡 Run atmos list stacks to see all available stacks Verify the stack name
-matches your stack manifest files
+💡 Run atmos list stacks to see all available stacks. Verify the stack name matches your stack manifest files

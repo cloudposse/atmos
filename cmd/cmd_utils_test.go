@@ -1032,6 +1032,8 @@ func TestValidateAtmosConfigWithOptions(t *testing.T) {
 
 // TestErrorWrappingInGetConfigAndStacksInfo verifies proper error wrapping.
 func TestErrorWrappingInGetConfigAndStacksInfo(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
 	cmd := &cobra.Command{
 		Use: "terraform",
 	}
@@ -1048,6 +1050,11 @@ func TestErrorWrappingInGetConfigAndStacksInfo(t *testing.T) {
 
 	// Verify error contains useful context.
 	assert.NotEmpty(t, err.Error(), "Error should have a message")
+
+	formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+	assert.Contains(t, formatted, "Stacks directory not found:")
+	assert.NotContains(t, formatted, "💡 Stacks directory not found:")
+	assert.NotContains(t, formatted, "## Hints")
 }
 
 // TestDetermineComponentTypeFromCommand tests component type detection from command hierarchy.
@@ -2129,6 +2136,8 @@ func TestProcessCustomCommands(t *testing.T) {
 				for _, cmd := range parentCmd.Commands() {
 					if cmd.Name() == expectedCmd {
 						found = true
+						require.NotNil(t, cmd.Annotations, "Expected command %q to have annotations", expectedCmd)
+						assert.Equal(t, annotationValueTrue, cmd.Annotations[annotationCustomCommand], "Expected command %q to be marked as a custom command", expectedCmd)
 						break
 					}
 				}

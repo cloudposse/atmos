@@ -187,7 +187,7 @@ func (i *Installer) install(ctx context.Context, spec Spec) error {
 		return errUtils.Build(errUtils.ErrHelmPluginInstall).
 			WithCause(err).
 			WithExplanationf("Failed to install helm plugin %q from %s", spec.Name, spec.URL).
-			WithHintf("helm reported: %s", strings.TrimSpace(stderr)).
+			WithExplanationf("helm reported: %s", strings.TrimSpace(stderr)).
 			Err()
 	}
 	return nil
@@ -202,7 +202,7 @@ func (i *Installer) uninstall(ctx context.Context, name string) error {
 		return errUtils.Build(errUtils.ErrHelmPluginInstall).
 			WithCause(err).
 			WithExplanationf("Failed to uninstall helm plugin %q before reinstalling", name).
-			WithHintf("helm reported: %s", strings.TrimSpace(stderr)).
+			WithExplanationf("helm reported: %s", strings.TrimSpace(stderr)).
 			Err()
 	}
 	return nil
@@ -218,7 +218,7 @@ func (i *Installer) ListInstalled(ctx context.Context) (map[string]string, error
 		return nil, errUtils.Build(errUtils.ErrHelmPluginInstall).
 			WithCause(err).
 			WithExplanation("Failed to list installed helm plugins").
-			WithHintf("helm reported: %s", strings.TrimSpace(stderr)).
+			WithExplanationf("helm reported: %s", strings.TrimSpace(stderr)).
 			Err()
 	}
 	return parsePluginList(stdout), nil

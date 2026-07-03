@@ -216,6 +216,26 @@ func TestNormalizeLineEndings(t *testing.T) {
 	}
 }
 
+func TestNormalizeSnapshotOutputHonorsIgnoreTrailingWhitespace(t *testing.T) {
+	input := "line1  \r\nline2\t\r\nProgress\r"
+
+	t.Run("preserves trailing whitespace by default", func(t *testing.T) {
+		got := normalizeSnapshotOutput(input, false)
+		expected := "line1  \nline2\t\nProgress\r"
+		if got != expected {
+			t.Errorf("normalizeSnapshotOutput() mismatch:\nExpected: %q\nGot:      %q", expected, got)
+		}
+	})
+
+	t.Run("strips trailing spaces and tabs when enabled", func(t *testing.T) {
+		got := normalizeSnapshotOutput(input, true)
+		expected := "line1\nline2\nProgress\r"
+		if got != expected {
+			t.Errorf("normalizeSnapshotOutput() mismatch:\nExpected: %q\nGot:      %q", expected, got)
+		}
+	})
+}
+
 // TestSnapshotRoundTripWithNormalization verifies that CRLF content is normalized
 // when written and read back.
 func TestSnapshotRoundTripWithNormalization(t *testing.T) {

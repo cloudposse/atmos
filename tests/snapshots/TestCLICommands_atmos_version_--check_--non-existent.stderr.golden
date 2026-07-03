@@ -7,6 +7,4 @@
  atmos version [flags]
  atmos version [sub-command] [flags]
 
-## Hints
-
 💡 Run atmos version --help for usage
