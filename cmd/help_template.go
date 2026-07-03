@@ -56,8 +56,10 @@ const (
 
 // Command annotation constants.
 const (
-	annotationExperimental = "experimental"
-	annotationValueTrue    = "true"
+	annotationExperimental  = "experimental"
+	annotationConfigAlias   = "configAlias"
+	annotationCustomCommand = "customCommand"
+	annotationValueTrue     = "true"
 )
 
 // isExperimentalCommand checks if a command has the experimental annotation.
@@ -517,8 +519,13 @@ func isConfigAlias(cmd *cobra.Command) bool {
 	if cmd.Annotations == nil {
 		return false
 	}
-	_, ok := cmd.Annotations["configAlias"]
+	_, ok := cmd.Annotations[annotationConfigAlias]
 	return ok
+}
+
+// isCustomCommand checks if a command was created from Atmos command configuration.
+func isCustomCommand(cmd *cobra.Command) bool {
+	return cmd.Annotations != nil && cmd.Annotations[annotationCustomCommand] == annotationValueTrue
 }
 
 // calculateCommandWidth calculates the display width of a command name including type suffix.
@@ -538,10 +545,10 @@ func calculateCommandWidth(cmd *cobra.Command, parentExperimental bool) int {
 // calculateMaxCommandWidth finds the maximum command name width for alignment.
 // Config aliases are excluded from this calculation since they're shown in a separate section.
 // If parentExperimental is true, experimental badges won't be included in width calculations.
-func calculateMaxCommandWidth(commands []*cobra.Command, parentExperimental bool) int {
+func calculateMaxCommandWidth(commands []*cobra.Command, parentExperimental bool, customCommands bool) int {
 	maxWidth := 0
 	for _, c := range commands {
-		if !isCommandAvailable(c) || isConfigAlias(c) {
+		if !isCommandAvailable(c) || isConfigAlias(c) || isCustomCommand(c) != customCommands {
 			continue
 		}
 		width := calculateCommandWidth(c, parentExperimental)
@@ -605,6 +612,32 @@ func formatCommandLine(ctx *helpRenderContext, cmd *cobra.Command, maxWidth int,
 	}
 }
 
+type commandSectionOptions struct {
+	heading            string
+	customCommands     bool
+	parentExperimental bool
+	mdRenderer         *markdown.Renderer
+}
+
+// printCommandSection prints one command-origin section.
+func printCommandSection(ctx *helpRenderContext, cmd *cobra.Command, opts commandSectionOptions) {
+	maxCmdWidth := calculateMaxCommandWidth(cmd.Commands(), opts.parentExperimental, opts.customCommands)
+	if maxCmdWidth == 0 {
+		return
+	}
+
+	fmt.Fprintln(ctx.writer, ctx.styles.heading.Render(opts.heading))
+	fmt.Fprintln(ctx.writer)
+
+	for _, c := range cmd.Commands() {
+		if !isCommandAvailable(c) || isConfigAlias(c) || isCustomCommand(c) != opts.customCommands {
+			continue
+		}
+		formatCommandLine(ctx, c, maxCmdWidth, opts.mdRenderer, opts.parentExperimental)
+	}
+	fmt.Fprintln(ctx.writer)
+}
+
 // printAvailableCommands prints the list of available subcommands.
 func printAvailableCommands(ctx *helpRenderContext, cmd *cobra.Command) {
 	defer perf.Track(nil, "cmd.printAvailableCommands")()
@@ -613,14 +646,9 @@ func printAvailableCommands(ctx *helpRenderContext, cmd *cobra.Command) {
 		return
 	}
 
-	fmt.Fprintln(ctx.writer, ctx.styles.heading.Render("AVAILABLE COMMANDS"))
-	fmt.Fprintln(ctx.writer)
-
 	// Check if the parent command is experimental.
 	// If so, subcommands don't need to repeat the badge since it's shown at the top.
 	parentExperimental := isExperimentalCommand(cmd)
-
-	maxCmdWidth := calculateMaxCommandWidth(cmd.Commands(), parentExperimental)
 
 	// Create markdown renderer for command descriptions (same approach as flag rendering).
 	var mdRenderer *markdown.Renderer
@@ -628,13 +656,18 @@ func printAvailableCommands(ctx *helpRenderContext, cmd *cobra.Command) {
 		mdRenderer, _ = markdown.NewTerminalMarkdownRenderer(*ctx.atmosConfig)
 	}
 
-	for _, c := range cmd.Commands() {
-		if !isCommandAvailable(c) || isConfigAlias(c) {
-			continue
-		}
-		formatCommandLine(ctx, c, maxCmdWidth, mdRenderer, parentExperimental)
-	}
-	fmt.Fprintln(ctx.writer)
+	printCommandSection(ctx, cmd, commandSectionOptions{
+		heading:            "BUILT-IN COMMANDS",
+		customCommands:     false,
+		parentExperimental: parentExperimental,
+		mdRenderer:         mdRenderer,
+	})
+	printCommandSection(ctx, cmd, commandSectionOptions{
+		heading:            "CUSTOM COMMANDS",
+		customCommands:     true,
+		parentExperimental: parentExperimental,
+		mdRenderer:         mdRenderer,
+	})
 }
 
 // getConfigAliases returns all available config alias commands.
