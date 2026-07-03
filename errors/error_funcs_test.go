@@ -365,13 +365,14 @@ func TestPrintStructuredPlainError(t *testing.T) {
 		// Should contain the error message.
 		assert.Contains(t, out, "profile not found", "output should contain base error")
 
-		// Should contain explanations.
-		assert.Contains(t, out, "Explanation:", "output should have explanation section")
+		// Should contain explanations without the old section header.
+		assert.NotContains(t, out, "Explanation:", "output should not have old explanation header")
 		assert.Contains(t, out, "Profile `test-profile` not found", "output should contain profile name in explanation")
 		assert.Contains(t, out, "Searched in:", "output should show searched paths")
 
-		// Should contain hints.
-		assert.Contains(t, out, "Hints:", "output should have hints section")
+		// Should contain standalone hints without the old section header.
+		assert.NotContains(t, out, "Hints:", "output should not have old hints header")
+		assert.Contains(t, out, "💡", "output should mark hints as action lines")
 		assert.Contains(t, out, "atmos profile list", "output should contain profile list hint")
 		assert.Contains(t, out, "Create the profile directory", "output should contain creation hint")
 

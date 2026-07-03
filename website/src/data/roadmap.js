@@ -40,7 +40,8 @@ export const roadmapConfig = {
     { id: 'q3-2025', label: 'Q3 2025', status: 'completed' },
     { id: 'q4-2025', label: 'Q4 2025', status: 'completed' },
     { id: 'q1-2026', label: 'Q1 2026', status: 'completed' },
-    { id: 'q2-2026', label: 'Q2 2026', status: 'current' },
+    { id: 'q2-2026', label: 'Q2 2026', status: 'completed' },
+    { id: 'q3-2026', label: 'Q3 2026', status: 'current' },
   ],
 
   // Featured: curated highlight reel of top strategic initiatives.
@@ -214,6 +215,7 @@ export const roadmapConfig = {
         { label: 'Aqua-compatible package verification for toolchain installs', status: 'shipped', quarter: 'q2-2026', pr: 2415, changelog: 'toolchain-package-verification', docs: '/cli/configuration/toolchain#package-verification', description: 'Verify downloaded toolchain packages before extraction using registry checksums, signatures, and attestations.', benefits: 'Teams get package integrity checks by default when registry metadata is available, with stricter required policies for CI and regulated environments.' },
         { label: 'Terminal themes', status: 'shipped', quarter: 'q4-2025', docs: '/cli/configuration/settings/terminal', changelog: 'terminal-themes', version: 'v1.198.0', description: 'Customizable terminal color themes with built-in presets and user-defined themes.', benefits: 'Match your terminal output to your preferences or brand. Switch themes without code changes.', demoId: 'theme' },
         { label: 'Theme-aware help text', status: 'shipped', quarter: 'q4-2025', changelog: 'theme-aware-help', version: 'v1.200.0', description: 'Help text respects your terminal theme settings for consistent styling.', benefits: 'Help output matches your theme. Consistent look across all Atmos commands.' },
+        { label: 'Clearer help sections and error explanations', status: 'shipped', quarter: 'q3-2026', changelog: 'help-command-groups-error-formatting', description: 'Help output now separates built-in Atmos commands from repository-defined custom commands, while errors render explanations as cleaner callouts with direct hint lines.', benefits: 'Users can distinguish native CLI commands from local runbooks faster, and troubleshooting output is easier to scan in terminals and CI logs.' },
         { label: 'Helpful error messages with hints', status: 'shipped', quarter: 'q4-2025', changelog: 'helpful-errors', version: 'v1.199.0', description: 'Error messages include actionable hints, rich context, and optional Sentry integration for enterprise error tracking.', benefits: 'Understand what went wrong and how to fix it. Enterprise teams get centralized error tracking.' },
         { label: 'Interactive Terraform prompts', status: 'shipped', quarter: 'q4-2025', changelog: 'interactive-terraform-prompts', description: 'Interactive component and stack selection when running Terraform commands without arguments.', benefits: 'Discover and select components interactively. No need to remember exact names.' },
         { label: 'Interactive file generation for terraform, helmfile, and packer', status: 'shipped', quarter: 'q1-2026', pr: 1971, changelog: 'interactive-file-generation', description: 'Interactive prompts for generate files command with cross-provisioner support and idempotent generation.', benefits: 'Explore file generation interactively. Same patterns work across terraform, helmfile, and packer.' },
