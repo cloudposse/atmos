@@ -484,6 +484,14 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "ci.cache.enabled", "ATMOS_CI_CACHE_ENABLED")
 	bindEnv(v, "ci.cache.auto", "ATMOS_CI_CACHE_AUTO")
 
+	// Cast recording settings (env overrides for schema fields with no CLI
+	// flag; recording pipelines set dimensions without editing atmos.yaml).
+	bindEnv(v, "cast.recording.enabled", "ATMOS_CAST_RECORDING_ENABLED")
+	bindEnv(v, "cast.recording.width", "ATMOS_CAST_RECORDING_WIDTH")
+	bindEnv(v, "cast.recording.height", "ATMOS_CAST_RECORDING_HEIGHT")
+	bindEnv(v, "cast.recording.input", "ATMOS_CAST_RECORDING_INPUT")
+	bindEnv(v, "cast.recording.base_path", "ATMOS_CAST_RECORDING_BASE_PATH")
+
 	// Profiler settings
 	bindEnv(v, "profiler.enabled", "ATMOS_PROFILER_ENABLED")
 	bindEnv(v, "profiler.host", "ATMOS_PROFILER_HOST")
@@ -1055,7 +1063,12 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	}
 
 	// Clear commands before processing imports to collect only imported commands.
-	tempViper.Set(commandsKey, nil)
+	// The override must be an empty slice, not nil: Viper's Get falls through a nil
+	// override to the raw config map, which still holds the un-preprocessed commands
+	// (with YAML function tags like !include stripped to plain strings) merged by
+	// MergeConfig. Falling through would let those raw commands be captured as
+	// "imported" and silently override the resolved default-import commands below.
+	tempViper.Set(commandsKey, []interface{}{})
 
 	// Process explicit imports.
 	// This will read the import paths from the config and process them.
@@ -1939,6 +1952,81 @@ func mergeDotenvIncludeCaseMaps(configFile string, rawYAML []byte, mergedCaseMap
 	for _, path := range []string{envKey, "templates.settings.env"} {
 		node := findYAMLPathNode(&root, strings.Split(path, yamlPathDelimiter))
 		mergeDotenvIncludeCaseMapFromNode(configFile, path, node, mergedCaseMaps)
+	}
+
+	// Also walk the whole tree for nested `env:` blocks (custom-command and
+	// step-level) whose value is produced by the !include YAML function. Keys
+	// sourced from an included file never appear in the raw config text, so
+	// mergeRecursiveEnvCaseKeys cannot recover their original case.
+	mergeNestedEnvIncludeCaseKeys(configFile, &root, mergedCaseMaps)
+}
+
+// mergeNestedEnvIncludeCaseKeys walks the raw YAML node tree and, for every `env:`
+// key whose value carries the !include tag, resolves the include and folds the
+// resolved map's keys into the shared "env" case map.
+func mergeNestedEnvIncludeCaseKeys(configFile string, node *yaml.Node, mergedCaseMaps *casemap.CaseMaps) {
+	if node == nil {
+		return
+	}
+	switch node.Kind {
+	case yaml.DocumentNode, yaml.SequenceNode:
+		for _, child := range node.Content {
+			mergeNestedEnvIncludeCaseKeys(configFile, child, mergedCaseMaps)
+		}
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			keyNode := node.Content[i]
+			valueNode := node.Content[i+1]
+			if strings.EqualFold(keyNode.Value, envKey) && isDotenvIncludeNode(valueNode) {
+				mergeEnvIncludeCaseKeys(configFile, valueNode, mergedCaseMaps)
+			}
+			mergeNestedEnvIncludeCaseKeys(configFile, valueNode, mergedCaseMaps)
+		}
+	}
+}
+
+// mergeEnvIncludeCaseKeys resolves a single `env: !include ...` node and folds the
+// resolved env keys into the shared "env" case map. Dotenv targets are read directly
+// (relative to the config file, matching the top-level dotenv include behavior);
+// other targets are resolved with the same include evaluation preprocessing uses,
+// so the recovered keys match the values that actually land in the config.
+func mergeEnvIncludeCaseKeys(configFile string, node *yaml.Node, mergedCaseMaps *casemap.CaseMaps) {
+	if _, isDotenv := parseDotenvIncludeFile(node.Value); isDotenv {
+		mergeDotenvIncludeCaseMap(configFile, envKey, node.Value, mergedCaseMaps)
+		return
+	}
+
+	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
+	data, err := processIncludeTag(node.Tag, node.Value, strFunc)
+	if err != nil {
+		log.Trace("Skipping env include case map extraction", "file", configFile, "include", node.Value, "error", err)
+		return
+	}
+	for _, key := range mapKeysAsStrings(data) {
+		mergeCaseMapKey(envKey, key, mergedCaseMaps)
+	}
+}
+
+// mapKeysAsStrings returns the string keys of a decoded YAML mapping value.
+// Non-mapping values and non-string keys yield no entries.
+func mapKeysAsStrings(data any) []string {
+	switch m := data.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(m))
+		for key := range m {
+			keys = append(keys, key)
+		}
+		return keys
+	case map[any]any:
+		keys := make([]string, 0, len(m))
+		for key := range m {
+			if s, ok := key.(string); ok {
+				keys = append(keys, s)
+			}
+		}
+		return keys
+	default:
+		return nil
 	}
 }
 
