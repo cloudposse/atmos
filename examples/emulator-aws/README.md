@@ -1,4 +1,8 @@
 ---
+description: >-
+  Provision an S3 bucket against a local AWS emulator (Floci) that Atmos
+  starts and stops as a stack-scoped component — no AWS account or
+  credentials required.
 cast:
   file: /casts/examples/emulator-aws/lifecycle.cast
   title: atmos emulator aws lifecycle

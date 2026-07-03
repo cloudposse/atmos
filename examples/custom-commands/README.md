@@ -1,4 +1,7 @@
 ---
+description: >-
+  Extend the Atmos CLI with custom commands defined in atmos.yaml — arguments,
+  flags, nested subcommands, and shell steps.
 cast:
   file: /casts/examples/custom-commands/hello-greet.cast
   title: atmos custom commands

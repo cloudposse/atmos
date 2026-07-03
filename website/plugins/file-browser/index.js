@@ -8,6 +8,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+const matter = require('gray-matter');
+
 // Default patterns to exclude from scanning.
 const DEFAULT_EXCLUDE_PATTERNS = [
   '**/node_modules/**',
@@ -285,44 +287,23 @@ function generateGitHubUrl(relativePath, options) {
 }
 
 /**
- * Parses simple README front matter. The example browser only needs scalar
- * metadata, so keep this intentionally narrow and avoid changing README bodies.
+ * Parses README front matter with gray-matter so nested metadata (e.g. the
+ * `cast:` block with `file:`/`title:`) survives, without changing README bodies.
  * @param {string} content - README content.
  * @returns {{data: object, body: string}} Parsed metadata and markdown body.
  */
 function parseReadmeFrontmatter(content) {
-  if (!content || !content.startsWith('---')) {
-    return { data: {}, body: content || '' };
+  if (!content) {
+    return { data: {}, body: '' };
   }
 
-  const lines = content.split(/\r?\n/);
-  if (lines[0].trim() !== '---') {
+  try {
+    const parsed = matter(content);
+    return { data: parsed.data || {}, body: parsed.content.trim() };
+  } catch (err) {
+    // Malformed front matter: fall back to treating the whole file as body.
     return { data: {}, body: content };
   }
-
-  const endIndex = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
-  if (endIndex === -1) {
-    return { data: {}, body: content };
-  }
-
-  const data = {};
-  for (const line of lines.slice(1, endIndex)) {
-    const match = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line);
-    if (!match) continue;
-    let value = match[2].trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    data[match[1]] = value;
-  }
-  if (Object.keys(data).length === 0) {
-    return { data: {}, body: content };
-  }
-
-  return {
-    data,
-    body: lines.slice(endIndex + 1).join('\n').trim(),
-  };
 }
 
 /**
@@ -457,9 +438,14 @@ function scanExamples(sourceDir, options) {
     const tree = scanDirectory(examplePath, entry.name, options);
     const readmeMetadata = tree.readme ? parseReadmeFrontmatter(tree.readme.content) : { data: {} };
 
-    // Get description from README.
-    const description = tree.readme ? extractDescription(tree.readme.content) : '';
-    const cast = readmeMetadata.data.cast || {};
+    // Get description: prefer explicit front matter, fall back to the README's first paragraph.
+    const frontmatterDescription =
+      typeof readmeMetadata.data.description === 'string' ? readmeMetadata.data.description.trim() : '';
+    const description =
+      frontmatterDescription || (tree.readme ? extractDescription(tree.readme.content) : '');
+    // Guard against a scalar `cast:` value so a malformed README can't break the build.
+    const castMeta = readmeMetadata.data.cast;
+    const cast = castMeta && typeof castMeta === 'object' ? castMeta : {};
 
     // Check for atmos.yaml.
     const hasAtmosYaml = tree.children.some(

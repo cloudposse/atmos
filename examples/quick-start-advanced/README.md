@@ -1,4 +1,7 @@
 ---
+description: >-
+  Provision a small AWS application stack entirely offline against a local AWS
+  emulator (Floci) — no AWS account or credentials required.
 cast:
   file: /casts/examples/quick-start-advanced/list-instances.cast
   title: atmos quick start advanced

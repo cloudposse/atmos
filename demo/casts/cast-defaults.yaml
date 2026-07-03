@@ -21,3 +21,6 @@ env:
     FORCE_COLOR: '1'
     ATMOS_FORCE_TTY: 'true'
     ATMOS_KEYRING_TYPE: memory
+    # Hide the experimental (test tube) indicator in recordings; viewers still
+    # see it when they run experimental commands themselves.
+    ATMOS_EXPERIMENTAL: silence

@@ -1,4 +1,8 @@
 ---
+description: >-
+  Declare, encrypt, and read secrets with a SOPS backend (age encryption) —
+  the full lifecycle against a git-committed encrypted file, no cloud
+  credentials.
 cast:
   file: /casts/examples/sops-secrets/secret-lifecycle.cast
   title: atmos sops secrets lifecycle
