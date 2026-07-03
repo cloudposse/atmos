@@ -86,6 +86,13 @@ func nodeArchive(t *testing.T) (name string, body []byte, shasums string) {
 	return name, body, shasums
 }
 
+func skipIfNodejsOrgArchiveUnsupported(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "linux" && hostUsesMuslLibc() {
+		t.Skip("nodejs.org Linux archives are glibc-linked; musl requires PLAYWRIGHT_NODEJS_PATH")
+	}
+}
+
 func TestEnsurePlaywrightDriver_AlreadySeededIsOffline(t *testing.T) {
 	driverDir := t.TempDir()
 	t.Setenv("PLAYWRIGHT_DRIVER_PATH", driverDir)
@@ -104,6 +111,8 @@ func TestEnsurePlaywrightDriver_AlreadySeededIsOffline(t *testing.T) {
 }
 
 func TestEnsurePlaywrightDriver_SeedsFromRegistries(t *testing.T) {
+	skipIfNodejsOrgArchiveUnsupported(t)
+
 	driverDir := t.TempDir()
 	t.Setenv("PLAYWRIGHT_DRIVER_PATH", driverDir)
 	t.Setenv("PLAYWRIGHT_NODEJS_PATH", "")
@@ -181,6 +190,8 @@ func TestEnsurePlaywrightDriver_IntegrityMismatchFails(t *testing.T) {
 }
 
 func TestEnsurePlaywrightDriver_NodeChecksumMismatchFails(t *testing.T) {
+	skipIfNodejsOrgArchiveUnsupported(t)
+
 	driverDir := t.TempDir()
 	t.Setenv("PLAYWRIGHT_DRIVER_PATH", driverDir)
 	t.Setenv("PLAYWRIGHT_NODEJS_PATH", "")
@@ -230,8 +241,100 @@ func TestSafeDriverJoin_RejectsEscapes(t *testing.T) {
 }
 
 func TestNodePlatformSuffix_CurrentPlatform(t *testing.T) {
-	// Compile/CI guard: every platform the test suite runs on must map cleanly.
 	suffix, err := nodePlatformSuffix()
+	if runtime.GOOS == "linux" && hostUsesMuslLibc() {
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
+		assert.Contains(t, err.Error(), "PLAYWRIGHT_NODEJS_PATH")
+		assert.Contains(t, err.Error(), "musl")
+		return
+	}
+
+	// Compile/CI guard: every supported platform the test suite runs on must map cleanly.
 	require.NoError(t, err)
 	assert.NotEmpty(t, suffix)
+}
+
+func TestNodePlatformSuffixFor_KnownPlatforms(t *testing.T) {
+	tests := []struct {
+		name       string
+		goos       string
+		goarch     string
+		linuxMusl  bool
+		wantSuffix string
+	}{
+		{
+			name:       "linux amd64 glibc",
+			goos:       "linux",
+			goarch:     "amd64",
+			wantSuffix: "linux-x64",
+		},
+		{
+			name:       "linux arm64 glibc",
+			goos:       "linux",
+			goarch:     "arm64",
+			wantSuffix: "linux-arm64",
+		},
+		{
+			name:       "darwin arm64",
+			goos:       "darwin",
+			goarch:     "arm64",
+			wantSuffix: "darwin-arm64",
+		},
+		{
+			name:       "windows amd64",
+			goos:       "windows",
+			goarch:     "amd64",
+			wantSuffix: "win-x64",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suffix, err := nodePlatformSuffixFor(tt.goos, tt.goarch, tt.linuxMusl)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantSuffix, suffix)
+		})
+	}
+}
+
+func TestNodePlatformSuffixFor_UnsupportedPlatformsRequireNodePath(t *testing.T) {
+	tests := []struct {
+		name      string
+		goos      string
+		goarch    string
+		linuxMusl bool
+		wantText  string
+	}{
+		{
+			name:     "unsupported arch",
+			goos:     "linux",
+			goarch:   "ppc64le",
+			wantText: "no prebuilt Node.js",
+		},
+		{
+			name:     "unsupported os",
+			goos:     "freebsd",
+			goarch:   "amd64",
+			wantText: "no prebuilt Node.js",
+		},
+		{
+			name:      "linux musl",
+			goos:      "linux",
+			goarch:    "amd64",
+			linuxMusl: true,
+			wantText:  "musl-compatible Node.js",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suffix, err := nodePlatformSuffixFor(tt.goos, tt.goarch, tt.linuxMusl)
+			require.Error(t, err)
+			assert.Empty(t, suffix)
+			assert.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
+			assert.Contains(t, err.Error(), "PLAYWRIGHT_NODEJS_PATH")
+			assert.Contains(t, err.Error(), tt.wantText)
+		})
+	}
 }

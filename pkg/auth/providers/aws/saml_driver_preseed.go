@@ -180,7 +180,8 @@ func extractNpmPackage(tgz []byte, driverDir string) error {
 // seedNodeBinary places a Node.js binary at <driverDir>/node[.exe], verifying
 // it against nodejs.org's published SHASUMS256. It is a no-op when
 // PLAYWRIGHT_NODEJS_PATH points at a preinstalled Node.js (which also covers
-// platforms without prebuilt nodejs.org binaries) or the binary already exists.
+// platforms without compatible prebuilt nodejs.org binaries) or the binary
+// already exists.
 func seedNodeBinary(driverDir string) error {
 	if os.Getenv("PLAYWRIGHT_NODEJS_PATH") != "" { //nolint:forbidigo // Third-party (playwright-go) env var, read the same way the library reads it.
 		return nil
@@ -244,17 +245,53 @@ func verifyNodeChecksum(body []byte, archiveName string) error {
 
 // nodePlatformSuffix maps GOOS/GOARCH to nodejs.org's archive naming.
 func nodePlatformSuffix() (string, error) {
-	arch := map[string]string{"amd64": "x64", "arm64": "arm64"}[runtime.GOARCH]
+	return nodePlatformSuffixFor(runtime.GOOS, runtime.GOARCH, runtime.GOOS == "linux" && hostUsesMuslLibc())
+}
+
+// nodePlatformSuffixFor maps a platform to nodejs.org's archive naming. It
+// refuses Linux/musl because nodejs.org's Linux binaries are glibc-linked.
+func nodePlatformSuffixFor(goos, goarch string, linuxMusl bool) (string, error) {
+	arch := map[string]string{"amd64": "x64", "arm64": "arm64"}[goarch]
 	if arch == "" {
-		return "", fmt.Errorf("%w: no prebuilt Node.js for %s/%s; set PLAYWRIGHT_NODEJS_PATH to a preinstalled Node.js", errUtils.ErrPlaywrightDriverSeed, runtime.GOOS, runtime.GOARCH)
+		return "", errNoPrebuiltNode(goos, goarch)
 	}
-	switch runtime.GOOS {
-	case "linux", "darwin":
-		return runtime.GOOS + "-" + arch, nil
+	switch goos {
+	case "linux":
+		if linuxMusl {
+			return "", fmt.Errorf("%w: nodejs.org does not publish musl-linked Node.js for %s/%s; set PLAYWRIGHT_NODEJS_PATH to a preinstalled musl-compatible Node.js", errUtils.ErrPlaywrightDriverSeed, goos, goarch)
+		}
+		return goos + "-" + arch, nil
+	case "darwin":
+		return goos + "-" + arch, nil
 	case windowsOS:
 		return "win-" + arch, nil
 	}
-	return "", fmt.Errorf("%w: no prebuilt Node.js for %s/%s; set PLAYWRIGHT_NODEJS_PATH to a preinstalled Node.js", errUtils.ErrPlaywrightDriverSeed, runtime.GOOS, runtime.GOARCH)
+	return "", errNoPrebuiltNode(goos, goarch)
+}
+
+func errNoPrebuiltNode(goos, goarch string) error {
+	return fmt.Errorf("%w: no prebuilt Node.js for %s/%s; set PLAYWRIGHT_NODEJS_PATH to a preinstalled Node.js", errUtils.ErrPlaywrightDriverSeed, goos, goarch)
+}
+
+func hostUsesMuslLibc() bool {
+	for _, pattern := range []string{
+		"/lib/ld-musl-*.so.*",
+		"/usr/lib/ld-musl-*.so.*",
+		"/lib/libc.musl-*.so.*",
+		"/usr/lib/libc.musl-*.so.*",
+	} {
+		matches, err := filepath.Glob(pattern)
+		if err == nil && len(matches) > 0 {
+			return true
+		}
+	}
+
+	ldd, err := os.ReadFile("/usr/bin/ldd")
+	if err == nil && bytes.Contains(bytes.ToLower(ldd), []byte("musl")) {
+		return true
+	}
+
+	return false
 }
 
 // extractTarGzSingleEntry extracts one named entry from a gzipped tar into
