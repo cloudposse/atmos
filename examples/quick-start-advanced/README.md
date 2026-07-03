@@ -1,7 +1,8 @@
 ---
 description: >-
-  Provision a small AWS application stack entirely offline against a local AWS
-  emulator (Floci) — no AWS account or credentials required.
+  See what a small AWS application stack looks like with Atmos end to end —
+  backend provisioning, secrets, identities, and Terraform against a local
+  AWS emulator.
 cast:
   file: /casts/examples/quick-start-advanced/list-instances.cast
   title: atmos quick start advanced

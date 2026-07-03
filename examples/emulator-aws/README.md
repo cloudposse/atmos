@@ -1,8 +1,8 @@
 ---
 description: >-
-  Provision an S3 bucket against a local AWS emulator (Floci) that Atmos
-  starts and stops as a stack-scoped component — no AWS account or
-  credentials required.
+  Learn how to use the AWS emulator with Atmos — declare it as a stack
+  component and Atmos starts, binds, and stops it around your Terraform
+  runs.
 cast:
   file: /casts/examples/emulator-aws/lifecycle.cast
   title: atmos emulator aws lifecycle

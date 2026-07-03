@@ -6,9 +6,6 @@ commands:
       - type: shell
         name: setup
         command: atmos casts setup
-      - type: shell
-        name: clean
-        command: rm -f ../../website/static/casts/examples/custom-commands/hello-greet.cast
       - type: cast
         name: hello-greet
         working_directory: "../../.context/cast-fixtures/custom-commands"
@@ -17,16 +14,40 @@ commands:
         defaults:
           cast: !include cast-defaults.yaml .cast
           simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
         output:
+          mode: raw
           cast: "../../website/static/casts/examples/custom-commands/hello-greet.cast"
         env: !include cast-defaults.yaml .env.recording
         steps:
+          - type: simulate
+            text: "# custom commands extend the atmos CLI, defined in plain YAML"
+          - type: simulate
+            text: &hello_cmd atmos hello
           - type: shell
             name: hello
-            command: atmos hello
+            duration: 450ms
+            interval: 750ms
+            command: *hello_cmd
+          - type: simulate
+            text: "# positional arguments with defaults"
+          - type: simulate
+            text: &greet_cmd atmos greet Alice
           - type: shell
             name: greet
-            command: atmos greet Alice
+            duration: 450ms
+            interval: 750ms
+            command: *greet_cmd
+          - type: simulate
+            text: "# steps can use native UI types: markdown, spinners, tables, toasts"
+          - type: simulate
+            text: &status_cmd atmos deploy-status
+          - type: shell
+            name: deploy-status
+            duration: 550ms
+            interval: 900ms
+            command: *status_cmd
       - type: shell
         name: validate
         command: atmos casts validate examples custom-commands hello-greet
@@ -37,11 +58,24 @@ commands:
         name: validate
         interpreter: python3
         script: |
-          from pathlib import Path
-          text = Path("../../website/static/casts/examples/custom-commands/hello-greet.cast").read_text()
-          for needle in ["Hello world!", "Hello, Alice"]:
-              if needle not in text:
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/custom-commands/hello-greet.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          assert_colored(text, "All services healthy")
+          for needle in [
+              "# custom commands extend the atmos CLI",
+              "Hello world!",
+              "Hello, Alice",
+              "Deployment Status",
+          ]:
+              if needle not in plain:
                   raise SystemExit(f"hello-greet cast missing {needle!r}")
-          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
-              if bad in text:
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[hello]", "[greet]", "[deploy-status]"]:
+              if bad in plain:
                   raise SystemExit(f"hello-greet cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

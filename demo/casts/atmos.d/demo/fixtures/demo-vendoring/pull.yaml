@@ -6,9 +6,6 @@ commands:
       - type: shell
         name: setup
         command: atmos casts setup
-      - type: shell
-        name: clean
-        command: rm -f ../../website/static/casts/demo/fixtures/demo-vendoring/pull.cast
       - type: cast
         name: pull
         working_directory: "../../.context/cast-fixtures/demo-vendoring"
@@ -17,13 +14,31 @@ commands:
         defaults:
           cast: !include cast-defaults.yaml .cast
           simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
         output:
+          mode: raw
           cast: "../../website/static/casts/demo/fixtures/demo-vendoring/pull.cast"
         env: !include cast-defaults.yaml .env.recording
         steps:
+          - type: simulate
+            text: "# vendor.yaml pins component sources and versions"
+          - type: simulate
+            text: &list_vendor_cmd atmos list vendor
+          - type: shell
+            name: list-vendor
+            duration: 450ms
+            interval: 750ms
+            command: *list_vendor_cmd
+          - type: simulate
+            text: "# pull them all, like a package manager for your components"
+          - type: simulate
+            text: &vendor_pull_cmd atmos vendor pull --everything
           - type: shell
             name: pull
-            command: atmos vendor pull --everything
+            duration: 550ms
+            interval: 900ms
+            command: *vendor_pull_cmd
       - type: shell
         name: validate
         command: atmos casts validate demo fixtures demo-vendoring pull
@@ -34,11 +49,18 @@ commands:
         name: validate
         interpreter: python3
         script: |
-          from pathlib import Path
-          text = Path("../../website/static/casts/demo/fixtures/demo-vendoring/pull.cast").read_text()
-          for needle in ["Vendoring from", "Vendored components success=3", "github/stargazers"]:
-              if needle not in text:
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/demo/fixtures/demo-vendoring/pull.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in ["# vendor.yaml pins component sources", "atmos vendor pull --everything", "github/stargazers"]:
+              if needle not in plain:
                   raise SystemExit(f"vendor pull cast missing {needle!r}")
-          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
-              if bad in text:
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[list-vendor]", "[pull]", "INFO"]:
+              if bad in plain:
                   raise SystemExit(f"vendor pull cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

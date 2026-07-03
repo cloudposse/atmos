@@ -6,9 +6,6 @@ commands:
       - type: shell
         name: setup
         command: atmos casts setup
-      - type: shell
-        name: clean
-        command: rm -f ../../website/static/casts/demo/fixtures/basic/list-stacks.cast
       - type: cast
         name: list-stacks
         working_directory: "../../.context/cast-fixtures/native-terraform"
@@ -17,6 +14,8 @@ commands:
         defaults:
           cast: !include cast-defaults.yaml .cast
           simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
         output:
           cast: "../../website/static/casts/demo/fixtures/basic/list-stacks.cast"
         env: !include cast-defaults.yaml .env.recording
@@ -35,11 +34,17 @@ commands:
         name: validate
         interpreter: python3
         script: |
-          from pathlib import Path
-          text = Path("../../website/static/casts/demo/fixtures/basic/list-stacks.cast").read_text()
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_body_color, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/demo/fixtures/basic/list-stacks.cast")
+          plain = strip_ansi(decoded)
           for needle in ["Stacks", "dev", "production"]:
-              if needle not in text:
+              if needle not in plain:
                   raise SystemExit(f"list stacks cast missing {needle!r}")
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found"]:
-              if bad in text:
+              if bad in plain:
                   raise SystemExit(f"list stacks cast contains {bad!r}")
+          assert_body_color(decoded)
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)

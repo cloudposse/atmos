@@ -54,6 +54,43 @@ commands:
   steps:
     - "echo Hello, {{ .Arguments.name }}"
 
+# Use native UI step types instead of shell.
+# Steps can render markdown, spinners, tables, and status toasts directly —
+# no echo or external tools required. See also .atmos.d/interactive.yaml for
+# interactive step types (choose, confirm, input, ...).
+- name: deploy-status
+  description: Show a styled deployment status using native step types
+  steps:
+    - name: banner
+      type: markdown
+      content: |
+        ## Deployment Status
+    - name: check
+      type: spin
+      title: "Checking service health..."
+      command: "sleep 1"
+    - name: services
+      type: table
+      title: "Services"
+      columns:
+        - service
+        - version
+        - status
+      data:
+        - service: api
+          version: v1.4.2
+          status: healthy
+        - service: worker
+          version: v1.4.2
+          status: healthy
+        - service: cache
+          version: v7.2.0
+          status: healthy
+    - name: done
+      type: toast
+      level: success
+      content: "All services healthy"
+
 # Use flags.
 - name: weather
   description: This command fetches the weather

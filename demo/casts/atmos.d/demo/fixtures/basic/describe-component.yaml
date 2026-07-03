@@ -6,9 +6,6 @@ commands:
       - type: shell
         name: setup
         command: atmos casts setup
-      - type: shell
-        name: clean
-        command: rm -f ../../website/static/casts/demo/fixtures/basic/describe-component.cast
       - type: cast
         name: describe-component
         working_directory: "../../.context/cast-fixtures/native-terraform"
@@ -17,6 +14,8 @@ commands:
         defaults:
           cast: !include cast-defaults.yaml .cast
           simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
         output:
           cast: "../../website/static/casts/demo/fixtures/basic/describe-component.cast"
         env: !include cast-defaults.yaml .env.recording
@@ -36,6 +35,12 @@ commands:
           text = path.read_text()
           text = text.replace(str(fixture), ".")
           path.write_text(text)
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/demo/fixtures/basic/describe-component.cast")
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)
       - type: shell
         name: validate
         command: atmos casts validate demo fixtures basic describe-component
@@ -46,11 +51,19 @@ commands:
         name: validate
         interpreter: python3
         script: |
-          from pathlib import Path
-          text = Path("../../website/static/casts/demo/fixtures/basic/describe-component.cast").read_text()
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_body_color, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/demo/fixtures/basic/describe-component.cast")
+          # Highlighted YAML puts SGR codes between keys and values, so match
+          # needles against stripped text.
+          plain = strip_ansi(decoded)
           for needle in ["component: vpc", "stack: dev", "cidr_block"]:
-              if needle not in text:
+              if needle not in plain:
                   raise SystemExit(f"describe component cast missing {needle!r}")
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
-              if bad in text:
+              if bad in plain:
                   raise SystemExit(f"describe component cast contains {bad!r}")
+          assert_body_color(decoded)
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)

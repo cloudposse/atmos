@@ -24,3 +24,6 @@ env:
     # Hide the experimental (test tube) indicator in recordings; viewers still
     # see it when they run experimental commands themselves.
     ATMOS_EXPERIMENTAL: silence
+    # Keep system logs out of demos (some fixtures set logs.level: Info for
+    # their own purposes; env wins so recordings stay clean).
+    ATMOS_LOGS_LEVEL: Warning

@@ -290,11 +290,11 @@ ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken
 ### Regenerating Screengrabs (IMPORTANT)
 **When:** After modifying CLI behavior/help/output, adding commands. NOT for doc-only changes.
 
-**How (any OS — native, no containers):**
-1. Local: `make -C demo/screengrabs all` (builds atmos from the working tree, installs bat/tree/terraform via the Atmos toolchain, records, installs casts into `website/static/casts/screengrabs/`)
+**How (any OS — native, no containers; screengrabs are casts custom commands, never a side-car tool):**
+1. Local: `atmos --chdir=demo/casts casts generate screengrabs cli` (the `casts setup` step builds atmos from the working tree; the command list lives inline in `demo/casts/atmos.d/screengrabs/cli.yaml` and each command is recorded via the global `--cast` flag into `website/static/casts/screengrabs/<slug>.cast`)
 2. GitHub Actions: `gh workflow run screengrabs.yaml` (creates PR; builds atmos from the checkout the same way)
 
-**Notes:** Recording uses no PTY; correct TrueColor and layout width come from `ATMOS_FORCE_COLOR` and `COLUMNS` (recorded at 90 cols to fit the docs column). Regenerate all together; never pipe the output.
+**Notes:** Recording uses no PTY; correct TrueColor and layout width come from `ATMOS_FORCE_COLOR` and `COLUMNS`/`ATMOS_CAST_RECORDING_WIDTH` (recorded at 90 cols to fit the docs column). Machine-specific repo paths are rewritten to `/absolute/path/to/repo` (the test-harness convention) and validation (`atmos --chdir=demo/casts casts validate screengrabs cli`) fails on error output, path leaks, or docs referencing a missing cast. Regenerate all together; never pipe the output.
 
 ### PRD Documentation (MANDATORY)
 All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames.

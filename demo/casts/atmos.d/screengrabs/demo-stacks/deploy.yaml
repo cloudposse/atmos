@@ -6,9 +6,6 @@ commands:
       - type: shell
         name: setup
         command: atmos casts setup
-      - type: shell
-        name: clean
-        command: rm -f ../../website/static/casts/screengrabs/demo-stacks/deploy.cast
       # Warm the fixture off-camera so provider installation and workspace
       # creation noise never enters the recording (replaces the legacy sed
       # noise filters).
@@ -87,3 +84,9 @@ commands:
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "- Installing hashicorp", "Finding latest version"]:
               if bad in text:
                   raise SystemExit(f"deploy cast contains {bad!r}")
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/screengrabs/demo-stacks/deploy.cast")
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)

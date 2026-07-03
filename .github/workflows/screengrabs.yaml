@@ -56,17 +56,19 @@ jobs:
         with:
           persist-credentials: false
 
-      # The Makefile is self-contained: it builds atmos from this checkout and
-      # installs the recording dependencies (bat, tree, terraform) via the
-      # Atmos toolchain, so no apt packages or released atmos are needed.
+      # The casts commands are self-contained: `casts setup` builds atmos from
+      # this checkout and prepares isolated recording fixtures, so no apt
+      # packages or released atmos are needed.
       - name: Setup Go
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: go.mod
 
-      - name: Run make build-all install
+      - name: Regenerate screengrab casts
         run: |
-          make -C demo/screengrabs build-all install
+          CGO_ENABLED=0 go build -o build/atmos .
+          ./build/atmos --chdir=demo/casts casts generate screengrabs cli
+          ./build/atmos --chdir=demo/casts casts generate screengrabs demo-stacks
           git add -A
           git status
         env:

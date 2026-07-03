@@ -6,9 +6,6 @@ commands:
       - type: shell
         name: setup
         command: atmos casts setup
-      - type: shell
-        name: clean
-        command: rm -f ../../website/static/casts/examples/quick-start-simple/list-and-plan.cast
       - type: cast
         name: list-and-plan
         working_directory: "../../.context/cast-fixtures/quick-start-simple"
@@ -61,11 +58,14 @@ commands:
         name: validate
         interpreter: python3
         script: |
-          import json
-          from pathlib import Path
-          raw = Path("../../website/static/casts/examples/quick-start-simple/list-and-plan.cast").read_text()
-          rows = raw.splitlines()
-          text = "".join(json.loads(line)[2] for line in rows[1:] if json.loads(line)[1] in ("o", "e"))
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/quick-start-simple/list-and-plan.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          assert_colored(text, "staging")
           for needle in [
               "# see the stacks in this quick start",
               "atmos list stacks --format=tree",
@@ -80,10 +80,10 @@ commands:
               "lang=sv",
               "Plan:",
           ]:
-              if needle not in text:
+              if needle not in plain:
                   raise SystemExit(f"list-and-plan cast missing {needle!r}")
-          if "\\u001b[" not in raw:
-              raise SystemExit("list-and-plan cast is missing ANSI color sequences")
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[list-stacks]", "[list-components]", "completed"]:
-              if bad in raw or bad in text:
+              if bad in plain:
                   raise SystemExit(f"list-and-plan cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

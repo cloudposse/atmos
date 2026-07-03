@@ -130,10 +130,10 @@ commands:
         dependencies:
           tools:
             jq: "^1.7.0"
-            yq: "~> 4.40.0"
+            yq: "^4.40.0"
         steps:
           - "echo 'jq (^1.7.0):' && jq --version"
-          - "echo 'yq (~> 4.40.0):' && yq --version"
+          - "echo 'yq (^4.40.0):' && yq --version"
 
       # Example 4: Multi-tool pipeline
       # Use multiple tools together

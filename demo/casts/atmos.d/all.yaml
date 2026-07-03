@@ -22,6 +22,9 @@ commands:
         name: screengrabs-demo-stacks
         command: atmos casts generate screengrabs demo-stacks
       - type: shell
+        name: screengrabs-cli
+        command: atmos casts generate screengrabs cli
+      - type: shell
         name: validate
         command: atmos casts validate all
   - name: casts validate all
@@ -46,3 +49,6 @@ commands:
       - type: shell
         name: screengrabs-demo-stacks
         command: atmos casts validate screengrabs demo-stacks
+      - type: shell
+        name: screengrabs-cli
+        command: atmos casts validate screengrabs cli
