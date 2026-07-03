@@ -28,6 +28,7 @@ type NamedConfig struct {
 	Image       string
 	Command     []string
 	Ports       []PortBinding
+	Networks    []NetworkAttachment
 	Mounts      []Mount
 	Env         map[string]string
 	User        string
@@ -195,6 +196,7 @@ func buildNamedCreateConfig(config *NamedConfig, name string) *CreateConfig {
 		Command:     config.Command,
 		Mounts:      config.Mounts,
 		Ports:       config.Ports,
+		Networks:    config.Networks,
 		Env:         config.Env,
 		User:        config.User,
 		Labels:      labels,
