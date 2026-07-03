@@ -115,6 +115,18 @@
   border-color: rgba(255, 255, 255, 0.1);
 }
 
+/* Tag Sections (grouped "All" view) */
+.tagSection {
+  margin-bottom: 3rem;
+}
+
+.tagSectionHeading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 1.5rem 0;
+  color: var(--ifm-heading-color);
+}
+
 /* Examples Grid */
 .examplesGrid {
   display: grid;

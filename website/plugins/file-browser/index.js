@@ -48,7 +48,9 @@ const TITLES_MAP = {
   'emulator-k8s': 'Kubernetes Emulator',
 };
 
-// Tags mapping for examples (an example can have multiple tags).
+// Tags mapping for examples (an example can have multiple tags; the first tag
+// is the example's section on the index page). A README front matter `tags:`
+// list overrides this map, so new examples can self-categorize.
 const TAGS_MAP = {
   'quick-start-simple': ['Quickstart'],
   'quick-start-advanced': ['Quickstart'],
@@ -58,28 +60,60 @@ const TAGS_MAP = {
   'config-profiles': ['Stacks'],
   'demo-auth': ['Stacks'],
   'demo-schemas': ['Stacks'],
+  'stack-names': ['Stacks'],
+  'remote-stack-imports': ['Stacks'],
+  locals: ['Stacks'],
+  compositions: ['Stacks'],
+  'sops-secrets': ['Stacks'],
+  'onepassword-secrets': ['Stacks'],
+  'auth-stores': ['Stacks'],
   'demo-vendoring': ['Components'],
   'demo-component-versions': ['Components'],
   'source-provisioning': ['Components'],
   'demo-library': ['Components'],
+  'custom-components': ['Components'],
+  'container-component': ['Components'],
+  'native-terraform': ['Components'],
+  'terraform-tests': ['Components'],
+  caching: ['Components'],
   'demo-workflows': ['Automation'],
   'demo-atlantis': ['Automation'],
   'custom-commands': ['Automation'],
   'interactive-workflows': ['Automation'],
   'demo-custom-command': ['Automation'],
-  'custom-components': ['Components'],
   'generate-files': ['Automation'],
+  'demo-ansible': ['Automation'],
+  'aws-ami-packer-github-actions': ['Automation'],
+  'background-steps': ['Automation'],
+  'parallel-steps': ['Automation'],
+  'workflow-retries': ['Automation'],
+  'container-step': ['Automation'],
+  'http-webhooks': ['Automation'],
+  'say-something': ['Automation'],
+  gitops: ['Automation'],
+  'hooks-checkov': ['Hooks'],
+  'hooks-custom-command': ['Hooks'],
+  'hooks-infracost': ['Hooks'],
+  'hooks-kics': ['Hooks'],
+  'hooks-trivy': ['Hooks'],
+  kubernetes: ['Kubernetes'],
+  helm: ['Kubernetes'],
+  kustomize: ['Kubernetes'],
+  'demo-helmfile': ['Kubernetes'],
+  'emulator-aws': ['Emulators'],
+  'emulator-k8s': ['Emulators', 'Kubernetes'],
+  'local-gitops': ['Emulators', 'Automation'],
   toolchain: ['DX'],
   devcontainer: ['DX'],
   'devcontainer-build': ['DX'],
-  'emulator-aws': ['DX'],
-  'emulator-k8s': ['DX'],
-  'demo-helmfile': ['DX'],
-  'stack-names': ['Stacks'],
-  'demo-ansible': ['Automation'],
+  'container-sandbox': ['DX'],
+  'secrets-masking': ['DX'],
+  'aws-security-compliance': ['DX'],
+  ai: ['DX'],
+  'ai-claude-code': ['DX'],
+  mcp: ['DX'],
+  'mcp-for-ai-coding-assistants': ['DX'],
   'mcp-with-aws': ['DX', 'Automation'],
-  'aws-ami-packer-github-actions': ['Automation'],
-  'sops-secrets': ['Stacks'],
 };
 
 // Documentation pages mapping for examples.
@@ -447,6 +481,13 @@ function scanExamples(sourceDir, options) {
     const castMeta = readmeMetadata.data.cast;
     const cast = castMeta && typeof castMeta === 'object' ? castMeta : {};
 
+    // Tags: README front matter wins so examples can self-categorize; fall back
+    // to the hand-maintained map. The first tag is the example's index section.
+    const frontmatterTags = Array.isArray(readmeMetadata.data.tags)
+      ? readmeMetadata.data.tags.filter((tag) => typeof tag === 'string')
+      : [];
+    const tags = frontmatterTags.length > 0 ? frontmatterTags : TAGS_MAP[entry.name] || [];
+
     // Check for atmos.yaml.
     const hasAtmosYaml = tree.children.some(
       (child) => child.type === 'file' && (child.name === 'atmos.yaml' || child.name === 'atmos.yml')
@@ -460,7 +501,7 @@ function scanExamples(sourceDir, options) {
       hasReadme: !!tree.readme,
       hasAtmosYaml,
       featured: FEATURED.includes(entry.name),
-      tags: TAGS_MAP[entry.name] || [],
+      tags,
       docs: DOCS_MAP[entry.name] || [],
       cast: {
         file: cast.file || '',
@@ -476,7 +517,7 @@ function scanExamples(sourceDir, options) {
   examples.sort((a, b) => a.name.localeCompare(b.name));
 
   // Collect unique tags in display order.
-  const tagOrder = ['Quickstart', 'Stacks', 'Components', 'Automation', 'DX'];
+  const tagOrder = ['Quickstart', 'Stacks', 'Components', 'Kubernetes', 'Automation', 'Hooks', 'Emulators', 'DX'];
   const tags = tagOrder.filter((tag) => examples.some((ex) => ex.tags.includes(tag)));
 
   // Build the curated featured list in FEATURED order (skip any that don't resolve).
