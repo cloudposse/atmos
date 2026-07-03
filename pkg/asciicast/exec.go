@@ -3,6 +3,7 @@ package asciicast
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 
@@ -39,6 +40,8 @@ type ExecResult struct {
 }
 
 // streamWriter forwards writes to the recorder as events on one stream.
+// Write failures propagate so the recorded command aborts rather than
+// silently producing an incomplete .cast file.
 type streamWriter struct {
 	rec    *Recorder
 	stream string
@@ -46,7 +49,9 @@ type streamWriter struct {
 
 //nolint:lintroller // Trivial io.Writer adapter on a hot output path - no perf tracking.
 func (w *streamWriter) Write(p []byte) (int, error) {
-	w.rec.Record(w.stream, string(p))
+	if err := w.rec.Event(w.stream, string(p)); err != nil {
+		return 0, fmt.Errorf("record %s event: %w", w.stream, err)
+	}
 	return len(p), nil
 }
 
@@ -83,15 +88,16 @@ func ExecRecord(ctx context.Context, opts *ExecOptions) (*ExecResult, error) {
 	cmd.Stderr = &streamWriter{rec: rec, stream: "e"}
 
 	runErr := cmd.Run()
-	if closeErr := rec.Close(); closeErr != nil {
-		return nil, closeErr
-	}
-	if runErr != nil {
-		var exitErr *exec.ExitError
-		if errors.As(runErr, &exitErr) {
-			return &ExecResult{ExitCode: exitErr.ExitCode()}, nil
+	closeErr := rec.Close()
+	var exitErr *exec.ExitError
+	if errors.As(runErr, &exitErr) {
+		if closeErr != nil {
+			return nil, errors.Join(closeErr, runErr)
 		}
-		return nil, runErr
+		return &ExecResult{ExitCode: exitErr.ExitCode()}, nil
+	}
+	if joined := errors.Join(runErr, closeErr); joined != nil {
+		return nil, joined
 	}
 	return &ExecResult{ExitCode: 0}, nil
 }

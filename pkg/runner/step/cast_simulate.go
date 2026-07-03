@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/muesli/termenv"
@@ -227,7 +228,16 @@ func renderCastTypedLineParts(prompt *schema.SimulatePrompt, line string) (strin
 	return rendered[:index], rendered[index+len(line):], nil
 }
 
+// castStyleMu serializes the global color-profile force/restore in
+// renderCastStyledText: concurrent cast branches (e.g. control steps with
+// MaxConcurrency) would otherwise interleave the toggles and restore the
+// wrong profile, corrupting generated ANSI output.
+var castStyleMu sync.Mutex
+
 func renderCastStyledText(text, styleName string, bold bool) (string, error) {
+	castStyleMu.Lock()
+	defer castStyleMu.Unlock()
+
 	restoreColorProfile := forceCastColorProfile()
 	defer restoreColorProfile()
 
