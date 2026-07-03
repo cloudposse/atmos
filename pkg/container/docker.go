@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -208,6 +209,7 @@ func (d *DockerRuntime) parseInspectData(data map[string]interface{}) *Info {
 
 	// Parse labels.
 	info.Labels = getLabelsFromInspect(data)
+	info.Networks = getNetworksFromInspect(data)
 
 	return info
 }
@@ -254,6 +256,26 @@ func getLabelsFromInspect(data map[string]interface{}) map[string]string {
 			result[k] = s
 		}
 	}
+	return result
+}
+
+func getNetworksFromInspect(data map[string]interface{}) []string {
+	settings, ok := data["NetworkSettings"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	networks, ok := settings["Networks"].(map[string]interface{})
+	if !ok || len(networks) == 0 {
+		return nil
+	}
+
+	result := make([]string, 0, len(networks))
+	for name := range networks {
+		if name != "" {
+			result = append(result, name)
+		}
+	}
+	sort.Strings(result)
 	return result
 }
 
