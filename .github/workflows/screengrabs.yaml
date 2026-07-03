@@ -92,8 +92,13 @@ jobs:
         env:
           ATMOS_PAGER: "false"
 
+      # PR-triggered runs only smoke-test the pipeline; the screengrab-update PR
+      # is created from workflow_dispatch runs on main. Rebasing the update
+      # commit onto main from a feature branch conflicts when the branch adds or
+      # removes artifacts that main does not have yet.
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: github-app
+        if: github.event_name == 'workflow_dispatch'
         with:
           app-id: ${{ vars.BOT_GITHUB_APP_ID }}
           private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
@@ -102,6 +107,7 @@ jobs:
 
       - name: Create or update PR
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        if: github.event_name == 'workflow_dispatch'
         with:
           token: ${{ steps.github-app.outputs.token }}
           branch: "chore/update-build-screengrabs-for-${{ needs.prepare.outputs.version }}"
