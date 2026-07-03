@@ -21,6 +21,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 )
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
 func TestStore_Name(t *testing.T) {
 	store := &Store{}
 	assert.Equal(t, "github/artifacts", store.Name())
@@ -1253,6 +1259,77 @@ func TestStore_List(t *testing.T) {
 		assert.Equal(t, "stack2/comp2/sha2.tfplan", files[1].Name)
 	})
 
+	t.Run("retries transient server error", func(t *testing.T) {
+		oldDelay := listArtifactsRetryBaseDelay
+		listArtifactsRetryBaseDelay = time.Nanosecond
+		defer func() { listArtifactsRetryBaseDelay = oldDelay }()
+
+		now := time.Now()
+		callCount := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			callCount++
+			if callCount == 1 {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"message":"temporary server error"}`))
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			response := map[string]any{
+				"total_count": 1,
+				"artifacts": []map[string]any{
+					{
+						"id":            1,
+						"name":          "planfile-stack1--comp1--sha1.tfplan",
+						"size_in_bytes": 100,
+						"created_at":    now.Format(time.RFC3339),
+					},
+				},
+			}
+			respBytes, _ := json.Marshal(response)
+			_, _ = w.Write(respBytes)
+		}))
+		defer server.Close()
+
+		store := &Store{
+			httpClient: server.Client(),
+			baseURL:    server.URL,
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
+		}
+
+		files, err := store.List(context.Background(), artifact.Query{All: true})
+		require.NoError(t, err)
+		require.Len(t, files, 1)
+		assert.Equal(t, "stack1/comp1/sha1.tfplan", files[0].Name)
+		assert.Equal(t, 2, callCount)
+	})
+
+	t.Run("does not retry client transport error", func(t *testing.T) {
+		oldDelay := listArtifactsRetryBaseDelay
+		listArtifactsRetryBaseDelay = time.Nanosecond
+		defer func() { listArtifactsRetryBaseDelay = oldDelay }()
+
+		callCount := 0
+		store := &Store{
+			httpClient: &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+				callCount++
+				return nil, fmt.Errorf("dial failed")
+			})},
+			baseURL: "https://api.github.test",
+			prefix:  "planfile",
+			owner:   "testowner",
+			repo:    "testrepo",
+		}
+
+		files, err := store.List(context.Background(), artifact.Query{All: true})
+		require.Error(t, err)
+		assert.Nil(t, files)
+		assert.Equal(t, 1, callCount)
+		assert.Contains(t, err.Error(), "dial failed")
+	})
+
 	t.Run("with prefix filter", func(t *testing.T) {
 		now := time.Now()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1907,8 +1984,17 @@ func TestStore_DownloadViaRuntime(t *testing.T) {
 			archiveFilename: []byte("rest tar content"),
 		})
 
-		// Blob server for the REST redirect target.
-		blob := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Blob server for the REST redirect target. GitHub/Azure signed blob
+		// URLs reject an extra GitHub Authorization header, so this catches
+		// regressions where the authenticated API client is reused for the blob.
+		var blobAuthHeader string
+		blob := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			blobAuthHeader = r.Header.Get("Authorization")
+			if blobAuthHeader != "" {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`<Error><Code>InvalidAuthenticationInfo</Code></Error>`))
+				return
+			}
 			_, _ = w.Write(zipData)
 		}))
 		defer blob.Close()
@@ -1936,7 +2022,12 @@ func TestStore_DownloadViaRuntime(t *testing.T) {
 		}
 
 		store := &Store{
-			httpClient: api.Client(),
+			httpClient: &http.Client{
+				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+					r.Header.Set("Authorization", "Bearer test-token")
+					return http.DefaultTransport.RoundTrip(r)
+				}),
+			},
 			baseURL:    api.URL,
 			prefix:     "planfile",
 			owner:      "testowner",
@@ -1953,6 +2044,7 @@ func TestStore_DownloadViaRuntime(t *testing.T) {
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
 		assert.Equal(t, "rest tar content", string(content))
+		assert.Empty(t, blobAuthHeader)
 	})
 
 	t.Run("invalid runtime token returns download error", func(t *testing.T) {
@@ -2072,6 +2164,7 @@ func TestStore_FetchBlob(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
 		assert.Contains(t, err.Error(), "status 403")
+		assert.Contains(t, err.Error(), "access denied")
 	})
 
 	t.Run("transport error returns download error", func(t *testing.T) {

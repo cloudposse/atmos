@@ -1,0 +1,66 @@
+workflows:
+  checks:
+    description: Run independent checks concurrently, then run a dependent summary step.
+    steps:
+      - name: checks
+        type: parallel
+        max_concurrency: 2
+        fail:
+          mode: wait_all
+        output:
+          mode: grouped
+          order: completion
+          show_summary: true
+          prefix: "{{ .step.name }}"
+        steps:
+          - name: lint
+            type: shell
+            command: echo "lint started"; sleep 1; echo "lint passed"
+
+          - name: unit
+            type: shell
+            command: echo "unit tests started"; sleep 1; echo "unit tests passed"
+
+          - name: package
+            type: shell
+            needs: [lint, unit]
+            command: echo "packaging after lint and unit"
+
+  prefixed:
+    description: Stream parallel child output live with step-name prefixes.
+    steps:
+      - name: live-checks
+        type: parallel
+        max_concurrency: 2
+        output:
+          mode: prefixed
+          show_summary: true
+          prefix: "{{ .step.name }}"
+        steps:
+          - name: first
+            type: shell
+            command: for i in 1 2 3; do echo "first $i"; sleep 1; done
+
+          - name: second
+            type: shell
+            command: for i in 1 2 3; do echo "second $i"; sleep 1; done
+
+  matrix:
+    description: Expand a matrix and run each generated row through the same scheduler.
+    steps:
+      - name: test-matrix
+        type: matrix
+        max_concurrency: 3
+        fail:
+          mode: wait_all
+        output:
+          mode: grouped
+          order: definition
+          show_summary: true
+        matrix:
+          os: [linux, darwin]
+          go: ["1.22", "1.23"]
+        steps:
+          - name: test
+            type: shell
+            command: echo "testing {{ .matrix.os }} with Go {{ .matrix.go }}"

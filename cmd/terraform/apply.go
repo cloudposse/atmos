@@ -33,7 +33,7 @@ For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/apply
 	https://opentofu.org/docs/cli/commands/apply`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return runHooks(h.BeforeTerraformApply, cmd, args)
+		return runBeforeHooks(h.BeforeTerraformApply, cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		// Reset per-run globals. Both must be initialised before any early return

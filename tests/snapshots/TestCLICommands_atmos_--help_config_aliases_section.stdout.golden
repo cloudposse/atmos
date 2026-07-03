@@ -6,10 +6,10 @@ across multiple cloud and DevOps toolchains.
 
 USAGE
 
-                                   
-    $ atmos [flags]                
-    $ atmos [sub-command] [flags]  
-                                   
+
+    $ atmos [flags]
+    $ atmos [sub-command] [flags]
+
 
 SUBCOMMAND ALIASES
 
@@ -17,10 +17,11 @@ SUBCOMMAND ALIASES
       c                Alias of atmos container command
       emu              Alias of atmos emulator command
       hf               Alias of atmos helmfile command
+      k8s              Alias of atmos kubernetes command
       pk               Alias of atmos packer command
       tf               Alias of atmos terraform command
 
-AVAILABLE COMMANDS
+BUILT-IN COMMANDS
 
       about                                  Learn about Atmos
       ai [command] [EXPERIMENTAL]            AI-powered assistant for Atmos operations
@@ -39,8 +40,10 @@ AVAILABLE COMMANDS
                                              registries
       env                                    Output environment variables configured in atmos.yaml
       git [command] [EXPERIMENTAL]           GitOps enablement: automate Git commits locally and in CI
+      helm [command] [EXPERIMENTAL]          Manage native Helm components
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments
       help                                   Help about any command
+      kubernetes [command] [EXPERIMENTAL]    Manage Kubernetes-native components
       list [command]                         List available stacks and components
       lsp [command] [EXPERIMENTAL]           Language Server Protocol commands
       mcp [command] [EXPERIMENTAL]           Manage MCP servers and external server connections
@@ -56,6 +59,10 @@ AVAILABLE COMMANDS
       vendor [command]                       Manage external dependencies for components or stacks
       version [command]                      Display the version of Atmos you are running and check for updates
       workflow [command]                     Run predefined tasks using workflows
+
+CUSTOM COMMANDS
+
+      release  Run release automation
 
 ALIASES
 

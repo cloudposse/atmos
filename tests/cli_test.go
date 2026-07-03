@@ -435,13 +435,13 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 		return groups[1] + fixedRemainder
 	})
 
-	// 5b. Join hint paths that may be split across lines due to terminal width wrapping.
+	// 5b. Join diagnostic paths that may be split across lines due to terminal width wrapping.
 	// This ensures consistent snapshots across platforms with different terminal widths.
 	// Example:
 	//   Input:  "💡 Path points to the stacks configuration directory, not a component:\n/absolute/path/to/repo/..."
 	//   Output: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/..."
-	hintPathRegex := regexp.MustCompile(`(💡[^:]+:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
-	result = hintPathRegex.ReplaceAllString(result, "$1 $2")
+	diagnosticPathRegex := regexp.MustCompile(`((?:💡\s*)?[^:\n]+:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
+	result = diagnosticPathRegex.ReplaceAllString(result, "$1 $2")
 
 	// Also handle "Stacks directory:" and "Workflows directory:" patterns.
 	// Example:
@@ -517,6 +517,14 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	terraformCommandEnvLogRegex := regexp.MustCompile(`(?m)^.*Found ENV variable ATMOS_COMPONENTS_TERRAFORM_COMMAND=[^\n]*\n?`)
 	result = terraformCommandEnvLogRegex.ReplaceAllString(result, "")
 
+	// 16. Drop environment-dependent GitHub authentication debug logs.
+	// These lines depend on whether gh is installed/authenticated in the runner and do not affect
+	// the command behavior under test.
+	githubCLITokenLookupLogRegex := regexp.MustCompile(`(?m)^.*GitHub CLI token lookup failed \(CLI may not be installed or authenticated\)[^\n]*\n?`)
+	result = githubCLITokenLookupLogRegex.ReplaceAllString(result, "")
+	anonymousGitHubAccessLogRegex := regexp.MustCompile(`(?m)^.*No GitHub token resolved; using anonymous \(unauthenticated\) GitHub access \(subject to rate limits\)[^\n]*\n?`)
+	result = anonymousGitHubAccessLogRegex.ReplaceAllString(result, "")
+
 	// 16. Apply custom replacements if provided.
 	// These are test-specific patterns that don't need to be part of the global sanitization.
 	// IMPORTANT: This must run LAST so it can override any built-in sanitization results.
@@ -553,12 +561,12 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
 	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
 
-	// 17. Join hint messages where the sanitized path ended up on the next line.
+	// 17. Join diagnostic messages where the sanitized path ended up on the next line.
 	// This must run AFTER path sanitization because it matches the sanitized path pattern.
-	// E.g., "💡 Stacks directory not found:\n/absolute/path" vs "💡 Stacks directory not found: /absolute/path"
+	// E.g., "Stacks directory not found:\n/absolute/path" vs "Stacks directory not found: /absolute/path"
 	// Also handles plain labels like "Stacks directory:\n/path"
-	hintPathRegex2 := regexp.MustCompile(`(?m)(💡[^\n]{0,200}?:|^[A-Z][^\n]{0,200}?directory:)\s*\n(/absolute/path/to/repo[^\s\n]*)`)
-	result = hintPathRegex2.ReplaceAllString(result, "$1 $2")
+	diagnosticPathRegex2 := regexp.MustCompile(`(?m)((?:💡\s*)?[A-Z][^\n]{0,200}?:)\s*\n(/absolute/path/to/repo[^\s\n]*)`)
+	result = diagnosticPathRegex2.ReplaceAllString(result, "$1 $2")
 
 	return result, nil
 }
@@ -1174,24 +1182,27 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		}
 	}
 
-	// Filter out ATMOS_* environment variables that shouldn't be inherited from developer's shell.
+	// Filter out environment variables that shouldn't be inherited from developer's shell.
 	// This ensures test reproducibility between local and CI environments.
-	// Only allow ATMOS_* vars explicitly set in tc.Env.
-	atmosVarsToFilter := []string{
+	// Only allow vars explicitly set in tc.Env.
+	varsToFilter := []string{
 		"ATMOS_LOGS_LEVEL", // Can change log verbosity and affect snapshot output
 		"ATMOS_CHDIR",      // Can change working directory resolution
 		"ATMOS_LOGS_FILE",  // Can redirect logs to unexpected locations
+		"ATMOS_PAGER",      // Can change settings.terminal.pager in snapshots
+		"PAGER",            // Can change settings.terminal.pager in snapshots
+		"NO_PAGER",         // Can change settings.terminal.pager in snapshots
 	}
 
-	for _, atmosVar := range atmosVarsToFilter {
+	for _, envVarToFilter := range varsToFilter {
 		// Skip if test explicitly sets this variable
-		if _, exists := tc.Env[atmosVar]; exists {
+		if _, exists := tc.Env[envVarToFilter]; exists {
 			continue
 		}
 
 		// Remove from inherited environment
 		for i, env := range envVars {
-			if strings.HasPrefix(env, atmosVar+"=") {
+			if strings.HasPrefix(env, envVarToFilter+"=") {
 				envVars = append(envVars[:i], envVars[i+1:]...)
 				break
 			}
@@ -1659,6 +1670,14 @@ func normalizeLineEndings(s string) string {
 	return strings.ReplaceAll(s, "\r\n", "\n")
 }
 
+func normalizeSnapshotOutput(input string, ignoreTrailingWhitespace bool) string {
+	normalized := normalizeLineEndings(input)
+	if ignoreTrailingWhitespace {
+		return stripTrailingWhitespace(normalized)
+	}
+	return normalized
+}
+
 // Generate a unified diff using gotextdiff.
 func generateUnifiedDiff(actual, expected string) string {
 	edits := myers.ComputeEdits(span.URIFromPath("actual"), expected, actual)
@@ -1735,15 +1754,11 @@ func getSnapshotFilenames(testName string, isTty bool) (stdout, stderr, tty stri
 
 // verifyTTYSnapshot handles snapshot verification for TTY mode tests.
 func verifyTTYSnapshot(t *testing.T, tc *TestCase, ttyPath, combinedOutput string, regenerate bool) bool {
-	if regenerate {
-		// Strip trailing whitespace from output before saving snapshot if requested.
-		outputToSave := combinedOutput
-		if tc.Expect.IgnoreTrailingWhitespace {
-			outputToSave = stripTrailingWhitespace(combinedOutput)
-		}
+	combinedOutput = normalizeSnapshotOutput(combinedOutput, tc.Expect.IgnoreTrailingWhitespace)
 
+	if regenerate {
 		t.Logf("Updating TTY snapshot at %q", ttyPath)
-		updateSnapshot(ttyPath, outputToSave)
+		updateSnapshot(ttyPath, combinedOutput)
 		return true
 	}
 
@@ -1754,13 +1769,7 @@ $ go test ./tests -run %q -regenerate-snapshots`, ttyPath, t.Name())
 	}
 
 	filteredActual := applyIgnorePatterns(combinedOutput, tc.Expect.Diff)
-	filteredExpected := applyIgnorePatterns(readSnapshot(t, ttyPath), tc.Expect.Diff)
-
-	// Strip trailing whitespace if requested.
-	if tc.Expect.IgnoreTrailingWhitespace {
-		filteredActual = stripTrailingWhitespace(filteredActual)
-		filteredExpected = stripTrailingWhitespace(filteredExpected)
-	}
+	filteredExpected := applyIgnorePatterns(normalizeSnapshotOutput(readSnapshot(t, ttyPath), tc.Expect.IgnoreTrailingWhitespace), tc.Expect.Diff)
 
 	if filteredExpected != filteredActual {
 		var diff string
@@ -1818,8 +1827,8 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Normalize line endings in actual output for cross-platform consistency.
 	// This handles cases where CLI might output CRLF on Windows but snapshots use LF.
-	stdoutOutput = normalizeLineEndings(stdoutOutput)
-	stderrOutput = normalizeLineEndings(stderrOutput)
+	stdoutOutput = normalizeSnapshotOutput(stdoutOutput, tc.Expect.IgnoreTrailingWhitespace)
+	stderrOutput = normalizeSnapshotOutput(stderrOutput, tc.Expect.IgnoreTrailingWhitespace)
 
 	stdoutPath, stderrPath, ttyPath := getSnapshotFilenames(t.Name(), tc.Tty)
 
@@ -1831,18 +1840,10 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Non-TTY mode: separate stdout and stderr snapshots
 	if regenerate {
-		// Strip trailing whitespace from output before saving snapshot if requested.
-		stdoutToSave := stdoutOutput
-		stderrToSave := stderrOutput
-		if tc.Expect.IgnoreTrailingWhitespace {
-			stdoutToSave = stripTrailingWhitespace(stdoutOutput)
-			stderrToSave = stripTrailingWhitespace(stderrOutput)
-		}
-
 		t.Logf("Updating stdout snapshot at %q", stdoutPath)
-		updateSnapshot(stdoutPath, stdoutToSave)
+		updateSnapshot(stdoutPath, stdoutOutput)
 		t.Logf("Updating stderr snapshot at %q", stderrPath)
-		updateSnapshot(stderrPath, stderrToSave)
+		updateSnapshot(stderrPath, stderrOutput)
 		return true
 	}
 
@@ -1854,13 +1855,7 @@ $ go test ./tests -run %q -regenerate-snapshots`, stdoutPath, t.Name())
 	}
 
 	filteredStdoutActual := applyIgnorePatterns(stdoutOutput, tc.Expect.Diff)
-	filteredStdoutExpected := applyIgnorePatterns(readSnapshot(t, stdoutPath), tc.Expect.Diff)
-
-	// Strip trailing whitespace if requested.
-	if tc.Expect.IgnoreTrailingWhitespace {
-		filteredStdoutActual = stripTrailingWhitespace(filteredStdoutActual)
-		filteredStdoutExpected = stripTrailingWhitespace(filteredStdoutExpected)
-	}
+	filteredStdoutExpected := applyIgnorePatterns(normalizeSnapshotOutput(readSnapshot(t, stdoutPath), tc.Expect.IgnoreTrailingWhitespace), tc.Expect.Diff)
 
 	if filteredStdoutExpected != filteredStdoutActual {
 		var diff string
@@ -1881,13 +1876,7 @@ Run the following command to create it:
 $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	}
 	filteredStderrActual := applyIgnorePatterns(stderrOutput, tc.Expect.Diff)
-	filteredStderrExpected := applyIgnorePatterns(readSnapshot(t, stderrPath), tc.Expect.Diff)
-
-	// Strip trailing whitespace if requested.
-	if tc.Expect.IgnoreTrailingWhitespace {
-		filteredStderrActual = stripTrailingWhitespace(filteredStderrActual)
-		filteredStderrExpected = stripTrailingWhitespace(filteredStderrExpected)
-	}
+	filteredStderrExpected := applyIgnorePatterns(normalizeSnapshotOutput(readSnapshot(t, stderrPath), tc.Expect.IgnoreTrailingWhitespace), tc.Expect.Diff)
 
 	if filteredStderrExpected != filteredStderrActual {
 		var diff string

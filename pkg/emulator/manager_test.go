@@ -40,9 +40,31 @@ func TestManager_Resolve_Running(t *testing.T) {
 
 	assert.Equal(t, TargetAWS, endpoint.Target)
 	assert.Equal(t, 54321, endpoint.Ports[4566])
-	assert.Equal(t, "http://localhost:54321", profile.Env["AWS_ENDPOINT_URL"])
+	assert.Equal(t, "http://127.0.0.1:54321", profile.Env["AWS_ENDPOINT_URL"])
 	assert.Equal(t, "1", profile.Env["TEST_DRIVER"], "manager returns the resolved driver's profile env")
 	assert.Equal(t, true, profile.Provider["test_flag"], "manager returns the resolved driver's provider fragment")
+}
+
+func TestManager_Resolve_GitHubJobContainerUsesNetworkAliasEndpoint(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv(envEmulatorUseCurrentContainerNetwork, "")
+	restore := stubEndpointHostDetection(t, true, "")
+	defer restore()
+
+	ctrl := gomock.NewController(t)
+	runtime := NewMockRuntime(ctrl)
+	gomock.InOrder(
+		runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return([]container.Info{runningEmulatorInfo(54321)}, nil),
+		runtime.EXPECT().Inspect(gomock.Any(), gomock.Any()).Return(&container.Info{Networks: []string{"github_network_123"}}, nil),
+	)
+
+	m := newManagerWithRuntime(runtime)
+	endpoint, profile, err := m.Resolve(context.Background(), &Spec{Driver: testDriverName}, "dev", "aws")
+	require.NoError(t, err)
+
+	assert.Equal(t, "dev-aws", endpoint.Host)
+	assert.Equal(t, 4566, endpoint.Ports[4566])
+	assert.Equal(t, "http://dev-aws:4566", profile.Env["AWS_ENDPOINT_URL"])
 }
 
 func TestManager_Resolve_NotRunning(t *testing.T) {

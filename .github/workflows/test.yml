@@ -55,8 +55,13 @@ jobs:
             target: linux
           - os: "windows-latest"
             target: windows
-          - os: "macos-latest"
+          - os: "macos-15"
             target: macos
+          # Docker-backed macOS CI uses Colima. GitHub's M-series macOS runners
+          # do not support the virtualization path Colima needs, so build a
+          # separate Intel artifact for the k3s macOS jobs only.
+          - os: "macos-15-intel"
+            target: macos-intel
     runs-on: ${{ matrix.os }}
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
@@ -68,6 +73,7 @@ jobs:
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Check out code into the Go module directory
@@ -121,7 +127,7 @@ jobs:
         flavor:
           - { os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false", target: linux }
           - { os: "windows-latest", target: windows }
-          - { os: "macos-latest", target: macos }
+          - { os: "macos-15", target: macos }
     timeout-minutes: 60
     runs-on: ${{ matrix.flavor.os }}
     steps:
@@ -136,6 +142,7 @@ jobs:
 
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
@@ -148,7 +155,7 @@ jobs:
       - name: Add build artifacts directory to PATH for linux or macos
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
         run: |
-          echo "${{ github.workspace }}" >> $GITHUB_PATH
+          echo "${{ github.workspace }}" >> "$GITHUB_PATH"
           chmod +x "${{ github.workspace }}/atmos"
 
       - name: Add build artifacts directory to PATH for windows
@@ -160,13 +167,6 @@ jobs:
             throw "atmos.exe not found at: $atmosPath"
           }
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
-
-      - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@fc711fa910b93cba0f3fbecaafc9f42fd0c411cb # v2.0.0
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        with:
-          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
-          tofu_wrapper: false
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
@@ -186,17 +186,21 @@ jobs:
         continue-on-error: true
         uses: ./actions/cache
 
-      - name: Install Helm and Helmfile
+      - name: Install Terraform, OpenTofu, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
           atmos toolchain install --default helm/helm@${{ env.HELM_VERSION }}
           atmos toolchain install --default helmfile/helmfile@${{ env.HELMFILE_VERSION }}
           atmos toolchain env --format=github
 
-      - name: Verify Helm and Helmfile
+      - name: Verify OpenTofu, Helm, and Helmfile
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
+          tofu version
           helm version --short
           helmfile version
 
@@ -232,7 +236,7 @@ jobs:
           make deps
 
       - name: Terraform registry cache acceptance test
-        timeout-minutes: 10
+        timeout-minutes: 25
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -242,13 +246,10 @@ jobs:
           CGO_ENABLED: 0
         run: go test ./tests -run '^TestTerraformRegistryCache$' -count=1 -timeout 10m -v
 
-      # Enable this after merging test-cases
-      # Only seems to work with remote schema files
-      #- name: Validate YAML Schema for Test Cases
-      #  run: |
-      #    npx --yes yaml-ls-check@1.5.1 schema \
-      #      "schema.json" \
-      #      "tests/test-cases/**/*.yaml"
+      # NOTE: The test-case YAML files (tests/test-cases/*.yaml) are validated against
+      # tests/test-cases/schema.json by the Go test `TestTestCaseSchemaValidation`, which
+      # dogfoods Atmos's own schema validator (the engine behind `atmos validate schema`).
+      # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
       - name: Acceptance tests with coverage
         timeout-minutes: 45
@@ -335,7 +336,7 @@ jobs:
           ignore: DL3008
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         if: always()
         with:
           # Path to SARIF file relative to the root of the repository
@@ -358,6 +359,7 @@ jobs:
       matrix:
         demo-folder:
           - emulator-aws
+          - terraform-tests
 
     timeout-minutes: 30
     steps:
@@ -376,16 +378,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Add Terraform from Atmos toolchain to PATH
+      - name: Install Terraform and OpenTofu with Atmos toolchain
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
           atmos toolchain env --format=github
 
-      - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@fc711fa910b93cba0f3fbecaafc9f42fd0c411cb # v2.0.0
-        with:
-          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
-          tofu_wrapper: false
+      - name: Verify OpenTofu
+        run: tofu version
 
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
@@ -423,7 +425,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: build-artifacts-linux
           path: /usr/local/bin
@@ -465,55 +467,73 @@ jobs:
           FLOCI_GCP_ENDPOINT: "http://localhost:4588"
           FLOCI_AZURE_ENDPOINT: "http://localhost:4577"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: go test ./tests -run 'Test(AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E' -count=1 -timeout 15m -v
+        run: go test ./tests -run 'Test((AWS(StoreHooks|Secrets)|GCPSecrets|AzureSecrets)FlociE2E|LocalGitOpsPushE2E)' -count=1 -timeout 15m -v
 
   # run k3s demo tests
   k3s:
-    name: "[k3s] ${{ matrix.demo-folder }}"
+    name: "[k3s-${{ matrix.flavor.target }}] ${{ matrix.demo-folder }}"
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.flavor.os }}
     env:
-      KUBECONFIG: ${{github.workspace}}/examples/${{ matrix.demo-folder }}/kubeconfig.yaml
       ATMOS_LOGS_LEVEL: Debug
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
     strategy:
+      fail-fast: false
       matrix:
+        flavor:
+          - { os: ubuntu-latest, target: linux, artifact: linux }
+          - { os: "macos-15-intel", target: macos, artifact: macos-intel }
         demo-folder:
           - demo-helmfile
+          - helm
 
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: Start Docker Compose
-        working-directory: examples/${{ matrix.demo-folder }}
-        run: docker compose up -d --wait
+      # The local k3s cluster is no longer started via docker-compose: `atmos test`
+      # brings it up through the native Kubernetes emulator (`atmos emulator up
+      # kubernetes`), which runs the privileged k3s container itself on the runner's
+      # Docker, and the helmfile component harvests its kubeconfig via `!emulator`.
 
-      - name: Wait for k3s to start
-        working-directory: examples/${{ matrix.demo-folder }}
+      - name: Start Docker-compatible runtime on macOS
+        if: matrix.flavor.target == 'macos'
         run: |
-          until kubectl get pods --all-namespaces >/dev/null 2>&1; do
-            echo "Retrying..."
-            sleep 1
-          done
-          kubectl get pods --all-namespaces
+          if brew tap | grep -qx 'aws/tap'; then
+            brew untap aws/tap
+          fi
+          brew install colima docker qemu
+          colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20
+          docker version
 
       - name: Download build artifacts
         uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
-          name: build-artifacts-linux
+          name: build-artifacts-${{ matrix.flavor.artifact }}
           path: /usr/local/bin
 
       - name: Set execute permissions on atmos
         run: chmod +x /usr/local/bin/atmos
 
       - name: Install the Cloud Posse package repository
+        if: matrix.flavor.target == 'linux'
         run: curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | sudo bash
 
-      - name: Install kubectl and helmfile
+      - name: Install kubectl and helmfile on Linux
+        if: matrix.flavor.target == 'linux'
         run: sudo apt-get -y install kubectl helmfile
+
+      - name: Install kubectl and helmfile on macOS
+        if: matrix.flavor.target == 'macos'
+        run: |
+          if brew tap | grep -qx 'aws/tap'; then
+            brew untap aws/tap
+          fi
+          brew install kubectl helmfile
 
       - name: Install Helm
         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
@@ -533,6 +553,70 @@ jobs:
           cd examples/${{ matrix.demo-folder }}
           atmos test
 
+  k3s-required:
+    name: "[k3s] demo-helmfile"
+    needs: k3s
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - name: Check k3s matrix result
+        run: |
+          if [ "${{ needs.k3s.result }}" != "success" ]; then
+            echo "k3s matrix result was '${{ needs.k3s.result }}'"
+            exit 1
+          fi
+
+  # Exercise the Kubernetes native component against a real kube-apiserver+etcd
+  # control plane (started by controller-runtime envtest): server-side apply,
+  # dry-run diff, delete, server-side validate, and a CRD round-trip. The
+  # control-plane binaries are provisioned on demand by the tests themselves via
+  # the Atmos toolchain (an inline registry in envtest_test.go) — there is no
+  # install step here. Windows is intentionally excluded: there is no official
+  # kube-apiserver build for it, so the tests are gated off that platform.
+  #
+  # The binaries land in the toolchain cache under the user cache dir; CI does
+  # not yet persist that across runs, so each run re-downloads the (small)
+  # tarball. Adding an actions/cache step keyed on the envtest version is an
+  # easy follow-up.
+  kubernetes-e2e:
+    name: "[kubernetes] e2e tests (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          cache: false
+          go-version-file: "go.mod"
+
+      - name: Run Kubernetes end-to-end tests
+        env:
+          GOCACHE: ${{ runner.temp }}/go-build
+          GOTMPDIR: ${{ runner.temp }}/go-tmp
+          TMPDIR: ${{ runner.temp }}/tmp
+          # Atmos builds with CGO disabled (see Makefile). Match that here so the
+          # toolchain's transitive CGO dependencies (e.g. bearsh/hid → libudev)
+          # are not compiled — they are unused and libudev is absent on runners.
+          CGO_ENABLED: "0"
+          # Fail loudly if the control plane can't be provisioned/started, rather
+          # than silently skipping all coverage.
+          ATMOS_ENVTEST_REQUIRED: "true"
+        run: |
+          mkdir -p "$GOCACHE" "$GOTMPDIR" "$TMPDIR"
+          go test -tags envtest -count=1 ./pkg/component/kubernetes/... -run TestEnvtest
+
   # run other demo tests
   mock:
     name: "[mock-${{ matrix.flavor.target}}] ${{ matrix.demo-folder }}"
@@ -544,7 +628,7 @@ jobs:
         flavor:
           - { os: ubuntu-latest, target: linux }
           - { os: windows-latest, target: windows }
-          - { os: macos-latest, target: macos }
+          - { os: "macos-15", target: macos }
         demo-folder:
           - examples/demo-atlantis
           # - examples/demo-component-manifest
@@ -577,6 +661,7 @@ jobs:
 
       - name: Add GNU tar to flavor.target (significantly faster than windows tar)
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
+        shell: pwsh
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Download build artifacts for ${{ matrix.flavor.target }}
@@ -589,7 +674,7 @@ jobs:
       - name: Add build artifacts directory to PATH for linux or macos
         if: matrix.flavor.target == 'linux' || matrix.flavor.target == 'macos'
         run: |
-          echo "${{ github.workspace }}" >> $GITHUB_PATH
+          echo "${{ github.workspace }}" >> "$GITHUB_PATH"
           chmod +x "${{ github.workspace }}/atmos"
 
       - name: Add build artifacts directory to PATH for windows
@@ -598,18 +683,18 @@ jobs:
         run: |
           echo "${{ github.workspace }}" >> $Env:GITHUB_PATH
 
-      - name: Add Terraform from Atmos toolchain to PATH
+      - name: Install Terraform and OpenTofu with Atmos toolchain
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           atmos toolchain install hashicorp/terraform
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
           atmos toolchain env --format=github
 
-      - name: Install OpenTofu
+      - name: Verify OpenTofu
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: opentofu/setup-opentofu@fc711fa910b93cba0f3fbecaafc9f42fd0c411cb # v2.0.0
-        with:
-          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
-          tofu_wrapper: false
+        run: tofu version
 
       - name: Run tests in ${{ matrix.demo-folder }} for ${{ matrix.flavor.target }}
         working-directory: ${{ matrix.demo-folder }}
@@ -617,7 +702,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos test
+          # Retry to ride out transient registry/network failures — e.g. a 502
+          # from github.com while terraform fetches a provider signature. A
+          # genuine test failure still fails on the final attempt.
+          for attempt in 1 2 3; do
+            atmos test && exit 0
+            status=$?
+            echo "atmos test failed (attempt ${attempt}/3, status ${status})" >&2
+            [ "${attempt}" -lt 3 ] && sleep 15
+          done
+          exit "${status}"
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -636,7 +730,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          atmos test
+          # Retry to ride out transient registry/network failures (e.g. a 502
+          # from github.com during terraform provider download). A genuine test
+          # failure still fails on the final attempt.
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            atmos test
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Output "atmos test failed (attempt $attempt/3, exit $LASTEXITCODE)"
+            if ($attempt -lt 3) { Start-Sleep -Seconds 15 }
+          }
+          exit $LASTEXITCODE
 
   # run other demo tests
   lint:
@@ -678,11 +781,24 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install OpenTofu
-        uses: opentofu/setup-opentofu@fc711fa910b93cba0f3fbecaafc9f42fd0c411cb # v2.0.0
+      - name: Download build artifacts
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
-          tofu_version: ${{ env.OPEN_TOFU_VERSION }}
-          tofu_wrapper: false
+          name: build-artifacts-linux
+          path: /usr/local/bin
+
+      - name: Set execute permissions on atmos
+        run: chmod +x /usr/local/bin/atmos
+
+      - name: Install OpenTofu with Atmos toolchain
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          atmos toolchain install --default opentofu/opentofu@${{ env.OPEN_TOFU_VERSION }}
+          atmos toolchain env --format=github
+
+      - name: Verify OpenTofu
+        run: tofu version
 
       - name: Lint examples/${{ matrix.demo-folder }}/components/terraform
         uses: reviewdog/action-tflint@54a5e5aed57dcfbb4662ec548de876df33d6288d # v1
@@ -708,16 +824,23 @@ jobs:
         demo-folder:
           - demo-context
           - emulator-aws
+          - terraform-tests
           - demo-stacks
-          - demo-helmfile
           - quick-start-simple
-          # quick-start-advanced is intentionally NOT validated here. It now uses runtime
-          # Atmos YAML functions (`!terraform.state`, `!store`, `!secret`) that the static
-          # yaml-language-server cannot resolve (the InoUno/yaml-ls-check action hardcodes
-          # an empty customTags list, so unknown tags fail with "Unresolved tag"). Every
-          # other function-using example (custom-components, sops-secrets,
-          # onepassword-secrets, native-terraform) is likewise excluded from this matrix.
-          # The example is still exercised end-to-end by the floci and acceptance jobs.
+          # Examples below use runtime Atmos YAML functions (`!terraform.state`, `!store`,
+          # `!secret`, …). They were previously excluded because the static yaml-language-server
+          # hardcodes an empty customTags list and fails them with "Unresolved tag". Atmos
+          # itself understands its own tags natively, so `atmos validate stacks` validates them.
+          - custom-components
+          - sops-secrets
+          - onepassword-secrets
+          # quick-start-advanced and native-terraform are intentionally NOT validated here:
+          #   - quick-start-advanced: its `stacks/workflows/*.yaml` manifests use newer workflow
+          #     step types (`type: stage`/`spin`, `title:`) that the atmos-manifest JSON Schema
+          #     does not describe yet, so schema validation fails. (Functions now parse fine.)
+          #   - native-terraform: intentionally configures no `stacks.name_pattern`/`name_template`,
+          #     which `atmos validate stacks` requires, so the command cannot resolve stacks.
+          # Both are still exercised end-to-end by the floci and acceptance jobs.
 
     timeout-minutes: 20
     steps:
@@ -726,31 +849,30 @@ jobs:
         with:
           persist-credentials: false
 
-      # The example stacks pin their `# yaml-language-server: $schema` modeline to the
-      # published schema at atmos.tools, which only updates after a PR merges and the site
-      # deploys. yaml-language-server gives the inline modeline absolute precedence over the
-      # `schemaMapping` below, so without this step the examples would always validate against
-      # the live (stale) schema — and a PR could never add a schema field and use it in an
-      # example at the same time. Rewrite the modeline URL to the in-repo schema (ephemeral,
-      # CI checkout only) so examples are validated against the schema this PR actually ships.
-      # The committed files keep the public URL for users who copy them.
-      - name: Use in-repo schema for validation
-        run: |
-          find "examples/${{ matrix.demo-folder }}/stacks" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0 \
-            | xargs -0 --no-run-if-empty sed -i \
-              "s#https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#file://${GITHUB_WORKSPACE}/website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json#g"
-
-      - name: Validate YAML Schema for Stacks
-        uses: InoUno/yaml-ls-check@2c229b85b877b2853b40bd0fbdcfccff5ff735c7 # v1.4.0
+      - name: Download build artifacts
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
-          root: "examples/${{ matrix.demo-folder }}/stacks"
-          schemaMapping: |
-            {
-              "file://${{ github.workspace }}/website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json": [
-                "examples/${{ matrix.demo-folder }}/stacks/**/*.yaml",
-                "examples/${{ matrix.demo-folder }}/stacks/**/*.yml"
-              ]
-            }
+          name: build-artifacts-linux
+          path: /usr/local/bin
+
+      - name: Set execute permissions on atmos
+        run: chmod +x /usr/local/bin/atmos
+
+      # Dogfood Atmos to validate the example stacks instead of a third-party action.
+      # `atmos validate stacks` checks YAML syntax, validates every manifest against the
+      # Atmos manifest JSON Schema, resolves imports, and detects duplicate components —
+      # and it understands Atmos YAML tags natively (`!terraform.state`, `!store`, `!secret`).
+      #
+      # `--schemas-atmos-manifest` points at the in-repo schema this PR ships (rather than the
+      # published schema at atmos.tools, which only updates after merge + site deploy), so a PR
+      # can add a schema field and use it in an example at the same time. This overrides any
+      # per-example `schemas.atmos.manifest` config. Atmos ignores the `# yaml-language-server:
+      # $schema` modeline, so the committed files keep their public URL for users who copy them.
+      - name: Validate stacks
+        working-directory: examples/${{ matrix.demo-folder }}
+        run: |
+          atmos validate stacks \
+            --schemas-atmos-manifest "${GITHUB_WORKSPACE}/website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 
   # run container step tests against a local registry (build -> push -> run)
   # Docker is available directly on the runner (see the k3s job), and a
@@ -771,7 +893,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
           name: build-artifacts-linux
           path: /usr/local/bin
@@ -805,7 +927,7 @@ jobs:
           echo "failing-check correctly returned a non-zero exit code"
 
   release:
-    needs: [test, lint, mock, k3s, floci, floci-go, docker, validate, container-step]
+    needs: [test, kubernetes-e2e, lint, mock, k3s, floci, floci-go, docker, validate, container-step]
     if: github.event_name == 'push'
     uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@8244c7c9142e92281e7841f655fa48e9ceb9b454 # main
     with:

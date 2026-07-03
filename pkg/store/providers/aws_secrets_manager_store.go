@@ -110,6 +110,11 @@ func (s *SecretsManagerStore) SetAuthContext(resolver store.AuthContextResolver,
 	}
 }
 
+// IdentityName returns the configured identity for default identity inheritance.
+func (s *SecretsManagerStore) IdentityName() string {
+	return s.identityName
+}
+
 func (s *SecretsManagerStore) initDefaultClient() error {
 	ctx := context.TODO()
 	cfgOpts := []func(*config.LoadOptions) error{config.WithRegion(s.region)}

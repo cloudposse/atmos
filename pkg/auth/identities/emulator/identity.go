@@ -196,13 +196,40 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 	if params == nil || params.AuthContext == nil || i.resolver == nil || i.config == nil {
 		return nil
 	}
-	if i.config.Kind == types.IdentityKindAWSEmulator {
+	switch i.config.Kind {
+	case types.IdentityKindAWSEmulator:
 		return i.setAWSAuthContext(ctx, params)
+	case types.IdentityKindGCPEmulator:
+		return i.setGCPAuthContext(ctx, params)
+	case types.IdentityKindAzureEmulator:
+		return i.setAzureAuthContext(ctx, params)
+	default:
+		// Kubernetes is consumed via KUBECONFIG (PrepareEnvironment), so it needs
+		// nothing here.
+		return nil
 	}
-	// TODO(emulator): populate the GCP/Azure auth contexts for gcp/azure emulator
-	// identities so their in-process stores work too (the subprocess/Terraform path
-	// already works for every target via PrepareEnvironment).
-	return nil
+}
+
+// resolveEmulatorEnvForContext resolves the bound emulator's env profile for
+// populating the in-process auth context. It returns (nil, nil) when no stack is
+// available to scope the emulator instance — auth flows that don't actually need the
+// in-process context still work (the AuthContext is simply left unpopulated). A
+// resolver failure (e.g. emulator not running) is surfaced rather than swallowed, so
+// in-process consumers get a clear error here instead of failing later against the
+// real cloud with a confusing credentials error.
+func (i *Identity) resolveEmulatorEnvForContext(ctx context.Context, params *types.PostAuthenticateParams) (map[string]string, error) {
+	stack := i.stack
+	if params.StackInfo != nil && params.StackInfo.Stack != "" {
+		stack = params.StackInfo.Stack
+	}
+	if stack == "" {
+		return nil, nil
+	}
+	env, _, err := i.resolver.ResolveEmulator(ctx, stack, i.config.Emulator)
+	if err != nil {
+		return nil, fmt.Errorf("resolve emulator %q for identity %q: %w", i.config.Emulator, i.Name(), err)
+	}
+	return env, nil
 }
 
 // Logout removes the harvested kubeconfig file (best-effort). No-op for cloud targets.

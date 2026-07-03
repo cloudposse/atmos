@@ -10,12 +10,11 @@ Valid subcommands are:
   • generate
   • source
   • sync
+  • template
   • version
 
 ## Usage
 
  atmos helmfile [sub-command] [flags]
-
-## Hints
 
 💡 Run atmos helmfile --help for usage

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -99,6 +100,37 @@ func TestManager_Up_CreatesAndStartsContainer(t *testing.T) {
 	assert.Equal(t, 40001, endpoint.Ports[4566])
 }
 
+func TestManager_Up_GitHubJobContainerAttachesCurrentNetworkAlias(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv(envEmulatorUseCurrentContainerNetwork, "")
+	restore := stubEndpointHostDetection(t, true, "")
+	defer restore()
+
+	ctrl := gomock.NewController(t)
+	runtime := NewMockRuntime(ctrl)
+	gomock.InOrder(
+		runtime.EXPECT().Inspect(gomock.Any(), gomock.Any()).Return(&container.Info{Networks: []string{"github_network_123"}}, nil),
+		runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, nil),
+		runtime.EXPECT().Create(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, create *container.CreateConfig) (string, error) {
+				require.Len(t, create.Networks, 1)
+				assert.Equal(t, "github_network_123", create.Networks[0].Name)
+				assert.Equal(t, []string{"dev-aws"}, create.Networks[0].Aliases)
+				return "new-id", nil
+			}),
+		runtime.EXPECT().Start(gomock.Any(), "new-id").Return(nil),
+		runtime.EXPECT().List(gomock.Any(), gomock.Any()).
+			Return([]container.Info{runningEmulatorInfo(40001)}, nil),
+		runtime.EXPECT().Inspect(gomock.Any(), gomock.Any()).Return(&container.Info{Networks: []string{"github_network_123"}}, nil),
+	)
+
+	m := newManagerWithRuntime(runtime)
+	endpoint, err := m.Up(context.Background(), &Spec{Driver: testDriverName}, "dev", "aws", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "dev-aws", endpoint.Host)
+	assert.Equal(t, 4566, endpoint.Ports[4566])
+}
+
 func TestManager_Up_UpWithRuntimeError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	runtime := NewMockRuntime(ctrl)
@@ -173,6 +205,10 @@ func TestManager_Exec_DefaultsToShell(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	runtime := NewMockRuntime(ctrl)
 	info := runningEmulatorInfo(54321)
+	originalStdinIsTerminal := stdinIsTerminal
+	stdinIsTerminal = func() bool { return true }
+	t.Cleanup(func() { stdinIsTerminal = originalStdinIsTerminal })
+
 	runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return([]container.Info{info}, nil)
 	runtime.EXPECT().
 		Exec(gomock.Any(), info.ID, []string{"/bin/sh"}, gomock.AssignableToTypeOf(&container.ExecOptions{})).
@@ -186,6 +222,29 @@ func TestManager_Exec_DefaultsToShell(t *testing.T) {
 
 	m := newManagerWithRuntime(runtime)
 	require.NoError(t, m.Exec(context.Background(), "dev", "aws", nil))
+}
+
+func TestManager_Exec_NonInteractiveDisablesTTYAndStdin(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	runtime := NewMockRuntime(ctrl)
+	info := runningEmulatorInfo(54321)
+	originalStdinIsTerminal := stdinIsTerminal
+	stdinIsTerminal = func() bool { return false }
+	t.Cleanup(func() { stdinIsTerminal = originalStdinIsTerminal })
+
+	runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return([]container.Info{info}, nil)
+	runtime.EXPECT().
+		Exec(gomock.Any(), info.ID, []string{"env"}, gomock.AssignableToTypeOf(&container.ExecOptions{})).
+		DoAndReturn(func(_ context.Context, _ string, _ []string, opts *container.ExecOptions) error {
+			assert.False(t, opts.Tty)
+			assert.False(t, opts.AttachStdin)
+			assert.True(t, opts.AttachStdout)
+			assert.True(t, opts.AttachStderr)
+			return nil
+		})
+
+	m := newManagerWithRuntime(runtime)
+	require.NoError(t, m.Exec(context.Background(), "dev", "aws", []string{"env"}))
 }
 
 func TestManager_Exec_UsesProvidedCommand(t *testing.T) {
@@ -258,19 +317,34 @@ func TestManager_Resolve_KubernetesHarvestsKubeconfig(t *testing.T) {
 	assert.Equal(t, 16443, endpoint.Ports[kubeTestDriverPort])
 	assert.Equal(t, "1", profile.Env["KUBE_DRIVER"])
 	require.NotEmpty(t, profile.Kubeconfig)
-	// The harvested kubeconfig's server URL is rewritten to the live host port.
-	assert.Contains(t, string(profile.Kubeconfig), "server: https://localhost:16443")
+	// The harvested kubeconfig's server URL is rewritten to the live host port on
+	// the IPv4 loopback literal (not "localhost"; see loopbackHostToIPv4).
+	assert.Contains(t, string(profile.Kubeconfig), "server: https://127.0.0.1:16443")
 }
 
 func TestManager_Resolve_KubernetesKubeconfigError(t *testing.T) {
+	// The kubeconfig harvest retries the readiness race; pin the timeout to 0 so a
+	// persistent exec error fails after a single attempt (matching the mock counts).
+	origTimeout := kubeconfigReadyTimeout
+	defer func() { kubeconfigReadyTimeout = origTimeout }()
+	kubeconfigReadyTimeout = 0
+
 	ctrl := gomock.NewController(t)
 	runtime := NewMockRuntime(ctrl)
 	info := kubeRunningInfo(16443)
 	runtime.EXPECT().List(gomock.Any(), gomock.Any()).
-		Return([]container.Info{info}, nil).Times(2)
+		Return([]container.Info{info}, nil).AnyTimes()
 	runtime.EXPECT().
 		Exec(gomock.Any(), info.ID, []string{"cat", k3sKubeconfigPath}, gomock.Any()).
-		Return(errRuntimeBoom)
+		Return(errRuntimeBoom).AnyTimes()
+	oldTimeout := kubeconfigReadyTimeout
+	oldInterval := kubeconfigPollInterval
+	kubeconfigReadyTimeout = time.Millisecond
+	kubeconfigPollInterval = time.Millisecond
+	t.Cleanup(func() {
+		kubeconfigReadyTimeout = oldTimeout
+		kubeconfigPollInterval = oldInterval
+	})
 
 	m := newManagerWithRuntime(runtime)
 	_, _, err := m.Resolve(context.Background(), &Spec{Driver: kubeTestDriverName}, "dev", "k8s")

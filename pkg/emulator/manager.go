@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/container"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"golang.org/x/term"
 )
 
 const defaultProtocol = "tcp"
@@ -24,6 +27,10 @@ type Manager struct {
 	runtime     container.Runtime // injected for tests; detected per call when nil.
 	runtimePref string
 	autoStart   bool
+}
+
+var stdinIsTerminal = func() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 // NewManager returns a Manager that detects the container runtime using the given
@@ -63,6 +70,9 @@ func (m *Manager) Up(ctx context.Context, spec *Spec, stack, name string, env ma
 	if err != nil {
 		return Endpoint{}, err
 	}
+	// Join the per-stack shared network so emulators can resolve each other by
+	// component name (e.g. a GitOps controller in k3s reaching the Gitea emulator).
+	m.attachSharedNetwork(ctx, runtime, namedConfig, stack, name)
 	if _, err := container.UpWithRuntime(ctx, runtime, namedConfig); err != nil {
 		return Endpoint{}, err
 	}
@@ -75,6 +85,14 @@ func (m *Manager) Up(ctx context.Context, spec *Spec, stack, name string, env ma
 	// unseal, and enable KV v2 (or re-unseal from the persisted bootstrap) before the
 	// endpoint is considered ready.
 	if err := m.bootstrapVaultIfNeeded(ctx, runtime, spec, stack, name); err != nil {
+		return Endpoint{}, err
+	}
+	// A fresh Gitea server boots installed-but-empty; create the admin user and the
+	// deployment repository so the GitOps loop has something to push to and clone.
+	if err := m.bootstrapGitIfNeeded(ctx, runtime, spec, stack, name); err != nil {
+		return Endpoint{}, err
+	}
+	if err := m.waitKubernetesIfNeeded(ctx, runtime, spec, stack, name); err != nil {
 		return Endpoint{}, err
 	}
 	return m.endpoint(ctx, runtime, spec, stack, name)
@@ -117,6 +135,53 @@ func (m *Manager) bootstrapVaultIfNeeded(ctx context.Context, runtime container.
 		return fmt.Errorf("%w: %s/emulator/%s did not start", errUtils.ErrEmulatorNotRunning, stack, name)
 	}
 	return bootstrapVault(ctx, runtime, info.ID)
+}
+
+// bootstrapGitIfNeeded creates the Gitea admin user and deployment repository when
+// the spec's target is git; it is a no-op for every other target. The repository
+// is created over the live HTTP endpoint, so the host port is read back from the
+// running container the same way endpoint() does.
+func (m *Manager) bootstrapGitIfNeeded(ctx context.Context, runtime container.Runtime, spec *Spec, stack, name string) error {
+	target, err := spec.Target()
+	if err != nil {
+		return err
+	}
+	if target != TargetGit {
+		return nil
+	}
+	info, found, err := container.FindInstance(ctx, runtime, stack, cfg.EmulatorComponentType, name)
+	if err != nil {
+		return err
+	}
+	if !found || !container.IsContainerRunning(info.Status) {
+		return fmt.Errorf("%w: %s/emulator/%s did not start", errUtils.ErrEmulatorNotRunning, stack, name)
+	}
+	endpoint, err := m.endpoint(ctx, runtime, spec, stack, name)
+	if err != nil {
+		return err
+	}
+	baseURL := endpoint.URL("http")
+	if baseURL == "" {
+		return fmt.Errorf("%w: %s/emulator/%s has no published HTTP port", errUtils.ErrEmulatorNotRunning, stack, name)
+	}
+	return bootstrapGitea(ctx, runtime, info.ID, baseURL)
+}
+
+// waitKubernetesIfNeeded blocks until a Kubernetes emulator has produced a
+// harvestable kubeconfig and registered a Ready node. K3s writes kubeconfig before
+// the API server is stable enough for immediate Helm/Kubectl release operations.
+func (m *Manager) waitKubernetesIfNeeded(ctx context.Context, runtime container.Runtime, spec *Spec, stack, name string) error {
+	target, err := spec.Target()
+	if err != nil {
+		return err
+	}
+	if target != TargetKubernetes {
+		return nil
+	}
+	if _, err := m.Kubeconfig(ctx, stack, name); err != nil {
+		return err
+	}
+	return m.waitKubernetesReady(ctx, runtime, stack, name)
 }
 
 func (m *Manager) namedConfig(spec *Spec, stack, name string, env map[string]string, rootless bool) (*container.NamedConfig, error) {
@@ -173,12 +238,75 @@ func (m *Manager) namedConfig(spec *Spec, stack, name string, env map[string]str
 		Env:              mergeEnv(defaultEnv, env),
 		Mounts:           mounts,
 		Privileged:       privileged,
+		Host:             spec.HostRuntime(),
 		Restart:          restart,
 		HealthCheck:      healthCheck,
 		PullPolicy:       container.PullMissing,
 		RuntimeName:      m.runtimePref,
 		RuntimeAutoStart: m.autoStart,
 	}, nil
+}
+
+// emulatorNetworkName is the per-stack user network emulators join so containers
+// in the same stack resolve each other by component name (container DNS). Derived
+// from the stack alone and sanitized to a valid network name.
+func emulatorNetworkName(stack string) string {
+	return "atmos-emulator-" + sanitizeNetworkToken(stack)
+}
+
+func emulatorNetworkAlias(stack, name string) string {
+	return sanitizeNetworkToken(stack + "-" + name)
+}
+
+// sanitizeNetworkToken reduces a stack name to characters valid in a docker/podman
+// network name ([a-zA-Z0-9_.-]); any other rune becomes '-'.
+func sanitizeNetworkToken(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '.', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	if b.Len() == 0 {
+		return "default"
+	}
+	return b.String()
+}
+
+// attachSharedNetwork best-effort joins the emulator container to the per-stack
+// shared network with its component name as a network alias, so peers resolve it
+// by name. It is a no-op when the runtime cannot create networks (e.g. a test
+// mock) or network creation fails — single-emulator use still works over the
+// default bridge, only cross-container name resolution is lost.
+func (m *Manager) attachSharedNetwork(ctx context.Context, runtime container.Runtime, namedConfig *container.NamedConfig, stack, name string) {
+	defer perf.Track(nil, "emulator.Manager.attachSharedNetwork")()
+
+	alias := emulatorNetworkAlias(stack, name)
+	if network := currentContainerNetwork(ctx, runtime); network != "" {
+		namedConfig.Networks = append(namedConfig.Networks, container.NetworkAttachment{
+			Name:    network,
+			Aliases: []string{alias},
+		})
+		return
+	}
+
+	ensurer, ok := runtime.(container.NetworkEnsurer)
+	if !ok {
+		return
+	}
+	network := emulatorNetworkName(stack)
+	if err := ensurer.EnsureNetwork(ctx, network); err != nil {
+		log.Debug("emulator shared network unavailable; containers will not resolve each other by name",
+			"network", network, "error", err)
+		return
+	}
+	namedConfig.Networks = append(namedConfig.Networks, container.NetworkAttachment{
+		Name:    network,
+		Aliases: []string{alias},
+	})
 }
 
 // resolveRootlessRun applies the driver's rootless override under a rootless
@@ -307,6 +435,22 @@ func (m *Manager) endpoint(ctx context.Context, runtime container.Runtime, spec 
 	if err != nil {
 		return Endpoint{}, err
 	}
+	if network := currentContainerNetwork(ctx, runtime); network != "" {
+		ports, ok := containerPorts(spec)
+		if ok {
+			return Endpoint{
+				Target:   target,
+				Host:     emulatorNetworkAlias(stack, name),
+				Ports:    ports,
+				Region:   spec.Region,
+				Project:  spec.Project,
+				Services: spec.Services,
+			}, nil
+		}
+		log.Debug("emulator current container network detected but container ports are unavailable; falling back to published host ports",
+			"network", network, "component", name)
+	}
+
 	ports := make(map[int]int, len(info.Ports))
 	for _, binding := range info.Ports {
 		if binding.HostPort != 0 {
@@ -315,12 +459,28 @@ func (m *Manager) endpoint(ctx context.Context, runtime container.Runtime, spec 
 	}
 	return Endpoint{
 		Target:   target,
-		Host:     "localhost",
+		Host:     reachableHostForPublishedPorts(),
 		Ports:    ports,
 		Region:   spec.Region,
 		Project:  spec.Project,
 		Services: spec.Services,
 	}, nil
+}
+
+func containerPorts(spec *Spec) (map[int]int, bool) {
+	defer perf.Track(nil, "emulator.containerPorts")()
+
+	specPorts, err := spec.ContainerPorts()
+	if err != nil || len(specPorts) == 0 {
+		return nil, false
+	}
+	ports := make(map[int]int, len(specPorts))
+	for _, binding := range specPorts {
+		if binding.Container != 0 {
+			ports[binding.Container] = binding.Container
+		}
+	}
+	return ports, len(ports) > 0
 }
 
 // Down stops and removes the emulator's container.
@@ -412,23 +572,27 @@ func (m *Manager) Exec(ctx context.Context, stack, name string, command []string
 	if len(command) == 0 {
 		command = []string{"/bin/sh"}
 	}
+	interactive := stdinIsTerminal()
 	return runtime.Exec(ctx, info.ID, command, &container.ExecOptions{
-		AttachStdin:  true,
+		AttachStdin:  interactive,
 		AttachStdout: true,
 		AttachStderr: true,
-		Tty:          true,
+		Tty:          interactive,
 	})
 }
 
-// Status is one row of `atmos emulator ps`.
+// Status is one row of `atmos emulator ps` / `atmos emulator list`.
 type Status struct {
 	Name   string
+	Stack  string
 	Image  string
 	Status string
 	ID     string
 }
 
-// Ps lists emulator containers in a stack (by canonical labels).
+// Ps lists emulator containers (by canonical labels). When stack is non-empty it
+// returns only that stack's emulators; an empty stack returns every emulator
+// across all stacks (used by `atmos emulator list` without `--stack`).
 func (m *Manager) Ps(ctx context.Context, stack string) ([]Status, error) {
 	defer perf.Track(nil, "emulator.Manager.Ps")()
 
@@ -445,11 +609,13 @@ func (m *Manager) Ps(ctx context.Context, stack string) ([]Status, error) {
 	}
 	statuses := make([]Status, 0, len(infos))
 	for i := range infos {
-		if infos[i].Labels[container.LabelStack] != stack {
+		instanceStack := infos[i].Labels[container.LabelStack]
+		if stack != "" && instanceStack != stack {
 			continue
 		}
 		statuses = append(statuses, Status{
 			Name:   infos[i].Labels[container.LabelComponent],
+			Stack:  instanceStack,
 			Image:  infos[i].Image,
 			Status: infos[i].Status,
 			ID:     infos[i].ID,

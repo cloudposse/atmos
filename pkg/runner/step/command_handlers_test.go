@@ -176,28 +176,34 @@ func TestContainerHandlerValidation(t *testing.T) {
 		{
 			name: "valid minimal container step",
 			step: &schema.WorkflowStep{
-				Name:    "test",
-				Type:    "container",
-				Image:   "alpine:latest",
-				Command: "echo hello",
+				Name: "test",
+				Type: "container",
+				Run: &schema.ContainerRunStep{
+					Image:   "alpine:latest",
+					Command: "echo hello",
+				},
 			},
 			expectErr: false,
 		},
 		{
 			name: "missing image",
 			step: &schema.WorkflowStep{
-				Name:    "test",
-				Type:    "container",
-				Command: "echo hello",
+				Name: "test",
+				Type: "container",
+				Run: &schema.ContainerRunStep{
+					Command: "echo hello",
+				},
 			},
 			expectErr: true,
 		},
 		{
 			name: "missing command",
 			step: &schema.WorkflowStep{
-				Name:  "test",
-				Type:  "container",
-				Image: "alpine:latest",
+				Name: "test",
+				Type: "container",
+				Run: &schema.ContainerRunStep{
+					Image: "alpine:latest",
+				},
 			},
 			expectErr: true,
 		},
@@ -206,31 +212,37 @@ func TestContainerHandlerValidation(t *testing.T) {
 			step: &schema.WorkflowStep{
 				Name:     "test",
 				Type:     "container",
-				Image:    "alpine:latest",
-				Command:  "echo hello",
 				Provider: "containerd",
+				Run: &schema.ContainerRunStep{
+					Image:   "alpine:latest",
+					Command: "echo hello",
+				},
 			},
 			expectErr: true,
 		},
 		{
 			name: "invalid pull policy",
 			step: &schema.WorkflowStep{
-				Name:    "test",
-				Type:    "container",
-				Image:   "alpine:latest",
-				Command: "echo hello",
-				Pull:    "sometimes",
+				Name: "test",
+				Type: "container",
+				Run: &schema.ContainerRunStep{
+					Image:   "alpine:latest",
+					Command: "echo hello",
+					Pull:    "sometimes",
+				},
 			},
 			expectErr: true,
 		},
 		{
 			name: "invalid cleanup policy",
 			step: &schema.WorkflowStep{
-				Name:    "test",
-				Type:    "container",
-				Image:   "alpine:latest",
-				Command: "echo hello",
-				Cleanup: "later",
+				Name: "test",
+				Type: "container",
+				Run: &schema.ContainerRunStep{
+					Image:   "alpine:latest",
+					Command: "echo hello",
+					Cleanup: "later",
+				},
 			},
 			expectErr: true,
 		},

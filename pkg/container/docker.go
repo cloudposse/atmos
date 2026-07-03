@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -76,6 +77,10 @@ func (d *DockerRuntime) Build(ctx context.Context, config *BuildConfig) error {
 func (d *DockerRuntime) Create(ctx context.Context, config *CreateConfig) (string, error) {
 	defer perf.Track(nil, "container.DockerRuntime.Create")()
 
+	if err := prepareHostRuntime(ctx, d, config); err != nil {
+		return "", err
+	}
+
 	args := buildCreateArgs(config)
 
 	cmd := d.command(ctx, args...)
@@ -94,6 +99,17 @@ func (d *DockerRuntime) Create(ctx context.Context, config *CreateConfig) (strin
 	log.Debug("Created docker container", logKeyID, containerID, "name", config.Name)
 
 	return containerID, nil
+}
+
+// EnsureNetwork idempotently creates a user-defined docker network. It implements
+// NetworkEnsurer so emulators in a stack can share a network and resolve each
+// other by component name.
+func (d *DockerRuntime) EnsureNetwork(ctx context.Context, name string) error {
+	defer perf.Track(nil, "container.DockerRuntime.EnsureNetwork")()
+
+	cmd := d.command(ctx, "network", "create", name)
+	output, err := cmd.CombinedOutput()
+	return networkCreateResult(err, string(output))
 }
 
 // Start starts a container.
@@ -193,6 +209,7 @@ func (d *DockerRuntime) parseInspectData(data map[string]interface{}) *Info {
 
 	// Parse labels.
 	info.Labels = getLabelsFromInspect(data)
+	info.Networks = getNetworksFromInspect(data)
 
 	return info
 }
@@ -239,6 +256,26 @@ func getLabelsFromInspect(data map[string]interface{}) map[string]string {
 			result[k] = s
 		}
 	}
+	return result
+}
+
+func getNetworksFromInspect(data map[string]interface{}) []string {
+	settings, ok := data["NetworkSettings"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	networks, ok := settings["Networks"].(map[string]interface{})
+	if !ok || len(networks) == 0 {
+		return nil
+	}
+
+	result := make([]string, 0, len(networks))
+	for name := range networks {
+		if name != "" {
+			result = append(result, name)
+		}
+	}
+	sort.Strings(result)
 	return result
 }
 

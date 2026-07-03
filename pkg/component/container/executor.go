@@ -251,6 +251,7 @@ func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		Env:     r.envList,
 		User:    r.runUser(),
 		Labels:  ctr.InstanceLabels(r.stack, cfg.ContainerComponentType, r.component),
+		Host:    r.spec.HostRuntime(),
 	})
 	if err != nil {
 		return fmt.Errorf("%w: run %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
@@ -285,6 +286,7 @@ func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		Mounts:        r.spec.Mounts(),
 		Env:           r.env,
 		User:          r.runUser(),
+		Host:          r.spec.HostRuntime(),
 		Restart:       r.spec.RestartPolicy(),
 		HealthCheck:   r.spec.HealthCheck(),
 	}

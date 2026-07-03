@@ -123,6 +123,23 @@ func TestBuildCreateArgs(t *testing.T) {
 			},
 		},
 		{
+			name: "config with networks and aliases",
+			config: &CreateConfig{
+				Name:  "test-container",
+				Image: "ubuntu:22.04",
+				Networks: []NetworkAttachment{
+					{Name: "github_network_123", Aliases: []string{"aws", "localstack"}},
+				},
+			},
+			expected: []string{
+				"create", "--name", "test-container", "-it",
+				"--network", "github_network_123",
+				"--network-alias", "aws",
+				"--network-alias", "localstack",
+				"ubuntu:22.04",
+			},
+		},
+		{
 			name: "config with user and workspace",
 			config: &CreateConfig{
 				Name:            "test-container",

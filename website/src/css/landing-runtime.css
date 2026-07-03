@@ -1,0 +1,1049 @@
+/* ==========================================================================
+   Landing page runtime theme — "The runtime for infrastructure".
+   Dark-first, Vercel-style: big type, monospace eyebrows + feature lists,
+   job-to-be-done sections, breadth mega-footer. Light theme stays functional.
+   All rules are scoped to .landing-page so docs chrome is untouched.
+   ========================================================================== */
+
+.landing-page {
+  /* Shared design tokens (dark-first defaults). */
+  --lp-fg: #f5f7fa;
+  --lp-fg-muted: #9aa4b2;
+  --lp-fg-faint: #6b7280;
+  --lp-panel: rgba(255, 255, 255, 0.03);
+  --lp-panel-hover: rgba(255, 255, 255, 0.06);
+  --lp-border: rgba(255, 255, 255, 0.1);
+  --lp-border-strong: rgba(255, 255, 255, 0.2);
+  --lp-accent: #538ce9;
+  --lp-pro-accent: #e0a83b;
+  --lp-mono: "Geist Mono", ui-monospace, "SFMono-Regular", "JetBrains Mono", "Fira Code", monospace;
+  overflow-x: clip;
+}
+
+html[data-theme="light"] .landing-page {
+  --lp-fg: #0b1220;
+  --lp-fg-muted: #4a5568;
+  --lp-fg-faint: #6b7280;
+  --lp-panel: rgba(0, 0, 0, 0.02);
+  --lp-panel-hover: rgba(0, 0, 0, 0.04);
+  --lp-border: rgba(0, 0, 0, 0.1);
+  --lp-border-strong: rgba(0, 0, 0, 0.18);
+  --lp-accent: #1e5bb8;
+  --lp-pro-accent: #b97e12;
+}
+
+.landing-page nav.navbar {
+  transition:
+    background 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    backdrop-filter 180ms ease;
+}
+
+.landing-page:not(.landing-page--scrolled) nav.navbar {
+  background: transparent !important;
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.landing-page:not(.landing-page--scrolled) .navbar__title {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* --- Shared section scaffolding ------------------------------------------- */
+.lp-section {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 6rem 2rem;
+  box-sizing: border-box;
+}
+
+.lp-section--tight {
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+}
+
+.lp-section-head {
+  max-width: 760px;
+  margin: 0 auto 3.5rem auto;
+  text-align: center;
+}
+
+.landing-page .lp-section-head h2 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  line-height: 1.1;
+  margin: 0.5rem 0 1rem 0;
+  color: var(--lp-fg);
+  text-align: center;
+}
+
+.lp-section-head p {
+  font-size: 1.2rem;
+  line-height: 1.6;
+  color: var(--lp-fg-muted);
+  margin: 0;
+}
+
+/* The hero already fills exactly one viewport (calc(100vh - navbar)), so the AI
+   section must flow normally right after it. The shared component uses a -20vh
+   margin (sized for the old hero) which here overlaps the hero — neutralize it. */
+.landing-page .ai-section {
+  margin-top: 0;
+  padding-top: 2.5rem;
+}
+
+/* Equal-height cards: make each animated grid item a flex container so the card
+   inside stretches to the full row height. */
+.lp-batteries-grid > *,
+.lp-extend-grid > * {
+  display: flex;
+}
+
+.lp-battery,
+.lp-extend-card {
+  width: 100%;
+}
+
+/* --- Shared utilities: monospace eyebrow, feature list, NEW badge --------- */
+.lp-eyebrow {
+  font-family: var(--lp-mono);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--lp-fg-faint);
+  margin: 0 0 1rem 0;
+  display: block;
+}
+
+/* Small accent glyph that precedes an eyebrow label (e.g. the GitHub Actions
+   mark on the "Local = CI" section). Sits inline, slightly muted. */
+.lp-eyebrow-icon {
+  width: 1.05em;
+  height: 1.05em;
+  margin-right: 0.5em;
+  vertical-align: -0.18em;
+  color: var(--lp-fg-muted);
+}
+
+.lp-mono-list {
+  list-style: none;
+  margin: 1.5rem 0 0 0;
+  padding: 0;
+  font-family: var(--lp-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lp-mono-list li {
+  color: var(--lp-fg-muted);
+  padding: 0.45rem 0;
+  border-top: 1px solid var(--lp-border);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lp-mono-list li:last-child {
+  border-bottom: 1px solid var(--lp-border);
+}
+
+/* Subtle accent pill, consistent with the runtime theme's understated aesthetic —
+   not a loud multi-color gradient that reads as foreign to the rest of the site. */
+.lp-new {
+  display: inline-block;
+  font-family: var(--lp-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.4rem;
+  border-radius: 5px;
+  color: var(--lp-accent);
+  background: color-mix(in srgb, var(--lp-accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--lp-accent) 32%, transparent);
+  vertical-align: middle;
+}
+
+/* Pro pill — same understated shape as .lp-new but a distinct amber/gold accent so
+   it reads as a premium (Atmos Pro) marker rather than "New". It is a link, so it
+   resets link styling and lifts on hover. */
+.lp-pro {
+  display: inline-block;
+  font-family: var(--lp-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.4rem;
+  border-radius: 5px;
+  color: var(--lp-pro-accent);
+  background: color-mix(in srgb, var(--lp-pro-accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--lp-pro-accent) 38%, transparent);
+  vertical-align: middle;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.lp-pro:hover {
+  color: var(--lp-pro-accent);
+  text-decoration: none;
+  background: color-mix(in srgb, var(--lp-pro-accent) 26%, transparent);
+  border-color: color-mix(in srgb, var(--lp-pro-accent) 56%, transparent);
+}
+
+/* Neutralize legacy .landing-page header / main h2 rules from landing-page.css
+   so they don't leak into the runtime hero and section headings. */
+.landing-page header.lp-hero {
+  width: 100%;
+  /* Above-the-fold: fill the viewport MINUS the navbar so the next section sits
+     exactly at the fold. This is the repo idiom (see custom.css) — NOT a bare
+     100vh, which overshoots by the navbar height and makes you scroll too far. */
+  min-height: calc(100vh - var(--ifm-navbar-height));
+  min-height: calc(100dvh - var(--ifm-navbar-height));
+  align-items: center;
+}
+
+.landing-page .lp-hero h1,
+.landing-page .lp-section-head h2,
+.landing-page .lp-workload h2 {
+  text-align: left;
+}
+
+.landing-page .lp-section-head h2 {
+  text-align: center;
+}
+
+/* ==========================================================================
+   1. HERO
+   ========================================================================== */
+.lp-hero {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--ifm-navbar-height) + 2rem) 2rem 2.5rem;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+/* Radial glow behind the hero. */
+.lp-hero::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1100px, calc(100vw - 2rem));
+  height: 900px;
+  background: radial-gradient(
+    circle at center,
+    rgba(83, 140, 233, 0.18) 0%,
+    rgba(83, 140, 233, 0.08) 32%,
+    transparent 68%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+html[data-theme="light"] .lp-hero::before {
+  background: radial-gradient(
+    circle at center,
+    rgba(83, 140, 233, 0.12) 0%,
+    rgba(245, 247, 250, 0.4) 40%,
+    transparent 70%
+  );
+}
+
+.lp-hero-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+.lp-hero-grid {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 3.5rem;
+  align-items: center;
+}
+
+.lp-hero-copy {
+  min-width: 0;
+}
+
+.landing-page .lp-hero h1 {
+  font-size: clamp(2.6rem, 6vw, 4.4rem);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--lp-fg);
+}
+
+/* Metallic header effect (stone gradient) on the major dark-mode headings. */
+html[data-theme="dark"] .landing-page .lp-hero h1,
+html[data-theme="dark"] .landing-page .lp-section-head h2,
+html[data-theme="dark"] .landing-page .lp-workload h2,
+html[data-theme="dark"] .landing-page .lp-finalcta h2 {
+  color: transparent;
+  background-image: linear-gradient(180deg, #ffffff 0%, #e7e5e4 45%, #a8a29e 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.lp-hero-sub {
+  font-size: 1.2rem;
+  line-height: 1.65;
+  color: var(--lp-fg-muted);
+  margin: 1.5rem 0 0 0;
+  max-width: 36rem;
+}
+
+/* Value props and the cloud logos share one row inside the hero copy column:
+   the "run it…" lines keep their natural width on the left, and the logos take
+   the remaining space and center within it — so they sit centered in the gap
+   between the text and the terminal visual on the right. */
+.lp-hero-runit-row {
+  margin: 1.75rem 0 0 0;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.lp-hero-valueprops {
+  margin: 0;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* Cloud logos relocated into the hero row: no labels, centered in the leftover
+   space between the value props and the terminal. */
+.lp-hero-clouds {
+  flex: 1 1 auto;
+  justify-content: center;
+  gap: 1.75rem;
+  margin-top: 0;
+}
+
+.lp-hero-clouds svg {
+  height: 46px;
+}
+
+.lp-hero-valueprops span {
+  font-family: var(--lp-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lp-fg-muted);
+}
+
+.lp-hero-cta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 2rem;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.lp-hero-cta .button {
+  margin: 0;
+  max-width: 100%;
+}
+
+.lp-hero-link {
+  color: var(--lp-fg-muted);
+  font-size: 0.95rem;
+  text-decoration: none;
+}
+
+.lp-hero-link:hover {
+  color: var(--lp-accent);
+  text-decoration: none;
+}
+
+/* "Runs everything" logo band. Spans the full hero width below the grid; the
+   .lp-hero-inner flex `gap` provides the spacing above it. */
+.lp-runs {
+  width: 100%;
+}
+
+.lp-runs-label {
+  font-family: var(--lp-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--lp-fg-faint);
+  margin-bottom: 0.9rem;
+}
+
+/* The tools list spans the band's full width now that the cloud logos have
+   moved up into the hero copy column. */
+.lp-runs-content {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2rem 2.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+/* Tool list — concrete workloads, so it reads as real, not vaporware. */
+.lp-runs-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.1rem;
+  font-family: var(--lp-mono);
+  font-size: 0.85rem;
+  color: var(--lp-fg-muted);
+}
+
+.lp-runs-row span {
+  white-space: nowrap;
+}
+
+/* Tools with a doc page are links, but read as plain text until hovered. */
+.lp-runs-link {
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.lp-runs-link:hover {
+  color: var(--lp-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.lp-runs-dot {
+  opacity: 0.4;
+}
+
+/* Hero terminal visual. */
+.lp-hero-visual {
+  min-width: 0;
+}
+
+.landing-page .lp-hero-visual .terminal {
+  width: 100%;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+  border-radius: 12px;
+}
+
+html[data-theme="light"] .landing-page .lp-hero-visual .terminal {
+  box-shadow: 0 24px 60px rgba(8, 115, 115, 0.18);
+}
+
+/* ==========================================================================
+   2. HOW IT WORKS
+   ========================================================================== */
+.lp-how-grid {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 3rem;
+  align-items: center;
+}
+
+.lp-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lp-step {
+  display: flex;
+  gap: 1rem;
+  padding: 1.1rem 0;
+  border-top: 1px solid var(--lp-border);
+}
+
+.lp-step:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.lp-step-num {
+  font-family: var(--lp-mono);
+  font-size: 0.85rem;
+  color: var(--lp-accent);
+  flex-shrink: 0;
+  padding-top: 0.15rem;
+}
+
+.landing-page .lp-step h3 {
+  font-size: 1.15rem;
+  margin: 0 0 0.25rem 0;
+  color: var(--lp-fg);
+  text-align: left;
+}
+
+.lp-step p {
+  margin: 0;
+  color: var(--lp-fg-muted);
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+
+.lp-how-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-top: 2rem;
+  font-family: var(--lp-mono);
+  font-size: 0.85rem;
+}
+
+.lp-how-cta a {
+  color: var(--lp-accent);
+  text-decoration: none;
+}
+
+.lp-how-cta a:hover {
+  text-decoration: underline;
+}
+
+.landing-page .lp-how-grid .terminal {
+  width: 100%;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+}
+
+/* ==========================================================================
+   3. BATTERIES INCLUDED (feature grid)
+   ========================================================================== */
+.lp-batteries-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.25rem;
+}
+
+.lp-battery {
+  display: flex;
+  flex-direction: column;
+  background: var(--lp-panel);
+  border: 1px solid var(--lp-border);
+  border-radius: 14px;
+  padding: 1.6rem;
+  transition: transform 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+}
+
+/* Cards are clickable links. */
+a.lp-battery,
+a.lp-battery:hover,
+a.lp-extend-card,
+a.lp-extend-card:hover {
+  text-decoration: none;
+  color: inherit;
+}
+
+a.lp-extend-card {
+  display: block;
+}
+
+a.lp-extend-card:hover {
+  border-color: var(--lp-border-strong);
+  background: var(--lp-panel-hover);
+}
+
+.lp-battery:hover {
+  transform: translateY(-4px);
+  background: var(--lp-panel-hover);
+  border-color: var(--lp-border-strong);
+}
+
+.lp-battery-icon {
+  font-size: 1.6rem;
+  color: var(--lp-accent);
+  display: inline-flex;
+  margin-bottom: 0.85rem;
+}
+
+.landing-page .lp-battery h3 {
+  font-size: 1.15rem;
+  margin: 0 0 0.5rem 0;
+  color: var(--lp-fg);
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lp-battery p {
+  margin: 0 0 0.85rem 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--lp-fg-muted);
+}
+
+.lp-battery-tag {
+  /* Anchor the tag row to the bottom of the card (not just after the paragraph)
+     so every card's tags align on one baseline across the row. The card is a flex
+     column; `margin-top: auto` absorbs the leftover space above the tag. The
+     paragraph's own `margin-bottom` keeps a minimum gap when a long description
+     fills the card height. */
+  margin-top: auto;
+  font-family: var(--lp-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lp-fg-faint);
+}
+
+/* ==========================================================================
+   4. WORKLOAD / JOB-TO-BE-DONE sections
+   ========================================================================== */
+.lp-workload {
+  display: grid;
+  /* minmax(0, 1fr) keeps both columns exactly equal — a wide, non-wrapping
+     terminal line (e.g. a long $schema URL) must not blow its column past 50%
+     and squeeze the copy. The terminal scrolls inside its own .viewport. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 3.5rem;
+  align-items: center;
+  padding: 4.5rem 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* Allow the visual cell to shrink so its terminal scrolls rather than overflows. */
+.lp-workload-visual {
+  min-width: 0;
+}
+
+.lp-workload--reverse .lp-workload-copy {
+  order: 2;
+}
+
+.landing-page .lp-workload h2 {
+  font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1.12;
+  margin: 0.25rem 0 1rem 0;
+  color: var(--lp-fg);
+  text-align: left;
+}
+
+.lp-workload-copy > p {
+  font-size: 1.1rem;
+  line-height: 1.6;
+  color: var(--lp-fg-muted);
+  margin: 0;
+}
+
+.lp-workload-proof {
+  margin-top: 1.5rem;
+  font-size: 0.95rem;
+  color: var(--lp-fg-faint);
+  font-style: italic;
+}
+
+.landing-page .lp-workload-visual .terminal {
+  width: 100%;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+}
+
+html[data-theme="light"] .landing-page .lp-workload-visual .terminal {
+  box-shadow: 0 16px 40px rgba(8, 115, 115, 0.15);
+}
+
+/* "Environments as configuration" section: a YAML manifest lives inside the
+   terminal window chrome, so let the window own the frame — strip the
+   CodeBlock's own margin, radius, and shadow. */
+.landing-page .lp-config .lp-workload-visual .terminal .theme-code-block {
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Config-as-code carousel: tabs rotate the terminal through real config
+   domains (environments, auth, secrets, workflows, vendoring). The tabs match
+   the mono, uppercase, letter-spaced treatment of .lp-mono-list. */
+.lp-config-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.lp-config-tabs button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-family: var(--lp-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lp-fg-faint);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.lp-config-tabs button:hover {
+  color: var(--lp-fg-muted);
+}
+
+.lp-config-tabs button.is-active {
+  color: var(--lp-fg);
+  border-color: var(--lp-border);
+  background: var(--lp-panel);
+}
+
+.lp-config-tabs button.is-active::after {
+  content: "";
+  display: block;
+  height: 2px;
+  margin-top: 0.3rem;
+  border-radius: 2px;
+  background: var(--lp-accent);
+}
+
+.lp-config-tabs button:focus-visible {
+  outline: 2px solid var(--lp-accent);
+  outline-offset: 2px;
+}
+
+/* All config snippets are stacked in the same grid cell so the terminal is always
+   as tall as the tallest snippet — swapping tabs crossfades in place instead of
+   resizing the window (a height change re-centered the row and made the tabs
+   jump). The .viewport max-height: 450px + scroll still caps the upper bound. */
+.lp-config .lp-config-stack {
+  display: grid;
+}
+
+.lp-config .lp-config-stack > .lp-config-slide {
+  grid-area: 1 / 1; /* overlap every slide in one cell; height = tallest slide. */
+  min-width: 0;
+}
+
+/* Inactive slides are faded out and must not intercept clicks/selection. */
+.lp-config .lp-config-slide[aria-hidden="true"] {
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   5. EXTENSIBILITY
+   ========================================================================== */
+.lp-extend {
+  text-align: center;
+}
+
+.lp-extend-snippet {
+  max-width: 620px;
+  margin: 0 auto 3rem auto;
+}
+
+.landing-page .lp-extend-snippet .terminal {
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+}
+
+.lp-extend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.lp-extend-card {
+  background: var(--lp-panel);
+  border: 1px solid var(--lp-border);
+  border-radius: 12px;
+  padding: 1.4rem;
+  text-align: left;
+}
+
+.landing-page .lp-extend-card h3 {
+  font-size: 1.05rem;
+  margin: 0 0 0.4rem 0;
+  color: var(--lp-fg);
+  text-align: left;
+}
+
+.lp-extend-card p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--lp-fg-muted);
+}
+
+/* ==========================================================================
+   6. MEGA-FOOTER (breadth as argument)
+   ========================================================================== */
+.lp-megafooter {
+  width: 100%;
+  border-top: 1px solid var(--lp-border);
+  margin-top: 2rem;
+}
+
+.lp-megafooter-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 4rem 2rem 2rem 2rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 2.5rem 1.5rem;
+}
+
+.lp-megafooter-col h4 {
+  font-family: var(--lp-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--lp-fg-faint);
+  margin: 0 0 1rem 0;
+}
+
+.lp-megafooter-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lp-megafooter-col li {
+  margin-bottom: 0.55rem;
+}
+
+.lp-megafooter-col a {
+  color: var(--lp-fg-muted);
+  font-size: 0.92rem;
+  text-decoration: none;
+}
+
+.lp-megafooter-col a:hover {
+  color: var(--lp-fg);
+  text-decoration: none;
+}
+
+/* Final CTA band. */
+.lp-finalcta {
+  text-align: center;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 4rem 2rem 6rem 2rem;
+}
+
+.landing-page .lp-finalcta h2 {
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  font-weight: 700;
+  color: var(--lp-fg);
+  margin: 0 0 1rem 0;
+  text-align: center;
+}
+
+.lp-finalcta p {
+  color: var(--lp-fg-muted);
+  font-size: 1.15rem;
+  margin: 0 0 2rem 0;
+}
+
+.lp-finalcta-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* The shared SecondaryCTA carries an `ml20` margin; the flex `gap` already spaces
+   the buttons, so neutralize it to keep them evenly centered. */
+.lp-finalcta-cta .ml20 {
+  margin-left: 0;
+}
+
+/* ==========================================================================
+   RESPONSIVE
+   ========================================================================== */
+@media screen and (max-width: 996px) {
+  .lp-hero-grid,
+  .lp-how-grid,
+  .lp-workload {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+
+  /* Keep the terminal below the copy on every workload section. */
+  .lp-workload--reverse .lp-workload-copy {
+    order: 0;
+  }
+
+  .lp-hero {
+    padding-top: calc(var(--ifm-navbar-height) + 2.5rem);
+  }
+
+  .landing-page header.lp-hero {
+    width: 100%;
+    max-width: 100%;
+    overflow: visible;
+    padding:
+      calc(var(--ifm-navbar-height) + 2.5rem)
+      2rem
+      2.5rem;
+  }
+
+  .landing-page .lp-hero h1,
+  .landing-page .lp-workload h2 {
+    text-align: left;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .lp-section {
+    padding: 4rem 1.25rem;
+  }
+
+  .lp-workload {
+    padding: 3rem 1.25rem;
+  }
+
+  .landing-page header.lp-hero,
+  .lp-hero {
+    width: 100%;
+    max-width: 100%;
+    min-height: min(42rem, calc(100svh - var(--ifm-navbar-height)));
+    align-items: center;
+    overflow: visible;
+    padding:
+      clamp(1.25rem, 4svh, 2rem)
+      clamp(1.25rem, 5vw, 2rem)
+      clamp(1.25rem, 4svh, 2rem);
+  }
+
+  .lp-hero-inner {
+    gap: 0;
+  }
+
+  .lp-hero-grid {
+    gap: 0;
+  }
+
+  .lp-hero-copy,
+  .lp-hero-grid {
+    min-width: 0;
+  }
+
+  .lp-hero-copy {
+    width: 100%;
+    max-width: 22rem;
+    margin: 0 auto;
+  }
+
+  .lp-hero-grid {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .landing-page .lp-hero h1 {
+    font-size: clamp(2rem, 10vw, 2.35rem);
+    line-height: 1.02;
+    max-width: 8.5em;
+    overflow-wrap: break-word;
+  }
+
+  .lp-eyebrow {
+    font-size: 0.68rem;
+    letter-spacing: 0.18em;
+    margin-bottom: 0.8rem;
+  }
+
+  .lp-hero-sub {
+    font-size: 0.98rem;
+    line-height: 1.45;
+    max-width: 100%;
+    margin-top: 1rem;
+  }
+
+  .lp-hero-runit-row {
+    align-items: center;
+    gap: 0.8rem;
+    justify-content: flex-start;
+    margin-top: 1.2rem;
+  }
+
+  .lp-hero-valueprops {
+    flex: 0 0 auto;
+    align-items: flex-start;
+    gap: 0.25rem;
+    min-width: 0;
+    text-align: left;
+  }
+
+  .lp-hero-valueprops span {
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+  }
+
+  .lp-hero-clouds {
+    flex: 1 1 auto;
+    justify-content: center;
+    gap: 0.7rem;
+    max-width: 100%;
+  }
+
+  .lp-hero-clouds svg {
+    height: 32px;
+  }
+
+  .lp-hero-cta {
+    gap: 0.9rem;
+    justify-content: center;
+    margin-top: 1.4rem;
+  }
+
+  .lp-hero-cta,
+  .lp-primary-cta {
+    max-width: 100%;
+  }
+
+  .lp-hero-visual,
+  .lp-runs {
+    display: none;
+  }
+}
+
+@media screen and (max-width: 380px) {
+  .landing-page header.lp-hero,
+  .lp-hero {
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .landing-page .lp-hero h1 {
+    font-size: 2rem;
+  }
+
+  .lp-hero-sub {
+    font-size: 0.94rem;
+    line-height: 1.4;
+  }
+
+  .lp-hero-cta {
+    margin-top: 1.2rem;
+  }
+}

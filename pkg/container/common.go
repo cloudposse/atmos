@@ -33,11 +33,27 @@ func buildCreateArgs(config *CreateConfig) []string {
 	args := []string{"create", "--name", config.Name, "-it"}
 
 	args = addRuntimeFlags(args, config)
+	args = addNetworkFlags(args, config.Networks)
 	args = addHealthAndRestart(args, config)
 	args = addMetadata(args, config)
 	args = addResourceBindings(args, config)
 	args = addImageAndCommand(args, config)
 
+	return args
+}
+
+func addNetworkFlags(args []string, networks []NetworkAttachment) []string {
+	for _, network := range networks {
+		if network.Name == "" {
+			continue
+		}
+		args = append(args, "--network", network.Name)
+		for _, alias := range network.Aliases {
+			if alias != "" {
+				args = append(args, "--network-alias", alias)
+			}
+		}
+	}
 	return args
 }
 
@@ -324,7 +340,7 @@ func buildBakeArgs(config *BuildConfig) []string {
 }
 
 func appendFile(first string, rest []string) []string {
-	values := make([]string, 0, len(rest)+1)
+	values := make([]string, 0, len(rest))
 	if first != "" {
 		values = append(values, first)
 	}

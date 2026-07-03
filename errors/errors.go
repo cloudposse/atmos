@@ -222,6 +222,9 @@ var (
 	ErrGitWorkdirExists            = errors.New("git workdir already exists")
 	ErrGitNoTrackingBranch         = errors.New("no branch to pull: the current branch has no upstream")
 	ErrGitWorkdirNotInitialized    = errors.New("git repository not cloned or initialized")
+	ErrGitTargetPathInvalid        = errors.New("git target path must not be empty or the repository root")
+	ErrGitArtifactWrite            = errors.New("failed to write provision artifact")
+	ErrGitArtifactRead             = errors.New("failed to read provision artifact")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")
@@ -260,6 +263,11 @@ var (
 	ErrDependencyConstraint = errors.New("dependency constraint validation failed")
 	ErrDependencyResolution = errors.New("dependency resolution failed")
 	ErrToolInstall          = errors.New("tool installation failed")
+
+	// Helm plugin errors.
+	ErrInvalidHelmPluginSpec = errors.New("invalid helm plugin specification")
+	ErrHelmPluginInstall     = errors.New("helm plugin installation failed")
+	ErrHelmBinaryNotFound    = errors.New("helm binary not found")
 
 	// Toolchain errors.
 	ErrToolNotFound                 = errors.New("tool not found")
@@ -326,6 +334,9 @@ var (
 
 	ErrMissingStack            = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrMissingComponent        = errors.New("component is required")
+	ErrNoStacksToSelect        = errors.New("no stacks are configured to choose from")
+	ErrNoComponentsToSelect    = errors.New("no components are configured to choose from")
+	ErrLoadSelectionOptions    = errors.New("failed to load options for interactive selection")
 	ErrMissingComponentType    = errors.New("component type is required")
 	ErrRequiredFlagNotProvided = errors.New("required flag not provided")
 	ErrRequiredFlagEmpty       = errors.New("required flag cannot be empty")
@@ -665,6 +676,7 @@ var (
 	ErrStepEmptyCommand              = errors.New("empty command for step")
 	ErrStepNoFilesFound              = errors.New("no files found matching criteria")
 	ErrStepFieldRequired             = errors.New("required field missing for step")
+	ErrStepExecutionFailed           = errors.New("step execution failed")
 	ErrStepTTYRequired               = errors.New("interactive terminal required for step")
 	ErrHTTPStepURLRequired           = errors.New("url is required for http step")
 	ErrHTTPStepInvalidMethod         = errors.New("invalid HTTP method for http step")
@@ -673,6 +685,8 @@ var (
 	ErrHTTPStepRequestFailed         = errors.New("http request failed")
 	ErrHTTPStepUnexpectedStatus      = errors.New("http response did not match expected status")
 	ErrHTTPStepUnexpectedResponse    = errors.New("http response body did not match expected pattern")
+	ErrRequireStepEmpty              = errors.New("require step must specify at least one of tools, files, or dirs")
+	ErrRequirementsNotMet            = errors.New("required tools or paths are missing")
 	ErrWorkingDirNotFound            = errors.New("working directory does not exist")
 	ErrWorkingDirNotDirectory        = errors.New("working directory path is not a directory")
 	ErrWorkingDirAccessFailed        = errors.New("failed to access working directory")
@@ -717,6 +731,8 @@ var (
 	ErrDescribeStacks               = errors.New("describe stacks failed")
 	ErrBuildDepGraph                = errors.New("build dependency graph failed")
 	ErrTopologicalOrder             = errors.New("topological sort failed")
+	ErrGraphExecutionCanceled       = errors.New("graph execution canceled")
+	ErrGraphExecutionOptions        = errors.New("graph execution options are invalid")
 	ErrFormatForLogging             = errors.New("format affected for logging failed")
 	ErrQueryEvaluation              = errors.New("query evaluation failed")
 	ErrNilResult                    = errors.New("nil result")
@@ -945,6 +961,13 @@ var (
 	ErrIdentityNotInConfig                  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig                  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
+
+	// Provision target (delivery destination) errors.
+	ErrProvisionTargetNotFound    = errors.New("provision target not found")
+	ErrProvisionTargetKindUnknown = errors.New("provision target kind is not registered")
+	ErrProvisionTargetKindMissing = errors.New("provision target is missing a kind")
+	ErrProvisionTargetNoFetch     = errors.New("provision target kind does not support reading current state")
+	ErrGitPullRequestNotSupported = errors.New("git pull request publishing is not supported by the cli provider")
 
 	// Backend provisioning errors.
 	ErrBucketRequired            = errors.New("backend.bucket is required")
@@ -1229,7 +1252,7 @@ var (
 	ErrWebSearchNotEnabled  = errors.New("web search is not enabled in configuration")
 
 	// MCP errors.
-	ErrMCPNotEnabled            = errors.New("MCP server is not enabled: add 'mcp:\n  enabled: true' to atmos.yaml")
+	ErrMCPNotEnabled            = errors.New("MCP server is not enabled")
 	ErrMCPToolNotFound          = errors.New("MCP tool not found")
 	ErrMCPInvalidJSONRPCVersion = errors.New("invalid JSON-RPC version")
 	ErrMCPInvalidTransport      = errors.New("invalid transport type")
@@ -1250,6 +1273,49 @@ var (
 	ErrLSPNoServerForFile       = errors.New("no LSP server found for file")
 	ErrLSPRPCError              = errors.New("RPC error")
 	ErrLSPNoContentLengthHeader = errors.New("no Content-Length header found")
+
+	// Kubernetes-native component errors.
+	ErrKubernetesFlagsMutuallyExclusive     = errors.New("--all and --affected are mutually exclusive")
+	ErrKubernetesComponentArgWithSelection  = errors.New("component argument cannot be used with --all or --affected")
+	ErrKubernetesOutputSingleComponentOnly  = errors.New("--output and --output-dir are only supported when rendering one component")
+	ErrKubernetesComponentArgRequired       = errors.New("requires exactly one component argument unless --all or --affected is set")
+	ErrKubernetesUnsupportedOperation       = errors.New("unsupported kubernetes operation")
+	ErrKubernetesUnsupportedSubcommand      = errors.New("unsupported kubernetes subcommand")
+	ErrKubernetesMissingMetadataName        = errors.New("object is missing metadata.name")
+	ErrKubernetesMissingGVK                 = errors.New("object is missing group/version/kind")
+	ErrManifestEntryInvalidType             = errors.New("manifest entries must be YAML strings or maps")
+	ErrManifestMissingAPIVersionKind        = errors.New("manifest is missing apiVersion or kind")
+	ErrManifestListItemNotObject            = errors.New("list item is not an unstructured object")
+	ErrKubernetesOutputDirMutuallyExclusive = errors.New("--output and --output-dir are mutually exclusive")
+	ErrKubernetesSplitRequiresOutputDir     = errors.New("--split requires --output-dir and cannot be used with --output")
+	ErrKubernetesSplitNeedsOutputDir        = errors.New("--split requires --output-dir")
+	ErrKubernetesClientInit                 = errors.New("failed to initialize kubernetes client")
+	ErrKubernetesApply                      = errors.New("failed to apply kubernetes object")
+	ErrKubernetesDelete                     = errors.New("failed to delete kubernetes object")
+	ErrKubernetesDiff                       = errors.New("failed to diff kubernetes object")
+	ErrKubernetesMarshal                    = errors.New("failed to marshal kubernetes object")
+	ErrKubernetesResolveResource            = errors.New("failed to resolve kubernetes resource")
+	ErrKubernetesComponentDir               = errors.New("failed to create kubernetes component directory")
+	ErrKubernetesRenderOutput               = errors.New("failed to write rendered kubernetes manifests")
+	ErrKubernetesRender                     = errors.New("failed to render kubernetes object")
+	ErrKubernetesProviderType               = errors.New("provider must be a string")
+	ErrManifestPathTraversal                = errors.New("manifest path escapes the component directory")
+	ErrKubernetesValidationFailed           = errors.New("kubernetes manifest validation failed")
+	ErrKubernetesManifestInvalidName        = errors.New("object metadata.name is not a valid DNS-1123 subdomain")
+	ErrKubernetesValidate                   = errors.New("failed to validate kubernetes object")
+
+	// Helm-native component errors.
+	ErrHelmFlagsMutuallyExclusive    = errors.New("--all and --affected are mutually exclusive")
+	ErrHelmComponentArgWithSelection = errors.New("component argument cannot be used with --all or --affected")
+	ErrHelmOutputSingleComponentOnly = errors.New("--output and --output-dir are only supported when rendering one component")
+	ErrHelmComponentArgRequired      = errors.New("requires exactly one component argument unless --all or --affected is set")
+	ErrHelmUnsupportedOperation      = errors.New("unsupported helm operation")
+	ErrHelmUnsupportedSubcommand     = errors.New("unsupported helm subcommand")
+	ErrHelmChartNotConfigured        = errors.New("helm component is missing a 'chart' reference")
+	ErrHelmRenderFailed              = errors.New("failed to render helm chart")
+	ErrHelmReleaseNameRequired       = errors.New("helm component is missing a release name")
+	ErrHelmDiffFailed                = errors.New("failed to compute helm diff")
+	ErrHelmBaselineRead              = errors.New("failed to read helm diff baseline")
 )
 
 // Stack dependency (`depends_on`) resolution errors.

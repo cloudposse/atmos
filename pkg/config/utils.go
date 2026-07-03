@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	goversion "github.com/hashicorp/go-version"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -482,6 +484,10 @@ func getVersionEnforcement(configEnforcement string) string {
 	return configEnforcement
 }
 
+func explicitVersionOverride() string {
+	return version.ExplicitVersionOverride(os.Args)
+}
+
 // buildVersionConstraintError builds the error for unsatisfied version constraint.
 func buildVersionConstraintError(constraint schema.VersionConstraint) error {
 	builder := errUtils.Build(errUtils.ErrVersionConstraint).
@@ -499,6 +505,15 @@ func buildVersionConstraintError(constraint schema.VersionConstraint) error {
 	return builder.Err()
 }
 
+func buildInvalidVersionConstraintError(constraint schema.VersionConstraint, err error) error {
+	return errUtils.Build(errors.Join(errUtils.ErrInvalidVersionConstraint, err)).
+		WithHint("Please use valid semver constraint syntax").
+		WithHint("Reference: https://github.com/hashicorp/go-version").
+		WithContext("constraint", constraint.Require).
+		WithExitCode(1).
+		Err()
+}
+
 // warnVersionConstraint logs a warning for unsatisfied version constraint.
 func warnVersionConstraint(constraint schema.VersionConstraint) {
 	ui.Warning(fmt.Sprintf(
@@ -509,6 +524,26 @@ func warnVersionConstraint(constraint schema.VersionConstraint) {
 	if constraint.Message != "" {
 		ui.Warning(constraint.Message)
 	}
+}
+
+// warnVersionConstraintOverride logs a warning when an explicit version override
+// bypasses a failed or non-evaluable version constraint.
+func warnVersionConstraintOverride(constraint schema.VersionConstraint, requestedVersion string, validationErr error) {
+	message := "Atmos version constraint not satisfied; explicit override bypasses enforcement"
+	keyvals := []interface{}{
+		"required", constraint.Require,
+		"current", version.Version,
+		"override", requestedVersion,
+	}
+	if validationErr != nil {
+		message = "Atmos version constraint could not be evaluated; explicit override bypasses enforcement"
+		keyvals = append(keyvals, "error", validationErr)
+	}
+	if constraint.Message != "" {
+		keyvals = append(keyvals, "configured_message", constraint.Message)
+	}
+
+	log.Warn(message, keyvals...)
 }
 
 // validateVersionConstraint validates the current Atmos version against the constraint
@@ -523,17 +558,27 @@ func validateVersionConstraint(constraint schema.VersionConstraint) error {
 		return nil
 	}
 
+	if _, err := goversion.NewConstraint(constraint.Require); err != nil {
+		return buildInvalidVersionConstraintError(constraint, fmt.Errorf("invalid version constraint %q: %w", constraint.Require, err))
+	}
+
+	requestedVersion := explicitVersionOverride()
+
 	satisfied, err := version.ValidateConstraint(constraint.Require)
 	if err != nil {
-		return errUtils.Build(errors.Join(errUtils.ErrInvalidVersionConstraint, err)).
-			WithHint("Please use valid semver constraint syntax").
-			WithHint("Reference: https://github.com/hashicorp/go-version").
-			WithContext("constraint", constraint.Require).
-			WithExitCode(1).
-			Err()
+		if requestedVersion != "" {
+			warnVersionConstraintOverride(constraint, requestedVersion, err)
+			return nil
+		}
+		return buildInvalidVersionConstraintError(constraint, err)
 	}
 
 	if satisfied {
+		return nil
+	}
+
+	if requestedVersion != "" {
+		warnVersionConstraintOverride(constraint, requestedVersion, nil)
 		return nil
 	}
 

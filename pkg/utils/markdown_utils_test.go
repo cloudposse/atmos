@@ -78,6 +78,35 @@ func TestPrintfMarkdownToTUI(t *testing.T) {
 	assert.Contains(t, output.String(), "Test: Message to stderr")
 }
 
+func TestPrintfMarkdownToTUIWithoutWordWrap(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{}
+	InitializeMarkdown(&atmosConfig)
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err, "Failed to create pipe")
+
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = oldStderr
+		r.Close()
+	})
+
+	message := "**Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features."
+	PrintfMarkdownToTUIWithoutWordWrap("%s", message)
+
+	err = w.Close()
+	require.NoError(t, err, "Failed to close pipe writer")
+
+	var output bytes.Buffer
+	_, err = io.Copy(&output, r)
+	require.NoError(t, err, "Failed to read pipe output")
+
+	assert.Contains(t, output.String(), "Telemetry Enabled")
+	assert.NotContains(t, output.String(), "regarding\nusage")
+	assert.Equal(t, 1, strings.Count(output.String(), "\n"))
+}
+
 // TestMarkdownRendering tests various markdown elements.
 func TestMarkdownRendering(t *testing.T) {
 	tests := []struct {
