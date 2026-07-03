@@ -63,6 +63,7 @@ type AquaRegistry struct {
 	client          httpClient.Client
 	cache           *RegistryCache
 	cacheStore      cache.Store
+	githubToken     string
 	githubBaseURL   string
 	registryBaseURL string // Base URL of the aqua-registry repo (raw content). See defaultAquaRegistryBaseURL.
 	lastSearchTotal int    // Total number of search results before pagination.
@@ -128,14 +129,16 @@ func NewAquaRegistry(opts ...RegistryOption) *AquaRegistry {
 		cacheBaseDir = filepath.Join(os.TempDir(), "atmos-toolchain-cache")
 	}
 
+	githubToken := github.GetGitHubToken()
 	ar := &AquaRegistry{
 		client: httpClient.NewDefaultClient(
-			httpClient.WithGitHubToken(github.GetGitHubToken()),
+			httpClient.WithGitHubToken(githubToken),
 		),
 		cache: &RegistryCache{
 			baseDir: filepath.Join(cacheBaseDir, "registry"),
 		},
 		cacheStore:      cache.NewFileStore(cacheBaseDir),
+		githubToken:     githubToken,
 		githubBaseURL:   "https://api.github.com", // default
 		registryBaseURL: defaultAquaRegistryBaseURL,
 	}
@@ -159,6 +162,11 @@ func (ar *AquaRegistry) get(url string) (*http.Response, error) {
 	resp, err := ar.client.Do(req)
 	if err != nil {
 		return nil, err
+	}
+
+	if ar.shouldRetryUnauthenticated(url, resp) {
+		resp.Body.Close()
+		return httpClient.NewDefaultClient().Do(req)
 	}
 
 	return resp, nil
@@ -199,6 +207,13 @@ func (ar *AquaRegistry) getBytes(url string) ([]byte, error) {
 		return nil, err
 	}
 	return data, nil
+}
+
+func (ar *AquaRegistry) shouldRetryUnauthenticated(url string, resp *http.Response) bool {
+	if resp == nil || resp.StatusCode != http.StatusForbidden || ar.githubToken == "" {
+		return false
+	}
+	return strings.HasPrefix(url, strings.TrimRight(ar.githubBaseURL, "/")+"/")
 }
 
 // LoadLocalConfig is deprecated and no-op for compatibility.

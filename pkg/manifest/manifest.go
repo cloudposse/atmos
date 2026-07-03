@@ -22,7 +22,7 @@ import (
 const (
 	// DefaultAPIVersion is the apiVersion used by all current Atmos manifests.
 	DefaultAPIVersion = "atmos/v1"
-	// yamlDecodeBufferSize is the buffer size used by the YAML/JSON stream decoder.
+	// The yamlDecodeBufferSize constant sets the YAML/JSON stream decoder buffer size.
 	yamlDecodeBufferSize = 4096
 )
 
