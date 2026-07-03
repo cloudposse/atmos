@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -124,6 +125,75 @@ func TestExecuteCommandPipeline_TTYError(t *testing.T) {
 	err := executeCommandPipeline(&atmosConfig, &info, execCtx)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrNoTty)
+}
+
+func TestExecuteCommandPipeline_GroupsWorkspaceSetupPhase(t *testing.T) {
+	output := runLogGroupPipelineSubprocess(t, map[string]string{
+		testEnvFakeTerraformSelectFail: "1",
+	})
+	groupLabel := logGroupTestToolLabel(t)
+
+	initStart := strings.Index(output, "::group::"+groupLabel+" init\n")
+	workspaceStart := strings.Index(output, "::group::"+groupLabel+" workspace\n")
+	selectOutput := strings.Index(output, "fake terraform workspace select dev")
+	newOutput := strings.Index(output, "fake terraform workspace new dev")
+	planStart := strings.Index(output, "::group::"+groupLabel+" plan\n")
+
+	require.NotEqual(t, -1, initStart, "init phase must be grouped; output:\n%s", output)
+	require.NotEqual(t, -1, workspaceStart, "workspace phase must be grouped; output:\n%s", output)
+	require.NotEqual(t, -1, selectOutput, "workspace select output must be present; output:\n%s", output)
+	require.NotEqual(t, -1, newOutput, "workspace new fallback output must be present; output:\n%s", output)
+	workspaceEnd := strings.Index(output[workspaceStart:], "::endgroup::\n")
+	require.NotEqual(t, -1, workspaceEnd, "workspace group must close; output:\n%s", output)
+	require.NotEqual(t, -1, planStart, "main terraform phase must be grouped; output:\n%s", output)
+
+	workspaceEnd += workspaceStart
+	assert.Less(t, initStart, workspaceStart, "workspace group must start after init")
+	assert.Less(t, workspaceStart, selectOutput, "workspace select must be inside workspace group")
+	assert.Less(t, selectOutput, newOutput, "workspace new fallback must follow failed select")
+	assert.Less(t, newOutput, workspaceEnd, "workspace fallback must remain inside workspace group")
+	assert.Less(t, workspaceEnd, planStart, "main phase must start after workspace group closes")
+}
+
+func TestExecuteCommandPipeline_SkipsWorkspaceGroupWhenSetupSkipped(t *testing.T) {
+	output := runLogGroupPipelineSubprocess(t, map[string]string{
+		testEnvPipelineBackendType: "http",
+		testEnvPipelineSkipInit:    "1",
+	})
+	groupLabel := logGroupTestToolLabel(t)
+
+	assert.NotContains(t, output, "::group::"+groupLabel+" workspace\n")
+	assert.NotContains(t, output, "fake terraform workspace select dev")
+	assert.Contains(t, output, "::group::"+groupLabel+" plan\n")
+	assert.Contains(t, output, "fake terraform plan")
+}
+
+func logGroupTestToolLabel(t *testing.T) string {
+	t.Helper()
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	return filepath.Base(exePath)
+}
+
+func runLogGroupPipelineSubprocess(t *testing.T, env map[string]string) string {
+	t.Helper()
+
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	cmd := osexec.Command(exePath)
+	cmd.Env = append(
+		os.Environ(),
+		testEnvRunLogGroupPipeline+"=1",
+		"GITHUB_ACTIONS=true",
+	)
+	for key, value := range env {
+		cmd.Env = append(cmd.Env, key+"="+value)
+	}
+
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "subprocess failed with output:\n%s", string(out))
+	return string(out)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

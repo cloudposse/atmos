@@ -184,7 +184,7 @@ func executeCommandPipeline(
 		return err
 	}
 
-	if err = runWorkspaceSetup(atmosConfig, info, componentPath, opts...); err != nil {
+	if err = runWorkspaceSetupPhase(atmosConfig, info, componentPath, opts...); err != nil {
 		return err
 	}
 
@@ -194,17 +194,36 @@ func executeCommandPipeline(
 
 	addRegionEnvVarForImport(info)
 
-	// Phase-level CI log grouping (Dimension "phase"): fold the main subcommand
-	// (plan/apply/destroy/…) into its own collapsible group, separate from init.
-	err = ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, info.SubCommand), func() error {
-		return executeMainTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, opts...)
-	})
-	if err != nil {
-		return err
+	if shouldRunMainTerraformCommand(info) {
+		// Phase-level CI log grouping (Dimension "phase"): fold the main subcommand
+		// (plan/apply/destroy/…) into its own collapsible group, separate from init
+		// and workspace setup.
+		err = ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, info.SubCommand), func() error {
+			return executeMainTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, opts...)
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	cleanupTerraformFiles(atmosConfig, info)
 	return nil
+}
+
+// runWorkspaceSetupPhase selects or creates the Terraform workspace under its own
+// phase-level CI log group. The group is emitted only when workspace setup will
+// actually run, avoiding empty groups for backends/subcommands that skip setup.
+func runWorkspaceSetupPhase(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) error {
+	if shouldSkipWorkspaceSetup(info) {
+		return nil
+	}
+	return ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandWorkspace), func() error {
+		return runWorkspaceSetup(atmosConfig, info, componentPath, opts...)
+	})
+}
+
+func shouldRunMainTerraformCommand(info *schema.ConfigAndStacksInfo) bool {
+	return info.SubCommand != subcommandWorkspace || info.SubCommand2 != ""
 }
 
 func addTerraformTestVarfileArg(info *schema.ConfigAndStacksInfo, testVarFile string) {
