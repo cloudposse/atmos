@@ -1072,6 +1072,15 @@ func TestParsePodmanPorts(t *testing.T) {
 	}
 }
 
+func TestParsePodmanNetworks(t *testing.T) {
+	assert.Equal(t, []string{"bridge", "github_network_123"}, parsePodmanNetworks([]interface{}{"github_network_123", "bridge"}))
+	assert.Equal(t, []string{"bridge", "github_network_123"}, parsePodmanNetworks(map[string]interface{}{
+		"github_network_123": map[string]interface{}{},
+		"bridge":             map[string]interface{}{},
+	}))
+	assert.Empty(t, parsePodmanNetworks("not-networks"))
+}
+
 func TestParsePodmanPort(t *testing.T) {
 	tests := []struct {
 		name        string
