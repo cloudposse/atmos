@@ -15,6 +15,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/templates"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -1673,6 +1675,153 @@ func TestResolveArtifactPath_EmptyStackOrComponent(t *testing.T) {
 		path := p.resolveArtifactPath(ctx)
 		assert.Empty(t, path)
 	})
+}
+
+func TestResolveArtifactPath_WorkdirComponent(t *testing.T) {
+	basePath := t.TempDir()
+	writeTestFile(t, filepath.Join(basePath, "atmos.yaml"), `
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+logs:
+  file: "/dev/stderr"
+  level: Info
+`)
+	writeTestFile(t, filepath.Join(basePath, "stacks", "deploy", "dev.yaml"), `
+vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        enabled: true
+`)
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, "components", "terraform", "vpc"), 0o755))
+	workdirPath := filepath.Join(provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, workdirPath), 0o755))
+	t.Chdir(basePath)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	ctx := &plugin.HookContext{
+		Config: &atmosConfig,
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+			ComponentType:    cfg.TerraformComponentType,
+		},
+	}
+
+	path := (&Plugin{}).resolveArtifactPath(ctx)
+
+	assert.Equal(t, filepath.Join(workdirPath, "dev-vpc.planfile"), path)
+	assert.Equal(t, path, ctx.Info.PlanFile)
+	assert.Equal(t, workdirPath, ctx.Info.ComponentSection[provWorkdir.WorkdirPathKey])
+}
+
+func TestApplyResolvedWorkdirArtifactPath(t *testing.T) {
+	t.Run("disabled workdir leaves section unchanged", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentSection: map[string]any{},
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{}, info)
+
+		require.True(t, ok)
+		_, exists := info.ComponentSection[provWorkdir.WorkdirPathKey]
+		assert.False(t, exists)
+	})
+
+	t.Run("enabled workdir with existing root sets workdir path", func(t *testing.T) {
+		basePath := t.TempDir()
+		workdirPath := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+		require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+		info := &schema.ConfigAndStacksInfo{
+			FinalComponent:   "vpc",
+			Stack:            "dev",
+			ComponentSection: workdirEnabledSection(),
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{BasePath: basePath}, info)
+
+		require.True(t, ok)
+		assert.Equal(t, workdirPath, info.ComponentSection[provWorkdir.WorkdirPathKey])
+	})
+
+	t.Run("enabled workdir with component subpath sets resolved subpath", func(t *testing.T) {
+		basePath := t.TempDir()
+		workdirPath := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-null-label", "exports")
+		require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+		info := &schema.ConfigAndStacksInfo{
+			BaseComponentPath: "exports",
+			FinalComponent:    "null-label",
+			Stack:             "dev",
+			ComponentSection:  workdirEnabledSection(),
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{BasePath: basePath}, info)
+
+		require.True(t, ok)
+		assert.Equal(t, workdirPath, info.ComponentSection[provWorkdir.WorkdirPathKey])
+	})
+
+	t.Run("enabled workdir with missing path leaves section unchanged", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			FinalComponent:   "missing",
+			Stack:            "dev",
+			ComponentSection: workdirEnabledSection(),
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{BasePath: t.TempDir()}, info)
+
+		require.True(t, ok)
+		_, exists := info.ComponentSection[provWorkdir.WorkdirPathKey]
+		assert.False(t, exists)
+	})
+
+	t.Run("enabled workdir with regular file path fails", func(t *testing.T) {
+		basePath := t.TempDir()
+		workdirPath := filepath.Join(basePath, provWorkdir.WorkdirPath, cfg.TerraformComponentType, "dev-vpc")
+		require.NoError(t, os.MkdirAll(filepath.Dir(workdirPath), 0o755))
+		require.NoError(t, os.WriteFile(workdirPath, []byte("not a directory"), 0o644))
+		info := &schema.ConfigAndStacksInfo{
+			FinalComponent:   "vpc",
+			Stack:            "dev",
+			ComponentSection: workdirEnabledSection(),
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{BasePath: basePath}, info)
+
+		require.False(t, ok)
+		_, exists := info.ComponentSection[provWorkdir.WorkdirPathKey]
+		assert.False(t, exists)
+	})
+}
+
+func workdirEnabledSection() map[string]any {
+	return map[string]any{
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+}
+
+func writeTestFile(t *testing.T, path string, content string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(strings.TrimSpace(content)+"\n"), 0o644))
 }
 
 func TestIsPlanfileStorageEnabled(t *testing.T) {
