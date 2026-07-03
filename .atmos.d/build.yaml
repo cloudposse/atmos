@@ -3,9 +3,12 @@ commands:
     description: Build and documentation commands for Atmos development
     default: binary
     env: &build_env
-      GOTOOLCHAIN: auto
-      ATMOS_BUILD_TARGET: "{{ .Flags.target }}"
-      ATMOS_BUILD_VERSION: "{{ .Flags.version }}"
+      - key: GOTOOLCHAIN
+        value: auto
+      - key: ATMOS_BUILD_TARGET
+        value: "{{ .Flags.target }}"
+      - key: ATMOS_BUILD_VERSION
+        value: "{{ .Flags.version }}"
     flags:
       - name: target
         description: "Build target: default, linux, windows, macos, or macos-intel"
@@ -72,7 +75,8 @@ commands:
       - name: deps
         description: Download Go module dependencies
         env:
-          GOTOOLCHAIN: auto
+          - key: GOTOOLCHAIN
+            value: auto
         steps:
           - go mod download
 
@@ -95,7 +99,8 @@ commands:
       - name: version
         description: Print the version from an already-built Atmos binary
         env:
-          ATMOS_BUILD_TARGET: "{{ .Flags.target }}"
+          - key: ATMOS_BUILD_TARGET
+            value: "{{ .Flags.target }}"
         flags:
           - name: target
             description: "Build target: default, linux, windows, macos, or macos-intel"
@@ -124,7 +129,8 @@ commands:
       - name: readme
         description: Regenerate README.md from README.yaml
         env:
-          GOTOOLCHAIN: auto
+          - key: GOTOOLCHAIN
+            value: auto
         steps:
           - |
             set -eu
