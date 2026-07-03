@@ -109,7 +109,8 @@ func TestHandleGitHubAPIError_RateLimitHintBranches(t *testing.T) {
 		// Verify formatted output contains rate limit explanation.
 		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
 		assert.Contains(t, formatted, "Rate limit exceeded")
-		assert.Contains(t, formatted, "Hints")
+		assert.Contains(t, formatted, "Verify your token: gh auth status")
+		assert.Contains(t, formatted, "Try re-authenticating: gh auth login")
 	})
 
 	t.Run("rate limit without token includes auth hints", func(t *testing.T) {
