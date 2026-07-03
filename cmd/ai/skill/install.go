@@ -28,7 +28,7 @@ var installUsageMarkdown string
 // installCmd represents the 'atmos ai skill install' command.
 var installCmd = &cobra.Command{
 	Use:     "install <source>",
-	Short:   "Install skills from a GitHub repository",
+	Short:   "Install bundled or GitHub-hosted AI skills",
 	Long:    installLongMarkdown,
 	Example: installUsageMarkdown,
 	Args:    cobra.ExactArgs(1),

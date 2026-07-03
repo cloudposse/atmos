@@ -1,11 +1,16 @@
 package exec
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	mockTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -186,4 +191,86 @@ func BenchmarkCheckHelmfileConfig(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = checkHelmfileConfig(&atmosConfig)
 	}
+}
+
+func TestPrepareHelmfileAuthEnvironment(t *testing.T) {
+	baseEnv := []string{"PATH=/bin"}
+
+	t.Run("nil manager returns original env", func(t *testing.T) {
+		got, err := prepareHelmfileAuthEnvironment(nil, "dev", baseEnv)
+		require.NoError(t, err)
+		assert.Equal(t, baseEnv, got)
+	})
+
+	t.Run("disabled identity returns original env", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		manager := mockTypes.NewMockAuthManager(ctrl)
+
+		got, err := prepareHelmfileAuthEnvironment(manager, cfg.IdentityFlagDisabledValue, baseEnv)
+		require.NoError(t, err)
+		assert.Equal(t, baseEnv, got)
+	})
+
+	t.Run("explicit identity prepares env", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		manager := mockTypes.NewMockAuthManager(ctrl)
+		prepared := []string{"PATH=/bin", "AWS_PROFILE=dev"}
+		manager.EXPECT().
+			PrepareShellEnvironment(gomock.Any(), "dev", baseEnv).
+			Return(prepared, nil)
+
+		got, err := prepareHelmfileAuthEnvironment(manager, "dev", baseEnv)
+		require.NoError(t, err)
+		assert.Equal(t, prepared, got)
+	})
+
+	t.Run("empty identity uses default identity", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		manager := mockTypes.NewMockAuthManager(ctrl)
+		prepared := []string{"PATH=/bin", "AWS_PROFILE=default"}
+		manager.EXPECT().GetDefaultIdentity(false).Return("default", nil)
+		manager.EXPECT().
+			PrepareShellEnvironment(gomock.Any(), "default", baseEnv).
+			Return(prepared, nil)
+
+		got, err := prepareHelmfileAuthEnvironment(manager, "", baseEnv)
+		require.NoError(t, err)
+		assert.Equal(t, prepared, got)
+	})
+
+	t.Run("empty identity without default keeps original env", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		manager := mockTypes.NewMockAuthManager(ctrl)
+		manager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
+
+		got, err := prepareHelmfileAuthEnvironment(manager, "", baseEnv)
+		require.NoError(t, err)
+		assert.Equal(t, baseEnv, got)
+	})
+
+	t.Run("select identity requires default identity", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		manager := mockTypes.NewMockAuthManager(ctrl)
+		manager.EXPECT().GetDefaultIdentity(false).Return("", errors.New("no default"))
+
+		got, err := prepareHelmfileAuthEnvironment(manager, cfg.IdentityFlagSelectValue, baseEnv)
+		require.Error(t, err)
+		assert.Nil(t, got)
+		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	})
+
+	t.Run("prepare failure is wrapped", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		manager := mockTypes.NewMockAuthManager(ctrl)
+		prepareErr := errors.New("prepare failed")
+		manager.EXPECT().
+			PrepareShellEnvironment(gomock.Any(), "dev", baseEnv).
+			Return(nil, prepareErr)
+
+		got, err := prepareHelmfileAuthEnvironment(manager, "dev", baseEnv)
+		require.Error(t, err)
+		assert.Nil(t, got)
+		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+		assert.ErrorIs(t, err, prepareErr)
+	})
 }

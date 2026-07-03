@@ -1,0 +1,40 @@
+---
+title: dependencies
+sidebar_label: dependencies
+sidebar_position: 4
+slug: /workflows/dependencies
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The workflow-level `dependencies` field declares the tool versions a workflow requires, so Atmos can provision them before any step runs.
+</Intro>
+
+```yaml
+workflows:
+  validate:
+    dependencies:
+      tools:
+        tflint: "^0.54.0"
+        checkov: latest
+    steps:
+      - command: terraform validate vpc
+      - command: tflint --recursive
+        type: shell
+```
+
+Atmos installs missing tools and prepares `PATH` before running the workflow.
+
+## Version Values
+
+Dependency versions support the same toolchain version forms used elsewhere in Atmos:
+
+| Value | Meaning |
+| --- | --- |
+| `1.10.3` | Exact version |
+| `~> 1.10.0` | Compatible patch releases |
+| `^1.10.0` | Compatible minor releases |
+| `latest` | Latest available version |
+
+Use project-wide `.tool-versions` files for common tool versions and workflow `dependencies` for workflow-specific requirements.

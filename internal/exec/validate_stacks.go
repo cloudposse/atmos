@@ -54,9 +54,9 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if schemasAtmosManifestFlag != "" {
-		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
+		atmosConfig.SetSchemaRegistry("atmos", schema.SchemaRegistry{
 			Manifest: schemasAtmosManifestFlag,
-		}
+		})
 	}
 
 	err = ValidateStacks(&atmosConfig)

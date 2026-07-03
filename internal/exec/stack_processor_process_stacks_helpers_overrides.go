@@ -19,10 +19,15 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 	result.ComponentOverridesSettings = make(map[string]any, componentOverridesCapacity)
 	result.ComponentOverridesEnv = make(map[string]any, componentOverridesCapacity)
 	result.ComponentOverridesAuth = make(map[string]any, componentOverridesCapacity)
+	result.ComponentOverridesSecrets = make(map[string]any, componentOverridesCapacity)
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.ComponentOverridesProviders = make(map[string]any, componentOverridesCapacity)
 		result.ComponentOverridesRequiredProviders = make(map[string]any, componentOverridesCapacity)
+	}
+	if supportsComponentHooks(opts.ComponentType) {
 		result.ComponentOverridesHooks = make(map[string]any, componentOverridesCapacity)
+	}
+	if supportsGenerate(opts.ComponentType) {
 		result.ComponentOverridesGenerate = make(map[string]any, componentOverridesCapacity)
 	}
 
@@ -125,8 +130,8 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 		}
 	}
 
-	// Terraform-specific: extract hooks overrides.
-	if opts.ComponentType == cfg.TerraformComponentType {
+	// Extract hooks overrides for component types with lifecycle hooks.
+	if supportsComponentHooks(opts.ComponentType) {
 		if i, ok := componentOverrides[cfg.HooksSectionName]; ok {
 			componentOverridesHooks, ok := i.(map[string]any)
 			if !ok {
@@ -136,8 +141,8 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 		}
 	}
 
-	// Terraform-specific: extract generate overrides.
-	if opts.ComponentType == cfg.TerraformComponentType {
+	// Extract generate overrides for component types with file generation.
+	if supportsGenerate(opts.ComponentType) {
 		if i, ok := componentOverrides[cfg.GenerateSectionName]; ok {
 			componentOverridesGenerate, ok := i.(map[string]any)
 			if !ok {

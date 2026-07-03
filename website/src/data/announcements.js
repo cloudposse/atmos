@@ -7,7 +7,7 @@
  * `dismissCooldownMs` before the next announcement appears.
  *
  * Styling: announcements intentionally do NOT set per-entry colors. Every
- * announcement inherits the consistent brand-blue bar styling from the
+ * announcement inherits the consistent blue-slate neutral bar styling from the
  * `--announcement-bar-background` / `--announcement-bar-text-color` CSS
  * variables (see website/src/css/custom.css). Keep it that way -- a single
  * on-brand color reads as sophisticated on the dark site, whereas per-entry
@@ -36,17 +36,17 @@ export const announcements = [
   {
     id: 'atmos-ai',
     content:
-      'New: <a href="/cli/commands/ai">Native AI support</a> in Atmos — intelligent infrastructure assistance built right into the CLI',
+      'New: <a href="/cli/commands/ai/usage">Native AI support</a> in Atmos — intelligent infrastructure assistance built right into the CLI',
   },
   {
     id: 'atmos-toolchain',
     content:
-      'Easily install Terraform, OpenTofu, and all your other tools with one command using <a href="/cli/commands/toolchain">Atmos Toolchain</a>',
+      'Easily install Terraform, OpenTofu, and all your other tools with one command using <a href="/cli/commands/toolchain/usage">Atmos Toolchain</a>',
   },
   {
     id: 'atmos-auth',
     content:
-      'Simplify cloud authentication with <a href="/cli/commands/auth">Atmos Auth</a> — unified identity management across providers',
+      'Simplify cloud authentication with <a href="/cli/commands/auth/usage">Atmos Auth</a> — unified identity management across providers',
   },
   {
     id: 'atmos-codegen',
@@ -66,11 +66,11 @@ export const announcements = [
   {
     id: 'atmos-backends',
     content:
-      'Dynamically generate and manage Terraform <a href="/stacks/components/terraform/backend">backend configurations</a> across all your environments',
+      'Dynamically generate and manage Terraform <a href="/stacks/terraform/backend">backend configurations</a> across all your environments',
   },
   {
     id: 'atmos-oidc',
     content:
-      'Did you know Atmos handles <a href="/cli/commands/auth">GitHub OIDC</a>? Authenticate to AWS without long-lived credentials',
+      'Did you know Atmos handles <a href="/cli/commands/auth/usage">GitHub OIDC</a>? Authenticate to AWS without long-lived credentials',
   },
 ];

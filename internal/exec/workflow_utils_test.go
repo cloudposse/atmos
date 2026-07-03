@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -11,9 +12,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -106,6 +109,33 @@ func TestIsKnownWorkflowError(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestExecuteExtendedStepInitializesExecutorAndLoadsEnv(t *testing.T) {
+	ResetStepExecutorState()
+	t.Cleanup(ResetStepExecutorState)
+
+	step := &schema.WorkflowStep{
+		Name:  "blank",
+		Type:  "linebreak",
+		Count: 1,
+	}
+	err := executeExtendedStep(
+		context.Background(),
+		step,
+		&schema.WorkflowDefinition{Output: "none"},
+		[]string{"ATMOS_TEST_EXTENDED_ENV=loaded", "malformed"},
+		extendedStepOptions{
+			DryRun:     true,
+			FinalStack: "plat-ue2-dev",
+		},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, stepExecutorState)
+	assert.Equal(t, "loaded", stepExecutorState.Variables().Env["ATMOS_TEST_EXTENDED_ENV"])
+	assert.Equal(t, "plat-ue2-dev", stepExecutorState.Variables().Flags["stack"])
+	_, ok := stepExecutorState.GetResult("blank")
+	assert.True(t, ok)
 }
 
 // TestCheckAndMergeDefaultIdentity tests the checkAndMergeDefaultIdentity function.
@@ -851,6 +881,47 @@ func TestPrepareStepEnvironment_NilAuthManager(t *testing.T) {
 	assert.Nil(t, env)
 }
 
+func TestExecuteWorkflowControlStepUsesResolvedIdentityFallback(t *testing.T) {
+	showSummary := false
+	ctrl := gomock.NewController(t)
+	authManager := authTypes.NewMockAuthManager(ctrl)
+	gomock.InOrder(
+		authManager.EXPECT().
+			GetCachedCredentials(gomock.Any(), "parent-id").
+			Return(&authTypes.WhoamiInfo{Identity: "parent-id"}, nil),
+		authManager.EXPECT().
+			PrepareShellEnvironment(gomock.Any(), "parent-id", gomock.Any()).
+			DoAndReturn(func(_ context.Context, identityName string, currentEnv []string) ([]string, error) {
+				assert.Equal(t, "parent-id", identityName)
+				assert.Contains(t, currentEnv, "BASE_VAR=base-value")
+				return append(currentEnv, "ATMOS_IDENTITY="+identityName), nil
+			}),
+	)
+	parent := &schema.WorkflowStep{
+		Name: "checks",
+		Type: schema.TaskTypeParallel,
+		ParallelOutput: &schema.ParallelOutputConfig{
+			Mode:        "none",
+			ShowSummary: &showSummary,
+		},
+		Steps: []schema.WorkflowStep{{
+			Name:    "child",
+			Type:    schema.TaskTypeShell,
+			Command: "echo child",
+		}},
+	}
+
+	err := executeWorkflowControlStep(context.Background(), &workflowControlContext{
+		workflowDefinition:  &schema.WorkflowDefinition{},
+		dryRun:              true,
+		commandLineIdentity: "parent-id",
+		baseEnv:             []string{"BASE_VAR=base-value"},
+		authManager:         authManager,
+	}, parent)
+
+	require.NoError(t, err)
+}
+
 // TestWorkflowMatch tests the WorkflowMatch struct.
 func TestWorkflowMatch(t *testing.T) {
 	match := WorkflowMatch{
@@ -1163,6 +1234,46 @@ func TestExecuteWorkflow_ShellFieldsFallback(t *testing.T) {
 
 	// This should succeed - version command works.
 	err = ExecuteWorkflow(atmosConfig, "test-fallback", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	assert.NoError(t, err)
+}
+
+func TestExecuteWorkflow_SkipsStepWhenConditionIsFalse(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test when skip",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "skip",
+				Command: "exit 77",
+				Type:    "shell",
+				When:    schema.MustCondition("never"),
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-when-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	assert.NoError(t, err)
+
+	workflowDefWithIdentity := &schema.WorkflowDefinition{
+		Description: "Test when skip with identity",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:     "skip-auth",
+				Command:  "exit 77",
+				Type:     "shell",
+				Identity: "missing-identity",
+				When:     schema.MustCondition("never"),
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-when-skip-auth", "/path/to/workflow.yaml", workflowDefWithIdentity, false, "", "", "")
 	assert.NoError(t, err)
 }
 

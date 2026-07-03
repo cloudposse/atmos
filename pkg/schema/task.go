@@ -16,9 +16,22 @@ const (
 	TaskTypeShell = "shell"
 	// TaskTypeAtmos is the task type for atmos commands.
 	TaskTypeAtmos = "atmos"
+	// TaskTypeParallel is the task type for running nested steps concurrently.
+	TaskTypeParallel = "parallel"
+	// TaskTypeMatrix is the task type for expanding and running nested steps concurrently.
+	TaskTypeMatrix = "matrix"
 	// TaskTypeExec is the task type for commands that replace the Atmos
 	// process entirely (shell exec semantics). Must be the final step.
 	TaskTypeExec = "exec"
+	// TaskTypeWait is the action step that blocks until the background step(s)
+	// named in `for:` are ready (a service's health check) or complete.
+	TaskTypeWait = "wait"
+	// TaskTypeWaitAll is the action step that blocks until all background steps
+	// in scope are ready/complete.
+	TaskTypeWaitAll = "wait-all"
+	// TaskTypeCancel is the action step that gracefully tears down the background
+	// step(s) named in `for:`.
+	TaskTypeCancel = "cancel"
 )
 
 // Sentinel errors for task validation.
@@ -49,6 +62,10 @@ type Task struct {
 	Retry *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 	// Identity specifies the authentication identity to use.
 	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+	// Needs lists sibling task names that must complete before this task can run.
+	Needs []string `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
+	// When controls whether the task runs.
+	When Condition `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
@@ -75,14 +92,17 @@ type Task struct {
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
 	// Display configuration.
-	Output   string          `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
-	Height   int             `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
-	Viewport *ViewportConfig `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Viewport settings for output mode.
-	Count    int             `yaml:"count,omitempty" json:"count,omitempty" mapstructure:"count"`          // Count for linebreak type.
+	Output         string                `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Output mode: viewport, raw, log, none.
+	ParallelOutput *ParallelOutputConfig `yaml:"-" json:"parallel_output,omitempty" mapstructure:"parallel_output"`    // Structured output for parallel/matrix.
+	Height         int                   `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`       // Height for write type (editor lines).
+	Viewport       *ViewportConfig       `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Viewport settings for output mode.
+	Count          int                   `yaml:"count,omitempty" json:"count,omitempty" mapstructure:"count"`          // Count for linebreak type.
 
 	// Style step fields (like gum style).
-	Foreground       string `yaml:"foreground,omitempty" json:"foreground,omitempty" mapstructure:"foreground"`                      // Foreground color.
-	Background       string `yaml:"background,omitempty" json:"background,omitempty" mapstructure:"background"`                      // Background color.
+	Foreground string `yaml:"foreground,omitempty" json:"foreground,omitempty" mapstructure:"foreground"` // Foreground color.
+	// Background is the style background color. The YAML key `background:` is polymorphic
+	// (see UnmarshalYAML): a string value sets this color; a boolean value sets BackgroundAsync.
+	Background       string `yaml:"-" json:"background,omitempty" mapstructure:"background"`                                         // Background color (string-valued `background:`).
 	Border           string `yaml:"border,omitempty" json:"border,omitempty" mapstructure:"border"`                                  // Border style: none, hidden, normal, rounded, thick, double.
 	BorderForeground string `yaml:"border_foreground,omitempty" json:"border_foreground,omitempty" mapstructure:"border_foreground"` // Border foreground color.
 	BorderBackground string `yaml:"border_background,omitempty" json:"border_background,omitempty" mapstructure:"border_background"` // Border background color.
@@ -101,6 +121,11 @@ type Task struct {
 	Level  string            `yaml:"level,omitempty" json:"level,omitempty" mapstructure:"level"`    // Log level: trace, debug, info, warn, error.
 	Fields map[string]string `yaml:"fields,omitempty" json:"fields,omitempty" mapstructure:"fields"` // Structured log fields (key-value pairs).
 
+	// Say step fields.
+	Voice []string `yaml:"voice,omitempty" json:"voice,omitempty" mapstructure:"voice"` // Ordered voice candidates; first one installed on the host wins.
+	Rate  string   `yaml:"rate,omitempty" json:"rate,omitempty" mapstructure:"rate"`    // Speech rate: slow, normal, fast.
+	Print string   `yaml:"print,omitempty" json:"print,omitempty" mapstructure:"print"` // Print policy: fallback, always, never.
+
 	// Environment variables (supports templates).
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 
@@ -110,8 +135,86 @@ type Task struct {
 	// Exit step type fields.
 	Code int `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"` // Exit code for exit step type.
 
+	// HTTP step type fields (type: http; also accepts the alias type: webhook).
+	URL     string            `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`             // Request URL (required, supports templates).
+	Method  string            `yaml:"method,omitempty" json:"method,omitempty" mapstructure:"method"`    // HTTP method/verb: GET (default), POST, PUT, PATCH, DELETE, HEAD, OPTIONS.
+	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty" mapstructure:"headers"` // Request headers (supports templates).
+	Query   map[string]string `yaml:"query,omitempty" json:"query,omitempty" mapstructure:"query"`       // Query-string parameters (supports templates).
+	Body    string            `yaml:"body,omitempty" json:"body,omitempty" mapstructure:"body"`          // Raw request body (supports templates); mutually exclusive with form.
+	Form    map[string]string `yaml:"form,omitempty" json:"form,omitempty" mapstructure:"form"`          // Form/JSON body params; mutually exclusive with body.
+	Expect  *HTTPExpect       `yaml:"expect,omitempty" json:"expect,omitempty" mapstructure:"expect"`    // Success criteria; defaults to any 2xx.
+
+	// Container step fields.
+	//
+	// Action selects the container verb; its parameters are supplied under the single
+	// `with:` key. Build/Push/Run/Inspect are populated from `with:` by UnmarshalYAML
+	// based on Action, so they carry no YAML key (see decodeContainerWith).
+	//
+	// Only cross-cutting execution modifiers stay top-level (provider, runtime_auto_start,
+	// container). All action parameters — image, command, ports, mounts, healthcheck, etc. —
+	// live under `with:` (decoded into Build/Run/Push/Inspect).
+	Action           string                `yaml:"action,omitempty" json:"action,omitempty" mapstructure:"action"` // build, push, run, inspect.
+	Build            *ContainerBuildStep   `yaml:"-" json:"build,omitempty" mapstructure:"build"`
+	Push             *ContainerPushStep    `yaml:"-" json:"push,omitempty" mapstructure:"push"`
+	Run              *ContainerRunStep     `yaml:"-" json:"run,omitempty" mapstructure:"run"`
+	Inspect          *ContainerInspectStep `yaml:"-" json:"inspect,omitempty" mapstructure:"inspect"`
+	RuntimeAutoStart bool                  `yaml:"runtime_auto_start,omitempty" json:"runtime_auto_start,omitempty" mapstructure:"runtime_auto_start"`
+	Provider         string                `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`    // docker, podman, or empty for auto-detect.
+	Container        *WorkflowContainer    `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"` // Workflow container override or false to run on host.
+
+	// Require step type fields (type: require; also accepts the alias type: assert).
+	// The step is a read-only preconditions gate: it never mutates PATH or the environment.
+	Tools []string `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"` // Executables that must be found on PATH (supports templates).
+	Files []string `yaml:"files,omitempty" json:"files,omitempty" mapstructure:"files"` // Paths that must exist (supports templates).
+	Dirs  []string `yaml:"dirs,omitempty" json:"dirs,omitempty" mapstructure:"dirs"`    // Directories that must exist (supports templates).
+	Hint  string   `yaml:"hint,omitempty" json:"hint,omitempty" mapstructure:"hint"`    // Extra remediation note appended to the failure error (supports templates).
+
+	// Outputs declares named outputs derived from the step result.
+	Outputs map[string]string `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
+
 	// Show configuration for this step (overrides workflow-level show settings).
 	Show *ShowConfig `yaml:"show,omitempty" json:"show,omitempty" mapstructure:"show"`
+
+	// Control step fields.
+	Steps          []WorkflowStep      `yaml:"steps,omitempty" json:"steps,omitempty" mapstructure:"steps"`
+	MaxConcurrency int                 `yaml:"max_concurrency,omitempty" json:"max_concurrency,omitempty" mapstructure:"max_concurrency"`
+	Matrix         map[string][]string `yaml:"matrix,omitempty" json:"matrix,omitempty" mapstructure:"matrix"`
+	Fail           *ParallelFailConfig `yaml:"fail,omitempty" json:"fail,omitempty" mapstructure:"fail"`
+
+	// BackgroundAsync marks a container step to run asynchronously (decoded from a
+	// boolean-valued `background:` key); a string-valued `background:` sets the style color.
+	// In v1 the validator accepts `background: true` only on `type: container` steps.
+	BackgroundAsync bool `yaml:"-" json:"background_async,omitempty" mapstructure:"background_async"`
+	// For lists the background step name(s) a `wait`/`cancel` action step targets.
+	For []string `yaml:"-" json:"for,omitempty" mapstructure:"for"`
+
+	// DryRun is set by executors and is not read from user configuration.
+	DryRun bool `yaml:"-" json:"-" mapstructure:"-"`
+}
+
+// UnmarshalYAML handles keys whose meaning depends on shape or a sibling field:
+//   - `output`     : scalar mode string or a structured ParallelOutputConfig.
+//   - `with`       : the container action's parameters, decoded into Build/Run/Push/Inspect by `action`.
+//   - `background` : boolean async marker, or a string style color.
+//   - `for`        : scalar or sequence of target step names (wait/cancel).
+func (task *Task) UnmarshalYAML(value *yaml.Node) error {
+	type plain Task
+	// Decode into a zero-value temp first so a reused receiver does not retain
+	// fields omitted from this YAML node (Decode merges into the destination).
+	var fresh plain
+	nodes, sanitized := splitStepPolymorphicNodes(value)
+	if err := sanitized.Decode(&fresh); err != nil {
+		return err
+	}
+	*task = Task(fresh)
+	return applyStepPolymorphicNodes(nodes, task.Action, stepPolyTargets{
+		output:    &task.Output,
+		parallel:  &task.ParallelOutput,
+		async:     &task.BackgroundAsync,
+		color:     &task.Background,
+		forList:   &task.For,
+		container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
+	})
 }
 
 // Tasks is a slice of Task that supports flexible YAML unmarshaling.
@@ -189,6 +292,8 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		WorkingDirectory: task.WorkingDirectory,
 		Retry:            task.Retry,
 		Identity:         task.Identity,
+		Needs:            task.Needs,
+		When:             task.When,
 		Interactive:      task.Interactive,
 		Tty:              task.Tty,
 
@@ -213,11 +318,12 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Extensions: task.Extensions,
 
 		// Display configuration.
-		Output:   task.Output,
-		Height:   task.Height,
-		Viewport: task.Viewport,
-		Timeout:  timeoutStr,
-		Count:    task.Count,
+		Output:         task.Output,
+		ParallelOutput: task.ParallelOutput,
+		Height:         task.Height,
+		Viewport:       task.Viewport,
+		Timeout:        timeoutStr,
+		Count:          task.Count,
 
 		// Style step fields.
 		Foreground:       task.Foreground,
@@ -240,6 +346,11 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Level:  task.Level,
 		Fields: task.Fields,
 
+		// Say step fields.
+		Voice: task.Voice,
+		Rate:  task.Rate,
+		Print: task.Print,
+
 		// Environment variables.
 		Env: task.Env,
 
@@ -249,8 +360,45 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		// Exit step type fields.
 		Code: task.Code,
 
+		// HTTP step type fields.
+		URL:     task.URL,
+		Method:  task.Method,
+		Headers: task.Headers,
+		Query:   task.Query,
+		Body:    task.Body,
+		Form:    task.Form,
+		Expect:  task.Expect,
+
+		// Container step fields.
+		Action:           task.Action,
+		Build:            task.Build,
+		Push:             task.Push,
+		Run:              task.Run,
+		Inspect:          task.Inspect,
+		RuntimeAutoStart: task.RuntimeAutoStart,
+		Provider:         task.Provider,
+		Container:        task.Container,
+
+		// Require step fields.
+		Tools: task.Tools,
+		Files: task.Files,
+		Dirs:  task.Dirs,
+		Hint:  task.Hint,
+
+		Outputs: task.Outputs,
+
 		// Show configuration.
 		Show: task.Show,
+
+		// Control step fields.
+		Steps:           task.Steps,
+		MaxConcurrency:  task.MaxConcurrency,
+		Matrix:          task.Matrix,
+		Fail:            task.Fail,
+		BackgroundAsync: task.BackgroundAsync,
+		For:             task.For,
+
+		DryRun: task.DryRun,
 	}
 }
 
@@ -273,6 +421,8 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		WorkingDirectory: step.WorkingDirectory,
 		Retry:            step.Retry,
 		Identity:         step.Identity,
+		Needs:            step.Needs,
+		When:             step.When,
 		Interactive:      step.Interactive,
 		Tty:              step.Tty,
 		Timeout:          timeout,
@@ -298,10 +448,11 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Extensions: step.Extensions,
 
 		// Display configuration.
-		Output:   step.Output,
-		Height:   step.Height,
-		Viewport: step.Viewport,
-		Count:    step.Count,
+		Output:         step.Output,
+		ParallelOutput: step.ParallelOutput,
+		Height:         step.Height,
+		Viewport:       step.Viewport,
+		Count:          step.Count,
 
 		// Style step fields.
 		Foreground:       step.Foreground,
@@ -324,6 +475,11 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Level:  step.Level,
 		Fields: step.Fields,
 
+		// Say step fields.
+		Voice: step.Voice,
+		Rate:  step.Rate,
+		Print: step.Print,
+
 		// Environment variables.
 		Env: step.Env,
 
@@ -333,8 +489,45 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		// Exit step type fields.
 		Code: step.Code,
 
+		// HTTP step type fields.
+		URL:     step.URL,
+		Method:  step.Method,
+		Headers: step.Headers,
+		Query:   step.Query,
+		Body:    step.Body,
+		Form:    step.Form,
+		Expect:  step.Expect,
+
+		// Container step fields.
+		Action:           step.Action,
+		Build:            step.Build,
+		Push:             step.Push,
+		Run:              step.Run,
+		Inspect:          step.Inspect,
+		RuntimeAutoStart: step.RuntimeAutoStart,
+		Provider:         step.Provider,
+		Container:        step.Container,
+
+		// Require step fields.
+		Tools: step.Tools,
+		Files: step.Files,
+		Dirs:  step.Dirs,
+		Hint:  step.Hint,
+
+		Outputs: step.Outputs,
+
 		// Show configuration.
 		Show: step.Show,
+
+		// Control step fields.
+		Steps:           step.Steps,
+		MaxConcurrency:  step.MaxConcurrency,
+		Matrix:          step.Matrix,
+		Fail:            step.Fail,
+		BackgroundAsync: step.BackgroundAsync,
+		For:             step.For,
+
+		DryRun: step.DryRun,
 	}
 }
 
@@ -393,11 +586,18 @@ func decodeTaskItem(item any, index int) (Task, error) {
 // decodeTaskFromMap decodes a map into a Task using mapstructure.
 func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	var task Task
+	m, err := normalizeTaskOutputMap(m, &task)
+	if err != nil {
+		return Task{}, fmt.Errorf("failed to decode task output at index %d: %w", index, err)
+	}
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		Result:           &task,
 		TagName:          "mapstructure",
 		WeaklyTypedInput: true,
-		DecodeHook:       mapstructure.StringToTimeDurationHookFunc(),
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			ConditionDecodeHook(),
+		),
 	})
 	if err != nil {
 		return Task{}, fmt.Errorf("failed to create decoder for task at index %d: %w", index, err)
@@ -410,4 +610,40 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 		task.Type = TaskTypeShell
 	}
 	return task, nil
+}
+
+func normalizeTaskOutputMap(m map[string]any, task *Task) (map[string]any, error) {
+	output, ok := m["output"]
+	if !ok {
+		return m, nil
+	}
+	switch v := output.(type) {
+	case string:
+		return m, nil
+	case map[string]any:
+		var cfg ParallelOutputConfig
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result:           &cfg,
+			TagName:          "mapstructure",
+			WeaklyTypedInput: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := decoder.Decode(v); err != nil {
+			return nil, err
+		}
+		task.Output = cfg.Mode
+		task.ParallelOutput = &cfg
+		copied := make(map[string]any, len(m)-1)
+		for key, val := range m {
+			if key == "output" {
+				continue
+			}
+			copied[key] = val
+		}
+		return copied, nil
+	default:
+		return m, nil
+	}
 }

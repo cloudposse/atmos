@@ -53,7 +53,6 @@ tests:
       diff: []
       stderr:
         - "workflow step execution failed"
-        - "## Hints"
         - "The following command failed to execute:"
         - "nonexistentcommand"
         - "To resume the workflow from this step, run:"
@@ -77,7 +76,6 @@ tests:
       diff: []
       stderr:
         - "workflow step execution failed"
-        - "## Hints"
         - "The following command failed to execute:"
         - "To resume the workflow from this step, run:"
       exit_code: 1
@@ -101,7 +99,6 @@ tests:
       stderr:
         - "This should fail"
         - "workflow step execution failed"
-        - "## Hints"
         - "The following command failed to execute:"
         - "To resume the workflow from this step, run:"
       exit_code: 1
@@ -122,7 +119,6 @@ tests:
       stderr:
         - "Workflow Error"
         - "workflow has no steps defined"
-        - "## Explanation"
         - "Workflow no-steps is empty and requires at least one step to execute."
       exit_code: 1
 
@@ -141,7 +137,6 @@ tests:
       diff: []
       stderr:
         - "invalid workflow step type"
-        - "## Hints"
         - "Step type 'invalid' is not supported"
         - "Each step must specify a valid type: 'atmos', 'shell', 'exec', or an"
       exit_code: 1
@@ -164,7 +159,6 @@ tests:
       stderr:
         - "Workflow Error"
         - "invalid from-step flag"
-        - "## Explanation"
         - "The --from-step flag was set to dne, but this step does not exist in workflow"
         - "pass"
         - "### Available steps:"
@@ -187,7 +181,6 @@ tests:
       stderr:
         - "# Error"
         - "no workflow found"
-        - "## Hints"
         - "No workflow exists with name no-workflow-exists"
         - "Available workflows in test.yaml"
         - "fail"
@@ -215,7 +208,6 @@ tests:
       stderr:
         - "# Error"
         - "invalid workflow manifest"
-        - "## Explanation"
         - "The workflow manifest"
         - "must be a map with"
         - "workflows: key"
@@ -237,7 +229,6 @@ tests:
       stderr:
         - "# Error"
         - "workflow file not found"
-        - "## Hints"
         - "The workflow manifest file"
         - "does not exist"
       exit_code: 1
@@ -259,7 +250,6 @@ tests:
       diff: []
       stderr:
         - "workflow step execution failed"
-        - "## Hints"
         - "The following command failed to execute:"
         - "To resume the workflow from this step, run:"
       exit_code: 1
@@ -279,7 +269,6 @@ tests:
       diff: []
       stderr:
         - "workflow step execution failed"
-        - "## Hints"
         - "The following command failed to execute:"
         - "To resume the workflow from this step, run:"
       exit_code: 1

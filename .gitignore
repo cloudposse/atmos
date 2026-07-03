@@ -27,9 +27,16 @@
 # Demo binaries and large audio files
 tools/director/director
 demos/audio/
+demo/screengrabs/.bin/
+
+# Generated landing-page demo recordings (VHS output).
+# NEVER commit these — they bloat the repo. The build pipeline renders them and
+# syncs to S3/CDN (`atmos demo publish`); the site references the remote URL.
+/website/static/img/demos/
 
 # Module directory
 .terraform
+**/.workdir/
 **/.idea
 **/*.iml
 
@@ -109,6 +116,12 @@ tools/lintroller/.lintroller
 /custom-gcl
 tools/gomodcheck/.gomodcheck
 
+# golangci-lint cache. Worktrees point GOLANGCI_LINT_CACHE at a repo-local dir to
+# avoid cross-worktree lock contention; it's large (100MB+) and machine-local, so
+# never commit it.
+.golangci-cache/
+**/.golangci-cache/
+
 # Claude Code and Hive Mind development tools
 .claude-flow/
 .hive-mind/
@@ -150,5 +163,9 @@ TESTABILITY_CHANGES_SUMMARY.md
 *_summary.txt
 reply_to_*.sh
 *.ansi
+*.ascii
 .claude-plan.md
 .claude/plans/
+
+# Generated JUnit test reports from `atmos terraform test` in CI.
+*.junit.xml

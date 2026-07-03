@@ -1,0 +1,51 @@
+---
+slug: offline-ai-skill-catalog
+title: "AI Skills, Now Bundled in the Atmos Binary"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+The official Atmos [agent skills](/ai/agent-skills) are now embedded directly in the Atmos binary. `atmos ai skill install <name>` works **fully offline** — no network call, no Git clone — and `atmos ai skill list` shows a single merged view of every skill available to you alongside what's already installed.
+
+<!--truncate-->
+
+## What Changed
+
+Previously, installing an Atmos skill meant fetching it from a GitHub repository. But this also meant that the skills could be out of sync with the version of Atmos that you're running.
+
+Now the complete catalog of official skills (and their reference files) ships inside the binary via an embedded filesystem. Two user-facing improvements fall out of that:
+
+- **Offline install by name.** `atmos ai skill install atmos-terraform` copies the skill straight out of the binary — instant, deterministic, and air-gap friendly. Community skills can still be installed from any GitHub repository.
+- **A unified available-vs-installed listing.** `atmos ai skill list` merges the bundled catalog with what's installed locally, alphabetically sorted, with a status marker per skill (`●` installed, `○` available).
+
+## How to Use It
+
+```shell
+# Browse everything — bundled catalog plus anything you've installed
+atmos ai skill list
+
+# Show only what's installed
+atmos ai skill list --installed
+
+# More detail per skill
+atmos ai skill list --detailed
+
+# Install an official skill offline, by its bare name
+atmos ai skill install atmos-terraform
+```
+
+The `--installed` view is also bound to `ATMOS_AI_SKILL_INSTALLED` for scripting. Once a skill is installed, use it with any command via the global `--skill` flag (with `--ai`):
+
+```shell
+atmos terraform plan vpc -s plat-ue2-prod --ai --skill atmos-terraform
+```
+
+## Why It Matters
+
+- **Works anywhere.** No network or Git access required to install the official skills — ideal for locked-down CI runners and air-gapped environments.
+- **Discoverable.** One command shows the full catalog and your install state together, instead of guessing what's available.
+- **Versioned with Atmos.** The bundled skills travel with the binary, so the catalog always matches the Atmos you're running.
+
+## Get Involved
+
+See the [`atmos ai skill`](/cli/commands/ai/skill) command reference and the [Agent Skills](/ai/agent-skills) guide. Skill ideas and contributions are welcome in the [Atmos community](https://github.com/cloudposse/atmos).

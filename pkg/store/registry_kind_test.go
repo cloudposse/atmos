@@ -1,8 +1,11 @@
 package store
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/go-viper/mapstructure/v2"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,6 +37,47 @@ func TestResolveKind_KindTakesPrecedence(t *testing.T) {
 	// Falls back to legacy type when kind is empty.
 	got = resolveKind(StoreConfig{Type: "aws-ssm-parameter-store"})
 	assert.Equal(t, KindAWSSSM, got)
+}
+
+func TestStoreConfigDecode_MapstructureKind(t *testing.T) {
+	var cfg StoreConfig
+	err := mapstructure.Decode(map[string]any{
+		"kind":     "aws/ssm",
+		"identity": "local-aws",
+		"secret":   true,
+		"options": map[string]any{
+			"region": "us-east-1",
+		},
+	}, &cfg)
+	require.NoError(t, err)
+
+	assert.Equal(t, "aws/ssm", cfg.Kind)
+	assert.Equal(t, "local-aws", cfg.Identity)
+	assert.True(t, cfg.Secret)
+	assert.Equal(t, "us-east-1", cfg.Options["region"])
+}
+
+func TestStoreConfigDecode_ViperKind(t *testing.T) {
+	v := viper.New()
+	v.SetConfigType("yaml")
+	require.NoError(t, v.ReadConfig(strings.NewReader(`
+stores:
+  config/ssm:
+    kind: aws/ssm
+    identity: local-aws
+    options:
+      region: us-east-1
+`)))
+
+	var cfg struct {
+		Stores StoresConfig `mapstructure:"stores"`
+	}
+	require.NoError(t, v.Unmarshal(&cfg))
+
+	require.Contains(t, cfg.Stores, "config/ssm")
+	assert.Equal(t, "aws/ssm", cfg.Stores["config/ssm"].Kind)
+	assert.Equal(t, "local-aws", cfg.Stores["config/ssm"].Identity)
+	assert.Equal(t, "us-east-1", cfg.Stores["config/ssm"].Options["region"])
 }
 
 func TestMapLegacyType_OnePasswordAliases(t *testing.T) {

@@ -26,6 +26,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
@@ -211,7 +212,7 @@ func (p *ssoProvider) newOIDCClient(ctx context.Context) (*ssooidc.Client, error
 		config.WithCredentialsProvider(aws.AnonymousCredentials{}),
 	}
 
-	if resolverOpt := awsCloud.GetResolverConfigOption(nil, p.config); resolverOpt != nil {
+	if resolverOpt := awsCloud.GetBaseEndpointConfigOption(nil, p.config); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}
 
@@ -408,7 +409,7 @@ func displayVerificationDialog(code, url string) {
 	}
 
 	// Render the box and display it.
-	fmt.Fprintf(os.Stderr, "%s\n", boxStyle.Render(content.String()))
+	utils.PrintfMessageToTUI("%s\n", boxStyle.Render(content.String()))
 }
 
 // displayVerificationPlainText shows verification code in plain text (for non-TTY/CI).
@@ -570,6 +571,7 @@ func (p *ssoProvider) pollForAccessTokenWithSpinner(ctx context.Context, oidcCli
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = theme.GetCurrentStyles().Spinner
+	fps.Apply(&s)
 
 	model := spinnerModel{
 		spinner:    s,
