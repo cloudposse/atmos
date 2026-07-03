@@ -480,6 +480,91 @@ func TestCastHandlerStepsInheritEnv(t *testing.T) {
 	}
 }
 
+func TestCastHandlerDiscardsRecordingWhenChildFails(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	tmpDir := t.TempDir()
+	castPath := filepath.Join(tmpDir, "demo.cast")
+	if err := os.WriteFile(castPath, []byte("previous good cast"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+		Name:             "demo",
+		Type:             schema.TaskTypeCast,
+		WorkingDirectory: tmpDir,
+		Output:           string(OutputModeNone),
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "boom",
+				Type:    schema.TaskTypeAtmos,
+				Command: "terraform apply",
+				Output:  string(OutputModeNone),
+				Env:     map[string]string{"_ATMOS_STEP_FAKE": "fail"},
+			},
+		},
+	}, NewVariables())
+	if err == nil {
+		t.Fatal("expected cast step to fail when a child step fails")
+	}
+
+	content, readErr := os.ReadFile(castPath)
+	if readErr != nil {
+		t.Fatalf("read cast: %v", readErr)
+	}
+	if string(content) != "previous good cast" {
+		t.Fatalf("failed recording replaced the committed cast: %q", content)
+	}
+}
+
+func TestCastHandlerCommitsRecordingWhenChildrenSucceed(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	tmpDir := t.TempDir()
+	castPath := filepath.Join(tmpDir, "demo.cast")
+	if err := os.WriteFile(castPath, []byte("stale cast"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+		Name:             "demo",
+		Type:             schema.TaskTypeCast,
+		WorkingDirectory: tmpDir,
+		Output:           string(OutputModeNone),
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "ok",
+				Type:    schema.TaskTypeAtmos,
+				Command: "terraform plan",
+				Output:  string(OutputModeNone),
+				Env:     map[string]string{"_ATMOS_STEP_FAKE": "ok"},
+			},
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("execute cast: %v", err)
+	}
+
+	content, readErr := os.ReadFile(castPath)
+	if readErr != nil {
+		t.Fatalf("read cast: %v", readErr)
+	}
+	if string(content) == "stale cast" {
+		t.Fatal("successful recording did not replace the stale cast")
+	}
+	if !strings.HasPrefix(string(content), `{"version":3`) {
+		t.Fatalf("committed cast is not an asciicast recording: %.60q", content)
+	}
+}
+
 func TestCastHandlerRecordsToastStep(t *testing.T) {
 	if err := iolib.Initialize(); err != nil {
 		t.Fatalf("initialize io: %v", err)

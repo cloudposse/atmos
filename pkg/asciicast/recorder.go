@@ -3,7 +3,6 @@ package asciicast
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -46,6 +45,7 @@ type Options struct {
 	Height     int
 	RecordIn   bool
 	Explicit   bool
+	Overwrite  bool
 	Env        map[string]string
 	Now        func() time.Time
 	Executable string
@@ -53,6 +53,11 @@ type Options struct {
 }
 
 // Recorder writes asciicast v3 header and event records to a file.
+//
+// Events stream into a temporary file next to the final path; Close commits
+// the recording by moving the temp file into place, and Discard drops it
+// without ever touching the final path. A failed recording therefore never
+// replaces a previously committed cast.
 type Recorder struct {
 	mu            sync.Mutex
 	file          *os.File
@@ -60,6 +65,7 @@ type Recorder struct {
 	started       time.Time
 	closed        bool
 	path          string
+	tempPath      string
 	recordIn      bool
 	width         int
 	height        int
@@ -119,12 +125,9 @@ func Start(opts *Options) (*Recorder, error) {
 	if err := os.MkdirAll(filepath.Dir(path), castDirPerm); err != nil {
 		return nil, fmt.Errorf("create cast directory: %w", err)
 	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, castFilePerm)
+	file, err := createCastTempFile(path, opts.Overwrite)
 	if err != nil {
-		if errors.Is(err, os.ErrExist) {
-			return nil, fmt.Errorf("%w: %s", ErrCastOutputExists, path)
-		}
-		return nil, fmt.Errorf("create cast file: %w", err)
+		return nil, err
 	}
 
 	rec := &Recorder{
@@ -132,6 +135,7 @@ func Start(opts *Options) (*Recorder, error) {
 		writer:     bufio.NewWriter(file),
 		started:    started,
 		path:       path,
+		tempPath:   file.Name(),
 		recordIn:   opts.RecordIn,
 		width:      width,
 		height:     height,
@@ -140,11 +144,32 @@ func Start(opts *Options) (*Recorder, error) {
 		outputRate: opts.OutputRate,
 	}
 	if err := writeRecorderHeader(rec, newRecorderHeader(rec, opts, started)); err != nil {
-		_ = rec.Close()
-		_ = os.Remove(path)
+		_ = rec.Discard()
 		return nil, err
 	}
 	return rec, nil
+}
+
+// createCastTempFile opens the temp file a recording streams into. It lives
+// next to the final path so the commit rename stays on one filesystem, and a
+// failed or aborted recording never replaces a previously committed cast.
+// Unless overwrite is set, an existing final path is refused up front.
+func createCastTempFile(path string, overwrite bool) (*os.File, error) {
+	if !overwrite {
+		if _, err := os.Stat(path); err == nil {
+			return nil, fmt.Errorf("%w: %s", ErrCastOutputExists, path)
+		}
+	}
+	file, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return nil, fmt.Errorf("create cast file: %w", err)
+	}
+	if err := file.Chmod(castFilePerm); err != nil {
+		_ = file.Close()
+		_ = os.Remove(file.Name()) //nolint:gosec // Removes the temp file this function just created.
+		return nil, fmt.Errorf("create cast file: %w", err)
+	}
+	return file, nil
 }
 
 // newRecorderHeader builds the asciicast v3 header for a new recording.
@@ -223,19 +248,54 @@ func (r *Recorder) Resize(width, height int) error {
 	return r.writeEventLocked("r", fmt.Sprintf("%dx%d", width, height))
 }
 
-// Close flushes and closes the underlying cast file.
+// Close commits the recording: it flushes and closes the temp cast file and
+// moves it into place at the final path. After a Discard it is a no-op.
 func (r *Recorder) Close() error {
 	defer perf.Track(nil, "asciicast.Recorder.Close")()
 
 	if r == nil {
 		return nil
 	}
+	tempPath, err := r.closeFile()
+	if tempPath == "" {
+		return err
+	}
+	if err != nil {
+		_ = os.Remove(tempPath)
+		return err
+	}
+	return r.commit(tempPath)
+}
+
+// Discard closes the recording and removes the temp cast file without ever
+// touching the final path. It is safe on an already-closed recorder.
+func (r *Recorder) Discard() error {
+	defer perf.Track(nil, "asciicast.Recorder.Discard")()
+
+	if r == nil {
+		return nil
+	}
+	tempPath, err := r.closeFile()
+	if tempPath == "" {
+		return err
+	}
+	if removeErr := os.Remove(tempPath); err == nil && removeErr != nil {
+		err = removeErr
+	}
+	return err
+}
+
+// closeFile flushes and closes the underlying temp file exactly once,
+// returning the temp path the first time so exactly one caller finalizes it.
+func (r *Recorder) closeFile() (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
-		return nil
+		return "", nil
 	}
 	r.closed = true
+	tempPath := r.tempPath
+	r.tempPath = ""
 	var err error
 	if r.writer != nil {
 		err = r.writer.Flush()
@@ -243,7 +303,25 @@ func (r *Recorder) Close() error {
 	if closeErr := r.file.Close(); err == nil {
 		err = closeErr
 	}
-	return err
+	return tempPath, err
+}
+
+// commit moves the closed temp file into place at the final path. Rename
+// replaces the target atomically on POSIX; on Windows it fails when the
+// target exists, so retry once after removing it.
+func (r *Recorder) commit(tempPath string) error {
+	if err := os.Rename(tempPath, r.path); err == nil {
+		return nil
+	}
+	if err := os.Remove(r.path); err != nil && !os.IsNotExist(err) {
+		_ = os.Remove(tempPath)
+		return fmt.Errorf("commit cast file: %w", err)
+	}
+	if err := os.Rename(tempPath, r.path); err != nil {
+		_ = os.Remove(tempPath)
+		return fmt.Errorf("commit cast file: %w", err)
+	}
+	return nil
 }
 
 func (r *Recorder) writeJSON(v any) error {

@@ -133,14 +133,17 @@ func (h *CastHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Work
 	}
 	runErr := runCastBody(ctx, step, vars, workflow)
 	restore()
-	closeErr := rec.Close()
-	if closeErr != nil {
-		runErr = errors.Join(runErr, closeErr)
-	}
-	if closeErr == nil {
+	if runErr != nil {
+		// A failed recording is discarded so it never replaces a previously
+		// committed cast at the output path.
+		if discardErr := rec.Discard(); discardErr != nil {
+			runErr = errors.Join(runErr, discardErr)
+		}
+		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast discarded (recording failed): %s\n", rec.Path())
+	} else if closeErr := rec.Close(); closeErr != nil {
+		runErr = closeErr
+	} else {
 		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast recorded: %s\n", rec.Path())
-	}
-	if runErr == nil {
 		runErr = renderCastOutputs(step, rec.Path())
 	}
 	result := NewStepResult(rec.Path()).WithMetadata("cast", rec.Path())
@@ -183,6 +186,7 @@ func startStepRecorder(step *schema.WorkflowStep, vars *Variables) (*asciicast.R
 		Height:     height,
 		RecordIn:   viper.GetBool("cast.recording.input"),
 		Explicit:   path != "",
+		Overwrite:  true, // Declarative steps own their output path; commit replaces it.
 		Env:        env,
 		OutputRate: outputRate,
 	})

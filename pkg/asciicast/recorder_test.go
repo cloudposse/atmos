@@ -73,6 +73,103 @@ func TestStartRemovesCastFileWhenHeaderWriteFails(t *testing.T) {
 	}
 }
 
+func TestCloseCommitsTempFileIntoPlace(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "demo.cast")
+	rec, err := Start(&Options{Path: path, Explicit: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("final cast exists before Close: %v", statErr)
+	}
+	rec.Record("o", "hello")
+	if err := rec.Close(); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "hello") {
+		t.Fatal("committed cast is missing recorded output")
+	}
+	assertNoTempFiles(t, dir)
+}
+
+func TestDiscardLeavesExistingCastUntouched(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "demo.cast")
+	if err := os.WriteFile(path, []byte("previous good cast"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := Start(&Options{Path: path, Explicit: true, Overwrite: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec.Record("o", "broken output")
+	if err := rec.Discard(); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "previous good cast" {
+		t.Fatalf("discard modified the committed cast: %q", content)
+	}
+	// Close after Discard must stay a no-op and never touch the final path.
+	if err := rec.Close(); err != nil {
+		t.Fatal(err)
+	}
+	content, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "previous good cast" {
+		t.Fatalf("close after discard modified the committed cast: %q", content)
+	}
+	assertNoTempFiles(t, dir)
+}
+
+func TestOverwriteReplacesExistingCastOnCommit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "demo.cast")
+	if err := os.WriteFile(path, []byte("stale cast"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := Start(&Options{Path: path, Explicit: true, Overwrite: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec.Record("o", "fresh output")
+	if err := rec.Close(); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "fresh output") {
+		t.Fatalf("commit did not replace the stale cast: %q", content)
+	}
+	assertNoTempFiles(t, dir)
+}
+
+// assertNoTempFiles fails when a recording leaves temp files behind.
+func assertNoTempFiles(t *testing.T, dir string) {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.Contains(entry.Name(), ".tmp-") {
+			t.Fatalf("temp cast file left behind: %s", entry.Name())
+		}
+	}
+}
+
 func TestRecorderOmitsInputUnlessEnabled(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "demo.cast")
 	rec, err := Start(&Options{Path: path, Explicit: true, Now: func() time.Time {

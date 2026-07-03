@@ -48,10 +48,6 @@ func StartRecordingIfRequested(cmd *cobra.Command, atmosConfig *schema.AtmosConf
 
 	castFlag := cmd.Flags().Lookup(FlagName)
 	flagChanged := castFlag != nil && castFlag.Changed
-	if skipRecording(cmd, atmosConfig, flagChanged) {
-		return nil
-	}
-
 	flagValue := ""
 	if flagChanged {
 		var err error
@@ -59,6 +55,15 @@ func StartRecordingIfRequested(cmd *cobra.Command, atmosConfig *schema.AtmosConf
 		if err != nil {
 			return err
 		}
+	}
+	// Commands with DisableFlagParsing (e.g. `git hooks run`) never parse the
+	// global --cast flag, so recover it from the raw arguments — the same way
+	// processChdirFlag recovers --chdir.
+	if !flagChanged && cmd.DisableFlagParsing {
+		flagValue, flagChanged = castFlagFromArgs(args)
+	}
+	if skipRecording(cmd, atmosConfig, flagChanged) {
+		return nil
 	}
 	rec, plan, err := startRecorder(flagValue, flagChanged, atmosConfig, args)
 	if err != nil {
@@ -75,11 +80,12 @@ func StartRecordingIfRequested(cmd *cobra.Command, atmosConfig *schema.AtmosConf
 }
 
 // skipRecording reports whether cast recording should not start for this
-// invocation. Help output is recorded only when --cast is passed explicitly;
-// implicit (config-enabled) recording skips it so casual `--help` calls are
-// not captured. Explicit help recording powers the docs screengrab pipeline.
+// invocation. Help and completion output are recorded only when --cast is
+// passed explicitly; implicit (config-enabled) recording skips them so casual
+// `--help` calls and shell completion machinery (__complete) are not
+// captured. Explicit help recording powers the docs screengrab pipeline.
 func skipRecording(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, flagChanged bool) bool {
-	if isCompletionCommand(cmd) {
+	if isCompletionCommand(cmd) && !flagChanged {
 		return true
 	}
 	isHelp := cmd.Name() == "help" || cmd.Flags().Changed("help")
@@ -87,6 +93,23 @@ func skipRecording(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, f
 		return true
 	}
 	return !atmosConfig.Cast.Recording.Enabled && !flagChanged
+}
+
+// castFlagFromArgs extracts the --cast flag from unparsed raw arguments.
+// Arguments after "--" belong to the downstream command and are not scanned.
+func castFlagFromArgs(args []string) (string, bool) {
+	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
+		if arg == "--"+FlagName {
+			return autoFlagValue, true
+		}
+		if strings.HasPrefix(arg, "--"+FlagName+"=") {
+			return strings.TrimPrefix(arg, "--"+FlagName+"="), true
+		}
+	}
+	return "", false
 }
 
 type recordingOutputPlan struct {
@@ -115,7 +138,7 @@ func startRecorder(flagValue string, flagChanged bool, atmosConfig *schema.Atmos
 	})
 	if err != nil {
 		if plan.removeCast && plan.castPath != "" {
-			_ = os.Remove(plan.castPath)
+			_ = os.Remove(plan.castPath) //nolint:gosec // Removes the intermediate cast path this command planned, not untrusted input.
 		}
 		return nil, recordingOutputPlan{}, err
 	}
@@ -149,7 +172,7 @@ func planRecordingOutput(value string, explicit bool) (recordingOutputPlan, erro
 }
 
 func planRenderedRecordingOutput(output string) (recordingOutputPlan, error) {
-	if _, err := os.Stat(output); err == nil {
+	if _, err := os.Stat(output); err == nil { //nolint:gosec // Existence check on the user's own --cast output path.
 		return recordingOutputPlan{}, fmt.Errorf("%w: %s", asciicast.ErrRenderOutputExists, output)
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return recordingOutputPlan{}, fmt.Errorf("%w: %s: %w", errUtils.ErrStatFile, output, err)
