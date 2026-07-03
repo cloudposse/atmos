@@ -681,8 +681,9 @@ func (s *Store) downloadViaRuntime(ctx context.Context, key string) (io.ReadClos
 	return extractFromZip(zipData)
 }
 
-// fetchBlob downloads the bytes at a pre-signed blob URL. The URL carries its
-// own authentication, so it is fetched with a plain client (no GitHub token).
+// fetchBlob downloads the bytes at a GitHub-issued signed blob URL. Runtime
+// artifact URLs and REST artifact redirect URLs carry their own authentication,
+// so they must be fetched with a plain client (no GitHub token).
 func (s *Store) fetchBlob(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -690,7 +691,7 @@ func (s *Store) fetchBlob(ctx context.Context, url string) ([]byte, error) {
 	}
 
 	client := &http.Client{Timeout: httpTimeout}
-	resp, err := client.Do(req) //nolint:gosec // G704: url is a GitHub-issued, pre-signed blob URL from the runtime API.
+	resp, err := client.Do(req) //nolint:gosec // G704: url is a GitHub-issued signed blob URL.
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to download artifact blob: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
@@ -729,20 +730,9 @@ func (s *Store) downloadArtifactContent(ctx context.Context, artifactID int64) (
 		return nil, fmt.Errorf("%w: failed to get artifact download URL: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create download request: %w", errUtils.ErrArtifactDownloadFailed, err)
-	}
-
-	resp, err := s.httpClient.Do(req)
+	zipData, err := s.fetchBlob(ctx, downloadURL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to download artifact: %w", errUtils.ErrArtifactDownloadFailed, err)
-	}
-	defer resp.Body.Close()
-
-	zipData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read artifact content: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 
 	return zipData, nil
