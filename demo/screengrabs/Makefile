@@ -10,9 +10,12 @@ install:
 	@cp -a artifacts/* $(INSTALL_PATH)
 
 # Build the working-tree atmos so recordings always reflect local changes.
+# CGO is disabled to match the release build (the root Makefile exports
+# CGO_ENABLED=0); with CGO on, transitive deps like bearsh/hid need libudev
+# headers that CI runners don't have.
 atmos-binary:
 	@echo "Building atmos from the working tree..."
-	@cd ../.. && go build -o build/atmos .
+	@cd ../.. && CGO_ENABLED=0 go build -o build/atmos .
 
 # Install recording dependencies via the Atmos toolchain (cross-platform,
 # no Homebrew or containers required). Versions are pinned in the repo-root

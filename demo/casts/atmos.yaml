@@ -58,4 +58,8 @@ commands:
         reset: true
       - type: shell
         name: build-atmos
+        # CGO off to match the release build; with CGO on, transitive deps
+        # like bearsh/hid need libudev headers that CI runners don't have.
+        env:
+          CGO_ENABLED: '0'
         command: go install ../..

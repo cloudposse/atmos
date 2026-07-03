@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/ansi"
 )
 
 // TestAuthLoginProvider tests the `atmos auth login --provider <provider>` command integration.
@@ -31,7 +33,10 @@ func TestAuthLoginProvider(t *testing.T) {
 		err := cmd.Run()
 		require.NoError(t, err)
 
-		output := stdout.String()
+		// Help output is colorized in CI (the terminal pipeline emits ANSI on pipes
+		// when CI is set), and the usage line styles each word separately — strip
+		// escape codes so substring assertions see the plain text.
+		output := ansi.Strip(stdout.String())
 		assert.Contains(t, output, "atmos auth login", "Help should show usage")
 		assert.Contains(t, output, "--provider", "Help should document --provider flag")
 		assert.Contains(t, output, "-p,", "Help should show short flag -p")
