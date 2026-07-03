@@ -194,7 +194,7 @@ func runOperation(cmd *cobra.Command, subCommand string, args []string) error {
 
 func getOperationFlags(cmd *cobra.Command) map[string]any {
 	result := make(map[string]any)
-	for _, name := range []string{"all", "affected", "include-dependents", "clone-target-ref", "server"} {
+	for _, name := range []string{"all", "affected", "ci", "include-dependents", "clone-target-ref", "server"} {
 		if flag := cmd.Flag(name); flag != nil {
 			result[name] = flag.Value.String() == valueTrue
 		}

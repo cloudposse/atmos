@@ -794,10 +794,14 @@ func applyResolvedWorkdirArtifactPath(config *schema.AtmosConfiguration, info *s
 
 	candidate, exists, err := component.BuildAndResolveWorkdirPath(config, info, cfg.TerraformComponentType)
 	if err != nil {
-		log.Debug("Failed to resolve workdir artifact path", "error", err)
+		log.Warn("Failed to resolve workdir artifact path; planfile upload will be skipped", "error", err)
 		return false
 	}
 	if !exists {
+		// A workdir-enabled component whose plan already ran should have a workdir;
+		// falling back to the source path may miss the actual planfile, so say so.
+		log.Warn("Workdir-enabled component's working directory does not exist; falling back to the source path for the planfile",
+			"path", candidate)
 		return true
 	}
 
