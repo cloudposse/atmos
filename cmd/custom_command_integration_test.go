@@ -87,6 +87,9 @@ func TestCustomCommandIntegration_MapEnvExported(t *testing.T) {
 	exePath, err := os.Executable()
 	require.NoError(t, err)
 
+	// The step goes through two unescaping layers: YAML parsing, then shell lexing (mvdan/sh).
+	// A YAML single-quoted scalar preserves the shell double quotes verbatim, and
+	// filepath.ToSlash keeps the Windows path free of backslashes the shell would otherwise eat.
 	configContent := fmt.Sprintf(`
 base_path: .
 commands:
@@ -98,8 +101,8 @@ commands:
       FROM_COMMAND:
         valueCommand: printf dynamic
     steps:
-      - %s
-`, strconv.Quote(envOutputFile), strconv.Quote(exePath))
+      - '%s'
+`, strconv.Quote(envOutputFile), strconv.Quote(filepath.ToSlash(exePath)))
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, cfg.AtmosConfigFileName), []byte(configContent), 0o644))
 	t.Chdir(tmpDir)
 
