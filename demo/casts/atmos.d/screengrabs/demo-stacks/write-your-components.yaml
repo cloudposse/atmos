@@ -1,0 +1,97 @@
+commands:
+  - name: casts generate screengrabs demo-stacks write-your-components
+    description: Regenerate the "write your components" docs screengrab cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: clean
+        command: rm -f ../../website/static/casts/screengrabs/demo-stacks/write-your-components.cast
+      - type: cast
+        name: write-your-components
+        working_directory: "../../.context/cast-fixtures/demo-stacks"
+        title: Write your Components
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        output:
+          cast: "../../website/static/casts/screengrabs/demo-stacks/write-your-components.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# Here's an example of how to organize components"
+          - type: simulate
+            text: tree components
+          - type: shell
+            name: tree-components
+            output: raw
+            command: tree -CF --gitignore --charset=UTF-8 -I ".git" -I "terraform.tfstate*" -I "*.tfvars.json" -I "cache*.txt" components
+          - type: simulate
+            text: "# Let's take a look at myapp terraform 'root' module..."
+          - type: simulate
+            text: "# This is a simple example of retrieving the weather."
+          - type: simulate
+            text: "# Taking a closer look at the main.tf, you'll notice it accepts a lot of parameters."
+          - type: simulate
+            text: "# This is a best practice for writing reusable components."
+          - type: simulate
+            text: cat components/terraform/myapp/main.tf
+          - type: shell
+            name: cat-main-tf
+            output: raw
+            command: bat --force-colorization --style header,numbers --theme="GitHub" --paging=never components/terraform/myapp/main.tf
+          - type: simulate
+            text: "# Then we define all the variables we plan to accept."
+          - type: simulate
+            text: "# Generally, we recommend avoiding defaults here and using baseline stack configurations."
+          - type: simulate
+            text: cat components/terraform/myapp/variables.tf
+          - type: shell
+            name: cat-variables-tf
+            output: raw
+            command: bat --force-colorization --style header,numbers --theme="GitHub" --paging=never components/terraform/myapp/variables.tf
+          - type: simulate
+            text: "# Then let's provide some outputs that can be used by other components."
+          - type: simulate
+            text: cat components/terraform/myapp/outputs.tf
+          - type: shell
+            name: cat-outputs-tf
+            output: raw
+            command: bat --force-colorization --style header,numbers --theme="GitHub" --paging=never components/terraform/myapp/outputs.tf
+          - type: simulate
+            text: "# It's a best practice to pin versions, so let's do that."
+          - type: simulate
+            text: cat components/terraform/myapp/versions.tf
+          - type: shell
+            name: cat-versions-tf
+            output: raw
+            command: bat --force-colorization --style header,numbers --theme="GitHub" --paging=never components/terraform/myapp/versions.tf
+      - type: shell
+        name: validate
+        command: atmos casts validate screengrabs demo-stacks write-your-components
+  - name: casts validate screengrabs demo-stacks write-your-components
+    description: Validate the "write your components" docs screengrab cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import json
+          import re
+          from pathlib import Path
+
+          def cast_text(path):
+              lines = Path(path).read_text().splitlines()
+              data = "".join(json.loads(line)[2] for line in lines[1:] if line.strip() and not line.startswith("#"))
+              return re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", data)
+
+          text = cast_text("../../website/static/casts/screengrabs/demo-stacks/write-your-components.cast")
+          for needle in ["organize components", "main.tf", "variables.tf", "outputs.tf", "versions.tf"]:
+              if needle not in text:
+                  raise SystemExit(f"write-your-components cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic"]:
+              if bad in text:
+                  raise SystemExit(f"write-your-components cast contains {bad!r}")

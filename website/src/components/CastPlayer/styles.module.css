@@ -225,6 +225,18 @@
   background: #d4d4d8;
 }
 
+/* Static frame: show the entire final terminal content at natural height
+   instead of clipping to the 16:9 playback viewport. */
+.staticFrame {
+  aspect-ratio: auto;
+  overflow: visible;
+}
+
+.staticFrame .screen {
+  padding: 2rem 2.5rem 2rem;
+  overflow: visible;
+}
+
 .thumbnail {
   max-width: 360px;
   border-radius: 6px;

@@ -28,6 +28,12 @@ type Props = {
   typeRate?: number;
   enterDelay?: number;
   exitDelay?: number;
+  /**
+   * Render the cast as a single static frame of its final terminal content:
+   * no playback, no controls, and the container grows to fit the full output
+   * instead of clipping to a 16:9 viewport. Used for docs screengrabs.
+   */
+  static?: boolean;
 };
 
 export default function CastPlayer({
@@ -48,6 +54,7 @@ export default function CastPlayer({
   typeRate = 0.035,
   enterDelay = 0.5,
   exitDelay = 0.6,
+  static: staticFrame = false,
 }: Props) {
   const [events, setEvents] = useState<CastEvent[]>([]);
   const [content, setContent] = useState("");
@@ -89,7 +96,11 @@ export default function CastPlayer({
           exitDelay,
         });
         const playbackEvents = applyIdleSkip(withIntro, idleSkip ? 1.5 : 0);
-        const initialPosition = 0;
+        // Static mode shows the final frame of the whole recording; playback
+        // never starts, so seek straight to the end.
+        const initialPosition = staticFrame
+          ? (playbackEvents.at(-1)?.[0] ?? 0)
+          : 0;
         setEvents(playbackEvents);
         setCastTitle(title ?? header.title ?? header.command ?? "Atmos");
         setContent(renderAt(playbackEvents, initialPosition));
@@ -98,14 +109,16 @@ export default function CastPlayer({
           playbackEvents,
           initialPosition,
         );
-        setPlaying(autoplay);
+        setPlaying(staticFrame ? false : autoplay);
         setSeekVersion((version) => version + 1);
       })
       .catch(() => {
         if (cancelled) return;
         setEvents([]);
         setCastTitle(title ?? "Atmos");
-        setContent("");
+        // Surface missing recordings instead of rendering an empty terminal,
+        // so docs authors notice a bad or not-yet-generated cast path.
+        setContent(`Missing cast: ${src}`);
         setPosition(0);
         renderedEventTime.current = -1;
         setPlaying(false);
@@ -125,19 +138,20 @@ export default function CastPlayer({
     exitDelay,
     idleSkip,
     autoplay,
+    staticFrame,
   ]);
 
   const duration = useMemo(() => events.at(-1)?.[0] ?? 0, [events]);
 
   useEffect(() => {
-    if (!screenRef.current) return;
+    if (staticFrame || !screenRef.current) return;
     screenRef.current.scrollTop = screenRef.current.scrollHeight;
-  }, [content]);
+  }, [content, staticFrame]);
 
   useEffect(() => {
     window.cancelAnimationFrame(animationFrame.current ?? 0);
     window.clearTimeout(loopTimer.current);
-    if (!playing || events.length === 0) return;
+    if (staticFrame || !playing || events.length === 0) return;
 
     if (duration <= 0 || position >= duration) {
       handlePlaybackEnd(
@@ -191,7 +205,16 @@ export default function CastPlayer({
       window.cancelAnimationFrame(animationFrame.current ?? 0);
       window.clearTimeout(loopTimer.current);
     };
-  }, [playing, seekVersion, events, duration, speed, loop, loopDelay]);
+  }, [
+    playing,
+    seekVersion,
+    events,
+    duration,
+    speed,
+    loop,
+    loopDelay,
+    staticFrame,
+  ]);
 
   const togglePlayback = () => {
     if (playing) {
@@ -215,10 +238,11 @@ export default function CastPlayer({
   const rootClassName = [
     chrome ? styles.window : styles.plain,
     thumbnail ? styles.thumbnail : "",
+    staticFrame ? styles.staticFrame : "",
   ]
     .filter(Boolean)
     .join(" ");
-  const showControls = controls ?? !thumbnail;
+  const showControls = staticFrame ? false : (controls ?? !thumbnail);
 
   return (
     <div className={rootClassName}>

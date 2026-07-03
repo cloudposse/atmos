@@ -1,17 +1,17 @@
-INSTALL_PATH ?= ../../website/src/components/Screengrabs
+INSTALL_PATH ?= ../../website/static/casts/screengrabs
 all: build-all install
 
-# Write to website/src/components/Screengrabs/
+# Write to website/static/casts/screengrabs/
 install:
-	@echo "Installing screengrabs to $(INSTALL_PATH)"
+	@echo "Installing screengrab casts to $(INSTALL_PATH)"
 	@mkdir -p $(INSTALL_PATH)
 	@cp -a artifacts/* $(INSTALL_PATH)
 
 build-all:
 	@go run . demo-stacks.txt
-	@echo "Validating screengrabs..."
-	@! grep -r "atmos: not found" artifacts/ || (echo "ERROR: Found 'atmos: not found' in screengrabs" && exit 1)
-	@echo "✓ All screengrabs validated successfully"
+	@echo "Validating screengrab casts..."
+	@! grep -r "atmos: not found" artifacts/ || (echo "ERROR: Found 'atmos: not found' in screengrab casts" && exit 1)
+	@echo "✓ All screengrab casts validated successfully"
 
 # Generate screengrabs using Docker (cross-platform, recommended)
 docker-build:

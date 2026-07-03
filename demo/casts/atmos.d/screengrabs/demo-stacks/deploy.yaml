@@ -1,0 +1,89 @@
+commands:
+  - name: casts generate screengrabs demo-stacks deploy
+    description: Regenerate the "deploy everywhere" docs screengrab cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: clean
+        command: rm -f ../../website/static/casts/screengrabs/demo-stacks/deploy.cast
+      # Warm the fixture off-camera so provider installation and workspace
+      # creation noise never enters the recording (replaces the legacy sed
+      # noise filters).
+      - type: shell
+        name: warm
+        output: none
+        working_directory: "../../.context/cast-fixtures/demo-stacks"
+        command: |
+          atmos terraform init myapp --stack dev
+          atmos terraform workspace myapp --stack dev
+          atmos terraform workspace myapp --stack staging
+          atmos terraform workspace myapp --stack prod
+      - type: cast
+        name: deploy
+        working_directory: "../../.context/cast-fixtures/demo-stacks"
+        title: Atmos Stacks
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        output:
+          cast: "../../website/static/casts/screengrabs/demo-stacks/deploy.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# Now, let's see what it looks like to deploy this everywhere! 🚀"
+          - type: simulate
+            text: "# Deploy your component to the dev environment 🚀"
+          - type: simulate
+            text: atmos terraform deploy myapp --stack dev
+          - type: shell
+            name: deploy-dev
+            output: raw
+            command: atmos terraform deploy myapp --stack dev
+          - type: simulate
+            text: "# Deploy your component to the staging environment 🚀"
+          - type: simulate
+            text: atmos terraform deploy myapp --stack staging
+          - type: shell
+            name: deploy-staging
+            output: raw
+            command: atmos terraform deploy myapp --stack staging
+          - type: simulate
+            text: "# Deploy your component to the prod environment 🚀"
+          - type: simulate
+            text: atmos terraform deploy myapp --stack prod
+          - type: shell
+            name: deploy-prod
+            output: raw
+            command: atmos terraform deploy myapp --stack prod
+      - type: shell
+        name: validate
+        command: atmos casts validate screengrabs demo-stacks deploy
+  - name: casts validate screengrabs demo-stacks deploy
+    description: Validate the "deploy everywhere" docs screengrab cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import json
+          import re
+          from pathlib import Path
+
+          def cast_text(path):
+              lines = Path(path).read_text().splitlines()
+              data = "".join(json.loads(line)[2] for line in lines[1:] if line.strip() and not line.startswith("#"))
+              return re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", data)
+
+          text = cast_text("../../website/static/casts/screengrabs/demo-stacks/deploy.cast")
+          for needle in ["deploy this everywhere", "dev", "staging", "prod", "Apply complete"]:
+              if needle not in text:
+                  raise SystemExit(f"deploy cast missing {needle!r}")
+          # Provider downloads must happen in the off-camera warm step; the
+          # quiet "Reusing previous version" init lines are expected.
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "- Installing hashicorp", "Finding latest version"]:
+              if bad in text:
+                  raise SystemExit(f"deploy cast contains {bad!r}")

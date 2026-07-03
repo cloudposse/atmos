@@ -107,12 +107,13 @@ func commandEnv() []string {
 	return env
 }
 
-// record captures one manifest command and renders its .html and .ascii
-// artifacts. It returns true when the command was skipped because the
-// installed Atmos does not support it yet.
+// record captures one manifest command as a noise-filtered .cast artifact.
+// The website renders these client-side (CastPlayer static mode), so no
+// display formats are generated here. It returns true when the command was
+// skipped because the installed Atmos does not support it yet.
 func record(demo, command string, env []string) (bool, error) {
 	slug := commandSlug(command)
-	fmt.Fprintf(os.Stdout, "Screengrabbing %s → %s\n", command, filepath.Join(artifactsDir, slug+".html")) //nolint:gosec // Terminal progress output for a local build tool, not a web response.
+	fmt.Fprintf(os.Stdout, "Screengrabbing %s → %s\n", command, filepath.Join(artifactsDir, slug+".cast")) //nolint:gosec // Terminal progress output for a local build tool, not a web response.
 
 	tmpDir, err := os.MkdirTemp("", "screengrab-*")
 	if err != nil {
@@ -144,21 +145,16 @@ func record(demo, command string, env []string) (bool, error) {
 		return false, fmt.Errorf("%w: exit code %d", errCommandFailed, result.ExitCode)
 	}
 
-	filteredCast := filepath.Join(tmpDir, "filtered.cast")
-	if err := writeFilteredCast(castPath, filteredCast, filterNoise(output)); err != nil {
+	artifactPath := filepath.Join(artifactsDir, slug+".cast")
+	if err := os.MkdirAll(filepath.Dir(artifactPath), artifactsDirPerm); err != nil { //nolint:gosec // Local build tool writing artifacts derived from the manifest.
 		return false, err
 	}
-	return false, renderArtifacts(filteredCast, slug)
+	return false, writeFilteredCast(castPath, artifactPath, filterNoise(output))
 }
 
-// commandDir returns the working directory for a manifest command: shell
-// scripts run from the screengrabs directory, everything else runs inside the
-// demo's example project.
-func commandDir(demo, command string) string {
-	first := strings.Fields(command)[0]
-	if strings.HasSuffix(first, ".sh") {
-		return ""
-	}
+// commandDir returns the working directory for a manifest command: commands
+// run inside the demo's example project so output shows realistic context.
+func commandDir(demo, _ string) string {
 	return filepath.Join("..", "..", "examples", demo)
 }
 
@@ -197,22 +193,7 @@ func writeFilteredCast(originalPath, outputPath, content string) error {
 		return err
 	}
 	data := string(headerJSON) + "\n" + string(eventJSON) + "\n"
-	return os.WriteFile(outputPath, []byte(data), castFilePerm)
-}
-
-func renderArtifacts(castPath, slug string) error {
-	htmlPath := filepath.Join(artifactsDir, slug+".html")
-	asciiPath := filepath.Join(artifactsDir, slug+".ascii")
-	if err := os.MkdirAll(filepath.Dir(htmlPath), artifactsDirPerm); err != nil { //nolint:gosec // Local build tool writing artifacts derived from the manifest.
-		return err
-	}
-	// Regeneration overwrites previous artifacts.
-	for _, path := range []string{htmlPath, asciiPath} {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) { //nolint:gosec // Local build tool removing its own artifacts.
-			return err
-		}
-	}
-	return asciicast.Render(castPath, &asciicast.RenderOptions{HTML: htmlPath, ASCII: asciiPath})
+	return os.WriteFile(outputPath, []byte(data), castFilePerm) //nolint:gosec // Local build tool writing artifacts derived from the manifest.
 }
 
 func reportSkipped(skipped []string) {

@@ -7,12 +7,11 @@ import (
 
 func TestCommandSlugMatchesLegacyPipeline(t *testing.T) {
 	cases := map[string]string{
-		"atmos about":                               "atmos-about",
-		"atmos about --help":                        "atmos-about--help",
-		"atmos describe config -f yaml":             "atmos-describe-config-f-yaml",
-		"atmos list stacks --charset=UTF-8":         "atmos-list-stacks",
-		"scripts/demo-stacks/deploy.sh":             "demo-stacks/deploy",
-		"scripts/demo-stacks/start-your-project.sh": "demo-stacks/start-your-project",
+		"atmos about":                       "atmos-about",
+		"atmos about --help":                "atmos-about--help",
+		"atmos describe config -f yaml":     "atmos-describe-config-f-yaml",
+		"atmos list stacks --charset=UTF-8": "atmos-list-stacks",
+		"tree -CAF --gitignore":             "tree-CAF--gitignore",
 	}
 	for command, want := range cases {
 		if got := commandSlug(command); got != want {

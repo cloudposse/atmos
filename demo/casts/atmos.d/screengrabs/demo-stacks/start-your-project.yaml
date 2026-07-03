@@ -1,0 +1,69 @@
+commands:
+  - name: casts generate screengrabs demo-stacks start-your-project
+    description: Regenerate the "start your project" docs screengrab cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: clean
+        command: rm -f ../../website/static/casts/screengrabs/demo-stacks/start-your-project.cast
+      - type: cast
+        name: start-your-project
+        working_directory: "../../.context/cast-fixtures/demo-stacks"
+        title: Start your Project
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        output:
+          cast: "../../website/static/casts/screengrabs/demo-stacks/start-your-project.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# Here's a simple way to organize environments."
+          - type: simulate
+            text: tree -I '*.tf' .
+          - type: shell
+            name: tree
+            output: raw
+            command: tree -CF --gitignore --charset=UTF-8 -I ".git" -I "terraform.tfstate*" -I "*.tfvars.json" -I "cache*.txt" -I "*.tf" .
+          - type: simulate
+            text: "# Customize how to organize environments in the atmos.yaml file."
+          - type: simulate
+            text: "# Pay special attention to the name_pattern, which is how Atmos knows"
+          - type: simulate
+            text: "# where to find the stacks."
+          - type: simulate
+            text: cat atmos.yaml
+          - type: shell
+            name: cat-atmos-yaml
+            output: raw
+            command: bat --force-colorization --style header,numbers --theme="GitHub" --paging=never atmos.yaml
+      - type: shell
+        name: validate
+        command: atmos casts validate screengrabs demo-stacks start-your-project
+  - name: casts validate screengrabs demo-stacks start-your-project
+    description: Validate the "start your project" docs screengrab cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import json
+          import re
+          from pathlib import Path
+
+          def cast_text(path):
+              lines = Path(path).read_text().splitlines()
+              data = "".join(json.loads(line)[2] for line in lines[1:] if line.strip() and not line.startswith("#"))
+              return re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", data)
+
+          text = cast_text("../../website/static/casts/screengrabs/demo-stacks/start-your-project.cast")
+          for needle in ["organize environments", "atmos.yaml", "name_pattern"]:
+              if needle not in text:
+                  raise SystemExit(f"start-your-project cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found"]:
+              if bad in text:
+                  raise SystemExit(f"start-your-project cast contains {bad!r}")

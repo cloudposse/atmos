@@ -51,6 +51,11 @@ commands:
         source: "../../examples/custom-commands"
         path: "../../.context/cast-fixtures/custom-commands"
         reset: true
+      - type: workdir
+        name: demo-stacks-fixture
+        source: "../../examples/demo-stacks"
+        path: "../../.context/cast-fixtures/demo-stacks"
+        reset: true
       - type: shell
         name: build-atmos
         command: go install ../..

@@ -183,10 +183,98 @@ atmos version show --help
 atmos workflow --help
 tree
 tree -CAF --gitignore
-scripts/demo-stacks/start-your-project.sh
-scripts/demo-stacks/write-your-components.sh
-scripts/demo-stacks/define-your-stacks.sh
-scripts/demo-stacks/deploy-staging.sh
-scripts/demo-stacks/deploy-dev.sh
-scripts/demo-stacks/deploy-prod.sh
-scripts/demo-stacks/deploy.sh
+#
+# Additional commands referenced by docs pages (previously missing artifacts)
+#
+atmos ansible --help
+atmos ansible playbook --help
+atmos ansible version --help
+atmos aws ecr login --help
+atmos describe config
+atmos describe locals --help
+atmos devcontainer --help
+atmos devcontainer attach --help
+atmos devcontainer config --help
+atmos devcontainer exec --help
+atmos devcontainer list --help
+atmos devcontainer logs --help
+atmos devcontainer rebuild --help
+atmos devcontainer remove --help
+atmos devcontainer shell --help
+atmos devcontainer start --help
+atmos devcontainer stop --help
+atmos emulator list --help
+atmos helmfile source --help
+atmos helmfile source delete --help
+atmos helmfile source describe --help
+atmos helmfile source list --help
+atmos helmfile source pull --help
+atmos kubernetes apply --help
+atmos kubernetes delete --help
+atmos kubernetes deploy --help
+atmos kubernetes diff --help
+atmos kubernetes render --help
+atmos kubernetes validate --help
+atmos list affected --help
+atmos list instances --help
+atmos list sources --help
+atmos list themes --help
+atmos list vendor --help
+atmos packer source --help
+atmos packer source delete --help
+atmos packer source describe --help
+atmos packer source list --help
+atmos packer source pull --help
+atmos secret --help
+atmos secret delete --help
+atmos secret exec --help
+atmos secret get --help
+atmos secret import --help
+atmos secret init --help
+atmos secret keygen --help
+atmos secret list --help
+atmos secret pull --help
+atmos secret push --help
+atmos secret set --help
+atmos secret shell --help
+atmos secret validate --help
+atmos terraform cache --help
+atmos terraform cache delete --help
+atmos terraform cache list --help
+atmos terraform cache mirror --help
+atmos terraform cache prune --help
+atmos terraform cache stats --help
+atmos terraform cache trust --help
+atmos terraform cache untrust --help
+atmos terraform generate files --help
+atmos terraform source --help
+atmos terraform source delete --help
+atmos terraform source describe --help
+atmos terraform source list --help
+atmos terraform source pull --help
+atmos terraform workdir --help
+atmos terraform workdir clean --help
+atmos terraform workdir describe --help
+atmos terraform workdir list --help
+atmos terraform workdir show --help
+atmos toolchain --help
+atmos toolchain add --help
+atmos toolchain aliases --help
+atmos toolchain clean --help
+atmos toolchain du --help
+atmos toolchain env --help
+atmos toolchain exec --help
+atmos toolchain get --help
+atmos toolchain info --help
+atmos toolchain install --help
+atmos toolchain list --help
+atmos toolchain path --help
+atmos toolchain registry --help
+atmos toolchain registry list --help
+atmos toolchain registry search --help
+atmos toolchain remove --help
+atmos toolchain search --help
+atmos toolchain set --help
+atmos toolchain uninstall --help
+atmos toolchain versions --help
+atmos toolchain which --help

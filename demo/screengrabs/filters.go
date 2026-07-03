@@ -7,15 +7,12 @@ import (
 
 // commandSlug converts a manifest command into its artifact path, matching the
 // slugs produced by the legacy bash pipeline so existing docs references keep
-// working (e.g. "atmos about --help" → "atmos-about--help",
-// "scripts/demo-stacks/deploy.sh" → "demo-stacks/deploy").
+// working (e.g. "atmos about --help" → "atmos-about--help").
 func commandSlug(command string) string {
 	slug := strings.ReplaceAll(command, " --charset=UTF-8", "")
 	slug = strings.ReplaceAll(slug, " -", "-")
 	slug = regexp.MustCompile(`\s+`).ReplaceAllString(slug, "-")
-	slug = strings.ReplaceAll(slug, "---", "--")
-	slug = strings.Replace(slug, "scripts/", "", 1)
-	return strings.TrimSuffix(slug, ".sh")
+	return strings.ReplaceAll(slug, "---", "--")
 }
 
 // noiseLinePatterns match whole lines of environment-dependent Terraform
