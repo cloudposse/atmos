@@ -56,7 +56,7 @@ components:
 
 <Experimental />
 
-When you only need to set a single value deep in a nested structure, you can use **dot notation** instead of creating the full hierarchy. This makes your configuration more concise and readable.
+When you only need to set a single value deep in a nested structure, you can use **dot notation** in YAML mapping keys instead of creating the full hierarchy. This makes your configuration more concise and readable.
 
 :::info Configuration Required
 Dot notation requires enabling the `key_delimiter` setting in your `atmos.yaml`. Without it, dotted keys are treated as literal key names.
@@ -70,6 +70,17 @@ settings:
 </File>
 
 See [YAML Settings](/cli/configuration/settings#yaml-settings) for details.
+:::
+
+:::warning Existing Dotted Keys
+After enabling `settings.yaml.key_delimiter: "."`, any unquoted mapping key containing `.` is expanded. If you need a literal dotted key, quote it:
+
+```yaml
+"output.json": true
+'config.file': /etc/app.conf
+```
+
+Before enabling this in an existing stack, check for unquoted dotted keys that should remain literal.
 :::
 
 ### Traditional Nesting vs Dot Notation
@@ -142,7 +153,7 @@ components:
 
 ### Quoting Preserves Literal Keys
 
-When `key_delimiter` is enabled, you can use YAML quoting (single or double quotes) to prevent expansion. Quoted keys are always treated as literal key names:
+When `key_delimiter` is enabled, you can use YAML quoting (single or double quotes) to prevent mapping key expansion. Quoted keys are always treated as literal key names:
 
 <File title="stacks/prod.yaml">
 ```yaml

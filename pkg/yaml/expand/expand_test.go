@@ -230,6 +230,24 @@ func TestKeyDelimiters(t *testing.T) {
 				assert.Equal(t, "vpc-base", metadata["component"])
 			},
 		},
+		{
+			name:      "sequence_of_maps",
+			yaml:      "items:\n  - a.b: v\n  - c.d: w",
+			delimiter: ".",
+			check: func(t *testing.T, result map[string]any) {
+				items, ok := result["items"].([]any)
+				require.True(t, ok)
+				require.Len(t, items, 2)
+
+				first := items[0].(map[string]any)
+				a := first["a"].(map[string]any)
+				assert.Equal(t, "v", a["b"])
+
+				second := items[1].(map[string]any)
+				c := second["c"].(map[string]any)
+				assert.Equal(t, "w", c["d"])
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -258,4 +276,23 @@ func TestKeyDelimiters_EmptyDelimiter(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "v", result["a.b"])
+}
+
+func TestKeyDelimiters_NonScalarKeyIsNotExpanded(t *testing.T) {
+	var node goyaml.Node
+	err := goyaml.Unmarshal([]byte("? [a.b]\n: v"), &node)
+	require.NoError(t, err)
+
+	KeyDelimiters(&node, ".")
+
+	require.Len(t, node.Content, 1)
+	mapping := node.Content[0]
+	require.Equal(t, goyaml.MappingNode, mapping.Kind)
+	require.Len(t, mapping.Content, 2)
+
+	key := mapping.Content[0]
+	require.Equal(t, goyaml.SequenceNode, key.Kind)
+	require.Len(t, key.Content, 1)
+	assert.Equal(t, "a.b", key.Content[0].Value)
+	assert.Equal(t, "v", mapping.Content[1].Value)
 }
