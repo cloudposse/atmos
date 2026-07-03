@@ -51,9 +51,14 @@ func ReadEvents(path string) (Header, []Event, error) {
 		return Header{}, nil, fmt.Errorf("decode cast header: %w", err)
 	}
 	var events []Event
+	var absoluteTime float64
 	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) > 0 && line[0] == '#' {
+			continue
+		}
 		var raw []any
-		if err := json.Unmarshal(scanner.Bytes(), &raw); err != nil {
+		if err := json.Unmarshal(line, &raw); err != nil {
 			return Header{}, nil, fmt.Errorf("decode cast event: %w", err)
 		}
 		if len(raw) != 3 {
@@ -62,6 +67,13 @@ func ReadEvents(path string) (Header, []Event, error) {
 		t, _ := raw[0].(float64)
 		stream, _ := raw[1].(string)
 		data, _ := raw[2].(string)
+		if header.Version == 3 {
+			absoluteTime += t
+			t = absoluteTime
+		}
+		if stream != "o" && stream != "i" && stream != "e" && stream != "r" && stream != "m" {
+			continue
+		}
 		events = append(events, Event{Time: t, Stream: stream, Data: data})
 	}
 	if err := scanner.Err(); err != nil {

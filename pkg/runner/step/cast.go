@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -132,7 +131,7 @@ func (h *CastHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Work
 	defer perf.Track(nil, "step.CastHandler.ExecuteWithWorkflow")()
 
 	applyCastRecordingDefaults(step)
-	rec, restore, err := startStepRecorder(step)
+	rec, restore, err := startStepRecorder(step, vars)
 	if err != nil {
 		return nil, err
 	}
@@ -156,27 +155,24 @@ func (h *CastHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Work
 	return result, runErr
 }
 
-func startStepRecorder(step *schema.WorkflowStep) (*asciicast.Recorder, func(), error) {
+func startStepRecorder(step *schema.WorkflowStep, vars *Variables) (*asciicast.Recorder, func(), error) {
 	applyCastRecordingDefaults(step)
+	if vars == nil {
+		vars = NewVariables()
+	}
 	path := ""
 	if step.CastOutput != nil {
 		path = step.CastOutput.Cast
 	}
-	env := make(map[string]string)
-	for _, pair := range os.Environ() {
-		k, v, ok := strings.Cut(pair, "=")
-		if ok {
-			env[k] = v
-		}
+	title, err := vars.Resolve(step.Title)
+	if err != nil {
+		return nil, nil, err
 	}
-	width := step.Width
-	if width <= 0 {
-		width = viper.GetInt("cast.recording.width")
+	env, err := castRecorderEnv(step, vars)
+	if err != nil {
+		return nil, nil, err
 	}
-	height := step.Height
-	if height <= 0 {
-		height = viper.GetInt("cast.recording.height")
-	}
+	width, height := castRecorderDimensions(step)
 	outputRate, err := parseDurationDefault(step.Rate, 0)
 	if err != nil {
 		return nil, nil, err
@@ -184,6 +180,8 @@ func startStepRecorder(step *schema.WorkflowStep) (*asciicast.Recorder, func(), 
 	rec, err := asciicast.Start(&asciicast.Options{
 		Path:       path,
 		BasePath:   viper.GetString("cast.recording.base_path"),
+		Name:       step.Name,
+		Title:      title,
 		Command:    castCommandArgs(step),
 		Width:      width,
 		Height:     height,
@@ -196,6 +194,36 @@ func startStepRecorder(step *schema.WorkflowStep) (*asciicast.Recorder, func(), 
 		return nil, nil, err
 	}
 	return rec, iolib.SetRecorder(rec), nil
+}
+
+func castRecorderEnv(step *schema.WorkflowStep, vars *Variables) (map[string]string, error) {
+	env := make(map[string]string, len(vars.Env)+len(step.Env))
+	for key, value := range vars.Env {
+		env[key] = value
+	}
+	if len(step.Env) == 0 {
+		return env, nil
+	}
+	resolvedEnv, err := vars.ResolveEnvMap(step.Env)
+	if err != nil {
+		return nil, fmt.Errorf("step '%s': %w", step.Name, err)
+	}
+	for key, value := range resolvedEnv {
+		env[key] = value
+	}
+	return env, nil
+}
+
+func castRecorderDimensions(step *schema.WorkflowStep) (int, int) {
+	width := step.Width
+	if width <= 0 {
+		width = viper.GetInt("cast.recording.width")
+	}
+	height := step.Height
+	if height <= 0 {
+		height = viper.GetInt("cast.recording.height")
+	}
+	return width, height
 }
 
 func applyCastRecordingDefaults(step *schema.WorkflowStep) {
@@ -719,7 +747,7 @@ func castCommandArgs(step *schema.WorkflowStep) []string {
 	if command != "" {
 		return strings.Fields(command)
 	}
-	return []string{"cast", step.Name}
+	return nil
 }
 
 func renderCastOutputs(step *schema.WorkflowStep, castPath string) error {

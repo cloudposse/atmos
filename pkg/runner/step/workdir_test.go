@@ -55,6 +55,36 @@ func TestWorkdirHandlerExecuteRequiresResetForExistingTarget(t *testing.T) {
 	assert.Contains(t, err.Error(), "set reset: true")
 }
 
+func TestWorkdirHandlerExecuteNormalizesRelativeTargetPath(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "README.md"), []byte("demo\n"), 0o644))
+
+	root := t.TempDir()
+	nested := filepath.Join(root, "nested")
+	require.NoError(t, os.MkdirAll(nested, 0o755))
+	previous, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(nested))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(previous))
+	})
+
+	handler := &WorkdirHandler{BaseHandler: NewBaseHandler(schema.TaskTypeWorkdir, CategoryCommand, false)}
+	result, err := handler.Execute(context.Background(), &schema.WorkflowStep{
+		Name:   "fixture",
+		Type:   schema.TaskTypeWorkdir,
+		Source: sourceDir,
+		Path:   "../workdir",
+		Reset:  true,
+	}, NewVariables())
+	require.NoError(t, err)
+
+	expected, err := filepath.Abs("../workdir")
+	require.NoError(t, err)
+	assert.Equal(t, expected, result.Value)
+	assert.FileExists(t, filepath.Join(expected, "README.md"))
+}
+
 func TestWorkdirHandlerValidateRequiresPathAndSource(t *testing.T) {
 	handler := &WorkdirHandler{BaseHandler: NewBaseHandler(schema.TaskTypeWorkdir, CategoryCommand, false)}
 

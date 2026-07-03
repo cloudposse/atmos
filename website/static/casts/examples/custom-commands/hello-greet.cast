@@ -1,8 +1,8 @@
-{"version":2,"width":120,"height":36,"timestamp":1782945446,"command":"atmos hello","env":{"SHELL":"/bin/zsh","TERM":"xterm-256color"}}
-[0.0073465,"e","[hello]\n"]
-[3.038455875,"o","Hello world!\n"]
-[3.038532833,"e","✓ hello completed\n"]
-[3.739868833,"e","[greet]\n"]
-[4.098713666,"o","Hello, Alice\n"]
-[4.098761708,"e","✓ greet completed\n"]
-[4.800519916,"o","\u003e "]
+{"version":3,"term":{"cols":120,"rows":36,"type":"dumb"},"timestamp":1783039542,"title":"Custom commands: hello and greet","env":{"SHELL":"/bin/zsh"}}
+[0.00761025,"e","[hello]\n"]
+[0.386927625,"o","Hello world!\n"]
+[0.000071125,"e","✓ hello completed\n"]
+[0.701631417,"e","[greet]\n"]
+[0.397884875,"o","Hello, Alice\n"]
+[0.000052083,"e","✓ greet completed\n"]
+[0.708315417,"o","\u001b[1;38;2;0;163;224m\u003e \u001b[0m"]

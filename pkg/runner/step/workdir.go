@@ -3,6 +3,7 @@ package step
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -53,6 +54,14 @@ func (h *WorkdirHandler) Execute(ctx context.Context, step *schema.WorkflowStep,
 			WithContext("step", step.Name).
 			Err()
 	}
+	if !filepath.IsAbs(targetPath) {
+		absPath, err := filepath.Abs(targetPath)
+		if err != nil {
+			return nil, fmt.Errorf("step '%s': failed to resolve absolute path %q: %w", step.Name, targetPath, err)
+		}
+		targetPath = absPath
+	}
+	targetPath = filepath.Clean(targetPath)
 
 	sourceSpec, err := h.resolveSourceSpec(step, vars)
 	if err != nil {

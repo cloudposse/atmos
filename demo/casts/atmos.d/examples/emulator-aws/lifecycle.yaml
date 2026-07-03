@@ -20,7 +20,7 @@ commands:
       - type: cast
         name: lifecycle
         working_directory: *emulator_aws_fixture
-        command: atmos emulator up aws -s dev --ephemeral
+        title: AWS emulator lifecycle
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast

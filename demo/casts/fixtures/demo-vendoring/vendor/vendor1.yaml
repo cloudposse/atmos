@@ -9,7 +9,7 @@ spec:
   sources:
     - component: "ipinfo"
       source: "github.com/cloudposse/atmos.git//examples/demo-library/{{ .Component }}?ref={{.Version}}"
-      version: "1bc4cd335e8016b8e527c1bb34baa4d0d8c758f2"
+      version: "main"
       targets:
         - "components/terraform/{{ .Component }}/{{.Version}}"
       tags:

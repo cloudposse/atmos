@@ -43,6 +43,11 @@ commands; the file path should describe the command group or demo it owns.
 
 Run these commands with the process working directory set to `demo/casts`.
 
+Generated `.cast` files use asciicast v3. For `type: cast` recordings in
+`mode: steps`, use top-level `title:` for the human-readable cast label. Reserve
+top-level `command:` for recordings that execute one real command or session.
+Nested shell steps still use `command:` because those commands are actually run.
+
 Regenerate one cast:
 
 ```sh

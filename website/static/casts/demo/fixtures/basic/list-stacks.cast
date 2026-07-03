@@ -1,5 +1,10 @@
-{"version":2,"width":120,"height":36,"timestamp":1782944795,"command":"atmos list stacks --format tree","env":{"SHELL":"/bin/zsh","TERM":"xterm-256color"}}
-[0.005147958,"e","[list-stacks]\n"]
-[0.124460208,"o"," Stacks \n│\n├──dev\n│\n└──production\n\n"]
-[0.346268625,"e","✓ list-stacks completed\n"]
-[1.047422542,"o","\u003e "]
+{"version":3,"term":{"cols":120,"rows":36,"type":"dumb"},"timestamp":1783039407,"title":"atmos list stacks","env":{"SHELL":"/bin/zsh"}}
+[0.007821959,"e","[list-stacks]\n"]
+[0.134991166,"o"," Stacks \n"]
+[0.012,"o","│\n"]
+[0.012,"o","├──dev\n"]
+[0.012,"o","│\n"]
+[0.012,"o","└──production\n"]
+[0.012,"o","\n"]
+[0.166186459,"e","✓ list-stacks completed\n"]
+[0.702861375,"o","\u001b[1;38;2;0;163;224m\u003e \u001b[0m"]

@@ -42,7 +42,7 @@ commands:
           chmod +x .context/bin/agg
       - type: cast
         name: usage
-        command: atmos about --cast=.context/cast-command-demo/about.gif
+        title: atmos about --cast=.context/cast-command-demo/about.gif
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast
@@ -57,7 +57,7 @@ commands:
             name: usage
             output: raw
             command: |
-              atmos about --cast=.context/cast-command-demo/about.gif
+              PATH="$PWD/.context/bin:$PATH" atmos about --cast=.context/cast-command-demo/about.gif
               test -s .context/cast-command-demo/about.gif
           - type: toast
             name: recorded-cast
@@ -79,7 +79,7 @@ commands:
         command: rm -f website/static/casts/cli/commands/cast/play.cast
       - type: cast
         name: play
-        command: atmos cast play website/static/casts/examples/custom-commands/hello-greet.cast
+        title: atmos cast play
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast
@@ -126,7 +126,7 @@ commands:
           rm -f .context/cast-render/hello-greet.gif
       - type: cast
         name: render
-        command: atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --gif=.context/cast-render/hello-greet.gif
+        title: atmos cast render
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast
@@ -141,7 +141,7 @@ commands:
             name: render
             output: raw
             command: |
-              atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --gif=.context/cast-render/hello-greet.gif
+              PATH="$PWD/.context/bin:$PATH" atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --gif=.context/cast-render/hello-greet.gif
               test -s .context/cast-render/hello-greet.gif
           - type: toast
             name: rendered-gif

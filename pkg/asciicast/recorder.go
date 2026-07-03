@@ -39,6 +39,8 @@ var ErrCastOutputExists = errUtils.ErrCastOutputExists
 type Options struct {
 	Path       string
 	BasePath   string
+	Name       string
+	Title      string
 	Command    []string
 	Width      int
 	Height     int
@@ -50,7 +52,7 @@ type Options struct {
 	OutputRate time.Duration
 }
 
-// Recorder writes asciicast v2 header and event records to a file.
+// Recorder writes asciicast v3 header and event records to a file.
 type Recorder struct {
 	mu            sync.Mutex
 	file          *os.File
@@ -61,17 +63,28 @@ type Recorder struct {
 	recordIn      bool
 	width         int
 	height        int
+	title         string
 	command       string
 	outputRate    time.Duration
 	lastEventTime time.Duration
 }
 
-// Header is the asciicast v2 header written as the first line of a recording.
+// Term describes the recorded terminal in asciicast v3 headers.
+type Term struct {
+	Cols int    `json:"cols"`
+	Rows int    `json:"rows"`
+	Type string `json:"type,omitempty"`
+}
+
+// Header is the asciicast header written as the first line of a recording.
+// Atmos writes v3 headers, but keeps the v2 width/height fields for legacy reads.
 type Header struct {
 	Version   int               `json:"version"`
-	Width     int               `json:"width"`
-	Height    int               `json:"height"`
-	Timestamp int64             `json:"timestamp"`
+	Width     int               `json:"width,omitempty"`
+	Height    int               `json:"height,omitempty"`
+	Term      *Term             `json:"term,omitempty"`
+	Timestamp int64             `json:"timestamp,omitempty"`
+	Title     string            `json:"title,omitempty"`
 	Command   string            `json:"command,omitempty"`
 	Env       map[string]string `json:"env,omitempty"`
 }
@@ -122,16 +135,21 @@ func Start(opts *Options) (*Recorder, error) {
 		recordIn:   opts.RecordIn,
 		width:      width,
 		height:     height,
+		title:      strings.TrimSpace(opts.Title),
 		command:    strings.Join(opts.Command, " "),
 		outputRate: opts.OutputRate,
 	}
 	header := Header{
-		Version:   2,
-		Width:     width,
-		Height:    height,
+		Version: 3,
+		Term: &Term{
+			Cols: width,
+			Rows: height,
+			Type: terminalType(opts.Env),
+		},
 		Timestamp: started.Unix(),
+		Title:     rec.title,
 		Command:   rec.command,
-		Env:       safeEnv(opts.Env),
+		Env:       safeEnvV3(opts.Env),
 	}
 	if err := writeRecorderHeader(rec, header); err != nil {
 		_ = rec.Close()
@@ -231,18 +249,29 @@ func (r *Recorder) writeJSON(v any) error {
 func (r *Recorder) writeEventLocked(stream, content string) error {
 	now := time.Since(r.started)
 	if r.outputRate <= 0 || stream == "i" || stream == "r" {
-		r.lastEventTime = maxDuration(now, r.lastEventTime)
-		return r.writeJSON([]any{r.lastEventTime.Seconds(), stream, content})
+		eventTime := maxDuration(now, r.lastEventTime)
+		return r.writeRelativeEvent(eventTime, stream, content)
 	}
 
 	eventTime := maxDuration(now, r.lastEventTime)
 	for _, chunk := range splitTerminalLines(content) {
-		if err := r.writeJSON([]any{eventTime.Seconds(), stream, chunk}); err != nil {
+		if err := r.writeRelativeEvent(eventTime, stream, chunk); err != nil {
 			return err
 		}
 		if strings.HasSuffix(chunk, "\n") {
 			eventTime += r.outputRate
 		}
+	}
+	return nil
+}
+
+func (r *Recorder) writeRelativeEvent(eventTime time.Duration, stream, content string) error {
+	delta := eventTime - r.lastEventTime
+	if delta < 0 {
+		delta = 0
+	}
+	if err := r.writeJSON([]any{delta.Seconds(), stream, content}); err != nil {
+		return err
 	}
 	r.lastEventTime = eventTime
 	return nil
@@ -293,6 +322,12 @@ func ResolvePath(opts *Options, started time.Time) (string, error) {
 		}
 	}
 	slug := CommandSlug(opts.Command)
+	if slug == "" {
+		slug = CommandSlug(strings.Fields(opts.Title))
+	}
+	if slug == "" {
+		slug = CommandSlug([]string{opts.Name})
+	}
 	if slug == "" {
 		slug = defaultCastCmd
 	}
@@ -363,4 +398,24 @@ func safeEnv(env map[string]string) map[string]string {
 		return nil
 	}
 	return result
+}
+
+func safeEnvV3(env map[string]string) map[string]string {
+	result := map[string]string{}
+	for _, key := range []string{"SHELL", "COLORTERM"} {
+		if value := env[key]; value != "" {
+			result[key] = value
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func terminalType(env map[string]string) string {
+	if env == nil {
+		return ""
+	}
+	return env["TERM"]
 }

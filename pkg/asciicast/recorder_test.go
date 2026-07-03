@@ -106,6 +106,7 @@ func TestStartWritesHeaderDefaultsAndSafeEnvironment(t *testing.T) {
 	rec, err := Start(&Options{
 		Path:     path,
 		Explicit: true,
+		Title:    "Workflow Run",
 		Command:  []string{"atmos", "workflow", "run"},
 		Env: map[string]string{
 			"SHELL":        "/bin/zsh",
@@ -130,17 +131,26 @@ func TestStartWritesHeaderDefaultsAndSafeEnvironment(t *testing.T) {
 	if err := json.Unmarshal([]byte(lines[0]), &header); err != nil {
 		t.Fatal(err)
 	}
-	if header.Version != 2 || header.Width != DefaultWidth || header.Height != DefaultHeight {
+	if header.Version != 3 || header.Term == nil || header.Term.Cols != DefaultWidth || header.Term.Rows != DefaultHeight {
 		t.Fatalf("unexpected header: %#v", header)
+	}
+	if header.Term.Type != "xterm-256color" {
+		t.Fatalf("terminal type = %q", header.Term.Type)
 	}
 	if header.Timestamp != started.Unix() {
 		t.Fatalf("timestamp = %d, want %d", header.Timestamp, started.Unix())
 	}
+	if header.Title != "Workflow Run" {
+		t.Fatalf("title = %q", header.Title)
+	}
 	if header.Command != "atmos workflow run" {
 		t.Fatalf("command = %q", header.Command)
 	}
-	if header.Env["SHELL"] != "/bin/zsh" || header.Env["TERM"] != "xterm-256color" || header.Env["COLORTERM"] != "truecolor" {
+	if header.Env["SHELL"] != "/bin/zsh" || header.Env["COLORTERM"] != "truecolor" {
 		t.Fatalf("safe env missing expected keys: %#v", header.Env)
+	}
+	if _, ok := header.Env["TERM"]; ok {
+		t.Fatalf("TERM should be stored in term.type for v3, env: %#v", header.Env)
 	}
 	if _, ok := header.Env["SECRET_TOKEN"]; ok {
 		t.Fatalf("unsafe env was recorded: %#v", header.Env)
@@ -265,9 +275,17 @@ func TestResolvePathExplicitBaseAndCommandSlug(t *testing.T) {
 	if slug := CommandSlug([]string{"atmos", "--help"}); slug != "" {
 		t.Fatalf("slug = %q, want empty", slug)
 	}
+
+	path, err = ResolvePath(&Options{BasePath: base, Title: "Quick Start: List Instances"}, started)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(filepath.Base(path), "010203-quick-start-list-instances-") {
+		t.Fatalf("title fallback slug missing: %q", path)
+	}
 }
 
-func TestReadEventsAndPlay(t *testing.T) {
+func TestReadEventsAndPlayV2(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "demo.cast")
 	content := strings.Join([]string{
 		`{"version":2,"width":80,"height":24,"timestamp":1}`,
@@ -286,6 +304,42 @@ func TestReadEventsAndPlay(t *testing.T) {
 	}
 	if header.Width != 80 || len(events) != 3 {
 		t.Fatalf("header=%#v events=%#v", header, events)
+	}
+	var out strings.Builder
+	if err := Play(path, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "hello error" {
+		t.Fatalf("played output = %q", out.String())
+	}
+}
+
+func TestReadEventsV3AccumulatesRelativeTimesAndSkipsComments(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "demo.cast")
+	content := strings.Join([]string{
+		`{"version":3,"term":{"cols":80,"rows":24,"type":"xterm-256color"},"timestamp":1,"title":"Demo"}`,
+		`# comment`,
+		`[0.5,"o","hello"]`,
+		`[0.25,"x","0"]`,
+		`[0.75,"e"," error"]`,
+		`[0.25,"i","ignored by play"]`,
+	}, "\n")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	header, events, err := ReadEvents(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if header.Version != 3 || header.Term == nil || header.Term.Cols != 80 || header.Term.Rows != 24 || header.Title != "Demo" {
+		t.Fatalf("unexpected header: %#v", header)
+	}
+	if len(events) != 3 {
+		t.Fatalf("events=%#v", events)
+	}
+	if events[0].Time != 0.5 || events[1].Time != 1.5 || events[2].Time != 1.75 {
+		t.Fatalf("events were not accumulated: %#v", events)
 	}
 	var out strings.Builder
 	if err := Play(path, &out); err != nil {

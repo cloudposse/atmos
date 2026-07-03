@@ -89,8 +89,10 @@ func TestStartRecordingWithExplicitPath(t *testing.T) {
 	headerLine := strings.SplitN(string(content), "\n", 2)[0]
 	var header struct {
 		Command string `json:"command"`
-		Width   int    `json:"width"`
-		Height  int    `json:"height"`
+		Term    struct {
+			Cols int `json:"cols"`
+			Rows int `json:"rows"`
+		} `json:"term"`
 	}
 	if err := json.Unmarshal([]byte(headerLine), &header); err != nil {
 		t.Fatal(err)
@@ -98,8 +100,8 @@ func TestStartRecordingWithExplicitPath(t *testing.T) {
 	if header.Command != "terraform plan --stack dev" {
 		t.Fatalf("recorded command = %q", header.Command)
 	}
-	if header.Width != 100 || header.Height != 30 {
-		t.Fatalf("size = %dx%d", header.Width, header.Height)
+	if header.Term.Cols != 100 || header.Term.Rows != 30 {
+		t.Fatalf("size = %dx%d", header.Term.Cols, header.Term.Rows)
 	}
 }
 

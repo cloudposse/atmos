@@ -12,7 +12,7 @@ commands:
       - type: cast
         name: hello-greet
         working_directory: "../../.context/cast-fixtures/custom-commands"
-        command: atmos hello
+        title: "Custom commands: hello and greet"
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast

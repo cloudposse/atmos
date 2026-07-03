@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { RiPauseFill, RiPlayFill } from "react-icons/ri";
 import styles from "./styles.module.css";
-import { applyIdleSkip } from "./playback.mjs";
+import { applyIdleSkip, parseCast } from "./playback.mjs";
 
 type CastEvent = [number, string, string];
 
 type CastHeader = {
   command?: string;
+  title?: string;
 };
 
 type Props = {
@@ -32,7 +33,7 @@ type Props = {
 export default function CastPlayer({
   src,
   command,
-  title = "Atmos",
+  title,
   chrome = false,
   controls,
   scrubber = true,
@@ -51,6 +52,7 @@ export default function CastPlayer({
   const [events, setEvents] = useState<CastEvent[]>([]);
   const [content, setContent] = useState("");
   const [playing, setPlaying] = useState(autoplay);
+  const [castTitle, setCastTitle] = useState(title ?? "Atmos");
   const [position, setPosition] = useState(0);
   const animationFrame = useRef<number | undefined>();
   const loopTimer = useRef<number | undefined>();
@@ -69,32 +71,15 @@ export default function CastPlayer({
       })
       .then((text) => {
         if (cancelled) return;
-        const rows = text.trim().split("\n");
-        let header: CastHeader;
-        try {
-          header = JSON.parse(rows[0] || "{}") as CastHeader;
-        } catch {
-          throw new Error("Malformed cast header");
-        }
-        const lines = rows.slice(1);
-        const parsed = lines.reduce<CastEvent[]>((events, line) => {
-          if (!line.trim()) return events;
-          let event: CastEvent;
-          try {
-            event = JSON.parse(line) as CastEvent;
-          } catch {
-            throw new Error("Malformed cast event");
-          }
-          const normalized: CastEvent = [
-            event[0],
-            event[1],
-            normalizeTerminalText(event[2]),
-          ];
-          if ((normalized[1] === "o" || normalized[1] === "e") && normalized[2] !== "") {
-            events.push(normalized);
-          }
-          return events;
-        }, []);
+        const { header, events } = parseCast(text) as {
+          header: CastHeader;
+          events: CastEvent[];
+        };
+        const parsed = events.map<CastEvent>((event) => [
+          event[0],
+          event[1],
+          normalizeTerminalText(event[2]),
+        ]);
         const withIntro = addCommandIntro(parsed, {
           command: command ?? header.command,
           enabled: showCommand,
@@ -106,6 +91,7 @@ export default function CastPlayer({
         const playbackEvents = applyIdleSkip(withIntro, idleSkip ? 1.5 : 0);
         const initialPosition = 0;
         setEvents(playbackEvents);
+        setCastTitle(title ?? header.title ?? header.command ?? "Atmos");
         setContent(renderAt(playbackEvents, initialPosition));
         setPosition(initialPosition);
         renderedEventTime.current = latestEventTimeAt(
@@ -118,6 +104,7 @@ export default function CastPlayer({
       .catch(() => {
         if (cancelled) return;
         setEvents([]);
+        setCastTitle(title ?? "Atmos");
         setContent("");
         setPosition(0);
         renderedEventTime.current = -1;
@@ -130,6 +117,7 @@ export default function CastPlayer({
   }, [
     src,
     command,
+    title,
     showCommand,
     prompt,
     typeRate,
@@ -241,7 +229,7 @@ export default function CastPlayer({
             <i />
             <i />
           </span>
-          <span className={styles.title}>{title}</span>
+          <span className={styles.title}>{castTitle}</span>
         </div>
       )}
       {terminal}

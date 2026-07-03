@@ -12,7 +12,7 @@ commands:
       - type: cast
         name: describe-component
         working_directory: "../../.context/cast-fixtures/native-terraform"
-        command: atmos describe component vpc -s dev
+        title: atmos describe component
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast
@@ -25,6 +25,17 @@ commands:
             name: describe-component
             output: raw
             command: atmos describe component vpc -s dev
+      - type: script
+        name: sanitize-runtime-paths
+        interpreter: python3
+        script: |
+          from pathlib import Path
+
+          path = Path("../../website/static/casts/demo/fixtures/basic/describe-component.cast")
+          fixture = Path("../../.context/cast-fixtures/native-terraform").resolve()
+          text = path.read_text()
+          text = text.replace(str(fixture), ".")
+          path.write_text(text)
       - type: shell
         name: validate
         command: atmos casts validate demo fixtures basic describe-component

@@ -12,7 +12,7 @@ commands:
       - type: cast
         name: pull
         working_directory: "../../.context/cast-fixtures/demo-vendoring"
-        command: atmos vendor pull --everything
+        title: atmos vendor pull
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast

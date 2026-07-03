@@ -1,5 +1,8 @@
-{"version":2,"width":120,"height":36,"timestamp":1782944919,"command":"atmos demo convert","env":{"SHELL":"/bin/zsh","TERM":"xterm-256color"}}
-[0.0049775,"e","[demo-convert]\n"]
-[0.821885167,"o","Converting YAML to formatted JSON\n{\n  \"name\": \"atmos\"\n}\n"]
-[0.821932125,"e","✓ demo-convert completed\n"]
-[1.5229185840000001,"o","\u003e "]
+{"version":3,"term":{"cols":120,"rows":36,"type":"dumb"},"timestamp":1783039537,"title":"atmos demo convert","env":{"SHELL":"/bin/zsh"}}
+[0.007784416,"e","[demo-convert]\n"]
+[0.816482459,"o","Converting YAML to formatted JSON\n"]
+[0.012,"o","{\n"]
+[0.012,"o","  \"name\": \"atmos\"\n"]
+[0.012,"o","}\n"]
+[0,"e","✓ demo-convert completed\n"]
+[0.66633375,"o","\u001b[1;38;2;0;163;224m\u003e \u001b[0m"]

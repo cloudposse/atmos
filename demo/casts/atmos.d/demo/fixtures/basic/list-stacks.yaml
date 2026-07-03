@@ -12,7 +12,7 @@ commands:
       - type: cast
         name: list-stacks
         working_directory: "../../.context/cast-fixtures/native-terraform"
-        command: atmos list stacks --format=tree
+        title: atmos list stacks
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast

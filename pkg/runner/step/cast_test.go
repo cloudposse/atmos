@@ -111,7 +111,7 @@ func TestCastRecorderUsesStepCommandInHeader(t *testing.T) {
 		CastOutput: &schema.CastOutput{
 			Cast: castPath,
 		},
-	})
+	}, NewVariables())
 	if err != nil {
 		t.Fatalf("start recorder: %v", err)
 	}
@@ -134,13 +134,73 @@ func TestCastRecorderUsesStepCommandInHeader(t *testing.T) {
 		}
 	}
 	var header struct {
+		Version int    `json:"version"`
 		Command string `json:"command"`
 	}
 	if err := json.Unmarshal(headerLine, &header); err != nil {
 		t.Fatalf("parse header: %v", err)
 	}
+	if header.Version != 3 {
+		t.Fatalf("header version = %d, want 3", header.Version)
+	}
 	if header.Command != "atmos terraform deploy vpc -s dev -auto-approve" {
 		t.Fatalf("header command = %q", header.Command)
+	}
+}
+
+func TestCastRecorderUsesStepTitleWithoutFakeCommand(t *testing.T) {
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	rec, restore, err := startStepRecorder(&schema.WorkflowStep{
+		Name:  "list-instances",
+		Type:  schema.TaskTypeCast,
+		Title: "Quick Start Advanced: list instances",
+		Env: map[string]string{
+			"TERM":         "xterm-256color",
+			"COLORTERM":    "truecolor",
+			"SECRET_TOKEN": "redacted",
+		},
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("start recorder: %v", err)
+	}
+	restore()
+	if err := rec.Close(); err != nil {
+		t.Fatalf("close recorder: %v", err)
+	}
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatalf("read cast: %v", err)
+	}
+	headerLine := strings.SplitN(string(content), "\n", 2)[0]
+	var header struct {
+		Title   string `json:"title"`
+		Command string `json:"command"`
+		Term    struct {
+			Type string `json:"type"`
+		} `json:"term"`
+		Env map[string]string `json:"env"`
+	}
+	if err := json.Unmarshal([]byte(headerLine), &header); err != nil {
+		t.Fatalf("parse header: %v", err)
+	}
+	if header.Title != "Quick Start Advanced: list instances" {
+		t.Fatalf("header title = %q", header.Title)
+	}
+	if header.Command != "" {
+		t.Fatalf("header command = %q, want empty", header.Command)
+	}
+	if header.Term.Type != "xterm-256color" {
+		t.Fatalf("terminal type = %q", header.Term.Type)
+	}
+	if header.Env["COLORTERM"] != "truecolor" {
+		t.Fatalf("safe env missing COLORTERM: %#v", header.Env)
+	}
+	if _, ok := header.Env["SECRET_TOKEN"]; ok {
+		t.Fatalf("unsafe env was recorded: %#v", header.Env)
 	}
 }
 
@@ -159,7 +219,7 @@ func TestCastRecorderUsesCastDefaultsForTerminalSettings(t *testing.T) {
 		CastOutput: &schema.CastOutput{
 			Cast: castPath,
 		},
-	})
+	}, NewVariables())
 	if err != nil {
 		t.Fatalf("start recorder: %v", err)
 	}
@@ -180,14 +240,16 @@ func TestCastRecorderUsesCastDefaultsForTerminalSettings(t *testing.T) {
 		}
 	}
 	var header struct {
-		Width  int `json:"width"`
-		Height int `json:"height"`
+		Term struct {
+			Cols int `json:"cols"`
+			Rows int `json:"rows"`
+		} `json:"term"`
 	}
 	if err := json.Unmarshal(headerLine, &header); err != nil {
 		t.Fatalf("parse header: %v", err)
 	}
-	if header.Width != 100 || header.Height != 32 {
-		t.Fatalf("header dimensions = %dx%d, want 100x32", header.Width, header.Height)
+	if header.Term.Cols != 100 || header.Term.Rows != 32 {
+		t.Fatalf("header dimensions = %dx%d, want 100x32", header.Term.Cols, header.Term.Rows)
 	}
 }
 
@@ -506,7 +568,7 @@ func TestRecordCastTypedLineWritesPromptAndCharactersAsEvents(t *testing.T) {
 		CastOutput: &schema.CastOutput{
 			Cast: castPath,
 		},
-	})
+	}, NewVariables())
 	if err != nil {
 		t.Fatalf("start recorder: %v", err)
 	}
@@ -549,7 +611,7 @@ func TestRecordCastTypedLineKeepsCursorVisibleWhenEnabled(t *testing.T) {
 		CastOutput: &schema.CastOutput{
 			Cast: castPath,
 		},
-	})
+	}, NewVariables())
 	if err != nil {
 		t.Fatalf("start recorder: %v", err)
 	}
@@ -617,7 +679,7 @@ func TestRecordCastPromptWritesPromptEvent(t *testing.T) {
 		CastOutput: &schema.CastOutput{
 			Cast: castPath,
 		},
-	})
+	}, NewVariables())
 	if err != nil {
 		t.Fatalf("start recorder: %v", err)
 	}
@@ -651,7 +713,7 @@ func TestRunCastSimulateStepResolvesTextTemplate(t *testing.T) {
 		CastOutput: &schema.CastOutput{
 			Cast: castPath,
 		},
-	})
+	}, NewVariables())
 	if err != nil {
 		t.Fatalf("start recorder: %v", err)
 	}
@@ -696,7 +758,7 @@ func TestRunCastSimulateStepPromptModeWritesPrompt(t *testing.T) {
 		CastOutput: &schema.CastOutput{
 			Cast: castPath,
 		},
-	})
+	}, NewVariables())
 	if err != nil {
 		t.Fatalf("start recorder: %v", err)
 	}
@@ -738,7 +800,7 @@ func TestRecordCastTypedLineReturnsContextCancellation(t *testing.T) {
 		CastOutput: &schema.CastOutput{
 			Cast: castPath,
 		},
-	})
+	}, NewVariables())
 	if err != nil {
 		t.Fatalf("start recorder: %v", err)
 	}
@@ -910,7 +972,7 @@ func TestRunCastStepModeRunsFailureConditionAfterSimulateError(t *testing.T) {
 		CastOutput: &schema.CastOutput{
 			Cast: castPath,
 		},
-	})
+	}, NewVariables())
 	if err != nil {
 		t.Fatalf("start recorder: %v", err)
 	}
@@ -1175,7 +1237,7 @@ func TestCastSessionActionsAndCommandArgs(t *testing.T) {
 		t.Fatalf("action = %#v, want %#v", actions[0], want)
 	}
 
-	if got := castCommandArgs(&schema.WorkflowStep{Name: "demo"}); strings.Join(got, " ") != "cast demo" {
+	if got := castCommandArgs(&schema.WorkflowStep{Name: "demo"}); len(got) != 0 {
 		t.Fatalf("default command args = %v", got)
 	}
 	if got := castCommandArgs(&schema.WorkflowStep{Command: "atmos terraform plan vpc"}); strings.Join(got, " ") != "atmos terraform plan vpc" {

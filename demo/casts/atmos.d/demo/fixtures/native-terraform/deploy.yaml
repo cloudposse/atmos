@@ -12,7 +12,7 @@ commands:
       - type: cast
         name: deploy
         working_directory: "../../.context/cast-fixtures/native-terraform"
-        command: atmos terraform deploy vpc -s dev -auto-approve
+        title: atmos terraform deploy
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast

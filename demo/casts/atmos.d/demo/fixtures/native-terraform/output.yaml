@@ -18,7 +18,7 @@ commands:
       - type: cast
         name: output
         working_directory: *native_terraform_fixture
-        command: atmos terraform output vpc -s dev
+        title: atmos terraform output
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast

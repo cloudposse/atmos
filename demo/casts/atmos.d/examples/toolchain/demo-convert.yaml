@@ -18,7 +18,7 @@ commands:
       - type: cast
         name: demo-convert
         working_directory: *toolchain_fixture
-        command: atmos demo convert
+        title: atmos demo convert
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast
