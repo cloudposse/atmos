@@ -1,0 +1,16 @@
+name: Native CI Log Groups
+description: Small workflow for inspecting CI log grouping modes in GitHub Actions.
+
+workflows:
+  ci-log-groups:
+    description: Emit simple shell output under the active CI grouping mode.
+    steps:
+      - name: first workflow group
+        type: shell
+        command: |
+          echo "native ci workflow group method: first"
+
+      - name: second workflow group
+        type: shell
+        command: |
+          echo "native ci workflow group method: second"

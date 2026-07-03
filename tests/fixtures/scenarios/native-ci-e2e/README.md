@@ -6,6 +6,7 @@ It is intentionally test-focused rather than an example for users to copy.
 The corresponding workflow exposes visible jobs for inspecting native CI
 summaries, outputs, status checks, PR comments, and Code Scanning annotations:
 
+- `[native ci] workflow groups (auto|invocation|off)`
 - `[native ci] terraform plan`
 - `[native ci] terraform apply`
 
