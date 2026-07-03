@@ -457,6 +457,9 @@ var RootCmd = &cobra.Command{
 				if !isHelpRequested {
 					log.Warn(err.Error())
 				}
+			} else if isCIGitCloneBootstrapRequested() {
+				tmpConfig.CI.Enabled = true
+				log.Debug("CLI configuration error (continuing for CI git clone bootstrap)", "error", err)
 			} else if isVersionCommand() {
 				// Version command should always work, even with invalid config.
 				// Log config error but allow version command to proceed.
@@ -1463,6 +1466,12 @@ func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration
 		return nil
 	}
 
+	if isCIGitCloneBootstrapRequested() {
+		atmosConfig.CI.Enabled = true
+		log.Debug("Warning: CLI configuration error (continuing for CI git clone bootstrap)", "error", initErr)
+		return nil
+	}
+
 	if errors.Is(initErr, cfg.NotFound) {
 		// Config not found is acceptable for some commands.
 		return nil
@@ -1490,6 +1499,117 @@ func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration
 
 	// Return other errors as-is.
 	return initErr
+}
+
+func isCIGitCloneBootstrapRequested() bool {
+	return ci.Detect() != nil && argsRequestNoArgGitClone(os.Args[1:])
+}
+
+const (
+	rootFlagChdirShort       = "-C"
+	rootFlagChdirShortPrefix = "-C="
+)
+
+var (
+	gitCloneBootstrapValueFlags = map[string]struct{}{
+		"--repo-uri":       {},
+		"-r":               {},
+		"--branch":         {},
+		"-b":               {},
+		"--remote":         {},
+		"--workdir":        {},
+		"--filter":         {},
+		"--depth":          {},
+		rootFlagChdirShort: {},
+	}
+	rootBootstrapValueFlags = map[string]struct{}{
+		"--chdir":          {},
+		rootFlagChdirShort: {},
+		"--profile":        {},
+		"--config":         {},
+		"--config-path":    {},
+		"--base-path":      {},
+		"--logs-level":     {},
+		"--logs-file":      {},
+		"--use-version":    {},
+	}
+)
+
+func argsRequestNoArgGitClone(args []string) bool {
+	args = stripRootFlagsForBootstrapCheck(args)
+	if len(args) < 2 || args[0] != "git" || args[1] != "clone" {
+		return false
+	}
+	return gitCloneArgsAllowBootstrap(args[2:])
+}
+
+type bootstrapArgAction int
+
+const (
+	bootstrapArgAllow bootstrapArgAction = iota
+	bootstrapArgConsumeNext
+	bootstrapArgReject
+)
+
+func gitCloneArgsAllowBootstrap(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		switch gitCloneBootstrapArgAction(args[i]) {
+		case bootstrapArgReject:
+			return false
+		case bootstrapArgConsumeNext:
+			i++
+		}
+	}
+	return true
+}
+
+func gitCloneBootstrapArgAction(arg string) bootstrapArgAction {
+	switch {
+	case arg == "--" || arg == "--all":
+		return bootstrapArgReject
+	case flagTakesSeparateValue(arg, gitCloneBootstrapValueFlags):
+		return bootstrapArgConsumeNext
+	case flagHasInlineValue(arg, gitCloneBootstrapValueFlags), shortChdirHasInlineValue(arg), strings.HasPrefix(arg, "-"):
+		return bootstrapArgAllow
+	default:
+		return bootstrapArgReject
+	}
+}
+
+func stripRootFlagsForBootstrapCheck(args []string) []string {
+	for len(args) > 0 {
+		arg := args[0]
+		switch {
+		case flagTakesSeparateValue(arg, rootBootstrapValueFlags):
+			if len(args) < 2 {
+				return nil
+			}
+			args = args[2:]
+		case flagHasInlineValue(arg, rootBootstrapValueFlags):
+			args = args[1:]
+		default:
+			return args
+		}
+	}
+	return args
+}
+
+func flagTakesSeparateValue(arg string, flags map[string]struct{}) bool {
+	_, ok := flags[arg]
+	return ok
+}
+
+func flagHasInlineValue(arg string, flags map[string]struct{}) bool {
+	for flag := range flags {
+		if strings.HasPrefix(arg, flag+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func shortChdirHasInlineValue(arg string) bool {
+	return strings.HasPrefix(arg, rootFlagChdirShort) && len(arg) > len(rootFlagChdirShort)
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

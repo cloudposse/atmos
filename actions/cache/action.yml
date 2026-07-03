@@ -28,6 +28,20 @@ runs:
     - id: meta
       shell: bash
       run: atmos ci cache paths --format=github
+    - id: validate
+      shell: bash
+      env:
+        ATMOS_CACHE_KEY: ${{ steps.meta.outputs.key }}
+        ATMOS_CACHE_PATH: ${{ steps.meta.outputs.path }}
+      run: |
+        if [ -z "${ATMOS_CACHE_KEY}" ]; then
+          echo "::error::Atmos cache metadata did not include a cache key. Check the previous 'atmos ci cache paths --format=github' step output."
+          exit 1
+        fi
+        if [ -z "${ATMOS_CACHE_PATH}" ]; then
+          echo "::error::Atmos cache metadata did not include any cache paths. Check ci.cache configuration and the previous metadata step output."
+          exit 1
+        fi
     - id: cache
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
