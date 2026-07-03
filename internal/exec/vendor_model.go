@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/downloader"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -124,6 +125,10 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	if !term.IsTTYSupportForStdout() {
 		opts = append(opts, tea.WithoutRenderer(), tea.WithInput(nil))
 		log.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
+	} else if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
 	}
 
 	if _, err := tea.NewProgram(&model, opts...).Run(); err != nil {
