@@ -4,13 +4,11 @@
 
 **Error:** invalid component
 
-Could not find the component mock in the stack idontexist. Check that all the
-context variables are correctly defined in the stack manifests. Are the
-component and stack names correct? Did you forget an import?
+Could not find the component mock in the stack idontexist. Check that all the context variables are correctly defined in
+the stack manifests. Are the component and stack names correct? Did you forget an import?
 # Workflow Error
 
-**Error:** workflow step execution failed: max attempts (1) exceeded, last
-error: subcommand exited with code 1
+**Error:** workflow step execution failed: max attempts (1) exceeded, last error: subcommand exited with code 1
 
 The following command failed to execute:
 
