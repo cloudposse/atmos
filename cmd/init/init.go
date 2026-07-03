@@ -32,10 +32,10 @@ This command helps you quickly scaffold a new Atmos project with
 best-practice configurations and directory structures.
 
 Available templates:
+- basic: Minimal cloud-agnostic project layout (atmos.yaml, stacks, and components)
 - simple: Basic Atmos project structure
 - atmos: Complete atmos.yaml configuration only
-- aws/sandbox: Bare-bones AWS project that runs on the Floci emulator
-- aws/landing-zone: Full AWS foundation (backend, secrets, workflows, validation)
+- aws/landing-zone: AWS landing zone (dev/staging/prod environments with a conventional baseline, emulator-enabled)
 
 Run "atmos scaffold list" to see all templates, including remote ones.
 
@@ -208,7 +208,7 @@ func executeInit(_ context.Context, opts initOptions) error {
 		return fmt.Errorf("%w: failed to get available configurations: %w", errUtils.ErrInitialization, err)
 	}
 
-	// Merge distributable catalog templates (e.g. aws/sandbox, aws/landing-zone).
+	// Merge distributable catalog templates (e.g. aws/landing-zone).
 	// They are advertised as stubs and fetched from their source on selection.
 	if stubs, stubErr := templates.CatalogStubs(opts.sourceOverride); stubErr == nil {
 		for name := range stubs {

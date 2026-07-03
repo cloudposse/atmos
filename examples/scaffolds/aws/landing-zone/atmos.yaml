@@ -1,78 +1,38 @@
 # atmos:template
-# Atmos configuration for {{ .Config.project_name }} (AWS landing zone).
+# Atmos configuration for [[ .Config.project_name ]] (AWS landing zone).
 # https://atmos.tools/cli/configuration
 
 base_path: "./"
 
 components:
   terraform:
-    command: {{ .Config.terraform_command }}
+    command: [[ .Config.terraform_command ]]
     base_path: "components/terraform"
     apply_auto_approve: false
     deploy_run_init: true
     init_run_reconfigure: true
-    # Generate backend.tf.json from each component's `backend` block. Atmos
-    # natively provisions the S3 state bucket before `terraform init` (see
-    # `provision.backend.enabled` on the bucket component). Components without a
-    # `backend_type` (e.g. secret-consumer) keep local state.
+    # Generate backend.tf.json from the `terraform.backend` block in
+    # stacks/_defaults.yaml. Atmos natively provisions the S3 state bucket
+    # before `terraform init` (`terraform.provision.backend.enabled`).
     auto_generate_backend_file: true
 
 stacks:
   base_path: "stacks"
-  # Only files under `deploy/` are top-level stacks; `catalog/` and `mixins/`
-  # are imported building blocks.
   included_paths:
-    - "deploy/**/*.yaml"
+    - "**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
+  name_template: "{{ .vars.stage }}"
 
-workflows:
-  base_path: "stacks/workflows"
-
-# JSON Schema and OPA validation for components.
-schemas:
-  jsonschema:
-    base_path: "stacks/schemas/jsonschema"
-  opa:
-    base_path: "stacks/schemas/opa"
-
-# Vendoring (no remote sources by default; see vendor.yaml).
-vendor:
-  base_path: "./vendor.yaml"
-
-# Secret stores backed by AWS SSM Parameter Store and Secrets Manager. On the
-# emulator these are served by Floci; the prefixes are env-driven so CI can keep
-# runs isolated.
-stores:
-  secrets/ssm:
-    kind: aws/ssm
-    identity: floci-superuser
-    secret: true
-    options:
-      region: {{ .Config.region }}
-      prefix: !env FLOCI_SECRETS_SSM_PREFIX
-  secrets/asm:
-    kind: aws/asm
-    identity: floci-superuser
-    secret: true
-    options:
-      region: {{ .Config.region }}
-      prefix: !env FLOCI_SECRETS_ASM_PREFIX
-
-# Authentication. The landing zone targets the Floci emulator, which accepts any
-# credentials. The endpoint defaults to the emulator and can be overridden with
-# FLOCI_ENDPOINT_URL.
+# A single aws/emulator identity binds every component to the local emulator.
+# `atmos emulator up aws -s <stage>` starts it; this identity and the
+# provider-config contributor wire Terraform to it — no providers.tf, no
+# endpoint configuration, no docker-compose.
 auth:
   identities:
-    floci-superuser:
-      kind: aws/user
-      credentials:
-        access_key_id: test
-        secret_access_key: test
-        region: {{ .Config.region }}
-      spec:
-        endpoint_url: "http://localhost:4566"
+    local:
+      kind: aws/emulator
+      emulator: aws
       default: true
 
 logs:
@@ -81,38 +41,21 @@ logs:
 
 commands:
   - name: test
-    description: Validate and provision the landing zone end to end against Floci.
+    description: Validate stacks, then provision and destroy every environment on the local emulator.
     steps:
       - atmos validate stacks
-      # Apply the workload bucket. Atmos auto-provisions the S3 state backend
-      # (on the emulator) before init, then Terraform creates the bucket.
-      - atmos terraform apply bucket -s dev -auto-approve
-      # Seed secrets into SSM/Secrets Manager, then provision the consumer.
-      - atmos secret set SSM_INSTANCE_TOKEN=dev-instance-token -s dev -c secret-consumer --force
-      - atmos secret set SSM_STACK_TOKEN=dev-stack-token -s dev -c secret-consumer --force
-      - 'atmos secret set ASM_DATABASE_CONFIG={"username":"demo","password":"dev-db-password","host":"db.dev.local"} -s dev -c secret-consumer --force'
-      - atmos secret set GLOBAL_SHARED_TOKEN=shared-token -s dev -c secret-consumer --force
-      - atmos terraform apply secret-consumer -s dev -auto-approve
-      # Tear everything down.
-      - atmos terraform destroy secret-consumer -s dev -auto-approve
-      - atmos terraform destroy bucket -s dev -auto-approve
-      # Confirm the staging and prod stacks plan cleanly.
-      - atmos terraform plan bucket -s staging
-      - atmos terraform plan bucket -s prod
-
-  - name: floci
-    commands:
-      - name: up
-        description: Start the Floci emulator in the background.
-        steps:
-          - docker compose up -d --wait
-      - name: down
-        description: Stop the Floci emulator.
-        steps:
-          - docker compose down
-      - name: reset
-        description: Reset the Floci emulator (delete all data).
-        steps:
-          - docker compose down
-          - rm -rf volume/
-          - docker compose up -d --wait
+      # dev
+      - atmos emulator up aws -s dev
+      - atmos terraform apply --all -s dev -i false
+      - atmos terraform destroy --all -s dev -i false
+      - atmos emulator down aws -s dev
+      # staging
+      - atmos emulator up aws -s staging
+      - atmos terraform apply --all -s staging -i false
+      - atmos terraform destroy --all -s staging -i false
+      - atmos emulator down aws -s staging
+      # prod
+      - atmos emulator up aws -s prod
+      - atmos terraform apply --all -s prod -i false
+      - atmos terraform destroy --all -s prod -i false
+      - atmos emulator down aws -s prod

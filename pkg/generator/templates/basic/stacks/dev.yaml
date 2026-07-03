@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# The `dev` stack. The stack name comes from `name_template` in `atmos.yaml`,
+# which reads `vars.stage`.
+
+import:
+  - _defaults
+
+vars:
+  stage: dev
+
+# Define components for this stack. For example, after adding a Terraform
+# component under `components/terraform/my-component`:
+#
+# components:
+#   terraform:
+#     my-component:
+#       vars:
+#         enabled: true
+#
+# Then run:
+#   atmos terraform plan my-component -s dev

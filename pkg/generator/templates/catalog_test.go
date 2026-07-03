@@ -18,24 +18,20 @@ func TestLoadCatalog(t *testing.T) {
 		byName[e.Name] = e
 	}
 
-	sandbox, ok := byName["aws/sandbox"]
-	require.True(t, ok, "catalog must include aws/sandbox")
-	assert.Equal(t, "aws", sandbox.Cloud)
-	assert.Equal(t, "sandbox", sandbox.Tier)
-	assert.NotEmpty(t, sandbox.Source)
-	assert.NotEmpty(t, sandbox.Version)
-	assert.NotEmpty(t, sandbox.Description)
-
 	lz, ok := byName["aws/landing-zone"]
 	require.True(t, ok, "catalog must include aws/landing-zone")
+	assert.Equal(t, "aws", lz.Cloud)
 	assert.Equal(t, "landing-zone", lz.Tier)
+	assert.NotEmpty(t, lz.Source)
+	assert.NotEmpty(t, lz.Version)
+	assert.NotEmpty(t, lz.Description)
 }
 
 func TestCatalogEntry_ResolvedSource(t *testing.T) {
 	e := CatalogEntry{
 		Cloud:  "aws",
-		Tier:   "sandbox",
-		Source: "github.com/cloudposse/atmos.git//examples/scaffolds/aws/sandbox?ref=main",
+		Tier:   "landing-zone",
+		Source: "github.com/cloudposse/atmos.git//examples/scaffolds/aws/landing-zone?ref=main",
 	}
 
 	// No override: the remote source is returned verbatim.
@@ -43,16 +39,16 @@ func TestCatalogEntry_ResolvedSource(t *testing.T) {
 
 	// Override: a local path under <override>/<cloud>/<tier>.
 	got := e.ResolvedSource(filepath.Join("repo", "examples", "scaffolds"))
-	assert.Equal(t, filepath.Join("repo", "examples", "scaffolds", "aws", "sandbox"), got)
+	assert.Equal(t, filepath.Join("repo", "examples", "scaffolds", "aws", "landing-zone"), got)
 }
 
 func TestCatalogStubs(t *testing.T) {
 	stubs, err := CatalogStubs("")
 	require.NoError(t, err)
 
-	stub, ok := stubs["aws/sandbox"]
+	stub, ok := stubs["aws/landing-zone"]
 	require.True(t, ok)
-	assert.Equal(t, "aws/sandbox", stub.Name)
+	assert.Equal(t, "aws/landing-zone", stub.Name)
 	assert.NotEmpty(t, stub.Description)
 	assert.NotEmpty(t, stub.Version)
 	assert.NotEmpty(t, stub.Source)
@@ -62,5 +58,5 @@ func TestCatalogStubs(t *testing.T) {
 	base := filepath.Join("repo", "examples", "scaffolds")
 	overridden, err := CatalogStubs(base)
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(base, "aws", "sandbox"), overridden["aws/sandbox"].Source)
+	assert.Equal(t, filepath.Join(base, "aws", "landing-zone"), overridden["aws/landing-zone"].Source)
 }

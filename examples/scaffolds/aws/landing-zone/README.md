@@ -1,50 +1,78 @@
 <!-- atmos:template -->
-# {{ .Config.project_name }}
+# [[ .Config.project_name ]]
 
-A full-featured [Atmos](https://atmos.tools) landing zone for AWS, runnable end
-to end on the [Floci](https://floci.io) emulator — no real AWS credentials
-required.
+An [Atmos](https://atmos.tools) landing zone for AWS: `dev`, `staging`, and
+`prod` environments, each with a small, conventional baseline — audit trail,
+encryption key, environment metadata, monitoring, and a deployment role — all
+provisionable end to end on a local emulator with no AWS credentials.
 
-## Capabilities
+## Quick start
 
-- **Native backend provisioning** — Atmos creates the S3 state bucket
-  automatically before `terraform init` (`provision.backend.enabled` on the
-  `bucket` component); no separate backend component is needed.
-- **Secrets** — AWS SSM Parameter Store and Secrets Manager stores, consumed via
-  `!secret` in the `secret-consumer` component.
-- **Custom commands** — `atmos test` (full provision/destroy) and an
-  `atmos floci up|down|reset` group.
-- **Workflows** — `provision` and `validation` workflows under `stacks/workflows/`.
-- **Validation** — JSON Schema + OPA policies guard the `bucket` component.
-- **Environments** — `dev`, `staging`, and `prod` stacks built from stage mixins.
+```shell
+atmos test
+```
+
+That validates the stacks, then for each environment starts the local
+emulator, applies every component, destroys them, and shuts the emulator down.
+
+To work with one environment interactively:
+
+```shell
+atmos emulator up aws -s dev
+atmos terraform apply --all -s dev -i false
+atmos terraform output monitoring -s dev
+atmos emulator down aws -s dev
+```
 
 ## Layout
 
 ```
-atmos.yaml                       Atmos config: stores, schemas, workflows, commands
-components/terraform/            bucket (native backend), secret-consumer
-stacks/mixins/floci.yaml         Points the AWS provider at the emulator
-stacks/mixins/stage/             dev / staging / prod mixins
-stacks/catalog/                  Abstract component definitions
-stacks/deploy/<stage>/           Concrete per-stage stacks
-stacks/workflows/                provision + validation workflows
-stacks/schemas/                  JSON Schema + OPA policies
+atmos.yaml                    Atmos config: emulator identity, test command
+components/terraform/
+  kms/                        Baseline encryption key + alias
+  audit-trail/                CloudTrail + encrypted, private log bucket
+  baseline/                   Environment metadata in SSM Parameter Store
+  monitoring/                 Log group, alerts topic, log-volume alarm
+  iam-baseline/               Environment deployment role
+stacks/
+  _defaults.yaml              Shared foundation: emulator, state backend
+  dev.yaml                    Development: disposable, short retention
+  staging.yaml                Staging: production-like rehearsal
+  prod.yaml                   Production: multi-region trail, long retention
 ```
 
-## Try it
+Every environment is a single flat stack file that imports `_defaults.yaml`
+and carries its own real configuration — no deep directory hierarchy.
 
-```sh
-# 1. Start the Floci emulator.
-atmos floci up      # or: docker compose up -d
+## How it works
 
-# 2. (optional) Isolate secret paths per run.
-export FLOCI_SECRETS_SSM_PREFIX="/atmos/{{ .Config.namespace }}/ssm"
-export FLOCI_SECRETS_ASM_PREFIX="atmos/{{ .Config.namespace }}/asm"
+- **State backend** — Atmos natively provisions the S3 state bucket before
+  `terraform init` (`terraform.provision.backend.enabled` in
+  `stacks/_defaults.yaml`); there is no hand-rolled tfstate component.
+- **Emulator** — the `local` identity (`kind: aws/emulator`) binds every
+  component to the stack-scoped emulator component. Atmos injects the
+  provider endpoint and credentials automatically; the components contain no
+  `providers.tf` and no endpoint configuration.
+- **Environments** — per-stage substance (retention, alarm thresholds, bucket
+  protection) lives visibly in `dev.yaml` / `staging.yaml` / `prod.yaml`.
 
-# 3. Validate, provision, and tear down everything against Floci.
-atmos test
-```
+## Moving to real AWS
 
-When you are ready to target real AWS, remove the `mixins/floci` imports and the
-`floci-superuser` identity, drop the custom `endpoints`/`use_path_style`/`access_key`
-settings from the `bucket` backend, and configure real provider/auth settings.
+1. In `stacks/_defaults.yaml`, delete the emulator component and everything
+   from `access_key` down in the backend block; pick a globally unique state
+   bucket name.
+2. In `atmos.yaml`, replace the `local` emulator identity with your real
+   authentication (see [Atmos Auth](https://atmos.tools/cli/commands/auth)).
+3. `atmos terraform plan --all -s dev` and review.
+
+Note: on the emulator, CloudTrail is management-plane only — the trail and
+its bucket are created for real, but no events are delivered.
+
+## Next steps
+
+- Add your first workload component under `components/terraform/` and wire it
+  into the stage stacks.
+- For an application repository that deploys *into* these environments, see
+  the `aws/app` scaffold and the
+  [Application SDLC Environments](https://atmos.tools/design-patterns/stack-organization/application-sdlc)
+  design pattern.

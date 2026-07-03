@@ -1,0 +1,18 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: basic
+  description: Minimal cloud-agnostic Atmos project layout — atmos.yaml, stacks, and components
+  author: Cloud Posse
+  version: 1.0.0
+spec:
+  fields:
+    - name: project_name
+      label: Project name
+      description: Name of the project (lowercase letters, numbers, and hyphens)
+      type: input
+      default: my-project
+      required: true
+      validation:
+        pattern: "^[a-z][a-z0-9-]{1,30}$"
+        message: "Project name must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens (2-31 characters)."

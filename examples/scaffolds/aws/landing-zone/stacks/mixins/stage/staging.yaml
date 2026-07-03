@@ -1,5 +1,0 @@
-# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
-
-# Mixin for the `staging` stage. Imported by every `staging` deploy stack.
-vars:
-  stage: staging

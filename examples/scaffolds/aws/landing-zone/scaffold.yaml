@@ -3,29 +3,24 @@ kind: AtmosScaffoldConfig
 metadata:
   # Display name only. The template is invoked by its catalog key `aws/landing-zone`.
   name: aws-landing-zone
-  description: Full AWS Atmos foundation — native backend provisioning, SSM/Secrets Manager, custom commands, workflows, validation, and dev/staging/prod stacks, all runnable on the Floci emulator.
+  description: AWS landing zone — dev/staging/prod environments with a conventional per-environment baseline (audit trail, KMS, SSM parameters, monitoring, IAM), provisioned end to end on the local emulator.
   author: Cloud Posse
-  version: 1.0.0
+  version: 2.0.0
 spec:
+  # Square-bracket delimiters so generated files can contain literal Go-template
+  # syntax (e.g. `name_template: "{{ .vars.stage }}"` in atmos.yaml) without the
+  # engine treating it as an unrendered scaffold variable.
+  delimiters: ["[[", "]]"]
   fields:
     - name: project_name
       label: Project name
-      description: Name of the project, also used as the directory slug.
+      description: Name of the project; used in resource names and the state bucket.
       type: input
       default: my-landing-zone
       required: true
       validation:
         pattern: "^[a-z][a-z0-9-]{1,30}$"
         message: Use lowercase letters, digits, and hyphens (2-31 characters).
-    - name: namespace
-      label: Namespace
-      description: Org or namespace short code used in resource names.
-      type: input
-      default: acme
-      required: true
-      validation:
-        pattern: "^[a-z0-9]{2,10}$"
-        message: Use 2-10 lowercase alphanumeric characters.
     - name: region
       label: Primary AWS region
       description: Default AWS region for the project.
