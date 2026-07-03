@@ -197,7 +197,7 @@ func startStepRecorder(step *schema.WorkflowStep, vars *Variables) (*asciicast.R
 }
 
 func castRecorderEnv(step *schema.WorkflowStep, vars *Variables) (map[string]string, error) {
-	env := make(map[string]string, len(vars.Env)+len(step.Env))
+	env := make(map[string]string)
 	for key, value := range vars.Env {
 		env[key] = value
 	}
