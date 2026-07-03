@@ -8,9 +8,13 @@ workflows:
       - name: first workflow group
         type: shell
         command: |
-          echo "native ci workflow group method: first"
+          echo "workflow step: first"
+          echo "ATMOS_CI_LOG_GROUP_ACTIVE=${ATMOS_CI_LOG_GROUP_ACTIVE:-<unset>}"
+          echo "payload: first step output should be inside the active Atmos group when grouping is enabled"
 
       - name: second workflow group
         type: shell
         command: |
-          echo "native ci workflow group method: second"
+          echo "workflow step: second"
+          echo "ATMOS_CI_LOG_GROUP_ACTIVE=${ATMOS_CI_LOG_GROUP_ACTIVE:-<unset>}"
+          echo "payload: second step output should be inside the active Atmos group when grouping is enabled"

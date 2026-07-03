@@ -68,7 +68,23 @@ jobs:
 
       - name: Run workflow log group fixture
         working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
-        run: atmos workflow ci-log-groups -f ci-log-groups
+        run: |
+          echo "ATMOS_CI_GROUPS_MODE=${ATMOS_CI_GROUPS_MODE}"
+          case "${ATMOS_CI_GROUPS_MODE}" in
+            auto)
+              echo "Expected: GitHub log groups named 'first workflow group' and 'second workflow group'."
+              echo "Expected: each workflow shell step prints ATMOS_CI_LOG_GROUP_ACTIVE=1."
+              ;;
+            invocation)
+              echo "Expected: one GitHub log group around the full 'atmos workflow' invocation."
+              echo "Expected: workflow shell steps print ATMOS_CI_LOG_GROUP_ACTIVE=1 because the invocation group is active."
+              ;;
+            off)
+              echo "Expected: no Atmos-created GitHub log groups."
+              echo "Expected: workflow shell steps print ATMOS_CI_LOG_GROUP_ACTIVE=<unset>."
+              ;;
+          esac
+          atmos workflow ci-log-groups -f ci-log-groups
 
   terraform-plan:
     name: "[native ci] terraform plan"
