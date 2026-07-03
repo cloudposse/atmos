@@ -15,8 +15,18 @@ commands:
         steps:
           - |
             echo "Auto-formatting PR changes..."
-            BASE_REF="${GITHUB_BASE_REF:-main}"
-            pre-commit run --from-ref origin/$BASE_REF --to-ref HEAD || true
+            BASE_REF="${GITHUB_BASE_REF:-origin/main}"
+
+            if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+              BASE_REF="${BASE_REF#origin/}"
+              if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+                echo "Base ref '$BASE_REF' not found. Fetching from origin..."
+                git fetch origin main:main || true
+                BASE_REF="main"
+              fi
+            fi
+
+            pre-commit run --from-ref "$BASE_REF" --to-ref HEAD || true
             echo "Formatting applied to PR changes"
 
       - name: all

@@ -79,6 +79,52 @@ func TestCustomCommandIntegration_DefaultSubcommand(t *testing.T) {
 	assert.Equal(t, "linux:"+tmpDir, string(output))
 }
 
+func TestCustomCommandIntegration_StepEnvExported(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "step-env.txt")
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{
+			{
+				Name:        "build",
+				Description: "Build command",
+				Flags: []schema.CommandFlag{
+					{Name: "target", Type: "string", Default: "default"},
+					{Name: "version", Type: "string", Default: "test"},
+				},
+				Steps: schema.Tasks{
+					{
+						Type: "shell",
+						Env: map[string]string{
+							"ATMOS_BUILD_TARGET":  "{{ .Flags.target }}",
+							"ATMOS_BUILD_VERSION": "{{ .Flags.version }}",
+						},
+						Command: fmt.Sprintf("printf %%s \"$ATMOS_BUILD_TARGET:$ATMOS_BUILD_VERSION\" > %q", outputPath),
+					},
+				},
+			},
+		},
+	}
+
+	parentCmd := &cobra.Command{Use: "atmos"}
+	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd))
+
+	buildCmd := findSubcommand(parentCmd, "build")
+	require.NotNil(t, buildCmd)
+	require.NoError(t, buildCmd.PersistentFlags().Set("target", "linux"))
+	require.NoError(t, buildCmd.PersistentFlags().Set("version", "1.2.3"))
+
+	buildCmd.PreRun(buildCmd, nil)
+	buildCmd.Run(buildCmd, nil)
+
+	output, err := os.ReadFile(outputPath)
+	require.NoError(t, err)
+	assert.Equal(t, "linux:1.2.3", string(output))
+}
+
 func TestCustomCommandIntegration_MapEnvExported(t *testing.T) {
 	_ = NewTestKit(t)
 

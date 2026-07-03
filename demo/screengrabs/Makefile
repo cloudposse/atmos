@@ -12,6 +12,7 @@ help:
 	@echo "  make install      -> atmos screengrabs install"
 	@echo "  make docker-build -> atmos screengrabs docker-build"
 	@echo "  make docker-all   -> atmos screengrabs docker-all"
+	@echo "  make clean        -> (no longer needed / see atmos screengrabs --help)"
 	@echo ""
 	@exit 1
 

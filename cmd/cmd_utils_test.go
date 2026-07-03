@@ -139,6 +139,86 @@ func TestCommandUsageLines(t *testing.T) {
 	assert.Empty(t, commandUsageLines(nil))
 }
 
+func TestRunDefaultSubcommandMergesInheritedFlags(t *testing.T) {
+	parent := &cobra.Command{Use: "parent"}
+	parent.PersistentFlags().String("profile", "default", "test profile")
+	require.NoError(t, parent.PersistentFlags().Set("profile", "prod"))
+
+	var got string
+	child := &cobra.Command{
+		Use: "child",
+		Run: func(cmd *cobra.Command, args []string) {
+			flag := cmd.Flag("profile")
+			require.NotNil(t, flag)
+			got = flag.Value.String()
+		},
+	}
+	parent.AddCommand(child)
+
+	handled := runDefaultSubcommand(parent, &schema.Command{
+		Name:    "parent",
+		Default: "child",
+		Commands: []schema.Command{
+			{Name: "child"},
+		},
+	})
+
+	assert.True(t, handled)
+	assert.Equal(t, "prod", got)
+}
+
+func TestRunDefaultSubcommandDetectsCycle(t *testing.T) {
+	originalOsExit := errUtils.OsExit
+	t.Cleanup(func() {
+		errUtils.OsExit = originalOsExit
+	})
+
+	type exitPanic struct {
+		code int
+	}
+	var exitCode int
+	errUtils.OsExit = func(code int) {
+		exitCode = code
+		panic(exitPanic{code: code})
+	}
+
+	aConfig := schema.Command{
+		Name:    "a",
+		Default: "b",
+		Commands: []schema.Command{
+			{Name: "b"},
+		},
+	}
+	bConfig := schema.Command{
+		Name:    "b",
+		Default: "a",
+		Commands: []schema.Command{
+			{Name: "a"},
+		},
+	}
+
+	aCmd := &cobra.Command{Use: "a"}
+	bCmd := &cobra.Command{
+		Use: "b",
+		Run: func(cmd *cobra.Command, args []string) {
+			runDefaultSubcommand(cmd, &bConfig)
+		},
+	}
+	nestedACmd := &cobra.Command{
+		Use: "a",
+		Run: func(cmd *cobra.Command, args []string) {
+			runDefaultSubcommand(cmd, &aConfig)
+		},
+	}
+	bCmd.AddCommand(nestedACmd)
+	aCmd.AddCommand(bCmd)
+
+	assert.Panics(t, func() {
+		runDefaultSubcommand(aCmd, &aConfig)
+	})
+	assert.Equal(t, 1, exitCode)
+}
+
 func TestAppendUsageSection(t *testing.T) {
 	cmd := &cobra.Command{
 		Use: "push <name-or-path>",

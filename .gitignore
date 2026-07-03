@@ -76,6 +76,7 @@ website/package-lock.json
 # Development configs - track only specific files
 .atmos.d/*
 !.atmos.d/*.yaml
+!.atmos.d/*.yml
 !.atmos.d/README.md
 
 # Ignore components vendored during tests

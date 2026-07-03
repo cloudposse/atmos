@@ -91,6 +91,24 @@ install_via_binary_download() {
 
     binary_url="https://github.com/cloudposse/atmos/releases/download/v${release}/atmos_${release}_${os}_${arch}${extension}"
     curl -fsSL "${binary_url}" -o "$output"
+    checksums_url="https://github.com/cloudposse/atmos/releases/download/v${release}/atmos_${release}_SHA256SUMS"
+    expected_sha="$(curl -fsSL "$checksums_url" | awk -v file="atmos_${release}_${os}_${arch}${extension}" '$2 == file {print $1; exit}')"
+    if [ -z "$expected_sha" ]; then
+      echo "Unable to find checksum for atmos_${release}_${os}_${arch}${extension}" >&2
+      exit 1
+    fi
+    if command_exists sha256sum; then
+      actual_sha="$(sha256sum "$output" | awk '{print $1}')"
+    elif command_exists shasum; then
+      actual_sha="$(shasum -a 256 "$output" | awk '{print $1}')"
+    else
+      echo "sha256sum or shasum is required to verify the downloaded Atmos binary." >&2
+      exit 1
+    fi
+    if [ "$actual_sha" != "$expected_sha" ]; then
+      echo "Checksum mismatch for $output" >&2
+      exit 1
+    fi
     chmod +x "$output"
     installed_atmos_path="./$output"
     echo "Atmos installed into $installed_atmos_path, make sure to move it into a directory in your PATH"

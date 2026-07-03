@@ -35,23 +35,37 @@ func TestExecuteShellAndReturnOutputInheritsPathAndAppliesOverrides(t *testing.T
 	}
 
 	t.Setenv("PATH", tmpDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("ATMOS_TEST_OUTPUT_HELPER", "inherited")
 
 	output, err := ExecuteShellAndReturnOutput(
 		helperName+" -test.run=TestExecuteShellAndReturnOutputHelper --",
 		"test-value-command",
 		".",
-		[]string{"ATMOS_TEST_OUTPUT_HELPER=override"},
+		[]string{
+			"ATMOS_TEST_OUTPUT_HELPER=override",
+			"ATMOS_TEST_OUTPUT_HELPER_COUNT=1",
+		},
 		false,
 	)
 
 	require.NoError(t, err)
-	assert.Equal(t, "override", strings.TrimSpace(output))
+	assert.Equal(t, "override\n1", strings.TrimSpace(output))
 }
 
 func TestExecuteShellAndReturnOutputHelper(t *testing.T) {
 	value := os.Getenv("ATMOS_TEST_OUTPUT_HELPER")
 	if value == "" {
 		return
+	}
+	if os.Getenv("ATMOS_TEST_OUTPUT_HELPER_COUNT") != "" {
+		count := 0
+		for _, envVar := range os.Environ() {
+			if strings.HasPrefix(envVar, "ATMOS_TEST_OUTPUT_HELPER=") {
+				count++
+			}
+		}
+		fmt.Fprintf(os.Stdout, "%s\n%d", value, count)
+		os.Exit(0)
 	}
 	fmt.Fprint(os.Stdout, value)
 	os.Exit(0)

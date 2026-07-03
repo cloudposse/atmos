@@ -376,7 +376,7 @@ Don't commit: todos, research, scratch files. Do commit: code, tests, requested 
 Always ask first: "This will discard uncommitted changes. Proceed? [y/N]"
 
 ### Test Coverage (MANDATORY)
-80% minimum (CodeCov enforced). All features need tests. `atmos test acc-coverage` for reports.
+80% minimum (CodeCov enforced). All features need tests. `atmos test --coverage` for reports.
 
 ### Cyclomatic Complexity (MANDATORY)
 golangci-lint enforces `cyclop: max-complexity: 15` and `funlen: lines: 60, statements: 40`.

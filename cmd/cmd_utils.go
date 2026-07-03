@@ -57,6 +57,7 @@ const currentDirPath = "."
 const (
 	customCommandKeyCommand  = "command"
 	customCommandKeyIdentity = "identity"
+	annotationDefaultChain   = "atmos.custom.default.chain"
 )
 
 var errCustomCommandFlagNotRegistered = errors.New("flag is not registered")
@@ -339,6 +340,18 @@ func runDefaultSubcommand(cmd *cobra.Command, commandConfig *schema.Command) boo
 		return false
 	}
 
+	chain := defaultSubcommandChain(cmd)
+	if Contains(chain, commandConfig.Name) {
+		err := errUtils.Build(errUtils.ErrInvalidConfig).
+			WithExplanationf("Custom command %q has a recursive default subcommand chain", commandConfig.Name).
+			WithHint("Remove the self-reference or cycle from the command's `default` settings").
+			WithContext(customCommandKeyCommand, commandConfig.Name).
+			WithContext("default", defaultName).
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "Invalid Command", "https://atmos.tools/cli/configuration/commands")
+		return true
+	}
+
 	subcommand := findSubcommand(cmd, defaultName)
 	if subcommand == nil {
 		err := errUtils.Build(errUtils.ErrInvalidConfig).
@@ -350,6 +363,10 @@ func runDefaultSubcommand(cmd *cobra.Command, commandConfig *schema.Command) boo
 		errUtils.CheckErrorPrintAndExit(err, "Invalid Command", "https://atmos.tools/cli/configuration/commands")
 		return true
 	}
+
+	_ = subcommand.InheritedFlags()
+	restoreChain := restoreDefaultSubcommandChain(subcommand, append(chain, commandConfig.Name))
+	defer restoreChain()
 
 	if subcommand.PreRunE != nil {
 		errUtils.CheckErrorPrintAndExit(subcommand.PreRunE(subcommand, nil), "", "")
@@ -366,6 +383,32 @@ func runDefaultSubcommand(cmd *cobra.Command, commandConfig *schema.Command) boo
 	}
 
 	return true
+}
+
+func defaultSubcommandChain(cmd *cobra.Command) []string {
+	if cmd.Annotations == nil {
+		return nil
+	}
+	raw := strings.TrimSpace(cmd.Annotations[annotationDefaultChain])
+	if raw == "" {
+		return nil
+	}
+	return strings.Split(raw, "\n")
+}
+
+func restoreDefaultSubcommandChain(cmd *cobra.Command, chain []string) func() {
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+	previous, hadPrevious := cmd.Annotations[annotationDefaultChain]
+	cmd.Annotations[annotationDefaultChain] = strings.Join(chain, "\n")
+	return func() {
+		if hadPrevious {
+			cmd.Annotations[annotationDefaultChain] = previous
+		} else {
+			delete(cmd.Annotations, annotationDefaultChain)
+		}
+	}
 }
 
 // findSubcommand returns the existing subcommand of parent with the given name, or nil.
@@ -938,6 +981,18 @@ func executeCustomCommand(
 			}
 		}
 
+		stepEnv := step.Env
+		if atmosConfig.CaseMaps != nil {
+			stepEnv = atmosConfig.CaseMaps.ApplyCase("env", stepEnv)
+		}
+		if len(stepEnv) > 0 {
+			resolvedStepEnv, resolveErr := stepVars.ResolveEnvMap(stepEnv)
+			errUtils.CheckErrorPrintAndExit(resolveErr, "", "")
+			for key, value := range resolvedStepEnv {
+				env = envpkg.UpdateEnvVar(env, key, value)
+			}
+		}
+
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
 		commandToRun, err := stepVars.Resolve(step.Command)
@@ -996,20 +1051,10 @@ func executeCustomCommand(
 			if stepPkg.IsExtendedStepType(stepType) {
 				// Convert Task to WorkflowStep for handler compatibility.
 				workflowStep := step.ToWorkflowStep()
-				// Carry env onto the step so handlers that read step.Env (e.g. the
-				// container handler's in-container env) see it. The step's own
-				// declared `env:` had its map keys lowercased by Viper, so restore
-				// the original case from the shared env case map, then merge it over
-				// the resolved command/process env (step vars win on collisions).
-				stepOwnEnv := workflowStep.Env
-				if atmosConfig.CaseMaps != nil {
-					stepOwnEnv = atmosConfig.CaseMaps.ApplyCase("env", stepOwnEnv)
-				}
-				mergedStepEnv := envSliceToMap(env)
-				for key, value := range stepOwnEnv {
-					mergedStepEnv[key] = value
-				}
-				workflowStep.Env = mergedStepEnv
+				// Carry the resolved process env onto the step so handlers that read
+				// step.Env (e.g. the container handler's in-container env) see the
+				// same command/component/auth/step env used by shell and atmos steps.
+				workflowStep.Env = envSliceToMap(env)
 				// Propagate working directory to extended step if not already set.
 				if workflowStep.WorkingDirectory == "" {
 					workflowStep.WorkingDirectory = workDir

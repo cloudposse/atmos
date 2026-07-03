@@ -47,7 +47,8 @@ func ExecuteShellAndReturnOutput(
 	}
 	mergedEnv := os.Environ()
 	for _, envVar := range env {
-		mergedEnv = updateEnvVar(mergedEnv, parseEnvVarKey(envVar), parseEnvVarValue(envVar))
+		key, value, _ := parseEnvVar(envVar)
+		mergedEnv = updateEnvVar(mergedEnv, key, value)
 	}
 	mergedEnv = updateEnvVar(mergedEnv, "ATMOS_SHLVL", strconv.Itoa(newShellLevel))
 
@@ -65,26 +66,17 @@ func ExecuteShellAndReturnOutput(
 	return b.String(), nil
 }
 
-func parseEnvVarKey(envVar string) string {
-	if idx := strings.IndexByte(envVar, '='); idx >= 0 {
-		return envVar[:idx]
-	}
-	return envVar
-}
-
-func parseEnvVarValue(envVar string) string {
-	if idx := strings.IndexByte(envVar, '='); idx >= 0 {
-		return envVar[idx+1:]
-	}
-	return ""
+func parseEnvVar(envVar string) (string, string, bool) {
+	return strings.Cut(envVar, "=")
 }
 
 func updateEnvVar(env []string, key, value string) []string {
 	for i, envVar := range env {
-		existingKey, _, found := strings.Cut(envVar, "=")
+		existingKey, _, found := parseEnvVar(envVar)
 		if !found {
 			continue
 		}
+		// PATH is compared case-insensitively because Windows may store it as "Path".
 		if existingKey == key || (strings.EqualFold(key, "PATH") && strings.EqualFold(existingKey, key)) {
 			env[i] = existingKey + "=" + value
 			return env

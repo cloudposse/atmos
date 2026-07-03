@@ -15,11 +15,16 @@ commands:
       - type: toast
         level: info
         content: Building Atmos...
-      - &build_binary_step |
+      - &build_binary_step
+        type: shell
+        env:
+          ATMOS_BUILD_TARGET: "{{ .Flags.target }}"
+          ATMOS_BUILD_VERSION: "{{ .Flags.version }}"
+        command: |
           set -eu
 
-          target="{{ .Flags.target }}"
-          version="{{ .Flags.version }}"
+          target="${ATMOS_BUILD_TARGET:-default}"
+          version="${ATMOS_BUILD_VERSION:-test}"
 
           case "$target" in
             default)
@@ -96,23 +101,28 @@ commands:
             description: "Build target: default, linux, windows, macos, or macos-intel"
             default: default
         steps:
-          - |
-            set -eu
+          - type: shell
+            env:
+              ATMOS_BUILD_TARGET: "{{ .Flags.target }}"
+            command: |
+              set -eu
 
-            case "{{ .Flags.target }}" in
-              windows)
-                ./build/atmos.exe version
-                ;;
-              default|linux|macos|macos-intel)
-                chmod +x ./build/atmos
-                ./build/atmos version
-                ;;
-              *)
-                echo "Unsupported version target: {{ .Flags.target }}" >&2
-                echo "Expected one of: default, linux, windows, macos, macos-intel" >&2
-                exit 1
-                ;;
-            esac
+              target="${ATMOS_BUILD_TARGET:-default}"
+
+              case "$target" in
+                windows)
+                  ./build/atmos.exe version
+                  ;;
+                default|linux|macos|macos-intel)
+                  chmod +x ./build/atmos
+                  ./build/atmos version
+                  ;;
+                *)
+                  echo "Unsupported version target: $target" >&2
+                  echo "Expected one of: default, linux, windows, macos, macos-intel" >&2
+                  exit 1
+                  ;;
+              esac
 
       - name: readme
         description: Regenerate README.md from README.yaml
