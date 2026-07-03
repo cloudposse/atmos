@@ -8,3 +8,7 @@
 **/terraform.tfstate.backup
 **/terraform.tfstate.d/**
 **/cache.*.txt
+# CI output scratch files written via $GITHUB_OUTPUT / $GITHUB_STEP_SUMMARY.
+# These are runtime artifacts, not fixtures — never track them.
+github-output.txt
+github-step-summary.txt

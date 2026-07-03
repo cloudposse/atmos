@@ -166,7 +166,7 @@ func authenticateForToken(ctx context.Context, authConfig *schema.AuthConfig, cl
 		AuthContext: &schema.AuthContext{},
 	}
 
-	credStore := credentials.NewCredentialStore()
+	credStore := credentials.NewCredentialStoreWithConfig(authConfig)
 	validator := validation.NewValidator()
 
 	mgr, err := auth.NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
@@ -238,7 +238,8 @@ func exportAWSCredsToEnv(creds types.ICredentials) error {
 	// that might conflict with the explicit credentials.
 	os.Unsetenv("AWS_PROFILE")
 
-	log.Debug("Exported AWS credentials to environment",
+	log.Debug(
+		"Exported AWS credentials to environment",
 		"hasAccessKey", awsCreds.AccessKeyID != "",
 		"hasSecretKey", awsCreds.SecretAccessKey != "",
 		"hasSessionToken", awsCreds.SessionToken != "",

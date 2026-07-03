@@ -47,7 +47,10 @@ Example usage:
 		}
 
 		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		opts, err := ParseTerraformRunOptions(v)
+		if err != nil {
+			return err
+		}
 
 		// Get flag values from Viper
 		stack := v.GetString("stack")

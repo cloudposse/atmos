@@ -8,20 +8,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 // TestProfileListCommand verifies that profile list command works correctly.
 func TestProfileListCommand(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for profile list test", "coverageEnabled", coverDir != "")
-	}
+	ensureAtmosRunner(t)
 
 	t.Run("profile list with profiles returns table output", func(t *testing.T) {
 		t.Chdir("fixtures/scenarios/config-profiles")
@@ -150,14 +141,7 @@ func TestProfileListCommand(t *testing.T) {
 
 // TestProfileShowCommand verifies that profile show command works correctly.
 func TestProfileShowCommand(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for profile show test", "coverageEnabled", coverDir != "")
-	}
+	ensureAtmosRunner(t)
 
 	t.Run("profile show with existing profile", func(t *testing.T) {
 		t.Chdir("fixtures/scenarios/config-profiles")
@@ -271,14 +255,7 @@ func TestProfileShowCommand(t *testing.T) {
 
 // TestProfileFlagIntegration verifies that --profile flag is accepted by commands.
 func TestProfileFlagIntegration(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for profile flag integration test", "coverageEnabled", coverDir != "")
-	}
+	ensureAtmosRunner(t)
 
 	t.Run("profile flag is accepted without error", func(t *testing.T) {
 		t.Chdir("fixtures/scenarios/config-profiles")

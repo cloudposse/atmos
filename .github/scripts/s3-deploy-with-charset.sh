@@ -33,7 +33,11 @@ aws sts get-caller-identity
 echo "::endgroup::"
 
 echo "::group::Sync ${LOCAL_DIR} -> ${S3_URI}"
-aws s3 sync "${LOCAL_DIR}" "${S3_URI}" --delete
+# Protect img/demos/* from --delete: the landing-page demo videos (*.webm/*.mp4/*.png)
+# are large, gitignored binaries published out-of-band by .github/workflows/landing-demos.yaml
+# (`atmos demo publish`). They live in this same origin bucket but are NOT part of
+# website/build, so without this exclusion every site deploy would delete them.
+aws s3 sync "${LOCAL_DIR}" "${S3_URI}" --delete --exclude 'img/demos/*'
 echo "::endgroup::"
 
 # Map text-format extensions to their `Content-Type; charset=utf-8`.

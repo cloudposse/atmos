@@ -1,0 +1,38 @@
+---
+title: spin
+sidebar_label: spin
+slug: /workflows/steps/type/spin
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `spin` step type runs a command behind an animated spinner — the same progress indicator Atmos uses for long-running operations — so your custom commands and workflows show clean, compact progress instead of noisy output.
+</Intro>
+
+```yaml
+steps:
+  - name: build
+    type: spin
+    title: Building application
+    command: npm run build
+    timeout: 60s
+```
+
+## Fields
+
+<dl>
+  <dt>`command`</dt>
+  <dd>Required. Command to run while the spinner is active.</dd>
+
+  <dt>`title`</dt>
+  <dd>Optional spinner title.</dd>
+
+  <dt>`timeout`</dt>
+  <dd>Optional duration limit, such as `30s` or `2m`.</dd>
+
+  <dt>`working_directory`</dt>
+  <dd>Optional directory where the command runs.</dd>
+</dl>
+
+Use `spin` when the command output is less useful than a compact progress indicator.

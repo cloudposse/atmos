@@ -1,0 +1,62 @@
+---
+title: atmos emulator up
+sidebar_label: up
+sidebar_class_name: command
+id: up
+description: Start (or reuse) an emulator's long-running container
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to start (or reuse) the emulator's long-running container. The container is labeled by its canonical instance address and outlives the `atmos` process, so it stays available for subsequent commands.
+
+By default the emulator **persists its state** across `down`/`up` by bind-mounting a host directory under the XDG cache (`$XDG_CACHE_HOME/atmos/emulator/<instance>`, overridable with `ATMOS_XDG_CACHE_HOME`) onto the emulator's data directory. Pass `--ephemeral` for a throwaway instance, or use [`atmos emulator reset`](/cli/commands/emulator/reset) to wipe persisted state.
+</Intro>
+
+<Experimental />
+
+<Screengrab title="atmos emulator up --help" slug="atmos-emulator-up--help" />
+
+## Usage
+
+```shell
+atmos emulator up <component> --stack <stack> [flags]
+```
+
+## Examples
+
+```shell
+# Start (or reuse) the aws emulator in the plat-ue2-dev stack
+atmos emulator up aws --stack=plat-ue2-dev
+
+# Start a throwaway instance that does not persist state
+atmos emulator up aws --stack=plat-ue2-dev --ephemeral
+
+# Using the emu alias
+atmos emu up aws --stack=plat-ue2-dev
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>**Required.** The emulator component to start (for example, `aws`).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`-s, --stack`</dt>
+  <dd>**Required.** The stack the emulator component belongs to (for example, `plat-ue2-dev`).</dd>
+
+  <dt>`--ephemeral`</dt>
+  <dd>Run without persisting state; data is discarded on `down`. Persistence is enabled by default, so this forces a throwaway instance for this `up` (overriding the component's `ephemeral:` config). Also settable with `ATMOS_EMULATOR_EPHEMERAL=true`.</dd>
+</dl>
+
+## See Also
+
+- [`atmos emulator down`](/cli/commands/emulator/down) — Stop and remove the emulator container (state is kept)
+- [`atmos emulator reset`](/cli/commands/emulator/reset) — Stop the emulator and wipe its persisted state
+- [`atmos emulator ps`](/cli/commands/emulator/ps) — List running emulators in the stack

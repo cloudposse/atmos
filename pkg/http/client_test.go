@@ -586,6 +586,62 @@ func TestGetGitHubTokenFromEnv_NilViperFallsBackToOsEnv(t *testing.T) {
 	assert.Equal(t, "nil-guard-token", got)
 }
 
+// TestGetGitHubTokenFromEnv_AtmosProPrecedence verifies the os.Getenv fallback path
+// (non-toolchain commands, where the "github-token" viper key is unbound) prefers
+// ATMOS_PRO_GITHUB_TOKEN over ATMOS_GITHUB_TOKEN over GITHUB_TOKEN, matching the
+// go-getter token injector in pkg/downloader.
+func TestGetGitHubTokenFromEnv_AtmosProPrecedence(t *testing.T) {
+	tests := []struct {
+		name        string
+		proToken    string
+		atmosToken  string
+		githubToken string
+		want        string
+	}{
+		{
+			name:        "prefers ATMOS_PRO_GITHUB_TOKEN over all",
+			proToken:    "pro-token",
+			atmosToken:  "atmos-token",
+			githubToken: "github-token",
+			want:        "pro-token",
+		},
+		{
+			name:        "falls back to ATMOS_GITHUB_TOKEN when no pro token",
+			proToken:    "",
+			atmosToken:  "atmos-token",
+			githubToken: "github-token",
+			want:        "atmos-token",
+		},
+		{
+			name:        "falls back to GITHUB_TOKEN when only it is set",
+			proToken:    "",
+			atmosToken:  "",
+			githubToken: "github-token",
+			want:        "github-token",
+		},
+		{
+			name:        "returns empty when none set",
+			proToken:    "",
+			atmosToken:  "",
+			githubToken: "",
+			want:        "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_PRO_GITHUB_TOKEN", tt.proToken)
+			t.Setenv("ATMOS_GITHUB_TOKEN", tt.atmosToken)
+			t.Setenv("GITHUB_TOKEN", tt.githubToken)
+
+			// Fresh viper with NO "github-token" binding simulates a non-toolchain
+			// command, so resolution falls through to the os.Getenv chain under test.
+			got := GetGitHubTokenFromEnv(viper.New())
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // TestWithTransport_AfterWithGitHubToken verifies that WithTransport applied after
 // WithGitHubToken does NOT drop the auth wrapper; the provided transport becomes the
 // inner base of the GitHubAuthenticatedTransport.

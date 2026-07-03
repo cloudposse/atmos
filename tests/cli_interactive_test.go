@@ -8,21 +8,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 // TestInteractiveIdentitySelection tests the interactive identity selection behavior
 // with different stdin/stdout/CI configurations.
 func TestInteractiveIdentitySelection(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for interactive test", "coverageEnabled", coverDir != "")
-	}
+	ensureAtmosRunner(t)
 
 	t.Run("explicit identity value should work even with piped output", func(t *testing.T) {
 		// Scenario: build/atmos auth login --identity asd
@@ -183,14 +174,7 @@ func TestInteractiveIdentitySelection(t *testing.T) {
 // TestCIEnvironmentDetection tests that various CI environment variables properly
 // disable interactive mode.
 func TestCIEnvironmentDetection(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for CI detection test", "coverageEnabled", coverDir != "")
-	}
+	ensureAtmosRunner(t)
 
 	ciEnvironments := []struct {
 		name string
@@ -320,14 +304,7 @@ func TestStdoutPipingDoesNotBlockInteraction(t *testing.T) {
 // TestExplicitIdentityAlwaysWorks verifies that explicit identity values
 // work in all environments (TTY, non-TTY, CI, piped).
 func TestExplicitIdentityAlwaysWorks(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for explicit identity test", "coverageEnabled", coverDir != "")
-	}
+	ensureAtmosRunner(t)
 
 	scenarios := []struct {
 		name     string

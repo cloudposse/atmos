@@ -3,18 +3,24 @@ package merge
 import (
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
 	ListMergeStrategyReplace = "replace"
 	ListMergeStrategyAppend  = "append"
 	ListMergeStrategyMerge   = "merge"
+
+	// MaxSliceCapacity is the maximum safe capacity for slice allocation to prevent overflow.
+	// This is 2^30 (about 1 billion elements), providing a safe margin below the int max.
+	maxSliceCapacity = 1 << 30
 )
 
 // DeepCopyMap performs a deep copy of a map optimized for map[string]any structures.
@@ -339,8 +345,15 @@ func MergeWithOptions(
 	}
 
 	// Fast-path: only one non-empty input, return a deep copy to maintain immutability.
+	// Still resolve any !append wrappers against an empty accumulator — a lone !append
+	// has nothing to append to, so it becomes a plain list — otherwise the wrapper would
+	// leak into the result instead of being resolved.
 	if len(nonEmptyInputs) == 1 {
-		return DeepCopyMap(nonEmptyInputs[0])
+		copied, err := DeepCopyMap(nonEmptyInputs[0])
+		if err != nil {
+			return nil, fmt.Errorf("%w: failed to deep copy map: %w", errUtils.ErrMerge, err)
+		}
+		return processAppendTags(copied, map[string]any{}, appendSlice), nil
 	}
 
 	// Standard merge path for multiple non-empty inputs.
@@ -356,13 +369,100 @@ func MergeWithOptions(
 		return nil, fmt.Errorf("%w: failed to deep copy map: %w", errUtils.ErrMerge, err)
 	}
 
+	// Resolve !append-tagged lists in the base input. At the base there is nothing
+	// to append to, so an !append list simply becomes a plain list.
+	merged = processAppendTags(merged, map[string]any{}, appendSlice)
+
 	for _, current := range nonEmptyInputs[1:] {
+		// Resolve !append-tagged lists against the accumulator before merging.
+		// With the global append strategy (appendSlice), processAppendTags returns only
+		// the new items so deepMergeNative's append adds them without duplication; otherwise
+		// it returns existing+new concatenated so the override replaces with the appended list.
+		current = processAppendTags(current, merged, appendSlice)
 		if err := deepMergeNative(merged, current, appendSlice, sliceDeepCopy); err != nil {
 			return nil, fmt.Errorf("%w: %w", errUtils.ErrMerge, err)
 		}
 	}
 
 	return merged, nil
+}
+
+// processAppendTags handles special !append tagged lists during merging.
+// It processes any values wrapped with __atmos_append__ metadata and appends them to existing lists.
+// When appendNewOnly is true (global append strategy), it returns only the new items so that
+// deepMergeNative's append strategy performs the append without duplication.
+func processAppendTags(current map[string]any, merged map[string]any, appendNewOnly bool) map[string]any {
+	result := make(map[string]any)
+
+	for key, value := range current {
+		result[key] = processValue(key, value, merged, appendNewOnly)
+	}
+
+	return result
+}
+
+// processValue processes a single value for append tags.
+func processValue(key string, value any, merged map[string]any, appendNewOnly bool) any {
+	// Check if this is an append-tagged list.
+	if list, isAppend := u.ExtractAppendListValue(value); isAppend {
+		return processAppendList(key, list, merged, appendNewOnly)
+	}
+
+	// Check if this is a nested map.
+	if nestedMap, ok := value.(map[string]any); ok {
+		return processNestedMap(key, nestedMap, merged, appendNewOnly)
+	}
+
+	// Regular value, pass through.
+	return value
+}
+
+// processAppendList handles appending a list to existing values.
+// If appendNewOnly is true, return only the new items so deepMergeNative's append strategy
+// can append them to the existing list without duplication.
+func processAppendList(key string, list []any, merged map[string]any, appendNewOnly bool) []any {
+	if appendNewOnly {
+		return list
+	}
+
+	var existingList []any
+	if existingValue, exists := merged[key]; exists {
+		if el, ok := existingValue.([]any); ok {
+			existingList = el
+		}
+	}
+
+	// Create a new slice to avoid modifying the original.
+	// Overflow guard: ensure existingLen+newLen stays within int range before computing
+	// it, so the make() below cannot overflow. Falling back to just the new list is safe.
+	existingLen := len(existingList)
+	newLen := len(list)
+	if newLen > math.MaxInt-existingLen {
+		return list
+	}
+	totalLen := existingLen + newLen
+	// Sanity cap: avoid absurdly large allocations even when within int range.
+	if totalLen > maxSliceCapacity {
+		return list
+	}
+	result := make([]any, existingLen, totalLen)
+	copy(result, existingList)
+	result = append(result, list...)
+	return result
+}
+
+// processNestedMap recursively processes nested maps for append tags.
+func processNestedMap(key string, nestedMap map[string]any, merged map[string]any, appendNewOnly bool) map[string]any {
+	var mergedNested map[string]any
+	if existingNested, exists := merged[key]; exists {
+		if mn, ok := existingNested.(map[string]any); ok {
+			mergedNested = mn
+		}
+	}
+	if mergedNested == nil {
+		mergedNested = make(map[string]any)
+	}
+	return processAppendTags(nestedMap, mergedNested, appendNewOnly)
 }
 
 // Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents.

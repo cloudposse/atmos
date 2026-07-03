@@ -1,21 +1,44 @@
 package cmd
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestEnvSliceToMap(t *testing.T) {
+	assert.Nil(t, envSliceToMap(nil))
+	assert.Nil(t, envSliceToMap([]string{}))
+	assert.Equal(t, map[string]string{
+		"A":     "override",
+		"B":     "2",
+		"EMPTY": "",
+	}, envSliceToMap([]string{
+		"A=1",
+		"malformed",
+		"B=2",
+		"EMPTY=",
+		"A=override",
+	}))
+}
 
 func TestVerifyInsideGitRepo(t *testing.T) {
 	// Create a temporary directory for testing
@@ -98,6 +121,164 @@ func TestContains(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestCommandUsageLines(t *testing.T) {
+	rootCmd := &cobra.Command{Use: "atmos"}
+	gitCmd := &cobra.Command{Use: "git"}
+	pushCmd := &cobra.Command{
+		Use: "push <name-or-path>",
+		Run: func(cmd *cobra.Command, args []string) {},
+	}
+	pushCmd.Flags().Bool("dry-run", false, "preview the push")
+	gitCmd.AddCommand(pushCmd)
+	rootCmd.AddCommand(gitCmd)
+
+	assert.Equal(t, "atmos git push <name-or-path> [flags]", commandUsageLines(pushCmd))
+	assert.Equal(t, "atmos git [sub-command] [flags]", commandUsageLines(gitCmd))
+	assert.Empty(t, commandUsageLines(nil))
+}
+
+func TestAppendUsageSection(t *testing.T) {
+	cmd := &cobra.Command{
+		Use: "push <name-or-path>",
+		Run: func(cmd *cobra.Command, args []string) {},
+	}
+	cmd.Flags().Bool("dry-run", false, "preview the push")
+	rootCmd := &cobra.Command{Use: "atmos"}
+	gitCmd := &cobra.Command{Use: "git"}
+	gitCmd.AddCommand(cmd)
+	rootCmd.AddCommand(gitCmd)
+
+	got := appendUsageSection("You invoked `atmos git push` incorrectly.\n", cmd)
+
+	assert.Contains(t, got, "## Usage")
+	assert.Contains(t, got, "```shell\natmos git push <name-or-path> [flags]\n```")
+}
+
+func TestUsageErrorHelpersExit(t *testing.T) {
+	_ = NewTestKit(t)
+
+	originalOsExit := errUtils.OsExit
+	t.Cleanup(func() {
+		errUtils.OsExit = originalOsExit
+	})
+
+	type exitPanic struct {
+		code int
+	}
+	var exitCode int
+	errUtils.OsExit = func(code int) {
+		exitCode = code
+		panic(exitPanic{code: code})
+	}
+
+	root := &cobra.Command{Use: "atmos"}
+	known := &cobra.Command{Use: "known", Run: func(*cobra.Command, []string) {}}
+	root.AddCommand(known)
+
+	assert.Panics(t, func() {
+		exitCode = 0
+		showUsageAndExit(root, nil)
+	})
+	assert.Equal(t, 1, exitCode)
+
+	assert.Panics(t, func() {
+		exitCode = 0
+		showUsageAndExit(root, []string{"knwon"})
+	})
+	assert.Equal(t, 1, exitCode)
+
+	assert.Panics(t, func() {
+		exitCode = 0
+		_ = showFlagUsageAndExit(known, errors.New("flag needs an argument: --stack"))
+	})
+	assert.Equal(t, 1, exitCode)
+
+	assert.Panics(t, func() {
+		exitCode = 0
+		_ = showFlagUsageAndExit(known, errors.New("unknown flag: --bad"))
+	})
+	assert.Equal(t, 1, exitCode)
+}
+
+func TestHandlePathResolutionError(t *testing.T) {
+	sentinelErrors := []error{
+		errUtils.ErrAmbiguousComponentPath,
+		errUtils.ErrComponentNotInStack,
+		errUtils.ErrStackNotFound,
+		errUtils.ErrUserAborted,
+	}
+
+	for _, sentinel := range sentinelErrors {
+		t.Run(sentinel.Error(), func(t *testing.T) {
+			err := handlePathResolutionError(sentinel)
+			assert.ErrorIs(t, err, sentinel)
+		})
+	}
+
+	t.Run("generic error is wrapped with path resolution failed", func(t *testing.T) {
+		err := handlePathResolutionError(errors.New("raw resolver failure"))
+		assert.ErrorIs(t, err, errUtils.ErrPathResolutionFailed)
+		assert.Contains(t, err.Error(), "raw resolver failure")
+	})
+}
+
+func TestVersionManagementCommandClassification(t *testing.T) {
+	root := &cobra.Command{Use: "atmos"}
+	versionCmd := &cobra.Command{Use: "version"}
+	installCmd := &cobra.Command{Use: "install"}
+	uninstallCmd := &cobra.Command{Use: "uninstall"}
+	listCmd := &cobra.Command{Use: "list"}
+	versionCmd.AddCommand(installCmd, uninstallCmd, listCmd)
+	root.AddCommand(versionCmd)
+
+	assert.False(t, isVersionManagementCommand(nil))
+	assert.True(t, isVersionManagementCommand(versionCmd))
+	assert.True(t, isVersionManagementCommand(installCmd))
+	assert.True(t, isVersionManagementCommand(uninstallCmd))
+	assert.False(t, isVersionManagementCommand(listCmd))
+	assert.False(t, isVersionManagementCommand(&cobra.Command{Use: "version"}))
+}
+
+func TestEnableHeatmapIfRequested(t *testing.T) {
+	oldArgs := os.Args
+	t.Cleanup(func() {
+		os.Args = oldArgs
+		perf.EnableTracking(false)
+	})
+
+	captureHeatmap := func() string {
+		oldStderr := os.Stderr
+		r, w, err := os.Pipe()
+		require.NoError(t, err)
+		os.Stderr = w
+		t.Cleanup(func() {
+			os.Stderr = oldStderr
+		})
+
+		require.NoError(t, displayPerformanceHeatmap(nil, "table"))
+		require.NoError(t, w.Close())
+		os.Stderr = oldStderr
+
+		var output bytes.Buffer
+		_, err = io.Copy(&output, r)
+		require.NoError(t, err)
+		return output.String()
+	}
+
+	os.Args = []string{"atmos", "version"}
+	enableHeatmapIfRequested()
+	done := perf.Track(nil, "cmd.test.heatmap.disabled")
+	done()
+	assert.NotContains(t, captureHeatmap(), "cmd.test.heatmap.disabled")
+
+	os.Args = []string{"atmos", "--heatmap", "version"}
+	enableHeatmapIfRequested()
+	done = perf.Track(nil, "cmd.test.heatmap.enabled")
+	time.Sleep(2 * time.Millisecond)
+	done()
+	assert.Contains(t, captureHeatmap(), "cmd.test.heatmap.enabled")
 }
 
 func TestIsVersionCommand(t *testing.T) {
@@ -849,6 +1030,8 @@ func TestValidateAtmosConfigWithOptions(t *testing.T) {
 
 // TestErrorWrappingInGetConfigAndStacksInfo verifies proper error wrapping.
 func TestErrorWrappingInGetConfigAndStacksInfo(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
 	cmd := &cobra.Command{
 		Use: "terraform",
 	}
@@ -865,6 +1048,11 @@ func TestErrorWrappingInGetConfigAndStacksInfo(t *testing.T) {
 
 	// Verify error contains useful context.
 	assert.NotEmpty(t, err.Error(), "Error should have a message")
+
+	formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+	assert.Contains(t, formatted, "Stacks directory not found:")
+	assert.NotContains(t, formatted, "💡 Stacks directory not found:")
+	assert.NotContains(t, formatted, "## Hints")
 }
 
 // TestDetermineComponentTypeFromCommand tests component type detection from command hierarchy.
@@ -1243,6 +1431,23 @@ func TestComponentsArgCompletion(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestComponentsArgCompletionDelegatesToFlagCompletion(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("target", "", "target flag")
+	err := cmd.RegisterFlagCompletionFunc("target", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return []string{"one", "two"}, cobra.ShellCompDirectiveNoFileComp
+	})
+	require.NoError(t, err)
+
+	completions, directive := ComponentsArgCompletion(cmd, []string{"component", "--target"}, "")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.Equal(t, []string{"one", "two"}, completions)
+
+	completions, directive = ComponentsArgCompletion(cmd, []string{"component"}, "--target")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.Equal(t, []string{"one", "two"}, completions)
 }
 
 // TestIsGitRepository tests the isGitRepository function.
@@ -1771,4 +1976,538 @@ func TestWithStackValidation(t *testing.T) {
 			assert.Equal(t, tt.expected, cfg.CheckStack)
 		})
 	}
+}
+
+func TestProcessCustomCommands(t *testing.T) {
+	tests := []struct {
+		name          string
+		commands      []schema.Command
+		expectedCmds  []string
+		expectedError bool
+	}{
+		{
+			name: "single command with no flags",
+			commands: []schema.Command{
+				{
+					Name:        "deploy",
+					Description: "Deploy the application",
+				},
+			},
+			expectedCmds: []string{"deploy"},
+		},
+		{
+			name: "command with bool flag",
+			commands: []schema.Command{
+				{
+					Name:        "build",
+					Description: "Build the application",
+					Flags: []schema.CommandFlag{
+						{Name: "verbose", Type: "bool", Usage: "Enable verbose output"},
+					},
+				},
+			},
+			expectedCmds: []string{"build"},
+		},
+		{
+			name: "command with string flag",
+			commands: []schema.Command{
+				{
+					Name:        "test",
+					Description: "Run tests",
+					Flags: []schema.CommandFlag{
+						{Name: "filter", Type: "string", Usage: "Filter pattern"},
+					},
+				},
+			},
+			expectedCmds: []string{"test"},
+		},
+		{
+			name: "command with flag shorthand",
+			commands: []schema.Command{
+				{
+					Name:        "run",
+					Description: "Run the application",
+					Flags: []schema.CommandFlag{
+						{Name: "config", Shorthand: "c", Type: "string", Usage: "Config file"},
+					},
+				},
+			},
+			expectedCmds: []string{"run"},
+		},
+		{
+			name: "command with bool flag shorthand",
+			commands: []schema.Command{
+				{
+					Name:        "check",
+					Description: "Check status",
+					Flags: []schema.CommandFlag{
+						{Name: "quiet", Shorthand: "q", Type: "bool", Usage: "Quiet mode"},
+					},
+				},
+			},
+			expectedCmds: []string{"check"},
+		},
+		{
+			name: "command with default values",
+			commands: []schema.Command{
+				{
+					Name:        "configure",
+					Description: "Configure settings",
+					Flags: []schema.CommandFlag{
+						{Name: "timeout", Type: "string", Default: "30s", Usage: "Timeout duration"},
+						{Name: "debug", Type: "bool", Default: true, Usage: "Debug mode"},
+					},
+				},
+			},
+			expectedCmds: []string{"configure"},
+		},
+		{
+			name: "multiple commands",
+			commands: []schema.Command{
+				{
+					Name:        "start",
+					Description: "Start the service",
+				},
+				{
+					Name:        "stop",
+					Description: "Stop the service",
+				},
+			},
+			expectedCmds: []string{"start", "stop"},
+		},
+		{
+			name: "nested subcommands",
+			commands: []schema.Command{
+				{
+					Name:        "service",
+					Description: "Service commands",
+					Commands: []schema.Command{
+						{
+							Name:        "start",
+							Description: "Start the service",
+						},
+					},
+				},
+			},
+			expectedCmds: []string{"service"},
+		},
+		{
+			name: "command with component",
+			commands: []schema.Command{
+				{
+					Name:        "deploy-app",
+					Description: "Deploy application",
+					Component: &schema.CommandComponent{
+						Type: "script",
+					},
+				},
+			},
+			expectedCmds: []string{"deploy-app"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			parentCmd := &cobra.Command{
+				Use:   "atmos",
+				Short: "Atmos CLI",
+			}
+
+			err := processCustomCommands(
+				schema.AtmosConfiguration{},
+				tt.commands,
+				parentCmd,
+			)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+
+			// Verify expected commands were added.
+			for _, expectedCmd := range tt.expectedCmds {
+				found := false
+				for _, cmd := range parentCmd.Commands() {
+					if cmd.Name() == expectedCmd {
+						found = true
+						require.NotNil(t, cmd.Annotations, "Expected command %q to have annotations", expectedCmd)
+						assert.Equal(t, annotationValueTrue, cmd.Annotations[annotationCustomCommand], "Expected command %q to be marked as a custom command", expectedCmd)
+						break
+					}
+				}
+				assert.True(t, found, "Expected command %q to be added", expectedCmd)
+			}
+		})
+	}
+}
+
+func TestFindTypedValue(t *testing.T) {
+	tests := []struct {
+		name          string
+		cmd           *schema.Command
+		argumentsData map[string]string
+		flagsData     map[string]any
+		semanticType  string
+		want          string
+	}{
+		{
+			name: "finds value in arguments by type",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: "component"},
+					{Name: "stack", Type: "stack"},
+				},
+			},
+			argumentsData: map[string]string{
+				"component": "vpc",
+				"stack":     "dev",
+			},
+			flagsData:    map[string]any{},
+			semanticType: "component",
+			want:         "vpc",
+		},
+		{
+			name: "finds value in flags by semantic type",
+			cmd: &schema.Command{
+				Flags: []schema.CommandFlag{
+					{Name: "stack", SemanticType: "stack"},
+					{Name: "component", SemanticType: "component"},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData: map[string]any{
+				"stack":     "prod",
+				"component": "eks",
+			},
+			semanticType: "stack",
+			want:         "prod",
+		},
+		{
+			name: "returns empty when not found in arguments",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "name", Type: "string"},
+				},
+			},
+			argumentsData: map[string]string{"name": "test"},
+			flagsData:     map[string]any{},
+			semanticType:  "component",
+			want:          "",
+		},
+		{
+			name: "returns empty when not found in flags",
+			cmd: &schema.Command{
+				Flags: []schema.CommandFlag{
+					{Name: "verbose", SemanticType: "bool"},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{"verbose": true},
+			semanticType:  "stack",
+			want:          "",
+		},
+		{
+			name: "handles non-string flag values",
+			cmd: &schema.Command{
+				Flags: []schema.CommandFlag{
+					{Name: "count", SemanticType: "component"},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{"count": 42},
+			semanticType:  "component",
+			want:          "",
+		},
+		{
+			name: "arguments take precedence over flags",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "comp", Type: "component"},
+				},
+				Flags: []schema.CommandFlag{
+					{Name: "component", SemanticType: "component"},
+				},
+			},
+			argumentsData: map[string]string{"comp": "from-arg"},
+			flagsData:     map[string]any{"component": "from-flag"},
+			semanticType:  "component",
+			want:          "from-arg",
+		},
+		{
+			name:          "handles empty command",
+			cmd:           &schema.Command{},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{},
+			semanticType:  "component",
+			want:          "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+			got := findTypedValue(tt.cmd, tt.argumentsData, tt.flagsData, tt.semanticType)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// errEnsureRegistered is a sentinel error used to verify ensureRegisteredFn error propagation.
+var errEnsureRegistered = errors.New("ensure registered failed")
+
+// errDescribe is a sentinel error used to verify describeFn error propagation.
+var errDescribe = errors.New("describe failed")
+
+func TestResolveCustomComponentConfig(t *testing.T) {
+	// okEnsure is a no-op registration stub that records the basePath it received.
+	type ensureCall struct {
+		typeName string
+		basePath string
+	}
+
+	tests := []struct {
+		name          string
+		commandConfig *schema.Command
+		argumentsData map[string]string
+		flagsData     map[string]any
+		ensureErr     error
+		describeRet   map[string]any
+		describeErr   error
+		wantErr       error
+		wantConfig    map[string]any
+		wantBasePath  string // expected basePath passed to ensureRegisteredFn (when registration is reached).
+	}{
+		{
+			name: "missing component argument returns ErrComponentArgumentNotFound",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{{Name: "component", Type: semanticTypeComponent}},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{},
+			wantErr:       errUtils.ErrComponentArgumentNotFound,
+		},
+		{
+			name: "component present but missing stack returns ErrStackArgumentNotFound",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+					{Name: "stack", Type: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app"},
+			flagsData:     map[string]any{},
+			wantErr:       errUtils.ErrStackArgumentNotFound,
+		},
+		{
+			name: "ensureRegisteredFn error propagates",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+					{Name: "stack", Type: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
+			flagsData:     map[string]any{},
+			ensureErr:     errEnsureRegistered,
+			wantErr:       errEnsureRegistered,
+			wantBasePath:  "components/script", // default basePath derived from type.
+		},
+		{
+			name: "describeFn error propagates",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+					{Name: "stack", Type: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
+			flagsData:     map[string]any{},
+			describeErr:   errDescribe,
+			wantErr:       errDescribe,
+			wantBasePath:  "components/script",
+		},
+		{
+			name: "success with default basePath returns component config",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script"},
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: semanticTypeComponent},
+					{Name: "stack", Type: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{"component": "deploy-app", "stack": "dev"},
+			flagsData:     map[string]any{},
+			describeRet:   map[string]any{"vars": map[string]any{"foo": "bar"}},
+			wantConfig:    map[string]any{"vars": map[string]any{"foo": "bar"}},
+			wantBasePath:  "components/script",
+		},
+		{
+			name: "success with explicit basePath and semantic flags",
+			commandConfig: &schema.Command{
+				Component: &schema.CommandComponent{Type: "script", BasePath: "custom/path"},
+				Flags: []schema.CommandFlag{
+					{Name: "component", SemanticType: semanticTypeComponent},
+					{Name: "stack", SemanticType: semanticTypeStack},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{"component": "deploy-app", "stack": "dev"},
+			describeRet:   map[string]any{"component": "deploy-app"},
+			wantConfig:    map[string]any{"component": "deploy-app"},
+			wantBasePath:  "custom/path", // explicit basePath is preserved.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			var gotEnsure *ensureCall
+			ensureFn := func(typeName, basePath string) error {
+				gotEnsure = &ensureCall{typeName: typeName, basePath: basePath}
+				return tt.ensureErr
+			}
+
+			var gotParams *e.ExecuteDescribeComponentParams
+			describeFn := func(params *e.ExecuteDescribeComponentParams) (map[string]any, error) {
+				gotParams = params
+				return tt.describeRet, tt.describeErr
+			}
+
+			got, err := resolveCustomComponentConfig(
+				tt.commandConfig,
+				tt.argumentsData,
+				tt.flagsData,
+				nil, // authManager not needed for these paths.
+				ensureFn,
+				describeFn,
+			)
+
+			if tt.wantErr != nil {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, tt.wantErr)
+				assert.Nil(t, got)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantConfig, got)
+
+			// Verify the custom type was registered with the expected basePath.
+			require.NotNil(t, gotEnsure)
+			assert.Equal(t, tt.commandConfig.Component.Type, gotEnsure.typeName)
+			assert.Equal(t, tt.wantBasePath, gotEnsure.basePath)
+
+			// Verify component/stack were threaded through to describeFn.
+			require.NotNil(t, gotParams)
+			assert.Equal(t, "deploy-app", gotParams.Component)
+			assert.Equal(t, "dev", gotParams.Stack)
+			assert.Equal(t, tt.commandConfig.Component.Type, gotParams.ComponentType)
+			assert.True(t, gotParams.ProcessTemplates)
+			assert.True(t, gotParams.ProcessYamlFunctions)
+		})
+	}
+}
+
+func TestAppendComponentEnvVars(t *testing.T) {
+	tests := []struct {
+		name            string
+		env             []string
+		componentConfig map[string]any
+		wantContains    []string
+		wantNotContains []string
+	}{
+		{
+			name: "exports component env section as KEY=VALUE",
+			env:  []string{"PATH=/usr/bin"},
+			componentConfig: map[string]any{
+				"env": map[string]any{
+					"DB_PASSWORD": "s3cr3t",
+					"REGION":      "us-east-1",
+				},
+			},
+			wantContains: []string{"PATH=/usr/bin", "DB_PASSWORD=s3cr3t", "REGION=us-east-1"},
+		},
+		{
+			name: "skips nil and \"null\" values",
+			env:  []string{},
+			componentConfig: map[string]any{
+				"env": map[string]any{
+					"KEEP":     "yes",
+					"DROP_NIL": nil,
+					"DROP_STR": "null",
+				},
+			},
+			wantContains:    []string{"KEEP=yes"},
+			wantNotContains: []string{"DROP_NIL=", "DROP_STR="},
+		},
+		{
+			name: "stringifies non-string values",
+			env:  []string{},
+			componentConfig: map[string]any{
+				"env": map[string]any{
+					"COUNT":   3,
+					"ENABLED": true,
+				},
+			},
+			wantContains: []string{"COUNT=3", "ENABLED=true"},
+		},
+		{
+			name: "missing env key is a no-op",
+			env:  []string{"PATH=/usr/bin"},
+			componentConfig: map[string]any{
+				"vars": map[string]any{"foo": "bar"},
+			},
+			wantContains: []string{"PATH=/usr/bin"},
+		},
+		{
+			name: "wrong-typed env key is a no-op",
+			env:  []string{"PATH=/usr/bin"},
+			componentConfig: map[string]any{
+				"env": "not-a-map",
+			},
+			wantContains: []string{"PATH=/usr/bin"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := appendComponentEnvVars(tt.env, tt.componentConfig)
+			for _, want := range tt.wantContains {
+				assert.Contains(t, got, want)
+			}
+			for _, notWant := range tt.wantNotContains {
+				for _, e := range got {
+					assert.False(t, strings.HasPrefix(e, notWant), "did not expect env entry %q", e)
+				}
+			}
+		})
+	}
+}
+
+// TestAppendComponentEnvVars_CommandEnvOverrides verifies the documented precedence: a value set by
+// the component `env` section can be overridden by a later command-level `env:` entry, since both
+// use UpdateEnvVar semantics (last write wins on key collision).
+func TestAppendComponentEnvVars_CommandEnvOverrides(t *testing.T) {
+	env := []string{}
+	componentConfig := map[string]any{
+		"env": map[string]any{"SHARED": "from-component"},
+	}
+
+	env = appendComponentEnvVars(env, componentConfig)
+	require.Contains(t, env, "SHARED=from-component")
+
+	// Simulate the command-level env loop overriding the same key.
+	env = envpkg.UpdateEnvVar(env, "SHARED", "from-command")
+
+	assert.Contains(t, env, "SHARED=from-command")
+	assert.NotContains(t, env, "SHARED=from-component")
 }

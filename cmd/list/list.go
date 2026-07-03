@@ -34,6 +34,7 @@ func init() {
 	listCmd.AddCommand(affectedCmd)
 	listCmd.AddCommand(aliasesCmd)
 	listCmd.AddCommand(componentsCmd)
+	listCmd.AddCommand(dependenciesCmd)
 	listCmd.AddCommand(stacksCmd)
 	listCmd.AddCommand(themesCmd)
 	listCmd.AddCommand(workflowsCmd)

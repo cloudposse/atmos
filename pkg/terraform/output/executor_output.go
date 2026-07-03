@@ -8,6 +8,7 @@ import (
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -38,6 +39,15 @@ func processOutputs(outputMeta map[string]tfexec.OutputMeta, atmosConfig *schema
 		if err != nil {
 			log.Error("Failed to convert output", "key", k, "error", err)
 			return k, nil
+		}
+
+		// Terraform marks sensitive outputs with `sensitive = true`. Register every secret-
+		// bearing representation (strings plus nested map/list leaves) with the I/O masker so
+		// the value is redacted everywhere it flows: !terraform.output, atmos.Component(),
+		// `atmos describe component`, and `atmos terraform output`. Non-sensitive outputs are
+		// intentionally left unregistered to avoid over-masking common values (e.g. VPC IDs).
+		if v.Sensitive {
+			iolib.RegisterSecretValue(d)
 		}
 
 		return k, d

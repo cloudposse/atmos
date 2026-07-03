@@ -44,6 +44,10 @@ const (
 
 	// Windows constants.
 	windowsExeExt = ".exe"
+
+	// Fallback cosign verifier bootstrap version for transient GitHub latest-release lookup failures.
+	// renovate: datasource=github-releases depName=sigstore/cosign.
+	defaultCosignVerifierVersion = "v3.0.6"
 )
 
 // EnsureWindowsExeExtension appends .exe to the binary name on Windows if not already present.
@@ -419,7 +423,25 @@ func (i *Installer) resolveVerifierInstallVersion(owner, repo string) (string, e
 		lookupErrs = append(lookupErrs, err)
 	}
 
+	if version, ok := fallbackVerifierInstallVersion(owner, repo); ok && len(lookupErrs) > 0 {
+		log.Debug(
+			"Using fallback verifier bootstrap version after latest lookup failure",
+			logFieldOwner, owner,
+			logFieldRepo, repo,
+			logFieldVersion, version,
+			"lookup_errors", errors.Join(lookupErrs...),
+		)
+		return version, nil
+	}
+
 	return "", verifierVersionUnavailableError(owner, repo, lookupErrs)
+}
+
+func fallbackVerifierInstallVersion(owner, repo string) (string, bool) {
+	if owner == "sigstore" && repo == "cosign" {
+		return defaultCosignVerifierVersion, true
+	}
+	return "", false
 }
 
 func (i *Installer) aquaVerifierRegistry() registry.ToolRegistry {

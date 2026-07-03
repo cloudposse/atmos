@@ -1,17 +1,31 @@
 package container
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
+
+// extractContainerID returns the last non-empty line of `create` output.
+// Both `docker create` and `podman create` print image-pull progress before the
+// container ID when the image is missing locally, so the ID is the final non-empty line.
+func extractContainerID(output []byte) string {
+	lines := strings.Split(string(output), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if line := strings.TrimSpace(lines[i]); line != "" {
+			return line
+		}
+	}
+	return ""
+}
 
 // buildCreateArgs builds the common arguments for container creation.
 // This function is shared between Docker and Podman runtimes to avoid duplication.
@@ -19,10 +33,75 @@ func buildCreateArgs(config *CreateConfig) []string {
 	args := []string{"create", "--name", config.Name, "-it"}
 
 	args = addRuntimeFlags(args, config)
+	args = addNetworkFlags(args, config.Networks)
+	args = addHealthAndRestart(args, config)
 	args = addMetadata(args, config)
 	args = addResourceBindings(args, config)
 	args = addImageAndCommand(args, config)
 
+	return args
+}
+
+func addNetworkFlags(args []string, networks []NetworkAttachment) []string {
+	for _, network := range networks {
+		if network.Name == "" {
+			continue
+		}
+		args = append(args, "--network", network.Name)
+		for _, alias := range network.Aliases {
+			if alias != "" {
+				args = append(args, "--network-alias", alias)
+			}
+		}
+	}
+	return args
+}
+
+// addHealthAndRestart emits the `--restart` and health-check flags. It is a no-op
+// when neither is configured, so containers without these settings keep their
+// previous argument layout. Shared between Docker and Podman, which accept the
+// same `--restart` / `--health-*` / `--no-healthcheck` syntax.
+func addHealthAndRestart(args []string, config *CreateConfig) []string {
+	args = addRestartFlag(args, config.Restart)
+	return addHealthFlags(args, config.HealthCheck)
+}
+
+// addRestartFlag emits `--restart=<policy>[:<max_retries>]` (max_retries applies
+// only to the `on-failure` policy).
+func addRestartFlag(args []string, rp *RestartPolicy) []string {
+	if rp == nil || rp.Policy == "" {
+		return args
+	}
+	value := rp.Policy
+	if rp.Policy == "on-failure" && rp.MaxRetries > 0 {
+		value = fmt.Sprintf("on-failure:%d", rp.MaxRetries)
+	}
+	return append(args, "--restart", value)
+}
+
+// addHealthFlags emits `--no-healthcheck` (when disabled) or the set of
+// `--health-*` flags for the configured fields.
+func addHealthFlags(args []string, hc *HealthCheck) []string {
+	if hc == nil {
+		return args
+	}
+	if hc.Disable {
+		return append(args, "--no-healthcheck")
+	}
+	for _, f := range []struct{ flag, value string }{
+		{"--health-cmd", hc.Cmd},
+		{"--health-interval", hc.Interval},
+		{"--health-timeout", hc.Timeout},
+		{"--health-start-period", hc.StartPeriod},
+		{"--health-start-interval", hc.StartInterval},
+	} {
+		if f.value != "" {
+			args = append(args, f.flag, f.value)
+		}
+	}
+	if hc.Retries > 0 {
+		args = append(args, "--health-retries", strconv.Itoa(hc.Retries))
+	}
 	return args
 }
 
@@ -48,14 +127,25 @@ func addRuntimeFlags(args []string, config *CreateConfig) []string {
 
 func addMetadata(args []string, config *CreateConfig) []string {
 	for key, value := range config.Labels {
-		args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
+		args = append(args, "--label", fmt.Sprintf(keyValueFormat, key, value))
 	}
 
 	for key, value := range config.Env {
-		args = append(args, "-e", fmt.Sprintf("%s=%s", key, value))
+		args = append(args, "-e", fmt.Sprintf(keyValueFormat, key, value))
 	}
 
 	return args
+}
+
+// publishArg returns the `-p` publish value for a port binding. A HostPort of 0
+// means "auto-assign": the container engine picks a free host port (read back
+// later via inspect). We omit the host side in that case — passing a literal `0`
+// makes Podman reject the spec ("port numbers must be between 1 and 65535").
+func publishArg(port PortBinding) string {
+	if port.HostPort == 0 {
+		return fmt.Sprintf("%d/%s", port.ContainerPort, port.Protocol)
+	}
+	return fmt.Sprintf("%d:%d/%s", port.HostPort, port.ContainerPort, port.Protocol)
 }
 
 func addResourceBindings(args []string, config *CreateConfig) []string {
@@ -68,7 +158,7 @@ func addResourceBindings(args []string, config *CreateConfig) []string {
 	}
 
 	for _, port := range config.Ports {
-		args = append(args, "-p", fmt.Sprintf("%d:%d/%s", port.HostPort, port.ContainerPort, port.Protocol))
+		args = append(args, "-p", publishArg(port))
 	}
 
 	if config.User != "" {
@@ -86,16 +176,59 @@ func addImageAndCommand(args []string, config *CreateConfig) []string {
 	args = append(args, config.RunArgs...)
 
 	if config.OverrideCommand {
-		args = append(args, "--entrypoint", "/bin/sh")
+		// Keep-alive containers run `/bin/sh -c "sleep infinity"` as PID 1, which
+		// ignores SIGTERM (the kernel applies no default signal disposition to PID 1).
+		// Force the stop signal to SIGKILL so teardown (stop / rm -f) is immediate
+		// instead of blocking for the runtime's full stop grace period.
+		args = append(args, "--stop-signal", "SIGKILL", "--entrypoint", "/bin/sh")
 	}
 
 	args = append(args, config.Image)
 
 	if config.OverrideCommand {
 		args = append(args, "-c", "sleep infinity")
+	} else {
+		// Long-lived service containers run their own command (or the image's
+		// default ENTRYPOINT/CMD when none is given).
+		args = append(args, config.Command...)
 	}
 
 	return args
+}
+
+// parseHealth extracts a container's health state from a human-readable status
+// string (the `docker ps` / `podman ps` `.Status` form, e.g. "Up 2 hours
+// (healthy)" or "Up 3s (health: starting)"). It returns "healthy", "unhealthy",
+// "starting", or "" when the container has no health check. Free to call — the
+// status string is already fetched during List, so it adds no runtime call.
+func parseHealth(status string) string {
+	s := strings.ToLower(status)
+	switch {
+	case strings.Contains(s, "(unhealthy)"):
+		return "unhealthy"
+	case strings.Contains(s, "(healthy)"):
+		return "healthy"
+	case strings.Contains(s, "health: starting"), strings.Contains(s, "(starting)"):
+		return "starting"
+	default:
+		return ""
+	}
+}
+
+// normalizeHealth maps a machine-readable health value (the inspect
+// `.State.Health.Status` form, e.g. "healthy"/"none") to the canonical Atmos
+// health token, returning "" for "none" or anything unrecognized.
+func normalizeHealth(health string) string {
+	switch strings.ToLower(strings.TrimSpace(health)) {
+	case "healthy":
+		return "healthy"
+	case "unhealthy":
+		return "unhealthy"
+	case "starting":
+		return "starting"
+	default:
+		return ""
+	}
 }
 
 // buildExecArgs builds the common arguments for container exec.
@@ -136,11 +269,30 @@ func addExecOptions(args []string, opts *ExecOptions) []string {
 // This function is shared between Docker and Podman runtimes to avoid duplication.
 // Extracted to allow testing the argument building logic without executing commands.
 func buildBuildArgs(config *BuildConfig) []string {
+	if config.Bake != nil {
+		return buildBakeArgs(config)
+	}
+
 	args := []string{"build"}
+	if config.Engine == "buildx" {
+		args = []string{"buildx", "build"}
+	}
+
+	if config.NoCache {
+		args = append(args, "--no-cache")
+	}
+
+	if config.Pull {
+		args = append(args, "--pull")
+	}
+
+	if config.Target != "" {
+		args = append(args, "--target", config.Target)
+	}
 
 	// Add build args.
 	for key, value := range config.Args {
-		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", key, value))
+		args = append(args, "--build-arg", fmt.Sprintf(keyValueFormat, key, value))
 	}
 
 	// Add tags.
@@ -152,6 +304,60 @@ func buildBuildArgs(config *BuildConfig) []string {
 	args = append(args, "-f", config.Dockerfile, config.Context)
 
 	return args
+}
+
+func buildBakeArgs(config *BuildConfig) []string {
+	args := []string{"buildx", "bake"}
+
+	for _, file := range appendFile(config.Bake.File, config.Bake.Files) {
+		args = append(args, "--file", file)
+	}
+
+	if config.NoCache {
+		args = append(args, "--no-cache")
+	}
+	if config.Pull {
+		args = append(args, "--pull")
+	}
+	if config.Bake.Load {
+		args = append(args, "--load")
+	}
+	if config.Bake.Push {
+		args = append(args, "--push")
+	}
+	if config.Bake.Print {
+		args = append(args, "--print")
+	}
+	for key, value := range config.Bake.Vars {
+		args = append(args, "--var", fmt.Sprintf(keyValueFormat, key, value))
+	}
+	for _, value := range config.Bake.Set {
+		args = append(args, "--set", value)
+	}
+
+	args = append(args, appendFile(config.Bake.Target, config.Bake.Targets)...)
+	return args
+}
+
+func appendFile(first string, rest []string) []string {
+	values := make([]string, 0, len(rest))
+	if first != "" {
+		values = append(values, first)
+	}
+	values = append(values, rest...)
+	return values
+}
+
+func buildTagArgs(source, target string) []string {
+	return []string{"tag", source, target}
+}
+
+func buildPushArgs(image string) []string {
+	return []string{"push", image}
+}
+
+func buildImageInspectArgs(image string) []string {
+	return []string{"image", "inspect", "--format", "{{json .}}", image}
 }
 
 // buildRemoveArgs builds the arguments for a container remove operation.
@@ -191,10 +397,11 @@ func buildLogsArgs(containerID string, follow bool, tail string) []string {
 	return args
 }
 
-// buildAttachCommand builds the shell command and exec options for an attach operation.
+// buildShellCommand builds the shell command and exec options for opening an
+// interactive shell in a container (via `exec`).
 // This function is shared between Docker and Podman runtimes to avoid duplication.
 // Extracted to allow testing the command building logic without executing commands.
-func buildAttachCommand(opts *AttachOptions) ([]string, *ExecOptions) {
+func buildShellCommand(opts *ShellOptions) ([]string, *ExecOptions) {
 	shell := "/bin/bash"
 	var shellArgs []string
 
@@ -222,7 +429,7 @@ func buildAttachCommand(opts *AttachOptions) ([]string, *ExecOptions) {
 		if opts.User != "" {
 			execOpts.User = opts.User
 		}
-		// Copy IO streams from AttachOptions to ExecOptions.
+		// Copy IO streams from ShellOptions to ExecOptions.
 		execOpts.Stdin = opts.Stdin
 		execOpts.Stdout = opts.Stdout
 		execOpts.Stderr = opts.Stderr
@@ -231,12 +438,54 @@ func buildAttachCommand(opts *AttachOptions) ([]string, *ExecOptions) {
 	return cmd, execOpts
 }
 
-// execWithRuntime executes a command in a container using the specified runtime.
-// This function is shared between Docker and Podman runtimes to avoid duplication.
-func execWithRuntime(ctx context.Context, runtimeName string, containerID string, cmd []string, opts *ExecOptions) error {
-	args := buildExecArgs(containerID, cmd, opts)
-	execCmd := exec.CommandContext(ctx, runtimeName, args...)
+// buildAttachArgs builds the `attach` CLI arguments and exec options for
+// attaching to a container's main process (PID 1). Shared between Docker and
+// Podman, which accept identical `attach --no-stdin --detach-keys` syntax.
+// Extracted to allow testing the argument building logic without executing.
+func buildAttachArgs(containerID string, opts *AttachOptions) ([]string, *ExecOptions) {
+	args := []string{"attach"}
+	execOpts := &ExecOptions{
+		Tty:          true,
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
 
+	if opts != nil {
+		if opts.NoStdin {
+			args = append(args, "--no-stdin")
+			execOpts.AttachStdin = false
+		}
+		if opts.DetachKeys != "" {
+			args = append(args, "--detach-keys", opts.DetachKeys)
+		}
+		execOpts.Stdin = opts.Stdin
+		execOpts.Stdout = opts.Stdout
+		execOpts.Stderr = opts.Stderr
+	}
+
+	args = append(args, containerID)
+	return args, execOpts
+}
+
+// applyCommandEnv sets the environment for a container CLI subprocess.
+// When env is non-empty it becomes the command's complete environment (callers
+// pass the fully composed environment, which already includes the inherited
+// process environment), letting credentials materialized by auth integrations —
+// e.g. the DOCKER_CONFIG written by the aws/ecr integration, or AWS_* variables —
+// reach the docker/podman CLI. An empty env leaves cmd.Env nil so the command
+// inherits os.Environ() unchanged.
+func applyCommandEnv(cmd *exec.Cmd, env []string) {
+	if len(env) == 0 {
+		return
+	}
+	cmd.Env = env
+}
+
+// runExecCommand wires IO streams onto an already-built container exec command
+// (constructed via the runtime's env-aware command helper) and runs it.
+// This function is shared between Docker and Podman runtimes to avoid duplication.
+func runExecCommand(execCmd *exec.Cmd, runtimeName string, opts *ExecOptions) error {
 	// Setup IO streams with defaults.
 	stdin, stdout, stderr := getIOStreams(opts)
 	attachIOStreams(execCmd, opts, stdin, stdout, stderr)

@@ -382,7 +382,7 @@ func TestRenderMarkdown_WithFindings(t *testing.T) {
 	assert.Contains(t, out, "checkov")
 	assert.Contains(t, out, "1 HIGH, 1 LOW")
 	assert.Contains(t, out, "CKV_AWS_19")
-	assert.Contains(t, out, "main.tf:5")
+	assert.Contains(t, out, "[main.tf:5](main.tf#L5)")
 }
 
 func TestRenderMarkdown_RespectsMaxFindings(t *testing.T) {

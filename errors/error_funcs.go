@@ -69,71 +69,74 @@ func InitializeMarkdown(config *schema.AtmosConfiguration) {
 	}
 }
 
-// GetMarkdownRenderer returns the package-level markdown renderer and may return nil
-// if the renderer has not been initialized via InitializeMarkdown or has been cleared.
-// This function is not safe for concurrent access during initialization.
-func GetMarkdownRenderer() *markdown.Renderer {
-	return render
-}
-
-// printPlainError writes a plain-text error to stderr without Markdown formatting.
-// This is used as a fallback when the markdown renderer is not available.
-func printPlainError(title string, err error, suggestion string) {
-	maskedStderr := os.Stderr
-	if title != "" {
-		title = cases.Title(language.English).String(title)
-		fmt.Fprintf(maskedStderr, "\n%s: %v\n", title, err)
-	} else {
-		fmt.Fprintf(maskedStderr, "\nError: %v\n", err)
-	}
-	if suggestion != "" {
-		fmt.Fprintf(maskedStderr, "%s\n", suggestion)
-	}
-}
-
 // printStructuredPlainError extracts ErrorBuilder enrichments and prints them
 // in a structured plain text format. This is used when the markdown renderer
 // is not available (e.g., during early startup errors before config is loaded).
 func printStructuredPlainError(err error, title string, suggestion string) {
+	_, writeErr := os.Stderr.WriteString(formatStructuredPlainError(err, title, suggestion))
+	if writeErr != nil {
+		log.Error(writeErr)
+		log.Error(err)
+	}
+}
+
+func formatStructuredPlainError(err error, title string, suggestion string) string {
 	if title == "" {
 		title = "Error"
 	}
 	title = cases.Title(language.English).String(title)
-	maskedStderr := os.Stderr
+	var out strings.Builder
 
 	// Print title and base error message.
-	fmt.Fprintf(maskedStderr, "\n%s: %v\n", title, err)
+	fmt.Fprintf(&out, "\n%s: %v\n", title, err)
 
 	// Extract and print explanations (from WithDetail/WithExplanation).
-	printErrorDetails(err)
+	appendErrorDetails(&out, err)
 
 	// Extract and print hints (skip TITLE: and EXAMPLE: prefixes).
-	printErrorHints(err)
+	appendErrorHints(&out, err)
 
 	// Extract and print context (from WithContext).
-	printErrorContext(err)
+	appendErrorContext(&out, err)
 
 	// Legacy suggestion fallback.
 	if suggestion != "" {
-		fmt.Fprintf(maskedStderr, "\n%s\n", suggestion)
+		fmt.Fprintf(&out, "\n%s\n", suggestion)
 	}
+
+	return out.String()
 }
 
 // printErrorDetails prints the explanation section from error details.
 func printErrorDetails(err error) {
+	var out strings.Builder
+	appendErrorDetails(&out, err)
+	if out.Len() > 0 {
+		_, _ = os.Stderr.WriteString(out.String())
+	}
+}
+
+func appendErrorDetails(out *strings.Builder, err error) {
 	details := errors.GetAllDetails(err)
 	if len(details) == 0 {
 		return
 	}
-	maskedStderr := os.Stderr
-	fmt.Fprintf(maskedStderr, "\nExplanation:\n")
+	fmt.Fprintln(out)
 	for _, d := range details {
-		fmt.Fprintf(maskedStderr, "  • %s\n", d)
+		fmt.Fprintf(out, "%s\n", d)
 	}
 }
 
 // printErrorHints prints the hints section, filtering out internal prefixes.
 func printErrorHints(err error) {
+	var out strings.Builder
+	appendErrorHints(&out, err)
+	if out.Len() > 0 {
+		_, _ = os.Stderr.WriteString(out.String())
+	}
+}
+
+func appendErrorHints(out *strings.Builder, err error) {
 	allHints := errors.GetAllHints(err)
 	var userHints []string
 	for _, h := range allHints {
@@ -144,25 +147,31 @@ func printErrorHints(err error) {
 	if len(userHints) == 0 {
 		return
 	}
-	maskedStderr := os.Stderr
-	fmt.Fprintf(maskedStderr, "\nHints:\n")
+	fmt.Fprintln(out)
 	for _, h := range userHints {
-		fmt.Fprintf(maskedStderr, "  • %s\n", h)
+		fmt.Fprintf(out, "💡 %s\n", h)
 	}
 }
 
 // printErrorContext prints the context section from safe details.
 func printErrorContext(err error) {
+	var out strings.Builder
+	appendErrorContext(&out, err)
+	if out.Len() > 0 {
+		_, _ = os.Stderr.WriteString(out.String())
+	}
+}
+
+func appendErrorContext(out *strings.Builder, err error) {
 	contextPairs := extractContextPairs(err)
 	if len(contextPairs) == 0 {
 		return
 	}
-	maskedStderr := os.Stderr
-	fmt.Fprintf(maskedStderr, "\nContext:\n")
+	fmt.Fprintf(out, "\nContext:\n")
 	for _, pair := range contextPairs {
 		parts := strings.SplitN(pair, "=", 2)
 		if len(parts) == 2 {
-			fmt.Fprintf(maskedStderr, "  %s: %s\n", parts[0], parts[1])
+			fmt.Fprintf(out, "  %s: %s\n", parts[0], parts[1])
 		}
 	}
 }
@@ -228,9 +237,9 @@ func printFormattedError(err error, title string, suggestion string) {
 
 			// Check if suggestion contains markdown sections (backward compatibility).
 			// Old code passed suggestions like "\n## Explanation\n..." which should be
-			// added as explanations, not hints, to avoid rendering empty hint sections.
+			// added as explanations, not hints.
 			if strings.Contains(suggestion, "\n##") || strings.HasPrefix(trimmed, "##") {
-				// Strip the "## Explanation" header if present since formatter adds it.
+				// Strip the legacy "## Explanation" header if present.
 				cleaned := strings.TrimLeft(suggestion, "\n")
 				cleaned = strings.TrimPrefix(cleaned, "## Explanation\n")
 				cleaned = strings.TrimPrefix(cleaned, "## Explanation")
@@ -238,8 +247,8 @@ func printFormattedError(err error, title string, suggestion string) {
 				builder = builder.WithExplanation(cleaned)
 			} else {
 				// Only add as hint if it's not empty after trimming.
-				// This prevents rendering empty "## Hints" sections for suggestions
-				// that are just whitespace or newlines.
+				// This prevents rendering empty hint lines for suggestions that are
+				// just whitespace or newlines.
 				if trimmed != "" {
 					builder = builder.WithHint(trimmed)
 				}
@@ -262,11 +271,9 @@ func printFormattedError(err error, title string, suggestion string) {
 
 	// Color mode is now determined by terminal settings (--no-color, --force-color, etc.)
 	// and does not need to be configured here.
-	config := FormatterConfig{
-		Verbose:       verbose,
-		MaxLineLength: DefaultMaxLineLength,
-		Title:         title, // Use provided title if any.
-	}
+	config := DefaultFormatterConfig()
+	config.Verbose = verbose
+	config.Title = title // Use provided title if any.
 	formatted := Format(err, config)
 
 	// Write directly to os.Stderr instead of using ui.MarkdownMessage() to avoid
@@ -281,7 +288,7 @@ func printFormattedError(err error, title string, suggestion string) {
 	//
 	// The formatted output is already rendered markdown, so writing to stderr is correct.
 	// Note: Error output is not masked to avoid import cycles with pkg/io.
-	_, printErr := os.Stderr.WriteString(formatted + "\n")
+	_, printErr := os.Stderr.WriteString(strings.TrimRight(formatted, "\n") + "\n")
 	if printErr != nil {
 		log.Error(printErr)
 		log.Error(err)
@@ -334,6 +341,15 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 		// without using os.Exit() directly (which is untestable).
 		if exitCodeErr.Code == 0 {
 			Exit(0)
+			return
+		}
+		// Silent exits propagate the code without printing (terminal-handoff
+		// steps; rendering would query the terminal and can hang).
+		if exitCodeErr.Silent {
+			if atmosConfig != nil && atmosConfig.Errors.Sentry.Enabled {
+				CloseSentry()
+			}
+			Exit(exitCodeErr.Code)
 			return
 		}
 		// Non-zero exit codes: print error and exit with that code

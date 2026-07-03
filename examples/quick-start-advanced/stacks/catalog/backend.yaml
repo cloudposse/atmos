@@ -1,0 +1,8 @@
+import:
+  - catalog/emulator/aws
+  - catalog/kms-key/defaults
+  - catalog/s3-bucket/defaults
+  - catalog/dynamodb-table/defaults
+  - catalog/sns-topic/defaults
+  - catalog/sqs-queue/defaults
+  - catalog/app-config/defaults

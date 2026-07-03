@@ -1,0 +1,11 @@
+base_path: "../.."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "scenarios/yaml-functions-circular-deps/stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"

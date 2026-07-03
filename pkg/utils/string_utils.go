@@ -92,17 +92,6 @@ func trimMatchingQuotes(value string) string {
 	return inner
 }
 
-// SplitStringAtFirstOccurrence splits a string into two parts at the first occurrence of the separator.
-func SplitStringAtFirstOccurrence(s string, sep string) [2]string {
-	defer perf.Track(nil, "utils.SplitStringAtFirstOccurrence")()
-
-	parts := strings.SplitN(s, sep, 2)
-	if len(parts) == 1 {
-		return [2]string{parts[0], ""}
-	}
-	return [2]string{parts[0], parts[1]}
-}
-
 // String interning pool for deduplicating common strings.
 // This saves memory by ensuring duplicate strings share the same underlying storage.
 var (
@@ -161,37 +150,6 @@ func Intern(_ *schema.AtmosConfiguration, s string) string {
 	}
 
 	return actual.(string)
-}
-
-// InternSlice interns all strings in a slice.
-// Returns a new slice with interned strings.
-// Note: perf.Track removed to avoid overhead on frequently-called function.
-func InternSlice(atmosConfig *schema.AtmosConfiguration, strings []string) []string {
-	if len(strings) == 0 {
-		return strings
-	}
-
-	result := make([]string, len(strings))
-	for i, s := range strings {
-		result[i] = Intern(atmosConfig, s)
-	}
-	return result
-}
-
-// InternMapKeys interns all keys in a map.
-// Returns a new map with interned keys and original values.
-// Note: Values are not interned as they may be of various types.
-// Note: perf.Track removed to avoid overhead on frequently-called function.
-func InternMapKeys(atmosConfig *schema.AtmosConfiguration, m map[string]any) map[string]any {
-	if len(m) == 0 {
-		return m
-	}
-
-	result := make(map[string]any, len(m))
-	for k, v := range m {
-		result[Intern(atmosConfig, k)] = v
-	}
-	return result
 }
 
 // InternStats represents string interning statistics.

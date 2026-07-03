@@ -1,0 +1,221 @@
+---
+title: flags
+sidebar_label: flags
+sidebar_position: 2
+slug: /cli/configuration/commands/flags
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `flags` field declares long and short flags for a custom command. Flag values are available to steps, env, and templates as `{{ .Flags.<name> }}`.
+</Intro>
+
+## Passing Flags
+
+Passing flags works much like positional [arguments](/cli/configuration/commands/arguments), except they are passed using long or short flags. Flags can be optional by setting `required: false`.
+
+```yaml
+commands:
+  - name: hello
+    description: This command says hello to the provided name
+    flags:
+      - name: name
+        shorthand: n
+        description: Name to greet
+        required: true
+    steps:
+      - "echo Hello {{ .Flags.name }}!"
+```
+
+Run it using the long flag:
+
+```shell
+atmos hello --name world
+```
+
+Or the shorthand:
+
+```shell
+atmos hello -n world
+```
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Required. Flag name, used as `--<name>` and referenced as `{{ .Flags.<name> }}`.</dd>
+
+  <dt>`shorthand`</dt>
+  <dd>Optional single-character short flag (for example, `n` enables `-n`).</dd>
+
+  <dt>`description`</dt>
+  <dd>Help text shown in `atmos help`.</dd>
+
+  <dt>`type`</dt>
+  <dd>Data type of the flag: `string` (default) or `bool`. See [Boolean Flags](#boolean-flags).</dd>
+
+  <dt>`required`</dt>
+  <dd>When `true`, the command fails if the flag is omitted and no `default` is set.</dd>
+
+  <dt>`default`</dt>
+  <dd>Value used when the flag is omitted. See [Flag Defaults](#flag-defaults).</dd>
+
+  <dt>`semantic_type`</dt>
+  <dd>Optional `component` or `stack`. See [Semantic Types](#semantic-types).</dd>
+</dl>
+
+## Boolean Flags
+
+Flags can be defined as boolean type using `type: bool`. Boolean flags don't require a value — when present, they are set to `true`.
+
+```yaml
+commands:
+  - name: deploy
+    description: Deploy to environment
+    flags:
+      - name: dry-run
+        shorthand: d
+        description: Perform a dry run without making changes
+        type: bool
+      - name: verbose
+        shorthand: v
+        description: Enable verbose output
+        type: bool
+        default: false
+      - name: auto-approve
+        description: Auto-approve without prompting
+        type: bool
+        default: true
+    steps:
+      - |
+        {{ if .Flags.dry-run }}
+        echo "DRY RUN MODE"
+        {{ end }}
+        {{ if .Flags.verbose }}
+        echo "Verbose output enabled"
+        {{ end }}
+        {{ if .Flags.auto-approve }}
+        terraform apply -auto-approve
+        {{ else }}
+        terraform apply
+        {{ end }}
+```
+
+Usage:
+
+```shell
+# Enable dry-run (sets it to true)
+atmos deploy --dry-run
+
+# Use short flag
+atmos deploy -d
+
+# Boolean with explicit value
+atmos deploy --auto-approve=false
+```
+
+### Using Boolean Flags in Steps
+
+Boolean flags are available as Go template variables with values `true` or `false`. Here are common patterns for using them in bash:
+
+```yaml
+commands:
+  - name: build
+    description: Build the project
+    flags:
+      - name: verbose
+        shorthand: v
+        type: bool
+        description: Enable verbose output
+      - name: clean
+        type: bool
+        default: true
+        description: Clean before building
+    steps:
+      # Pattern 1: Conditional command execution with if/else
+      - |
+        {{ if .Flags.verbose }}
+        echo "Verbose mode enabled"
+        set -x
+        {{ end }}
+
+      # Pattern 2: Inline conditional flag
+      - echo "Building{{ if .Flags.verbose }} with verbose output{{ end }}..."
+
+      # Pattern 3: Pass as flag to another command
+      - make build {{ if .Flags.verbose }}VERBOSE=1{{ end }}
+
+      # Pattern 4: Conditional step execution
+      - |
+        {{ if .Flags.clean }}
+        echo "Cleaning build directory..."
+        rm -rf ./build
+        {{ end }}
+
+      # Pattern 5: Negation check
+      - |
+        {{ if not .Flags.clean }}
+        echo "Skipping clean step"
+        {{ end }}
+
+      # Pattern 6: Convert to shell variable
+      - |
+        VERBOSE={{ .Flags.verbose }}
+        if [ "$VERBOSE" = "true" ]; then
+          echo "Verbose is on"
+        fi
+
+      # Pattern 7: Using printf for explicit string conversion
+      - |
+        VERBOSE={{ printf "%t" .Flags.verbose }}
+        echo "Verbose flag is: $VERBOSE"
+```
+
+:::tip
+Boolean values automatically render as `true` or `false` (lowercase strings) when used in templates. You can reference them directly with `{{ .Flags.name }}` — no conversion needed!
+:::
+
+## Flag Defaults
+
+Both string and boolean flags support default values using the `default` attribute:
+
+```yaml
+flags:
+  - name: environment
+    description: Target environment
+    default: "development"
+  - name: force
+    type: bool
+    description: Force the operation
+    default: false
+  - name: auto-approve
+    type: bool
+    description: Skip confirmation prompts
+    default: true
+```
+
+When a flag has a default value, users can omit it from the command line. The default value will be used unless explicitly overridden.
+
+## Semantic Types
+
+Set `semantic_type: component` or `semantic_type: stack` to tell Atmos that a flag provides the
+component name or stack name, so Atmos can resolve the matching component configuration and expose
+it as `{{ .Component.* }}`. We use `semantic_type` for flags because `type` already specifies the
+data type (`string`, `bool`).
+
+```yaml
+commands:
+  - name: script
+    description: "Run script components"
+    flags:
+      - name: stack
+        shorthand: s
+        description: "Stack name"
+        semantic_type: stack         # this flag provides the stack name
+        required: true
+    component:
+      type: script
+    steps:
+      - 'echo "Stack: {{ .Component.atmos_stack }}"'
+```
+
+See [`component`](/cli/configuration/commands/component) for the full custom component type workflow.

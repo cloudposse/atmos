@@ -1,0 +1,53 @@
+---
+title: atmos emulator logs
+sidebar_label: logs
+sidebar_class_name: command
+id: logs
+description: Stream an emulator container's logs
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to stream the emulator container's logs, useful for debugging emulator startup or watching requests as your components interact with the local cloud API. The container is discovered by label.
+</Intro>
+
+<Experimental />
+
+<Screengrab title="atmos emulator logs --help" slug="atmos-emulator-logs--help" />
+
+## Usage
+
+```shell
+atmos emulator logs <component> --stack <stack> [flags]
+```
+
+## Examples
+
+```shell
+# Stream the aws emulator's logs in the plat-ue2-dev stack
+atmos emulator logs aws --stack=plat-ue2-dev
+
+# Using the emu alias
+atmos emu logs aws --stack=plat-ue2-dev
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>**Required.** The emulator component whose logs are streamed (for example, `aws`).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`-s, --stack`</dt>
+  <dd>**Required.** The stack the emulator component belongs to (for example, `plat-ue2-dev`).</dd>
+</dl>
+
+## See Also
+
+- [`atmos emulator ps`](/cli/commands/emulator/ps) — List running emulators in the stack
+- [`atmos emulator exec`](/cli/commands/emulator/exec) — Run a command in the emulator container

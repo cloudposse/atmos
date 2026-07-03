@@ -1,0 +1,161 @@
+---
+title: atmos helm
+sidebar_label: helm
+sidebar_class_name: command
+---
+
+import Intro from "@site/src/components/Intro";
+import ActionCard from "@site/src/components/ActionCard";
+import PrimaryCTA from "@site/src/components/PrimaryCTA";
+import Experimental from "@site/src/components/Experimental";
+
+<Intro>
+  Deploy Helm charts as first-class Atmos components — local charts, remote
+  repository charts, and OCI charts — using the same stack-based workflow you use
+  for Terraform and Kubernetes. Atmos renders, previews, installs, and deletes
+  releases through the Helm Go SDK, with values, credentials, hooks, and
+  dependency ordering handled by your stack configuration. No `helm` or
+  `helmfile` binary required.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Configure Helm Components">
+  Set the default component location in `atmos.yaml`, then describe what each
+  stack should deploy with `chart`, `version`, `repositories`, `values`,
+  `values_files`, `namespace`, `env`, hooks, and dependencies.
+  <div>
+    <PrimaryCTA to="/stacks/components/helm">
+      Stack Configuration
+    </PrimaryCTA>
+  </div>
+</ActionCard>
+
+## Usage
+
+```shell
+atmos helm template <component> --stack <stack>
+atmos helm diff <component> --stack <stack>
+atmos helm plan <component> --stack <stack>
+atmos helm apply <component> --stack <stack>
+atmos helm deploy <component> --stack <stack>
+atmos helm delete <component> --stack <stack>
+
+atmos helm template --all --stack <stack>
+atmos helm apply --affected --base origin/main
+atmos helm deploy <component> --stack <stack> --ci
+```
+
+The native Helm component renders charts in-process with the Helm Go SDK
+(equivalent to `helm template`), so `atmos helm template` works without a cluster
+or credentials. `apply`/`deploy` install or upgrade the release
+(`helm upgrade --install`); `delete` uninstalls it.
+
+## Native CI Summaries
+
+When `ci.enabled: true` and CI is detected, or when CI mode is forced with `--ci` or `ATMOS_CI`,
+native Helm commands write a Markdown step summary through Atmos native CI. Helm CI support is
+summaries-only; it does not write output variables, commit statuses, PR comments, or artifacts.
+
+Supported summaries:
+
+| Command | Summary template |
+|---------|------------------|
+| `template`, `render` | `ci.templates.helm.template` |
+| `diff`, `plan` | `ci.templates.helm.diff` |
+| `apply`, `deploy` | `ci.templates.helm.apply` |
+| `delete`, `destroy` | `ci.templates.helm.delete` |
+
+Summaries include component, stack, command status, a local reproduction command, and Helm metadata
+such as release name, namespace, chart, target, object counts, object kinds, and rendered manifest
+size when available.
+
+## Chart sources
+
+The `chart` field accepts three kinds of references:
+
+<dl>
+  <dt>Local chart</dt>
+  <dd>A path relative to the component directory (e.g. `chart: .` or `chart: ./charts/app`), or an absolute path.</dd>
+
+  <dt>Remote repository chart</dt>
+  <dd>Either `repository: https://...` plus `chart: <name>`, or a `repo/name` reference resolved against merged global and component `repositories:` entries. Declarative repositories are added/updated in Helm's local repository config before chart operations.</dd>
+
+  <dt>OCI chart</dt>
+  <dd>An `oci://` reference (e.g. `chart: oci://ghcr.io/acme/charts/app`).</dd>
+</dl>
+
+## Values
+
+The component `values:` map **is** the Helm chart's values, merged through Atmos
+inheritance (imports, base components, and overrides). Optional `values_files:`
+overlay value files (templated, layered) underneath the inline `values`. Secret
+values flow in through Atmos native secrets (the `!secret` YAML function) and are
+masked automatically — Helm has no native secrets concept, so Atmos provides it.
+
+```yaml
+components:
+  helm:
+    monitoring:
+      chart: prometheus-community/kube-prometheus-stack
+      version: "65.1.1"
+      repositories:
+        - name: prometheus-community
+          url: https://prometheus-community.github.io/helm-charts
+      namespace: monitoring
+      values:
+        grafana:
+          adminPassword: !secret grafana_admin_password
+```
+
+List repository associations for Helm components:
+
+```shell
+atmos helm repo list --stack=ue2-dev
+atmos helm repo list monitoring --format=json
+```
+
+## Provision targets
+
+Like the Kubernetes component, `apply`/`deploy` can deliver the rendered
+manifests to a **provision target** instead of a cluster — for example, commit
+them to a Git deployment repository monitored by ArgoCD:
+
+```yaml
+components:
+  helm:
+    monitoring:
+      # ...
+      provision:
+        default: cluster
+        targets:
+          cluster:
+            kind: kubernetes
+          deployment-repo:
+            kind: git
+            repository: deployments
+            path: "clusters/{{ .vars.stage }}/monitoring"
+```
+
+```shell
+atmos helm deploy monitoring -s plat-ue2-dev --target deployment-repo
+```
+
+## Subcommands
+
+<dl>
+  <dt>[`template`](/cli/commands/helm/template)</dt>
+  <dd>Render the chart to Kubernetes manifests (stdout, files, or a provision target).</dd>
+
+  <dt>[`diff`](/cli/commands/helm/diff) / [`plan`](/cli/commands/helm/plan)</dt>
+  <dd>Show a unified diff against a baseline — the deployed release, a local manifest, or a GitOps deployment repository.</dd>
+
+  <dt>[`apply`](/cli/commands/helm/apply) / [`deploy`](/cli/commands/helm/deploy)</dt>
+  <dd>Install or upgrade the release, or deliver rendered manifests to a target.</dd>
+
+  <dt>[`delete`](/cli/commands/helm/delete)</dt>
+  <dd>Uninstall the release.</dd>
+
+  <dt>[`plugin`](/cli/commands/helm/plugin)</dt>
+  <dd>Install and list Helm CLI plugins (e.g. `helm-secrets`) used by `helmfile` components.</dd>
+</dl>

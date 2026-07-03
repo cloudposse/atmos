@@ -1,0 +1,127 @@
+---
+title: atmos kubernetes validate
+sidebar_label: validate
+sidebar_class_name: command
+id: validate
+description: Validate rendered Kubernetes manifests offline by default, with optional server-side dry-run checks.
+---
+
+import Intro from "@site/src/components/Intro";
+import ActionCard from "@site/src/components/ActionCard";
+import PrimaryCTA from "@site/src/components/PrimaryCTA";
+import Screengrab from "@site/src/components/Screengrab";
+
+<Intro>
+  Catch broken manifests before they reach the cluster. `validate` renders the
+  component and checks the resulting Kubernetes objects — confirming every object
+  has a valid `apiVersion`/`kind`, a present and well-formed `metadata.name`, and
+  a resolvable group/version/kind. With `--server`, it additionally validates the
+  objects against the live cluster using a server-side dry-run apply.
+</Intro>
+
+<Screengrab title="atmos kubernetes validate --help" slug="atmos-kubernetes-validate--help" />
+
+<ActionCard title="Configure Kubernetes Components">
+  `validate` uses the same stack inputs as the rest of the lifecycle:
+  `provider`, `paths`, `manifests`, `vars`, `env`, Auth, hooks, and
+  dependencies.
+  <div>
+    <PrimaryCTA to="/stacks/components/kubernetes">
+      Stack Configuration
+    </PrimaryCTA>
+  </div>
+</ActionCard>
+
+## Usage
+
+```shell
+atmos kubernetes validate <component> --stack <stack> [options]
+atmos kubernetes validate --affected --base origin/main
+```
+
+`validate` resolves the component stack configuration, renders the final
+Kubernetes manifests (the same way [`render`](/cli/commands/kubernetes/render)
+does), and then validates the rendered objects.
+
+By default, validation is **offline** — it does not contact the Kubernetes API
+server. It reports every invalid object in a single run (it does not stop at the
+first failure) and exits non-zero if any object fails.
+
+When every object fails fast matters most: the same offline structural checks
+run automatically before [`apply`](/cli/commands/kubernetes/apply) and
+[`deploy`](/cli/commands/kubernetes/deploy), so a malformed manifest is rejected
+before anything is sent to the cluster or delivered to a provision target.
+
+## Examples
+
+Validate a single component offline:
+
+```shell
+atmos kubernetes validate argocd -s plat-ue2-dev
+```
+
+Validate against the live cluster with a server-side dry-run apply:
+
+```shell
+atmos kubernetes validate argocd -s plat-ue2-dev --server
+```
+
+Validate all Kubernetes components in dependency order:
+
+```shell
+atmos kubernetes validate --all -s plat-ue2-dev
+```
+
+Validate affected Kubernetes components:
+
+```shell
+atmos kubernetes validate --affected --base origin/main
+```
+
+## What is validated
+
+Offline (default):
+
+- `apiVersion` and `kind` are present (also enforced during rendering).
+- `metadata.name` is present and is a valid DNS-1123 subdomain.
+- The object resolves to a non-empty group/version/kind.
+
+With `--server`:
+
+- Each object is sent to the Kubernetes API server as a server-side dry-run
+  apply, surfacing schema errors (unknown or mistyped fields) and missing
+  Custom Resource Definitions authoritatively. Requires a reachable cluster and
+  a configured kubeconfig.
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+<dt>
+  `--server` <em>(optional)</em>
+</dt>
+<dd>
+  Also validate the rendered manifests against the live cluster using a
+  server-side dry-run apply. Requires a reachable cluster and kubeconfig.
+</dd>
+
+<dt>
+  `--all` <em>(optional)</em>
+</dt>
+<dd>Validate all Kubernetes components in dependency order.</dd>
+
+<dt>
+  `--affected` <em>(optional)</em>
+</dt>
+<dd>Validate affected Kubernetes components and their dependencies.</dd>
+
+<dt>
+  `--base` <em>(optional)</em>
+</dt>
+<dd>Base branch, tag, or commit used when selecting affected components.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent Kubernetes components.</dd>
+</dl>

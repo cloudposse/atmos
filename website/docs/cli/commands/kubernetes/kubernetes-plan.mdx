@@ -1,0 +1,71 @@
+---
+title: atmos kubernetes plan
+sidebar_label: plan
+sidebar_class_name: command
+id: plan
+---
+
+import Intro from "@site/src/components/Intro";
+import ActionCard from "@site/src/components/ActionCard";
+import PrimaryCTA from "@site/src/components/PrimaryCTA";
+
+<Intro>
+  Give Kubernetes components a Terraform-style preview step. `plan` shows what a
+  stack-configured component would create or change before you approve the
+  deployment workflow.
+</Intro>
+
+<ActionCard title="Configure Kubernetes Components">
+  `plan` uses the same Kubernetes component stack configuration as `diff`:
+  manifest inputs, rendered values, Auth, hooks, and dependencies.
+  <div>
+    <PrimaryCTA to="/stacks/components/kubernetes">
+      Stack Configuration
+    </PrimaryCTA>
+  </div>
+</ActionCard>
+
+## Usage
+
+```shell
+atmos kubernetes plan <component> --stack <stack>
+atmos kubernetes plan --affected --base origin/main
+```
+
+In v1, `plan` is an alias of
+[`atmos kubernetes diff`](/cli/commands/kubernetes/diff). It renders the final
+manifests, validates them with Kubernetes server-side dry-run apply, reads live
+objects, and reports create, change, and no-change results — including the per-object unified
+diff in the terminal and, in CI, a collapsible **Kubernetes Diff** block in the job summary
+(`Secret` objects are omitted). See [`atmos kubernetes diff`](/cli/commands/kubernetes/diff) for
+example output.
+
+This gives Kubernetes components a Terraform-shaped preview command while keeping the implementation simple. Future versions can extend `plan` with structured plan files or approval artifacts without changing `diff`.
+
+## Example
+
+```shell
+atmos kubernetes plan argocd -s plat-ue2-dev
+```
+
+## Flags
+
+<dl>
+  <dt>
+    `--stack`, `-s` <em>(required)</em>
+  </dt>
+  <dd>Atmos stack.</dd>
+
+<dt>
+  `--all` <em>(optional)</em>
+</dt>
+<dd>Plan all Kubernetes components in dependency order.</dd>
+
+<dt>
+  `--affected` <em>(optional)</em>
+</dt>
+<dd>Plan affected Kubernetes components and their dependencies.</dd>
+
+  <dt>`--include-dependents` <em>(optional)</em></dt>
+  <dd>With `--affected`, include dependent Kubernetes components.</dd>
+</dl>
