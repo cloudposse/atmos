@@ -545,6 +545,19 @@ jobs:
           cd examples/${{ matrix.demo-folder }}
           atmos test
 
+  k3s-required:
+    name: "[k3s] demo-helmfile"
+    needs: k3s
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - name: Check k3s matrix result
+        run: |
+          if [ "${{ needs.k3s.result }}" != "success" ]; then
+            echo "k3s matrix result was '${{ needs.k3s.result }}'"
+            exit 1
+          fi
+
   # Exercise the Kubernetes native component against a real kube-apiserver+etcd
   # control plane (started by controller-runtime envtest): server-side apply,
   # dry-run diff, delete, server-side validate, and a CRD round-trip. The
