@@ -254,6 +254,10 @@ func emulatorNetworkName(stack string) string {
 	return "atmos-emulator-" + sanitizeNetworkToken(stack)
 }
 
+func emulatorNetworkAlias(stack, name string) string {
+	return sanitizeNetworkToken(stack + "-" + name)
+}
+
 // sanitizeNetworkToken reduces a stack name to characters valid in a docker/podman
 // network name ([a-zA-Z0-9_.-]); any other rune becomes '-'.
 func sanitizeNetworkToken(s string) string {
@@ -280,6 +284,15 @@ func sanitizeNetworkToken(s string) string {
 func (m *Manager) attachSharedNetwork(ctx context.Context, runtime container.Runtime, namedConfig *container.NamedConfig, stack, name string) {
 	defer perf.Track(nil, "emulator.Manager.attachSharedNetwork")()
 
+	alias := emulatorNetworkAlias(stack, name)
+	if network := currentContainerNetwork(ctx, runtime); network != "" {
+		namedConfig.Networks = append(namedConfig.Networks, container.NetworkAttachment{
+			Name:    network,
+			Aliases: []string{alias},
+		})
+		return
+	}
+
 	ensurer, ok := runtime.(container.NetworkEnsurer)
 	if !ok {
 		return
@@ -290,7 +303,10 @@ func (m *Manager) attachSharedNetwork(ctx context.Context, runtime container.Run
 			"network", network, "error", err)
 		return
 	}
-	namedConfig.RunArgs = append(namedConfig.RunArgs, "--network", network, "--network-alias", name)
+	namedConfig.Networks = append(namedConfig.Networks, container.NetworkAttachment{
+		Name:    network,
+		Aliases: []string{alias},
+	})
 }
 
 // resolveRootlessRun applies the driver's rootless override under a rootless
@@ -419,6 +435,22 @@ func (m *Manager) endpoint(ctx context.Context, runtime container.Runtime, spec 
 	if err != nil {
 		return Endpoint{}, err
 	}
+	if network := currentContainerNetwork(ctx, runtime); network != "" {
+		ports, ok := containerPorts(spec)
+		if ok {
+			return Endpoint{
+				Target:   target,
+				Host:     emulatorNetworkAlias(stack, name),
+				Ports:    ports,
+				Region:   spec.Region,
+				Project:  spec.Project,
+				Services: spec.Services,
+			}, nil
+		}
+		log.Debug("emulator current container network detected but container ports are unavailable; falling back to published host ports",
+			"network", network, "component", name)
+	}
+
 	ports := make(map[int]int, len(info.Ports))
 	for _, binding := range info.Ports {
 		if binding.HostPort != 0 {
@@ -427,12 +459,28 @@ func (m *Manager) endpoint(ctx context.Context, runtime container.Runtime, spec 
 	}
 	return Endpoint{
 		Target:   target,
-		Host:     "localhost",
+		Host:     reachableHostForPublishedPorts(),
 		Ports:    ports,
 		Region:   spec.Region,
 		Project:  spec.Project,
 		Services: spec.Services,
 	}, nil
+}
+
+func containerPorts(spec *Spec) (map[int]int, bool) {
+	defer perf.Track(nil, "emulator.containerPorts")()
+
+	specPorts, err := spec.ContainerPorts()
+	if err != nil || len(specPorts) == 0 {
+		return nil, false
+	}
+	ports := make(map[int]int, len(specPorts))
+	for _, binding := range specPorts {
+		if binding.Container != 0 {
+			ports[binding.Container] = binding.Container
+		}
+	}
+	return ports, len(ports) > 0
 }
 
 // Down stops and removes the emulator's container.

@@ -500,6 +500,30 @@ func TestAquaRegistry_GetLatestVersion(t *testing.T) {
 	assert.Equal(t, "1.5.0", version) // Should skip draft v1.6.0 and prerelease v2.0.0-beta
 }
 
+func TestAquaRegistry_GetLatestVersion_RetriesUnauthenticatedAfterForbidden(t *testing.T) {
+	releases := []releaseInfo{{TagName: "v1.5.0", Prerelease: false, Draft: false}}
+	var calls int
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(releases)
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
+	ar.githubToken = "github-actions-installation-token"
+
+	version, err := ar.GetLatestVersion("aquasecurity", "trivy")
+	require.NoError(t, err)
+	assert.Equal(t, "v1.5.0", version)
+	assert.Equal(t, 2, calls)
+}
+
 func TestAquaRegistry_GetLatestVersion_NoVersionPrefixPreservesTag(t *testing.T) {
 	const packageYAML = `packages:
   - type: github_release
