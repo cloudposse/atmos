@@ -335,8 +335,7 @@ func processSimpleTags(
 		if err != nil {
 			return nil, true, err
 		}
-		track := manager.EffectiveTrackFromStack(atmosConfig, stackInfo)
-		res, err := manager.ResolveLocked(atmosConfig, track, name)
+		res, err := manager.ResolveYAMLFunc(atmosConfig, name, stackInfo)
 		if err != nil {
 			return nil, true, err
 		}

@@ -313,29 +313,6 @@ func buildLocalsResult(rawConfig map[string]any, localsCtx *LocalsContext) *extr
 	return result
 }
 
-func addVersionTemplateContext(
-	atmosConfig *schema.AtmosConfiguration,
-	yamlContent string,
-	context map[string]any,
-	track string,
-) (map[string]any, error) {
-	if !strings.Contains(yamlContent, ".version") {
-		return context, nil
-	}
-	if context == nil {
-		context = map[string]any{}
-	}
-	if _, exists := context["version"]; exists {
-		return context, nil
-	}
-	versionMap, err := manager.VersionMap(atmosConfig, track)
-	if err != nil {
-		return nil, err
-	}
-	context["version"] = versionMap
-	return context, nil
-}
-
 // processTemplatesInSection processes Go templates in a section (settings, vars, or env) using the provided context.
 // This allows sections to reference resolved locals and other processed sections.
 // Returns the processed section or an error if template processing fails.
@@ -445,7 +422,7 @@ func extractAndAddLocalsToContext(
 	// We check hasLocals instead of len(locals) to support empty locals: {} sections,
 	// which should still enable template context.
 	if !extractResult.hasLocals {
-		return addVersionTemplateContext(atmosConfig, yamlContent, context, extractResult.versionTrack)
+		return manager.AddTemplateContext(atmosConfig, yamlContent, context, extractResult.versionTrack)
 	}
 
 	// context is never nil here: the clone above always allocates a fresh map
@@ -456,7 +433,7 @@ func extractAndAddLocalsToContext(
 	// This allows settings/vars/env templates to reference locals.
 	context[cfg.LocalsSectionName] = extractResult.locals
 	var versionContextErr error
-	context, versionContextErr = addVersionTemplateContext(atmosConfig, yamlContent, context, extractResult.versionTrack)
+	context, versionContextErr = manager.AddTemplateContext(atmosConfig, yamlContent, context, extractResult.versionTrack)
 	if versionContextErr != nil {
 		return context, versionContextErr
 	}

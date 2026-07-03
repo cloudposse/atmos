@@ -805,7 +805,7 @@ func ProcessStacks(
 		for k, v := range configAndStacksInfo.ComponentSection {
 			componentTemplateContext[k] = v
 		}
-		componentTemplateContext, err = addVersionTemplateContext(
+		componentTemplateContext, err = manager.AddTemplateContext(
 			atmosConfig,
 			componentSectionStr,
 			componentTemplateContext,
