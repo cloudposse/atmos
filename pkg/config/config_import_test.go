@@ -1,15 +1,19 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const mergeConfigFileExecHelperEnv = "ATMOS_TEST_MERGE_CONFIG_FILE_EXEC_HELPER"
 
 func TestMergeConfig_ImportOverrideBehavior(t *testing.T) {
 	// Test that the main config file's settings override imported settings.
@@ -77,31 +81,21 @@ settings:
 }
 
 func TestMergeConfigFileProcessesCommandYamlFunctionsOnce(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("uses a POSIX shell helper script")
-	}
-
 	tempDir := t.TempDir()
 	countPath := filepath.Join(tempDir, "exec-count")
-	helperPath := filepath.Join(tempDir, "resolve-description.sh")
-	helperContent := `#!/bin/sh
-count_file="$1"
-count=$(cat "$count_file" 2>/dev/null || printf 0)
-count=$((count + 1))
-printf '%s' "$count" > "$count_file"
-printf 'resolved-description'
-`
-	require.NoError(t, os.WriteFile(helperPath, []byte(helperContent), 0o755))
 
 	configPath := filepath.Join(tempDir, "commands.yaml")
-	configContent := `
+	configContent := fmt.Sprintf(`
 commands:
   - name: existing
     description: overridden
   - name: generated
-    description: !exec ` + helperPath + ` ` + countPath + `
-`
+    description: !exec >-
+      %s -test.run=^TestMergeConfigFileExecHelper$ -- %s
+`, shellQuote(os.Args[0]), shellQuote(countPath))
 	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
+
+	t.Setenv(mergeConfigFileExecHelperEnv, "1")
 
 	v := viper.New()
 	v.SetConfigType(yamlType)
@@ -132,6 +126,41 @@ commands:
 
 	assert.Equal(t, "overridden", byName["existing"]["description"])
 	assert.Equal(t, "resolved-description", byName["generated"]["description"])
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func TestMergeConfigFileExecHelper(t *testing.T) {
+	if os.Getenv(mergeConfigFileExecHelperEnv) != "1" {
+		return
+	}
+
+	args := os.Args
+	for len(args) > 0 && args[0] != "--" {
+		args = args[1:]
+	}
+	if len(args) != 2 {
+		fmt.Fprintf(os.Stderr, "expected count path after --, got %q", os.Args)
+		os.Exit(2)
+	}
+
+	countPath := args[1]
+	count := 0
+	if raw, err := os.ReadFile(countPath); err == nil && len(raw) > 0 {
+		count, err = strconv.Atoi(string(raw))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "invalid count file %q: %v", countPath, err)
+			os.Exit(2)
+		}
+	}
+	if err := os.WriteFile(countPath, []byte(strconv.Itoa(count+1)), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "write count file %q: %v", countPath, err)
+		os.Exit(2)
+	}
+	fmt.Fprint(os.Stdout, "resolved-description")
+	os.Exit(0)
 }
 
 func TestMergeConfig_ImportDeepMerge(t *testing.T) {
