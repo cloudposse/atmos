@@ -918,7 +918,7 @@ func executeCustomCommand(
 			stepType = "shell"
 		}
 
-		err = retry.Do(context.Background(), step.Retry, func() error {
+		runStep := func() error {
 			// Execute the step based on type.
 			//
 			// shell/exec/atmos use the legacy, cross-platform, child-reaping paths
@@ -994,7 +994,12 @@ func executeCustomCommand(
 				}
 				return fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
 			}
-		})
+		}
+		if step.Retry != nil {
+			err = retry.Do(context.Background(), step.Retry, runStep)
+		} else {
+			err = runStep()
+		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }

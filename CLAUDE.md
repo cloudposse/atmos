@@ -158,6 +158,9 @@ Three groups separated by blank lines, sorted alphabetically:
 
 Maintain aliases: `cfg`, `log`, `u`, `errUtils`
 
+### Go Formatting (MANDATORY)
+Use `gofumpt`, not `gofmt`, when formatting Go files. The repository enables `gofumpt` and `goimports` in `.golangci.yml`; using plain `gofmt` can leave files inconsistent with CI.
+
 ### Performance Tracking (MANDATORY)
 Add `defer perf.Track(atmosConfig, "pkg.FuncName")()` + blank line to all public functions. Use `nil` if no atmosConfig param.
 
