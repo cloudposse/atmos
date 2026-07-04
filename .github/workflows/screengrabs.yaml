@@ -56,17 +56,23 @@ jobs:
         with:
           persist-credentials: false
 
-      # The casts commands are self-contained: `casts setup` builds atmos from
-      # this checkout and prepares isolated recording fixtures, so no apt
-      # packages or released atmos are needed.
+      # The casts commands build Atmos from this checkout, prepare isolated
+      # recording fixtures, install declared dependencies, and assert required
+      # host recorder tools are available.
       - name: Setup Go
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: go.mod
 
-      - name: Regenerate screengrab casts
+      - name: Build Atmos
         run: |
           go build -o build/atmos .
+          echo "$PWD/build" >> "$GITHUB_PATH"
+        env:
+          CGO_ENABLED: "0"
+
+      - name: Regenerate screengrab casts
+        run: |
           ./build/atmos --chdir=demo/casts casts generate screengrabs cli
           ./build/atmos --chdir=demo/casts casts generate screengrabs demo-stacks
           git add -A

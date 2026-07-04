@@ -1,8 +1,16 @@
 commands:
   - name: casts generate screengrabs demo-stacks start-your-project
     description: Regenerate the "start your project" docs screengrab cast
+    dependencies:
+      tools:
+        sharkdp/bat: v0.26.1
     env: !include cast-defaults.yaml .env.command
     steps:
+      - type: require
+        name: require-screengrab-tools
+        tools:
+          - tree
+        hint: Install GNU-compatible `tree` before recording docs screengrabs.
       - type: shell
         name: setup
         command: atmos casts setup
