@@ -366,10 +366,6 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		return atmosConfig, err
 	}
 
-	// Capture the fully merged settings (profiles applied) for path-derived lookups the
-	// typed struct can't express — e.g. per-command default args (`<command>.args`).
-	atmosConfig.RawConfig = v.AllSettings()
-
 	extractEnvMapsFromViper(v, &atmosConfig)
 
 	// Fix auth.identities after Viper unmarshal.

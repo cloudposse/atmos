@@ -278,6 +278,9 @@ func Reset() {
 	defer registry.mu.Unlock()
 
 	registry.providers = make(map[string]CommandProvider)
+	configuredCommandAliases.mu.Lock()
+	configuredCommandAliases.expander = nil
+	configuredCommandAliases.mu.Unlock()
 }
 
 // GetCompatFlagsForCommand returns compatibility flags for a command provider.

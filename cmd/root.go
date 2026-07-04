@@ -1538,7 +1538,17 @@ func Execute() error {
 			return err
 		}
 
+		err = internal.ConfigureCommandAliases(atmosConfig.CommandAliases)
+		if err != nil {
+			return err
+		}
+
 		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, RootCmd, true)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = internal.ConfigureCommandAliases(nil)
 		if err != nil {
 			return err
 		}
@@ -1549,7 +1559,9 @@ func Execute() error {
 
 	// Preprocess args before Cobra parses.
 	// This orchestrates multiple preprocessing steps in the correct order.
-	preprocessArgs()
+	if err := preprocessArgs(); err != nil {
+		return err
+	}
 
 	// Set up AI output capture if --ai flag is present (flag parsing in cmd/ai,
 	// orchestration in pkg/ai/analyze, skill loading in pkg/ai/skills).
@@ -1595,35 +1607,38 @@ func unknownSubcommand(err error) (string, bool) {
 
 // preprocessArgs runs all argument preprocessing before Cobra parses.
 // This orchestrates multiple preprocessing steps in the correct order:
-//  1. NoOptDefVal flags: Rewrites --flag value → --flag=value for native Atmos flags
-//  2. Compatibility flags: Separates Atmos flags from pass-through flags for external tools
-func preprocessArgs() {
+//  1. Command aliases: Rewrites configured alias prefixes before command lookup
+//  2. NoOptDefVal flags: Rewrites --flag value → --flag=value for native Atmos flags
+//  3. Compatibility flags: Separates Atmos flags from pass-through flags for external tools
+func preprocessArgs() error {
 	osArgs := os.Args[1:]
 	if len(osArgs) == 0 {
-		return
+		return nil
 	}
 
-	// Step 0: Inject config-sourced default args for the target command (global `args:` and
-	// path-derived `<command>.args:`). atmosConfig is already loaded here (with profiles
-	// merged), so profile-defined args are honored. Defaults whose flag is already on the CLI
-	// or set via env are skipped, preserving CLI > ENV > config precedence.
-	osArgs = flags.InjectDefaultArgs(RootCmd, atmosConfig.RawConfig, osArgs)
+	// Step 1: Expand configured command aliases before Cobra command lookup.
+	var err error
+	osArgs, err = internal.ExpandCommandAliases(osArgs)
+	if err != nil {
+		return err
+	}
 
-	// Step 1: Preprocess NoOptDefVal flags (native Atmos flags like --identity, --pager).
+	// Step 2: Preprocess NoOptDefVal flags (native Atmos flags like --identity, --pager).
 	// This rewrites --identity value → --identity=value before Cobra parses.
 	processedArgs := preprocessNoOptDefValFlags(osArgs)
 
-	// Step 2: Preprocess compatibility flags (external tool syntax like -var).
+	// Step 3: Preprocess compatibility flags (external tool syntax like -var).
 	// This separates Atmos flags from pass-through flags.
 	// Note: This may call RootCmd.SetArgs() if there are compat flags.
 	hasCompatFlags := preprocessCompatibilityFlags(processedArgs)
 
-	// If no compat flags were processed but injection or NoOptDefVal changed the args,
+	// If no compat flags were processed but alias expansion or NoOptDefVal changed the args,
 	// we need to set the processed args for Cobra to use. Compare against the original
-	// os.Args (not the post-injection osArgs) so injected default args are not dropped.
+	// os.Args (not the post-alias osArgs) so expanded aliases are not dropped.
 	if !hasCompatFlags && !slicesEqual(processedArgs, os.Args[1:]) {
 		RootCmd.SetArgs(processedArgs)
 	}
+	return nil
 }
 
 // slicesEqual compares two string slices for equality.
