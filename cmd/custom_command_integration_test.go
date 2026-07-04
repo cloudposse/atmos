@@ -267,6 +267,8 @@ func TestCustomCommandIntegration_SkipsStepWhenConditionIsFalse(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	skippedFile := filepath.Join(tmpDir, "skipped.txt")
+	celSkippedFile := filepath.Join(tmpDir, "cel-skipped.txt")
+	celRanFile := filepath.Join(tmpDir, "cel-ran.txt")
 	ranFile := filepath.Join(tmpDir, "ran.txt")
 
 	testCommand := schema.Command{
@@ -277,6 +279,18 @@ func TestCustomCommandIntegration_SkipsStepWhenConditionIsFalse(t *testing.T) {
 				Command: customCommandWriteHelperCommand(t, skippedFile, "skipped"),
 				Type:    "shell",
 				When:    schema.MustCondition("never"),
+			},
+			{
+				Name:    "cel-skip",
+				Command: customCommandWriteHelperCommand(t, celSkippedFile, "cel-skipped"),
+				Type:    "shell",
+				When:    schema.MustCondition("step == 'cel-run'"),
+			},
+			{
+				Name:    "cel-run",
+				Command: customCommandWriteHelperCommand(t, celRanFile, "cel-ran"),
+				Type:    "shell",
+				When:    schema.MustCondition("workflow == 'test-when-skip' && step == 'cel-run'"),
 			},
 			{
 				Command: customCommandWriteHelperCommand(t, ranFile, "ran"),
@@ -301,6 +315,8 @@ func TestCustomCommandIntegration_SkipsStepWhenConditionIsFalse(t *testing.T) {
 	customCmd.Run(customCmd, []string{})
 
 	assert.NoFileExists(t, skippedFile)
+	assert.NoFileExists(t, celSkippedFile)
+	assert.FileExists(t, celRanFile)
 	assert.FileExists(t, ranFile)
 }
 

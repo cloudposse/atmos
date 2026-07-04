@@ -366,8 +366,6 @@ func ExecuteWorkflow(
 		return err
 	}
 
-	conditionContext := workflowConditionContext()
-
 	// Create auth manager if any runnable step has an identity or if command-line identity is specified.
 	// We check once upfront to avoid repeated initialization.
 	var authManager auth.AuthManager
@@ -378,7 +376,11 @@ func ExecuteWorkflow(
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			return err
 		}
-		if !step.When.Evaluate(conditionContext) {
+		runs, err := step.When.EvaluateE(workflowConditionContext(workflow, workflowDefinition, step, commandLineStack, workflowDefinition.Env))
+		if err != nil {
+			return err
+		}
+		if !runs {
 			continue
 		}
 		if commandLineIdentity != "" || strings.TrimSpace(step.Identity) != "" {
@@ -421,7 +423,11 @@ func ExecuteWorkflow(
 	showRenderer.RenderHeaderIfNeeded(workflowDefinition, workflow, flags)
 
 	for stepIdx, step := range steps {
-		if !step.When.Evaluate(conditionContext) {
+		runs, err := step.When.EvaluateE(workflowConditionContext(workflow, workflowDefinition, &step, commandLineStack, workflowDefinition.Env))
+		if err != nil {
+			return err
+		}
+		if !runs {
 			log.Debug("Skipping workflow step, `when` condition did not match", "step", step.Name)
 			continue
 		}
@@ -696,10 +702,38 @@ func ExecuteWorkflow(
 	return nil
 }
 
-func workflowConditionContext() schema.ConditionContext {
+func workflowConditionContext(workflow string, workflowDefinition *schema.WorkflowDefinition, step *schema.WorkflowStep, commandLineStack string, env map[string]string) schema.ConditionContext {
+	stack := ""
+	stepName := ""
+	stepEnv := env
+	if workflowDefinition != nil {
+		stack = workflowDefinition.Stack
+	}
+	if step != nil {
+		if step.Stack != "" {
+			stack = step.Stack
+		}
+		stepName = step.Name
+		if len(step.Env) > 0 {
+			stepEnv = make(map[string]string, len(env)+len(step.Env))
+			for key, value := range env {
+				stepEnv[key] = value
+			}
+			for key, value := range step.Env {
+				stepEnv[key] = value
+			}
+		}
+	}
+	if commandLineStack != "" {
+		stack = commandLineStack
+	}
 	return schema.ConditionContext{
-		CI:     telemetry.IsCI(),
-		Status: schema.ConditionPredicateSuccess,
+		CI:       telemetry.IsCI(),
+		Status:   schema.ConditionPredicateSuccess,
+		Stack:    stack,
+		Workflow: workflow,
+		Step:     stepName,
+		Env:      stepEnv,
 	}
 }
 
