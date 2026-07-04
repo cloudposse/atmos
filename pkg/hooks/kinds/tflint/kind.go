@@ -5,6 +5,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/hooks"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/scanners"
 	tflintscanner "github.com/cloudposse/atmos/pkg/scanners/tflint"
 )
@@ -26,6 +27,8 @@ func init() {
 type tflintEngine struct{}
 
 func (tflintEngine) Run(ctx *hooks.ExecContext) (*hooks.Output, error) {
+	defer perf.Track(nil, "hooks.tflint.Run")()
+
 	if ctx == nil || ctx.Hook == nil {
 		return nil, errUtils.ErrNilParam
 	}
