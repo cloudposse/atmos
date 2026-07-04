@@ -1,13 +1,15 @@
 ---
 slug: atmos-builds-atmos
-title: "Atmos Builds Atmos Now"
+title: "Atmos Now Builds Atmos"
 authors: [osterman]
 tags: [dx, core]
 ---
 
 import EmbedFile from '@site/src/components/EmbedFile'
 
-Atmos no longer uses Make as the active development interface for the Atmos repository. The same custom command system users rely on for project workflows now builds, tests, lints, validates, and publishes the Atmos CLI itself.
+Atmos now builds Atmos.
+
+We replaced the old Make-based build and CI entrypoints with Atmos custom commands, dogfooding the workflow experience directly in this repo and demonstrating how capable Atmos has become as an orchestration layer.
 
 <!--truncate-->
 
@@ -23,13 +25,13 @@ The repository's development commands now live in `.atmos.d/` command groups ins
 
 Makefiles remain only as migration guards. If someone runs an old target, the Makefile exits and points them to the Atmos command that replaced it.
 
-## A Real Command Group
+## A Cleaner Command Surface
 
-The build commands below are not copied into this post. They are embedded directly from the repository's `.atmos.d/build.yaml`, so the docs move with the code.
+The result is intentionally plain. The repository now has command groups that read like the workflows contributors actually run. The build commands below are embedded directly from `.atmos.d/build.yaml`, so the post shows the same configuration CI and contributors use.
 
 <EmbedFile filePath=".atmos.d/build.yaml" />
 
-The same pattern is used for tests:
+The same pattern carries through to tests:
 
 <EmbedFile filePath=".atmos.d/test.yaml" />
 
