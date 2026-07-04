@@ -2,6 +2,7 @@ package exec
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -10,11 +11,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/diagnostics"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	process "github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -36,8 +37,8 @@ func TestShellHelperProcess(t *testing.T) {
 
 	switch args[1] {
 	case "stdout-stderr":
-		fmt.Fprint(os.Stdout, "stdout")
-		fmt.Fprint(os.Stderr, "stderr")
+		_, _ = os.Stdout.Write([]byte("stdout"))
+		_, _ = os.Stderr.Write([]byte("stderr"))
 	case "exit":
 		os.Exit(2)
 	default:
@@ -95,125 +96,6 @@ func TestMergeEnvVars(t *testing.T) {
 	}
 }
 
-func TestGetAtmosShellLevel(t *testing.T) {
-	tests := []struct {
-		name     string
-		envValue string
-		expected int
-	}{
-		{
-			name:     "no env var set",
-			envValue: "",
-			expected: 0,
-		},
-		{
-			name:     "level 1",
-			envValue: "1",
-			expected: 1,
-		},
-		{
-			name:     "level 5",
-			envValue: "5",
-			expected: 5,
-		},
-		{
-			name:     "invalid value returns 0",
-			envValue: "invalid",
-			expected: 0,
-		},
-		{
-			name:     "negative value",
-			envValue: "-1",
-			expected: -1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.envValue != "" {
-				t.Setenv(atmosShellLevelEnvVar, tt.envValue)
-			} else {
-				os.Unsetenv(atmosShellLevelEnvVar)
-			}
-
-			result := getAtmosShellLevel()
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestSetAtmosShellLevel(t *testing.T) {
-	tests := []struct {
-		name  string
-		level int
-	}{
-		{
-			name:  "set level 0",
-			level: 0,
-		},
-		{
-			name:  "set level 1",
-			level: 1,
-		},
-		{
-			name:  "set level 10",
-			level: 10,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := setAtmosShellLevel(tt.level)
-			require.NoError(t, err)
-
-			result := getAtmosShellLevel()
-			assert.Equal(t, tt.level, result)
-
-			// Clean up.
-			os.Unsetenv(atmosShellLevelEnvVar)
-		})
-	}
-}
-
-func TestDecrementAtmosShellLevel(t *testing.T) {
-	tests := []struct {
-		name     string
-		initial  int
-		expected int
-	}{
-		{
-			name:     "decrement from 3 to 2",
-			initial:  3,
-			expected: 2,
-		},
-		{
-			name:     "decrement from 1 to 0",
-			initial:  1,
-			expected: 0,
-		},
-		{
-			name:     "decrement from 0 stays 0",
-			initial:  0,
-			expected: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := setAtmosShellLevel(tt.initial)
-			require.NoError(t, err)
-
-			decrementAtmosShellLevel()
-
-			result := getAtmosShellLevel()
-			assert.Equal(t, tt.expected, result)
-
-			// Clean up.
-			os.Unsetenv(atmosShellLevelEnvVar)
-		})
-	}
-}
-
 func TestExecuteShellCommandUsesInjectedStreamsAndCapture(t *testing.T) {
 	var terminalOut, terminalErr, captureOut, captureErr bytes.Buffer
 	helper := shellHelperCommand(t, "stdout-stderr")
@@ -238,6 +120,146 @@ func TestExecuteShellCommandUsesInjectedStreamsAndCapture(t *testing.T) {
 	assert.Equal(t, "stderr", terminalErr.String())
 	assert.Equal(t, "stdout", captureOut.String())
 	assert.Equal(t, "stderr", captureErr.String())
+}
+
+func TestExecuteShellCommandTerminalSpeedPreservesNonTTYStreamsAndCapture(t *testing.T) {
+	var terminalOut, terminalErr, captureOut, captureErr bytes.Buffer
+	helper := shellHelperCommand(t, "stdout-stderr")
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{Speed: 8},
+		},
+	}
+
+	err := ExecuteShellCommand(
+		atmosConfig,
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &terminalErr,
+		}),
+		WithStdoutCapture(&captureOut),
+		WithStderrCapture(&captureErr),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "stdout", terminalOut.String())
+	assert.Equal(t, "stderr", terminalErr.String())
+	assert.Equal(t, "stdout", captureOut.String())
+	assert.Equal(t, "stderr", captureErr.String())
+}
+
+func TestExecuteShellCommandWritesDiagnosticsEvents(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atmos-events.jsonl")
+	helper := shellHelperCommand(t, "stdout-stderr")
+	atmosConfig := schema.AtmosConfiguration{
+		Diagnostics: schema.Diagnostics{
+			Enabled: true,
+			File:    path,
+		},
+	}
+
+	err := ExecuteShellCommand(
+		atmosConfig,
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+		WithProcessStreams(process.Streams{
+			Stdout: &bytes.Buffer{},
+			Stderr: &bytes.Buffer{},
+		}),
+	)
+
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"level"`)
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	require.Len(t, lines, 2)
+
+	var startEvent diagnostics.Event
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &startEvent))
+	assert.Equal(t, "process.start", startEvent.Type)
+	assert.NotEmpty(t, startEvent.ID)
+	assert.Equal(t, helper.command, startEvent.Command)
+	assert.Equal(t, helper.args, startEvent.Args)
+	require.NotNil(t, startEvent.TTY)
+	assert.False(t, *startEvent.TTY)
+
+	var endEvent diagnostics.Event
+	require.NoError(t, json.Unmarshal([]byte(lines[1]), &endEvent))
+	assert.Equal(t, "process.end", endEvent.Type)
+	assert.Equal(t, startEvent.ID, endEvent.ID)
+	require.NotNil(t, endEvent.Started)
+	assert.True(t, *endEvent.Started)
+	require.NotNil(t, endEvent.Success)
+	assert.True(t, *endEvent.Success)
+	require.NotNil(t, endEvent.ExitCode)
+	assert.Equal(t, 0, *endEvent.ExitCode)
+	require.NotNil(t, endEvent.DurationMS)
+	assert.GreaterOrEqual(t, *endEvent.DurationMS, int64(0))
+}
+
+func TestExecuteShellCommandWritesDiagnosticsOutputWhenEnabled(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atmos-events.jsonl")
+	helper := shellHelperCommand(t, "stdout-stderr")
+	atmosConfig := schema.AtmosConfiguration{
+		Diagnostics: schema.Diagnostics{
+			Enabled:       true,
+			File:          path,
+			IncludeOutput: true,
+		},
+	}
+
+	err := ExecuteShellCommand(
+		atmosConfig,
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+		WithProcessStreams(process.Streams{
+			Stdout: &bytes.Buffer{},
+			Stderr: &bytes.Buffer{},
+		}),
+	)
+
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"level"`)
+
+	var outputEvents []diagnostics.Event
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		var event diagnostics.Event
+		require.NoError(t, json.Unmarshal([]byte(line), &event))
+		if event.Type == "process.output" {
+			outputEvents = append(outputEvents, event)
+		}
+	}
+	require.Len(t, outputEvents, 2)
+	outputByStream := map[string]diagnostics.Event{}
+	for _, event := range outputEvents {
+		outputByStream[event.Stream] = event
+	}
+	assert.Equal(t, "stdout", outputByStream["stdout"].Data)
+	assert.Equal(t, "stderr", outputByStream["stderr"].Data)
+	assert.Equal(t, outputEvents[0].ID, outputEvents[1].ID)
+	require.NotNil(t, outputByStream["stdout"].Bytes)
+	assert.Equal(t, len("stdout"), *outputByStream["stdout"].Bytes)
+	require.NotNil(t, outputByStream["stdout"].Sequence)
+	assert.Equal(t, uint64(1), *outputByStream["stdout"].Sequence)
 }
 
 func TestExecuteShellCommandPreservesDetailedExitCode(t *testing.T) {
@@ -352,121 +374,6 @@ func TestConvertEnvMapToSlice(t *testing.T) {
 			assert.Equal(t, tt.expected, resultMap)
 		})
 	}
-}
-
-func TestDetermineShell(t *testing.T) {
-	tests := []struct {
-		name            string
-		shellOverride   string
-		shellArgs       []string
-		expectedShell   string
-		expectedArgs    []string
-		skipOnWindows   bool
-		setupViperShell string
-	}{
-		{
-			name:          "override takes precedence",
-			shellOverride: "/usr/bin/custom-shell",
-			shellArgs:     []string{"-c", "echo test"},
-			expectedShell: "/usr/bin/custom-shell",
-			expectedArgs:  []string{"-c", "echo test"},
-			skipOnWindows: true,
-		},
-		{
-			name:          "default login shell with no args",
-			shellOverride: "",
-			shellArgs:     []string{},
-			expectedArgs:  []string{"-l"},
-			skipOnWindows: true,
-		},
-		{
-			name:          "custom args provided",
-			shellOverride: "",
-			shellArgs:     []string{"-c", "exit 0"},
-			expectedArgs:  []string{"-c", "exit 0"},
-			skipOnWindows: true,
-		},
-		{
-			name:            "viper shell value used",
-			shellOverride:   "",
-			shellArgs:       []string{},
-			setupViperShell: "/bin/zsh",
-			expectedShell:   "/bin/zsh",
-			expectedArgs:    []string{"-l"},
-			skipOnWindows:   true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.skipOnWindows && runtime.GOOS == "windows" {
-				t.Skipf("Skipping test on Windows: shell behavior differs")
-			}
-
-			if tt.setupViperShell != "" {
-				viper.Set("shell", tt.setupViperShell)
-				defer viper.Set("shell", "")
-			}
-
-			shellCommand, shellCommandArgs := determineShell(tt.shellOverride, tt.shellArgs)
-
-			if tt.expectedShell != "" {
-				assert.Equal(t, tt.expectedShell, shellCommand)
-			} else {
-				assert.NotEmpty(t, shellCommand, "shell command should not be empty")
-			}
-			assert.Equal(t, tt.expectedArgs, shellCommandArgs)
-		})
-	}
-}
-
-func TestDetermineShell_Windows(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skipf("Skipping Windows-specific test on non-Windows platform")
-	}
-
-	tests := []struct {
-		name          string
-		shellOverride string
-		shellArgs     []string
-		expectedShell string
-		expectedArgs  []string
-	}{
-		{
-			name:          "windows uses cmd.exe by default",
-			shellOverride: "",
-			shellArgs:     []string{},
-			expectedShell: "cmd.exe",
-			expectedArgs:  []string{},
-		},
-		{
-			name:          "windows with custom args",
-			shellOverride: "",
-			shellArgs:     []string{"/c", "echo test"},
-			expectedShell: "cmd.exe",
-			expectedArgs:  []string{"/c", "echo test"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			shellCommand, shellCommandArgs := determineShell(tt.shellOverride, tt.shellArgs)
-
-			assert.Equal(t, tt.expectedShell, shellCommand)
-			assert.Equal(t, tt.expectedArgs, shellCommandArgs)
-		})
-	}
-}
-
-func TestFindAvailableShell(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping Unix shell test on Windows")
-	}
-
-	shellPath := findAvailableShell()
-
-	// Should find either bash or sh on Unix systems.
-	assert.NotEmpty(t, shellPath, "should find a shell on Unix systems")
 }
 
 func TestMergeEnvVarsSimple(t *testing.T) {

@@ -1,8 +1,15 @@
 # Atmos GitHub Runtime action
 
 Exposes the GitHub Actions **runtime credentials** (`ACTIONS_RUNTIME_TOKEN`,
-`ACTIONS_RESULTS_URL`, …) to your `run:` steps so the Atmos-managed cache backend
-(`atmos ci cache restore` / `save`) can reach the GitHub Actions cache service.
+`ACTIONS_RESULTS_URL`, …) to your `run:` steps so the Atmos backends that talk
+to the runner's cache and artifacts services can reach them:
+
+- **Cache** — `atmos ci cache restore` / `save` (GitHub Actions cache service).
+- **Planfile storage** — `atmos terraform plan --ci` / `atmos terraform deploy`
+  / `atmos terraform planfile upload`|`download` when the `github/artifacts`
+  store is selected (GitHub Actions Artifacts service).
+
+Both read the same two env vars, so this single action serves both.
 
 ## Why this exists
 
@@ -55,6 +62,23 @@ The runtime token is always masked with `::add-mask::` regardless of mode.
 - if: always()
   run: atmos ci cache save
 ```
+
+### Planfile storage (`github/artifacts`)
+
+The same credentials let the [`github/artifacts` planfile store](https://atmos.tools/ci/planfile-storage)
+upload/download planfiles from a `run:` step. With `mode: env` no per-step wiring is needed —
+`atmos terraform` reads the credentials from the environment automatically:
+
+```yaml
+- uses: cloudposse/atmos/actions/github-runtime@v1   # pin to a release or SHA
+  with:
+    mode: env
+- run: atmos terraform plan mycomponent -s prod --ci    # uploads to github/artifacts
+- run: atmos terraform deploy mycomponent -s prod --ci  # downloads & verifies the planfile
+```
+
+Prefer `mode: output` (the default) when you want to scope the credentials to only these steps via
+explicit `env:`, exactly as in the cache examples above.
 
 ## Versioning
 

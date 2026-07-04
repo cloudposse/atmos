@@ -1,0 +1,8 @@
+{
+  "label": "cache",
+  "className": "command",
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/terraform/cache/cache"
+  }
+}

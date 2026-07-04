@@ -37,7 +37,6 @@ type TerraformRunOptions struct {
 	PlanFile         string
 	PlanSkipPlanfile bool
 	DeployRunInit    bool
-	VerifyPlan       bool
 
 	// Multi-component flags.
 	Query      string
@@ -55,6 +54,12 @@ type TerraformRunOptions struct {
 
 	// Status upload flag.
 	UploadStatus bool
+
+	// AppendArgs are extra terraform pass-through flags injected by the caller
+	// (e.g. `-json` for `terraform test` in CI). They are appended to
+	// info.AdditionalArgsAndFlags so they reach the terraform command directly,
+	// bypassing Cobra positional-arg parsing.
+	AppendArgs []string
 }
 
 // ParseTerraformRunOptions parses and validates shared terraform flags from Viper.
@@ -73,7 +78,6 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		PlanFile:                v.GetString("planfile"),
 		PlanSkipPlanfile:        v.GetBool("skip-planfile"),
 		DeployRunInit:           v.GetBool("deploy-run-init"),
-		VerifyPlan:              v.GetBool("verify-plan"),
 		Query:                   v.GetString("query"),
 		Components:              v.GetStringSlice("components"),
 		All:                     v.GetBool("all"),

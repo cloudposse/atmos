@@ -105,6 +105,13 @@ func (p *Provider) Context() (*provider.Context, error) {
 		}
 	}
 
+	// Checkout metadata: honor GITHUB_SERVER_URL so GitHub Enterprise
+	// clone URLs resolve to the right host.
+	ctx.ServerURL = serverURLOrDefault()
+	if ctx.Repository != "" {
+		ctx.CloneURL = ctx.ServerURL + "/" + ctx.Repository + ".git"
+	}
+
 	// Set branch name (prefer GITHUB_HEAD_REF for PRs, fall back to GITHUB_REF_NAME).
 	branch := os.Getenv("GITHUB_HEAD_REF") // PR head branch.
 	if branch == "" {
@@ -155,10 +162,7 @@ func parsePRInfo() *provider.PRInfo {
 	}
 
 	repo := os.Getenv("GITHUB_REPOSITORY")
-	serverURL := os.Getenv("GITHUB_SERVER_URL")
-	if serverURL == "" {
-		serverURL = "https://github.com"
-	}
+	serverURL := serverURLOrDefault()
 
 	var prURL string
 	if prNumber > 0 && repo != "" {
@@ -201,4 +205,13 @@ func init() {
 	// detected one. The client is lazily initialized — GITHUB_TOKEN is not
 	// required at init time.
 	ci.Register(NewProvider())
+}
+
+// serverURLOrDefault returns GITHUB_SERVER_URL, defaulting to github.com.
+// GitHub Enterprise sets this to the enterprise host.
+func serverURLOrDefault() string {
+	if serverURL := os.Getenv("GITHUB_SERVER_URL"); serverURL != "" {
+		return serverURL
+	}
+	return "https://github.com"
 }

@@ -118,7 +118,7 @@ func (c *Context) RunAnalysis(cmdErr error) bool {
 	// Also append it to captured stderr so the AI sees the full error context.
 	if cmdErr != nil {
 		formatted := errUtils.Format(cmdErr, errUtils.DefaultFormatterConfig())
-		_, _ = iolib.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
+		_, _ = iolib.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
 
 		if stderrCaptured != "" {
 			stderrCaptured += "\n"

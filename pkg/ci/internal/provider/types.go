@@ -79,6 +79,16 @@ type DebugModeDetector interface {
 	IsDebugMode() bool
 }
 
+// LogGrouper is an optional capability for providers that can group log output
+// in the current run (for example, GitHub Actions' ::group:: workflow command).
+type LogGrouper interface {
+	// StartLogGroup opens a collapsible log group with the given title.
+	StartLogGroup(title string) error
+
+	// EndLogGroup closes the current log group.
+	EndLogGroup() error
+}
+
 // CacheProvider is an optional capability for CI providers that expose a remote
 // build cache (for example, the GitHub Actions cache). Providers implement this
 // when their platform offers a documented cache store reachable from within a
@@ -139,6 +149,17 @@ type Context struct {
 
 	// RepoName is the repository name.
 	RepoName string
+
+	// ServerURL is the base URL of the SCM host running this CI
+	// (e.g., "https://github.com" or a GitHub Enterprise URL).
+	// Empty when the provider cannot determine it.
+	ServerURL string
+
+	// CloneURL is the URL to clone the current repository, used by
+	// `atmos git clone` for CI checkout replacement. Each provider
+	// constructs it from its own metadata; empty when the provider
+	// cannot determine it.
+	CloneURL string
 
 	// PullRequest contains PR info if this is a pull request event.
 	PullRequest *PRInfo

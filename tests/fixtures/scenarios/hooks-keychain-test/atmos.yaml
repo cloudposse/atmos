@@ -1,0 +1,28 @@
+base_path: "./"
+
+stores:
+  testkeychain:
+    kind: keychain
+    options:
+      backend: file
+      # file_dir intentionally omitted -> resolves under XDG_DATA_HOME (the test sets it to a temp dir).
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "."
+  included_paths:
+    - "stacks/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info

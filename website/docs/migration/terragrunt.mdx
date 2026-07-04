@@ -419,23 +419,23 @@ If you're familiar with Terragrunt, the concepts below will help you translate w
         vpc:
           hooks:
             cost:
-              events: [after-terraform-plan]
+              events: [after.terraform.plan]
               kind: infracost
 
             security:
-              events: [after-terraform-plan]
+              events: [after.terraform.plan]
               kind: trivy
 
             policy:
-              events: [after-terraform-plan]
+              events: [after.terraform.plan]
               kind: checkov
 
             kics:
-              events: [after-terraform-plan]
+              events: [after.terraform.plan]
               kind: kics
 
             notify:
-              events: [after-terraform-apply]
+              events: [after.terraform.apply]
               kind: command
               command: ./scripts/notify.sh
     ```

@@ -2,36 +2,23 @@
 package tests
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
-	"net"
-	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/tests/testhelpers"
-)
-
-const (
-	flociDefaultEndpoint = "http://localhost:4566"
-	flociAWSRegion       = "us-east-1"
 )
 
 var flociMarkerKeys = []string{
@@ -43,7 +30,7 @@ var flociMarkerKeys = []string{
 }
 
 func TestTerraformFlociApplyDestroyDAG(t *testing.T) {
-	endpoint := requireFlociEndpoint(t)
+	endpoint := requireFlociEndpoint(t, "", "")
 	RequireTerraform(t)
 
 	ensureFlociAtmosRunner(t)
@@ -79,7 +66,7 @@ func TestTerraformFlociApplyDestroyDAG(t *testing.T) {
 }
 
 func TestTerraformFlociAffectedApplyDestroyDAG(t *testing.T) {
-	endpoint := requireFlociEndpoint(t)
+	endpoint := requireFlociEndpoint(t, "", "")
 	RequireTerraform(t)
 	RequireExecutable(t, "git", "terraform affected Floci tests")
 
@@ -187,12 +174,6 @@ func TestTerraformFlociAffectedApplyDestroyDAG(t *testing.T) {
 		require.NoError(t, err, "affected destroy with dependents failed:\n%s", stderr)
 		requireFlociParametersGone(t, client, flociParameterNames(testID))
 	})
-}
-
-func ensureFlociAtmosRunner(t *testing.T) {
-	t.Helper()
-
-	ensureAtmosRunner(t)
 }
 
 func runFlociLifecycle(t *testing.T, endpoint, absWorkdir string, maxConcurrency int) {
@@ -304,44 +285,6 @@ func setupFlociAffectedRepos(t *testing.T, absWorkdir string) flociAffectedRepos
 	}
 }
 
-func copyFlociFixture(srcDir, dstDir string) error {
-	return filepath.WalkDir(srcDir, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		relPath, err := filepath.Rel(srcDir, path)
-		if err != nil {
-			return err
-		}
-		if relPath == "." {
-			return os.MkdirAll(dstDir, 0o755)
-		}
-		if entry.Name() == ".git" && entry.IsDir() {
-			return filepath.SkipDir
-		}
-
-		targetPath := filepath.Join(dstDir, relPath)
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			return os.MkdirAll(targetPath, info.Mode().Perm())
-		}
-		if !info.Mode().IsRegular() {
-			return nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-			return err
-		}
-		return os.WriteFile(targetPath, data, info.Mode().Perm())
-	})
-}
-
 func initFlociGitRepo(t *testing.T, dir, message string) {
 	t.Helper()
 
@@ -360,62 +303,6 @@ func runFlociGit(t *testing.T, dir string, args ...string) {
 	cmd := exec.Command("git", cmdArgs...) //nolint:gosec // Test helper runs fixed git commands against temp fixtures.
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git %s failed:\n%s", strings.Join(args, " "), string(output))
-}
-
-func requireFlociEndpoint(t *testing.T) string {
-	t.Helper()
-
-	if os.Getenv("ATMOS_TEST_FLOCI") != "true" {
-		t.Skip("set ATMOS_TEST_FLOCI=true and start Floci before running this integration test")
-	}
-
-	endpoint := os.Getenv("AWS_ENDPOINT_URL")
-	if endpoint == "" {
-		endpoint = os.Getenv("FLOCI_ENDPOINT_URL")
-	}
-	if endpoint == "" {
-		endpoint = flociDefaultEndpoint
-	}
-	endpoint = normalizeFlociEndpoint(endpoint)
-
-	parsed, err := url.Parse(endpoint)
-	require.NoError(t, err)
-	require.NotEmpty(t, parsed.Host)
-
-	address := parsed.Host
-	if _, _, splitErr := net.SplitHostPort(address); splitErr != nil {
-		port := parsed.Port()
-		if port == "" {
-			port = "4566"
-		}
-		address = net.JoinHostPort(parsed.Hostname(), port)
-	}
-
-	conn, err := net.DialTimeout("tcp", address, 2*time.Second)
-	if err != nil {
-		t.Skipf("Floci is not reachable at %s: %v", endpoint, err)
-	}
-	require.NoError(t, conn.Close())
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	require.NoError(t, err)
-	// #nosec G107 -- endpoint is an opt-in local Floci test target.
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Skipf("Floci HTTP endpoint is not reachable at %s: %v", endpoint, err)
-	}
-	require.NoError(t, resp.Body.Close())
-
-	return endpoint
-}
-
-func normalizeFlociEndpoint(endpoint string) string {
-	if strings.Contains(endpoint, "://") {
-		return endpoint
-	}
-	return "http://" + endpoint
 }
 
 func flociCommandEnv(t *testing.T, endpoint, absWorkdir string, sandbox *testhelpers.SandboxEnvironment, testID string) map[string]string {
@@ -439,71 +326,6 @@ func flociCommandEnv(t *testing.T, endpoint, absWorkdir string, sandbox *testhel
 		}
 	}
 	return env
-}
-
-func runFlociAtmos(t *testing.T, env map[string]string, timeout time.Duration, args ...string) (string, string, error) {
-	t.Helper()
-
-	return runFlociAtmosInDir(t, "", env, timeout, args...)
-}
-
-func runFlociAtmosInDir(t *testing.T, dir string, env map[string]string, timeout time.Duration, args ...string) (string, string, error) {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	cmd := atmosRunner.CommandContext(ctx, args...)
-	if dir != "" {
-		cmd.Dir = dir
-	}
-	cmd.Env = mergeCommandEnv(cmd.Env, env)
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return stdout.String(), stderr.String(), ctx.Err()
-	}
-	return stdout.String(), stderr.String(), err
-}
-
-func mergeCommandEnv(base []string, overrides map[string]string) []string {
-	if len(base) == 0 {
-		base = os.Environ()
-	}
-	env := append([]string{}, base...)
-	for key, value := range overrides {
-		prefix := key + "="
-		for i := 0; i < len(env); i++ {
-			if strings.HasPrefix(env[i], prefix) {
-				env = append(env[:i], env[i+1:]...)
-				i--
-			}
-		}
-		env = append(env, prefix+value)
-	}
-	return env
-}
-
-func newFlociSSMClient(t *testing.T, endpoint string) *ssm.Client {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	cfg, err := awsconfig.LoadDefaultConfig(
-		ctx,
-		awsconfig.WithRegion(flociAWSRegion),
-		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("test", "test", "")),
-	)
-	require.NoError(t, err)
-
-	return ssm.NewFromConfig(cfg, func(options *ssm.Options) {
-		options.BaseEndpoint = aws.String(endpoint)
-	})
 }
 
 func flociParameterNames(testID string) []string {
@@ -644,13 +466,4 @@ func requireTerraformSummaryNodes(t *testing.T, summaryFile string, expected []s
 		}
 	}
 	require.ElementsMatch(t, expected, actual)
-}
-
-func uniqueFlociTestID(t *testing.T) string {
-	t.Helper()
-
-	name := strings.ToLower(t.Name())
-	name = regexp.MustCompile(`[^a-z0-9-]+`).ReplaceAllString(name, "-")
-	name = strings.Trim(name, "-")
-	return fmt.Sprintf("%d-%s", time.Now().UnixNano(), name)
 }

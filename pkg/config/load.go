@@ -1,3 +1,4 @@
+//nolint:revive // Legacy config loading file exceeds the standard file length limit.
 package config
 
 import (
@@ -15,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	goyaml "go.yaml.in/yaml/v3"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -405,6 +407,14 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		viper.GetViper().Set("profiles.base_path", atmosConfig.Profiles.BasePath)
 	}
 
+	// Bridge the first-class `container.runtime.auto_start` YAML setting to the env
+	// var that container runtime detection reads (pkg/container). PromoteAtmosEnv
+	// respects precedence: an explicitly-set ATMOS_CONTAINER_RUNTIME_AUTO_START
+	// always wins over config and is never overwritten.
+	if atmosConfig.Container.Runtime.AutoStart {
+		envpkg.PromoteAtmosEnv(map[string]string{"ATMOS_CONTAINER_RUNTIME_AUTO_START": "true"})
+	}
+
 	return atmosConfig, nil
 }
 
@@ -415,6 +425,8 @@ func setEnv(v *viper.Viper) {
 	// Terraform plugin cache configuration.
 	bindEnv(v, "components.terraform.plugin_cache", "ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE")
 	bindEnv(v, "components.terraform.plugin_cache_dir", "ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR")
+	bindEnv(v, "components.terraform.cache.enabled", "ATMOS_COMPONENTS_TERRAFORM_CACHE_ENABLED")
+	bindEnv(v, "components.terraform.cache.location", "ATMOS_COMPONENTS_TERRAFORM_CACHE_LOCATION")
 	bindEnv(v, "components.terraform.auto_provision_workdir_for_outputs", "ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS")
 
 	bindEnv(v, "settings.github_token", "GITHUB_TOKEN")
@@ -437,6 +449,11 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
 	bindEnv(v, "settings.terminal.force_color", "ATMOS_FORCE_COLOR")
 	bindEnv(v, "settings.terminal.theme", "ATMOS_THEME", "THEME")
+	bindEnv(v, "settings.terminal.speed", "ATMOS_TERMINAL_SPEED")
+
+	bindEnv(v, "diagnostics.enabled", "ATMOS_DIAGNOSTICS_ENABLED")
+	bindEnv(v, "diagnostics.file", "ATMOS_DIAGNOSTICS_FILE")
+	bindEnv(v, "diagnostics.include_output", "ATMOS_DIAGNOSTICS_INCLUDE_OUTPUT")
 
 	// Experimental feature handling
 	bindEnv(v, "settings.experimental", "ATMOS_EXPERIMENTAL")
@@ -496,11 +513,15 @@ func setDefaultConfiguration(v *viper.Viper) {
 
 	v.SetDefault("logs.file", "/dev/stderr")
 	v.SetDefault("logs.level", "Warning")
+	v.SetDefault("diagnostics.enabled", false)
+	v.SetDefault("diagnostics.file", "")
+	v.SetDefault("diagnostics.include_output", false)
 
 	v.SetDefault("settings.terminal.color", true)
 	v.SetDefault("settings.terminal.no_color", false)
 	v.SetDefault("settings.terminal.pager", "false") // String value to match the field type
-	v.SetDefault("settings.experimental", "warn")    // Experimental feature handling: silence, disable, warn, error
+	v.SetDefault("settings.terminal.speed", 0.0)
+	v.SetDefault("settings.experimental", "warn") // Experimental feature handling: silence, disable, warn, error
 	// Note: force_color is ENV-only (ATMOS_FORCE_COLOR), no config default
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 
@@ -1200,6 +1221,12 @@ func shouldExcludePathForTesting(dirPath string) bool {
 //
 // Returns error if files can't be read or YAML is invalid.
 func loadAtmosConfigsFromDirectory(searchPattern string, dst *viper.Viper, source string) error {
+	return loadAtmosConfigsFromDirectoryWithMerge(searchPattern, dst, source, mergeConfigFile)
+}
+
+type configFileMergeFunc func(path string, v *viper.Viper) error
+
+func loadAtmosConfigsFromDirectoryWithMerge(searchPattern string, dst *viper.Viper, source string, mergeFile configFileMergeFunc) error {
 	// Find all config files using existing search infrastructure.
 	foundPaths, err := SearchAtmosConfig(searchPattern)
 	if err != nil {
@@ -1214,7 +1241,7 @@ func loadAtmosConfigsFromDirectory(searchPattern string, dst *viper.Viper, sourc
 
 	// Load and merge each file.
 	for _, filePath := range foundPaths {
-		if err := mergeConfigFile(filePath, dst); err != nil {
+		if err := mergeFile(filePath, dst); err != nil {
 			return fmt.Errorf("%w: failed to load configuration file from %s: %s: %w", errUtils.ErrParseFile, source, filePath, err)
 		}
 
@@ -1410,8 +1437,8 @@ func mergeConfigFile(
 	// We need to do this because viper.MergeConfig doesn't overwrite arrays.
 	tempViper := viper.New()
 	tempViper.SetConfigType(yamlType)
-	err = tempViper.ReadConfig(bytes.NewReader(content))
-	if err != nil {
+	tempViper.SetConfigFile(path)
+	if err = tempViper.ReadConfig(bytes.NewReader(content)); err != nil {
 		return err
 	}
 	newCommands := tempViper.Get(commandsKey)
@@ -1438,6 +1465,69 @@ func mergeConfigFile(
 	}
 
 	return nil
+}
+
+func mergeConfigFileWithImports(path string, v *viper.Viper) error {
+	//nolint:gosec // path is a resolved Atmos configuration/profile file path selected by the loader.
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	content, err = resolveDotenvMergeIncludeKeys(path, content)
+	if err != nil {
+		return err
+	}
+
+	tempViper := viper.New()
+	tempViper.SetConfigType(yamlType)
+	tempViper.SetConfigFile(path)
+	if err = tempViper.ReadConfig(bytes.NewReader(content)); err != nil {
+		return err
+	}
+
+	imports := tempViper.GetStringSlice("import")
+	if len(imports) > 0 {
+		var importConfig schema.AtmosConfiguration
+		if err = v.UnmarshalKey("settings", &importConfig.Settings, atmosDecodeHook()); err != nil {
+			return err
+		}
+		importConfig.Import = imports
+		importConfig.BasePath = tempViper.GetString("base_path")
+		if importConfig.BasePath == "" {
+			importConfig.BasePath = filepath.Dir(path)
+		}
+		if err = processConfigImports(&importConfig, v); err != nil {
+			return err
+		}
+	}
+
+	if err = mergeConfigFile(path, v); err != nil {
+		return err
+	}
+	if len(imports) > 0 {
+		if err = preprocessAtmosYamlFunc(content, tempViper); err != nil {
+			return err
+		}
+		overlayProfileSettings(v, tempViper.AllSettings(), "")
+	}
+	return nil
+}
+
+func overlayProfileSettings(v *viper.Viper, settings map[string]any, prefix string) {
+	for key, value := range settings {
+		if key == "import" || key == commandsKey {
+			continue
+		}
+		path := key
+		if prefix != "" {
+			path = prefix + yamlPathDelimiter + key
+		}
+		if nested, ok := value.(map[string]any); ok {
+			overlayProfileSettings(v, nested, path)
+			continue
+		}
+		v.Set(path, value)
+	}
 }
 
 // mergeCommandArrays merges two command arrays, appending new commands to existing ones.
@@ -1560,7 +1650,26 @@ func mergeCaseMapsFromFile(configFile string, mergedCaseMaps *casemap.CaseMaps) 
 		mergedCaseMaps.Set(path, existingMap)
 	}
 
+	mergeRecursiveEnvCaseKeys(rawYAML, mergedCaseMaps)
 	mergeDotenvIncludeCaseMaps(configFile, rawYAML, mergedCaseMaps)
+}
+
+// mergeRecursiveEnvCaseKeys folds env-var key casing from nested `env:` blocks
+// (custom-command and step-level) into the shared "env" case map, so they restore
+// the same way the top-level `env:` section does.
+func mergeRecursiveEnvCaseKeys(rawYAML []byte, mergedCaseMaps *casemap.CaseMaps) {
+	envKeys, err := casemap.CollectEnvKeysRecursive(rawYAML)
+	if err != nil || len(envKeys) == 0 {
+		return
+	}
+	existingMap := mergedCaseMaps.Get(envKey)
+	if existingMap == nil {
+		existingMap = make(casemap.CaseMap)
+	}
+	for k, v := range envKeys {
+		existingMap[k] = v
+	}
+	mergedCaseMaps.Set(envKey, existingMap)
 }
 
 // populateLegacyIdentityCaseMap copies auth.identities case mappings to the legacy IdentityCaseMap field.
@@ -1591,6 +1700,7 @@ func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
+		schema.ConditionDecodeHook(),
 		schema.TasksDecodeHook(),
 	)
 }
@@ -1827,26 +1937,27 @@ func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) e
 			continue
 		}
 
-		// Parse raw YAML to get auth.identities without Viper's dot-splitting.
-		var rawConfig map[string]interface{}
-		if err := yaml.Unmarshal(rawYAML, &rawConfig); err != nil {
+		// Parse raw YAML as nodes to get auth.identities without Viper's dot-splitting
+		// while preserving Atmos YAML function tags inside identity credentials.
+		var rawNode goyaml.Node
+		if err := goyaml.Unmarshal(rawYAML, &rawNode); err != nil {
 			log.Trace("Failed to parse YAML for identity extraction", "file", configFile, "error", err)
 			continue
 		}
 
-		// Navigate to auth.identities.
-		auth, ok := rawConfig["auth"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		identitiesRaw, ok := auth["identities"].(map[string]interface{})
-		if !ok {
+		identitiesNode := findYAMLMappingPath(&rawNode, "auth", "identities")
+		if identitiesNode == nil || identitiesNode.Kind != goyaml.MappingNode {
 			continue
 		}
 
 		// Convert each identity to schema.Identity and merge with existing.
-		for identityName, identityDataRaw := range identitiesRaw {
+		for i := 0; i < len(identitiesNode.Content); i += 2 {
+			identityName := identitiesNode.Content[i].Value
+			identityDataRaw, err := decodeNodeWithYamlFunctions(identitiesNode.Content[i+1])
+			if err != nil {
+				log.Trace("Failed to process YAML functions for identity", "name", identityName, "error", err)
+				continue
+			}
 			identityData, ok := identityDataRaw.(map[string]interface{})
 			if !ok {
 				log.Trace("Skipping invalid identity", "name", identityName, "file", configFile)
@@ -1883,5 +1994,33 @@ func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) e
 		atmosConfig.Auth.Identities = mergedIdentities
 	}
 
+	return nil
+}
+
+// findYAMLMappingPath walks a YAML document or mapping node to the node reached by
+// following the given sequence of mapping keys, returning nil if any key along the
+// path is missing or a non-mapping node is encountered before the path is consumed.
+func findYAMLMappingPath(node *goyaml.Node, path ...string) *goyaml.Node {
+	if node == nil {
+		return nil
+	}
+	if node.Kind == goyaml.DocumentNode {
+		if len(node.Content) == 0 {
+			return nil
+		}
+		return findYAMLMappingPath(node.Content[0], path...)
+	}
+	if len(path) == 0 {
+		return node
+	}
+	if node.Kind != goyaml.MappingNode {
+		return nil
+	}
+	head, tail := path[0], path[1:]
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == head {
+			return findYAMLMappingPath(node.Content[i+1], tail...)
+		}
+	}
 	return nil
 }

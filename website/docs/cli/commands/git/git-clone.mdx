@@ -1,0 +1,193 @@
+---
+title: atmos git clone
+sidebar_label: clone
+sidebar_class_name: command
+id: clone
+description: Clone or reconcile a managed Git repository, an ad hoc URI, or the current CI repository.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Clone a named repository configured under [`git.repositories`](/cli/configuration/git), the single configured repository when only one exists, an ad hoc URI, or — in CI — the current repository as a replacement for `actions/checkout`. Clone is a *reconcile* operation: if the destination already exists, Atmos fetches and fast-forwards instead of failing, so restored CI caches and re-runs are always safe.
+</Intro>
+
+<Screengrab title="atmos git clone --help" slug="atmos-git-clone--help" />
+
+## Usage
+
+```shell
+atmos git clone [name-or-uri] [flags] [-- <native git args>]
+```
+
+Configure repositories once in `atmos.yaml`, then clone them by name:
+
+```yaml
+git:
+  repositories:
+    flux-deploy:
+      uri: https://github.com/acme/flux-deploy.git
+      branch: main
+      clone:
+        depth: 1
+        single_branch: true
+```
+
+```shell
+atmos git clone flux-deploy
+```
+
+## Examples
+
+```shell
+# Clone a named managed repository (destination: automatic XDG workdir)
+atmos git clone flux-deploy
+
+# Clone the single configured repository when only one exists
+atmos git clone
+
+# Clone/reconcile every repository configured under git.repositories
+atmos git clone --all
+
+# Clone an ad hoc HTTPS URI (destination: <cwd>/<repo-name>, like plain git clone)
+atmos git clone https://github.com/acme/repo.git
+
+# SCP-style URI
+atmos git clone git@github.com:acme/repo.git
+
+# go-getter style URI — same syntax used in vendoring and `source` configs
+atmos git clone "git::https://github.com/acme/repo.git?ref=main&depth=1"
+
+# Shallow, single-branch clone into an explicit destination
+atmos git clone flux-deploy --depth=1 --single-branch --workdir=./deploy
+
+# In CI (ci.enabled: true): check out the current repository into the
+# working directory — replaces actions/checkout
+atmos git clone
+
+# Pass native arguments to the underlying git clone invocation
+atmos git clone flux-deploy -- --no-tags
+```
+
+## Clone Destinations
+
+The destination depends on the argument form:
+
+| Clone form | Destination |
+| --- | --- |
+| Named managed repository (`atmos git clone flux-deploy`) | Automatic XDG workdir (`$XDG_CACHE_HOME/atmos/git/repositories/<name>`), captured by the [native CI cache](/cli/configuration/ci) |
+| Single configured repository (`atmos git clone` with exactly one repository outside CI) | Automatic XDG workdir (`$XDG_CACHE_HOME/atmos/git/repositories/<name>`) |
+| No-arg CI checkout replacement (`atmos git clone` with `ci.enabled: true` and detected CI metadata) | The **working directory** (e.g., `GITHUB_WORKSPACE`), exactly like `actions/checkout` |
+| Ad hoc URI (`atmos git clone https://...`) | `<cwd>/<repo-name>`, like plain `git clone` |
+
+`--workdir=<path>` overrides the destination in all forms.
+
+## CI Checkout Replacement
+
+When invoked with no argument in CI, `atmos git clone` infers the repository and ref from CI provider metadata. This requires:
+
+1. `ci.enabled: true` in `atmos.yaml`.
+2. A detected CI provider (for example, GitHub Actions).
+3. Repository metadata supplied by the provider.
+
+Outside CI, no-arg clone reconciles the single configured repository when exactly one repository exists under `git.repositories`. If zero or multiple repositories are configured, pass a repository name, URI, or `--all`.
+
+:::warning Fetch depth and `atmos describe affected`
+
+Affected detection requires merge-base history. If [`atmos describe affected`](/cli/commands/describe/affected) runs against the clone, use `--depth=0` (full history) or a depth large enough to include the merge base — the same guidance that applies to `fetch-depth` with `actions/checkout`.
+
+:::
+
+## Arguments
+
+<dl>
+    <dt>`name-or-uri` <em>(optional)</em></dt>
+    <dd>
+        A repository name configured under `git.repositories`, or a Git URI. Supported URI forms:
+
+        - HTTPS: `https://github.com/acme/repo.git`
+        - SCP-style: `git@github.com:acme/repo.git`
+        - go-getter style: `git::https://github.com/acme/repo.git?ref=main&depth=1` — the `git::` prefix is stripped, `?ref=` maps to the branch/ref and `?depth=` to clone depth; unknown query parameters are rejected
+
+        When omitted: in CI (`ci.enabled: true` with a detected CI provider), performs the current-repository checkout; otherwise, reconciles the single configured repository when exactly one entry exists under [`git.repositories`](/cli/configuration/git). When zero or multiple repositories are configured, pass a repository name, a URI, or `--all`.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--all` <em>(optional)</em></dt>
+    <dd>
+        Clone/reconcile every repository configured under `git.repositories`, concurrently. Every repository is attempted; failures are aggregated and reported at the end. Mutually exclusive with a positional argument.
+        Environment variable: `ATMOS_GIT_CLONE_ALL`
+    </dd>
+
+    <dt>`--repo-uri` <em>(optional)</em></dt>
+    <dd>
+        Remote repository URI (overrides the configured URI).
+        Environment variable: `ATMOS_GIT_REPO_URI`
+    </dd>
+
+    <dt>`--branch` / `-b` <em>(optional)</em></dt>
+    <dd>
+        Branch to clone. Precedence: flag &gt; `?ref=` query parameter &gt; repository config &gt; remote default branch.
+        Environment variable: `ATMOS_GIT_BRANCH`
+    </dd>
+
+    <dt>`--remote` <em>(optional)</em></dt>
+    <dd>
+        Remote name. Default: `origin`.
+        Environment variable: `ATMOS_GIT_REMOTE`
+    </dd>
+
+    <dt>`--workdir` <em>(optional)</em></dt>
+    <dd>
+        Override the destination directory for all clone forms.
+        Environment variable: `ATMOS_GIT_WORKDIR`
+    </dd>
+
+    <dt>`--depth` <em>(optional)</em></dt>
+    <dd>
+        Shallow clone depth. `0` (the default) means full history. Precedence: flag &gt; `?depth=` query parameter &gt; `clone.depth` config &gt; default.
+        Environment variable: `ATMOS_GIT_DEPTH`
+    </dd>
+
+    <dt>`--filter` <em>(optional)</em></dt>
+    <dd>
+        Partial-clone filter spec (e.g., `blob:none`), matching Git's own `--filter` flag.
+        Environment variable: `ATMOS_GIT_FILTER`
+    </dd>
+
+    <dt>`--single-branch` <em>(optional)</em></dt>
+    <dd>
+        Limit the clone to the specified branch.
+        Environment variable: `ATMOS_GIT_SINGLE_BRANCH`
+    </dd>
+
+    <dt>`--submodules` <em>(optional)</em></dt>
+    <dd>
+        Initialize submodules after clone. Off by default.
+        Environment variable: `ATMOS_GIT_SUBMODULES`
+    </dd>
+
+    <dt>`--identity` <em>(optional)</em></dt>
+    <dd>
+        Atmos Auth identity to use for this operation (global flag). Overrides the repository's `auth.identity`.
+        Environment variable: `ATMOS_IDENTITY`
+    </dd>
+</dl>
+
+## Native Git Arguments
+
+Arguments after `--` are passed verbatim to the underlying `git clone` invocation. They apply only when a fresh clone runs; reconciling an existing workdir (fetch + fast-forward) does not invoke `git clone`.
+
+```shell
+atmos git clone flux-deploy -- --no-tags
+```
+
+## Related
+
+- [`atmos git init`](/cli/commands/git/init) — initialize a repository whose remote has no content yet
+- [`atmos git pull`](/cli/commands/git/pull) — fast-forward an existing workdir
+- [`atmos git list`](/cli/commands/git/list) — list configured repositories and their workdirs
+- [Git Configuration](/cli/configuration/git) — repository fields, defaults, and the native CI lifecycle

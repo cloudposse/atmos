@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"os"
 	osexec "os/exec"
+	"slices"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
@@ -23,7 +25,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // componentExecContext holds the per-execution state assembled by prepareComponentExecution.
@@ -31,6 +32,7 @@ import (
 type componentExecContext struct {
 	componentPath string
 	varFile       string
+	testVarFile   string
 	planFile      string
 	workingDir    string
 	tenv          *dependencies.ToolchainEnvironment
@@ -68,6 +70,10 @@ func prepareComponentExecution(
 	}
 
 	varFile := constructTerraformComponentVarfileName(info)
+	testVarFile := ""
+	if hasTerraformTestVars(info) {
+		testVarFile = constructTerraformComponentTestVarfileName(info)
+	}
 	planFile := constructTerraformComponentPlanfileName(info)
 	workingDir := constructTerraformComponentWorkingDir(atmosConfig, info)
 
@@ -78,6 +84,7 @@ func prepareComponentExecution(
 	return &componentExecContext{
 		componentPath: componentPath,
 		varFile:       varFile,
+		testVarFile:   testVarFile,
 		planFile:      planFile,
 		workingDir:    workingDir,
 		tenv:          tenv,
@@ -93,6 +100,11 @@ func runPreExecutionSteps(
 	workingDir string,
 	tenv *dependencies.ToolchainEnvironment,
 ) error {
+	// Partition variables into disk-safe vs. secret-bearing BEFORE writing the varfile or
+	// assembling env vars (and before the auth pre-hook registers credentials with the
+	// masker), so secrets are kept off disk and injected as TF_VAR_* env vars instead.
+	computeTerraformSecretVarKeys(info)
+
 	if err := printAndWriteVarFiles(atmosConfig, info); err != nil {
 		return err
 	}
@@ -145,6 +157,7 @@ func executeCommandPipeline(
 
 	handleDeploySubcommand(atmosConfig, info)
 	logTerraformContext(info, execCtx.workingDir)
+	addTerraformTestVarfileArg(info, execCtx.testVarFile)
 
 	allArgsAndFlags, uploadStatusFlag, err := buildTerraformCommandArgs(atmosConfig, info, execCtx.varFile, execCtx.planFile, &componentPath)
 	if err != nil {
@@ -169,9 +182,22 @@ func executeCommandPipeline(
 	return nil
 }
 
+func addTerraformTestVarfileArg(info *schema.ConfigAndStacksInfo, testVarFile string) {
+	if info.SubCommand != "test" || testVarFile == "" {
+		return
+	}
+	info.AdditionalArgsAndFlags = append([]string{varFileFlag, testVarFile}, info.AdditionalArgsAndFlags...)
+}
+
 // shouldSkipWorkspaceSetup returns true when workspace setup should be skipped.
 func shouldSkipWorkspaceSetup(info *schema.ConfigAndStacksInfo) bool {
 	if info.SubCommand == subcommandInit || (info.SubCommand == subcommandWorkspace && info.SubCommand2 != "") {
+		return true
+	}
+	// `providers` subcommands (mirror, lock, schema) operate on configuration, not
+	// state, so they need no workspace — and selecting one fails on never-applied
+	// components.
+	if strings.HasPrefix(info.SubCommand, "providers") {
 		return true
 	}
 	if info.ComponentBackendType == "http" {
@@ -279,7 +305,7 @@ func checkTTYRequirement(info *schema.ConfigAndStacksInfo) error {
 	if os.Stdin != nil {
 		return nil
 	}
-	if info.SubCommand == subcommandApply && !u.SliceContainsString(info.AdditionalArgsAndFlags, autoApproveFlag) {
+	if info.SubCommand == subcommandApply && !slices.Contains(info.AdditionalArgsAndFlags, autoApproveFlag) {
 		return fmt.Errorf(
 			"%w: 'terraform apply' requires a user interaction, but no TTY is attached. "+
 				"Use 'terraform apply -auto-approve' or 'terraform deploy' instead",
@@ -402,6 +428,13 @@ func cleanupTerraformFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 		varFilePath := constructTerraformComponentVarfilePath(atmosConfig, info)
 		if err := os.Remove(varFilePath); err != nil && !os.IsNotExist(err) {
 			log.Trace("Failed to remove var file during cleanup", "error", err, "file", varFilePath)
+		}
+	}
+
+	if info.SubCommand == "test" {
+		testVarFilePath := constructTerraformComponentTestVarfilePath(atmosConfig, info)
+		if err := os.Remove(testVarFilePath); err != nil && !os.IsNotExist(err) {
+			log.Trace("Failed to remove Terraform test var file during cleanup", "error", err, "file", testVarFilePath)
 		}
 	}
 }

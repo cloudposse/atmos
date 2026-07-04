@@ -33,6 +33,16 @@ This command applies Terraform changes to your infrastructure. You can:
 For automated deployments, consider using `atmos terraform deploy` which automatically includes `-auto-approve`.
 :::
 
+:::note
+`apply` does **not** download stored planfiles or run
+[drift verification](/components/terraform/planfiles#drift-verification). It applies a planfile passed
+with `--planfile`, or—when none is given—lets Terraform plan and apply in one step; in neither case does
+Atmos capture a separate fresh plan to diff a stored plan against. The automatic download → verify →
+apply flow lives on
+[`atmos terraform deploy`](/cli/commands/terraform/deploy#automatic-plan-verification-in-ci), which runs
+a discrete `plan` step as part of the command.
+:::
+
 ## Examples
 
 ### Interactive Apply

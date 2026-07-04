@@ -9,7 +9,7 @@ acme-platform-dev:
         auth: {}
         backend: {}
         backend_type: ""
-        command: terraform
+        command: tofu
         component: mock
         component_info:
           component_path: ../../components/terraform/mock
@@ -48,7 +48,7 @@ acme-platform-prod:
         auth: {}
         backend: {}
         backend_type: ""
-        command: terraform
+        command: tofu
         component: mock
         component_info:
           component_path: ../../components/terraform/mock
@@ -87,7 +87,7 @@ acme-platform-staging:
         auth: {}
         backend: {}
         backend_type: ""
-        command: terraform
+        command: tofu
         component: mock
         component_info:
           component_path: ../../components/terraform/mock

@@ -7,10 +7,10 @@ management.
 
 USAGE
 
-                                             
-    $ atmos terraform [flags]                
-    $ atmos terraform [sub-command] [flags]  
-                                             
+
+    $ atmos terraform [flags]
+    $ atmos terraform [sub-command] [flags]
+
 
 ALIASES
 
@@ -18,17 +18,18 @@ ALIASES
 
 EXAMPLES
 
-                                                                      
-    – Execute a terraform subcommand                                  
-                                                                      
-                                                                      
-     $ atmos terraform [subcommand] <component-name> -s <stack-name>  
-                                                                      
 
-AVAILABLE COMMANDS
+    – Execute a terraform subcommand
+
+
+     $ atmos terraform [subcommand] <component-name> -s <stack-name>
+
+
+BUILT-IN COMMANDS
 
       apply                             Apply changes to infrastructure
       backend [command] [EXPERIMENTAL]  Manage Terraform state backends
+      cache [command] [EXPERIMENTAL]    Manage the Terraform registry cache
       clean                             Clean up Terraform state and artifacts
       console                           Try Terraform expressions at an interactive command prompt
       deploy                            Deploy the specified infrastructure using Terraform
@@ -96,6 +97,9 @@ FLAGS
       --sha string                Git commit SHA with which to compare the current branch
 
       --skip strings              Skip executing specific YAML functions in the Atmos stack manifests
+
+      --skip-hooks string         Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --
+                                  skip-hooks=name1,name2 to skip specific hooks by name
 
       --skip-init                 Skip terraform init before running command
 
@@ -174,9 +178,6 @@ GLOBAL FLAGS
 
       --skill strings                        Specify skills for AI analysis context (comma-separated or repeated flag,
                                              requires --ai)
-
-      --skip-hooks string                    Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to
-                                             skip all, or --skip-hooks=name1,name2 to skip specific hooks by name
 
       --use-version string                   Use a specific version of Atmos (e.g., --use-version=1.160.0)
 

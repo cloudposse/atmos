@@ -6,15 +6,15 @@ Helmfile.
 
 USAGE
 
-                                            
-    $ atmos helmfile [sub-command] [flags]  
-                                            
+
+    $ atmos helmfile [sub-command] [flags]
+
 
 ALIASES
 
   helmfile, hf
 
-AVAILABLE COMMANDS
+BUILT-IN COMMANDS
 
       apply               Apply changes to align the actual state of Helm releases with the desired state.
       destroy             Destroy the Helm releases for the specified stack.
@@ -23,12 +23,15 @@ AVAILABLE COMMANDS
       source [command]    Manage Helmfile component sources (JIT vendoring)
       sync                Synchronize the state of Helm releases by reconciling the actual state with the desired state
                           (applies changes as needed).
+      template            Render Helm releases defined in a helmfile to Kubernetes manifests.
       version             Get Helmfile version
 
 FLAGS
 
       --              Use double dashes to separate Atmos-specific options from native arguments and flags for the
                       command.
+
+      --ci            Enable CI mode for automated pipelines (writes job summary).
 
   -h, --help          help for helmfile
 
@@ -103,9 +106,6 @@ GLOBAL FLAGS
 
       --skill strings                        Specify skills for AI analysis context (comma-separated or repeated flag,
                                              requires --ai)
-
-      --skip-hooks string                    Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to
-                                             skip all, or --skip-hooks=name1,name2 to skip specific hooks by name
 
       --use-version string                   Use a specific version of Atmos (e.g., --use-version=1.160.0)
 

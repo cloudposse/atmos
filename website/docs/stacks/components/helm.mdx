@@ -1,0 +1,130 @@
+---
+title: Helm Components
+sidebar_position: 7
+sidebar_label: helm
+sidebar_class_name: command
+description: Configure native Helm components in Atmos stack manifests.
+id: helm
+---
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  Define Helm releases in stack manifests when you want Atmos to deploy charts —
+  local, remote-repository, or OCI — alongside Terraform, Kubernetes, Helmfile,
+  Packer, and Ansible components. A Helm component describes which chart and
+  version to use, which values to apply, and how the result should be deployed
+  for each stack.
+</Intro>
+
+## Available Configuration Sections
+
+Helm components use the same stack sections as other Atmos components, so the
+release can inherit values, run hooks, use Auth, declare dependencies, and be
+included in affected runs.
+
+<dl>
+  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
+  <dd>Component behavior, inheritance, and base component selection.</dd>
+
+  <dt>[`vars`](/stacks/vars)</dt>
+  <dd>Variables available to stack template rendering.</dd>
+
+  <dt>[`env`](/stacks/env)</dt>
+  <dd>Environment variables applied before Helm runs, such as <code>KUBECONFIG</code>.</dd>
+
+  <dt>[`settings`](/stacks/settings)</dt>
+  <dd>Integration metadata and legacy dependency settings.</dd>
+
+  <dt>[`dependencies`](/stacks/dependencies/components)</dt>
+  <dd>Cross-component ordering for <code>--all</code> and <code>--affected</code> runs.</dd>
+</dl>
+
+## Helm-Specific Sections
+
+<dl>
+  <dt>`chart` <em>(required)</em></dt>
+  <dd>The chart reference: a local path (<code>.</code> or <code>./charts/app</code>), a <code>repo/name</code> reference, a bare name used with <code>repository</code>, or an <code>oci://</code> reference.</dd>
+
+  <dt>`version`</dt>
+  <dd>The chart version constraint (for repository and OCI charts).</dd>
+
+  <dt>`repository`</dt>
+  <dd>An explicit HTTP chart repository URL used with a bare <code>chart</code> name.</dd>
+
+  <dt>`repositories`</dt>
+  <dd>A list of chart repositories used to resolve <code>repo/name</code> chart references. Entries support <code>name</code>, <code>url</code>, optional basic auth, TLS files, <code>pass_credentials_all</code>, and <code>insecure_skip_tls_verify</code>. Atmos adds/updates these repositories in Helm's local repository config before rendering or deploying.</dd>
+
+  <dt>`namespace`</dt>
+  <dd>The target Kubernetes namespace. Defaults to <code>default</code>.</dd>
+
+  <dt>`name`</dt>
+  <dd>The Helm release name. Defaults to the component's last path segment.</dd>
+
+  <dt>`values`</dt>
+  <dd>The Helm chart values, merged through Atmos inheritance. This map <strong>is</strong> the values passed to the chart.</dd>
+
+  <dt>`values_files`</dt>
+  <dd>A list of value files layered <em>underneath</em> the inline <code>values</code> (templated, in listed order).</dd>
+
+  <dt>`render`</dt>
+  <dd>Default output for <code>atmos helm template</code> (<code>output.path</code> and <code>output.split</code>).</dd>
+
+  <dt>`provision`</dt>
+  <dd>Delivery targets for <code>apply</code>/<code>deploy</code> — the cluster (default) or an external target such as a Git deployment repository.</dd>
+</dl>
+
+Reusable repository defaults can also be configured under
+`components.helm.repositories` in `atmos.yaml`. Component-level repositories
+override global entries with the same `name`.
+
+:::note Diffs
+[`atmos helm diff`](/cli/commands/helm/diff) shows a real unified diff (via the
+embedded [helm-diff](https://github.com/databus23/helm-diff) library — no plugin to
+install) against the deployed release, a local manifest file, or the manifests in a
+`provision` git deployment repository (the offline, GitOps producer-side diff).
+Helm CLI **subcommand** plugins such as `helm-secrets` are not run by the native
+component — use a [`helmfile`](/stacks/components/helmfile) component for those.
+:::
+
+## Example
+
+<File title="stacks/catalog/monitoring.yaml">
+```yaml
+components:
+  helm:
+    monitoring:
+      chart: prometheus-community/kube-prometheus-stack
+      version: "65.1.1"
+      repositories:
+        - name: prometheus-community
+          url: https://prometheus-community.github.io/helm-charts
+      namespace: monitoring
+      values:
+        grafana:
+          enabled: true
+      dependencies:
+        components:
+          - cert-manager
+      provision:
+        default: cluster
+        targets:
+          cluster:
+            kind: kubernetes
+          deployment-repo:
+            kind: git
+            repository: deployments
+            path: "clusters/{{ .vars.stage }}/monitoring"
+```
+</File>
+
+See the [`atmos helm`](/cli/commands/helm/usage) command reference for the full
+workflow.
+
+To inspect which repositories are associated with Helm components, run:
+
+```shell
+atmos helm repo list --stack=ue2-dev
+atmos helm repo list monitoring --format=json
+```

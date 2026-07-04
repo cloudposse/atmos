@@ -3,6 +3,7 @@
 package cache
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -13,6 +14,53 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
+
+func TestWithLockContext_Success(t *testing.T) {
+	lockPath := filepath.Join(t.TempDir(), "test-lock")
+	lock := NewFileLock(lockPath)
+
+	executed := false
+	err := lock.WithLockContext(context.Background(), func() error {
+		executed = true
+		return nil
+	})
+	require.NoError(t, err)
+	assert.True(t, executed, "function should have been executed under the lock")
+}
+
+func TestWithLockContext_FnError(t *testing.T) {
+	lockPath := filepath.Join(t.TempDir(), "test-lock")
+	lock := NewFileLock(lockPath)
+
+	expectedErr := errors.New("test error")
+	err := lock.WithLockContext(context.Background(), func() error {
+		return expectedErr
+	})
+	require.ErrorIs(t, err, expectedErr, "should return the function's error")
+}
+
+func TestWithLockContext_CanceledBeforeAcquire(t *testing.T) {
+	lockPath := filepath.Join(t.TempDir(), "test-lock")
+
+	// Hold the lock with a separate flock so acquisition cannot succeed, then probe
+	// with an already-canceled context: WithLockContext must fail with ErrCacheLocked.
+	held := flock.New(lockPath + ".lock")
+	locked, err := held.TryLock()
+	require.NoError(t, err)
+	require.True(t, locked)
+	t.Cleanup(func() { _ = held.Unlock() })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	executed := false
+	err = NewFileLock(lockPath).WithLockContext(ctx, func() error {
+		executed = true
+		return nil
+	})
+	require.ErrorIs(t, err, errUtils.ErrCacheLocked)
+	assert.False(t, executed, "fn must not run when the lock cannot be acquired")
+}
 
 func TestNewFileLock_LockPathSuffix(t *testing.T) {
 	lock := NewFileLock("/some/path/cache")

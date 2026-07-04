@@ -11,6 +11,9 @@ const (
 	// TagExec executes a shell command and returns the output.
 	TagExec = "exec"
 
+	// TagSecret resolves a declared secret from its configured backend.
+	TagSecret = "secret"
+
 	// TagStore retrieves a value from a configured store.
 	TagStore = "store"
 
@@ -81,6 +84,7 @@ func AllTags() []string {
 
 	return []string{
 		TagExec,
+		TagSecret,
 		TagStore,
 		TagStoreGet,
 		TagTemplate,
@@ -107,6 +111,7 @@ func AllTags() []string {
 // tagsMap provides O(1) lookup for tag names.
 var tagsMap = map[string]bool{
 	TagExec:                    true,
+	TagSecret:                  true,
 	TagStore:                   true,
 	TagStoreGet:                true,
 	TagTemplate:                true,

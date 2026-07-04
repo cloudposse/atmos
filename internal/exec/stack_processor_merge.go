@@ -8,7 +8,35 @@ import (
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
 )
+
+// tagSecretsScopes stamps the position-derived scope onto each secrets layer before merging: the
+// stack-level (global) layer is `stack`-scoped, every component-level layer (base, component,
+// overrides) is `instance`-scoped. It returns the layers in merge order (lowest→highest priority).
+// A declaration whose explicit `scope` conflicts with its position is rejected as invalid secrets.
+func tagSecretsScopes(global, base, component, overrides map[string]any) ([]map[string]any, error) {
+	defer perf.Track(nil, "exec.tagSecretsScopes")()
+
+	layers := []struct {
+		section map[string]any
+		scope   secrets.Scope
+	}{
+		{global, secrets.ScopeStack},
+		{base, secrets.ScopeInstance},
+		{component, secrets.ScopeInstance},
+		{overrides, secrets.ScopeInstance},
+	}
+	out := make([]map[string]any, 0, len(layers))
+	for _, l := range layers {
+		tagged, err := secrets.TagScope(l.section, l.scope)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidComponentSecrets, err)
+		}
+		out = append(out, tagged)
+	}
+	return out, nil
+}
 
 // effectiveAtmosConfig returns an *AtmosConfiguration suitable for merging this
 // component's sections. If any settings layer overrides list_merge_strategy, a
@@ -194,9 +222,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
-	// Terraform-specific: merge hooks using deferred merge.
+	// Merge hooks using deferred merge for component types with lifecycle hooks.
 	var finalComponentHooks map[string]any
-	if opts.ComponentType == cfg.TerraformComponentType {
+	if supportsComponentHooks(opts.ComponentType) {
 		var hooksCtx *m.DeferredMergeContext
 		finalComponentHooks, hooksCtx, err = m.MergeWithDeferred(
 			mergeConfig,
@@ -217,14 +245,54 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
-	// Terraform-specific: merge generate section using deferred merge.
+	// Terraform-specific: merge test configuration.
+	var finalComponentTest map[string]any
+	if opts.ComponentType == cfg.TerraformComponentType {
+		var testCtx *m.DeferredMergeContext
+		finalComponentTest, testCtx, err = m.MergeWithDeferred(
+			mergeConfig,
+			[]map[string]any{
+				result.BaseComponentTest,
+				result.ComponentTest,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := m.ApplyDeferredMerges(testCtx, finalComponentTest, mergeConfig, nil); err != nil {
+			return nil, err
+		}
+	}
+
+	// Merge secrets declarations (global stack → base → component → overrides). Available for
+	// all component types; inherits through the stack hierarchy like other sections. The
+	// stack-level (global) `secrets:` block lets providers/declarations be defined once per stack.
+	//
+	// Scope is derived from position and stamped onto each declaration BEFORE the merge: the
+	// global (stack-level) layer is `stack`-scoped, every component-level layer is `instance`-scoped.
+	// "Most-specific wins" then resolves overrides — a component re-declaring a stack secret pulls it
+	// to instance scope — and enforces the one-way rule, with no merge-engine changes.
+	var finalComponentSecrets map[string]any
+	if len(opts.GlobalSecrets) > 0 || len(result.BaseComponentSecrets) > 0 || len(result.ComponentSecrets) > 0 || len(result.ComponentOverridesSecrets) > 0 {
+		scopedSecrets, err := tagSecretsScopes(opts.GlobalSecrets, result.BaseComponentSecrets, result.ComponentSecrets, result.ComponentOverridesSecrets)
+		if err != nil {
+			return nil, err
+		}
+		finalComponentSecrets, err = m.Merge(mergeConfig, scopedSecrets)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Merge generate section using deferred merge.
 	// Merge order (lowest to highest priority):
-	// 1. Global + Terraform-level generate (stack-level `generate:` + `terraform.generate:`)
+	// 1. Global + component-type-level generate
 	// 2. Base component generate (from metadata.inherits)
 	// 3. Component generate (component-specific generate section)
 	// 4. Component overrides generate (from overrides section)
 	var finalComponentGenerate map[string]any
-	if opts.ComponentType == cfg.TerraformComponentType {
+	if supportsGenerate(opts.ComponentType) {
 		var generateCtx *m.DeferredMergeContext
 		finalComponentGenerate, generateCtx, err = m.MergeWithDeferred(
 			mergeConfig,
@@ -270,6 +338,53 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	}
 	if result.ComponentOverridesCommand != "" {
 		finalComponentCommand = result.ComponentOverridesCommand
+	}
+
+	// Precedence (lowest to highest): stack-global Kubernetes defaults → base
+	// component → component instance.
+	finalComponentProvider := opts.GlobalKubernetesProvider
+	if result.BaseComponentProvider != "" {
+		finalComponentProvider = result.BaseComponentProvider
+	}
+	if result.ComponentProvider != "" {
+		finalComponentProvider = result.ComponentProvider
+	}
+
+	finalComponentPaths, err := mergeComponentAnySection(
+		mergeConfig,
+		cfg.PathsSectionName,
+		opts.GlobalKubernetesPaths,
+		result.BaseComponentPaths,
+		result.ComponentPaths,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	finalComponentManifests, err := mergeComponentAnySection(
+		mergeConfig,
+		cfg.ManifestsSectionName,
+		opts.GlobalKubernetesManifests,
+		result.BaseComponentManifests,
+		result.ComponentManifests,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var finalComponentRender map[string]any
+	if opts.ComponentType == cfg.KubernetesComponentType {
+		finalComponentRender, err = m.Merge(
+			mergeConfig,
+			[]map[string]any{
+				opts.GlobalKubernetesRender,
+				result.BaseComponentRender,
+				result.ComponentRender,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Process settings integrations.
@@ -379,6 +494,11 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.RetrySectionName] = finalComponentRetry
 	}
 
+	// Add secrets declarations if present (all component types).
+	if len(finalComponentSecrets) > 0 {
+		comp[cfg.SecretsSectionName] = finalComponentSecrets
+	}
+
 	// Terraform-specific: process backends and add Terraform-specific fields.
 	if opts.ComponentType == cfg.TerraformComponentType {
 		// Process backend configuration.
@@ -447,6 +567,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.RequiredProvidersSectionName] = finalComponentRequiredProviders
 		comp[cfg.RequiredVersionSectionName] = finalComponentRequiredVersion
 		comp[cfg.HooksSectionName] = finalComponentHooks
+		if len(finalComponentTest) > 0 {
+			comp[cfg.TestSectionName] = finalComponentTest
+		}
 		comp[cfg.GenerateSectionName] = finalComponentGenerate
 		comp[cfg.BackendTypeSectionName] = finalComponentBackendType
 		comp[cfg.BackendSectionName] = finalComponentBackend
@@ -455,10 +578,62 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.AuthSectionName] = mergedAuth
 	}
 
-	// Process source and provision configuration for terraform, helmfile, and packer components.
-	if opts.ComponentType == cfg.TerraformComponentType ||
-		opts.ComponentType == cfg.HelmfileComponentType ||
-		opts.ComponentType == cfg.PackerComponentType {
+	if opts.ComponentType == cfg.KubernetesComponentType {
+		if finalComponentProvider != "" {
+			comp[cfg.ProviderSectionName] = finalComponentProvider
+		}
+		if finalComponentPaths != nil {
+			comp[cfg.PathsSectionName] = finalComponentPaths
+		}
+		if finalComponentManifests != nil {
+			comp[cfg.ManifestsSectionName] = finalComponentManifests
+		}
+		if len(finalComponentRender) > 0 {
+			comp[cfg.RenderSectionName] = finalComponentRender
+		}
+		comp[cfg.HooksSectionName] = finalComponentHooks
+		comp[cfg.GenerateSectionName] = finalComponentGenerate
+	}
+
+	if opts.ComponentType == cfg.HelmComponentType {
+		finalComponentHelm, err := m.Merge(
+			mergeConfig,
+			[]map[string]any{
+				result.BaseComponentHelm,
+				result.ComponentHelm,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		for key, value := range finalComponentHelm {
+			comp[key] = value
+		}
+		comp[cfg.HooksSectionName] = finalComponentHooks
+		comp[cfg.GenerateSectionName] = finalComponentGenerate
+	}
+
+	// Merge the Helm CLI plugins list (helm and helmfile components).
+	// Base-component plugins (e.g. from an abstract/catalog component) are merged
+	// with the concrete component's plugins; the configured list_merge_strategy
+	// (default: replace) governs how the lists combine.
+	if supportsPlugins(opts.ComponentType) {
+		finalComponentPlugins, err := mergeComponentAnySection(
+			mergeConfig,
+			cfg.PluginsSectionName,
+			result.BaseComponentPlugins,
+			result.ComponentPlugins,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if finalComponentPlugins != nil {
+			comp[cfg.PluginsSectionName] = finalComponentPlugins
+		}
+	}
+
+	// Process source and provision configuration.
+	if supportsSourceProvision(opts.ComponentType) {
 		finalComponentSource, err := m.Merge(
 			mergeConfig,
 			[]map[string]any{
@@ -494,6 +669,24 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	}
 
 	return comp, nil
+}
+
+func mergeComponentAnySection(atmosConfig *schema.AtmosConfiguration, key string, values ...any) (any, error) {
+	sections := make([]map[string]any, 0, len(values))
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		sections = append(sections, map[string]any{key: value})
+	}
+	if len(sections) == 0 {
+		return nil, nil
+	}
+	merged, err := m.Merge(atmosConfig, sections)
+	if err != nil {
+		return nil, err
+	}
+	return merged[key], nil
 }
 
 // processAuthConfig merges global and component-level auth configurations.

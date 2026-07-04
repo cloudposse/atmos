@@ -4,12 +4,14 @@ package pty
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/creack/pty"
 
@@ -25,6 +27,11 @@ type Options struct {
 
 	// EnableMasking enables output masking through the PTY proxy.
 	EnableMasking bool
+
+	// DisableStdinForward skips forwarding Stdin to the PTY and skips putting
+	// the host terminal into raw mode (like docker -t without -i: the child
+	// gets a TTY but receives no input from the host).
+	DisableStdinForward bool
 
 	// Stdin provides input to the PTY. If nil, defaults to os.Stdin.
 	Stdin io.Reader
@@ -77,8 +84,9 @@ func ExecWithPTY(ctx context.Context, cmd *exec.Cmd, opts *Options) error {
 	}
 	defer func() { _ = ptmx.Close() }()
 
-	// Setup terminal environment.
-	cleanup, err := setupTerminal(ptmx)
+	// Setup terminal environment. Raw mode is only needed when host input is
+	// forwarded to the PTY (it routes control bytes like Ctrl-C to the child).
+	cleanup, err := setupTerminal(ptmx, !opts.DisableStdinForward)
 	if err != nil {
 		return err
 	}
@@ -88,7 +96,11 @@ func ExecWithPTY(ctx context.Context, cmd *exec.Cmd, opts *Options) error {
 	outputWriter := createOutputWriter(opts)
 
 	// Run command with bidirectional IO.
-	return runWithIO(ctx, cmd, ptmx, opts.Stdin, outputWriter)
+	stdin := opts.Stdin
+	if opts.DisableStdinForward {
+		stdin = nil
+	}
+	return runWithIO(ctx, cmd, ptmx, stdin, outputWriter)
 }
 
 // applyDefaults applies default values to Options if not set.
@@ -120,42 +132,83 @@ func createOutputWriter(opts *Options) io.Writer {
 }
 
 // runWithIO sets up bidirectional IO and waits for command completion.
+// The stdin reader may be nil to skip input forwarding entirely.
 func runWithIO(ctx context.Context, cmd *exec.Cmd, ptmx *os.File, stdin io.Reader, stdout io.Writer) error {
 	var wg sync.WaitGroup
 	errChan := make(chan error, 2)
 
-	// Copy input from user terminal to PTY.
-	wg.Add(1)
-	go copyInput(&wg, errChan, ptmx, stdin)
+	// Copy input from user terminal to PTY. This goroutine is intentionally
+	// NOT in the WaitGroup: io.Copy from a terminal stdin only returns on the
+	// next read after the PTY closes, so joining it would block completion
+	// until the user presses a key (the standard docker-CLI pattern is to let
+	// it die with the process).
+	if stdin != nil {
+		go copyInput(errChan, ptmx, stdin)
+	}
 
 	// Copy output from PTY to terminal.
 	wg.Add(1)
 	go copyOutput(&wg, errChan, stdout, ptmx)
 
 	// Wait for completion or cancellation.
-	return waitForCompletion(ctx, cmd, &wg, errChan)
+	return waitForCompletion(ctx, cmd, ptmx, &wg, errChan)
 }
 
 // copyInput copies data from stdin to PTY, ignoring expected EIO errors.
-func copyInput(wg *sync.WaitGroup, errChan chan error, dst io.Writer, src io.Reader) {
-	defer wg.Done()
+// The send is non-blocking: input errors observed after completion has already
+// drained the channel are not actionable.
+func copyInput(errChan chan error, dst io.Writer, src io.Reader) {
 	_, err := io.Copy(dst, src)
 	if err != nil && !isPtyEIO(err) {
-		errChan <- fmt.Errorf("input copy failed: %w", err)
+		select {
+		case errChan <- fmt.Errorf("input copy failed: %w", err):
+		default:
+		}
 	}
 }
 
-// copyOutput copies data from PTY to stdout, ignoring expected EIO errors.
+// outputDrainTimeout bounds how long completion waits for the output copier
+// after the child exits. The copier normally ends almost immediately with EIO
+// when the last PTY slave fd closes - but grandchildren that inherited the
+// slave (e.g. aws ssm's session-manager-plugin, or backgrounded processes)
+// can keep it open indefinitely, which would leave the host terminal in raw
+// mode with no prompt until a stray keypress shook things loose.
+const outputDrainTimeout = 1 * time.Second
+
+// copyOutput copies data from PTY to stdout, ignoring expected errors:
+// EIO from the closed PTY, and deadline/close errors from bounded draining.
 func copyOutput(wg *sync.WaitGroup, errChan chan error, dst io.Writer, src io.Reader) {
 	defer wg.Done()
 	_, err := io.Copy(dst, src)
-	if err != nil && !isPtyEIO(err) {
+	if err != nil && !isPtyEIO(err) && !errors.Is(err, os.ErrDeadlineExceeded) && !errors.Is(err, os.ErrClosed) {
 		errChan <- fmt.Errorf("output copy failed: %w", err)
 	}
 }
 
+// waitOutputDrained waits for the output copier with a deadline. If the PTY
+// slave is still held open past the deadline, the pending read is forced to
+// return so the session can tear down and the host terminal can be restored.
+func waitOutputDrained(ptmx *os.File, wg *sync.WaitGroup) {
+	drained := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(drained)
+	}()
+
+	select {
+	case <-drained:
+	case <-time.After(outputDrainTimeout):
+		// Unblock the pending read: prefer a deadline (keeps ptmx usable for
+		// the deferred Close), fall back to Close for non-pollable files.
+		if err := ptmx.SetReadDeadline(time.Now()); err != nil {
+			_ = ptmx.Close()
+		}
+		<-drained
+	}
+}
+
 // waitForCompletion waits for command completion or context cancellation.
-func waitForCompletion(ctx context.Context, cmd *exec.Cmd, wg *sync.WaitGroup, errChan chan error) error {
+func waitForCompletion(ctx context.Context, cmd *exec.Cmd, ptmx *os.File, wg *sync.WaitGroup, errChan chan error) error {
 	cmdDone := make(chan error, 1)
 	go func() {
 		cmdDone <- cmd.Wait()
@@ -166,18 +219,23 @@ func waitForCompletion(ctx context.Context, cmd *exec.Cmd, wg *sync.WaitGroup, e
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 		}
-		wg.Wait()
+		waitOutputDrained(ptmx, wg)
 		return ctx.Err()
 	case err := <-cmdDone:
-		wg.Wait()
-		close(errChan)
+		waitOutputDrained(ptmx, wg)
 		// Return first IO error if any, otherwise return command error.
-		for ioErr := range errChan {
-			if ioErr != nil {
-				return ioErr
+		// Drain non-blockingly: the channel stays open because the detached
+		// stdin copier may outlive command completion.
+		for {
+			select {
+			case ioErr := <-errChan:
+				if ioErr != nil {
+					return ioErr
+				}
+			default:
+				return err
 			}
 		}
-		return err
 	}
 }
 

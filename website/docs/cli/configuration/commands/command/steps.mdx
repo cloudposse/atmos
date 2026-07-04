@@ -1,0 +1,320 @@
+---
+title: steps
+sidebar_label: steps
+sidebar_position: 4
+slug: /cli/configuration/commands/steps
+---
+
+import Intro from '@site/src/components/Intro'
+import StepTypes from '@site/docs/workflows/_partials/_step-types.mdx'
+
+<Intro>
+The `steps` field is the work a custom command performs. Custom commands run steps through the **same engine as [workflows](/workflows)** and support the **same step types** — from plain shell and Atmos commands to interactive prompts, spinners, tables, and container operations.
+</Intro>
+
+## Simple and structured steps
+
+In its simplest form, `steps` is a list of shell command strings:
+
+```yaml
+commands:
+  - name: hello
+    description: Say hello
+    steps:
+      - "echo Hello world!"
+      - "echo Goodbye!"
+```
+
+For anything beyond a plain shell command, use the structured form — an object per step with a
+`type` and the fields for that type. The two forms can be mixed in the same list:
+
+```yaml
+commands:
+  - name: deploy
+    description: Deploy with a confirmation prompt
+    steps:
+      - type: confirm
+        name: proceed
+        prompt: "Deploy to production?"
+        default: false
+      - "echo Deploying..."
+      - type: atmos
+        command: terraform apply vpc -s plat-ue2-prod
+```
+
+A structured step is the same object documented for workflows. See the
+[step reference](/workflows/steps) for the common step fields (`name`, `type`, `command`,
+`output`, and more).
+
+## Conditional steps
+
+Structured custom command steps support the same `when` condition syntax as
+workflow steps. Omitted `when` means run; a false condition skips the step
+without failing the command.
+
+```yaml
+commands:
+  - name: release
+    description: Run release checks
+    steps:
+      - type: shell
+        command: ./scripts/ci-release-checks.sh
+        when: ci
+      - type: shell
+        command: ./scripts/local-summary.sh
+        when:
+          not: ci
+```
+
+String shorthand steps remain plain shell commands and always run. Use the
+structured form when a custom command step needs a condition.
+
+Step predicates are:
+
+<dl>
+  <dt>`ci`</dt>
+  <dd>Run only when Atmos detects CI using its standard CI detection.</dd>
+
+  <dt>`local`</dt>
+  <dd>Run only outside CI.</dd>
+
+  <dt>`always`</dt>
+  <dd>Always run.</dd>
+
+  <dt>`never`</dt>
+  <dd>Never run.</dd>
+
+  <dt>`success`</dt>
+  <dd>Run when the step condition is evaluated with success status.</dd>
+</dl>
+
+`failure` is supported for hooks, which evaluate against a lifecycle outcome,
+but not for workflow or custom command steps.
+
+## Step types
+
+Custom commands and workflows share one step-type registry, so every step type works the same in
+both. The full reference lives with the workflow docs — see the
+[step type reference](/workflows/steps/type) for each type's fields, examples, and behavior.
+
+<StepTypes />
+
+## Interactive and TTY Steps
+
+Some commands need to take over the terminal — SSM sessions, SSH, database consoles, `vim`, `top`. By default, shell steps run with Atmos managing output (masking, capture), which mangles full-screen terminal applications and means Ctrl-C interrupts Atmos itself instead of the command.
+
+Steps support docker-style `tty` and `interactive` fields to hand the terminal to the command:
+
+```yaml
+commands:
+  - name: ssh
+    description: Open an SSM session to an instance
+    arguments:
+      - name: instance_id
+        description: EC2 instance ID
+        required: true
+    steps:
+      - type: shell
+        tty: true
+        interactive: true
+        command: "aws ssm start-session --target {{ .Arguments.instance_id }}"
+```
+
+With this configuration, `atmos ssh i-1234567890` behaves like `docker run -it`: the session gets a real TTY, keystrokes (including Ctrl-C) go to the session instead of Atmos, and the session's exit code becomes the Atmos exit code.
+
+<dl>
+  <dt>`interactive`</dt>
+  <dd>
+    Attach host stdin to the step and let the step handle Ctrl-C (like `docker -i`).
+    While the step runs, Atmos suspends its own interrupt handling so pressing Ctrl-C
+    interrupts the step's process, not Atmos. Output is still masked and captured normally.
+  </dd>
+
+  <dt>`tty`</dt>
+  <dd>
+    Allocate a pseudo-terminal for the step (like `docker -t`). The command sees a real
+    TTY on stdin/stdout, so full-screen and cursor-addressing programs render correctly.
+    Secret masking is still applied to session output. The step's `output` mode does not
+    apply (the session writes directly to your terminal), and the step produces no
+    capturable output for later steps. Combine with `interactive: true` for full
+    terminal sessions — `tty: true` alone does not forward your keystrokes.
+  </dd>
+</dl>
+
+:::note Platform support
+Pseudo-terminals are supported on macOS and Linux. On Windows, `tty: true` falls back
+to attaching the real console streams directly; the session still works, but secret
+masking is unavailable in that mode (Atmos prints a warning when masking is enabled).
+:::
+
+The same fields work in [workflow](/workflows) shell steps.
+
+### Replacing the Atmos Process (`type: exec`)
+
+For commands that should fully take over — where Atmos is purely a launcher — use a
+step of `type: exec`. The command **replaces the Atmos process entirely** (shell
+`exec` semantics): on macOS and Linux it's a true `execve` of the system shell, so
+the command inherits your terminal, environment, and working directory natively,
+job control (Ctrl-Z) works exactly as if you'd run the command yourself, and its
+exit code becomes the Atmos exit code with no intermediary.
+
+```yaml
+commands:
+  - name: ssh
+    description: Open an SSM session to an instance
+    arguments:
+      - name: instance_id
+        description: EC2 instance ID
+        required: true
+    steps:
+      - type: exec
+        command: "aws ssm start-session --target {{ .Arguments.instance_id }}"
+```
+
+Choose between the two models:
+
+<dl>
+  <dt>`tty: true` + `interactive: true` — Atmos as supervisor</dt>
+  <dd>
+    Secret masking applied to session output, multiple steps before and after the
+    session, retries and timeouts available. The session runs under a pseudo-terminal
+    proxied by Atmos.
+  </dd>
+
+  <dt>`type: exec` — Atmos as launcher</dt>
+  <dd>
+    Native terminal behavior with zero proxy overhead. Because the process is
+    replaced: the exec step <strong>must be the last step</strong> (validated — later
+    steps could never run), no secret masking applies to its output, no steps run
+    after it, and supervisor-only fields (`tty`, `interactive`, `retry`, `timeout`,
+    `output`) are rejected. `ATMOS_SHLVL` is not incremented (the session replaces
+    Atmos rather than nesting under it). Tools like `aws ssm start-session` behave
+    exactly as when run directly.
+  </dd>
+</dl>
+
+:::note Platform support
+On Windows, which has no `execve`, `type: exec` is emulated: the command runs with
+the real console streams attached, Atmos waits while the command owns Ctrl-C, and
+the command's exit code is propagated as the Atmos exit code.
+:::
+
+## Extended Step Types
+
+Beyond `shell`, `atmos`, and `exec`, custom commands support the full set of extended step types —
+the same ones workflows use — enabling interactive CLI wizards directly in your custom commands.
+Use these step types to collect user input, display formatted output, and control execution flow.
+
+### Example: Interactive Deployment Command
+
+```yaml
+commands:
+  - name: deploy-wizard
+    description: Interactive deployment wizard
+    steps:
+      # Collect environment selection
+      - name: env
+        type: choose
+        prompt: "Select target environment"
+        options:
+          - dev
+          - staging
+          - prod
+        default: dev
+
+      # Show warning for production
+      - name: prod_warning
+        type: toast
+        level: warn
+        content: "You are about to deploy to PRODUCTION!"
+
+      # Confirm deployment
+      - name: confirm
+        type: confirm
+        prompt: "Deploy to {{ .steps.env.value }}?"
+        default: false
+
+      # Run the deployment
+      - name: deploy
+        type: atmos
+        command: terraform apply vpc -s {{ .steps.env.value }}
+
+      # Show success message
+      - name: done
+        type: toast
+        level: success
+        content: "Deployment to {{ .steps.env.value }} completed!"
+```
+
+### Example: Multi-Component Deploy with Selection
+
+```yaml
+commands:
+  - name: deploy-components
+    description: Select and deploy multiple components
+    steps:
+      # Multi-select components
+      - name: components
+        type: filter
+        prompt: "Select components to deploy"
+        multiple: true
+        options:
+          - vpc
+          - eks
+          - rds
+          - s3
+          - lambda
+
+      # Show selected components
+      - name: summary
+        type: markdown
+        content: |
+          ## Deployment Summary
+
+          You selected **{{ len .steps.components.values }}** components:
+          {{ range .steps.components.values }}
+          - {{ . }}
+          {{ end }}
+
+      # Confirm and deploy
+      - name: confirm
+        type: confirm
+        prompt: "Proceed with deployment?"
+
+      # Deploy each component
+      - type: shell
+        command: |
+          {{ range .steps.components.values }}
+          echo "Deploying {{ . }}..."
+          {{ end }}
+```
+
+### Example: Input Collection
+
+```yaml
+commands:
+  - name: create-ticket
+    description: Create a deployment ticket
+    steps:
+      - name: title
+        type: input
+        prompt: "Ticket title"
+        placeholder: "Brief description of the change"
+
+      - name: description
+        type: write
+        prompt: "Detailed description"
+
+      - name: priority
+        type: choose
+        prompt: "Priority level"
+        options: [low, medium, high, critical]
+        default: medium
+
+      - type: toast
+        level: success
+        content: |
+          Ticket created:
+          Title: {{ .steps.title.value }}
+          Priority: {{ .steps.priority.value }}
+```
