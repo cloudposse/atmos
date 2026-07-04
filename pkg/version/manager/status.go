@@ -2,6 +2,7 @@ package manager
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -15,8 +16,11 @@ const (
 	StatusLocked = "locked"
 	// StatusCurrent means the locked version matches the resolved target.
 	StatusCurrent = "current"
-	// StatusUpdateAvailable means the resolved target differs from the locked version.
+	// StatusUpdateAvailable means a policy-eligible update differs from the locked version.
 	StatusUpdateAvailable = "update-available"
+	// StatusBlocked means a newer version exists but the update policy
+	// (strategy or cooldown) holds it back; Message carries the reason.
+	StatusBlocked = "newer-available (blocked)"
 )
 
 // StatusEntry reports the lock/update status for one managed version.
@@ -66,6 +70,9 @@ func StatusTrack(atmosConfig *schema.AtmosConfiguration, track, group string) (*
 }
 
 // statusForEntry computes the status row for a single effective entry.
+// Resolved reflects the policy-eligible target, so StatusUpdateAvailable
+// means an update the policy would actually take; a newer version held back
+// by strategy or cooldown reports StatusBlocked with the reason in Message.
 func statusForEntry(atmosConfig *schema.AtmosConfiguration, lockedEntries map[string]LockEntry, entry *EffectiveEntry) StatusEntry {
 	row := StatusEntry{
 		Name:       entry.Name,
@@ -81,19 +88,22 @@ func statusForEntry(atmosConfig *schema.AtmosConfiguration, lockedEntries map[st
 		row.Locked = locked.Version
 		row.Status = StatusLocked
 	}
-	resolved, err := ResolveTarget(atmosConfig, entry)
+	decision, err := decideUpdate(atmosConfig, entry, row.Locked, time.Now())
 	if err != nil {
 		row.Message = err.Error()
 		return row
 	}
-	row.Resolved = resolved
-	switch row.Locked {
-	case "":
+	row.Resolved = decision.Target.Version
+	switch {
+	case row.Locked == "":
 		row.Status = StatusUnlocked
-	case resolved:
-		row.Status = StatusCurrent
-	default:
+	case decision.Target.Version != row.Locked:
 		row.Status = StatusUpdateAvailable
+	case decision.Raw.Version != row.Locked:
+		row.Status = StatusBlocked
+		row.Message = decision.Reason
+	default:
+		row.Status = StatusCurrent
 	}
 	return row
 }
@@ -108,7 +118,9 @@ func VerifyTrack(atmosConfig *schema.AtmosConfiguration, track string) (*TrackSt
 	}
 	for i := range status.Entries {
 		entry := &status.Entries[i]
-		if entry.Status != StatusCurrent && entry.Status != StatusLocked {
+		// A policy-blocked newer version is not a verification failure: the
+		// locked version is exactly what the policy wants deployed.
+		if entry.Status != StatusCurrent && entry.Status != StatusLocked && entry.Status != StatusBlocked {
 			return status, fmt.Errorf("%w: %s: %s is %s", ErrTrackNotVerified, status.Track, entry.Name, entry.Status)
 		}
 	}
