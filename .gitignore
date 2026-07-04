@@ -171,3 +171,6 @@ reply_to_*.sh
 
 # Python bytecode from cast validation helpers (demo/casts/cast_checks.py).
 __pycache__/
+
+# Per-worktree golangci-lint cache (GOLANGCI_LINT_CACHE).
+.cache/
