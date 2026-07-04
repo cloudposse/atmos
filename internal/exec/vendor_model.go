@@ -8,21 +8,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -38,7 +37,7 @@ const (
 	pkgTypeOci
 	pkgTypeLocal
 
-	// PkgStatusFmt is the format string for per-package status messages.
+	// Package status format string for per-package status messages.
 	pkgStatusFmt = "%s %s"
 )
 
