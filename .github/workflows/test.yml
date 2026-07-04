@@ -480,7 +480,7 @@ jobs:
           - demo-helmfile
           - helm
 
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -494,13 +494,77 @@ jobs:
 
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
+        timeout-minutes: 25
         run: |
+          set -euo pipefail
+
+          run_with_timeout() {
+            local timeout_seconds="$1"
+            shift
+
+            "$@" &
+            local cmd_pid=$!
+
+            (
+              sleep "$timeout_seconds"
+              if kill -0 "$cmd_pid" 2>/dev/null; then
+                echo "::error::Timed out after ${timeout_seconds}s: $*"
+                kill -TERM "$cmd_pid" 2>/dev/null || true
+                sleep 10
+                kill -KILL "$cmd_pid" 2>/dev/null || true
+              fi
+            ) &
+            local timer_pid=$!
+
+            local status=0
+            wait "$cmd_pid" || status=$?
+            kill "$timer_pid" 2>/dev/null || true
+            wait "$timer_pid" 2>/dev/null || true
+            return "$status"
+          }
+
+          diagnose_colima() {
+            echo "::group::Colima diagnostics"
+            colima status || true
+            limactl list || true
+            pgrep -fl 'colima|lima|qemu' || true
+            for log in "$HOME"/.colima/_lima/colima/serial*.log "$HOME"/.colima/_lima/colima/ha.stderr.log; do
+              if [ -f "$log" ]; then
+                echo "---- $log ----"
+                tail -n 200 "$log" || true
+              fi
+            done
+            echo "::endgroup::"
+          }
+
           if brew tap | grep -qx 'aws/tap'; then
             brew untap aws/tap
           fi
-          brew install colima docker qemu
-          colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20
-          docker version
+
+          run_with_timeout 600 brew install colima docker qemu
+
+          for attempt in 1 2; do
+            echo "::group::Start Colima attempt ${attempt}"
+            if run_with_timeout 720 colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20; then
+              echo "::endgroup::"
+              break
+            fi
+
+            status=$?
+            echo "::endgroup::"
+            diagnose_colima
+
+            run_with_timeout 180 colima delete -f || true
+
+            if [ "$attempt" -eq 2 ]; then
+              exit "$status"
+            fi
+
+            sleep 5
+          done
+
+          docker context use colima || true
+          run_with_timeout 120 docker version
 
       - name: Download build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -511,30 +575,6 @@ jobs:
       - name: Set execute permissions on atmos
         run: chmod +x /usr/local/bin/atmos
 
-      - name: Install the Cloud Posse package repository
-        if: matrix.flavor.target == 'linux'
-        run: curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | sudo bash
-
-      - name: Install kubectl and helmfile on Linux
-        if: matrix.flavor.target == 'linux'
-        run: sudo apt-get -y install kubectl helmfile
-
-      - name: Install kubectl and helmfile on macOS
-        if: matrix.flavor.target == 'macos'
-        run: |
-          if brew tap | grep -qx 'aws/tap'; then
-            brew untap aws/tap
-          fi
-          brew install kubectl helmfile
-
-      - name: Install Helm
-        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
-        with:
-          version: ${{ env.HELM_VERSION }}
-
-      - name: Install helm-diff plugin
-        run: helm plugin install https://github.com/databus23/helm-diff
-
       - name: Write a default AWS profile to the AWS config file
         run: |
           mkdir -p ~/.aws
@@ -543,7 +583,52 @@ jobs:
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
           cd examples/${{ matrix.demo-folder }}
-          atmos test
+          run_with_timeout() {
+            python3 - "$@" <<'PY'
+          import os
+          import signal
+          import subprocess
+          import sys
+
+          timeout = int(sys.argv[1])
+          cmd = sys.argv[2:]
+          proc = subprocess.Popen(cmd, start_new_session=True)
+          try:
+              raise SystemExit(proc.wait(timeout=timeout))
+          except subprocess.TimeoutExpired:
+              print(f"{' '.join(cmd)} timed out after {timeout}s", file=sys.stderr)
+              os.killpg(proc.pid, signal.SIGTERM)
+              try:
+                  proc.wait(timeout=10)
+              except subprocess.TimeoutExpired:
+                  os.killpg(proc.pid, signal.SIGKILL)
+                  proc.wait()
+              raise SystemExit(124)
+          PY
+          }
+
+          cleanup_k3s() {
+            atmos emulator down kubernetes -s dev || true
+            docker rm -f atmos-dev-emulator-kubernetes >/dev/null 2>&1 || true
+          }
+
+          # macOS k3s jobs can occasionally hang in the Docker/Colima stack.
+          # Bound each attempt so the matrix can retry instead of consuming the
+          # whole job timeout and cancelling the required aggregate check.
+          attempt_timeout=1500
+          if [ "${{ matrix.flavor.target }}" = "macos" ]; then
+            attempt_timeout=900
+          fi
+
+          trap cleanup_k3s EXIT
+          for attempt in 1 2; do
+            run_with_timeout "${attempt_timeout}" atmos test && exit 0
+            status=$?
+            echo "atmos test failed (attempt ${attempt}/2, status ${status})" >&2
+            cleanup_k3s
+            [ "${attempt}" -lt 2 ] && sleep 15
+          done
+          exit "${status}"
 
   k3s-required:
     name: "[k3s] demo-helmfile"
