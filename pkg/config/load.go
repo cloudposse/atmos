@@ -1439,19 +1439,11 @@ func mergeConfigFile(
 	// Save existing commands before merge.
 	existingCommands := v.Get(commandsKey)
 
-	// Parse the new file to get its commands.
-	// We need to do this because viper.MergeConfig doesn't overwrite arrays.
-	tempViper := viper.New()
-	tempViper.SetConfigType(yamlType)
-	tempViper.SetConfigFile(path)
-	if err = tempViper.ReadConfig(bytes.NewReader(content)); err != nil {
+	// Extract commands separately because viper.MergeConfig doesn't overwrite arrays.
+	newCommands, err := extractCommandsWithYamlFunctions(content)
+	if err != nil {
 		return err
 	}
-
-	if err = preprocessAtmosYamlFunc(content, tempViper); err != nil {
-		return err
-	}
-	newCommands := tempViper.Get(commandsKey)
 
 	// Do the normal merge for all other settings (non-array values).
 	// This preserves viper's merge behavior for nested maps.
@@ -1460,7 +1452,11 @@ func mergeConfigFile(
 		return err
 	}
 
-	err = preprocessAtmosYamlFunc(content, v)
+	preprocessContent, err := yamlContentWithoutTopLevelKey(content, commandsKey)
+	if err != nil {
+		return err
+	}
+	err = preprocessAtmosYamlFunc(preprocessContent, v)
 	if err != nil {
 		return err
 	}
@@ -1475,6 +1471,47 @@ func mergeConfigFile(
 	}
 
 	return nil
+}
+
+func yamlContentWithoutTopLevelKey(content []byte, key string) ([]byte, error) {
+	var root yaml.Node
+	if err := yaml.Unmarshal(content, &root); err != nil {
+		return nil, err
+	}
+	if len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
+		return content, nil
+	}
+
+	mapping := root.Content[0]
+	for i := 0; i < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value != key {
+			continue
+		}
+		mapping.Content = append(mapping.Content[:i], mapping.Content[i+2:]...)
+		return yaml.Marshal(&root)
+	}
+
+	return content, nil
+}
+
+func extractCommandsWithYamlFunctions(content []byte) (interface{}, error) {
+	var root goyaml.Node
+	if err := goyaml.Unmarshal(content, &root); err != nil {
+		return nil, err
+	}
+	if len(root.Content) == 0 || root.Content[0].Kind != goyaml.MappingNode {
+		return nil, nil
+	}
+
+	for i := 0; i < len(root.Content[0].Content); i += 2 {
+		keyNode := root.Content[0].Content[i]
+		if keyNode.Value != commandsKey {
+			continue
+		}
+		return decodeNodeWithYamlFunctions(root.Content[0].Content[i+1])
+	}
+
+	return nil, nil
 }
 
 func mergeConfigFileWithImports(path string, v *viper.Viper) error {

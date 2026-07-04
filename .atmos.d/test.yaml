@@ -20,7 +20,7 @@ commands:
         default: false
       - name: generate-mocks
         type: bool
-        description: Regenerate mocks using go:generate directives
+        description: Regenerate auth/http mocks using go:generate directives
         default: false
     steps:
       - type: shell
@@ -44,7 +44,7 @@ commands:
           {{- if .Flags.full }} acc
           {{- else if .Flags.coverage }} acc-coverage
           {{- else if .Flags.race }} race
-          {{- else if index .Flags "generate-mocks" }} generate-mocks
+          {{- else if index .Flags "generate-mocks" }} generate-auth-http-mocks
           {{- else }} short
           {{- end }}
     commands:
@@ -120,8 +120,8 @@ commands:
           - type: shell
             command: go test -race -shuffle=on ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 10m
 
-      - name: generate-mocks
-        description: Regenerate mocks using go:generate directives
+      - name: generate-auth-http-mocks
+        description: Regenerate auth/http mocks using go:generate directives
         env: *go_auto_env
         steps:
           - type: shell

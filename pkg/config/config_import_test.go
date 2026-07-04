@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -73,6 +74,64 @@ settings:
 	assert.True(t, v.GetBool("settings.main"))
 	// Note: settings.imported is NOT present because the entire settings section
 	// from the main config replaces the imported settings section.
+}
+
+func TestMergeConfigFileProcessesCommandYamlFunctionsOnce(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell helper script")
+	}
+
+	tempDir := t.TempDir()
+	countPath := filepath.Join(tempDir, "exec-count")
+	helperPath := filepath.Join(tempDir, "resolve-description.sh")
+	helperContent := `#!/bin/sh
+count_file="$1"
+count=$(cat "$count_file" 2>/dev/null || printf 0)
+count=$((count + 1))
+printf '%s' "$count" > "$count_file"
+printf 'resolved-description'
+`
+	require.NoError(t, os.WriteFile(helperPath, []byte(helperContent), 0o755))
+
+	configPath := filepath.Join(tempDir, "commands.yaml")
+	configContent := `
+commands:
+  - name: existing
+    description: overridden
+  - name: generated
+    description: !exec ` + helperPath + ` ` + countPath + `
+`
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	v.Set(commandsKey, []interface{}{
+		map[string]interface{}{
+			"name":        "existing",
+			"description": "original",
+		},
+	})
+
+	require.NoError(t, mergeConfigFile(configPath, v))
+
+	count, err := os.ReadFile(countPath)
+	require.NoError(t, err)
+	assert.Equal(t, "1", string(count))
+
+	commands := normalizeCommandArray(v.Get(commandsKey))
+	require.Len(t, commands, 2)
+
+	byName := map[string]map[string]interface{}{}
+	for _, command := range commands {
+		cmd, ok := command.(map[string]interface{})
+		require.True(t, ok)
+		name, ok := cmd["name"].(string)
+		require.True(t, ok)
+		byName[name] = cmd
+	}
+
+	assert.Equal(t, "overridden", byName["existing"]["description"])
+	assert.Equal(t, "resolved-description", byName["generated"]["description"])
 }
 
 func TestMergeConfig_ImportDeepMerge(t *testing.T) {
