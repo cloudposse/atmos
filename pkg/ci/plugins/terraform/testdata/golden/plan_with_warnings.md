@@ -1,7 +1,11 @@
 
 ## Resource Changes Found for `mycomponent` in `prod`
 
-<a href="https://atmos.tools/ci"><img src="https://atmos.tools/img/atmos-ci-gradient.svg" alt="Atmos CI" width="220px" align="right"/></a> [![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#user-content-create-prod-mycomponent)
+<a href="https://atmos.tools/ci"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg">
+  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" width="220px" align="right">
+</picture></a> [![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#user-content-create-prod-mycomponent)
 <details><summary><a id="result-prod-mycomponent" />Plan: 1 to add, 0 to change, 0 to destroy.</summary>
 
 <br/>

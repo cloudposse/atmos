@@ -53,6 +53,16 @@ const assets = [
     jpgBackground: "#ffffff",
   },
   {
+    source: "img/atmos-ci-lockup-gradient.svg",
+    destinationBase: "atmos-ci-lockup-gradient",
+    jpgBackground: "#171717",
+  },
+  {
+    source: "img/atmos-ci-lockup-gradient-on-light.svg",
+    destinationBase: "atmos-ci-lockup-gradient-on-light",
+    jpgBackground: "#ffffff",
+  },
+  {
     source: "img/atmos-ai-gradient.svg",
     destinationBase: "atmos-ai-gradient",
     jpgBackground: "#171717",
