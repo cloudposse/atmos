@@ -468,9 +468,12 @@ func TestSAMLProvider_Authenticate_BrowserGateCreatesDir(t *testing.T) {
 	t.Setenv("USERPROFILE", homeDir)
 	homedir.Reset()
 
+	browserPath := filepath.Join(homeDir, "test-browser")
+	require.NoError(t, os.WriteFile(browserPath, []byte("#!/bin/sh\nexit 0\n"), 0o755))
+
 	p := &samlProvider{
 		name:                      "test",
-		config:                    &schema.Provider{Driver: "Browser"},
+		config:                    &schema.Provider{Driver: "Browser", BrowserExecutablePath: browserPath},
 		url:                       "https://idp.example.com/saml",
 		region:                    "us-east-1",
 		RoleToAssumeFromAssertion: "arn:aws:iam::123456789012:role/test",
