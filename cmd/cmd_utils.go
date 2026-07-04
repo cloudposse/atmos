@@ -30,6 +30,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	pkgFlags "github.com/cloudposse/atmos/pkg/flags"
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -365,6 +366,7 @@ func createCustomCommand(
 		Use:   commandConfig.Name,
 		Short: commandConfig.Description,
 		Long:  commandConfig.Description,
+		Args:  customCommandArgsValidator(commandConfig),
 		Annotations: map[string]string{
 			annotationCustomCommand: annotationValueTrue,
 		},
@@ -396,6 +398,21 @@ func createCustomCommand(
 	registerSemanticFlagCompletions(customCommand, commandConfig)
 
 	return customCommand, nil
+}
+
+func customCommandArgsValidator(commandConfig *schema.Command) cobra.PositionalArgs {
+	if len(commandConfig.Arguments) == 0 {
+		return pkgFlags.SeparatorAwareValidator(cobra.NoArgs)
+	}
+
+	requiredNoDefaultCount := 0
+	for _, arg := range commandConfig.Arguments {
+		if arg.Required && arg.Default == "" {
+			requiredNoDefaultCount++
+		}
+	}
+
+	return pkgFlags.SeparatorAwareValidator(cobra.RangeArgs(requiredNoDefaultCount, len(commandConfig.Arguments)))
 }
 
 // validateCustomCommandFlags checks for duplicate flags and type conflicts

@@ -1,6 +1,9 @@
 ---
 title: Compositions
 tags: [Stacks]
+cast:
+  file: /casts/examples/compositions/validate.cast
+  title: atmos composition validation
 ---
 
 # Compositions

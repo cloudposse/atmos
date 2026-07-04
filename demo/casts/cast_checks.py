@@ -100,6 +100,9 @@ def assert_no_error_output(text):
         "Values for undeclared variables",
         "undeclared variable",
         "undeclared variables",
+        "Workspace \"",
+        "You're now on a new, empty workspace",
+        "currently selected workspace",
         "panic:",
     ):
         if marker in text:

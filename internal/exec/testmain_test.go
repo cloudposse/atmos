@@ -2,6 +2,7 @@ package exec
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -14,6 +15,10 @@ import (
 //	_ATMOS_TEST_COUNTER_FILE=<path>  — if set, append one byte ("x") to <path>
 //	                                   on every invocation (for single-invocation
 //	                                   regression guard in terraform_execute_single_invocation_test.go).
+//	_ATMOS_TEST_ARGS_FILE=<path>     — if set, write subprocess arguments and exit
+//	                                   successfully (for command argument assertions).
+//	_ATMOS_TEST_STDOUT=<text>         — if set, write text to stdout.
+//	_ATMOS_TEST_STDERR=<text>         — if set, write text to stderr.
 //	_ATMOS_TEST_EXIT_ONE=1           — if set, exit 1 immediately after the optional
 //	                                   counter-file write (for workspace recovery tests).
 func TestMain(m *testing.M) {
@@ -26,6 +31,24 @@ func TestMain(m *testing.M) {
 			_, _ = fd.WriteString("x")
 			_ = fd.Close()
 		}
+	}
+
+	if argsFile := os.Getenv("_ATMOS_TEST_ARGS_FILE"); argsFile != "" {
+		_ = os.WriteFile(argsFile, []byte(strings.Join(os.Args[1:], "\n")), 0o600)
+		os.Exit(0)
+	}
+
+	wroteOutput := false
+	if stdout := os.Getenv("_ATMOS_TEST_STDOUT"); stdout != "" {
+		_, _ = os.Stdout.WriteString(stdout)
+		wroteOutput = true
+	}
+	if stderr := os.Getenv("_ATMOS_TEST_STDERR"); stderr != "" {
+		_, _ = os.Stderr.WriteString(stderr)
+		wroteOutput = true
+	}
+	if wroteOutput {
+		os.Exit(0)
 	}
 
 	// Subprocess helper: when the test binary is invoked as the "terraform" command,

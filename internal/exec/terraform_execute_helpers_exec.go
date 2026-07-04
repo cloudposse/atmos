@@ -214,19 +214,19 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		return nil
 	}
 
-	// Default: redirect workspace-select stderr to stdout so it is visible.
+	// Default: merge workspace-select stderr into stdout and capture both streams.
+	// Workspace setup is an Atmos pre-command implementation detail; Terraform may
+	// print "Workspace doesn't exist" or "You're now on a new, empty workspace"
+	// during normal first-run setup, which is noisy in user-facing command output.
 	redirectStdErr := "/dev/stdout"
 	if info.RedirectStdErr != "" {
 		redirectStdErr = info.RedirectStdErr
 	}
 
-	// For data-producing subcommands redirect "Switched to workspace…" to stderr
-	// so it doesn't pollute captured stdout in $() substitutions.
 	// Merge caller-provided opts (e.g., WithEnvironment) with workspace-specific opts.
+	var workspaceOutput bytes.Buffer
 	wsOpts := append([]ShellCommandOption{}, opts...)
-	if info.SubCommand == "output" || info.SubCommand == "show" {
-		wsOpts = append(wsOpts, WithStdoutOverride(os.Stderr))
-	}
+	wsOpts = append(wsOpts, WithStdoutOverride(&workspaceOutput))
 
 	err := executeShellCommandWithRetry(
 		atmosConfig,
@@ -236,7 +236,7 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 			return ExecuteShellCommand(
 				*atmosConfig,
 				info.Command,
-				[]string{"workspace", "select", info.TerraformWorkspace},
+				[]string{"workspace", "select", "-or-create", info.TerraformWorkspace},
 				componentPath,
 				info.ComponentEnvList,
 				info.DryRun,
@@ -263,6 +263,15 @@ func runWorkspaceSetup(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 // If workspace creation also fails with exit code 1 and the workspace is already
 // active (stale .terraform/environment file), it proceeds with a warning.
 func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) error {
+	redirectStdErr := info.RedirectStdErr
+	if redirectStdErr == "" {
+		redirectStdErr = "/dev/stdout"
+	}
+
+	var workspaceOutput bytes.Buffer
+	wsOpts := append([]ShellCommandOption{}, opts...)
+	wsOpts = append(wsOpts, WithStdoutOverride(&workspaceOutput))
+
 	newErr := executeShellCommandWithRetry(
 		atmosConfig,
 		info,
@@ -275,11 +284,11 @@ func createWorkspaceFallback(atmosConfig *schema.AtmosConfiguration, info *schem
 				componentPath,
 				info.ComponentEnvList,
 				info.DryRun,
-				info.RedirectStdErr,
+				redirectStdErr,
 				o...,
 			)
 		},
-		opts...,
+		wsOpts...,
 	)
 	if newErr == nil {
 		return nil

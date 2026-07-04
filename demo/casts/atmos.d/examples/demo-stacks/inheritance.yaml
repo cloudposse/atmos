@@ -42,12 +42,12 @@ commands:
           - type: simulate
             text: "# compare the resolved configuration across every environment"
           - type: simulate
-            text: &describe_stacks_cmd atmos describe stacks --components myapp --sections vars
+            text: &list_vars_cmd atmos list vars myapp
           - type: shell
-            name: describe-stacks
+            name: list-vars
             duration: 550ms
             interval: 900ms
-            command: *describe_stacks_cmd
+            command: *list_vars_cmd
       - type: shell
         name: validate
         command: atmos casts validate examples demo-stacks inheritance
@@ -73,8 +73,9 @@ commands:
               "atmos describe component myapp -s prod --query .vars",
               "location: Los Angeles",
               "lang: en",
-              "atmos describe stacks --components myapp --sections vars",
-              "staging:",
+              "atmos list vars myapp",
+              "staging",
+              "stage     dev        prod         staging",
           ]:
               if needle not in plain:
                   raise SystemExit(f"inheritance cast missing {needle!r}")

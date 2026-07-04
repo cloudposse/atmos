@@ -46,6 +46,15 @@ commands:
         name: demo-context-name-template
         command: atmos casts generate examples demo-context name-template
       - type: shell
+        name: demo-auth-auth-list
+        command: atmos casts generate examples demo-auth auth-list
+      - type: shell
+        name: auth-stores-identity-backed-stores
+        command: atmos casts generate examples auth-stores identity-backed-stores
+      - type: shell
+        name: compositions-validate
+        command: atmos casts generate examples compositions validate
+      - type: shell
         name: demo-env-masked-token
         command: atmos casts generate examples demo-env masked-token
       - type: shell
@@ -103,6 +112,9 @@ commands:
         name: hooks-checkov-security-scan
         command: atmos casts generate examples hooks-checkov security-scan
       - type: shell
+        name: hooks-infracost-cost-summary
+        command: atmos casts generate examples hooks-infracost cost-summary
+      - type: shell
         name: hooks-kics-security-scan
         command: atmos casts generate examples hooks-kics security-scan
       - type: shell
@@ -123,6 +135,9 @@ commands:
       - type: shell
         name: devcontainer-config
         command: atmos casts generate examples devcontainer config
+      - type: shell
+        name: devcontainer-build-build-config
+        command: atmos casts generate examples devcontainer-build build-config
       - type: shell
         name: gitops-reconcile
         command: atmos casts generate examples gitops reconcile
@@ -191,6 +206,15 @@ commands:
         name: demo-context-name-template
         command: atmos casts validate examples demo-context name-template
       - type: shell
+        name: demo-auth-auth-list
+        command: atmos casts validate examples demo-auth auth-list
+      - type: shell
+        name: auth-stores-identity-backed-stores
+        command: atmos casts validate examples auth-stores identity-backed-stores
+      - type: shell
+        name: compositions-validate
+        command: atmos casts validate examples compositions validate
+      - type: shell
         name: demo-env-masked-token
         command: atmos casts validate examples demo-env masked-token
       - type: shell
@@ -248,6 +272,9 @@ commands:
         name: hooks-checkov-security-scan
         command: atmos casts validate examples hooks-checkov security-scan
       - type: shell
+        name: hooks-infracost-cost-summary
+        command: atmos casts validate examples hooks-infracost cost-summary
+      - type: shell
         name: hooks-kics-security-scan
         command: atmos casts validate examples hooks-kics security-scan
       - type: shell
@@ -268,6 +295,9 @@ commands:
       - type: shell
         name: devcontainer-config
         command: atmos casts validate examples devcontainer config
+      - type: shell
+        name: devcontainer-build-build-config
+        command: atmos casts validate examples devcontainer-build build-config
       - type: shell
         name: gitops-reconcile
         command: atmos casts validate examples gitops reconcile

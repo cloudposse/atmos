@@ -1,5 +1,5 @@
 ---
-title: Say Something (Text-to-Speech)
+title: Say Something (Text-to-Speech / TTS)
 tags: [Automation]
 cast:
   file: /casts/examples/say-something/pipeline.cast

@@ -1,6 +1,9 @@
 ---
 title: Authentication
 tags: [Stacks]
+cast:
+  file: /casts/examples/demo-auth/auth-list.cast
+  title: atmos auth identities
 ---
 
 # Demo: Auth

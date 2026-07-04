@@ -33,9 +33,12 @@ func TestParseYAMLFuncArgs(t *testing.T) {
 
 func testEndpoint() *Endpoint {
 	return &Endpoint{
-		Target:  TargetAWS,
-		Host:    "localhost",
-		Ports:   map[int]int{4566: 34566},
+		Target: TargetAWS,
+		Host:   "localhost",
+		Ports:  map[int]int{4566: 34566},
+		NetworkIPs: map[string]string{
+			"atmos-emulator-dev": "172.20.0.2",
+		},
 		Region:  "us-east-1",
 		Project: "demo-project",
 	}
@@ -50,6 +53,7 @@ func TestValueForKey_ScalarKeys(t *testing.T) {
 		"url":                   "http://127.0.0.1:34566",
 		"host":                  "localhost",
 		"port":                  "34566",
+		"network_ip":            "172.20.0.2",
 		"region":                "us-east-1",
 		"project":               "demo-project",
 		"env.AWS_ACCESS_KEY_ID": "test",

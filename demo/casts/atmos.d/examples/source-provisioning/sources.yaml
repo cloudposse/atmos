@@ -22,6 +22,24 @@ commands:
           cast: "../../website/static/casts/examples/source-provisioning/sources.cast"
         steps:
           - type: simulate
+            text: "# list source definitions before provisioning"
+          - type: simulate
+            text: &source_list_cmd atmos terraform source list
+          - type: shell
+            name: source-list
+            duration: 450ms
+            interval: 750ms
+            command: *source_list_cmd
+          - type: simulate
+            text: "# inspect the weather source mapping"
+          - type: simulate
+            text: &source_describe_cmd atmos terraform source describe weather -s dev
+          - type: shell
+            name: source-describe
+            duration: 450ms
+            interval: 750ms
+            command: *source_describe_cmd
+          - type: simulate
             text: "# local sources provision into isolated Terraform workdirs"
           - type: simulate
             text: &weather_cmd atmos terraform plan weather -s dev
@@ -39,6 +57,15 @@ commands:
             duration: 450ms
             interval: 750ms
             command: *workdir_cmd
+          - type: simulate
+            text: "# show the exact files Atmos provisioned"
+          - type: simulate
+            text: &workdir_show_cmd atmos terraform workdir show weather -s dev
+          - type: shell
+            name: workdir-show
+            duration: 450ms
+            interval: 750ms
+            command: *workdir_show_cmd
       - type: shell
         name: validate
         command: atmos casts validate examples source-provisioning sources
@@ -60,7 +87,10 @@ commands:
               "atmos terraform plan weather -s dev",
               "Terraform will perform the following actions",
               "Plan:",
+              "atmos terraform source list",
+              "atmos terraform source describe weather -s dev",
               "atmos terraform workdir list",
+              "atmos terraform workdir show weather -s dev",
               "dev-weather",
           ]:
               if needle not in plain:

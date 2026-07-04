@@ -63,23 +63,32 @@ commands:
           cast: "../../website/static/casts/examples/http-webhooks/local-endpoints.cast"
         steps:
           - type: simulate
+            text: "# the workflow names the webhook step and reads the URL from env"
+          - type: simulate
+            text: &workflow_cmd sed -n '1,32p' workflows/http.yaml
+          - type: shell
+            name: workflow
+            duration: 450ms
+            interval: 750ms
+            command: *workflow_cmd
+          - type: simulate
             text: "# POST a deployment notification to a webhook endpoint"
           - type: simulate
-            text: &notify_cmd ATMOS_LOGS_LEVEL=Info WEBHOOK_URL=http://127.0.0.1:18765/hook atmos workflow notify -f http
+            text: atmos workflow notify -f http
           - type: shell
             name: notify
             duration: 450ms
             interval: 750ms
-            command: *notify_cmd
+            command: WEBHOOK_URL=http://127.0.0.1:18765/hook atmos workflow notify -f http
           - type: simulate
             text: "# poll until the health endpoint returns the expected JSON body"
           - type: simulate
-            text: &poll_cmd HEALTH_URL=http://127.0.0.1:18765 atmos workflow poll-health -f http && echo "health check matched"
+            text: atmos workflow poll-health -f http && echo "health check matched"
           - type: shell
             name: poll-health
             duration: 450ms
             interval: 750ms
-            command: *poll_cmd
+            command: HEALTH_URL=http://127.0.0.1:18765 atmos workflow poll-health -f http && echo "health check matched"
       - type: shell
         name: stop-http-server
         when: always
@@ -102,13 +111,20 @@ commands:
           text = load_text("../../website/static/casts/examples/http-webhooks/local-endpoints.cast")
           plain = strip_ansi(text)
           assert_no_experimental(text)
+          webhook_url_template = 'url: "' + chr(123) * 2 + ' .env.WEBHOOK_URL ' + chr(125) * 2 + '"'
           for needle in [
-              "ATMOS_LOGS_LEVEL=Info WEBHOOK_URL=http://127.0.0.1:18765/hook atmos workflow notify -f http",
-              "Webhook returned HTTP 202",
-              "HEALTH_URL=http://127.0.0.1:18765 atmos workflow poll-health -f http",
+              "sed -n '1,32p' workflows/http.yaml",
+              "type: http",
+              webhook_url_template,
+              "atmos workflow notify -f http",
+              "Webhook \"trigger\" sent POST request to 127.0.0.1:18765 and received HTTP 202",
+              "atmos workflow poll-health -f http",
+              "Webhook \"health\" sent GET request to 127.0.0.1:18765 and received HTTP 200",
               "health check matched",
           ]:
               if needle not in plain:
                   raise SystemExit(f"http-webhooks cast missing {needle!r}")
+          if "127.0.0.1:18765/hook" in plain:
+              raise SystemExit("http-webhooks cast exposes a full webhook URL")
           assert_no_error_output(text)
           assert_no_local_paths(text)

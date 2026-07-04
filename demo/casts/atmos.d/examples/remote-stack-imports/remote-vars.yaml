@@ -22,6 +22,15 @@ commands:
           cast: "../../website/static/casts/examples/remote-stack-imports/remote-vars.cast"
         steps:
           - type: simulate
+            text: "# trace where stack imports came from"
+          - type: simulate
+            text: &tree_cmd atmos list stacks --format tree --provenance
+          - type: shell
+            name: import-tree
+            duration: 550ms
+            interval: 750ms
+            command: *tree_cmd
+          - type: simulate
             text: "# remote imports merge values into the local stack"
           - type: simulate
             text: &cmd atmos describe component myapp -s demo --query .vars
@@ -46,7 +55,7 @@ commands:
           text = load_text("../../website/static/casts/examples/remote-stack-imports/remote-vars.cast")
           plain = strip_ansi(text)
           assert_no_experimental(text)
-          for needle in ["atmos describe component myapp -s demo --query .vars", "imported_from: remote", "remote_import_test: true", "shared_setting: value-from-remote"]:
+          for needle in ["atmos list stacks --format tree --provenance", "atmos describe component myapp -s demo --query .vars", "imported_from: remote", "remote_import_test: true", "shared_setting: value-from-remote"]:
               if needle not in plain:
                   raise SystemExit(f"remote-stack-imports cast missing {needle!r}")
           assert_no_error_output(text)

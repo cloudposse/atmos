@@ -22,15 +22,6 @@ commands:
           cast: "../../website/static/casts/examples/demo-context/name-template.cast"
         steps:
           - type: simulate
-            text: "# stack names are computed from context values via a name template"
-          - type: simulate
-            text: &describe_config_cmd atmos describe config --format=yaml --query .stacks.name_template
-          - type: shell
-            name: describe-config
-            duration: 450ms
-            interval: 750ms
-            command: *describe_config_cmd
-          - type: simulate
             text: "# the template produces these stack names"
           - type: simulate
             text: &list_stacks_cmd atmos list stacks
@@ -39,6 +30,15 @@ commands:
             duration: 450ms
             interval: 750ms
             command: *list_stacks_cmd
+          - type: simulate
+            text: "# the source template combines provider context values"
+          - type: simulate
+            text: &describe_config_cmd atmos describe config --format=yaml --query .stacks.name_template
+          - type: shell
+            name: describe-config
+            duration: 450ms
+            interval: 750ms
+            command: *describe_config_cmd
           - type: simulate
             text: "# inspect the resolved component in one of them"
           - type: simulate
@@ -67,13 +67,14 @@ commands:
           assert_body_color(text)
           name_template = chr(123) + chr(123) + ".providers.context.values.product" + chr(125) + chr(125)
           for needle in [
-              "# stack names are computed from context values via a name template",
-              "atmos describe config --format=yaml --query .stacks.name_template",
-              name_template,
+              "# the template produces these stack names",
               "atmos list stacks",
               "acme-west-dev",
               "acme-west-prod",
               "acme-west-staging",
+              "# the source template combines provider context values",
+              "atmos describe config --format=yaml --query .stacks.name_template",
+              name_template,
               "atmos describe component demo -s acme-west-dev --query .vars",
               "pet: dog",
           ]:

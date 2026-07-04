@@ -69,11 +69,13 @@ commands:
         script: |
           import os, sys
           sys.path.insert(0, os.getcwd())
-          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_colored, assert_no_error_output, assert_no_local_paths
           text = load_text("../../website/static/casts/examples/locals/structured-values.cast")
           plain = strip_ansi(text)
           assert_no_experimental(text)
           assert_body_color(text)
+          assert_colored(text, "namespace")
+          assert_colored(text, "name_prefix")
           for needle in [
               "# start with the stacks that define file-scoped locals",
               "atmos list stacks",

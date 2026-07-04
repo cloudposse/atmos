@@ -122,7 +122,6 @@ const TAGS_MAP = {
   'devcontainer-build': ['DX'],
   'container-sandbox': ['DX'],
   'secrets-masking': ['DX'],
-  'aws-security-compliance': ['DX'],
   ai: ['DX'],
   'ai-claude-code': ['DX'],
   mcp: ['DX'],

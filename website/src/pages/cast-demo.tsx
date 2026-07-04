@@ -27,6 +27,7 @@ export default function CastDemoPage() {
               autoplay
               loopDelay={5}
               thumbnail
+              preWrap={false}
             />
           </div>
           <div className={styles.galleryItem}>
@@ -37,6 +38,7 @@ export default function CastDemoPage() {
               autoplay
               loopDelay={5}
               thumbnail
+              preWrap={false}
             />
           </div>
           <div className={styles.galleryItem}>
@@ -48,6 +50,7 @@ export default function CastDemoPage() {
               autoplay
               loopDelay={5}
               thumbnail
+              preWrap={false}
             />
           </div>
         </section>

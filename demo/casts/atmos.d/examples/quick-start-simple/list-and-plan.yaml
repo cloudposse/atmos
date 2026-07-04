@@ -40,6 +40,15 @@ commands:
             interval: 750ms
             command: *list_components_cmd
           - type: simulate
+            text: "# compare station variables across environments"
+          - type: simulate
+            text: &list_vars_cmd atmos list vars station
+          - type: shell
+            name: list-vars
+            duration: 450ms
+            interval: 750ms
+            command: *list_vars_cmd
+          - type: simulate
             text: "# plan the dev station instance"
           - type: simulate
             text: &terraform_plan_cmd atmos terraform plan station -s dev
@@ -72,6 +81,7 @@ commands:
               "Stacks",
               "atmos list components",
               "station",
+              "atmos list vars station",
               "# plan the dev station instance",
               "atmos terraform plan station -s dev",
               "Terraform will perform the following actions",

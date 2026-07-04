@@ -1,6 +1,6 @@
 ---
 title: "AWS Security & Compliance"
-tags: [DX]
+tags: [AWS]
 ---
 
 # Example: AWS Security & Compliance
@@ -29,7 +29,7 @@ Learn more in the [AWS Security documentation](https://atmos.tools/cli/commands/
 ## Try It
 
 ```shell
-cd examples/aws-security-compliance
+cd gists/aws-security-compliance
 
 # All findings
 atmos aws security analyze

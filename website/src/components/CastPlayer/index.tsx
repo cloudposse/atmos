@@ -23,6 +23,7 @@ type Props = {
   speed?: number;
   idleSkip?: boolean;
   thumbnail?: boolean;
+  preWrap?: boolean;
   showCommand?: boolean;
   prompt?: string;
   typeRate?: number;
@@ -49,6 +50,7 @@ export default function CastPlayer({
   speed = 1,
   idleSkip = true,
   thumbnail = false,
+  preWrap = true,
   showCommand = true,
   prompt = "\x1b[1;38;2;0;95;135m>\x1b[0m ",
   typeRate = 0.035,
@@ -230,8 +232,14 @@ export default function CastPlayer({
     setPlaying(true);
   };
 
+  const screenClassName = [
+    styles.screen,
+    preWrap ? "" : styles.noPreWrap,
+  ]
+    .filter(Boolean)
+    .join(" ");
   const terminal = (
-    <pre className={styles.screen} ref={screenRef}>
+    <pre className={screenClassName} ref={screenRef}>
       {renderAnsi(content || " ")}
     </pre>
   );

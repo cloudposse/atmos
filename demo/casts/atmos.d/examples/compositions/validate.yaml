@@ -1,0 +1,63 @@
+commands:
+  - name: casts generate examples compositions validate
+    description: Regenerate the Compositions example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: validate
+        working_directory: "../../.context/cast-fixtures/compositions"
+        title: "Compositions: validate service membership"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/compositions/validate.cast"
+        steps:
+          - type: simulate
+            text: "# local provides frontend and api; database can stay external"
+          - type: simulate
+            text: &local_cmd atmos composition validate storefront -s local
+          - type: shell
+            name: local
+            duration: 450ms
+            interval: 750ms
+            command: *local_cmd
+          - type: simulate
+            text: "# dev fulfills the full storefront composition"
+          - type: simulate
+            text: &dev_cmd atmos composition validate storefront -s dev
+          - type: shell
+            name: dev
+            duration: 450ms
+            interval: 750ms
+            command: *dev_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples compositions validate
+  - name: casts validate examples compositions validate
+    description: Validate the Compositions example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/compositions/validate.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in ["atmos composition validate storefront -s local", "Composition: storefront", "Fulfilled:", "api", "frontend", "atmos composition validate storefront -s dev", "database"]:
+              if needle not in plain:
+                  raise SystemExit(f"compositions cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

@@ -1,6 +1,9 @@
 ---
 title: Devcontainer (Custom Build)
 tags: [DX]
+cast:
+  file: /casts/examples/devcontainer-build/build-config.cast
+  title: atmos devcontainer build config
 ---
 
 # Custom Dockerfile Devcontainer Example

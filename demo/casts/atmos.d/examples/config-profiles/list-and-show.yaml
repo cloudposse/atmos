@@ -29,7 +29,7 @@ commands:
             name: list-profiles
             duration: 450ms
             interval: 750ms
-            command: atmos profile list | sed "s#$(pwd)#.#g"
+            command: *list_cmd
           - type: simulate
             text: "# inspect the developer profile files"
           - type: simulate
@@ -38,7 +38,7 @@ commands:
             name: show-developer
             duration: 450ms
             interval: 750ms
-            command: atmos profile show developer | sed "s#$(pwd)#.#g"
+            command: *show_cmd
       - type: shell
         name: validate
         command: atmos casts validate examples config-profiles list-and-show
@@ -58,5 +58,8 @@ commands:
           for needle in ["atmos profile list", "developer", "production", "PROFILE: developer", "auth.yaml", "settings.yaml", "Use with: atmos --profile developer <command>"]:
               if needle not in plain:
                   raise SystemExit(f"config-profiles cast missing {needle!r}")
+          for forbidden in [".context/cast-fixtures", "/Users/", "../"]:
+              if forbidden in plain:
+                  raise SystemExit(f"config-profiles cast contains noisy path fragment {forbidden!r}")
           assert_no_error_output(text)
           assert_no_local_paths(text)

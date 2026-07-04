@@ -72,6 +72,21 @@ commands:
         path: "../../.context/cast-fixtures/demo-context"
         reset: true
       - type: workdir
+        name: demo-auth-fixture
+        source: "../../examples/demo-auth"
+        path: "../../.context/cast-fixtures/demo-auth"
+        reset: true
+      - type: workdir
+        name: auth-stores-fixture
+        source: "../../examples/auth-stores"
+        path: "../../.context/cast-fixtures/auth-stores"
+        reset: true
+      - type: workdir
+        name: compositions-fixture
+        source: "../../examples/compositions"
+        path: "../../.context/cast-fixtures/compositions"
+        reset: true
+      - type: workdir
         name: demo-env-fixture
         source: "../../examples/demo-env"
         path: "../../.context/cast-fixtures/demo-env"
@@ -255,6 +270,11 @@ commands:
         name: devcontainer-fixture
         source: "../../examples/devcontainer"
         path: "../../.context/cast-fixtures/devcontainer"
+        reset: true
+      - type: workdir
+        name: devcontainer-build-fixture
+        source: "../../examples/devcontainer-build"
+        path: "../../.context/cast-fixtures/devcontainer-build"
         reset: true
       - type: workdir
         name: container-component-fixture

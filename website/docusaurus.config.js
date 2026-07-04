@@ -72,6 +72,10 @@ const config = {
                         to: '/changelog'
                     },
                     {
+                        from: '/examples/aws-security-compliance',
+                        to: '/gists/aws-security-compliance'
+                    },
+                    {
                         from: '/introduction',
                         to: '/intro'
                     },

@@ -10,11 +10,15 @@ auth:
 
     azure-oidc:
       kind: azure/oidc
-      tenant_id: "00000000-0000-0000-0000-000000000000"
-      client_id: "11111111-1111-1111-1111-111111111111"
+      spec:
+        tenant_id: "00000000-0000-0000-0000-000000000000"
+        client_id: "11111111-1111-1111-1111-111111111111"
 
     gcp-adc:
       kind: gcp/adc
+      spec:
+        project_id: acme-prod-123456
+        region: us-central1
 
   identities:
     prod-admin:

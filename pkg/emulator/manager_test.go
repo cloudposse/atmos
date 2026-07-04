@@ -33,6 +33,7 @@ func TestManager_Resolve_Running(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	runtime := NewMockRuntime(ctrl)
 	runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return([]container.Info{runningEmulatorInfo(54321)}, nil)
+	runtime.EXPECT().Inspect(gomock.Any(), "container-abc").Return(&container.Info{}, nil)
 
 	m := newManagerWithRuntime(runtime)
 	endpoint, profile, err := m.Resolve(context.Background(), &Spec{Driver: testDriverName}, "dev", "aws")
@@ -55,6 +56,7 @@ func TestManager_Resolve_GitHubJobContainerUsesNetworkAliasEndpoint(t *testing.T
 	runtime := NewMockRuntime(ctrl)
 	gomock.InOrder(
 		runtime.EXPECT().List(gomock.Any(), gomock.Any()).Return([]container.Info{runningEmulatorInfo(54321)}, nil),
+		runtime.EXPECT().Inspect(gomock.Any(), "container-abc").Return(&container.Info{}, nil),
 		runtime.EXPECT().Inspect(gomock.Any(), gomock.Any()).Return(&container.Info{Networks: []string{"github_network_123"}}, nil),
 	)
 

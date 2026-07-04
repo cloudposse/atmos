@@ -101,6 +101,10 @@
   white-space: pre-wrap;
 }
 
+.noPreWrap {
+  white-space: pre;
+}
+
 .cursor {
   display: inline-block;
   width: 0.56em;

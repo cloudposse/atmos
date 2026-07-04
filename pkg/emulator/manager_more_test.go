@@ -67,9 +67,10 @@ func TestManager_Up_ReusesRunningContainer(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	runtime := NewMockRuntime(ctrl)
 	// Up calls UpWithRuntime (FindInstance->List) then endpoint (FindInstance->List).
-	// A running instance is reused, so only List is invoked (no Create/Start).
+	// A running instance is reused, so no Create/Start is invoked.
 	runtime.EXPECT().List(gomock.Any(), gomock.Any()).
 		Return([]container.Info{runningEmulatorInfo(54321)}, nil).Times(2)
+	runtime.EXPECT().Inspect(gomock.Any(), "container-abc").Return(&container.Info{}, nil)
 
 	m := newManagerWithRuntime(runtime)
 	endpoint, err := m.Up(context.Background(), &Spec{Driver: testDriverName}, "dev", "aws",
@@ -92,6 +93,7 @@ func TestManager_Up_CreatesAndStartsContainer(t *testing.T) {
 		runtime.EXPECT().Start(gomock.Any(), "new-id").Return(nil),
 		runtime.EXPECT().List(gomock.Any(), gomock.Any()).
 			Return([]container.Info{runningEmulatorInfo(40001)}, nil),
+		runtime.EXPECT().Inspect(gomock.Any(), "container-abc").Return(&container.Info{}, nil),
 	)
 
 	m := newManagerWithRuntime(runtime)
@@ -121,6 +123,7 @@ func TestManager_Up_GitHubJobContainerAttachesCurrentNetworkAlias(t *testing.T) 
 		runtime.EXPECT().Start(gomock.Any(), "new-id").Return(nil),
 		runtime.EXPECT().List(gomock.Any(), gomock.Any()).
 			Return([]container.Info{runningEmulatorInfo(40001)}, nil),
+		runtime.EXPECT().Inspect(gomock.Any(), "container-abc").Return(&container.Info{}, nil),
 		runtime.EXPECT().Inspect(gomock.Any(), gomock.Any()).Return(&container.Info{Networks: []string{"github_network_123"}}, nil),
 	)
 
@@ -302,6 +305,7 @@ func TestManager_Resolve_KubernetesHarvestsKubeconfig(t *testing.T) {
 	rawKubeconfig := "apiVersion: v1\nclusters:\n- cluster:\n    server: https://127.0.0.1:6443\n"
 	runtime.EXPECT().List(gomock.Any(), gomock.Any()).
 		Return([]container.Info{info}, nil).Times(2)
+	runtime.EXPECT().Inspect(gomock.Any(), info.ID).Return(&container.Info{}, nil)
 	runtime.EXPECT().
 		Exec(gomock.Any(), info.ID, []string{"cat", k3sKubeconfigPath}, gomock.Any()).
 		DoAndReturn(func(_ context.Context, _ string, _ []string, opts *container.ExecOptions) error {
@@ -334,6 +338,7 @@ func TestManager_Resolve_KubernetesKubeconfigError(t *testing.T) {
 	info := kubeRunningInfo(16443)
 	runtime.EXPECT().List(gomock.Any(), gomock.Any()).
 		Return([]container.Info{info}, nil).AnyTimes()
+	runtime.EXPECT().Inspect(gomock.Any(), info.ID).Return(&container.Info{}, nil).AnyTimes()
 	runtime.EXPECT().
 		Exec(gomock.Any(), info.ID, []string{"cat", k3sKubeconfigPath}, gomock.Any()).
 		Return(errRuntimeBoom).AnyTimes()

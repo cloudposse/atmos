@@ -106,6 +106,65 @@ func TestCustomCommandStepWorkingDirectory(t *testing.T) {
 	assert.Equal(t, stepDir, strings.TrimSpace(string(actual)))
 }
 
+func TestCustomCommandDispatchRejectsUnexpectedArgsOnRunnableParent(t *testing.T) {
+	_ = NewTestKit(t)
+
+	atmosConfig := schema.AtmosConfiguration{
+		Commands: []schema.Command{
+			{
+				Name:  "examples",
+				Steps: stepsFromStrings("echo parent"),
+				Commands: []schema.Command{
+					{
+						Name: "auth-stores",
+						Commands: []schema.Command{
+							{
+								Name:  "identity-backed-stores",
+								Steps: stepsFromStrings("echo leaf"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	root := &cobra.Command{
+		Use:           "atmos",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+	}
+	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, root))
+
+	examplesCmd, _, err := root.Find([]string{"examples"})
+	require.NoError(t, err)
+	require.NotNil(t, examplesCmd)
+
+	parentRan := false
+	leafRan := false
+	examplesCmd.Run = func(cmd *cobra.Command, args []string) {
+		parentRan = true
+	}
+
+	leafCmd, _, err := root.Find([]string{"examples", "auth-stores", "identity-backed-stores"})
+	require.NoError(t, err)
+	require.NotNil(t, leafCmd)
+	leafCmd.Run = func(cmd *cobra.Command, args []string) {
+		leafRan = true
+	}
+
+	root.SetArgs([]string{"examples", "auth-stores identity-backed-stores"})
+	err = root.Execute()
+	require.Error(t, err)
+	assert.False(t, parentRan, "unexpected extra args must not execute the runnable parent")
+	assert.False(t, leafRan)
+
+	root.SetArgs([]string{"examples", "auth-stores", "identity-backed-stores"})
+	require.NoError(t, root.Execute())
+	assert.False(t, parentRan)
+	assert.True(t, leafRan)
+}
+
 func TestCustomCommandCastStepInheritsWorkingDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses POSIX shell redirection")
