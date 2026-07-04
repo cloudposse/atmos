@@ -66,12 +66,13 @@ jobs:
 
       - name: Regenerate screengrab casts
         run: |
-          CGO_ENABLED=0 go build -o build/atmos .
+          go build -o build/atmos .
           ./build/atmos --chdir=demo/casts casts generate screengrabs cli
           ./build/atmos --chdir=demo/casts casts generate screengrabs demo-stacks
           git add -A
           git status
         env:
+          CGO_ENABLED: "0"
           ATMOS_PAGER: "false"
 
       # PR-triggered runs only smoke-test the pipeline; the screengrab-update PR
