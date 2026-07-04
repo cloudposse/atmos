@@ -3,7 +3,9 @@ package function
 import (
 	"testing"
 
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAllTags(t *testing.T) {
@@ -26,6 +28,14 @@ func TestAllTags(t *testing.T) {
 		TagGitSha,
 		TagGitBranch,
 		TagGitRef,
+		TagGitRepository,
+		TagGitOwner,
+		TagGitName,
+		TagGitHost,
+		TagGitURL,
+		TagAppend,
+		TagCwd,
+		TagUnset,
 		TagRandom,
 		TagLiteral,
 		TagAwsAccountID,
@@ -33,6 +43,7 @@ func TestAllTags(t *testing.T) {
 		TagAwsCallerIdentityUserID,
 		TagAwsRegion,
 		TagAwsOrganizationID,
+		TagEmulator,
 	}
 
 	assert.Equal(t, len(expectedTags), len(tags))
@@ -60,6 +71,14 @@ func TestIsValidTag(t *testing.T) {
 		TagGitSha,
 		TagGitBranch,
 		TagGitRef,
+		TagGitRepository,
+		TagGitOwner,
+		TagGitName,
+		TagGitHost,
+		TagGitURL,
+		TagAppend,
+		TagCwd,
+		TagUnset,
 		TagRandom,
 		TagLiteral,
 		TagAwsAccountID,
@@ -67,6 +86,7 @@ func TestIsValidTag(t *testing.T) {
 		TagAwsCallerIdentityUserID,
 		TagAwsRegion,
 		TagAwsOrganizationID,
+		TagEmulator,
 	}
 
 	for _, tag := range expectedTags {
@@ -96,6 +116,14 @@ func TestYAMLTag(t *testing.T) {
 		{TagGitSha, "!git.sha"},
 		{TagGitBranch, "!git.branch"},
 		{TagGitRef, "!git.ref"},
+		{TagGitRepository, "!git.repository"},
+		{TagGitOwner, "!git.owner"},
+		{TagGitName, "!git.name"},
+		{TagGitHost, "!git.host"},
+		{TagGitURL, "!git.url"},
+		{TagAppend, "!append"},
+		{TagCwd, "!cwd"},
+		{TagUnset, "!unset"},
 		{TagRandom, "!random"},
 		{TagLiteral, "!literal"},
 		{TagAwsAccountID, "!aws.account_id"},
@@ -103,6 +131,7 @@ func TestYAMLTag(t *testing.T) {
 		{TagAwsCallerIdentityUserID, "!aws.caller_identity_user_id"},
 		{TagAwsRegion, "!aws.region"},
 		{TagAwsOrganizationID, "!aws.organization_id"},
+		{TagEmulator, "!emulator"},
 		{"custom", "!custom"},
 		{"", "!"},
 	}
@@ -134,6 +163,14 @@ func TestFromYAMLTag(t *testing.T) {
 		{"!git.sha", "git.sha"},
 		{"!git.branch", "git.branch"},
 		{"!git.ref", "git.ref"},
+		{"!git.repository", "git.repository"},
+		{"!git.owner", "git.owner"},
+		{"!git.name", "git.name"},
+		{"!git.host", "git.host"},
+		{"!git.url", "git.url"},
+		{"!append", "append"},
+		{"!cwd", "cwd"},
+		{"!unset", "unset"},
 		{"!random", "random"},
 		{"!literal", "literal"},
 		{"!aws.account_id", "aws.account_id"},
@@ -141,6 +178,7 @@ func TestFromYAMLTag(t *testing.T) {
 		{"!aws.caller_identity_user_id", "aws.caller_identity_user_id"},
 		{"!aws.region", "aws.region"},
 		{"!aws.organization_id", "aws.organization_id"},
+		{"!emulator", "emulator"},
 		{"!custom", "custom"},
 		// Without prefix - returns as-is.
 		{"env", "env"},
@@ -176,6 +214,14 @@ func TestTagConstants(t *testing.T) {
 	assert.Equal(t, "git.sha", TagGitSha)
 	assert.Equal(t, "git.branch", TagGitBranch)
 	assert.Equal(t, "git.ref", TagGitRef)
+	assert.Equal(t, "git.repository", TagGitRepository)
+	assert.Equal(t, "git.owner", TagGitOwner)
+	assert.Equal(t, "git.name", TagGitName)
+	assert.Equal(t, "git.host", TagGitHost)
+	assert.Equal(t, "git.url", TagGitURL)
+	assert.Equal(t, "append", TagAppend)
+	assert.Equal(t, "cwd", TagCwd)
+	assert.Equal(t, "unset", TagUnset)
 	assert.Equal(t, "random", TagRandom)
 	assert.Equal(t, "literal", TagLiteral)
 	assert.Equal(t, "aws.account_id", TagAwsAccountID)
@@ -183,6 +229,7 @@ func TestTagConstants(t *testing.T) {
 	assert.Equal(t, "aws.caller_identity_user_id", TagAwsCallerIdentityUserID)
 	assert.Equal(t, "aws.region", TagAwsRegion)
 	assert.Equal(t, "aws.organization_id", TagAwsOrganizationID)
+	assert.Equal(t, "emulator", TagEmulator)
 }
 
 func TestYAMLTag_RoundTrip(t *testing.T) {
@@ -204,4 +251,19 @@ func TestIsValidTag_Consistency(t *testing.T) {
 	for _, tag := range tags {
 		assert.True(t, IsValidTag(tag), "tag %s in AllTags() but IsValidTag returns false", tag)
 	}
+}
+
+func TestYAMLTagHelpers(t *testing.T) {
+	yamlTags := AllYAMLTags()
+	require.Len(t, yamlTags, len(AllTags()))
+
+	for _, yamlTag := range yamlTags {
+		assert.True(t, IsValidYAMLTag(yamlTag), "expected %s to be valid", yamlTag)
+		assert.Contains(t, yamlTags, YAMLTag(FromYAMLTag(yamlTag)))
+	}
+
+	assert.False(t, IsValidYAMLTag("!envv"))
+	assert.False(t, IsValidYAMLTag("!!str"))
+	assert.Equal(t, AllTags(), fntag.All(), "function and lightweight YAML tag catalogs must stay in sync")
+	assert.Equal(t, AllYAMLTags(), fntag.AllYAML(), "YAML tag catalogs must stay in sync")
 }

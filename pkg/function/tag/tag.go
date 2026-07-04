@@ -225,3 +225,42 @@ func IsValidYAML(yamlTag string) bool {
 
 	return IsValid(FromYAML(yamlTag))
 }
+
+// AtmosConfigYAML returns the YAML tags supported while preprocessing atmos.yaml.
+// Some registered YAML functions require stack/component context and are resolved
+// later by the stack YAML processor, so they are intentionally excluded here.
+func AtmosConfigYAML() []string {
+	defer perf.Track(nil, "tag.AtmosConfigYAML")()
+
+	return []string{
+		ToYAML(Env),
+		ToYAML(Exec),
+		ToYAML(Include),
+		ToYAML(IncludeRaw),
+		ToYAML(RepoRoot),
+		ToYAML(GitRoot),
+		ToYAML(GitSha),
+		ToYAML(GitBranch),
+		ToYAML(GitRef),
+		ToYAML(GitRepository),
+		ToYAML(GitOwner),
+		ToYAML(GitName),
+		ToYAML(GitHost),
+		ToYAML(GitURL),
+		ToYAML(Cwd),
+		ToYAML(Random),
+		ToYAML(Unset),
+	}
+}
+
+// IsAtmosConfigYAML checks if a YAML tag is supported by atmos.yaml preprocessing.
+func IsAtmosConfigYAML(yamlTag string) bool {
+	defer perf.Track(nil, "tag.IsAtmosConfigYAML")()
+
+	for _, tag := range AtmosConfigYAML() {
+		if yamlTag == tag {
+			return true
+		}
+	}
+	return false
+}
