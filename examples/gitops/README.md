@@ -1,6 +1,9 @@
 ---
 title: GitOps Publishing
 tags: [Kubernetes, Automation]
+cast:
+  file: /casts/examples/gitops/reconcile.cast
+  title: atmos gitops reconcile
 ---
 
 # GitOps Publishing Demo

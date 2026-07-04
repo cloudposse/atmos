@@ -181,6 +181,86 @@ commands:
         source: "../../examples/hooks-custom-command"
         path: "../../.context/cast-fixtures/hooks-custom-command"
         reset: true
+      - type: workdir
+        name: demo-helmfile-fixture
+        source: "../../examples/demo-helmfile"
+        path: "../../.context/cast-fixtures/demo-helmfile"
+        reset: true
+      - type: workdir
+        name: gitops-fixture
+        source: "../../examples/gitops"
+        path: "../../.context/cast-fixtures/gitops"
+        reset: true
+      - type: workdir
+        name: helm-fixture
+        source: "../../examples/helm"
+        path: "../../.context/cast-fixtures/helm"
+        reset: true
+      - type: workdir
+        name: kubernetes-fixture
+        source: "../../examples/kubernetes"
+        path: "../../.context/cast-fixtures/kubernetes"
+        reset: true
+      - type: workdir
+        name: kustomize-fixture
+        source: "../../examples/kustomize"
+        path: "../../.context/cast-fixtures/kustomize"
+        reset: true
+      - type: workdir
+        name: background-steps-fixture
+        source: "../../examples/background-steps"
+        path: "../../.context/cast-fixtures/background-steps"
+        reset: true
+      - type: workdir
+        name: container-step-fixture
+        source: "../../examples/container-step"
+        path: "../../.context/cast-fixtures/container-step"
+        reset: true
+      - type: workdir
+        name: hooks-checkov-fixture
+        source: "../../examples/hooks-checkov"
+        path: "../../.context/cast-fixtures/hooks-checkov"
+        reset: true
+      - type: workdir
+        name: hooks-infracost-fixture
+        source: "../../examples/hooks-infracost"
+        path: "../../.context/cast-fixtures/hooks-infracost"
+        reset: true
+      - type: workdir
+        name: hooks-kics-fixture
+        source: "../../examples/hooks-kics"
+        path: "../../.context/cast-fixtures/hooks-kics"
+        reset: true
+      - type: workdir
+        name: hooks-trivy-fixture
+        source: "../../examples/hooks-trivy"
+        path: "../../.context/cast-fixtures/hooks-trivy"
+        reset: true
+      - type: workdir
+        name: emulator-k8s-fixture
+        source: "../../examples/emulator-k8s"
+        path: "../../.context/cast-fixtures/emulator-k8s"
+        reset: true
+      - type: workdir
+        name: local-gitops-fixture
+        source: "../../examples/local-gitops"
+        path: "../../.context/cast-fixtures/local-gitops"
+        reset: true
+      - type: workdir
+        name: container-sandbox-fixture
+        source: "../../examples/container-sandbox"
+        path: "../../.context/cast-fixtures/container-sandbox"
+        reset: true
+      - type: workdir
+        name: devcontainer-fixture
+        source: "../../examples/devcontainer"
+        path: "../../.context/cast-fixtures/devcontainer"
+        reset: true
+      - type: workdir
+        name: container-component-fixture
+        source: "../../examples/container-component"
+        path: "../../.context/cast-fixtures/container-component"
+        reset: true
       - type: shell
         name: build-atmos
         # CGO off to match the release build; with CGO on, transitive deps

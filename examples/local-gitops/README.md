@@ -1,6 +1,9 @@
 ---
 title: Local GitOps
 tags: [Emulators, Kubernetes, Automation]
+cast:
+  file: /casts/examples/local-gitops/lifecycle.cast
+  title: atmos local gitops lifecycle
 ---
 
 # Example: Local GitOps Round Trip

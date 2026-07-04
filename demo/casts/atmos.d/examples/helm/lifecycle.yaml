@@ -1,0 +1,54 @@
+commands:
+  - name: casts generate examples helm lifecycle
+    description: Regenerate the Native Helm example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: lifecycle
+        working_directory: "../../.context/cast-fixtures/helm"
+        title: "Native Helm: deploy to a local emulator"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/helm/lifecycle.cast"
+        steps:
+          - type: simulate
+            text: "# render, deploy, verify, and tear down the Helm release"
+          - type: simulate
+            text: &cmd atmos test
+          - type: shell
+            name: test
+            duration: 650ms
+            interval: 750ms
+            command: *cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples helm lifecycle
+  - name: casts validate examples helm lifecycle
+    description: Validate the Native Helm example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/helm/lifecycle.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in ["atmos test", "apiversion: apps/v1", "kind: deployment", "kind: service", "emulator kubernetes is up", "emulator kubernetes is down"]:
+              if needle not in plain.lower():
+                  raise SystemExit(f"helm cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

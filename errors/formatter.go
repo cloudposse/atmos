@@ -35,7 +35,9 @@ const (
 	newline = "\n"
 )
 
-var newTerminalMarkdownRenderer = markdown.NewTerminalMarkdownRenderer
+var newMarkdownRendererWithWidth = func(config schema.AtmosConfiguration, width int) (*markdown.Renderer, error) {
+	return markdown.NewRenderer(config, markdown.WithWidth(uint(width))) //nolint:gosec // width is normalized by renderMarkdown before conversion.
+}
 
 const (
 	explanationGradientStart = "#33204f"
@@ -399,15 +401,8 @@ func resolveFormatterWidth(config FormatterConfig) int {
 	configuredWidth := configuredFormatterWidth()
 	detectedWidth := detectFormatterTerminalWidth()
 
-	if configuredWidth > 0 {
-		if detectedWidth > 0 {
-			return min(configuredWidth, detectedWidth)
-		}
+	if configuredWidth > 0 && configuredWidth != detectedWidth {
 		return configuredWidth
-	}
-
-	if detectedWidth > 0 {
-		return detectedWidth
 	}
 
 	return DefaultMarkdownWidth
@@ -614,7 +609,7 @@ func renderMarkdown(md string, maxLineLength int) (string, bool) {
 		},
 	}
 
-	renderer, err := newTerminalMarkdownRenderer(config)
+	renderer, err := newMarkdownRendererWithWidth(config, width)
 	if err != nil {
 		return "", false
 	}

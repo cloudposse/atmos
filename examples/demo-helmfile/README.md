@@ -1,6 +1,9 @@
 ---
 title: Helmfile
 tags: [Kubernetes]
+cast:
+  file: /casts/examples/demo-helmfile/lifecycle.cast
+  title: atmos helmfile lifecycle
 ---
 
 # Example: Demo Helmfile

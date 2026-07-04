@@ -1,6 +1,9 @@
 ---
 title: Container Steps
 tags: [Automation]
+cast:
+  file: /casts/examples/container-step/build-run.cast
+  title: atmos container build run
 ---
 
 # Example: Container Step

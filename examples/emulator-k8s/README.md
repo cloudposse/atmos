@@ -1,6 +1,9 @@
 ---
 title: Kubernetes Emulator
 tags: [Emulators, Kubernetes]
+cast:
+  file: /casts/examples/emulator-k8s/lifecycle.cast
+  title: atmos kubernetes emulator lifecycle
 ---
 
 ## Notes

@@ -96,6 +96,10 @@ def assert_no_error_output(text):
         "## Explanation",
         "## Hints",
         "Incorrect Usage",
+        "Value for undeclared variable",
+        "Values for undeclared variables",
+        "undeclared variable",
+        "undeclared variables",
         "panic:",
     ):
         if marker in text:

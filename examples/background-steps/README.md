@@ -1,6 +1,9 @@
 ---
 title: Background Steps
 tags: [Automation]
+cast:
+  file: /casts/examples/background-steps/service.cast
+  title: atmos background service
 ---
 
 # Background container services

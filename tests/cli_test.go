@@ -1107,7 +1107,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["COLORTERM"] = "" // Explicitly empty to prevent truecolor (force 256-color)
 	}
 	if _, exists := tc.Env["COLUMNS"]; !exists {
-		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table rendering
+		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table and markdown rendering
 	}
 
 	// Standardize the terraform binary on OpenTofu for the whole suite so the

@@ -1,6 +1,9 @@
 ---
 title: Kubernetes Components
 tags: [Kubernetes]
+cast:
+  file: /casts/examples/kubernetes/lifecycle.cast
+  title: atmos kubernetes lifecycle
 ---
 
 # Example: Kubernetes Components

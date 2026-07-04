@@ -70,8 +70,8 @@ commands:
         name: say-something-pipeline
         command: atmos casts generate examples say-something pipeline
       - type: shell
-        name: demo-ansible-dry-run
-        command: atmos casts generate examples demo-ansible dry-run
+        name: demo-ansible-playbook
+        command: atmos casts generate examples demo-ansible playbook
       - type: shell
         name: demo-atlantis-repo-config
         command: atmos casts generate examples demo-atlantis repo-config
@@ -99,6 +99,51 @@ commands:
       - type: shell
         name: hooks-custom-command-hook-config
         command: atmos casts generate examples hooks-custom-command hook-config
+      - type: shell
+        name: hooks-checkov-security-scan
+        command: atmos casts generate examples hooks-checkov security-scan
+      - type: shell
+        name: hooks-kics-security-scan
+        command: atmos casts generate examples hooks-kics security-scan
+      - type: shell
+        name: hooks-trivy-security-scan
+        command: atmos casts generate examples hooks-trivy security-scan
+      - type: shell
+        name: background-steps-service
+        command: atmos casts generate examples background-steps service
+      - type: shell
+        name: container-step-build-run
+        command: atmos casts generate examples container-step build-run
+      - type: shell
+        name: container-sandbox-sandbox
+        command: atmos casts generate examples container-sandbox sandbox
+      - type: shell
+        name: container-component-lifecycle
+        command: atmos casts generate examples container-component lifecycle
+      - type: shell
+        name: devcontainer-config
+        command: atmos casts generate examples devcontainer config
+      - type: shell
+        name: gitops-reconcile
+        command: atmos casts generate examples gitops reconcile
+      - type: shell
+        name: helm-lifecycle
+        command: atmos casts generate examples helm lifecycle
+      - type: shell
+        name: kubernetes-lifecycle
+        command: atmos casts generate examples kubernetes lifecycle
+      - type: shell
+        name: kustomize-lifecycle
+        command: atmos casts generate examples kustomize lifecycle
+      - type: shell
+        name: demo-helmfile-lifecycle
+        command: atmos casts generate examples demo-helmfile lifecycle
+      - type: shell
+        name: emulator-k8s-lifecycle
+        command: atmos casts generate examples emulator-k8s lifecycle
+      - type: shell
+        name: local-gitops-lifecycle
+        command: atmos casts generate examples local-gitops lifecycle
   - name: casts validate examples
     description: Validate every example-sourced cast
     env: !include cast-defaults.yaml .env.command
@@ -170,8 +215,8 @@ commands:
         name: say-something-pipeline
         command: atmos casts validate examples say-something pipeline
       - type: shell
-        name: demo-ansible-dry-run
-        command: atmos casts validate examples demo-ansible dry-run
+        name: demo-ansible-playbook
+        command: atmos casts validate examples demo-ansible playbook
       - type: shell
         name: demo-atlantis-repo-config
         command: atmos casts validate examples demo-atlantis repo-config
@@ -199,3 +244,48 @@ commands:
       - type: shell
         name: hooks-custom-command-hook-config
         command: atmos casts validate examples hooks-custom-command hook-config
+      - type: shell
+        name: hooks-checkov-security-scan
+        command: atmos casts validate examples hooks-checkov security-scan
+      - type: shell
+        name: hooks-kics-security-scan
+        command: atmos casts validate examples hooks-kics security-scan
+      - type: shell
+        name: hooks-trivy-security-scan
+        command: atmos casts validate examples hooks-trivy security-scan
+      - type: shell
+        name: background-steps-service
+        command: atmos casts validate examples background-steps service
+      - type: shell
+        name: container-step-build-run
+        command: atmos casts validate examples container-step build-run
+      - type: shell
+        name: container-sandbox-sandbox
+        command: atmos casts validate examples container-sandbox sandbox
+      - type: shell
+        name: container-component-lifecycle
+        command: atmos casts validate examples container-component lifecycle
+      - type: shell
+        name: devcontainer-config
+        command: atmos casts validate examples devcontainer config
+      - type: shell
+        name: gitops-reconcile
+        command: atmos casts validate examples gitops reconcile
+      - type: shell
+        name: helm-lifecycle
+        command: atmos casts validate examples helm lifecycle
+      - type: shell
+        name: kubernetes-lifecycle
+        command: atmos casts validate examples kubernetes lifecycle
+      - type: shell
+        name: kustomize-lifecycle
+        command: atmos casts validate examples kustomize lifecycle
+      - type: shell
+        name: demo-helmfile-lifecycle
+        command: atmos casts validate examples demo-helmfile lifecycle
+      - type: shell
+        name: emulator-k8s-lifecycle
+        command: atmos casts validate examples emulator-k8s lifecycle
+      - type: shell
+        name: local-gitops-lifecycle
+        command: atmos casts validate examples local-gitops lifecycle

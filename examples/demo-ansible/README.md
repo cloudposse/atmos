@@ -2,8 +2,8 @@
 title: Ansible
 tags: [Automation]
 cast:
-  file: /casts/examples/demo-ansible/dry-run.cast
-  title: atmos Ansible dry run
+  file: /casts/examples/demo-ansible/playbook.cast
+  title: atmos Ansible playbook
 ---
 
 # Example: Ansible Hello World
@@ -35,8 +35,6 @@ atmos ansible playbook hello-world -s dev
 # Run the playbook in prod (different vars)
 atmos ansible playbook hello-world -s prod
 
-# Dry run to see the command without executing
-atmos ansible playbook hello-world -s dev --dry-run
 ```
 
 ## Key Files

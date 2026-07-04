@@ -1,6 +1,9 @@
 ---
 title: Container Sandbox
 tags: [DX]
+cast:
+  file: /casts/examples/container-sandbox/sandbox.cast
+  title: atmos container sandbox
 ---
 
 # Example: Container Sandbox

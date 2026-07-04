@@ -53,7 +53,20 @@ func InitializeMarkdown(config *schema.AtmosConfiguration) {
 	}
 
 	var err error
-	render, err = markdown.NewTerminalMarkdownRenderer(*config)
+	detectedWidth := detectFormatterTerminalWidth()
+	width := config.Settings.Terminal.MaxWidth
+	if width == detectedWidth {
+		width = 0
+	}
+	//nolint:staticcheck // Deprecated docs max-width remains supported as a compatibility fallback.
+	if width <= 0 {
+		width = config.Settings.Docs.MaxWidth
+	}
+	if width <= 0 {
+		width = DefaultMarkdownWidth
+	}
+
+	render, err = markdown.NewRenderer(*config, markdown.WithWidth(uint(width))) //nolint:gosec // width is normalized above before conversion.
 	if err != nil {
 		log.Error("failed to initialize Markdown renderer", "error", err)
 	}

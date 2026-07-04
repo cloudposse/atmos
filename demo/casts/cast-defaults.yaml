@@ -14,6 +14,7 @@ env:
   command:
     PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
   recording:
+    NO_COLOR: ''
     TERM: xterm-256color
     COLORTERM: truecolor
     ATMOS_FORCE_COLOR: '1'

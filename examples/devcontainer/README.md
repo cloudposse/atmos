@@ -1,6 +1,9 @@
 ---
 title: Devcontainer
 tags: [DX]
+cast:
+  file: /casts/examples/devcontainer/config.cast
+  title: atmos devcontainer config
 ---
 
 # Devcontainer Example

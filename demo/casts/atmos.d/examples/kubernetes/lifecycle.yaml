@@ -1,0 +1,54 @@
+commands:
+  - name: casts generate examples kubernetes lifecycle
+    description: Regenerate the Kubernetes Components example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: lifecycle
+        working_directory: "../../.context/cast-fixtures/kubernetes"
+        title: "Kubernetes Components: apply to a local emulator"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/kubernetes/lifecycle.cast"
+        steps:
+          - type: simulate
+            text: "# bring up k3s, apply manifests, then tear it down"
+          - type: simulate
+            text: &cmd atmos test
+          - type: shell
+            name: test
+            duration: 650ms
+            interval: 750ms
+            command: *cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples kubernetes lifecycle
+  - name: casts validate examples kubernetes lifecycle
+    description: Validate the Kubernetes Components example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/kubernetes/lifecycle.cast")
+          plain = strip_ansi(text).lower()
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in ["atmos test", "emulator kubernetes is up", "applied apps/v1/deployment", "applied v1/service", "emulator kubernetes is down"]:
+              if needle not in plain:
+                  raise SystemExit(f"kubernetes cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

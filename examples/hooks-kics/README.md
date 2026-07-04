@@ -1,6 +1,9 @@
 ---
 title: KICS Hook
 tags: [Hooks]
+cast:
+  file: /casts/examples/hooks-kics/security-scan.cast
+  title: atmos KICS hook
 ---
 
 # `hooks-kics`

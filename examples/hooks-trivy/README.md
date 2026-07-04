@@ -1,6 +1,9 @@
 ---
 title: Trivy Hook
 tags: [Hooks]
+cast:
+  file: /casts/examples/hooks-trivy/security-scan.cast
+  title: atmos Trivy hook
 ---
 
 # `hooks-trivy`

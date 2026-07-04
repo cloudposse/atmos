@@ -1,6 +1,9 @@
 ---
 title: Kustomize
 tags: [Kubernetes]
+cast:
+  file: /casts/examples/kustomize/lifecycle.cast
+  title: atmos kustomize lifecycle
 ---
 
 # Example: Kustomize Components

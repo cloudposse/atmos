@@ -1,6 +1,9 @@
 ---
 title: Native Helm
 tags: [Kubernetes]
+cast:
+  file: /casts/examples/helm/lifecycle.cast
+  title: atmos native helm lifecycle
 ---
 
 # Native Helm Component Example
