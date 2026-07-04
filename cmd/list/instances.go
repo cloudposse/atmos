@@ -86,7 +86,7 @@ func parseInstancesOptions(cmd *cobra.Command, v *viper.Viper) *InstancesOptions
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
-		AuthDisabled:     identityName == cfg.IdentityFlagDisabledValue,
+		AuthDisabled:     identityName == "" || identityName == cfg.IdentityFlagDisabledValue,
 	}
 }
 
@@ -203,6 +203,6 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 		OutputFile:       opts.OutputFile,
 		ProcessTemplates: opts.ProcessTemplates,
 		ProcessFunctions: opts.ProcessFunctions,
-		Skip:             opts.Skip,
+		Skip:             skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager),
 	})
 }

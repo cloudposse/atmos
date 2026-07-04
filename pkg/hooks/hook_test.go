@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -109,6 +110,58 @@ func TestHook_MatchesEvent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.hook.MatchesEvent(tt.event))
+		})
+	}
+}
+
+func TestHook_MatchesAllTerraformEventNotations(t *testing.T) {
+	events := []HookEvent{
+		BeforeTerraformInit,
+		AfterTerraformInit,
+		BeforeTerraformPlan,
+		AfterTerraformPlan,
+		AfterTerraformPlanAggregate,
+		BeforeTerraformApply,
+		AfterTerraformApply,
+		AfterTerraformApplyAggregate,
+		BeforeTerraformDeploy,
+		AfterTerraformDeploy,
+		AfterTerraformDestroyAggregate,
+	}
+
+	for _, event := range events {
+		canonical := string(event)
+		hyphenated := strings.ReplaceAll(canonical, ".", "-")
+
+		t.Run(canonical+"/dotted", func(t *testing.T) {
+			assert.True(t, Hook{Events: []string{canonical}}.MatchesEvent(event))
+		})
+
+		t.Run(canonical+"/hyphenated", func(t *testing.T) {
+			assert.True(t, Hook{Events: []string{hyphenated}}.MatchesEvent(event))
+		})
+	}
+}
+
+func TestHook_MatchesDeployApplyAliasesInBothNotations(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured string
+		event      HookEvent
+	}{
+		{name: "dotted apply matches deploy", configured: "after.terraform.apply", event: AfterTerraformDeploy},
+		{name: "hyphenated apply matches deploy", configured: "after-terraform-apply", event: AfterTerraformDeploy},
+		{name: "dotted deploy matches apply", configured: "after.terraform.deploy", event: AfterTerraformApply},
+		{name: "hyphenated deploy matches apply", configured: "after-terraform-deploy", event: AfterTerraformApply},
+		{name: "dotted before apply matches before deploy", configured: "before.terraform.apply", event: BeforeTerraformDeploy},
+		{name: "hyphenated before apply matches before deploy", configured: "before-terraform-apply", event: BeforeTerraformDeploy},
+		{name: "dotted before deploy matches before apply", configured: "before.terraform.deploy", event: BeforeTerraformApply},
+		{name: "hyphenated before deploy matches before apply", configured: "before-terraform-deploy", event: BeforeTerraformApply},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.True(t, Hook{Events: []string{tt.configured}}.MatchesEvent(tt.event))
 		})
 	}
 }

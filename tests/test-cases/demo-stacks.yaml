@@ -9,15 +9,17 @@ tests:
     args:
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff: []
       stdout:
-        - "AVAILABLE COMMANDS"
+        - "BUILT-IN COMMANDS"
         - "\\bauth\\b"
         - "\\batlantis\\b"
         - "\\baws\\b"
         - "\\bcompletion\\b"
         - "\\bdescribe\\b"
         - "\\bdocs\\b"
+        - "\\bgit\\b"
         - "\\bhelmfile\\b"
         - "\\bhelp\\b"
         - "\\blist\\b"

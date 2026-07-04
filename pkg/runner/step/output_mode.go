@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -55,6 +56,25 @@ func (w *OutputModeWriter) Execute(cmd *exec.Cmd) (string, string, error) {
 	}
 }
 
+// ExecuteWithIO runs a command-like operation with the configured output mode.
+// The runner receives stdout and stderr writers to attach to the operation.
+func (w *OutputModeWriter) ExecuteWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
+	defer perf.Track(nil, "step.OutputModeWriter.ExecuteWithIO")()
+
+	switch w.mode {
+	case OutputModeViewport:
+		return w.executeViewportWithIO(runner)
+	case OutputModeRaw:
+		return w.executeRawWithIO(runner)
+	case OutputModeLog:
+		return w.executeLogWithIO(runner)
+	case OutputModeNone:
+		return w.executeNoneWithIO(runner)
+	default:
+		return w.executeLogWithIO(runner)
+	}
+}
+
 // executeViewport captures output and displays in pager.
 func (w *OutputModeWriter) executeViewport(cmd *exec.Cmd) (string, string, error) {
 	var stdout, stderr bytes.Buffer
@@ -98,6 +118,40 @@ func (w *OutputModeWriter) executeViewport(cmd *exec.Cmd) (string, string, error
 	return stdout.String(), stderr.String(), nil
 }
 
+func (w *OutputModeWriter) executeViewportWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
+	var stdout, stderr bytes.Buffer
+
+	err := runner(&stdout, &stderr)
+	if err != nil {
+		return w.fallbackToLog(stdout.String(), stderr.String(), err)
+	}
+
+	term := terminal.New()
+	if !term.IsTTY(terminal.Stdout) {
+		return w.fallbackToLog(stdout.String(), stderr.String(), nil)
+	}
+
+	content := stdout.String()
+	if stderr.Len() > 0 {
+		content += "\n--- stderr ---\n" + stderr.String()
+	}
+
+	height, width := 0, 0
+	if w.viewport != nil {
+		height = w.viewport.Height
+		width = w.viewport.Width
+	}
+
+	p := pager.NewWithViewport(true, height, width)
+	if pagerErr := p.Run(w.stepName, content); pagerErr != nil {
+		if writeErr := data.Write(content); writeErr != nil {
+			return stdout.String(), stderr.String(), writeErr
+		}
+	}
+
+	return stdout.String(), stderr.String(), nil
+}
+
 // executeRaw passes output directly to stdout/stderr.
 func (w *OutputModeWriter) executeRaw(cmd *exec.Cmd) (string, string, error) {
 	// Create writers that capture and forward output.
@@ -112,6 +166,14 @@ func (w *OutputModeWriter) executeRaw(cmd *exec.Cmd) (string, string, error) {
 	cmd.Stderr = io.MultiWriter(&stderr, ioCtx.UI())
 
 	err := cmd.Run()
+	return stdout.String(), stderr.String(), err
+}
+
+func (w *OutputModeWriter) executeRawWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
+	var stdout, stderr bytes.Buffer
+	ioCtx := iolib.GetContext()
+
+	err := runner(io.MultiWriter(&stdout, ioCtx.Data()), io.MultiWriter(&stderr, ioCtx.UI()))
 	return stdout.String(), stderr.String(), err
 }
 
@@ -133,6 +195,22 @@ func (w *OutputModeWriter) executeLog(cmd *exec.Cmd) (string, string, error) {
 
 	err := cmd.Run()
 
+	return w.fallbackToLog(stdout.String(), stderr.String(), err)
+}
+
+func (w *OutputModeWriter) executeLogWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
+	var stdout, stderr bytes.Buffer
+
+	styles := theme.GetCurrentStyles()
+	var stepLabel string
+	if styles != nil {
+		stepLabel = styles.Label.Render("[" + w.stepName + "]")
+	} else {
+		stepLabel = "[" + w.stepName + "]"
+	}
+	ui.Writeln(stepLabel)
+
+	err := runner(&stdout, &stderr)
 	return w.fallbackToLog(stdout.String(), stderr.String(), err)
 }
 
@@ -188,6 +266,13 @@ func (w *OutputModeWriter) executeNone(cmd *exec.Cmd) (string, string, error) {
 	return stdout.String(), stderr.String(), err
 }
 
+func (w *OutputModeWriter) executeNoneWithIO(runner func(stdout, stderr io.Writer) error) (string, string, error) {
+	var stdout, stderr bytes.Buffer
+
+	err := runner(&stdout, &stderr)
+	return stdout.String(), stderr.String(), err
+}
+
 // GetOutputMode returns the effective output mode for a step.
 // Checks step-level, workflow-level, and defaults.
 func GetOutputMode(step *schema.WorkflowStep, workflow *schema.WorkflowDefinition) OutputMode {
@@ -203,8 +288,25 @@ func GetOutputMode(step *schema.WorkflowStep, workflow *schema.WorkflowDefinitio
 		return OutputMode(workflow.Output)
 	}
 
+	if envPagerEnabled() {
+		return OutputModeViewport
+	}
+
 	// Default to log mode.
 	return OutputModeLog
+}
+
+func envPagerEnabled() bool {
+	if os.Getenv("NO_PAGER") != "" { //nolint:forbidigo // NO_PAGER is a standard CLI env var.
+		return false
+	}
+
+	pagerValue := os.Getenv("ATMOS_PAGER") //nolint:forbidigo // Used here before command-level Viper binding is guaranteed.
+	if pagerValue == "" {
+		return false
+	}
+
+	return (&schema.Terminal{Pager: pagerValue}).IsPagerEnabled()
 }
 
 // GetViewportConfig returns the effective viewport config for a step.

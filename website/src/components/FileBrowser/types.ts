@@ -50,9 +50,13 @@ export interface DocLink {
 export interface ExampleProject {
   name: string;
   path: string;
+  /** Friendly display title; falls back to the directory name. */
+  title?: string;
   description: string;
   hasReadme: boolean;
   hasAtmosYaml: boolean;
+  /** Whether this example is part of the curated featured set. */
+  featured?: boolean;
   tags: string[];
   docs: DocLink[];
   root: DirectoryNode;
@@ -63,6 +67,8 @@ export interface ExampleProject {
  */
 export interface ExamplesTree {
   examples: ExampleProject[];
+  /** Curated featured examples, in display order. */
+  featured: ExampleProject[];
   tags: string[];
   generatedAt: string;
   totalFiles: number;

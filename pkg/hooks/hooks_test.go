@@ -322,7 +322,7 @@ func TestResolveHookForExecutionBranches(t *testing.T) {
 		original := &Hook{Kind: "store", Name: "static-store"}
 		hooks := &Hooks{}
 
-		resolved, err := hooks.resolveHookForExecution("missing", original, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{})
+		resolved, err := hooks.resolveHookForExecution("missing", original, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunSuccess})
 		require.NoError(t, err)
 		assert.Same(t, original, resolved)
 	})
@@ -351,7 +351,7 @@ func TestResolveHookForExecutionBranches(t *testing.T) {
 			},
 		}
 
-		resolved, err := hooks.resolveHookForExecution("store-outputs", &Hook{Kind: "store"}, &schema.AtmosConfiguration{}, nil)
+		resolved, err := hooks.resolveHookForExecution("store-outputs", &Hook{Kind: "store"}, &schema.AtmosConfiguration{}, nil, Outcome{Status: RunSuccess})
 		require.NoError(t, err)
 		assert.Equal(t, "store", resolved.Kind)
 		assert.Equal(t, "my-project", resolved.Name)
@@ -370,7 +370,7 @@ func TestResolveHookForExecutionBranches(t *testing.T) {
 			},
 		}
 
-		_, err := hooks.resolveHookForExecution("broken", &Hook{Kind: "store"}, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{})
+		_, err := hooks.resolveHookForExecution("broken", &Hook{Kind: "store"}, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Outcome{Status: RunSuccess})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to render hook")
 	})
@@ -844,6 +844,88 @@ func TestRunAll_SkipHooksBypassesPreflightBinaryCheck(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRunAll_PreflightOnlyChecksMatchingEvent(t *testing.T) {
+	h := Hooks{
+		config: &schema.AtmosConfiguration{},
+		info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "test-component",
+			Stack:            "test-stack",
+		},
+		items: map[string]Hook{
+			"plan-scanner": {
+				Events:  []string{"after-terraform-plan"},
+				Kind:    "command",
+				Command: "definitely-not-on-path-atmos-test",
+			},
+		},
+	}
+
+	err := h.RunAll(BeforeTerraformApply, h.config, h.info, nil, nil)
+	require.NoError(t, err, "plan-only hook must not block apply preflight")
+
+	err = h.RunAll(AfterTerraformPlan, h.config, h.info, nil, nil)
+	require.Error(t, err, "matching event must still preflight hook binaries")
+	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+}
+
+func TestHooksPreflight_CacheIncludesStatusAndCI(t *testing.T) {
+	t.Run("ci state", func(t *testing.T) {
+		h := Hooks{
+			items: map[string]Hook{
+				"ci-only": {
+					Kind:    "command",
+					Command: "definitely-not-on-path-atmos-test",
+					When:    schema.MustCondition("ci"),
+				},
+			},
+		}
+		cfg := &schema.AtmosConfiguration{}
+		info := &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"}
+
+		err := h.preflight(cfg, info, hookFilter{
+			event:  BeforeTerraformPlan,
+			status: RunSuccess,
+			isCI:   false,
+		})
+		require.NoError(t, err)
+
+		err = h.preflight(cfg, info, hookFilter{
+			event:  BeforeTerraformPlan,
+			status: RunSuccess,
+			isCI:   true,
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	})
+
+	t.Run("status", func(t *testing.T) {
+		h := Hooks{
+			items: map[string]Hook{
+				"failure-only": {
+					Kind:    "command",
+					Command: "definitely-not-on-path-atmos-test",
+					When:    schema.MustCondition("failure"),
+				},
+			},
+		}
+		cfg := &schema.AtmosConfiguration{}
+		info := &schema.ConfigAndStacksInfo{ComponentFromArg: "component", Stack: "stack"}
+
+		err := h.preflight(cfg, info, hookFilter{
+			event:  BeforeTerraformPlan,
+			status: RunSuccess,
+		})
+		require.NoError(t, err)
+
+		err = h.preflight(cfg, info, hookFilter{
+			event:  BeforeTerraformPlan,
+			status: RunFailure,
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	})
+}
+
 func TestHooksPreflight_NoOpBranches(t *testing.T) {
 	skipNone := func(string) bool { return false }
 
@@ -904,7 +986,12 @@ func TestHooksPreflight_NoOpBranches(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.hooks.preflight(tt.cfg, tt.info, tt.skip)
+			err := tt.hooks.preflight(tt.cfg, tt.info, hookFilter{
+				event:         BeforeTerraformPlan,
+				skipPredicate: tt.skip,
+				status:        RunSuccess,
+				isCI:          false,
+			})
 			require.NoError(t, err)
 			assert.True(t, tt.hooks.preflightDone)
 		})
@@ -920,7 +1007,25 @@ func TestHooksVerifyAllBinaries(t *testing.T) {
 			"skipped":    {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
 		}}
 
-		err := h.verifyAllBinaries(func(name string) bool { return name == "skipped" })
+		err := h.verifyAllBinaries(hookFilter{
+			event:         BeforeTerraformPlan,
+			skipPredicate: func(name string) bool { return name == "skipped" },
+			status:        RunSuccess,
+			isCI:          false,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("skips hooks for other events", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"plan-only": {
+				Events:  []string{"after-terraform-plan"},
+				Kind:    "command",
+				Command: "definitely-not-on-path-atmos-test",
+			},
+		}}
+
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformApply, status: RunSuccess})
 		require.NoError(t, err)
 	})
 
@@ -929,7 +1034,39 @@ func TestHooksVerifyAllBinaries(t *testing.T) {
 			"missing": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
 		}}
 
-		err := h.verifyAllBinaries(nil)
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	})
+
+	t.Run("skips hooks that do not run for the current outcome status", func(t *testing.T) {
+		// A success-only hook (default `when`) with a missing binary must not
+		// fail preflight on the failure path. The only command to verify is the
+		// success-only hook; the failure hook has no command.
+		h := Hooks{items: map[string]Hook{
+			"success-only": {Kind: "command", Command: "definitely-not-on-path-atmos-test"},
+			"on-failure":   {Kind: "store", When: schema.MustCondition(WhenFailure)},
+		}}
+
+		// Failure path: the success-only hook is skipped, so its missing binary
+		// does not block the run.
+		require.NoError(t, h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunFailure}))
+
+		// Success path: the success-only hook IS verified and its missing binary
+		// is reported (proving the skip above was status-driven, not a no-op).
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+	})
+
+	t.Run("skips ci-only hooks outside ci during preflight", func(t *testing.T) {
+		h := Hooks{items: map[string]Hook{
+			"ci-only": {Kind: "command", Command: "definitely-not-on-path-atmos-test", When: schema.MustCondition("ci")},
+		}}
+
+		require.NoError(t, h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess}))
+
+		err := h.verifyAllBinaries(hookFilter{event: BeforeTerraformPlan, status: RunSuccess, isCI: true})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
 	})

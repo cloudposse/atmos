@@ -1,0 +1,160 @@
+# End-to-end test for the AUTOMATIC native-CI planfile flow on `deploy`.
+#
+# Distinct from planfile-artifacts-e2e.yml (which exercises the *manual* CLI:
+# `planfile download` + `apply --planfile`). This workflow exercises the
+# hook-driven automatic path:
+#
+#   plan job          -> `atmos terraform plan` auto-uploads the planfile, then
+#                        `atmos terraform planfile list` asserts it landed.
+#   deploy-verify job -> `atmos terraform deploy` auto-downloads the stored plan,
+#                        runs the plan-diff, and applies the verified plan
+#                        (verification is on by default under CI).
+#   deploy-drift job  -> mutates the component so the fresh plan differs, then
+#                        asserts `deploy` FAILS on drift (verify mode fail).
+#
+# CI is auto-detected (CI/GITHUB_ACTIONS) and the fixture sets `ci.enabled: true`,
+# so the `--ci` flag is unnecessary — the commands behave natively and assert via
+# their own exit codes and structured output rather than grepping logs.
+#
+# The warn/off mode decisions are covered by unit tests (finalizeVerification,
+# ResolveVerifyMode); this workflow covers the real runner integration.
+#
+# Like the upload, the automatic download talks to the GitHub Artifacts runtime
+# API, so every job surfaces ACTIONS_RUNTIME_TOKEN/RESULTS_URL via the in-repo
+# github-runtime action. OpenTofu is dogfooded through the Atmos toolchain (the
+# fixture declares dependencies.tools.opentofu), so there is no setup-terraform.
+name: Planfile Verify E2E
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'pkg/ci/artifact/**'
+      - 'cmd/terraform/**'
+      - 'internal/exec/terraform_verify_plan.go'
+      - 'internal/exec/terraform_plan_diff*.go'
+      - 'pkg/ci/plugins/terraform/**'
+      - 'actions/github-runtime/**'
+      - 'tests/fixtures/scenarios/planfile-artifacts-e2e/**'
+      - '.github/workflows/planfile-verify-e2e.yml'
+
+permissions:
+  contents: read
+  actions: read # GITHUB_TOKEN reads artifacts via the REST API (fallback path).
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pin the SHA so the plan upload and the deploy download derive the identical
+  # planfile key across jobs.
+  ATMOS_CI_SHA: ${{ github.sha }}
+  GITHUB_TOKEN: ${{ github.token }}
+  FIXTURE_DIR: tests/fixtures/scenarios/planfile-artifacts-e2e
+
+jobs:
+  plan:
+    name: plan (upload planfile)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: "go.mod"
+      - name: Build atmos
+        run: |
+          make build
+          echo "$PWD/build" >> "$GITHUB_PATH"
+      - name: Expose GitHub Actions runtime credentials
+        uses: ./actions/github-runtime
+        with:
+          mode: env
+      - name: Plan and upload the planfile
+        working-directory: tests/fixtures/scenarios/planfile-artifacts-e2e
+        # No --ci: GitHub Actions is auto-detected (CI/GITHUB_ACTIONS) and the
+        # fixture sets ci.enabled, so the upload hook runs natively.
+        run: atmos terraform plan mycomponent -s prod
+      - name: List the uploaded planfile
+        working-directory: tests/fixtures/scenarios/planfile-artifacts-e2e
+        # Exercises the github/artifacts List() against the real runner API and
+        # proves the upload landed, asserting the command's structured JSON output
+        # (not grepping log prose). The command already filters by component+stack
+        # +SHA, so a non-empty array means the planfile is there; an absent one
+        # renders `null`, which `length > 0` fails on.
+        run: |
+          set -euo pipefail
+          atmos terraform planfile list mycomponent -s prod --format=json \
+            | jq -e 'length > 0' > /dev/null
+
+  deploy-verify:
+    name: deploy (auto verify + apply)
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: "go.mod"
+      - name: Build atmos
+        run: |
+          make build
+          echo "$PWD/build" >> "$GITHUB_PATH"
+      - name: Expose GitHub Actions runtime credentials
+        uses: ./actions/github-runtime
+        with:
+          mode: env
+      - name: Deploy with automatic verification
+        working-directory: tests/fixtures/scenarios/planfile-artifacts-e2e
+        # No drift: the deploy re-plans the unchanged component, the plan-diff matches
+        # the stored plan, and the verified plan is applied. No --ci, no log grep: a
+        # green deploy *proves* verification ran, because a missing stored plan now
+        # fails loudly (planfiles.required defaults to tracking the verify mode,
+        # which is fail under CI).
+        run: atmos terraform deploy mycomponent -s prod
+
+  deploy-drift:
+    name: deploy (drift fails)
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: "go.mod"
+      - name: Build atmos
+        run: |
+          make build
+          echo "$PWD/build" >> "$GITHUB_PATH"
+      - name: Expose GitHub Actions runtime credentials
+        uses: ./actions/github-runtime
+        with:
+          mode: env
+      - name: Induce drift and expect deploy to fail
+        working-directory: tests/fixtures/scenarios/planfile-artifacts-e2e
+        # Native exit code is the contract: deploy exits non-zero on drift
+        # (ErrPlanVerificationFailed), so an inverted check needs no --ci, no
+        # captured `$?`, and no log grep.
+        run: |
+          set -euo pipefail
+          # Mutate the component so the fresh plan differs from the stored plan.
+          sed -i 's/test = "test"/test = "drifted"/' components/terraform/mock/main.tf
+
+          if atmos terraform deploy mycomponent -s prod; then
+            echo "ERROR: expected drift to block the deploy, but it succeeded."
+            exit 1
+          fi
+          echo "Drift correctly blocked the deploy."

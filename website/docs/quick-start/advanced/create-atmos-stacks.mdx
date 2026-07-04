@@ -1,337 +1,349 @@
 ---
 title: Create Atmos Stacks
-sidebar_position: 6
+sidebar_position: 4
 sidebar_label: Create Stacks
 ---
 import File from '@site/src/components/File'
 
-In the previous step, we've configured the Terraform components and described how they can be vendored into the repository.
+In the previous steps, we configured the Terraform components and started the [local sandbox](/quick-start/advanced/start-sandbox).
 
-Next step is to create and configure [Atmos stacks](/learn/stacks).
+Next step is to create and configure [Atmos stacks](/learn/stacks) — the YAML configuration that tells Atmos how each component should be provisioned in
+each environment. This is the heart of the tutorial, and it's where most of the Atmos design patterns show up.
 
 ## Create Catalog for Components
 
-Atmos supports the [Catalog](/howto/catalogs) pattern to configure default settings for Atmos components.
-All the common default settings for each Atmos component should be in a separate file in the `stacks/catalog` directory.
-The file then gets imported into the parent Atmos stacks.
-This makes the stack configurations DRY by reusing the component's config that is common for all environments.
+Atmos supports the [Configuration Catalog](/design-patterns/component-catalog) pattern to define default settings for Atmos components.
+All the common default settings for each component go into a separate file under the `stacks/catalog` directory, which is then imported into the
+parent Atmos stacks. This keeps the stack configurations DRY by reusing the component config that's common to every environment.
 
 Refer to [Stack Imports](/stacks/imports) for more details on Atmos imports.
 
-In the `stacks/catalog/vpc-flow-logs-bucket/defaults.yaml` file, add the following manifest for the `vpc-flow-logs-bucket` Atmos component:
+### `kms-key`
 
-<File title="stacks/catalog/vpc-flow-logs-bucket/defaults.yaml">
+The KMS key encrypts every other resource, so it's the root of the dependency graph. Notice there is **no per-component identity binding**: every component runs
+under the [default identity](/quick-start/advanced/configure-project) (`local-aws`, declared with `default: true` in `atmos.yaml`), so it reaches the local
+sandbox automatically. To run a component under a *different* identity you'd use the `--identity` flag or a component-level `auth` section — not a `settings` field.
+
+<File title="stacks/catalog/kms-key/defaults.yaml">
 ```yaml
 components:
   terraform:
-    vpc-flow-logs-bucket:
+    kms-key:
       metadata:
-        # Point to the Terraform component
-        component: vpc-flow-logs-bucket
+        component: kms-key
+        description: "Customer-managed KMS key that encrypts the application backend."
       vars:
-        enabled: true
-        name: "vpc-flow-logs"
-        traffic_type: "ALL"
-        force_destroy: true
-        lifecycle_rule_enabled: false
+        name: app
+        enable_key_rotation: true
 ```
 </File>
 
-In the `stacks/catalog/vpc/defaults.yaml` file, add the following manifest for the `vpc` Atmos component:
+### `s3-bucket`
 
-<File title="stacks/catalog/vpc/defaults.yaml">
+The bucket is server-side encrypted with the KMS key. Two patterns appear here for the first time:
+
+- **`dependencies.components`** declares that the bucket depends on `kms-key`, so Atmos deploys the key first (see [Component Dependencies](/stacks/dependencies)).
+- **Stack name templates** build predictable resource coordinates from `namespace`, `tenant`, `environment`, and `stage`, so the full graph can be planned before first-run state exists.
+
+It also declares `validation` (covered in [Configure Validation](/quick-start/advanced/configure-validation)) and a `hooks` block that publishes the
+bucket's coordinate to the `config/ssm` store after apply (covered under [service discovery](#two-ways-components-share-data) below).
+
+<File title="stacks/catalog/s3-bucket/defaults.yaml">
 ```yaml
 components:
   terraform:
-    vpc:
+    s3-bucket:
       metadata:
-        # Point to the Terraform component
-        component: vpc
+        component: s3-bucket
+        description: "Encrypted S3 bucket for application assets."
       settings:
-        # Validation
-        # Supports JSON Schema and OPA policies
-        # All validation steps must succeed to allow the component to be provisioned
         validation:
-          validate-vpc-component-with-jsonschema:
+          validate-s3-bucket-with-jsonschema:
             schema_type: jsonschema
-            # 'schema_path' can be an absolute path or a path relative to 'schemas.jsonschema.base_path' defined in `atmos.yaml`
-            schema_path: "vpc/validate-vpc-component.json"
-            description: Validate 'vpc' component variables using JSON Schema
-          check-vpc-component-config-with-opa-policy:
+            schema_path: "s3-bucket/validate-s3-bucket-component.json"
+            description: Validate 's3-bucket' variables using JSON Schema
+          check-s3-bucket-with-opa-policy:
             schema_type: opa
-            # 'schema_path' can be an absolute path or a path relative to 'schemas.opa.base_path' defined in `atmos.yaml`
-            schema_path: "vpc/validate-vpc-component.rego"
-            # An array of filesystem paths (folders or individual files) to the additional modules for schema validation
-            # Each path can be an absolute path or a path relative to `schemas.opa.base_path` defined in `atmos.yaml`
-            # In this example, we have the additional Rego modules in `stacks/schemas/opa/catalog/constants`
+            schema_path: "s3-bucket/validate-s3-bucket-component.rego"
             module_paths:
               - "catalog/constants"
-            description: Check 'vpc' component configuration using OPA policy
-            # Set `disabled` to `true` to skip the validation step
-            # `disabled` is set to `false` by default, the step is allowed if `disabled` is not declared
-            disabled: false
-            # Validation timeout in seconds
+            description: Check 's3-bucket' configuration using OPA policy
             timeout: 10
+      dependencies:
+        components:
+          - name: kms-key
+      hooks:
+        publish-coordinates:
+          events:
+            - after-terraform-apply
+          kind: store
+          name: config/ssm
+          outputs:
+            bucket_id: .bucket_id
       vars:
-        enabled: true
-        name: "common"
-        max_subnet_count: 3
-        map_public_ip_on_launch: true
-        assign_generated_ipv6_cidr_block: false
-        nat_gateway_enabled: true
-        nat_instance_enabled: false
-        vpc_flow_logs_enabled: true
-        vpc_flow_logs_traffic_type: "ALL"
-        vpc_flow_logs_log_destination_type: "s3"
-        nat_eip_aws_shield_protection_enabled: false
-        subnet_type_tag_key: "acme/subnet/type"
-        ipv4_primary_cidr_block: 10.9.0.0/18
+        name: assets
+        versioning_enabled: true
+        kms_key_arn: "alias/{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-app"
 ```
 </File>
 
-In the `stacks/catalog/vpc/ue2.yaml` file, add the following manifest for the `vpc` Atmos component:
+### `dynamodb-table`
 
-<File title="stacks/catalog/vpc/ue2.yaml">
+The DynamoDB table has no dependencies of its own; it just publishes its table name to the `config/ssm` store after apply.
+
+<File title="stacks/catalog/dynamodb-table/defaults.yaml">
+```yaml
+components:
+  terraform:
+    dynamodb-table:
+      metadata:
+        component: dynamodb-table
+        description: "DynamoDB table for application state."
+      hooks:
+        publish-coordinates:
+          events:
+            - after-terraform-apply
+          kind: store
+          name: config/ssm
+          outputs:
+            table_name: .table_name
+      vars:
+        name: state
+        hash_key: id
+```
+</File>
+
+### `sns-topic`
+
+The SNS topic is KMS-encrypted with the same deterministic key alias and depends on `kms-key`.
+
+<File title="stacks/catalog/sns-topic/defaults.yaml">
+```yaml
+components:
+  terraform:
+    sns-topic:
+      metadata:
+        component: sns-topic
+        description: "SNS topic for application events."
+      dependencies:
+        components:
+          - name: kms-key
+      hooks:
+        publish-coordinates:
+          events:
+            - after-terraform-apply
+          kind: store
+          name: config/ssm
+          outputs:
+            topic_arn: .topic_arn
+      vars:
+        name: events
+        kms_key_arn: "alias/{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-app"
+```
+</File>
+
+### `sqs-queue`
+
+The queue subscribes to the SNS topic. It uses the stack-derived topic ARN and depends on `sns-topic`, so the graph still deploys the topic first.
+
+<File title="stacks/catalog/sqs-queue/defaults.yaml">
+```yaml
+components:
+  terraform:
+    sqs-queue:
+      metadata:
+        component: sqs-queue
+        description: "SQS queue subscribed to the events topic."
+      dependencies:
+        components:
+          - name: sns-topic
+      hooks:
+        publish-coordinates:
+          events:
+            - after-terraform-apply
+          kind: store
+          name: config/ssm
+          outputs:
+            queue_url: .queue_url
+      vars:
+        name: events
+        topic_arn: "arn:aws:sns:{{ .vars.region }}:000000000000:{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-events"
+```
+</File>
+
+### `app-config`
+
+The `app-config` component ties everything together. It depends on all five resources, uses stack-derived coordinates for the values it publishes, and
+pulls two [secrets](/quick-start/advanced/configure-secrets) with the [`!secret`](/functions/yaml/secret) function. Keeping the coordinates template-based
+lets `atmos terraform deploy --all` build the full graph on the first run, before any Terraform state or store values exist.
+
+<File title="stacks/catalog/app-config/defaults.yaml">
+```yaml
+components:
+  terraform:
+    app-config:
+      metadata:
+        component: app-config
+        description: "Publishes resolved app configuration and secrets to SSM Parameter Store."
+      dependencies:
+        components:
+          - name: kms-key
+          - name: s3-bucket
+          - name: dynamodb-table
+          - name: sns-topic
+          - name: sqs-queue
+      secrets:
+        vars:
+          API_KEY:
+            description: "Third-party API key for the application."
+            store: secrets/ssm
+            required: true
+          DB_CONFIG:
+            description: "Structured database credentials (JSON) stored in Secrets Manager."
+            store: secrets/asm
+            required: true
+      vars:
+        name: app
+        kms_key_arn: "alias/{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-app"
+        bucket_id: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-assets"
+        table_name: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-state"
+        topic_arn: "arn:aws:sns:{{ .vars.region }}:000000000000:{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-events"
+        queue_url: "http://sqs.{{ .vars.region }}.localhost.localstack.cloud:4566/000000000000/{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-events"
+        api_key: !secret API_KEY
+        db_password: !secret DB_CONFIG | path ".password"
+```
+</File>
+
+### Two ways components share data
+
+This example deliberately shows **two cross-component patterns**, and it's worth pausing on the distinction:
+
+- **Templates plus dependencies** — stack templates produce predictable names and ARNs, while `dependencies.components` controls apply/destroy order.
+  This is the primary path in the quick start because it supports first-run `atmos terraform deploy --all`.
+
+- **Stores** — components also write their actual outputs to a [store](/cli/configuration/stores) after apply using a [hook](/stacks/hooks). Operators
+  can inspect those published coordinates, and larger stacks can use [`!store`](/functions/yaml/store) when consumers should discover values that are not
+  predictable from naming conventions.
+
+## Group the catalog with `catalog/backend`
+
+Rather than importing all six catalog files everywhere, the example collects them (plus the emulator) into a single `catalog/backend` manifest. Importing
+`catalog/backend` once brings the whole backend into a stack.
+
+<File title="stacks/catalog/backend.yaml">
 ```yaml
 import:
-  - catalog/vpc/defaults
-
-components:
-  terraform:
-    vpc:
-      vars:
-        availability_zones:
-          - us-east-2a
-          - us-east-2b
-          - us-east-2c
+  - catalog/emulator/aws
+  - catalog/kms-key/defaults
+  - catalog/s3-bucket/defaults
+  - catalog/dynamodb-table/defaults
+  - catalog/sns-topic/defaults
+  - catalog/sqs-queue/defaults
+  - catalog/app-config/defaults
 ```
 </File>
-
-In the `stacks/catalog/vpc/uw2.yaml` file, add the following manifest for the `vpc` Atmos component:
-
-<File title="stacks/catalog/vpc/uw2.yaml">
-```yaml
-import:
-  - catalog/vpc/defaults
-
-components:
-  terraform:
-    vpc:
-      vars:
-        availability_zones:
-          - us-west-2a
-          - us-west-2b
-          - us-west-2c
-```
-</File>
-
-In the `stacks/catalog/vpc/dev.yaml` file, add the following manifest for the `vpc` Atmos component:
-
-<File title="stacks/catalog/vpc/dev.yaml">
-```yaml
-components:
-  terraform:
-    vpc:
-      vars:
-        ipv4_primary_cidr_block: 10.7.0.0/18
-        vpc_flow_logs_enabled: false
-```
-</File>
-
-In the `stacks/catalog/vpc/staging.yaml` file, add the following manifest for the `vpc` Atmos component:
-
-<File title="stacks/catalog/vpc/staging.yaml">
-```yaml
-components:
-  terraform:
-    vpc:
-      vars:
-        ipv4_primary_cidr_block: 10.9.0.0/18
-        vpc_flow_logs_enabled: false
-```
-</File>
-
-In the `stacks/catalog/vpc/prod.yaml` file, add the following manifest for the `vpc` Atmos component:
-
-<File title="stacks/catalog/vpc/prod.yaml">
-```yaml
-components:
-  terraform:
-    vpc:
-      vars:
-        ipv4_primary_cidr_block: 10.8.0.0/18
-        # In `prod`, don't map public IPs on launch
-        # Override `map_public_ip_on_launch` from the defaults
-        map_public_ip_on_launch: false
-```
-</File>
-
-These Atmos component manifests will be imported into the top-level Atmos stacks. The default variables (in the `vars` sections)
-can be overridden in the derived Atmos components by using [Atmos Component Inheritance](/howto/inheritance).
 
 ## Atmos Top-level Stacks
 
 When executing the [CLI commands](/cheatsheets/commands), Atmos does not use the stack file names and their filesystem locations to search for the stack
 where the component is defined. Instead, Atmos uses the context variables (`namespace`, `tenant`, `environment`, `stage`) to search for the stack. The
-stack config file names (stack manifest names) can be anything, and they can be in any folder in any sub-folder in the `stacks` directory.
+stack config file names can be anything, and they can be in any folder or sub-folder in the `stacks` directory.
 
-For example, when executing the `atmos terraform apply vpc -s plat-ue2-dev`
-command, the Atmos stack `plat-ue2-dev` is specified by the `-s` flag. By looking at `name_pattern: "{tenant}-{environment}-{stage}"`
-(see [Configure CLI](/quick-start/advanced/configure-cli)) and processing the tokens, Atmos knows that the first part of the stack name is `tenant`, the second
-part is `environment`, and the third part is `stage`. Then Atmos searches for the top-level stack manifest (in the `stacks` directory)
-where `tenant: plat`, `environment: ue2` and `stage: dev` are defined (inline or via imports).
+For example, when executing the `atmos terraform apply app-config -s plat-ue2-dev`
+command, the Atmos stack `plat-ue2-dev` is specified by the `-s` flag. Atmos evaluates `name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"`
+(see [Configure CLI](/quick-start/advanced/configure-project)) for each top-level stack. The stack whose variables render to `plat-ue2-dev` is the match.
+Then Atmos searches the top-level stack manifests (in the `stacks` directory) where `tenant: plat`, `environment: ue2` and `stage: dev` are defined
+(inline or via imports).
 
-Atmos top-level stacks can be configured using a Basic Layout or a Hierarchical Layout.
+We use a [hierarchical layout](/design-patterns/stack-organization/organizational-hierarchy-configuration) that follows the way AWS thinks about
+infrastructure (organization → OU/tenant → account/stage → region). This works very well as you grow to dozens or hundreds of accounts and regions, and
+it's the recommended starting point even for a small example like this one.
 
-The Basic Layout can be used when you have a very simple configuration using just a few accounts and regions.
-The Hierarchical Layout should be used when you have a very complex organization, for example, with many AWS Organizational Units (which Atmos
-refers to as tenants) and dozens of AWS accounts and regions.
-
-### Basic Layout
-
-A basic form of stack organization is to follow the pattern of naming where each `$environment-$stage.yaml` is a file. This works well until you have
-so many environments and stages.
-
-For example, `$environment` might be `ue2` (for `us-east-2`) and `$stage` might be `prod` which would result in `stacks/ue2-prod.yaml`
-
-Some resources, however, are global in scope. For example, Route53 and IAM might not make sense to tie to a region. These are what we call "global
-resources". You might want to put these into a file like `stacks/global-region.yaml` to connote that they are not tied to any particular region.
-
-In our example, the filesystem layout for the stacks Basic Layout using `dev`, `staging` and `prod` accounts and `us-east-2` and `us-west-2` regions
-would look like this:
+Create the following filesystem layout (the final layout for this Quick Start guide):
 
 <File title="infra-live/" icon="fa-solid fa-folder">
 ```console
-   │   # Centralized stacks configuration
-   ├── stacks
-   │   ├── catalog
-   │   │    ├── vpc.yaml
-   │   │    └── vpc-flow-logs-bucket.yaml
-   │   ├── ue2-dev.yaml
-   │   ├── ue2-staging.yaml
-   │   ├── ue2-prod.yaml
-   │   ├── uw2-dev.yaml
-   │   ├── uw2-staging.yaml
-   │   └── uw2-prod.yaml
-   │  
-   │   # Centralized components configuration. Components are broken down by tool
-   └── components
-       └── terraform   # Terraform components (Terraform root modules)
-           ├── vpc
-           └── vpc-flow-logs-bucket
+   │   # Centralized stacks configuration
+   ├── stacks
+   │   ├── catalog
+   │   │    ├── backend.yaml
+   │   │    ├── emulator
+   │   │    │   └── aws.yaml
+   │   │    ├── kms-key
+   │   │    │   └── defaults.yaml
+   │   │    ├── s3-bucket
+   │   │    │   └── defaults.yaml
+   │   │    ├── dynamodb-table
+   │   │    │   └── defaults.yaml
+   │   │    ├── sns-topic
+   │   │    │   └── defaults.yaml
+   │   │    ├── sqs-queue
+   │   │    │   └── defaults.yaml
+   │   │    └── app-config
+   │   │        └── defaults.yaml
+   │   ├── mixins
+   │   │    └── region
+   │   │        ├── global-region.yaml
+   │   │        ├── us-east-2.yaml
+   │   │        └── us-west-2.yaml
+   │   └── orgs
+   │        └── acme
+   │            ├── _defaults.yaml
+   │            ├── core
+   │            │   └── _defaults.yaml
+   │            └── plat
+   │                 ├── _defaults.yaml
+   │                 ├── dev
+   │                 │   ├── _defaults.yaml
+   │                 │   ├── global-region.yaml
+   │                 │   ├── us-east-2.yaml
+   │                 │   └── us-west-2.yaml
+   │                 ├── prod
+   │                 │   ├── _defaults.yaml
+   │                 │   ├── global-region.yaml
+   │                 │   ├── us-east-2.yaml
+   │                 │   └── us-west-2.yaml
+   │                 └── staging
+   │                     ├── _defaults.yaml
+   │                     ├── global-region.yaml
+   │                     ├── us-east-2.yaml
+   │                     └── us-west-2.yaml
+   │
+   │   # Centralized components configuration. Components are broken down by tool
+   └── components
+       └── terraform   # Terraform components (Terraform root modules)
+           ├── kms-key
+           ├── s3-bucket
+           ├── dynamodb-table
+           ├── sns-topic
+           ├── sqs-queue
+           └── app-config
 ```
 </File>
 
-### Hierarchical Layout
+### Configure Region Mixins
 
-We recommend using a hierarchical layout that follows the way AWS thinks about infrastructure. This works very well when you may have dozens or
-hundreds of accounts and regions that you operate in.
+[Mixins](/design-patterns/component-catalog/mixins) are a special kind of "[import](/stacks/imports)".
+It's simply a convention we recommend to distribute reusable snippets of configuration that alter behavior in some deliberate way.
+Mixins are not handled in any special way — they are technically identical to all other imports.
 
-## Create Top-level Stacks
+Reach for a mixin when a snippet is **genuinely cross-cutting** — reused across many stacks regardless of where they sit in the hierarchy. The region is
+the textbook case: every account (`dev`, `staging`, `prod`) deploys into the same set of regions, so the region context belongs in one reusable place.
 
-Although in this Quick Start guide we use just a few Terraform components which we want to provision into three AWS accounts in just two AWS regions
-(which could be considered basic), we will use the Hierarchical Layout to show how the Atmos stacks can be configured for very complex organizations
-and infrastructures.
-
-We will assume we are using just one Organization `acme` and just one AWS Organizational Unit (OU) `plat`. But as you will notice, the layout
-can be easily extended to support many AWS Organizations and Organizational Units.
-
-Create the following filesystem layout (which will be the final layout for this Quick Start guide):
-
-<File title="infra-live/" icon="fa-solid fa-folder">
-```console
-   │   # Centralized stacks configuration
-   ├── stacks
-   │   ├── catalog
-   │   │    ├── vpc
-   │   │    │   ├── defaults.yaml
-   │   │    │   ├── disabled.yaml
-   │   │    │   ├── prod.yaml
-   │   │    │   ├── ue2.yaml
-   │   │    │   └── uw2.yaml
-   │   │    └── vpc-flow-logs-bucket
-   │   │        ├── defaults.yaml
-   │   │        └── disabled.yaml
-   │   ├── mixins
-   │   │    ├── tenant
-   │   │    │   ├── core.yaml
-   │   │    │   └── plat.yaml
-   │   │    ├── region
-   │   │    │   ├── us-east-2.yaml
-   │   │    │   └── us-west-2.yaml
-   │   │    └── stage
-   │   │        ├── dev.yaml
-   │   │        ├── prod.yaml
-   │   │        └── staging.yaml
-   │   └── orgs
-   │        └── acme
-   │            ├── _defaults.yaml
-   │            └── plat
-   │                 ├── _defaults.yaml
-   │                 ├── dev
-   │                 │   ├── _defaults.yaml
-   │                 │   ├── us-east-2.yaml
-   │                 │   └── us-west-2.yaml
-   │                 ├── prod
-   │                 │   ├── _defaults.yaml
-   │                 │   ├── us-east-2.yaml
-   │                 │   └── us-west-2.yaml
-   │                 └── staging
-   │                     ├── _defaults.yaml
-   │                     ├── us-east-2.yaml
-   │                     └── us-west-2.yaml
-   │  
-   │   # Centralized components configuration. Components are broken down by tool
-   └── components
-       └── terraform   # Terraform components (Terraform root modules)
-           ├── vpc
-           └── vpc-flow-logs-bucket
-```
-</File>
-
-### Configure Region and Stage Mixins
-
-[Mixins](/howto/mixins) are a special kind of "[import](/stacks/imports)".
-It's simply a convention we recommend to distribute reusable snippets of configuration that alter the behavior in some deliberate way.
-Mixins are not handled in any special way. They are technically identical to all other imports.
-
-In `stacks/mixins/tenant/core.yaml`, add the following config:
-
-<File title="stacks/mixins/tenant/core.yaml">
-```yaml
-vars:
-  tenant: core
-
-# Other defaults for the `core` tenant/OU
-```
-</File>
-
-In `stacks/mixins/tenant/plat.yaml`, add the following config:
-
-<File title="stacks/mixins/tenant/plat.yaml">
-```yaml
-vars:
-  tenant: plat
-
-# Other defaults for the `plat` tenant/OU
-```
-</File>
+:::tip Don't create a mixin for a single line
+Earlier versions of this example also had `mixins/tenant/*` and `mixins/stage/*` files that each set a single context variable (`tenant: plat`,
+`stage: dev`). That added an extra file to chase for no real reuse. A value that belongs to exactly one layer of the hierarchy should live **in that
+layer's `_defaults.yaml`**, not in a one-line mixin. So `tenant` now lives in the tenant's `_defaults.yaml`, and `stage` lives in each account's
+`_defaults.yaml`. Component settings stay in the top-level regional stacks that actually deploy those components.
+:::
 
 In `stacks/mixins/region/us-east-2.yaml`, add the following config:
 
 <File title="stacks/mixins/region/us-east-2.yaml">
 ```yaml
-import:
-  # Import the `ue2` manifest with `vpc` configuration for `us-east-2` region
-  - catalog/vpc/ue2
-  # All accounts (stages) in `us-east-2` region will have the `vpc-flow-logs-bucket` component
-  - catalog/vpc-flow-logs-bucket/defaults
-
 vars:
   region: us-east-2
   environment: ue2
-
-# Other defaults for the `us-east-2` region
 ```
 </File>
 
@@ -339,67 +351,28 @@ In `stacks/mixins/region/us-west-2.yaml`, add the following config:
 
 <File title="stacks/mixins/region/us-west-2.yaml">
 ```yaml
-import:
-  # Import the `uw2` manifest with `vpc` configuration for `us-west-2` region
-  - catalog/vpc/uw2
-  # All accounts (stages) in `us-west-2` region will have the `vpc-flow-logs-bucket` component
-  - catalog/vpc-flow-logs-bucket/defaults
-
 vars:
   region: us-west-2
   environment: uw2
-
-# Other defaults for the `us-west-2` region
 ```
 </File>
 
-In `stacks/mixins/stage/dev.yaml`, add the following config:
-
-<File title="stacks/mixins/stage/dev.yaml">
-```yaml
-vars:
-  stage: dev
-
-# Other defaults for the `dev` stage/account
-```
-</File>
-
-In `stacks/mixins/stage/prod.yaml`, add the following config:
-
-<File title="stacks/mixins/stage/prod.yaml">
-```yaml
-vars:
-  stage: prod
-
-# Other defaults for the `prod` stage/account
-```
-</File>
-
-In `stacks/mixins/stage/staging.yaml`, add the following config:
-
-<File title="stacks/mixins/stage/staging.yaml">
-```yaml
-vars:
-  stage: staging
-
-# Other defaults for the `staging` stage/account
-```
-</File>
-
-As we can see, in the tenant, region and stage mixins, besides some other common variables, we are defining the global context
-variables `tenant`, `environment` and `stage`, which Atmos uses when searching for a component in a stack. These mixins then get imported into the
-parent Atmos stacks without defining the context variables in each top-level stack, making the configuration DRY.
+The region mixin defines the global context variables `region` and `environment`, which Atmos uses when searching for a component in a stack. The mixin
+gets imported into the top-level stacks, so we don't repeat the region context in every account — keeping the configuration DRY. This is the
+[multi-region](/design-patterns/stack-organization/multi-region-configuration) modeling pattern.
 
 ### Configure Defaults for Organization, OU and accounts
 
-The `_defaults.yaml` stack manifests contain the default settings for the Organization(s), Organizational Units, and accounts.
+The `_defaults.yaml` stack manifests contain the default settings for the Organization(s), Organizational Units, and accounts. This is the
+[`_defaults.yaml` design pattern](/design-patterns/stack-organization/defaults-pattern).
 
 :::info
 The `_defaults.yaml` stack manifests are not imported into other Atmos manifests automatically.
 You need to explicitly import them using [imports](/stacks/imports).
 :::
 
-In `stacks/orgs/acme/_defaults.yaml`, add the following config:
+In `stacks/orgs/acme/_defaults.yaml`, define the `namespace` for the entire `acme` Organization (the real file also sets common tags and template
+settings):
 
 <File title="stacks/orgs/acme/_defaults.yaml">
 ```yaml
@@ -408,147 +381,146 @@ vars:
 ```
 </File>
 
-The file defines the context variable `namespace` for the entire `acme` Organization.
-
-In `stacks/orgs/acme/core/_defaults.yaml`, add the following config for the `core` OU (tenant):
-
-<File title="stacks/orgs/acme/core/_defaults.yaml">
-```yaml
-import:
-  - orgs/acme/_defaults
-  - mixins/tenant/core
-```
-</File>
-
-In `stacks/orgs/acme/plat/_defaults.yaml`, add the following config for the `plat` OU (tenant):
+In `stacks/orgs/acme/plat/_defaults.yaml`, configure the `plat` OU (tenant). The `tenant` context variable lives right here in the tenant's
+`_defaults.yaml` (no separate one-line mixin to chase). Defaults files should hold context and truly common settings; deployable component catalogs are
+imported by the top-level stacks that actually run them.
 
 <File title="stacks/orgs/acme/plat/_defaults.yaml">
 ```yaml
 import:
   - orgs/acme/_defaults
-  - mixins/tenant/plat
+
+vars:
+  tenant: plat
 ```
 </File>
 
-In the `stacks/orgs/acme/plat/_defaults.yaml` file, we import the defaults for the Organization and for the `plat` tenant (which
-corresponds to the `plat` Organizational Unit). When Atmos processes this stack config, it will import and deep-merge all the variables defined in the
-imported files and inline. All imports are processed in the order they are defined.
+When Atmos processes this stack config, it imports and deep-merges all the variables defined in the imported files and inline. Since the backend catalog
+is not imported at this layer, helper stacks such as `global-region` can carry context without accidentally defining regional application resources.
 
-In `stacks/orgs/acme/plat/dev/_defaults.yaml`, add the following config for the `dev` account:
+In `stacks/orgs/acme/plat/dev/_defaults.yaml`, configure the `dev` account context. Keep this file focused on context and truly common defaults:
 
 <File title="stacks/orgs/acme/plat/dev/_defaults.yaml">
 ```yaml
 import:
   - orgs/acme/plat/_defaults
-  - mixins/stage/dev
+
+vars:
+  stage: dev
 ```
 </File>
 
-In the file, we import the mixin for the `plat` tenant (which, as was described above, imports the defaults for the Organization), and then the mixin
-for the `dev` account (which defines `stage: dev` variable). After processing all these imports, Atmos determines the values for the three context
-variables `namespace`, `tenant` and `stage`, which it then sends to the Terraform components as Terraform variables. We are using hierarchical imports
-here.
-
-Similar to the `dev` account, add the following configs for the `prod` and `staging` accounts:
+Configure the `prod` account the same way:
 
 <File title="stacks/orgs/acme/plat/prod/_defaults.yaml">
 ```yaml
 import:
   - orgs/acme/plat/_defaults
-  - mixins/stage/prod
+
+vars:
+  stage: prod
 ```
 </File>
 
-<File title="stacks/orgs/acme/plat/staging/_defaults.yaml">
-```yaml
-import:
-  - orgs/acme/plat/_defaults
-  - mixins/stage/staging
-```
-</File>
+Add the `staging` account defaults the same way.
 
 ### Configure Top-level Stacks
 
-After we've configured the catalog for the components, the mixins for the tenants, regions and stages, and the defaults for the Organization, OU and
-accounts, the final step is to configure the Atmos root (top-level) stacks and the Atmos components in the stacks.
+After we've configured the catalog, the region mixins, and the defaults for the Organization, OU and accounts, the final step is to configure the Atmos
+root (top-level) stacks. Each deployable regional leaf stack imports the backend catalog, its account defaults, and a region mixin. It also carries the
+component settings for that stage and region.
 
-In `stacks/orgs/acme/plat/dev/us-east-2.yaml`, add the following config:
+This keeps component definitions in the stacks that actually deploy them, while defaults stay focused on shared context. This layering is the
+[organizational hierarchy](/design-patterns/stack-organization/organizational-hierarchy-configuration) pattern in action.
+
+In `stacks/orgs/acme/plat/dev/us-east-2.yaml`, define the dev backend in `us-east-2`. This is where you can see, at a glance, **what makes `dev`
+different** from the catalog defaults — same services, deliberately cheaper and more ephemeral settings:
 
 <File title="stacks/orgs/acme/plat/dev/us-east-2.yaml">
 ```yaml
-# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
-# File extensions are optional (if not specified, `.yaml` is used by default).
 import:
+  - catalog/backend
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-east-2
-  # Override the `vpc` component configuration for `dev` by importing the `catalog/vpc/dev` manifest
-  - catalog/vpc/dev
+
+components:
+  terraform:
+    s3-bucket:
+      vars:
+        force_destroy: true        # easy teardown of non-empty dev buckets
+        versioning_enabled: false  # not worth the storage for throwaway data
+    kms-key:
+      vars:
+        deletion_window_in_days: 7 # shortest window AWS allows
+        enable_key_rotation: false
+    sqs-queue:
+      vars:
+        message_retention_seconds: 86400  # 1 day
 ```
 </File>
 
-In the file, we import the region mixin and the defaults for the Organization, OU and account (using hierarchical imports).
-
-Similarly, create the top-level Atmos stack for the `dev` account in `us-west-2` region:
+Similarly, create the top-level Atmos stack for the `dev` account in `us-west-2` with the same dev component settings and a different region mixin:
 
 <File title="stacks/orgs/acme/plat/dev/us-west-2.yaml">
 ```yaml
 import:
+  - catalog/backend
   - orgs/acme/plat/dev/_defaults
   - mixins/region/us-west-2
-  # Override the `vpc` component configuration for `dev` by importing the `catalog/vpc/dev` manifest
-  - catalog/vpc/dev
+
+components:
+  terraform:
+    s3-bucket:
+      vars:
+        force_destroy: true
+        versioning_enabled: false
+    kms-key:
+      vars:
+        deletion_window_in_days: 7
+        enable_key_rotation: false
+    sqs-queue:
+      vars:
+        message_retention_seconds: 86400
 ```
 </File>
 
-In `stacks/orgs/acme/plat/staging/us-east-2.yaml`, add the following config:
-
-<File title="stacks/orgs/acme/plat/staging/us-east-2.yaml">
-```yaml
-import:
-  - orgs/acme/plat/staging/_defaults
-  - mixins/region/us-east-2
-  # Override the `vpc` component configuration for `staging` by importing the `catalog/vpc/staging` manifest
-  - catalog/vpc/staging
-```
-</File>
-
-Similarly, create the top-level Atmos stack for the `staging` account in `us-west-2` region:
-
-<File title="stacks/orgs/acme/plat/staging/us-west-2.yaml">
-```yaml
-import:
-  - orgs/acme/plat/staging/_defaults
-  - mixins/region/us-west-2
-  # Override the `vpc` component configuration for `staging` by importing the `catalog/vpc/staging` manifest
-  - catalog/vpc/staging
-```
-</File>
-
-In `stacks/orgs/acme/plat/prod/us-east-2.yaml`, add the following config:
+Repeat the pattern for the `staging` and `prod` accounts, importing the matching `_defaults`, region mixin, and component settings. For example,
+`stacks/orgs/acme/plat/prod/us-east-2.yaml` uses the **opposite, hardened** choices:
 
 <File title="stacks/orgs/acme/plat/prod/us-east-2.yaml">
 ```yaml
-# Import the tenant and region mixins, and the defaults for the components from the `catalog`.
-# `import` supports POSIX-style Globs for file names/paths (double-star `**` is supported).
-# File extensions are optional (if not specified, `.yaml` is used by default).
 import:
+  - catalog/backend
   - orgs/acme/plat/prod/_defaults
   - mixins/region/us-east-2
-  # Override the `vpc` component configuration for `prod` by importing the `catalog/vpc/prod` manifest
-  - catalog/vpc/prod
+
+components:
+  terraform:
+    s3-bucket:
+      vars:
+        force_destroy: false       # never silently delete a non-empty prod bucket
+        versioning_enabled: true   # required in prod (enforced by the OPA policy)
+    kms-key:
+      vars:
+        deletion_window_in_days: 30 # longest window AWS allows — recoverable
+        enable_key_rotation: true
+    sqs-queue:
+      vars:
+        message_retention_seconds: 1209600  # 14 days (AWS max)
 ```
 </File>
 
-In the file, we import the region mixin and the defaults for the Organization, OU and account (using hierarchical imports).
+These per-account, per-region leaf files are the top-level stacks Atmos resolves when you pass `-s plat-ue2-dev`, `-s plat-uw2-prod`, and so on.
+The `global-region` stacks intentionally omit `catalog/backend`; they define context only, so regional resources like `sns-topic` and `sqs-queue` are not
+accidentally instantiated in `plat-gbl-*`.
 
-Similarly, create the top-level Atmos stack for the `prod` account in `us-west-2` region:
+:::tip Component Inheritance
+This is exactly what the regional top-level stack files do above: the catalog defines the defaults once, and each stage overrides only what differs via
+[Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance). `dev` turns `versioning_enabled` off while `prod` keeps it on —
+which is exactly the difference the [OPA policy](/quick-start/advanced/configure-validation) enforces for `prod`. You can override per stage (as here) or
+per region, at any layer of the hierarchy.
+:::
 
-<File title="stacks/orgs/acme/plat/prod/us-west-2.yaml">
-```yaml
-import:
-  - orgs/acme/plat/prod/_defaults
-  - mixins/region/us-west-2
-  # Override the `vpc` component configuration for `prod` by importing the `catalog/vpc/prod` manifest
-  - catalog/vpc/prod
-```
-</File>
+---
+
+**Next:** run scans on every plan and publish outputs on every apply → **[Configure Hooks →](/quick-start/advanced/configure-hooks)**

@@ -171,7 +171,8 @@ Users currently using the GitHub Actions can migrate incrementally:
 - **PR comments** - Create, update, upsert behaviors
 - **Job summaries** - `$GITHUB_STEP_SUMMARY` integration
 - **Status checks** - Post check runs when operations start/complete (requires `checks: write`)
-- **CI outputs** - `$GITHUB_OUTPUT` for both plan and apply
+- **CI outputs** - `$GITHUB_OUTPUT` for plan and apply, plus aggregate
+  outputs for graph-backed concurrent plan/apply/destroy runs
 - **Terraform outputs export** - After successful apply
 - **`--format=matrix`** - For `describe affected` command
 - **`--verify-plan` on `deploy`** - Using existing plan-diff (deploy downloads stored plan, generates fresh plan, compares, applies if match)

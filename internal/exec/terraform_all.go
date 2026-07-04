@@ -11,7 +11,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -27,6 +26,7 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 // ExecuteTerraformAllWithContext executes all selected Terraform components through
 // the graph-backed scheduler using the provided cancellation context.
 func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformAllWithContext")()
 	// Validate inputs for --all flag usage.
 	// When no stack is given, --all processes every stack — matching the documented
 	// behavior of `atmos terraform apply --all` (see website/docs/cli/commands/terraform).
@@ -38,7 +38,6 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 	if err != nil {
 		return fmt.Errorf(errWrapFmt, errUtils.ErrInitializeCLIConfig, err)
 	}
-	defer perf.Track(&atmosConfig, "exec.ExecuteTerraformAllWithContext")()
 
 	log.Debug("Executing terraform command for all components in dependency order", "command", info.SubCommand)
 
@@ -50,8 +49,7 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 		return err
 	}
 	if authManager != nil {
-		resolver := authbridge.NewResolver(authManager, info)
-		atmosConfig.Stores.SetAuthContextResolver(resolver)
+		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
 	}
 
 	stacks, err := ExecuteDescribeStacks(
@@ -83,41 +81,6 @@ func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndS
 		Stacks:      stacks,
 		Executor:    executeTerraformQueryComponent,
 	})
-}
-
-// executeInDependencyOrder executes terraform commands in dependency order.
-//
-// Deprecated: production Terraform bulk execution uses the scheduler adapter.
-// Keep this helper only while legacy dependency-order tests still cover it.
-func executeInDependencyOrder(graph *dependency.Graph, info *schema.ConfigAndStacksInfo) error {
-	// Get execution order.
-	executionOrder, err := graph.TopologicalSort()
-	if err != nil {
-		return fmt.Errorf(errWrapFmt, errUtils.ErrTopologicalOrder, err)
-	}
-
-	// For destroy command, reverse the execution order to destroy dependents before dependencies.
-	if info.SubCommand == "destroy" {
-		for i, j := 0, len(executionOrder)-1; i < j; i, j = i+1, j-1 {
-			executionOrder[i], executionOrder[j] = executionOrder[j], executionOrder[i]
-		}
-		log.Info("Processing components in reverse dependency order for destroy", "count", len(executionOrder))
-	} else {
-		log.Info("Processing components in dependency order", "count", len(executionOrder))
-	}
-
-	// Execute components in order.
-	for i := range executionOrder {
-		node := &executionOrder[i]
-		log.Info("Processing component", "index", i+1, "total", len(executionOrder), "component", node.Component, "stack", node.Stack)
-
-		if err := executeTerraformForNode(node, info); err != nil {
-			return fmt.Errorf("%w: component=%s stack=%s: %w", errUtils.ErrTerraformExecFailed, node.Component, node.Stack, err)
-		}
-	}
-
-	log.Info("Successfully processed all components", "count", len(executionOrder))
-	return nil
 }
 
 // buildTerraformDependencyGraph builds the complete dependency graph from stacks.

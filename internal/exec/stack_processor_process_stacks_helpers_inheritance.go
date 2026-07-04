@@ -20,17 +20,28 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 	result.BaseComponentSettings = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentEnv = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentAuth = make(map[string]any, componentSmallMapCapacity)
+	result.BaseComponentSecrets = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentMetadata = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentDependencies = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentLocals = make(map[string]any, componentSmallMapCapacity)
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentRequiredProviders = make(map[string]any, componentSmallMapCapacity)
-		result.BaseComponentHooks = make(map[string]any, componentSmallMapCapacity)
-		result.BaseComponentGenerate = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentTest = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentBackendSection = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentRemoteStateBackendSection = make(map[string]any, componentSmallMapCapacity)
+	}
+	if supportsComponentHooks(opts.ComponentType) {
+		result.BaseComponentHooks = make(map[string]any, componentSmallMapCapacity)
+	}
+	if supportsGenerate(opts.ComponentType) {
+		result.BaseComponentGenerate = make(map[string]any, componentSmallMapCapacity)
+	}
+	if supportsSourceProvision(opts.ComponentType) {
 		result.BaseComponentProvisionSection = make(map[string]any, componentSmallMapCapacity)
+	}
+	if opts.ComponentType == cfg.KubernetesComponentType {
+		result.BaseComponentRender = make(map[string]any, componentSmallMapCapacity)
 	}
 
 	var baseComponentConfig schema.BaseComponentConfig
@@ -214,27 +225,43 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentSettings = baseComponentConfig.BaseComponentSettings
 	result.BaseComponentEnv = baseComponentConfig.BaseComponentEnv
 	result.BaseComponentAuth = baseComponentConfig.BaseComponentAuth
+	result.BaseComponentSecrets = baseComponentConfig.BaseComponentSecrets
 	result.BaseComponentMetadata = baseComponentConfig.BaseComponentMetadata
 	result.BaseComponentDependencies = baseComponentConfig.BaseComponentDependencies
 	result.BaseComponentLocals = baseComponentConfig.BaseComponentLocals
 	result.BaseComponentName = baseComponentConfig.FinalBaseComponentName
 	result.BaseComponentCommand = baseComponentConfig.BaseComponentCommand
+	result.BaseComponentProvider = baseComponentConfig.BaseComponentProvider
+	result.BaseComponentPaths = baseComponentConfig.BaseComponentPaths
+	result.BaseComponentManifests = baseComponentConfig.BaseComponentManifests
+	result.BaseComponentRender = baseComponentConfig.BaseComponentRender
+	result.BaseComponentHelm = baseComponentConfig.BaseComponentHelm
 	// BaseComponentRetry flows from the inheritance chain through to merge — see
 	// mergeComponentConfigurations for the final deep-merge with concrete + overrides.
 	result.BaseComponentRetry = baseComponentConfig.BaseComponentRetry
 	*componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
 
-	// Terraform-specific: extract base component providers, hooks, generate, backend, source, and provision.
+	// Terraform-specific: extract base component providers and backend sections.
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = baseComponentConfig.BaseComponentProviders
 		result.BaseComponentRequiredProviders = baseComponentConfig.BaseComponentRequiredProviders
 		result.BaseComponentRequiredVersion = baseComponentConfig.BaseComponentRequiredVersion
-		result.BaseComponentHooks = baseComponentConfig.BaseComponentHooks
-		result.BaseComponentGenerate = baseComponentConfig.BaseComponentGenerate
+		result.BaseComponentTest = baseComponentConfig.BaseComponentTest
 		result.BaseComponentBackendType = baseComponentConfig.BaseComponentBackendType
 		result.BaseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
 		result.BaseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
 		result.BaseComponentRemoteStateBackendSection = baseComponentConfig.BaseComponentRemoteStateBackendSection
+	}
+	if supportsComponentHooks(opts.ComponentType) {
+		result.BaseComponentHooks = baseComponentConfig.BaseComponentHooks
+	}
+	if supportsGenerate(opts.ComponentType) {
+		result.BaseComponentGenerate = baseComponentConfig.BaseComponentGenerate
+	}
+	if supportsPlugins(opts.ComponentType) {
+		result.BaseComponentPlugins = baseComponentConfig.BaseComponentPlugins
+	}
+	if supportsSourceProvision(opts.ComponentType) {
 		result.BaseComponentSourceSection = baseComponentConfig.BaseComponentSourceSection
 		result.BaseComponentProvisionSection = baseComponentConfig.BaseComponentProvisionSection
 	}

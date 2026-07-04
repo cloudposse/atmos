@@ -30,6 +30,14 @@ This command generates varfiles for all Atmos terraform components in all stacks
 Run `atmos terraform generate varfiles --help` to see all the available options
 :::
 
+:::note Secrets are omitted
+To avoid writing plaintext [secrets](/cli/configuration/secrets) to disk, any variable whose value
+contains a secret is **omitted** from the generated varfiles (Atmos warns you when this happens). This
+batch command has no opt-in to include them; use the single-component
+[`generate varfile --with-secrets`](/cli/commands/terraform/generate/varfile) when you deliberately need a
+varfile containing decrypted values.
+:::
+
 ## Examples
 
 ```shell

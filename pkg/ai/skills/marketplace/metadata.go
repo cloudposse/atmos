@@ -52,7 +52,7 @@ type ExtendedMetadata struct {
 	Copyright   string `yaml:"copyright,omitempty"`
 }
 
-// ParseSkillMetadata reads and parses a SKILL.md file's frontmatter.
+// ParseSkillMetadata reads and parses a SKILL.md file's frontmatter from disk.
 func ParseSkillMetadata(path string) (*SkillMetadata, error) {
 	defer perf.Track(nil, "marketplace.ParseSkillMetadata")()
 
@@ -60,6 +60,15 @@ func ParseSkillMetadata(path string) (*SkillMetadata, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read SKILL.md file: %w", err)
 	}
+
+	return ParseSkillMetadataBytes(data)
+}
+
+// ParseSkillMetadataBytes parses a SKILL.md file's frontmatter from raw bytes.
+// It is shared by the on-disk parser (ParseSkillMetadata) and the embedded
+// catalog so both apply identical frontmatter extraction and validation.
+func ParseSkillMetadataBytes(data []byte) (*SkillMetadata, error) {
+	defer perf.Track(nil, "marketplace.ParseSkillMetadataBytes")()
 
 	// Extract YAML frontmatter.
 	frontmatter, err := extractFrontmatter(string(data))

@@ -4,7 +4,7 @@ import './index.css';
 
 const PrimaryCTA = ({ to, children }) => {
   return (
-        <Link to={to} className="button button--lg button--primary">{children}</Link>
+        <Link to={to} className="button button--lg button--primary lp-primary-cta">{children}</Link>
       )
 };
 

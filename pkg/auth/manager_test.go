@@ -741,13 +741,19 @@ func (s stubUserID) Paths() ([]types.Path, error)            { return []types.Pa
 func (s stubUserID) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
-func (s stubUserID) Logout(_ context.Context) error                                { return nil }
-func (s stubUserID) CredentialsExist() (bool, error)                               { return true, nil }
+func (s stubUserID) Logout(_ context.Context) error  { return nil }
+func (s stubUserID) CredentialsExist() (bool, error) { return true, nil }
+
 func (s stubUserID) LoadCredentials(_ context.Context) (types.ICredentials, error) { return nil, nil }
+
 func (s stubUserID) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
 }
-func (s stubUserID) SetRealm(_ string) {}
+func (s stubUserID) SetRealm(_ string)  {}
+func (s stubUserID) IsStandalone() bool { return true }
+func (s stubUserID) AuthenticateStandalone(ctx context.Context) (types.ICredentials, error) {
+	return s.Authenticate(ctx, nil)
+}
 
 func TestManager_authenticateFromIndex_StandaloneAWSUser(t *testing.T) {
 	creds := &testCreds{}
@@ -1002,9 +1008,11 @@ func (s stubIdentity) Paths() ([]types.Path, error)            { return []types.
 func (s stubIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
-func (s stubIdentity) Logout(_ context.Context) error                                { return nil }
-func (s stubIdentity) CredentialsExist() (bool, error)                               { return true, nil }
+func (s stubIdentity) Logout(_ context.Context) error  { return nil }
+func (s stubIdentity) CredentialsExist() (bool, error) { return true, nil }
+
 func (s stubIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) { return nil, nil }
+
 func (s stubIdentity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
 }

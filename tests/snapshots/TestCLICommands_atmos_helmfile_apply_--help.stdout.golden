@@ -11,9 +11,9 @@ apply echo-server -s tenant1-ue2-dev --redirect-stderr /dev/stdout
 
 USAGE
 
-                                    
-    $ atmos helmfile apply [flags]  
-                                    
+
+    $ atmos helmfile apply [flags]
+
 
 FLAGS
 
@@ -31,6 +31,8 @@ GLOBAL FLAGS
 
   -C, --chdir string                         Change working directory before executing the command (run as if Atmos
                                              started in this directory)
+
+      --ci                                   Enable CI mode for automated pipelines (writes job summary).
 
       --config strings                       Paths to configuration files (comma-separated or repeated flag)
 
@@ -91,9 +93,6 @@ GLOBAL FLAGS
 
       --skill strings                        Specify skills for AI analysis context (comma-separated or repeated flag,
                                              requires --ai)
-
-      --skip-hooks string                    Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to
-                                             skip all, or --skip-hooks=name1,name2 to skip specific hooks by name
 
   -s, --stack string                         The stack flag specifies the environment or configuration set for
                                              deployment in Atmos CLI.

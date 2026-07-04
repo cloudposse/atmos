@@ -34,6 +34,9 @@
     "components": {
       "$ref": "#/definitions/components"
     },
+    "secrets": {
+      "$ref": "#/definitions/component_secrets"
+    },
     "overrides": {
       "$ref": "#/definitions/overrides"
     },
@@ -118,6 +121,161 @@
     }
   ],
   "definitions": {
+    "condition_predicate": {
+      "type": "string",
+      "description": "Built-in condition predicate for step and hook execution.",
+      "enum": [
+        "ci",
+        "local",
+        "always",
+        "never",
+        "success",
+        "failure"
+      ]
+    },
+    "step_condition_predicate": {
+      "type": "string",
+      "description": "Built-in condition predicate for workflow and custom command step execution.",
+      "enum": [
+        "ci",
+        "local",
+        "always",
+        "never",
+        "success"
+      ]
+    },
+    "step_condition": {
+      "description": "Declarative condition controlling whether a workflow or custom command step runs. A string is a built-in predicate; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/step_condition_predicate"
+        },
+        {
+          "type": "array",
+          "description": "All-of shorthand. Every condition in the list must evaluate to true.",
+          "items": {
+            "$ref": "#/definitions/step_condition"
+          },
+          "minItems": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "all": {
+              "description": "All conditions must evaluate to true.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/step_condition"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/step_condition"
+                  },
+                  "minItems": 1
+                }
+              ]
+            },
+            "any": {
+              "type": "array",
+              "description": "At least one condition must evaluate to true.",
+              "items": {
+                "$ref": "#/definitions/step_condition"
+              },
+              "minItems": 1
+            },
+            "not": {
+              "description": "The nested condition must evaluate to false.",
+              "$ref": "#/definitions/step_condition"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "all"
+              ]
+            },
+            {
+              "required": [
+                "any"
+              ]
+            },
+            {
+              "required": [
+                "not"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "condition": {
+      "description": "Declarative condition controlling whether a step or hook runs. A string is a built-in predicate; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/condition_predicate"
+        },
+        {
+          "type": "array",
+          "description": "All-of shorthand. Every condition in the list must evaluate to true.",
+          "items": {
+            "$ref": "#/definitions/condition"
+          },
+          "minItems": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "all": {
+              "description": "All conditions must evaluate to true.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/condition"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/condition"
+                  },
+                  "minItems": 1
+                }
+              ]
+            },
+            "any": {
+              "type": "array",
+              "description": "At least one condition must evaluate to true.",
+              "items": {
+                "$ref": "#/definitions/condition"
+              },
+              "minItems": 1
+            },
+            "not": {
+              "description": "The nested condition must evaluate to false.",
+              "$ref": "#/definitions/condition"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "all"
+              ]
+            },
+            {
+              "required": [
+                "any"
+              ]
+            },
+            {
+              "required": [
+                "not"
+              ]
+            }
+          ]
+        }
+      ]
+    },
     "import": {
       "title": "import",
       "description": "Import section",
@@ -230,6 +388,16 @@
             },
             "vars": {
               "$ref": "#/definitions/vars"
+            },
+            "test": {
+              "type": "object",
+              "description": "Terraform test configuration. `vars` are passed only to `terraform test` as test-scope variables.",
+              "additionalProperties": false,
+              "properties": {
+                "vars": {
+                  "$ref": "#/definitions/vars"
+                }
+              }
             },
             "env": {
               "$ref": "#/definitions/env"
@@ -347,6 +515,16 @@
             "vars": {
               "$ref": "#/definitions/vars"
             },
+            "test": {
+              "type": "object",
+              "description": "Terraform test configuration. `vars` are passed only to `terraform test` as test-scope variables.",
+              "additionalProperties": false,
+              "properties": {
+                "vars": {
+                  "$ref": "#/definitions/vars"
+                }
+              }
+            },
             "env": {
               "$ref": "#/definitions/env"
             },
@@ -385,6 +563,9 @@
             },
             "auth": {
               "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
             },
             "generate": {
               "$ref": "#/definitions/generate"
@@ -495,6 +676,9 @@
             },
             "auth": {
               "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
             }
           },
           "required": []
@@ -602,6 +786,9 @@
             },
             "auth": {
               "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
             }
           },
           "required": []
@@ -644,6 +831,10 @@
             "component": {
               "type": "string",
               "description": "Terraform/OpenTofu/Helmfile component"
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable component description"
             },
             "inherits": {
               "oneOf": [
@@ -807,7 +998,7 @@
     },
     "env": {
       "title": "env",
-      "description": "Env section",
+      "description": "Env section. Supports either a map of environment variables or a YAML !include string.",
       "oneOf": [
         {
           "type": "string",
@@ -1262,43 +1453,7 @@
                 {
                   "type": "array",
                   "items": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                      "name": {
-                        "type": "string"
-                      },
-                      "command": {
-                        "type": "string"
-                      },
-                      "stack": {
-                        "type": "string"
-                      },
-                      "type": {
-                        "type": "string"
-                      },
-                      "retry": {
-                        "$ref": "#/definitions/workflow_retry"
-                      },
-                      "working_directory": {
-                        "type": "string",
-                        "description": "Working directory for the workflow step"
-                      },
-                      "identity": {
-                        "type": "string",
-                        "description": "Identity to use for the workflow step"
-                      },
-                      "env": {
-                        "type": "object",
-                        "additionalProperties": {
-                          "type": "string"
-                        },
-                        "description": "Environment variables for the workflow step"
-                      }
-                    },
-                    "required": [
-                      "command"
-                    ]
+                    "$ref": "#/definitions/workflow_step"
                   }
                 }
               ]
@@ -1309,6 +1464,146 @@
           ]
         }
       ]
+    },
+    "workflow_step": {
+      "title": "workflow_step",
+      "description": "Workflow step",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "stack": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "retry": {
+          "$ref": "#/definitions/workflow_retry"
+        },
+        "working_directory": {
+          "type": "string",
+          "description": "Working directory for the workflow step"
+        },
+        "identity": {
+          "type": "string",
+          "description": "Identity to use for the workflow step"
+        },
+        "when": {
+          "description": "Condition controlling whether this workflow step runs. Omitted means run.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/step_condition"
+            }
+          ]
+        },
+        "timeout": {
+          "type": "string",
+          "description": "Timeout duration for the workflow step"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Environment variables for the workflow step"
+        },
+        "needs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "description": "Sibling workflow steps that must complete before this step can run"
+        },
+        "max_concurrency": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum number of child steps to run concurrently"
+        },
+        "fail": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "wait_all",
+                "fail_fast",
+                "best_effort"
+              ]
+            },
+            "max_failures": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "output": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "grouped",
+                    "prefixed",
+                    "none"
+                  ]
+                },
+                "order": {
+                  "type": "string",
+                  "enum": [
+                    "completion",
+                    "definition"
+                  ]
+                },
+                "show_summary": {
+                  "type": "boolean"
+                },
+                "prefix": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        },
+        "matrix": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": "Matrix axes for matrix workflow steps"
+        },
+        "steps": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^!include"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/workflow_step"
+              }
+            }
+          ]
+        }
+      }
     },
     "providers": {
       "title": "providers",
@@ -1340,7 +1635,7 @@
     },
     "hooks": {
       "title": "hooks",
-      "description": "Hooks section",
+      "description": "Hooks section. Each key names a hook; the value sets its kind, the lifecycle events it fires on, and kind-specific settings.",
       "oneOf": [
         {
           "type": "string",
@@ -1348,7 +1643,128 @@
         },
         {
           "type": "object",
-          "additionalProperties": true
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^!include"
+              },
+              {
+                "type": "object",
+                "description": "A single hook.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "description": "Selects the engine that runs this hook.",
+                    "enum": [
+                      "store",
+                      "command",
+                      "infracost",
+                      "checkov",
+                      "kics",
+                      "trivy",
+                      "git",
+                      "step",
+                      "steps",
+                      "ci.check",
+                      "ci.output",
+                      "ci.summary",
+                      "ci.upload",
+                      "ci.download"
+                    ]
+                  },
+                  "command": {
+                    "type": "string",
+                    "description": "Binary to execute (command kind); also the legacy alias for kind (e.g. 'command: store')."
+                  },
+                  "events": {
+                    "type": "array",
+                    "description": "Lifecycle events this hook fires on (e.g. after.terraform.apply). The legacy hyphenated form (e.g. after-terraform-apply) is also accepted. Empty matches all events.",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "on_failure": {
+                    "type": "string",
+                    "description": "Failure mode when the hook errors.",
+                    "enum": [
+                      "warn",
+                      "fail",
+                      "ignore"
+                    ]
+                  },
+                  "when": {
+                    "description": "Condition controlling whether this hook runs. Omitted means success. If no success, failure, or always predicate is mentioned, success is applied implicitly.",
+                    "allOf": [
+                      {
+                        "$ref": "#/definitions/condition"
+                      }
+                    ]
+                  },
+                  "args": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "env": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "format": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "description": "Step type to run (step kind): any registered workflow/custom-command step type, e.g. container, http, toast, log."
+                  },
+                  "with": {
+                    "description": "Parameters for the step named by 'type' (step kind), or an ordered list of steps (steps kind). Validated by the step handler at run time.",
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": true
+                        }
+                      }
+                    ]
+                  },
+                  "retry": {
+                    "$ref": "#/definitions/workflow_retry"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "Store backend name (store kind)."
+                  },
+                  "outputs": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "repository": {
+                    "type": "string",
+                    "description": "Managed repository name (git kind)."
+                  },
+                  "commit": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "push": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": true
+              }
+            ]
+          }
         }
       ]
     },
@@ -1677,7 +2093,7 @@
         },
         "kind": {
           "type": "string",
-          "description": "Dependency type. Use `terraform`, `helmfile`, `packer`, or another registered component type for component dependencies (defaults to the declaring component's type). The legacy values `file` and `folder` (with `path:`) still parse but are discouraged — use `dependencies.files` / `dependencies.folders` instead."
+          "description": "Dependency type. Use `terraform`, `helmfile`, `packer`, or another registered component type for component dependencies (defaults to the declaring component's type). The legacy values `file` and `folder` (with `path:`) still parse but are discouraged \u2014 use `dependencies.files` / `dependencies.folders` instead."
         },
         "path": {
           "type": "string",
@@ -1686,15 +2102,27 @@
       },
       "anyOf": [
         {
-          "required": ["name"]
+          "required": [
+            "name"
+          ]
         },
         {
-          "required": ["component"]
+          "required": [
+            "component"
+          ]
         },
         {
-          "required": ["kind", "path"],
+          "required": [
+            "kind",
+            "path"
+          ],
           "properties": {
-            "kind": { "enum": ["file", "folder"] }
+            "kind": {
+              "enum": [
+                "file",
+                "folder"
+              ]
+            }
           }
         }
       ],
@@ -1714,6 +2142,165 @@
             "type": "string",
             "description": "Tool version (e.g., '1.9.8', '0.32.7', 'latest')"
           }
+        }
+      ]
+    },
+    "component_secrets": {
+      "title": "component_secrets",
+      "description": "Secrets configuration. Declares secrets resolved at runtime via the `!secret` YAML function, and (at the stack/global level) the non-store secret providers (e.g. SOPS) that back them. Store-backed secrets reference a `secret: true` store under `stores`.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "providers": {
+              "$ref": "#/definitions/secret_providers"
+            },
+            "vars": {
+              "$ref": "#/definitions/secret_vars"
+            }
+          }
+        }
+      ]
+    },
+    "secret_providers": {
+      "title": "secret_providers",
+      "description": "Non-store secret providers (e.g. SOPS) that do not fit the key-value store interface. Keys are provider names, values are provider configurations.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[a-zA-Z0-9/_-]+$": {
+              "$ref": "#/definitions/secret_provider"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "secret_provider": {
+      "title": "secret_provider",
+      "description": "A single non-store secret provider configuration (e.g. a SOPS backend).",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Provider implementation (e.g. 'sops/age', 'sops/aws-kms', 'sops/gcp-kms', 'sops/gpg')."
+            },
+            "identity": {
+              "type": "string",
+              "description": "Optional auth identity (resolved via auth) used by KMS-backed SOPS kinds (sops/aws-kms, sops/gcp-kms). Local-key kinds (sops/age, sops/gpg) ignore it."
+            },
+            "spec": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Provider-specific options (e.g. file, age_recipients, kms arn)."
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "secret_vars": {
+      "title": "secret_vars",
+      "description": "Declared secrets for a component. Keys are secret names, values are secret declarations. A secret must be declared before it can be set, read via `!secret`, or pulled/pushed.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            ".+": {
+              "$ref": "#/definitions/secret_declaration"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "secret_declaration": {
+      "title": "secret_declaration",
+      "description": "A single declared secret. Exactly one backend reference (store or sops) is set.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of the secret."
+            },
+            "store": {
+              "type": "string",
+              "description": "Names a `secret: true` store (under `stores`) this secret resolves from."
+            },
+            "sops": {
+              "type": "string",
+              "description": "Names a `secrets.providers` SOPS provider this secret resolves from."
+            },
+            "reference": {
+              "type": "string",
+              "description": "Optional backend-specific address for the secret. Reference-based backends (e.g. a 1Password store) resolve it directly instead of composing a key from the secret name; it may contain Go-template vars ({{ .atmos_stack }}, {{ .atmos_component }}). Example: \"op://Production/{{ .atmos_component }}/password\". Name-keyed backends ignore it."
+            },
+            "required": {
+              "type": "boolean",
+              "description": "Marks the secret as required; validation fails if it is not initialized."
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "instance",
+                "stack",
+                "global"
+              ],
+              "description": "Storage scope. Normally derived from declaration position (top-level `secrets:` => stack, shared by every component instance; `components.<c>.secrets:` => instance). If set explicitly it must match the position \u2014 a conflict (e.g. `scope: stack` under a component) is an error \u2014 except `global`, which is honored at either position. Instance-scoped secrets are stored per component; stack-scoped secrets are stored once per stack; global secrets are stored once per backend store and shared by every stack and component that resolves through it."
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "store"
+              ],
+              "not": {
+                "required": [
+                  "sops"
+                ]
+              }
+            },
+            {
+              "required": [
+                "sops"
+              ],
+              "not": {
+                "required": [
+                  "store"
+                ]
+              }
+            }
+          ]
         }
       ]
     },

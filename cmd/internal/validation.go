@@ -23,15 +23,6 @@ func WithStackValidation(check bool) ValidateOption {
 	}
 }
 
-// WithConfigInfo sets the config info for validation, respecting config selection flags.
-func WithConfigInfo(info *schema.ConfigAndStacksInfo) ValidateOption {
-	return func(cfg *ValidateConfig) {
-		if info != nil {
-			cfg.ConfigInfo = *info
-		}
-	}
-}
-
 // ValidateAtmosConfig checks the Atmos configuration and returns an error instead of exiting.
 // This makes the function testable by allowing errors to be handled by the caller.
 //
@@ -62,7 +53,7 @@ func ValidateAtmosConfig(opts ...ValidateOption) error {
 		if !atmosConfigExists || err != nil {
 			// Return an error with context instead of printing and exiting.
 			return errUtils.Build(errUtils.ErrStacksDirectoryDoesNotExist).
-				WithHintf("Stacks directory not found:  \n%s", atmosConfig.StacksBaseAbsolutePath).
+				WithExplanationf("Stacks directory not found:  \n%s", atmosConfig.StacksBaseAbsolutePath).
 				WithContext("base_path", atmosConfig.BasePath).
 				WithContext("stacks_base_path", atmosConfig.Stacks.BasePath).
 				Err()

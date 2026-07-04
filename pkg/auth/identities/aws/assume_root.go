@@ -468,6 +468,7 @@ func (i *assumeRootIdentity) PostAuthenticate(ctx context.Context, params *types
 		IdentityName: params.IdentityName,
 		Credentials:  params.Credentials,
 		BasePath:     "",
+		Manager:      params.Manager,
 		Realm:        params.Realm,
 	}); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)

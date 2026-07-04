@@ -226,15 +226,17 @@ func executeAndExtractStacks(
 	authManager auth.AuthManager,
 ) ([]map[string]any, map[string]any, error) {
 	defer perf.Track(nil, "list.stacks.executeAndExtractStacks")()
+	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
 
-	stacksMap, err := e.ExecuteDescribeStacks(
+	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		false, // includeEmptyStacks
-		opts.Skip,
+		skip,
 		authManager,
+		authManager == nil,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
@@ -343,14 +345,16 @@ func renderStacksTreeFormat(
 	// Re-process stacks with provenance tracking enabled. Honor the
 	// caller-supplied template/function flags so tree output is consistent with
 	// non-tree runs of the same command invocation.
-	stacksMap, err := e.ExecuteDescribeStacks(
+	skip := skipCredentialBackedYAMLFunctionsForInventory(opts.Skip, authManager)
+	stacksMap, err := e.ExecuteDescribeStacksWithAuthDisabled(
 		atmosConfig, "", nil, nil, nil,
 		false, // ignoreMissingFiles
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		false, // includeEmptyStacks
-		opts.Skip,
+		skip,
 		authManager,
+		authManager == nil,
 	)
 	if err != nil {
 		return fmt.Errorf("error re-processing stacks with provenance: %w", err)

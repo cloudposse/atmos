@@ -83,6 +83,10 @@ func (p *Provider) Context() (*provider.Context, error) {
 		Branch:     getFirstEnvOrGit("ATMOS_CI_BRANCH", "GIT_BRANCH", "CI_COMMIT_REF_NAME", "BRANCH_NAME", gitBranchFallback),
 		Repository: getFirstEnv("ATMOS_CI_REPOSITORY", "CI_PROJECT_PATH"),
 		Actor:      getFirstEnv("ATMOS_CI_ACTOR", "CI_COMMIT_AUTHOR", "USER"),
+		// Checkout metadata from common CI conventions (GitLab CI_SERVER_URL/
+		// CI_REPOSITORY_URL, Jenkins GIT_URL); empty when undeterminable.
+		ServerURL: getFirstEnv("ATMOS_CI_SERVER_URL", "CI_SERVER_URL"),
+		CloneURL:  getFirstEnv("ATMOS_CI_REPOSITORY_URL", "CI_REPOSITORY_URL", "GIT_URL"),
 	}
 
 	// If we have a repository, try to split into owner/name.

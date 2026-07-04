@@ -51,7 +51,7 @@ func (b *ErrorBuilder) WithHintf(format string, args ...interface{}) *ErrorBuild
 
 // WithExplanation adds a detailed explanation to the error.
 // The explanation provides context about what went wrong and why.
-// It will be displayed in a dedicated "## Explanation" section when formatted.
+// It will be displayed as diagnostic explanation content when formatted.
 func (b *ErrorBuilder) WithExplanation(explanation string) *ErrorBuilder {
 	b.err = errors.WithDetail(b.err, explanation)
 	return b

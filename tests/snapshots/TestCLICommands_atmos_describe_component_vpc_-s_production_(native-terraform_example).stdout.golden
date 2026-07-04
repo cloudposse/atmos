@@ -10,7 +10,7 @@
         "init_run_reconfigure": true,
         "auto_generate_backend_file": false,
         "auto_generate_files": false,
-        "command": "",
+        "command": "tofu",
         "shell": {
           "prompt": ""
         },
@@ -47,6 +47,15 @@
       "ansible": {
         "base_path": "",
         "command": "",
+        "auto_generate_files": false
+      },
+      "kubernetes": {
+        "base_path": "",
+        "provider": "",
+        "auto_generate_files": false
+      },
+      "helm": {
+        "base_path": "",
         "auto_generate_files": false
       },
       "list": {
@@ -90,7 +99,7 @@
     "describe",
     "component"
   ],
-  "command": "terraform",
+  "command": "tofu",
   "component": "vpc",
   "component_info": {
     "component_path": "/absolute/path/to/repo/examples/native-terraform/components/terraform/vpc",
@@ -202,7 +211,7 @@
   "imports": [
     "_defaults"
   ],
-  "inheritance": null,
+  "inheritance": [],
   "metadata": {},
   "overrides": {},
   "providers": {},

@@ -3,10 +3,12 @@ package aws
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -52,12 +54,15 @@ type SetAuthContextParams struct {
 	IdentityName string
 	Credentials  types.ICredentials
 	BasePath     string
+	Manager      types.AuthManager
 	Realm        string // Realm for credential isolation (optional).
 }
 
 // SetAuthContext populates the AWS auth context with Atmos-managed credential paths.
 // This enables in-process AWS SDK calls to use Atmos-managed credentials.
 func SetAuthContext(params *SetAuthContextParams) error {
+	defer perf.Track(nil, "aws.SetAuthContext")()
+
 	if params == nil {
 		return fmt.Errorf("%w: SetAuthContext parameters cannot be nil", errUtils.ErrInvalidAuthConfig)
 	}
@@ -87,7 +92,8 @@ func SetAuthContext(params *SetAuthContextParams) error {
 	// Stack inheritance allows components to override identity configuration.
 	if regionOverride := getComponentRegionOverride(params.StackInfo, params.IdentityName); regionOverride != "" {
 		region = regionOverride
-		log.Debug("Using component-level region override",
+		log.Debug(
+			"Using component-level region override",
 			"identity", params.IdentityName,
 			"region", region,
 		)
@@ -99,9 +105,11 @@ func SetAuthContext(params *SetAuthContextParams) error {
 		ConfigFile:      configPath,
 		Profile:         params.IdentityName,
 		Region:          region,
+		EndpointURL:     endpointURLFromManager(params.Manager, params.IdentityName),
 	}
 
-	log.Debug("Set AWS auth context",
+	log.Debug(
+		"Set AWS auth context",
 		"profile", params.IdentityName,
 		"credentials", credentialsPath,
 		"config", configPath,
@@ -109,6 +117,34 @@ func SetAuthContext(params *SetAuthContextParams) error {
 	)
 
 	return nil
+}
+
+func endpointURLFromManager(manager types.AuthManager, identityName string) string {
+	if manager == nil {
+		return ""
+	}
+
+	var identity *schema.Identity
+	// Track the key that actually matched (original or lowercase fallback) so the
+	// provider fallback below resolves against the same key the identity matched.
+	resolvedKey := identityName
+	identities := manager.GetIdentities()
+	if len(identities) > 0 {
+		lower := strings.ToLower(identityName)
+		if found, ok := identities[identityName]; ok {
+			identity = &found
+		} else if found, ok := identities[lower]; ok {
+			identity = &found
+			resolvedKey = lower
+		}
+	}
+
+	if url := baseEndpointURL(identity, nil); url != "" {
+		return url
+	}
+
+	provider, _ := manager.ResolveProviderConfig(resolvedKey)
+	return baseEndpointURL(nil, provider)
 }
 
 // getComponentRegionOverride extracts region override from component auth config.

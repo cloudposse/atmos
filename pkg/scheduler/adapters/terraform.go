@@ -74,6 +74,7 @@ type TerraformExecutionResult struct {
 
 // CombinedOutput returns stdout and stderr in the order hooks expect.
 func (r TerraformExecutionResult) CombinedOutput() string {
+	defer perf.Track(nil, "adapters.TerraformExecutionResult.CombinedOutput")()
 	if r.Stderr == "" {
 		return r.Stdout
 	}
@@ -92,6 +93,7 @@ type TerraformNodeOutcome struct {
 	Changed   bool              `json:"changed"`
 	ExitCode  int               `json:"exit_code"`
 	LogFiles  map[string]string `json:"log_files,omitempty"`
+	Output    string            `json:"-"`
 }
 
 // TerraformOptions configures graph-backed Terraform bulk execution.
@@ -144,10 +146,12 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if graph, err = prepareTerraformGraphForCommand(opts.Info, graph); err != nil {
 		return err
 	}
+	// Debug, not Info: the user-facing "Processing components..." line is emitted once
+	// by the caller (e.g. ExecuteTerraformAll); this duplicate carries only the count.
 	if opts.Info.SubCommand == "destroy" {
-		log.Info("Processing components in reverse dependency order for destroy", "count", graph.Size())
+		log.Debug("Processing components in reverse dependency order for destroy", "count", graph.Size())
 	} else {
-		log.Info("Processing components in dependency order", "count", graph.Size())
+		log.Debug("Processing components in dependency order", "count", graph.Size())
 	}
 
 	if err := validateTerraformFailureMode(opts.Info); err != nil {
@@ -162,11 +166,12 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	}
 
 	dispatcher := &TerraformDispatcher{
-		atmosConfig: opts.AtmosConfig,
-		info:        opts.Info,
-		executor:    opts.Executor,
-		locks:       newTerraformResourceLocks(),
-		output:      output,
+		atmosConfig:        opts.AtmosConfig,
+		info:               opts.Info,
+		executor:           opts.Executor,
+		locks:              newTerraformResourceLocks(),
+		output:             output,
+		disablePluginCache: disableTerraformPluginCacheForConcurrentRun(opts.Info),
 	}
 	timings := newTerraformNodeTimings()
 	result := scheduler.New(
@@ -180,6 +185,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if err := writeTerraformSummary(opts.Info, result, timings); err != nil {
 		return err
 	}
+	finalizeTerraformCIResults(opts.Info, result, timings)
 	if result.Err != nil {
 		return result.Err
 	}
@@ -187,7 +193,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if processedCount(result) == 0 {
 		ui.Success("No components matched")
 	}
-	if terraformPlanChanged(result) {
+	if opts.Info.SubCommand == "plan" && terraformPlanChanged(result) {
 		return errUtils.ExitCodeError{Code: 2}
 	}
 	return nil
@@ -335,6 +341,17 @@ func cloneTerraformNodeMetadata(metadata map[string]any) map[string]any {
 	return cloned
 }
 
+func cloneTerraformAtmosSectionMap(section schema.AtmosSectionMapType) schema.AtmosSectionMapType {
+	if section == nil {
+		return nil
+	}
+	cloned := make(schema.AtmosSectionMapType, len(section))
+	for key, value := range section {
+		cloned[key] = value
+	}
+	return cloned
+}
+
 // validateTerraformConcurrentExecution enforces constraints for concurrent Terraform runs.
 func validateTerraformConcurrentExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, _ *dependency.Graph) error {
 	if effectiveTerraformMaxConcurrency(info) <= 1 {
@@ -402,15 +419,17 @@ func containsTerraformFlag(args []string, flag string) bool {
 
 // TerraformDispatcher adapts scheduler nodes to Terraform component execution.
 type TerraformDispatcher struct {
-	atmosConfig *schema.AtmosConfiguration
-	info        *schema.ConfigAndStacksInfo
-	executor    TerraformExecutor
-	locks       *terraformResourceLocks
-	output      *terraformOutput
+	atmosConfig        *schema.AtmosConfiguration
+	info               *schema.ConfigAndStacksInfo
+	executor           TerraformExecutor
+	locks              *terraformResourceLocks
+	output             *terraformOutput
+	disablePluginCache bool
 }
 
 // Dispatch executes one Terraform scheduler node.
 func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Node) (scheduler.Result, error) {
+	defer perf.Track(nil, "adapters.TerraformDispatcher.Dispatch")()
 	if node == nil {
 		return scheduler.Result{}, fmt.Errorf("%w: node is nil", errUtils.ErrInvalidConfig)
 	}
@@ -430,10 +449,16 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 	}
 
 	nodeInfo := *d.info
+	nodeInfo.ComponentEnvSection = cloneTerraformAtmosSectionMap(nodeInfo.ComponentEnvSection)
+	nodeInfo.ComponentEnvList = append([]string(nil), nodeInfo.ComponentEnvList...)
+	nodeInfo.SanitizedEnv = append([]string(nil), nodeInfo.SanitizedEnv...)
 	nodeInfo.Component = node.Component
 	nodeInfo.ComponentFromArg = node.Component
 	nodeInfo.Stack = node.Stack
 	nodeInfo.StackFromArg = node.Stack
+	if d.disablePluginCache {
+		nodeInfo.DisablePluginCache = true
+	}
 
 	unlock := d.lockTerraformResource(node)
 	defer unlock()
@@ -451,10 +476,14 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 		execution.CaptureOutput = d.output.captureOutput()
 		outcome.LogFiles = logFiles
 	}
+	if d.info != nil && d.info.TerraformPlanCIResultHandler != nil {
+		execution.CaptureOutput = true
+	}
 
 	execResult, err := d.executor(execution)
 	outcome.ExitCode = terraformExitCode(err)
 	outcome.Changed = terraformPlanChangedError(d.info, err)
+	outcome.Output = execResult.CombinedOutput()
 	if execution.Flush != nil {
 		if flushErr := execution.Flush(); flushErr != nil && err == nil {
 			err = flushErr
@@ -867,6 +896,7 @@ func newTerraformResourceLocks() *terraformResourceLocks {
 
 // Lock acquires the mutex for key and returns its unlock function.
 func (l *terraformResourceLocks) Lock(key string) func() {
+	defer perf.Track(nil, "adapters.terraformResourceLocks.Lock")()
 	l.mu.Lock()
 	lock, ok := l.locks[key]
 	if !ok {
@@ -1200,6 +1230,78 @@ func terraformPlanChanged(result *scheduler.AggregateResult) bool {
 	return false
 }
 
+// finalizeTerraformCIResults converts scheduler outcomes into aggregate CI results.
+func finalizeTerraformCIResults(info *schema.ConfigAndStacksInfo, result *scheduler.AggregateResult, timings *terraformNodeTimings) {
+	if info == nil || !supportsTerraformConcurrency(info.SubCommand) || info.TerraformPlanCIResultHandler == nil || result == nil {
+		return
+	}
+
+	resultSet := schema.TerraformPlanCIResultSet{
+		Command: info.SubCommand,
+		Results: make([]schema.TerraformPlanCIResult, 0, len(result.Results)),
+	}
+	for i := range result.Results {
+		resultSet.Results = append(resultSet.Results, terraformPlanCIResultFromNode(&result.Results[i], timings))
+	}
+
+	if err := info.TerraformPlanCIResultHandler.HandleTerraformPlanCIResults(resultSet); err != nil {
+		log.Warn("Terraform CI aggregate hook failed", "command", info.SubCommand, "error", err)
+	}
+}
+
+// terraformPlanCIResultFromNode converts one scheduler node result into aggregate CI data.
+func terraformPlanCIResultFromNode(nodeResult *scheduler.Result, timings *terraformNodeTimings) schema.TerraformPlanCIResult {
+	outcome, _ := nodeResult.Value.(TerraformNodeOutcome)
+	entry := schema.TerraformPlanCIResult{
+		NodeID:    nodeResult.NodeID,
+		Stack:     nodeResult.Node.Stack,
+		Component: nodeResult.Node.Component,
+		Status:    string(nodeResult.Status),
+		Processed: outcome.Processed,
+		Changed:   outcome.Changed,
+		ExitCode:  outcome.ExitCode,
+		Output:    outcome.Output,
+		LogFiles:  cloneStringMap(outcome.LogFiles),
+	}
+	applyTerraformPlanCITiming(&entry, nodeResult.NodeID, timings)
+	applyTerraformPlanCIError(&entry, nodeResult.Err)
+	return entry
+}
+
+// applyTerraformPlanCITiming adds captured scheduler timings to one CI result.
+func applyTerraformPlanCITiming(entry *schema.TerraformPlanCIResult, nodeID string, timings *terraformNodeTimings) {
+	if timing, ok := timings.Get(nodeID); ok {
+		entry.StartedAt = timing.startedAt
+		entry.FinishedAt = timing.finishedAt
+		if !timing.startedAt.IsZero() && !timing.finishedAt.IsZero() {
+			entry.DurationMS = timing.finishedAt.Sub(timing.startedAt).Milliseconds()
+		}
+	}
+}
+
+// applyTerraformPlanCIError records node errors with default failed exit-code semantics.
+func applyTerraformPlanCIError(entry *schema.TerraformPlanCIResult, nodeErr error) {
+	if nodeErr == nil {
+		return
+	}
+	entry.Error = nodeErr.Error()
+	if entry.ExitCode == 0 {
+		entry.ExitCode = 1
+	}
+}
+
+// cloneStringMap returns an independent copy of captured node log paths.
+func cloneStringMap(values map[string]string) map[string]string {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
+}
+
 type terraformSummary struct {
 	Results []terraformSummaryResult `json:"results"`
 }
@@ -1238,6 +1340,7 @@ func newTerraformNodeTimings() *terraformNodeTimings {
 
 // Start records the UTC start time for a node.
 func (t *terraformNodeTimings) Start(node *dependency.Node) {
+	defer perf.Track(nil, "adapters.terraformNodeTimings.Start")()
 	if t == nil || node == nil {
 		return
 	}
@@ -1250,6 +1353,7 @@ func (t *terraformNodeTimings) Start(node *dependency.Node) {
 
 // Complete records the UTC finish time for a node.
 func (t *terraformNodeTimings) Complete(node *dependency.Node, _ scheduler.Result) {
+	defer perf.Track(nil, "adapters.terraformNodeTimings.Complete")()
 	if t == nil || node == nil {
 		return
 	}
@@ -1262,6 +1366,7 @@ func (t *terraformNodeTimings) Complete(node *dependency.Node, _ scheduler.Resul
 
 // Get returns the recorded timing for nodeID.
 func (t *terraformNodeTimings) Get(nodeID string) (terraformNodeTiming, bool) {
+	defer perf.Track(nil, "adapters.terraformNodeTimings.Get")()
 	if t == nil {
 		return terraformNodeTiming{}, false
 	}
@@ -1337,6 +1442,14 @@ func effectiveTerraformMaxConcurrency(info *schema.ConfigAndStacksInfo) int {
 		return 1
 	}
 	return info.MaxConcurrency
+}
+
+// disableTerraformPluginCacheForConcurrentRun reports whether worker subprocesses
+// should avoid Terraform/OpenTofu provider plugin caches. The shared plugin cache
+// is not safe for concurrent terraform init, so concurrent graph execution favors
+// parallelism over cache reuse.
+func disableTerraformPluginCacheForConcurrentRun(info *schema.ConfigAndStacksInfo) bool {
+	return effectiveTerraformMaxConcurrency(info) > 1
 }
 
 // validateTerraformFailureMode rejects mutually exclusive Terraform failure flags.

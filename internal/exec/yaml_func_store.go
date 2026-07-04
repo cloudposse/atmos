@@ -81,6 +81,12 @@ func processTagStore(atmosConfig *schema.AtmosConfiguration, input string, curre
 		retParams.key = strings.TrimSpace(storeParts[2])
 	}
 
+	// Refuse !store access to a secret store; secret stores are only reachable via !secret.
+	if cfg, ok := atmosConfig.StoresConfig[retParams.storeName]; ok && cfg.Secret {
+		er := fmt.Errorf("%w: store %q (in %s)", errUtils.ErrStoreIsSecret, retParams.storeName, input)
+		errUtils.CheckErrorPrintAndExit(er, "", "")
+	}
+
 	// Retrieve the store from atmosConfig
 	store := atmosConfig.Stores[retParams.storeName]
 

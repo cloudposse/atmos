@@ -1,0 +1,54 @@
+---
+title: atmos emulator down
+sidebar_label: down
+sidebar_class_name: command
+id: down
+description: Stop and remove an emulator's container
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to stop and remove the emulator's container. The container is discovered by the label derived from its canonical instance address. Persisted state is **kept** — the next [`atmos emulator up`](/cli/commands/emulator/up) resumes from it. Use [`atmos emulator reset`](/cli/commands/emulator/reset) to wipe persisted state instead.
+</Intro>
+
+<Experimental />
+
+<Screengrab title="atmos emulator down --help" slug="atmos-emulator-down--help" />
+
+## Usage
+
+```shell
+atmos emulator down <component> --stack <stack> [flags]
+```
+
+## Examples
+
+```shell
+# Stop and remove the aws emulator in the plat-ue2-dev stack
+atmos emulator down aws --stack=plat-ue2-dev
+
+# Using the emu alias
+atmos emu down aws --stack=plat-ue2-dev
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>**Required.** The emulator component to stop (for example, `aws`).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`-s, --stack`</dt>
+  <dd>**Required.** The stack the emulator component belongs to (for example, `plat-ue2-dev`).</dd>
+</dl>
+
+## See Also
+
+- [`atmos emulator up`](/cli/commands/emulator/up) — Start (or reuse) the emulator container
+- [`atmos emulator reset`](/cli/commands/emulator/reset) — Stop the emulator and wipe its persisted state
+- [`atmos emulator ps`](/cli/commands/emulator/ps) — List running emulators in the stack

@@ -570,51 +570,6 @@ func kubeconfigDebugDiff() bool {
 	return os.Getenv("ATMOS_KUBECONFIG_DEBUG_DIFF") != ""
 }
 
-// clusterMapsEqual returns true when two cluster maps have identical
-// key sets and identical entry contents.
-func clusterMapsEqual(a, b map[string]*clientcmdapi.Cluster) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, av := range a {
-		bv, ok := b[k]
-		if !ok || !clustersEqual(av, bv) {
-			return false
-		}
-	}
-	return true
-}
-
-// contextMapsEqual returns true when two context maps have identical
-// key sets and identical entry contents.
-func contextMapsEqual(a, b map[string]*clientcmdapi.Context) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, av := range a {
-		bv, ok := b[k]
-		if !ok || !contextsEqual(av, bv) {
-			return false
-		}
-	}
-	return true
-}
-
-// authInfoMapsEqual returns true when two auth-info maps have identical
-// key sets and identical entry contents.
-func authInfoMapsEqual(a, b map[string]*clientcmdapi.AuthInfo) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, av := range a {
-		bv, ok := b[k]
-		if !ok || !authInfosEqual(av, bv) {
-			return false
-		}
-	}
-	return true
-}
-
 // clustersEqual compares the fields of two Cluster entries that BuildClusterConfig
 // populates plus the other fields a user might reasonably set in a kubeconfig.
 // LocationOfOrigin and Extensions are intentionally excluded — they're load-time

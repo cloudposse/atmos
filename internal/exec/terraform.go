@@ -12,6 +12,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	"github.com/cloudposse/atmos/pkg/xdg"
 
 	// Import backend provisioner to register S3 provisioner.
@@ -19,10 +20,19 @@ import (
 )
 
 const (
+	terraformPluginCacheDirEnv              = "TF_PLUGIN_CACHE_DIR"
+	terraformPluginCacheMayBreakLockFileEnv = "TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE"
+
 	// BeforeTerraformInitEvent is the hook event name for provisioners that run before terraform init.
 	// This matches the hook event registered by backend provisioners in pkg/provisioner/backend/backend.go.
 	// See pkg/hooks/event.go (hooks.BeforeTerraformInit) for the canonical definition.
 	beforeTerraformInitEvent = "before.terraform.init"
+
+	// AfterTerraformInitEvent is the hook event name for provisioners that run after a
+	// successful terraform init (e.g. the multi-platform providers-lock hook in
+	// pkg/provisioner/lock). It is dispatched with a TerraformExecContext so the provisioner
+	// can run a terraform subcommand against the live env, RC, and working directory.
+	afterTerraformInitEvent = "after.terraform.init"
 
 	subcommandApply     = "apply"
 	subcommandDeploy    = "deploy"
@@ -51,6 +61,35 @@ func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info
 	}
 
 	return tenv, nil
+}
+
+// startManagedTerraformCache starts the registry cache for this execution and returns
+// the Setup whose Close the caller must defer. It returns (nil, nil) when caching is
+// disabled or when the caller owns the cache lifecycle (info.TerraformCacheExternal,
+// e.g. `cache mirror` sharing one proxy across components) — in which case the pre-set
+// info.TerraformCache is reused as-is. On a trust failure the proxy is closed before
+// returning so it does not leak.
+func startManagedTerraformCache(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*tfcache.Setup, error) {
+	defer perf.Track(atmosConfig, "exec.startManagedTerraformCache")()
+
+	if info.TerraformCacheExternal {
+		return nil, nil
+	}
+	setup, err := tfcache.Start(context.Background(), atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	if setup == nil {
+		return nil, nil
+	}
+	info.TerraformCache = setup
+	// Fail fast with an actionable message when the OS does not trust the cache
+	// certificate (macOS/Windows), instead of a raw x509 error from terraform.
+	if trustErr := setup.VerifyTrust(context.Background()); trustErr != nil {
+		_ = setup.Close(context.Background())
+		return nil, trustErr
+	}
+	return setup, nil
 }
 
 // ExecuteTerraform executes terraform commands.
@@ -113,10 +152,36 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	// repos via the inherited GIT_CONFIG_* rewrites. Process-once and gated (CI + configured).
 	broker.EnsureCredentials(context.Background(), &atmosConfig)
 
+	// Start the Terraform registry cache (no-op when disabled or caller-owned). The
+	// ephemeral proxy must outlive the whole pipeline, so its Close is deferred here.
+	// Env assembly merges its CLI-config contribution into the generated RC.
+	cacheSetup, err := startManagedTerraformCache(&atmosConfig, &info)
+	if err != nil {
+		return err
+	}
+	if cacheSetup != nil {
+		defer func() {
+			if closeErr := cacheSetup.Close(context.Background()); closeErr != nil {
+				log.Debug("Failed to shut down Terraform registry cache", "error", closeErr)
+			}
+		}()
+	}
+
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
 	execCtx, err := prepareComponentExecution(&atmosConfig, &info, shouldProcess)
 	if err != nil {
 		return err
+	}
+
+	// Remove the temporary Terraform CLI config (TF_CLI_CONFIG_FILE) after the whole
+	// pipeline (init, workspace, plan/apply) completes. Registered here, not inside the
+	// pipeline, so the file survives every subprocess and is cleaned up on early errors.
+	if info.RCCleanup != nil {
+		defer func() {
+			if cleanupErr := info.RCCleanup(); cleanupErr != nil {
+				log.Debug("Failed to remove temporary Terraform CLI config", "error", cleanupErr)
+			}
+		}()
 	}
 
 	// Persist auth context so PostRunE hooks (e.g. store hooks that read
@@ -163,8 +228,8 @@ func configurePluginCache(atmosConfig *schema.AtmosConfiguration) []string {
 	}
 
 	return []string{
-		fmt.Sprintf("TF_PLUGIN_CACHE_DIR=%s", pluginCacheDir),
-		"TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true",
+		fmt.Sprintf("%s=%s", terraformPluginCacheDirEnv, pluginCacheDir),
+		fmt.Sprintf("%s=true", terraformPluginCacheMayBreakLockFileEnv),
 	}
 }
 
@@ -173,7 +238,7 @@ func configurePluginCache(atmosConfig *schema.AtmosConfiguration) []string {
 // Invalid values (empty string or "/") are logged as warnings.
 func getValidUserPluginCacheDir(atmosConfig *schema.AtmosConfiguration) string {
 	// Check OS environment first.
-	if osEnvDir, inOsEnv := os.LookupEnv("TF_PLUGIN_CACHE_DIR"); inOsEnv {
+	if osEnvDir, inOsEnv := os.LookupEnv(terraformPluginCacheDirEnv); inOsEnv {
 		if isValidPluginCacheDir(osEnvDir, "environment variable") {
 			return osEnvDir
 		}
@@ -181,7 +246,7 @@ func getValidUserPluginCacheDir(atmosConfig *schema.AtmosConfiguration) string {
 	}
 
 	// Check global env section in atmos.yaml.
-	if globalEnvDir, inGlobalEnv := atmosConfig.Env["TF_PLUGIN_CACHE_DIR"]; inGlobalEnv {
+	if globalEnvDir, inGlobalEnv := atmosConfig.Env[terraformPluginCacheDirEnv]; inGlobalEnv {
 		if isValidPluginCacheDir(globalEnvDir, "atmos.yaml env section") {
 			return globalEnvDir
 		}
@@ -203,4 +268,58 @@ func isValidPluginCacheDir(path, source string) bool {
 		return false
 	}
 	return true
+}
+
+// disableTerraformPluginCacheForExecution removes Terraform/OpenTofu plugin-cache
+// configuration from this execution. This is intentionally scoped to the current
+// subprocess environment and config copy so concurrent graph runs can keep full
+// scheduler parallelism without racing on a shared provider cache.
+func disableTerraformPluginCacheForExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	if atmosConfig == nil || info == nil || !info.DisablePluginCache {
+		return
+	}
+
+	atmosConfig.Components.Terraform.PluginCache = false
+	atmosConfig.Components.Terraform.PluginCacheDir = ""
+
+	delete(atmosConfig.Env, terraformPluginCacheDirEnv)
+	delete(atmosConfig.Env, terraformPluginCacheMayBreakLockFileEnv)
+	delete(info.ComponentEnvSection, terraformPluginCacheDirEnv)
+	delete(info.ComponentEnvSection, terraformPluginCacheMayBreakLockFileEnv)
+
+	baseEnv := info.SanitizedEnv
+	if baseEnv == nil {
+		baseEnv = os.Environ()
+	}
+	info.SanitizedEnv = removeEnvKeys(baseEnv, terraformPluginCacheDirEnv, terraformPluginCacheMayBreakLockFileEnv)
+	info.ComponentEnvList = removeEnvKeys(info.ComponentEnvList, terraformPluginCacheDirEnv, terraformPluginCacheMayBreakLockFileEnv)
+}
+
+func removeEnvKeys(env []string, keys ...string) []string {
+	if len(env) == 0 || len(keys) == 0 {
+		return env
+	}
+	skip := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		skip[key] = struct{}{}
+	}
+
+	filtered := env[:0]
+	for _, entry := range env {
+		key := envKey(entry)
+		if _, ok := skip[key]; ok {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	return filtered
+}
+
+func envKey(entry string) string {
+	for i := 0; i < len(entry); i++ {
+		if entry[i] == '=' {
+			return entry[:i]
+		}
+	}
+	return entry
 }

@@ -1,0 +1,34 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Track 1: a 1Password secret store. `secret: true` is implied for `type: onepassword`, so it is
+# always a secret backend (resolved via !secret, never !store). Authentication auto-selects:
+#   - 1Password Connect    when OP_CONNECT_HOST + OP_CONNECT_TOKEN are set (typical CI/cloud)
+#   - Service Account       when OP_SERVICE_ACCOUNT_TOKEN is set (typical local dev)
+# No `op` CLI is required.
+stores:
+  op:
+    type: onepassword
+    options:
+      mode: auto
+      # Optional default vault, so references may be written vault-relative (e.g. "Datadog/api_key"):
+      # vault: Production

@@ -156,3 +156,63 @@ func TestNewStoreRegistry_MixedIdentityStores(t *testing.T) {
 		_ = ias
 	}
 }
+
+func TestNewStoreRegistry_CustomEndpointOptions(t *testing.T) {
+	config := &StoresConfig{
+		"local-ssm": StoreConfig{
+			Kind:     KindAWSSSM,
+			Identity: "aws/local",
+			Options: map[string]interface{}{
+				"region":   "us-east-1",
+				"endpoint": "http://localhost:4566",
+			},
+		},
+		"local-asm": StoreConfig{
+			Kind:     KindAWSASM,
+			Identity: "aws/local",
+			Options: map[string]interface{}{
+				"region":       "us-east-1",
+				"endpoint_url": "http://localhost:4566",
+			},
+		},
+		"local-azure": StoreConfig{
+			Kind:     KindAzureKeyVault,
+			Identity: "azure/local",
+			Options: map[string]interface{}{
+				"endpoint": "http://localhost:4567",
+				"disable_challenge_resource_verification": true,
+				"without_authentication":                  true,
+			},
+		},
+		"local-gcp": StoreConfig{
+			Kind:     KindGCPSecret,
+			Identity: "gcp/local",
+			Options: map[string]interface{}{
+				"project_id":             "local-project",
+				"endpoint":               "http://localhost:4568",
+				"endpoint_insecure":      true,
+				"without_authentication": true,
+			},
+		},
+	}
+
+	registry, err := NewStoreRegistry(config)
+	assert.NoError(t, err)
+
+	ssmStore := registry["local-ssm"].(*SSMStore)
+	assert.Equal(t, "http://localhost:4566", ssmStore.endpoint)
+
+	asmStore := registry["local-asm"].(*SecretsManagerStore)
+	assert.Equal(t, "http://localhost:4566", asmStore.endpoint)
+
+	azureStore := registry["local-azure"].(*AzureKeyVaultStore)
+	assert.Equal(t, "http://localhost:4567", azureStore.vaultURL)
+	assert.True(t, azureStore.clientOptions.DisableChallengeResourceVerification)
+	assert.True(t, azureStore.clientOptions.InsecureAllowCredentialWithHTTP)
+	assert.True(t, azureStore.withoutAuth)
+
+	gsmStore := registry["local-gcp"].(*GSMStore)
+	assert.Equal(t, "http://localhost:4568", gsmStore.endpoint)
+	assert.True(t, gsmStore.endpointInsecure)
+	assert.True(t, gsmStore.withoutAuthentication)
+}

@@ -16,7 +16,9 @@ alias cat='bat'
 
 function clean() {
     find . -type d -name '.terraform' -prune  -exec rm -rf {} \;
-    find . -type f -name '.terraform.lock.hcl' -exec rm -f {} \;
+    # Preserve the committed multi-platform lock for myapp so recorded `terraform init`
+    # finds complete checksums and skips the "Incomplete lock file" warning.
+    find . -type f -name '.terraform.lock.hcl' ! -path './components/terraform/myapp/.terraform.lock.hcl' -exec rm -f {} \;
     find . -type d -name 'terraform.tfstate.d' -prune -exec rm -rf {} \;
     find . -type f -name '*.tfvar.json' -exec rm -f {} \;
 }
