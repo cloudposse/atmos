@@ -506,16 +506,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - flavor: { os: ubuntu-latest, target: linux, artifact: linux }
-            demo-folder: demo-helmfile
-          - flavor: { os: ubuntu-latest, target: linux, artifact: linux }
-            demo-folder: helm
-          # The native Helm k3s smoke is covered on Linux. On macOS, this
-          # specific Helm + Colima + k3s combination can hang until the job
-          # timeout, while demo-helmfile still exercises macOS k3s coverage.
-          - flavor: { os: "macos-15-intel", target: macos, artifact: macos-intel }
-            demo-folder: demo-helmfile
+        flavor:
+          - { os: ubuntu-latest, target: linux, artifact: linux }
+          - { os: "macos-15-intel", target: macos, artifact: macos-intel }
+        demo-folder:
+          - demo-helmfile
+          - helm
 
     timeout-minutes: 60
     steps:
@@ -582,26 +578,47 @@ jobs:
           cd examples/${{ matrix.demo-folder }}
           run_with_timeout() {
             python3 - "$@" <<'PY'
+          import os
+          import signal
           import subprocess
           import sys
 
           timeout = int(sys.argv[1])
           cmd = sys.argv[2:]
+          proc = subprocess.Popen(cmd, start_new_session=True)
           try:
-              raise SystemExit(subprocess.run(cmd, timeout=timeout).returncode)
+              raise SystemExit(proc.wait(timeout=timeout))
           except subprocess.TimeoutExpired:
               print(f"{' '.join(cmd)} timed out after {timeout}s", file=sys.stderr)
+              os.killpg(proc.pid, signal.SIGTERM)
+              try:
+                  proc.wait(timeout=10)
+              except subprocess.TimeoutExpired:
+                  os.killpg(proc.pid, signal.SIGKILL)
+                  proc.wait()
               raise SystemExit(124)
           PY
+          }
+
+          cleanup_k3s() {
+            atmos emulator down kubernetes -s dev || true
+            docker rm -f atmos-dev-emulator-kubernetes >/dev/null 2>&1 || true
           }
 
           # macOS k3s jobs can occasionally hang in the Docker/Colima stack.
           # Bound each attempt so the matrix can retry instead of consuming the
           # whole job timeout and cancelling the required aggregate check.
+          attempt_timeout=1500
+          if [ "${{ matrix.flavor.target }}" = "macos" ]; then
+            attempt_timeout=900
+          fi
+
+          trap cleanup_k3s EXIT
           for attempt in 1 2; do
-            run_with_timeout 1500 atmos test && exit 0
+            run_with_timeout "${attempt_timeout}" atmos test && exit 0
             status=$?
             echo "atmos test failed (attempt ${attempt}/2, status ${status})" >&2
+            cleanup_k3s
             [ "${attempt}" -lt 2 ] && sleep 15
           done
           exit "${status}"
