@@ -9,6 +9,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -98,7 +99,8 @@ func TestCacheFileLockTimeoutBehavior(t *testing.T) {
 	// Create a test that simulates what happens during a lock timeout.
 	// This should complete within a reasonable time (5 seconds max for lock acquisition).
 	start := time.Now()
-	err = withCacheFileLock(cacheFile, func() error {
+	lock := cache.NewFileLock(cacheFile)
+	err = lock.WithLock(func() error {
 		// Simulate some work.
 		time.Sleep(100 * time.Millisecond)
 		return nil
@@ -132,7 +134,8 @@ func TestLoadCacheNonBlockingWithLockedFile(t *testing.T) {
 	lockReleased := make(chan bool)
 
 	go func() {
-		err := withCacheFileLock(cacheFile, func() error {
+		lock := cache.NewFileLock(cacheFile)
+		err := lock.WithLock(func() error {
 			lockHeld <- true
 			// Hold the lock for a bit.
 			time.Sleep(2 * time.Second)

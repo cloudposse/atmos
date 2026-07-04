@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -21,12 +22,12 @@ func TerraformFlags() *flags.FlagRegistry {
 // registerIdentityFlags adds identity and authentication related flags.
 func registerIdentityFlags(registry *flags.FlagRegistry) {
 	registry.Register(&flags.StringFlag{
-		Name:        "identity",
-		Shorthand:   "i",
+		Name:        cfg.IdentityFlagName,
+		Shorthand:   cfg.IdentityFlagShortName,
 		Default:     "",
 		Description: "Specify the identity to authenticate to before running Terraform commands. Use without value to interactively select.",
-		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
-		NoOptDefVal: "__SELECT__",
+		EnvVars:     []string{"ATMOS_IDENTITY"},
+		NoOptDefVal: cfg.IdentityFlagSelectValue,
 	})
 }
 
@@ -61,6 +62,17 @@ func registerExecutionFlags(registry *flags.FlagRegistry) {
 		Default:     "",
 		Description: "Customize User-Agent string in Terraform provider requests (sets TF_APPEND_USER_AGENT)",
 		EnvVars:     []string{"ATMOS_APPEND_USER_AGENT"},
+	})
+	// Skip hooks at runtime. --skip-hooks (no value) skips all hooks for the
+	// current invocation; --skip-hooks=name1,name2 skips only the named hooks.
+	// Per-invocation only — does not propagate to nested commands.
+	registry.Register(&flags.StringFlag{
+		Name:        "skip-hooks",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Skip lifecycle hooks for this invocation. Use --skip-hooks (no value) to skip all, or --skip-hooks=name1,name2 to skip specific hooks by name",
+		EnvVars:     []string{"ATMOS_SKIP_HOOKS"},
+		NoOptDefVal: "*", // bare --skip-hooks means "skip all".
 	})
 }
 

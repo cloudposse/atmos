@@ -308,6 +308,7 @@ func TestRunAnalysis_ErrorAppendsToExistingStderr(t *testing.T) {
 }
 
 func TestRunAnalysis_ErrorWithEmptyStderr(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	redirectToDevNull(t)
 	capturedInput := withMockAnalyzePtr(t)
 	_ = withMockExit(t)

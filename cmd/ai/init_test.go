@@ -23,12 +23,12 @@ func TestInitializeAIToolsAndExecutor_ToolsDisabled(t *testing.T) {
 		},
 	}
 
-	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrAIToolsDisabled))
-	assert.Nil(t, registry)
-	assert.Nil(t, executor)
+	assert.Nil(t, toolsResult)
+	// executor is nil when result is nil
 }
 
 func TestInitializeAIToolsAndExecutor_ToolsEnabled(t *testing.T) {
@@ -47,13 +47,13 @@ func TestInitializeAIToolsAndExecutor_ToolsEnabled(t *testing.T) {
 		},
 	}
 
-	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 	assert.NoError(t, err)
-	assert.NotNil(t, registry)
-	assert.NotNil(t, executor)
+	assert.NotNil(t, toolsResult)
+	assert.NotNil(t, toolsResult.Executor)
 	// Registry should have registered tools.
-	assert.Greater(t, registry.Count(), 0)
+	assert.Greater(t, toolsResult.Registry.Count(), 0)
 }
 
 func TestInitializeAIToolsAndExecutor_YOLOMode(t *testing.T) {
@@ -68,11 +68,11 @@ func TestInitializeAIToolsAndExecutor_YOLOMode(t *testing.T) {
 		},
 	}
 
-	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 	assert.NoError(t, err)
-	assert.NotNil(t, registry)
-	assert.NotNil(t, executor)
+	assert.NotNil(t, toolsResult)
+	assert.NotNil(t, toolsResult.Executor)
 }
 
 func TestInitializeAIToolsAndExecutor_WithToolLists(t *testing.T) {
@@ -128,14 +128,14 @@ func TestInitializeAIToolsAndExecutor_WithToolLists(t *testing.T) {
 				},
 			}
 
-			registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+			toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 			if tt.shouldError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.NotNil(t, registry)
-				assert.NotNil(t, executor)
+				assert.NotNil(t, toolsResult)
+				assert.NotNil(t, toolsResult.Executor)
 			}
 		})
 	}
@@ -174,11 +174,11 @@ func TestInitializeAIToolsAndExecutor_RequireConfirmation(t *testing.T) {
 				},
 			}
 
-			registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+			toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 			assert.NoError(t, err)
-			assert.NotNil(t, registry)
-			assert.NotNil(t, executor)
+			assert.NotNil(t, toolsResult)
+			assert.NotNil(t, toolsResult.Executor)
 		})
 	}
 }
@@ -208,12 +208,12 @@ func TestInitializeAIToolsAndExecutor_PermissionCacheFailure(t *testing.T) {
 
 	// The function should still succeed, but use NewCLIPrompter instead of
 	// NewCLIPrompterWithCache due to the permission cache failure.
-	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 	assert.NoError(t, err)
-	assert.NotNil(t, registry)
-	assert.NotNil(t, executor)
-	assert.Greater(t, registry.Count(), 0)
+	assert.NotNil(t, toolsResult)
+	assert.NotNil(t, toolsResult.Executor)
+	assert.Greater(t, toolsResult.Registry.Count(), 0)
 }
 
 // TestInitializeAIToolsAndExecutor_EmptyBasePath tests with an empty base path.
@@ -229,11 +229,11 @@ func TestInitializeAIToolsAndExecutor_EmptyBasePath(t *testing.T) {
 		},
 	}
 
-	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 	assert.NoError(t, err)
-	assert.NotNil(t, registry)
-	assert.NotNil(t, executor)
+	assert.NotNil(t, toolsResult)
+	assert.NotNil(t, toolsResult.Executor)
 }
 
 // TestInitializeAIToolsAndExecutor_PermissionModes tests different permission mode configurations.
@@ -297,11 +297,11 @@ func TestInitializeAIToolsAndExecutor_PermissionModes(t *testing.T) {
 				},
 			}
 
-			registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+			toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 			assert.NoError(t, err, tt.description)
-			assert.NotNil(t, registry)
-			assert.NotNil(t, executor)
+			assert.NotNil(t, toolsResult)
+			assert.NotNil(t, toolsResult.Executor)
 		})
 	}
 }
@@ -318,14 +318,14 @@ func TestInitializeAIToolsAndExecutor_ToolRegistration(t *testing.T) {
 		},
 	}
 
-	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 	assert.NoError(t, err)
-	assert.NotNil(t, registry)
-	assert.NotNil(t, executor)
+	assert.NotNil(t, toolsResult)
+	assert.NotNil(t, toolsResult.Executor)
 
 	// Verify multiple tools were registered.
-	toolCount := registry.Count()
+	toolCount := toolsResult.Registry.Count()
 	assert.Greater(t, toolCount, 5, "Expected more than 5 tools to be registered")
 }
 
@@ -354,9 +354,257 @@ func TestInitializeAIToolsAndExecutor_NilPermCacheUsesSimplePrompter(t *testing.
 
 	// The function should still succeed because it handles permCache failure gracefully
 	// by using NewCLIPrompter() instead of NewCLIPrompterWithCache().
-	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+	toolsResult, err := initializeAIToolsAndExecutor(atmosConfig, nil, "")
 
 	assert.NoError(t, err)
-	assert.NotNil(t, registry)
-	assert.NotNil(t, executor)
+	assert.NotNil(t, toolsResult)
+	assert.NotNil(t, toolsResult.Executor)
+}
+
+// TestSelectMCPServers tests all branches of the selectMCPServers function.
+func TestSelectMCPServers(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"aws":   {Command: "aws-mcp", Description: "AWS tools"},
+		"gcp":   {Command: "gcp-mcp", Description: "GCP tools"},
+		"azure": {Command: "azure-mcp", Description: "Azure tools"},
+	}
+
+	t.Run("manual override with known servers", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			MCP: schema.MCPSettings{
+				Servers: servers,
+			},
+		}
+		result := selectMCPServers(atmosConfig, []string{"aws", "gcp"}, "some question")
+		assert.Len(t, result, 2)
+		assert.Contains(t, result, "aws")
+		assert.Contains(t, result, "gcp")
+		assert.NotContains(t, result, "azure")
+	})
+
+	t.Run("manual override with unknown server name", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			MCP: schema.MCPSettings{
+				Servers: servers,
+			},
+		}
+		// "nonexistent" is not in the servers map - should still return any valid ones.
+		result := selectMCPServers(atmosConfig, []string{"aws", "nonexistent"}, "")
+		assert.Len(t, result, 1)
+		assert.Contains(t, result, "aws")
+	})
+
+	t.Run("manual override all unknown returns empty", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			MCP: schema.MCPSettings{
+				Servers: servers,
+			},
+		}
+		result := selectMCPServers(atmosConfig, []string{"nonexistent1", "nonexistent2"}, "")
+		assert.Empty(t, result)
+	})
+
+	t.Run("single server no routing needed", func(t *testing.T) {
+		singleServer := map[string]schema.MCPServerConfig{
+			"only": {Command: "only-mcp"},
+		}
+		atmosConfig := &schema.AtmosConfiguration{
+			MCP: schema.MCPSettings{
+				Servers: singleServer,
+			},
+		}
+		result := selectMCPServers(atmosConfig, nil, "some question")
+		assert.Len(t, result, 1)
+		assert.Contains(t, result, "only")
+	})
+
+	t.Run("routing disabled returns all servers", func(t *testing.T) {
+		routingDisabled := false
+		atmosConfig := &schema.AtmosConfiguration{
+			MCP: schema.MCPSettings{
+				Servers: servers,
+				Routing: schema.MCPRoutingConfig{
+					Enabled: &routingDisabled,
+				},
+			},
+		}
+		result := selectMCPServers(atmosConfig, nil, "deploy to AWS")
+		assert.Len(t, result, 3)
+		assert.Equal(t, servers, result)
+	})
+
+	t.Run("empty question returns all servers", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			MCP: schema.MCPSettings{
+				Servers: servers,
+			},
+		}
+		// Empty question = chat mode, returns all servers.
+		result := selectMCPServers(atmosConfig, nil, "")
+		assert.Len(t, result, 3)
+		assert.Equal(t, servers, result)
+	})
+
+	t.Run("multiple servers with empty question and routing enabled", func(t *testing.T) {
+		routingEnabled := true
+		atmosConfig := &schema.AtmosConfiguration{
+			MCP: schema.MCPSettings{
+				Servers: servers,
+				Routing: schema.MCPRoutingConfig{
+					Enabled: &routingEnabled,
+				},
+			},
+		}
+		// Even with routing enabled, empty question returns all.
+		result := selectMCPServers(atmosConfig, nil, "")
+		assert.Len(t, result, 3)
+	})
+}
+
+// TestFilterServersByName tests the filterServersByName function.
+func TestFilterServersByName(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"aws":   {Command: "aws-mcp"},
+		"gcp":   {Command: "gcp-mcp"},
+		"azure": {Command: "azure-mcp"},
+	}
+
+	t.Run("all names found", func(t *testing.T) {
+		result := filterServersByName(servers, []string{"aws", "gcp", "azure"})
+		assert.Len(t, result, 3)
+		assert.Equal(t, "aws-mcp", result["aws"].Command)
+		assert.Equal(t, "gcp-mcp", result["gcp"].Command)
+		assert.Equal(t, "azure-mcp", result["azure"].Command)
+	})
+
+	t.Run("some names not found", func(t *testing.T) {
+		result := filterServersByName(servers, []string{"aws", "nonexistent"})
+		assert.Len(t, result, 1)
+		assert.Contains(t, result, "aws")
+		assert.NotContains(t, result, "nonexistent")
+	})
+
+	t.Run("empty names list", func(t *testing.T) {
+		result := filterServersByName(servers, []string{})
+		assert.Empty(t, result)
+	})
+
+	t.Run("empty servers map", func(t *testing.T) {
+		result := filterServersByName(map[string]schema.MCPServerConfig{}, []string{"aws"})
+		assert.Empty(t, result)
+	})
+
+	t.Run("nil servers map", func(t *testing.T) {
+		result := filterServersByName(nil, []string{"aws"})
+		assert.Empty(t, result)
+	})
+}
+
+// TestSortedServerNames tests the sortedServerNames function.
+func TestSortedServerNames(t *testing.T) {
+	t.Run("multiple servers returned sorted", func(t *testing.T) {
+		servers := map[string]schema.MCPServerConfig{
+			"zebra":  {Command: "z"},
+			"apple":  {Command: "a"},
+			"mango":  {Command: "m"},
+			"banana": {Command: "b"},
+		}
+		result := sortedServerNames(servers)
+		assert.Equal(t, []string{"apple", "banana", "mango", "zebra"}, result)
+	})
+
+	t.Run("empty map", func(t *testing.T) {
+		result := sortedServerNames(map[string]schema.MCPServerConfig{})
+		assert.Empty(t, result)
+	})
+
+	t.Run("single server", func(t *testing.T) {
+		servers := map[string]schema.MCPServerConfig{
+			"only": {Command: "only-mcp"},
+		}
+		result := sortedServerNames(servers)
+		assert.Equal(t, []string{"only"}, result)
+	})
+}
+
+func TestIsCLIProvider(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		expected bool
+	}{
+		{"claude-code is CLI", "claude-code", true},
+		{"codex-cli is CLI", "codex-cli", true},
+		{"gemini-cli is CLI", "gemini-cli", true},
+		{"anthropic is not CLI", "anthropic", false},
+		{"openai is not CLI", "openai", false},
+		{"ollama is not CLI", "ollama", false},
+		{"empty is not CLI", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isCLIProvider(tt.provider))
+		})
+	}
+}
+
+func TestSelectManualServers(t *testing.T) {
+	servers := map[string]schema.MCPServerConfig{
+		"aws":   {Command: "aws-mcp"},
+		"gcp":   {Command: "gcp-mcp"},
+		"azure": {Command: "azure-mcp"},
+	}
+
+	t.Run("all valid", func(t *testing.T) {
+		result := selectManualServers(servers, []string{"aws", "gcp"})
+		assert.Len(t, result, 2)
+		assert.Contains(t, result, "aws")
+		assert.Contains(t, result, "gcp")
+	})
+
+	t.Run("some unknown", func(t *testing.T) {
+		result := selectManualServers(servers, []string{"aws", "nonexistent"})
+		assert.Len(t, result, 1)
+		assert.Contains(t, result, "aws")
+	})
+
+	t.Run("all unknown", func(t *testing.T) {
+		result := selectManualServers(servers, []string{"fake1", "fake2"})
+		assert.Empty(t, result)
+	})
+}
+
+// TestServersNeedAuth tests the serversNeedAuth function.
+func TestServersNeedAuth(t *testing.T) {
+	t.Run("no servers need auth", func(t *testing.T) {
+		servers := map[string]schema.MCPServerConfig{
+			"aws": {Command: "aws-mcp"},
+			"gcp": {Command: "gcp-mcp"},
+		}
+		assert.False(t, serversNeedAuth(servers))
+	})
+
+	t.Run("one server needs auth", func(t *testing.T) {
+		servers := map[string]schema.MCPServerConfig{
+			"aws": {Command: "aws-mcp", Identity: "aws-identity"},
+			"gcp": {Command: "gcp-mcp"},
+		}
+		assert.True(t, serversNeedAuth(servers))
+	})
+
+	t.Run("all servers need auth", func(t *testing.T) {
+		servers := map[string]schema.MCPServerConfig{
+			"aws": {Command: "aws-mcp", Identity: "aws-id"},
+			"gcp": {Command: "gcp-mcp", Identity: "gcp-id"},
+		}
+		assert.True(t, serversNeedAuth(servers))
+	})
+
+	t.Run("empty map", func(t *testing.T) {
+		assert.False(t, serversNeedAuth(map[string]schema.MCPServerConfig{}))
+	})
+
+	t.Run("nil map", func(t *testing.T) {
+		assert.False(t, serversNeedAuth(nil))
+	})
 }

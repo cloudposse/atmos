@@ -77,6 +77,11 @@ type Flags struct {
 
 	// Version management.
 	UseVersion string // Specify which version of Atmos to use (--use-version).
+
+	// SettingsListMergeStrategy overrides settings.list_merge_strategy for
+	// this invocation. Controls how lists are merged in Atmos stack manifests
+	// (replace, append, merge).
+	SettingsListMergeStrategy string
 }
 
 // NewFlags creates a Flags with default values.

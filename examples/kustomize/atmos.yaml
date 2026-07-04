@@ -1,0 +1,38 @@
+base_path: "./"
+
+components:
+  kubernetes:
+    base_path: "components/kubernetes"
+    provider: kustomize
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# The `local-k3s` identity binds the component to a local Kubernetes emulator. Atmos
+# starts the k3s container (`atmos emulator up kubernetes -s dev`), harvests its
+# admin kubeconfig, and injects KUBECONFIG into the component environment — no
+# docker-compose, no mixin, no manual kubeconfig wiring. The bound emulator is the
+# `components.emulator.kubernetes` component (stacks/catalog/emulator/kubernetes.yaml).
+auth:
+  identities:
+    local-k3s:
+      kind: kubernetes/emulator
+      emulator: kubernetes
+
+commands:
+  - name: "test"
+    description: "Bring up the local Kubernetes emulator, apply the Kustomize demo, then tear it down"
+    steps:
+      - atmos validate stacks
+      - atmos emulator up kubernetes -s dev
+      - atmos kubernetes apply demo -s dev --identity local-k3s
+      - atmos emulator down kubernetes -s dev

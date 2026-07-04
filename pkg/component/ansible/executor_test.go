@@ -8,8 +8,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/types"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -39,6 +43,75 @@ func TestCheckConfig(t *testing.T) {
 		err := checkConfig(atmosConfig)
 		assert.NoError(t, err)
 	})
+}
+
+func TestProcessStacksWithAuthPassesAuthManager(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockAuthManager := types.NewMockAuthManager(ctrl)
+
+	originalSetup := setupComponentAuthForCLI
+	originalProcessStacks := processStacks
+	t.Cleanup(func() {
+		setupComponentAuthForCLI = originalSetup
+		processStacks = originalProcessStacks
+	})
+
+	setupComponentAuthForCLI = func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+		assert.Equal(t, "terraform", info.Identity)
+		return mockAuthManager, nil
+	}
+
+	processStacks = func(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, checkStack, processTemplates, processYamlFunctions bool, skip []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+		assert.True(t, checkStack)
+		assert.True(t, processTemplates)
+		assert.True(t, processYamlFunctions)
+		assert.Nil(t, skip)
+		assert.Equal(t, mockAuthManager, authManager)
+
+		info.ComponentIsEnabled = true
+		return info, nil
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentType:    cfg.AnsibleComponentType,
+		ComponentFromArg: "pg-auto-failover",
+		Stack:            "fuecoco-stg",
+		Identity:         "terraform",
+	}
+
+	err := processStacksWithAuth(&schema.AtmosConfiguration{}, info)
+	require.NoError(t, err)
+	assert.True(t, info.ComponentIsEnabled)
+}
+
+func TestProcessStacksWithAuthSkipsAuthWhenIdentityIsEmpty(t *testing.T) {
+	originalSetup := setupComponentAuthForCLI
+	originalProcessStacks := processStacks
+	t.Cleanup(func() {
+		setupComponentAuthForCLI = originalSetup
+		processStacks = originalProcessStacks
+	})
+
+	setupComponentAuthForCLI = func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+		t.Fatal("auth setup should not run without an explicit identity")
+		return nil, nil
+	}
+
+	processStacks = func(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, checkStack, processTemplates, processYamlFunctions bool, skip []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+		assert.Nil(t, authManager)
+		info.ComponentIsEnabled = true
+		return info, nil
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentType:    cfg.AnsibleComponentType,
+		ComponentFromArg: "certificate-issuer",
+		Stack:            "cicd-prd",
+	}
+
+	err := processStacksWithAuth(&schema.AtmosConfiguration{}, info)
+	require.NoError(t, err)
+	assert.True(t, info.ComponentIsEnabled)
 }
 
 func TestGetPlaybookFromSettings(t *testing.T) {

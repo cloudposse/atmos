@@ -1,0 +1,31 @@
+---
+title: confirm
+sidebar_label: confirm
+slug: /workflows/steps/type/confirm
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `confirm` step type asks for a yes/no decision and stores the answer, adding an interactive guardrail to your custom commands and workflows before they take a risky action.
+</Intro>
+
+```yaml
+steps:
+  - name: proceed
+    type: confirm
+    prompt: Deploy to production?
+    default: false
+```
+
+## Fields
+
+<dl>
+  <dt>`prompt`</dt>
+  <dd>Required. Prompt text shown to the user.</dd>
+
+  <dt>`default`</dt>
+  <dd>Optional default. Values such as `true` or `yes` default to confirmation.</dd>
+</dl>
+
+Interactive steps require a TTY. Reference the answer later with `{{ .steps.proceed.value }}`.

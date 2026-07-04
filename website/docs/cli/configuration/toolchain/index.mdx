@@ -16,6 +16,7 @@ The toolchain feature enables you to manage CLI tool versions (Terraform, kubect
 - Manage tool versions with `.tool-versions` files
 - Install CLI binaries from GitHub releases and other sources
 - Integrate with the Aqua registry ecosystem for 1,000+ pre-configured tools
+- Verify package checksums and signatures when registry metadata provides them
 - Version control your tools for team consistency
 - Automatic tool provisioning in workflows
 </KeyPoints>
@@ -65,6 +66,12 @@ toolchain:
     Alternative name for `install_path`. Use `install_path` for consistency.
   </dd>
 </dl>
+
+## Package Verification
+
+Atmos verifies downloaded toolchain packages before extraction when registry metadata includes checksums, signatures, or attestations. The default behavior is non-breaking: verification runs when metadata is available, and packages without verification metadata can still install.
+
+See [Toolchain Verification](/cli/configuration/toolchain/verification) for checksum policies, signature policies, verifier CLI resolution, and strict verification settings.
 
 ## Tool Versions File
 
@@ -127,6 +134,7 @@ For advanced toolchain features, see:
 
 - [Registries](/cli/configuration/toolchain/registries) - Configure tool registries (Aqua, custom, inline)
 - [Aliases](/cli/configuration/toolchain/aliases) - Define tool name aliases
+- [Verification](/cli/configuration/toolchain/verification) - Configure checksum, signature, and attestation verification
 
 ## Complete Example
 
@@ -151,6 +159,12 @@ toolchain:
       type: aqua
       source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
       priority: 10
+
+  # Package verification
+  verification:
+    checksums: when_available
+    signatures: when_available
+    verifier_install: auto
 ```
 </File>
 

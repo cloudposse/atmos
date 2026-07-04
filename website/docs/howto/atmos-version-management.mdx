@@ -101,7 +101,7 @@ jobs:
     env:
       ATMOS_VERSION: "1.199.0"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Deploy
         run: atmos terraform apply -s production/mystack --auto-approve
 ```

@@ -208,3 +208,36 @@ tests:
         - "--affected"
         - "can't be used"
         - "--all"
+
+  # Verify --all executes components in dependency (topological) order.
+  # Asserts the partial order implied by settings.depends_on in the
+  # terraform-apply-affected prod fixture. The full order is an
+  # implementation detail; these regex patterns only assert correctness.
+  - name: "terraform plan --all executes in dependency order"
+    enabled: true
+    tty: false
+    description: "Verify --all topologically orders components by settings.depends_on"
+    workdir: "fixtures/scenarios/terraform-apply-affected/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "--all"
+      - "-s"
+      - "prod"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        # Non-TTY formatter strips backticks from the styled message, so the
+        # match patterns use plain component names. Partial-order assertions
+        # only — the full topological order is an implementation detail.
+        # vpc has no dependencies; eks/cluster depends on vpc.
+        - "(?s)Would plan vpc in prod.*Would plan eks/cluster in prod"
+        # eks/karpenter depends on eks/cluster; eks/karpenter-node-pool depends on eks/karpenter.
+        - "(?s)Would plan eks/cluster in prod.*Would plan eks/karpenter in prod"
+        - "(?s)Would plan eks/karpenter in prod.*Would plan eks/karpenter-node-pool in prod"
+        # eks/istio/base before eks/istio/istiod before eks/istio/test-app.
+        - "(?s)Would plan eks/istio/base in prod.*Would plan eks/istio/istiod in prod"
+        - "(?s)Would plan eks/istio/istiod in prod.*Would plan eks/istio/test-app in prod"
+        - "Processing components in dependency order"

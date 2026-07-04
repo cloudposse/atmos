@@ -186,6 +186,8 @@ func createTestEksCommand() *cobra.Command {
 	cmd.Flags().Bool("dry-run", false, "Dry run mode")
 	cmd.Flags().Bool("verbose", false, "Verbose output")
 	cmd.Flags().String("alias", "", "Cluster context alias")
+	cmd.Flags().String("integration", "", "Named integration")
+	cmd.Flags().StringP("identity", "i", "", "Atmos identity")
 	return cmd
 }
 

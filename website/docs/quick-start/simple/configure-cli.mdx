@@ -19,7 +19,7 @@ import Note from '@site/src/components/Note'
 The `atmos.yaml` configuration file controls the behavior of the `atmos` CLI and how Atmos will work with your project.
 </Intro>
 
-Therefore, this file should exist in the project repository alongside your Terraform components and Atmos stacks. It's also where you can [configure integrations](/cli/configuration/integrations), like with our [GitHub Actions](/integrations/github-actions).
+Therefore, this file should exist in the project repository alongside your Terraform components and Atmos stacks. It's also where you can [configure integrations](/cli/configuration/integrations), like with [native CI for GitHub Actions](/ci).
 
 <KeyPoints>
 - How install `atmos` and make sure you're on a current version
@@ -62,23 +62,18 @@ And here's what all that means...
 ### Basic Settings
 
 <dl>
-  <dt>`stacks.name_pattern`</dt>
+  <dt>`stacks.name_template`</dt>
   <dd>
-    Atmos uses “slugs” to refer to stacks, which are defined by the `name_pattern` setting.<br/>
+    Atmos uses “slugs” to refer to stacks, which are defined by the `name_template` setting.<br/>
     Instead of relying on file names and locations, which can change, Atmos uses context variables (`namespace`, `tenant`, `environment`, `stage`)
     to identify the stack. For example, with the command `atmos terraform apply myapp -s dev`,
-    Atmos interprets the slug `dev` using the pattern `{stage}` to locate the correct stack configuration
+    Atmos matches the slug `dev` by evaluating the template `{{ .vars.stage }}` against stack configuration
     in the stacks directory.
   </dd>
 
   <dt>`logs.level`</dt>
   <dd>
     Set to `Info` to see the most helpful logs. You can also set it to `Trace` to see all the logs, which is helpful for debugging.
-  </dd>
-
-  <dt>`logs.file`</dt>
-  <dd>
-    Set to `/dev/stderr` to send all of Atmos output to the standard error stream. This is useful when running Atmos in a CI/CD pipeline.
   </dd>
 </dl>
 
@@ -91,10 +86,10 @@ Well-known paths are how Atmos finds all your stack configurations, components, 
   <dd>The base path for components, stacks, and workflow configurations. We set it to `./` so it will use the current working directory. Alternatively, we can override this behavior by setting the ENV var `ATMOS_BASE_PATH` to point to another directory location.</dd>
 
   <dt>`components.terraform.base_path`</dt>
-  <dd>The base path to the Terraform components (Terraform root modules). As described in [Configure Repository](/quick-start/advanced/configure-repository), we've decided to put the Terraform components into the `components/terraform` directory, and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENV var) with `components.terraform.base_path` to calculate the final path to the Terraform components</dd>
+  <dd>The base path to the Terraform components (Terraform root modules). As described in [Configure Repository](/quick-start/advanced/configure-project), we've decided to put the Terraform components into the `components/terraform` directory, and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENV var) with `components.terraform.base_path` to calculate the final path to the Terraform components</dd>
 
   <dt>`stacks.base_path`</dt>
-  <dd>The base path to the Atmos stacks. As described in [Configure Repository](/quick-start/advanced/configure-repository), we've decided to put the stack configurations into the `stacks` directory, and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENV var) with `stacks.base_path` to calculate the final path to the stacks</dd>
+  <dd>The base path to the Atmos stacks. As described in [Configure Repository](/quick-start/advanced/configure-project), we've decided to put the stack configurations into the `stacks` directory, and this setting tells Atmos where to find them. Atmos will join the base path (set in the `ATMOS_BASE_PATH` ENV var) with `stacks.base_path` to calculate the final path to the stacks</dd>
 
   <dt>`stacks.included_paths`</dt>
   <dd>List of file paths to the top-level stacks in the `stacks` directory to include in search when Atmos searches for the stack where the component is defined when executing `atmos` commands</dd>

@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -247,6 +249,159 @@ func TestCustomCommandIntegration_MultipleSteps(t *testing.T) {
 	step1Identity := extractEnvVar(env1Vars, "ATMOS_IDENTITY")
 	step2Identity := extractEnvVar(env2Vars, "ATMOS_IDENTITY")
 	assert.Equal(t, step1Identity, step2Identity, "Both steps should use the same identity")
+}
+
+func TestCustomCommandIntegration_SkipsStepWhenConditionIsFalse(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	testDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	_ = NewTestKit(t)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	skippedFile := filepath.Join(tmpDir, "skipped.txt")
+	ranFile := filepath.Join(tmpDir, "ran.txt")
+
+	testCommand := schema.Command{
+		Name:        "test-when-skip",
+		Description: "Test when skip",
+		Steps: schema.Tasks{
+			{
+				Command: customCommandWriteHelperCommand(t, skippedFile, "skipped"),
+				Type:    "shell",
+				When:    schema.MustCondition("never"),
+			},
+			{
+				Command: customCommandWriteHelperCommand(t, ranFile, "ran"),
+				Type:    "shell",
+			},
+		},
+	}
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-when-skip" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
+
+	assert.NoFileExists(t, skippedFile)
+	assert.FileExists(t, ranFile)
+}
+
+func customCommandWriteHelperCommand(t *testing.T, path, value string) string {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	encodedValue := base64.RawURLEncoding.EncodeToString([]byte(value))
+	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationWriteHelper -- %s %s", exe, encodedPath, encodedValue)
+}
+
+func TestCustomCommandIntegrationWriteHelper(t *testing.T) {
+	separator := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 2)
+	pathBytes, err := base64.RawURLEncoding.DecodeString(args[0])
+	require.NoError(t, err)
+	valueBytes, err := base64.RawURLEncoding.DecodeString(args[1])
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(string(pathBytes), valueBytes, 0o600))
+	os.Exit(0)
+}
+
+// TestCustomCommandIntegration_ComponentEnvExported verifies that a custom component's `env`
+// section is exported as real environment variables to the command's step subprocess (mirroring
+// the built-in terraform/helmfile/packer/ansible providers). This is the behavior that lets a
+// `!secret` placed in a custom component's `env` section reach the step as `$VAR` instead of being
+// inlined into the command string.
+func TestCustomCommandIntegration_ComponentEnvExported(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode: resolves a component from stack config")
+	}
+
+	// Use the custom-components example, whose `deploy-app` component declares an `env` section.
+	testDir := "../examples/custom-components"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	_ = NewTestKit(t)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	envOutputFile := filepath.Join(tmpDir, "component-env.txt")
+
+	// Use the test binary itself (in env-dump helper mode via TestMain) as a cross-platform
+	// substitute for `env` / `cmd /c set`: the step runs the binary, and TestMain writes the step
+	// subprocess environment to the file named by _ATMOS_TEST_DUMP_ENV, then exits. This keeps the
+	// test free of platform-specific binaries (see testing_main_test.go).
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	// A custom command bound to the `script` component type whose step dumps its environment.
+	testCommand := schema.Command{
+		Name:        "test-component-env",
+		Description: "Dump the environment of a custom component step",
+		Arguments: []schema.CommandArgument{
+			{Name: "component", Type: "component", Required: true},
+		},
+		Flags: []schema.CommandFlag{
+			{Name: "stack", Shorthand: "s", SemanticType: "stack", Required: true},
+		},
+		Component: &schema.CommandComponent{Type: "script"},
+		Env:       []schema.CommandEnv{{Key: "_ATMOS_TEST_DUMP_ENV", Value: envOutputFile}},
+		Steps:     stepsFromStrings(fmt.Sprintf("%q", exePath)),
+	}
+
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	RootCmd.SetArgs([]string{"test-component-env", "deploy-app", "-s", "dev"})
+	err = RootCmd.Execute()
+	require.NoError(t, err, "custom command execution should succeed")
+
+	envContent, err := os.ReadFile(envOutputFile)
+	require.NoError(t, err, "should be able to read environment output file")
+	envVars := string(envContent)
+	// Log only the asserted keys, never the whole environment (which can leak CI secrets/tokens).
+	t.Logf("Captured component env: DEPLOY_REGION=%q APP_VERSION=%q",
+		extractEnvVar(envVars, "DEPLOY_REGION"), extractEnvVar(envVars, "APP_VERSION"))
+
+	// The component `env` section values must be exported as real environment variables.
+	assert.Equal(t, "us-east-1", extractEnvVar(envVars, "DEPLOY_REGION"),
+		"component env section must export DEPLOY_REGION to the step subprocess")
+	assert.Equal(t, "1.0.0", extractEnvVar(envVars, "APP_VERSION"),
+		"component env section must export APP_VERSION to the step subprocess")
 }
 
 // extractEnvVar extracts the value of an environment variable from env output.

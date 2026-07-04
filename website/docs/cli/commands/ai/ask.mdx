@@ -65,7 +65,14 @@ atmos ai ask [question]
 
   <dt>`--no-tools`</dt>
   <dd>Disable tool execution for faster, simpler queries</dd>
+
+  <dt>`--mcp <servers>`</dt>
+  <dd>MCP servers to use (comma-separated). Skips automatic server routing and starts only the specified servers. Can be repeated: `--mcp aws-iam --mcp aws-billing`. Use [`atmos mcp list`](/cli/commands/mcp/list) to see available server names. Environment variable: `ATMOS_AI_MCP`</dd>
 </dl>
+
+:::tip Smart MCP Routing
+When multiple MCP servers are configured with API providers, Atmos automatically selects only the servers relevant to your question using a lightweight routing call. Use `--mcp` to bypass routing and specify servers directly. CLI providers (`claude-code`, `codex-cli`, `gemini-cli`) skip routing — all servers are passed to the CLI tool, which handles selection internally.
+:::
 
 ## Examples
 
@@ -203,6 +210,21 @@ atmos ai ask "What are the security best practices for Atmos?"
 atmos ai ask "How do I use workflows in Atmos?"
 atmos ai ask "What's the difference between terraform and helmfile components?"
 atmos ai ask "How do I vendor external components?"
+```
+
+### MCP Server Questions
+
+```shell
+# Auto-routing selects the right server automatically
+atmos ai ask "What did we spend on EC2 last month?"
+atmos ai ask "Is GuardDuty enabled in us-east-1?"
+
+# Specify servers directly (skip routing)
+atmos ai ask --mcp aws-iam "List all admin roles"
+atmos ai ask --mcp aws-iam,aws-cloudtrail "Who accessed the admin role?"
+
+# Environment variable
+ATMOS_AI_MCP=aws-billing atmos ai ask "Show our billing summary"
 ```
 
 ## Advanced Usage

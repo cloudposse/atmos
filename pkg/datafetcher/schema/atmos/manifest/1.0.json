@@ -17,6 +17,9 @@
     "helmfile": {
       "$ref": "#/definitions/helmfile"
     },
+    "kubernetes": {
+      "$ref": "#/definitions/kubernetes"
+    },
     "packer": {
       "$ref": "#/definitions/packer"
     },
@@ -37,6 +40,12 @@
     },
     "components": {
       "$ref": "#/definitions/components"
+    },
+    "compositions": {
+      "$ref": "#/definitions/compositions"
+    },
+    "secrets": {
+      "$ref": "#/definitions/component_secrets"
     },
     "overrides": {
       "$ref": "#/definitions/overrides"
@@ -79,6 +88,11 @@
         },
         {
           "required": [
+            "kubernetes"
+          ]
+        },
+        {
+          "required": [
             "packer"
           ]
         },
@@ -116,6 +130,161 @@
     }
   ],
   "definitions": {
+    "condition_predicate": {
+      "type": "string",
+      "description": "Built-in condition predicate for step and hook execution.",
+      "enum": [
+        "ci",
+        "local",
+        "always",
+        "never",
+        "success",
+        "failure"
+      ]
+    },
+    "step_condition_predicate": {
+      "type": "string",
+      "description": "Built-in condition predicate for workflow and custom command step execution.",
+      "enum": [
+        "ci",
+        "local",
+        "always",
+        "never",
+        "success"
+      ]
+    },
+    "step_condition": {
+      "description": "Declarative condition controlling whether a workflow or custom command step runs. A string is a built-in predicate; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/step_condition_predicate"
+        },
+        {
+          "type": "array",
+          "description": "All-of shorthand. Every condition in the list must evaluate to true.",
+          "items": {
+            "$ref": "#/definitions/step_condition"
+          },
+          "minItems": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "all": {
+              "description": "All conditions must evaluate to true.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/step_condition"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/step_condition"
+                  },
+                  "minItems": 1
+                }
+              ]
+            },
+            "any": {
+              "type": "array",
+              "description": "At least one condition must evaluate to true.",
+              "items": {
+                "$ref": "#/definitions/step_condition"
+              },
+              "minItems": 1
+            },
+            "not": {
+              "description": "The nested condition must evaluate to false.",
+              "$ref": "#/definitions/step_condition"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "all"
+              ]
+            },
+            {
+              "required": [
+                "any"
+              ]
+            },
+            {
+              "required": [
+                "not"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "condition": {
+      "description": "Declarative condition controlling whether a step or hook runs. A string is a built-in predicate; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/condition_predicate"
+        },
+        {
+          "type": "array",
+          "description": "All-of shorthand. Every condition in the list must evaluate to true.",
+          "items": {
+            "$ref": "#/definitions/condition"
+          },
+          "minItems": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "all": {
+              "description": "All conditions must evaluate to true.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/condition"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/condition"
+                  },
+                  "minItems": 1
+                }
+              ]
+            },
+            "any": {
+              "type": "array",
+              "description": "At least one condition must evaluate to true.",
+              "items": {
+                "$ref": "#/definitions/condition"
+              },
+              "minItems": 1
+            },
+            "not": {
+              "description": "The nested condition must evaluate to false.",
+              "$ref": "#/definitions/condition"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "all"
+              ]
+            },
+            {
+              "required": [
+                "any"
+              ]
+            },
+            {
+              "required": [
+                "not"
+              ]
+            }
+          ]
+        }
+      ]
+    },
     "import": {
       "title": "import",
       "description": "Import section",
@@ -147,6 +316,17 @@
                   "skip_if_missing": {
                     "type": "boolean"
                   },
+                  "nested_imports": {
+                    "type": "string",
+                    "enum": [
+                      "local",
+                      "remote"
+                    ]
+                  },
+                  "ttl": {
+                    "type": "string",
+                    "description": "Cache duration for the cloned source repo of a remote (git) import. When set, the clone is reused across Atmos invocations until it expires (e.g. with a warm CI cache). Within a single invocation a source repo is cloned at most once regardless of TTL. Examples: '0s', '5m', '1h', '7d', 'daily'."
+                  },
                   "context": {
                     "type": "object",
                     "additionalProperties": true
@@ -163,7 +343,7 @@
     },
     "components": {
       "title": "components",
-      "description": "Components section",
+      "description": "Components section. Supports built-in types (terraform, helmfile, kubernetes, packer) and custom component types defined in custom commands.",
       "oneOf": [
         {
           "type": "string",
@@ -179,8 +359,17 @@
             "helmfile": {
               "$ref": "#/definitions/helmfile_components"
             },
+            "kubernetes": {
+              "$ref": "#/definitions/kubernetes_components"
+            },
             "packer": {
               "$ref": "#/definitions/packer_components"
+            },
+            "container": {
+              "$ref": "#/definitions/container_components"
+            },
+            "emulator": {
+              "$ref": "#/definitions/emulator_components"
             }
           },
           "required": []
@@ -280,6 +469,16 @@
             "vars": {
               "$ref": "#/definitions/vars"
             },
+            "test": {
+              "type": "object",
+              "description": "Terraform test configuration. `vars` are passed only to `terraform test` as test-scope variables.",
+              "additionalProperties": false,
+              "properties": {
+                "vars": {
+                  "$ref": "#/definitions/vars"
+                }
+              }
+            },
             "env": {
               "$ref": "#/definitions/env"
             },
@@ -309,6 +508,12 @@
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
             }
           },
           "required": []
@@ -342,6 +547,9 @@
             "command": {
               "$ref": "#/definitions/command"
             },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
             "overrides": {
               "$ref": "#/definitions/overrides"
             }
@@ -363,6 +571,262 @@
           "patternProperties": {
             "^[/a-zA-Z0-9-_{}. ]+$": {
               "$ref": "#/definitions/helmfile_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "container_restart": {
+      "title": "container_restart",
+      "type": "object",
+      "description": "Restart policy (maps to docker/podman --restart). Shared by the container and emulator component kinds.",
+      "additionalProperties": false,
+      "properties": {
+        "policy": {
+          "type": "string",
+          "description": "Restart policy.",
+          "enum": ["no", "always", "on-failure", "unless-stopped"]
+        },
+        "max_retries": {
+          "type": "integer",
+          "description": "Maximum restart attempts (only used with the `on-failure` policy).",
+          "minimum": 0
+        }
+      }
+    },
+    "container_healthcheck": {
+      "title": "container_healthcheck",
+      "type": "object",
+      "description": "Health check, mirroring the Docker Compose `healthcheck` shape (maps to docker/podman --health-* flags). Shared by the container and emulator component kinds.",
+      "additionalProperties": false,
+      "properties": {
+        "test": {
+          "description": "Health command. A string (run via the shell, equivalent to CMD-SHELL) or a list whose first element is NONE, CMD, or CMD-SHELL.",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "interval": { "type": "string", "description": "Time between checks (e.g. 30s, 1m30s)." },
+        "timeout": { "type": "string", "description": "Time a check may take before it is considered failed (e.g. 10s)." },
+        "retries": { "type": "integer", "description": "Consecutive failures before the container is marked unhealthy.", "minimum": 0 },
+        "start_period": { "type": "string", "description": "Grace period before failures are counted (e.g. 40s)." },
+        "start_interval": { "type": "string", "description": "Time between checks during the start period (e.g. 5s)." },
+        "disable": { "type": "boolean", "description": "Disable any health check baked into the image." }
+      }
+    },
+    "container_runtime": {
+      "title": "container_runtime",
+      "type": "object",
+      "description": "Per-instance container runtime block. Shared by the container and emulator component kinds.",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "description": "Container runtime provider: docker, podman, or empty for auto-detect.",
+          "enum": ["", "docker", "podman"]
+        },
+        "auto_start": {
+          "type": "boolean",
+          "description": "Auto-init/start the Podman machine when no running runtime is found."
+        },
+        "host": {
+          "type": "boolean",
+          "description": "Grant the container access to the host container runtime (Docker-out-of-Docker): mount the runtime socket, run as root, relabel for SELinux, set DOCKER_HOST. Opt-in; effectively host-root. On rootless podman the socket is unreachable in-container — use Docker or `podman machine set --rootful`."
+        }
+      }
+    },
+    "emulator_components": {
+      "title": "emulator_components",
+      "description": "Emulator components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/emulator_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "emulator_component_manifest": {
+      "title": "emulator_component_manifest",
+      "description": "Emulator component manifest. A driver-backed, long-lived cloud-API emulator (Floci, k3s, OpenBao, registry, …). `driver` and the nested `container` block are first-class sections (not under `vars`).",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "driver": {
+              "type": "string",
+              "description": "Built-in emulator driver, e.g. `floci/aws`, `k3s`, `openbao`, `registry`, `gitea`."
+            },
+            "cloud": {
+              "type": "string",
+              "description": "Explicit emulated cloud/target (optional; derived from the driver when omitted)."
+            },
+            "region": {
+              "type": "string",
+              "description": "Cloud region (AWS/GCP/Azure)."
+            },
+            "project": {
+              "type": "string",
+              "description": "GCP project."
+            },
+            "services": {
+              "type": "array",
+              "description": "Emulated services to enable (informational; may drive env).",
+              "items": { "type": "string" }
+            },
+            "ephemeral": {
+              "type": "boolean",
+              "description": "When true, run without persisting state (no host data dir is bind-mounted)."
+            },
+            "container": {
+              "type": "object",
+              "description": "Container overrides for the emulator (image, ports, mounts, env, restart, healthcheck). Reuses the container kind's run shape; the driver supplies defaults.",
+              "additionalProperties": true,
+              "properties": {
+                "runtime": {
+                  "$ref": "#/definitions/container_runtime"
+                },
+                "restart": {
+                  "$ref": "#/definitions/container_restart"
+                },
+                "healthcheck": {
+                  "$ref": "#/definitions/container_healthcheck"
+                }
+              }
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            }
+          }
+        }
+      ]
+    },
+    "container_components": {
+      "title": "container_components",
+      "description": "Container components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/container_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "container_component_manifest": {
+      "title": "container_component_manifest",
+      "description": "Container component manifest. A stack-scoped, persistent container service. `image`, `build`, and `run` are first-class sections (not under `vars`).",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "composition": {
+              "type": "string",
+              "description": "Name of the composition this component is a member of (must be declared under the top-level `compositions` section)."
+            },
+            "image": {
+              "type": "string",
+              "description": "Container image reference (supports Go templates)."
+            },
+            "build": {
+              "type": "object",
+              "description": "Image build configuration (context, dockerfile, tags, build_args, target, etc.).",
+              "additionalProperties": true
+            },
+            "run": {
+              "type": "object",
+              "description": "Container run configuration (command, ports, mounts, user, restart, healthcheck, etc.).",
+              "additionalProperties": true,
+              "properties": {
+                "runtime": {
+                  "$ref": "#/definitions/container_runtime"
+                },
+                "restart": {
+                  "$ref": "#/definitions/container_restart"
+                },
+                "healthcheck": {
+                  "$ref": "#/definitions/container_healthcheck"
+                }
+              }
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "command": {
+              "$ref": "#/definitions/command"
+            }
+          }
+        }
+      ]
+    },
+    "compositions": {
+      "title": "compositions",
+      "description": "Named multi-service systems. Components join a composition via their `composition` field.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["services"],
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "services": {
+                  "type": "array",
+                  "description": "Closed set of service names that may claim membership (open for fulfillment).",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
             }
           },
           "additionalProperties": false
@@ -401,6 +865,143 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "plugins": {
+              "$ref": "#/definitions/plugins"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "kubernetes": {
+      "title": "kubernetes",
+      "description": "Kubernetes component type defaults",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "provider": {
+              "$ref": "#/definitions/kubernetes_provider"
+            },
+            "paths": {
+              "$ref": "#/definitions/kubernetes_paths"
+            },
+            "manifests": {
+              "$ref": "#/definitions/kubernetes_manifests"
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "kubernetes_components": {
+      "title": "kubernetes_components",
+      "description": "Kubernetes components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/kubernetes_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "kubernetes_component_manifest": {
+      "title": "kubernetes_component_manifest",
+      "description": "Kubernetes component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "provider": {
+              "$ref": "#/definitions/kubernetes_provider"
+            },
+            "paths": {
+              "$ref": "#/definitions/kubernetes_paths"
+            },
+            "manifests": {
+              "$ref": "#/definitions/kubernetes_manifests"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
+            },
+            "render": {
+              "$ref": "#/definitions/kubernetes_render"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
             }
           },
           "required": []
@@ -493,9 +1094,250 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
             }
           },
           "required": []
+        }
+      ]
+    },
+    "kubernetes_provider": {
+      "title": "kubernetes_provider",
+      "description": "SDK-backed Kubernetes manifest provider",
+      "type": "string",
+      "enum": ["kubectl", "kustomize"]
+    },
+    "kubernetes_paths": {
+      "title": "kubernetes_paths",
+      "description": "Manifest files or directories relative to the Kubernetes component directory",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "kubernetes_manifests": {
+      "title": "kubernetes_manifests",
+      "description": "Inline Kubernetes manifests rendered and deployed with the component",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/definitions/kubernetes_manifest"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "kubernetes_manifest": {
+      "title": "kubernetes_manifest",
+      "description": "Kubernetes API object. Atmos validates only the structural fields it requires before passing the object to the Kubernetes API.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["apiVersion", "kind"],
+      "properties": {
+        "apiVersion": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "kubernetes_render": {
+      "title": "kubernetes_render",
+      "description": "Render output configuration for Kubernetes manifests",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "output": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "split": {
+                  "type": "boolean"
+                }
+              },
+              "required": []
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "plugins": {
+      "title": "plugins",
+      "description": "Helm CLI plugins (e.g. helm-diff, helm-secrets) to install into the managed HELM_PLUGINS directory. Each entry is a compact spec: a short alias (e.g. \"diff@3.9.x\"), an \"owner/repo@version\", or a full plugin URL.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "generate": {
+      "title": "generate",
+      "description": "Generate section for declarative file generation.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
+    },
+    "source": {
+      "title": "source",
+      "description": "Source configuration for JIT-vendored components",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
+    },
+    "provision": {
+      "title": "provision",
+      "description": "Provisioning configuration such as workdir or delivery targets",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "workdir": {
+              "type": "object",
+              "description": "Working directory provisioning settings for this component",
+              "additionalProperties": true
+            },
+            "default": {
+              "type": "string",
+              "description": "Name of the provision target used by apply/deploy when --target is not given"
+            },
+            "targets": {
+              "type": "object",
+              "description": "Named delivery destinations for rendered artifacts, keyed by target name",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "description": "Target provisioner kind (e.g. 'git' or 'kubernetes')"
+                  },
+                  "repository": {
+                    "type": "string",
+                    "description": "For kind 'git': name of a top-level git.repositories.<name> to publish to"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "For kind 'git': destination path inside the deployment repository (supports Go templates)"
+                  },
+                  "auth": {
+                    "type": "object",
+                    "properties": {
+                      "identity": {
+                        "type": "string",
+                        "description": "Atmos Auth identity used for the delivery"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "commit": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string",
+                        "description": "Commit message (supports Go templates)"
+                      },
+                      "signing": {
+                        "type": "string",
+                        "enum": ["auto", "always", "never"],
+                        "description": "Commit signing mode"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "pull_request": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean",
+                        "description": "Publish via pull request (not yet supported by the cli git provider)"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["kind"],
+                "additionalProperties": true
+              }
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "dependencies": {
+      "title": "dependencies",
+      "description": "Component, file, or folder dependencies used by affected detection and DAG execution",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
         }
       ]
     },
@@ -539,6 +1381,10 @@
             "component": {
               "type": "string",
               "description": "Terraform/OpenTofu/Helmfile component"
+            },
+            "description": {
+              "type": "string",
+              "description": "Human-readable component description"
             },
             "inherits": {
               "oneOf": [
@@ -1167,7 +2013,8 @@
                         "type": "string"
                       },
                       "type": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Step type (step kind): any registered workflow/custom-command step type, e.g. shell, container, http, log, wait, wait-all, cancel. Omitted defaults to a command step."
                       },
                       "retry": {
                         "title": "retry",
@@ -1231,17 +2078,109 @@
                         "type": "string",
                         "description": "Identity to use for the workflow step"
                       },
+                      "when": {
+                        "description": "Condition controlling whether this workflow step runs. Omitted means run.",
+                        "allOf": [
+                          {
+                            "$ref": "#/definitions/step_condition"
+                          }
+                        ]
+                      },
+                      "interactive": {
+                        "type": "boolean",
+                        "description": "Attach host stdin to the step and let the step handle Ctrl-C (like docker -i)"
+                      },
+                      "tty": {
+                        "type": "boolean",
+                        "description": "Allocate a pseudo-terminal for the step (like docker -t); combine with interactive for full terminal sessions"
+                      },
                       "env": {
                         "type": "object",
                         "additionalProperties": {
                           "type": "string"
                         },
                         "description": "Environment variables for the workflow step"
+                      },
+                      "tools": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Require step (type: require/assert): executables that must be found on PATH"
+                      },
+                      "files": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Require step (type: require/assert): paths that must exist"
+                      },
+                      "dirs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Require step (type: require/assert): directories that must exist"
+                      },
+                      "hint": {
+                        "type": "string",
+                        "description": "Require step (type: require/assert): extra remediation note appended to the failure error"
+                      },
+                      "needs": {
+                        "description": "Names of earlier steps that must complete before this step runs.",
+                        "oneOf": [
+                          { "type": "string" },
+                          { "type": "array", "items": { "type": "string" } }
+                        ]
+                      },
+                      "outputs": {
+                        "type": "object",
+                        "description": "Named outputs exported by the step for use by later steps.",
+                        "additionalProperties": { "type": "string" }
+                      },
+                      "timeout": {
+                        "type": "string",
+                        "description": "Maximum duration the step may run (e.g. '30s', '5m')."
+                      },
+                      "background": {
+                        "description": "Run the step asynchronously in the background (boolean; v1 supports this only for container steps). A string value instead sets the step's background style color.",
+                        "oneOf": [
+                          { "type": "boolean" },
+                          { "type": "string" }
+                        ]
+                      },
+                      "for": {
+                        "description": "Fan the step out over a list of values (string expression or explicit array of strings).",
+                        "oneOf": [
+                          { "type": "string" },
+                          { "type": "array", "items": { "type": "string" } }
+                        ]
+                      },
+                      "action": {
+                        "type": "string",
+                        "description": "Action selector for action-bearing step kinds (e.g. container: run, build, push, inspect). Selects which params 'with' holds."
+                      },
+                      "provider": {
+                        "type": "string",
+                        "description": "Provider/runtime backend for the step kind (e.g. container: docker, podman)."
+                      },
+                      "container": {
+                        "description": "Container sandbox control for the step. Boolean to enable/disable, or an object with sandbox settings.",
+                        "oneOf": [
+                          { "type": "boolean" },
+                          { "type": "object", "additionalProperties": true }
+                        ]
+                      },
+                      "runtime_auto_start": {
+                        "type": "boolean",
+                        "description": "Automatically start the container runtime if it is not already running."
+                      },
+                      "with": {
+                        "type": "object",
+                        "description": "Parameters for the step named by 'type' (and 'action' where applicable). Validated by the step handler at run time. For container steps this holds image, command, ports, mounts, build context, etc.",
+                        "additionalProperties": true
                       }
-                    },
-                    "required": [
-                      "command"
-                    ]
+                    }
                   }
                 }
               ]
@@ -1250,6 +2189,60 @@
           "required": [
             "steps"
           ]
+        }
+      ]
+    },
+    "workflow_retry": {
+      "title": "workflow_retry",
+      "description": "Retry configuration for workflow steps",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum number of retry attempts"
+            },
+            "initial_delay": {
+              "type": "string",
+              "description": "Initial delay between retries (e.g., '1s', '500ms')"
+            },
+            "max_delay": {
+              "type": "string",
+              "description": "Maximum delay between retries (e.g., '30s', '1m')"
+            },
+            "backoff_strategy": {
+              "type": "string",
+              "enum": [
+                "constant",
+                "linear",
+                "exponential"
+              ],
+              "description": "Strategy for increasing delay between retries"
+            },
+            "multiplier": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Multiplier for exponential/linear backoff"
+            },
+            "random_jitter": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Random jitter factor (0-1) to add to delays"
+            },
+            "max_elapsed_time": {
+              "type": "string",
+              "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+            }
+          },
+          "required": []
         }
       ]
     },
@@ -1283,7 +2276,7 @@
     },
     "hooks": {
       "title": "hooks",
-      "description": "Hooks section",
+      "description": "Hooks section. Each key names a hook; the value sets its kind, the lifecycle events it fires on, and kind-specific settings.",
       "oneOf": [
         {
           "type": "string",
@@ -1291,7 +2284,552 @@
         },
         {
           "type": "object",
-          "additionalProperties": true
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^!include"
+              },
+              {
+            "type": "object",
+            "description": "A single hook.",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "description": "Selects the engine that runs this hook.",
+                "enum": [
+                  "store",
+                  "command",
+                  "infracost",
+                  "checkov",
+                  "kics",
+                  "trivy",
+                  "git",
+                  "step",
+                  "steps",
+                  "ci.check",
+                  "ci.output",
+                  "ci.summary",
+                  "ci.upload",
+                  "ci.download"
+                ]
+              },
+              "command": {
+                "type": "string",
+                "description": "Binary to execute (command kind); also the legacy alias for kind (e.g. 'command: store')."
+              },
+              "events": {
+                "type": "array",
+                "description": "Lifecycle events this hook fires on (e.g. after.terraform.apply). The legacy hyphenated form (e.g. after-terraform-apply) is also accepted. Empty matches all events.",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "on_failure": {
+                "type": "string",
+                "description": "Failure mode when the hook errors.",
+                "enum": [
+                  "warn",
+                  "fail",
+                  "ignore"
+                ]
+              },
+              "when": {
+                "description": "Condition controlling whether this hook runs. Omitted means success. If no success, failure, or always predicate is mentioned, success is applied implicitly.",
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/condition"
+                  }
+                ]
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "env": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "format": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "description": "Step type to run (step kind): any registered workflow/custom-command step type, e.g. container, http, toast, log."
+              },
+              "with": {
+                "description": "Parameters for the step named by 'type' (step kind), or an ordered list of steps (steps kind). Validated by the step handler at run time.",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                ]
+              },
+              "retry": {
+                "$ref": "#/definitions/workflow_retry"
+              },
+              "name": {
+                "type": "string",
+                "description": "Store backend name (store kind)."
+              },
+              "outputs": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "repository": {
+                "type": "string",
+                "description": "Managed repository name (git kind)."
+              },
+              "commit": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "push": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "component_secrets": {
+      "title": "component_secrets",
+      "description": "Secrets configuration. Declares secrets resolved at runtime via the `!secret` YAML function, and (at the stack/global level) the non-store secret providers (e.g. SOPS) that back them. Store-backed secrets reference a `secret: true` store under `stores`.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "providers": {
+              "$ref": "#/definitions/secret_providers"
+            },
+            "vars": {
+              "$ref": "#/definitions/secret_vars"
+            }
+          }
+        }
+      ]
+    },
+    "secret_providers": {
+      "title": "secret_providers",
+      "description": "Non-store secret providers (e.g. SOPS) that do not fit the key-value store interface. Keys are provider names, values are provider configurations.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[a-zA-Z0-9/_-]+$": {
+              "$ref": "#/definitions/secret_provider"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "secret_provider": {
+      "title": "secret_provider",
+      "description": "A single non-store secret provider configuration (e.g. a SOPS backend).",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Provider implementation (e.g. 'sops/age', 'sops/aws-kms', 'sops/gcp-kms', 'sops/gpg')."
+            },
+            "identity": {
+              "type": "string",
+              "description": "Optional auth identity (resolved via auth) used by KMS-backed SOPS kinds (sops/aws-kms, sops/gcp-kms). Local-key kinds (sops/age, sops/gpg) ignore it."
+            },
+            "spec": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Provider-specific options (e.g. file, age_recipients, kms arn)."
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "secret_vars": {
+      "title": "secret_vars",
+      "description": "Declared secrets for a component. Keys are secret names, values are secret declarations. A secret must be declared before it can be set, read via `!secret`, or pulled/pushed.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            ".+": {
+              "$ref": "#/definitions/secret_declaration"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "secret_declaration": {
+      "title": "secret_declaration",
+      "description": "A single declared secret. Exactly one backend reference (store or sops) is set.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "type": "string",
+              "description": "Human-readable description of the secret."
+            },
+            "store": {
+              "type": "string",
+              "description": "Names a `secret: true` store (under `stores`) this secret resolves from."
+            },
+            "sops": {
+              "type": "string",
+              "description": "Names a `secrets.providers` SOPS provider this secret resolves from."
+            },
+            "reference": {
+              "type": "string",
+              "description": "Optional backend-specific address for the secret. Reference-based backends (e.g. a 1Password store) resolve it directly instead of composing a key from the secret name; it may contain Go-template vars ({{ .atmos_stack }}, {{ .atmos_component }}). Example: \"op://Production/{{ .atmos_component }}/password\". Name-keyed backends ignore it."
+            },
+            "required": {
+              "type": "boolean",
+              "description": "Marks the secret as required; validation fails if it is not initialized."
+            },
+            "scope": {
+              "type": "string",
+              "enum": ["instance", "stack", "global"],
+              "description": "Storage scope. Normally derived from declaration position (top-level `secrets:` => stack, shared by every component instance; `components.<c>.secrets:` => instance). If set explicitly it must match the position — a conflict (e.g. `scope: stack` under a component) is an error — except `global`, which is honored at either position. Instance-scoped secrets are stored per component; stack-scoped secrets are stored once per stack; global secrets are stored once per backend store and shared by every stack and component that resolves through it."
+            }
+          },
+          "oneOf": [
+            {
+              "required": ["store"],
+              "not": { "required": ["sops"] }
+            },
+            {
+              "required": ["sops"],
+              "not": { "required": ["store"] }
+            }
+          ]
+        }
+      ]
+    },
+    "component_auth": {
+      "title": "component_auth",
+      "description": "Component-level authentication configuration. Allows overriding or extending global auth providers and identities for specific components.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "realm": {
+              "type": "string",
+              "description": "Credential isolation realm. Different realms provide isolated credentials even for identities with the same name."
+            },
+            "providers": {
+              "$ref": "#/definitions/auth_providers"
+            },
+            "identities": {
+              "$ref": "#/definitions/auth_identities"
+            },
+            "integrations": {
+              "type": "object",
+              "description": "Client-only credential materializations (e.g., ECR, EKS).",
+              "additionalProperties": true
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "auth_providers": {
+      "title": "auth_providers",
+      "description": "Authentication providers configuration. Keys are provider names, values are provider configurations.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[a-zA-Z0-9/_-]+$": {
+              "$ref": "#/definitions/auth_provider"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "auth_provider": {
+      "title": "auth_provider",
+      "description": "Authentication provider configuration.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Provider type (e.g., 'aws/iam-identity-center', 'aws/credentials')"
+            },
+            "start_url": {
+              "type": "string",
+              "description": "SSO start URL for AWS IAM Identity Center"
+            },
+            "url": {
+              "type": "string",
+              "description": "Provider URL"
+            },
+            "region": {
+              "type": "string",
+              "description": "AWS region for the provider"
+            },
+            "default": {
+              "type": "boolean",
+              "description": "Whether this is the default provider"
+            },
+            "session": {
+              "$ref": "#/definitions/auth_session"
+            },
+            "console": {
+              "$ref": "#/definitions/auth_console"
+            },
+            "auto_provision_identities": {
+              "type": "boolean",
+              "description": "Whether to auto-provision identities when authenticating with this provider"
+            },
+            "spec": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Provider-specific configuration"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "auth_identities": {
+      "title": "auth_identities",
+      "description": "Authentication identities configuration. Keys are identity names, values are identity configurations.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[a-zA-Z0-9/_-]+$": {
+              "$ref": "#/definitions/auth_identity"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "auth_identity": {
+      "title": "auth_identity",
+      "description": "Authentication identity configuration.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Identity type (e.g., 'aws/permission-set', 'aws/assume-role')"
+            },
+            "default": {
+              "type": "boolean",
+              "description": "Whether this is the default identity"
+            },
+            "required": {
+              "type": "boolean",
+              "description": "Whether this identity is automatically authenticated without prompting. Required identities are authenticated before commands run."
+            },
+            "provider": {
+              "type": "string",
+              "description": "Provider name for direct provider association"
+            },
+            "via": {
+              "$ref": "#/definitions/auth_identity_via"
+            },
+            "principal": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Principal information (role name, account, etc.)",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Principal name (e.g., permission set name, role name)"
+                },
+                "account": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Account name"
+                    },
+                    "id": {
+                      "type": "string",
+                      "description": "Account ID"
+                    }
+                  }
+                }
+              }
+            },
+            "credentials": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Static credentials configuration"
+            },
+            "alias": {
+              "type": "string",
+              "description": "Alias for the identity"
+            },
+            "env": {
+              "type": "array",
+              "description": "Environment variables to set when using this identity",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key",
+                  "value"
+                ]
+              }
+            },
+            "session": {
+              "$ref": "#/definitions/auth_session"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "auth_identity_via": {
+      "title": "auth_identity_via",
+      "description": "Specifies how an identity connects to a provider or chains from another identity.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "type": "string",
+              "description": "Provider name to authenticate through"
+            },
+            "identity": {
+              "type": "string",
+              "description": "Identity name to chain from (for role chaining)"
+            }
+          }
+        }
+      ]
+    },
+    "auth_session": {
+      "title": "auth_session",
+      "description": "Session configuration for authentication.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "duration": {
+              "type": "string",
+              "description": "Session duration (e.g., '1h', '12h')"
+            }
+          }
+        }
+      ]
+    },
+    "auth_console": {
+      "title": "auth_console",
+      "description": "Web console access configuration.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "session_duration": {
+              "type": "string",
+              "description": "Console session duration (e.g., '12h'). Max: 12h for AWS."
+            }
+          }
         }
       ]
     }

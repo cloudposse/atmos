@@ -1,7 +1,10 @@
 package exec
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -10,8 +13,12 @@ import (
 	"github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	"github.com/cloudposse/atmos/pkg/auth"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -19,6 +26,13 @@ import (
 // Helper function to create a bool pointer for testing.
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+func skipGomonkeyOnDarwinARM64(t testing.TB) {
+	t.Helper()
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		t.Skip("gomonkey binary patching is not supported on macOS ARM64")
+	}
 }
 
 func TestIsWorkspacesEnabled(t *testing.T) {
@@ -234,6 +248,441 @@ func TestExecuteTerraformQueryNoMatches(t *testing.T) {
 	}
 }
 
+func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	oldAuthManagerFactory := authManagerFactory
+	authManagerFactory = func(identity string, _ schema.AuthConfig, flagSelectValue string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		require.Equal(t, "terraform", identity)
+		require.Equal(t, cfg.IdentityFlagSelectValue, flagSelectValue)
+		return authManager, nil
+	}
+	defer func() {
+		authManagerFactory = oldAuthManagerFactory
+	}()
+
+	stacks := map[string]any{"dev": map[string]any{}}
+	var described bool
+	var scheduled bool
+
+	patches := gomonkey.NewPatches()
+	defer patches.Reset()
+	patches.ApplyFunc(cfg.InitCliConfig, func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		require.Equal(t, "dev", info.Stack)
+		require.True(t, processStacks)
+		return schema.AtmosConfiguration{}, nil
+	})
+	patches.ApplyFunc(ExecuteDescribeStacks, func(
+		atmosConfig *schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+		gotAuthManager auth.AuthManager,
+	) (map[string]any, error) {
+		described = true
+		require.NotNil(t, atmosConfig)
+		require.Equal(t, "dev", filterByStack)
+		require.Equal(t, []string{"app"}, components)
+		require.Equal(t, []string{cfg.TerraformComponentType}, componentTypes)
+		require.Nil(t, sections)
+		require.False(t, ignoreMissingFiles)
+		require.True(t, processTemplates)
+		require.True(t, processYamlFunctions)
+		require.False(t, includeEmptyStacks)
+		require.Equal(t, []string{"skip-me"}, skip)
+		require.Equal(t, authManager, gotAuthManager)
+		return stacks, nil
+	})
+	patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(ctx context.Context, opts scheduleradapters.TerraformOptions) error {
+		scheduled = true
+		require.NotNil(t, ctx)
+		require.NotNil(t, opts.AtmosConfig)
+		require.Equal(t, stacks, opts.Stacks)
+		require.NotNil(t, opts.Executor)
+		require.Equal(t, "dev", opts.Info.Stack)
+		require.Equal(t, "plan", opts.Info.SubCommand)
+		require.Equal(t, authManager, opts.Info.AuthManager)
+		return nil
+	})
+
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		Components:       []string{"app"},
+		SubCommand:       "plan",
+		Identity:         "terraform",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+		Skip:             []string{"skip-me"},
+	}
+	require.NoError(t, ExecuteTerraformQuery(info))
+	require.True(t, described)
+	require.True(t, scheduled)
+}
+
+func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	oldAuthManagerFactory := authManagerFactory
+	authManagerFactory = func(identity string, _ schema.AuthConfig, flagSelectValue string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		require.Equal(t, "terraform", identity)
+		require.Equal(t, cfg.IdentityFlagSelectValue, flagSelectValue)
+		return authManager, nil
+	}
+	defer func() {
+		authManagerFactory = oldAuthManagerFactory
+	}()
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": map[string]any{},
+				},
+			},
+		},
+	}
+	var describedAffected bool
+	var describedStacks bool
+	var scheduled bool
+	repoPath := t.TempDir()
+
+	patches := gomonkey.NewPatches()
+	defer patches.Reset()
+	patches.ApplyFunc(cfg.InitCliConfig, func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		require.Equal(t, "plan", info.SubCommand)
+		require.True(t, processStacks)
+		return schema.AtmosConfiguration{}, nil
+	})
+	patches.ApplyFunc(getAffectedComponents, func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
+		describedAffected = true
+		require.NotNil(t, args.CLIConfig)
+		require.Equal(t, repoPath, args.RepoPath)
+		require.Equal(t, "dev", args.Stack)
+		require.True(t, args.ProcessTemplates)
+		require.True(t, args.ProcessYamlFunctions)
+		require.Equal(t, []string{"skip-me"}, args.Skip)
+		require.Equal(t, authManager, args.AuthManager)
+		require.False(t, args.AuthDisabled)
+		return []schema.Affected{
+			{Component: "app", Stack: "dev", ComponentType: cfg.TerraformComponentType},
+			{Component: "helm", Stack: "dev", ComponentType: "helmfile"},
+			{Component: "deleted", Stack: "dev", ComponentType: cfg.TerraformComponentType, Deleted: true},
+		}, nil
+	})
+	patches.ApplyFunc(ExecuteDescribeStacksWithAuthDisabled, func(
+		atmosConfig *schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+		gotAuthManager auth.AuthManager,
+		authDisabled bool,
+	) (map[string]any, error) {
+		describedStacks = true
+		require.NotNil(t, atmosConfig)
+		require.Empty(t, filterByStack)
+		require.Nil(t, components)
+		require.Equal(t, []string{cfg.TerraformComponentType}, componentTypes)
+		require.Nil(t, sections)
+		require.False(t, ignoreMissingFiles)
+		require.True(t, processTemplates)
+		require.True(t, processYamlFunctions)
+		require.False(t, includeEmptyStacks)
+		require.Equal(t, []string{"skip-me"}, skip)
+		require.Equal(t, authManager, gotAuthManager)
+		require.False(t, authDisabled)
+		return stacks, nil
+	})
+	patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(ctx context.Context, opts scheduleradapters.TerraformOptions) error {
+		scheduled = true
+		require.NotNil(t, ctx)
+		require.NotNil(t, opts.AtmosConfig)
+		require.Equal(t, stacks, opts.Stacks)
+		require.NotNil(t, opts.Executor)
+		require.Equal(t, "plan", opts.Info.SubCommand)
+		require.Equal(t, authManager, opts.Info.AuthManager)
+		require.NotNil(t, opts.Selection)
+		require.Equal(t, []string{"app-dev"}, opts.Selection.NodeIDs)
+		require.True(t, opts.Selection.IncludeDependents)
+		require.False(t, opts.Selection.IncludeDependencies)
+		return nil
+	})
+
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		Affected:         true,
+		Identity:         "terraform",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+		Skip:             []string{"skip-me"},
+	}
+	args := &DescribeAffectedCmdArgs{
+		RepoPath:             repoPath,
+		Stack:                "dev",
+		IncludeDependents:    true,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{"skip-me"},
+	}
+	require.NoError(t, ExecuteTerraformAffectedWithContext(context.Background(), args, info))
+	require.True(t, describedAffected)
+	require.True(t, describedStacks)
+	require.True(t, scheduled)
+}
+
+func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	t.Run("config init", func(t *testing.T) {
+		expectedErr := errors.New("config failed")
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, expectedErr
+		})
+
+		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("auth manager", func(t *testing.T) {
+		expectedErr := errors.New("auth failed")
+		oldAuthManagerFactory := authManagerFactory
+		authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+			return nil, expectedErr
+		}
+		defer func() {
+			authManagerFactory = oldAuthManagerFactory
+		}()
+
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		})
+
+		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("describe stacks", func(t *testing.T) {
+		expectedErr := errors.New("describe failed")
+		oldAuthManagerFactory := authManagerFactory
+		authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+			return nil, nil
+		}
+		defer func() {
+			authManagerFactory = oldAuthManagerFactory
+		}()
+
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		})
+		patches.ApplyFunc(ExecuteDescribeStacks, func(
+			*schema.AtmosConfiguration,
+			string,
+			[]string,
+			[]string,
+			[]string,
+			bool,
+			bool,
+			bool,
+			bool,
+			[]string,
+			auth.AuthManager,
+		) (map[string]any, error) {
+			return nil, expectedErr
+		})
+
+		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("scheduler", func(t *testing.T) {
+		expectedErr := errors.New("scheduler failed")
+		oldAuthManagerFactory := authManagerFactory
+		authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+			return nil, nil
+		}
+		defer func() {
+			authManagerFactory = oldAuthManagerFactory
+		}()
+
+		patches := gomonkey.NewPatches()
+		defer patches.Reset()
+		patches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		})
+		patches.ApplyFunc(ExecuteDescribeStacks, func(
+			*schema.AtmosConfiguration,
+			string,
+			[]string,
+			[]string,
+			[]string,
+			bool,
+			bool,
+			bool,
+			bool,
+			[]string,
+			auth.AuthManager,
+		) (map[string]any, error) {
+			return map[string]any{}, nil
+		})
+		patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(context.Context, scheduleradapters.TerraformOptions) error {
+			return expectedErr
+		})
+
+		err := ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+}
+
+func TestCreateQueryAuthManagerPropagatesFactoryError(t *testing.T) {
+	expectedErr := errors.New("auth failed")
+	oldAuthManagerFactory := authManagerFactory
+	authManagerFactory = func(_ string, _ schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+		return nil, expectedErr
+	}
+	defer func() {
+		authManagerFactory = oldAuthManagerFactory
+	}()
+
+	manager, err := createQueryAuthManager(&schema.ConfigAndStacksInfo{}, &schema.AtmosConfiguration{})
+	require.Nil(t, manager)
+	require.ErrorIs(t, err, expectedErr)
+	require.Contains(t, err.Error(), "create query auth manager")
+}
+
+func TestExecuteTerraformQueryComponentStreamsCapturesAndRunsHook(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	var streamedOut bytes.Buffer
+	var streamedErr bytes.Buffer
+	var hookOutput string
+	var hookErr error
+
+	expectedErr := errors.New("terraform failed")
+	patches := gomonkey.ApplyFunc(ExecuteTerraform, func(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+		var cfg shellCommandConfig
+		for _, opt := range opts {
+			opt(&cfg)
+		}
+
+		require.NotNil(t, cfg.streams)
+		require.Equal(t, os.Stdin, cfg.streams.Stdin)
+		require.NotNil(t, cfg.stdoutCapture)
+		require.NotNil(t, cfg.stderrCapture)
+
+		_, err := cfg.streams.Stdout.Write([]byte("streamed stdout"))
+		require.NoError(t, err)
+		_, err = cfg.streams.Stderr.Write([]byte("streamed stderr"))
+		require.NoError(t, err)
+		_, err = cfg.stdoutCapture.Write([]byte("captured stdout"))
+		require.NoError(t, err)
+		_, err = cfg.stderrCapture.Write([]byte("captured stderr"))
+		require.NoError(t, err)
+
+		return expectedErr
+	})
+	defer patches.Reset()
+
+	result, err := executeTerraformQueryComponent(scheduleradapters.TerraformExecution{
+		Info: schema.ConfigAndStacksInfo{
+			Component: "vpc",
+			Stack:     "dev",
+			PerComponentHook: func(info *schema.ConfigAndStacksInfo, output string, err error) {
+				require.Equal(t, "vpc", info.Component)
+				hookOutput = output
+				hookErr = err
+			},
+		},
+		Stdout:        &streamedOut,
+		Stderr:        &streamedErr,
+		CaptureOutput: true,
+	})
+
+	require.ErrorIs(t, err, expectedErr)
+	require.Equal(t, "streamed stdout", streamedOut.String())
+	require.Equal(t, "streamed stderr", streamedErr.String())
+	require.Equal(t, "captured stdout", result.Stdout)
+	require.Equal(t, "captured stderr", result.Stderr)
+	require.Equal(t, "captured stdout\ncaptured stderr", hookOutput)
+	require.ErrorIs(t, hookErr, expectedErr)
+}
+
+func TestExecuteTerraformQueryComponentWithoutHookDoesNotCaptureByDefault(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	expectedErr := errors.New("terraform failed")
+	patches := gomonkey.ApplyFunc(ExecuteTerraform, func(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+		var cfg shellCommandConfig
+		for _, opt := range opts {
+			opt(&cfg)
+		}
+
+		require.Nil(t, cfg.streams)
+		require.Nil(t, cfg.stdoutCapture)
+		require.Nil(t, cfg.stderrCapture)
+		return expectedErr
+	})
+	defer patches.Reset()
+
+	result, err := executeTerraformQueryComponent(scheduleradapters.TerraformExecution{
+		Info: schema.ConfigAndStacksInfo{
+			Component: "vpc",
+			Stack:     "dev",
+		},
+	})
+
+	require.ErrorIs(t, err, expectedErr)
+	require.Empty(t, result.Stdout)
+	require.Empty(t, result.Stderr)
+}
+
+func TestExecuteTerraformQueryComponentCaptureOutputWithoutHook(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	patches := gomonkey.ApplyFunc(ExecuteTerraform, func(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+		var cfg shellCommandConfig
+		for _, opt := range opts {
+			opt(&cfg)
+		}
+
+		require.NotNil(t, cfg.stdoutCapture)
+		require.NotNil(t, cfg.stderrCapture)
+		_, err := cfg.stdoutCapture.Write([]byte("captured stdout"))
+		require.NoError(t, err)
+		return nil
+	})
+	defer patches.Reset()
+
+	result, err := executeTerraformQueryComponent(scheduleradapters.TerraformExecution{
+		Info:          schema.ConfigAndStacksInfo{Component: "vpc", Stack: "dev"},
+		CaptureOutput: true,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "captured stdout", result.Stdout)
+	require.Empty(t, result.Stderr)
+}
+
 // TestWalkTerraformComponents verifies that walkTerraformComponents iterates over all components.
 func TestWalkTerraformComponents(t *testing.T) {
 	t.Run("iterates all components", func(t *testing.T) {
@@ -378,8 +827,8 @@ func TestProcessTerraformComponent(t *testing.T) {
 	}
 
 	// mockExecutor returns a mock executor that records whether it was called.
-	mockExecutor := func(called *bool, returnErr error) func(schema.ConfigAndStacksInfo) error {
-		return func(i schema.ConfigAndStacksInfo) error {
+	mockExecutor := func(called *bool, returnErr error) func(schema.ConfigAndStacksInfo, ...ShellCommandOption) error {
+		return func(i schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 			*called = true
 			return returnErr
 		}
@@ -450,7 +899,7 @@ func TestProcessTerraformComponent(t *testing.T) {
 	t.Run("execute", func(t *testing.T) {
 		section := newSection(map[string]any{"enabled": true})
 		called := false
-		executor := func(i schema.ConfigAndStacksInfo) error {
+		executor := func(i schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 			called = true
 			// check fields set
 			assert.Equal(t, component, i.Component)
@@ -487,6 +936,74 @@ func TestProcessTerraformComponent(t *testing.T) {
 		assert.Error(t, err)
 		assert.True(t, processed)
 		assert.True(t, called)
+	})
+
+	t.Run("per-component hook fires on success with captured output", func(t *testing.T) {
+		section := newSection(map[string]any{"enabled": true})
+		hookCalled := false
+		var hookComponent, hookStack, hookOutput string
+		var hookErr error
+
+		info := schema.ConfigAndStacksInfo{
+			SubCommand: "plan",
+			PerComponentHook: func(ci *schema.ConfigAndStacksInfo, output string, execErr error) {
+				hookCalled = true
+				hookComponent = ci.Component
+				hookStack = ci.Stack
+				hookOutput = output
+				hookErr = execErr
+			},
+		}
+
+		// Executor writes to the capture buffers provided via ShellCommandOption.
+		executor := func(_ schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+			c := &shellCommandConfig{}
+			for _, opt := range opts {
+				opt(c)
+			}
+			if c.stdoutCapture != nil {
+				fmt.Fprint(c.stdoutCapture, "plan-stdout")
+			}
+			if c.stderrCapture != nil {
+				fmt.Fprint(c.stderrCapture, "plan-stderr")
+			}
+			return nil
+		}
+
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc, executor)
+
+		assert.NoError(t, err)
+		assert.True(t, processed)
+		assert.True(t, hookCalled)
+		assert.Equal(t, component, hookComponent)
+		assert.Equal(t, stack, hookStack)
+		assert.Contains(t, hookOutput, "plan-stdout")
+		assert.Contains(t, hookOutput, "plan-stderr")
+		assert.NoError(t, hookErr)
+	})
+
+	t.Run("per-component hook fires before error is returned", func(t *testing.T) {
+		section := newSection(map[string]any{"enabled": true})
+		expectedErr := errors.New("terraform failed")
+		hookCalled := false
+		var hookErr error
+
+		info := schema.ConfigAndStacksInfo{
+			SubCommand: "plan",
+			PerComponentHook: func(ci *schema.ConfigAndStacksInfo, output string, execErr error) {
+				hookCalled = true
+				hookErr = execErr
+			},
+		}
+
+		_, err := processTerraformComponent(
+			&atmosConfig, &info, stack, component, section, logFunc,
+			func(_ schema.ConfigAndStacksInfo, _ ...ShellCommandOption) error { return expectedErr },
+		)
+
+		assert.ErrorIs(t, err, expectedErr)
+		assert.True(t, hookCalled, "hook must fire even when executor fails")
+		assert.ErrorIs(t, hookErr, expectedErr)
 	})
 }
 
@@ -1075,11 +1592,7 @@ func BenchmarkNeedProcessTemplatesAndYamlFunctions(b *testing.B) {
 }
 
 func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
-	// gomonkey uses unsafe binary patching that causes a fatal SIGBUS on macOS ARM64
-	// (Apple Silicon) because code pages are read-only. Skip on that platform.
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		t.Skip("gomonkey binary patching is not supported on macOS ARM64")
-	}
+	skipGomonkeyOnDarwinARM64(t)
 
 	tests := []struct {
 		name               string
@@ -1321,6 +1834,119 @@ func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
 			expectedError:      false,
 			expectedCalls:      1, // Only vpc, dependents not included.
 		},
+		{
+			// Defense-in-depth coverage for issue #2361: a terraform component
+			// must never trigger terraform plan/apply on a helmfile dependent.
+			name: "helmfile dependent skipped (issue #2361)",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				DryRun:     false,
+			},
+			affectedList: []schema.Affected{
+				{StackSlug: "prod-helm-app"},
+			},
+			affectedComponent: "vpc",
+			affectedStack:     "prod",
+			parentComponent:   "",
+			parentStack:       "",
+			dependents: []schema.Dependent{
+				{
+					Component:            "helm-app",
+					ComponentType:        "helmfile",
+					Stack:                "prod",
+					StackSlug:            "prod-helm-app",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+			},
+			args: &DescribeAffectedCmdArgs{
+				IncludeDependents: true,
+			},
+			mockTerraformError: false,
+			expectedError:      false,
+			expectedCalls:      1, // Only vpc; helmfile dependent filtered.
+		},
+		{
+			// Defense-in-depth coverage for issue #2361: a terraform component
+			// must never trigger terraform plan/apply on a packer dependent.
+			name: "packer dependent skipped (issue #2361)",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				DryRun:     false,
+			},
+			affectedList: []schema.Affected{
+				{StackSlug: "prod-image"},
+			},
+			affectedComponent: "vpc",
+			affectedStack:     "prod",
+			parentComponent:   "",
+			parentStack:       "",
+			dependents: []schema.Dependent{
+				{
+					Component:            "image",
+					ComponentType:        "packer",
+					Stack:                "prod",
+					StackSlug:            "prod-image",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+			},
+			args: &DescribeAffectedCmdArgs{
+				IncludeDependents: true,
+			},
+			mockTerraformError: false,
+			expectedError:      false,
+			expectedCalls:      1, // Only vpc; packer dependent filtered.
+		},
+		{
+			// Mixed-type dependents: only the terraform one runs.
+			name: "mixed-type dependents — only terraform runs (issue #2361)",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				DryRun:     false,
+			},
+			affectedList: []schema.Affected{
+				{StackSlug: "prod-helm-app"},
+				{StackSlug: "prod-image"},
+				{StackSlug: "prod-security-group"},
+			},
+			affectedComponent: "vpc",
+			affectedStack:     "prod",
+			parentComponent:   "",
+			parentStack:       "",
+			dependents: []schema.Dependent{
+				{
+					Component:            "helm-app",
+					ComponentType:        "helmfile",
+					Stack:                "prod",
+					StackSlug:            "prod-helm-app",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+				{
+					Component:            "image",
+					ComponentType:        "packer",
+					Stack:                "prod",
+					StackSlug:            "prod-image",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+				{
+					Component:            "security-group",
+					ComponentType:        "terraform",
+					Stack:                "prod",
+					StackSlug:            "prod-security-group",
+					IncludedInDependents: false,
+					Dependents:           []schema.Dependent{},
+				},
+			},
+			args: &DescribeAffectedCmdArgs{
+				IncludeDependents: true,
+			},
+			mockTerraformError: false,
+			expectedError:      false,
+			expectedCalls:      2, // vpc + security-group; helmfile + packer filtered.
+		},
 	}
 
 	for _, tt := range tests {
@@ -1393,6 +2019,57 @@ func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
 			// Verify that the function completed successfully.
 			// Note: The info object is modified during recursive execution,
 			// so we only verify the call count and error state.
+		})
+	}
+}
+
+// TestIsNonTerraformDependent is the portable companion to the gomonkey-based
+// table above. It directly exercises the defense-in-depth predicate that
+// `executeTerraformAffectedComponentInDepOrder` uses to drop helmfile/packer
+// dependents during the recursion. Testing the predicate (rather than the
+// orchestrator) avoids racing with parallel tests that monkey-patch the
+// orchestrator, and gives the guard real coverage on every CI runner —
+// including macOS ARM64 where gomonkey is unsupported.
+func TestIsNonTerraformDependent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		dep  schema.Dependent
+		want bool
+	}{
+		{
+			name: "helmfile dependent is non-terraform (issue #2361)",
+			dep:  schema.Dependent{Component: "helm-app", ComponentType: cfg.HelmfileComponentType, Stack: "prod"},
+			want: true,
+		},
+		{
+			name: "packer dependent is non-terraform (issue #2361)",
+			dep:  schema.Dependent{Component: "image", ComponentType: cfg.PackerComponentType, Stack: "prod"},
+			want: true,
+		},
+		{
+			// Positive path: a terraform dependent must NOT be flagged,
+			// otherwise the guard would be over-broad and silently drop
+			// legitimate work.
+			name: "terraform dependent is not flagged",
+			dep:  schema.Dependent{Component: "security-group", ComponentType: cfg.TerraformComponentType, Stack: "prod"},
+			want: false,
+		},
+		{
+			// Empty ComponentType is treated as terraform for backward
+			// compatibility — older affected payloads omitted this field.
+			name: "empty ComponentType is treated as terraform",
+			dep:  schema.Dependent{Component: "legacy", ComponentType: "", Stack: "prod"},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dep := tt.dep
+			assert.Equal(t, tt.want, isNonTerraformDependent(&dep))
 		})
 	}
 }
@@ -1778,4 +2455,167 @@ func TestTFCliArgsAndVarsComponentSections(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestIsTerraformCurrentWorkspace verifies the helper that detects whether a given workspace
+// name matches the active workspace recorded in the .terraform/environment file.
+func TestIsTerraformCurrentWorkspace(t *testing.T) {
+	t.Run("returns true when environment file contains matching workspace", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte("nonprod"), 0o644))
+
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns true when environment file has trailing newline", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte("nonprod\n"), 0o644))
+
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns false when workspace does not match", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte("staging"), 0o644))
+
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns false when environment file does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		// Create .terraform dir but omit the environment file — distinct from the
+		// directory-absent case covered by the next sub-test.
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, ".terraform"), 0o755))
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns false when .terraform directory does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		// No .terraform directory at all — environment file is implicitly absent.
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("respects TF_DATA_DIR env var", func(t *testing.T) {
+		dir := t.TempDir()
+		customDir := filepath.Join(dir, "custom-tf-dir")
+		require.NoError(t, os.MkdirAll(customDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(customDir, "environment"), []byte("nonprod"), 0o644))
+
+		t.Setenv("TF_DATA_DIR", customDir)
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("respects relative TF_DATA_DIR env var", func(t *testing.T) {
+		// Terraform resolves TF_DATA_DIR relative to the component path (the process CWD
+		// at invocation time, which atmos sets to componentPath).  Verify that
+		// isTerraformCurrentWorkspace applies the same resolution.
+		dir := t.TempDir()
+		relDir := "custom-tf-dir"
+		customDir := filepath.Join(dir, relDir)
+		require.NoError(t, os.MkdirAll(customDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(customDir, "environment"), []byte("nonprod"), 0o644))
+
+		t.Setenv("TF_DATA_DIR", relDir)
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	// Default workspace: Terraform never writes the environment file for "default".
+	// Absence of the file (or an empty file) must be treated as the default workspace.
+	t.Run("returns true for default workspace when environment file is absent", func(t *testing.T) {
+		dir := t.TempDir()
+		// No .terraform directory or environment file — default workspace is implied.
+		assert.True(t, isTerraformCurrentWorkspace(dir, "default", nil))
+	})
+
+	t.Run("returns false for non-default workspace when environment file is absent", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns true for default workspace when environment file is empty", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte(""), 0o644))
+
+		assert.True(t, isTerraformCurrentWorkspace(dir, "default", nil))
+	})
+
+	t.Run("returns false for non-default workspace when environment file is empty", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte(""), 0o644))
+
+		assert.False(t, isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("TF_DATA_DIR absolute path is used directly without joining componentPath", func(t *testing.T) {
+		// When TF_DATA_DIR is set to an absolute path, isTerraformCurrentWorkspace must read
+		// the environment file from that absolute path rather than joining componentPath.
+		// This documents the invariant for the filepath.IsAbs guard in the implementation.
+		absDataDir := t.TempDir()
+		t.Setenv("TF_DATA_DIR", absDataDir)
+
+		workspace := "staging"
+		require.NoError(t, os.WriteFile(
+			filepath.Join(absDataDir, "environment"),
+			[]byte(workspace),
+			0o600,
+		))
+
+		// componentPath is a different directory — the environment file is under absDataDir, not here.
+		componentPath := t.TempDir()
+		assert.True(t, isTerraformCurrentWorkspace(componentPath, workspace, nil),
+			"absolute TF_DATA_DIR must resolve the environment file without joining componentPath")
+	})
+
+	t.Run("envList TF_DATA_DIR takes precedence over process env", func(t *testing.T) {
+		// When TF_DATA_DIR is set in the subprocess env (envList) but not in the parent
+		// process, the helper must use the envList value.  This covers the case where a
+		// component sets TF_DATA_DIR in its env config.
+		dir := t.TempDir()
+
+		// Create custom data dir with environment file.
+		customDir := filepath.Join(dir, "subprocess-tf-data")
+		require.NoError(t, os.MkdirAll(customDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(customDir, "environment"), []byte("nonprod"), 0o644))
+
+		// Ensure TF_DATA_DIR is NOT set in the parent process env.
+		t.Setenv("TF_DATA_DIR", "")
+
+		// Pass TF_DATA_DIR via envList — simulates ComponentEnvList.
+		envList := []string{"TF_DATA_DIR=" + customDir}
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod", envList),
+			"envList TF_DATA_DIR must be used when set in subprocess env")
+	})
+
+	t.Run("envList TF_DATA_DIR overrides process TF_DATA_DIR", func(t *testing.T) {
+		// When both envList and process env set TF_DATA_DIR, envList wins (subprocess
+		// env is what terraform actually sees).
+		dir := t.TempDir()
+
+		// Process-level TF_DATA_DIR points to a dir with a different workspace.
+		processDir := filepath.Join(dir, "process-tf-data")
+		require.NoError(t, os.MkdirAll(processDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(processDir, "environment"), []byte("staging"), 0o644))
+		t.Setenv("TF_DATA_DIR", processDir)
+
+		// envList TF_DATA_DIR points to a dir with the target workspace.
+		subprocessDir := filepath.Join(dir, "subprocess-tf-data")
+		require.NoError(t, os.MkdirAll(subprocessDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(subprocessDir, "environment"), []byte("nonprod"), 0o644))
+
+		envList := []string{"TF_DATA_DIR=" + subprocessDir}
+		assert.True(t, isTerraformCurrentWorkspace(dir, "nonprod", envList),
+			"envList TF_DATA_DIR must override process env TF_DATA_DIR")
+		assert.False(t, isTerraformCurrentWorkspace(dir, "staging", envList),
+			"process env TF_DATA_DIR must not be used when envList overrides it")
+	})
 }

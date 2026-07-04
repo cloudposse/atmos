@@ -1,0 +1,16 @@
+# plat-staging EKS stack — has NO auth block at all. It should NOT inherit
+# anything from the data-staging monitoring stack (which is in a completely
+# unrelated OU). Per discussion #122, it currently does inherit the leak.
+
+vars:
+  tenant: plat
+  stage: staging
+  region: us-east-1
+
+components:
+  terraform:
+    eks:
+      metadata:
+        component: mock_caller_identity
+      vars:
+        enabled: true

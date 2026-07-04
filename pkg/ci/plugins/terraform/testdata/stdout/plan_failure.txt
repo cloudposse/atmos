@@ -1,0 +1,24 @@
+
+Initializing the backend...
+
+Initializing provider plugins...
+- Finding hashicorp/aws versions matching "~> 5.0"...
+- Installing hashicorp/aws v5.31.0...
+- Installed hashicorp/aws v5.31.0 (signed by HashiCorp)
+
+Terraform has been successfully initialized!
+
+Planning...
+
+│ Error: Invalid provider configuration
+│
+│ Provider "registry.terraform.io/hashicorp/aws" requires explicit configuration.
+│ Add a provider block to the root module and configure the provider's required
+│ arguments as described in the provider documentation.
+
+│ Error: Missing required argument
+│
+│   on main.tf line 5, in resource "aws_instance" "example":
+│    5: resource "aws_instance" "example" {
+│
+│ The argument "ami" is required, but no definition was found.

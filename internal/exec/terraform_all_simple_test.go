@@ -9,22 +9,14 @@ import (
 )
 
 func TestExecuteTerraformAll_ValidationSimple(t *testing.T) {
+	// --all without a stack is allowed: it processes every stack
+	// (see website/docs/cli/commands/terraform/terraform-apply.mdx).
 	tests := []struct {
 		name        string
 		info        *schema.ConfigAndStacksInfo
 		expectError bool
 		errorMsg    string
 	}{
-		{
-			name: "no stack specified",
-			info: &schema.ConfigAndStacksInfo{
-				ComponentFromArg: "",
-				Stack:            "",
-				SubCommand:       "plan",
-			},
-			expectError: true,
-			errorMsg:    "stack is required",
-		},
 		{
 			name: "component specified with --all",
 			info: &schema.ConfigAndStacksInfo{

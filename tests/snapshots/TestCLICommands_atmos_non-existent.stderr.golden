@@ -10,19 +10,27 @@ Valid subcommands are:
   • atlantis
   • auth
   • aws
+  • ci
   • completion
+  • composition
+  • container
   • describe
   • devcontainer
   • docs
+  • emulator
   • env
+  • git
+  • helm
   • helmfile
   • help
+  • kubernetes
   • list
   • lsp
   • mcp
   • packer
   • pro
   • profile
+  • secret
   • show
   • support
   • terraform
@@ -35,6 +43,9 @@ Valid subcommands are:
   • version
   • workflow
 
-## Hints
+## Usage
+
+ atmos [flags]
+ atmos [sub-command] [flags]
 
 💡 Run atmos --help for usage

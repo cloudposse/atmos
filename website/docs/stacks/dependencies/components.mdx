@@ -3,7 +3,7 @@ title: Component Dependencies
 sidebar_position: 2
 sidebar_label: components
 sidebar_class_name: command
-description: Define dependencies between components to control execution order and detect affected components.
+description: Define dependencies between components, files, and folders to control execution order and detect affected components.
 id: components
 ---
 
@@ -12,7 +12,7 @@ import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 
 <Intro>
-The `dependencies.components` section defines relationships between components, ensuring they are deployed in the correct order. Use it to declare which components must be applied before others.
+The `dependencies` section has four sibling keys: `tools` (tool versions), `components` (other components this one depends on), `files` (file paths to watch), and `folders` (folder paths to watch). Use them to declare ordering, propagate impact through `atmos describe affected`, and drive CI/CD orchestration.
 </Intro>
 
 ## Use Cases
@@ -20,35 +20,53 @@ The `dependencies.components` section defines relationships between components, 
 - **Execution Order:** Ensure VPC is created before subnets
 - **CI/CD Orchestration:** Spacelift and other integrations use dependencies to order stack runs
 - **Impact Analysis:** The `atmos describe affected` command uses dependencies to find impacted components
-- **File/Folder Watching:** Trigger component redeployment when external files change
+- **File/Folder Watching:** Trigger component redeployment when external files or folders change
 
 ## Configuration
 
-The `dependencies.components` section is a list of dependency objects.
+The `dependencies` section is an object with up to four sibling keys. Each key is independently optional.
 
-### Schema
+### Sibling Keys
 
 <dl>
-  <dt>component <em>(optional)</em></dt>
-  <dd>The component instance name as defined in the stack (e.g., `vpc`, `subnet`, `tgw/hub`). This is the name under `components.<kind>.<name>`, not the Terraform module path. Required for component dependencies.</dd>
+  <dt>tools <em>(map)</em></dt>
+  <dd>Required CLI tool versions (e.g., `terraform: "1.9.8"`). See the [overview page](/stacks/dependencies) for details.</dd>
 
-  <dt>stack <em>(optional)</em></dt>
-  <dd>The Atmos stack name where the component is provisioned (e.g., `tenant1-ue2-prod`). If omitted, the component is assumed to be in the same stack. Use templates to construct stack names dynamically.</dd>
+  <dt>components <em>(list)</em></dt>
+  <dd>Other Atmos components this component depends on. Used for ordering and dependency-graph traversal.</dd>
 
-  <dt>kind <em>(optional)</em></dt>
-  <dd>The dependency type: `terraform`, `helmfile`, `packer`, `file`, `folder`, or a registered plugin type. Defaults to the declaring component's type for component dependencies. Use `file` or `folder` for path-based dependencies.</dd>
+  <dt>files <em>(list of strings)</em></dt>
+  <dd>File paths whose changes mark this component as affected. Use when external configuration or source files belong logically to this component but live outside the component directory.</dd>
 
-  <dt>path <em>(optional)</em></dt>
-  <dd>The file or folder path for path-based dependencies. Required when `kind` is `file` or `folder`. Changes to files at this path mark the component as affected.</dd>
+  <dt>folders <em>(list of strings)</em></dt>
+  <dd>Folder paths whose recursive contents mark this component as affected. Typical use: pointing at a Lambda source tree or a templates directory.</dd>
 </dl>
 
-:::info
-For component dependencies, `component` is required. For path dependencies (`kind: file` or `kind: folder`), `path` is required.
+### `dependencies.components[]` Entry Schema
+
+Each entry in `dependencies.components` is an object with these fields:
+
+<dl>
+  <dt>name <em>(string, preferred)</em></dt>
+  <dd>The component instance name as defined in the stack (e.g., `vpc`, `subnet`, `tgw/hub`). This is the name under `components.<kind>.<name>`, not the Terraform module path.</dd>
+
+  <dt>component <em>(string, legacy alias)</em></dt>
+  <dd>Older alias for `name`. Still parses for backward compatibility with configurations from Atmos &lt; v1.211.0. New configurations should use `name`. Setting both `name` and `component` to different values is a configuration error.</dd>
+
+  <dt>stack <em>(string, optional)</em></dt>
+  <dd>The Atmos stack name where the component is provisioned (e.g., `tenant1-ue2-prod`). If omitted, the component is assumed to be in the same stack. Use Go templates to construct stack names dynamically.</dd>
+
+  <dt>kind <em>(string, optional)</em></dt>
+  <dd>The dependency type: `terraform`, `helmfile`, `packer`, or a registered plugin type. Defaults to the declaring component's type for component dependencies.</dd>
+</dl>
+
+:::info Migrating from `settings.depends_on`?
+The legacy `namespace`, `tenant`, `environment`, and `stage` fields are **not supported** in `dependencies.components`. Use the `stack` field with a Go template instead — for example, `stack: "{{ .vars.tenant }}-{{ .vars.environment }}-prod"`.
 :::
 
 ## Examples
 
-### Same-Stack Dependency
+### Same-Stack Component Dependency
 
 The simplest case: a component depends on another component in the same stack.
 
@@ -63,13 +81,13 @@ components:
     subnet:
       dependencies:
         components:
-          - component: vpc
+          - name: vpc
       vars:
         vpc_id: !terraform.output vpc.vpc_id
 ```
 </File>
 
-### Cross-Stack Dependencies
+### Cross-Stack Component Dependencies
 
 Use the `stack` field or templates to depend on components in different stacks.
 
@@ -86,25 +104,25 @@ components:
       dependencies:
         components:
           # Depend on vpc in the same stack (no stack field needed)
-          - component: vpc
+          - name: vpc
 
           # Depend on shared-services in a specific stack
-          - component: shared-services
+          - name: shared-services
             stack: acme-ue1-network
 
           # Depend on rds in prod using a template
-          - component: rds
+          - name: rds
             stack: "{{ .vars.tenant }}-{{ .vars.environment }}-prod"
 
           # Depend on tgw/hub in a different region using a template
-          - component: tgw/hub
+          - name: tgw/hub
             stack: "{{ .vars.tenant }}-uw2-{{ .vars.stage }}"
 ```
 </File>
 
 ### File and Folder Dependencies
 
-Trigger `describe affected` when external files or folders change using `kind` and `path`.
+Trigger `atmos describe affected` when external files or folders change. Use the sibling `dependencies.files` and `dependencies.folders` keys.
 
 <File title="stacks/catalog/lambda.yaml">
 ```yaml
@@ -112,17 +130,17 @@ components:
   terraform:
     lambda-function:
       dependencies:
+        # Re-deploy when the Lambda source code changes
+        folders:
+          - src/lambda/my-function
+
+        # Re-deploy when a specific config file changes
+        files:
+          - configs/lambda-settings.json
+
+        # Also depend on the vpc component
         components:
-          # Re-deploy when the Lambda source code changes
-          - kind: folder
-            path: "src/lambda/my-function"
-
-          # Re-deploy when a specific config file changes
-          - kind: file
-            path: "configs/lambda-settings.json"
-
-          # Also depend on the vpc component
-          - component: vpc
+          - name: vpc
 ```
 </File>
 
@@ -138,29 +156,34 @@ components:
       dependencies:
         components:
           # Terraform component (default kind for terraform components)
-          - component: vpc
+          - name: vpc
 
           # Helmfile component in a different stack
-          - component: nginx-ingress
+          - name: nginx-ingress
             kind: helmfile
             stack: platform-stack
 
           # Packer component
-          - component: base-ami
+          - name: base-ami
             kind: packer
 ```
 </File>
 
 ## Merge Behavior
 
-`dependencies.components` uses **append merge** behavior: child stacks add their dependencies to parent dependencies.
+By default, `dependencies.components` uses **replace merge** behavior during stack inheritance: a child stack's list of dependencies replaces (does not extend) the parent's list. To opt into append-merge behavior across imports, set `settings.list_merge_strategy: append` in `atmos.yaml`. The same rule applies to `dependencies.files` and `dependencies.folders`.
+
+### Default (replace)
 
 <File title="stacks/catalog/base.yaml">
 ```yaml
 # Parent stack defines base dependencies
-dependencies:
-  components:
-    - component: account-settings
+components:
+  terraform:
+    vpc:
+      dependencies:
+        components:
+          - name: account-settings
 ```
 </File>
 
@@ -174,16 +197,34 @@ components:
     vpc:
       dependencies:
         components:
-          # This is APPENDED to the parent's dependencies
-          - component: network-baseline
+          # This REPLACES the parent's list
+          - name: network-baseline
 
-# Result: vpc depends on both account-settings AND network-baseline
+# Result: vpc depends on network-baseline only.
+# `account-settings` from the parent is NOT inherited.
 ```
 </File>
 
+### Opt-in append
+
+Configure list-merge once globally in `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  list_merge_strategy: append
+```
+</File>
+
+With that set, child `dependencies.components` lists extend the parent's list — in the example above, `vpc` would depend on both `account-settings` and `network-baseline`.
+
+:::tip
+Other valid `list_merge_strategy` values are `replace` (default), `append`, and `merge`. See the [`settings` reference](/cli/configuration/settings) for full semantics.
+:::
+
 ## Integration with `atmos describe affected`
 
-The `dependencies.components` section is used by [`atmos describe affected`](/cli/commands/describe/affected) to determine which components are impacted by changes.
+`dependencies.components`, `dependencies.files`, and `dependencies.folders` are all consumed by [`atmos describe affected`](/cli/commands/describe/affected) to determine which components are impacted by changes.
 
 ### How It Works
 
@@ -191,8 +232,9 @@ When you run `atmos describe affected`:
 
 1. Atmos compares the current branch to the target branch (e.g., `main`)
 2. It identifies changed files (stack configs, component code)
-3. It checks `dependencies.components` for file/folder dependencies
-4. Components with changed dependencies are marked as "affected"
+3. It checks `dependencies.files` / `dependencies.folders` for path-based matches against the changed file set
+4. It walks `dependencies.components` to propagate impact through the dependency graph
+5. Components touched directly or transitively are marked as "affected"
 
 ### Example: File Dependency
 
@@ -202,9 +244,8 @@ components:
   terraform:
     my-lambda:
       dependencies:
-        components:
-          - kind: folder
-            path: "src/lambda/handler"
+        folders:
+          - src/lambda/handler
 ```
 </File>
 
@@ -280,10 +321,80 @@ Find all components affected by changes in a branch:
 3. **Use Templates for Cross-Stack** - Use `{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}` instead of hardcoded stack names
 4. **Combine with YAML Functions** - Use `!terraform.output` to pass data between dependent components
 5. **Test with `describe affected`** - Verify your dependencies work correctly in CI/CD
+6. **Prefer `name:` over `component:`** - In new configurations, use `name:` inside `dependencies.components[]` for clarity
+7. **Prefer `dependencies.files` / `dependencies.folders` over inline `kind: file/folder`** - Cleaner separation between component-graph dependencies and path-watch dependencies
+
+## Legacy entry shapes (still supported)
+
+These older shapes shipped in v1.210.0 and continue to parse for backward compatibility. They are still fully supported, but new configurations should use the canonical shapes shown above.
+
+### Legacy: `component:` instead of `name:`
+
+The `component:` field is the older spelling of `name:`. Both refer to the same value:
+
+<File title="Legacy form (still works)">
+```yaml
+components:
+  terraform:
+    subnet:
+      dependencies:
+        components:
+          - component: vpc      # legacy spelling — equivalent to `name: vpc`
+```
+</File>
+
+<File title="Canonical form (preferred)">
+```yaml
+components:
+  terraform:
+    subnet:
+      dependencies:
+        components:
+          - name: vpc
+```
+</File>
+
+Setting `name:` and `component:` to different values on the same entry is a configuration error.
+
+### Legacy: inline `kind: file` / `kind: folder`
+
+Path-based dependencies originally had to be declared inside `dependencies.components[]` using `kind: file` or `kind: folder` with a `path:` field. This still works, but the sibling keys are clearer:
+
+<File title="Legacy inline form (still works)">
+```yaml
+components:
+  terraform:
+    lambda:
+      dependencies:
+        components:
+          - kind: file
+            path: configs/lambda-settings.json
+          - kind: folder
+            path: src/lambda/handler
+          - component: vpc
+```
+</File>
+
+<File title="Canonical sibling-key form (preferred)">
+```yaml
+components:
+  terraform:
+    lambda:
+      dependencies:
+        files:
+          - configs/lambda-settings.json
+        folders:
+          - src/lambda/handler
+        components:
+          - name: vpc
+```
+</File>
+
+Both forms produce identical behavior in `atmos describe affected` and `atmos describe dependents`. They can also be mixed within the same component.
 
 ## Migration from `settings.depends_on`
 
-If you're using the legacy `settings.depends_on` format:
+If you're using the much older `settings.depends_on` format:
 
 <File title="Old format (deprecated)">
 ```yaml
@@ -301,22 +412,22 @@ settings:
 ```yaml
 dependencies:
   components:
-    - component: vpc
-    - component: rds
+    - name: vpc
+    - name: rds
       stack: "{{ .vars.tenant }}-{{ .vars.environment }}-prod"
 ```
 </File>
 
 ### Key Differences
 
-| Feature | `settings.depends_on` | `dependencies.components` |
-|---------|----------------------|--------------------------|
-| Format | Map with numeric keys | List |
-| Merge behavior | Deep merge (complex) | Append (simple) |
+| Feature | `settings.depends_on` | `dependencies.*` (current) |
+|---------|----------------------|---------------------------|
+| Format | Map with numeric keys | List(s) under sibling keys |
+| Merge behavior | Deep merge (complex) | Per-list (replace by default, append opt-in) |
 | Location | Under `settings` | Under `dependencies` |
 | Cross-stack | `namespace`, `tenant`, `environment`, `stage` fields | `stack` field only (use templates) |
-| Cross-type | Not supported | Use `kind` field (terraform, helmfile, packer, etc.) |
-| File/folder deps | `file` and `folder` fields | `kind: file` or `kind: folder` with `path` |
+| Cross-type | Not supported | Use `kind` field on `components[]` (terraform, helmfile, packer, etc.) |
+| File/folder deps | `file` and `folder` fields per entry | `dependencies.files` and `dependencies.folders` sibling keys |
 
 Both formats continue to work. The new format is recommended for new configurations.
 

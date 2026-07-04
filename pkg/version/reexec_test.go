@@ -3,12 +3,14 @@ package version
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 )
@@ -76,6 +78,9 @@ func testReexecConfig(finder *mockVersionFinder, installer *mockVersionInstaller
 		InstallFromSHA: func(_ string, _ bool) (string, error) {
 			return "", errors.New("mock: SHA install not configured")
 		},
+		ResolveRef: func(_ context.Context, _ string) (string, error) {
+			return "", errors.New("mock: ref resolution not configured")
+		},
 	}
 }
 
@@ -102,7 +107,7 @@ func TestCheckAndReexecWithConfig_GuardActive(t *testing.T) {
 	installer := &mockVersionInstaller{}
 
 	envVars := map[string]string{
-		ReexecGuardEnvVar: "1.160.0",
+		reexec.DepthEnvVar: "1",
 	}
 
 	cfg := &ReexecConfig{
@@ -117,14 +122,87 @@ func TestCheckAndReexecWithConfig_GuardActive(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{
 		Version: schema.Version{
-			Use: "1.160.0", // Same as guard.
+			Use: "1.160.0",
 		},
 	}
 
 	result := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.False(t, result, "Should return false when guard is active for same version")
-	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when guard active")
+	assert.False(t, result, "Should return false when depth > 0")
+	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when depth > 0")
+}
+
+func TestParseUseVersionFromArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "empty", args: []string{}, want: ""},
+		{name: "absent flag", args: []string{"atmos", "terraform", "plan"}, want: ""},
+		{name: "equals form", args: []string{"atmos", "--use-version=ref:main", "list", "stacks"}, want: "ref:main"},
+		{name: "separate value form", args: []string{"atmos", "--use-version", "1.2.3", "list", "stacks"}, want: "1.2.3"},
+		{name: "missing separate value", args: []string{"atmos", "list", "stacks", "--use-version"}, want: ""},
+		{name: "bare separator is not a separate value", args: []string{"atmos", "list", "stacks", "--use-version", "--"}, want: ""},
+		{name: "after bare separator is ignored", args: []string{"atmos", "--", "--use-version=ref:main"}, want: ""},
+		{name: "before bare separator is found", args: []string{"atmos", "--use-version=ref:main", "--", "plan"}, want: "ref:main"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, ParseUseVersionFromArgs(tt.args))
+		})
+	}
+}
+
+func TestExplicitVersionOverride(t *testing.T) {
+	originalArgs := os.Args
+	os.Args = []string{"atmos"}
+	t.Cleanup(func() { os.Args = originalArgs })
+
+	for _, key := range []string{
+		VersionUseEnvVar,
+		UseVersionEnvVar,
+		VersionEnvVar,
+	} {
+		t.Setenv(key, "")
+	}
+
+	t.Run("internal env has highest precedence", func(t *testing.T) {
+		t.Setenv(VersionUseEnvVar, "1.2.3")
+		t.Setenv(UseVersionEnvVar, "1.2.4")
+		t.Setenv(VersionEnvVar, "1.2.5")
+		os.Args = []string{"atmos", "--use-version=ref:main"}
+
+		assert.Equal(t, "1.2.3", ExplicitVersionOverride(os.Args))
+	})
+
+	t.Run("args precede public env", func(t *testing.T) {
+		t.Setenv(VersionUseEnvVar, "")
+		t.Setenv(UseVersionEnvVar, "1.2.4")
+		t.Setenv(VersionEnvVar, "1.2.5")
+		os.Args = []string{"atmos", "--use-version=ref:main"}
+
+		assert.Equal(t, "ref:main", ExplicitVersionOverride(os.Args))
+	})
+
+	t.Run("public env precedes legacy env", func(t *testing.T) {
+		t.Setenv(VersionUseEnvVar, "")
+		t.Setenv(UseVersionEnvVar, "1.2.4")
+		t.Setenv(VersionEnvVar, "1.2.5")
+		os.Args = []string{"atmos"}
+
+		assert.Equal(t, "1.2.4", ExplicitVersionOverride(os.Args))
+	})
+
+	t.Run("legacy env fallback", func(t *testing.T) {
+		t.Setenv(VersionUseEnvVar, "")
+		t.Setenv(UseVersionEnvVar, "")
+		t.Setenv(VersionEnvVar, "1.2.5")
+		os.Args = []string{"atmos"}
+
+		assert.Equal(t, "1.2.5", ExplicitVersionOverride(os.Args))
+	})
 }
 
 func TestCheckAndReexecWithConfig_VersionMatch(t *testing.T) {
@@ -384,15 +462,15 @@ func TestCheckAndReexecWithConfig_GuardIsSet(t *testing.T) {
 	}
 	installer := &mockVersionInstaller{}
 
-	var guardValue string
+	var depthValue string
 	cfg := &ReexecConfig{
 		Finder:    finder,
 		Installer: installer,
 		ExecFn:    func(argv0 string, argv []string, envv []string) error { return nil },
 		GetEnv:    func(key string) string { return "" },
 		SetEnv: func(key, value string) error {
-			if key == ReexecGuardEnvVar {
-				guardValue = value
+			if key == reexec.DepthEnvVar {
+				depthValue = value
 			}
 			return nil
 		},
@@ -408,7 +486,7 @@ func TestCheckAndReexecWithConfig_GuardIsSet(t *testing.T) {
 
 	CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.Equal(t, "1.160.0", guardValue, "Guard should be set to requested version")
+	assert.Equal(t, "1", depthValue, "Depth should be incremented to 1 on first re-exec")
 }
 
 func TestCheckAndReexecWithConfig_EnvVarVersions(t *testing.T) {
@@ -426,6 +504,11 @@ func TestCheckAndReexecWithConfig_EnvVarVersions(t *testing.T) {
 			name:       "ATMOS_VERSION_USE env var",
 			envVarKey:  VersionUseEnvVar,
 			envVarName: "ATMOS_VERSION_USE",
+		},
+		{
+			name:       "ATMOS_USE_VERSION env var",
+			envVarKey:  UseVersionEnvVar,
+			envVarName: "ATMOS_USE_VERSION",
 		},
 	}
 
@@ -511,6 +594,75 @@ func TestCheckAndReexecWithConfig_EnvVarPrecedence(t *testing.T) {
 
 	assert.True(t, result, "Should return true when re-exec is triggered")
 	assert.Equal(t, 1, finder.callCount, "Should call FindBinaryPath")
+}
+
+// TestCheckAndReexecWithConfig_UseEnvVarPrecedence verifies the env-var
+// precedence order ATMOS_VERSION_USE > ATMOS_USE_VERSION > ATMOS_VERSION.
+func TestCheckAndReexecWithConfig_UseEnvVarPrecedence(t *testing.T) {
+	tests := []struct {
+		name     string
+		envVars  map[string]string
+		expected string
+		reason   string
+	}{
+		{
+			name: "ATMOS_USE_VERSION beats ATMOS_VERSION",
+			envVars: map[string]string{
+				UseVersionEnvVar: "1.166.0",
+				VersionEnvVar:    "1.170.0",
+			},
+			expected: "1.166.0",
+			reason:   "ATMOS_USE_VERSION should take precedence over ATMOS_VERSION",
+		},
+		{
+			name: "ATMOS_VERSION_USE beats ATMOS_USE_VERSION",
+			envVars: map[string]string{
+				VersionUseEnvVar: "1.165.0",
+				UseVersionEnvVar: "1.166.0",
+				VersionEnvVar:    "1.170.0",
+			},
+			expected: "1.165.0",
+			reason:   "ATMOS_VERSION_USE (set by --use-version flag) should take highest precedence",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save original version and restore after test.
+			originalVersion := Version
+			Version = "1.150.0"
+			defer func() { Version = originalVersion }()
+
+			finder := &mockVersionFinder{
+				findBinaryPathFunc: func(owner, repo, version string) (string, error) {
+					assert.Equal(t, tt.expected, version, tt.reason)
+					return "/path/to/atmos", nil
+				},
+			}
+
+			envVars := tt.envVars
+			cfg := &ReexecConfig{
+				Finder:    finder,
+				Installer: &mockVersionInstaller{},
+				ExecFn:    func(argv0 string, argv []string, envv []string) error { return nil },
+				GetEnv:    func(key string) string { return envVars[key] },
+				SetEnv:    func(key, value string) error { envVars[key] = value; return nil },
+				Args:      []string{"atmos", "version"},
+				Environ:   func() []string { return []string{} },
+			}
+
+			atmosConfig := &schema.AtmosConfiguration{
+				Version: schema.Version{
+					Use: "1.160.0", // Config file value should be ignored.
+				},
+			}
+
+			result := CheckAndReexecWithConfig(atmosConfig, cfg)
+
+			assert.True(t, result, "Should return true when re-exec is triggered")
+			assert.Equal(t, 1, finder.callCount, "Should call FindBinaryPath")
+		})
+	}
 }
 
 func TestCheckAndReexecWithConfig_EnvVarFallbackToConfig(t *testing.T) {
@@ -667,77 +819,6 @@ func TestFindOrInstallVersionWithConfig_InstallSucceedsButBinaryNotFound(t *test
 	assert.Empty(t, path)
 }
 
-func TestStripChdirFlags(t *testing.T) {
-	tests := []struct {
-		name     string
-		args     []string
-		expected []string
-	}{
-		{
-			name:     "no chdir flags",
-			args:     []string{"atmos", "terraform", "plan", "--stack", "dev"},
-			expected: []string{"atmos", "terraform", "plan", "--stack", "dev"},
-		},
-		{
-			name:     "long form with separate value",
-			args:     []string{"atmos", "--chdir", "examples/demo-stacks", "terraform", "plan"},
-			expected: []string{"atmos", "terraform", "plan"},
-		},
-		{
-			name:     "long form with equals",
-			args:     []string{"atmos", "--chdir=examples/demo-stacks", "terraform", "plan"},
-			expected: []string{"atmos", "terraform", "plan"},
-		},
-		{
-			name:     "short form with separate value",
-			args:     []string{"atmos", "-C", "examples/demo-stacks", "terraform", "plan"},
-			expected: []string{"atmos", "terraform", "plan"},
-		},
-		{
-			name:     "short form with equals",
-			args:     []string{"atmos", "-C=examples/demo-stacks", "terraform", "plan"},
-			expected: []string{"atmos", "terraform", "plan"},
-		},
-		{
-			name:     "chdir at end with separate value",
-			args:     []string{"atmos", "terraform", "plan", "--chdir", "examples/demo-stacks"},
-			expected: []string{"atmos", "terraform", "plan"},
-		},
-		{
-			name:     "chdir at end with equals",
-			args:     []string{"atmos", "terraform", "plan", "--chdir=examples/demo-stacks"},
-			expected: []string{"atmos", "terraform", "plan"},
-		},
-		{
-			name:     "multiple flags mixed",
-			args:     []string{"atmos", "--use-version", "1.199.0", "--chdir", "examples/demo-stacks", "terraform", "plan"},
-			expected: []string{"atmos", "--use-version", "1.199.0", "terraform", "plan"},
-		},
-		{
-			name:     "empty args",
-			args:     []string{},
-			expected: []string{},
-		},
-		{
-			name:     "only program name",
-			args:     []string{"atmos"},
-			expected: []string{"atmos"},
-		},
-		{
-			name:     "chdir without value at end",
-			args:     []string{"atmos", "terraform", "plan", "--chdir"},
-			expected: []string{"atmos", "terraform", "plan"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := stripChdirFlags(tt.args)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestCheckAndReexecWithConfig_StripsChdirFlags(t *testing.T) {
 	// Save original version and restore after test.
 	originalVersion := Version
@@ -842,19 +923,25 @@ func TestStripUseVersionFlags(t *testing.T) {
 func TestStripBothChdirAndUseVersionFlags(t *testing.T) {
 	// Test that both flag types are stripped when used together.
 	args := []string{"atmos", "--chdir", "examples/demo-stacks", "--use-version", "1.199.0", "terraform", "plan"}
-	result := stripChdirFlags(args)
+	result := reexec.StripChdirArgs(args)
 	result = stripUseVersionFlags(result)
 	assert.Equal(t, []string{"atmos", "terraform", "plan"}, result)
 
 	// Test with equals form.
 	args = []string{"atmos", "--chdir=examples/demo-stacks", "--use-version=1.199.0", "terraform", "plan"}
-	result = stripChdirFlags(args)
+	result = reexec.StripChdirArgs(args)
 	result = stripUseVersionFlags(result)
 	assert.Equal(t, []string{"atmos", "terraform", "plan"}, result)
 
 	// Test with mixed forms.
 	args = []string{"atmos", "-C", "examples/demo-stacks", "--use-version=1.199.0", "terraform", "plan"}
-	result = stripChdirFlags(args)
+	result = reexec.StripChdirArgs(args)
+	result = stripUseVersionFlags(result)
+	assert.Equal(t, []string{"atmos", "terraform", "plan"}, result)
+
+	// Concatenated short form -Cvalue (new capability after consolidation).
+	args = []string{"atmos", "-C../foo", "--use-version=1.199.0", "terraform", "plan"}
+	result = reexec.StripChdirArgs(args)
 	result = stripUseVersionFlags(result)
 	assert.Equal(t, []string{"atmos", "terraform", "plan"}, result)
 }
@@ -930,68 +1017,80 @@ func TestShouldSkipReexec(t *testing.T) {
 	tests := []struct {
 		name             string
 		requestedVersion string
-		guard            string
+		depth            string
 		expected         bool
 	}{
 		{
-			name:             "PR version never skips",
+			name:             "PR version never skips when depth=0",
 			requestedVersion: "pr:2040",
-			guard:            "",
+			depth:            "",
 			expected:         false,
 		},
 		{
-			name:             "SHA version never skips",
+			name:             "SHA version never skips when depth=0",
 			requestedVersion: "sha:ceb7526",
-			guard:            "",
+			depth:            "",
 			expected:         false,
 		},
 		{
-			name:             "auto-detect PR never skips",
+			name:             "auto-detect PR never skips when depth=0",
 			requestedVersion: "2040",
-			guard:            "",
+			depth:            "",
 			expected:         false,
 		},
 		{
-			name:             "auto-detect SHA never skips",
+			name:             "auto-detect SHA never skips when depth=0",
 			requestedVersion: "ceb7526",
-			guard:            "",
+			depth:            "",
 			expected:         false,
 		},
 		{
-			name:             "guard match skips",
-			requestedVersion: "1.160.0",
-			guard:            "1.160.0",
+			name:             "ref version never skips when depth=0",
+			requestedVersion: "ref:main",
+			depth:            "",
+			expected:         false,
+		},
+		{
+			name:             "ref version skipped when depth=1 (prevents loop)",
+			requestedVersion: "ref:main",
+			depth:            "1",
 			expected:         true,
 		},
 		{
-			name:             "guard mismatch does not skip",
+			name:             "depth=1 skips semver switch",
 			requestedVersion: "1.160.0",
-			guard:            "1.150.0",
-			expected:         false,
+			depth:            "1",
+			expected:         true,
 		},
 		{
-			name:             "same version skips",
+			name:             "depth=1 skips PR version (prevents loop)",
+			requestedVersion: "pr:2040",
+			depth:            "1",
+			expected:         true,
+		},
+		{
+			name:             "depth=1 skips SHA version (prevents loop)",
+			requestedVersion: "sha:ceb7526",
+			depth:            "1",
+			expected:         true,
+		},
+		{
+			name:             "same version skips (no re-exec needed)",
 			requestedVersion: "1.150.0",
-			guard:            "",
+			depth:            "",
 			expected:         true,
 		},
 		{
 			name:             "same version with v prefix skips",
 			requestedVersion: "v1.150.0",
-			guard:            "",
+			depth:            "",
 			expected:         true,
 		},
 		{
 			name:             "different version does not skip",
 			requestedVersion: "1.160.0",
-			guard:            "",
+			depth:            "",
 			expected:         false,
-		},
-		{
-			name:             "guard takes precedence over PR version",
-			requestedVersion: "pr:2040",
-			guard:            "pr:2040",
-			expected:         true,
 		},
 	}
 
@@ -999,8 +1098,8 @@ func TestShouldSkipReexec(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &ReexecConfig{
 				GetEnv: func(key string) string {
-					if key == ReexecGuardEnvVar {
-						return tt.guard
+					if key == reexec.DepthEnvVar {
+						return tt.depth
 					}
 					return ""
 				},
@@ -1037,66 +1136,45 @@ func TestFindOrInstallVersionWithConfig_EmptyBinaryPath(t *testing.T) {
 	assert.Equal(t, 1, installer.callCount, "Should call Install once")
 }
 
-func TestCheckAndReexecWithConfig_PRVersionGuardActive(t *testing.T) {
-	// When guard matches a PR version, re-exec is skipped.
-	finder := &mockVersionFinder{}
-	installer := &mockVersionInstaller{}
-
-	envVars := map[string]string{
-		ReexecGuardEnvVar: "pr:2040",
+// Depth > 0 must prevent re-exec even for PR or SHA versions, which otherwise
+// always trigger a switch. This prevents a re-exec'd child from looping back
+// to install another PR/SHA build.
+func TestCheckAndReexecWithConfig_DepthActiveSkipsPRAndSHA(t *testing.T) {
+	tests := []struct {
+		name    string
+		version string
+	}{
+		{"PR version skipped when depth > 0", "pr:2040"},
+		{"SHA version skipped when depth > 0", "sha:ceb7526"},
 	}
 
-	cfg := &ReexecConfig{
-		Finder:    finder,
-		Installer: installer,
-		ExecFn:    func(argv0 string, argv []string, envv []string) error { return nil },
-		GetEnv:    func(key string) string { return envVars[key] },
-		SetEnv:    func(key, value string) error { envVars[key] = value; return nil },
-		Args:      []string{"atmos", "version"},
-		Environ:   func() []string { return []string{} },
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			finder := &mockVersionFinder{}
+			installer := &mockVersionInstaller{}
+
+			envVars := map[string]string{reexec.DepthEnvVar: "1"}
+
+			cfg := &ReexecConfig{
+				Finder:    finder,
+				Installer: installer,
+				ExecFn:    func(argv0 string, argv []string, envv []string) error { return nil },
+				GetEnv:    func(key string) string { return envVars[key] },
+				SetEnv:    func(key, value string) error { envVars[key] = value; return nil },
+				Args:      []string{"atmos", "version"},
+				Environ:   func() []string { return []string{} },
+			}
+
+			atmosConfig := &schema.AtmosConfiguration{
+				Version: schema.Version{Use: tt.version},
+			}
+
+			result := CheckAndReexecWithConfig(atmosConfig, cfg)
+
+			assert.False(t, result, "Should return false when depth > 0")
+			assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when depth > 0")
+		})
 	}
-
-	atmosConfig := &schema.AtmosConfiguration{
-		Version: schema.Version{
-			Use: "pr:2040", // Same as guard.
-		},
-	}
-
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
-
-	assert.False(t, result, "Should return false when guard is active for PR version")
-	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when guard active")
-}
-
-func TestCheckAndReexecWithConfig_SHAVersionGuardActive(t *testing.T) {
-	// When guard matches a SHA version, re-exec is skipped.
-	finder := &mockVersionFinder{}
-	installer := &mockVersionInstaller{}
-
-	envVars := map[string]string{
-		ReexecGuardEnvVar: "sha:ceb7526",
-	}
-
-	cfg := &ReexecConfig{
-		Finder:    finder,
-		Installer: installer,
-		ExecFn:    func(argv0 string, argv []string, envv []string) error { return nil },
-		GetEnv:    func(key string) string { return envVars[key] },
-		SetEnv:    func(key, value string) error { envVars[key] = value; return nil },
-		Args:      []string{"atmos", "version"},
-		Environ:   func() []string { return []string{} },
-	}
-
-	atmosConfig := &schema.AtmosConfiguration{
-		Version: schema.Version{
-			Use: "sha:ceb7526", // Same as guard.
-		},
-	}
-
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
-
-	assert.False(t, result, "Should return false when guard is active for SHA version")
-	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when guard active")
 }
 
 func TestCheckAndReexecWithConfig_InvalidVersionFormat(t *testing.T) {
@@ -1146,13 +1224,6 @@ func TestStripUseVersionFlags_AtEnd(t *testing.T) {
 	// Test --use-version without value at end of args.
 	args := []string{"atmos", "--use-version"}
 	result := stripUseVersionFlags(args)
-	assert.Equal(t, []string{"atmos"}, result)
-}
-
-func TestStripChdirFlags_ConcatenatedC(t *testing.T) {
-	// Test -C without value at end of args.
-	args := []string{"atmos", "-C"}
-	result := stripChdirFlags(args)
 	assert.Equal(t, []string{"atmos"}, result)
 }
 
@@ -1242,6 +1313,149 @@ func TestFindOrInstallVersionWithConfig_AutoDetectSHA(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "/path/to/sha-ceb7526/atmos", path)
 	assert.Equal(t, 0, finder.callCount, "Should not use semver finder for SHA version")
+}
+
+// TestFindOrInstallVersionWithConfig_RefVersion verifies a ref resolves to a SHA that hits the SHA cache, bypassing the semver path.
+func TestFindOrInstallVersionWithConfig_RefVersion(t *testing.T) {
+	finder := &mockVersionFinder{}
+	installer := &mockVersionInstaller{}
+	cfg := testReexecConfig(finder, installer)
+
+	resolveCalledWith := ""
+	fullSHA := "ef725b83ded66da561cd47dc5a0c1c7ed1c2bd0b"
+	cfg.ResolveRef = func(_ context.Context, ref string) (string, error) {
+		resolveCalledWith = ref
+		return fullSHA, nil
+	}
+	// After resolution, the SHA path is reused; serve a cache hit for the resolved SHA.
+	cfg.CheckSHACache = func(sha string) (bool, string) {
+		assert.Equal(t, fullSHA, sha, "ref should resolve to the full SHA passed to the SHA cache")
+		return true, "/path/to/sha-ef725b8/atmos"
+	}
+
+	// "ref:main" is a valid ref version specifier.
+	path, err := findOrInstallVersionWithConfig("ref:main", cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/path/to/sha-ef725b8/atmos", path)
+	assert.Equal(t, "main", resolveCalledWith, "ResolveRef should be called with the ref name")
+	// Should not use the semver finder/installer.
+	assert.Equal(t, 0, finder.callCount, "Should not use semver finder for ref version")
+	assert.Equal(t, 0, installer.callCount, "Should not use semver installer for ref version")
+}
+
+// TestFindOrInstallVersionWithConfig_RefVersionFreshInstall verifies a ref with no cached SHA installs the SHA artifact.
+func TestFindOrInstallVersionWithConfig_RefVersionFreshInstall(t *testing.T) {
+	finder := &mockVersionFinder{}
+	installer := &mockVersionInstaller{}
+	cfg := testReexecConfig(finder, installer)
+
+	fullSHA := "ceb752612345678901234567890123456789abcd"
+	cfg.ResolveRef = func(_ context.Context, ref string) (string, error) {
+		assert.Equal(t, "v1.199.0", ref)
+		return fullSHA, nil
+	}
+	cfg.CheckSHACache = func(_ string) (bool, string) { return false, "" }
+	cfg.InstallFromSHA = func(sha string, _ bool) (string, error) {
+		assert.Equal(t, fullSHA, sha)
+		return "/installed/sha-ceb7526/atmos", nil
+	}
+
+	// "ref:v1.199.0" resolves a tag to its commit, then installs the SHA artifact.
+	path, err := findOrInstallVersionWithConfig("ref:v1.199.0", cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/installed/sha-ceb7526/atmos", path)
+}
+
+// TestFindOrInstallVersionWithConfig_RefResolveFails verifies a ref-resolution failure propagates and never reaches the SHA path.
+func TestFindOrInstallVersionWithConfig_RefResolveFails(t *testing.T) {
+	finder := &mockVersionFinder{}
+	installer := &mockVersionInstaller{}
+	cfg := testReexecConfig(finder, installer)
+
+	cfg.ResolveRef = func(_ context.Context, _ string) (string, error) {
+		return "", errUtils.Build(errUtils.ErrToolNotFound).
+			WithExplanation("Git ref 'does-not-exist' not found").
+			Err()
+	}
+	// SHA path must never be reached when ref resolution fails.
+	cfg.CheckSHACache = func(_ string) (bool, string) {
+		t.Fatal("CheckSHACache should not be called when ref resolution fails")
+		return false, ""
+	}
+
+	path, err := findOrInstallVersionWithConfig("ref:does-not-exist", cfg)
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrToolNotFound)
+	assert.Empty(t, path)
+	assert.Equal(t, 0, finder.callCount, "Should not use semver finder for ref version")
+}
+
+// TestFindOrInstallVersionWithConfig_SHADoesNotResolveRef verifies a SHA version never invokes ref resolution.
+func TestFindOrInstallVersionWithConfig_SHADoesNotResolveRef(t *testing.T) {
+	finder := &mockVersionFinder{}
+	installer := &mockVersionInstaller{}
+	cfg := testReexecConfig(finder, installer)
+
+	cfg.ResolveRef = func(_ context.Context, _ string) (string, error) {
+		t.Fatal("ResolveRef should not be called for a SHA version")
+		return "", nil
+	}
+	cfg.CheckSHACache = func(_ string) (bool, string) {
+		return true, "/path/to/sha-ceb7526/atmos"
+	}
+
+	path, err := findOrInstallVersionWithConfig("sha:ceb7526", cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/path/to/sha-ceb7526/atmos", path)
+}
+
+// TestCheckAndReexecWithConfig_RefVersionReexec verifies a ref version triggers the full re-exec path: resolve -> SHA install -> exec.
+func TestCheckAndReexecWithConfig_RefVersionReexec(t *testing.T) {
+	originalVersion := Version
+	Version = "1.150.0"
+	defer func() { Version = originalVersion }()
+
+	finder := &mockVersionFinder{}
+	installer := &mockVersionInstaller{}
+
+	fullSHA := "ef725b83ded66da561cd47dc5a0c1c7ed1c2bd0b"
+	var execCalledWith string
+	cfg := &ReexecConfig{
+		Finder:    finder,
+		Installer: installer,
+		ExecFn: func(argv0 string, argv []string, envv []string) error {
+			execCalledWith = argv0
+			return nil
+		},
+		GetEnv:         func(key string) string { return "" },
+		SetEnv:         func(key, value string) error { return nil },
+		Args:           []string{"atmos", "version"},
+		Environ:        func() []string { return []string{} },
+		CheckPRCache:   func(_ int) (toolchain.PRCacheStatus, string) { return toolchain.PRCacheNeedsInstall, "" },
+		CheckPRUpdate:  func(_ context.Context, _ int, _ bool) (bool, error) { return false, nil },
+		InstallFromPR:  func(_ int, _ bool) (string, error) { return "", errors.New("not used") },
+		CheckSHACache:  func(_ string) (bool, string) { return true, "/path/to/sha-ef725b8/atmos" },
+		InstallFromSHA: func(_ string, _ bool) (string, error) { return "", errors.New("not used") },
+		ResolveRef: func(_ context.Context, ref string) (string, error) {
+			assert.Equal(t, "main", ref)
+			return fullSHA, nil
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Version: schema.Version{
+			Use: "ref:main",
+		},
+	}
+
+	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+
+	assert.True(t, result, "Should return true when ref re-exec is triggered")
+	assert.Equal(t, "/path/to/sha-ef725b8/atmos", execCalledWith)
 }
 
 func TestCheckAndReexecWithConfig_PRVersionReexec(t *testing.T) {
@@ -1348,6 +1562,7 @@ func TestDefaultReexecConfig(t *testing.T) {
 	assert.NotNil(t, cfg.InstallFromPR)
 	assert.NotNil(t, cfg.CheckSHACache)
 	assert.NotNil(t, cfg.InstallFromSHA)
+	assert.NotNil(t, cfg.ResolveRef)
 }
 
 // TestFindOrInstallPRVersionWithConfig_CacheValid tests that a valid cached PR binary is returned immediately.

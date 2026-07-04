@@ -1,0 +1,17 @@
+components:
+  terraform:
+    dynamodb-table:
+      metadata:
+        component: dynamodb-table
+        description: "DynamoDB table for application state."
+      hooks:
+        publish-coordinates:
+          events:
+            - after-terraform-apply
+          kind: store
+          name: config/ssm
+          outputs:
+            table_name: .table_name
+      vars:
+        name: state
+        hash_key: id

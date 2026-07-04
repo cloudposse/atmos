@@ -349,6 +349,73 @@ terraform:
 	}
 }
 
+func TestInitCliConfig_DotenvIncludeInAtmosYamlEnv(t *testing.T) {
+	tests := []struct {
+		name          string
+		configContent string
+		expectedEnv   map[string]string
+	}{
+		{
+			name: "direct include",
+			configContent: `base_path: ./
+env: !include .env
+`,
+			expectedEnv: map[string]string{
+				"DATABASE_URL": "postgres://localhost/db",
+				"AWS_REGION":   "from-dotenv",
+			},
+		},
+		{
+			name: "merge include with inline override",
+			configContent: `base_path: ./
+env:
+  <<: !include .env
+  AWS_REGION: inline
+  BALH: foo
+`,
+			expectedEnv: map[string]string{
+				"DATABASE_URL": "postgres://localhost/db",
+				"AWS_REGION":   "inline",
+				"BALH":         "foo",
+			},
+		},
+		{
+			name: "layered merge includes",
+			configContent: `base_path: ./
+env:
+  <<:
+    - !include .env.local
+    - !include .env
+  AWS_REGION: inline
+`,
+			expectedEnv: map[string]string{
+				"DATABASE_URL": "postgres://localhost/db",
+				"AWS_REGION":   "inline",
+				"LOCAL_ONLY":   "true",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+
+			createConfigFile(t, tmpDir, ".env", `DATABASE_URL=postgres://localhost/db
+AWS_REGION=from-dotenv
+`)
+			createConfigFile(t, tmpDir, ".env.local", `AWS_REGION=from-local
+LOCAL_ONLY=true
+`)
+			createConfigFile(t, tmpDir, "atmos.yaml", tt.configContent)
+			changeWorkingDir(t, tmpDir)
+
+			cfg, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedEnv, cfg.Env)
+		})
+	}
+}
+
 func TestParseFlags(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -621,6 +688,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 		envVars         map[string]string
 		args            []string
 		expectedPager   string
+		expectedSpeed   float64
 		expectedNoColor bool
 		expectedColor   bool
 	}{
@@ -665,6 +733,14 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			},
 			args:          []string{"atmos", "describe", "config"},
 			expectedColor: true,
+		},
+		{
+			name: "ATMOS_TERMINAL_SPEED environment variable",
+			envVars: map[string]string{
+				"ATMOS_TERMINAL_SPEED": "8",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedSpeed: 8,
 		},
 		{
 			name: "CLI flag overrides environment variable",
@@ -789,7 +865,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			originalEnvVars := make(map[string]string)
 
 			// Clear and save relevant environment variables
-			envVarsToCheck := []string{"ATMOS_PAGER", "PAGER", "NO_PAGER", "NO_COLOR", "ATMOS_NO_COLOR", "COLOR", "ATMOS_COLOR"}
+			envVarsToCheck := []string{"ATMOS_PAGER", "PAGER", "NO_PAGER", "NO_COLOR", "ATMOS_NO_COLOR", "COLOR", "ATMOS_COLOR", "ATMOS_TERMINAL_SPEED"}
 			for _, envVar := range envVarsToCheck {
 				if val, exists := os.LookupEnv(envVar); exists {
 					originalEnvVars[envVar] = val
@@ -828,6 +904,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			v.BindEnv("settings.terminal.pager", "ATMOS_PAGER", "PAGER")
 			v.BindEnv("settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
 			v.BindEnv("settings.terminal.color", "ATMOS_COLOR", "COLOR")
+			v.BindEnv("settings.terminal.speed", "ATMOS_TERMINAL_SPEED")
 
 			// Create a test config
 			atmosConfig := &schema.AtmosConfiguration{
@@ -851,6 +928,9 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 				// Only set Color if NoColor is not true
 				atmosConfig.Settings.Terminal.Color = v.GetBool("settings.terminal.color")
 			}
+			if v.IsSet("settings.terminal.speed") {
+				atmosConfig.Settings.Terminal.Speed = v.GetFloat64("settings.terminal.speed")
+			}
 
 			// Apply CLI flags (simulating what setLogConfig does)
 			setLogConfig(atmosConfig)
@@ -858,6 +938,9 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			// Verify results
 			if tt.expectedPager != "" {
 				assert.Equal(t, tt.expectedPager, atmosConfig.Settings.Terminal.Pager, "Pager setting mismatch")
+			}
+			if tt.expectedSpeed != 0 {
+				assert.Equal(t, tt.expectedSpeed, atmosConfig.Settings.Terminal.Speed, "Terminal speed setting mismatch")
 			}
 			assert.Equal(t, tt.expectedNoColor, atmosConfig.Settings.Terminal.NoColor, "NoColor setting mismatch")
 			if tt.expectedColor || tt.expectedNoColor {
@@ -867,6 +950,35 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTerminalSpeedDefaultAndEnvBinding(t *testing.T) {
+	v := viper.New()
+	setDefaultConfiguration(v)
+	assert.Equal(t, 0.0, v.GetFloat64("settings.terminal.speed"))
+
+	t.Setenv("ATMOS_TERMINAL_SPEED", "8")
+	bindEnv(v, "settings.terminal.speed", "ATMOS_TERMINAL_SPEED")
+	assert.Equal(t, 8.0, v.GetFloat64("settings.terminal.speed"))
+}
+
+func TestDiagnosticsDefaultAndEnvBinding(t *testing.T) {
+	v := viper.New()
+	setDefaultConfiguration(v)
+	assert.False(t, v.GetBool("diagnostics.enabled"))
+	assert.Equal(t, "", v.GetString("diagnostics.file"))
+	assert.False(t, v.GetBool("diagnostics.include_output"))
+
+	t.Setenv("ATMOS_DIAGNOSTICS_ENABLED", "true")
+	t.Setenv("ATMOS_DIAGNOSTICS_FILE", "/tmp/atmos-events.jsonl")
+	t.Setenv("ATMOS_DIAGNOSTICS_INCLUDE_OUTPUT", "true")
+	bindEnv(v, "diagnostics.enabled", "ATMOS_DIAGNOSTICS_ENABLED")
+	bindEnv(v, "diagnostics.file", "ATMOS_DIAGNOSTICS_FILE")
+	bindEnv(v, "diagnostics.include_output", "ATMOS_DIAGNOSTICS_INCLUDE_OUTPUT")
+
+	assert.True(t, v.GetBool("diagnostics.enabled"))
+	assert.Equal(t, "/tmp/atmos-events.jsonl", v.GetString("diagnostics.file"))
+	assert.True(t, v.GetBool("diagnostics.include_output"))
 }
 
 // TestResolveAbsolutePath tests the path resolution logic for different scenarios.
@@ -1114,7 +1226,7 @@ func TestResolveAbsolutePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := resolveAbsolutePath(tt.path, tt.cliConfigPath)
+			result, err := resolveAbsolutePath(tt.path, tt.cliConfigPath, "")
 			require.NoError(t, err)
 
 			if filepath.IsAbs(tt.path) {
@@ -1269,18 +1381,20 @@ func TestDotPathResolvesRelativeToConfigDir(t *testing.T) {
 	err = os.Unsetenv("ATMOS_BASE_PATH")
 	require.NoError(t, err)
 
-	t.Run("ATMOS_BASE_PATH=. should resolve to config dir (config-file-relative)", func(t *testing.T) {
-		// This test verifies that "." resolves relative to where atmos.yaml is located,
-		// NOT relative to CWD. This follows the convention of other config files.
-		//
-		// Users who need CWD-relative behavior should use the !cwd YAML tag:
-		// - base_path: !cwd
+	t.Run("ATMOS_BASE_PATH=. should resolve to CWD (shell convention)", func(t *testing.T) {
+		// This test verifies that "." from an env var (runtime source) resolves to CWD,
+		// NOT config dir. In shell context, "." means "here" = where the command runs.
+		// This follows the unified convention: dot-prefix anchors to context
+		// (config dir in yaml, CWD in shell).
 		changeWorkingDir(t, "../../tests/fixtures/scenarios/complete/components/terraform/top-level-component1")
+
+		cwd, err := os.Getwd()
+		require.NoError(t, err)
 
 		// Point to the repo root where atmos.yaml is located.
 		configPath := "../../.."
 		t.Setenv("ATMOS_CLI_CONFIG_PATH", configPath)
-		// Set base_path to "." - this should resolve to config dir (where atmos.yaml is).
+		// Set base_path to "." via env var — runtime source → CWD.
 		t.Setenv("ATMOS_BASE_PATH", ".")
 		// Disable git root discovery for this test.
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
@@ -1288,13 +1402,9 @@ func TestDotPathResolvesRelativeToConfigDir(t *testing.T) {
 		cfg, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		require.NoError(t, err, "InitCliConfig should succeed")
 
-		// Get the absolute path of the config directory.
-		configDir, err := filepath.Abs(configPath)
-		require.NoError(t, err)
-
-		// BasePathAbsolute should be the config directory, not CWD.
-		assert.Equal(t, configDir, cfg.BasePathAbsolute,
-			"Base path with '.' should resolve to config directory (config-file-relative)")
+		// BasePathAbsolute should be CWD (shell convention for runtime source).
+		assert.Equal(t, cwd, cfg.BasePathAbsolute,
+			"ATMOS_BASE_PATH=. should resolve to CWD (shell convention), not config dir")
 	})
 
 	t.Run("base_path=. when CWD equals config dir resolves to config dir", func(t *testing.T) {
@@ -1342,7 +1452,7 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 	t.Run("returns git root when path is empty and git available", func(t *testing.T) {
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
 
-		result, err := tryResolveWithGitRoot("", false, "")
+		result, err := tryResolveWithGitRoot("", "", "")
 		require.NoError(t, err)
 		// We're in a git repo, so should get the git root.
 		assert.NotEmpty(t, result)
@@ -1354,24 +1464,15 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithGitRoot("", false, configPath)
+		result, err := tryResolveWithGitRoot("", configPath, "")
 		require.NoError(t, err)
 		assert.Equal(t, configPath, result)
-	})
-
-	t.Run("resolves explicit relative path with git root", func(t *testing.T) {
-		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
-
-		result, err := tryResolveWithGitRoot("./subdir", true, "")
-		require.NoError(t, err)
-		assert.True(t, filepath.IsAbs(result))
-		assert.Contains(t, result, "subdir")
 	})
 
 	t.Run("joins simple relative path with git root", func(t *testing.T) {
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
 
-		result, err := tryResolveWithGitRoot("stacks", false, "")
+		result, err := tryResolveWithGitRoot("stacks", "", "")
 		require.NoError(t, err)
 		assert.Contains(t, result, "stacks")
 	})
@@ -1381,7 +1482,7 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	t.Run("returns config path when path is empty", func(t *testing.T) {
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithConfigPath("", configPath)
+		result, err := tryResolveWithConfigPath("", configPath, "")
 		require.NoError(t, err)
 		assert.Equal(t, configPath, result)
 	})
@@ -1389,14 +1490,14 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	t.Run("joins path with config path", func(t *testing.T) {
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithConfigPath("subdir", configPath)
+		result, err := tryResolveWithConfigPath("subdir", configPath, "")
 		require.NoError(t, err)
 		expected := filepath.Join(configPath, "subdir")
 		assert.Equal(t, expected, result)
 	})
 
 	t.Run("resolves relative to CWD when no config path", func(t *testing.T) {
-		result, err := tryResolveWithConfigPath("subdir", "")
+		result, err := tryResolveWithConfigPath("subdir", "", "")
 		require.NoError(t, err)
 
 		cwd, _ := os.Getwd()
@@ -1405,7 +1506,7 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	})
 
 	t.Run("handles empty path and empty config path", func(t *testing.T) {
-		result, err := tryResolveWithConfigPath("", "")
+		result, err := tryResolveWithConfigPath("", "", "")
 		require.NoError(t, err)
 
 		cwd, _ := os.Getwd()

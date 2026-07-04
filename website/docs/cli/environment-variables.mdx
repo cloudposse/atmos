@@ -182,6 +182,30 @@ These environment variables configure Atmos behavior and can override settings i
     - **YAML Path:** `components.terraform.plugin_cache_dir`
   </dd>
 
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_CACHE_ENABLED`</dt>
+  <dd>
+    If set to `true`, enable the Terraform registry cache proxy for provider and module registry traffic.
+
+    - **YAML Path:** `components.terraform.cache.enabled`
+    - **Default:** `false`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_CACHE_LOCATION`</dt>
+  <dd>
+    Custom root directory for the Terraform registry cache. Pin this to a stable path in CI when the cache should be reused across `atmos` invocations.
+
+    - **YAML Path:** `components.terraform.cache.location`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS`</dt>
+  <dd>
+    If set to `false`, disable automatic JIT workdir provisioning before
+    `terraform init` during `!terraform.output` / `atmos.Component` evaluation.
+
+    - **YAML Path:** `components.terraform.auto_provision_workdir_for_outputs`
+    - **Default:** `true`
+  </dd>
+
   <dt>`ATMOS_COMPONENTS_HELMFILE_COMMAND`</dt>
   <dd>
     The executable to be called by `atmos` when running Helmfile commands.
@@ -376,9 +400,23 @@ These environment variables configure Atmos behavior and can override settings i
     Automatically injected into Terraform environments when `ATMOS_INJECT_GITHUB_TOKEN=true` (default).
   </dd>
 
+  <dt>`ATMOS_PRO_GITHUB_TOKEN`</dt>
+  <dd>
+    GitHub token for private module downloads and Atmos-native git operations (vendoring, `source:` provisioning, go-getter), preferred ahead of `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN`. Typically a token brokered by [Atmos Pro](/cli/configuration/auth#github-sts-atmos-pro).
+  </dd>
+
   <dt>`ATMOS_INJECT_GITHUB_TOKEN`</dt>
   <dd>
     Inject the GitHub token into component environments. Default: `true`. Set to `false` to prevent token injection.
+  </dd>
+
+  <dt>`ATMOS_GITHUB_CLI`</dt>
+  <dd>
+    Name (or path) of the GitHub CLI used to obtain a token when no `GITHUB_TOKEN` / `ATMOS_GITHUB_TOKEN` is set.
+    Defaults to `gh`. Atmos runs `<cli> auth token` only as a last resort, after the flag and environment variables.
+    Set it to an empty value to disable the CLI fallback entirely, or to a nonexistent binary to force anonymous
+    (unauthenticated) GitHub access — useful for testing the public artifact/download paths (subject to GitHub's
+    60 requests/hour unauthenticated rate limit).
   </dd>
 
   <dt>`GITHUB_USERNAME` / `GITHUB_ACTOR` / `ATMOS_GITHUB_USERNAME`</dt>
@@ -408,9 +446,9 @@ These environment variables configure Atmos behavior and can override settings i
     Inject the Bitbucket token into component environments.
   </dd>
 
-  <dt>`ATMOS_BITBUCKET_USERNAME`</dt>
+  <dt>`BITBUCKET_USERNAME`</dt>
   <dd>
-    Username for Bitbucket authentication.
+    Username for Bitbucket authentication. Bitbucket requires a valid username and does not accept dummy values like `x-access-token`.
   </dd>
 </dl>
 
@@ -457,6 +495,63 @@ These environment variables configure Atmos behavior and can override settings i
   <dt>`ATMOS_AI_SEND_CONTEXT`</dt>
   <dd>
     Control whether stack configurations are sent to the AI provider for context-aware answers. Default: `false`.
+  </dd>
+
+  <dt>`ATMOS_AI_MCP`</dt>
+  <dd>
+    Specify which MCP servers to use (comma-separated). Skips automatic server routing and starts only the specified servers.
+    Equivalent to the `--mcp` flag on `atmos ai ask`, `atmos ai chat`, and `atmos ai exec`.
+
+    - Example: `ATMOS_AI_MCP=aws-iam,aws-billing atmos ai ask "List admin roles and their costs"`
+  </dd>
+
+  <dt>`ATMOS_AI_INCLUDE`</dt>
+  <dd>
+    Add glob patterns to include in AI context (comma-separated). Equivalent to the `--include` flag.
+
+    - Example: `ATMOS_AI_INCLUDE="stacks/**/*.yaml" atmos ai ask "Describe our stacks"`
+  </dd>
+
+  <dt>`ATMOS_AI_EXCLUDE`</dt>
+  <dd>
+    Add glob patterns to exclude from AI context (comma-separated). Equivalent to the `--exclude` flag.
+
+    - Example: `ATMOS_AI_EXCLUDE="**/secrets/**" atmos ai ask "Analyze our config"`
+  </dd>
+
+  <dt>`ATMOS_AI_NO_AUTO_CONTEXT`</dt>
+  <dd>
+    Disable automatic context discovery. Equivalent to the `--no-auto-context` flag. Default: `false`.
+  </dd>
+
+  <dt>`ATMOS_AI_NO_TOOLS`</dt>
+  <dd>
+    Disable tool execution for faster, simpler queries. Equivalent to the `--no-tools` flag. Default: `false`.
+  </dd>
+
+  <dt>`ATMOS_AI_FORMAT`</dt>
+  <dd>
+    Output format for `atmos ai exec`: `text`, `json`, or `markdown`. Equivalent to the `--format` flag. Default: `text`.
+  </dd>
+
+  <dt>`ATMOS_AI_OUTPUT`</dt>
+  <dd>
+    Output file path for `atmos ai exec`. Equivalent to the `--output` flag. Default: stdout.
+  </dd>
+
+  <dt>`ATMOS_AI_CONTEXT`</dt>
+  <dd>
+    Include stack context in the prompt for `atmos ai exec`. Equivalent to the `--context` flag. Default: `false`.
+  </dd>
+
+  <dt>`ATMOS_AI_PROVIDER`</dt>
+  <dd>
+    Override AI provider for `atmos ai exec` (e.g., `anthropic`, `openai`, `gemini`). Equivalent to the `--provider` flag.
+  </dd>
+
+  <dt>`ATMOS_AI_SESSION`</dt>
+  <dd>
+    Session ID for conversation context in `atmos ai exec` and `atmos ai chat`. Equivalent to the `--session` flag.
   </dd>
 </dl>
 
@@ -506,6 +601,11 @@ These environment variables configure Atmos behavior and can override settings i
   <dd>
     Override the `init_run_reconfigure` setting from `atmos.yaml`.
   </dd>
+
+  <dt>`ATMOS_TERRAFORM_VERIFY_PLAN`</dt>
+  <dd>
+    Set to `true` to force planfile drift verification (fail on drift) on `atmos terraform deploy`, equivalent to `--verify-plan`. Set to `false` to disable verification (equivalent to `--verify-plan=false`), overriding config and the CI default. See [Planfile drift verification](/components/terraform/planfiles#drift-verification).
+  </dd>
 </dl>
 
 ## Atmos Pro
@@ -521,14 +621,14 @@ These environment variables configure Atmos behavior and can override settings i
     Atmos Pro API endpoint.
   </dd>
 
-  <dt>`ATMOS_PRO_TOKEN`</dt>
-  <dd>
-    Atmos Pro authentication token.
-  </dd>
-
   <dt>`ATMOS_PRO_WORKSPACE_ID`</dt>
   <dd>
-    Atmos Pro workspace identifier.
+    Atmos Pro workspace identifier. Not a secret.
+  </dd>
+
+  <dt>`ATMOS_PRO_TOKEN`</dt>
+  <dd>
+    Bearer token obtained via OIDC token exchange (advanced). See [Pro authentication](/cli/configuration/settings/pro#authentication).
   </dd>
 
   <dt>`ATMOS_UPLOAD_STATUS`</dt>

@@ -12,12 +12,15 @@ import (
 	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	p "github.com/cloudposse/atmos/pkg/provenance"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -32,6 +35,14 @@ type DescribeComponentParams struct {
 	File                 string
 	Provenance           bool
 	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+	AuthDisabled         bool
+}
+
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_describe_component.go -package=$GOPACKAGE
+
+// DescribeComponentCmdExec is the interface for executing describe component commands.
+type DescribeComponentCmdExec interface {
+	ExecuteDescribeComponentCmd(describeComponentParams DescribeComponentParams) error
 }
 
 type DescribeComponentExec struct {
@@ -43,7 +54,7 @@ type DescribeComponentExec struct {
 	evaluateYqExpression     func(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error)
 }
 
-func NewDescribeComponentExec() *DescribeComponentExec {
+func NewDescribeComponentExec() DescribeComponentCmdExec {
 	defer perf.Track(nil, "exec.NewDescribeComponentExec")()
 
 	return &DescribeComponentExec{
@@ -84,6 +95,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	if provenance {
 		atmosConfig.TrackProvenance = true
 	}
+	injectDescribeComponentStoreAuthResolver(&atmosConfig, describeComponentParams.AuthManager)
 
 	var componentSection map[string]any
 	var mergeContext *m.MergeContext
@@ -99,6 +111,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 			ProcessYamlFunctions: processYamlFunctions,
 			Skip:                 skip,
 			AuthManager:          describeComponentParams.AuthManager,
+			AuthDisabled:         describeComponentParams.AuthDisabled,
 		})
 		if err != nil {
 			return err
@@ -112,12 +125,14 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	} else {
 		// Use the standard version
 		componentSection, err = d.executeDescribeComponent(&ExecuteDescribeComponentParams{
+			AtmosConfig:          &atmosConfig,
 			Component:            component,
 			Stack:                stack,
 			ProcessTemplates:     processTemplates,
 			ProcessYamlFunctions: processYamlFunctions,
 			Skip:                 skip,
 			AuthManager:          describeComponentParams.AuthManager,
+			AuthDisabled:         describeComponentParams.AuthDisabled,
 		})
 		if err != nil {
 			return err
@@ -164,6 +179,19 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	return nil
 }
 
+// injectDescribeComponentStoreAuthResolver wires the auth manager into atmosConfig
+// as the store auth-context resolver so identity-aware stores can resolve
+// credentials lazily during describe-component. It is a no-op when either argument
+// is nil.
+func injectDescribeComponentStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) {
+	if atmosConfig == nil || authManager == nil {
+		return
+	}
+
+	resolver := authbridge.NewResolver(authManager, authManager.GetStackInfo())
+	atmosConfig.Stores.SetAuthContextResolver(resolver)
+}
+
 func (d *DescribeComponentExec) viewConfig(atmosConfig *schema.AtmosConfiguration, displayName string, format string, data any) error {
 	if !d.IsTTYSupportForStdout() {
 		return ErrTTYNotSupported
@@ -204,10 +232,12 @@ type ExecuteDescribeComponentParams struct {
 	AtmosConfig          *schema.AtmosConfiguration // Optional: Use provided config instead of initializing new one.
 	Component            string
 	Stack                string
+	ComponentType        string // Optional: if set, only try this component type.
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
 	AuthManager          auth.AuthManager
+	AuthDisabled         bool
 }
 
 // ExecuteDescribeComponent describes component config.
@@ -218,10 +248,12 @@ func ExecuteDescribeComponent(params *ExecuteDescribeComponentParams) (map[strin
 		AtmosConfig:          params.AtmosConfig,
 		Component:            params.Component,
 		Stack:                params.Stack,
+		ComponentType:        params.ComponentType,
 		ProcessTemplates:     params.ProcessTemplates,
 		ProcessYamlFunctions: params.ProcessYamlFunctions,
 		Skip:                 params.Skip,
 		AuthManager:          params.AuthManager,
+		AuthDisabled:         params.AuthDisabled,
 	})
 	if err != nil {
 		return nil, err
@@ -253,9 +285,8 @@ func (d *DescribeComponentExec) renderProvenance(
 		return writeOutputToFile(file, output)
 	}
 
-	// Print to stdout (pipeable)
-	fmt.Print(output)
-	return nil
+	// Print to stdout (pipeable).
+	return data.Write(output)
 }
 
 // extractImportsList converts imports from any type to []string.
@@ -377,10 +408,12 @@ type DescribeComponentContextParams struct {
 	AtmosConfig          *schema.AtmosConfiguration
 	Component            string
 	Stack                string
+	ComponentType        string // Optional: if set, only try this component type.
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
-	AuthManager          auth.AuthManager // Optional: Auth manager for credential management
+	AuthManager          auth.AuthManager // Optional: Auth manager for credential management.
+	AuthDisabled         bool
 }
 
 // componentTypeProcessParams contains parameters for tryProcessWithComponentType.
@@ -397,12 +430,16 @@ type componentTypeProcessParams struct {
 // tryProcessWithComponentType attempts to process stacks with a specific component type.
 func tryProcessWithComponentType(params *componentTypeProcessParams) (schema.ConfigAndStacksInfo, error) {
 	params.configAndStacksInfo.ComponentType = params.componentType
+	// `describe component` is an inspection command: when masking is enabled (the default),
+	// resolve `!secret` to the mask replacement WITHOUT retrieving from the backend, so the
+	// command needs no credentials for the secret provider.
+	params.configAndStacksInfo.SecretsMaskOnly = iolib.MaskingEnabled()
 	result, err := ProcessStacks(params.atmosConfig, params.configAndStacksInfo, true, params.processTemplates, params.processYamlFunctions, params.skip, params.authManager)
 	result.ComponentSection[cfg.ComponentTypeSectionName] = params.componentType
 	return result, err
 }
 
-// detectComponentType tries to detect component type (Terraform, Helmfile, Packer, or Ansible).
+// detectComponentType tries to detect component type (Terraform, Helmfile, Packer, Ansible, Kubernetes, or custom).
 func detectComponentType(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
@@ -417,50 +454,47 @@ func detectComponentType(
 		authManager:          params.AuthManager,
 	}
 
-	// Try Terraform.
-	baseParams.componentType = cfg.TerraformComponentType
-	result, err := tryProcessWithComponentType(&baseParams)
-	if err != nil {
-		// If this is NOT a "component not found" type error, don't try other component types.
-		// For example, if the component has invalid HCL syntax, we should report that error
-		// rather than trying Helmfile/Packer and ultimately returning "component not found".
-		// This fixes https://github.com/cloudposse/atmos/issues/1864
+	// If a specific component type is provided, use it directly.
+	if params.ComponentType != "" {
+		baseParams.componentType = params.ComponentType
+		return tryProcessWithComponentType(&baseParams)
+	}
+
+	// Auto-detect the component type by trying each in order; the first type whose
+	// section contains the component wins. A non "component not found" error (e.g.
+	// invalid HCL) is reported immediately rather than masked as "component not
+	// found" by trying the remaining types (see issue #1864).
+	componentTypes := []string{
+		cfg.TerraformComponentType,
+		cfg.HelmfileComponentType,
+		cfg.PackerComponentType,
+		cfg.AnsibleComponentType,
+		cfg.ContainerComponentType,
+		cfg.EmulatorComponentType,
+		cfg.KubernetesComponentType,
+		cfg.HelmComponentType,
+	}
+
+	var result schema.ConfigAndStacksInfo
+	var err error
+	for _, componentType := range componentTypes {
+		baseParams.componentType = componentType
+		result, err = tryProcessWithComponentType(&baseParams)
+		if err == nil {
+			return result, nil
+		}
 		if !errors.Is(err, errUtils.ErrInvalidComponent) {
 			return result, err
 		}
-
-		// Try Helmfile.
+		// Component not found for this type — carry the result forward and try the next.
 		baseParams.configAndStacksInfo = result
-		baseParams.componentType = cfg.HelmfileComponentType
-		result, err = tryProcessWithComponentType(&baseParams)
-		if err != nil {
-			// Same check for Helmfile errors.
-			if !errors.Is(err, errUtils.ErrInvalidComponent) {
-				return result, err
-			}
-
-			// Try Packer.
-			baseParams.configAndStacksInfo = result
-			baseParams.componentType = cfg.PackerComponentType
-			result, err = tryProcessWithComponentType(&baseParams)
-			if err != nil {
-				// Same check for Packer errors.
-				if !errors.Is(err, errUtils.ErrInvalidComponent) {
-					return result, err
-				}
-
-				// Try Ansible.
-				baseParams.configAndStacksInfo = result
-				baseParams.componentType = cfg.AnsibleComponentType
-				result, err = tryProcessWithComponentType(&baseParams)
-				if err != nil {
-					result.ComponentSection[cfg.ComponentTypeSectionName] = ""
-					return result, err
-				}
-			}
-		}
 	}
-	return result, nil
+
+	// Exhausted all types: the component was not found in any of them.
+	if result.ComponentSection != nil {
+		result.ComponentSection[cfg.ComponentTypeSectionName] = ""
+	}
+	return result, err
 }
 
 // ExecuteDescribeComponentWithContext describes component config and returns the merge context.
@@ -472,6 +506,7 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 	configAndStacksInfo.Stack = params.Stack
 	configAndStacksInfo.CliArgs = []string{"describe", "component"}
 	configAndStacksInfo.ComponentSection = make(map[string]any)
+	configAndStacksInfo.AuthDisabled = params.AuthDisabled
 
 	var err error
 	atmosConfig := params.AtmosConfig

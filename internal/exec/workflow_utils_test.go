@@ -1,8 +1,10 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -10,9 +12,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -105,6 +109,33 @@ func TestIsKnownWorkflowError(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestExecuteExtendedStepInitializesExecutorAndLoadsEnv(t *testing.T) {
+	ResetStepExecutorState()
+	t.Cleanup(ResetStepExecutorState)
+
+	step := &schema.WorkflowStep{
+		Name:  "blank",
+		Type:  "linebreak",
+		Count: 1,
+	}
+	err := executeExtendedStep(
+		context.Background(),
+		step,
+		&schema.WorkflowDefinition{Output: "none"},
+		[]string{"ATMOS_TEST_EXTENDED_ENV=loaded", "malformed"},
+		extendedStepOptions{
+			DryRun:     true,
+			FinalStack: "plat-ue2-dev",
+		},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, stepExecutorState)
+	assert.Equal(t, "loaded", stepExecutorState.Variables().Env["ATMOS_TEST_EXTENDED_ENV"])
+	assert.Equal(t, "plat-ue2-dev", stepExecutorState.Variables().Flags["stack"])
+	_, ok := stepExecutorState.GetResult("blank")
+	assert.True(t, ok)
 }
 
 // TestCheckAndMergeDefaultIdentity tests the checkAndMergeDefaultIdentity function.
@@ -850,6 +881,47 @@ func TestPrepareStepEnvironment_NilAuthManager(t *testing.T) {
 	assert.Nil(t, env)
 }
 
+func TestExecuteWorkflowControlStepUsesResolvedIdentityFallback(t *testing.T) {
+	showSummary := false
+	ctrl := gomock.NewController(t)
+	authManager := authTypes.NewMockAuthManager(ctrl)
+	gomock.InOrder(
+		authManager.EXPECT().
+			GetCachedCredentials(gomock.Any(), "parent-id").
+			Return(&authTypes.WhoamiInfo{Identity: "parent-id"}, nil),
+		authManager.EXPECT().
+			PrepareShellEnvironment(gomock.Any(), "parent-id", gomock.Any()).
+			DoAndReturn(func(_ context.Context, identityName string, currentEnv []string) ([]string, error) {
+				assert.Equal(t, "parent-id", identityName)
+				assert.Contains(t, currentEnv, "BASE_VAR=base-value")
+				return append(currentEnv, "ATMOS_IDENTITY="+identityName), nil
+			}),
+	)
+	parent := &schema.WorkflowStep{
+		Name: "checks",
+		Type: schema.TaskTypeParallel,
+		ParallelOutput: &schema.ParallelOutputConfig{
+			Mode:        "none",
+			ShowSummary: &showSummary,
+		},
+		Steps: []schema.WorkflowStep{{
+			Name:    "child",
+			Type:    schema.TaskTypeShell,
+			Command: "echo child",
+		}},
+	}
+
+	err := executeWorkflowControlStep(context.Background(), &workflowControlContext{
+		workflowDefinition:  &schema.WorkflowDefinition{},
+		dryRun:              true,
+		commandLineIdentity: "parent-id",
+		baseEnv:             []string{"BASE_VAR=base-value"},
+		authManager:         authManager,
+	}, parent)
+
+	require.NoError(t, err)
+}
+
 // TestWorkflowMatch tests the WorkflowMatch struct.
 func TestWorkflowMatch(t *testing.T) {
 	match := WorkflowMatch{
@@ -1131,6 +1203,10 @@ func TestShellFieldsParseErrors(t *testing.T) {
 // TestExecuteWorkflow_ShellFieldsFallback tests that ExecuteWorkflow falls back to
 // strings.Fields when shell.Fields fails to parse the command.
 func TestExecuteWorkflow_ShellFieldsFallback(t *testing.T) {
+	if _, err := exec.LookPath("atmos"); err != nil {
+		t.Skip("skipping: atmos binary not found in PATH (required to execute atmos workflow steps)")
+	}
+
 	stacksPath := "../../tests/fixtures/scenarios/workflows"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
@@ -1158,6 +1234,46 @@ func TestExecuteWorkflow_ShellFieldsFallback(t *testing.T) {
 
 	// This should succeed - version command works.
 	err = ExecuteWorkflow(atmosConfig, "test-fallback", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	assert.NoError(t, err)
+}
+
+func TestExecuteWorkflow_SkipsStepWhenConditionIsFalse(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test when skip",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "skip",
+				Command: "exit 77",
+				Type:    "shell",
+				When:    schema.MustCondition("never"),
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-when-skip", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	assert.NoError(t, err)
+
+	workflowDefWithIdentity := &schema.WorkflowDefinition{
+		Description: "Test when skip with identity",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:     "skip-auth",
+				Command:  "exit 77",
+				Type:     "shell",
+				Identity: "missing-identity",
+				When:     schema.MustCondition("never"),
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-when-skip-auth", "/path/to/workflow.yaml", workflowDefWithIdentity, false, "", "", "")
 	assert.NoError(t, err)
 }
 
@@ -1400,6 +1516,9 @@ func TestExecuteWorkflow_StepIdentityOverridesCommandLine(t *testing.T) {
 func TestExecuteWorkflow_MultipleStepsWithMixedTypes(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
+	}
+	if _, err := exec.LookPath("atmos"); err != nil {
+		t.Skip("skipping: atmos binary not found in PATH (required to execute atmos workflow steps)")
 	}
 
 	stacksPath := "../../tests/fixtures/scenarios/workflows"
@@ -1685,4 +1804,62 @@ func TestDoubleHyphenIssue1967(t *testing.T) {
 	// Verify the terraform flag after -- is preserved.
 	assert.Equal(t, "--", args[5], "sixth arg should be --")
 	assert.Equal(t, "-consolidate-warnings=false", args[6], "seventh arg should be -consolidate-warnings=false")
+}
+
+func TestExecuteWorkflowExecStep_ValidationViaSchema(t *testing.T) {
+	// The workflow runner validates exec steps before executing anything.
+	err := schema.ValidateExecWorkflowSteps([]schema.WorkflowStep{
+		{Type: schema.TaskTypeExec, Command: "psql"},
+		{Type: schema.TaskTypeShell, Command: "echo never runs"},
+	})
+	require.ErrorIs(t, err, schema.ErrExecStepNotLast)
+
+	err = schema.ValidateExecWorkflowSteps([]schema.WorkflowStep{
+		{Type: schema.TaskTypeShell, Command: "echo first"},
+		{Type: schema.TaskTypeExec, Command: "psql"},
+	})
+	assert.NoError(t, err)
+}
+
+func TestExecuteWorkflow_ExecStepDryRun(t *testing.T) {
+	testDir := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDefinition := &schema.WorkflowDefinition{
+		Description: "Exec step as the final step",
+		Steps: []schema.WorkflowStep{
+			{Name: "prep", Type: "shell", Command: "echo preparing"},
+			{Name: "session", Type: schema.TaskTypeExec, Command: "echo session"},
+		},
+	}
+
+	// Dry-run exercises validation and the exec routing without replacing the process.
+	err = ExecuteWorkflow(atmosConfig, "exec-dry-run", "test.yaml", workflowDefinition, true, "", "", "")
+	require.NoError(t, err)
+}
+
+func TestExecuteWorkflow_ExecStepNotLastFails(t *testing.T) {
+	testDir := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	workflowDefinition := &schema.WorkflowDefinition{
+		Description: "Exec step in the wrong position",
+		Steps: []schema.WorkflowStep{
+			{Name: "session", Type: schema.TaskTypeExec, Command: "echo session"},
+			{Name: "after", Type: "shell", Command: "echo never runs"},
+		},
+	}
+
+	// Validation must fail before any step executes, even in dry-run.
+	err = ExecuteWorkflow(atmosConfig, "exec-not-last", "test.yaml", workflowDefinition, true, "", "", "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, schema.ErrExecStepNotLast)
 }

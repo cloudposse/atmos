@@ -149,6 +149,90 @@ func TestBuildGlobalAuthSection(t *testing.T) {
 			},
 		},
 		{
+			name: "realm included when explicitly configured",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm:       "my-project",
+					RealmSource: "config",
+				},
+			},
+			expected: map[string]any{
+				"realm": "my-project",
+			},
+		},
+		{
+			name: "realm included when set via env",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm:       "env-realm",
+					RealmSource: "env",
+				},
+			},
+			expected: map[string]any{
+				"realm": "env-realm",
+			},
+		},
+		{
+			name: "realm excluded when auto-computed from config-path",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm:       "b80ea18be93f8201",
+					RealmSource: "config-path",
+				},
+			},
+			expected: map[string]any{},
+		},
+		{
+			name: "realm excluded when default",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm:       "default",
+					RealmSource: "default",
+				},
+			},
+			expected: map[string]any{},
+		},
+		{
+			name: "realm excluded when empty",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm: "",
+				},
+			},
+			expected: map[string]any{},
+		},
+		{
+			name: "all sections including explicit realm",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Realm:       "prod-realm",
+					RealmSource: "config",
+					Providers: map[string]schema.Provider{
+						"aws": {Kind: "aws-iam"},
+					},
+					Identities: map[string]schema.Identity{
+						"dev": {Kind: "aws"},
+					},
+					Logs:    schema.Logs{Level: "info"},
+					Keyring: schema.KeyringConfig{Type: "file"},
+				},
+			},
+			expected: map[string]any{
+				"realm": "prod-realm",
+				"providers": map[string]schema.Provider{
+					"aws": {Kind: "aws-iam"},
+				},
+				"identities": map[string]schema.Identity{
+					"dev": {Kind: "aws"},
+				},
+				"logs": map[string]any{
+					"level": "info",
+					"file":  "",
+				},
+				"keyring": schema.KeyringConfig{Type: "file"},
+			},
+		},
+		{
 			name: "empty maps are excluded",
 			config: &schema.AtmosConfiguration{
 				Auth: schema.AuthConfig{
@@ -296,6 +380,16 @@ func TestStoreAutoDetectedIdentity(t *testing.T) {
 			expectedIdentity: "existing-role",
 		},
 		{
+			name:            "interactive select sentinel stores selected identity",
+			initialIdentity: cfg.IdentityFlagSelectValue,
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{"selected-role"})
+				return m
+			},
+			expectedIdentity: "selected-role",
+		},
+		{
 			name:            "empty chain does not update",
 			initialIdentity: "",
 			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
@@ -343,6 +437,90 @@ func TestStoreAutoDetectedIdentity(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.expectedIdentity, info.Identity)
+		})
+	}
+}
+
+func TestHookStoreDefaultIdentity(t *testing.T) {
+	tests := []struct {
+		name             string
+		setupMock        func(ctrl *gomock.Controller) *mockTypes.MockAuthManager
+		nilManager       bool
+		initialIdentity  string
+		expectedReturn   string
+		expectedIdentity string // info.Identity after the call (auto-detect may populate it).
+	}{
+		{
+			name:             "nil manager returns empty (ambient/default credentials preserved)",
+			nilManager:       true,
+			initialIdentity:  "",
+			expectedReturn:   "",
+			expectedIdentity: "",
+		},
+		{
+			name:            "no explicit identity inherits the auto-detected chain leaf",
+			initialIdentity: "",
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{"permission-set", "core-identity/devops"})
+				return m
+			},
+			expectedReturn:   "core-identity/devops",
+			expectedIdentity: "core-identity/devops",
+		},
+		{
+			name:            "empty chain yields no inheritance",
+			initialIdentity: "",
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{})
+				return m
+			},
+			expectedReturn:   "",
+			expectedIdentity: "",
+		},
+		{
+			name:             "explicit identity is preserved without consulting the chain",
+			initialIdentity:  "cli-admin",
+			setupMock:        mockTypes.NewMockAuthManager, // GetChain must NOT be called.
+			expectedReturn:   "cli-admin",
+			expectedIdentity: "cli-admin",
+		},
+		{
+			name:            "interactive select sentinel resolves to the chain leaf",
+			initialIdentity: cfg.IdentityFlagSelectValue,
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{"core-identity/managers"})
+				return m
+			},
+			expectedReturn:   "core-identity/managers",
+			expectedIdentity: "core-identity/managers",
+		},
+		{
+			name:             "disabled sentinel yields no inheritance",
+			initialIdentity:  cfg.IdentityFlagDisabledValue,
+			setupMock:        mockTypes.NewMockAuthManager, // GetChain must NOT be called.
+			expectedReturn:   "",
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+
+			info := &schema.ConfigAndStacksInfo{Identity: tt.initialIdentity}
+
+			var got string
+			if tt.nilManager {
+				got = HookStoreDefaultIdentity(nil, info)
+			} else {
+				got = HookStoreDefaultIdentity(tt.setupMock(ctrl), info)
+			}
+
+			assert.Equal(t, tt.expectedReturn, got, "returned default identity")
+			assert.Equal(t, tt.expectedIdentity, info.Identity, "info.Identity after call")
 		})
 	}
 }
@@ -519,6 +697,24 @@ func TestGetMergedAuthConfigWithFetcher_ComponentConfigSuccess(t *testing.T) {
 	assert.NotNil(t, result)
 }
 
+func TestGetMergedAuthConfigWithFetcher_PassesComponentType(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		ComponentFromArg: "demo",
+		ComponentType:    cfg.HelmComponentType,
+	}
+
+	mockFetcher := func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+		assert.Equal(t, cfg.HelmComponentType, params.ComponentType)
+		return map[string]any{}, nil
+	}
+
+	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
 func TestGetMergedAuthConfigWithFetcher_InvalidComponentError(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	info := &schema.ConfigAndStacksInfo{
@@ -607,7 +803,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_Success(t *testing.T) {
 	}
 
 	// Mock auth creator returns a mock manager.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return mockManager, nil
 	}
 
@@ -631,7 +827,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_InvalidComponentError(t *testi
 	}
 
 	// Mock auth creator - should not be called.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		t.Fatal("auth creator should not be called when component is invalid")
 		return nil, nil
 	}
@@ -655,7 +851,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_AuthCreatorError(t *testing.T)
 	}
 
 	// Mock auth creator returns an error.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return nil, errors.New("auth failed")
 	}
 
@@ -684,7 +880,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_OtherMergeError(t *testing.T) 
 	}
 
 	// Mock auth creator should still be called because getMergedAuthConfigWithFetcher handles errors gracefully.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return nil, nil
 	}
 
@@ -706,13 +902,151 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_NilAuthManager(t *testing.T) {
 	}
 
 	// Mock auth creator returns nil (no auth configured).
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return nil, nil
 	}
 
 	result, err := createAndAuthenticateAuthManagerWithDeps(atmosConfig, info, mockFetcher, mockCreator)
 	assert.NoError(t, err)
 	assert.Nil(t, result)
+}
+
+func TestGetMergedAuthConfigWithFetcher_RealmPropagated(t *testing.T) {
+	// Verify realm is propagated through CopyGlobalAuthConfig when no component auth exists.
+	// This is the --all path: each component iteration must preserve the realm.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Realm:       "my-project",
+			RealmSource: "config",
+			Providers: map[string]schema.Provider{
+				"aws": {Kind: "aws-iam"},
+			},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev-us-west-2",
+		ComponentFromArg: "vpc",
+	}
+
+	// Mock fetcher returns component config without auth section.
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			"vars": map[string]any{"test": "value"},
+		}, nil
+	}
+
+	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "my-project", result.Realm)
+	assert.Equal(t, "config", result.RealmSource)
+}
+
+func TestGetMergedAuthConfigWithFetcher_RealmPropagatedWithEmptyStack(t *testing.T) {
+	// When stack is empty (global auth only path), realm must still be preserved.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Realm:       "env-realm",
+			RealmSource: "env",
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "",
+		ComponentFromArg: "",
+	}
+
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		t.Fatal("fetcher should not be called when stack is empty")
+		return nil, nil
+	}
+
+	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "env-realm", result.Realm)
+	assert.Equal(t, "env", result.RealmSource)
+}
+
+func TestMergeGlobalAuthConfig_RealmPropagated(t *testing.T) {
+	// Verify explicitly configured realm is included in the merged auth section map.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Realm:       "my-project",
+			RealmSource: "config",
+			Providers: map[string]schema.Provider{
+				"aws": {Kind: "aws-iam"},
+			},
+		},
+	}
+	componentSection := map[string]any{}
+
+	result := mergeGlobalAuthConfig(atmosConfig, componentSection)
+	assert.Contains(t, result, "realm")
+	assert.Equal(t, "my-project", result["realm"])
+	assert.Contains(t, result, "providers")
+}
+
+func TestMergeGlobalAuthConfig_NoRealmConfigured(t *testing.T) {
+	// When no realm is configured, the merged map should not contain a "realm" key.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"aws": {Kind: "aws-iam"},
+			},
+		},
+	}
+	componentSection := map[string]any{}
+
+	result := mergeGlobalAuthConfig(atmosConfig, componentSection)
+	assert.NotContains(t, result, "realm")
+	assert.Contains(t, result, "providers")
+}
+
+func TestMergeGlobalAuthConfig_AutoRealmExcluded(t *testing.T) {
+	// Auto-computed realm (from config-path hash) should not appear in merged output.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Realm:       "b80ea18be93f8201",
+			RealmSource: "config-path",
+			Providers: map[string]schema.Provider{
+				"aws": {Kind: "aws-iam"},
+			},
+		},
+	}
+	componentSection := map[string]any{}
+
+	result := mergeGlobalAuthConfig(atmosConfig, componentSection)
+	assert.NotContains(t, result, "realm")
+	assert.Contains(t, result, "providers")
+}
+
+func TestGetMergedAuthConfigWithFetcher_NoRealmPreservesEmptyRealm(t *testing.T) {
+	// When no realm is configured, the merged config should have empty realm — same as before the fix.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"aws": {Kind: "aws-iam"},
+			},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev-us-west-2",
+		ComponentFromArg: "vpc",
+	}
+
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			"vars": map[string]any{"test": "value"},
+		}, nil
+	}
+
+	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Empty(t, result.Realm)
+	assert.Empty(t, result.RealmSource)
+	// Providers should still be present.
+	assert.Len(t, result.Providers, 1)
 }
 
 func TestGetMergedAuthConfigWithFetcher_MergeReturnsError(t *testing.T) {
@@ -764,7 +1098,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_PreservesExistingIdentity(t *t
 		return nil, nil
 	}
 
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ string) (auth.AuthManager, error) {
 		return mockManager, nil
 	}
 

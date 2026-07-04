@@ -1,0 +1,2 @@
+# Decrypted scratch files should never be committed.
+secrets/*.dec.yaml
