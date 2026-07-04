@@ -204,6 +204,7 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 			Info:          info,
 			Cmd:           cmd,
 			Args:          args,
+			HookName:      name,
 			Outcome:       outcome,
 			ToolchainPATH: h.toolchainPATH,
 		}); err != nil {

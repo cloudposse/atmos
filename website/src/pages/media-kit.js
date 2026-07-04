@@ -92,24 +92,48 @@ const animatedWordmarks = [
     ),
   },
   {
-    title: "Atmos CI Gradient",
-    variant: "CI on dark",
+    title: "Atmos CI GitHub Badge",
+    variant: "On dark",
     tone: "dark",
     usage:
-      "The animated Atmos CI lockup for dark native CI summaries, CI docs, and CI-related placements.",
+      "The compact Atmos CI badge used in GitHub PR comments and dark CI surfaces.",
     preview: "/img/atmos-ci-gradient.svg",
     files: mediaKitFiles("atmos-ci-gradient", "/img/atmos-ci-gradient.svg"),
   },
   {
-    title: "Atmos CI Gradient",
-    variant: "CI on light",
+    title: "Atmos CI GitHub Badge",
+    variant: "On light",
     tone: "light",
     usage:
-      "The animated Atmos CI lockup tuned for white and light neutral CI placements.",
+      "The compact Atmos CI badge tuned for white and light neutral CI surfaces.",
     preview: "/img/atmos-ci-gradient-on-light.svg",
     files: mediaKitFiles(
       "atmos-ci-gradient-on-light",
       "/img/atmos-ci-gradient-on-light.svg",
+    ),
+  },
+  {
+    title: "Atmos CI Gradient Lockup",
+    variant: "CI on dark",
+    tone: "dark",
+    usage:
+      "The animated Atmos CI lockup for dark native CI summaries, CI docs, and CI-related placements.",
+    preview: "/img/atmos-ci-lockup-gradient.svg",
+    files: mediaKitFiles(
+      "atmos-ci-lockup-gradient",
+      "/img/atmos-ci-lockup-gradient.svg",
+    ),
+  },
+  {
+    title: "Atmos CI Gradient Lockup",
+    variant: "CI on light",
+    tone: "light",
+    usage:
+      "The animated Atmos CI lockup tuned for white and light neutral CI placements.",
+    preview: "/img/atmos-ci-lockup-gradient-on-light.svg",
+    files: mediaKitFiles(
+      "atmos-ci-lockup-gradient-on-light",
+      "/img/atmos-ci-lockup-gradient-on-light.svg",
     ),
   },
   {
@@ -548,8 +572,8 @@ export default function MediaKitPage() {
           <p className={styles.sectionLede}>
             Show that your project runs on Atmos using real SVG badges from the
             media kit. Use the dark badge on light surfaces, the light badge on
-            dark surfaces, and the CI gradient badge — in dark or light — for
-            Atmos CI placements.
+            dark surfaces, and the Atmos CI GitHub badge for PR comments and CI
+            surfaces.
           </p>
           <div className={styles.assetGrid}>
             {poweredBy.map((badge) => (
