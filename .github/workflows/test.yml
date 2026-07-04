@@ -499,7 +499,18 @@ jobs:
             brew untap aws/tap
           fi
           brew install colima docker qemu
-          colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20
+          for attempt in 1 2 3; do
+            if colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20; then
+              break
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+
+            colima delete --force || true
+            sleep $((attempt * 20))
+          done
           docker version
 
       - name: Download build artifacts
