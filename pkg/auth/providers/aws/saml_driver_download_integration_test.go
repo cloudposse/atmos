@@ -17,6 +17,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const playwrightIntegrationDriverVersion = "1.60.0"
+
 // TestPlaywrightDriverDownload_Integration validates that the actual Playwright driver download works.
 // This is an integration test that downloads real browser drivers (~100-300MB).
 // It is skipped by default and must be explicitly enabled with:
@@ -94,13 +96,17 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 	// Test the actual Playwright driver installation.
 	t.Log("Starting Playwright driver download (this may take 1-2 minutes)...")
 
+	driverDir := filepath.Join(testHomeDir, ".cache", "ms-playwright-go", playwrightIntegrationDriverVersion)
 	runOptions := playwright.RunOptions{
+		DriverDirectory:     driverDir,
 		SkipInstallBrowsers: false,
 		Browsers:            []string{"chromium"}, // Only download Chromium to save time.
 	}
 
-	err = playwright.Install(&runOptions)
-	require.NoError(t, err, "Playwright driver installation should succeed")
+	driver, err := playwright.NewDriver(&runOptions)
+	require.NoError(t, err)
+	driver.Version = playwrightIntegrationDriverVersion
+	require.NoError(t, driver.Install(), "Playwright driver installation should succeed")
 
 	t.Log("Playwright drivers downloaded successfully")
 
