@@ -3,7 +3,6 @@ package provider
 
 import (
 	"context"
-	"io"
 
 	"github.com/cloudposse/atmos/pkg/ci/cache"
 )
@@ -80,20 +79,14 @@ type DebugModeDetector interface {
 	IsDebugMode() bool
 }
 
-// LogGrouper is an optional capability for CI providers whose log viewer
-// supports collapsible, named groups (for example GitHub Actions' workflow
-// commands `::group::<name>` / `::endgroup::`). Providers implement this when
-// their platform documents a way to fold a region of the run log under a
-// label. Callers (the custom-command and workflow step runners) use it to wrap
-// each step's output in its own collapsible group. Providers without log
-// grouping simply do not implement this interface, and grouping becomes a
-// no-op for them.
+// LogGrouper is an optional capability for providers that can group log output
+// in the current run (for example, GitHub Actions' ::group:: workflow command).
 type LogGrouper interface {
-	// StartGroup writes a group-start marker named `name` to w.
-	StartGroup(w io.Writer, name string)
+	// StartLogGroup opens a collapsible log group with the given title.
+	StartLogGroup(title string) error
 
-	// EndGroup writes the matching group-end marker to w.
-	EndGroup(w io.Writer)
+	// EndLogGroup closes the current log group.
+	EndLogGroup() error
 }
 
 // CacheProvider is an optional capability for CI providers that expose a remote

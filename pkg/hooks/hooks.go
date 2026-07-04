@@ -242,6 +242,7 @@ func (h *Hooks) runResolvedHook(name string, kind *Kind, executionHook *Hook, ct
 		Info:          ctx.info,
 		Cmd:           ctx.cmd,
 		Args:          ctx.args,
+		HookName:      name,
 		Outcome:       ctx.outcome,
 		ToolchainPATH: h.toolchainPATH,
 	}

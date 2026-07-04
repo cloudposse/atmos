@@ -3,6 +3,13 @@ base_path: "."
 workflows:
   base_path: "workflows"
 
+# Enable native CI summaries for the container build/push examples when they run
+# under GitHub Actions or another detected CI provider.
+ci:
+  enabled: true
+  summary:
+    enabled: true
+
 # Global container runtime defaults (the top-level `container:` namespace).
 container:
   runtime:

@@ -1,10 +1,7 @@
 package ci
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
-	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,26 +13,28 @@ import (
 // mockGroupingProvider is a mockProvider that also implements provider.LogGrouper.
 type mockGroupingProvider struct {
 	*mockProvider
+	started []string
+	ended   int
 }
 
-func (m *mockGroupingProvider) StartGroup(w io.Writer, name string) { fmt.Fprintln(w, "START:"+name) }
+func (m *mockGroupingProvider) StartLogGroup(name string) error {
+	m.started = append(m.started, name)
+	return nil
+}
 
-func (m *mockGroupingProvider) EndGroup(w io.Writer) { fmt.Fprintln(w, "END") }
-
-// setLogGroupOut redirects log-group marker output to buf for the duration of t.
-func setLogGroupOut(t *testing.T, buf *bytes.Buffer) {
-	t.Helper()
-	prev := logGroupOut
-	logGroupOut = buf
-	t.Cleanup(func() { logGroupOut = prev })
+func (m *mockGroupingProvider) EndLogGroup() error {
+	m.ended++
+	return nil
 }
 
 // registerGrouping installs a detected, grouping-capable provider for the duration of t.
-func registerGrouping(t *testing.T) {
+func registerGrouping(t *testing.T) *mockGroupingProvider {
 	t.Helper()
 	restore := SwapRegistryForTest()
 	t.Cleanup(restore)
-	Register(&mockGroupingProvider{mockProvider: &mockProvider{name: "mock-grouping", detected: true}})
+	p := &mockGroupingProvider{mockProvider: &mockProvider{name: "mock-grouping", detected: true}}
+	Register(p)
+	return p
 }
 
 // modeConfig returns a CI-enabled config with the given groups mode.
@@ -47,33 +46,32 @@ func modeConfig(mode string) *schema.AtmosConfiguration {
 }
 
 func TestGroup_EmitsMarkersWhenStepDimensionActive(t *testing.T) {
-	registerGrouping(t)
-	var buf bytes.Buffer
-	setLogGroupOut(t, &buf)
+	p := registerGrouping(t)
 
 	called := false
 	// Default (empty) mode resolves to auto, under which DimensionStep is active.
 	err := Group(modeConfig(""), DimensionStep, "terraform init", func() error {
-		assert.Equal(t, "START:terraform init\n", buf.String())
+		assert.Equal(t, []string{"terraform init"}, p.started)
+		assert.Zero(t, p.ended)
 		called = true
 		return nil
 	})
 
 	require.NoError(t, err)
 	assert.True(t, called)
-	assert.Equal(t, "START:terraform init\nEND\n", buf.String())
+	assert.Equal(t, []string{"terraform init"}, p.started)
+	assert.Equal(t, 1, p.ended)
 }
 
 func TestGroup_EndMarkerEmittedOnError(t *testing.T) {
-	registerGrouping(t)
-	var buf bytes.Buffer
-	setLogGroupOut(t, &buf)
+	p := registerGrouping(t)
 
 	sentinel := errors.New("step failed")
 	err := Group(modeConfig(GroupModeAuto), DimensionStep, "apply", func() error { return sentinel })
 
 	require.ErrorIs(t, err, sentinel)
-	assert.Equal(t, "START:apply\nEND\n", buf.String())
+	assert.Equal(t, []string{"apply"}, p.started)
+	assert.Equal(t, 1, p.ended)
 }
 
 func TestGroup_DimensionVsMode(t *testing.T) {
@@ -94,17 +92,17 @@ func TestGroup_DimensionVsMode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			registerGrouping(t)
-			var buf bytes.Buffer
-			setLogGroupOut(t, &buf)
+			p := registerGrouping(t)
 
 			called := false
 			require.NoError(t, Group(modeConfig(tt.mode), tt.dim, "x", func() error { called = true; return nil }))
 			assert.True(t, called, "fn must always run")
 			if tt.grouped {
-				assert.Equal(t, "START:x\nEND\n", buf.String())
+				assert.Equal(t, []string{"x"}, p.started)
+				assert.Equal(t, 1, p.ended)
 			} else {
-				assert.Empty(t, buf.String())
+				assert.Empty(t, p.started)
+				assert.Zero(t, p.ended)
 			}
 		})
 	}
@@ -115,9 +113,7 @@ func TestDimensionActive_UnknownDimension(t *testing.T) {
 }
 
 func TestGroup_NoNestedGroups(t *testing.T) {
-	registerGrouping(t)
-	var buf bytes.Buffer
-	setLogGroupOut(t, &buf)
+	p := registerGrouping(t)
 
 	inner := false
 	err := Group(modeConfig(GroupModeAuto), DimensionStep, "outer", func() error {
@@ -129,7 +125,8 @@ func TestGroup_NoNestedGroups(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, inner)
-	assert.Equal(t, "START:outer\nEND\n", buf.String())
+	assert.Equal(t, []string{"outer"}, p.started)
+	assert.Equal(t, 1, p.ended)
 }
 
 func TestGroup_NoOpCases(t *testing.T) {
@@ -148,8 +145,9 @@ func TestGroup_NoOpCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			var p *mockGroupingProvider
 			if tt.register {
-				registerGrouping(t)
+				p = registerGrouping(t)
 			} else {
 				restore := SwapRegistryForTest()
 				t.Cleanup(restore)
@@ -157,15 +155,16 @@ func TestGroup_NoOpCases(t *testing.T) {
 			if tt.sentinelOn {
 				t.Setenv(logGroupSentinelEnvVar, "1")
 			}
-			var buf bytes.Buffer
-			setLogGroupOut(t, &buf)
 
 			called := false
 			err := Group(tt.config, DimensionStep, "step", func() error { called = true; return nil })
 
 			require.NoError(t, err)
 			assert.True(t, called, "fn must still run when grouping is a no-op")
-			assert.Empty(t, buf.String(), "no markers when grouping inactive")
+			if p != nil {
+				assert.Empty(t, p.started, "no markers when grouping inactive")
+				assert.Zero(t, p.ended, "no markers when grouping inactive")
+			}
 		})
 	}
 }
@@ -176,15 +175,11 @@ func TestGroup_NoOpWhenProviderLacksGrouping(t *testing.T) {
 	// mockProvider (no LogGrouper) is detected but cannot group.
 	Register(&mockProvider{name: "mock-plain", detected: true})
 
-	var buf bytes.Buffer
-	setLogGroupOut(t, &buf)
-
 	called := false
 	err := Group(modeConfig(GroupModeAuto), DimensionStep, "step", func() error { called = true; return nil })
 
 	require.NoError(t, err)
 	assert.True(t, called)
-	assert.Empty(t, buf.String())
 }
 
 func TestGroupingEnabled(t *testing.T) {
@@ -240,8 +235,6 @@ func TestShouldPropagateLogGroupSentinel(t *testing.T) {
 
 func TestShouldPropagateLogGroupSentinel_WhenGroupAlreadyOpen(t *testing.T) {
 	registerGrouping(t)
-	var buf bytes.Buffer
-	setLogGroupOut(t, &buf)
 
 	err := Group(modeConfig(GroupModeInvocation), DimensionInvocation, "atmos workflow deploy", func() error {
 		assert.True(t, ShouldPropagateLogGroupSentinel(modeConfig(GroupModeInvocation), DimensionStep))

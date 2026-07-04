@@ -104,6 +104,9 @@ func (e *CommandEngine) Run(ctx *ExecContext) (*Output, error) {
 		return nil, err
 	}
 
+	endLogGroup := startHookLogGroup(ctx)
+	defer endLogGroup()
+
 	runErr := runSubprocess(prep)
 	updateExecCtx(ctx, outputFile, tmpDir, runErr)
 
@@ -281,6 +284,44 @@ func renderTerminal(ctx *ExecContext, out *Output) {
 		ui.Writeln("")
 		ui.MarkdownMessage(string(out.Artifact.Body))
 	}
+}
+
+func startHookLogGroup(ctx *ExecContext) func() {
+	if !ciEnabled(ctx) {
+		return func() {}
+	}
+	return ci.StartLogGroup(hookLogGroupTitle(ctx))
+}
+
+func hookLogGroupTitle(ctx *ExecContext) string {
+	if ctx == nil {
+		return "hook"
+	}
+
+	label := strings.TrimSpace(ctx.HookName)
+	kind := ""
+	command := ""
+	if ctx.Hook != nil {
+		kind = strings.TrimSpace(ctx.Hook.Kind)
+		command = strings.TrimSpace(ctx.Hook.Command)
+	}
+	if label == "" {
+		label = kind
+	}
+	if label == "" {
+		label = command
+	}
+	if label == "" {
+		label = "hook"
+	}
+
+	if kind != "" && kind != label {
+		label = fmt.Sprintf("%s (%s)", label, kind)
+	}
+	if ctx.Event != "" {
+		return fmt.Sprintf("hook %s - %s", label, ctx.Event)
+	}
+	return fmt.Sprintf("hook %s", label)
 }
 
 // BuildAtmosEnv exposes the ATMOS_* env-var map builder to engines outside the

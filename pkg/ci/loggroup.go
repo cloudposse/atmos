@@ -1,13 +1,12 @@
 package ci
 
 import (
-	"io"
 	"os"
 	"strings"
 	"sync/atomic"
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
-	iolib "github.com/cloudposse/atmos/pkg/io"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -52,14 +51,6 @@ const (
 // it skips its own grouping so nested `atmos` invocations do not emit
 // unsupported nested groups.
 const logGroupSentinelEnvVar = "ATMOS_CI_LOG_GROUP_ACTIVE"
-
-// logGroupOut is where Group writes log-group markers. It defaults to os.Stdout
-// — the stream the CI runner reads workflow commands from, and the stream that
-// carries forwarded subprocess output, which keeps the start/content/end
-// ordering correct — and is overridable in tests.
-//
-//nolint:gochecknoglobals // test seam for stdout-bound workflow commands.
-var logGroupOut io.Writer = os.Stdout
 
 // logGroupDepth guards against in-process re-entry: only the outermost Group
 // emits markers.
@@ -163,10 +154,6 @@ func ShouldPropagateLogGroupSentinel(atmosConfig *schema.AtmosConfiguration, dim
 // an error or panics), so a failing operation never leaves a group open. Nested
 // calls within the same process do not emit nested groups — only the outermost
 // Group emits markers.
-//
-// Markers are written through a masking writer so a secret resolved into the
-// group label (for example a step command containing a `!secret` value) is not
-// leaked into the CI log.
 func Group(atmosConfig *schema.AtmosConfiguration, dim Dimension, name string, fn func() error) error {
 	defer perf.Track(nil, "ci.Group")()
 
@@ -182,9 +169,15 @@ func Group(atmosConfig *schema.AtmosConfiguration, dim Dimension, name string, f
 	}
 	defer atomic.AddInt32(&logGroupDepth, -1)
 
-	out := iolib.MaskWriter(logGroupOut)
-	lg.StartGroup(out, name)
-	defer lg.EndGroup(out)
+	if err := lg.StartLogGroup(name); err != nil {
+		log.Debug("Failed to start CI log group", "title", name, "error", err)
+		return fn()
+	}
+	defer func() {
+		if err := lg.EndLogGroup(); err != nil {
+			log.Debug("Failed to end CI log group", "title", name, "error", err)
+		}
+	}()
 
 	return fn()
 }
