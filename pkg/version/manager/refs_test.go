@@ -46,7 +46,7 @@ func TestPinInheritsThroughPolicyChain(t *testing.T) {
 			},
 			Tracks: map[string]schema.VersionTrack{
 				"prod": {
-					Versions: map[string]schema.VersionEntry{
+					Dependencies: map[string]schema.VersionEntry{
 						"checkout": {Ecosystem: "github/actions", Package: "actions/checkout", Desired: "v6"},
 						"nginx": {
 							Ecosystem: "oci",

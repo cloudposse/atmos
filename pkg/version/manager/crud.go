@@ -24,12 +24,21 @@ var (
 // mode cannot be determined.
 const configFilePerm os.FileMode = 0o644
 
-// entryPath returns the dot path to a version entry inside atmos.yaml.
+// entryPath returns the canonical dot path to a dependency entry inside
+// atmos.yaml.
 func entryPath(track, name string) string {
-	return fmt.Sprintf("version.tracks.%s.versions.%s", track, name)
+	return fmt.Sprintf("version.tracks.%s.dependencies.%s", track, name)
 }
 
-// AddEntry writes a new version entry into the editable atmos.yaml,
+func existingEntryPath(content []byte, track, name string) (string, error) {
+	path := entryPath(track, name)
+	if _, err := atmosyaml.Get(content, path); err == nil {
+		return path, nil
+	}
+	return "", ErrEntryNotFound
+}
+
+// AddEntry writes a new dependency entry into the editable atmos.yaml,
 // preserving comments and formatting, and returns the file modified. It fails
 // with ErrEntryExists when the entry is already configured.
 func AddEntry(atmosConfig *schema.AtmosConfiguration, track, name string, entry *schema.VersionEntry) (string, error) {
@@ -41,7 +50,7 @@ func AddEntry(atmosConfig *schema.AtmosConfiguration, track, name string, entry 
 		return "", err
 	}
 	path := entryPath(track, name)
-	if _, err := atmosyaml.Get(content, path); err == nil {
+	if _, err := existingEntryPath(content, track, name); err == nil {
 		return "", fmt.Errorf("%w: %s in track %s (%s)", ErrEntryExists, name, track, file)
 	}
 	document, err := json.Marshal(entryDocument(entry))
@@ -55,7 +64,7 @@ func AddEntry(atmosConfig *schema.AtmosConfiguration, track, name string, entry 
 	return file, writeConfig(file, updated)
 }
 
-// SetEntryFields updates fields of an existing version entry (dot-relative
+// SetEntryFields updates fields of an existing dependency entry (dot-relative
 // paths such as "desired" or "update.pin") and returns the file modified.
 func SetEntryFields(atmosConfig *schema.AtmosConfiguration, track, name string, fields map[string]string) (string, error) {
 	defer perf.Track(atmosConfig, "manager.SetEntryFields")()
@@ -65,8 +74,8 @@ func SetEntryFields(atmosConfig *schema.AtmosConfiguration, track, name string, 
 	if err != nil {
 		return "", err
 	}
-	path := entryPath(track, name)
-	if _, err := atmosyaml.Get(content, path); err != nil {
+	path, err := existingEntryPath(content, track, name)
+	if err != nil {
 		return "", fmt.Errorf("%w: %s in track %s (%s)", ErrEntryNotFound, name, track, file)
 	}
 	for field, value := range fields {
@@ -78,7 +87,7 @@ func SetEntryFields(atmosConfig *schema.AtmosConfiguration, track, name string, 
 	return file, writeConfig(file, content)
 }
 
-// RemoveEntry deletes a version entry and returns the file modified.
+// RemoveEntry deletes a dependency entry and returns the file modified.
 func RemoveEntry(atmosConfig *schema.AtmosConfiguration, track, name string) (string, error) {
 	defer perf.Track(atmosConfig, "manager.RemoveEntry")()
 
@@ -87,8 +96,8 @@ func RemoveEntry(atmosConfig *schema.AtmosConfiguration, track, name string) (st
 	if err != nil {
 		return "", err
 	}
-	path := entryPath(track, name)
-	if _, err := atmosyaml.Get(content, path); err != nil {
+	path, err := existingEntryPath(content, track, name)
+	if err != nil {
 		return "", fmt.Errorf("%w: %s in track %s (%s)", ErrEntryNotFound, name, track, file)
 	}
 	updated, err := atmosyaml.Delete(content, path)

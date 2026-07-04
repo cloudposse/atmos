@@ -96,7 +96,10 @@ func EffectiveEntries(atmosConfig *schema.AtmosConfiguration, track string) (map
 	track = EffectiveTrack(atmosConfig, track)
 	versionTrack, ok := atmosConfig.Version.Tracks[track]
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrTrackNotFound, track)
+		if !canUseBaseCatalogTrack(atmosConfig, track) {
+			return nil, fmt.Errorf("%w: %s", ErrTrackNotFound, track)
+		}
+		versionTrack = schema.VersionTrack{}
 	}
 
 	entries, err := collectTrackEntries(atmosConfig, &versionTrack)
@@ -112,22 +115,76 @@ func EffectiveEntries(atmosConfig *schema.AtmosConfiguration, track string) (map
 	return result, nil
 }
 
-// collectTrackEntries merges a track's version entries over its extended parent.
+func canUseBaseCatalogTrack(atmosConfig *schema.AtmosConfiguration, track string) bool {
+	if len(atmosConfig.Version.Dependencies) == 0 {
+		return false
+	}
+	if atmosConfig.Version.Track != "" {
+		return track == atmosConfig.Version.Track
+	}
+	return track == DefaultTrack
+}
+
+// collectTrackEntries merges the base dependency catalog, extended parent
+// tracks, and the requested track's dependency overrides.
 func collectTrackEntries(atmosConfig *schema.AtmosConfiguration, versionTrack *schema.VersionTrack) (map[string]schema.VersionEntry, error) {
 	entries := map[string]schema.VersionEntry{}
+	mergeEntrySet(entries, atmosConfig.Version.Dependencies)
 	if versionTrack.Extends != "" {
 		parent, ok := atmosConfig.Version.Tracks[versionTrack.Extends]
 		if !ok {
 			return nil, fmt.Errorf("%w: %s", ErrTrackNotFound, versionTrack.Extends)
 		}
-		for name := range parent.Versions {
-			entries[name] = parent.Versions[name]
+		parentEntries, err := collectTrackEntries(atmosConfig, &parent)
+		if err != nil {
+			return nil, err
 		}
+		entries = parentEntries
 	}
-	for name := range versionTrack.Versions {
-		entries[name] = versionTrack.Versions[name]
-	}
+	mergeEntrySet(entries, versionTrack.Dependencies)
 	return entries, nil
+}
+
+// mergeEntrySet overlays entries field-by-field so track dependencies can
+// override only desired, policy, or metadata while inheriting the base catalog
+// coordinate.
+func mergeEntrySet(entries map[string]schema.VersionEntry, overlay map[string]schema.VersionEntry) {
+	for name, entry := range overlay {
+		entries[name] = mergeEntry(entries[name], entry)
+	}
+}
+
+func mergeEntry(base, override schema.VersionEntry) schema.VersionEntry {
+	result := base
+	if override.Ecosystem != "" {
+		result.Ecosystem = override.Ecosystem
+	}
+	if override.Datasource != "" {
+		result.Datasource = override.Datasource
+	}
+	if override.Provider != "" {
+		result.Provider = override.Provider
+	}
+	if override.Package != "" {
+		result.Package = override.Package
+	}
+	if override.Desired != "" {
+		result.Desired = override.Desired
+	}
+	if override.Group != "" {
+		result.Group = override.Group
+	}
+	result.Update = mergeUpdatePolicy(result.Update, override.Update)
+	if len(override.Allow) > 0 {
+		result.Allow = append([]string{}, override.Allow...)
+	}
+	if len(override.Ignore) > 0 {
+		result.Ignore = append([]string{}, override.Ignore...)
+	}
+	if len(override.Labels) > 0 {
+		result.Labels = append([]string{}, override.Labels...)
+	}
+	return result
 }
 
 // buildEffectiveEntry applies the policy inheritance chain to a single entry:

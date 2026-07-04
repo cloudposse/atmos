@@ -244,46 +244,50 @@ version:
         cooldown: 14d
       labels: [infrastructure]
 
+  dependencies:
+    opentofu:
+      ecosystem: toolchain
+      datasource: toolchain
+      package: opentofu
+      desired: "~1.10"
+
+    dd_forwarder:
+      ecosystem: github
+      datasource: github-tags
+      provider: github
+      package: DataDog/datadog-serverless-functions
+      desired: "~5.4"
+
+    nginx:
+      ecosystem: oci
+      datasource: oci-tags
+      provider: dockerhub
+      package: library/nginx
+      desired: "~1.28"
+
+    private_api:
+      ecosystem: oci
+      datasource: oci-tags
+      provider: ecr_prod
+      package: platform/private-api
+      desired: "~2.7"
+
+    checkout:
+      ecosystem: github/actions
+      datasource: github-tags
+      provider: github
+      package: actions/checkout
+      desired: "v6"
+
   tracks:
     prod:
       defaults:
         update:
           cooldown: 30d
 
-      versions:
-        opentofu:
-          ecosystem: toolchain
-          datasource: toolchain
-          package: opentofu
-          desired: "~1.10"
-
-        dd_forwarder:
-          ecosystem: github
-          datasource: github-tags
-          provider: github
-          package: DataDog/datadog-serverless-functions
-          desired: "~5.4"
-
+      dependencies:
         nginx:
-          ecosystem: oci
-          datasource: oci-tags
-          provider: dockerhub
-          package: library/nginx
-          desired: "~1.28"
-
-        private_api:
-          ecosystem: oci
-          datasource: oci-tags
-          provider: ecr_prod
-          package: platform/private-api
-          desired: "~2.7"
-
-        checkout:
-          ecosystem: github/actions
-          datasource: github-tags
-          provider: github
-          package: actions/checkout
-          desired: "v6"
+          desired: "~1.29"
 ```
 
 ---
@@ -313,11 +317,11 @@ Relative paths resolve from the Atmos base path.
 
 Defines named providers and their auth/address metadata.
 
-Provider names are arbitrary and are referenced from version entries.
+Provider names are arbitrary and are referenced from dependency entries.
 
 ### `version.defaults`
 
-Default policy inherited by all tracks and version entries.
+Default policy inherited by all tracks and dependency entries.
 
 Supported fields:
 
@@ -347,6 +351,10 @@ Supported policy fields:
 - `ignore`
 - `labels`
 
+### `version.dependencies`
+
+Defines the base catalog of external dependencies Atmos tracks.
+
 ### `version.tracks`
 
 Defines named version tracks.
@@ -355,11 +363,12 @@ Each track supports:
 
 - `extends`
 - `defaults`
-- `versions`
+- `dependencies`
 
-### `version.tracks.<track>.versions`
+### `version.tracks.<track>.dependencies`
 
-Defines version entries.
+Defines track-specific dependency overrides. These entries merge over
+`version.dependencies`.
 
 Supported fields:
 
@@ -382,7 +391,7 @@ Effective policy is resolved in this order:
 
 1. Global defaults: `version.defaults`
 2. Track defaults: `version.tracks.<track>.defaults`
-3. Version entry: `version.tracks.<track>.versions.<name>`
+3. Dependency entry: `version.dependencies.<name>` plus any `version.tracks.<track>.dependencies.<name>` override
 4. Matched group policy: `version.groups.<group>`
 
 Scalar fields use last-writer-wins.

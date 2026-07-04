@@ -25,25 +25,29 @@ The Atmos Version Tracker makes external versions first-class Atmos configuratio
 version:
   track: prod
 
+  dependencies:
+    checkout:
+      ecosystem: github-actions
+      package: actions/checkout
+      desired: v6
+      update:
+        pin: sha        # lock and render the immutable commit SHA
+
+    opentofu:
+      ecosystem: toolchain
+      package: opentofu
+      desired: "~1.10"
+
+    nginx:
+      ecosystem: oci
+      package: library/nginx
+      desired: "1.29.0"
+
   tracks:
     prod:
-      versions:
-        checkout:
-          ecosystem: github-actions
-          package: actions/checkout
-          desired: v6
-          update:
-            pin: sha        # lock and render the immutable commit SHA
-
-        opentofu:
-          ecosystem: toolchain
-          package: opentofu
-          desired: "~1.10"
-
+      dependencies:
         nginx:
-          ecosystem: oci
-          package: library/nginx
-          desired: "1.29.0"
+          desired: "1.29.1"
 
   files:
     - manager: github-actions

@@ -13,7 +13,7 @@ import Intro from '@site/src/components/Intro'
 Use `atmos version track` (alias: `tracks`) to manage the Atmos Version Tracker: external versions declared under `version:` in `atmos.yaml`, resolved deterministically into `versions.lock.yaml`, and applied to project files by the file managers.
 </Intro>
 
-The version tracker manages externally versioned dependencies — GitHub Actions refs, container images, toolchain tools, release tags — declared in [`version.tracks`](/cli/configuration/version/managed-versions) in `atmos.yaml`. The top-level `atmos version` command remains about the Atmos CLI itself.
+The version tracker manages externally versioned dependencies — GitHub Actions refs, container images, toolchain tools, release tags — declared in [`version.dependencies`](/cli/configuration/version/managed-versions) and track overrides in `atmos.yaml`. The top-level `atmos version` command remains about the Atmos CLI itself.
 
 ## Usage
 
@@ -51,7 +51,7 @@ Most subcommands accept an optional `[track]` argument. The target track resolve
   <dd>Rewrite version-managed files from the lock using the file managers.</dd>
 
   <dt>[`add`](#add) / [`set`](#set) / [`remove`](#remove) / [`get`](#get)</dt>
-  <dd>Edit managed version entries in `atmos.yaml` without hand-editing YAML, preserving comments and formatting.</dd>
+  <dd>Edit dependency entries in `atmos.yaml` without hand-editing YAML, preserving comments and formatting.</dd>
 </dl>
 
 ## Global Flags
@@ -265,7 +265,7 @@ atmos version track apply --manager=github-actions
 
 ## `add`
 
-Add a managed version entry to the version track in `atmos.yaml`, preserving comments and formatting. When `--ecosystem` is omitted, it is inferred from the package coordinate:
+Add a dependency entry to a version track in `atmos.yaml`, preserving comments and formatting. When `--ecosystem` is omitted, it is inferred from the package coordinate:
 
 - `actions/*` (and other `owner/repo` action paths) → `github/actions`
 - Registry-hosted images (`ghcr.io/...`, `registry/...`) → `oci`
@@ -319,7 +319,7 @@ atmos version track add nginx --package=library/nginx --track=prod
 
 ## `set`
 
-Update fields of an existing managed version entry in `atmos.yaml`, preserving comments and formatting. Only the flags you pass are changed.
+Update fields of an existing dependency entry in `atmos.yaml`, preserving comments and formatting. Only the flags you pass are changed.
 
 ### Arguments
 
@@ -356,7 +356,7 @@ atmos version track set nginx --pin=digest
 
 ## `remove`
 
-Alias: `rm`. Remove a managed version entry from the version track in `atmos.yaml`, preserving comments and formatting.
+Alias: `rm`. Remove a dependency entry from a version track in `atmos.yaml`, preserving comments and formatting.
 
 ### Arguments
 
@@ -373,7 +373,7 @@ atmos version track remove nginx
 
 ## `get`
 
-Show a managed version entry with its effective policy (after defaults and groups are applied) and its locked state.
+Show a dependency entry with its effective policy (after defaults and groups are applied) and its locked state.
 
 ### Arguments
 

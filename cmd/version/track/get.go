@@ -12,7 +12,7 @@ import (
 
 var trackGetCmd = &cobra.Command{
 	Use:   "get NAME",
-	Short: "Show a managed version entry with its effective policy and lock state",
+	Short: "Show a dependency entry with its effective policy and lock state",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfig, "version.track.get.RunE")()

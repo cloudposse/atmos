@@ -59,34 +59,38 @@ version:
         cooldown: 14d
       labels: [infrastructure]
 
+  dependencies:
+    opentofu:
+      ecosystem: toolchain
+      datasource: toolchain
+      package: opentofu
+      desired: "~1.10"
+
+    checkout:
+      ecosystem: github/actions
+      datasource: github-tags
+      provider: github
+      package: actions/checkout
+      desired: "v6"
+      update:
+        pin: sha   # lock and apply the commit SHA, not the mutable tag
+
+    nginx:
+      ecosystem: oci
+      datasource: oci-tags
+      provider: dockerhub
+      package: library/nginx
+      desired: "1.28.0"
+
   tracks:
     prod:
       defaults:
         update:
           cooldown: 30d
 
-      versions:
-        opentofu:
-          ecosystem: toolchain
-          datasource: toolchain
-          package: opentofu
-          desired: "~1.10"
-
-        checkout:
-          ecosystem: github/actions
-          datasource: github-tags
-          provider: github
-          package: actions/checkout
-          desired: "v6"
-          update:
-            pin: sha   # lock and apply the commit SHA, not the mutable tag
-
+      dependencies:
         nginx:
-          ecosystem: oci
-          datasource: oci-tags
-          provider: dockerhub
-          package: library/nginx
-          desired: "1.28.0"
+          desired: "1.29.0"
 
   # Which project files the file managers maintain (see File Managers below).
   files:
@@ -111,6 +115,7 @@ version:
 | `provider` | Concrete backend or auth target, such as `github`, `dockerhub`, `ecr_prod`, or `ghcr`. |
 | `track` | Named version lane, such as `dev`, `staging`, or `prod`. |
 | `group` | Batch of related updates with shared match rules and policy. |
+| `dependencies` | Base catalog of external dependencies tracked by Atmos. Track-level `dependencies` override the base catalog. |
 | `lock_file` | File that stores resolved versions. Defaults to `versions.lock.yaml`. |
 | `files` | Rules mapping [file managers](#file-managers) to the project files they maintain. |
 
@@ -247,7 +252,7 @@ Use the optional `match=` regex (with exactly one capture group) when the defaul
 
 ## Editing the Catalog
 
-The [`add`, `set`, `remove`, and `get`](/cli/commands/version/track#add) subcommands edit managed version entries in `atmos.yaml` without hand-editing YAML, preserving comments, anchors, and formatting. `add` infers the ecosystem from the package coordinate:
+The [`add`, `set`, `remove`, and `get`](/cli/commands/version/track#add) subcommands edit dependency entries in `atmos.yaml` without hand-editing YAML, preserving comments, anchors, and formatting. `add` infers the ecosystem from the package coordinate:
 
 ```shell
 atmos version track add checkout --package=actions/checkout --pin=sha

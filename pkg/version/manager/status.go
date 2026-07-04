@@ -8,7 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Status values reported for managed version entries.
+// Status values reported for managed dependency entries.
 const (
 	// StatusUnlocked means the entry has no lock file record.
 	StatusUnlocked = "unlocked"

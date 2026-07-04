@@ -10,8 +10,8 @@ import (
 
 var trackSetCmd = &cobra.Command{
 	Use:   "set NAME",
-	Short: "Update fields of a managed version entry in atmos.yaml",
-	Long:  "Update fields of an existing managed version entry (desired version, pin policy, package, provider, group) in atmos.yaml, preserving comments and formatting.",
+	Short: "Update fields of a dependency entry in atmos.yaml",
+	Long:  "Update fields of an existing dependency entry (desired version, pin policy, package, provider, group) in atmos.yaml, preserving comments and formatting.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfig, "version.track.set.RunE")()

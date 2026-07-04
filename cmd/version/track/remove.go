@@ -11,8 +11,8 @@ import (
 var trackRemoveCmd = &cobra.Command{
 	Use:     "remove NAME",
 	Aliases: []string{"rm"},
-	Short:   "Remove a managed version entry from atmos.yaml",
-	Long:    "Remove a managed version entry from the version track in atmos.yaml, preserving comments and formatting.",
+	Short:   "Remove a dependency entry from atmos.yaml",
+	Long:    "Remove a dependency entry from a version track in atmos.yaml, preserving comments and formatting.",
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfig, "version.track.remove.RunE")()

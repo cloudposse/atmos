@@ -36,7 +36,7 @@ func TestEffectiveEntriesAppliesDefaultsTrackAndGroup(t *testing.T) {
 							Cooldown: "30d",
 						},
 					},
-					Versions: map[string]schema.VersionEntry{
+					Dependencies: map[string]schema.VersionEntry{
 						"checkout": {
 							Ecosystem: "github/actions",
 							Provider:  "github",
@@ -78,7 +78,7 @@ func TestEffectiveEntriesTreatsLegacyGitHubActionsEcosystemAsGitHubActions(t *te
 			},
 			Tracks: map[string]schema.VersionTrack{
 				"prod": {
-					Versions: map[string]schema.VersionEntry{
+					Dependencies: map[string]schema.VersionEntry{
 						"checkout": {
 							Ecosystem: "github/actions",
 							Package:   "actions/checkout",
@@ -107,7 +107,7 @@ func TestLockTrackAndVersionMap(t *testing.T) {
 			LockFile: "versions.lock.yaml",
 			Tracks: map[string]schema.VersionTrack{
 				"prod": {
-					Versions: map[string]schema.VersionEntry{
+					Dependencies: map[string]schema.VersionEntry{
 						"checkout": {
 							Ecosystem:  "github/actions",
 							Datasource: "github-tags",
@@ -137,5 +137,68 @@ func TestLockTrackAndVersionMap(t *testing.T) {
 	}
 	if versionMap["checkout"].Version != "v6" {
 		t.Fatalf("expected v6 in version map, got %q", versionMap["checkout"].Version)
+	}
+}
+
+func TestEffectiveEntriesMergesBaseDependenciesWithTrackOverrides(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Version: schema.Version{
+			Dependencies: map[string]schema.VersionEntry{
+				"atmos": {
+					Ecosystem:  "github",
+					Datasource: "github-releases",
+					Provider:   "github",
+					Package:    "cloudposse/atmos",
+					Desired:    "~1.200",
+				},
+			},
+			Tracks: map[string]schema.VersionTrack{
+				"dev": {
+					Dependencies: map[string]schema.VersionEntry{
+						"atmos": {
+							Desired: "latest",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	entries, err := EffectiveEntries(atmosConfig, "dev")
+	if err != nil {
+		t.Fatalf("EffectiveEntries returned error: %v", err)
+	}
+	atmos := entries["atmos"]
+	if atmos.Package != "cloudposse/atmos" {
+		t.Fatalf("expected package inherited from base catalog, got %q", atmos.Package)
+	}
+	if atmos.Desired != "latest" {
+		t.Fatalf("expected track desired override, got %q", atmos.Desired)
+	}
+}
+
+func TestEffectiveEntriesUsesBaseCatalogForConfiguredDefaultTrack(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Version: schema.Version{
+			Track: "prod",
+			Dependencies: map[string]schema.VersionEntry{
+				"atmos": {
+					Ecosystem: "github",
+					Package:   "cloudposse/atmos",
+					Desired:   "~1.200",
+				},
+			},
+		},
+	}
+
+	entries, err := EffectiveEntries(atmosConfig, "")
+	if err != nil {
+		t.Fatalf("EffectiveEntries returned error: %v", err)
+	}
+	if entries["atmos"].Desired != "~1.200" {
+		t.Fatalf("expected base catalog dependency, got %#v", entries["atmos"])
+	}
+	if _, err := EffectiveEntries(atmosConfig, "dev"); err == nil {
+		t.Fatal("expected unknown non-default track to fail")
 	}
 }

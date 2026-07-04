@@ -17,7 +17,7 @@ version:
   track: prod
   tracks:
     prod:
-      versions:
+      dependencies:
         # Keep opentofu on 1.10 until the provider matrix is validated.
         opentofu:
           ecosystem: toolchain
@@ -63,6 +63,7 @@ func TestAddEntryPreservesCommentsAndFailsOnDuplicate(t *testing.T) {
 	for _, expected := range []string{
 		"# Project configuration — hand-written comment that must survive edits.",
 		"# Keep opentofu on 1.10 until the provider matrix is validated.",
+		"dependencies:",
 		"checkout:",
 		"package: actions/checkout",
 		"desired: v6",

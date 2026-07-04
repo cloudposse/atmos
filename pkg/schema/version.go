@@ -112,9 +112,9 @@ type VersionFileRule struct {
 
 // VersionTrack configures a named version lane such as dev, staging, or prod.
 type VersionTrack struct {
-	Extends  string                  `yaml:"extends,omitempty" mapstructure:"extends" json:"extends,omitempty"`
-	Defaults VersionPolicy           `yaml:"defaults,omitempty" mapstructure:"defaults" json:"defaults,omitempty"`
-	Versions map[string]VersionEntry `yaml:"versions,omitempty" mapstructure:"versions" json:"versions,omitempty"`
+	Extends      string                  `yaml:"extends,omitempty" mapstructure:"extends" json:"extends,omitempty"`
+	Defaults     VersionPolicy           `yaml:"defaults,omitempty" mapstructure:"defaults" json:"defaults,omitempty"`
+	Dependencies map[string]VersionEntry `yaml:"dependencies,omitempty" mapstructure:"dependencies" json:"dependencies,omitempty"`
 }
 
 // Version configures version checking, constraint validation, self-management, and managed external versions.
@@ -143,7 +143,10 @@ type Version struct {
 	Providers map[string]VersionProvider `yaml:"providers,omitempty" mapstructure:"providers" json:"providers,omitempty"`
 	Defaults  VersionPolicy              `yaml:"defaults,omitempty" mapstructure:"defaults" json:"defaults,omitempty"`
 	Groups    map[string]VersionGroup    `yaml:"groups,omitempty" mapstructure:"groups" json:"groups,omitempty"`
-	Tracks    map[string]VersionTrack    `yaml:"tracks,omitempty" mapstructure:"tracks" json:"tracks,omitempty"`
+	// Dependencies is the base catalog of external dependencies managed by the
+	// Version Tracker. Track-level dependencies override these entries.
+	Dependencies map[string]VersionEntry `yaml:"dependencies,omitempty" mapstructure:"dependencies" json:"dependencies,omitempty"`
+	Tracks       map[string]VersionTrack `yaml:"tracks,omitempty" mapstructure:"tracks" json:"tracks,omitempty"`
 
 	// Files declares which project files the file managers maintain. When
 	// empty, managers with default paths (github-actions, template) run over

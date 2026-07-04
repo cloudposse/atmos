@@ -43,7 +43,7 @@ func policyConfig(t *testing.T, update *schema.VersionUpdatePolicy) *schema.Atmo
 		Version: schema.Version{
 			Tracks: map[string]schema.VersionTrack{
 				"prod": {
-					Versions: map[string]schema.VersionEntry{
+					Dependencies: map[string]schema.VersionEntry{
 						"thing": {
 							Datasource: "fake-policy",
 							Package:    "acme/thing",

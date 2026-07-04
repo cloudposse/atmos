@@ -18,8 +18,8 @@ type crudResult struct {
 
 var trackAddCmd = &cobra.Command{
 	Use:   "add NAME",
-	Short: "Add a managed version entry to atmos.yaml",
-	Long:  "Add a managed version entry to the version track in atmos.yaml, preserving comments and formatting. The ecosystem is inferred from the package when not set explicitly (actions/* is github/actions, registry-hosted images are oci, bare tool names are toolchain, owner/repo is github).",
+	Short: "Add a dependency entry to atmos.yaml",
+	Long:  "Add a dependency entry to a version track in atmos.yaml, preserving comments and formatting. The ecosystem is inferred from the package when not set explicitly (actions/* is github/actions, registry-hosted images are oci, bare tool names are toolchain, owner/repo is github).",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfig, "version.track.add.RunE")()
