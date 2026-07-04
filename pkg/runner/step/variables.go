@@ -162,6 +162,8 @@ func (v *Variables) SetFlag(key, value string) {
 	v.Flags[key] = value
 }
 
+// SetAtmosConfig stores the active Atmos configuration for step handlers that
+// need to respect process-level settings such as native CI summary controls.
 func (v *Variables) SetAtmosConfig(config *schema.AtmosConfiguration) {
 	defer perf.Track(nil, "step.Variables.SetAtmosConfig")()
 

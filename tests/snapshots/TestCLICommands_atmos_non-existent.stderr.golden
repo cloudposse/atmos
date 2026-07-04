@@ -48,6 +48,4 @@ Valid subcommands are:
  atmos [flags]
  atmos [sub-command] [flags]
 
-## Hints
-
 💡 Run atmos --help for usage

@@ -40,6 +40,9 @@ type ExecContext struct {
 	Cmd *cobra.Command
 	// Args are the command-line args passed to Cmd.
 	Args []string
+	// HookName is the key used for this hook in the component's hooks map.
+	// It is separate from Hook.Name, which is a store-kind field.
+	HookName string
 
 	// Outcome is the lifecycle operation result this hook fires around
 	// (success/failure, exit code, error). Set by RunAll. Distinct from the
