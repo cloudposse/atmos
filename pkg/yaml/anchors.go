@@ -110,7 +110,12 @@ func collectAnchors(content []byte) (map[string]anchorInfo, error) {
 
 	anchors := make(map[string]anchorInfo)
 	aliasCounts := make(map[string]int)
-	walkAnchorNodes(&root, anchors, aliasCounts)
+	if dup := walkAnchorNodes(&root, anchors, aliasCounts); dup != "" {
+		// A redefined anchor name means aliases before and after the second
+		// definition resolve to different values, so the per-name comparison
+		// below cannot detect a silent shared-value mutation. Refuse to edit.
+		return nil, fmt.Errorf("%w: anchor &%s is defined more than once; rename the duplicate anchors before editing", ErrYAMLDuplicateAnchor, dup)
+	}
 
 	// Fold alias counts into the anchor records.
 	for name, count := range aliasCounts {
@@ -121,13 +126,17 @@ func collectAnchors(content []byte) (map[string]anchorInfo, error) {
 	return anchors, nil
 }
 
-// walkAnchorNodes recursively records anchored nodes and alias references.
-func walkAnchorNodes(node *goyaml.Node, anchors map[string]anchorInfo, aliasCounts map[string]int) {
+// walkAnchorNodes recursively records anchored nodes and alias references. It
+// returns the name of the first anchor defined more than once, or "".
+func walkAnchorNodes(node *goyaml.Node, anchors map[string]anchorInfo, aliasCounts map[string]int) string {
 	if node == nil {
-		return
+		return ""
 	}
 
 	if node.Anchor != "" {
+		if _, exists := anchors[node.Anchor]; exists {
+			return node.Anchor
+		}
 		anchors[node.Anchor] = anchorInfo{content: serializeNode(node)}
 	}
 	if node.Kind == goyaml.AliasNode {
@@ -136,8 +145,11 @@ func walkAnchorNodes(node *goyaml.Node, anchors map[string]anchorInfo, aliasCoun
 	}
 
 	for _, child := range node.Content {
-		walkAnchorNodes(child, anchors, aliasCounts)
+		if dup := walkAnchorNodes(child, anchors, aliasCounts); dup != "" {
+			return dup
+		}
 	}
+	return ""
 }
 
 // serializeNode renders a node's anchored subtree to a stable string for value

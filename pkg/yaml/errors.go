@@ -34,6 +34,16 @@ var (
 	// which the strict editing contract forbids.
 	ErrYAMLAnchorAltered = errors.New("edit would alter or expand a YAML anchor or alias")
 
+	// ErrYAMLDuplicateAnchor is returned when a document defines the same anchor name more than
+	// once. Aliases before and after the redefinition resolve to different values, so the anchor
+	// guard cannot safely verify an edit; the duplicates must be renamed first.
+	ErrYAMLDuplicateAnchor = errors.New("duplicate YAML anchor definition")
+
+	// ErrYAMLMultiDocUnsupported is returned when the editor is given a stream containing more
+	// than one YAML document. Edits would silently apply to every document, so multi-document
+	// files are rejected explicitly.
+	ErrYAMLMultiDocUnsupported = errors.New("multi-document YAML streams are not supported by the YAML editor")
+
 	// ErrParseYAML is returned when YAML content cannot be parsed.
 	ErrParseYAML = errors.New("failed to parse YAML")
 

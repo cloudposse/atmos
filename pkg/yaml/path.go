@@ -55,9 +55,14 @@ func DotPathToYqPath(dotPath string) (string, error) {
 	}
 
 	var b strings.Builder
-	for _, seg := range segments {
+	for i, seg := range segments {
 		switch {
 		case seg.isIndex:
+			// A leading index needs an explicit `.` — a bare `[0]` is an array
+			// literal in yq, which would turn the edit into a silent no-op.
+			if i == 0 {
+				b.WriteString(".")
+			}
 			b.WriteString("[")
 			b.WriteString(strconv.Itoa(seg.index))
 			b.WriteString("]")
@@ -65,9 +70,11 @@ func DotPathToYqPath(dotPath string) (string, error) {
 			b.WriteString(".")
 			b.WriteString(seg.key)
 		default:
-			b.WriteString(`.["`)
-			b.WriteString(strings.ReplaceAll(seg.key, doubleQuote, `\"`))
-			b.WriteString(`"]`)
+			// encodeStringValue escapes both backslashes and quotes so the key
+			// survives yq's double-quoted string parsing verbatim.
+			b.WriteString(".[")
+			b.WriteString(encodeStringValue(seg.key))
+			b.WriteString("]")
 		}
 	}
 
@@ -179,18 +186,23 @@ func QuotePathSegment(key string) string {
 }
 
 // scanQuotedSegment reads a `"quoted"` key starting at the opening quote (start),
-// returning the index of the closing quote and the unquoted text.
+// returning the index of the closing quote and the unquoted text. The escapes
+// emitted by QuotePathSegment/encodeStringValue (`\"` and `\\`) are honored so
+// a quoted segment round-trips; any other backslash is kept literally.
 func scanQuotedSegment(runes []rune, start int, path string) (int, string, error) {
-	j := start + 1
 	var quoted strings.Builder
-	for j < len(runes) && runes[j] != '"' {
-		quoted.WriteRune(runes[j])
-		j++
+	for j := start + 1; j < len(runes); j++ {
+		switch {
+		case runes[j] == '\\' && j+1 < len(runes) && (runes[j+1] == '"' || runes[j+1] == '\\'):
+			quoted.WriteRune(runes[j+1])
+			j++
+		case runes[j] == '"':
+			return j, quoted.String(), nil
+		default:
+			quoted.WriteRune(runes[j])
+		}
 	}
-	if j >= len(runes) {
-		return 0, "", fmt.Errorf("%w: unterminated quote in path %q", ErrInvalidYAMLExpression, path)
-	}
-	return j, quoted.String(), nil
+	return 0, "", fmt.Errorf("%w: unterminated quote in path %q", ErrInvalidYAMLExpression, path)
 }
 
 // scanIndexSegment reads a `[N]` array index starting at the opening bracket
