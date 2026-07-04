@@ -1,4 +1,6 @@
 ---
+title: Quick Start (Simple)
+tags: [Quickstart]
 description: >-
   Minimal Atmos setup with a single component and three environments — no
   cloud credentials or access required.

@@ -1,3 +1,8 @@
+---
+title: Parallel Steps
+tags: [Automation]
+---
+
 # Example: Parallel Workflow Steps
 
 This example demonstrates `parallel` and `matrix` workflow control steps with `needs`, configurable output, and failure behavior.

@@ -1,3 +1,8 @@
+---
+title: Devcontainer
+tags: [DX]
+---
+
 # Devcontainer Example
 
 This example demonstrates how to configure devcontainers in Atmos as a replacement for the Geodesic shell wrapper.

@@ -1,4 +1,6 @@
 ---
+title: Custom Commands
+tags: [Automation]
 description: >-
   Extend the Atmos CLI with custom commands defined in atmos.yaml — arguments,
   flags, nested subcommands, and shell steps.

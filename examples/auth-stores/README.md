@@ -1,3 +1,8 @@
+---
+title: Auth Identities for Stores
+tags: [Stacks]
+---
+
 # Auth Identity for Stores Example
 
 Demonstrates how stores authenticate using Atmos auth identities instead of the default credential chain.

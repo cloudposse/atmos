@@ -1,3 +1,8 @@
+---
+title: Trivy Hook
+tags: [Hooks]
+---
+
 # `hooks-trivy`
 
 Demonstrates the **`trivy`** hook kind: an `after.terraform.plan` hook that

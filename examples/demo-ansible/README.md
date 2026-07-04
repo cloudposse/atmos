@@ -1,3 +1,8 @@
+---
+title: Ansible
+tags: [Automation]
+---
+
 # Example: Ansible Hello World
 
 Minimal Atmos setup demonstrating how stack variables are passed to Ansible playbooks.

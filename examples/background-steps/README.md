@@ -1,3 +1,8 @@
+---
+title: Background Steps
+tags: [Automation]
+---
+
 # Background container services
 
 This example shows how to start a long-running container service in the background,

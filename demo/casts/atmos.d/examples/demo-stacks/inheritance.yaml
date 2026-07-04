@@ -1,0 +1,85 @@
+commands:
+  - name: casts generate examples demo-stacks inheritance
+    description: Regenerate the Stack Inheritance example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: inheritance
+        working_directory: "../../.context/cast-fixtures/demo-stacks"
+        title: "Stack Inheritance: shared defaults, per-environment overrides"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/demo-stacks/inheritance.cast"
+        steps:
+          - type: simulate
+            text: "# myapp inherits shared defaults from the catalog"
+          - type: simulate
+            text: &describe_dev_cmd atmos describe component myapp -s dev --query .vars
+          - type: shell
+            name: describe-dev
+            duration: 450ms
+            interval: 750ms
+            command: *describe_dev_cmd
+          - type: simulate
+            text: "# prod imports the same catalog but overrides location and language"
+          - type: simulate
+            text: &describe_prod_cmd atmos describe component myapp -s prod --query .vars
+          - type: shell
+            name: describe-prod
+            duration: 450ms
+            interval: 750ms
+            command: *describe_prod_cmd
+          - type: simulate
+            text: "# compare the resolved configuration across every environment"
+          - type: simulate
+            text: &describe_stacks_cmd atmos describe stacks --components myapp --sections vars
+          - type: shell
+            name: describe-stacks
+            duration: 550ms
+            interval: 900ms
+            command: *describe_stacks_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples demo-stacks inheritance
+  - name: casts validate examples demo-stacks inheritance
+    description: Validate the Stack Inheritance example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/demo-stacks/inheritance.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "# myapp inherits shared defaults from the catalog",
+              "atmos describe component myapp -s dev --query .vars",
+              "location: Stockholm",
+              "lang: sv",
+              "atmos describe component myapp -s prod --query .vars",
+              "location: Los Angeles",
+              "lang: en",
+              "atmos describe stacks --components myapp --sections vars",
+              "staging:",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"inheritance cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "[describe-dev]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"inheritance cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

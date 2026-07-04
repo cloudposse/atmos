@@ -1,0 +1,100 @@
+commands:
+  - name: casts generate examples locals structured-values
+    description: Regenerate the Locals example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: structured-values
+        working_directory: "../../.context/cast-fixtures/locals"
+        title: "Locals: computed values and structured tags"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/locals/structured-values.cast"
+        steps:
+          - type: simulate
+            text: "# start with the stacks that define file-scoped locals"
+          - type: simulate
+            text: &list_stacks_cmd atmos list stacks
+          - type: shell
+            name: list-stacks
+            duration: 450ms
+            interval: 750ms
+            command: *list_stacks_cmd
+          - type: simulate
+            text: "# inspect the resolved locals for the dev stack"
+          - type: simulate
+            text: &describe_locals_cmd atmos describe locals -s dev
+          - type: shell
+            name: describe-locals
+            duration: 550ms
+            interval: 900ms
+            command: *describe_locals_cmd
+          - type: simulate
+            text: "# component-specific locals include the same computed values"
+          - type: simulate
+            text: &describe_component_locals_cmd atmos describe locals myapp -s dev
+          - type: shell
+            name: describe-component-locals
+            duration: 550ms
+            interval: 900ms
+            command: *describe_component_locals_cmd
+          - type: simulate
+            text: "# locals flow into component vars as structured values"
+          - type: simulate
+            text: &describe_component_cmd atmos describe component myapp -s dev --query .vars
+          - type: shell
+            name: describe-component
+            duration: 550ms
+            interval: 900ms
+            command: *describe_component_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples locals structured-values
+  - name: casts validate examples locals structured-values
+    description: Validate the Locals example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/locals/structured-values.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "# start with the stacks that define file-scoped locals",
+              "atmos list stacks",
+              "dev",
+              "prod",
+              "# inspect the resolved locals for the dev stack",
+              "atmos describe locals -s dev",
+              "namespace: acme",
+              "name_prefix: acme-development",
+              "# component-specific locals include the same computed values",
+              "atmos describe locals myapp -s dev",
+              "# locals flow into component vars as structured values",
+              "atmos describe component myapp -s dev --query .vars",
+              "full_name: acme-development-dev",
+              "tags:",
+              "ManagedBy: Atmos",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"structured-values cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "map[", "[list-stacks]", "[describe-locals]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"structured-values cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

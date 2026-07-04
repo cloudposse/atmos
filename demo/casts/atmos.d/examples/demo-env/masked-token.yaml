@@ -1,0 +1,133 @@
+commands:
+  - name: casts generate examples demo-env masked-token
+    description: Regenerate the demo-env masked token cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: script
+        name: install-fake-gh
+        working_directory: &demo_env_fixture "../../.context/cast-fixtures/demo-env"
+        output: none
+        interpreter: python3
+        script: |
+          from pathlib import Path
+
+          bin_dir = Path(".cast-bin")
+          bin_dir.mkdir(exist_ok=True)
+          Path(".env.cast").unlink(missing_ok=True)
+          gh = bin_dir / "gh"
+          gh.write_text(
+              "#!/bin/sh\n"
+              "if [ \"$1\" = \"auth\" ] && [ \"$2\" = \"token\" ]; then\n"
+              "  printf %s gho_abcdefghijklmnopqrstuvwxyz1234567890\n"
+              "  exit 0\n"
+              "fi\n"
+              "exit 1\n"
+          )
+          gh.chmod(0o755)
+      - type: cast
+        name: masked-token
+        working_directory: *demo_env_fixture
+        title: "atmos env masks terminal secrets"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env:
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+          ATMOS_EXPERIMENTAL: silence
+          ATMOS_LOGS_LEVEL: Warning
+          ATMOS_TELEMETRY_ENABLED: 'false'
+          PATH: '{{ env "PWD" }}/../../.context/cast-fixtures/demo-env/.cast-bin:{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/demo-env/masked-token.cast"
+        steps:
+          - type: simulate
+            text: "# start with the stack that uses the GitHub provider"
+          - type: simulate
+            text: &list_stacks_cmd atmos list stacks
+          - type: shell
+            name: list-stacks
+            duration: 450ms
+            interval: 750ms
+            command: *list_stacks_cmd
+          - type: simulate
+            text: "# inspect the exports before applying them"
+          - type: simulate
+            text: &env_cmd atmos env
+          - type: shell
+            name: env
+            duration: 450ms
+            interval: 750ms
+            command: *env_cmd
+          - type: simulate
+            text: "# automation output stays raw"
+          - type: simulate
+            text: &env_file_cmd atmos env --output-file .env.cast
+          - type: shell
+            name: env-file
+            duration: 450ms
+            interval: 750ms
+            command: *env_file_cmd
+          - type: simulate
+            text: &check_env_file_cmd grep -q '^export GITHUB_TOKEN=gho_' .env.cast && echo 'raw token preserved for automation'
+          - type: shell
+            name: check-env-file
+            duration: 450ms
+            interval: 750ms
+            command: *check_env_file_cmd
+      - type: shell
+        name: cleanup-env-file
+        when: always
+        working_directory: *demo_env_fixture
+        output: none
+        command: rm -f .env.cast
+      - type: shell
+        name: validate
+        command: atmos casts validate examples demo-env masked-token
+  - name: casts validate examples demo-env masked-token
+    description: Validate the demo-env masked token cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, re, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/demo-env/masked-token.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "# start with the stack that uses the GitHub provider",
+              "atmos list stacks",
+              "demo",
+              "# inspect the exports before applying them",
+              "atmos env",
+              "export GITHUB_TOKEN=<MASKED>",
+              "# automation output stays raw",
+              "atmos env --output-file .env.cast",
+              "grep -q '^export GITHUB_TOKEN=gho_' .env.cast",
+              "raw token preserved for automation",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"demo-env masked-token cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "[list-stacks]", "[env]", "[env-file]", "[check-env-file]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"demo-env masked-token cast contains {bad!r}")
+          if re.search(r"\bgho_[A-Za-z0-9]{36}\b", plain):
+              raise SystemExit("demo-env masked-token cast leaks a GitHub token")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

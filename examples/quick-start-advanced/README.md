@@ -1,4 +1,6 @@
 ---
+title: Quick Start (Advanced)
+tags: [Quickstart]
 description: >-
   See what a small AWS application stack looks like with Atmos end to end —
   backend provisioning, secrets, identities, and Terraform against a local

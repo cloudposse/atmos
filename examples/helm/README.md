@@ -1,3 +1,8 @@
+---
+title: Native Helm
+tags: [Kubernetes]
+---
+
 # Native Helm Component Example
 
 A minimal, credential-free example of a native Helm component. The chart lives in

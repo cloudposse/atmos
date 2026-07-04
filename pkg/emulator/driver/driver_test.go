@@ -53,15 +53,16 @@ func TestRegisteredDrivers_TargetsAndDefaults(t *testing.T) {
 	cases := map[string]struct {
 		target string
 	}{
-		"floci/aws":      {emu.TargetAWS},
-		"ministack/aws":  {emu.TargetAWS},
-		"localstack/aws": {emu.TargetAWS},
-		"floci/gcp":      {emu.TargetGCP},
-		"floci/az":       {emu.TargetAzure},
-		"k3s":            {emu.TargetKubernetes},
-		"openbao":        {emu.TargetVault},
-		"vault":          {emu.TargetVault},
-		"registry":       {emu.TargetRegistry},
+		"floci/aws":                 {emu.TargetAWS},
+		"ministack/aws":             {emu.TargetAWS},
+		"localstack/aws":            {emu.TargetAWS},
+		"floci/gcp":                 {emu.TargetGCP},
+		"floci/az":                  {emu.TargetAzure},
+		"k3s":                       {emu.TargetKubernetes},
+		"openbao":                   {emu.TargetVault},
+		"vault":                     {emu.TargetVault},
+		"registry":                  {emu.TargetRegistry},
+		"mockoon/1password-connect": {emu.TargetOnePassword},
 	}
 	for name, want := range cases {
 		t.Run(name, func(t *testing.T) {

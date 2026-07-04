@@ -1,3 +1,8 @@
+---
+title: Terraform Tests
+tags: [Components]
+---
+
 ## Notes
 
 This example runs **Terraform tests** (`*.tftest.hcl`) against a **local AWS sandbox** — no AWS account or

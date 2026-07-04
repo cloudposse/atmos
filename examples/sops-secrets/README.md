@@ -1,4 +1,6 @@
 ---
+title: SOPS Secrets
+tags: [Stacks]
 description: >-
   Declare, encrypt, and read secrets with a SOPS backend (age encryption) —
   the full lifecycle against a git-committed encrypted file, no cloud

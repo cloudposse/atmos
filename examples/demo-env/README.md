@@ -1,3 +1,11 @@
+---
+title: Environment Variables
+tags: [Stacks]
+cast:
+  file: /casts/examples/demo-env/masked-token.cast
+  title: atmos env masked token
+---
+
 # Demo: Using `atmos env` with GitHub Provider
 
 This example demonstrates how to use `atmos env` to export environment variables
@@ -29,7 +37,7 @@ variable. This example shows how to:
 # View what will be exported
 atmos env
 
-# Export to your shell
+# Export to your shell. Piped output stays raw so eval can use the value.
 eval "$(atmos env)"
 ```
 

@@ -46,8 +46,8 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
     { tag: 'More', examples: examples.filter((ex) => ex.tags.length === 0) },
   ].filter((section) => section.examples.length > 0);
 
-  // Render a single example card. Featured cards use the friendly title; the full grid keeps
-  // the directory name so it stays scannable alongside the URL path.
+  // Render a single example card. All cards use the friendly English title
+  // (README front matter `title:`), falling back to the directory name.
   const renderCard = (example: ExamplesTree['examples'][number], displayName: string) => (
     <article
       key={example.name}
@@ -62,17 +62,23 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
         </div>
       </Link>
       {example.cast?.file && (
-        <div className={styles.exampleCardCast}>
-          <CastPlayer
-            src={example.cast.file}
-            title={example.cast.title || displayName}
-            chrome
-            thumbnail
-            controls={false}
-            scrubber={false}
-            showCommand={false}
-          />
-        </div>
+        <Link
+          to={`${routeBasePath}/${example.name}`}
+          className={styles.exampleCardCastLink}
+          aria-label={`Open the ${displayName} example`}
+        >
+          <div className={styles.exampleCardCast}>
+            <CastPlayer
+              src={example.cast.file}
+              title={example.cast.title || displayName}
+              chrome
+              thumbnail
+              controls={false}
+              scrubber={false}
+              showCommand={false}
+            />
+          </div>
+        </Link>
       )}
       <div className={styles.exampleCardDescription}>
         <Markdown components={cardMarkdownComponents}>
@@ -134,13 +140,13 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
             <section key={tag} className={styles.tagSection}>
               <h2 className={styles.tagSectionHeading}>{tag}</h2>
               <div className={styles.examplesGrid}>
-                {sectionExamples.map((example) => renderCard(example, example.name))}
+                {sectionExamples.map((example) => renderCard(example, example.title || example.name))}
               </div>
             </section>
           ))
         ) : (
           <div className={styles.examplesGrid}>
-            {filteredExamples.map((example) => renderCard(example, example.name))}
+            {filteredExamples.map((example) => renderCard(example, example.title || example.name))}
           </div>
         )}
       </div>

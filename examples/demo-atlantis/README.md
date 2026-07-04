@@ -1,3 +1,8 @@
+---
+title: Atlantis
+tags: [Automation]
+---
+
 # Example: Demo Atlantis
 
 Generate Atlantis configuration for PR-based Terraform automation.

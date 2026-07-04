@@ -1,4 +1,6 @@
 ---
+title: AWS Emulator
+tags: [Emulators]
 description: >-
   Learn how to use the AWS emulator with Atmos — declare it as a stack
   component and Atmos starts, binds, and stops it around your Terraform

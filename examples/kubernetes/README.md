@@ -1,3 +1,8 @@
+---
+title: Kubernetes Components
+tags: [Kubernetes]
+---
+
 # Example: Kubernetes Components
 
 Deploy Kubernetes manifests with Atmos-native Kubernetes components against a local Kubernetes emulator (k3s).

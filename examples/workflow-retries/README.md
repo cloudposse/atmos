@@ -1,3 +1,8 @@
+---
+title: Workflow Retries
+tags: [Automation]
+---
+
 # Workflow Retries Example
 
 Demonstrates automatic retry configuration for workflow steps.

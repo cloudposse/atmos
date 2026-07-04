@@ -1,4 +1,6 @@
 ---
+title: Vendoring
+tags: [Components]
 cast:
   file: /casts/demo/fixtures/demo-vendoring/pull.cast
   title: atmos vendor pull

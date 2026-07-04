@@ -1,3 +1,8 @@
+---
+title: Local GitOps
+tags: [Emulators, Kubernetes, Automation]
+---
+
 # Example: Local GitOps Round Trip
 
 Stand up an **entire GitOps loop on your laptop** — no GitHub account, no real

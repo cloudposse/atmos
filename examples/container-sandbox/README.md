@@ -1,3 +1,8 @@
+---
+title: Container Sandbox
+tags: [DX]
+---
+
 # Example: Container Sandbox
 
 Run an entire Atmos workflow inside one shared container sandbox.

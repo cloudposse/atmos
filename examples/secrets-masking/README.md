@@ -1,3 +1,8 @@
+---
+title: Secrets Masking
+tags: [DX]
+---
+
 # Secrets Masking Example
 
 This example demonstrates Atmos's automatic secrets masking feature.

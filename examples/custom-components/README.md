@@ -1,3 +1,11 @@
+---
+title: Custom Component Types
+tags: [Components]
+cast:
+  file: /casts/examples/custom-components/script-command.cast
+  title: atmos custom component command
+---
+
 # Custom Components Example
 
 This example demonstrates how to define custom component types in Atmos using custom commands.
@@ -25,15 +33,15 @@ examples/custom-components/
 
 ## Usage
 
-1. Build atmos (from repo root):
+1. Inspect the custom component type configuration:
    ```bash
-   make build
+   atmos describe config --format=yaml --query .components.script
    ```
 
 2. Run the custom command:
    ```bash
    cd examples/custom-components
-   ../../build/atmos script deploy-app -s dev
+   atmos script deploy-app -s dev
    ```
 
 3. Expected output:

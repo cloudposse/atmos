@@ -1,3 +1,8 @@
+---
+title: GitOps Publishing
+tags: [Kubernetes, Automation]
+---
+
 # GitOps Publishing Demo
 
 This example shows the **publishing half of a GitOps pipeline** — reconcile, review, and publish artifacts to a managed deployment repository using `atmos git`. A reconciler such as Argo CD or Flux (or your CI) consumes what gets published; Atmos is the producer side.

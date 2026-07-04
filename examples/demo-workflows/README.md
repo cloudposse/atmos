@@ -1,3 +1,8 @@
+---
+title: Workflows
+tags: [Automation]
+---
+
 # Example: Demo Workflows
 
 Run multiple Atmos commands in sequence with a single command.

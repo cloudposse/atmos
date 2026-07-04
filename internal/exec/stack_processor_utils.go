@@ -26,6 +26,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
+	atmostmpl "github.com/cloudposse/atmos/pkg/template"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -318,6 +319,8 @@ func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section m
 		return section, nil
 	}
 
+	section = processStructuredTemplateRefs(section, context).(map[string]any)
+
 	// Convert section to YAML for template processing.
 	yamlStr, err := u.ConvertToYAML(section)
 	if err != nil {
@@ -345,6 +348,34 @@ func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section m
 	}
 
 	return result, nil
+}
+
+func processStructuredTemplateRefs(value any, context map[string]any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(typed))
+		for k, v := range typed {
+			result[k] = processStructuredTemplateRefs(v, context)
+		}
+		return result
+	case []any:
+		result := make([]any, len(typed))
+		for i, v := range typed {
+			result[i] = processStructuredTemplateRefs(v, context)
+		}
+		return result
+	case string:
+		ref, ok, err := atmostmpl.ExtractPlainFieldRef(typed)
+		if err != nil || !ok {
+			return typed
+		}
+		if resolved, found := atmostmpl.LookupFieldPath(context, ref.Path); found {
+			return resolved
+		}
+		return typed
+	default:
+		return value
+	}
 }
 
 // extractAndAddLocalsToContext extracts locals from YAML and adds them to the template context.
@@ -947,8 +978,20 @@ func processYAMLConfigFileWithContextInternal(
 	// Other .tmpl files are processed only when context is provided (backward compatibility).
 	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
 	if !skipTemplatesProcessingInImports && (u.IsTemplateFile(filePath) || len(context) > 0) { //nolint:nestif // Template processing error handling requires conditional formatting based on context
+		stackManifestTemplateInput := stackYamlConfig
+		if len(context) > 0 {
+			var rawStackConfig map[string]any
+			if err := yaml.Unmarshal([]byte(stackYamlConfig), &rawStackConfig); err == nil {
+				if processedStructured, ok := processStructuredTemplateRefs(rawStackConfig, context).(map[string]any); ok {
+					if renderedStructured, err := u.ConvertToYAML(processedStructured); err == nil {
+						stackManifestTemplateInput = renderedStructured
+					}
+				}
+			}
+		}
+
 		var tmplErr error
-		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(atmosConfig, relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
+		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(atmosConfig, relativeFilePath, stackManifestTemplateInput, context, ignoreMissingTemplateValues)
 		if tmplErr != nil {
 			// If template processing failed and the only context is from file extraction
 			// (locals/settings/vars/env, not from an explicit import context), this is likely
@@ -958,7 +1001,7 @@ func processYAMLConfigFileWithContextInternal(
 			if !originalContextProvided {
 				log.Debug("Template processing deferred for file with file-extracted context only",
 					"file", relativeFilePath, "error", tmplErr)
-				stackManifestTemplatesProcessed = stackYamlConfig
+				stackManifestTemplatesProcessed = stackManifestTemplateInput
 			} else {
 				if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 					stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)

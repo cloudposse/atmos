@@ -1,0 +1,126 @@
+commands:
+  - name: casts generate examples onepassword-secrets connect-mock
+    description: Regenerate the 1Password Connect mock cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-stale-state
+        working_directory: &onepassword_fixture "../../.context/cast-fixtures/onepassword-secrets"
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: atmos --logs-level=Off emulator down onepassword-connect -s dev || true
+      - type: cast
+        name: connect-mock
+        working_directory: *onepassword_fixture
+        title: "1Password Connect mock"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/onepassword-secrets/connect-mock.cast"
+        steps:
+          - type: simulate
+            text: "# start a local 1Password Connect mock"
+          - type: simulate
+            text: &emulator_up_cmd atmos emulator up onepassword-connect -s dev --ephemeral
+          - type: shell
+            name: emulator-up
+            duration: 450ms
+            interval: 750ms
+            command: *emulator_up_cmd
+          - type: simulate
+            text: "# resolve a mocked 1Password secret"
+          - type: simulate
+            text: &secret_get_cmd atmos secret get DATADOG_API_KEY --stack dev --component api --mask=false
+          - type: shell
+            name: secret-get
+            duration: 450ms
+            interval: 750ms
+            command: *secret_get_cmd
+          - type: simulate
+            text: "# validate the declared secrets"
+          - type: simulate
+            text: &secret_validate_cmd atmos secret validate --stack dev --component api
+          - type: shell
+            name: secret-validate
+            duration: 450ms
+            interval: 750ms
+            command: *secret_validate_cmd
+          - type: simulate
+            text: "# write and remove a mocked secret"
+          - type: simulate
+            text: &secret_set_cmd atmos secret set DB_PASSWORD=rotated-password --stack dev --component api
+          - type: shell
+            name: secret-set
+            duration: 450ms
+            interval: 750ms
+            command: *secret_set_cmd
+          - type: simulate
+            text: &secret_delete_cmd atmos secret delete DB_PASSWORD --stack dev --component api --force
+          - type: shell
+            name: secret-delete
+            duration: 450ms
+            interval: 750ms
+            command: *secret_delete_cmd
+          - type: simulate
+            text: "# stop the mock"
+          - type: simulate
+            text: &emulator_down_cmd atmos emulator down onepassword-connect -s dev
+          - type: shell
+            name: emulator-down
+            when: always
+            duration: 450ms
+            interval: 750ms
+            command: *emulator_down_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples onepassword-secrets connect-mock
+  - name: casts validate examples onepassword-secrets connect-mock
+    description: Validate the 1Password Connect mock cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, re, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/onepassword-secrets/connect-mock.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "# start a local 1Password Connect mock",
+              "atmos emulator up onepassword-connect -s dev --ephemeral",
+              "emulator onepassword-connect is up",
+              "# resolve a mocked 1Password secret",
+              "atmos secret get DATADOG_API_KEY --stack dev --component api --mask=false",
+              "dd-mock-api-key",
+              "# validate the declared secrets",
+              "atmos secret validate --stack dev --component api",
+              "All required secrets are initialized",
+              "# write and remove a mocked secret",
+              "atmos secret set DB_PASSWORD=rotated-password --stack dev --component api",
+              "Set secret DB_PASSWORD",
+              "atmos secret delete DB_PASSWORD --stack dev --component api --force",
+              "Deleted secret DB_PASSWORD",
+              "# stop the mock",
+              "emulator onepassword-connect is down",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"onepassword connect mock cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "[emulator-up]", "[secret-get]", "[secret-validate]", "[secret-set]", "[secret-delete]", "[emulator-down]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"onepassword connect mock cast contains {bad!r}")
+          if re.search(r"\b(gho|ghp|github_pat|op)_[A-Za-z0-9_]{16,}\b", plain):
+              raise SystemExit("onepassword connect mock cast leaks a token-looking value")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

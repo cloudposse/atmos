@@ -1,3 +1,8 @@
+---
+title: Infracost Hook
+tags: [Hooks]
+---
+
 # `hooks-infracost`
 
 Demonstrates the **`infracost`** hook kind: an `after.terraform.plan` hook

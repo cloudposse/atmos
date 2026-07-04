@@ -1,3 +1,8 @@
+---
+title: "AWS Security & Compliance"
+tags: [DX]
+---
+
 # Example: AWS Security & Compliance
 
 Analyze AWS security findings, map them to Atmos components and stacks, and get

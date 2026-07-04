@@ -42,6 +42,11 @@ commands:
         path: "../../.context/cast-fixtures/sops-secrets"
         reset: true
       - type: workdir
+        name: onepassword-secrets-fixture
+        source: "../../examples/onepassword-secrets"
+        path: "../../.context/cast-fixtures/onepassword-secrets"
+        reset: true
+      - type: workdir
         name: toolchain-fixture
         source: "../../examples/toolchain"
         path: "../../.context/cast-fixtures/toolchain"
@@ -55,6 +60,96 @@ commands:
         name: demo-stacks-fixture
         source: "../../examples/demo-stacks"
         path: "../../.context/cast-fixtures/demo-stacks"
+        reset: true
+      - type: workdir
+        name: locals-fixture
+        source: "../../examples/locals"
+        path: "../../.context/cast-fixtures/locals"
+        reset: true
+      - type: workdir
+        name: demo-context-fixture
+        source: "../../examples/demo-context"
+        path: "../../.context/cast-fixtures/demo-context"
+        reset: true
+      - type: workdir
+        name: demo-env-fixture
+        source: "../../examples/demo-env"
+        path: "../../.context/cast-fixtures/demo-env"
+        reset: true
+      - type: workdir
+        name: stack-names-fixture
+        source: "../../examples/stack-names"
+        path: "../../.context/cast-fixtures/stack-names"
+        reset: true
+      - type: workdir
+        name: demo-schemas-fixture
+        source: "../../examples/demo-schemas"
+        path: "../../.context/cast-fixtures/demo-schemas"
+        reset: true
+      - type: workdir
+        name: custom-components-fixture
+        source: "../../examples/custom-components"
+        path: "../../.context/cast-fixtures/custom-components"
+        reset: true
+      - type: workdir
+        name: demo-component-versions-fixture
+        source: "../../examples/demo-component-versions"
+        path: "../../.context/cast-fixtures/demo-component-versions"
+        reset: true
+      - type: workdir
+        name: caching-fixture
+        source: "../../examples/caching"
+        path: "../../.context/cast-fixtures/caching"
+        reset: true
+      - type: workdir
+        name: generate-files-fixture
+        source: "../../examples/generate-files"
+        path: "../../.context/cast-fixtures/generate-files"
+        reset: true
+      - type: workdir
+        name: demo-workflows-fixture
+        source: "../../examples/demo-workflows"
+        path: "../../.context/cast-fixtures/demo-workflows"
+        reset: true
+      - type: workdir
+        name: parallel-steps-fixture
+        source: "../../examples/parallel-steps"
+        path: "../../.context/cast-fixtures/parallel-steps"
+        reset: true
+      - type: workdir
+        name: workflow-retries-fixture
+        source: "../../examples/workflow-retries"
+        path: "../../.context/cast-fixtures/workflow-retries"
+        reset: true
+      - type: workdir
+        name: http-webhooks-fixture
+        source: "../../examples/http-webhooks"
+        path: "../../.context/cast-fixtures/http-webhooks"
+        reset: true
+      - type: workdir
+        name: say-something-fixture
+        source: "../../examples/say-something"
+        path: "../../.context/cast-fixtures/say-something"
+        reset: true
+      - type: workdir
+        name: demo-ansible-fixture
+        source: "../../examples/demo-ansible"
+        path: "../../.context/cast-fixtures/demo-ansible"
+        reset: true
+      - type: workdir
+        name: demo-atlantis-fixture
+        source: "../../examples/demo-atlantis"
+        path: "../../.context/cast-fixtures/demo-atlantis"
+        reset: true
+      - type: workdir
+        name: interactive-workflows-fixture
+        source: "../../examples/interactive-workflows"
+        path: "../../.context/cast-fixtures/interactive-workflows"
+        reset: true
+      - type: workdir
+        name: secrets-masking-fixture
+        source: "../../examples/secrets-masking"
+        path: "../../.context/cast-fixtures/secrets-masking"
         reset: true
       - type: shell
         name: build-atmos

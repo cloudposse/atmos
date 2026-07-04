@@ -1,3 +1,8 @@
+---
+title: Devcontainer (Custom Build)
+tags: [DX]
+---
+
 # Custom Dockerfile Devcontainer Example
 
 This example demonstrates using a custom Dockerfile with Atmos devcontainers. The Dockerfile extends the Geodesic base image and pre-installs Atmos.

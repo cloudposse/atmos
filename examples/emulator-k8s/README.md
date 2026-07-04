@@ -1,3 +1,8 @@
+---
+title: Kubernetes Emulator
+tags: [Emulators, Kubernetes]
+---
+
 ## Notes
 
 This example deploys a Helm release (nginx) to a **local Kubernetes sandbox** — no EKS, no

@@ -1,4 +1,6 @@
 ---
+title: Native Terraform Migration
+tags: [Components]
 cast:
   file: /casts/demo/fixtures/native-terraform/plan.cast
   title: atmos terraform plan

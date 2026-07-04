@@ -24,6 +24,20 @@ const DEFAULT_EXCLUDE_PATTERNS = [
   '**/.envrc',
 ];
 
+// Default section order for the index page. Instances can override with the
+// `tagOrder` plugin option (the gists gallery defines its own chapters).
+const DEFAULT_TAG_ORDER = [
+  'Quickstart',
+  'Stacks',
+  'Components',
+  'Kubernetes',
+  'Automation',
+  'Hooks',
+  'Emulators',
+  'AI',
+  'DX',
+];
+
 // Curated ("featured") examples, in display order. This list is editorial — like the
 // roadmap's featured[] it is hand-maintained and never auto-promoted. These are pinned to the
 // top of the /examples index page so the gallery leads with the demos we want people to try
@@ -493,10 +507,15 @@ function scanExamples(sourceDir, options) {
       (child) => child.type === 'file' && (child.name === 'atmos.yaml' || child.name === 'atmos.yml')
     );
 
+    // Title: README front matter wins so examples name themselves; fall back
+    // to the hand-maintained map, then the directory name.
+    const frontmatterTitle =
+      typeof readmeMetadata.data.title === 'string' ? readmeMetadata.data.title.trim() : '';
+
     examples.push({
       name: entry.name,
       path: entry.name,
-      title: TITLES_MAP[entry.name] || entry.name,
+      title: frontmatterTitle || TITLES_MAP[entry.name] || entry.name,
       description,
       hasReadme: !!tree.readme,
       hasAtmosYaml,
@@ -516,9 +535,18 @@ function scanExamples(sourceDir, options) {
   // Sort examples alphabetically.
   examples.sort((a, b) => a.name.localeCompare(b.name));
 
-  // Collect unique tags in display order.
-  const tagOrder = ['Quickstart', 'Stacks', 'Components', 'Kubernetes', 'Automation', 'Hooks', 'Emulators', 'DX'];
-  const tags = tagOrder.filter((tag) => examples.some((ex) => ex.tags.includes(tag)));
+  // Collect unique tags in display order. The order is a per-instance plugin
+  // option so the examples and gists galleries can define their own chapters.
+  const tagOrder = Array.isArray(options.tagOrder) && options.tagOrder.length > 0
+    ? options.tagOrder
+    : DEFAULT_TAG_ORDER;
+  const knownTags = tagOrder.filter((tag) => examples.some((ex) => ex.tags.includes(tag)));
+  // Any tag not in the configured order still gets a section (after the known
+  // ones, alphabetically) instead of being silently dropped from the filter bar.
+  const extraTags = [...new Set(examples.flatMap((ex) => ex.tags))]
+    .filter((tag) => !tagOrder.includes(tag))
+    .sort((a, b) => a.localeCompare(b));
+  const tags = [...knownTags, ...extraTags];
 
   // Build the curated featured list in FEATURED order (skip any that don't resolve).
   const featured = FEATURED.map((name) => examples.find((ex) => ex.name === name)).filter(Boolean);
@@ -594,6 +622,7 @@ module.exports = function fileBrowserPlugin(context, options) {
     disclaimer = '',
     excludePatterns = [],
     maxFileSize = 100 * 1024, // 100KB default.
+    tagOrder = DEFAULT_TAG_ORDER,
   } = options;
 
   const mergedExcludePatterns = [...DEFAULT_EXCLUDE_PATTERNS, ...excludePatterns];
@@ -614,6 +643,7 @@ module.exports = function fileBrowserPlugin(context, options) {
         githubRepo,
         githubBranch,
         githubPath,
+        tagOrder,
       });
 
       console.log(

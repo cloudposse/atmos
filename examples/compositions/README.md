@@ -1,3 +1,8 @@
+---
+title: Compositions
+tags: [Stacks]
+---
+
 # Compositions
 
 A **composition** groups multiple services into one system. Components declare

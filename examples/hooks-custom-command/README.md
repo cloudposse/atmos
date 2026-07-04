@@ -1,3 +1,8 @@
+---
+title: Custom Command Hook
+tags: [Hooks]
+---
+
 # `hooks-custom-command`
 
 Demonstrates the generic **`kind: command`** hook by wiring a custom

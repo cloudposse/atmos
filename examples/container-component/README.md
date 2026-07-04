@@ -1,3 +1,8 @@
+---
+title: Container Components
+tags: [Components]
+---
+
 # Container Components
 
 This example demonstrates the **`container` component kind**: stack-scoped,

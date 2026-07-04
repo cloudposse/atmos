@@ -1,3 +1,8 @@
+---
+title: Helmfile
+tags: [Kubernetes]
+---
+
 # Example: Demo Helmfile
 
 Deploy Kubernetes resources using Helmfile with Atmos stack patterns, against a local Kubernetes emulator (k3s).

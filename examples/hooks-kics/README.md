@@ -1,3 +1,8 @@
+---
+title: KICS Hook
+tags: [Hooks]
+---
+
 # `hooks-kics`
 
 Demonstrates the **`kics`** hook kind: an `after.terraform.plan` hook that

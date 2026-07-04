@@ -221,11 +221,23 @@
   flex: 1;
 }
 
+/* The cast preview is a link to the example; the player itself must not
+   swallow clicks (thumbnail mode, controls off), so navigation always wins. */
+.exampleCardCastLink {
+  display: block;
+  cursor: pointer;
+}
+
+.exampleCardCastLink:hover {
+  text-decoration: none;
+}
+
 .exampleCardCast {
   width: 100%;
   margin: 0 0 1rem;
   overflow: hidden;
   border-radius: 8px;
+  pointer-events: none;
 }
 
 .exampleCardCast > div {

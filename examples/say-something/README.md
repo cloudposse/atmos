@@ -1,3 +1,8 @@
+---
+title: Say Something (Text-to-Speech)
+tags: [Automation]
+---
+
 # Say Something Demo
 
 This example demonstrates the `say` step type in custom commands, workflows,

@@ -535,6 +535,7 @@ func TestIsCLIProvider(t *testing.T) {
 	}{
 		{"claude-code is CLI", "claude-code", true},
 		{"codex-cli is CLI", "codex-cli", true},
+		{"copilot-cli is CLI", "copilot-cli", true},
 		{"gemini-cli is CLI", "gemini-cli", true},
 		{"anthropic is not CLI", "anthropic", false},
 		{"openai is not CLI", "openai", false},

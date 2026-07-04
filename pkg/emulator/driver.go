@@ -24,13 +24,14 @@ import (
 
 // Emulator targets — what an emulator emulates. Derived from a driver's Target().
 const (
-	TargetAWS        = "aws"
-	TargetGCP        = "gcp"
-	TargetAzure      = "azure"
-	TargetKubernetes = "kubernetes"
-	TargetVault      = "vault"
-	TargetRegistry   = "registry"
-	TargetGit        = "git"
+	TargetAWS         = "aws"
+	TargetGCP         = "gcp"
+	TargetAzure       = "azure"
+	TargetKubernetes  = "kubernetes"
+	TargetVault       = "vault"
+	TargetRegistry    = "registry"
+	TargetGit         = "git"
+	TargetOnePassword = "onepassword"
 )
 
 // ContainerDefaults are the built-in container defaults a driver supplies. Every

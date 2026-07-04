@@ -1,3 +1,8 @@
+---
+title: Component Library
+tags: [Components]
+---
+
 # Demo Components
 
 Here are some examples of distributing reusable components as part of a library.

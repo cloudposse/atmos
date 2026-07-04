@@ -1,4 +1,6 @@
 ---
+title: Toolchain
+tags: [DX]
 description: >-
   Define the tool versions your stacks and infrastructure depend on —
   registries, aliases, and pinned versions that Atmos installs on demand.

@@ -1,3 +1,8 @@
+---
+title: Container Steps
+tags: [Automation]
+---
+
 # Example: Container Step
 
 Build, push, and run containers from Atmos workflows and custom commands.

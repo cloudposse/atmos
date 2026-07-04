@@ -1,0 +1,123 @@
+commands:
+  - name: casts generate examples caching registry-cache
+    description: Regenerate the Terraform registry cache example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: warm-cache
+        working_directory: &caching_fixture "../../.context/cast-fixtures/caching"
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: |
+          atmos terraform cache trust
+          atmos terraform workspace random-pet -s dev
+          rm -rf components/terraform/random-pet/.terraform/providers components/terraform/random-pet/.terraform/modules
+      - type: cast
+        name: registry-cache
+        working_directory: *caching_fixture
+        title: "Terraform registry cache"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/caching/registry-cache.cast"
+        steps:
+          - type: simulate
+            text: "# inspect the cache settings"
+          - type: simulate
+            text: &cache_config_cmd atmos describe config --format=yaml --query .components.terraform.cache
+          - type: shell
+            name: cache-config
+            duration: 450ms
+            interval: 750ms
+            command: *cache_config_cmd
+          - type: simulate
+            text: "# plan through the registry cache"
+          - type: simulate
+            text: &plan_cmd atmos terraform plan random-pet -s dev
+          - type: shell
+            name: terraform-plan
+            duration: 650ms
+            interval: 900ms
+            command: *plan_cmd
+          - type: simulate
+            text: "# inspect the populated cache"
+          - type: simulate
+            text: &cache_stats_cmd atmos terraform cache stats
+          - type: shell
+            name: cache-stats
+            duration: 450ms
+            interval: 750ms
+            command: *cache_stats_cmd
+      - type: script
+        name: sanitize-runtime-values
+        interpreter: python3
+        script: |
+          from pathlib import Path
+          import json
+          import re
+
+          path = Path("../../website/static/casts/examples/caching/registry-cache.cast")
+          lines = path.read_text().splitlines()
+          rewritten = [lines[0]]
+          for line in lines[1:]:
+              event = json.loads(line)
+              if event[1] in ("o", "e"):
+                  event[2] = re.sub(
+                      r"Registry cache root:\s+.*",
+                      "Registry cache root:  <cache>",
+                      event[2],
+                  )
+                  event[2] = re.sub(r"https://127\.0\.0\.1:\d+/", "https://127.0.0.1:<port>/", event[2])
+              rewritten.append(json.dumps(event, separators=(",", ":")))
+          path.write_text("\n".join(rewritten) + "\n")
+      - type: shell
+        name: validate
+        command: atmos casts validate examples caching registry-cache
+  - name: casts validate examples caching registry-cache
+    description: Validate the Terraform registry cache example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, re, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/caching/registry-cache.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "# inspect the cache settings",
+              "atmos describe config --format=yaml --query .components.terraform.cache",
+              "enabled: true",
+              "# plan through the registry cache",
+              "atmos terraform plan random-pet -s dev",
+              "OpenTofu has been successfully initialized",
+              "Plan: 4 to add, 0 to change, 0 to destroy.",
+              "Registry cache:",
+              "saved",
+              "# inspect the populated cache",
+              "atmos terraform cache stats",
+              "Objects:",
+              "providers",
+              "modules",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"caching registry-cache cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "Workspace \"dev\" doesn't exist", "[cache-config]", "[terraform-plan]", "[cache-stats]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"caching registry-cache cast contains {bad!r}")
+          if re.search(r"/Users/|/home/|C:\\\\Users\\\\", plain):
+              raise SystemExit("caching registry-cache cast leaks a local path")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)
