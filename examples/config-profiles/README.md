@@ -1,6 +1,9 @@
 ---
 title: Config Profiles
 tags: [Stacks]
+cast:
+  file: /casts/examples/config-profiles/list-and-show.cast
+  title: atmos config profiles
 ---
 
 # Config Profiles Example

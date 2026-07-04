@@ -1,0 +1,71 @@
+commands:
+  - name: casts generate examples interactive-workflows table-and-build
+    description: Regenerate the Interactive Workflows example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: table-and-build
+        working_directory: "../../.context/cast-fixtures/interactive-workflows"
+        title: "Interactive Workflows: formatted steps without prompts"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/interactive-workflows/table-and-build.cast"
+        steps:
+          - type: simulate
+            text: "# table steps render structured choices for operators"
+          - type: simulate
+            text: &table_cmd atmos workflow show-environments -f interactive
+          - type: shell
+            name: show-environments
+            duration: 450ms
+            interval: 750ms
+            command: *table_cmd
+          - type: simulate
+            text: "# spinner and toast steps compose into build flows"
+          - type: simulate
+            text: &build_cmd atmos workflow build -f interactive
+          - type: shell
+            name: build
+            duration: 450ms
+            interval: 750ms
+            command: *build_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples interactive-workflows table-and-build
+  - name: casts validate examples interactive-workflows table-and-build
+    description: Validate the Interactive Workflows example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/interactive-workflows/table-and-build.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          for needle in [
+              "atmos workflow show-environments -f interactive",
+              "Available Environments",
+              "dev",
+              "staging",
+              "prod",
+              "atmos workflow build -f interactive",
+              "Building application...",
+              "Build completed successfully!",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"interactive-workflows cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

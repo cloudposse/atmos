@@ -1,6 +1,9 @@
 ---
 title: Generate Files
 tags: [Automation]
+cast:
+  file: /casts/examples/generate-files/component-files.cast
+  title: atmos generate files
 ---
 
 # Generate Files

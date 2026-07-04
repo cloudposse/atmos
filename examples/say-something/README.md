@@ -1,6 +1,9 @@
 ---
 title: Say Something (Text-to-Speech)
 tags: [Automation]
+cast:
+  file: /casts/examples/say-something/pipeline.cast
+  title: atmos say steps
 ---
 
 # Say Something Demo

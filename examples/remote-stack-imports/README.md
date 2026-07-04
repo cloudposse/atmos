@@ -1,6 +1,9 @@
 ---
 title: Remote Stack Imports
 tags: [Stacks]
+cast:
+  file: /casts/examples/remote-stack-imports/remote-vars.cast
+  title: atmos remote stack imports
 ---
 
 # Remote Stack Imports Example

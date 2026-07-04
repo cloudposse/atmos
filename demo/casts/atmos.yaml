@@ -151,6 +151,36 @@ commands:
         source: "../../examples/secrets-masking"
         path: "../../.context/cast-fixtures/secrets-masking"
         reset: true
+      - type: workdir
+        name: remote-stack-imports-fixture
+        source: "../../examples/remote-stack-imports"
+        path: "../../.context/cast-fixtures/remote-stack-imports"
+        reset: true
+      - type: workdir
+        name: demo-library-fixture
+        source: "../../examples/demo-library"
+        path: "../../.context/cast-fixtures/demo-library"
+        reset: true
+      - type: workdir
+        name: source-provisioning-fixture
+        source: "../../examples/source-provisioning"
+        path: "../../.context/cast-fixtures/source-provisioning"
+        reset: true
+      - type: workdir
+        name: config-profiles-fixture
+        source: "../../examples/config-profiles"
+        path: "../../.context/cast-fixtures/config-profiles"
+        reset: true
+      - type: workdir
+        name: terraform-tests-fixture
+        source: "../../examples/terraform-tests"
+        path: "../../.context/cast-fixtures/terraform-tests"
+        reset: true
+      - type: workdir
+        name: hooks-custom-command-fixture
+        source: "../../examples/hooks-custom-command"
+        path: "../../.context/cast-fixtures/hooks-custom-command"
+        reset: true
       - type: shell
         name: build-atmos
         # CGO off to match the release build; with CGO on, transitive deps

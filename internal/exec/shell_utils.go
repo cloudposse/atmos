@@ -114,6 +114,17 @@ func ExecuteShellCommand(
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteShellCommand")()
 
+	disableMasking := false
+	if viper.IsSet("mask") {
+		disableMasking = !viper.GetBool("mask")
+	} else if viper.IsSet("settings.terminal.mask.enabled") {
+		disableMasking = !atmosConfig.Settings.Terminal.Mask.Enabled
+	}
+	ioLayer.ApplyMaskingConfig(&ioLayer.Config{
+		DisableMasking: disableMasking,
+		AtmosConfig:    atmosConfig,
+	})
+
 	// Apply functional options.
 	var cfg shellCommandConfig
 	for _, opt := range opts {

@@ -1,6 +1,9 @@
 ---
 title: Workflows
 tags: [Automation]
+cast:
+  file: /casts/examples/demo-workflows/deploy.cast
+  title: atmos workflows
 ---
 
 # Example: Demo Workflows

@@ -1,6 +1,9 @@
 ---
 title: Workflow Retries
 tags: [Automation]
+cast:
+  file: /casts/examples/workflow-retries/retry-failure.cast
+  title: atmos workflow retries
 ---
 
 # Workflow Retries Example

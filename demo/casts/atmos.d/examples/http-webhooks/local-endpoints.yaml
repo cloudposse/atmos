@@ -1,0 +1,114 @@
+commands:
+  - name: casts generate examples http-webhooks local-endpoints
+    description: Regenerate the HTTP Webhooks example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: script
+        name: start-http-server
+        working_directory: &http_fixture "../../.context/cast-fixtures/http-webhooks"
+        output: none
+        interpreter: python3
+        script: |
+          import os
+          import subprocess
+          import textwrap
+          from pathlib import Path
+
+          Path(".cast-server.py").write_text(textwrap.dedent("""
+              from http.server import BaseHTTPRequestHandler, HTTPServer
+
+              class Handler(BaseHTTPRequestHandler):
+                  def do_POST(self):
+                      self.send_response(202)
+                      self.send_header("Content-Type", "application/json")
+                      self.end_headers()
+                      self.wfile.write(b'{"accepted":true}')
+
+                  def do_GET(self):
+                      self.send_response(200)
+                      self.send_header("Content-Type", "application/json")
+                      self.end_headers()
+                      self.wfile.write(b'{"status":"healthy"}')
+
+                  def log_message(self, *args):
+                      pass
+
+              HTTPServer(("127.0.0.1", 18765), Handler).serve_forever()
+          """))
+          old = Path(".cast-server.pid")
+          if old.exists():
+              try:
+                  os.kill(int(old.read_text()), 15)
+              except Exception:
+                  pass
+              old.unlink(missing_ok=True)
+          proc = subprocess.Popen(["python3", ".cast-server.py"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+          Path(".cast-server.pid").write_text(str(proc.pid))
+      - type: cast
+        name: local-endpoints
+        working_directory: *http_fixture
+        title: "HTTP Webhooks: POST and poll local endpoints"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/http-webhooks/local-endpoints.cast"
+        steps:
+          - type: simulate
+            text: "# POST a deployment notification to a webhook endpoint"
+          - type: simulate
+            text: &notify_cmd ATMOS_LOGS_LEVEL=Info WEBHOOK_URL=http://127.0.0.1:18765/hook atmos workflow notify -f http
+          - type: shell
+            name: notify
+            duration: 450ms
+            interval: 750ms
+            command: *notify_cmd
+          - type: simulate
+            text: "# poll until the health endpoint returns the expected JSON body"
+          - type: simulate
+            text: &poll_cmd HEALTH_URL=http://127.0.0.1:18765 atmos workflow poll-health -f http && echo "health check matched"
+          - type: shell
+            name: poll-health
+            duration: 450ms
+            interval: 750ms
+            command: *poll_cmd
+      - type: shell
+        name: stop-http-server
+        when: always
+        working_directory: *http_fixture
+        output: none
+        command: test ! -f .cast-server.pid || kill "$(cat .cast-server.pid)" || true; rm -f .cast-server.pid .cast-server.py
+      - type: shell
+        name: validate
+        command: atmos casts validate examples http-webhooks local-endpoints
+  - name: casts validate examples http-webhooks local-endpoints
+    description: Validate the HTTP Webhooks example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/http-webhooks/local-endpoints.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          for needle in [
+              "ATMOS_LOGS_LEVEL=Info WEBHOOK_URL=http://127.0.0.1:18765/hook atmos workflow notify -f http",
+              "Webhook returned HTTP 202",
+              "HEALTH_URL=http://127.0.0.1:18765 atmos workflow poll-health -f http",
+              "health check matched",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"http-webhooks cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

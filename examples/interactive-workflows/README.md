@@ -1,6 +1,9 @@
 ---
 title: Interactive Workflows
 tags: [Automation]
+cast:
+  file: /casts/examples/interactive-workflows/table-and-build.cast
+  title: atmos interactive workflow steps
 ---
 
 # Interactive Workflows Demo

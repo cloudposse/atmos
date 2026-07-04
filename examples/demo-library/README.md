@@ -1,6 +1,9 @@
 ---
 title: Component Library
 tags: [Components]
+cast:
+  file: /casts/examples/demo-library/modules.cast
+  title: atmos component library
 ---
 
 # Demo Components

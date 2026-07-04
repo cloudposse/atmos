@@ -1,0 +1,75 @@
+commands:
+  - name: casts generate examples parallel-steps control-steps
+    description: Regenerate the Parallel Steps example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: control-steps
+        working_directory: "../../.context/cast-fixtures/parallel-steps"
+        title: "Parallel Steps: grouped checks and matrix expansion"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/parallel-steps/control-steps.cast"
+        steps:
+          - type: simulate
+            text: "# run independent checks with dependency-aware parallelism"
+          - type: simulate
+            text: &checks_cmd atmos workflow checks -f parallel
+          - type: shell
+            name: checks
+            duration: 450ms
+            interval: 750ms
+            command: *checks_cmd
+          - type: simulate
+            text: "# expand a matrix into parallel work"
+          - type: simulate
+            text: &matrix_cmd atmos workflow matrix -f parallel
+          - type: shell
+            name: matrix
+            duration: 450ms
+            interval: 750ms
+            command: *matrix_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples parallel-steps control-steps
+  - name: casts validate examples parallel-steps control-steps
+    description: Validate the Parallel Steps example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/parallel-steps/control-steps.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          for needle in [
+              "atmos workflow checks -f parallel",
+              "lint passed",
+              "unit tests passed",
+              "packaging after lint and unit",
+              "3 succeeded, 0 failed",
+              "atmos workflow matrix -f parallel",
+              "testing linux with Go 1.22",
+              "testing darwin with Go 1.23",
+              "4 succeeded, 0 failed",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"parallel-steps cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "✗"]:
+              if bad in plain:
+                  raise SystemExit(f"parallel-steps cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

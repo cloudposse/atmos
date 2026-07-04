@@ -51,6 +51,54 @@ commands:
       - type: shell
         name: locals-structured-values
         command: atmos casts generate examples locals structured-values
+      - type: shell
+        name: generate-files-component-files
+        command: atmos casts generate examples generate-files component-files
+      - type: shell
+        name: demo-workflows-deploy
+        command: atmos casts generate examples demo-workflows deploy
+      - type: shell
+        name: parallel-steps-control-steps
+        command: atmos casts generate examples parallel-steps control-steps
+      - type: shell
+        name: workflow-retries-retry-failure
+        command: atmos casts generate examples workflow-retries retry-failure
+      - type: shell
+        name: http-webhooks-local-endpoints
+        command: atmos casts generate examples http-webhooks local-endpoints
+      - type: shell
+        name: say-something-pipeline
+        command: atmos casts generate examples say-something pipeline
+      - type: shell
+        name: demo-ansible-dry-run
+        command: atmos casts generate examples demo-ansible dry-run
+      - type: shell
+        name: demo-atlantis-repo-config
+        command: atmos casts generate examples demo-atlantis repo-config
+      - type: shell
+        name: interactive-workflows-table-and-build
+        command: atmos casts generate examples interactive-workflows table-and-build
+      - type: shell
+        name: secrets-masking-masked-plan
+        command: atmos casts generate examples secrets-masking masked-plan
+      - type: shell
+        name: remote-stack-imports-remote-vars
+        command: atmos casts generate examples remote-stack-imports remote-vars
+      - type: shell
+        name: demo-library-modules
+        command: atmos casts generate examples demo-library modules
+      - type: shell
+        name: source-provisioning-sources
+        command: atmos casts generate examples source-provisioning sources
+      - type: shell
+        name: config-profiles-list-and-show
+        command: atmos casts generate examples config-profiles list-and-show
+      - type: shell
+        name: terraform-tests-stack-discovery
+        command: atmos casts generate examples terraform-tests stack-discovery
+      - type: shell
+        name: hooks-custom-command-hook-config
+        command: atmos casts generate examples hooks-custom-command hook-config
   - name: casts validate examples
     description: Validate every example-sourced cast
     env: !include cast-defaults.yaml .env.command
@@ -103,3 +151,51 @@ commands:
       - type: shell
         name: locals-structured-values
         command: atmos casts validate examples locals structured-values
+      - type: shell
+        name: generate-files-component-files
+        command: atmos casts validate examples generate-files component-files
+      - type: shell
+        name: demo-workflows-deploy
+        command: atmos casts validate examples demo-workflows deploy
+      - type: shell
+        name: parallel-steps-control-steps
+        command: atmos casts validate examples parallel-steps control-steps
+      - type: shell
+        name: workflow-retries-retry-failure
+        command: atmos casts validate examples workflow-retries retry-failure
+      - type: shell
+        name: http-webhooks-local-endpoints
+        command: atmos casts validate examples http-webhooks local-endpoints
+      - type: shell
+        name: say-something-pipeline
+        command: atmos casts validate examples say-something pipeline
+      - type: shell
+        name: demo-ansible-dry-run
+        command: atmos casts validate examples demo-ansible dry-run
+      - type: shell
+        name: demo-atlantis-repo-config
+        command: atmos casts validate examples demo-atlantis repo-config
+      - type: shell
+        name: interactive-workflows-table-and-build
+        command: atmos casts validate examples interactive-workflows table-and-build
+      - type: shell
+        name: secrets-masking-masked-plan
+        command: atmos casts validate examples secrets-masking masked-plan
+      - type: shell
+        name: remote-stack-imports-remote-vars
+        command: atmos casts validate examples remote-stack-imports remote-vars
+      - type: shell
+        name: demo-library-modules
+        command: atmos casts validate examples demo-library modules
+      - type: shell
+        name: source-provisioning-sources
+        command: atmos casts validate examples source-provisioning sources
+      - type: shell
+        name: config-profiles-list-and-show
+        command: atmos casts validate examples config-profiles list-and-show
+      - type: shell
+        name: terraform-tests-stack-discovery
+        command: atmos casts validate examples terraform-tests stack-discovery
+      - type: shell
+        name: hooks-custom-command-hook-config
+        command: atmos casts validate examples hooks-custom-command hook-config

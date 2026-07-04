@@ -1,6 +1,9 @@
 ---
 title: Secrets Masking
 tags: [DX]
+cast:
+  file: /casts/examples/secrets-masking/masked-plan.cast
+  title: atmos secrets masking
 ---
 
 # Secrets Masking Example

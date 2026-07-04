@@ -1,6 +1,9 @@
 ---
 title: Parallel Steps
 tags: [Automation]
+cast:
+  file: /casts/examples/parallel-steps/control-steps.cast
+  title: atmos parallel workflow steps
 ---
 
 # Example: Parallel Workflow Steps

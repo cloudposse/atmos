@@ -1,6 +1,9 @@
 ---
 title: Ansible
 tags: [Automation]
+cast:
+  file: /casts/examples/demo-ansible/dry-run.cast
+  title: atmos Ansible dry run
 ---
 
 # Example: Ansible Hello World

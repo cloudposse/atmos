@@ -1,6 +1,9 @@
 ---
 title: HTTP Webhooks
 tags: [Hooks, Automation]
+cast:
+  file: /casts/examples/http-webhooks/local-endpoints.cast
+  title: atmos HTTP webhooks
 ---
 
 # HTTP Step Type

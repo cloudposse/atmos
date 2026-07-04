@@ -1,6 +1,9 @@
 ---
 title: Source Provisioning
 tags: [Components]
+cast:
+  file: /casts/examples/source-provisioning/sources.cast
+  title: atmos source provisioning
 ---
 
 # Source Provisioning

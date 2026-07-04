@@ -1,0 +1,62 @@
+commands:
+  - name: casts generate examples source-provisioning sources
+    description: Regenerate the Source Provisioning example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: sources
+        working_directory: "../../.context/cast-fixtures/source-provisioning"
+        title: "Source Provisioning: local and remote component sources"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/source-provisioning/sources.cast"
+        steps:
+          - type: simulate
+            text: "# local sources can point at sibling component libraries"
+          - type: simulate
+            text: &weather_cmd atmos describe component weather -s dev --query .source
+          - type: shell
+            name: weather-source
+            duration: 450ms
+            interval: 750ms
+            command: *weather_cmd
+          - type: simulate
+            text: "# remote sources can pin a GitHub component path and ref"
+          - type: simulate
+            text: &ipinfo_cmd atmos describe component ipinfo -s dev --query .source
+          - type: shell
+            name: ipinfo-source
+            duration: 450ms
+            interval: 750ms
+            command: *ipinfo_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples source-provisioning sources
+  - name: casts validate examples source-provisioning sources
+    description: Validate the Source Provisioning example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/source-provisioning/sources.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          for needle in ["uri: ../demo-library/weather", "uri: github.com/cloudposse/atmos//examples/demo-library/ipinfo", "version: main"]:
+              if needle not in plain:
+                  raise SystemExit(f"source-provisioning cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)
