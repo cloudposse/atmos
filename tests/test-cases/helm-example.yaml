@@ -14,9 +14,9 @@ tests:
       - "test"
     skip:
       # The K3s emulator needs a privileged-capable container runtime. The current
-      # hosted Windows and macOS acceptance runners do not provide one reliably.
-      # The dedicated k3s workflow still runs this example on Linux, while macOS
-      # k3s coverage is exercised by examples/demo-helmfile.
+      # hosted Windows and Apple Silicon macOS acceptance runners do not provide
+      # one reliably. The dedicated k3s workflow still runs this example on
+      # Linux and macOS Intel runners.
       os: !not "darwin|windows"
     expect:
       timeout: "10m"

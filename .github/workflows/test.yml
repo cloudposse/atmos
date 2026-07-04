@@ -473,13 +473,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - flavor: { os: ubuntu-latest, target: linux, artifact: linux }
-            demo-folder: demo-helmfile
-          - flavor: { os: ubuntu-latest, target: linux, artifact: linux }
-            demo-folder: helm
-          - flavor: { os: "macos-15-intel", target: macos, artifact: macos-intel }
-            demo-folder: demo-helmfile
+        flavor:
+          - { os: ubuntu-latest, target: linux, artifact: linux }
+          - { os: "macos-15-intel", target: macos, artifact: macos-intel }
+        demo-folder:
+          - demo-helmfile
+          - helm
 
     timeout-minutes: 40
     steps:
