@@ -269,11 +269,16 @@ func TestCustomCommandIntegration_SkipsStepWhenConditionIsFalse(t *testing.T) {
 	skippedFile := filepath.Join(tmpDir, "skipped.txt")
 	celSkippedFile := filepath.Join(tmpDir, "cel-skipped.txt")
 	celRanFile := filepath.Join(tmpDir, "cel-ran.txt")
+	envSkippedFile := filepath.Join(tmpDir, "env-skipped.txt")
+	envRanFile := filepath.Join(tmpDir, "env-ran.txt")
 	ranFile := filepath.Join(tmpDir, "ran.txt")
 
 	testCommand := schema.Command{
 		Name:        "test-when-skip",
 		Description: "Test when skip",
+		Env: []schema.CommandEnv{
+			{Key: "TARGET", Value: "prod"},
+		},
 		Steps: schema.Tasks{
 			{
 				Command: customCommandWriteHelperCommand(t, skippedFile, "skipped"),
@@ -291,6 +296,19 @@ func TestCustomCommandIntegration_SkipsStepWhenConditionIsFalse(t *testing.T) {
 				Command: customCommandWriteHelperCommand(t, celRanFile, "cel-ran"),
 				Type:    "shell",
 				When:    schema.MustCondition("workflow == 'test-when-skip' && step == 'cel-run'"),
+			},
+			{
+				Name:    "env-skip",
+				Command: customCommandWriteHelperCommand(t, envSkippedFile, "env-skipped"),
+				Type:    "shell",
+				When:    schema.MustCondition("env['TARGET'] == 'dev'"),
+			},
+			{
+				Name:    "env-run",
+				Command: customCommandWriteHelperCommand(t, envRanFile, "env-ran"),
+				Type:    "shell",
+				Env:     map[string]string{"STEP_TARGET": "enabled"},
+				When:    schema.MustCondition("env['TARGET'] == 'prod' && env['STEP_TARGET'] == 'enabled'"),
 			},
 			{
 				Command: customCommandWriteHelperCommand(t, ranFile, "ran"),
@@ -317,6 +335,8 @@ func TestCustomCommandIntegration_SkipsStepWhenConditionIsFalse(t *testing.T) {
 	assert.NoFileExists(t, skippedFile)
 	assert.NoFileExists(t, celSkippedFile)
 	assert.FileExists(t, celRanFile)
+	assert.NoFileExists(t, envSkippedFile)
+	assert.FileExists(t, envRanFile)
 	assert.FileExists(t, ranFile)
 }
 

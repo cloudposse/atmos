@@ -233,12 +233,23 @@ func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep,
 }
 
 func workflowConditionContext(workflow string, workflowDefinition *schema.WorkflowDefinition, step *schema.WorkflowStep, commandLineStack string) schema.ConditionContext {
+	return BuildConditionContext(workflow, workflowDefinition, step, commandLineStack, nil)
+}
+
+// BuildConditionContext constructs the runtime facts exposed to workflow `when`
+// conditions. Step stack overrides workflow stack, command-line stack overrides
+// both, and step env overlays workflow/base env.
+func BuildConditionContext(workflow string, workflowDefinition *schema.WorkflowDefinition, step *schema.WorkflowStep, commandLineStack string, baseEnv map[string]string) schema.ConditionContext {
+	defer perf.Track(nil, "workflow.BuildConditionContext")()
+
 	stack := ""
 	stepName := ""
-	env := map[string]string(nil)
+	env := baseEnv
 	if workflowDefinition != nil {
 		stack = workflowDefinition.Stack
-		env = workflowDefinition.Env
+		if env == nil {
+			env = workflowDefinition.Env
+		}
 	}
 	if step != nil {
 		if step.Stack != "" {

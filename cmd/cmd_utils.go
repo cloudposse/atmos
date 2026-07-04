@@ -622,13 +622,14 @@ func executeCustomCommand(
 		finalArgs = args
 	}
 
+	commandConditionEnv := envpkg.CommandEnvToMap(commandConfig.Env)
 	hasRunnableStep := false
 	for i := range commandConfig.Steps {
 		step := &commandConfig.Steps[i]
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
-		runs, err := step.When.EvaluateE(customCommandConditionContext(commandConfig.Name, step, i, nil))
+		runs, err := step.When.EvaluateE(customCommandConditionContext(commandConfig.Name, step, i, commandConditionEnv))
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
@@ -745,7 +746,7 @@ func executeCustomCommand(
 
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
-		runs, err := step.When.EvaluateE(customCommandConditionContext(commandConfig.Name, &step, i, nil))
+		runs, err := step.When.EvaluateE(customCommandConditionContext(commandConfig.Name, &step, i, commandConditionEnv))
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
@@ -1007,9 +1008,19 @@ func executeCustomCommand(
 func customCommandConditionContext(commandName string, step *schema.Task, index int, env map[string]string) schema.ConditionContext {
 	stepName := ""
 	stack := ""
+	stepEnv := env
 	if step != nil {
 		stepName = step.Name
 		stack = step.Stack
+		if len(step.Env) > 0 {
+			stepEnv = make(map[string]string, len(env)+len(step.Env))
+			for key, value := range env {
+				stepEnv[key] = value
+			}
+			for key, value := range step.Env {
+				stepEnv[key] = value
+			}
+		}
 	}
 	if stepName == "" {
 		stepName = fmt.Sprintf("step-%d", index)
@@ -1020,7 +1031,7 @@ func customCommandConditionContext(commandName string, step *schema.Task, index 
 		Stack:    stack,
 		Workflow: commandName,
 		Step:     stepName,
-		Env:      env,
+		Env:      stepEnv,
 	}
 }
 

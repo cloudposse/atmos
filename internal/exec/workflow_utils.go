@@ -376,7 +376,7 @@ func ExecuteWorkflow(
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			return err
 		}
-		runs, err := step.When.EvaluateE(workflowConditionContext(workflow, workflowDefinition, step, commandLineStack, workflowDefinition.Env))
+		runs, err := step.When.EvaluateE(workflowPkg.BuildConditionContext(workflow, workflowDefinition, step, commandLineStack, workflowDefinition.Env))
 		if err != nil {
 			return err
 		}
@@ -423,7 +423,7 @@ func ExecuteWorkflow(
 	showRenderer.RenderHeaderIfNeeded(workflowDefinition, workflow, flags)
 
 	for stepIdx, step := range steps {
-		runs, err := step.When.EvaluateE(workflowConditionContext(workflow, workflowDefinition, &step, commandLineStack, workflowDefinition.Env))
+		runs, err := step.When.EvaluateE(workflowPkg.BuildConditionContext(workflow, workflowDefinition, &step, commandLineStack, workflowDefinition.Env))
 		if err != nil {
 			return err
 		}
@@ -700,41 +700,6 @@ func ExecuteWorkflow(
 	}
 
 	return nil
-}
-
-func workflowConditionContext(workflow string, workflowDefinition *schema.WorkflowDefinition, step *schema.WorkflowStep, commandLineStack string, env map[string]string) schema.ConditionContext {
-	stack := ""
-	stepName := ""
-	stepEnv := env
-	if workflowDefinition != nil {
-		stack = workflowDefinition.Stack
-	}
-	if step != nil {
-		if step.Stack != "" {
-			stack = step.Stack
-		}
-		stepName = step.Name
-		if len(step.Env) > 0 {
-			stepEnv = make(map[string]string, len(env)+len(step.Env))
-			for key, value := range env {
-				stepEnv[key] = value
-			}
-			for key, value := range step.Env {
-				stepEnv[key] = value
-			}
-		}
-	}
-	if commandLineStack != "" {
-		stack = commandLineStack
-	}
-	return schema.ConditionContext{
-		CI:       telemetry.IsCI(),
-		Status:   schema.ConditionPredicateSuccess,
-		Stack:    stack,
-		Workflow: workflow,
-		Step:     stepName,
-		Env:      stepEnv,
-	}
 }
 
 // stepExecutorState holds persistent state for extended step execution within a workflow.
