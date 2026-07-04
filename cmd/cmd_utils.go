@@ -1013,7 +1013,7 @@ func customCommandConditionContext(commandName string, step *schema.Task, index 
 		stepName = step.Name
 		stack = step.Stack
 		if len(step.Env) > 0 {
-			stepEnv = make(map[string]string, len(env)+len(step.Env))
+			stepEnv = make(map[string]string, len(env))
 			for key, value := range env {
 				stepEnv[key] = value
 			}

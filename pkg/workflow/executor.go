@@ -257,7 +257,7 @@ func BuildConditionContext(workflow string, workflowDefinition *schema.WorkflowD
 		}
 		stepName = step.Name
 		if len(step.Env) > 0 {
-			merged := make(map[string]string, len(env)+len(step.Env))
+			merged := make(map[string]string, len(env))
 			for key, value := range env {
 				merged[key] = value
 			}
