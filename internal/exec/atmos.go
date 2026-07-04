@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -71,7 +72,7 @@ func ExecuteAtmosCmd() error {
 	lo.ForEach(componentsSet, func(c string, _ int) {
 		var stacksForComponent []string
 		for k, v := range stacksComponentsMap {
-			if u.SliceContainsString(v, c) {
+			if slices.Contains(v, c) {
 				stacksForComponent = append(stacksForComponent, k)
 			}
 		}
@@ -151,10 +152,18 @@ func ExecuteAtmosCmd() error {
 		return nil
 	}
 
-	// All Terraform commands
+	// All Terraform commands.
 	if strings.HasPrefix(selectedCommand, "terraform") {
 		parts := strings.Split(selectedCommand, " ")
 		subcommand := parts[1]
+
+		// "terraform shell" is an Atmos-only command (not a native terraform subcommand).
+		// Route it directly to ExecuteTerraformShell to avoid ExecuteTerraform passing
+		// it to the terraform executable.
+		if subcommand == "shell" {
+			return ExecuteTerraformShell(shellOptionsForUI(selectedComponent, selectedStack), &atmosConfig)
+		}
+
 		configAndStacksInfo.ComponentType = "terraform"
 		configAndStacksInfo.Component = selectedComponent
 		configAndStacksInfo.ComponentFromArg = selectedComponent
@@ -169,4 +178,14 @@ func ExecuteAtmosCmd() error {
 	}
 
 	return nil
+}
+
+// shellOptionsForUI builds ShellOptions for the interactive UI dispatch path.
+// The UI doesn't support DryRun or Identity selection, so those default to zero values.
+func shellOptionsForUI(component, stack string) *ShellOptions {
+	return &ShellOptions{
+		Component:         component,
+		Stack:             stack,
+		ProcessingOptions: ProcessingOptions{ProcessTemplates: true, ProcessFunctions: true},
+	}
 }

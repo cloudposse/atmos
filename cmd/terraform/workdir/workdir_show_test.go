@@ -411,3 +411,74 @@ func TestShowCmd_ConfigValues(t *testing.T) {
 	assert.Equal(t, "staging", stack)
 	assert.Equal(t, "/custom/path", basePath)
 }
+
+// Test remote source type display.
+
+func TestPrintShowHuman_RemoteSourceType(t *testing.T) {
+	info := &WorkdirInfo{
+		Name:          "dev-vpc",
+		Component:     "vpc",
+		Stack:         "dev",
+		SourceType:    "remote",
+		SourceURI:     "github.com/cloudposse/terraform-aws-vpc",
+		SourceVersion: "v1.2.3",
+		Source:        "terraform-aws-vpc",
+		Path:          ".workdir/terraform/dev-vpc",
+		ContentHash:   "abc123",
+		CreatedAt:     time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
+		UpdatedAt:     time.Date(2024, 1, 2, 12, 0, 0, 0, time.UTC),
+	}
+
+	// Should display remote source fields without panic.
+	printShowHuman(info)
+}
+
+func TestPrintShowHuman_RemoteSourceWithoutVersion(t *testing.T) {
+	info := &WorkdirInfo{
+		Name:       "dev-vpc",
+		Component:  "vpc",
+		Stack:      "dev",
+		SourceType: "remote",
+		SourceURI:  "github.com/cloudposse/terraform-aws-vpc",
+		// SourceVersion is empty.
+		Source:    "terraform-aws-vpc",
+		Path:      ".workdir/terraform/dev-vpc",
+		CreatedAt: time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
+		UpdatedAt: time.Date(2024, 1, 2, 12, 0, 0, 0, time.UTC),
+	}
+
+	// Should handle missing version gracefully.
+	printShowHuman(info)
+}
+
+func TestPrintShowHuman_WithLastAccessed(t *testing.T) {
+	info := &WorkdirInfo{
+		Name:         "dev-vpc",
+		Component:    "vpc",
+		Stack:        "dev",
+		Source:       "components/terraform/vpc",
+		Path:         ".workdir/terraform/dev-vpc",
+		CreatedAt:    time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
+		UpdatedAt:    time.Date(2024, 1, 2, 12, 0, 0, 0, time.UTC),
+		LastAccessed: time.Date(2024, 1, 3, 12, 0, 0, 0, time.UTC),
+	}
+
+	// Should display last accessed timestamp.
+	printShowHuman(info)
+}
+
+func TestPrintShowHuman_ZeroLastAccessed(t *testing.T) {
+	info := &WorkdirInfo{
+		Name:      "dev-vpc",
+		Component: "vpc",
+		Stack:     "dev",
+		Source:    "components/terraform/vpc",
+		Path:      ".workdir/terraform/dev-vpc",
+		CreatedAt: time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
+		UpdatedAt: time.Date(2024, 1, 2, 12, 0, 0, 0, time.UTC),
+		// LastAccessed is zero value - should not be displayed.
+	}
+
+	// Should not display last accessed when zero.
+	printShowHuman(info)
+}

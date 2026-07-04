@@ -387,7 +387,7 @@ func TestReadTerraformBackendAzurerm_MissingStorageAccount(t *testing.T) {
 
 func TestReadTerraformBackendAzurerm_CachedClient(t *testing.T) {
 	// Pre-populate cache with a mock client.
-	cacheKey := "cachedaccount"
+	cacheKey := "cachedaccount:blob.core.windows.net"
 	mockContent := `{"version": 4, "outputs": {"cached": {"value": "from-cache"}}}`
 
 	mockClient := &mockAzureBlobClient{
@@ -930,4 +930,182 @@ func TestReadTerraformBackendAzurerm_Integration_WorkspaceNaming(t *testing.T) {
 			assert.Equal(t, tt.expectedBlobName, actualBlobName)
 		})
 	}
+}
+
+func TestResolveAzureBlobSuffix(t *testing.T) {
+	tests := []struct {
+		name           string
+		environment    string
+		expectedSuffix string
+	}{
+		{
+			name:           "public cloud",
+			environment:    "public",
+			expectedSuffix: "blob.core.windows.net",
+		},
+		{
+			name:           "US government cloud (GCC High)",
+			environment:    "usgovernment",
+			expectedSuffix: "blob.core.usgovcloudapi.net",
+		},
+		{
+			name:           "China cloud (Mooncake)",
+			environment:    "china",
+			expectedSuffix: "blob.core.chinacloudapi.cn",
+		},
+		{
+			name:           "German cloud",
+			environment:    "german",
+			expectedSuffix: "blob.core.cloudapi.de",
+		},
+		{
+			name:           "empty defaults to public",
+			environment:    "",
+			expectedSuffix: "blob.core.windows.net",
+		},
+		{
+			name:           "unknown defaults to public",
+			environment:    "custom-cloud",
+			expectedSuffix: "blob.core.windows.net",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suffix := resolveAzureBlobSuffix(tt.environment)
+			assert.Equal(t, tt.expectedSuffix, suffix)
+		})
+	}
+}
+
+func TestReadTerraformBackendAzurerm_SovereignCloudCacheLookup(t *testing.T) {
+	// Verify that ReadTerraformBackendAzurerm uses backend["environment"] to
+	// build the cache key. We pre-populate the cache with sovereign-cloud keys
+	// and assert that the production code finds the right cached client.
+	tests := []struct {
+		name        string
+		environment string
+		blobSuffix  string // Expected suffix in cache key.
+	}{
+		{
+			name:        "US government backend uses gov cache key",
+			environment: "usgovernment",
+			blobSuffix:  "blob.core.usgovcloudapi.net",
+		},
+		{
+			name:        "China backend uses china cache key",
+			environment: "china",
+			blobSuffix:  "blob.core.chinacloudapi.cn",
+		},
+		{
+			name:        "public backend uses public cache key",
+			environment: "public",
+			blobSuffix:  "blob.core.windows.net",
+		},
+		{
+			name:        "empty environment uses public cache key",
+			environment: "",
+			blobSuffix:  "blob.core.windows.net",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			account := "sovtest" + tt.environment
+			cacheKey := account + ":" + tt.blobSuffix
+			expectedContent := `{"sovereign":"` + tt.environment + `"}`
+
+			mockClient := &mockAzureBlobClient{
+				downloadStreamFunc: func(ctx context.Context, containerName string, blobName string, options *azblob.DownloadStreamOptions) (AzureBlobDownloadResponse, error) {
+					return createMockDownloadResponse(expectedContent), nil
+				},
+			}
+
+			// Pre-populate the cache with the sovereign key.
+			azureBlobClientCache.Store(cacheKey, mockClient)
+			defer azureBlobClientCache.Delete(cacheKey)
+
+			// Call through the real public API — this must read backend["environment"],
+			// build the same cache key, and find our mock client.
+			componentSections := map[string]any{
+				"workspace": "default",
+				"backend": map[string]any{
+					"storage_account_name": account,
+					"container_name":       "tfstate",
+					"key":                  "terraform.tfstate",
+					"environment":          tt.environment,
+				},
+			}
+
+			result, err := ReadTerraformBackendAzurerm(nil, &componentSections, nil)
+			require.NoError(t, err)
+			assert.Equal(t, expectedContent, string(result))
+		})
+	}
+}
+
+func TestSovereignCloudIsolatesCacheFromPublic(t *testing.T) {
+	// Verify that the same storage account with different environments
+	// uses separate cache entries (i.e., a public-cloud cached client
+	// is NOT returned for a usgovernment backend).
+	account := "sharedaccount"
+	publicKey := account + ":blob.core.windows.net"
+	govKey := account + ":blob.core.usgovcloudapi.net"
+
+	publicClient := &mockAzureBlobClient{
+		downloadStreamFunc: func(ctx context.Context, containerName string, blobName string, options *azblob.DownloadStreamOptions) (AzureBlobDownloadResponse, error) {
+			return createMockDownloadResponse(`{"cloud":"public"}`), nil
+		},
+	}
+	govClient := &mockAzureBlobClient{
+		downloadStreamFunc: func(ctx context.Context, containerName string, blobName string, options *azblob.DownloadStreamOptions) (AzureBlobDownloadResponse, error) {
+			return createMockDownloadResponse(`{"cloud":"usgovernment"}`), nil
+		},
+	}
+
+	azureBlobClientCache.Store(publicKey, publicClient)
+	azureBlobClientCache.Store(govKey, govClient)
+	defer azureBlobClientCache.Delete(publicKey)
+	defer azureBlobClientCache.Delete(govKey)
+
+	makeComponentSections := func(env string) map[string]any {
+		return map[string]any{
+			"workspace": "default",
+			"backend": map[string]any{
+				"storage_account_name": account,
+				"container_name":       "tfstate",
+				"key":                  "terraform.tfstate",
+				"environment":          env,
+			},
+		}
+	}
+
+	// Public backend should get the public client.
+	pubSections := makeComponentSections("public")
+	pubResult, err := ReadTerraformBackendAzurerm(nil, &pubSections, nil)
+	require.NoError(t, err)
+	assert.Equal(t, `{"cloud":"public"}`, string(pubResult))
+
+	// Government backend should get the government client.
+	govSections := makeComponentSections("usgovernment")
+	govResult, err := ReadTerraformBackendAzurerm(nil, &govSections, nil)
+	require.NoError(t, err)
+	assert.Equal(t, `{"cloud":"usgovernment"}`, string(govResult))
+}
+
+func TestLogAzureRetryExhausted(t *testing.T) {
+	// Verify logAzureRetryExhausted does not panic with various error types.
+	t.Run("with ResponseError", func(t *testing.T) {
+		respErr := &azcore.ResponseError{StatusCode: 500}
+		assert.NotPanics(t, func() {
+			logAzureRetryExhausted(respErr, "test.tfstate", "container", 2)
+		})
+	})
+
+	t.Run("with generic error", func(t *testing.T) {
+		err := fmt.Errorf("network failure")
+		assert.NotPanics(t, func() {
+			logAzureRetryExhausted(err, "test.tfstate", "container", 2)
+		})
+	})
 }

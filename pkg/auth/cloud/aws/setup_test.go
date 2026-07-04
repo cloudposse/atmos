@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	ini "gopkg.in/ini.v1"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -20,7 +21,7 @@ func TestSetupFiles_WritesCredentialsAndConfig(t *testing.T) {
 	homedir.Reset()                  // Clear homedir cache
 
 	creds := &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret", SessionToken: "token", Region: "us-east-2"}
-	err := SetupFiles("prov", "dev", creds, "")
+	err := SetupFiles("prov", "dev", creds, "", "")
 	require.NoError(t, err)
 
 	credPath := filepath.Join(tmp, "atmos", "aws", "prov", "credentials")
@@ -52,7 +53,7 @@ func TestSetupFiles_WithEmptyRegion(t *testing.T) {
 
 	// Credentials without region - should default to us-east-1.
 	creds := &types.AWSCredentials{AccessKeyID: "AKIA456", SecretAccessKey: "secret2", SessionToken: "token2", Region: ""}
-	err := SetupFiles("test-prov", "test-id", creds, "")
+	err := SetupFiles("test-prov", "test-id", creds, "", "")
 	require.NoError(t, err)
 
 	cfgPath := filepath.Join(tmp, "atmos", "aws", "test-prov", "config")
@@ -66,7 +67,7 @@ func TestSetupFiles_WithEmptyRegion(t *testing.T) {
 
 func TestSetupFiles_NonAWSCredentials(t *testing.T) {
 	// Pass nil credentials (ICredentials interface).
-	err := SetupFiles("prov", "id", nil, "")
+	err := SetupFiles("prov", "id", nil, "", "")
 	require.NoError(t, err) // Should succeed without doing anything.
 }
 
@@ -76,12 +77,12 @@ func TestSetupFiles_WithBasePath(t *testing.T) {
 	basePath := filepath.Join(tmp, "custom-base")
 
 	creds := &types.AWSCredentials{AccessKeyID: "AKIA789", SecretAccessKey: "secret3", SessionToken: "token3", Region: "eu-west-1"}
-	err := SetupFiles("base-prov", "base-id", creds, basePath)
+	err := SetupFiles("base-prov", "base-id", creds, basePath, "")
 	require.NoError(t, err)
 
-	// Files are under basePath/base-prov/, not basePath/.aws/atmos/base-prov/.
-	credPath := filepath.Join(basePath, "base-prov", "credentials")
-	cfgPath := filepath.Join(basePath, "base-prov", "config")
+	// Files are under basePath/aws/base-prov/ with new path structure.
+	credPath := filepath.Join(basePath, "aws", "base-prov", "credentials")
+	cfgPath := filepath.Join(basePath, "aws", "base-prov", "config")
 
 	// Verify credentials file in custom base path.
 	cfg, err := ini.Load(credPath)
@@ -206,22 +207,22 @@ func TestSetEnvironmentVariables_ClearsConflictingCredentials(t *testing.T) {
 	err := SetEnvironmentVariables(authContext, stack)
 	require.NoError(t, err)
 
-	// Verify conflicting credential environment variables were cleared.
+	// Verify conflicting credential environment variables were deleted (not present).
+	// Scrubbing from subprocess env happens at the WithEnvironment level.
 	_, hasAccessKey := stack.ComponentEnvSection["AWS_ACCESS_KEY_ID"]
+	assert.False(t, hasAccessKey, "AWS_ACCESS_KEY_ID should be absent")
 	_, hasSecretKey := stack.ComponentEnvSection["AWS_SECRET_ACCESS_KEY"]
+	assert.False(t, hasSecretKey, "AWS_SECRET_ACCESS_KEY should be absent")
 	_, hasSessionToken := stack.ComponentEnvSection["AWS_SESSION_TOKEN"]
+	assert.False(t, hasSessionToken, "AWS_SESSION_TOKEN should be absent")
 	_, hasSecurityToken := stack.ComponentEnvSection["AWS_SECURITY_TOKEN"]
-	_, hasWebIdentityToken := stack.ComponentEnvSection["AWS_WEB_IDENTITY_TOKEN_FILE"]
-	_, hasRoleArn := stack.ComponentEnvSection["AWS_ROLE_ARN"]
-	_, hasRoleSessionName := stack.ComponentEnvSection["AWS_ROLE_SESSION_NAME"]
-
-	assert.False(t, hasAccessKey, "AWS_ACCESS_KEY_ID should be cleared")
-	assert.False(t, hasSecretKey, "AWS_SECRET_ACCESS_KEY should be cleared")
-	assert.False(t, hasSessionToken, "AWS_SESSION_TOKEN should be cleared")
-	assert.False(t, hasSecurityToken, "AWS_SECURITY_TOKEN should be cleared")
-	assert.False(t, hasWebIdentityToken, "AWS_WEB_IDENTITY_TOKEN_FILE should be cleared")
-	assert.False(t, hasRoleArn, "AWS_ROLE_ARN should be cleared")
-	assert.False(t, hasRoleSessionName, "AWS_ROLE_SESSION_NAME should be cleared")
+	assert.False(t, hasSecurityToken, "AWS_SECURITY_TOKEN should be absent")
+	_, hasWebIdentity := stack.ComponentEnvSection["AWS_WEB_IDENTITY_TOKEN_FILE"]
+	assert.False(t, hasWebIdentity, "AWS_WEB_IDENTITY_TOKEN_FILE should be absent")
+	_, hasRoleARN := stack.ComponentEnvSection["AWS_ROLE_ARN"]
+	assert.False(t, hasRoleARN, "AWS_ROLE_ARN should be absent")
+	_, hasRoleSession := stack.ComponentEnvSection["AWS_ROLE_SESSION_NAME"]
+	assert.False(t, hasRoleSession, "AWS_ROLE_SESSION_NAME should be absent")
 
 	// Verify non-AWS environment variables were preserved.
 	assert.Equal(t, "/home/user", stack.ComponentEnvSection["HOME"])
@@ -268,6 +269,116 @@ func TestSetAuthContext_PopulatesAuthContext(t *testing.T) {
 	assert.Equal(t, "us-west-2", authContext.AWS.Region)
 	assert.Contains(t, authContext.AWS.CredentialsFile, filepath.Join("test-provider", "credentials"))
 	assert.Contains(t, authContext.AWS.ConfigFile, filepath.Join("test-provider", "config"))
+	assert.Empty(t, authContext.AWS.EndpointURL)
+}
+
+func TestSetAuthContext_WithIdentitySpecEndpoint(t *testing.T) {
+	// The identity endpoint is keyed by lowercase identity name. The
+	// "lowercase fallback" case exercises the strings.ToLower lookup in
+	// endpointURLFromManager when the caller passes a mixed-case identity name.
+	tests := []struct {
+		name         string
+		identityName string
+	}{
+		{name: "exact match", identityName: "test-identity"},
+		{name: "lowercase fallback", identityName: "Test-Identity"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", tmp)
+			homedir.Reset()
+
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockManager := types.NewMockAuthManager(ctrl)
+			mockManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+				"test-identity": {
+					Spec: map[string]interface{}{
+						"endpoint_url": "http://identity.localstack:4566",
+					},
+				},
+			})
+
+			authContext := &schema.AuthContext{}
+			err := SetAuthContext(&SetAuthContextParams{
+				AuthContext:  authContext,
+				StackInfo:    &schema.ConfigAndStacksInfo{},
+				ProviderName: "test-provider",
+				IdentityName: tt.identityName,
+				Credentials:  &types.AWSCredentials{Region: "us-west-2"},
+				BasePath:     "",
+				Manager:      mockManager,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, authContext.AWS)
+			assert.Equal(t, "http://identity.localstack:4566", authContext.AWS.EndpointURL)
+		})
+	}
+}
+
+func TestSetAuthContext_WithProviderSpecEndpointFallback(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	homedir.Reset()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockManager := types.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"test-identity": {
+			Spec: map[string]interface{}{},
+		},
+	})
+	mockManager.EXPECT().ResolveProviderConfig("test-identity").Return(&schema.Provider{
+		Spec: map[string]interface{}{
+			"endpoint_url": "http://provider.localstack:4566",
+		},
+	}, true)
+
+	authContext := &schema.AuthContext{}
+	err := SetAuthContext(&SetAuthContextParams{
+		AuthContext:  authContext,
+		StackInfo:    &schema.ConfigAndStacksInfo{},
+		ProviderName: "test-provider",
+		IdentityName: "test-identity",
+		Credentials:  &types.AWSCredentials{Region: "us-west-2"},
+		BasePath:     "",
+		Manager:      mockManager,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, authContext.AWS)
+	assert.Equal(t, "http://provider.localstack:4566", authContext.AWS.EndpointURL)
+}
+
+func TestSetAuthContext_NoEndpoint(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	homedir.Reset()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockManager := types.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{})
+	mockManager.EXPECT().ResolveProviderConfig("test-identity").Return(nil, false)
+
+	authContext := &schema.AuthContext{}
+	err := SetAuthContext(&SetAuthContextParams{
+		AuthContext:  authContext,
+		StackInfo:    &schema.ConfigAndStacksInfo{},
+		ProviderName: "test-provider",
+		IdentityName: "test-identity",
+		Credentials:  &types.AWSCredentials{Region: "us-west-2"},
+		BasePath:     "",
+		Manager:      mockManager,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, authContext.AWS)
+	assert.Empty(t, authContext.AWS.EndpointURL)
 }
 
 func TestSetAuthContext_NilParams(t *testing.T) {

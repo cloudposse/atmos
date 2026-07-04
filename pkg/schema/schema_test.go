@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 
 	"github.com/cloudposse/atmos/pkg/config/casemap"
@@ -37,6 +38,33 @@ schemas:
 	schemas := atmosConfig.GetSchemaRegistry("atmos")
 	assert.Equal(t, "some/random/path", schemas.Manifest)
 	assert.Equal(t, []string{"hello", "world"}, schemas.Matches)
+}
+
+func TestSetSchemaRegistry_NilMap(t *testing.T) {
+	// Reproduces the "assignment to entry in nil map" panic: a config loaded
+	// without a `schemas:` section leaves Schemas nil, and applying a
+	// `--schemas-atmos-manifest` override must not panic.
+	atmosConfig := &AtmosConfiguration{}
+	require.Nil(t, atmosConfig.Schemas, "precondition: Schemas must start nil")
+
+	assert.NotPanics(t, func() {
+		atmosConfig.SetSchemaRegistry("atmos", SchemaRegistry{Manifest: "some/random/path"})
+	})
+
+	registry := atmosConfig.GetSchemaRegistry("atmos")
+	assert.Equal(t, "some/random/path", registry.Manifest)
+}
+
+func TestSetSchemaRegistry_ExistingMapPreservesOtherKeys(t *testing.T) {
+	// Setting one key must not clobber unrelated entries already present.
+	atmosConfig := &AtmosConfiguration{Schemas: map[string]any{
+		"opa": ResourcePath{BasePath: "opa/path"},
+	}}
+
+	atmosConfig.SetSchemaRegistry("atmos", SchemaRegistry{Manifest: "manifest/path"})
+
+	assert.Equal(t, "manifest/path", atmosConfig.GetSchemaRegistry("atmos").Manifest)
+	assert.Equal(t, "opa/path", atmosConfig.GetResourcePath("opa").BasePath)
 }
 
 func TestIsColorEnabled(t *testing.T) {
@@ -180,4 +208,56 @@ func TestGetCaseSensitiveMap(t *testing.T) {
 		result := atmosConfig.GetCaseSensitiveMap("env")
 		assert.Nil(t, result)
 	})
+
+	templateEnvTests := []struct {
+		name     string
+		config   *AtmosConfiguration
+		expected map[string]string
+	}{
+		{
+			name: "returns templates.settings.env map when no CaseMaps",
+			config: &AtmosConfiguration{
+				Templates: Templates{
+					Settings: TemplatesSettings{
+						Env: map[string]string{
+							"aws_profile": "my-profile",
+						},
+					},
+				},
+			},
+			expected: map[string]string{"aws_profile": "my-profile"},
+		},
+		{
+			name: "returns templates.settings.env with case restored",
+			config: func() *AtmosConfiguration {
+				cm := casemap.New()
+				cm.Set("templates.settings.env", casemap.CaseMap{
+					"aws_profile": "AWS_PROFILE",
+					"aws_region":  "AWS_REGION",
+				})
+				return &AtmosConfiguration{
+					Templates: Templates{
+						Settings: TemplatesSettings{
+							Env: map[string]string{
+								"aws_profile": "production",
+								"aws_region":  "us-east-1",
+							},
+						},
+					},
+					CaseMaps: cm,
+				}
+			}(),
+			expected: map[string]string{
+				"AWS_PROFILE": "production",
+				"AWS_REGION":  "us-east-1",
+			},
+		},
+	}
+
+	for _, tt := range templateEnvTests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.config.GetCaseSensitiveMap("templates.settings.env")
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

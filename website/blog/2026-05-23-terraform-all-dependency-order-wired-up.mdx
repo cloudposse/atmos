@@ -1,0 +1,62 @@
+---
+slug: terraform-all-dependency-order-wired-up
+title: "Fix: terraform plan/apply --all actually runs in dependency order"
+authors: [atmos]
+tags: [bugfix]
+---
+
+`atmos terraform plan --all` and `apply --all` now execute components in dependency (topological) order, as originally documented. Until this fix, the `--all` flag was processing components in a non-deterministic order — the dependency-graph implementation that landed with [PR #1516](https://github.com/cloudposse/atmos/pull/1516) was reachable from tests but never wired into the CLI dispatcher.
+
+<!--truncate-->
+
+## What Changed
+
+The CLI dispatcher in `cmd/terraform/utils.go` routed every multi-component flag (`--all`, `--components`, `--query`) through `ExecuteTerraformQuery`, which walks components via Go map iteration. Go map iteration order is randomized — there was no topological sort on this path, and `settings.depends_on` was ignored even when defined.
+
+`--all` is now routed to `ExecuteTerraformAll`, the function that builds the dependency graph and executes components in topological order. `--components` and `--query` continue to route to `ExecuteTerraformQuery`; their behavior is unchanged.
+
+```bash
+# Components execute in dependency order, every time.
+$ atmos terraform plan --all -s prod --dry-run
+INFO  Processing components in dependency order count=8
+INFO  Processing component index=1 total=8 component=vpc stack=prod
+✓ Would plan vpc in prod (dry run)
+INFO  Processing component index=2 total=8 component=eks/cluster stack=prod
+✓ Would plan eks/cluster in prod (dry run)
+INFO  Processing component index=3 total=8 component=eks/external-dns stack=prod
+✓ Would plan eks/external-dns in prod (dry run)
+...
+```
+
+`destroy --all` now executes in reverse topological order — dependents are destroyed before their dependencies. Circular dependencies in `depends_on` produce a hard error with the cycle path instead of being silently traversed.
+
+## Why This Matters
+
+Anyone who configured `settings.depends_on` and ran `atmos terraform apply --all` was relying on a feature that didn't exist at the dispatch layer. A database component referencing a VPC's subnet IDs could be applied before the VPC, depending on which order Go decided to iterate the components map that run. The failure looked like a Terraform error, not a missing-feature bug, which is why this took a while to surface.
+
+The PRD for [DAG-based concurrent execution](https://github.com/cloudposse/atmos/blob/main/docs/prd/dag-concurrent-execution.md) was authored on the assumption that this path already worked. That work can now build on a foundation that actually exists.
+
+## Behavior Notes
+
+A few related changes ride along with the dispatch fix:
+
+- **Stack is no longer required with `--all`.** Running `atmos terraform plan --all` without `-s` now processes every stack, matching what the [terraform-apply docs](/cli/commands/terraform/apply) describe ("Apply all components in all stacks"). The internal `stack is required when using --all flag` error has been removed.
+- **`--all -s <stack>` still scopes to that stack.** Cross-stack prerequisites are not pulled in by default — same scope as before, just ordered. A future opt-in flag will allow cross-stack execution.
+- **Dry-run output is consistent.** Both multi-component paths now emit `Would <subcmd> <component> in <stack> (dry run)` for each component.
+- **Auth-aware YAML functions work under `--all`.** `!terraform.state`, `!store`, and friends now resolve credentials correctly during multi-component runs, the same as `--query` already did (fixes a latent regression of [#2081](https://github.com/cloudposse/atmos/issues/2081) for the `--all` path).
+
+## Known Follow-ups
+
+This fix unblocks several improvements that are still pending:
+
+- The dependency parser only reads the deprecated `settings.depends_on` format. It does not yet read [`dependencies.components`](/stacks/dependencies/components), the preferred format.
+- The parser only recognizes `component` and `stack` keys; documented `namespace`/`tenant`/`environment`/`stage` keys are ignored. A target in another stack must use the explicit `stack:` form.
+- Dependency-resolution failures (e.g., typo in a `component:` reference) are still logged at `Warn` and swallowed. A typo'd dependency silently drops the edge instead of erroring.
+- Execution is sequential. The DAG concurrency work tracked in `docs/prd/dag-concurrent-execution.md` will add `--max-concurrency` to parallelize independent components at the same level.
+
+Tracking issue: [#2485](https://github.com/cloudposse/atmos/issues/2485).
+
+## Get Involved
+
+- Share feedback in the [Atmos Community Slack](https://cloudposse.com/slack)
+- [Report issues](https://github.com/cloudposse/atmos/issues) on GitHub

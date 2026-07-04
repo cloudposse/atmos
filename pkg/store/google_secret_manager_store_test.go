@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"testing"
 
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/google/go-cmp/cmp"
 	"github.com/googleapis/gax-go/v2"
 	"github.com/stretchr/testify/assert"
@@ -28,6 +26,7 @@ type MockGSMClient struct {
 	mock.Mock
 }
 
+// CreateSecret mocks the GSM CreateSecret API call.
 func (m *MockGSMClient) CreateSecret(ctx context.Context, req *secretmanagerpb.CreateSecretRequest, opts ...gax.CallOption) (*secretmanagerpb.Secret, error) {
 	args := m.Called(mock.Anything, req)
 	if args.Get(0) == nil {
@@ -36,6 +35,7 @@ func (m *MockGSMClient) CreateSecret(ctx context.Context, req *secretmanagerpb.C
 	return args.Get(0).(*secretmanagerpb.Secret), args.Error(1)
 }
 
+// AddSecretVersion mocks the GSM AddSecretVersion API call.
 func (m *MockGSMClient) AddSecretVersion(ctx context.Context, req *secretmanagerpb.AddSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error) {
 	args := m.Called(mock.Anything, req)
 	if args.Get(0) == nil {
@@ -44,6 +44,7 @@ func (m *MockGSMClient) AddSecretVersion(ctx context.Context, req *secretmanager
 	return args.Get(0).(*secretmanagerpb.SecretVersion), args.Error(1)
 }
 
+// AccessSecretVersion mocks the GSM AccessSecretVersion API call.
 func (m *MockGSMClient) AccessSecretVersion(ctx context.Context, req *secretmanagerpb.AccessSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.AccessSecretVersionResponse, error) {
 	args := m.Called(mock.Anything, req)
 	if args.Get(0) == nil {
@@ -52,6 +53,23 @@ func (m *MockGSMClient) AccessSecretVersion(ctx context.Context, req *secretmana
 	return args.Get(0).(*secretmanagerpb.AccessSecretVersionResponse), args.Error(1)
 }
 
+// GetSecretVersion mocks the GSM GetSecretVersion API call, which returns version metadata
+// without accessing or decrypting the secret payload.
+func (m *MockGSMClient) GetSecretVersion(ctx context.Context, req *secretmanagerpb.GetSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error) {
+	args := m.Called(mock.Anything, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*secretmanagerpb.SecretVersion), args.Error(1)
+}
+
+// DeleteSecret mocks the GSM DeleteSecret API call.
+func (m *MockGSMClient) DeleteSecret(ctx context.Context, req *secretmanagerpb.DeleteSecretRequest, opts ...gax.CallOption) error {
+	args := m.Called(mock.Anything, req)
+	return args.Error(0)
+}
+
+// Close mocks the GSM client Close method.
 func (m *MockGSMClient) Close() error {
 	args := m.Called()
 	return args.Error(0)
@@ -77,11 +95,15 @@ func newGSMStoreWithClient(client GSMClient, options GSMStoreOptions) *GSMStore 
 
 	store.replication = createReplicationFromLocations(options.Locations)
 
+	// Mark initOnce as done so ensureClient() won't try to create a real client.
+	store.initOnce.Do(func() {})
+
 	return store
 }
 
+// gsmClientSecretCreationMock returns a setup function that configures mock expectations for secret creation.
 func gsmClientSecretCreationMock(projectID string, secretId string, secretPayload string, replication *secretmanagerpb.Replication, err error) func(m *MockGSMClient) {
-	parent := fmt.Sprintf("projects/%s", "test-project")
+	parent := fmt.Sprintf("projects/%s", projectID)
 	return func(m *MockGSMClient) {
 		if replication == nil {
 			replication = &secretmanagerpb.Replication{
@@ -259,22 +281,22 @@ func TestGSMStore_Set(t *testing.T) {
 				}, nil),
 		},
 		{
-			name:      "empty stack",
-			stack:     "",
-			component: "app/service",
-			key:       "config-key",
-			value:     "test-value",
-			mockFn:    func(m *MockGSMClient) {},
-			wantErr:   true,
-		},
-		{
-			name:      "empty component",
+			// A stack-scoped secret coordinate omits the component segment.
+			name:      "stack scoped set omits component",
 			stack:     "dev-usw2",
 			component: "",
 			key:       "config-key",
 			value:     "test-value",
-			mockFn:    func(m *MockGSMClient) {},
-			wantErr:   true,
+			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_dev_usw2_config-key", `"test-value"`, nil, nil),
+		},
+		{
+			// A global secret coordinate omits both the stack and component segments.
+			name:      "global scoped set omits stack and component",
+			stack:     "",
+			component: "",
+			key:       "config-key",
+			value:     "test-value",
+			mockFn:    gsmClientSecretCreationMock("test-project", "test-prefix_config-key", `"test-value"`, nil, nil),
 		},
 		{
 			name:      "empty key",
@@ -399,22 +421,34 @@ func TestGSMStore_Get(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:      "empty stack",
-			stack:     "",
-			component: "app/service",
-			key:       "config-key",
-			mockFn:    func(m *MockGSMClient) {},
-			want:      nil,
-			wantErr:   true,
-		},
-		{
-			name:      "empty component",
+			// A stack-scoped secret coordinate omits the component segment.
+			name:      "stack scoped get omits component",
 			stack:     "dev-usw2",
 			component: "",
 			key:       "config-key",
-			mockFn:    func(m *MockGSMClient) {},
-			want:      nil,
-			wantErr:   true,
+			mockFn: func(m *MockGSMClient) {
+				m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+					return req.Name == "projects/test-project/secrets/test-prefix_dev_usw2_config-key/versions/latest"
+				})).Return(&secretmanagerpb.AccessSecretVersionResponse{
+					Payload: &secretmanagerpb.SecretPayload{Data: []byte(`"test-value"`)},
+				}, nil)
+			},
+			want: "test-value",
+		},
+		{
+			// A global secret coordinate omits both the stack and component segments.
+			name:      "global scoped get omits stack and component",
+			stack:     "",
+			component: "",
+			key:       "config-key",
+			mockFn: func(m *MockGSMClient) {
+				m.On("AccessSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.AccessSecretVersionRequest) bool {
+					return req.Name == "projects/test-project/secrets/test-prefix_config-key/versions/latest"
+				})).Return(&secretmanagerpb.AccessSecretVersionResponse{
+					Payload: &secretmanagerpb.SecretPayload{Data: []byte(`"test-value"`)},
+				}, nil)
+			},
+			want: "test-value",
 		},
 		{
 			name:      "empty key",
@@ -457,57 +491,244 @@ func TestGSMStore_Get(t *testing.T) {
 	}
 }
 
-func TestNewGSMStore(t *testing.T) {
+func TestGSMStore_Delete(t *testing.T) {
+	testPrefix := "test-prefix"
+	testDelimiter := "-"
+	const secretName = "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key"
+
+	matchDelete := func(m *MockGSMClient, err error) {
+		m.On("DeleteSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.DeleteSecretRequest) bool {
+			return req.Name == secretName
+		})).Return(err)
+	}
+
 	tests := []struct {
-		name        string
-		options     GSMStoreOptions
-		expectError bool
-		skipMessage string
+		name      string
+		stack     string
+		component string
+		key       string
+		mockFn    func(*MockGSMClient)
+		wantErr   error
 	}{
 		{
-			name: "valid_options_invalid_credentials",
-			options: GSMStoreOptions{
-				ProjectID:      "test-project",
-				Prefix:         aws.String("test-prefix"),
-				StackDelimiter: aws.String("-"),
-				Credentials:    aws.String(`{"type": "service_account"}`), // Add minimal credentials
-			},
-			expectError: true, // Error is expected because the minimal credentials are incomplete for authentication
+			name:      "success",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			mockFn:    func(m *MockGSMClient) { matchDelete(m, nil) },
 		},
 		{
-			name: "missing project ID",
-			options: GSMStoreOptions{
-				Prefix:         aws.String("test-prefix"),
-				StackDelimiter: aws.String("-"),
-			},
-			expectError: true,
+			name:      "not found",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			mockFn:    func(m *MockGSMClient) { matchDelete(m, status.Error(codes.NotFound, "resource not found")) },
+			wantErr:   ErrResourceNotFound,
 		},
 		{
-			name: "with credentials from env",
-			options: GSMStoreOptions{
-				ProjectID:      "test-project",
-				Prefix:         aws.String("test-prefix"),
-				StackDelimiter: aws.String("-"),
+			name:      "permission denied",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			mockFn:    func(m *MockGSMClient) { matchDelete(m, status.Error(codes.PermissionDenied, "permission denied")) },
+			wantErr:   ErrPermissionDenied,
+		},
+		{
+			name:      "generic error wrapped as delete failure",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "config-key",
+			mockFn:    func(m *MockGSMClient) { matchDelete(m, ErrInternalError) },
+			wantErr:   ErrDeleteSecret,
+		},
+		{
+			// A stack-scoped secret coordinate omits the component segment.
+			name:      "stack scoped delete omits component",
+			stack:     "dev-usw2",
+			component: "",
+			key:       "config-key",
+			mockFn: func(m *MockGSMClient) {
+				m.On("DeleteSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.DeleteSecretRequest) bool {
+					return req.Name == "projects/test-project/secrets/test-prefix_dev_usw2_config-key"
+				})).Return(nil)
 			},
-			expectError: false,
-			skipMessage: "GOOGLE_APPLICATION_CREDENTIALS environment variable not set",
+		},
+		{
+			// A global secret coordinate omits both the stack and component segments.
+			name:      "global scoped delete omits stack and component",
+			stack:     "",
+			component: "",
+			key:       "config-key",
+			mockFn: func(m *MockGSMClient) {
+				m.On("DeleteSecret", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.DeleteSecretRequest) bool {
+					return req.Name == "projects/test-project/secrets/test-prefix_config-key"
+				})).Return(nil)
+			},
+		},
+		{
+			name:      "empty key",
+			stack:     "dev-usw2",
+			component: "app/service",
+			key:       "",
+			mockFn:    func(m *MockGSMClient) {},
+			wantErr:   ErrEmptyKey,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.skipMessage != "" && os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
-				t.Skipf("%s", tt.skipMessage)
+			mockClient := new(MockGSMClient)
+			tt.mockFn(mockClient)
+
+			store := newGSMStoreWithClient(mockClient, GSMStoreOptions{
+				ProjectID:      "test-project",
+				Prefix:         &testPrefix,
+				StackDelimiter: &testDelimiter,
+			})
+
+			err := store.Delete(tt.stack, tt.component, tt.key)
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+			} else {
+				assert.NoError(t, err)
 			}
-			store, err := NewGSMStore(tt.options)
+			mockClient.AssertExpectations(t)
+		})
+	}
+}
+
+func TestGSMStore_Has(t *testing.T) {
+	testPrefix := "test-prefix"
+	testDelimiter := "-"
+	// Has builds the same version resource name that Get uses for AccessSecretVersion.
+	const versionName = "projects/test-project/secrets/test-prefix_dev_usw2_app_service_config-key/versions/latest"
+
+	matchGetVersion := func(m *MockGSMClient, version *secretmanagerpb.SecretVersion, err error) {
+		call := m.On("GetSecretVersion", mock.Anything, mock.MatchedBy(func(req *secretmanagerpb.GetSecretVersionRequest) bool {
+			return req.Name == versionName
+		}))
+		if err != nil {
+			call.Return(nil, err)
+		} else {
+			call.Return(version, nil)
+		}
+	}
+
+	tests := []struct {
+		name    string
+		mockFn  func(*MockGSMClient)
+		want    bool
+		wantErr error
+	}{
+		{
+			name: "present",
+			mockFn: func(m *MockGSMClient) {
+				matchGetVersion(m, &secretmanagerpb.SecretVersion{Name: versionName}, nil)
+			},
+			want: true,
+		},
+		{
+			name:   "absent",
+			mockFn: func(m *MockGSMClient) { matchGetVersion(m, nil, status.Error(codes.NotFound, "resource not found")) },
+			want:   false,
+		},
+		{
+			name: "other error propagated",
+			mockFn: func(m *MockGSMClient) {
+				matchGetVersion(m, nil, status.Error(codes.PermissionDenied, "permission denied"))
+			},
+			want:    false,
+			wantErr: ErrPermissionDenied,
+		},
+		{
+			// A non-gRPC-status error has no recognizable code, so it is wrapped as a generic
+			// access failure rather than mapped to absence.
+			name:    "non_status_error_wrapped",
+			mockFn:  func(m *MockGSMClient) { matchGetVersion(m, nil, errors.New("boom")) },
+			want:    false,
+			wantErr: ErrAccessSecret,
+		},
+		{
+			// An empty key is rejected before any client call.
+			name:    "empty_key",
+			mockFn:  func(m *MockGSMClient) {},
+			want:    false,
+			wantErr: ErrEmptyKey,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := new(MockGSMClient)
+			tt.mockFn(mockClient)
+
+			store := newGSMStoreWithClient(mockClient, GSMStoreOptions{
+				ProjectID:      "test-project",
+				Prefix:         &testPrefix,
+				StackDelimiter: &testDelimiter,
+			})
+
+			key := "config-key"
+			if tt.name == "empty_key" {
+				key = ""
+			}
+			got, err := store.Has("dev-usw2", "app/service", key)
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.want, got)
+			// Existence must be checked WITHOUT accessing/decrypting the payload.
+			mockClient.AssertNotCalled(t, "AccessSecretVersion")
+			mockClient.AssertExpectations(t)
+		})
+	}
+}
+
+func TestNewGSMStore(t *testing.T) {
+	tests := []struct {
+		name        string
+		options     GSMStoreOptions
+		expectError bool
+	}{
+		{
+			name: "valid_options_with_credentials",
+			options: GSMStoreOptions{
+				ProjectID:      "test-project",
+				Prefix:         stringPtr("test-prefix"),
+				StackDelimiter: stringPtr("-"),
+				Credentials:    stringPtr(`{"type": "service_account"}`),
+			},
+			// Client creation is deferred — no error at construction time.
+			expectError: false,
+		},
+		{
+			name: "missing project ID",
+			options: GSMStoreOptions{
+				Prefix:         stringPtr("test-prefix"),
+				StackDelimiter: stringPtr("-"),
+			},
+			expectError: true,
+		},
+		{
+			name: "valid_options_no_credentials",
+			options: GSMStoreOptions{
+				ProjectID:      "test-project",
+				Prefix:         stringPtr("test-prefix"),
+				StackDelimiter: stringPtr("-"),
+			},
+			// Client creation is deferred — succeeds at construction time.
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store, err := NewGSMStore(tt.options, "")
 			if tt.expectError {
 				assert.Error(t, err)
-				switch tt.name {
-				case "missing project ID":
-					assert.Contains(t, err.Error(), "project_id is required")
-				default:
-					assert.Contains(t, err.Error(), "failed to create client")
-				}
+				assert.Contains(t, err.Error(), "project_id is required")
 				assert.Nil(t, store)
 			} else {
 				assert.NoError(t, err)
@@ -515,6 +736,23 @@ func TestNewGSMStore(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewGSMStore_LazyClientCreation(t *testing.T) {
+	// Verify that NewGSMStore does not eagerly create a GCP client.
+	// This is important because config loading creates stores before auth
+	// credentials (e.g. GOOGLE_OAUTH_ACCESS_TOKEN) are established.
+	store, err := NewGSMStore(GSMStoreOptions{
+		ProjectID:      "test-project",
+		Prefix:         stringPtr("test-prefix"),
+		StackDelimiter: stringPtr("-"),
+	}, "")
+	assert.NoError(t, err)
+	assert.NotNil(t, store)
+
+	// The underlying client field should be nil (deferred).
+	gsmStore := store.(*GSMStore)
+	assert.Nil(t, gsmStore.client, "client should not be eagerly initialized")
 }
 
 func TestGSMStore_GetKey(t *testing.T) {
@@ -531,7 +769,7 @@ func TestGSMStore_GetKey(t *testing.T) {
 		{
 			name:           "basic path",
 			prefix:         "test-prefix",
-			stackDelimiter: aws.String("-"),
+			stackDelimiter: stringPtr("-"),
 			stack:          "dev-usw2",
 			component:      "app",
 			key:            "config",
@@ -541,7 +779,7 @@ func TestGSMStore_GetKey(t *testing.T) {
 		{
 			name:           "path with slashes",
 			prefix:         "test-prefix",
-			stackDelimiter: aws.String("-"),
+			stackDelimiter: stringPtr("-"),
 			stack:          "dev-usw2",
 			component:      "app/service",
 			key:            "config/key",
@@ -551,7 +789,7 @@ func TestGSMStore_GetKey(t *testing.T) {
 		{
 			name:           "path with multiple delimiters",
 			prefix:         "test/prefix",
-			stackDelimiter: aws.String("-"),
+			stackDelimiter: stringPtr("-"),
 			stack:          "dev-usw2-prod",
 			component:      "app/service/db",
 			key:            "config-key-name",
@@ -570,7 +808,7 @@ func TestGSMStore_GetKey(t *testing.T) {
 		{
 			name:           "overridden stack delimiter",
 			prefix:         "test-prefix",
-			stackDelimiter: aws.String("_"),
+			stackDelimiter: stringPtr("_"),
 			stack:          "dev_usw2_prod",
 			component:      "app/service",
 			key:            "config-key",
@@ -689,6 +927,8 @@ func TestGSMStore_GetKeyDirect(t *testing.T) {
 				client:    mockClient,
 				projectID: "test-project",
 			}
+			// Mark initOnce as done so ensureClient() won't try to create a real client.
+			store.initOnce.Do(func() {})
 
 			// Set up mock expectations
 			expectedFullPath := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", "test-project", tt.key)

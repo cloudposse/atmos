@@ -1,0 +1,9 @@
+# Base VPC defaults with a list var.
+components:
+  terraform:
+    vpc:
+      vars:
+        enabled: true
+        cidr_blocks:
+          - "10.0.0.0/16"
+          - "10.1.0.0/16"

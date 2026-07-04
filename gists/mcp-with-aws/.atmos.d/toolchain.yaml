@@ -1,0 +1,3 @@
+toolchain:
+  aliases:
+    uv: astral-sh/uv

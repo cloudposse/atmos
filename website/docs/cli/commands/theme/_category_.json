@@ -1,6 +1,5 @@
 {
   "label": "theme",
-  "position": 16,
   "className": "command",
   "collapsible": true,
   "collapsed": true,

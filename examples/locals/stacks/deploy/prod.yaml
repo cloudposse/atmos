@@ -1,0 +1,40 @@
+# Production Environment Stack
+#
+# Each file has its own independent locals scope.
+# Even though both dev.yaml and prod.yaml define `namespace: acme`,
+# they are completely separate — changing one never affects the other.
+
+settings:
+  version: v2
+  team: platform
+
+vars:
+  stage: prod
+
+locals:
+  namespace: acme
+  environment: production
+
+  # Same patterns as dev.yaml, different values.
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+  full_name: "{{ .locals.name_prefix }}-{{ .vars.stage }}"
+
+  # Sprig pipe syntax works too.
+  namespace_upper: '{{ .locals.namespace | upper }}'
+
+  # Production-specific tags with extra fields.
+  default_tags:
+    Namespace: "{{ .locals.namespace }}"
+    Environment: "{{ .locals.environment }}"
+    Team: "{{ .settings.team }}"
+    ManagedBy: Atmos
+    CostCenter: production
+
+components:
+  terraform:
+    myapp:
+      vars:
+        name: "{{ .locals.namespace }}"
+        environment: "{{ .locals.environment }}"
+        full_name: "{{ .locals.full_name }}"
+        tags: "{{ .locals.default_tags }}"

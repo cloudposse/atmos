@@ -20,6 +20,7 @@ type subscriptionIdentity struct {
 	subscriptionID string
 	resourceGroup  string
 	location       string
+	realm          string // Credential isolation realm set by auth manager.
 }
 
 // NewSubscriptionIdentity creates a new Azure subscription identity.
@@ -67,6 +68,11 @@ func (i *subscriptionIdentity) Kind() string {
 	return "azure/subscription"
 }
 
+// SetRealm sets the credential isolation realm for this identity.
+func (i *subscriptionIdentity) SetRealm(realm string) {
+	i.realm = realm
+}
+
 // GetProviderName returns the provider name for this identity.
 func (i *subscriptionIdentity) GetProviderName() (string, error) {
 	if i.config.Via == nil || i.config.Via.Provider == "" {
@@ -108,6 +114,7 @@ func (i *subscriptionIdentity) Authenticate(ctx context.Context, baseCreds authT
 		IsServicePrincipal: azureCreds.IsServicePrincipal, // Preserve auth type for MSAL cache format.
 		TokenFilePath:      azureCreds.TokenFilePath,      // Preserve token file path for OIDC.
 		FederatedToken:     azureCreds.FederatedToken,     // Preserve federated token for Azure CLI.
+		CloudEnvironment:   azureCreds.CloudEnvironment,   // Preserve cloud environment for MSAL cache.
 	}
 
 	// If location not specified in identity, use provider's location.
@@ -184,7 +191,7 @@ func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *aut
 	)
 
 	// Setup Azure files (credentials.json).
-	if err := azureCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, ""); err != nil {
+	if err := azureCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, "", i.realm); err != nil {
 		return fmt.Errorf("failed to setup Azure files: %w", err)
 	}
 
@@ -192,7 +199,7 @@ func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *aut
 	// This ensures azuread and azapi providers can authenticate using Azure CLI credentials.
 	azureCreds, ok := params.Credentials.(*authTypes.AzureCredentials)
 	if ok {
-		if err := azureCloud.UpdateAzureCLIFiles(params.Credentials, azureCreds.TenantID, i.subscriptionID); err != nil {
+		if err := azureCloud.UpdateAzureCLIFiles(params.Credentials, azureCreds.TenantID, i.subscriptionID, azureCreds.CloudEnvironment); err != nil {
 			log.Debug("Failed to update Azure CLI files", "error", err)
 			// Non-fatal - continue with normal flow.
 		}
@@ -206,6 +213,7 @@ func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *aut
 		IdentityName: params.IdentityName,
 		Credentials:  params.Credentials,
 		BasePath:     "", // Use default path.
+		Realm:        i.realm,
 	}
 	if err := azureCloud.SetAuthContext(setupParams); err != nil {
 		return fmt.Errorf("failed to set Azure auth context: %w", err)
@@ -239,7 +247,7 @@ func (i *subscriptionIdentity) CredentialsExist() (bool, error) {
 		return false, err
 	}
 
-	fileManager, err := azureCloud.NewAzureFileManager("")
+	fileManager, err := azureCloud.NewAzureFileManager("", i.realm)
 	if err != nil {
 		return false, err
 	}
@@ -256,7 +264,7 @@ func (i *subscriptionIdentity) Paths() ([]authTypes.Path, error) {
 	}
 
 	// Create file manager to get provider-namespaced paths.
-	fileManager, err := azureCloud.NewAzureFileManager("")
+	fileManager, err := azureCloud.NewAzureFileManager("", i.realm)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +290,7 @@ func (i *subscriptionIdentity) LoadCredentials(ctx context.Context) (authTypes.I
 		return nil, err
 	}
 
-	fileManager, err := azureCloud.NewAzureFileManager("")
+	fileManager, err := azureCloud.NewAzureFileManager("", i.realm)
 	if err != nil {
 		return nil, err
 	}

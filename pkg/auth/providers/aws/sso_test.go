@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -122,7 +123,7 @@ func TestSSOProvider_PreAuthenticate_NoOp(t *testing.T) {
 
 func TestSSOProvider_Authenticate_Simple(t *testing.T) {
 	// Prevent browser launch during device auth flow and shorten network timeouts.
-	t.Setenv("GO_TEST", "1") // utils.OpenUrl early-exits when set.
+	t.Setenv("GO_TEST", "1") // browser.Open early-exits when set.
 	t.Setenv("CI", "1")      // promptDeviceAuth avoids opening in CI.
 
 	config := &schema.Provider{
@@ -133,6 +134,12 @@ func TestSSOProvider_Authenticate_Simple(t *testing.T) {
 
 	provider, err := NewSSOProvider(testProviderName, config)
 	require.NoError(t, err)
+
+	// Isolate from the package-level defaultSessionStore so this test cannot be
+	// influenced by — nor pollute — sibling tests that share the same (start_url,
+	// region) tuple. Each Authenticate() invocation here must do its own
+	// fast-path miss → fall-through-to-auth dance, independent of other tests.
+	provider.sessionStore = newSessionTokenStore()
 
 	// Use short timeout so SDK calls fail fast in tests.
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -148,7 +155,7 @@ func TestSSOProvider_promptDeviceAuth_SafeInCI(t *testing.T) {
 	t.Setenv("CI", "1")
 	p, err := NewSSOProvider("sso", &schema.Provider{Kind: testSSOKind, Region: testRegion, StartURL: testStartURL})
 	require.NoError(t, err)
-	// With a full verification URL, OpenUrl is skipped under GO_TEST and CI.
+	// With a full verification URL, browser.Open is skipped under GO_TEST and CI.
 	url := "https://company.awsapps.com/start/#/device?user_code=WDDD-HRQV"
 	p.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{VerificationUriComplete: &url})
 }
@@ -201,7 +208,7 @@ func TestSSOProvider_NameAndPreAuthenticate_NoOp(t *testing.T) {
 }
 
 func TestSSOProvider_promptDeviceAuth_NonCI_OpensURL(t *testing.T) {
-	t.Setenv("GO_TEST", "1") // ensure OpenUrl returns quickly
+	t.Setenv("GO_TEST", "1") // ensure browser.Open returns quickly.
 	t.Setenv("CI", "")       // not CI
 	p, err := NewSSOProvider("sso", &schema.Provider{Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://x"})
 	require.NoError(t, err)
@@ -209,18 +216,14 @@ func TestSSOProvider_promptDeviceAuth_NonCI_OpensURL(t *testing.T) {
 	p.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{VerificationUriComplete: &url})
 }
 
-func TestSSOProvider_WithCustomResolver(t *testing.T) {
-	// Test SSO provider with custom resolver configuration.
+func TestSSOProvider_WithCustomEndpoint(t *testing.T) {
+	// Test SSO provider with custom endpoint configuration.
 	config := &schema.Provider{
 		Kind:     "aws/iam-identity-center",
 		Region:   "us-east-1",
 		StartURL: "https://company.awsapps.com/start",
 		Spec: map[string]interface{}{
-			"aws": map[string]interface{}{
-				"resolver": map[string]interface{}{
-					"url": "http://localhost:4566",
-				},
-			},
+			"endpoint_url": "http://localhost:4566",
 		},
 	}
 
@@ -231,16 +234,14 @@ func TestSSOProvider_WithCustomResolver(t *testing.T) {
 	assert.Equal(t, "us-east-1", p.region)
 	assert.Equal(t, "https://company.awsapps.com/start", p.startURL)
 
-	// Verify the provider has the config with resolver.
+	// Verify the provider has the config with endpoint.
 	assert.NotNil(t, p.config)
 	assert.NotNil(t, p.config.Spec)
-	awsSpec, ok := p.config.Spec["aws"]
-	assert.True(t, ok)
-	assert.NotNil(t, awsSpec)
+	assert.Equal(t, "http://localhost:4566", p.config.Spec["endpoint_url"])
 }
 
-func TestSSOProvider_WithoutCustomResolver(t *testing.T) {
-	// Test SSO provider without custom resolver configuration.
+func TestSSOProvider_WithoutCustomEndpoint(t *testing.T) {
+	// Test SSO provider without custom endpoint configuration.
 	config := &schema.Provider{
 		Kind:     "aws/iam-identity-center",
 		Region:   "us-east-1",
@@ -310,7 +311,7 @@ func TestSSOProvider_GetFilesDisplayPath(t *testing.T) {
 				Region:   testRegion,
 				StartURL: testStartURL,
 			},
-			expected: "atmos/aws", // XDG path contains atmos/aws
+			expected: "atmos", // XDG path contains atmos (aws is added in subdirectories).
 		},
 		{
 			name: "custom base_path",
@@ -396,9 +397,9 @@ func TestSSOProvider_Logout_ErrorPaths(t *testing.T) {
 
 func TestIsTTY(t *testing.T) {
 	// isTTY checks if stderr is a terminal.
-	// In test environment, this will typically return false.
+	// In test environment, stderr is not a terminal.
 	result := isTTY()
-	assert.IsType(t, false, result)
+	assert.False(t, result, "isTTY should return false in test environment (stderr is not a terminal)")
 }
 
 func TestDisplayVerificationDialog(t *testing.T) {
@@ -511,16 +512,16 @@ func TestPollForAccessToken_ContextCancellation(t *testing.T) {
 }
 
 func TestPollResult_Structure(t *testing.T) {
-	// Test pollResult struct creation.
+	// Test pollResult struct creation. The token is now a full ssoTokenCache
+	// (access token + expiry + refresh fields) rather than a bare string.
 	now := time.Now()
 	result := pollResult{
-		token:     "test-token",
-		expiresAt: now,
-		err:       nil,
+		token: ssoTokenCache{AccessToken: "test-token", ExpiresAt: now},
+		err:   nil,
 	}
 
-	assert.Equal(t, "test-token", result.token)
-	assert.Equal(t, now, result.expiresAt)
+	assert.Equal(t, "test-token", result.token.AccessToken)
+	assert.Equal(t, now, result.token.ExpiresAt)
 	assert.Nil(t, result.err)
 }
 
@@ -587,9 +588,8 @@ func TestSpinnerModel_Update_PollResult(t *testing.T) {
 	// Simulate receiving poll result.
 	now := time.Now()
 	pollRes := pollResult{
-		token:     "test-token",
-		expiresAt: now,
-		err:       nil,
+		token: ssoTokenCache{AccessToken: "test-token", ExpiresAt: now},
+		err:   nil,
 	}
 
 	newModel, _ := model.Update(pollRes)
@@ -597,8 +597,8 @@ func TestSpinnerModel_Update_PollResult(t *testing.T) {
 
 	assert.True(t, updatedModel.done)
 	assert.NotNil(t, updatedModel.result)
-	assert.Equal(t, "test-token", updatedModel.result.token)
-	assert.Equal(t, now, updatedModel.result.expiresAt)
+	assert.Equal(t, "test-token", updatedModel.result.token.AccessToken)
+	assert.Equal(t, now, updatedModel.result.token.ExpiresAt)
 	assert.Nil(t, updatedModel.result.err)
 	assert.True(t, cancelCalled)
 }
@@ -622,7 +622,7 @@ func TestSpinnerModel_View(t *testing.T) {
 			name: "success",
 			done: true,
 			result: &pollResult{
-				token: "test",
+				token: ssoTokenCache{AccessToken: "test"},
 				err:   nil,
 			},
 			expectEmpty: true, // Success returns empty string, auth login will show table.
@@ -662,9 +662,8 @@ func TestSpinnerModel_CheckResult(t *testing.T) {
 	resultChan := make(chan pollResult, 1)
 	now := time.Now()
 	resultChan <- pollResult{
-		token:     "test-token",
-		expiresAt: now,
-		err:       nil,
+		token: ssoTokenCache{AccessToken: "test-token", ExpiresAt: now},
+		err:   nil,
 	}
 
 	model := spinnerModel{
@@ -679,7 +678,7 @@ func TestSpinnerModel_CheckResult(t *testing.T) {
 	msg := cmd()
 	pollRes, ok := msg.(pollResult)
 	assert.True(t, ok)
-	assert.Equal(t, "test-token", pollRes.token)
+	assert.Equal(t, "test-token", pollRes.token.AccessToken)
 
 	close(resultChan)
 }
@@ -806,10 +805,25 @@ func TestPromptDeviceAuth_VariousURLFormats(t *testing.T) {
 }
 
 func TestIsInteractive(t *testing.T) {
-	// Test isInteractive function.
+	// Test isInteractive function without force-tty.
+	// In test environment (no TTY), this returns false via isTTY() fallback.
+	prevForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", false)
+	t.Cleanup(func() { viper.Set("force-tty", prevForceTTY) })
+
 	result := isInteractive()
-	// In test environment, this typically returns false, but we just verify it doesn't panic.
-	assert.IsType(t, false, result)
+	// Test runner has no real TTY, so isTTY() returns false.
+	assert.False(t, result, "isInteractive should return false in non-TTY test environment when force-tty is not set")
+}
+
+func TestIsInteractive_ForceTTY(t *testing.T) {
+	// Test that force-tty viper setting overrides the TTY check.
+	prevForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", prevForceTTY) })
+
+	result := isInteractive()
+	assert.True(t, result, "isInteractive should return true when force-tty is set")
 }
 
 func TestSSOProvider_Paths(t *testing.T) {
@@ -861,6 +875,53 @@ func TestSSOProvider_Paths(t *testing.T) {
 // stringPtr is a helper to create string pointers.
 func stringPtr(s string) *string {
 	return &s
+}
+
+func TestSSOProvider_SetRealm(t *testing.T) {
+	providerConfig := &schema.Provider{
+		Kind:     testSSOKind,
+		Region:   testRegion,
+		StartURL: testStartURL,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, providerConfig)
+	require.NoError(t, err)
+
+	// Initially realm should be empty.
+	assert.Empty(t, provider.realm, "realm should be empty initially")
+
+	// Set realm.
+	provider.SetRealm("test-realm")
+	assert.Equal(t, "test-realm", provider.realm, "realm should be set to test-realm")
+
+	// Update realm.
+	provider.SetRealm("another-realm")
+	assert.Equal(t, "another-realm", provider.realm, "realm should be updated to another-realm")
+}
+
+func TestSSOProvider_Authenticate_NonInteractive_ErrorMessage(t *testing.T) {
+	// Test that the non-interactive error is the correct sentinel error.
+	t.Setenv("CI", "1") // Force non-interactive mode.
+
+	providerConfig := &schema.Provider{
+		Kind:     testSSOKind,
+		Region:   testRegion,
+		StartURL: testStartURL,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, providerConfig)
+	require.NoError(t, err)
+
+	// Isolate from defaultSessionStore. If a sibling test had seeded a token for
+	// this (start_url, region), the in-memory fast path would return it before
+	// the non-interactive guard runs, and we'd assert against the wrong code path.
+	provider.sessionStore = newSessionTokenStore()
+
+	ctx := context.Background()
+	_, err = provider.Authenticate(ctx)
+	assert.Error(t, err)
+	// The error should wrap ErrAuthenticationFailed.
+	assert.ErrorContains(t, err, "authentication failed")
 }
 
 func TestNewSSOProvider_InvalidProviderKind(t *testing.T) {

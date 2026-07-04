@@ -3,12 +3,13 @@ package exec
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // BuildTerraformWorkspace builds Terraform workspace.
@@ -31,7 +32,7 @@ func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndSt
 	case configAndStacksInfo.StackManifestName != "":
 		contextPrefix = configAndStacksInfo.StackManifestName
 	case atmosConfig.Stacks.NameTemplate != "":
-		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 		if err != nil {
 			return "", err
 		}
@@ -39,7 +40,8 @@ func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndSt
 	case atmosConfig.Stacks.NamePattern != "":
 		contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, atmosConfig.Stacks.NamePattern, configAndStacksInfo.Stack)
 		if err != nil {
-			return "", err
+			// Fall back to filename when pattern validation fails.
+			contextPrefix = strings.ReplaceAll(configAndStacksInfo.Stack, "/", "-")
 		}
 	default:
 		contextPrefix = strings.Replace(configAndStacksInfo.Stack, "/", "-", -1)
@@ -129,26 +131,24 @@ func BuildDependentStackNameFromDependsOnLegacy(
 ) (string, error) {
 	defer perf.Track(nil, "exec.BuildDependentStackNameFromDependsOnLegacy")()
 
-	var dependentStackName string
-
 	dep := strings.Replace(dependsOn, "/", "-", -1)
 
-	if u.SliceContainsString(allStackNames, dep) {
-		dependentStackName = dep
-	} else if u.SliceContainsString(componentNamesInCurrentStack, dep) {
-		dependentStackName = fmt.Sprintf("%s-%s", currentStackName, dep)
-	} else {
-		errorMessage := fmt.Errorf("the component '%[1]s' in the stack '%[2]s' specifies 'depends_on' dependency '%[3]s', "+
-			"but '%[3]s' is not a stack and not a component in the '%[2]s' stack",
-			currentComponentName,
-			currentStackName,
-			dependsOn,
-		)
-
-		return "", errorMessage
+	if slices.Contains(allStackNames, dep) {
+		return dep, nil
 	}
 
-	return dependentStackName, nil
+	if slices.Contains(componentNamesInCurrentStack, dep) {
+		return fmt.Sprintf("%s-%s", currentStackName, dep), nil
+	}
+
+	return "", fmt.Errorf(
+		"%w: the component '%[2]s' in the stack '%[3]s' specifies 'depends_on' dependency '%[4]s', "+
+			"but '%[4]s' is not a stack and not a component in the '%[3]s' stack",
+		errUtils.ErrInvalidDependsOn,
+		currentComponentName,
+		currentStackName,
+		dependsOn,
+	)
 }
 
 // BuildDependentStackNameFromDependsOn builds the dependent stack name from "settings.depends_on" config.
@@ -163,43 +163,71 @@ func BuildDependentStackNameFromDependsOn(
 
 	dep := strings.Replace(fmt.Sprintf("%s-%s", dependsOnStackName, dependsOnComponentName), "/", "-", -1)
 
-	if u.SliceContainsString(allStackNames, dep) {
+	if slices.Contains(allStackNames, dep) {
 		return dep, nil
 	}
 
-	errorMessage := fmt.Errorf("the component '%[1]s' in the stack '%[2]s' specifies 'settings.depends_on' dependency "+
-		"on the component '%[3]s' in the stack '%[4]s', but '%[3]s' is not defined in the '%[4]s' stack, or the component and stack names are not correct",
+	return "", fmt.Errorf(
+		"%w: the component '%s' in the stack '%s' specifies 'settings.depends_on' dependency "+
+			"on the component '%s' in the stack '%s', but '%s' is not defined in the '%s' stack, or the component and stack names are not correct",
+		errUtils.ErrInvalidSettingsDependsOn,
 		currentComponentName,
 		currentStackName,
 		dependsOnComponentName,
 		dependsOnStackName,
+		dependsOnComponentName,
+		dependsOnStackName,
 	)
-
-	return "", errorMessage
 }
 
 // BuildComponentPath builds component path (path to the component's physical location on disk).
+// The optional componentNameFallback parameter is used when the "component" field is not set
+// in the componentSectionMap (e.g., for JIT vendored components with "source" attribute).
 func BuildComponentPath(
 	atmosConfig *schema.AtmosConfiguration,
 	componentSectionMap *map[string]any,
 	componentType string,
+	componentNameFallback ...string,
 ) string {
 	defer perf.Track(atmosConfig, "exec.BuildComponentPath")()
 
-	var componentPath string
-
-	if stackComponentSection, ok := (*componentSectionMap)[cfg.ComponentSectionName].(string); ok {
-		switch componentType {
-		case cfg.TerraformComponentType:
-			componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, stackComponentSection)
-		case cfg.HelmfileComponentType:
-			componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, stackComponentSection)
-		case cfg.PackerComponentType:
-			componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, stackComponentSection)
-		}
+	// Determine the component folder name.
+	componentFolder := GetComponentFolder(componentSectionMap, componentNameFallback...)
+	if componentFolder == "" {
+		return ""
 	}
 
-	return componentPath
+	// Build the full path based on component type.
+	switch componentType {
+	case cfg.TerraformComponentType:
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, componentFolder)
+	case cfg.HelmfileComponentType:
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, componentFolder)
+	case cfg.PackerComponentType:
+		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, componentFolder)
+	default:
+		return ""
+	}
+}
+
+// GetComponentFolder extracts the component folder name from a component section.
+// It checks for an explicit "component" field, falling back to componentNameFallback if provided.
+// This ensures components with "source" (JIT vendored) or without explicit "component" field
+// still have their folder resolved correctly.
+func GetComponentFolder(componentSectionMap *map[string]any, componentNameFallback ...string) string {
+	defer perf.Track(nil, "exec.GetComponentFolder")()
+
+	// Check for explicit "component" field.
+	if stackComponentSection, ok := (*componentSectionMap)[cfg.ComponentSectionName].(string); ok && stackComponentSection != "" {
+		return stackComponentSection
+	}
+
+	// Use fallback if provided.
+	if len(componentNameFallback) > 0 && componentNameFallback[0] != "" {
+		return componentNameFallback[0]
+	}
+
+	return ""
 }
 
 // GetStackNamePattern returns the stack name pattern.
@@ -224,16 +252,4 @@ func IsComponentAbstract(metadataSection map[string]any) bool {
 		}
 	}
 	return false
-}
-
-// IsComponentEnabled returns 'true' if the component is enabled.
-func IsComponentEnabled(varsSection map[string]any) bool {
-	defer perf.Track(nil, "exec.IsComponentEnabled")()
-
-	if enabled, ok := varsSection["enabled"].(bool); ok {
-		if enabled == false {
-			return false
-		}
-	}
-	return true
 }

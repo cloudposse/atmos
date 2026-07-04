@@ -4,18 +4,19 @@
 
 Valid subcommands are:
 
-• console
-• ecr-login
-• env
-• exec
-• list
-• login
-• logout
-• shell
-• user
-• validate
-• whoami
+  • console
+  • env
+  • exec
+  • list
+  • login
+  • logout
+  • shell
+  • user
+  • validate
+  • whoami
 
-## Hints
+## Usage
+
+ atmos auth [sub-command] [flags]
 
 💡 Run atmos auth --help for usage

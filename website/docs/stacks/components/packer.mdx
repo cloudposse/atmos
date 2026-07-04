@@ -6,11 +6,14 @@ sidebar_class_name: command
 description: Configure Packer components in your Atmos stack manifests for machine image building.
 id: packer
 ---
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
 
 <Intro>
-Packer components build machine images (AMIs, VM images, container images) using HashiCorp Packer. They allow you to manage image builds with the same stack-based configuration approach used for Terraform and Helmfile.
+  Packer components build machine images (AMIs, VM images, container images)
+  using HashiCorp Packer. They allow you to manage image builds with the same
+  stack-based configuration approach used for Terraform and Helmfile.
 </Intro>
 
 ## Available Configuration Sections
@@ -21,17 +24,17 @@ Packer components support the common configuration sections:
   <dt>[`vars`](/stacks/vars)</dt>
   <dd>Variables passed to packer.</dd>
 
-  <dt>[`env`](/stacks/env)</dt>
-  <dd>Environment variables during execution.</dd>
+<dt>[`env`](/stacks/env)</dt>
+<dd>Environment variables during execution.</dd>
 
-  <dt>[`settings`](/stacks/settings)</dt>
-  <dd>Integrations and metadata.</dd>
+<dt>[`settings`](/stacks/settings)</dt>
+<dd>Integrations and metadata.</dd>
 
-  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
-  <dd>Component behavior and inheritance.</dd>
+<dt>[`metadata`](/stacks/components/component-metadata)</dt>
+<dd>Component behavior and inheritance.</dd>
 
-  <dt>[`command`](/stacks/command)</dt>
-  <dd>Override packer binary.</dd>
+<dt>[`command`](/stacks/command)</dt>
+<dd>Override packer binary.</dd>
 
   <dt>[`hooks`](/stacks/hooks)</dt>
   <dd>Lifecycle event handlers.</dd>
@@ -52,7 +55,7 @@ components:
         instance_type: t3.medium
         source_ami_filter:
           name: "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
-          owner: "099720109477"  # Canonical
+          owner: "099720109477" # Canonical
         ami_name_prefix: "acme-ubuntu"
       env:
         AWS_PROFILE: acme-prod
@@ -98,29 +101,30 @@ variable "region" {
 }
 
 variable "instance_type" {
-  type        = string
-  default     = "t3.medium"
-  description = "EC2 instance type for the builder"
+type = string
+default = "t3.medium"
+description = "EC2 instance type for the builder"
 }
 
 variable "source_ami_filter" {
-  type = object({
-    name  = string
-    owner = string
-  })
-  description = "Filter for source AMI"
+type = object({
+name = string
+owner = string
+})
+description = "Filter for source AMI"
 }
 
 variable "ami_name_prefix" {
-  type        = string
-  description = "Prefix for the AMI name"
+type = string
+description = "Prefix for the AMI name"
 }
 
 variable "tags" {
-  type        = map(string)
-  default     = {}
-  description = "Tags to apply to the AMI"
+type = map(string)
+default = {}
+description = "Tags to apply to the AMI"
 }
+
 ```
 </File>
 
@@ -170,6 +174,7 @@ build {
   }
 }
 ```
+
 </File>
 
 ## Component-Type Defaults
@@ -250,8 +255,67 @@ components:
         repository: "acme/base"
         tag: "{{ .stage }}-{{ timestamp }}"
         base_image: "ubuntu:22.04"
+
 ```
 </File>
+
+## Template Configuration
+
+Atmos supports two ways to specify Packer templates:
+
+### Directory Mode (Default)
+
+By default, Atmos passes the component directory to Packer, which automatically loads all `*.pkr.hcl` files.
+This is the recommended approach for organizing Packer configurations:
+
+```yaml
+components:
+  packer:
+    my-ami:
+      # No settings.packer.template - uses directory mode
+      # Packer loads all *.pkr.hcl files from the component directory
+      vars:
+        region: us-east-1
+```
+
+This allows you to organize your Packer component with multiple files:
+
+```
+components/packer/my-ami/
+├── variables.pkr.hcl    # Variable declarations
+├── main.pkr.hcl         # Source and build blocks
+├── locals.pkr.hcl       # Local values (optional)
+└── plugins.pkr.hcl      # Required plugins (optional)
+```
+
+### Single File Mode
+
+For simple components or when you need to specify a particular template file:
+
+```yaml
+components:
+  packer:
+    my-ami:
+      settings:
+        packer:
+          template: main.pkr.hcl # Use specific file
+      vars:
+        region: us-east-1
+```
+
+You can also use the `--template` (or `-t`) flag on the command line to override the template:
+
+```bash
+atmos packer validate my-ami -s prod --template main.pkr.hcl
+```
+
+:::tip Directory Mode Benefits
+Directory mode is recommended because it:
+
+- Follows Packer best practices for organizing configurations
+- Allows separation of variables, sources, and builds into logical files
+- Simplifies stack manifests by not requiring explicit template configuration
+  :::
 
 ## Running Packer Commands
 
@@ -279,14 +343,14 @@ Common environment variables for Packer components:
   <dt>`PACKER_LOG`</dt>
   <dd>Enable logging (set to `1`).</dd>
 
-  <dt>`PACKER_LOG_PATH`</dt>
-  <dd>Path to log file.</dd>
+<dt>`PACKER_LOG_PATH`</dt>
+<dd>Path to log file.</dd>
 
-  <dt>`AWS_PROFILE`</dt>
-  <dd>AWS profile for authentication.</dd>
+<dt>`AWS_PROFILE`</dt>
+<dd>AWS profile for authentication.</dd>
 
-  <dt>`AWS_REGION`</dt>
-  <dd>Default AWS region.</dd>
+<dt>`AWS_REGION`</dt>
+<dd>Default AWS region.</dd>
 
   <dt>`PACKER_CACHE_DIR`</dt>
   <dd>Directory for Packer cache.</dd>
@@ -313,6 +377,53 @@ Atmos generates a variables file that Packer uses during builds:
 }
 ```
 
+## Passing Secrets Securely
+
+The generated variables file is written to **disk in plaintext** (world‑readable, `0644`) so Packer
+can read it. Unlike Terraform — which keeps secret‑bearing `vars` off disk — Packer performs **no**
+off‑disk partitioning. **Never put secrets in a Packer component's `vars` section.**
+
+:::warning Secrets belong in `env`, not `vars`
+Values in the `env` section are injected only into the Packer subprocess environment and are
+**never written to the variables file**. Declare secrets under
+[`secrets.vars`](/cli/configuration/secrets#declaring-secrets), reference them with
+[`!secret`](/functions/yaml/secret) in `env`, and read them in the Packer template with the
+[`env` function](https://developer.hashicorp.com/packer/docs/templates/hcl_templates/functions/contextual/env).
+:::
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+components:
+  packer:
+    bastion:
+      secrets:
+        vars:
+          GITHUB_TOKEN:
+            description: "Token for provisioners that clone private repos"
+            store: ssm-secrets        # a `secret: true` store; or use `sops: <provider>`
+            required: true
+      env:
+        # Injected ONLY into the Packer subprocess environment — never written to the
+        # variables file on disk.
+        GITHUB_TOKEN: !secret GITHUB_TOKEN
+      vars:
+        region: us-east-1             # non-secret values only
+```
+</File>
+
+Read the secret from the environment in the Packer template (Packer's `env` function is allowed in
+variable defaults and `locals`):
+
+<File title="components/packer/bastion/build.pkr.hcl">
+```hcl
+variable "github_token" {
+  type      = string
+  sensitive = true
+  default   = env("GITHUB_TOKEN")   # read from the environment, not the variables file
+}
+```
+</File>
+
 ## Multi-Cloud Support
 
 Packer components can build images for multiple cloud providers:
@@ -337,12 +448,12 @@ components:
   packer:
     azure-image:
       vars:
-        azure_subscription_id: "{{ env \"ARM_SUBSCRIPTION_ID\" }}"
+        azure_subscription_id: '{{ env "ARM_SUBSCRIPTION_ID" }}'
         azure_resource_group: "packer-images-rg"
         azure_location: "eastus"
       env:
-        ARM_CLIENT_ID: "{{ env \"ARM_CLIENT_ID\" }}"
-        ARM_CLIENT_SECRET: "{{ env \"ARM_CLIENT_SECRET\" }}"
+        ARM_CLIENT_ID: '{{ env "ARM_CLIENT_ID" }}'
+        ARM_CLIENT_SECRET: '{{ env "ARM_CLIENT_SECRET" }}'
 ```
 
 ### GCP Machine Image
@@ -395,4 +506,6 @@ components:
 - [Terraform Components](/stacks/components/terraform)
 - [Configure Variables](/stacks/vars)
 - [Configure Environment](/stacks/env)
+- [Passing Secrets](/cli/configuration/secrets)
+- [`!secret` function](/functions/yaml/secret)
 - [depends_on](/stacks/settings/depends_on)

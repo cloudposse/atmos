@@ -1,0 +1,68 @@
+components:
+  terraform:
+    bucket:
+      metadata:
+        component: bucket
+      dependencies:
+        tools:
+          terraform: "1.9.7"
+          checkov: "3.2.529"
+          kics: "2.1.20"
+      hooks:
+        checkov-policy:
+          events:
+            - after-terraform-plan
+          kind: checkov
+          args:
+            - "-f"
+            - "$ATMOS_COMPONENT_PATH/checkov_target.tf"
+            - "-o"
+            - "sarif"
+            - "--output-file-path"
+            - "$ATMOS_OUTPUT_DIR"
+            - "--quiet"
+            - "--soft-fail"
+            # Scope to versioning + access logging; the logging check is
+            # suppressed inline in checkov_target.tf so only versioning reports.
+            - "--check"
+            - "CKV_AWS_21,CKV_AWS_18"
+          on_failure: warn
+        trivy-policy:
+          events:
+            - after-terraform-plan
+          kind: trivy
+          args:
+            - "config"
+            - "--format"
+            - "sarif"
+            - "--output"
+            - "$ATMOS_OUTPUT_FILE"
+            - "--quiet"
+            # Scope to LOW+MEDIUM; with the public-access block in place the
+            # only findings are AWS-0090 (versioning, MEDIUM) and AWS-0089
+            # (logging, LOW). The logging finding is suppressed inline in
+            # trivy_target.tf so only versioning reports.
+            - "--severity"
+            - "MEDIUM,LOW"
+            - "$ATMOS_COMPONENT_PATH/trivy_target.tf"
+          on_failure: warn
+        kics-policy:
+          events:
+            - after-terraform-plan
+          kind: kics
+          args:
+            - "scan"
+            - "-p"
+            - "$ATMOS_COMPONENT_PATH/kics_target.tf"
+            - "-o"
+            - "$ATMOS_OUTPUT_DIR"
+            - "--report-formats"
+            - "sarif"
+            - "--no-progress"
+            # Scope to the versioning + logging queries; the logging query is
+            # disabled inline in kics_target.tf so only versioning reports.
+            - "--include-queries"
+            - "568a4d22-3517-44a6-a7ad-6a7eed88722c,f861041c-8c9f-4156-acfc-5e6e524f5884"
+          env:
+            KICS_QUERIES_PATH: "$KICS_QUERIES_PATH"
+          on_failure: warn

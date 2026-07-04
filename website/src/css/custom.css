@@ -132,7 +132,7 @@ div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
 
 body {
     background-color: var(--ifm-background-color);
-    font-family: 'Optimistic Text', -apple-system, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    font-family: var(--atmos-docs-font-sans), 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     font-size: 17px;
     line-height: 30px;
 }
@@ -191,8 +191,49 @@ li.sidebar-title > ul:first .menu__list .menu__list {
     padding-left: 0;
 }
 
+/* ============================================================ */
+/* MODERN LEADING COLLAPSE CHEVRON                              */
+/* Thin chevron moved to the leading (left) edge, VS Code /     */
+/* Linear / Stripe style. The glyph stays up-pointing so        */
+/* Infima's existing rotation still works: expanded points      */
+/* down (rotate 180deg), collapsed points right (rotateZ 90deg).*/
+/* Dark mode is handled by --ifm-menu-link-sublist-icon-filter. */
+/* ============================================================ */
+
+/* Swap the chunky default caret for a thin, stroke-based chevron. */
+:root {
+    --ifm-menu-link-sublist-icon: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.55)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>');
+}
+
+/* Pure-expander categories (no own page): caret rendered as ::after
+   inside the flex .menu__link. Move it ahead of the label. */
+.menu__link--sublist-caret:after {
+    order: -1;
+    margin-left: 0;
+    margin-right: 0.25rem;
+    min-width: 1.25rem;
+    background: var(--ifm-menu-link-sublist-icon) 50% / 1rem 1rem no-repeat;
+}
+
+/* Linked categories (own page): caret is a separate .menu__caret button
+   inside the flex .menu__list-item-collapsible row. Move it ahead of the link. */
+.menu__list-item-collapsible .menu__caret {
+    order: -1;
+    padding-left: 0;
+    padding-right: 0;
+    margin-right: 0.25rem;
+}
+
 .menu__caret:before {
-    background: var(--ifm-menu-link-sublist-icon) 50% / 2rem 1.5rem;
+    min-width: 1.25rem;
+    background: var(--ifm-menu-link-sublist-icon) 50% / 1rem 1rem no-repeat;
+}
+
+/* Reserve the chevron gutter on leaf links so their labels line up with
+   category labels (chevron column stays empty for leaves). Section titles
+   (li.sidebar-title > div > a) are direct grandchildren and unaffected. */
+.menu__list-item > .menu__link:not(.menu__link--sublist-caret) {
+    padding-left: calc(var(--ifm-menu-link-padding-horizontal) + 1.5rem);
 }
 
 li > ul.menu__list {
@@ -215,7 +256,7 @@ article .theme-admonition-danger ul li strong, article .theme-admonition-danger 
 .theme-admonition {
     border-left: none;
     padding: 2em;
-    border-radius: 1.3em;
+    border-radius: var(--atmos-docs-radius);
     margin-top: 2.5em;
     margin-bottom: 2.5em;
 }
@@ -262,6 +303,38 @@ article h1 {
     --ifm-menu-color: var(--c-gray-100);
     --ifm-menu-link-padding-horizontal: 0.25rem;
 
+    --atmos-docs-font-sans: var(--font-geist-sans, 'Geist', 'Optimistic Text', -apple-system, ui-sans-serif, system-ui, sans-serif);
+    --atmos-docs-font-mono: var(--font-geist-mono, 'Geist Mono', ui-monospace, 'SFMono-Regular', 'JetBrains Mono', 'Fira Code', monospace);
+    --atmos-docs-radius: 8px;
+    --atmos-docs-surface: #ffffff;
+    --atmos-docs-surface-subtle: #fafafa;
+    --atmos-docs-surface-elevated: #ffffff;
+    --atmos-docs-border: rgba(17, 24, 39, 0.12);
+    --atmos-docs-border-hover: rgba(17, 24, 39, 0.28);
+    --atmos-docs-text: #111827;
+    --atmos-docs-muted: #5f6876;
+    --atmos-docs-accent: #3578e5;
+    --atmos-docs-accent-soft: rgba(53, 120, 229, 0.10);
+    --atmos-docs-accent-strong: #1e5bb8;
+    --atmos-docs-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+
+    --atmos-code-bg: #f1f2f4;
+    --atmos-code-border: rgba(18, 31, 54, 0.12);
+    --atmos-code-button-bg: rgba(255, 255, 255, 0.72);
+    --atmos-code-button-color: #4b5565;
+    --atmos-code-line-number: #7a8494;
+    --atmos-code-line-border: rgba(18, 31, 54, 0.10);
+    --atmos-terminal-bg: #050505;
+    --atmos-terminal-border: rgba(255, 255, 255, 0.16);
+    --atmos-terminal-header-bg: rgba(255, 255, 255, 0.06);
+    --atmos-terminal-text: #f5f5f5;
+    --atmos-table-bg: rgba(255, 255, 255, 0.72);
+    --atmos-table-border: #e5e7eb;
+    --atmos-table-header-bg: #fafafa;
+    --atmos-table-hover-bg: rgba(17, 24, 39, 0.025);
+    --atmos-table-text: #24292f;
+    --atmos-table-muted: #666;
+
     --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
     --ifm-card-background-color: #eeeeee38;
     --ifm-color-primary: #3578e5;
@@ -275,8 +348,13 @@ article h1 {
     --aa-input-border-color-rgb: var(--ifm-toc-border-color);
     --aa-input-border-color-alpha: var(--ifm-toc-border-color);
     --aa-primary-color-rgb: var(--ifm-toc-border-color) !important;
-    --announcement-bar-background: #3578e5;
-    --announcement-bar-text-color: #fff;
+    --announcement-bar-background: #070b12;
+    --announcement-bar-text-color: #d7dde8;
+
+    /* Geist font family (Vercel's typeface) across the whole site. */
+    --ifm-font-family-base: var(--atmos-docs-font-sans), 'Apple Color Emoji', 'Segoe UI Emoji';
+    --ifm-font-family-monospace: var(--atmos-docs-font-mono);
+    --ifm-heading-font-family: var(--atmos-docs-font-sans);
 }
 
 /* Fix announcement bar responsive wrapping at mid-range widths */
@@ -304,20 +382,93 @@ div[class*="announcementBarContent"] {
     --ifm-card-background-color: #eeeeee14;
     --ifm-button-color: #ccc;
     --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+    --atmos-docs-surface: #030711;
+    --atmos-docs-surface-subtle: #090a0c;
+    --atmos-docs-surface-elevated: #0b0d12;
+    --atmos-docs-border: rgba(255, 255, 255, 0.12);
+    --atmos-docs-border-hover: rgba(255, 255, 255, 0.28);
+    --atmos-docs-text: #ededed;
+    --atmos-docs-muted: #a1a1aa;
+    --atmos-docs-accent: #538ce9;
+    --atmos-docs-accent-soft: rgba(83, 140, 233, 0.14);
+    --atmos-docs-accent-strong: #8ab4ff;
+    --atmos-docs-shadow: none;
+    --atmos-code-bg: #090a0c;
+    --atmos-code-border: rgba(148, 163, 184, 0.18);
+    --atmos-code-button-bg: rgba(15, 23, 42, 0.74);
+    --atmos-code-button-color: #cbd5e1;
+    --atmos-code-line-number: #77818f;
+    --atmos-code-line-border: rgba(148, 163, 184, 0.16);
+    --atmos-terminal-bg: #050505;
+    --atmos-terminal-border: rgba(255, 255, 255, 0.16);
+    --atmos-terminal-header-bg: rgba(255, 255, 255, 0.035);
+    --atmos-terminal-text: #f5f5f5;
+    --atmos-table-bg: rgba(3, 7, 17, 0.38);
+    --atmos-table-border: rgba(255, 255, 255, 0.12);
+    --atmos-table-header-bg: rgba(255, 255, 255, 0.03);
+    --atmos-table-hover-bg: rgba(255, 255, 255, 0.025);
+    --atmos-table-text: #ededed;
+    --atmos-table-muted: #a1a1aa;
+}
+
+html[data-theme='dark'] {
+    --atmos-code-bg: #090a0c;
+    --atmos-code-border: rgba(229, 231, 235, 0.16);
+    --atmos-code-button-bg: rgba(255, 255, 255, 0.04);
+    --atmos-code-button-color: #d1d5db;
+    --atmos-code-line-number: #858b95;
+    --atmos-code-line-border: rgba(229, 231, 235, 0.14);
+    --atmos-terminal-bg: #050505;
+    --atmos-terminal-border: rgba(255, 255, 255, 0.16);
+    --atmos-terminal-header-bg: rgba(255, 255, 255, 0.035);
+    --atmos-terminal-text: #f5f5f5;
+    --atmos-table-bg: rgba(3, 7, 17, 0.38);
+    --atmos-table-border: rgba(255, 255, 255, 0.12);
+    --atmos-table-header-bg: rgba(255, 255, 255, 0.03);
+    --atmos-table-hover-bg: rgba(255, 255, 255, 0.025);
+    --atmos-table-text: #ededed;
+    --atmos-table-muted: #a1a1aa;
 }
 
 html[data-theme='dark'] {
     --docsearch-searchbox-background: #121526 !important;
 }
 
+/* Modern glassy admonition styling for dark mode */
 [data-theme='dark'] .alert--secondary {
-    --ifm-color-secondary-contrast-background: rgb(145 161 217 / 24%);
-    --ifm-alert-background-color: rgb(145 161 217 / 24%);
+    --ifm-color-secondary-contrast-background: rgba(145, 161, 217, 0.12);
+    --ifm-alert-background-color: rgba(145, 161, 217, 0.12);
+    border: 1px solid rgba(145, 161, 217, 0.30);
 }
 
-[data-theme='dark'] .alert--info {
-    --ifm-color-info-contrast-background: rgb(25, 60, 71, 0.50);
-    --ifm-alert-background-color: rgb(25, 60, 71, 0.50);
+[data-theme='dark'] .alert--info,
+[data-theme='dark'] .theme-admonition-info,
+[data-theme='dark'] .theme-admonition-note {
+    --ifm-color-info-contrast-background: rgba(56, 139, 253, 0.12);
+    --ifm-alert-background-color: rgba(56, 139, 253, 0.12);
+    border: 1px solid rgba(56, 139, 253, 0.35);
+}
+
+[data-theme='dark'] .alert--success,
+[data-theme='dark'] .theme-admonition-tip {
+    --ifm-alert-background-color: rgba(35, 134, 54, 0.12);
+    --ifm-color-success-contrast-background: rgba(35, 134, 54, 0.12);
+    border: 1px solid rgba(46, 160, 67, 0.35);
+}
+
+[data-theme='dark'] .alert--warning,
+[data-theme='dark'] .theme-admonition-warning,
+[data-theme='dark'] .theme-admonition-caution {
+    --ifm-alert-background-color: rgba(187, 128, 9, 0.12);
+    --ifm-color-warning-contrast-background: rgba(187, 128, 9, 0.12);
+    border: 1px solid rgba(210, 153, 34, 0.35);
+}
+
+[data-theme='dark'] .alert--danger,
+[data-theme='dark'] .theme-admonition-danger {
+    --ifm-alert-background-color: rgba(248, 81, 73, 0.12);
+    --ifm-color-danger-contrast-background: rgba(248, 81, 73, 0.12);
+    border: 1px solid rgba(248, 81, 73, 0.35);
 }
 
 .alert--secondary {
@@ -325,23 +476,26 @@ html[data-theme='dark'] {
 }
 
 .button--lg {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     margin: 1em;
-    padding-top: 0.8em;
-    padding-bottom: 0;
+    padding: 0.65em 1.1em;
+    line-height: 1.2;
+    vertical-align: middle;
 }
 
 .button--lg p {
-    margin-bottom: 0.85em;
+    margin: 0;
 }
 
 details a.button.button--lg.button--primary {
-    padding-top: inherit;
-    padding-bottom: inherit;
+    padding: 0.65em 1.1em;
     text-decoration: none;
 }
 
 details a.button.button--lg.button--primary p {
-    margin-bottom: inherit;
+    margin: 0;
 }
 
 .header-github-link:hover {
@@ -417,8 +571,60 @@ html[data-theme='dark'] {
     background: transparent;
 }
 
-table tr td {
-    white-space: nowrap;
+.markdown table {
+    display: table;
+    width: 100%;
+    min-width: 100%;
+    margin: 1.75rem 0;
+    border: 1px solid var(--atmos-table-border);
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 8px;
+    background: var(--atmos-table-bg);
+    color: var(--atmos-table-text);
+    font-size: 0.92rem;
+    line-height: 1.55;
+    overflow: hidden;
+}
+
+.markdown thead {
+    background: var(--atmos-table-header-bg);
+}
+
+.markdown table tr,
+.markdown table tbody tr:nth-child(2n) {
+    background: transparent;
+    border: 0;
+}
+
+.markdown tbody tr:hover {
+    background: var(--atmos-table-hover-bg);
+}
+
+.markdown th,
+.markdown td {
+    padding: 0.75rem 0.9rem;
+    border: 0;
+    border-bottom: 1px solid var(--atmos-table-border);
+    vertical-align: top;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.markdown th {
+    background: var(--atmos-table-header-bg);
+    color: var(--atmos-table-muted);
+    font-weight: 500;
+    text-align: left;
+}
+
+.markdown tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.markdown table code {
+    white-space: break-spaces;
+    overflow-wrap: anywhere;
 }
 
 .react-player {
@@ -444,8 +650,127 @@ a.table-of-contents__link {
     border: none;
 }
 
-pre code {
-    box-shadow: var(--ifm-alert-shadow);
+.theme-code-block {
+    overflow: hidden;
+    border: 1px solid var(--atmos-code-border);
+    border-radius: 8px;
+    background: var(--atmos-code-bg) !important;
+    box-shadow: none !important;
+}
+
+.theme-code-block pre.prism-code {
+    --ifm-pre-background: var(--atmos-code-bg);
+    background: transparent !important;
+}
+
+.theme-code-block code {
+    background: transparent;
+    box-shadow: none;
+}
+
+.theme-code-block button.code-line-numbers-button--enabled {
+    border-color: transparent;
+    color: var(--atmos-code-button-color);
+}
+
+html[data-theme='dark'] .theme-code-block button.code-line-numbers-button--enabled {
+    background: transparent;
+}
+
+.theme-code-block button.code-line-numbers-button--enabled:hover,
+.theme-code-block button.code-line-numbers-button--enabled:focus-visible {
+    color: var(--ifm-color-primary);
+}
+
+.code-line-numbers-button__icon {
+    width: 1rem;
+    height: 1rem;
+}
+
+.theme-code-block code[class*="codeBlockLinesWithNumbering"] {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+}
+
+.theme-code-block span[class*="codeLineNumber"] {
+    min-width: 3.25rem;
+    padding: 0 0.9rem;
+    border-right: 1px solid var(--atmos-code-line-border);
+    background: var(--atmos-code-bg);
+    color: var(--atmos-code-line-number);
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+}
+
+.theme-code-block span[class*="codeLineNumber"]::before {
+    opacity: 0.62;
+}
+
+.theme-code-block span[class*="codeLineContent"] {
+    padding-left: 0.95rem;
+}
+
+html[data-code-line-numbers='off'] .theme-code-block code[class*="codeBlockLinesWithNumbering"] {
+    display: block;
+    padding: var(--ifm-pre-padding);
+}
+
+html[data-code-line-numbers='off'] .theme-code-block span[class^="codeLine_"],
+html[data-code-line-numbers='off'] .theme-code-block span[class*=" codeLine_"] {
+    display: block;
+}
+
+html[data-code-line-numbers='off'] .theme-code-block span[class*="codeLineNumber"] {
+    display: none;
+}
+
+html[data-code-line-numbers='off'] .theme-code-block span[class*="codeLineContent"] {
+    display: inline;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.theme-code-block.language-shell,
+.theme-code-block.language-bash,
+.theme-code-block.language-sh,
+.theme-code-block.language-powershell,
+.theme-code-block.language-ps1 {
+    position: relative;
+    padding-top: 3.25rem;
+    border-color: var(--atmos-terminal-border);
+    background: var(--atmos-terminal-bg) !important;
+    color: var(--atmos-terminal-text);
+}
+
+.theme-code-block.language-shell::before,
+.theme-code-block.language-bash::before,
+.theme-code-block.language-sh::before,
+.theme-code-block.language-powershell::before,
+.theme-code-block.language-ps1::before {
+    content: ">_  Terminal";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 3.25rem;
+    display: flex;
+    align-items: center;
+    padding: 0 1rem;
+    border-bottom: 1px solid var(--atmos-terminal-border);
+    background: var(--atmos-terminal-header-bg);
+    color: color-mix(in srgb, var(--atmos-terminal-text) 72%, transparent);
+    font-family: var(--ifm-font-family-monospace);
+    font-size: 0.92rem;
+    letter-spacing: 0;
+    pointer-events: none;
+}
+
+.theme-code-block.language-shell pre.prism-code,
+.theme-code-block.language-bash pre.prism-code,
+.theme-code-block.language-sh pre.prism-code,
+.theme-code-block.language-powershell pre.prism-code,
+.theme-code-block.language-ps1 pre.prism-code {
+    --ifm-pre-background: var(--atmos-terminal-bg);
 }
 
 li.menu__list-item.command {
@@ -455,6 +780,10 @@ li.menu__list-item.command {
 li.menu__list-item.hidden {
     display: none;
 }
+
+/* The experimental-feature sidebar marker (yellow dot + hover tooltip) is rendered
+   by the ExperimentalDot component (src/components/ExperimentalDot), injected into
+   the item label by the DocSidebarItem swizzle. Styles live in that component. */
 
 .aa-Autocomplete > .aa-DetachedSearchButton {
     border-radius: 32px;
@@ -927,8 +1256,11 @@ article header {
     font-weight: 600;
 }
 
-/* Fix sidebar sticky positioning - allow native Docusaurus collapse to work */
-.theme-doc-sidebar-container:not([class*="hidden"]) {
+/* Fix sidebar sticky positioning - allow native Docusaurus collapse to work.
+   The collapsed class is `docSidebarContainerHidden` (capital H, build-hashed),
+   so we must match that exact token - a lowercase `hidden` never matches and
+   would leave the collapsed state styled like the expanded one. */
+.theme-doc-sidebar-container:not([class*="docSidebarContainerHidden"]) {
     position: sticky !important;
     top: var(--ifm-navbar-height) !important;
     max-height: calc(100vh - var(--ifm-navbar-height)) !important;
@@ -984,8 +1316,7 @@ a[class*="sidebarItemLink"]:hover {
 
 /* Table of contents - reasonable width with sticky positioning */
 .theme-doc-toc-desktop,
-div[class*="tableOfContents"],
-.thin-scrollbar {
+div[class*="tableOfContents"] {
     min-width: 250px;
     position: sticky;
     top: var(--ifm-navbar-height);
@@ -1017,20 +1348,114 @@ a[class*="table-of-contents__link"] {
     max-width: none;
 }
 
-/* YAML syntax highlighting - nightOwl theme doesn't style atrule tokens */
-/* YAML keys use atrule token, values use various scalar types */
-.prism-code .token.atrule,
-.token.atrule {
+/* YAML syntax highlighting: nightOwl dark mode doesn't style atrule/scalar tokens. */
+html[data-theme='dark'] .prism-code .token.atrule,
+html[data-theme='dark'] .token.atrule {
     color: rgb(127, 219, 202) !important;
 }
 
-.prism-code .token.scalar,
-.token.scalar {
+html[data-theme='dark'] .prism-code .token.scalar,
+html[data-theme='dark'] .token.scalar {
     color: rgb(173, 219, 103) !important;
 }
 
-/* Ensure YAML punctuation (colons, dashes) are visible */
-.prism-code .token.punctuation,
-.token.punctuation {
+html[data-theme='dark'] .prism-code .token.punctuation,
+html[data-theme='dark'] .token.punctuation {
     color: rgb(199, 146, 234);
+}
+
+/* ========================= */
+/* RESIZABLE DOCS SIDEBAR    */
+/* ========================= */
+
+/* Drag handle: invisible strip on right edge of sidebar, visible on hover.
+   All rules are scoped to the expanded (`:not(...docSidebarContainerHidden)`)
+   state so that the native Docusaurus collapse - which adds the
+   `docSidebarContainerHidden` class and sets width to 30px WITHOUT `!important` -
+   can shrink the container to the discreet strip. An unscoped `!important` width
+   here would always win and leave the sidebar hidden-but-full-width. */
+@media (min-width: 997px) {
+    .theme-doc-sidebar-container:not([class*="docSidebarContainerHidden"]) {
+        width: var(--doc-sidebar-width, 300px) !important;
+        min-width: var(--doc-sidebar-width, 300px) !important;
+        flex: 0 0 var(--doc-sidebar-width, 300px) !important;
+        /* Borderless sidebar (Vercel/Linear style). The resize drag-handle
+           below (::after) still provides the edge affordance and resizing. */
+        border-right: none !important;
+    }
+
+    /* Drop the hard border box around the bottom collapse («) button so the
+       borderless look is consistent top-to-bottom. Hover background kept. */
+    .collapseSidebarButton {
+        border: none !important;
+    }
+
+    /* Resize affordance only in the expanded state - the collapsed 30px strip
+       must not show a col-resize edge. */
+    .theme-doc-sidebar-container:not([class*="docSidebarContainerHidden"])::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: -2px;
+        width: 5px;
+        height: 100%;
+        cursor: col-resize;
+        background: transparent;
+        transition: background 0.15s ease;
+        z-index: 10;
+    }
+
+    .theme-doc-sidebar-container:not([class*="docSidebarContainerHidden"]):hover::after {
+        background: var(--ifm-color-primary-lightest);
+        opacity: 0.4;
+    }
+
+    html.sidebar-resizing .theme-doc-sidebar-container:not([class*="docSidebarContainerHidden"])::after {
+        background: var(--ifm-color-primary);
+        opacity: 0.6;
+        width: 3px;
+    }
+}
+
+/* During drag: force col-resize cursor and prevent text selection */
+html.sidebar-resizing,
+html.sidebar-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
+/* Disable sidebar transition during drag for instant feedback */
+html.sidebar-resizing .theme-doc-sidebar-container {
+    transition: none !important;
+}
+
+/* Media-kit badge previews used in blog posts and announcements. */
+.mediaKitBadgeGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.mediaKitBadgeCard {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 112px;
+    padding: 1.25rem;
+    border-radius: 8px;
+    background: #ffffff;
+    border: 1px solid var(--ifm-color-emphasis-200);
+}
+
+html[data-theme='dark'] .mediaKitBadgeCard {
+    background: #171717;
+    border-color: var(--ifm-color-emphasis-300);
+}
+
+.mediaKitBadgeCard img {
+    max-height: 64px;
+    max-width: 100%;
+    width: auto;
+    object-fit: contain;
 }

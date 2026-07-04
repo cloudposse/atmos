@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
@@ -27,57 +28,68 @@ type GSMClient interface {
 	CreateSecret(ctx context.Context, req *secretmanagerpb.CreateSecretRequest, opts ...gax.CallOption) (*secretmanagerpb.Secret, error)
 	AddSecretVersion(ctx context.Context, req *secretmanagerpb.AddSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error)
 	AccessSecretVersion(ctx context.Context, req *secretmanagerpb.AccessSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.AccessSecretVersionResponse, error)
+	GetSecretVersion(ctx context.Context, req *secretmanagerpb.GetSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error)
+	DeleteSecret(ctx context.Context, req *secretmanagerpb.DeleteSecretRequest, opts ...gax.CallOption) error
 	Close() error
 }
 
 // GSMStore is an implementation of the Store interface for Google Secret Manager.
 type GSMStore struct {
-	client         GSMClient
-	projectID      string
-	prefix         string
-	stackDelimiter *string
-	replication    *secretmanagerpb.Replication
+	client                GSMClient
+	projectID             string
+	prefix                string
+	stackDelimiter        *string
+	replication           *secretmanagerpb.Replication
+	credentials           *string // Store-level credentials (from options).
+	endpoint              string
+	endpointInsecure      bool
+	withoutAuthentication bool
+
+	// Identity-based authentication fields.
+	identityName string
+	authResolver AuthContextResolver
+	initOnce     sync.Once
+	initErr      error
 }
 
 // GSMStoreOptions defines the configuration options for Google Secret Manager store.
 type GSMStoreOptions struct {
-	Prefix         *string   `mapstructure:"prefix"`
-	ProjectID      string    `mapstructure:"project_id"`
-	StackDelimiter *string   `mapstructure:"stack_delimiter"`
-	Credentials    *string   `mapstructure:"credentials"` // Optional JSON credentials
-	Locations      *[]string `mapstructure:"locations"`   // Optional replication locations
+	Prefix                *string   `mapstructure:"prefix"`
+	ProjectID             string    `mapstructure:"project_id"`
+	StackDelimiter        *string   `mapstructure:"stack_delimiter"`
+	Credentials           *string   `mapstructure:"credentials"` // Optional JSON credentials
+	Locations             *[]string `mapstructure:"locations"`   // Optional replication locations
+	Endpoint              *string   `mapstructure:"endpoint"`
+	EndpointURL           *string   `mapstructure:"endpoint_url"`
+	EndpointInsecure      bool      `mapstructure:"endpoint_insecure"`
+	WithoutAuthentication bool      `mapstructure:"without_authentication"`
 }
 
-// Verify that GSMStore implements the Store interface.
-var _ Store = (*GSMStore)(nil)
+// Verify that GSMStore implements the Store, IdentityAwareStore, DeletableStore, and
+// StatusStore interfaces.
+var (
+	_ Store              = (*GSMStore)(nil)
+	_ IdentityAwareStore = (*GSMStore)(nil)
+	_ DeletableStore     = (*GSMStore)(nil)
+	_ StatusStore        = (*GSMStore)(nil)
+)
 
 // NewGSMStore initializes a new Google Secret Manager Store.
-func NewGSMStore(options GSMStoreOptions) (Store, error) {
+// Client initialization is always deferred to first use via ensureClient().
+// This allows auth credentials (e.g., GOOGLE_OAUTH_ACCESS_TOKEN) to be
+// established after config loading but before the store is actually used.
+func NewGSMStore(options GSMStoreOptions, identityName string) (Store, error) {
 	if options.ProjectID == "" {
 		return nil, ErrProjectIDRequired
 	}
 
-	ctx := context.Background()
-
-	// Use unified GCP authentication
-	clientOpts := gcp.GetClientOptions(gcp.AuthOptions{
-		Credentials: gcp.GetCredentialsFromStore(options.Credentials),
-	})
-
-	client, err := secretmanager.NewClient(ctx, clientOpts...)
-	if err != nil {
-		// Close the client to prevent resource leaks
-		if client != nil {
-			if closeErr := client.Close(); closeErr != nil {
-				log.Trace("Failed to close Google Secret Manager client after creation error", "error", closeErr)
-			}
-		}
-		return nil, fmt.Errorf(errWrapFormat, ErrCreateClient, err)
-	}
-
 	store := &GSMStore{
-		client:    client,
-		projectID: options.ProjectID,
+		projectID:             options.ProjectID,
+		credentials:           options.Credentials,
+		endpoint:              firstNonEmptyStringPtr(options.Endpoint, options.EndpointURL),
+		endpointInsecure:      options.EndpointInsecure,
+		withoutAuthentication: options.WithoutAuthentication,
+		identityName:          identityName,
 	}
 
 	if options.Prefix != nil {
@@ -96,6 +108,120 @@ func NewGSMStore(options GSMStoreOptions) (Store, error) {
 	return store, nil
 }
 
+// SetAuthContext implements IdentityAwareStore.
+// If identityName is non-empty, it overrides the store's identity. Otherwise, the existing identity is preserved.
+func (s *GSMStore) SetAuthContext(resolver AuthContextResolver, identityName string) {
+	s.authResolver = resolver
+	if identityName != "" && s.identityName != identityName {
+		if s.client != nil {
+			if err := s.client.Close(); err != nil {
+				log.Trace("Failed to close Google Secret Manager client during identity switch", "error", err)
+			}
+		}
+		s.identityName = identityName
+		s.client = nil
+		s.initOnce = sync.Once{}
+		s.initErr = nil
+	}
+}
+
+// initDefaultClient initializes the GCP client using store-level credentials or default credential chain.
+func (s *GSMStore) initDefaultClient() error {
+	ctx := context.Background()
+
+	clientOpts := gcp.GetClientOptions(s.defaultAuthOptions())
+
+	client, err := secretmanager.NewClient(ctx, clientOpts...)
+	if err != nil {
+		if client != nil {
+			if closeErr := client.Close(); closeErr != nil {
+				log.Trace("Failed to close Google Secret Manager client after creation error", "error", closeErr)
+			}
+		}
+		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+	}
+
+	s.client = client
+
+	return nil
+}
+
+// initIdentityClient initializes the GCP client using identity-based credentials.
+func (s *GSMStore) initIdentityClient() error {
+	if s.authResolver == nil {
+		return fmt.Errorf("%w: store requires identity %q but no auth resolver was injected", ErrIdentityNotConfigured, s.identityName)
+	}
+
+	ctx := context.Background()
+	authContext, err := s.authResolver.ResolveGCPAuthContext(ctx, s.identityName)
+	if err != nil {
+		return fmt.Errorf("%w: failed to resolve GCP auth context for identity %q: %w", ErrAuthContextNotAvailable, s.identityName, err)
+	}
+
+	clientOpts := gcp.GetClientOptions(s.identityAuthOptions(authContext))
+
+	client, err := secretmanager.NewClient(ctx, clientOpts...)
+	if err != nil {
+		if client != nil {
+			if closeErr := client.Close(); closeErr != nil {
+				log.Trace("Failed to close Google Secret Manager client after creation error", "error", closeErr)
+			}
+		}
+		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+	}
+
+	s.client = client
+
+	return nil
+}
+
+func (s *GSMStore) identityAuthOptions(authContext *GCPAuthConfig) gcp.AuthOptions {
+	opts := s.defaultAuthOptions()
+	if authContext == nil {
+		return opts
+	}
+	if authContext.AccessToken != "" {
+		opts.Credentials = ""
+		opts.AccessToken = authContext.AccessToken
+		opts.TokenExpiry = authContext.TokenExpiry
+		return opts
+	}
+	if authContext.CredentialsFile != "" {
+		opts.Credentials = authContext.CredentialsFile
+	}
+	return opts
+}
+
+// defaultAuthOptions builds the GCP AuthOptions for this store from its configured
+// credentials, endpoint, insecure-endpoint flag, and without-authentication flag.
+func (s *GSMStore) defaultAuthOptions() gcp.AuthOptions {
+	return gcp.AuthOptions{
+		Credentials:           gcp.GetCredentialsFromStore(s.credentials),
+		Endpoint:              s.endpoint,
+		EndpointInsecure:      s.endpointInsecure,
+		WithoutAuthentication: s.withoutAuthentication,
+	}
+}
+
+// ensureClient lazily initializes the GCP client if it hasn't been initialized yet.
+// The client-nil check is inside initOnce.Do to avoid a data race between the
+// unsynchronized read and the write that happens inside Do on another goroutine.
+func (s *GSMStore) ensureClient() error {
+	s.initOnce.Do(func() {
+		if s.client != nil {
+			return // Already initialized (eager init path).
+		}
+		if s.identityName == "" {
+			s.initErr = s.initDefaultClient()
+		} else {
+			s.initErr = s.initIdentityClient()
+		}
+	})
+
+	return s.initErr
+}
+
+// createReplicationFromLocations builds a replication config: automatic if no locations, user-managed otherwise.
 func createReplicationFromLocations(locations *[]string) *secretmanagerpb.Replication {
 	if locations == nil || len(*locations) == 0 {
 		return &secretmanagerpb.Replication{
@@ -142,6 +268,7 @@ func (s *GSMStore) getKey(stack string, component string, key string) (string, e
 	return baseKey, nil
 }
 
+// createSecret creates a new secret in Google Secret Manager, returning an existing one if already present.
 func (s *GSMStore) createSecret(ctx context.Context, secretID string) (*secretmanagerpb.Secret, error) {
 	parent := fmt.Sprintf("projects/%s", s.projectID)
 	createSecretReq := &secretmanagerpb.CreateSecretRequest{
@@ -171,6 +298,7 @@ func (s *GSMStore) createSecret(ctx context.Context, secretID string) (*secretma
 	return secret, nil
 }
 
+// addSecretVersion adds a new version with the given value to an existing secret.
 func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb.Secret, value string) error {
 	addVersionReq := &secretmanagerpb.AddSecretVersionRequest{
 		Parent: secret.GetName(),
@@ -194,19 +322,18 @@ func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb
 	return nil
 }
 
-// Set stores a key-value pair in Google Secret Manager.
+// Set stores a key-value pair in Google Secret Manager. An empty stack and/or component is
+// permitted: scoped secret coordinates (stack/global scope) omit those path segments.
 func (s *GSMStore) Set(stack string, component string, key string, value any) error {
-	if stack == "" {
-		return ErrEmptyStack
-	}
-	if component == "" {
-		return ErrEmptyComponent
-	}
 	if key == "" {
 		return ErrEmptyKey
 	}
 	if value == nil {
 		return fmt.Errorf("%w for key %s in stack %s component %s", ErrNilValue, key, stack, component)
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
@@ -237,16 +364,15 @@ func (s *GSMStore) Set(stack string, component string, key string, value any) er
 	return nil
 }
 
-// Get retrieves a value by key from Google Secret Manager.
+// Get retrieves a value by key from Google Secret Manager. An empty stack and/or component is
+// permitted: scoped secret coordinates (stack/global scope) omit those path segments.
 func (s *GSMStore) Get(stack string, component string, key string) (any, error) {
-	if stack == "" {
-		return nil, ErrEmptyStack
-	}
-	if component == "" {
-		return nil, ErrEmptyComponent
-	}
 	if key == "" {
 		return nil, ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
@@ -287,9 +413,98 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 	return unmarshalled, nil
 }
 
+// Delete removes a secret (and all its versions) from Google Secret Manager for the given
+// stack, component, and key. An empty stack and/or component is permitted: scoped secret
+// coordinates (stack/global scope) omit those path segments.
+func (s *GSMStore) Delete(stack string, component string, key string) error {
+	if key == "" {
+		return ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return err
+	}
+
+	secretID, err := s.getKey(stack, component, key)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
+	defer cancel()
+
+	name := fmt.Sprintf("projects/%s/secrets/%s", s.projectID, secretID)
+	err = s.client.DeleteSecret(ctx, &secretmanagerpb.DeleteSecretRequest{
+		Name: name,
+	})
+	if err != nil {
+		if st, ok := status.FromError(err); ok {
+			switch st.Code() {
+			case codes.NotFound:
+				return fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, secretID, err)
+			case codes.PermissionDenied:
+				return fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretID), err)
+			}
+		}
+		return fmt.Errorf(errWrapFormatWithID, ErrDeleteSecret, secretID, err)
+	}
+
+	return nil
+}
+
+// Has reports whether a secret exists for the given stack, component, and key. It queries the
+// latest version's metadata via GetSecretVersion, which does NOT access or decrypt the secret
+// payload. A not-found result maps to false; any other error is propagated.
+func (s *GSMStore) Has(stack string, component string, key string) (bool, error) {
+	if key == "" {
+		return false, ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return false, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
+	defer cancel()
+
+	// Get the secret ID using getKey.
+	secretID, err := s.getKey(stack, component, key)
+	if err != nil {
+		return false, fmt.Errorf(errWrapFormat, ErrGetKey, err)
+	}
+
+	// Build the resource name for the latest version, matching Get's naming scheme.
+	name := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", s.projectID, secretID)
+
+	// Fetch only the version metadata; this avoids accessing/decrypting the payload.
+	_, err = s.client.GetSecretVersion(ctx, &secretmanagerpb.GetSecretVersionRequest{
+		Name: name,
+	})
+	if err != nil {
+		st, ok := status.FromError(err)
+		if ok {
+			switch st.Code() {
+			case codes.NotFound:
+				return false, nil
+			case codes.PermissionDenied:
+				return false, fmt.Errorf(errWrapFormatWithID, ErrPermissionDenied, fmt.Sprintf("secret %s", secretID), err)
+			}
+		}
+		return false, fmt.Errorf(errWrapFormat, ErrAccessSecret, err)
+	}
+
+	// The existence of the version means the secret is initialized.
+	return true, nil
+}
+
+// GetKey retrieves a secret value directly by its key name, without stack/component scoping.
 func (s *GSMStore) GetKey(key string) (interface{}, error) {
 	if key == "" {
 		return nil, ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return nil, err
 	}
 
 	// Use the key directly as the secret name

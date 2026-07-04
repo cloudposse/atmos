@@ -10,9 +10,15 @@ VERSION=test
 
 export CGO_ENABLED=0
 
-readme:
-	@echo "README.md generation temporarily disabled."
-	@exit 0
+# Detect git worktree and set GOFLAGS accordingly.
+# In worktrees, buildvcs fails because .git is in a different location.
+IS_WORKTREE := $(shell [ "$$(git rev-parse --git-dir 2>/dev/null)" != "$$(git rev-parse --git-common-dir 2>/dev/null)" ] && echo true)
+ifdef IS_WORKTREE
+export GOFLAGS := -buildvcs=false
+endif
+
+readme: build
+	./build/atmos docs generate readme
 
 build: build-default
 
@@ -27,7 +33,7 @@ lint: deps lintroller gomodcheck custom-gcl
 # Uses a temporary directory to prevent git corruption during pre-commit hooks
 custom-gcl: tools/lintroller/.lintroller .custom-gcl.yml
 	@echo "Building custom golangci-lint binary with lintroller plugin..."
-	@GOFLAGS="-buildvcs=false" golangci-lint custom
+	@GOFLAGS="-buildvcs=false" GOTOOLCHAIN=go$(shell go env GOVERSION | sed 's/^go//') golangci-lint custom
 	@echo "Custom golangci-lint binary built successfully: ./custom-gcl"
 
 # Custom linter for Atmos-specific rules (t.Setenv misuse, os.Setenv in tests, os.MkdirTemp in tests).
@@ -69,15 +75,26 @@ build-windows: deps
 build-macos: GOOS=darwin
 build-macos: build-default
 
+build-macos-intel: GOOS=darwin
+build-macos-intel: GOARCH=amd64
+build-macos-intel: build-default
+
 version-linux: version-default
 
 version-macos: version-default
+
+version-macos-intel: version-default
 
 version-default:
 	chmod +x ./build/atmos
 	./build/atmos version
 
-version-windows: build-windows
+# Run the already-built binary; do NOT depend on build-windows. The CI build
+# step runs `make build-windows` before this, so re-declaring the dependency
+# made Windows recompile and re-link the whole binary a second time per job —
+# work that version-linux/version-macos (via version-default) do not repeat.
+# On the slow windows-latest runner that doubled the build phase.
+version-windows:
 	./build/atmos.exe version
 
 deps:
@@ -113,4 +130,16 @@ generate-mocks:
 	@go generate ./pkg/http/...
 	@echo "Mocks regenerated successfully"
 
-.PHONY: lint lintroller gomodcheck build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover generate-mocks
+# Check markdown links (requires lychee: brew install lychee)
+link-check:
+	@command -v lychee >/dev/null 2>&1 || { echo "Install lychee: brew install lychee"; exit 1; }
+	lychee --config lychee.toml --root-dir "$(CURDIR)" '**/*.md'
+
+# Run quick tests with race detector and shuffled order.
+# This target is recommended for CI to catch data races and order-dependent failures.
+# Usage: make test-race
+test-race: deps
+	@echo "Running tests with -race -shuffle=on"
+	CGO_ENABLED=1 go test -race -shuffle=on $(TEST) $(TESTARGS) -timeout 10m
+
+.PHONY: all clean test readme lint lintroller gomodcheck build version build-linux build-windows build-macos build-macos-intel deps version-linux version-windows version-macos version-macos-intel testacc testacc-cover testacc-coverage test-short test-short-cover test-race generate-mocks link-check

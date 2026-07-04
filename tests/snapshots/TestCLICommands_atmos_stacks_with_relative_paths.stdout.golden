@@ -9,8 +9,11 @@ acme-platform-dev:
         auth: {}
         backend: {}
         backend_type: ""
-        command: terraform
+        command: tofu
         component: mock
+        component_info:
+          component_path: ../../components/terraform/mock
+          component_type: terraform
         env: {}
         generate: {}
         hooks: {}
@@ -21,6 +24,8 @@ acme-platform-dev:
         provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
+        required_providers: {}
+        required_version: ""
         settings: {}
         source: {}
         stack: acme-platform-dev
@@ -43,8 +48,11 @@ acme-platform-prod:
         auth: {}
         backend: {}
         backend_type: ""
-        command: terraform
+        command: tofu
         component: mock
+        component_info:
+          component_path: ../../components/terraform/mock
+          component_type: terraform
         env: {}
         generate: {}
         hooks: {}
@@ -55,6 +63,8 @@ acme-platform-prod:
         provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
+        required_providers: {}
+        required_version: ""
         settings: {}
         source: {}
         stack: acme-platform-prod
@@ -77,8 +87,11 @@ acme-platform-staging:
         auth: {}
         backend: {}
         backend_type: ""
-        command: terraform
+        command: tofu
         component: mock
+        component_info:
+          component_path: ../../components/terraform/mock
+          component_type: terraform
         env: {}
         generate: {}
         hooks: {}
@@ -89,6 +102,8 @@ acme-platform-staging:
         provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
+        required_providers: {}
+        required_version: ""
         settings: {}
         source: {}
         stack: acme-platform-staging

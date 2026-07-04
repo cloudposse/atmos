@@ -123,9 +123,12 @@ func TestTasks_UnmarshalYAML_WithRetry(t *testing.T) {
 
 	assert.Len(t, tasks, 1)
 	require.NotNil(t, tasks[0].Retry)
-	assert.Equal(t, 3, tasks[0].Retry.MaxAttempts)
-	assert.Equal(t, time.Second, tasks[0].Retry.InitialDelay)
-	assert.Equal(t, 10*time.Second, tasks[0].Retry.MaxDelay)
+	require.NotNil(t, tasks[0].Retry.MaxAttempts)
+	assert.Equal(t, 3, *tasks[0].Retry.MaxAttempts)
+	require.NotNil(t, tasks[0].Retry.InitialDelay)
+	assert.Equal(t, time.Second, *tasks[0].Retry.InitialDelay)
+	require.NotNil(t, tasks[0].Retry.MaxDelay)
+	assert.Equal(t, 10*time.Second, *tasks[0].Retry.MaxDelay)
 }
 
 func TestTasks_UnmarshalYAML_WithWorkingDirectory(t *testing.T) {
@@ -157,6 +160,129 @@ func TestTasks_UnmarshalYAML_WithIdentity(t *testing.T) {
 	assert.Equal(t, "production-deployer", tasks[0].Identity)
 }
 
+func TestTasks_UnmarshalYAML_WithContainerFields(t *testing.T) {
+	// Container run parameters live under `with:` (GitHub Actions style) and
+	// decode into task.Run; only cross-cutting modifiers (provider) stay top-level.
+	input := `
+- name: scan
+  type: container
+  provider: docker
+  with:
+    image: alpine:latest
+    command: echo hello
+    shell: /bin/sh
+    pull: always
+    workspace: /workspace
+    workspace_read_only: true
+    cleanup: on_success
+    user: "1000:1000"
+    run_args:
+      - --network=none
+    mounts:
+      - type: bind
+        source: ./cache
+        target: /cache
+        read_only: true
+    ports:
+      - host: 8080
+        container: 8080
+        protocol: tcp
+`
+	var tasks Tasks
+	err := yaml.Unmarshal([]byte(input), &tasks)
+	require.NoError(t, err)
+
+	require.Len(t, tasks, 1)
+	task := tasks[0]
+	assert.Equal(t, "container", task.Type)
+	assert.Equal(t, "docker", task.Provider)
+	require.NotNil(t, task.Run)
+	assert.Equal(t, "alpine:latest", task.Run.Image)
+	assert.Equal(t, "/bin/sh", task.Run.Shell)
+	assert.Equal(t, "always", task.Run.Pull)
+	assert.Equal(t, "/workspace", task.Run.Workspace)
+	assert.True(t, task.Run.WorkspaceReadOnly)
+	assert.Equal(t, "on_success", task.Run.Cleanup)
+	assert.Equal(t, "1000:1000", task.Run.User)
+	assert.Equal(t, []string{"--network=none"}, task.Run.RunArgs)
+	require.Len(t, task.Run.Mounts, 1)
+	assert.Equal(t, "./cache", task.Run.Mounts[0].Source)
+	assert.Equal(t, "/cache", task.Run.Mounts[0].Target)
+	assert.True(t, task.Run.Mounts[0].ReadOnly)
+	require.Len(t, task.Run.Ports, 1)
+	assert.Equal(t, 8080, task.Run.Ports[0].Host)
+	assert.Equal(t, 8080, task.Run.Ports[0].Container)
+	assert.Equal(t, "tcp", task.Run.Ports[0].Protocol)
+}
+
+func TestTasks_UnmarshalYAML_WithContainerActionBlocksAndOutputs(t *testing.T) {
+	// Container action params live under `with:`; the action selects the struct.
+	input := `
+- name: build
+  type: container
+  action: build
+  with:
+    provider: docker
+    runtime_auto_start: true
+    engine: buildx
+    context: .
+    dockerfile: Dockerfile
+    tags:
+      - app:local
+    build_args:
+      VERSION: "1.0.0"
+    target: runtime
+    no_cache: true
+    pull: true
+    bake:
+      file: docker-bake.hcl
+      files:
+        - docker-bake.override.hcl
+      target: app
+      targets:
+        - worker
+      set:
+        - "*.platform=linux/amd64"
+      vars:
+        VERSION: "1.0.0"
+      load: true
+      push: true
+      print: true
+  outputs:
+    image: "{{ .metadata.image }}"
+`
+	var tasks Tasks
+	err := yaml.Unmarshal([]byte(input), &tasks)
+	require.NoError(t, err)
+
+	require.Len(t, tasks, 1)
+	task := tasks[0]
+	assert.Equal(t, "container", task.Type)
+	assert.Equal(t, "build", task.Action)
+	require.NotNil(t, task.Build)
+	assert.Equal(t, "docker", task.Build.Provider)
+	assert.True(t, task.Build.RuntimeAutoStart)
+	assert.Equal(t, "buildx", task.Build.Engine)
+	assert.Equal(t, ".", task.Build.Context)
+	assert.Equal(t, "Dockerfile", task.Build.Dockerfile)
+	assert.Equal(t, []string{"app:local"}, task.Build.Tags)
+	assert.Equal(t, map[string]string{"VERSION": "1.0.0"}, task.Build.BuildArgs)
+	assert.Equal(t, "runtime", task.Build.Target)
+	assert.True(t, task.Build.NoCache)
+	assert.True(t, task.Build.Pull)
+	require.NotNil(t, task.Build.Bake)
+	assert.Equal(t, "docker-bake.hcl", task.Build.Bake.File)
+	assert.Equal(t, []string{"docker-bake.override.hcl"}, task.Build.Bake.Files)
+	assert.Equal(t, "app", task.Build.Bake.Target)
+	assert.Equal(t, []string{"worker"}, task.Build.Bake.Targets)
+	assert.Equal(t, []string{"*.platform=linux/amd64"}, task.Build.Bake.Set)
+	assert.Equal(t, map[string]string{"VERSION": "1.0.0"}, task.Build.Bake.Vars)
+	assert.True(t, task.Build.Bake.Load)
+	assert.True(t, task.Build.Bake.Push)
+	assert.True(t, task.Build.Bake.Print)
+	assert.Equal(t, map[string]string{"image": "{{ .metadata.image }}"}, task.Outputs)
+}
+
 func TestTasks_UnmarshalYAML_EmptyList(t *testing.T) {
 	input := `[]`
 	var tasks Tasks
@@ -186,6 +312,7 @@ func TestTasks_UnmarshalYAML_InvalidNestedSequence(t *testing.T) {
 }
 
 func TestTask_ToWorkflowStep(t *testing.T) {
+	maxAttempts := 3
 	task := Task{
 		Name:             "test-task",
 		Command:          "echo hello",
@@ -194,9 +321,38 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 		WorkingDirectory: "/app",
 		Identity:         "test-identity",
 		Retry: &schema.RetryConfig{
-			MaxAttempts: 3,
+			MaxAttempts: &maxAttempts,
 		},
-		Timeout: 30 * time.Second,
+		Timeout:  30 * time.Second,
+		Provider: "docker",
+		Action:   "run",
+		Build: &schema.ContainerBuildStep{
+			Engine:  "buildx",
+			Context: ".",
+			Tags:    []string{"app:local"},
+			Bake: &schema.ContainerBuildBakeStep{
+				File:   "docker-bake.hcl",
+				Target: "app",
+			},
+		},
+		Push: &schema.ContainerPushStep{
+			Image: "app:local",
+			Tags:  []string{"registry.example.com/app:local"},
+		},
+		Run: &schema.ContainerRunStep{
+			Image:             "app:local",
+			Command:           "echo ok",
+			Shell:             "/bin/sh",
+			Pull:              "always",
+			Workspace:         "/workspace",
+			WorkspaceReadOnly: true,
+			Cleanup:           "on_success",
+			User:              "1000:1000",
+			RunArgs:           []string{"--network=none"},
+			Mounts:            []schema.ContainerMount{{Type: "bind", Source: "./cache", Target: "/cache", ReadOnly: true}},
+			Ports:             []schema.ContainerPort{{Host: 8080, Container: 8080, Protocol: "tcp"}},
+		},
+		Outputs: map[string]string{"image": "{{ .metadata.image }}"},
 	}
 
 	step := task.ToWorkflowStep()
@@ -208,10 +364,17 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 	assert.Equal(t, task.WorkingDirectory, step.WorkingDirectory)
 	assert.Equal(t, task.Identity, step.Identity)
 	assert.Equal(t, task.Retry, step.Retry)
+	assert.Equal(t, task.Provider, step.Provider)
+	assert.Equal(t, task.Action, step.Action)
+	assert.Equal(t, task.Build, step.Build)
+	assert.Equal(t, task.Push, step.Push)
+	assert.Equal(t, task.Run, step.Run)
+	assert.Equal(t, task.Outputs, step.Outputs)
 	// Note: Timeout is not in WorkflowStep.
 }
 
 func TestTaskFromWorkflowStep(t *testing.T) {
+	maxAttempts := 5
 	step := schema.WorkflowStep{
 		Name:             "workflow-step",
 		Command:          "terraform apply",
@@ -220,8 +383,37 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 		WorkingDirectory: "/infra",
 		Identity:         "prod-identity",
 		Retry: &schema.RetryConfig{
-			MaxAttempts: 5,
+			MaxAttempts: &maxAttempts,
 		},
+		Provider: "docker",
+		Action:   "run",
+		Build: &schema.ContainerBuildStep{
+			Engine:  "buildx",
+			Context: ".",
+			Tags:    []string{"app:local"},
+			Bake: &schema.ContainerBuildBakeStep{
+				File:   "docker-bake.hcl",
+				Target: "app",
+			},
+		},
+		Push: &schema.ContainerPushStep{
+			Image: "app:local",
+			Tags:  []string{"registry.example.com/app:local"},
+		},
+		Run: &schema.ContainerRunStep{
+			Image:             "app:local",
+			Command:           "echo ok",
+			Shell:             "/bin/sh",
+			Pull:              "always",
+			Workspace:         "/workspace",
+			WorkspaceReadOnly: true,
+			Cleanup:           "on_success",
+			User:              "1000:1000",
+			RunArgs:           []string{"--network=none"},
+			Mounts:            []schema.ContainerMount{{Type: "bind", Source: "./cache", Target: "/cache", ReadOnly: true}},
+			Ports:             []schema.ContainerPort{{Host: 8080, Container: 8080, Protocol: "tcp"}},
+		},
+		Outputs: map[string]string{"image": "{{ .metadata.image }}"},
 	}
 
 	task := schema.TaskFromWorkflowStep(&step)
@@ -233,5 +425,11 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 	assert.Equal(t, step.WorkingDirectory, task.WorkingDirectory)
 	assert.Equal(t, step.Identity, task.Identity)
 	assert.Equal(t, step.Retry, task.Retry)
+	assert.Equal(t, step.Provider, task.Provider)
+	assert.Equal(t, step.Action, task.Action)
+	assert.Equal(t, step.Build, task.Build)
+	assert.Equal(t, step.Push, task.Push)
+	assert.Equal(t, step.Run, task.Run)
+	assert.Equal(t, step.Outputs, task.Outputs)
 	assert.Zero(t, task.Timeout) // WorkflowStep doesn't have Timeout.
 }

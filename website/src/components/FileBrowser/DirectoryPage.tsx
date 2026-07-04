@@ -9,6 +9,7 @@ import DirectoryListing from './DirectoryListing';
 import FileViewer from './FileViewer';
 import RelatedDocs from './RelatedDocs';
 import { findExampleByName, getExampleNameFromPath } from './utils';
+import GistDisclaimer from '@site/src/components/GistDisclaimer';
 import type { ExamplesTree, FileBrowserOptions, DirectoryNode } from './types';
 import styles from './styles.module.css';
 
@@ -40,8 +41,9 @@ export default function DirectoryPage({
     );
   }
 
+  const sectionName = optionsData.title || 'Examples';
   const pageTitle = dirData.path === exampleName
-    ? `${exampleName} - Examples`
+    ? `${exampleName} - ${sectionName}`
     : `${dirData.name} - ${exampleName}`;
 
   return (
@@ -53,7 +55,11 @@ export default function DirectoryPage({
           currentPath={dirData.path}
         />
         <main className={styles.mainContent}>
-          <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} />
+          <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} rootLabel={sectionName.toLowerCase()} />
+
+          {optionsData.disclaimer && (
+            <GistDisclaimer text={optionsData.disclaimer} />
+          )}
 
           {/* Show README if present */}
           {dirData.readme && (

@@ -1,12 +1,37 @@
 package exec
 
 import (
+	"context"
+
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// filterTerraformAffected narrows the affected list to items that `atmos terraform
+// plan/apply --affected` should actually execute: terraform components only, and
+// only those that still exist (not deleted in HEAD). Helmfile and Packer items
+// belong to their own subcommands; deleted components have no on-disk module so
+// terraform plan/apply against them would fail or no-op. See issue #2361.
+func filterTerraformAffected(affectedList []schema.Affected) []schema.Affected {
+	filtered := affectedList[:0]
+	for i := range affectedList {
+		a := &affectedList[i]
+		if a.ComponentType != cfg.TerraformComponentType {
+			continue
+		}
+		if a.Deleted {
+			continue
+		}
+		filtered = append(filtered, *a)
+	}
+	return filtered
+}
 
 // getAffectedComponents retrieves the list of affected components based on the provided arguments.
 func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
@@ -28,6 +53,8 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ProcessYamlFunctions,
 			args.Skip,
 			args.ExcludeLocked,
+			args.AuthManager,
+			args.AuthDisabled,
 		)
 		return affectedList, err
 	case args.CloneTargetRef:
@@ -44,6 +71,8 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ProcessYamlFunctions,
 			args.Skip,
 			args.ExcludeLocked,
+			args.AuthManager,
+			args.AuthDisabled,
 		)
 		return affectedList, err
 	default:
@@ -51,6 +80,7 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.CLIConfig,
 			args.Ref,
 			args.SHA,
+			args.TargetBranch,
 			args.IncludeSpaceliftAdminStacks,
 			args.IncludeSettings,
 			args.Stack,
@@ -58,6 +88,8 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 			args.ProcessYamlFunctions,
 			args.Skip,
 			args.ExcludeLocked,
+			args.AuthManager,
+			args.AuthDisabled,
 		)
 		return affectedList, err
 	}
@@ -66,6 +98,13 @@ func getAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 // ExecuteTerraformAffected executes `atmos terraform <command> --affected`.
 func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformAffected")()
+	return ExecuteTerraformAffectedWithContext(context.Background(), args, info)
+}
+
+// ExecuteTerraformAffectedWithContext executes affected Terraform components through
+// the shared graph-backed scheduler path.
+func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformAffectedWithContext")()
 
 	if args == nil {
 		return errUtils.ErrNilParam
@@ -74,28 +113,78 @@ func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.Config
 		return errUtils.ErrNilParam
 	}
 
+	authDisabled := args.AuthDisabled || info.AuthDisabled || info.Identity == cfg.IdentityFlagDisabledValue
+	if authDisabled {
+		info.Identity = cfg.IdentityFlagDisabledValue
+		info.AuthDisabled = true
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		return err
+	}
+
+	authManager, err := createQueryAuthManager(info, &atmosConfig)
+	if err != nil {
+		return err
+	}
+	if authManager != nil {
+		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
+	}
+
+	args.CLIConfig = &atmosConfig
+	args.AuthManager = authManager
+	args.AuthDisabled = authDisabled
+
 	affectedList, err := getAffectedComponents(args)
 	if err != nil {
 		return err
 	}
 
-	// Add dependent components for each directly affected component.
-	if len(affectedList) > 0 {
-		err = addDependentsToAffected(
-			args.CLIConfig,
-			&affectedList,
-			args.IncludeSettings,
-			args.ProcessTemplates,
-			args.ProcessYamlFunctions,
-			args.Skip,
-			"",
-		)
-		if err != nil {
-			return err
-		}
+	// Drop non-terraform component types (helmfile, packer) and deleted components
+	// before resolving dependents — `addDependentsToAffected` is expensive and there
+	// is no reason to walk dependency graphs for items we will not execute.
+	affectedList = filterTerraformAffected(affectedList)
+
+	if len(affectedList) == 0 {
+		ui.Success("No components affected")
+		return nil
 	}
 
-	return executeAffectedComponents(affectedList, info, args)
+	affectedYaml, err := u.ConvertToYAML(affectedList)
+	if err != nil {
+		return err
+	}
+	log.Debug("Affected", "components", affectedYaml)
+
+	stacks, err := ExecuteDescribeStacksWithAuthDisabled(
+		&atmosConfig,
+		"",  // all stacks; the affected selector already constrains direct matches
+		nil, // all components; graph filtering applies the selected affected set
+		[]string{cfg.TerraformComponentType},
+		nil,
+		false,
+		info.ProcessTemplates,
+		info.ProcessFunctions,
+		false,
+		info.Skip,
+		authManager,
+		authDisabled,
+	)
+	if err != nil {
+		return err
+	}
+
+	return scheduleradapters.ExecuteTerraform(ctx, scheduleradapters.TerraformOptions{
+		AtmosConfig: &atmosConfig,
+		Info:        info,
+		Stacks:      stacks,
+		Executor:    executeTerraformQueryComponent,
+		Selection: &scheduleradapters.TerraformSelection{
+			NodeIDs:           extractAffectedNodeIDs(affectedList),
+			IncludeDependents: args.IncludeDependents,
+		},
+	})
 }
 
 // executeAffectedComponents processes each affected component in dependency order.
@@ -104,6 +193,7 @@ func executeAffectedComponents(affectedList []schema.Affected, info *schema.Conf
 
 	// Early return for empty list - nothing to process.
 	if len(affectedList) == 0 {
+		ui.Success("No components affected")
 		return nil
 	}
 
@@ -121,11 +211,11 @@ func executeAffectedComponents(affectedList []schema.Affected, info *schema.Conf
 			err = executeTerraformAffectedComponentInDepOrder(
 				info,
 				affectedList,
-				affected.Component,
-				affected.Stack,
-				"",
-				"",
-				affected.Dependents,
+				&affectedDepOrderParams{
+					AffectedComponent: affected.Component,
+					AffectedStack:     affected.Stack,
+					Dependents:        affected.Dependents,
+				},
 				args,
 			)
 			if err != nil {

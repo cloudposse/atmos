@@ -97,9 +97,7 @@ func executeThemeList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write the table output.
-	if err := ui.Write(result.Output); err != nil {
-		return err
-	}
+	ui.Write(result.Output)
 
 	// Write footer messages with styling.
 	countMsg := fmt.Sprintf("%d theme", result.ThemeCount)
@@ -116,14 +114,10 @@ func executeThemeList(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if err := ui.Info(countMsg); err != nil {
-		return err
-	}
+	ui.Info(countMsg)
 
 	if result.ActiveTheme != "" {
-		if err := ui.Success(fmt.Sprintf("Active theme: %s", result.ActiveTheme)); err != nil {
-			return err
-		}
+		ui.Success(fmt.Sprintf("Active theme: %s", result.ActiveTheme))
 	}
 
 	return nil

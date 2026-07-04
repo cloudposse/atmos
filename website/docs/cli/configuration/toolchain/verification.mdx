@@ -1,0 +1,103 @@
+---
+title: Toolchain Verification
+sidebar_position: 3
+sidebar_label: verification
+description: Configure checksum, signature, and attestation verification for Atmos toolchain packages.
+---
+
+import Intro from '@site/src/components/Intro';
+import File from '@site/src/components/File';
+
+<Intro>
+The `toolchain.verification` section controls how Atmos verifies downloaded toolchain packages before extraction and installation.
+</Intro>
+
+## Configuration
+
+By default, Atmos verifies packages when registry metadata provides checksums, signatures, or attestations. Packages without verification metadata can still install.
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  verification:
+    checksums: when_available
+    signatures: when_available
+    verifier_install: auto
+```
+</File>
+
+## Options
+
+<dl>
+  <dt>`checksums`</dt>
+  <dd>
+    Controls checksum verification for downloaded packages. Supported values:
+    <ul>
+      <li><code>when_available</code> verifies checksums when registry metadata provides them. This is the default.</li>
+      <li><code>required</code> fails installation when checksum metadata is missing or verification fails.</li>
+      <li><code>disabled</code> skips checksum verification.</li>
+    </ul>
+  </dd>
+
+  <dt>`signatures`</dt>
+  <dd>
+    Controls signature and attestation verification for downloaded packages. Supported values:
+    <ul>
+      <li><code>when_available</code> verifies signatures and attestations when registry metadata provides them. This is the default.</li>
+      <li><code>required</code> fails installation when signature metadata is missing or verification fails.</li>
+      <li><code>disabled</code> skips signature and attestation verification.</li>
+    </ul>
+  </dd>
+
+  <dt>`verifier_install`</dt>
+  <dd>
+    Controls how external verifier CLIs are resolved. Supported values:
+    <ul>
+      <li><code>auto</code> installs supported verifier CLIs through Atmos toolchain when they are not already on <code>PATH</code>. This is the default.</li>
+      <li><code>path_only</code> requires verifier CLIs to already be available on <code>PATH</code>.</li>
+    </ul>
+  </dd>
+</dl>
+
+## Verification Methods
+
+Atmos supports Aqua-compatible verification metadata for package downloads.
+
+<dl>
+  <dt>Checksums</dt>
+  <dd>Verifies downloaded assets with `sha256`, `sha512`, `sha1`, or `md5` checksum files before extraction.</dd>
+
+  <dt>`cosign`</dt>
+  <dd>Runs `cosign verify-blob` for Sigstore signatures and bundles.</dd>
+
+  <dt>`slsa_provenance`</dt>
+  <dd>Runs `slsa-verifier verify-artifact` for SLSA provenance metadata.</dd>
+
+  <dt>`github_artifact_attestations`</dt>
+  <dd>Runs `gh attestation verify`. This requires the GitHub CLI (`gh`) on `PATH`, or `verifier_install: auto` so Atmos can install `cli/cli` through the toolchain.</dd>
+
+  <dt>`minisign`</dt>
+  <dd>Runs `minisign -Vm` for Minisign signatures.</dd>
+</dl>
+
+## Strict Verification
+
+Use `required` policies when every package must provide verification metadata:
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  verification:
+    checksums: required
+    signatures: required
+    verifier_install: path_only
+```
+</File>
+
+With this configuration, installation fails when checksum metadata is missing, signature or attestation metadata is missing, a verifier CLI is missing from `PATH`, or verification fails.
+
+## Related
+
+- [Toolchain Configuration](/cli/configuration/toolchain) - Configure tool versions, registries, aliases, and verification
+- [Toolchain Registries](/cli/configuration/toolchain/registries) - Configure package metadata sources
+- [`atmos toolchain install`](/cli/commands/toolchain/install) - Install toolchain packages

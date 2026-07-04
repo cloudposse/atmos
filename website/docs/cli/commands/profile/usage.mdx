@@ -9,10 +9,13 @@ import Screengrab from '@site/src/components/Screengrab';
 import DocCardList from '@theme/DocCardList';
 import Intro from '@site/src/components/Intro';
 import ActionCard from '@site/src/components/ActionCard';
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
 Use these subcommands to discover, inspect, and manage configuration profiles. Profiles provide environment-specific configuration overrides for development, CI/CD, and production contexts without duplicating settings.
 </Intro>
+
+<DemoVideo id="profile" title="atmos profile" showCaption={false} />
 
 <Screengrab title="atmos profile --help" slug="atmos-profile--help" />
 
@@ -34,34 +37,9 @@ Atmos discovers profiles from multiple locations in the following precedence ord
 3. **XDG user directory**: `~/.config/atmos/profiles/` (or `$XDG_CONFIG_HOME/atmos/profiles/`)
 4. **Project directory**: `profiles/` in your project root
 
-Each profile can be either:
-- An inline definition in `atmos.yaml`
-- A separate directory containing `atmos.yaml` and other configuration files
+Each profile is a directory containing `atmos.yaml` and other configuration files.
 
 ## Profile Structure
-
-### Inline Profiles (in atmos.yaml)
-
-```yaml
-# atmos.yaml
-profiles:
-  developer:
-    logs:
-      level: Debug
-    settings:
-      terminal:
-        max_width: 120
-
-  ci:
-    logs:
-      level: Info
-    settings:
-      terminal:
-        color: false
-        pager: false
-```
-
-### Directory-Based Profiles
 
 ```
 profiles/

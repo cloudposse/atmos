@@ -13,7 +13,7 @@ tests:
       - "validate"
     expect:
       diff: []
-      stdout:
+      stderr:
         - "Authentication configuration is valid"
       exit_code: 0
 
@@ -28,6 +28,7 @@ tests:
       - "validate"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff: []
       stdout:
         - "Validate the authentication configuration in atmos.yaml"
@@ -49,6 +50,7 @@ tests:
       - "whoami"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff: []
       stdout:
         - "Display information about the current effective authentication principal."
@@ -88,6 +90,7 @@ tests:
       - "env"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff: []
       stdout:
         - "Outputs environment variables for the assumed identity"
@@ -170,6 +173,7 @@ tests:
       - "exec"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff: []
       stdout:
         - "Execute a command with the authenticated identity's environment variables set."
@@ -212,6 +216,7 @@ tests:
       - "login"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff: []
       stdout:
         - "Authenticate to cloud providers using an identity defined in atmos.yaml"
@@ -252,6 +257,7 @@ tests:
       - "configure"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff: []
       stdout:
         - "Configure static AWS user credentials"
@@ -293,7 +299,7 @@ tests:
     expect:
       diff: []
       stderr:
-        - "invalid argument"
+        - "unsupported format"
       exit_code: 1
 
   - name: atmos auth whoami --identity nonexistent
@@ -325,6 +331,8 @@ tests:
     description: "Test auth login with mock identity (succeeds)"
     workdir: "fixtures/scenarios/atmos-auth-mock/"
     command: "atmos"
+    env:
+      ATMOS_AUTH_REALM: "test-realm"
     args:
       - "auth"
       - "login"

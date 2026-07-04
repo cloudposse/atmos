@@ -19,9 +19,19 @@ type DescribeSettings struct {
 	IncludeEmpty *bool `yaml:"include_empty,omitempty" json:"include_empty,omitempty" mapstructure:"include_empty"`
 }
 
+// DescribeAffected contains configuration for the `atmos describe affected` command.
+type DescribeAffected struct {
+	// Sections is the authoritative list of top-level component sections compared
+	// when computing affected components. When set, it REPLACES the built-in defaults.
+	// When empty, the built-in defaults are used. `metadata` and `settings` are always
+	// evaluated via dedicated logic and are not controlled by this list.
+	Sections []string `yaml:"sections,omitempty" json:"sections,omitempty" mapstructure:"sections"`
+}
+
 // Describe contains configuration for the describe command.
 type Describe struct {
 	Settings DescribeSettings `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+	Affected DescribeAffected `yaml:"affected,omitempty" json:"affected,omitempty" mapstructure:"affected"`
 }
 
 // ProfilesConfig defines configuration for the profiles system.
@@ -30,6 +40,12 @@ type ProfilesConfig struct {
 	// If relative, resolved from atmos.yaml directory.
 	// If absolute, used as-is.
 	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+
+	// Default is the name of a profile loaded automatically when neither the
+	// --profile flag nor the ATMOS_PROFILE environment variable is set.
+	// The default is treated as implicit: an explicit --profile or ATMOS_PROFILE
+	// always wins, and it does not suppress the interactive identity fallback.
+	Default string `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
 }
 
 // ConfigMetadata contains metadata about a configuration file or profile.
@@ -53,10 +69,13 @@ type ConfigMetadata struct {
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	BasePathSource                string             `yaml:"-" json:"-" mapstructure:"-"` // "runtime" if from env var/CLI/provider, "" if from config file.
 	Components                    Components         `yaml:"components" json:"components" mapstructure:"components"`
 	Stacks                        Stacks             `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
+	Imports                       ImportsSettings    `yaml:"imports,omitempty" json:"imports,omitempty" mapstructure:"imports"`
 	Workflows                     Workflows          `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
 	Logs                          Logs               `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
+	Diagnostics                   Diagnostics        `yaml:"diagnostics" json:"diagnostics" mapstructure:"diagnostics"`
 	Errors                        ErrorsConfig       `yaml:"errors,omitempty" json:"errors,omitempty" mapstructure:"errors"`
 	Commands                      []Command          `yaml:"commands,omitempty" json:"commands,omitempty" mapstructure:"commands"`
 	CommandAliases                CommandAliases     `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
@@ -66,6 +85,7 @@ type AtmosConfiguration struct {
 	Settings                      AtmosSettings      `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
 	Describe                      Describe           `yaml:"describe,omitempty" json:"describe,omitempty" mapstructure:"describe"`
 	StoresConfig                  store.StoresConfig `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
+	Secrets                       SecretsConfig      `yaml:"secrets,omitempty" json:"secrets,omitempty" mapstructure:"secrets"`
 	Vendor                        Vendor             `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool               `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
 	BasePathAbsolute              string             `yaml:"basePathAbsolute,omitempty" json:"basePathAbsolute,omitempty" mapstructure:"basePathAbsolute"`
@@ -75,6 +95,9 @@ type AtmosConfiguration struct {
 	TerraformDirAbsolutePath      string             `yaml:"terraformDirAbsolutePath,omitempty" json:"terraformDirAbsolutePath,omitempty" mapstructure:"terraformDirAbsolutePath"`
 	HelmfileDirAbsolutePath       string             `yaml:"helmfileDirAbsolutePath,omitempty" json:"helmfileDirAbsolutePath,omitempty" mapstructure:"helmfileDirAbsolutePath"`
 	PackerDirAbsolutePath         string             `yaml:"packerDirAbsolutePath,omitempty" json:"packerDirAbsolutePath,omitempty" mapstructure:"packerDirAbsolutePath"`
+	AnsibleDirAbsolutePath        string             `yaml:"ansibleDirAbsolutePath,omitempty" json:"ansibleDirAbsolutePath,omitempty" mapstructure:"ansibleDirAbsolutePath"`
+	KubernetesDirAbsolutePath     string             `yaml:"kubernetesDirAbsolutePath,omitempty" json:"kubernetesDirAbsolutePath,omitempty" mapstructure:"kubernetesDirAbsolutePath"`
+	HelmDirAbsolutePath           string             `yaml:"helmDirAbsolutePath,omitempty" json:"helmDirAbsolutePath,omitempty" mapstructure:"helmDirAbsolutePath"`
 	StackConfigFilesRelativePaths []string           `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
 	StackConfigFilesAbsolutePaths []string           `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string             `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
@@ -84,21 +107,37 @@ type AtmosConfiguration struct {
 	// Stores is never read from yaml, it is populated in processStoreConfig and it's used to pass to the populated store
 	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
 	// functions to be able to call stores from within hooks.
-	Stores          store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
-	CliConfigPath   string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
-	Import          []string            `yaml:"import" json:"import" mapstructure:"import"`
-	Docs            Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
-	Auth            AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
-	Env             map[string]string   `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
-	CaseMaps        *casemap.CaseMaps   `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
-	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
-	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
-	Toolchain       Toolchain           `yaml:"toolchain,omitempty" json:"toolchain,omitempty" mapstructure:"toolchain"`
-	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
-	Profiles        ProfilesConfig      `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
-	Metadata        ConfigMetadata      `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+	Stores store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
+	// SecretsAuth carries the auth-context resolver and effective default identity for cloud-KMS
+	// SOPS providers (sops/aws-kms, sops/gcp-kms, sops/azure-kv). It is transient (never serialized)
+	// and populated alongside the store auth resolver in the `atmos secret` and terraform code paths.
+	SecretsAuth     *store.SecretsAuthContext `yaml:"-" json:"-" mapstructure:"-"`
+	CliConfigPath   string                    `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
+	Import          []string                  `yaml:"import" json:"import" mapstructure:"import"`
+	Docs            Docs                      `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Auth            AuthConfig                `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	Container       ContainerConfig           `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
+	Compositions    map[string]Composition    `yaml:"compositions,omitempty" json:"compositions,omitempty" mapstructure:"compositions"`
+	Env             map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
+	CaseMaps        *casemap.CaseMaps         `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
+	Profiler        profiler.Config           `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
+	TrackProvenance bool                      `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
+	Toolchain       Toolchain                 `yaml:"toolchain,omitempty" json:"toolchain,omitempty" mapstructure:"toolchain"`
+	Git             GitConfig                 `yaml:"git,omitempty" json:"git,omitempty" mapstructure:"git"`
+	Devcontainer    map[string]any            `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
+	Profiles        ProfilesConfig            `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
+	Metadata        ConfigMetadata            `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
 	// List holds command-specific list configurations (list.components, list.instances, list.stacks).
 	List TopLevelListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
+	CI   CIConfig           `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
+	// AI settings.
+	AI AISettings `yaml:"ai,omitempty" json:"ai,omitempty" mapstructure:"ai"`
+	// AWS settings.
+	AWS AWSSettings `yaml:"aws,omitempty" json:"aws,omitempty" mapstructure:"aws"`
+	// MCP (Model Context Protocol) server settings.
+	MCP MCPSettings `yaml:"mcp,omitempty" json:"mcp,omitempty" mapstructure:"mcp"`
+	// LSP settings.
+	LSP LSPSettings `yaml:"lsp,omitempty" json:"lsp,omitempty" mapstructure:"lsp"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -112,6 +151,18 @@ func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
 		return manifestSchema
 	}
 	return SchemaRegistry{}
+}
+
+// SetSchemaRegistry stores a SchemaRegistry under the given key, lazily
+// initializing the Schemas map when it is nil. A nil map occurs when the loaded
+// `atmos.yaml` has no `schemas:` section (mapstructure leaves the field nil), so
+// callers applying flag/env overrides must use this setter instead of a raw
+// map assignment to avoid an "assignment to entry in nil map" panic.
+func (m *AtmosConfiguration) SetSchemaRegistry(key string, registry SchemaRegistry) {
+	if m.Schemas == nil {
+		m.Schemas = make(map[string]any)
+	}
+	m.Schemas[key] = registry
 }
 
 func (m *AtmosConfiguration) GetResourcePath(key string) ResourcePath {
@@ -224,12 +275,14 @@ func (a *AtmosConfiguration) processResourceSchema(key string) {
 
 // GetCaseSensitiveMap returns the specified map with original key casing restored.
 // This compensates for Viper lowercasing all YAML map keys.
-// Supported paths: "env".
+// Supported paths: "env", "templates.settings.env".
 func (a *AtmosConfiguration) GetCaseSensitiveMap(path string) map[string]string {
 	var source map[string]string
 	switch path {
 	case "env":
 		source = a.Env
+	case "templates.settings.env":
+		source = a.Templates.Settings.Env
 	default:
 		return nil
 	}
@@ -262,15 +315,23 @@ type EditorConfig struct {
 
 // Toolchain configures the built-in CLI toolchain management system for installing and managing external tools.
 type Toolchain struct {
-	InstallPath     string              `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
-	FilePath        string              `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
-	ToolsDir        string              `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
-	VersionsFile    string              `yaml:"versions_file" json:"versions_file" mapstructure:"versions_file"`
-	LockFile        string              `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
-	UseToolVersions bool                `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
-	UseLockFile     bool                `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
-	Registries      []ToolchainRegistry `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
-	Aliases         map[string]string   `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+	InstallPath     string                 `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
+	FilePath        string                 `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
+	ToolsDir        string                 `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
+	VersionsFile    string                 `yaml:"versions_file" json:"versions_file" mapstructure:"versions_file"`
+	LockFile        string                 `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
+	UseToolVersions bool                   `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
+	UseLockFile     bool                   `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
+	Verification    *ToolchainVerification `yaml:"verification,omitempty" json:"verification,omitempty" mapstructure:"verification"`
+	Registries      []ToolchainRegistry    `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
+	Aliases         map[string]string      `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+}
+
+// ToolchainVerification configures package integrity and signature checks.
+type ToolchainVerification struct {
+	Checksums       string `yaml:"checksums,omitempty" json:"checksums,omitempty" mapstructure:"checksums"`
+	Signatures      string `yaml:"signatures,omitempty" json:"signatures,omitempty" mapstructure:"signatures"`
+	VerifierInstall string `yaml:"verifier_install,omitempty" json:"verifier_install,omitempty" mapstructure:"verifier_install"`
 }
 
 // ToolchainRegistry defines a registry source for tool metadata.
@@ -291,6 +352,7 @@ type Terminal struct {
 	Color              bool               `yaml:"color" json:"color" mapstructure:"color"`
 	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"` // Deprecated in config, use Color instead
 	ForceColor         bool               `yaml:"-" json:"-" mapstructure:"force_color"`            // ENV-only: ATMOS_FORCE_COLOR
+	Speed              float64            `yaml:"speed,omitempty" json:"speed,omitempty" mapstructure:"speed"`
 	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
 	Title              bool               `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
 	Alerts             bool               `yaml:"alerts,omitempty" json:"alerts,omitempty" mapstructure:"alerts"`
@@ -356,6 +418,7 @@ type AtmosSettings struct {
 	InjectGithubToken    bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
 	GithubToken          string           `yaml:"github_token,omitempty" mapstructure:"github_token"`
 	AtmosGithubToken     string           `yaml:"atmos_github_token,omitempty" mapstructure:"atmos_github_token"`
+	AtmosProGithubToken  string           `yaml:"atmos_pro_github_token,omitempty" mapstructure:"atmos_pro_github_token"`
 	GithubUsername       string           `yaml:"github_username,omitempty" mapstructure:"github_username"`
 	InjectBitbucketToken bool             `yaml:"inject_bitbucket_token,omitempty" mapstructure:"inject_bitbucket_token"`
 	BitbucketToken       string           `yaml:"bitbucket_token,omitempty" mapstructure:"bitbucket_token"`
@@ -368,6 +431,8 @@ type AtmosSettings struct {
 	Pro ProSettings `yaml:"pro,omitempty" json:"pro,omitempty" mapstructure:"pro"`
 	// Telemetry settings
 	Telemetry TelemetrySettings `yaml:"telemetry,omitempty" json:"telemetry,omitempty" mapstructure:"telemetry"`
+	// Provision contains global defaults for provisioning.
+	Provision ProvisionSettings `yaml:"provision,omitempty" json:"provision,omitempty" mapstructure:"provision"`
 }
 
 // TelemetrySettings contains configuration for telemetry collection.
@@ -376,6 +441,61 @@ type TelemetrySettings struct {
 	Endpoint string `yaml:"endpoint,omitempty" json:"endpoint,omitempty" mapstructure:"endpoint"`
 	Token    string `yaml:"token,omitempty" json:"token,omitempty" mapstructure:"token"`
 	Logging  bool   `yaml:"logging" json:"logging" mapstructure:"logging"`
+}
+
+// ProvisionSettings contains global defaults for provisioning.
+type ProvisionSettings struct {
+	Workdir ProvisionWorkdirSettings `yaml:"workdir,omitempty" json:"workdir,omitempty" mapstructure:"workdir"`
+	// Default is the name of the target used by apply/deploy when no --target is given.
+	Default string `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	// Targets maps target names to delivery destinations for rendered artifacts.
+	Targets map[string]ProvisionTarget `yaml:"targets,omitempty" json:"targets,omitempty" mapstructure:"targets"`
+}
+
+// ProvisionTarget is a delivery destination for a rendered artifact, selected by
+// its kind (e.g. "git", "kubernetes"). Kind-specific fields below are interpreted
+// by the registered target provisioner for that kind.
+type ProvisionTarget struct {
+	// Kind selects the target provisioner (e.g. "git", "kubernetes").
+	Kind string `yaml:"kind" json:"kind" mapstructure:"kind"`
+	// Repository references a top-level git.repositories.<name> (git kind).
+	Repository string `yaml:"repository,omitempty" json:"repository,omitempty" mapstructure:"repository"`
+	// Path is the destination path inside the deployment repository (git kind, supports templates).
+	Path string `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`
+	// Auth selects the Atmos Auth identity used for the delivery (overrides the repository default).
+	Auth ProvisionTargetAuth `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	// Commit controls the commit message and signing for the delivery (git kind).
+	Commit ProvisionTargetCommit `yaml:"commit,omitempty" json:"commit,omitempty" mapstructure:"commit"`
+	// PullRequest configures pull-request publishing (git kind; not yet supported by the cli provider).
+	PullRequest ProvisionTargetPullRequest `yaml:"pull_request,omitempty" json:"pull_request,omitempty" mapstructure:"pull_request"`
+}
+
+// ProvisionTargetAuth selects the Atmos Auth identity for a delivery.
+type ProvisionTargetAuth struct {
+	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+}
+
+// ProvisionTargetCommit controls commit message and signing for a git delivery.
+type ProvisionTargetCommit struct {
+	// Message is the commit message (supports templates).
+	Message string `yaml:"message,omitempty" json:"message,omitempty" mapstructure:"message"`
+	// Signing mode: "auto" (git config decides), "always" (-S), or "never" (--no-gpg-sign).
+	Signing string `yaml:"signing,omitempty" json:"signing,omitempty" mapstructure:"signing"`
+}
+
+// ProvisionTargetPullRequest configures pull-request publishing for a git delivery.
+type ProvisionTargetPullRequest struct {
+	// Enabled requests pull-request publishing (not yet supported by the cli provider).
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+}
+
+// ProvisionWorkdirSettings contains default settings for workdir provisioning.
+type ProvisionWorkdirSettings struct {
+	// Enabled sets the default enabled state for workdir provisioning.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// TTL is the default time-to-live for workdirs (e.g., "7d", "24h", "weekly").
+	// Workdirs not accessed within this duration can be cleaned up.
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
 }
 
 type Docs struct {
@@ -397,6 +517,10 @@ type TemplatesSettings struct {
 	Delimiters  []string                  `yaml:"delimiters,omitempty" json:"delimiters,omitempty" mapstructure:"delimiters"`
 	Evaluations int                       `yaml:"evaluations,omitempty" json:"evaluations,omitempty" mapstructure:"evaluations"`
 	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
+	// IgnoreMissingTemplateValues is the global default for ignoring missing template values.
+	// When true, template processing will not fail if a template variable is missing.
+	// This can be overridden per-import using the import's own ignore_missing_template_values setting.
+	IgnoreMissingTemplateValues bool `yaml:"ignore_missing_template_values,omitempty" json:"ignore_missing_template_values,omitempty" mapstructure:"ignore_missing_template_values"`
 }
 
 type TemplatesSettingsSprig struct {
@@ -414,6 +538,14 @@ type TemplatesSettingsGomplate struct {
 	Datasources map[string]TemplatesSettingsGomplateDatasource `yaml:"datasources" json:"datasources" mapstructure:"datasources"`
 }
 
+// SourceSettings holds global source configuration defaults for JIT-vendored components.
+type SourceSettings struct {
+	// TTL is the default cache duration for JIT-vendored sources.
+	// Applied to all components unless overridden per-component.
+	// If not set, cached sources are reused indefinitely.
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
+}
+
 type Terraform struct {
 	BasePath                string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
@@ -424,12 +556,13 @@ type Terraform struct {
 	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
 	// (e.g., .tf, .json, .yaml) during Terraform operations when set to true.
 	// Generated files are defined in the component's generate section.
-	AutoGenerateFiles bool          `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
-	WorkspacesEnabled *bool         `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
-	Command           string        `yaml:"command" json:"command" mapstructure:"command"`
-	Shell             ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
-	Init              TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
-	Plan              TerraformPlan `yaml:"plan" json:"plan" mapstructure:"plan"`
+	AutoGenerateFiles bool            `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	WorkspacesEnabled *bool           `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
+	Command           string          `yaml:"command" json:"command" mapstructure:"command"`
+	Shell             ShellConfig     `yaml:"shell" json:"shell" mapstructure:"shell"`
+	Init              TerraformInit   `yaml:"init" json:"init" mapstructure:"init"`
+	Plan              TerraformPlan   `yaml:"plan" json:"plan" mapstructure:"plan"`
+	Planfiles         PlanfilesConfig `yaml:"planfiles,omitempty" json:"planfiles,omitempty" mapstructure:"planfiles"`
 	// PluginCache enables automatic Terraform provider plugin caching.
 	// When true, Atmos sets TF_PLUGIN_CACHE_DIR to XDG cache or PluginCacheDir.
 	// Default: true.
@@ -437,6 +570,104 @@ type Terraform struct {
 	// PluginCacheDir is an optional custom path for the plugin cache.
 	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
 	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	// AutoProvisionWorkdirForOutputs controls whether Atmos automatically provisions
+	// JIT working directories before running terraform output.
+	// When true (default), output fetching transparently provisions the workdir
+	// if provision.workdir.enabled is set on the referenced component.
+	AutoProvisionWorkdirForOutputs bool `yaml:"auto_provision_workdir_for_outputs" json:"auto_provision_workdir_for_outputs" mapstructure:"auto_provision_workdir_for_outputs"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	// CI holds terraform-specific CI configuration (e.g., exit code mapping).
+	// Only active when the global ci.enabled is true.
+	CI TerraformCI `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
+	// Workspace holds workspace-related configuration for backend key generation.
+	Workspace WorkspaceConfig `yaml:"workspace,omitempty" json:"workspace,omitempty" mapstructure:"workspace"`
+	// RC holds Terraform CLI configuration (.terraformrc) that Atmos renders and
+	// exposes to the terraform/tofu subprocess via TF_CLI_CONFIG_FILE. Disabled by default.
+	RC *TerraformRCConfig `yaml:"rc,omitempty" json:"rc,omitempty" mapstructure:"rc"`
+	// Cache holds the Terraform registry cache configuration (provider + module
+	// caching via an ephemeral network-mirror proxy). Disabled by default.
+	Cache *TerraformCacheConfig `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+	// Platforms lists the target platforms a project builds for, as <os>_<arch>
+	// (e.g. linux_amd64, darwin_arm64). It is consumed by `atmos terraform cache
+	// mirror` (eager multi-platform pre-seeding) and by the automatic post-init
+	// `providers lock` that keeps .terraform.lock.hcl complete across platforms.
+	// Empty defaults to the current host platform.
+	Platforms []string `yaml:"platforms,omitempty" json:"platforms,omitempty" mapstructure:"platforms"`
+}
+
+// TerraformRCConfig is a near-opaque passthrough rendered into Terraform's native
+// CLI configuration (HCL). Only `enabled` is typed; all remaining keys are captured
+// verbatim in Config and rendered as CLI-config directives (provider_installation,
+// host, credentials, plugin_cache_dir, ...), so new directives require no Atmos
+// schema change.
+type TerraformRCConfig struct {
+	// Enabled turns on rendering of the CLI configuration. Defaults to false.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// Config captures all remaining keys verbatim (provider_installation, host, ...).
+	Config map[string]any `yaml:",inline" json:",inline" mapstructure:",remain"`
+}
+
+// TerraformCacheConfig configures the Terraform registry cache. The cache is
+// execution-environment (runner) configuration — where/how a machine caches
+// registry content — not stack data.
+type TerraformCacheConfig struct {
+	// Enabled turns on the registry cache. Defaults to false.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// Location is the cache root. Defaults to the XDG cache directory
+	// (~/.cache/atmos or $XDG_CACHE_HOME/atmos) under terraform/registry.
+	Location string `yaml:"location,omitempty" json:"location,omitempty" mapstructure:"location"`
+	// Backend selects the storage backend. filesystem (default) in V1.
+	Backend TerraformCacheBackend `yaml:"backend,omitempty" json:"backend,omitempty" mapstructure:"backend"`
+	// MetadataTTL is the time-to-live for registry metadata. Defaults to 24h.
+	MetadataTTL string `yaml:"metadata_ttl,omitempty" json:"metadata_ttl,omitempty" mapstructure:"metadata_ttl"`
+	// StaleWhileRevalidate is the window during which stale metadata may be served
+	// while revalidating in the background. Defaults to 168h.
+	StaleWhileRevalidate string `yaml:"stale_while_revalidate,omitempty" json:"stale_while_revalidate,omitempty" mapstructure:"stale_while_revalidate"`
+	// Mirror configures eager multi-platform pre-seeding via `atmos terraform cache
+	// mirror` (which wraps `terraform/tofu providers mirror`). When omitted, mirror
+	// defaults to the current host platform.
+	Mirror *TerraformCacheMirror `yaml:"mirror,omitempty" json:"mirror,omitempty" mapstructure:"mirror"`
+}
+
+// TerraformCacheBackend selects and configures the cache storage backend.
+type TerraformCacheBackend struct {
+	// Type is the storage backend: filesystem (default, maps to artifact local/dir).
+	Type string `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
+	// Options carries backend-specific configuration.
+	Options map[string]any `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`
+}
+
+// TerraformCacheMirror configures eager, multi-platform pre-seeding of the cache
+// using `terraform/tofu providers mirror`. The mirror writes the canonical
+// filesystem_mirror layout the lazy proxy already serves, so the same cache
+// directory works lazily (proxy), eagerly (mirror), and offline (filesystem_mirror).
+//
+// The target platforms live at components.terraform.platforms (a project-level
+// property shared with the automatic post-init `providers lock`), not here.
+type TerraformCacheMirror struct {
+	// Enabled expresses fleet pre-seeding policy; the `cache mirror` command runs
+	// regardless of this value. Defaults to false.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+}
+
+// WorkspaceConfig holds workspace-related configuration.
+type WorkspaceConfig struct {
+	// PrefixSeparator controls how '/' in component names is handled when
+	// auto-generating backend key prefixes (workspace_key_prefix for S3,
+	// prefix for GCS, key for Azure).
+	//
+	// "-" (default): Replace '/' with '-' → services/consul becomes services-consul.
+	// "/": Preserve '/' as-is → services/consul stays services/consul.
+	PrefixSeparator string `yaml:"prefix_separator,omitempty" json:"prefix_separator,omitempty" mapstructure:"prefix_separator"`
+}
+
+// TerraformCI holds CI-specific configuration for terraform components.
+type TerraformCI struct {
+	// ExitCodes maps terraform exit codes to success/failure for CI runners.
+	// When a code maps to true, Atmos exits 0 (success). When false or unmapped,
+	// the original exit code is preserved. Only active when global ci.enabled is true.
+	ExitCodes map[int]bool `yaml:"exit_codes,omitempty" json:"exit_codes,omitempty" mapstructure:"exit_codes"`
 }
 
 type TerraformInit struct {
@@ -447,29 +678,373 @@ type TerraformPlan struct {
 	SkipPlanfile bool `yaml:"skip_planfile" json:"skip_planfile" mapstructure:"skip_planfile"`
 }
 
+// PlanfilesConfig contains configuration for planfile storage backends.
+type PlanfilesConfig struct {
+	Default    string                       `yaml:"default" json:"default" mapstructure:"default"`
+	Priority   []string                     `yaml:"priority,omitempty" json:"priority,omitempty" mapstructure:"priority"`
+	KeyPattern string                       `yaml:"key_pattern,omitempty" json:"key_pattern,omitempty" mapstructure:"key_pattern"`
+	Stores     map[string]PlanfileStoreSpec `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
+	// Verify controls drift verification of the stored planfile on `deploy`.
+	// One of: fail | warn | off. Empty means unset (defaults to fail under CI
+	// when planfile storage is configured, otherwise off).
+	Verify PlanfileVerifyMode `yaml:"verify,omitempty" json:"verify,omitempty" mapstructure:"verify"`
+	// Required controls whether a stored planfile must exist to verify against on
+	// `deploy` (distinct from Verify, which governs the drift comparison when a
+	// stored plan exists). A nil pointer means unset: required tracks verify
+	// strictness (true when verification resolves to fail, e.g. under CI with
+	// storage configured), so a fail-by-default deploy fails loudly rather than
+	// silently applying an unverified fresh plan. true requires a stored plan;
+	// false applies a fresh plan when none is found. It only applies when
+	// verification is active (verify is not off).
+	Required *bool `yaml:"required,omitempty" json:"required,omitempty" mapstructure:"required"`
+}
+
+// PlanfileVerifyMode controls how `atmos terraform deploy` reacts when the
+// stored planfile drifts from a freshly generated plan.
+type PlanfileVerifyMode string
+
+const (
+	// PlanfileVerifyFail fails the deploy when the stored plan drifts from a fresh plan.
+	PlanfileVerifyFail PlanfileVerifyMode = "fail"
+	// PlanfileVerifyWarn logs a warning on drift but proceeds with the deploy.
+	PlanfileVerifyWarn PlanfileVerifyMode = "warn"
+	// PlanfileVerifyOff disables verification (and skips the stored-plan download).
+	PlanfileVerifyOff PlanfileVerifyMode = "off"
+)
+
+// IsValid reports whether the mode is empty (unset) or one of the known values.
+func (m PlanfileVerifyMode) IsValid() bool {
+	switch m {
+	case "", PlanfileVerifyFail, PlanfileVerifyWarn, PlanfileVerifyOff:
+		return true
+	default:
+		return false
+	}
+}
+
+// PlanfileStoreSpec defines a planfile storage backend.
+type PlanfileStoreSpec struct {
+	Type    string         `yaml:"type" json:"type" mapstructure:"type"`
+	Options map[string]any `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`
+}
+
 type ShellConfig struct {
 	Prompt string `yaml:"prompt" json:"prompt" mapstructure:"prompt"`
+}
+
+// TerraformPlanCIResultHandler receives the complete result set for one
+// graph-backed Terraform run and can emit CI artifacts after scheduling has
+// fully completed.
+type TerraformPlanCIResultHandler interface {
+	HandleTerraformPlanCIResults(TerraformPlanCIResultSet) error
+}
+
+// TerraformPlanCIResultSet contains deterministic per-node Terraform results
+// for CI rendering.
+type TerraformPlanCIResultSet struct {
+	Command string
+	Results []TerraformPlanCIResult
+}
+
+// TerraformPlanCIResult contains the scheduler and Terraform output details
+// needed to render CI artifacts for one Terraform component.
+type TerraformPlanCIResult struct {
+	NodeID     string
+	Stack      string
+	Component  string
+	Status     string
+	Processed  bool
+	Changed    bool
+	ExitCode   int
+	Output     string
+	LogFiles   map[string]string
+	StartedAt  time.Time
+	FinishedAt time.Time
+	DurationMS int64
+	Error      string
+}
+
+// KubernetesCIResult contains the compact result data rendered into native CI
+// job summaries for one Kubernetes component command.
+type KubernetesCIResult struct {
+	Stack        string
+	Component    string
+	Command      string
+	ExitCode     int
+	Error        string
+	ObjectsTotal int
+	Actions      []KubernetesObjectCIResult
+	ActionCounts map[string]int
+}
+
+// KubernetesObjectCIResult contains one Kubernetes object action row.
+type KubernetesObjectCIResult struct {
+	Action    string
+	Resource  string
+	Namespace string
+	Name      string
+	// Diff holds the unified diff for this object (plan/diff only). Empty for
+	// no-change objects, Secret objects (deliberately omitted), and operations
+	// that do not produce a diff.
+	Diff string
+}
+
+// CIConfig contains CI/CD integration configuration.
+// Uses provider-agnostic naming to support GitHub Actions, GitLab CI, and other providers.
+type CIConfig struct {
+	Enabled     bool                `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Output      CIOutputConfig      `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
+	Summary     CISummaryConfig     `yaml:"summary,omitempty" json:"summary,omitempty" mapstructure:"summary"`
+	Annotations CIAnnotationsConfig `yaml:"annotations,omitempty" json:"annotations,omitempty" mapstructure:"annotations"`
+	Results     CIResultsConfig     `yaml:"results,omitempty" json:"results,omitempty" mapstructure:"results"`
+	Checks      CIChecksConfig      `yaml:"checks,omitempty" json:"checks,omitempty" mapstructure:"checks"`
+	Comments    CICommentsConfig    `yaml:"comments,omitempty" json:"comments,omitempty" mapstructure:"comments"`
+	Templates   CITemplatesConfig   `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
+	Cache       CICacheConfig       `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+}
+
+// CICacheConfig configures the CI build cache, which restores a well-known
+// cache directory (the toolchain install path and anything else under the XDG
+// cache root) at Atmos startup and saves it at exit, using the active CI
+// provider's cache store (e.g. the GitHub Actions cache). All operations are
+// no-ops when no cache-capable CI provider is detected (i.e. outside CI).
+type CICacheConfig struct {
+	// Enabled is the master switch for the CI cache (env: ATMOS_CI_CACHE_ENABLED).
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+
+	// Auto controls automatic behavior: "off" (default), "restore", "save", or "both".
+	// "restore" restores on startup; "save" saves on exit; "both" does both. The
+	// explicit `atmos ci cache` subcommands are always available regardless.
+	Auto string `yaml:"auto,omitempty" json:"auto,omitempty" mapstructure:"auto"`
+
+	// Root overrides the well-known cache directory that is archived. Defaults
+	// to the Atmos XDG cache directory (~/.cache/atmos), of which the toolchain
+	// is a sub-path. Honors ATMOS_XDG_CACHE_HOME / XDG_CACHE_HOME when unset.
+	Root string `yaml:"root,omitempty" json:"root,omitempty" mapstructure:"root"`
+
+	// Paths are root-relative subpaths to include in the cache. Empty means the
+	// entire root is cached.
+	Paths []string `yaml:"paths,omitempty" json:"paths,omitempty" mapstructure:"paths"`
+
+	// Key is the cache key. Supports Go templates with {{.OS}}, {{.Arch}} and a
+	// hashFiles function. Defaults to a key derived from the toolchain lockfile
+	// hash plus OS/arch when unset.
+	Key string `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`
+
+	// RestoreKeys are prefix fallbacks tried (in order) when the exact key is
+	// absent, mirroring actions/cache restore-keys.
+	RestoreKeys []string `yaml:"restore_keys,omitempty" json:"restore_keys,omitempty" mapstructure:"restore_keys"`
+
+	// Compression selects the archive compression. Currently only "gzip" (the
+	// default) is supported.
+	Compression string `yaml:"compression,omitempty" json:"compression,omitempty" mapstructure:"compression"`
+}
+
+// CIOutputConfig configures CI output variables for downstream jobs.
+// GitHub: $GITHUB_OUTPUT, GitLab: dotenv artifacts.
+type CIOutputConfig struct {
+	// Enabled controls whether output variables are written.
+	// When nil (not set), defaults to true (enabled).
+	// When explicitly set to false, output is disabled.
+	Enabled   *bool    `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Variables []string `yaml:"variables,omitempty" json:"variables,omitempty" mapstructure:"variables"`
+}
+
+// CISummaryConfig configures CI job summary output.
+// GitHub: $GITHUB_STEP_SUMMARY, GitLab: job artifacts.
+type CISummaryConfig struct {
+	// Enabled controls whether job summaries are written.
+	// When nil (not set), defaults to true (enabled).
+	// When explicitly set to false, summaries are disabled.
+	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
+}
+
+// CIAnnotationsConfig configures inline annotations for scanner-hook findings.
+// GitHub: workflow `::error`/`::warning` commands shown inline on the PR diff.
+// This is the "non-CodeQL" path — it needs no GitHub Advanced Security.
+//
+// Enabled is *bool so callers can distinguish "unset" (nil, default applies)
+// from explicit false. Default is true when omitted; effective only when the
+// global ci.enabled is true.
+type CIAnnotationsConfig struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+}
+
+// CIResultsConfig configures uploading scanner-hook findings (SARIF) to the
+// CI provider's security-findings store. GitHub: Code Scanning / the Security
+// tab, which requires GitHub Advanced Security on private repos and a token
+// with the `security_events` write scope.
+//
+// Enabled is *bool so callers can distinguish "unset" (nil, default applies)
+// from explicit false. Default is false when omitted (opt-in, since it has
+// side effects and extra requirements); effective only when ci.enabled is true.
+type CIResultsConfig struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+}
+
+// CIChecksConfig configures CI commit status checks.
+// GitHub: Commit Status API, GitLab: Commit Status API.
+type CIChecksConfig struct {
+	// Enabled controls whether commit status checks are created.
+	// When nil (not set), defaults to false (disabled) as checks require extra permissions.
+	// When explicitly set to true, checks are enabled.
+	Enabled       *bool                  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	ContextPrefix string                 `yaml:"context_prefix,omitempty" json:"context_prefix,omitempty" mapstructure:"context_prefix"`
+	Statuses      CIChecksStatusesConfig `yaml:"statuses,omitempty" json:"statuses,omitempty" mapstructure:"statuses"`
+}
+
+// CIChecksStatusesConfig configures which per-operation commit statuses are created.
+// All fields default to true when nil (not set).
+type CIChecksStatusesConfig struct {
+	// Component controls the component-level status (e.g., atmos/plan/stack/component).
+	Component *bool `yaml:"component,omitempty" json:"component,omitempty" mapstructure:"component"`
+
+	// Add controls the per-operation add status (e.g., atmos/plan/stack/component/add).
+	// Only created when resources to add > 0.
+	Add *bool `yaml:"add,omitempty" json:"add,omitempty" mapstructure:"add"`
+
+	// Change controls the per-operation change status (e.g., atmos/plan/stack/component/change).
+	// Only created when resources to change > 0.
+	Change *bool `yaml:"change,omitempty" json:"change,omitempty" mapstructure:"change"`
+
+	// Destroy controls the per-operation destroy status (e.g., atmos/plan/stack/component/destroy).
+	// Only created when resources to destroy > 0.
+	Destroy *bool `yaml:"destroy,omitempty" json:"destroy,omitempty" mapstructure:"destroy"`
+}
+
+// CICommentsConfig configures PR/MR comment integration.
+// GitHub: PR comments, GitLab: MR notes.
+//
+// Enabled is *bool so callers can distinguish "unset" (nil, default applies)
+// from explicit false. Default is true when omitted; see `isCommentsEnabled`.
+type CICommentsConfig struct {
+	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Behavior string `yaml:"behavior,omitempty" json:"behavior,omitempty" mapstructure:"behavior"` // create, update, upsert
+	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
+}
+
+// CITemplatesConfig configures CI summary templates per component type.
+type CITemplatesConfig struct {
+	// BasePath is the base directory for custom templates.
+	// Relative paths are resolved from atmos.yaml location.
+	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+
+	// Terraform contains template overrides for terraform commands.
+	// Keys are command names (e.g., "plan", "apply"), values are template file paths.
+	Terraform map[string]string `yaml:"terraform,omitempty" json:"terraform,omitempty" mapstructure:"terraform"`
+
+	// Helm contains template overrides for native Helm commands.
+	// Keys are command names (e.g., "diff", "apply"), values are template file paths.
+	Helm map[string]string `yaml:"helm,omitempty" json:"helm,omitempty" mapstructure:"helm"`
+
+	// Helmfile contains template overrides for helmfile commands.
+	// Keys are command names (e.g., "diff", "apply"), values are template file paths.
+	Helmfile map[string]string `yaml:"helmfile,omitempty" json:"helmfile,omitempty" mapstructure:"helmfile"`
 }
 
 type Helmfile struct {
 	BasePath              string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	UseEKS                bool   `yaml:"use_eks" json:"use_eks" mapstructure:"use_eks"`
 	KubeconfigPath        string `yaml:"kubeconfig_path" json:"kubeconfig_path" mapstructure:"kubeconfig_path"`
-	HelmAwsProfilePattern string `yaml:"helm_aws_profile_pattern" json:"helm_aws_profile_pattern" mapstructure:"helm_aws_profile_pattern"`
-	ClusterNamePattern    string `yaml:"cluster_name_pattern" json:"cluster_name_pattern" mapstructure:"cluster_name_pattern"`
+	HelmAwsProfilePattern string `yaml:"helm_aws_profile_pattern" json:"helm_aws_profile_pattern" mapstructure:"helm_aws_profile_pattern"` // Deprecated: use --identity flag instead.
+	ClusterNamePattern    string `yaml:"cluster_name_pattern" json:"cluster_name_pattern" mapstructure:"cluster_name_pattern"`             // Deprecated: use ClusterNameTemplate with Go template syntax.
+	ClusterNameTemplate   string `yaml:"cluster_name_template" json:"cluster_name_template" mapstructure:"cluster_name_template"`
+	ClusterName           string `yaml:"cluster_name" json:"cluster_name" mapstructure:"cluster_name"`
 	Command               string `yaml:"command" json:"command" mapstructure:"command"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// during Helmfile operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	// Plugins lists Helm CLI plugins (e.g. helm-diff, helm-secrets) required by
+	// helmfile components. Each entry is a compact spec: a short alias
+	// (e.g. "diff@3.9.x"), an "owner/repo@version", or a full plugin URL.
+	// Atmos installs them into a managed HELM_PLUGINS directory before invoking
+	// the helmfile binary. Type-level defaults declared here inherit down to
+	// component instances via normal stack deep-merge.
+	Plugins []string `yaml:"plugins,omitempty" json:"plugins,omitempty" mapstructure:"plugins"`
 }
 
 type Packer struct {
 	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	Command  string `yaml:"command" json:"command" mapstructure:"command"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// during Packer operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+}
+
+// Ansible defines configuration for Ansible components.
+type Ansible struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	Command  string `yaml:"command" json:"command" mapstructure:"command"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// during Ansible operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+}
+
+// Kubernetes defines configuration for Kubernetes components.
+type Kubernetes struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	// Provider selects the SDK-backed renderer/loader. Supported values are kubectl and kustomize.
+	Provider string `yaml:"provider" json:"provider" mapstructure:"provider"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// during Kubernetes operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+}
+
+// HelmRepository describes an HTTP Helm chart repository.
+type HelmRepository struct {
+	Name                  string `yaml:"name" json:"name" mapstructure:"name"`
+	URL                   string `yaml:"url" json:"url" mapstructure:"url"`
+	Username              string `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
+	Password              string `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"` // #nosec G117 -- Helm repository credentials are part of user configuration.
+	PassCredentialsAll    bool   `yaml:"pass_credentials_all,omitempty" json:"pass_credentials_all,omitempty" mapstructure:"pass_credentials_all"`
+	CertFile              string `yaml:"cert_file,omitempty" json:"cert_file,omitempty" mapstructure:"cert_file"`
+	KeyFile               string `yaml:"key_file,omitempty" json:"key_file,omitempty" mapstructure:"key_file"`
+	CAFile                string `yaml:"ca_file,omitempty" json:"ca_file,omitempty" mapstructure:"ca_file"`
+	InsecureSkipTLSVerify bool   `yaml:"insecure_skip_tls_verify,omitempty" json:"insecure_skip_tls_verify,omitempty" mapstructure:"insecure_skip_tls_verify"`
+}
+
+// Helm defines configuration for native Helm components.
+// Helm components render and deploy Helm charts (local, remote-repo, or OCI)
+// using the Helm Go SDK, and can deliver rendered manifests to provision targets.
+type Helm struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// during Helm operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	// Plugins lists Helm CLI plugins (e.g. helm-diff, helm-secrets) to install
+	// into the managed HELM_PLUGINS directory. Each entry is a compact spec: a
+	// short alias (e.g. "diff@3.9.x"), an "owner/repo@version", or a full plugin
+	// URL. Native Helm SDK operations do not use plugins; these apply only to
+	// helm-binary passthrough. Type-level defaults inherit down to instances via
+	// normal stack deep-merge.
+	Plugins []string `yaml:"plugins,omitempty" json:"plugins,omitempty" mapstructure:"plugins"`
+	// Repositories lists reusable Helm chart repositories available to native
+	// Helm components. Component-level repositories override entries by name.
+	Repositories []HelmRepository `yaml:"repositories,omitempty" json:"repositories,omitempty" mapstructure:"repositories"`
 }
 
 type Components struct {
 	// Built-in component types (legacy - will migrate to plugin model in future phases).
-	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
-	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
-	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
+	Terraform  Terraform  `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
+	Helmfile   Helmfile   `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
+	Packer     Packer     `yaml:"packer" json:"packer" mapstructure:"packer"`
+	Ansible    Ansible    `yaml:"ansible" json:"ansible" mapstructure:"ansible"`
+	Kubernetes Kubernetes `yaml:"kubernetes" json:"kubernetes" mapstructure:"kubernetes"`
+	Helm       Helm       `yaml:"helm" json:"helm" mapstructure:"helm"`
 
 	// List configuration for component listing.
 	List ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
@@ -493,6 +1068,12 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 		return c.Helmfile, true
 	case "packer":
 		return c.Packer, true
+	case "ansible":
+		return c.Ansible, true
+	case "kubernetes":
+		return c.Kubernetes, true
+	case "helm":
+		return c.Helm, true
 	default:
 		// Check plugin types.
 		if config, ok := c.Plugins[componentType]; ok {
@@ -550,6 +1131,13 @@ type Workflows struct {
 type Logs struct {
 	File  string `yaml:"file" json:"file" mapstructure:"file"`
 	Level string `yaml:"level" json:"level" mapstructure:"level"`
+}
+
+// Diagnostics contains machine-readable diagnostic event stream settings.
+type Diagnostics struct {
+	Enabled       bool   `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	File          string `yaml:"file" json:"file" mapstructure:"file"`
+	IncludeOutput bool   `yaml:"include_output" json:"include_output" mapstructure:"include_output"`
 }
 
 // ErrorsConfig contains configuration for error handling.
@@ -624,6 +1212,8 @@ type ArgsAndFlagsInfo struct {
 	HelmfileDir               string
 	PackerCommand             string
 	PackerDir                 string
+	AnsibleCommand            string
+	AnsibleDir                string
 	ConfigDir                 string
 	StacksDir                 string
 	WorkflowsDir              string
@@ -639,6 +1229,7 @@ type ArgsAndFlagsInfo struct {
 	PlanFile                  string
 	DryRun                    bool
 	SkipInit                  bool
+	UploadStatus              bool
 	NeedHelp                  bool
 	JsonSchemaDir             string
 	OpaDir                    string
@@ -652,7 +1243,8 @@ type ArgsAndFlagsInfo struct {
 	Affected                  bool
 	All                       bool
 	Identity                  string
-	NeedsPathResolution       bool // True if ComponentFromArg is a path that needs resolution.
+	ClusterName               string // EKS cluster name from --cluster-name flag.
+	NeedsPathResolution       bool   // True if ComponentFromArg is a path that needs resolution.
 }
 
 // AuthContext holds active authentication credentials for multiple providers.
@@ -672,8 +1264,10 @@ type AuthContext struct {
 	// Azure holds Azure credentials if an Azure identity is active.
 	Azure *AzureAuthContext `json:"azure,omitempty" yaml:"azure,omitempty"`
 
+	// GCP holds GCP credentials if a GCP identity is active.
+	GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty" mapstructure:"gcp"`
+
 	// Future: Add other cloud providers as needed
-	// GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty"`
 	// GitHub *GitHubAuthContext `json:"github,omitempty" yaml:"github,omitempty"`
 }
 
@@ -694,6 +1288,9 @@ type AWSAuthContext struct {
 
 	// Region is the AWS region (optional, may be empty if not specified in identity).
 	Region string `json:"region,omitempty" yaml:"region,omitempty"`
+
+	// EndpointURL is the optional AWS service endpoint resolver URL.
+	EndpointURL string `json:"endpoint_url,omitempty" yaml:"endpoint_url,omitempty"`
 }
 
 // AzureAuthContext holds Azure-specific authentication context.
@@ -727,6 +1324,48 @@ type AzureAuthContext struct {
 	// TokenFilePath is the path to the OIDC token file (e.g., from GitHub Actions).
 	// Optional - if not set, AZURE_FEDERATED_TOKEN_FILE env var will be used.
 	TokenFilePath string `json:"token_file_path,omitempty" yaml:"token_file_path,omitempty"`
+
+	// CloudEnvironment is the Azure cloud environment name ("public", "usgovernment", "china").
+	// Used to set ARM_ENVIRONMENT for Terraform and other Azure tooling in sovereign clouds.
+	CloudEnvironment string `json:"cloud_environment,omitempty" yaml:"cloud_environment,omitempty"`
+
+	// StorageConnectionString is the Azure Storage connection string (carrying the blob
+	// endpoint + account credentials) used by in-process Azure Blob clients — e.g.
+	// `!terraform.state` reading from an azurerm backend against a local emulator (Azurite).
+	// Populated from AZURE_STORAGE_CONNECTION_STRING. Empty for real Azure, where the blob
+	// endpoint is derived from the storage account and DefaultAzureCredential is used.
+	StorageConnectionString string `json:"storage_connection_string,omitempty" yaml:"storage_connection_string,omitempty"`
+}
+
+// GCPAuthContext holds GCP-specific authentication context.
+// This is populated by the GCP auth system and consumed by GCP SDK calls.
+type GCPAuthContext struct {
+	// ProjectID is the GCP project ID.
+	ProjectID string `json:"project_id,omitempty" yaml:"project_id,omitempty" mapstructure:"project_id"`
+	// ProjectName is a human-readable project name (optional).
+	ProjectName string `json:"project_name,omitempty" yaml:"project_name,omitempty" mapstructure:"project_name"`
+	// ServiceAccountEmail is the service account being used (when impersonating).
+	ServiceAccountEmail string `json:"service_account_email,omitempty" yaml:"service_account_email,omitempty" mapstructure:"service_account_email"`
+	// AccessToken is the OAuth2 access token.
+	AccessToken string `json:"access_token,omitempty" yaml:"access_token,omitempty" mapstructure:"access_token"`
+	// TokenExpiry is when the token expires.
+	TokenExpiry time.Time `json:"token_expiry,omitempty" yaml:"token_expiry,omitempty" mapstructure:"token_expiry"`
+	// Region is the GCP region (optional).
+	Region string `json:"region,omitempty" yaml:"region,omitempty" mapstructure:"region"`
+	// Location is the GCP location (optional, e.g., multi-region or zone).
+	Location string `json:"location,omitempty" yaml:"location,omitempty" mapstructure:"location"`
+	// ConfigDir is the directory for GCP config isolation.
+	ConfigDir string `json:"config_dir,omitempty" yaml:"config_dir,omitempty" mapstructure:"config_dir"`
+	// CredentialsFile is the path to the credentials file managed by Atmos.
+	CredentialsFile string `json:"credentials_file,omitempty" yaml:"credentials_file,omitempty" mapstructure:"credentials_file"`
+	// StorageEmulatorHost is the GCS emulator endpoint (from STORAGE_EMULATOR_HOST) used by
+	// in-process GCS clients — e.g. `!terraform.state` reading from a GCS backend against a
+	// local emulator. GCP is per-service (each SDK reads its own *_EMULATOR_HOST), so this
+	// carries only the storage endpoint. Empty for real GCP.
+	StorageEmulatorHost string `json:"storage_emulator_host,omitempty" yaml:"storage_emulator_host,omitempty" mapstructure:"storage_emulator_host"`
+	// WithoutAuthentication disables GCP authentication for in-process clients pointed at a
+	// local emulator that does not validate credentials (from CLOUDSDK_AUTH_DISABLE_CREDENTIALS).
+	WithoutAuthentication bool `json:"without_authentication,omitempty" yaml:"without_authentication,omitempty" mapstructure:"without_authentication"`
 }
 
 type ConfigAndStacksInfo struct {
@@ -755,7 +1394,24 @@ type ConfigAndStacksInfo struct {
 	ComponentEnvSection           AtmosSectionMapType
 	ComponentAuthSection          AtmosSectionMapType
 	ComponentEnvList              []string
-	ComponentBackendSection       AtmosSectionMapType
+	// TerraformSecretVarKeys holds the set of top-level keys in ComponentVarsSection
+	// whose value contains a resolved secret (detected via the masker). These variables
+	// are excluded from the on-disk Terraform varfile and injected at runtime as
+	// TF_VAR_<name> environment variables instead, so plaintext secrets never hit disk.
+	// Computed once early in the execution pipeline (right after secret resolution,
+	// before auth credentials are registered) to keep the varfile-write and env-assembly
+	// steps consistent.
+	TerraformSecretVarKeys map[string]bool
+	// SanitizedEnv holds the sanitized process environment from auth.
+	// When set, subprocess execution uses this instead of re-reading os.Environ(),
+	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).
+	SanitizedEnv            []string
+	ComponentBackendSection AtmosSectionMapType
+	// ComponentRetrySection holds the per-component `retry:` block parsed from stack
+	// manifests. When non-nil and `Conditions` is populated, each subprocess invocation
+	// in the terraform execution pipeline (init, workspace, main) is retried independently
+	// on errors whose captured output matches a `Conditions` regex.
+	ComponentRetrySection *RetryConfig
 	// AuthContext holds active authentication credentials for cloud providers.
 	// This is the SINGLE SOURCE OF TRUTH for auth credentials.
 	// ComponentEnvSection/ComponentEnvList are derived from this context.
@@ -769,63 +1425,126 @@ type ConfigAndStacksInfo struct {
 	//   - pkg/auth already imports pkg/schema (for ConfigAndStacksInfo)
 	//   - This would create: schema → auth → schema (circular dependency error)
 	//   - Type assertions are used at usage sites to recover type safety
-	AuthManager               any
-	ComponentBackendType      string
-	AdditionalArgsAndFlags    []string
-	GlobalOptions             []string
-	BasePath                  string
-	VendorBasePathFlag        string
-	TerraformCommand          string
-	TerraformDir              string
-	HelmfileCommand           string
-	HelmfileDir               string
-	PackerCommand             string
-	PackerDir                 string
-	ConfigDir                 string
-	StacksDir                 string
-	WorkflowsDir              string
-	Context                   Context
-	ContextPrefix             string
-	DeployRunInit             string
-	InitRunReconfigure        string
-	InitPassVars              string
-	PlanSkipPlanfile          string
-	AutoGenerateBackendFile   string
-	UseTerraformPlan          bool
-	PlanFile                  string
-	DryRun                    bool
-	SkipInit                  bool
-	ComponentInheritanceChain []string
-	ComponentImportsSection   []string
-	NeedHelp                  bool
-	ComponentIsAbstract       bool
-	ComponentIsEnabled        bool
-	ComponentIsLocked         bool
-	ComponentMetadataSection  AtmosSectionMapType
-	TerraformWorkspace        string
-	JsonSchemaDir             string
-	OpaDir                    string
-	CueDir                    string
-	AtmosManifestJsonSchema   string
-	AtmosCliConfigPath        string
-	AtmosBasePath             string
-	ProfilesFromArg           []string
-	RedirectStdErr            string
-	LogsLevel                 string
-	LogsFile                  string
-	SettingsListMergeStrategy string
-	Query                     string
-	AtmosConfigFilesFromArg   []string
-	AtmosConfigDirsFromArg    []string
-	ProcessTemplates          bool
-	ProcessFunctions          bool
-	Skip                      []string
-	CliArgs                   []string
-	Affected                  bool
-	All                       bool
-	Components                []string
-	Identity                  string
-	NeedsPathResolution       bool // True if ComponentFromArg is a path that needs resolution.
+	AuthManager  any
+	AuthDisabled bool
+	// SecretsMaskOnly indicates an inspection command (describe/list) is resolving YAML
+	// functions with masking enabled. When true, the `!secret` resolver returns the mask
+	// replacement WITHOUT retrieving from the backend (no credentials required). Value-
+	// producing commands (secret get/pull/push, terraform plan/apply/output) leave this false.
+	SecretsMaskOnly      bool
+	ComponentBackendType string
+	// RequiredVersion is the Terraform version constraint (e.g., ">= 1.10.1").
+	// This is extracted from terraform.required_version or components.terraform.<name>.required_version.
+	RequiredVersion string
+	// RequiredProviders maps provider names to their configuration.
+	// Example: {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}}.
+	// This is extracted from terraform.required_providers or components.terraform.<name>.required_providers.
+	RequiredProviders       map[string]map[string]any
+	AdditionalArgsAndFlags  []string
+	GlobalOptions           []string
+	BasePath                string
+	VendorBasePathFlag      string
+	TerraformCommand        string
+	TerraformDir            string
+	HelmfileCommand         string
+	HelmfileDir             string
+	PackerCommand           string
+	PackerDir               string
+	AnsibleCommand          string
+	AnsibleDir              string
+	ConfigDir               string
+	StacksDir               string
+	WorkflowsDir            string
+	Context                 Context
+	ContextPrefix           string
+	DeployRunInit           string
+	InitRunReconfigure      string
+	InitPassVars            string
+	PlanSkipPlanfile        string
+	AutoGenerateBackendFile string
+	UseTerraformPlan        bool
+	PlanFile                string
+	StoredPlanFile          string
+	// VerifyPlanMode carries the explicit CLI planfile-verify override for `deploy`
+	// (--verify-plan => fail, --verify-plan=false => off; empty when the flag is unset).
+	// It is resolved against config + CI mode via planfile.ResolveVerifyMode at the
+	// before.terraform.deploy hook (download decision) and the RunE verify gate.
+	VerifyPlanMode             PlanfileVerifyMode
+	DryRun                     bool
+	SkipInit                   bool
+	UploadStatus               bool
+	ComponentInheritanceChain  []string
+	ComponentImportsSection    []string
+	NeedHelp                   bool
+	ComponentIsAbstract        bool
+	ComponentIsEnabled         bool
+	ComponentIsLocked          bool
+	ComponentMetadataSection   AtmosSectionMapType
+	TerraformWorkspace         string
+	JsonSchemaDir              string
+	OpaDir                     string
+	CueDir                     string
+	AtmosManifestJsonSchema    string
+	AtmosCliConfigPath         string
+	AtmosBasePath              string
+	ProfilesFromArg            []string
+	RedirectStdErr             string
+	LogsLevel                  string
+	LogsFile                   string
+	SettingsListMergeStrategy  string
+	Query                      string
+	AtmosConfigFilesFromArg    []string
+	AtmosConfigDirsFromArg     []string
+	ProcessTemplates           bool
+	ProcessFunctions           bool
+	Skip                       []string
+	CliArgs                    []string
+	Affected                   bool
+	All                        bool
+	Components                 []string
+	MaxConcurrency             int
+	TerraformFailureMode       string
+	FailFast                   bool
+	KeepGoing                  bool
+	DisablePluginCache         bool
+	TerraformPlanLogOrder      string
+	TerraformPlanHide          []string
+	TerraformPlanHideNoChanges bool
+	TerraformPlanSummaryFile   string
+	Identity                   string
+	ClusterName                string // EKS cluster name from --cluster-name flag.
+	NeedsPathResolution        bool   // True if ComponentFromArg is a path that needs resolution.
+
+	// PerComponentHook is called after each component executes in multi-component mode
+	// (--all, --query, --components). Receives a snapshot of info with Component/Stack
+	// set to the executed component, combined stdout+stderr output, and the execution
+	// error (nil on success). Nil means no per-component callback.
+	PerComponentHook func(info *ConfigAndStacksInfo, output string, execErr error)
+
+	// TerraformPlanCIResultHandler is called once after a graph-backed
+	// multi-component Terraform plan/apply/destroy run completes. It
+	// centralizes CI output writes for concurrent execution so GitHub
+	// summary/output files are not written by worker goroutines.
+	TerraformPlanCIResultHandler TerraformPlanCIResultHandler
+
+	// RCCleanup, when non-nil, removes the temporary Terraform CLI config file
+	// (TF_CLI_CONFIG_FILE) generated for this run. It is registered during env
+	// assembly and invoked (deferred) after the whole terraform pipeline completes,
+	// so the temp file survives init, workspace, and plan/apply subprocesses.
+	// Transient runtime state — not serialized.
+	RCCleanup func() error `yaml:"-" json:"-" mapstructure:"-"`
+
+	// TerraformCache holds the started registry cache (*pkg/terraform/cache.Setup),
+	// typed as any to avoid a schema→cache import cycle. When non-nil, env assembly
+	// merges its CLI-config contribution (network_mirror + module host overrides)
+	// into the generated RC. Transient runtime state — not serialized.
+	TerraformCache any `yaml:"-" json:"-" mapstructure:"-"`
+
+	// TerraformCacheExternal indicates the caller owns the registry cache lifecycle
+	// (started it and will close it). When true, ExecuteTerraform reuses the
+	// pre-set TerraformCache and does not start, verify, or close its own. Used by
+	// `atmos terraform cache mirror` to share one proxy across components.
+	TerraformCacheExternal bool `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // GetComponentEnvSection returns the component's env section map.
@@ -847,14 +1566,22 @@ var (
 )
 
 // RetryConfig represents the retry configuration.
+// Pointer types are used to distinguish between "not specified" (nil) and "explicitly set to zero".
+// - nil means the feature is disabled or unlimited (e.g., nil MaxAttempts = unlimited retries).
+// - Explicitly setting a value to zero is invalid and will cause a validation error.
 type RetryConfig struct {
-	MaxAttempts     int             `yaml:"max_attempts" json:"max_attempts" mapstructure:"max_attempts"`
-	BackoffStrategy BackoffStrategy `yaml:"backoff_strategy" json:"backoff_strategy" mapstructure:"backoff_strategy"`
-	InitialDelay    time.Duration   `yaml:"initial_delay" json:"initial_delay" mapstructure:"initial_delay"`
-	MaxDelay        time.Duration   `yaml:"max_delay" json:"max_delay" mapstructure:"max_delay"`
-	RandomJitter    float64         `yaml:"random_jitter" json:"random_jitter" mapstructure:"random_jitter"`
-	Multiplier      float64         `yaml:"multiplier" json:"multiplier" mapstructure:"multiplier"`
-	MaxElapsedTime  time.Duration   `yaml:"max_elapsed_time" json:"max_elapsed_time" mapstructure:"max_elapsed_time"`
+	MaxAttempts     *int            `yaml:"max_attempts,omitempty" json:"max_attempts,omitempty" mapstructure:"max_attempts"`
+	BackoffStrategy BackoffStrategy `yaml:"backoff_strategy,omitempty" json:"backoff_strategy,omitempty" mapstructure:"backoff_strategy"`
+	InitialDelay    *time.Duration  `yaml:"initial_delay,omitempty" json:"initial_delay,omitempty" mapstructure:"initial_delay"`
+	MaxDelay        *time.Duration  `yaml:"max_delay,omitempty" json:"max_delay,omitempty" mapstructure:"max_delay"`
+	RandomJitter    *float64        `yaml:"random_jitter,omitempty" json:"random_jitter,omitempty" mapstructure:"random_jitter"`
+	Multiplier      *float64        `yaml:"multiplier,omitempty" json:"multiplier,omitempty" mapstructure:"multiplier"`
+	MaxElapsedTime  *time.Duration  `yaml:"max_elapsed_time,omitempty" json:"max_elapsed_time,omitempty" mapstructure:"max_elapsed_time"`
+	// Conditions is a list of regex patterns matched against captured subprocess output
+	// to decide whether an error is recoverable and the command should be retried.
+	// When empty or nil, no pattern-based retry is performed (all failures are terminal).
+	// Patterns may be wrapped in optional /.../ delimiters for readability.
+	Conditions []string `yaml:"conditions,omitempty" json:"conditions,omitempty" mapstructure:"conditions"`
 }
 
 // EKS update-kubeconfig
@@ -928,21 +1655,33 @@ type Affected struct {
 	Dependents           []Dependent         `yaml:"dependents" json:"dependents" mapstructure:"dependents"`
 	IncludedInDependents bool                `yaml:"included_in_dependents" json:"included_in_dependents" mapstructure:"included_in_dependents"`
 	Settings             AtmosSectionMapType `yaml:"settings" json:"settings" mapstructure:"settings"`
+	Deleted              bool                `yaml:"deleted,omitempty" json:"deleted,omitempty" mapstructure:"deleted"`
+	DeletionType         string              `yaml:"deletion_type,omitempty" json:"deletion_type,omitempty" mapstructure:"deletion_type"`
 }
 
 type BaseComponentConfig struct {
-	BaseComponentVars         AtmosSectionMapType
-	BaseComponentSettings     AtmosSectionMapType
-	BaseComponentEnv          AtmosSectionMapType
-	BaseComponentAuth         AtmosSectionMapType
-	BaseComponentDependencies AtmosSectionMapType
-	BaseComponentLocals       AtmosSectionMapType // Component-level locals for template processing.
-	BaseComponentMetadata     AtmosSectionMapType
-	BaseComponentProviders    AtmosSectionMapType
-	BaseComponentHooks        AtmosSectionMapType
+	BaseComponentVars              AtmosSectionMapType
+	BaseComponentSettings          AtmosSectionMapType
+	BaseComponentEnv               AtmosSectionMapType
+	BaseComponentAuth              AtmosSectionMapType
+	BaseComponentSecrets           AtmosSectionMapType
+	BaseComponentDependencies      AtmosSectionMapType
+	BaseComponentLocals            AtmosSectionMapType // Component-level locals for template processing.
+	BaseComponentMetadata          AtmosSectionMapType
+	BaseComponentProviders         AtmosSectionMapType
+	BaseComponentRequiredProviders AtmosSectionMapType
+	BaseComponentRequiredVersion   string
+	BaseComponentHooks             AtmosSectionMapType
+	BaseComponentTest              AtmosSectionMapType
 	// BaseComponentGenerate holds the generate section configuration from the base component,
 	// defining auxiliary files to be generated for this component.
 	BaseComponentGenerate                  AtmosSectionMapType
+	BaseComponentProvider                  string
+	BaseComponentPaths                     any
+	BaseComponentManifests                 any
+	BaseComponentPlugins                   any
+	BaseComponentRender                    AtmosSectionMapType
+	BaseComponentHelm                      AtmosSectionMapType
 	FinalBaseComponentName                 string
 	BaseComponentCommand                   string
 	BaseComponentBackendType               string
@@ -951,10 +1690,26 @@ type BaseComponentConfig struct {
 	BaseComponentRemoteStateBackendSection AtmosSectionMapType
 	BaseComponentSourceSection             AtmosSectionMapType
 	BaseComponentProvisionSection          AtmosSectionMapType
-	ComponentInheritanceChain              []string
+	// BaseComponentRetry holds the raw retry configuration inherited from base components.
+	// It is deep-merged with the child component's retry block by mergeComponentConfigurations.
+	BaseComponentRetry        AtmosSectionMapType
+	ComponentInheritanceChain []string
 }
 
 // Stack imports (`import` section)
+
+const (
+	StackImportNestedImportsLocal  = "local"
+	StackImportNestedImportsRemote = "remote"
+)
+
+// ImportsSettings holds global defaults applied when processing stack imports.
+type ImportsSettings struct {
+	// TTL is the default cache duration for the cloned source repos of remote (git)
+	// imports, applied when a per-import `ttl` is not set. See StackImport.TTL for the
+	// caching semantics and accepted formats.
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
+}
 
 type StackImport struct {
 	Path                        string              `yaml:"path" json:"path" mapstructure:"path"`
@@ -962,6 +1717,14 @@ type StackImport struct {
 	SkipTemplatesProcessing     bool                `yaml:"skip_templates_processing,omitempty" json:"skip_templates_processing,omitempty" mapstructure:"skip_templates_processing"`
 	IgnoreMissingTemplateValues bool                `yaml:"ignore_missing_template_values,omitempty" json:"ignore_missing_template_values,omitempty" mapstructure:"ignore_missing_template_values"`
 	SkipIfMissing               bool                `yaml:"skip_if_missing,omitempty" json:"skip_if_missing,omitempty" mapstructure:"skip_if_missing"`
+	NestedImports               string              `yaml:"nested_imports,omitempty" json:"nested_imports,omitempty" mapstructure:"nested_imports"`
+	// TTL is the cache duration for the cloned source repo of a remote (git) import.
+	// When set, the cloned source is reused across Atmos invocations until it expires,
+	// so a warm cache (e.g. GitHub Actions cache of the imports cache dir) skips the
+	// re-clone. Within a single invocation a source repo is always cloned at most once,
+	// regardless of TTL. When unset, the source is re-cloned once per invocation.
+	// Examples: "0s" (always re-fetch), "5m", "1h", "7d", or keywords like "daily".
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
 }
 
 // Dependencies
@@ -1016,15 +1779,15 @@ type ConfigSources map[string]map[string]ConfigSourcesItem
 // Atmos vendoring (`vendor.yaml` file)
 
 type AtmosVendorSource struct {
-	Component     string       `yaml:"component" json:"component" mapstructure:"component"`
-	Source        string       `yaml:"source" json:"source" mapstructure:"source"`
-	Version       string       `yaml:"version" json:"version" mapstructure:"version"`
-	File          string       `yaml:"file" json:"file" mapstructure:"file"`
-	Targets       []string     `yaml:"targets" json:"targets" mapstructure:"targets"`
-	IncludedPaths []string     `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
-	ExcludedPaths []string     `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
-	Tags          []string     `yaml:"tags" json:"tags" mapstructure:"tags"`
-	Retry         *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
+	Component     string             `yaml:"component" json:"component" mapstructure:"component"`
+	Source        string             `yaml:"source" json:"source" mapstructure:"source"`
+	Version       string             `yaml:"version" json:"version" mapstructure:"version"`
+	File          string             `yaml:"file" json:"file" mapstructure:"file"`
+	Targets       AtmosVendorTargets `yaml:"targets" json:"targets" mapstructure:"targets"`
+	IncludedPaths []string           `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
+	ExcludedPaths []string           `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
+	Tags          []string           `yaml:"tags" json:"tags" mapstructure:"tags"`
+	Retry         *RetryConfig       `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 }
 
 type AtmosVendorSpec struct {

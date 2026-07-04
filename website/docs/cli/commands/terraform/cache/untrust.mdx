@@ -1,0 +1,48 @@
+---
+title: atmos terraform cache untrust
+sidebar_label: cache untrust
+sidebar_class_name: command
+id: untrust
+description: Remove the registry cache proxy certificate from the OS trust store.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Remove the registry cache's self-signed certificate from the operating system trust store — the inverse of [`atmos terraform cache trust`](/cli/commands/terraform/cache/trust). Relevant on **macOS and Windows**, where trust is installed in the OS store; on Linux/BSD it is a no-op because no OS trust change was ever made.
+</Intro>
+
+<Screengrab title="atmos terraform cache untrust --help" slug="atmos-terraform-cache-untrust--help" />
+
+Use this when you stop using the cache, or before regenerating the certificate, to remove the previously trusted certificate:
+
+- **macOS** — removes it from your login keychain.
+- **Windows** — removes it from your user `Root` certificate store.
+- **Linux/BSD** — no-op (trust is via `SSL_CERT_FILE`, not the OS store).
+
+## Usage
+
+```shell
+atmos terraform cache untrust
+```
+
+The command takes no arguments. Atmos global selection flags (`--base-path`, `--config`, `--config-path`, `--profile`) are honored and select which configuration resolves the cache location and certificate path.
+
+## Flags
+
+<dl>
+  <dt>No command-specific flags</dt>
+  <dd>This command takes no arguments or command-specific flags. It removes the cache certificate from the OS trust store. Atmos global flags are honored.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Remove the cache certificate from the OS trust store (macOS/Windows)
+atmos terraform cache untrust
+```
+
+## Related Commands
+
+- [`atmos terraform cache trust`](/cli/commands/terraform/cache/trust)
+- [`atmos terraform cache`](/cli/commands/terraform/cache)

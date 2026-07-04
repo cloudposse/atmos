@@ -3,6 +3,7 @@ package credentials
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,7 +11,54 @@ import (
 	"github.com/zalando/go-keyring"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// Compile-time guard: a rename of the Keyring/Type schema fields must break the build.
+var _ = schema.AuthConfig{Keyring: schema.KeyringConfig{Type: "memory"}}
+
+// TestNewCredentialStoreWithConfig_SelectsBackendByPriority verifies the
+// env > config > default priority used to choose the keyring backend. The
+// config-driven case is the regression guard for issue #2544: a non-nil
+// authConfig with Keyring.Type must select that backend.
+func TestNewCredentialStoreWithConfig_SelectsBackendByPriority(t *testing.T) {
+	tests := []struct {
+		name       string
+		envType    string
+		authConfig *schema.AuthConfig
+		wantType   string
+	}{
+		{
+			name:       "config memory is honored (issue #2544)",
+			envType:    "",
+			authConfig: &schema.AuthConfig{Keyring: schema.KeyringConfig{Type: types.CredentialStoreTypeMemory}},
+			wantType:   types.CredentialStoreTypeMemory,
+		},
+		{
+			name:       "env var overrides config",
+			envType:    types.CredentialStoreTypeMemory,
+			authConfig: &schema.AuthConfig{Keyring: schema.KeyringConfig{Type: "system"}},
+			wantType:   types.CredentialStoreTypeMemory,
+		},
+		{
+			name:       "nil config defaults to system in test environment",
+			envType:    "",
+			authConfig: nil,
+			wantType:   types.CredentialStoreTypeSystemKeyring,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setenv with empty string clears any inherited value for this test.
+			t.Setenv("ATMOS_KEYRING_TYPE", tt.envType)
+
+			store := NewCredentialStoreWithConfig(tt.authConfig)
+			assert.NotNil(t, store)
+			assert.Equal(t, tt.wantType, store.Type())
+		})
+	}
+}
 
 // Ensure the keyring uses an in-memory mock backend for tests.
 func init() {
@@ -27,9 +75,9 @@ func TestStoreRetrieve_AWS(t *testing.T) {
 	alias := "aws-1"
 	exp := time.Now().UTC().Add(1 * time.Hour).Format(time.RFC3339)
 	in := &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "SECRET", SessionToken: "TOKEN", Region: "us-east-1", Expiration: exp}
-	assert.NoError(t, s.Store(alias, in))
+	assert.NoError(t, s.Store(alias, in, ""))
 
-	got, err := s.Retrieve(alias)
+	got, err := s.Retrieve(alias, "")
 	assert.NoError(t, err)
 	out, ok := got.(*types.AWSCredentials)
 	if assert.True(t, ok) {
@@ -43,15 +91,34 @@ func TestStoreRetrieve_OIDC(t *testing.T) {
 	s := NewCredentialStore()
 	alias := "oidc-1"
 	in := &types.OIDCCredentials{Token: "hdr.payload.", Provider: "github", Audience: "sts"}
-	assert.NoError(t, s.Store(alias, in))
+	assert.NoError(t, s.Store(alias, in, ""))
 
-	got, err := s.Retrieve(alias)
+	got, err := s.Retrieve(alias, "")
 	assert.NoError(t, err)
 	out, ok := got.(*types.OIDCCredentials)
 	if assert.True(t, ok) {
 		assert.Equal(t, in.Token, out.Token)
 		assert.Equal(t, in.Provider, out.Provider)
 		assert.Equal(t, in.Audience, out.Audience)
+	}
+}
+
+func TestStoreRetrieve_Pro(t *testing.T) {
+	t.Setenv("ATMOS_KEYRING_TYPE", "memory")
+	s := NewCredentialStore()
+	alias := "atmos-pro-1"
+	in := &types.ProCredentials{Token: "hdr.payload.", BaseURL: "https://pro", Endpoint: "api/v1", WorkspaceID: "ws-1", Provider: "atmos-pro"}
+	assert.NoError(t, s.Store(alias, in, "realmA"))
+
+	got, err := s.Retrieve(alias, "realmA")
+	assert.NoError(t, err)
+	out, ok := got.(*types.ProCredentials)
+	if assert.True(t, ok) {
+		assert.Equal(t, in.Token, out.Token)
+		assert.Equal(t, in.BaseURL, out.BaseURL)
+		assert.Equal(t, in.Endpoint, out.Endpoint)
+		assert.Equal(t, in.WorkspaceID, out.WorkspaceID)
+		assert.Equal(t, in.Provider, out.Provider)
 	}
 }
 
@@ -65,7 +132,7 @@ func (f *fakeCreds) Validate(ctx context.Context) (*types.ValidationInfo, error)
 
 func TestStore_UnsupportedType(t *testing.T) {
 	s := NewCredentialStore()
-	err := s.Store("alias", &fakeCreds{})
+	err := s.Store("alias", &fakeCreds{}, "")
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, ErrCredentialStore))
 }
@@ -74,22 +141,22 @@ func TestDelete_Flow(t *testing.T) {
 	s := NewCredentialStore()
 	alias := "to-delete"
 	// Delete non-existent -> success (treated as already deleted).
-	assert.NoError(t, s.Delete(alias))
+	assert.NoError(t, s.Delete(alias, ""))
 
 	// Store then delete -> ok.
-	assert.NoError(t, s.Store(alias, &types.OIDCCredentials{Token: "hdr.payload."}))
-	assert.NoError(t, s.Delete(alias))
+	assert.NoError(t, s.Store(alias, &types.OIDCCredentials{Token: "hdr.payload."}, ""))
+	assert.NoError(t, s.Delete(alias, ""))
 	// Retrieve after delete -> error.
-	_, err := s.Retrieve(alias)
+	_, err := s.Retrieve(alias, "")
 	assert.Error(t, err)
 
 	// Delete again -> success (idempotent).
-	assert.NoError(t, s.Delete(alias))
+	assert.NoError(t, s.Delete(alias, ""))
 }
 
 func TestList_NotSupported(t *testing.T) {
 	s := NewCredentialStore()
-	_, err := s.List()
+	_, err := s.List("")
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, ErrCredentialStore))
 }
@@ -101,6 +168,69 @@ func TestDefaultStore_Suite(t *testing.T) {
 	}
 
 	RunCredentialStoreTests(t, factory)
+}
+
+func TestResolveKeyringType(t *testing.T) {
+	t.Run("environment overrides auth config", func(t *testing.T) {
+		t.Setenv("ATMOS_KEYRING_TYPE", "memory")
+		authConfig := &schema.AuthConfig{
+			Keyring: schema.KeyringConfig{Type: "file"},
+		}
+
+		assert.Equal(t, "memory", resolveKeyringType(authConfig))
+	})
+
+	t.Run("auth config overrides default", func(t *testing.T) {
+		t.Setenv("ATMOS_KEYRING_TYPE", "")
+
+		authConfig := &schema.AuthConfig{
+			Keyring: schema.KeyringConfig{Type: "file"},
+		}
+
+		assert.Equal(t, "file", resolveKeyringType(authConfig))
+	})
+
+	t.Run("default remains system", func(t *testing.T) {
+		t.Setenv("ATMOS_KEYRING_TYPE", "")
+
+		assert.Equal(t, "system", resolveKeyringType(nil))
+	})
+}
+
+func TestNewCredentialStoreWithConfig_ConcurrentInitialization(t *testing.T) {
+	t.Setenv("ATMOS_KEYRING_TYPE", "memory")
+
+	authConfig := &schema.AuthConfig{
+		Keyring: schema.KeyringConfig{Type: "system"},
+	}
+
+	const (
+		workers    = 32
+		iterations = 50
+	)
+
+	errs := make(chan error, workers*iterations)
+	var wg sync.WaitGroup
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				store := NewCredentialStoreWithConfig(authConfig)
+				if store == nil {
+					errs <- errors.New("credential store is nil")
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		assert.NoError(t, err)
+	}
 }
 
 // TestNewCredentialStoreWithConfig_NoopFallback tests that credential store uses no-op keyring when system keyring is unavailable.
@@ -145,11 +275,11 @@ func TestNewCredentialStoreWithConfig_NoopFallback(t *testing.T) {
 			// Verify store is functional by storing and retrieving.
 			alias := "test-fallback"
 			creds := &types.OIDCCredentials{Token: "test-token", Provider: "test"}
-			err := store.Store(alias, creds)
+			err := store.Store(alias, creds, "")
 			assert.NoError(t, err, "store should be able to store credentials")
 
 			if tt.expectRetrieve {
-				retrieved, err := store.Retrieve(alias)
+				retrieved, err := store.Retrieve(alias, "")
 				assert.NoError(t, err, "store should be able to retrieve credentials")
 				assert.NotNil(t, retrieved, "retrieved credentials should not be nil")
 			}
@@ -165,11 +295,11 @@ func TestNewKeyringAuthStore(t *testing.T) {
 	// Should be able to perform basic operations.
 	alias := "deprecated-test"
 	creds := &types.OIDCCredentials{Token: "test-token", Provider: "test"}
-	err := store.Store(alias, creds)
+	err := store.Store(alias, creds, "")
 	assert.NoError(t, err, "should be able to store credentials")
 
 	// Clean up.
-	store.Delete(alias)
+	store.Delete(alias, "")
 }
 
 // TestNoopKeyringStore tests the no-op keyring behavior.
@@ -178,26 +308,26 @@ func TestNoopKeyringStore(t *testing.T) {
 
 	// Store succeeds (no-op).
 	creds := &types.OIDCCredentials{Token: "test-token", Provider: "test"}
-	err := store.Store("alias", creds)
+	err := store.Store("alias", creds, "")
 	assert.NoError(t, err, "Store should succeed (no-op)")
 
 	// Retrieve validates credentials and returns error.
 	// Note: In test environment without AWS credentials, this will fail validation.
-	retrieved, err := store.Retrieve("alias")
+	retrieved, err := store.Retrieve("alias", "")
 	assert.Error(t, err, "Retrieve should return error (no AWS credentials in test)")
 	assert.Nil(t, retrieved, "Retrieved credentials should be nil")
 
 	// Delete succeeds (no-op).
-	err = store.Delete("alias")
+	err = store.Delete("alias", "")
 	assert.NoError(t, err, "Delete should succeed (no-op)")
 
 	// List returns empty.
-	list, err := store.List()
+	list, err := store.List("")
 	assert.NoError(t, err, "List should succeed")
 	assert.Empty(t, list, "List should be empty")
 
 	// IsExpired returns true with error.
-	expired, err := store.IsExpired("alias")
+	expired, err := store.IsExpired("alias", "")
 	assert.True(t, expired, "IsExpired should return true")
 	assert.ErrorIs(t, err, ErrCredentialsNotFound, "Should return credentials not found error")
 
@@ -216,7 +346,7 @@ func TestNoopKeyringStore_RetrieveBehavior(t *testing.T) {
 	store := newNoopKeyringStore()
 
 	// Retrieve should immediately return ErrCredentialsNotFound without any validation.
-	creds, err := store.Retrieve("test-alias")
+	creds, err := store.Retrieve("test-alias", "")
 	assert.Nil(t, creds, "Should return nil credentials")
 	assert.ErrorIs(t, err, ErrCredentialsNotFound, "Should return credentials not found")
 }

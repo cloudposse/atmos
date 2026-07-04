@@ -2,12 +2,12 @@
 
 Pin components to specific versions for reproducible deployments.
 
-Learn more about [Vendoring](https://atmos.tools/core-concepts/vendoring/).
+Learn more about [Vendoring](https://atmos.tools/vendor).
 
 ## What You'll See
 
-- [Version pinning](https://atmos.tools/core-concepts/vendoring/#versioning) with git refs
-- [YAML anchors](https://atmos.tools/core-concepts/vendoring/vendor-manifest/#yaml-anchors) to DRY up vendor configs
+- [Version pinning](https://atmos.tools/vendor#versioning) with git refs
+- [YAML anchors](https://atmos.tools/vendor/vendor-manifest#yaml-anchors) to DRY up vendor configs
 - Multiple component versions side-by-side
 
 ## Try It

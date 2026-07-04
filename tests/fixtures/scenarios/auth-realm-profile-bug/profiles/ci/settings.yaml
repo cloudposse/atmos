@@ -1,0 +1,3 @@
+# CI profile settings.
+logs:
+  level: Warning

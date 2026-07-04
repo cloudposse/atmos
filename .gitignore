@@ -3,7 +3,6 @@
 *.tfstate
 *.tfstate.*
 **/*.tf.json
-**/planfile
 **/*.planfile
 **/*.kubeconfig
 **/terraform.tfvars.json
@@ -17,12 +16,27 @@
 **/nohup.out
 **/kubeconfig.yaml
 **/*.planfile.json
+.atmos/planfiles
+.atmos/planfiles/**
+
+**/.atmos
 
 # Atmos binary (only in root directory)
 /atmos
 
+# Demo binaries and large audio files
+tools/director/director
+demos/audio/
+demo/screengrabs/.bin/
+
+# Generated landing-page demo recordings (VHS output).
+# NEVER commit these — they bloat the repo. The build pipeline renders them and
+# syncs to S3/CDN (`atmos demo publish`); the site references the remote URL.
+/website/static/img/demos/
+
 # Module directory
 .terraform
+**/.workdir/
 **/.idea
 **/*.iml
 
@@ -38,29 +52,39 @@
 /bin
 
 # Nix
-.envrc
 .direnv/
+
+# Environment files (except .envrc which is tracked for Nix)
+.env*
+!.envrc
 
 # Tool version managers
 .tool-versions
 !examples/toolchain/.tool-versions
+!examples/mcp-for-ai-coding-assistants/.tool-versions
 
-# Ignore cache files
+# Ignore cache files and sessions
 **/.atmos/cache.yaml
+**/.atmos/sessions/
 **/cache.*.txt
+**/.atmos/ai.settings.local.json
 
-# Conductor workspace uses pnpm, but project uses npm
+# Website lock files (CI manages dependencies)
 website/pnpm-lock.yaml
+website/package-lock.json
 
 # Development configs - track only specific files
 .atmos.d/*
 !.atmos.d/dev.yaml
+!.atmos.d/toolchain.yaml
 !.atmos.d/README.md
 
 # Ignore components vendored during tests
 examples/demo-vendoring/components/**
 tests/fixtures/scenarios/vendor-globs/components/**
 tests/fixtures/scenarios/vendor/components/**
+tests/fixtures/scenarios/vendor-simple-excludes/components/**
+tests/fixtures/scenarios/complete/components/terraform/infra/account-map/context.tf
 internal/exec/output.*
 
 # Coverage files
@@ -88,13 +112,22 @@ TEST_QUALITY_*.md
 /lintroller
 /.lintroller
 tools/lintroller/.lintroller
+.golangci/lintroller/lintroller
 /custom-gcl
 tools/gomodcheck/.gomodcheck
+
+# golangci-lint cache. Worktrees point GOLANGCI_LINT_CACHE at a repo-local dir to
+# avoid cross-worktree lock contention; it's large (100MB+) and machine-local, so
+# never commit it.
+.golangci-cache/
+**/.golangci-cache/
 
 # Claude Code and Hive Mind development tools
 .claude-flow/
 .hive-mind/
 .claude/plans/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 performance-optimization/
 node_modules
@@ -121,10 +154,18 @@ scratch/
 COVERAGE_SUMMARY.md
 TESTABILITY_CHANGES_SUMMARY.md
 
+# Docusaurus build cache
+.docusaurus/
+
 # Conductor scratch/temporary files
 *.log
 *_progress.txt
 *_summary.txt
 reply_to_*.sh
 *.ansi
+*.ascii
 .claude-plan.md
+.claude/plans/
+
+# Generated JUnit test reports from `atmos terraform test` in CI.
+*.junit.xml

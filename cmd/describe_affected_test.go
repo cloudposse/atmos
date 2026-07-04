@@ -170,6 +170,93 @@ func TestSetFlagValueInCliArgs(t *testing.T) {
 	}
 }
 
+// TestDescribeAffectedSetsAuthDisabled exercises the wiring that routes the --identity=false
+// signal (and its aliases) into DescribeAffectedCmdArgs.AuthDisabled. Before this fix, the
+// disabled sentinel terminated at the top-level AuthManager (which became nil) but never
+// reached the per-component auth resolver inside ExecuteDescribeStacks, so the
+// `--identity=false` user expectation was silently ignored in `describe affected --upload`.
+// See plan: --identity=false not honored in `atmos describe affected`.
+func TestDescribeAffectedSetsAuthDisabled(t *testing.T) {
+	tests := []struct {
+		name             string
+		envIdentity      string
+		viperIdentity    string
+		wantAuthDisabled bool
+	}{
+		{
+			name:             "identity=false sets AuthDisabled",
+			envIdentity:      "false",
+			viperIdentity:    "false",
+			wantAuthDisabled: true,
+		},
+		{
+			name:             "identity=off sets AuthDisabled",
+			envIdentity:      "off",
+			viperIdentity:    "off",
+			wantAuthDisabled: true,
+		},
+		{
+			name:             "identity=0 sets AuthDisabled",
+			envIdentity:      "0",
+			viperIdentity:    "0",
+			wantAuthDisabled: true,
+		},
+		{
+			name:             "identity=no sets AuthDisabled",
+			envIdentity:      "no",
+			viperIdentity:    "no",
+			wantAuthDisabled: true,
+		},
+		{
+			name:             "no identity flag does not set AuthDisabled",
+			envIdentity:      "",
+			viperIdentity:    "",
+			wantAuthDisabled: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			viper.Reset()
+			t.Setenv("ATMOS_IDENTITY", tc.envIdentity)
+			t.Setenv("IDENTITY", "")
+			if tc.viperIdentity != "" {
+				viper.Set("identity", tc.viperIdentity)
+			}
+
+			t.Chdir("../tests/fixtures/scenarios/basic")
+
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			var captured *exec.DescribeAffectedCmdArgs
+			mock := exec.NewMockDescribeAffectedExec(ctrl)
+			mock.EXPECT().Execute(gomock.Any()).DoAndReturn(func(args *exec.DescribeAffectedCmdArgs) error {
+				captured = args
+				return nil
+			})
+
+			run := getRunnableDescribeAffectedCmd(
+				func(opts ...AtmosValidateOption) {},
+				exec.ParseDescribeAffectedCliArgs,
+				func(atmosConfig *schema.AtmosConfiguration) exec.DescribeAffectedExec { return mock },
+			)
+
+			err := run(describeAffectedCmd, []string{})
+			assert.NoError(t, err)
+			assert.NotNil(t, captured, "Execute was not called with args")
+			assert.Equal(t, tc.wantAuthDisabled, captured.AuthDisabled,
+				"AuthDisabled should reflect the normalized identity flag value")
+			if tc.wantAuthDisabled {
+				assert.Nil(t, captured.AuthManager,
+					"AuthManager must be nil when authentication is explicitly disabled")
+			}
+		})
+	}
+}
+
 func TestDescribeAffectedCmd_Error(t *testing.T) {
 	_ = NewTestKit(t)
 

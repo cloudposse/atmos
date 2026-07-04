@@ -9,7 +9,7 @@ import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `stores` section in `atmos.yaml` configures external key-value stores that can be used to share data between components using the [`!store`](/stacks/sharing-state/stores) YAML function and [hooks](/stacks/hooks).
+The `stores` section in `atmos.yaml` configures external key-value stores that can be used to share data between components using the [`!store`](/stacks/sharing-state/stores) YAML function and [hooks](/stacks/hooks). Any store can also be marked sensitive with `secret: true` to make it a [secret backend](/cli/configuration/secrets) — a great place to keep API keys, tokens, and passwords — resolved with the [`!secret`](/functions/yaml/secret) function and the [`atmos secret`](/cli/commands/secret/usage) CLI.
 </Intro>
 
 ## Configuration
@@ -19,19 +19,25 @@ The `stores` section in `atmos.yaml` configures external key-value stores that c
 stores:
   # AWS SSM Parameter Store
   prod/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
+    options:
+      region: us-east-1
+
+  # AWS Secrets Manager
+  prod/asm:
+    kind: aws/asm
     options:
       region: us-east-1
 
   # Azure Key Vault
   prod/azure:
-    type: azure-key-vault
+    kind: azure/keyvault
     options:
       vault_url: "https://my-keyvault.vault.azure.net/"
 
   # Google Secret Manager
   prod/gcp:
-    type: google-secret-manager
+    kind: gcp/secretmanager
     options:
       project_id: my-project
 
@@ -65,24 +71,68 @@ vars:
   api_key: !store prod/ssm::/app/api-key
 ```
 
-## Supported Store Types
+## Supported Store Kinds
+
+Use `kind` for new store definitions. The legacy `type` field is still accepted for
+backward compatibility; when both are set, `kind` wins.
 
 <dl>
-  <dt>`aws-ssm-parameter-store`</dt>
+  <dt>`aws/ssm` (legacy type: `aws-ssm-parameter-store`)</dt>
   <dd>AWS Systems Manager Parameter Store. Stores and retrieves parameters from SSM.</dd>
 
-  <dt>`azure-key-vault`</dt>
+  <dt>`aws/asm` (legacy type: `aws-secrets-manager`)</dt>
+  <dd>AWS Secrets Manager. Stores and retrieves string or JSON secret values.</dd>
+
+  <dt>`azure/keyvault` (legacy type: `azure-key-vault`)</dt>
   <dd>Azure Key Vault. Stores and retrieves secrets from Azure.</dd>
 
-  <dt>`google-secret-manager` (or `gsm`)</dt>
+  <dt>`gcp/secretmanager` (legacy types: `google-secret-manager`, `google/secretmanager`, `gsm`)</dt>
   <dd>Google Cloud Secret Manager. Stores and retrieves secrets from GCP.</dd>
 
   <dt>`redis`</dt>
   <dd>Redis key-value store. Useful for caching and temporary data.</dd>
 
   <dt>`artifactory`</dt>
-  <dd>JFrog Artifactory. Stores and retrieves artifacts and metadata.</dd>
+  <dd>JFrog Artifactory. Stores and retrieves data as JSON files. Use a Generic repository type.</dd>
+
+  <dt>`github-actions` (kind: `github/actions`)</dt>
+  <dd>GitHub Actions secrets. Writes, lists, and deletes secrets through the GitHub API; secret <em>values</em> can only be read back inside a GitHub Actions runner (the API never returns them). Best suited as a distribution target so workflows consume secrets via the native <code>secrets</code> context.</dd>
 </dl>
+
+## Secret Stores
+
+Stores are an excellent place to keep secrets. Mark any store sensitive by setting `secret: true`, and it becomes a **secret backend**:
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  # Regular store (machine outputs) — accessed with !store
+  terraform-outputs:
+    kind: aws/ssm
+    options:
+      region: us-east-1
+
+  # Secret store (SecureString) — accessed with !secret
+  app-secrets:
+    kind: aws/ssm
+    secret: true
+    options:
+      region: us-east-1
+      prefix: /atmos/secrets
+```
+</File>
+
+A `secret: true` store:
+
+- **Writes the sensitive at-rest variant** of its backend (e.g. SSM `SecureString`, Key Vault secret).
+- **Masks values automatically** in command output, so secrets don't leak into logs the way a plain `!store` value can.
+- **Is resolved only with [`!secret`](/functions/yaml/secret)** and the [`atmos secret`](/cli/commands/secret/usage) CLI — using `!store`, `!store.get`, or `atmos.Store` against a `secret: true` store is an error, which keeps the declarative secret registry mandatory by construction.
+
+Some backends are secret managers by nature (1Password, the OS keychain, GitHub Actions) and default to `secret: true` even when you omit it. For declaring, provisioning, and reading secrets, see [Secrets Configuration](/cli/configuration/secrets).
+
+:::caution Only backends that encrypt at rest can be secret stores
+`secret: true` is rejected at startup for backends that store values in plaintext — currently **Redis** (an in-memory cache) and **Artifactory** (an artifact repository). Marking one of these sensitive would give a false sense of security, so Atmos fails fast with a clear error rather than writing secrets in the clear. Use an encrypted backend instead: AWS SSM (`SecureString`), AWS Secrets Manager, Azure Key Vault, Google Secret Manager, HashiCorp Vault, 1Password, the OS keychain, or GitHub Actions.
+:::
 
 ## Store Type Configuration
 
@@ -92,15 +142,39 @@ vars:
 ```yaml
 stores:
   prod/ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     options:
       region: us-east-1
       # Optional
       prefix: myapp
       stack_delimiter: "/"
+      # Optional: custom endpoint for AWS-compatible local/test APIs
+      # (`endpoint_url` is an accepted alias; `endpoint` wins if both are set)
+      endpoint: http://localhost:4566
       # Optional: assume role for cross-account access
       read_role_arn: arn:aws:iam::123456789012:role/SSMReader
       write_role_arn: arn:aws:iam::123456789012:role/SSMWriter
+```
+</File>
+
+### AWS Secrets Manager
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  prod/asm:
+    kind: aws/asm
+    options:
+      region: us-east-1
+      # Optional
+      prefix: myapp
+      stack_delimiter: "/"
+      # Optional: custom endpoint for AWS-compatible local/test APIs
+      # (`endpoint_url` is an accepted alias; `endpoint` wins if both are set)
+      endpoint: http://localhost:4566
+      # Optional: assume role for cross-account access
+      read_role_arn: arn:aws:iam::123456789012:role/SecretsReader
+      write_role_arn: arn:aws:iam::123456789012:role/SecretsWriter
 ```
 </File>
 
@@ -110,12 +184,23 @@ stores:
 ```yaml
 stores:
   prod/azure:
-    type: azure-key-vault
+    kind: azure/keyvault
     options:
       vault_url: "https://my-keyvault.vault.azure.net/"
       # Optional
       prefix: myapp
       stack_delimiter: "-"
+      # Optional alias for vault_url, useful for local/test endpoints
+      endpoint: http://localhost:4567
+      # Optional for Key Vault-compatible local endpoints whose auth challenge
+      # resource does not match the endpoint host
+      disable_challenge_resource_verification: true
+      # Optional for plaintext local endpoints (rewrites http:// to https:// over an insecure transport)
+      endpoint_insecure: true
+      # Optional for emulators that accept any bearer token
+      without_authentication: true
+      # Optional: permit sending the credential over plain http (does not rewrite the URL like endpoint_insecure)
+      insecure_allow_credential_with_http: true
 ```
 </File>
 
@@ -127,18 +212,70 @@ Authentication uses the [Azure Default Credential chain](https://learn.microsoft
 ```yaml
 stores:
   prod/gcp:
-    type: google-secret-manager  # or "gsm"
+    kind: gcp/secretmanager
     options:
       project_id: my-project
       # Optional
       prefix: myapp
       stack_delimiter: "_"
+      # Optional: custom endpoint for local/test APIs
+      # (`endpoint_url` is an accepted alias; `endpoint` wins if both are set)
+      endpoint: localhost:4568
+      # Optional for plaintext local gRPC endpoints
+      endpoint_insecure: true
+      # Optional for emulators that do not validate Google credentials
+      without_authentication: true
       # Optional: JSON credentials (or use GOOGLE_APPLICATION_CREDENTIALS env var)
       credentials: '{"type":"service_account",...}'
       # Optional: replication locations
       locations:
         - us-east1
         - us-west1
+```
+</File>
+
+### Floci Local Endpoints
+
+For local Floci-backed store tests, configure the AWS auth identity endpoint
+under `auth.identities.*.spec.endpoint_url` and configure GCP/Azure emulator
+endpoints on the store options:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    floci-superuser:
+      kind: aws/user
+      credentials:
+        access_key_id: test
+        secret_access_key: test
+        region: us-east-1
+      spec:
+        endpoint_url: "http://localhost:4566"
+
+stores:
+  local/ssm:
+    kind: aws/ssm
+    identity: floci-superuser
+    options:
+      region: us-east-1
+      endpoint: "http://localhost:4566"
+
+  local/gsm:
+    kind: gcp/secretmanager
+    options:
+      project_id: local-project
+      endpoint: "http://localhost:4588"
+      endpoint_insecure: true
+      without_authentication: true
+
+  local/keyvault:
+    kind: azure/keyvault
+    options:
+      endpoint: "http://localhost:4577/devstoreaccount1-keyvault"
+      endpoint_insecure: true
+      without_authentication: true
+      disable_challenge_resource_verification: true
 ```
 </File>
 
@@ -169,13 +306,79 @@ stores:
     options:
       url: https://artifactory.example.com
       repo_name: my-repo
-      # Optional: access token (or use ARTIFACTORY_ACCESS_TOKEN env var)
-      access_token: "..."
+      # Access token from environment variable (recommended)
+      access_token: !env ARTIFACTORY_ACCESS_TOKEN
       # Optional
       prefix: myapp
       stack_delimiter: "/"
 ```
 </File>
+
+The `access_token` can be provided directly, via the `!env` function, or through the `ARTIFACTORY_ACCESS_TOKEN` environment variable.
+
+:::tip JFrog Artifactory Repository Type
+When setting up Artifactory as a store backend, create a **Generic** repository type in JFrog Artifactory. Atmos stores data as JSON files, so no specific package type (Maven, npm, Docker, etc.) is required. The repository can be local, remote, or virtual.
+:::
+
+### GitHub Actions
+
+GitHub Actions secrets are a **"native CI" backend**. Because the GitHub API never returns a secret's value, this store is asymmetric:
+
+- **Write / list / delete** go through the GitHub API and work anywhere a token is available.
+- **Existence checks** (`atmos secret list`) work everywhere — the API reports whether a secret is initialized (and when it was last updated) without exposing the value.
+- **Reading a value** only works inside a GitHub Actions runner, where GitHub injects the secret into the environment. Outside a runner the read fails with a clear error; gate it with `ci.enabled` for non-runner contexts.
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  gha:
+    kind: github/actions       # or type: github-actions
+    secret: true               # implied: GitHub Actions is a secret backend by default
+    options:
+      owner: acme              # required: repository owner (org or user)
+      repo: infra              # required: repository name
+      # Optional: target environment-level secrets instead of repository secrets
+      environment: production
+      # Optional: name prefix applied before the key (key db_password → ATMOS_DB_PASSWORD)
+      prefix: atmos
+      # Optional: explicit token; defaults to ATMOS_GITHUB_TOKEN / GITHUB_TOKEN
+      token: !env ATMOS_GITHUB_TOKEN
+      # Optional: allow value reads outside a runner (default: auto-detected via GITHUB_ACTIONS)
+      ci:
+        enabled: false
+```
+</File>
+
+Secret names are flat and repo-global: a key is written as `[PREFIX_]KEY` uppercased (e.g. `db_password` → `DB_PASSWORD`), so the same key resolves to the same GitHub secret across stacks and components. To read a value inside a workflow, map the secret into the job environment under the **same name** so the env-based read can find it:
+
+```yaml
+# .github/workflows/deploy.yml
+jobs:
+  deploy:
+    env:
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+    steps:
+      - run: atmos terraform apply vpc -s prod   # !secret resolves DB_PASSWORD from the env
+```
+
+The token is resolved from the `token` option, then `ATMOS_PRO_GITHUB_TOKEN`, `ATMOS_GITHUB_TOKEN`, and `GITHUB_TOKEN` (in that order). Only `api.github.com` is targeted; GitHub Enterprise Server is not yet supported.
+
+#### Alignment warnings
+
+When a value is read inside a runner, Atmos emits **warnings** (never errors) if the runner's context doesn't match the store config, so misconfigurations surface early:
+
+- **Repository mismatch** — if `GITHUB_REPOSITORY` differs from the store's `owner/repo`, the injected secrets come from a different repository than the store targets.
+- **Environment mismatch** — GitHub doesn't expose the job's `environment:` name as a plain variable, but it *is* present in the **GitHub Actions OIDC token** (`environment` claim). When the store has `environment:` set, Atmos best-effort mints and decodes that token to verify the job is actually running in the matching environment. This requires the job to grant `permissions: id-token: write`; without it, the check is skipped silently.
+
+```yaml
+jobs:
+  deploy:
+    environment: production       # binds the job to the environment
+    permissions:
+      id-token: write             # lets Atmos verify the environment via OIDC
+    env:
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+```
 
 ## Using Stores in Hooks
 
@@ -188,15 +391,15 @@ components:
       hooks:
         store-outputs:
           events:
-            - after-terraform-apply
+            - after.terraform.apply
           command: store
           name: prod/ssm
           outputs:
-            - vpc_id
-            - subnet_ids
+            vpc_id: .vpc_id
+            subnet_ids: .private_subnet_ids
 ```
 
-This writes Terraform outputs to the configured store after apply completes.
+This writes Terraform outputs to the configured store after apply completes. The output values starting with `.` reference Terraform output names.
 
 ## Related
 

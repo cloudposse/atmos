@@ -5,14 +5,16 @@ package generate
 //go:generate go run go.uber.org/mock/mockgen@latest -typed -destination=mock_stack_processor_test.go -package=generate github.com/cloudposse/atmos/pkg/terraform/generate StackProcessor
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // Section key constants for component configuration.
@@ -68,7 +70,8 @@ func (s *Service) ExecuteForComponent(
 ) error {
 	defer perf.Track(atmosConfig, "terraform.generate.ExecuteForComponent")()
 
-	log.Debug("ExecuteForComponent called",
+	log.Debug(
+		"ExecuteForComponent called",
 		logKeyComponent, component,
 		logKeyStack, stack,
 		"dryRun", dryRun,
@@ -107,6 +110,13 @@ func (s *Service) ExecuteForComponent(
 		info.FinalComponent,
 	)
 
+	// Ensure component directory exists (skip for dry-run and clean).
+	if !dryRun && !clean {
+		if err := os.MkdirAll(componentDir, 0o755); err != nil { //nolint:revive
+			return fmt.Errorf("failed to create component directory: %w", err)
+		}
+	}
+
 	// Generate files.
 	config := GenerateConfig{
 		DryRun: dryRun,
@@ -127,7 +137,8 @@ func (s *Service) ExecuteForAll(
 ) error {
 	defer perf.Track(atmosConfig, "terraform.generate.ExecuteForAll")()
 
-	log.Debug("ExecuteForAll called",
+	log.Debug(
+		"ExecuteForAll called",
 		"stacks", stacks,
 		"components", components,
 		"dryRun", dryRun,
@@ -169,7 +180,8 @@ func (s *Service) GenerateFilesForComponent(atmosConfig *schema.AtmosConfigurati
 		return nil
 	}
 
-	log.Debug("Auto-generating files for component",
+	log.Debug(
+		"Auto-generating files for component",
 		logKeyComponent, info.ComponentFromArg,
 		logKeyStack, info.Stack,
 	)
@@ -198,7 +210,7 @@ func processStackForGenerate(
 	}
 
 	for componentName, compSection := range terraformSection {
-		if len(components) > 0 && !u.SliceContainsString(components, componentName) {
+		if len(components) > 0 && !slices.Contains(components, componentName) {
 			continue
 		}
 
@@ -236,7 +248,8 @@ func processComponentForGenerate(
 		componentPath,
 	)
 
-	log.Info("Processing component",
+	log.Info(
+		"Processing component",
 		logKeyComponent, componentName,
 		logKeyStack, stackFileName,
 	)

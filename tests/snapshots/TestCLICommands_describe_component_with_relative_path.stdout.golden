@@ -1,6 +1,6 @@
 atlantis_project: tenant1-ue2-dev-top-level-component1
 atmos_cli_config:
-  base_path: .
+  base_path: ../..
   components:
     terraform:
       base_path: components/terraform
@@ -10,7 +10,7 @@ atmos_cli_config:
       init_run_reconfigure: true
       auto_generate_backend_file: false
       auto_generate_files: false
-      command: terraform
+      command: tofu
       shell:
         prompt: ""
       init:
@@ -18,16 +18,32 @@ atmos_cli_config:
       plan:
         skip_planfile: false
       plugin_cache: true
+      auto_provision_workdir_for_outputs: true
     helmfile:
       base_path: components/helmfile
       use_eks: true
       kubeconfig_path: /dev/shm
       helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
       cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+      cluster_name_template: ""
+      cluster_name: ""
       command: ""
+      auto_generate_files: false
     packer:
       base_path: ""
       command: ""
+      auto_generate_files: false
+    ansible:
+      base_path: ""
+      command: ""
+      auto_generate_files: false
+    kubernetes:
+      base_path: ""
+      provider: ""
+      auto_generate_files: false
+    helm:
+      base_path: ""
+      auto_generate_files: false
   stacks:
     base_path: stacks
     included_paths:
@@ -60,7 +76,7 @@ backend_type: s3
 cli_args:
   - describe
   - component
-command: terraform
+command: tofu
 component: top-level-component1
 component_info:
   component_path: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1
@@ -78,6 +94,7 @@ component_info:
         default: {}
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 181
@@ -92,6 +109,7 @@ component_info:
         default: []
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 146
@@ -125,6 +143,7 @@ component_info:
           tenant: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 50
@@ -137,6 +156,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 137
@@ -159,6 +179,7 @@ component_info:
         default: {}
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 260
@@ -169,6 +190,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 97
@@ -179,6 +201,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 115
@@ -193,6 +216,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 211
@@ -207,6 +231,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 226
@@ -220,6 +245,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 191
@@ -236,6 +262,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 242
@@ -255,6 +282,7 @@ component_info:
           - default
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 157
@@ -268,6 +296,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 127
@@ -278,6 +307,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 103
@@ -291,6 +321,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 201
@@ -301,6 +332,7 @@ component_info:
         default: null
         required: true
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/variables.tf
           line: 1
@@ -311,6 +343,7 @@ component_info:
         default: []
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/variables.tf
           line: 11
@@ -321,6 +354,7 @@ component_info:
         default: {}
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/variables.tf
           line: 17
@@ -331,6 +365,7 @@ component_info:
         default: null
         required: true
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/variables.tf
           line: 6
@@ -341,6 +376,7 @@ component_info:
         default: []
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/variables.tf
           line: 28
@@ -351,6 +387,7 @@ component_info:
         default: {}
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/variables.tf
           line: 34
@@ -361,6 +398,7 @@ component_info:
         default: null
         required: true
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/variables.tf
           line: 23
@@ -371,6 +409,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 121
@@ -383,6 +422,7 @@ component_info:
         default: {}
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 172
@@ -393,6 +433,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
           line: 109
@@ -401,6 +442,7 @@ component_info:
         name: service_1_id
         description: Service 1 ID
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/outputs.tf
           line: 1
@@ -409,6 +451,7 @@ component_info:
         name: service_2_id
         description: Service 2 ID
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/outputs.tf
           line: 6
@@ -512,6 +555,8 @@ remote_state_backend:
   role_arn: arn:aws:iam::123456789012:role/cp-gbl-root-terraform
   workspace_key_prefix: top-level-component1
 remote_state_backend_type: s3
+required_providers: {}
+required_version: ""
 settings:
   atlantis:
     config_template:

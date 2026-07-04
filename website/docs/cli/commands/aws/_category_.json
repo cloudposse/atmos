@@ -1,6 +1,5 @@
 {
   "label": "aws",
-  "position": 4,
   "className": "command",
   "collapsible": true,
   "collapsed": true,

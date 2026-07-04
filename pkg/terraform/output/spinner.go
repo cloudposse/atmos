@@ -7,10 +7,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -57,13 +59,18 @@ func NewSpinner(message string) *tea.Program {
 
 	s := spinner.New()
 	s.Style = theme.GetCurrentStyles().Spinner
+	fps.Apply(&s)
 
-	var opts []tea.ProgramOption
+	// Always output to UI (stderr) to avoid blocking /dev/tty.
+	// Without this, bubbletea defaults to /dev/tty which can block credential resolution
+	// and cause hangs when used with commands that need AWS access.
+	opts := []tea.ProgramOption{tea.WithOutput(iolib.UI)}
+
 	if !term.IsTTYSupportForStdout() {
 		// Workaround for non-TTY environments.
-		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
+		opts = append(opts, tea.WithoutRenderer(), tea.WithInput(nil))
 		log.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
-		_ = ui.Writeln(message)
+		ui.Writeln(message)
 	}
 
 	p := tea.NewProgram(modelSpinner{
@@ -82,7 +89,7 @@ func RunSpinner(p *tea.Program, spinnerChan chan struct{}, message string) {
 		defer close(spinnerChan)
 		if _, err := p.Run(); err != nil {
 			// If there's any error running the spinner, output the message and log the error.
-			_ = ui.Writeln(message)
+			ui.Writeln(message)
 			log.Error("Failed to run spinner:", "error", err)
 		}
 	}()

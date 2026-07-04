@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -137,6 +138,36 @@ func registerCommonPatterns(masker Masker) {
 	}
 }
 
+// registerCustomMaskPatterns registers user-defined patterns and literals from atmos.yaml.
+// Invalid regex patterns log a warning but don't fail startup.
+func registerCustomMaskPatterns(masker Masker, cfg *Config) {
+	defer perf.Track(nil, "io.registerCustomMaskPatterns")()
+
+	if cfg == nil {
+		return
+	}
+
+	maskSettings := cfg.AtmosConfig.Settings.Terminal.Mask
+
+	// Register custom literal values.
+	for _, literal := range maskSettings.Literals {
+		if literal != "" {
+			masker.RegisterValue(literal)
+		}
+	}
+
+	// Register custom regex patterns (warn on invalid, don't crash).
+	for _, pattern := range maskSettings.Patterns {
+		if pattern == "" {
+			continue
+		}
+		if err := masker.RegisterPattern(pattern); err != nil {
+			log.Warn("Skipping invalid mask pattern from atmos.yaml",
+				"pattern", pattern, "error", err)
+		}
+	}
+}
+
 // MaskWriter wraps any io.Writer with automatic masking.
 // Use this when you need to write to custom file handles with masking enabled.
 //
@@ -165,6 +196,23 @@ func MaskWriter(w stdio.Writer) stdio.Writer {
 		underlying: w,
 		masker:     ctx.Masker(),
 	}
+}
+
+// MaskString applies the global masker to a string and returns the masked value.
+// It is useful for structured sinks that need to redact individual fields before
+// serialization rather than wrapping a writer.
+func MaskString(value string) string {
+	defer perf.Track(nil, "io.MaskString")()
+
+	if value == "" {
+		return value
+	}
+
+	ctx := GetContext()
+	if ctx == nil {
+		return value
+	}
+	return ctx.Masker().Mask(value)
 }
 
 // RegisterSecret registers a secret value for masking.
@@ -261,6 +309,84 @@ func RegisterPattern(pattern string) error {
 	}
 
 	return ctx.Masker().RegisterPattern(pattern)
+}
+
+// ReconcileMasking re-reads the masking configuration (CLI flags → env → atmos.yaml → default)
+// and updates the global masker's enabled state to match. This is necessary because the global
+// masker may be created early (before CLI flags are parsed), at which point the `--mask` flag
+// value is not yet available — only its default. Call this from PersistentPreRun AFTER flags
+// are parsed so `--mask=false` reliably disables masking (matching `ATMOS_MASK=false`).
+func ReconcileMasking() {
+	defer perf.Track(nil, "io.ReconcileMasking")()
+
+	ctx := GetContext()
+	if ctx == nil {
+		return
+	}
+	cfg := buildConfig()
+	ctx.Masker().SetEnabled(!cfg.DisableMasking)
+}
+
+// MaskingEnabled reports whether the global masker is currently enabled. Inspection commands
+// (describe/list) use this to decide whether to resolve `!secret` to the mask replacement
+// without retrieving (and thus without requiring credentials).
+func MaskingEnabled() bool {
+	defer perf.Track(nil, "io.MaskingEnabled")()
+
+	ctx := GetContext()
+	if ctx == nil {
+		return true // Fail safe: assume masking is on if I/O isn't initialized.
+	}
+	return ctx.Masker().Enabled()
+}
+
+// ContainsSecret reports whether value contains any registered secret literal as a
+// substring, using the global masker. It is independent of the --mask display flag and
+// is used to keep secret-bearing values off disk (e.g. out of Terraform varfiles).
+// Returns false if the I/O context isn't initialized (no secrets could have been registered).
+func ContainsSecret(value string) bool {
+	defer perf.Track(nil, "io.ContainsSecret")()
+
+	if value == "" {
+		return false
+	}
+
+	globalMu.RLock()
+	ctx := globalContext
+	globalMu.RUnlock()
+
+	if ctx == nil {
+		return false
+	}
+
+	return ctx.Masker().ContainsSecret(value)
+}
+
+// RegisterSecretValue registers every secret-bearing representation of a value with the
+// masker, not only plain strings. Scalars are registered via their string form; maps and
+// slices are walked so nested string leaves (e.g. a `password` field of an object output)
+// are masked too. Shared by the secrets resolver and sensitive-Terraform-output handling.
+func RegisterSecretValue(v any) {
+	defer perf.Track(nil, "io.RegisterSecretValue")()
+
+	switch t := v.(type) {
+	case nil:
+		return
+	case string:
+		RegisterSecret(t)
+	case map[string]any:
+		for _, child := range t {
+			RegisterSecretValue(child)
+		}
+	case []any:
+		for _, child := range t {
+			RegisterSecretValue(child)
+		}
+	default:
+		if s := fmt.Sprintf("%v", t); s != "" {
+			RegisterSecret(s)
+		}
+	}
 }
 
 // GetContext returns the global I/O context for advanced usage.

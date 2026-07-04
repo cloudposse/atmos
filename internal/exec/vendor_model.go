@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -90,17 +91,18 @@ type pkgComponentVendor struct {
 }
 
 type modelVendor struct {
-	packages    []pkgVendor
-	index       int
-	width       int
-	height      int
-	spinner     spinner.Model
-	progress    progress.Model
-	done        bool
-	dryRun      bool
-	failedPkg   int
-	atmosConfig *schema.AtmosConfiguration
-	isTTY       bool
+	packages       []pkgVendor
+	index          int
+	width          int
+	height         int
+	spinner        spinner.Model
+	progress       progress.Model
+	done           bool
+	dryRun         bool
+	failedPkg      int
+	failedPkgNames []string
+	atmosConfig    *schema.AtmosConfiguration
+	isTTY          bool
 }
 
 func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
@@ -128,9 +130,19 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	}
 
 	if model.failedPkg > 0 {
-		return fmt.Errorf("%w: %d", ErrVendorComponents, model.failedPkg)
+		return vendorFailureError(model.failedPkg, len(model.packages), model.failedPkgNames)
 	}
 	return nil
+}
+
+// vendorFailureError builds a descriptive error listing the names of the
+// components that failed to vendor.
+func vendorFailureError(failedCount, totalCount int, failedNames []string) error {
+	explanation := fmt.Sprintf("Failed to vendor %d of %d components: %s",
+		failedCount, totalCount, strings.Join(failedNames, ", "))
+	return errUtils.Build(ErrVendorComponents).
+		WithExplanation(explanation).
+		Err()
 }
 
 // newModelVendor constructs a modelVendor prepared to run vendor installations
@@ -151,6 +163,7 @@ func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
 	)
 	s := spinner.New()
 	s.Style = theme.GetCurrentStyles().Spinner
+	fps.Apply(&s)
 
 	if len(pkgs) == 0 {
 		return modelVendor{done: true}, nil
@@ -254,6 +267,7 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 		}
 		mark = xMark
 		m.failedPkg++
+		m.failedPkgNames = append(m.failedPkgNames, pkg.name)
 	}
 	version := ""
 	if pkg.version != "" {

@@ -249,6 +249,7 @@ func TestAllSupportedYamlTagsList(t *testing.T) {
 	// This test verifies all the originally expected tags are present.
 	expectedTags := []string{
 		"!exec",
+		"!secret",
 		"!store",
 		"!store.get",
 		"!template",
@@ -258,13 +259,26 @@ func TestAllSupportedYamlTagsList(t *testing.T) {
 		"!include",
 		"!include.raw",
 		"!repo-root",
+		"!git.root",
+		"!git.sha",
+		"!git.branch",
+		"!git.ref",
+		"!git.repository",
+		"!git.owner",
+		"!git.name",
+		"!git.host",
+		"!git.url",
+		"!append",
 		"!cwd",
+		"!unset",
 		"!random",
 		"!literal",
 		"!aws.account_id",
 		"!aws.caller_identity_arn",
 		"!aws.caller_identity_user_id",
 		"!aws.region",
+		"!aws.organization_id",
+		"!emulator",
 	}
 
 	allYAMLTags := fntag.AllYAML()

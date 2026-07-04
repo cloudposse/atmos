@@ -85,10 +85,14 @@ atmos packer build bastion/dev --stack dev    # ✓ Explicit and unambiguous
 
     <dt>`--template` <em>(alias `-t`)</em><em>(optional)</em></dt>
     <dd>
-        Packer template.
-        It can be specified in the `settings.packer.template` section in the Atmos component manifest,
-        or on the command line via the flag `--template <template>` (shorthand `-t`).
-        The command line flag takes precedence over `settings.packer.template`.
+        Packer template file or directory path. Defaults to `.` (component working directory), which tells Packer
+        to load all `*.pkr.hcl` files from the component directory.
+
+        - Omit or use `.` to load all HCL files (recommended for multi-file components)
+        - Use a specific filename like `main.pkr.hcl` for single-file templates
+
+        Can also be specified via `settings.packer.template` in the stack manifest.
+        The command line flag takes precedence.
     </dd>
 
     <dt>`--query` <em>(alias `-q`)</em><em>(optional)</em></dt>
@@ -154,6 +158,10 @@ atmos packer output . -s prod --query '.builds[0].artifact_id'
 
 <ActionCard title="Configure Packer" ctaText="Learn More" ctaLink="/cli/configuration/components/packer">
   Learn how to configure Packer components in your `atmos.yaml`, including templates and component settings.
+</ActionCard>
+
+<ActionCard title="Troubleshooting" ctaText="Learn More" ctaLink="/troubleshoot/packer-troubleshooting">
+  Common issues and solutions when using Atmos with Packer.
 </ActionCard>
 
 ## Arguments

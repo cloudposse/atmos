@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/signal"
 	"strings"
@@ -8,7 +9,10 @@ import (
 
 	"github.com/cloudposse/atmos/cmd"
 	errUtils "github.com/cloudposse/atmos/errors"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/panics"
+	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 func main() {
@@ -16,16 +20,25 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		sig := <-sigChan
-		// Clean up resources before exit.
-		cmd.Cleanup()
-		// Exit with correct POSIX exit code (128 + signal number).
-		// Use errUtils.OsExit to allow test interception (Go 1.25+ panics on os.Exit in tests).
-		if s, ok := sig.(syscall.Signal); ok {
-			errUtils.OsExit(128 + int(s))
+		for sig := range sigChan {
+			// While an interactive/TTY step owns the terminal, SIGINT belongs to
+			// the foreground child process - keep waiting instead of exiting.
+			if !shouldExitOnSignal(sig) {
+				continue
+			}
+			// Run registered exit cleanups (e.g. restore the terminal from raw
+			// mode) - os.Exit below skips deferred functions.
+			signals.RunExitCleanups()
+			// Clean up resources before exit.
+			cmd.Cleanup()
+			// Exit with correct POSIX exit code (128 + signal number).
+			// Use errUtils.OsExit to allow test interception (Go 1.25+ panics on os.Exit in tests).
+			if s, ok := sig.(syscall.Signal); ok {
+				errUtils.OsExit(128 + int(s))
+			}
+			// Fallback to SIGINT exit code if signal type assertion fails.
+			errUtils.OsExit(130)
 		}
-		// Fallback to SIGINT exit code if signal type assertion fails.
-		errUtils.OsExit(130)
 	}()
 
 	// Disable timestamp in logs so snapshots work. We will address this in a future PR updating styles, etc.
@@ -38,7 +51,15 @@ func main() {
 
 // run executes the main application logic and returns an exit code.
 // This separation allows proper cleanup via defer before os.Exit in main().
-func run() int {
+func run() (exitCode int) {
+	// Install the global panic handler first so any subsequent panic
+	// (including inside cmd.Cleanup via the defer below) is turned
+	// into a friendly message + crash report. Order matters: the
+	// panic handler must be deferred BEFORE cmd.Cleanup so Go unwinds
+	// defers in LIFO order — Cleanup runs first, then Recover catches
+	// anything that escapes either Cleanup or the main call chain.
+	defer panics.Recover(&exitCode)
+
 	// Ensure cleanup happens on normal exit.
 	defer cmd.Cleanup()
 
@@ -51,17 +72,19 @@ func run() int {
 		// Check for conflicting flags: --version and --use-version cannot be used together.
 		if hasUseVersionFlag(os.Args) {
 			// Print error directly since config/formatters aren't initialized yet.
-			os.Stderr.WriteString("\nError: --version and --use-version cannot be used together\n\n")
-			os.Stderr.WriteString("Hints:\n")
-			os.Stderr.WriteString("  - Use --version to display the current Atmos version\n")
-			os.Stderr.WriteString("  - Use --use-version to run a command with a specific Atmos version\n\n")
+			// Use MaskWriter for consistent masking (gracefully falls back if not initialized).
+			maskedStderr := ioLayer.MaskWriter(os.Stderr)
+			_, _ = maskedStderr.Write([]byte("\nError: --version and --use-version cannot be used together\n\n"))
+			_, _ = maskedStderr.Write([]byte("Hints:\n"))
+			_, _ = maskedStderr.Write([]byte("  - Use --version to display the current Atmos version\n"))
+			_, _ = maskedStderr.Write([]byte("  - Use --use-version to run a command with a specific Atmos version\n\n"))
 			return 1
 		}
 		err := cmd.ExecuteVersion()
 		if err != nil {
 			errUtils.CaptureError(err)
 			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			os.Stderr.WriteString(formatted + "\n")
+			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
 			return errUtils.GetExitCode(err)
 		}
 		return 0 // Exit normally after printing version.
@@ -69,12 +92,19 @@ func run() int {
 
 	err := cmd.Execute()
 	if err != nil {
+		// Silent exit-code carriers (terminal-handoff steps) propagate the
+		// child's code without themed rendering, which would query the
+		// terminal and can hang when stdin is still contended by the session.
+		if code, ok := silentExitCode(err); ok {
+			return code
+		}
+
 		// Capture error to Sentry if configured (safe to call even if Sentry not initialized).
 		errUtils.CaptureError(err)
 
 		// Format and print error using centralized formatter.
 		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-		os.Stderr.WriteString(formatted + "\n")
+		_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
 
 		// Extract and use the correct exit code.
 		exitCode := errUtils.GetExitCode(err)
@@ -83,6 +113,25 @@ func run() int {
 	}
 
 	return 0
+}
+
+// silentExitCode reports the exit code to use when err is a silent exit-code
+// carrier (a terminal-handoff step that exited non-zero). Such errors must
+// propagate the code without themed rendering, which would query the terminal
+// and can hang when the session still contends for stdin.
+func silentExitCode(err error) (int, bool) {
+	var exitCodeErr errUtils.ExitCodeError
+	if errors.As(err, &exitCodeErr) && exitCodeErr.Silent {
+		return exitCodeErr.Code, true
+	}
+	return 0, false
+}
+
+// shouldExitOnSignal reports whether the process should exit in response to sig.
+// SIGINT is ignored while a foreground interactive/TTY step owns the terminal
+// (the child process handles Ctrl-C). SIGTERM always exits as an escape hatch.
+func shouldExitOnSignal(sig os.Signal) bool {
+	return sig != os.Interrupt || !signals.InterruptExitSuspended()
 }
 
 // hasVersionFlag checks if --version flag is present in args.

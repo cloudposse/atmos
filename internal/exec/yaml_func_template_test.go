@@ -12,6 +12,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	tests "github.com/cloudposse/atmos/tests"
 )
 
 // TestProcessTagTemplate_UnitTests tests the core processTagTemplate function with various inputs.
@@ -391,8 +392,9 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
 		assert.Contains(t, y, "stack_var: nonprod")
 	})
 
-	// Test template with atmos.Component() integration
+	// Test template with atmos.Component() integration.
 	t.Run("atmos.Component integration", func(t *testing.T) {
+		tests.RequireTofu(t)
 		res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            "test-template-with-atmos-component",
 			Stack:                stack,
@@ -430,6 +432,7 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
 
 	// Test template in lists
 	t.Run("template in lists", func(t *testing.T) {
+		tests.RequireTofu(t)
 		res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            "test-template-in-lists",
 			Stack:                stack,
@@ -454,6 +457,7 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
 
 	// Test template in maps
 	t.Run("template in maps", func(t *testing.T) {
+		tests.RequireTofu(t)
 		res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            "test-template-in-maps",
 			Stack:                stack,

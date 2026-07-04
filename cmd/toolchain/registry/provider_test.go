@@ -10,7 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
-	toolchainregistry "github.com/cloudposse/atmos/toolchain/registry"
+	toolchainregistry "github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
 // TestRegistryCommandProvider tests RegistryCommandProvider implementation.

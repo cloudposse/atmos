@@ -1,0 +1,16 @@
+# Staging stack - sets "staging" as the default identity.
+vars:
+  stage: staging
+
+auth:
+  identities:
+    staging:
+      default: true
+
+components:
+  terraform:
+    network:
+      metadata:
+        component: network
+      vars:
+        name: staging-network

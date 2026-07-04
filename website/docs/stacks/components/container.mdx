@@ -1,0 +1,155 @@
+---
+title: Container Components
+sidebar_position: 2
+sidebar_label: container
+sidebar_class_name: command
+description: Configure Container components in your Atmos stack manifests to build images and run persistent, stack-scoped container services.
+id: container
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Container components are stack-scoped, persistent containers. One component is one service. Atmos owns the image artifact (build/push/pull) and an optional long-running named container lifecycle, discovered by labels derived from the canonical component instance address — not from local state files. You declare them with the same stack-based configuration used for Terraform, Helmfile, Packer, and Ansible.
+</Intro>
+
+For the conceptual overview and command walkthrough, see [Using Containers](/components/container). This page is the stack-manifest configuration reference.
+
+## Available Configuration Sections
+
+Container components are declared under `components.container` and use **first-class sections** (siblings of `metadata` — **not** nested under `vars`):
+
+<dl>
+  <dt>`image`</dt>
+  <dd>The image reference to run (and the default push/pull target). May be set directly or produced by `build`.</dd>
+
+  <dt>`build`</dt>
+  <dd>How to build the image — `context`, `dockerfile`, `tags`, `build_args`, `target`, `no_cache`, `pull`, and more. Reuses the same shape as the [`type: container` workflow step](/workflows).</dd>
+
+  <dt>`run`</dt>
+  <dd>How to run the long-lived container — `command`, `ports`, `mounts`, `user`, `run_args`, `pull`, `restart`, and `healthcheck`.</dd>
+
+  <dt>[`env`](/stacks/env)</dt>
+  <dd>Container application environment, resolved with [secrets](/cli/configuration/secrets). Injected into the running container — **not** read from `run`.</dd>
+
+  <dt>`composition`</dt>
+  <dd>Optional [composition](/components/container#compositions) membership — groups this service into a larger system.</dd>
+
+  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
+  <dd>Component behavior and inheritance (e.g. `metadata.type: abstract` for catalog base components).</dd>
+
+  <dt>[`hooks`](/stacks/hooks)</dt>
+  <dd>Lifecycle event handlers.</dd>
+</dl>
+
+## Component Structure
+
+A typical container component configuration:
+
+```yaml
+components:
+  container:
+    api:
+      composition: storefront            # composition membership (optional)
+      image: localhost:5001/api:latest
+      build:                             # build the image
+        context: app
+        dockerfile: Dockerfile
+        tags:
+          - localhost:5001/api:latest
+      run:                               # run configuration
+        command: ./api
+        ports:
+          - host: 8080
+            container: 80
+        mounts:
+          - source: .
+            target: /workspace
+        restart:
+          policy: unless-stopped
+        healthcheck:
+          test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+          interval: 30s
+          retries: 3
+      env:                               # component env (resolved with secrets)
+        PORT: "8080"
+```
+
+Inheritance (`metadata.inherits`), catalogs, mixins, and deep-merge work exactly like other component kinds — define an abstract base component with shared `run`/`build` defaults and inherit it.
+
+## Component-Type Defaults
+
+Define defaults for all container components:
+
+```yaml
+# Apply to all container components
+container:
+  run:
+    restart:
+      policy: unless-stopped
+
+# Individual components
+components:
+  container:
+    api:
+      image: localhost:5001/api:latest
+```
+
+## Complete Example
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+import:
+  - catalog/container/_defaults
+
+vars:
+  stage: dev
+
+components:
+  container:
+    api:
+      composition: storefront
+      build:
+        context: app
+        dockerfile: Dockerfile
+        tags:
+          - localhost:5001/api:latest
+      run:
+        ports:
+          - host: 8080
+            container: 80
+      env:
+        PORT: "8080"
+
+    worker:
+      image: localhost:5001/worker:latest
+      run:
+        command: ./worker
+      env:
+        QUEUE_URL: "redis://localhost:6379"
+```
+</File>
+
+## Running Container Commands
+
+Atmos provides commands that wrap the container lifecycle:
+
+```bash
+atmos container build api -s dev      # build the image from `build`
+atmos container up api -s dev         # create/start the long-running container (build-on-missing)
+atmos container list                  # all container components + running state
+atmos container ps api -s dev         # show running state
+atmos container logs api -s dev       # stream logs
+atmos container exec api -s dev -- sh # run a command inside the container
+atmos container down api -s dev       # stop + rm
+```
+
+Each instance is named and labeled from its canonical address `<stack>/container/<component>` (e.g., `atmos-dev-container-api`), so lifecycle commands discover it by label — there are no local state files.
+
+## Related
+
+- [Using Containers](/components/container) — Conceptual overview and command walkthrough
+- [atmos container](/cli/commands/container/usage) — Command reference
+- [Emulator Components](/stacks/components/emulator) — Built on the same container lifecycle
+- [Component Types Overview](/stacks/components)
+- [Configure Environment](/stacks/env)

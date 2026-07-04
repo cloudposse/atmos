@@ -11,6 +11,7 @@ import (
 	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
@@ -49,7 +50,7 @@ func trimRenderedMarkdown(md string, isTerminal bool) string {
 }
 
 // printfMarkdownTo prints a message in Markdown format to the specified writer.
-func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
+func printfMarkdownTo(w io.Writer, disableWordWrap bool, format string, a ...interface{}) {
 	if render == nil {
 		_, err := fmt.Fprintf(w, format, a...)
 		errUtils.CheckErrorAndPrint(err, "", "")
@@ -58,7 +59,11 @@ func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
 	message := fmt.Sprintf(format, a...)
 	var md string
 	var renderErr error
-	md, renderErr = render.Render(message)
+	if disableWordWrap {
+		md, renderErr = render.RenderWithoutWordWrap(message)
+	} else {
+		md, renderErr = render.Render(message)
+	}
 	if renderErr != nil {
 		errUtils.CheckErrorPrintAndExit(renderErr, "", "")
 	}
@@ -80,7 +85,7 @@ func printfMarkdownTo(w io.Writer, format string, a ...interface{}) {
 func PrintfMarkdown(format string, a ...interface{}) {
 	defer perf.Track(nil, "utils.PrintfMarkdown")()
 
-	printfMarkdownTo(os.Stdout, format, a...)
+	printfMarkdownTo(ioLayer.MaskWriter(os.Stdout), false, format, a...)
 }
 
 // PrintfMarkdownToTUI prints a message in Markdown format to stderr.
@@ -89,7 +94,15 @@ func PrintfMarkdown(format string, a ...interface{}) {
 func PrintfMarkdownToTUI(format string, a ...interface{}) {
 	defer perf.Track(nil, "utils.PrintfMarkdownToTUI")()
 
-	printfMarkdownTo(os.Stderr, format, a...)
+	printfMarkdownTo(ioLayer.MaskWriter(os.Stderr), false, format, a...)
+}
+
+// PrintfMarkdownToTUIWithoutWordWrap prints a markdown message to stderr without
+// wrapping long lines. This is intended for snapshot-stable one-line notices.
+func PrintfMarkdownToTUIWithoutWordWrap(format string, a ...interface{}) {
+	defer perf.Track(nil, "utils.PrintfMarkdownToTUIWithoutWordWrap")()
+
+	printfMarkdownTo(ioLayer.MaskWriter(os.Stderr), true, format, a...)
 }
 
 // InitializeMarkdown initializes a new Markdown renderer.

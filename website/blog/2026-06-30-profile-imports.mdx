@@ -1,0 +1,44 @@
+---
+slug: profile-imports
+title: "Profiles Can Now Import Shared Configuration"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+Auth profiles and team defaults are often managed centrally, but workload or app repositories still need to use them. Until now, that usually meant copying profile YAML into each repository and keeping those copies in sync by hand.
+
+<!--truncate-->
+
+## The Problem
+
+Many teams keep authentication, identity, terminal, and CI defaults in a central infrastructure repository. That works well for governance, but it creates friction for workload or app repositories: every repo needs the same profile definitions, and every update has to be copied everywhere.
+
+That duplication is especially painful for auth profiles. The central platform team owns the provider and identity shape, while each app repository only wants to consume the right profile and add a small local override.
+
+## The Change
+
+Profile config files can now use `import:`, including remote imports. That means a profile in a workload or app repository can pull shared configuration from a central repository and then override only the local pieces it owns.
+
+```yaml title="profiles/developer/atmos.yaml"
+import:
+  - "github.com/my-org/platform-atmos//profiles/shared-auth.yaml?ref=v1.4.0"
+
+logs:
+  level: Debug
+
+settings:
+  terminal:
+    max_width: 140
+```
+
+The imported file provides the baseline. Values in the local profile are merged over it, so the workload repository can keep its local preferences without forking the shared auth profile.
+
+## Why It Matters
+
+- **Centralize auth profiles.** Platform teams can publish shared provider and identity configuration once.
+- **Keep app repos small.** Workload or app repositories can consume the shared profile instead of duplicating it.
+- **Override locally when needed.** Imported profile configuration is still just layered Atmos configuration, so local profile values win.
+
+## Get Involved
+
+See the [profiles documentation](/cli/configuration/profiles) for profile discovery, activation, and merge behavior.

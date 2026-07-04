@@ -13,6 +13,7 @@ func ProcessYAMLConfigFiles(
 	terraformComponentsBasePath string,
 	helmfileComponentsBasePath string,
 	packerComponentsBasePath string,
+	ansibleComponentsBasePath string,
 	filePaths []string,
 	processStackDeps bool,
 	processComponentDeps bool,
@@ -31,6 +32,7 @@ func ProcessYAMLConfigFiles(
 		terraformComponentsBasePath,
 		helmfileComponentsBasePath,
 		packerComponentsBasePath,
+		ansibleComponentsBasePath,
 		filePaths,
 		processStackDeps,
 		processComponentDeps,
@@ -80,40 +82,5 @@ func ProcessYAMLConfigFile(
 		parentHelmfileOverridesInline,
 		parentHelmfileOverridesImports,
 		atmosManifestJsonSchemaFilePath,
-	)
-}
-
-// ProcessStackConfig takes a stack manifest, deep-merges all variables, settings, environments and backends,
-// and returns the final stack configuration for all Terraform and helmfile components.
-func ProcessStackConfig(
-	atmosConfig *schema.AtmosConfiguration,
-	stacksBasePath string,
-	terraformComponentsBasePath string,
-	helmfileComponentsBasePath string,
-	stack string,
-	config map[string]any,
-	processStackDeps bool,
-	processComponentDeps bool,
-	componentTypeFilter string,
-	componentStackMap map[string]map[string][]string,
-	importsConfig map[string]map[string]any,
-	checkBaseComponentExists bool,
-) (map[string]any, error) {
-	defer perf.Track(atmosConfig, "stack.ProcessStackConfig")()
-
-	return exec.ProcessStackConfig(
-		atmosConfig,
-		stacksBasePath,
-		terraformComponentsBasePath,
-		helmfileComponentsBasePath,
-		"",
-		stack,
-		config,
-		processStackDeps,
-		processComponentDeps,
-		componentTypeFilter,
-		componentStackMap,
-		importsConfig,
-		checkBaseComponentExists,
 	)
 }

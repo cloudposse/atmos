@@ -2,6 +2,9 @@
 
 **Error:** unknown flag --non-existent for command atmos version
 
-## Hints
+## Usage
+
+ atmos version [flags]
+ atmos version [sub-command] [flags]
 
 💡 Run atmos version --help for usage

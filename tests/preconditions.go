@@ -8,7 +8,10 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,6 +33,22 @@ const (
 	// EnvAWSProfile is the environment variable for AWS profile.
 	envAWSProfile = "AWS_PROFILE"
 )
+
+var testToolPathLocks sync.Map
+
+type cachedTestTool struct {
+	Repo    string
+	Version string
+	Binary  string
+}
+
+var cachedTestTools = []cachedTestTool{
+	{Repo: "opentofu/opentofu", Version: "1.12.2", Binary: "tofu"},
+	{Repo: "hashicorp/terraform", Version: "1.15.6", Binary: "terraform"},
+	{Repo: "hashicorp/packer", Version: "1.14.2", Binary: "packer"},
+	{Repo: "helmfile/helmfile", Version: "v1.1.0", Binary: "helmfile"},
+	{Repo: "helm/helm", Version: "v3.19.2", Binary: "helm"},
+}
 
 // ShouldCheckPreconditions returns true if precondition checks should be performed.
 // Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to bypass all precondition checks.
@@ -322,6 +341,8 @@ func RequireNetworkAccess(t *testing.T, url string) {
 func RequireExecutable(t *testing.T, name string, purpose string) {
 	t.Helper()
 
+	prependCachedTestTool(name)
+
 	if !ShouldCheckPreconditions() {
 		return
 	}
@@ -331,6 +352,42 @@ func RequireExecutable(t *testing.T, name string, purpose string) {
 		t.Skipf("'%s' not found in PATH: required for %s. Install the tool or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true",
 			name, purpose)
 	}
+}
+
+func prependCachedTestTool(binary string) {
+	tool, ok := cachedTestToolForBinary(binary)
+	if !ok {
+		return
+	}
+
+	lockValue, _ := testToolPathLocks.LoadOrStore(binary, &sync.Once{})
+	lockValue.(*sync.Once).Do(func() {
+		cacheDir, err := os.UserCacheDir()
+		if err != nil {
+			return
+		}
+		binDir := filepath.Join(cacheDir, "atmos", "test-toolchain", "bin", filepath.FromSlash(tool.Repo), tool.Version)
+		binaryPath := filepath.Join(binDir, tool.Binary)
+		if _, err := os.Stat(binaryPath); err != nil {
+			return
+		}
+
+		path := os.Getenv("PATH")
+		if path == "" {
+			os.Setenv("PATH", binDir)
+			return
+		}
+		os.Setenv("PATH", binDir+string(os.PathListSeparator)+path)
+	})
+}
+
+func cachedTestToolForBinary(binary string) (cachedTestTool, bool) {
+	for _, tool := range cachedTestTools {
+		if tool.Binary == binary {
+			return tool, true
+		}
+	}
+	return cachedTestTool{}, false
 }
 
 // RequireEnvVar checks if an environment variable is set.
@@ -383,6 +440,30 @@ func RequireTerraform(t *testing.T) {
 	RequireExecutable(t, "terraform", "terraform operations")
 }
 
+// RequireTofu checks if tofu (OpenTofu) is installed and available in PATH.
+// The CLI test suite standardizes on OpenTofu (see ATMOS_COMPONENTS_TERRAFORM_COMMAND
+// in cli_test.go), so terraform-invoking tests gate on this rather than terraform.
+func RequireTofu(t *testing.T) {
+	t.Helper()
+	RequireExecutable(t, "tofu", "OpenTofu operations")
+}
+
+// RequireTerraformOrTofu checks if terraform or tofu is installed and available in PATH.
+// Use this for tests whose fixture atmos.yaml sets command: tofu, or that work with either binary.
+func RequireTerraformOrTofu(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	_, terraformErr := exec.LookPath("terraform")
+	_, tofuErr := exec.LookPath("tofu")
+	if terraformErr != nil && tofuErr != nil {
+		t.Skipf("Neither 'terraform' nor 'tofu' found in PATH: required for terraform operations. Install one or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+}
+
 // RequirePacker checks if packer is installed and available in PATH.
 // This is a convenience function that uses RequireExecutable specifically for packer.
 func RequirePacker(t *testing.T) {
@@ -415,6 +496,26 @@ func RequireOCIAuthentication(t *testing.T) {
 
 	if githubToken == "" {
 		t.Skipf("GitHub token not configured: required for GitHub API access (OCI images, cloning repos, avoiding rate limits). Set GITHUB_TOKEN or ATMOS_GITHUB_TOKEN environment variable, or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	// Token exists — probe ghcr.io to verify this specific token can actually pull images.
+	// A bot token may exist but not have access to the ghcr.io registry used by tests.
+	client := &http.Client{Timeout: httpTimeout}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://ghcr.io/v2/", nil)
+	if err != nil {
+		t.Logf("Warning: Could not create ghcr.io request: %v", err)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+githubToken)
+		resp, reqErr := client.Do(req) //nolint:gosec // URL is a hardcoded constant (ghcr.io), not user input.
+		if reqErr != nil {
+			t.Skipf("Cannot reach ghcr.io: %v. OCI registry access required. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to skip.", reqErr)
+		}
+		resp.Body.Close()
+		// 401 = unauthorized (wrong/expired token); 403 = forbidden (no read:packages scope).
+		// Both indicate the token cannot pull OCI images from ghcr.io.
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			t.Skipf("GitHub token exists but is not authorized for ghcr.io (HTTP %d). OCI integration test requires a token with 'read:packages' scope.", resp.StatusCode)
+		}
 	}
 
 	// Token exists, log that authentication is available
@@ -551,4 +652,29 @@ func RequirePodman(t *testing.T) {
 	}
 
 	t.Logf("Podman is available and working")
+}
+
+// terraformRegistryErrorSignatures are substrings emitted by Terraform/OpenTofu when a
+// provider install fails because of a transient registry problem (HTTP 429 rate limiting,
+// registry unreachable) rather than a defect in the code under test.
+var terraformRegistryErrorSignatures = []string{
+	"Failed to install provider",
+	"Failed to query available provider packages",
+	"could not query provider registry",
+	"Too Many Requests",
+}
+
+// SkipIfTerraformRegistryError skips the test when the captured Terraform/OpenTofu output
+// shows a transient provider-registry failure (for example, an HTTP 429 rate limit from
+// registry.terraform.io). These failures are environmental, not regressions, so the repo
+// treats them as skips, mirroring the Packer init network-failure handling. Pass the
+// captured command output (stdout/stderr) collected while running the Terraform subcommand.
+func SkipIfTerraformRegistryError(t *testing.T, output string) {
+	t.Helper()
+
+	for _, sig := range terraformRegistryErrorSignatures {
+		if strings.Contains(output, sig) {
+			t.Skipf("Skipping: transient Terraform provider registry error detected in output (%q)", sig)
+		}
+	}
 }

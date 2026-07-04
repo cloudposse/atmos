@@ -7,6 +7,9 @@ import (
 	"github.com/spf13/viper"
 )
 
+// DefaultThemeName is the default theme used when no theme is configured.
+const DefaultThemeName = "atmos"
+
 // StyleSet provides pre-configured lipgloss styles for common UI elements.
 type StyleSet struct {
 	// Text styles
@@ -370,7 +373,7 @@ func GetCurrentStyles() *StyleSet {
 		// Fall back to atmos theme if there's an error
 		registry, _ := NewRegistry()
 		if registry != nil {
-			defaultTheme := registry.GetOrDefault("atmos")
+			defaultTheme := registry.GetOrDefault(DefaultThemeName)
 			tmpScheme := GenerateColorScheme(defaultTheme)
 			scheme = &tmpScheme
 		}
@@ -444,8 +447,8 @@ func getActiveThemeName() string {
 		return theme
 	}
 
-	// Default to "atmos" theme
-	return "atmos"
+	// Default to atmos theme.
+	return DefaultThemeName
 }
 
 // Helper functions for getting theme-aware colors and styles
@@ -484,16 +487,6 @@ func GetInfoStyle() lipgloss.Style {
 		return lipgloss.NewStyle()
 	}
 	return styles.Info
-}
-
-// GetNoticeStyle returns the notice style from the current theme.
-// Notice style is used for neutral informational messages, typically in empty states.
-func GetNoticeStyle() lipgloss.Style {
-	styles := GetCurrentStyles()
-	if styles == nil {
-		return lipgloss.NewStyle()
-	}
-	return styles.Notice
 }
 
 // GetDebugStyle returns the debug style from the current theme.
@@ -572,4 +565,19 @@ func GetBorderColor() string {
 		return "#5F5FD7" // Default border color
 	}
 	return scheme.Border
+}
+
+// GetHeaderTextColor returns the table header text color from the current theme.
+func GetHeaderTextColor() string {
+	// Use cached color scheme if available.
+	if lastColorScheme != nil {
+		return lastColorScheme.HeaderText
+	}
+
+	// Fall back to loading from theme.
+	scheme, err := GetColorSchemeForTheme(getActiveThemeName())
+	if err != nil || scheme == nil {
+		return "#98e024" // Default green (Atmos theme)
+	}
+	return scheme.HeaderText
 }

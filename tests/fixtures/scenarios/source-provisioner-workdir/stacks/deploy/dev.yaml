@@ -7,6 +7,7 @@ import:
   # Terraform
   - catalog/source-only
   - catalog/source-with-workdir
+  - catalog/source-with-workdir-metadata-component
   - catalog/local-with-workdir
   # Helmfile
   - catalog/helmfile-source-with-workdir

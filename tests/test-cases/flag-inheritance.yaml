@@ -27,6 +27,7 @@ tests:
       - "plan"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -39,13 +40,14 @@ tests:
     enabled: true
     snapshot: true
     description: "Custom 'terraform provision' command should show --stack flag"
-    workdir: "../examples/quick-start-advanced"
+    workdir: "fixtures/scenarios/flag-inheritance"
     command: "atmos"
     args:
       - "terraform"
       - "provision"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -58,13 +60,14 @@ tests:
     enabled: true
     snapshot: true
     description: "Custom 'show component' command should show --stack flag"
-    workdir: "../examples/quick-start-advanced"
+    workdir: "fixtures/scenarios/flag-inheritance"
     command: "atmos"
     args:
       - "show"
       - "component"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -82,12 +85,13 @@ tests:
     enabled: true
     snapshot: true
     description: "Built-in terraform command should show --stack flag"
-    workdir: "../examples/quick-start-advanced"
+    workdir: "fixtures/scenarios/flag-inheritance"
     command: "atmos"
     args:
       - "terraform"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -106,6 +110,7 @@ tests:
       - "component"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -123,20 +128,20 @@ tests:
     enabled: true
     snapshot: true
     description: "Custom 'show component' command should read --stack flag value correctly"
-    workdir: "../examples/quick-start-advanced"
+    workdir: "fixtures/scenarios/flag-inheritance"
     command: "atmos"
     args:
       - "show"
       - "component"
-      - "vpc"
+      - "mock"
       - "-s"
-      - "plat-ue2-dev"
+      - "dev"
     expect:
-      exit_code: 1  # Expected to fail on backend.bucket, but flag reading works
+      exit_code: 0  # The custom command reads the --stack flag and renders the component config.
       stdout:
-        - "Atmos component from argument: vpc"
-        - "Atmos stack: plat-ue2-dev"
-        - "Terraform component: vpc"
+        - "Atmos component from argument: mock"
+        - "Atmos stack: dev"
+        - "Terraform component: mock"
 
   # ============================================
   # GROUP 4: Global Flags Still Work
@@ -163,11 +168,12 @@ tests:
     enabled: true
     snapshot: true
     description: "Global --help flag should work"
-    workdir: "../examples/quick-start-advanced"
+    workdir: "fixtures/scenarios/flag-inheritance"
     command: "atmos"
     args:
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "USAGE"
@@ -185,35 +191,39 @@ tests:
     enabled: true
     snapshot: true
     description: "Describe component should work with --stack flag"
-    workdir: "../examples/quick-start-advanced"
+    # Repointed off quick-start-advanced (which now uses runtime YAML functions needing a
+    # live emulator); the provenance fixture resolves fully offline.
+    workdir: "fixtures/scenarios/provenance"
     command: "atmos"
     args:
       - "describe"
       - "component"
-      - "vpc"
+      - "mock"
       - "-s"
-      - "plat-ue2-dev"
+      - "acme-dev-us-east-1"
       - "--format"
       - "yaml"
     expect:
       exit_code: 0
       stdout:
-        - "component: vpc"
+        - "component: mock"
         - "vars:"
-        - "tenant: plat"
+        - "tenant: acme"
 
   - name: describe component with provenance and stack
     enabled: true
     snapshot: true
     description: "Describe component with --provenance should work with --stack"
-    workdir: "../examples/quick-start-advanced"
+    # Repointed off quick-start-advanced (runtime YAML functions need a live emulator);
+    # the provenance fixture resolves fully offline and has multi-level imports.
+    workdir: "fixtures/scenarios/provenance"
     command: "atmos"
     args:
       - "describe"
       - "component"
-      - "vpc-flow-logs-bucket"
+      - "mock"
       - "-s"
-      - "plat-ue2-dev"
+      - "acme-dev-us-east-1"
       - "--provenance"
     expect:
       exit_code: 0
@@ -221,9 +231,6 @@ tests:
         - "# Provenance Legend:"
         - "vars:"
         - "enabled: true"
-      diff:
-        # Ignore lines with variable whitespace alignment in provenance comments
-        - "provisioned_by_user:.*#"
 
   # ============================================
   # GROUP 6: Custom Command with --verbose Flag
@@ -244,6 +251,7 @@ tests:
       - "info"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "verbose"
@@ -281,6 +289,12 @@ tests:
       stdout:
         - "Info: This is a basic message"
         - "Verbose: Additional details enabled"
+      diff:
+        # Ignore platform-specific quote escaping in debug output (Unix uses \" vs Windows uses /")
+        - 'DEBU  Executing command="echo.*"'
+        # GitHub token probing depends on whether the local/CI environment has gh auth.
+        - 'DEBU  GitHub CLI token lookup failed .*'
+        - 'DEBU  No GitHub token resolved; using anonymous .*'
 
   - name: deploy component help shows stack flag
     enabled: true
@@ -293,6 +307,7 @@ tests:
       - "component"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -327,8 +342,9 @@ tests:
   - name: list stacks works
     enabled: true
     snapshot: true
-    description: "List stacks should work in quick-start-advanced"
-    workdir: "../examples/quick-start-advanced"
+    description: "List stacks should work offline (provenance fixture)"
+    # Repointed off quick-start-advanced (runtime YAML functions need a live emulator).
+    workdir: "fixtures/scenarios/provenance"
     command: "atmos"
     args:
       - "list"
@@ -336,14 +352,14 @@ tests:
     expect:
       exit_code: 0
       stdout:
-        - "plat-ue2-dev"
-        - "plat-ue2-prod"
+        - "acme-dev-us-east-1"
 
   - name: list components works
     enabled: true
     snapshot: true
-    description: "List components should work in quick-start-advanced"
-    workdir: "../examples/quick-start-advanced"
+    description: "List components should work offline (provenance fixture)"
+    # Repointed off quick-start-advanced (runtime YAML functions need a live emulator).
+    workdir: "fixtures/scenarios/provenance"
     command: "atmos"
     args:
       - "list"
@@ -351,5 +367,4 @@ tests:
     expect:
       exit_code: 0
       stdout:
-        - "vpc"
-        - "vpc-flow-logs-bucket"
+        - "mock"

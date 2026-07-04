@@ -37,6 +37,7 @@ func autoProvisionBackend(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
+	_ *TerraformExecContext,
 ) error {
 	defer perf.Track(atmosConfig, "provisioner.autoProvisionBackend")()
 
@@ -101,7 +102,7 @@ func autoProvisionBackend(
 	// so any output during spinner execution would interleave and corrupt the display.
 	if result != nil {
 		for _, warning := range result.Warnings {
-			_ = ui.Warning(warning)
+			ui.Warning(warning)
 		}
 	}
 

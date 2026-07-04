@@ -1,0 +1,15 @@
+# Minimal scenario proving the OCI / Terraform registry emulator comes up and serves
+# the registry API via the emulator-component path: `atmos emulator up registry` (atmos
+# manages the container). Used by TestEmulatorRegistryLifecycle (opt-in,
+# runtime-gated).
+base_path: "./"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info

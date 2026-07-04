@@ -1815,4 +1815,4 @@ atmos profile validate ci
 - [XDG Base Directory Specification PRD](./xdg-base-directory-specification.md) - XDG support for user-global profiles
 - [Atmos Configuration Documentation](https://atmos.tools/cli/configuration)
 - [Viper Configuration Library](https://github.com/spf13/viper)
-- [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
+- [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/basedir-spec-latest.html)

@@ -14,6 +14,9 @@ const (
 	// Exec executes a shell command and returns the output.
 	Exec = "exec"
 
+	// Secret resolves a declared secret from its configured backend.
+	Secret = "secret"
+
 	// Store retrieves a value from a configured store.
 	Store = "store"
 
@@ -41,8 +44,41 @@ const (
 	// RepoRoot returns the git repository root path.
 	RepoRoot = "repo-root"
 
+	// GitRoot returns the git repository root path.
+	GitRoot = "git.root"
+
+	// GitSha returns the current Git HEAD commit SHA.
+	GitSha = "git.sha"
+
+	// GitBranch returns the current Git branch name.
+	GitBranch = "git.branch"
+
+	// GitRef returns the immutable Git ref used for source pinning.
+	GitRef = "git.ref"
+
+	// GitRepository returns the repository owner/name slug.
+	GitRepository = "git.repository"
+
+	// GitOwner returns the repository owner.
+	GitOwner = "git.owner"
+
+	// GitName returns the repository name.
+	GitName = "git.name"
+
+	// GitHost returns the repository host.
+	GitHost = "git.host"
+
+	// GitURL returns the repository URL.
+	GitURL = "git.url"
+
+	// Append appends list items during stack merging.
+	Append = "append"
+
 	// Cwd returns the current working directory.
 	Cwd = "cwd"
+
+	// Unset removes a value during configuration processing.
+	Unset = "unset"
 
 	// Random generates a random number.
 	Random = "random"
@@ -61,6 +97,12 @@ const (
 
 	// AwsRegion returns the AWS region.
 	AwsRegion = "aws.region"
+
+	// AwsOrganizationID returns the AWS Organization ID.
+	AwsOrganizationID = "aws.organization_id"
+
+	// Emulator resolves a value from a local emulator.
+	Emulator = "emulator"
 )
 
 // YAMLPrefix is the prefix used for YAML custom tags.
@@ -72,6 +114,7 @@ func All() []string {
 
 	return []string{
 		Exec,
+		Secret,
 		Store,
 		StoreGet,
 		Template,
@@ -81,19 +124,33 @@ func All() []string {
 		Include,
 		IncludeRaw,
 		RepoRoot,
+		GitRoot,
+		GitSha,
+		GitBranch,
+		GitRef,
+		GitRepository,
+		GitOwner,
+		GitName,
+		GitHost,
+		GitURL,
+		Append,
 		Cwd,
+		Unset,
 		Random,
 		Literal,
 		AwsAccountID,
 		AwsCallerIdentityArn,
 		AwsCallerIdentityUserID,
 		AwsRegion,
+		AwsOrganizationID,
+		Emulator,
 	}
 }
 
 // tagsMap provides O(1) lookup for tag names.
 var tagsMap = map[string]bool{
 	Exec:                    true,
+	Secret:                  true,
 	Store:                   true,
 	StoreGet:                true,
 	Template:                true,
@@ -103,13 +160,26 @@ var tagsMap = map[string]bool{
 	Include:                 true,
 	IncludeRaw:              true,
 	RepoRoot:                true,
+	GitRoot:                 true,
+	GitSha:                  true,
+	GitBranch:               true,
+	GitRef:                  true,
+	GitRepository:           true,
+	GitOwner:                true,
+	GitName:                 true,
+	GitHost:                 true,
+	GitURL:                  true,
+	Append:                  true,
 	Cwd:                     true,
+	Unset:                   true,
 	Random:                  true,
 	Literal:                 true,
 	AwsAccountID:            true,
 	AwsCallerIdentityArn:    true,
 	AwsCallerIdentityUserID: true,
 	AwsRegion:               true,
+	AwsOrganizationID:       true,
+	Emulator:                true,
 }
 
 // IsValid checks if a tag name is registered. The name should not include the YAML prefix.

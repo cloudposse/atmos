@@ -9,7 +9,10 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
@@ -67,13 +70,20 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 
 	// Check if vendoring is needed.
 	if !params.Force && !needsVendoring(targetDir) {
-		_ = ui.Info(fmt.Sprintf("Component already exists at %s (use --force to re-vendor)", targetDir))
+		ui.Info(fmt.Sprintf("Component already exists at `%s` (use --force to re-vendor)", targetDir))
+		restoreInstanceLock(targetDir, params.ComponentConfig)
 		return nil
 	}
 
+	// Build component identifier with optional version.
+	componentID := params.Component
+	if sourceSpec.Version != "" {
+		componentID = fmt.Sprintf("%s@%s", params.Component, sourceSpec.Version)
+	}
+
 	// Vendor the source with spinner feedback.
-	progressMsg := fmt.Sprintf("Vendoring %s from %s", params.Component, sourceSpec.Uri)
-	completedMsg := fmt.Sprintf("Vendored %s to %s", params.Component, targetDir)
+	progressMsg := fmt.Sprintf("Vendoring `%s` from `%s`", componentID, sourceSpec.Uri)
+	completedMsg := fmt.Sprintf("Vendored `%s` to `%s`", componentID, targetDir)
 	err = spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
 		return VendorSource(ctx, params.AtmosConfig, sourceSpec, targetDir)
 	})
@@ -89,7 +99,18 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 			Err()
 	}
 
+	restoreInstanceLock(targetDir, params.ComponentConfig)
 	return nil
+}
+
+// restoreInstanceLock seeds the vendored component dir's canonical .terraform.lock.hcl from a
+// committed per-instance lock (.<stack>-<component>.terraform.lock.hcl), if present, so init
+// honors the instance's pinned providers; the after.terraform.init hook completes and
+// re-persists it. Best-effort: a restore failure is logged, not fatal.
+func restoreInstanceLock(targetDir string, componentConfig map[string]any) {
+	if err := provisioner.RestorePerInstanceLock(targetDir, targetDir, componentConfig); err != nil {
+		log.Debug("Failed to restore per-instance provider lock", "error", err)
+	}
 }
 
 // needsVendoring checks if the target directory needs vendoring.
@@ -133,7 +154,7 @@ func DetermineTargetDirectory(
 	}
 
 	// Check if workdir is enabled - if so, use workdir path.
-	if isWorkdirEnabled(componentConfig) {
+	if workdir.IsWorkdirEnabled(componentConfig) {
 		return buildWorkdirPath(atmosConfig, componentType, component, componentConfig)
 	}
 
@@ -188,6 +209,10 @@ func getResolvedAbsPath(atmosConfig *schema.AtmosConfiguration, componentType st
 		return atmosConfig.HelmfileDirAbsolutePath
 	case "packer":
 		return atmosConfig.PackerDirAbsolutePath
+	case "kubernetes":
+		return atmosConfig.KubernetesDirAbsolutePath
+	case "helm":
+		return atmosConfig.HelmDirAbsolutePath
 	default:
 		return ""
 	}
@@ -229,6 +254,8 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentType 
 		return atmosConfig.Components.Helmfile.BasePath
 	case "packer":
 		return atmosConfig.Components.Packer.BasePath
+	case "kubernetes":
+		return atmosConfig.Components.Kubernetes.BasePath
 	default:
 		return ""
 	}
@@ -255,7 +282,5 @@ func buildWorkdirPath(
 		basePath = "."
 	}
 
-	// Build workdir path: .workdir/<componentType>/<stack>-<component>/
-	workdirName := fmt.Sprintf("%s-%s", stack, component)
-	return filepath.Join(basePath, WorkdirPath, componentType, workdirName), nil
+	return workdir.BuildPath(basePath, componentType, component, stack, componentConfig), nil
 }

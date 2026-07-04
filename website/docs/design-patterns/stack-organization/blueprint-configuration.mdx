@@ -1,0 +1,272 @@
+---
+title: Blueprint Configuration
+sidebar_position: 14
+sidebar_label: Blueprint Configuration
+description: Blueprint Configuration Atmos Design Pattern
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+The **Blueprint Configuration** pattern creates reusable deployment templates that bundle multiple components with sensible defaults. Top-level stacks import a blueprint and customize only what differs per deployment.
+</Intro>
+
+## What Is a Blueprint?
+
+A **blueprint** is a stack manifest that bundles multiple components into a reusable deployment template. It sits above catalogs and archetypes in the abstraction hierarchy:
+
+- A **[catalog](/design-patterns/component-catalog)** defines defaults for a single component (e.g., `catalog/vpc/defaults.yaml`)
+- An **archetype** is a pre-configured variant of a single component for a specific use case (e.g., `catalog/s3-bucket/logging.yaml`), typically using [`metadata.inherits`](/howto/inheritance)
+- A **blueprint** composes multiple components together into a complete deployment type (e.g., networking + compute + storage for a multi-tenant platform)
+
+Catalogs and archetypes answer "how should this component be configured?" Blueprints answer "what components make up this type of deployment, and what are the sensible defaults?"
+
+## Use-cases
+
+Use the **Blueprint Configuration** pattern when:
+
+- You manage many deployments of the same architecture (e.g., multi-tenant, multi-region)
+
+- Each deployment follows a common pattern but needs deployment-specific values (CIDRs, instance sizes, etc.)
+
+- You want to prevent drift between deployments by sharing a single source of truth
+
+- Different deployment types have different component compositions (e.g., multi-tenant vs single-tenant)
+
+## Benefits
+
+- **One blueprint per deployment type** — changes propagate to all deployments automatically
+
+- **Top-level stacks are minimal** — just an import and deployment-specific values
+
+- **Composable** — blueprints import layers, layers import component defaults
+
+- **No `overrides` needed** — plain `vars` at the same scope level handles customization
+
+## Example
+
+The following is one opinionated implementation using dedicated `layers/` and `blueprints/` directories. Your project may organize these differently — what matters is the pattern of composing component catalogs into a reusable template that deployment stacks import.
+
+### Directory Structure
+
+```console
+   ├── stacks
+   │   ├── catalog              # Component defaults
+   │   │   ├── vpc
+   │   │   │   └── defaults.yaml
+   │   │   ├── eks
+   │   │   │   └── defaults.yaml
+   │   │   └── rds
+   │   │       └── defaults.yaml
+   │   ├── layers               # Infrastructure layers
+   │   │   ├── networking.yaml
+   │   │   ├── compute.yaml
+   │   │   └── storage.yaml
+   │   ├── blueprints           # Deployment type templates
+   │   │   ├── multi-tenant.yaml
+   │   │   └── single-tenant.yaml
+   │   └── deploy               # One file per deployment
+   │       ├── mt-prod-us.yaml
+   │       ├── mt-prod-eu.yaml
+   │       └── st-prod-us-customer1.yaml
+   │
+   └── components
+       └── terraform
+           ├── vpc
+           ├── eks
+           └── rds
+```
+
+### Component Defaults (Catalog)
+
+Component defaults define the baseline configuration for each Terraform component:
+
+<File title="stacks/catalog/vpc/defaults.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      vars:
+        enable_dns_hostnames: true
+        enable_dns_support: true
+        enable_nat_gateway: true
+```
+</File>
+
+<File title="stacks/catalog/rds/defaults.yaml">
+```yaml
+components:
+  terraform:
+    rds:
+      metadata:
+        component: rds
+      vars:
+        engine: postgres
+        engine_version: "15"
+        backup_retention_period: 7
+```
+</File>
+
+### Layers
+
+Layers group related component defaults by infrastructure function:
+
+<File title="stacks/layers/networking.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+```
+</File>
+
+<File title="stacks/layers/storage.yaml">
+```yaml
+import:
+  - catalog/rds/defaults
+```
+</File>
+
+### Blueprints
+
+Blueprints import layers and define configurable defaults. The key is to define defaults at the **global** `vars` level so that deployment stacks can easily override them:
+
+<File title="stacks/blueprints/multi-tenant.yaml">
+```yaml
+import:
+  - layers/networking
+  - layers/compute
+  - layers/storage
+
+# Configurable defaults at the global level
+vars:
+  tenant_model: multi-tenant
+  cidr_block: "10.0.0.0/16"
+  rds_instance_type: "db.r5.large"
+  eks_node_instance_type: "t3.large"
+  eks_node_count: 3
+```
+</File>
+
+<File title="stacks/blueprints/single-tenant.yaml">
+```yaml
+import:
+  - layers/networking
+  - layers/compute
+  - layers/storage
+
+# Single-tenant gets a smaller footprint by default
+vars:
+  tenant_model: single-tenant
+  cidr_block: "10.0.0.0/24"
+  rds_instance_type: "db.t3.medium"
+  eks_node_instance_type: "t3.medium"
+  eks_node_count: 2
+```
+</File>
+
+### Deployment Stacks
+
+Each deployment imports its blueprint and overrides only what's specific to that deployment:
+
+<File title="stacks/deploy/mt-prod-us.yaml">
+```yaml
+import:
+  - blueprints/multi-tenant
+
+# Deployment-specific values override blueprint defaults
+vars:
+  stage: prod
+  region: us-east-1
+  cidr_block: "172.16.0.0/16"
+  rds_instance_type: "db.r5.12xlarge"
+```
+</File>
+
+<File title="stacks/deploy/mt-prod-eu.yaml">
+```yaml
+import:
+  - blueprints/multi-tenant
+
+vars:
+  stage: prod
+  region: eu-west-1
+  cidr_block: "172.17.0.0/16"
+  # Uses blueprint default for rds_instance_type
+```
+</File>
+
+<File title="stacks/deploy/st-prod-us-customer1.yaml">
+```yaml
+import:
+  - blueprints/single-tenant
+
+vars:
+  stage: prod
+  region: us-east-1
+  tenant: customer1
+  cidr_block: "10.100.0.0/24"
+```
+</File>
+
+This works because both the blueprint and the deployment stack define `vars` at the **same scope level** (global). The importing file's values override the imported file's values.
+
+## Why You Don't Need `overrides`
+
+The [`overrides`](/stacks/overrides) section exists for a different problem: **file-scoped variable application**. When multiple manifests (e.g., team A and team B) are imported into the same top-level stack, `overrides` prevents one team's settings from leaking into the other team's components.
+
+In the blueprint pattern, each deployment stack imports a single blueprint. There's no competing manifest to leak into, so `overrides` adds no value. Plain `vars` at the same scope level is all you need.
+
+## The Scope Trap
+
+If your blueprint defines defaults at the **component** level instead of the global level, you must override at the component level too.
+
+<File title="Blueprint with component-level defaults">
+```yaml
+# If the blueprint puts cidr_block HERE (component level)...
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+<File title="Deployment stack (wrong way)">
+```yaml
+import:
+  - blueprints/multi-tenant
+
+# ...setting it HERE (global level) won't override it
+vars:
+  cidr_block: "172.16.0.0/16"  # This loses! Component level beats global level.
+```
+</File>
+
+<File title="Deployment stack (right way)">
+```yaml
+import:
+  - blueprints/multi-tenant
+
+# Override at the SAME level
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "172.16.0.0/16"  # This wins
+```
+</File>
+
+## Related Patterns
+
+- [Layered Stack Configuration](/design-patterns/stack-organization/layered-stack-configuration) — Organize components into infrastructure layers
+- [Component Catalog](/design-patterns/component-catalog) — Define reusable component defaults
+- [Defaults Pattern](/design-patterns/stack-organization/defaults-pattern) — Share common configuration across stacks
+
+## References
+
+- [Stack Imports](/stacks/imports) — Import syntax and resolution
+- [Overrides](/stacks/overrides) — File-scoped variable application

@@ -10,7 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	toolchainpkg "github.com/cloudposse/atmos/toolchain"
+	toolchainpkg "github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 const (
@@ -90,7 +90,10 @@ func init() {
 		flags.WithStringFlag(flagGitHubToken, "", "", "GitHub token for authenticated requests"),
 		flags.WithStringFlag(flagToolVersions, "", ".tool-versions", "Path to tool-versions file"),
 		flags.WithStringFlag(flagToolchainPath, "", ".tools", "Directory to store installed tools"),
-		flags.WithEnvVars(flagGitHubToken, "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"),
+		// Prefer the Atmos Pro-brokered token, then ATMOS_GITHUB_TOKEN, then GITHUB_TOKEN.
+		// This matches the go-getter token injector and pkg/http GetGitHubTokenFromEnv so
+		// toolchain installs use the same token as every other GitHub-talking path.
+		flags.WithEnvVars(flagGitHubToken, "ATMOS_PRO_GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"),
 		flags.WithEnvVars(flagToolVersions, "ATMOS_TOOL_VERSIONS"),
 		flags.WithEnvVars(flagToolchainPath, "ATMOS_TOOLCHAIN_PATH"),
 	)

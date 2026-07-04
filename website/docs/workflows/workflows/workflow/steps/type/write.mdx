@@ -1,0 +1,35 @@
+---
+title: write
+sidebar_label: write
+slug: /workflows/steps/type/write
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `write` step type opens a multi-line text editor prompt, giving your custom commands and workflows a place to collect longer free-form input such as release notes or commit messages.
+</Intro>
+
+```yaml
+steps:
+  - name: notes
+    type: write
+    prompt: Release notes
+    placeholder: Summarize the change
+    height: 8
+```
+
+## Fields
+
+<dl>
+  <dt>`prompt`</dt>
+  <dd>Required. Prompt text shown to the user.</dd>
+
+  <dt>`placeholder`</dt>
+  <dd>Optional placeholder text.</dd>
+
+  <dt>`height`</dt>
+  <dd>Optional editor height in lines.</dd>
+</dl>
+
+Interactive steps require a TTY. Reference the text later with `{{ .steps.notes.value }}`.

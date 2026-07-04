@@ -1,0 +1,23 @@
+components:
+  terraform:
+    api:
+      metadata:
+        component: api
+      secrets:
+        vars:
+          DATADOG_API_KEY:
+            description: "Datadog API key for monitoring"
+            store: op
+            # A literal 1Password secret reference (op://vault/item/field).
+            reference: "op://Shared/Datadog/api_key"
+            required: true
+          DB_PASSWORD:
+            description: "Per-stack database password"
+            store: op
+            # Templated reference: {{ .atmos_stack }} / {{ .atmos_component }} are in scope,
+            # so each stack resolves a different 1Password item.
+            reference: "op://{{ .atmos_stack }}/postgres/password"
+      vars:
+        # Resolved at runtime via the 1Password-backed !secret function.
+        datadog_api_key: !secret DATADOG_API_KEY
+        db_password: !secret DB_PASSWORD
