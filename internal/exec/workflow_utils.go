@@ -709,16 +709,18 @@ func ExecuteWorkflow(
 					})
 				default:
 					err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
-						DryRun:     dryRun,
-						FinalStack: finalStack,
+						DryRun:      dryRun,
+						FinalStack:  finalStack,
+						AtmosConfig: &atmosConfig,
 					})
 				}
 				break
 			}
 			if err == nil {
 				err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
-					DryRun:     dryRun,
-					FinalStack: finalStack,
+					DryRun:      dryRun,
+					FinalStack:  finalStack,
+					AtmosConfig: &atmosConfig,
 				})
 			}
 		}
@@ -772,8 +774,9 @@ func workflowConditionContext() schema.ConditionContext {
 var stepExecutorState *stepPkg.StepExecutor
 
 type extendedStepOptions struct {
-	DryRun     bool
-	FinalStack string
+	DryRun      bool
+	FinalStack  string
+	AtmosConfig *schema.AtmosConfiguration
 }
 
 // executeExtendedStep runs an extended step type (input, confirm, choose, etc.).
@@ -785,6 +788,7 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 
 	// Set workflow context for output mode inheritance.
 	stepExecutorState.SetWorkflow(workflow)
+	stepExecutorState.SetAtmosConfig(opts.AtmosConfig)
 
 	// Add environment variables to the executor.
 	for _, env := range envVars {

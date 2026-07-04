@@ -10,6 +10,7 @@ import (
 
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -29,6 +30,7 @@ type Variables struct {
 	Env map[string]string
 	// Flags contains workflow command-line flags exposed to step templates.
 	Flags            map[string]string
+	AtmosConfig      *schema.AtmosConfiguration
 	templateRoots    map[string]any
 	templateRenderer TemplateRenderer
 	templatePasses   int
@@ -174,6 +176,14 @@ func (v *Variables) SetFlag(key, value string) {
 		v.Flags = make(map[string]string)
 	}
 	v.Flags[key] = value
+}
+
+// SetAtmosConfig stores the active Atmos configuration for step handlers that
+// need to respect process-level settings such as native CI summary controls.
+func (v *Variables) SetAtmosConfig(config *schema.AtmosConfiguration) {
+	defer perf.Track(nil, "step.Variables.SetAtmosConfig")()
+
+	v.AtmosConfig = config
 }
 
 // SetTemplateData sets extra root values exposed during template resolution.
