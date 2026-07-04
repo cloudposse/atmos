@@ -1,3 +1,6 @@
+export const DEFAULT_MAX_CAST_SPEED = 0.6;
+export const MIN_CAST_SPEED = 0.1;
+
 export function parseCast(text) {
   const rows = text.trim().split("\n");
   let header;
@@ -28,6 +31,17 @@ export function parseCast(text) {
     return parsed;
   }, []);
   return { header, events };
+}
+
+export function resolvePlaybackSpeed(
+  speed = DEFAULT_MAX_CAST_SPEED,
+  maxScrollRate = DEFAULT_MAX_CAST_SPEED,
+) {
+  const requestedSpeed = Number.isFinite(speed) ? speed : DEFAULT_MAX_CAST_SPEED;
+  const maxSpeed = Number.isFinite(maxScrollRate)
+    ? maxScrollRate
+    : DEFAULT_MAX_CAST_SPEED;
+  return Math.max(MIN_CAST_SPEED, Math.min(requestedSpeed, maxSpeed));
 }
 
 export function applyIdleSkip(events, maxGap) {

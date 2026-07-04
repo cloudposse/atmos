@@ -22,7 +22,16 @@ commands:
           cast: "../../website/static/casts/examples/demo-context/name-template.cast"
         steps:
           - type: simulate
-            text: "# the template produces these stack names"
+            text: "# context values come from defaults and mixins"
+          - type: simulate
+            text: &context_cmd atmos describe component demo -s acme-west-dev --query .providers.context.values
+          - type: shell
+            name: context-values
+            duration: 450ms
+            interval: 750ms
+            command: *context_cmd
+          - type: simulate
+            text: "# Atmos turns those values into stack names"
           - type: simulate
             text: &list_stacks_cmd atmos list stacks
           - type: shell
@@ -31,16 +40,7 @@ commands:
             interval: 750ms
             command: *list_stacks_cmd
           - type: simulate
-            text: "# the source template combines provider context values"
-          - type: simulate
-            text: &describe_config_cmd atmos describe config --format=yaml --query .stacks.name_template
-          - type: shell
-            name: describe-config
-            duration: 450ms
-            interval: 750ms
-            command: *describe_config_cmd
-          - type: simulate
-            text: "# inspect the resolved component in one of them"
+            text: "# the same context resolves component variables"
           - type: simulate
             text: &describe_component_cmd atmos describe component demo -s acme-west-dev --query .vars
           - type: shell
@@ -65,16 +65,19 @@ commands:
           plain = strip_ansi(text)
           assert_no_experimental(text)
           assert_body_color(text)
-          name_template = chr(123) + chr(123) + ".providers.context.values.product" + chr(125) + chr(125)
           for needle in [
-              "# the template produces these stack names",
+              "# context values come from defaults and mixins",
+              "atmos describe component demo -s acme-west-dev --query .providers.context.values",
+              "product: acme",
+              "region: west",
+              "environment: dev",
+              "support_email: dev-support@acme.com",
+              "# Atmos turns those values into stack names",
               "atmos list stacks",
               "acme-west-dev",
               "acme-west-prod",
               "acme-west-staging",
-              "# the source template combines provider context values",
-              "atmos describe config --format=yaml --query .stacks.name_template",
-              name_template,
+              "# the same context resolves component variables",
               "atmos describe component demo -s acme-west-dev --query .vars",
               "pet: dog",
           ]:

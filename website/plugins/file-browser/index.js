@@ -456,9 +456,9 @@ function extractDescription(content) {
     const trimmed = line.trim();
     // Skip empty lines and headers.
     if (!trimmed || trimmed.startsWith('#')) continue;
-    // Return first non-empty, non-header line (truncated).
-    const description = trimmed.slice(0, 200);
-    return description.length < trimmed.length ? `${description}...` : description;
+    // Return the first non-empty, non-header line. Cards grow to fit the
+    // description, so avoid clipping meaningful example copy here.
+    return trimmed;
   }
 
   return '';

@@ -86,9 +86,10 @@ commands:
               "jq",
               "yq",
               "Using pinned jq 1.7.1",
-              "Converting YAML to formatted JSON",
+              "Converting demo.yaml to formatted JSON",
               "name",
               "atmos",
+              "features",
           ]:
               if needle not in plain:
                   raise SystemExit(f"demo-convert cast missing {needle!r}")

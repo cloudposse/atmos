@@ -104,7 +104,7 @@ commands:
           ]:
               if needle not in plain:
                   raise SystemExit(f"generate-files cast missing {needle!r}")
-          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "[generate]", "completed", "--dry-run", "Would generate:"]:
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "[generate]", "completed", "--dry-run", "Would generate:", "Created:", "Updated:", "Deleted:"]:
               if bad in plain:
                   raise SystemExit(f"generate-files cast contains {bad!r}")
           assert_no_error_output(text)

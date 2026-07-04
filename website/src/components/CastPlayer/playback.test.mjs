@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {applyIdleSkip, parseCast} from './playback.mjs';
+import {
+  DEFAULT_MAX_CAST_SPEED,
+  MIN_CAST_SPEED,
+  applyIdleSkip,
+  parseCast,
+  resolvePlaybackSpeed,
+} from './playback.mjs';
 
 test('applyIdleSkip compresses an initial prompt-to-output gap', () => {
   const events = [
@@ -51,4 +57,22 @@ test('parseCast accumulates v3 relative event times and skips comments', () => {
     [0.5, 'o', 'hello'],
     [1.5, 'o', ' world'],
   ]);
+});
+
+test('resolvePlaybackSpeed uses the default max rate when speed is omitted', () => {
+  assert.equal(resolvePlaybackSpeed(), DEFAULT_MAX_CAST_SPEED);
+});
+
+test('resolvePlaybackSpeed preserves slower explicit speeds', () => {
+  assert.equal(resolvePlaybackSpeed(0.4), 0.4);
+});
+
+test('resolvePlaybackSpeed caps faster explicit speeds', () => {
+  assert.equal(resolvePlaybackSpeed(1), DEFAULT_MAX_CAST_SPEED);
+  assert.equal(resolvePlaybackSpeed(2, 0.75), 0.75);
+});
+
+test('resolvePlaybackSpeed keeps the lower playback safety floor', () => {
+  assert.equal(resolvePlaybackSpeed(0.01), MIN_CAST_SPEED);
+  assert.equal(resolvePlaybackSpeed(1, 0.01), MIN_CAST_SPEED);
 });

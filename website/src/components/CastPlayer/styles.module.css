@@ -3,6 +3,7 @@
   position: relative;
   box-sizing: border-box;
   inline-size: 100%;
+  min-width: 0;
   width: 100%;
   max-width: 1280px;
   aspect-ratio: 16 / 9;
@@ -81,6 +82,8 @@
 
 .screen {
   flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
   min-height: 0;
   height: auto;
   margin: 0;
@@ -252,6 +255,8 @@
 }
 
 .thumbnail {
+  min-width: 0;
+  width: 100%;
   max-width: 360px;
   border-radius: 6px;
 }

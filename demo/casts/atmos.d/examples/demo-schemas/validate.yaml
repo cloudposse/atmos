@@ -22,7 +22,7 @@ commands:
           cast: "../../website/static/casts/examples/demo-schemas/validate.cast"
         steps:
           - type: simulate
-            text: "# three schema sources: a local file, a remote URL, and an inline schema"
+            text: "# validate local, remote, and inline schemas"
           - type: simulate
             text: &validate_cmd atmos validate schema
           - type: shell
@@ -48,7 +48,7 @@ commands:
           assert_no_experimental(text)
           assert_body_color(text)
           for needle in [
-              "# three schema sources: a local file, a remote URL, and an inline schema",
+              "# validate local, remote, and inline schemas",
               "atmos validate schema",
               "Validated bower.yaml",
               "Validated config.yaml",

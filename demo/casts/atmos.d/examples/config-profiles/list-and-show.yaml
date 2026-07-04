@@ -14,7 +14,18 @@ commands:
         defaults:
           cast: !include cast-defaults.yaml .cast
           simulate: !include cast-defaults.yaml .simulate
-        env: !include cast-defaults.yaml .env.recording
+        env:
+          NO_COLOR: ''
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+          ATMOS_EXPERIMENTAL: silence
+          ATMOS_LOGS_LEVEL: Warning
+          ATMOS_PROFILE: developer
         show:
           labels: false
         output:

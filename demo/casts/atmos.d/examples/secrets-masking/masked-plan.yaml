@@ -10,7 +10,7 @@ commands:
         name: reset-terraform-workdir
         working_directory: &secrets_fixture "../../.context/cast-fixtures/secrets-masking"
         output: none
-        command: rm -rf components/terraform/secrets-demo/.terraform components/terraform/secrets-demo/.terraform.lock.hcl components/terraform/secrets-demo/demo-dev-test-secrets-demo.terraform.tfvars.json
+        command: rm -rf components/terraform/secrets-demo/.terraform components/terraform/secrets-demo/demo-dev-test-secrets-demo.terraform.tfvars.json
       - type: cast
         name: masked-plan
         working_directory: *secrets_fixture
@@ -66,6 +66,9 @@ commands:
               "demo-key-ABCD1234EFGH5678",
               "internal-0123456789abcdef0123456789abcdef",
               "super-secret-demo-value",
+              "Incomplete lock file information",
+              "Value for undeclared variable",
+              "undeclared variable",
           ]:
               if bad in plain:
                   raise SystemExit(f"secrets-masking cast leaks {bad!r}")

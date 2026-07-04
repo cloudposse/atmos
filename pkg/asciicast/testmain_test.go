@@ -81,8 +81,13 @@ func runAsciicastSessionHelper() {
 		case 4:
 			return
 		case '\r', '\n':
-			if strings.TrimSpace(line.String()) == "printf ready" {
+			switch strings.TrimSpace(line.String()) {
+			case "printf ready":
 				_, _ = os.Stdout.WriteString("ready\n")
+			case "print context":
+				cwd, _ := os.Getwd()
+				_, _ = os.Stdout.WriteString("cwd=" + cwd + "\n")
+				_, _ = os.Stdout.WriteString("marker=" + os.Getenv("ATMOS_CAST_SESSION_MARKER") + "\n")
 			}
 			line.Reset()
 		default:

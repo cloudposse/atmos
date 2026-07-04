@@ -45,6 +45,8 @@ type SessionAction struct {
 // SessionOptions configures a scripted shell session used to generate cast output.
 type SessionOptions struct {
 	Shell       string
+	Dir         string
+	Env         map[string]string
 	Width       int
 	Height      int
 	WriteRate   time.Duration
@@ -53,10 +55,13 @@ type SessionOptions struct {
 }
 
 // RunSession executes scripted session actions against an interactive shell.
-func RunSession(ctx context.Context, opts SessionOptions) error {
+func RunSession(ctx context.Context, opts *SessionOptions) error {
 	defer perf.Track(nil, "asciicast.RunSession")()
 
-	opts = normalizeSessionOptions(opts)
+	if opts == nil {
+		opts = &SessionOptions{}
+	}
+	normalizeSessionOptions(opts)
 	proc, err := startSessionShell(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("start cast session shell: %w", err)
@@ -92,7 +97,7 @@ type sessionState struct {
 	cancel  context.CancelFunc
 }
 
-func normalizeSessionOptions(opts SessionOptions) SessionOptions {
+func normalizeSessionOptions(opts *SessionOptions) {
 	if opts.Width <= 0 {
 		opts.Width = DefaultWidth
 	}
@@ -105,7 +110,6 @@ func normalizeSessionOptions(opts SessionOptions) SessionOptions {
 	if opts.KeyInterval < 0 {
 		opts.KeyInterval = 0
 	}
-	return opts
 }
 
 func sessionShell(configured string) string {
@@ -119,6 +123,27 @@ func sessionShell(configured string) string {
 		return "cmd.exe"
 	}
 	return "/bin/sh"
+}
+
+func sessionEnvironment(env map[string]string) []string {
+	if len(env) == 0 {
+		return os.Environ()
+	}
+	merged := make(map[string]string)
+	for _, item := range os.Environ() {
+		key, value, ok := strings.Cut(item, "=")
+		if ok {
+			merged[key] = value
+		}
+	}
+	for key, value := range env {
+		merged[key] = value
+	}
+	out := make([]string, 0, len(merged))
+	for key, value := range merged {
+		out = append(out, key+"="+value)
+	}
+	return out
 }
 
 func safePTYSize(value int) uint16 {
@@ -208,7 +233,7 @@ func finishSession(ctx context.Context, proc *sessionProcess, done <-chan error)
 	}
 }
 
-func runAction(ctx context.Context, input io.Writer, state *sessionState, action *SessionAction, opts SessionOptions) error {
+func runAction(ctx context.Context, input io.Writer, state *sessionState, action *SessionAction, opts *SessionOptions) error {
 	switch action.Type {
 	case "write":
 		return runWriteAction(input, action, opts.WriteRate)

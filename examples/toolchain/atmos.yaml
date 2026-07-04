@@ -140,5 +140,5 @@ commands:
       - name: convert
         description: Convert YAML to JSON using yq and jq together
         steps:
-          - echo "Converting YAML to formatted JSON"
-          - "echo 'name: atmos' | yq -o json | jq ."
+          - echo "Converting demo.yaml to formatted JSON"
+          - "yq -o json demo.yaml | jq ."

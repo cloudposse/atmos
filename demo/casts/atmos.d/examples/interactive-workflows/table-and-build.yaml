@@ -9,36 +9,59 @@ commands:
       - type: cast
         name: table-and-build
         working_directory: "../../.context/cast-fixtures/interactive-workflows"
-        title: "Interactive Workflows: formatted steps without prompts"
-        mode: steps
+        title: "Interactive Workflows: choose, confirm, and type"
+        mode: session
+        shell: /bin/sh
+        write_rate: 25ms
+        key_interval: 250ms
+        timeout: 45s
         defaults:
           cast: !include cast-defaults.yaml .cast
-          simulate: !include cast-defaults.yaml .simulate
-        env: !include cast-defaults.yaml .env.recording
+        env:
+          TERM: dumb
+          NO_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+          ATMOS_EXPERIMENTAL: silence
+          ATMOS_LOGS_LEVEL: Warning
+          PS1: '$ '
         show:
           labels: false
         output:
           mode: raw
           cast: "../../website/static/casts/examples/interactive-workflows/table-and-build.cast"
         steps:
-          - type: simulate
-            text: "# table steps render structured choices for operators"
-          - type: simulate
-            text: &table_cmd atmos workflow show-environments -f interactive
-          - type: shell
-            name: show-environments
-            duration: 450ms
-            interval: 750ms
-            command: *table_cmd
-          - type: simulate
-            text: "# spinner and toast steps compose into build flows"
-          - type: simulate
-            text: &build_cmd atmos workflow build -f interactive
-          - type: shell
-            name: build
-            duration: 450ms
-            interval: 750ms
-            command: *build_cmd
+          - type: pause
+            duration: 500ms
+          - type: write
+            text: "atmos workflow deploy -f interactive"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Select the target environment"
+            timeout: 10s
+          - type: key
+            key: enter
+          - type: wait
+            text: "You selected: dev"
+            timeout: 10s
+          - type: wait
+            text: "Are you absolutely sure?"
+            timeout: 10s
+          - type: write
+            text: "y"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Enter a deployment message"
+            timeout: 10s
+          - type: write
+            text: "Routine deployment"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Deployment configured"
+            timeout: 10s
       - type: shell
         name: validate
         command: atmos casts validate examples interactive-workflows table-and-build
@@ -56,14 +79,15 @@ commands:
           plain = strip_ansi(text)
           assert_no_experimental(text)
           for needle in [
-              "atmos workflow show-environments -f interactive",
-              "Available Environments",
+              "atmos workflow deploy -f interactive",
+              "Deployment Wizard",
+              "Select the target environment",
               "dev",
-              "staging",
-              "prod",
-              "atmos workflow build -f interactive",
-              "Building application...",
-              "Build completed successfully!",
+              "You selected: dev",
+              "Are you absolutely sure?",
+              "Enter a deployment message",
+              "Routine deployment",
+              "Deployment configured",
           ]:
               if needle not in plain:
                   raise SystemExit(f"interactive-workflows cast missing {needle!r}")

@@ -1,7 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { RiPauseFill, RiPlayFill } from "react-icons/ri";
 import styles from "./styles.module.css";
-import { applyIdleSkip, parseCast } from "./playback.mjs";
+import {
+  applyIdleSkip,
+  DEFAULT_MAX_CAST_SPEED,
+  parseCast,
+  resolvePlaybackSpeed,
+} from "./playback.mjs";
 
 type CastEvent = [number, string, string];
 
@@ -21,6 +26,7 @@ type Props = {
   loop?: boolean;
   loopDelay?: number;
   speed?: number;
+  maxScrollRate?: number;
   idleSkip?: boolean;
   thumbnail?: boolean;
   preWrap?: boolean;
@@ -47,7 +53,8 @@ export default function CastPlayer({
   autoplay = true,
   loop = true,
   loopDelay = 5,
-  speed = 1,
+  speed = DEFAULT_MAX_CAST_SPEED,
+  maxScrollRate = DEFAULT_MAX_CAST_SPEED,
   idleSkip = true,
   thumbnail = false,
   preWrap = true,
@@ -144,6 +151,10 @@ export default function CastPlayer({
   ]);
 
   const duration = useMemo(() => events.at(-1)?.[0] ?? 0, [events]);
+  const effectiveSpeed = useMemo(
+    () => resolvePlaybackSpeed(speed, maxScrollRate),
+    [speed, maxScrollRate],
+  );
 
   useEffect(() => {
     if (staticFrame || !screenRef.current) return;
@@ -171,11 +182,11 @@ export default function CastPlayer({
     }
 
     const startedAt =
-      performance.now() - (position * 1000) / Math.max(speed, 0.1);
+      performance.now() - (position * 1000) / effectiveSpeed;
     const tick = (now: number) => {
       const nextPosition = Math.min(
         duration,
-        ((now - startedAt) / 1000) * Math.max(speed, 0.1),
+        ((now - startedAt) / 1000) * effectiveSpeed,
       );
       setPosition(nextPosition);
 
@@ -212,7 +223,7 @@ export default function CastPlayer({
     seekVersion,
     events,
     duration,
-    speed,
+    effectiveSpeed,
     loop,
     loopDelay,
     staticFrame,

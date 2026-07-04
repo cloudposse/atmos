@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -15,12 +16,13 @@ import (
 )
 
 func TestNormalizeSessionOptionsDefaultsAndClampsDurations(t *testing.T) {
-	opts := normalizeSessionOptions(SessionOptions{
+	opts := &SessionOptions{
 		Width:       -1,
 		Height:      0,
 		WriteRate:   -time.Second,
 		KeyInterval: -time.Millisecond,
-	})
+	}
+	normalizeSessionOptions(opts)
 
 	if opts.Width != DefaultWidth {
 		t.Fatalf("width = %d, want %d", opts.Width, DefaultWidth)
@@ -261,7 +263,7 @@ func TestRunActionDispatchesAndRejectsUnknownType(t *testing.T) {
 	defer func() { _ = reader.Close() }()
 
 	state := &sessionState{changed: make(chan struct{}, 1), done: make(chan error, 1)}
-	err = runAction(context.Background(), writer, state, &SessionAction{Type: "write", Text: "ok", Rate: "0"}, SessionOptions{})
+	err = runAction(context.Background(), writer, state, &SessionAction{Type: "write", Text: "ok", Rate: "0"}, &SessionOptions{})
 	if err != nil {
 		t.Fatalf("runAction write error: %v", err)
 	}
@@ -274,7 +276,7 @@ func TestRunActionDispatchesAndRejectsUnknownType(t *testing.T) {
 		t.Fatalf("written content = %q", content)
 	}
 
-	err = runAction(context.Background(), os.Stdout, state, &SessionAction{Type: "bogus"}, SessionOptions{})
+	err = runAction(context.Background(), os.Stdout, state, &SessionAction{Type: "bogus"}, &SessionOptions{})
 	if !errors.Is(err, ErrUnknownSessionAction) {
 		t.Fatalf("expected unknown action error, got %v", err)
 	}
@@ -324,7 +326,7 @@ func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	err = RunSession(ctx, SessionOptions{
+	err = RunSession(ctx, &SessionOptions{
 		Shell:  shell,
 		Width:  80,
 		Height: 24,
@@ -332,6 +334,41 @@ func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
 			{Type: "wait", Text: "ready", Timeout: "2s"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunSession error: %v", err)
+	}
+}
+
+func TestRunSessionAppliesDirectoryAndEnvironment(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	shell, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	expectedDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(asciicastSessionHelperEnv, "1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	err = RunSession(ctx, &SessionOptions{
+		Shell: shell,
+		Dir:   dir,
+		Env: map[string]string{
+			"ATMOS_CAST_SESSION_MARKER": "from-session",
+		},
+		Actions: []SessionAction{
+			{Type: "write", Text: "print context", Rate: "0"},
+			{Type: "key", Key: "enter"},
+			{Type: "wait", Text: "cwd=" + expectedDir, Timeout: "2s"},
+			{Type: "wait", Text: "marker=from-session", Timeout: "2s"},
 		},
 	})
 	if err != nil {
@@ -351,7 +388,7 @@ func TestRunSessionReturnsActionErrors(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	err = RunSession(ctx, SessionOptions{
+	err = RunSession(ctx, &SessionOptions{
 		Shell:   shell,
 		Actions: []SessionAction{{Type: "bogus"}},
 	})

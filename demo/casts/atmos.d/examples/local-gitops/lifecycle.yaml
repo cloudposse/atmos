@@ -36,17 +36,23 @@ commands:
             interval: 750ms
             command: *up_cmd
           - type: simulate
-            text: "# inspect the rendered payload that Atmos pushed to local Git"
+            text: "# Atmos Git tracks the managed deployment repo"
           - type: simulate
-            text: git -C .atmos/git/deployments log -1 --format=%s
+            text: &git_list_cmd atmos git list --check-status
           - type: shell
-            name: commit
-            command: git -C .atmos/git/deployments log -1 --format=%s
+            name: git-list
+            duration: 450ms
+            interval: 750ms
+            command: *git_list_cmd
           - type: simulate
-            text: find .atmos/git/deployments/clusters/local -type f | sort
+            text: "# re-rendering shows Git already has the payload"
+          - type: simulate
+            text: &git_status_cmd atmos git status deployments
           - type: shell
-            name: files
-            command: find .atmos/git/deployments/clusters/local -type f | sort
+            name: git-status
+            duration: 450ms
+            interval: 750ms
+            command: *git_status_cmd
           - type: simulate
             text: "# confirm Flux is watching Git inside the local cluster"
           - type: simulate
@@ -118,13 +124,20 @@ commands:
               "emulator gitserver is up",
               "emulator kubernetes is up",
               "applied source.toolkit.fluxcd.io/v1/gitrepository flux-system/deployments",
-              "render demo-app for local",
-              ".atmos/git/deployments/clusters/local/demo-app",
+              "atmos git list --check-status",
+              "deployments",
+              "atmos git status deployments",
+              "repository at .atmos/git/deployments is clean",
               "atmos emulator exec kubernetes -s local -- kubectl -n flux-system get gitrepository,kustomization",
+              "kustomization.kustomize.toolkit.fluxcd.io/apps",
               "atmos emulator exec kubernetes -s local -- kubectl -n gitops-demo get configmap demo-app",
+              "demo-app",
               "atmos gitops down",
           ]:
               if needle not in plain:
                   raise SystemExit(f"local-gitops cast missing {needle!r}")
+          for bad in ["git -c", "git -C", "find .atmos/git"]:
+              if bad in plain:
+                  raise SystemExit(f"local-gitops cast contains raw shell verification {bad!r}")
           assert_no_error_output(text)
           assert_no_local_paths(text)

@@ -530,7 +530,7 @@ func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
 func GetHighlightedYAML(atmosConfig *schema.AtmosConfiguration, data any) (string, error) {
 	defer perf.Track(atmosConfig, "utils.GetHighlightedYAML")()
 
-	y, err := ConvertToYAML(data)
+	y, err := ConvertToYAML(data, YAMLOptions{Indent: getIndentFromConfig(atmosConfig)})
 	if err != nil {
 		return "", err
 	}

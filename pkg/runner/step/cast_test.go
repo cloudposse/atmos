@@ -1341,11 +1341,11 @@ func TestRunCastBodyRejectsInvalidMode(t *testing.T) {
 }
 
 func TestRunCastSessionModeRejectsInvalidDurationsBeforeStartingSession(t *testing.T) {
-	err := runCastSessionMode(context.Background(), &schema.WorkflowStep{WriteRate: "fast"})
+	err := runCastSessionMode(context.Background(), &schema.WorkflowStep{WriteRate: "fast"}, NewVariables())
 	if err == nil || !strings.Contains(err.Error(), "invalid duration") {
 		t.Fatalf("expected invalid write rate, got %v", err)
 	}
-	err = runCastSessionMode(context.Background(), &schema.WorkflowStep{KeyInterval: "soon"})
+	err = runCastSessionMode(context.Background(), &schema.WorkflowStep{KeyInterval: "soon"}, NewVariables())
 	if err == nil || !strings.Contains(err.Error(), "invalid duration") {
 		t.Fatalf("expected invalid key interval, got %v", err)
 	}

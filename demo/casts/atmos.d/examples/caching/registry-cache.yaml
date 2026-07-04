@@ -72,8 +72,8 @@ commands:
               event = json.loads(line)
               if event[1] in ("o", "e"):
                   event[2] = re.sub(
-                      r"Registry cache root:\s+.*",
-                      "Registry cache root:  <cache>",
+                      r"Registry cache root\s+.*",
+                      "Registry cache root  <cache>",
                       event[2],
                   )
                   event[2] = re.sub(r"https://127\.0\.0\.1:\d+/", "https://127.0.0.1:<port>/", event[2])
@@ -108,7 +108,11 @@ commands:
               "saved",
               "# inspect the populated cache",
               "atmos terraform cache stats",
-              "Objects:",
+              "METRIC",
+              "VALUE",
+              "Registry cache root  <cache>",
+              "Objects",
+              "Total size",
               "providers",
               "modules",
           ]:

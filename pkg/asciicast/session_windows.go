@@ -9,8 +9,10 @@ import (
 	"sync"
 )
 
-func startSessionShell(ctx context.Context, opts SessionOptions) (*sessionProcess, error) {
+func startSessionShell(ctx context.Context, opts *SessionOptions) (*sessionProcess, error) {
 	cmd := exec.CommandContext(ctx, sessionShell(opts.Shell)) //nolint:gosec // The shell is user/config supplied for an explicit interactive cast session.
+	cmd.Dir = opts.Dir
+	cmd.Env = sessionEnvironment(opts.Env)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err

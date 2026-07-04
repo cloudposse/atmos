@@ -247,7 +247,7 @@ func runCastBody(ctx context.Context, castStep *schema.WorkflowStep, vars *Varia
 	case "steps":
 		return runCastStepMode(ctx, castStep, vars, workflow)
 	case "session":
-		return runCastSessionMode(ctx, castStep)
+		return runCastSessionMode(ctx, castStep, vars)
 	default:
 		return fmt.Errorf(wrappedQuotedErrorFormat, ErrInvalidCastMode, castStep.Mode)
 	}
@@ -340,7 +340,7 @@ func prepareCastChildStep(castStep, child *schema.WorkflowStep, index int) {
 	}
 }
 
-func runCastSessionMode(ctx context.Context, castStep *schema.WorkflowStep) error {
+func runCastSessionMode(ctx context.Context, castStep *schema.WorkflowStep, vars *Variables) error {
 	writeRate, err := parseDurationDefault(castStep.WriteRate, 40*time.Millisecond)
 	if err != nil {
 		return err
@@ -349,8 +349,14 @@ func runCastSessionMode(ctx context.Context, castStep *schema.WorkflowStep) erro
 	if err != nil {
 		return err
 	}
-	return asciicast.RunSession(ctx, asciicast.SessionOptions{
+	env, err := castRecorderEnv(castStep, vars)
+	if err != nil {
+		return err
+	}
+	return asciicast.RunSession(ctx, &asciicast.SessionOptions{
 		Shell:       castStep.Shell,
+		Dir:         castStep.WorkingDirectory,
+		Env:         env,
 		Width:       castStep.Width,
 		Height:      castStep.Height,
 		WriteRate:   writeRate,

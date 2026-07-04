@@ -6,9 +6,19 @@ commands:
       - type: shell
         name: setup
         command: atmos casts setup
+      - type: shell
+        name: reset-workdir
+        working_directory: &source_fixture "../../.context/cast-fixtures/source-provisioning"
+        output: none
+        command: rm -rf .workdir
+      - type: shell
+        name: provision-workdir
+        working_directory: *source_fixture
+        output: none
+        command: atmos terraform init weather -s dev -backend=false >/dev/null 2>&1
       - type: cast
         name: sources
-        working_directory: "../../.context/cast-fixtures/source-provisioning"
+        working_directory: *source_fixture
         title: "Source Provisioning: provision local component sources"
         mode: steps
         defaults:
@@ -40,15 +50,6 @@ commands:
             interval: 750ms
             command: *source_describe_cmd
           - type: simulate
-            text: "# local sources provision into isolated Terraform workdirs"
-          - type: simulate
-            text: &weather_cmd atmos terraform plan weather -s dev
-          - type: shell
-            name: weather-plan
-            duration: 650ms
-            interval: 750ms
-            command: *weather_cmd
-          - type: simulate
             text: "# inspect the provisioned workdir"
           - type: simulate
             text: &workdir_cmd atmos terraform workdir list
@@ -66,6 +67,15 @@ commands:
             duration: 450ms
             interval: 750ms
             command: *workdir_show_cmd
+          - type: simulate
+            text: "# delete the provisioned source workdir"
+          - type: simulate
+            text: &source_delete_cmd atmos terraform source delete weather -s dev --force
+          - type: shell
+            name: source-delete
+            duration: 450ms
+            interval: 750ms
+            command: *source_delete_cmd
       - type: shell
         name: validate
         command: atmos casts validate examples source-provisioning sources
@@ -84,16 +94,18 @@ commands:
           assert_no_experimental(text)
           assert_body_color(text)
           for needle in [
-              "atmos terraform plan weather -s dev",
-              "Terraform will perform the following actions",
-              "Plan:",
               "atmos terraform source list",
               "atmos terraform source describe weather -s dev",
               "atmos terraform workdir list",
               "atmos terraform workdir show weather -s dev",
+              "atmos terraform source delete weather -s dev --force",
               "dev-weather",
+              "Deleted .workdir/terraform/dev-weather",
           ]:
               if needle not in plain:
                   raise SystemExit(f"source-provisioning cast missing {needle!r}")
+          for bad in ["Value for undeclared variable", "undeclared variable", "Workspace \"default\" doesn't exist", "Incomplete lock file information", "wttr.in", "Weather report"]:
+              if bad in plain:
+                  raise SystemExit(f"source-provisioning cast contains {bad!r}")
           assert_no_error_output(text)
           assert_no_local_paths(text)

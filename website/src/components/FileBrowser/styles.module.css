@@ -142,6 +142,9 @@
 
 /* Example Card */
 .exampleCard {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   background: white;
   border-radius: 12px;
   padding: 1.5rem;
@@ -162,6 +165,7 @@
 }
 
 .exampleCardLink {
+  min-width: 0;
   color: inherit;
   text-decoration: none;
 }
@@ -214,17 +218,21 @@
 }
 
 .exampleCardDescription {
+  min-width: 0;
   font-size: 0.9rem;
   color: var(--ifm-color-emphasis-600);
   line-height: 1.5;
   margin: 0 0 1rem 0;
   flex: 1;
+  overflow-wrap: anywhere;
 }
 
 /* The cast preview is a link to the example; the player itself must not
    swallow clicks (thumbnail mode, controls off), so navigation always wins. */
 .exampleCardCastLink {
   display: block;
+  min-width: 0;
+  max-width: 100%;
   cursor: pointer;
 }
 
@@ -234,6 +242,8 @@
 
 .exampleCardCast {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin: 0 0 1rem;
   overflow: hidden;
   border-radius: 8px;
@@ -241,6 +251,8 @@
 }
 
 .exampleCardCast > div {
+  min-width: 0;
+  width: 100%;
   max-width: none;
 }
 

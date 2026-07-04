@@ -69,5 +69,14 @@ commands:
           ]:
               if needle not in plain:
                   raise SystemExit(f"terraform-tests cast missing {needle!r}")
+          for bad in [
+              "Incomplete lock file information",
+              "Value for undeclared variable",
+              "undeclared variable",
+              "Workspace \"default\" doesn't exist",
+              "workdir mismatch",
+          ]:
+              if bad in plain:
+                  raise SystemExit(f"terraform-tests cast contains {bad!r}")
           assert_no_error_output(text)
           assert_no_local_paths(text)
