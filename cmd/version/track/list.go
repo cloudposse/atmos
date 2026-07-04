@@ -1,4 +1,4 @@
-package version
+package track
 
 import (
 	"github.com/spf13/cobra"
@@ -13,9 +13,9 @@ var trackListCmd = &cobra.Command{
 	Short: "List configured version tracks",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		defer perf.Track(atmosConfigPtr, "version.track.list.RunE")()
+		defer perf.Track(atmosConfig, "version.track.list.RunE")()
 
-		return writeFormatted(cmd, manager.TrackNames(atmosConfigPtr))
+		return writeFormatted(cmd, manager.TrackNames(atmosConfig))
 	},
 }
 

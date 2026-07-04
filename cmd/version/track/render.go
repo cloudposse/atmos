@@ -1,4 +1,4 @@
-package version
+package track
 
 import (
 	"fmt"
@@ -24,7 +24,7 @@ var trackRenderCmd = &cobra.Command{
 	Long:  "Render a single template file with the .version context resolved from the lock file. Use --output to write the result and --check to verify a committed file is current.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		defer perf.Track(atmosConfigPtr, "version.track.render.RunE")()
+		defer perf.Track(atmosConfig, "version.track.render.RunE")()
 
 		file, _ := cmd.Flags().GetString("file")
 		output, _ := cmd.Flags().GetString("output")
@@ -32,7 +32,7 @@ var trackRenderCmd = &cobra.Command{
 		if file == "" {
 			return ErrRenderFileRequired
 		}
-		rendered, err := manager.RenderFile(atmosConfigPtr, trackFromArgs(cmd, args), file, renderTemplate)
+		rendered, err := manager.RenderFile(atmosConfig, trackFromArgs(cmd, args), file, renderTemplate)
 		if err != nil {
 			return err
 		}

@@ -1,4 +1,4 @@
-package version
+package track
 
 import (
 	"github.com/spf13/cobra"
@@ -13,10 +13,10 @@ var trackDiffCmd = &cobra.Command{
 	Short: "Show entries whose locked version differs from the resolved target",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		defer perf.Track(atmosConfigPtr, "version.track.diff.RunE")()
+		defer perf.Track(atmosConfig, "version.track.diff.RunE")()
 
 		group, _ := cmd.Flags().GetString("group")
-		status, err := manager.StatusTrack(atmosConfigPtr, trackFromArgs(cmd, args), group)
+		status, err := manager.StatusTrack(atmosConfig, trackFromArgs(cmd, args), group)
 		if err != nil {
 			return err
 		}

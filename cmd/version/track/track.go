@@ -1,4 +1,7 @@
-package version
+// Package track implements the `atmos version track` command group: the Atmos
+// Version Tracker's verbs for locking, updating, inspecting, and applying
+// managed external versions.
+package track
 
 import (
 	"errors"
@@ -9,7 +12,23 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// atmosConfig is set by SetAtmosConfig before command execution.
+var atmosConfig *schema.AtmosConfiguration
+
+// SetAtmosConfig sets the Atmos configuration for the track command group.
+// The parent version command forwards it from cmd/root.go initialization.
+func SetAtmosConfig(config *schema.AtmosConfiguration) {
+	atmosConfig = config
+}
+
+// GetTrackCommand returns the `atmos version track` command group for the
+// parent version command to register.
+func GetTrackCommand() *cobra.Command {
+	return trackCmd
+}
 
 var (
 	// ErrRenderFileRequired is returned when render is invoked without --file.
@@ -73,8 +92,4 @@ func writeFormatted(cmd *cobra.Command, v any) error {
 	default:
 		return fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
-}
-
-func init() {
-	versionCmd.AddCommand(trackCmd)
 }

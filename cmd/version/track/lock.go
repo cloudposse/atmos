@@ -1,4 +1,4 @@
-package version
+package track
 
 import (
 	"github.com/spf13/cobra"
@@ -14,10 +14,10 @@ var trackLockCmd = &cobra.Command{
 	Long:  "Resolve each entry's desired version to a concrete version and write versions.lock.yaml. Lock resolves the desired versions as-is; use `update` to advance versions within the update policy.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		defer perf.Track(atmosConfigPtr, "version.track.lock.RunE")()
+		defer perf.Track(atmosConfig, "version.track.lock.RunE")()
 
 		group, _ := cmd.Flags().GetString("group")
-		lock, err := manager.LockTrack(atmosConfigPtr, trackFromArgs(cmd, args), group)
+		lock, err := manager.LockTrack(atmosConfig, trackFromArgs(cmd, args), group)
 		if err != nil {
 			return err
 		}

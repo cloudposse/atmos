@@ -1,4 +1,4 @@
-package version
+package track
 
 import (
 	"github.com/spf13/cobra"
@@ -14,9 +14,9 @@ var trackVerifyCmd = &cobra.Command{
 	Long:  "Fail when any configured entry is unlocked or has a policy-eligible update available. Intended for CI.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		defer perf.Track(atmosConfigPtr, "version.track.verify.RunE")()
+		defer perf.Track(atmosConfig, "version.track.verify.RunE")()
 
-		status, err := manager.VerifyTrack(atmosConfigPtr, trackFromArgs(cmd, args))
+		status, err := manager.VerifyTrack(atmosConfig, trackFromArgs(cmd, args))
 		if err != nil {
 			return err
 		}

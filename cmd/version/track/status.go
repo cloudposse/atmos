@@ -1,4 +1,4 @@
-package version
+package track
 
 import (
 	"github.com/spf13/cobra"
@@ -13,10 +13,10 @@ var trackStatusCmd = &cobra.Command{
 	Short: "Show lock and update status for a version track",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		defer perf.Track(atmosConfigPtr, "version.track.status.RunE")()
+		defer perf.Track(atmosConfig, "version.track.status.RunE")()
 
 		group, _ := cmd.Flags().GetString("group")
-		status, err := manager.StatusTrack(atmosConfigPtr, trackFromArgs(cmd, args), group)
+		status, err := manager.StatusTrack(atmosConfig, trackFromArgs(cmd, args), group)
 		if err != nil {
 			return err
 		}

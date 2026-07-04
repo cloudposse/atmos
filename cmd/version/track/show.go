@@ -1,4 +1,4 @@
-package version
+package track
 
 import (
 	"github.com/spf13/cobra"
@@ -14,9 +14,9 @@ var trackShowCmd = &cobra.Command{
 	Long:  "Show a version track's entries after global defaults, track defaults, and group policies are applied.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		defer perf.Track(atmosConfigPtr, "version.track.show.RunE")()
+		defer perf.Track(atmosConfig, "version.track.show.RunE")()
 
-		entries, err := manager.EffectiveEntries(atmosConfigPtr, trackFromArgs(cmd, args))
+		entries, err := manager.EffectiveEntries(atmosConfig, trackFromArgs(cmd, args))
 		if err != nil {
 			return err
 		}
