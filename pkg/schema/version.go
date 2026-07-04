@@ -99,6 +99,17 @@ type VersionEntry struct {
 	Labels     []string            `yaml:"labels,omitempty" mapstructure:"labels" json:"labels,omitempty"`
 }
 
+// VersionFileRule maps a file manager to the paths it maintains, so a single
+// `atmos version track apply` sweeps every version-managed file.
+type VersionFileRule struct {
+	// Manager is the file manager name (github-actions, marker, template).
+	Manager string `yaml:"manager,omitempty" mapstructure:"manager" json:"manager,omitempty"`
+	// Paths are glob patterns (doublestar) relative to the project root.
+	Paths []string `yaml:"paths,omitempty" mapstructure:"paths" json:"paths,omitempty"`
+	// Options carries manager-specific settings.
+	Options map[string]any `yaml:"options,omitempty" mapstructure:"options" json:"options,omitempty"`
+}
+
 // VersionTrack configures a named version lane such as dev, staging, or prod.
 type VersionTrack struct {
 	Extends  string                  `yaml:"extends,omitempty" mapstructure:"extends" json:"extends,omitempty"`
@@ -133,4 +144,9 @@ type Version struct {
 	Defaults  VersionPolicy              `yaml:"defaults,omitempty" mapstructure:"defaults" json:"defaults,omitempty"`
 	Groups    map[string]VersionGroup    `yaml:"groups,omitempty" mapstructure:"groups" json:"groups,omitempty"`
 	Tracks    map[string]VersionTrack    `yaml:"tracks,omitempty" mapstructure:"tracks" json:"tracks,omitempty"`
+
+	// Files declares which project files the file managers maintain. When
+	// empty, managers with default paths (github-actions, template) run over
+	// those defaults.
+	Files []VersionFileRule `yaml:"files,omitempty" mapstructure:"files" json:"files,omitempty"`
 }
