@@ -788,6 +788,7 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncAwsRegion,
 		AtmosYamlFuncAwsOrganizationID,
 		AtmosYamlFuncEmulator,
+		AtmosYamlFuncVersion,
 	}
 
 	for _, tag := range expectedTags {
