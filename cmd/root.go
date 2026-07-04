@@ -1612,40 +1612,12 @@ func Execute() error {
 		return err
 	}
 
-	// Parse config-selection flags from os.Args before Cobra parses (same pattern as --chdir).
-	// This ensures --base-path, --config, --config-path, and --profile are all applied
-	// during the initial config load, so custom commands get the correct config.
-	profilesFromArg := cfg.ParseProfilesFromOsArgs(os.Args[1:])
-	if len(profilesFromArg) == 0 {
-		//nolint:forbidigo // Must use os.Getenv: profile is processed before Viper configuration loads.
-		if envProfiles := os.Getenv("ATMOS_PROFILE"); envProfiles != "" {
-			profilesFromArg = cfg.ParseProfilesFromEnvString(envProfiles)
-		}
-	}
-
-	configSel := cfg.ParseConfigSelectionFromOsArgs(os.Args[1:])
-	envSel := cfg.ConfigSelectionFromEnv()
-	if configSel.BasePath == "" {
-		configSel.BasePath = envSel.BasePath
-	}
-	if len(configSel.Config) == 0 {
-		configSel.Config = envSel.Config
-	}
-	if len(configSel.ConfigPath) == 0 {
-		configSel.ConfigPath = envSel.ConfigPath
-	}
-
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config.
 	// Note: --version flag is now handled in main.go before calling Execute().
 	var initErr error
-	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{
-		ProfilesFromArg:         profilesFromArg,
-		AtmosBasePath:           configSel.BasePath,
-		AtmosConfigFilesFromArg: configSel.Config,
-		AtmosConfigDirsFromArg:  configSel.ConfigPath,
-	}, false)
+	atmosConfig, initErr = cfg.InitCliConfig(cfg.EarlyConfigAndStacksInfoFromArgs(os.Args[1:]), false)
 
 	// Set atmosConfig for commands that need access to config.
 	version.SetAtmosConfig(&atmosConfig)

@@ -253,6 +253,43 @@ func ConfigSelectionFromEnv() ConfigSelection {
 	return sel
 }
 
+// EarlyConfigAndStacksInfoFromArgs builds the initial config-selection values
+// before Cobra and Viper have parsed global flags. It is used by cmd/root.go
+// before the first InitCliConfig call so custom commands and aliases are loaded
+// from the selected config location.
+func EarlyConfigAndStacksInfoFromArgs(args []string) schema.ConfigAndStacksInfo {
+	profilesFromArg := ParseProfilesFromOsArgs(args)
+	if len(profilesFromArg) == 0 {
+		//nolint:forbidigo // Must use os.Getenv: profile is processed before Viper configuration loads.
+		if envProfiles := os.Getenv("ATMOS_PROFILE"); envProfiles != "" {
+			profilesFromArg = ParseProfilesFromEnvString(envProfiles)
+		}
+	}
+
+	configSel := ParseConfigSelectionFromOsArgs(args)
+	envSel := ConfigSelectionFromEnv()
+	configSel.applyFallbacks(envSel)
+
+	return schema.ConfigAndStacksInfo{
+		ProfilesFromArg:         profilesFromArg,
+		AtmosBasePath:           configSel.BasePath,
+		AtmosConfigFilesFromArg: configSel.Config,
+		AtmosConfigDirsFromArg:  configSel.ConfigPath,
+	}
+}
+
+func (s *ConfigSelection) applyFallbacks(fallback ConfigSelection) {
+	if s.BasePath == "" {
+		s.BasePath = fallback.BasePath
+	}
+	if len(s.Config) == 0 {
+		s.Config = fallback.Config
+	}
+	if len(s.ConfigPath) == 0 {
+		s.ConfigPath = fallback.ConfigPath
+	}
+}
+
 // getProfilesFromFallbacks handles fallback profile loading when Viper doesn't have profiles set.
 // Returns profiles and source ("flag" or "env") for logging.
 func getProfilesFromFallbacks() ([]string, string) {

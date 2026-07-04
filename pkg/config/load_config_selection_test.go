@@ -182,3 +182,100 @@ func TestConfigSelectionFromEnv(t *testing.T) {
 		})
 	}
 }
+
+func TestEarlyConfigAndStacksInfoFromArgs(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		envVars    map[string]string
+		basePath   string
+		config     []string
+		configPath []string
+		profiles   []string
+	}{
+		{
+			name:       "empty when no args or env",
+			args:       []string{"describe", "stacks"},
+			basePath:   "",
+			config:     nil,
+			configPath: nil,
+			profiles:   nil,
+		},
+		{
+			name: "env fallback supplies config selection and profiles",
+			args: []string{"describe", "stacks"},
+			envVars: map[string]string{
+				"ATMOS_BASE_PATH":   "/env/base",
+				"ATMOS_CONFIG":      "env-a.yaml,env-b.yaml",
+				"ATMOS_CONFIG_PATH": "env-dir-a,env-dir-b",
+				"ATMOS_PROFILE":     "env-profile-a,env-profile-b",
+			},
+			basePath:   "/env/base",
+			config:     []string{"env-a.yaml", "env-b.yaml"},
+			configPath: []string{"env-dir-a", "env-dir-b"},
+			profiles:   []string{"env-profile-a", "env-profile-b"},
+		},
+		{
+			name: "args override env per field",
+			args: []string{
+				"--base-path", "/arg/base",
+				"--config", "arg.yaml",
+				"--config-path", "arg-dir",
+				"--profile", "arg-profile",
+			},
+			envVars: map[string]string{
+				"ATMOS_BASE_PATH":   "/env/base",
+				"ATMOS_CONFIG":      "env.yaml",
+				"ATMOS_CONFIG_PATH": "env-dir",
+				"ATMOS_PROFILE":     "env-profile",
+			},
+			basePath:   "/arg/base",
+			config:     []string{"arg.yaml"},
+			configPath: []string{"arg-dir"},
+			profiles:   []string{"arg-profile"},
+		},
+		{
+			name: "env fills only missing config selection fields",
+			args: []string{"--base-path", "/arg/base"},
+			envVars: map[string]string{
+				"ATMOS_BASE_PATH":   "/env/base",
+				"ATMOS_CONFIG":      "env.yaml",
+				"ATMOS_CONFIG_PATH": "env-dir",
+			},
+			basePath:   "/arg/base",
+			config:     []string{"env.yaml"},
+			configPath: []string{"env-dir"},
+			profiles:   nil,
+		},
+		{
+			name: "empty profile arg falls back to env profile",
+			args: []string{"--profile="},
+			envVars: map[string]string{
+				"ATMOS_PROFILE": "env-profile",
+			},
+			basePath:   "",
+			config:     nil,
+			configPath: nil,
+			profiles:   []string{"env-profile"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_BASE_PATH", "")
+			t.Setenv("ATMOS_CONFIG", "")
+			t.Setenv("ATMOS_CONFIG_PATH", "")
+			t.Setenv("ATMOS_PROFILE", "")
+
+			for k, v := range tt.envVars {
+				t.Setenv(k, v)
+			}
+
+			info := EarlyConfigAndStacksInfoFromArgs(tt.args)
+			assert.Equal(t, tt.basePath, info.AtmosBasePath, "AtmosBasePath")
+			assert.Equal(t, tt.config, info.AtmosConfigFilesFromArg, "AtmosConfigFilesFromArg")
+			assert.Equal(t, tt.configPath, info.AtmosConfigDirsFromArg, "AtmosConfigDirsFromArg")
+			assert.Equal(t, tt.profiles, info.ProfilesFromArg, "ProfilesFromArg")
+		})
+	}
+}
