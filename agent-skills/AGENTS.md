@@ -80,7 +80,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Local and remote stack imports, go-getter schemes, templated imports, private GitHub imports with STS                | `atmos-imports`         | `agent-skills/skills/atmos-imports/SKILL.md`         |
 | Terraform root modules, component source provisioning, abstract components, component inheritance, versioning, mixins | `atmos-components`      | `agent-skills/skills/atmos-components/SKILL.md`      |
 | vendor.yaml manifests, checked-in copies from Git/S3/HTTP/OCI/Terraform Registry, component.yaml                     | `atmos-vendoring`       | `agent-skills/skills/atmos-vendoring/SKILL.md`       |
-| Container components: build/run/push/pull/up/down/logs/exec and stack-scoped persistent containers                    | `atmos-container`       | `agent-skills/skills/atmos-container/SKILL.md`       |
+| Container components: Docker Compose migration, build/run/push/pull/up/down/logs/exec, stack-scoped containers        | `atmos-container`       | `agent-skills/skills/atmos-container/SKILL.md`       |
 | Emulator components: AWS/GCP/Azure/Kubernetes/Vault/OpenBao/registry local emulators                                  | `atmos-emulator`        | `agent-skills/skills/atmos-emulator/SKILL.md`        |
 | Compositions: named service groupings and `atmos composition validate`                                                | `atmos-compositions`    | `agent-skills/skills/atmos-compositions/SKILL.md`    |
 | terraform plan/apply/deploy/destroy, workspace management, backend config, varfile generation                         | `atmos-terraform`       | `agent-skills/skills/atmos-terraform/SKILL.md`       |
