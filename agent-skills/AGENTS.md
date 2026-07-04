@@ -59,7 +59,7 @@ atmos emulator up <component> -s <stack>          # Start a local cloud/API emul
 atmos secret validate -c <component> -s <stack>   # Validate declared secrets are initialized
 atmos git status <repo>                           # Inspect a managed Git repository
 atmos composition validate <name> -s <stack>      # Validate composition service fulfillment
-atmos toolchain install                          # Install tools from .tool-versions
+atmos toolchain install                          # Manual bootstrap/cache warm only; execution auto-installs declared tools
 atmos ai ask "What stacks do we have?"           # Ask AI with Atmos tools and skills
 atmos mcp export                                 # Export MCP server config for AI clients
 atmos list stacks                                # List all stacks
@@ -101,7 +101,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | YAML functions: !terraform.state, !store, !secret, !emulator, !git.*, !include, !append, !unset, !aws.*, !literal    | `atmos-yaml-functions`  | `agent-skills/skills/atmos-yaml-functions/SKILL.md`  |
 | Go templates, Sprig/Gomplate functions, atmos.Component, atmos.GomplateDatasource, template configuration            | `atmos-templates`       | `agent-skills/skills/atmos-templates/SKILL.md`       |
 | Design patterns: stack organization, component catalogs, inheritance, configuration composition, version management   | `atmos-design-patterns` | `agent-skills/skills/atmos-design-patterns/SKILL.md` |
-| Toolchain management: install/exec/search tools, .tool-versions, Aqua registries, custom registries, aliases         | `atmos-toolchain`       | `agent-skills/skills/atmos-toolchain/SKILL.md`       |
+| Toolchain management: declarative dependencies, automatic installs, .tool-versions, Aqua registries, aliases         | `atmos-toolchain`       | `agent-skills/skills/atmos-toolchain/SKILL.md`       |
 | Introspection: describe component/stacks/affected/dependents, list stacks/components/instances, querying, provenance | `atmos-introspection`   | `agent-skills/skills/atmos-introspection/SKILL.md`   |
 | Diagnostics: JSONL event streams for subprocess start/end/output and debugging execution                             | `atmos-diagnostics`     | `agent-skills/skills/atmos-diagnostics/SKILL.md`     |
 | Global settings: settings, logs, errors, env, docs, metadata, version requirements                                 | `atmos-settings`        | `agent-skills/skills/atmos-settings/SKILL.md`        |
@@ -133,8 +133,9 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 - **Schema validation**: Use `atmos validate stacks` to validate manifests against the Atmos JSON Schema.
 - **Introspection**: Use `atmos describe component` and `atmos list stacks/components` to query the project before
   generating configuration -- never guess at stack names or component configs.
-- **Toolchain**: Use `.tool-versions` for general project tools, `dependencies.tools` for stack/component/workflow/
-  command requirements, configure aliases and registries in `atmos.yaml`, and run `atmos toolchain install`.
+- **Toolchain**: Use `dependencies.tools` for stack/component/workflow/custom-command requirements and
+  `.tool-versions` for repo-wide developer shell defaults. Atmos auto-installs and injects missing tools
+  during execution; reserve `atmos toolchain install` for shell bootstrap, cache warming, or troubleshooting.
 - **AI/MCP**: Configure AI providers and MCP servers in `atmos.yaml`; use `atmos mcp export` so AI clients get
   auth-wrapped MCP commands and toolchain-aware `PATH` entries.
 - **Dependencies**: use `dependencies.components` for component, file, and folder dependencies. Treat
@@ -145,7 +146,8 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 - **Native CI**: use the Atmos container and direct `atmos` commands; replace deprecated
   `cloudposse/github-action-atmos*` wrapper actions with Native CI workflows. Prefer Atmos
   `dependencies.tools` over Terraform/OpenTofu setup actions such as `hashicorp/setup-terraform`
-  or `opentofu/setup-opentofu`.
+  or `opentofu/setup-opentofu`. When a CI step needs a tool, first declare it on the owning
+  component, workflow, or custom command instead of adding a preinstall step.
 - **Atmos Pro drift detection**: use `settings.pro.drift_detection.enabled` and `atmos terraform plan
   --upload-status`; do not build new scheduled drift workflows from deprecated wrapper actions.
 - **GitHub STS**: for private GitHub `vendor`, component `source`, remote `import`, or Terraform modules

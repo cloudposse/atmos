@@ -20,6 +20,7 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 | `cloudposse/github-action-atmos*` wrapper actions | Native CI with direct `atmos` commands |
 | `cloudposse/github-action-setup-atmos` as default | GitHub Actions container `ghcr.io/cloudposse/atmos:<version>` |
 | `hashicorp/setup-terraform` / `opentofu/setup-opentofu` in Atmos jobs | Atmos `dependencies.tools` and toolchain |
+| Manual `atmos toolchain install <tool>` preinstall steps for Atmos-owned tools | Declarative `dependencies.tools` at the owning component, workflow, hook, or custom command |
 | Hand-rolled scheduled drift GitHub Actions | Atmos Pro drift detection |
 | `cloudposse/github-action-atmos-terraform-drift-*` | `settings.pro.drift_detection` plus `terraform plan --upload-status` |
 | Secret values through raw store calls | Declared `secrets.vars` plus `!secret` |

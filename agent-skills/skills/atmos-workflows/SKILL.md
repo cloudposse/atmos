@@ -239,6 +239,9 @@ workflows:
 Dependencies support SemVer constraints: exact (`1.10.3`), pessimistic (`~> 1.10.0`),
 compatible (`^1.10.0`), or `latest`.
 
+No separate `atmos toolchain install` step is needed for workflow-declared tools; Atmos installs and
+injects them when the workflow runs. Reserve explicit installs for cache warming or job-level scripts.
+
 ## Working with Stacks in Workflows
 
 The stack for Atmos-type steps can be specified in four ways (lowest to highest priority):

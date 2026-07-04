@@ -16,6 +16,10 @@ Complete reference for all `atmos toolchain` subcommands, flags, and usage patte
 
 Install tools from .tool-versions or by name.
 
+Prefer declarative `dependencies.tools` for normal Atmos execution. Use this command for manual
+bootstrap, cache warming, shell setup, ad-hoc verification, or tools outside a component/workflow/
+custom-command execution context.
+
 ```shell
 atmos toolchain install [tool@version] [flags]
 ```
@@ -23,9 +27,9 @@ atmos toolchain install [tool@version] [flags]
 ### Examples
 
 ```shell
-atmos toolchain install                        # Install all from .tool-versions
-atmos toolchain install terraform@1.9.8        # Install specific version
-atmos toolchain install jq                     # Install latest from .tool-versions
+atmos toolchain install                        # Warm/install .tool-versions for a shell or cache
+atmos toolchain install terraform@1.9.8        # Ad-hoc install a specific version
+atmos toolchain install jq                     # Bootstrap a repo-wide default tool
 ```
 
 ---

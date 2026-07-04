@@ -1,6 +1,6 @@
 ---
 name: atmos-toolchain
-description: "Toolchain management: install/exec/search/env commands, Aqua registry integration, version pinning, package verification, multi-tooling execution"
+description: "Toolchain management: declarative dependencies, automatic installs, install/exec/search/env commands, Aqua registry integration, version pinning, package verification"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -15,6 +15,16 @@ references:
 The Atmos toolchain manages CLI tool installation and versioning natively, using the Aqua package registry
 ecosystem. It replaces external version managers (asdf, mise, aqua CLI) with a built-in system that
 integrates directly with atmos.yaml configuration.
+
+## Default Rule
+
+Declare tool requirements where they are used, then run the owning Atmos command. Do not add
+`atmos toolchain install` before component, workflow, custom-command, or hook execution when the
+tool can be declared with `dependencies.tools`. Atmos installs missing declared tools and injects
+them into `PATH` for that execution context.
+
+Use explicit `atmos toolchain install` only for shell bootstrap, cache warming, ad-hoc
+troubleshooting, or job-level tools that are not owned by a component, workflow, custom command, or hook.
 
 ## Core Concepts
 
@@ -35,14 +45,24 @@ jq 1.7.1
 - File location: project root (default), overridable via `toolchain.versions_file` in atmos.yaml,
   `--tool-versions`, or `ATMOS_TOOL_VERSIONS`
 
-Use `.tool-versions` for general project tools that should be installed for developers, agents, or
-interactive shells but are not a dependency of a specific stack, component, workflow, or command. For
-example, put `jq`, `yq`, `kubectl`, or a general `terraform` default here when the whole repo expects them.
+Use `.tool-versions` for repo-wide developer shell defaults and general tools that every developer,
+agent, or interactive shell should see. Atmos can auto-install these defaults for custom commands and
+shell integration, but `.tool-versions` is not the preferred home for operation-specific requirements.
 
 Use `dependencies.tools` when the tool is part of a stack/component/workflow/command contract. Those
 dependencies are installed and injected into that execution context and can override `.tool-versions`
 defaults. Do not rely on `.tool-versions` alone when CI or a stack requires a specific Terraform,
 OpenTofu, scanner, or generator version.
+
+### Where to Declare a Tool
+
+| Need | Preferred declaration |
+|------|-----------------------|
+| Component needs Terraform/OpenTofu, scanner, or generator | Stack/component `dependencies.tools` |
+| Workflow step needs a CLI | Workflow `dependencies.tools` |
+| Custom command invokes a CLI such as `bat`, `tree`, `jq`, or `checkov` | Command `dependencies.tools` |
+| Hook invokes a scanner or custom binary | Component `dependencies.tools` for the hooked component |
+| One-off local shell, manual verification, or cache warm | `atmos toolchain install` plus `atmos toolchain env` |
 
 ### Tool Installation Path
 
@@ -160,14 +180,17 @@ toolchain:
 
 ## Key Commands
 
-### Installation
+### Manual Installation and Cleanup
 
 ```bash
-atmos toolchain install                    # Install all tools from .tool-versions
-atmos toolchain install terraform@1.9.8    # Install specific tool and version
+atmos toolchain install                    # Bootstrap/cache warm tools from .tool-versions
+atmos toolchain install terraform@1.9.8    # Ad-hoc install for shell use or troubleshooting
 atmos toolchain uninstall terraform@1.9.8  # Remove installed tool
 atmos toolchain clean                      # Remove all installed tools and cache
 ```
+
+Prefer `dependencies.tools` for normal Atmos execution. Component, workflow, custom-command, and hook
+runs install missing declared tools automatically.
 
 ### Version Management
 
@@ -246,14 +269,12 @@ export ATMOS_TOOLCHAIN_PATH="$HOME/.cache/atmos/tools"
 eval "$(atmos toolchain env --format=bash)"
 ```
 
-In GitHub Actions, use the GitHub format. When `$GITHUB_PATH` is available, Atmos appends toolchain
-paths to it automatically:
+In GitHub Actions, use the GitHub format only when later job-level steps need direct shell access to
+toolchain binaries. When `$GITHUB_PATH` is available, Atmos appends toolchain paths to it automatically:
 
 ```yaml
-- name: Install toolchain tools
-  run: |
-    atmos toolchain install
-    atmos toolchain env --format=github
+- name: Add toolchain paths for later job-level scripts
+  run: atmos toolchain env --format=github
 ```
 
 ## Tool Dependencies in Atmos Config
@@ -306,7 +327,9 @@ only for non-production workflows where drift is acceptable.
 In Atmos CI, prefer `dependencies.tools` over GitHub setup actions such as
 `hashicorp/setup-terraform` or `opentofu/setup-opentofu`. Setup actions install a runner-level binary,
 while Atmos tool dependencies travel with the stack, component, workflow, or command that requires
-the tool and are injected into that execution context.
+the tool and are injected into that execution context. If an agent is about to add
+`atmos toolchain install <tool>` to CI, first check whether the tool belongs on the component,
+workflow, or custom command that invokes it.
 
 ## Custom Registries in atmos.yaml
 
@@ -383,23 +406,18 @@ kubernetes-sigs/kubectl 1.28.0
 helmfile/helmfile 0.168.0
 ```
 
-```bash
-# Install everything
-atmos toolchain install
-
-# Verify
-atmos toolchain list
-```
+Tools declared on components, workflows, and commands are installed when those operations run. Use
+`atmos toolchain list` to inspect local installs; use `atmos toolchain install` only to pre-warm a
+developer shell or CI cache.
 
 ### CI/CD Integration
 
 ```yaml
-# GitHub Actions
-- name: Install tools
-  run: |
-    atmos toolchain install
-    atmos toolchain env --format=github
-    # Automatically appends paths to $GITHUB_PATH when available
+# GitHub Actions: normal Atmos operation, no preinstall step needed
+- run: atmos terraform plan vpc -s prod
+
+# Optional: expose already-managed tool paths to later non-Atmos shell steps
+- run: atmos toolchain env --format=github
 ```
 
 ### Custom Tool Registry

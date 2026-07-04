@@ -91,8 +91,9 @@ Pinning can be applied at four scopes, in increasing precedence:
 3. **Component-type** -- `terraform.dependencies.tools` to default every Terraform/OpenTofu component.
 4. **Per-component** -- `dependencies.tools` on an individual component for migrations or one-offs.
 
-Install everything declared across these scopes with `atmos toolchain install`. For full YAML
-examples, resolution order, ad-hoc installs, and the install/list/set workflow, see
+Atmos installs declared tools when running the component. Use `atmos toolchain install` only to
+pre-warm a cache, bootstrap a shell, or troubleshoot a specific binary. For full YAML examples,
+resolution order, ad-hoc installs, and the inspection workflow, see
 [references/toolchain-pinning.md](references/toolchain-pinning.md) and the
 [atmos-toolchain](../atmos-toolchain/SKILL.md) skill.
 

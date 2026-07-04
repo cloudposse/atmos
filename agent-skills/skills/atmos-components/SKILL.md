@@ -139,6 +139,8 @@ components:
             path: src/lambda
 ```
 
+Use `dependencies.tools` for runtime CLIs at global, component-type, or per-component scope; Atmos auto-installs and injects them, so do not add a separate install step.
+
 Do not add new `settings.depends_on` examples. If a repository already uses that legacy field,
 recommend migrating it to `dependencies.components`.
 

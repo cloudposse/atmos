@@ -82,7 +82,9 @@ commands.
 
 Use explicit `atmos toolchain install ...` only for job-level scripted tools that are not already
 declared in `dependencies.tools`. In GitHub Actions, `atmos toolchain env --format=github`
-automatically appends toolchain paths to `$GITHUB_PATH` when available.
+automatically appends toolchain paths to `$GITHUB_PATH` when available. Most install steps added
+to fix missing tools should instead become `dependencies.tools` on the component, workflow, hook,
+or custom command that invokes the tool.
 
 ## Minimal Permissions
 

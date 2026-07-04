@@ -89,7 +89,9 @@ or custom command; Atmos installs and injects the exact version for that executi
 Use explicit `atmos toolchain install ...` steps only for job-level scripts that need tools not
 declared as component, workflow, or custom command dependencies. In GitHub Actions, run
 `atmos toolchain env --format=github`; Atmos appends toolchain paths to `$GITHUB_PATH` when that
-file is available, so later steps can call those tools directly.
+file is available, so later steps can call those tools directly. If a CI fix adds
+`atmos toolchain install <tool>` for a tool used by an Atmos command, workflow, hook, or component,
+convert that tool into the owning `dependencies.tools` declaration instead.
 
 Primary GitHub Actions pattern:
 

@@ -74,5 +74,7 @@ Use `--all`, `--components`, or `--query` filters when warming only part of the 
 - Do not conflate CI cache, Terraform registry cache, and Terraform plugin cache.
 - Prefer cache keys that include Atmos/toolchain config and lock files.
 - Keep cache restores before toolchain-heavy steps and saves after all Atmos commands complete.
+- Treat toolchain cache warming as an optimization after `atmos ci cache restore`, not as required
+  correctness. Declared `dependencies.tools` still auto-install when the owning operation runs.
 - For private registry or GitHub reads, solve auth first with Atmos Auth or `github/sts`; cache
   should not be used as an auth workaround.

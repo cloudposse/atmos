@@ -388,6 +388,10 @@ When you run the command, Atmos:
 3. Updates PATH to include the tool
 4. Executes the steps
 
+Do not add a separate workflow or CI step that runs `atmos toolchain install <tool>` for tools the
+custom command itself invokes. Put utilities such as `bat`, `tree`, `jq`, `tflint`, or `checkov`
+under the command's `dependencies.tools` so the command is self-contained.
+
 Multiple tools and SemVer constraints are supported:
 
 ```yaml
@@ -452,8 +456,8 @@ commands:
 5. **Use `verbose: false` for noisy commands.** Suppress command echo for commands that produce
    a lot of output or contain sensitive information.
 
-6. **Leverage tool dependencies.** Instead of documenting prerequisites, declare them in
-   `dependencies.tools` so they are auto-installed.
+6. **Leverage tool dependencies.** Instead of documenting prerequisites or adding preinstall
+   steps, declare every command-owned CLI in `dependencies.tools` so it is auto-installed.
 
 7. **Organize with nested subcommands.** Use nested `commands` for related operations
    (e.g., `atmos list stacks`, `atmos list components`).

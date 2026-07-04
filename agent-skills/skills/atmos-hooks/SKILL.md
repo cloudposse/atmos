@@ -70,6 +70,9 @@ Use the specific kind when Atmos has one; use `command` for project-specific scr
 Hooks can use `dependencies.tools` so required scanners or CLIs are installed and placed on `PATH`
 for the hook execution context.
 
+When the hooked component declares the hook binary in `dependencies.tools`, do not add a separate
+`atmos toolchain install` step. Atmos resolves, installs, and injects the tool before the hook fires.
+
 ## Operational Guidance
 
 - Use hooks for repeatable lifecycle behavior, not one-off local scripts.

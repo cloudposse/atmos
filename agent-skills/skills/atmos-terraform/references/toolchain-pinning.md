@@ -21,8 +21,8 @@ terraform 1.9.8
 opentofu 1.10.3
 ```
 
-Then `atmos toolchain install` provisions both. After install, `atmos terraform plan` uses the
-version that matches the configured `command`.
+When you run `atmos terraform plan/apply/deploy`, Atmos provisions missing declared tools and uses
+the version that matches the configured `command`.
 
 `.tool-versions` is the right place for project-wide defaults. It is NOT the right place when a
 specific stack or component requires a different version -- use `dependencies.tools` for that.
@@ -88,13 +88,16 @@ When Atmos invokes the configured binary, it resolves the version using standard
 per-component `dependencies.tools` > component-type `terraform.dependencies.tools` > stack
 `dependencies.tools` > project `.tool-versions` > whatever's on PATH (last resort).
 
-## Installation workflow
+## Execution and Optional Cache Warm
 
 ```bash
-# Install everything declared in .tool-versions + dependencies.tools across the project
+# Normal path: run the component; Atmos installs and injects declared tools automatically
+atmos terraform plan vpc -s prod
+
+# Optional cache warm or shell bootstrap
 atmos toolchain install
 
-# Install a specific version ad-hoc
+# Optional ad-hoc troubleshooting
 atmos toolchain install opentofu@1.10.3
 atmos toolchain install terraform@1.9.8
 
