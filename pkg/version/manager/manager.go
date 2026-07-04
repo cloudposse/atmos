@@ -27,10 +27,8 @@ var (
 	ErrTrackNotFound          = errors.New("version track not found")
 	ErrVersionNotFound        = errors.New("version not found")
 	ErrVersionNotLocked       = errors.New("version not locked")
-	ErrResolverUnsupported    = errors.New("version resolver unsupported")
 	ErrTrackNotVerified       = errors.New("version track is not verified")
 	ErrDesiredVersionRequired = errors.New("desired version is required")
-	ErrNoVersionMatch         = errors.New("no version satisfies constraint")
 )
 
 // EffectiveEntry is a version entry after defaults and groups are applied.
