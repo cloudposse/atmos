@@ -11,6 +11,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 NOTICE_FILE="${REPO_ROOT}/NOTICE"
 TEMP_DIR=$(mktemp -d)
 GO_LICENSES_BIN="$(command -v go-licenses || true)"
+GO_LICENSES_VERSION="${GO_LICENSES_VERSION:-v1.6.0}"
 LICENSE_GOOS="${LICENSE_GOOS:-linux}"
 LICENSE_GOARCH="${LICENSE_GOARCH:-amd64}"
 LICENSE_CGO_ENABLED="${LICENSE_CGO_ENABLED:-1}"
@@ -84,8 +85,8 @@ EOF
 
 # Check if go-licenses is installed
 if [ -z "${GO_LICENSES_BIN}" ]; then
-    echo "Installing go-licenses..."
-    go install github.com/google/go-licenses@latest
+    echo "Installing go-licenses ${GO_LICENSES_VERSION}..."
+    go install "github.com/google/go-licenses@${GO_LICENSES_VERSION}"
     GOBIN="$(go env GOBIN)"
     if [ -z "${GOBIN}" ]; then
         GOBIN="$(go env GOPATH)/bin"

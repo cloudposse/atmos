@@ -544,30 +544,6 @@ jobs:
       - name: Set execute permissions on atmos
         run: chmod +x /usr/local/bin/atmos
 
-      - name: Install the Cloud Posse package repository
-        if: matrix.flavor.target == 'linux'
-        run: curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | sudo bash
-
-      - name: Install kubectl and helmfile on Linux
-        if: matrix.flavor.target == 'linux'
-        run: sudo apt-get -y install kubectl helmfile
-
-      - name: Install kubectl and helmfile on macOS
-        if: matrix.flavor.target == 'macos'
-        run: |
-          if brew tap | grep -qx 'aws/tap'; then
-            brew untap aws/tap
-          fi
-          brew install kubectl helmfile
-
-      - name: Install Helm
-        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
-        with:
-          version: ${{ env.HELM_VERSION }}
-
-      - name: Install helm-diff plugin
-        run: helm plugin install https://github.com/databus23/helm-diff
-
       - name: Write a default AWS profile to the AWS config file
         run: |
           mkdir -p ~/.aws

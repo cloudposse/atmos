@@ -15,9 +15,14 @@ want to validate together: Atmos output variables, summaries, status checks, PR
 comments, SARIF hook handling, Atmos native CI cache, the Terraform registry
 cache, eager provider mirroring, and toolchain-managed Terraform installation.
 
-Scanner findings are produced by real scanner hook kinds (`checkov`, `trivy`,
-and `kics`) against separate intentionally-insecure Terraform files. Keep those
+Scanner findings are produced by real scanner hook kinds (`checkov` and
+`trivy`) against separate intentionally-insecure Terraform files. Keep those
 targets separate so the pull request's Code Scanning annotations show the
 scanner names and distinct file/line locations. Do not replace them with a
 synthetic SARIF fixture; generic `format: sarif` coverage belongs in Go tests,
 not in this visual E2E workflow.
+
+KICS is intentionally not exercised here until its query bundle is modeled as a
+first-class Atmos toolchain artifact. The KICS release tarball installs the
+binary only; downloading `extracted-info.zip` directly in this workflow would
+reintroduce an ad hoc executable-tool setup path.
