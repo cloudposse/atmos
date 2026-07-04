@@ -232,7 +232,10 @@
   "default": false,
   "version": {
     "check": {},
-    "constraint": {}
+    "constraint": {},
+    "defaults": {
+      "update": {}
+    }
   },
   "validate": {
     "editorconfig": {}

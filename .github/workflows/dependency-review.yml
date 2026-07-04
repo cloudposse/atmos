@@ -41,7 +41,11 @@ jobs:
           # Allow specific packages where GitHub cannot detect the license but we've verified it
           # modernc.org/libc: BSD-3-Clause (verified at https://gitlab.com/cznic/libc/-/blob/master/LICENSE)
           #   Transitive dependency of modernc.org/sqlite used for AI session storage
-          allow-dependencies-licenses: "pkg:golang/modernc.org/libc"
+          # github.com/opencontainers/go-digest: Apache-2.0 code; the "AND CC-BY-SA-4.0" in its
+          #   license scan comes from LICENSE.docs, which covers documentation only (see
+          #   https://github.com/opencontainers/go-digest#copyright-and-license).
+          #   Transitive dependency of github.com/updatecli/updatecli (Version Tracker).
+          allow-dependencies-licenses: "pkg:golang/modernc.org/libc, pkg:golang/github.com/opencontainers/go-digest"
 
           # Fail on moderate or higher severity vulnerabilities
           fail-on-severity: moderate
