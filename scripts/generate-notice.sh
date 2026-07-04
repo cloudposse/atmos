@@ -24,22 +24,22 @@ cd "${REPO_ROOT}"
 # different host than their module path, so go-licenses must do a network fetch to
 # map the path to its source repo — when that fetch fails it emits "URL: Unknown",
 # producing a spurious NOTICE diff. Each entry is
-# "<module> <source-repo> [license-path]"; the URL is rebuilt from the module's
-# version in the build list (no network), so it is identical on every run
-# regardless of whether go-licenses' resolution succeeded.
+# "<module> <source-repo> [license-path] [ref-prefix]"; the URL is rebuilt from
+# the module's version in the build list (no network), so it is identical on
+# every run regardless of whether go-licenses' resolution succeeded.
 # A plain newline-delimited list (not a bash 4 associative array) keeps this working
 # on macOS's stock bash 3.2.
 REPO_OVERRIDES="
 cloud.google.com/go github.com/googleapis/google-cloud-go
-cloud.google.com/go/auth github.com/googleapis/google-cloud-go auth/LICENSE
-cloud.google.com/go/auth/oauth2adapt github.com/googleapis/google-cloud-go auth/oauth2adapt/LICENSE
-cloud.google.com/go/compute/metadata github.com/googleapis/google-cloud-go compute/metadata/LICENSE
-cloud.google.com/go/iam github.com/googleapis/google-cloud-go iam/LICENSE
-cloud.google.com/go/kms github.com/googleapis/google-cloud-go kms/LICENSE
-cloud.google.com/go/longrunning github.com/googleapis/google-cloud-go longrunning/LICENSE
-cloud.google.com/go/monitoring github.com/googleapis/google-cloud-go monitoring/LICENSE
-cloud.google.com/go/secretmanager github.com/googleapis/google-cloud-go secretmanager/LICENSE
-cloud.google.com/go/storage github.com/googleapis/google-cloud-go storage/LICENSE
+cloud.google.com/go/auth github.com/googleapis/google-cloud-go auth/LICENSE auth/
+cloud.google.com/go/auth/oauth2adapt github.com/googleapis/google-cloud-go auth/oauth2adapt/LICENSE auth/oauth2adapt/
+cloud.google.com/go/compute/metadata github.com/googleapis/google-cloud-go compute/metadata/LICENSE compute/metadata/
+cloud.google.com/go/iam github.com/googleapis/google-cloud-go iam/LICENSE iam/
+cloud.google.com/go/kms github.com/googleapis/google-cloud-go kms/LICENSE kms/
+cloud.google.com/go/longrunning github.com/googleapis/google-cloud-go longrunning/LICENSE longrunning/
+cloud.google.com/go/monitoring github.com/googleapis/google-cloud-go monitoring/LICENSE monitoring/
+cloud.google.com/go/secretmanager github.com/googleapis/google-cloud-go secretmanager/LICENSE secretmanager/
+cloud.google.com/go/storage github.com/googleapis/google-cloud-go storage/LICENSE storage/
 dario.cat/mergo github.com/imdario/mergo
 inet.af/netaddr github.com/inetaf/netaddr
 "
@@ -59,13 +59,14 @@ git_ref_from_version() {
 # apply_url_overrides rewrites the URL (2nd CSV field) for each overridden module to
 # a deterministic, version-pinned LICENSE URL derived from go.mod (no network fetch).
 apply_url_overrides() {
-    local csv="$1" module repo license_path version ref url
-    while read -r module repo license_path; do
+    local csv="$1" module repo license_path ref_prefix version ref url
+    while read -r module repo license_path ref_prefix; do
         [ -n "${module}" ] || continue
         license_path="${license_path:-LICENSE}"
+        ref_prefix="${ref_prefix:-}"
         version="$(go list -m -f '{{.Version}}' "${module}" 2>/dev/null || true)"
         [ -n "${version}" ] || continue
-        ref="$(git_ref_from_version "${version}")"
+        ref="${ref_prefix}$(git_ref_from_version "${version}")"
         url="https://${repo}/blob/${ref}/${license_path}"
         awk -F',' -v OFS=',' -v mod="${module}" -v newurl="${url}" \
             '$1==mod{$2=newurl} {print}' "${csv}" > "${csv}.tmp" && mv "${csv}.tmp" "${csv}"
