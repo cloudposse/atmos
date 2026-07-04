@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -98,7 +99,7 @@ func TestHandleInstalledPkgMsg_NonTTYStatusOutput(t *testing.T) {
 
 		assert.NotNil(t, cmd)
 		assert.Equal(t, 1, m.index)
-		assert.Contains(t, stderr.String(), "vpc (1.0.0)")
+		assert.Contains(t, atmosansi.Strip(stderr.String()), "vpc (1.0.0)")
 	})
 
 	t.Run("final failure logs failed package and summary", func(t *testing.T) {
@@ -117,7 +118,7 @@ func TestHandleInstalledPkgMsg_NonTTYStatusOutput(t *testing.T) {
 
 		assert.NotNil(t, cmd)
 		assert.True(t, m.done)
-		output := stderr.String()
+		output := atmosansi.Strip(stderr.String())
 		assert.Contains(t, output, "Failed to vendor vpc")
 		assert.Contains(t, output, "vpc (1.0.0)")
 		assert.Contains(t, output, "Vendored components (success: 0, failed: 1)")
@@ -138,7 +139,7 @@ func TestLogNonTTYFinalStatus_DryRunSuccessSummary(t *testing.T) {
 
 	m.logNonNTYFinalStatus(m.packages[0], false)
 
-	output := stderr.String()
+	output := atmosansi.Strip(stderr.String())
 	assert.Contains(t, output, "vpc (1.0.0)")
 	assert.Contains(t, output, "Done! Dry run completed. No components vendored")
 	assert.Contains(t, output, "Vendored components (success: 1)")
