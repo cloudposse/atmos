@@ -40,6 +40,14 @@ type TrackUpdate struct {
 func UpdateTrack(atmosConfig *schema.AtmosConfiguration, track, group string, only []string) (*TrackUpdate, error) {
 	defer perf.Track(atmosConfig, "manager.UpdateTrack")()
 
+	return UpdateTrackWithContext(context.Background(), atmosConfig, track, group, only)
+}
+
+// UpdateTrackWithContext advances locked versions while honoring caller
+// cancellation and deadlines for resolver calls.
+func UpdateTrackWithContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, track, group string, only []string) (*TrackUpdate, error) {
+	defer perf.Track(atmosConfig, "manager.UpdateTrackWithContext")()
+
 	track = EffectiveTrack(atmosConfig, track)
 	entries, err := EffectiveEntries(atmosConfig, track)
 	if err != nil {
@@ -64,7 +72,7 @@ func UpdateTrack(atmosConfig *schema.AtmosConfiguration, track, group string, on
 			continue
 		}
 		locked := lock.Tracks[track][name]
-		result, lockEntry, err := updateEntry(atmosConfig, &entry, &locked, now)
+		result, lockEntry, err := updateEntry(ctx, atmosConfig, &entry, &locked, now)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
@@ -76,8 +84,8 @@ func UpdateTrack(atmosConfig *schema.AtmosConfiguration, track, group string, on
 
 // updateEntry computes the policy-driven update for a single entry and its
 // new lock entry.
-func updateEntry(atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry, locked *LockEntry, now time.Time) (UpdateResult, LockEntry, error) {
-	decision, err := decideUpdate(atmosConfig, entry, locked.Version, now)
+func updateEntry(ctx context.Context, atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry, locked *LockEntry, now time.Time) (UpdateResult, LockEntry, error) {
+	decision, err := decideUpdate(ctx, atmosConfig, entry, locked.Version, now)
 	if err != nil {
 		return UpdateResult{}, LockEntry{}, err
 	}
@@ -87,7 +95,7 @@ func updateEntry(atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry, 
 	// purpose: digest refresh catches re-tagged upstream releases, which is
 	// the whole point of `strategy: pin` with `pin: digest`.
 	if pinEnabled(entry) && target.Version != "" && (target.Digest == "" || target.Version == locked.Version) {
-		digest, err := pinDigest(atmosConfig, entry, target.Version)
+		digest, err := pinDigest(ctx, atmosConfig, entry, target.Version)
 		if err != nil {
 			return UpdateResult{}, LockEntry{}, err
 		}
@@ -122,10 +130,12 @@ func updateEntry(atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry, 
 
 // pinDigest resolves the immutable digest for a version via the entry's
 // datasource.
-func pinDigest(atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry, version string) (string, error) {
+func pinDigest(ctx context.Context, atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry, version string) (string, error) {
 	res, datasource, ok := resolver.Lookup(entry.Datasource)
 	if !ok {
 		return "", fmt.Errorf("%w: datasource %q cannot pin digests", ErrResolverUnsupported, entry.Datasource)
 	}
-	return res.Pin(context.Background(), resolverRequest(atmosConfig, entry, datasource), version)
+	ctx, cancel := resolverContext(ctx)
+	defer cancel()
+	return res.Pin(ctx, resolverRequest(atmosConfig, entry, datasource), version)
 }

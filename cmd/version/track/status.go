@@ -16,7 +16,7 @@ var trackStatusCmd = &cobra.Command{
 		defer perf.Track(atmosConfig, "version.track.status.RunE")()
 
 		group, _ := cmd.Flags().GetString("group")
-		status, err := manager.StatusTrack(atmosConfig, trackFromArgs(cmd, args), group)
+		status, err := manager.StatusTrackWithContext(cmd.Context(), atmosConfig, trackFromArgs(cmd, args), group)
 		if err != nil {
 			return err
 		}

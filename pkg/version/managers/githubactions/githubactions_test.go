@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@0000000000000000000000000000000000000000 # v5.0.0
-      - uses: aws-actions/configure-aws-credentials/subdir@v1
+      - uses: aws-actions/configure-aws-credentials/subdir@v1 # keep this explanatory note
       - uses: unmanaged/action@v9
       - uses: ./local/action
       - name: reusable
@@ -75,7 +75,7 @@ func TestGitHubActionsManagerRewritesManagedRefs(t *testing.T) {
 		// Pinned with stale SHA/comment: fully rewritten.
 		"uses: actions/setup-go@2222222222222222222222222222222222222222 # v5.2.0",
 		// Unpinned subdirectory action: version ref, package matched on owner/repo.
-		"uses: aws-actions/configure-aws-credentials/subdir@v4.0.1",
+		"uses: aws-actions/configure-aws-credentials/subdir@v4.0.1 # keep this explanatory note",
 		// Reusable workflow path.
 		"uses: acme/workflows/.github/workflows/ci.yml@v3",
 		// Unmanaged and local refs untouched.

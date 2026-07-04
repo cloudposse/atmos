@@ -62,6 +62,17 @@ func TestMarkerStandaloneCommentDockerfile(t *testing.T) {
 	}
 }
 
+func TestMarkerStandaloneHTMLComment(t *testing.T) {
+	_, changes := planFixture(t, "Dockerfile",
+		"<!-- atmos:version opentofu -->\nENV TOFU_VERSION=1.9.0\n")
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(changes))
+	}
+	if !strings.Contains(string(changes[0].New), "ENV TOFU_VERSION=1.10.6") {
+		t.Fatalf("expected next-line rewrite, got:\n%s", changes[0].New)
+	}
+}
+
 func TestMarkerPinnedDigestReplacement(t *testing.T) {
 	_, changes := planFixture(t, "deploy.yaml",
 		"image: nginx@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb # atmos:version nginx\n")

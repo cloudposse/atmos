@@ -34,13 +34,7 @@ func (Resolver) Versions(ctx context.Context, req *resolver.Request) ([]resolver
 		return nil, err
 	}
 	reg := toolchain.NewAquaRegistry()
-	lister, ok := reg.(interface {
-		GetAvailableVersions(owner, repo string) ([]string, error)
-	})
-	if !ok {
-		return nil, fmt.Errorf("%w: toolchain registry cannot list versions", resolver.ErrVersionListingUnsupported)
-	}
-	versions, err := lister.GetAvailableVersions(owner, repo)
+	versions, err := availableVersions(ctx, reg, owner, repo)
 	if err != nil {
 		return nil, err
 	}
@@ -49,6 +43,20 @@ func (Resolver) Versions(ctx context.Context, req *resolver.Request) ([]resolver
 		candidates = append(candidates, resolver.Candidate{Version: version})
 	}
 	return candidates, nil
+}
+
+func availableVersions(ctx context.Context, reg any, owner, repo string) ([]string, error) {
+	if lister, ok := reg.(interface {
+		GetAvailableVersionsContext(context.Context, string, string) ([]string, error)
+	}); ok {
+		return lister.GetAvailableVersionsContext(ctx, owner, repo)
+	}
+	if lister, ok := reg.(interface {
+		GetAvailableVersions(owner, repo string) ([]string, error)
+	}); ok {
+		return lister.GetAvailableVersions(owner, repo)
+	}
+	return nil, fmt.Errorf("%w: toolchain registry cannot list versions", resolver.ErrVersionListingUnsupported)
 }
 
 // Pin is unsupported: toolchain packages have no immutable digest concept.

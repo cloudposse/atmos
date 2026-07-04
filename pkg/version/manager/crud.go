@@ -2,11 +2,11 @@ package manager
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -15,9 +15,9 @@ import (
 
 var (
 	// ErrEntryExists is returned when adding an entry that is already configured.
-	ErrEntryExists = errors.New("version entry already exists")
+	ErrEntryExists = errUtils.ErrVersionEntryExists
 	// ErrEntryNotFound is returned when editing an entry that is not configured.
-	ErrEntryNotFound = errors.New("version entry not found")
+	ErrEntryNotFound = errUtils.ErrVersionEntryNotFound
 )
 
 // Permission for a configuration file written by CRUD edits when its previous

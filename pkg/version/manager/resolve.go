@@ -3,11 +3,14 @@ package manager
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version/resolver"
 )
+
+const resolverTimeout = 2 * time.Minute
 
 // Errors surfaced from the resolver registry, aliased so existing callers and
 // errors.Is checks against the manager package keep working.
@@ -23,7 +26,15 @@ var (
 func ResolveTarget(atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry) (string, error) {
 	defer perf.Track(atmosConfig, "manager.ResolveTarget")()
 
-	candidate, err := ResolveEntry(atmosConfig, entry, false)
+	return ResolveTargetWithContext(context.Background(), atmosConfig, entry)
+}
+
+// ResolveTargetWithContext returns the desired concrete version for an entry,
+// honoring the caller's cancellation and deadline.
+func ResolveTargetWithContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry) (string, error) {
+	defer perf.Track(atmosConfig, "manager.ResolveTargetWithContext")()
+
+	candidate, err := ResolveEntryWithContext(ctx, atmosConfig, entry, false)
 	if err != nil {
 		return "", err
 	}
@@ -38,6 +49,14 @@ func ResolveTarget(atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry
 func ResolveEntry(atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry, pin bool) (resolver.Candidate, error) {
 	defer perf.Track(atmosConfig, "manager.ResolveEntry")()
 
+	return ResolveEntryWithContext(context.Background(), atmosConfig, entry, pin)
+}
+
+// ResolveEntryWithContext resolves an entry to its full candidate while
+// honoring the caller's cancellation and deadline.
+func ResolveEntryWithContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry, pin bool) (resolver.Candidate, error) {
+	defer perf.Track(atmosConfig, "manager.ResolveEntryWithContext")()
+
 	if entry.Desired == "" {
 		return resolver.Candidate{}, fmt.Errorf("%w: %s", ErrDesiredVersionRequired, entry.Name)
 	}
@@ -50,7 +69,8 @@ func ResolveEntry(atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry,
 		return resolver.Candidate{}, fmt.Errorf("%w: datasource %q has no registered resolver; use a concrete desired version", ErrResolverUnsupported, entry.Datasource)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := resolverContext(ctx)
+	defer cancel()
 	req := resolverRequest(atmosConfig, entry, datasource)
 	candidate, err := selectCandidate(ctx, res, req, entry, concrete)
 	if err != nil {
@@ -64,6 +84,13 @@ func ResolveEntry(atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry,
 		candidate.Digest = digest
 	}
 	return candidate, nil
+}
+
+func resolverContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithTimeout(ctx, resolverTimeout)
 }
 
 // selectCandidate returns the candidate for an entry: the concrete desired

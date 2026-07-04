@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -23,11 +24,11 @@ import (
 
 var (
 	// ErrDrift is returned by Check when managed files differ from the lock.
-	ErrDrift = errors.New("version-managed files are out of date; run `atmos version track apply`")
+	ErrDrift = errUtils.ErrVersionFilesDrift
 	// ErrUnknownManager is returned for a file rule naming an unregistered manager.
-	ErrUnknownManager = errors.New("unknown file manager")
+	ErrUnknownManager = errUtils.ErrUnknownVersionFileManager
 	// ErrDuplicateManager is returned when two managers register the same name.
-	ErrDuplicateManager = errors.New("duplicate file manager registration")
+	ErrDuplicateManager = errUtils.ErrDuplicateVersionFileManager
 )
 
 // Permission for files written by Apply when the file does not exist yet.
@@ -225,10 +226,41 @@ func Apply(changes []PlannedChange) error {
 		if err := os.MkdirAll(filepath.Dir(change.Path), managedDirPerm); err != nil {
 			return err
 		}
-		if err := os.WriteFile(change.Path, change.New, perm); err != nil { // #nosec G306 -- managed files are non-sensitive project files.
+		if err := writeFileAtomic(change.Path, change.New, perm); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+func writeFileAtomic(path string, content []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".atmos-version-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpName)
+		}
+	}()
+
+	if _, err := tmp.Write(content); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpName, perm); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	cleanup = false
 	return nil
 }
 
@@ -260,7 +292,10 @@ func ExpandPaths(dir string, patterns []string) ([]string, error) {
 		matches, err := u.GetGlobMatches(filepath.ToSlash(pattern))
 		if err != nil {
 			// A pattern with no matches is not an error for file managers.
-			continue
+			if errors.Is(err, errUtils.ErrFailedToFindImport) {
+				continue
+			}
+			return nil, err
 		}
 		for _, match := range matches {
 			info, err := os.Stat(match)

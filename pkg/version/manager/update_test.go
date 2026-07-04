@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -14,11 +15,13 @@ import (
 // candidates for policy tests.
 type policyFakeResolver struct{}
 
+type policyErrorResolver struct{}
+
 func (policyFakeResolver) Names() []string { return []string{"fake-policy"} }
 
 func (policyFakeResolver) Versions(ctx context.Context, req *resolver.Request) ([]resolver.Candidate, error) {
-	old := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	fresh := time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)
+	old := time.Now().Add(-52 * daysPerWeek * hoursPerDay * time.Hour)
+	fresh := time.Now().Add(-2 * hoursPerDay * time.Hour)
 	return []resolver.Candidate{
 		{Version: "v1.9.0", ReleasedAt: &old},
 		{Version: "v1.10.2", ReleasedAt: &old, Digest: "sha-1102"},
@@ -31,8 +34,19 @@ func (policyFakeResolver) Pin(ctx context.Context, req *resolver.Request, versio
 	return "pinned-" + version, nil
 }
 
+func (policyErrorResolver) Names() []string { return []string{"fake-policy-error"} }
+
+func (policyErrorResolver) Versions(ctx context.Context, req *resolver.Request) ([]resolver.Candidate, error) {
+	return nil, errors.New("resolver failed")
+}
+
+func (policyErrorResolver) Pin(ctx context.Context, req *resolver.Request, version string) (string, error) {
+	return "", errors.New("resolver failed")
+}
+
 func init() {
 	resolver.Register(policyFakeResolver{})
+	resolver.Register(policyErrorResolver{})
 }
 
 // policyConfig builds a config with one fake-policy entry using the given policy.
@@ -136,11 +150,7 @@ func TestUpdateTrackStrategyMinorHoldsBackMajor(t *testing.T) {
 }
 
 func TestUpdateTrackCooldownHoldsBackFreshRelease(t *testing.T) {
-	// v1.11.0 was released 2026-06-30; a 14d cooldown blocks it "today"
-	// (test clock is real time, and the fixture date is in the past), so
-	// use a large cooldown relative to the fresh candidate instead: pick a
-	// cooldown that only the old candidates satisfy.
-	atmosConfig := policyConfig(t, &schema.VersionUpdatePolicy{Strategy: StrategyMinor, Cooldown: "26w"})
+	atmosConfig := policyConfig(t, &schema.VersionUpdatePolicy{Strategy: StrategyMinor, Cooldown: "14d"})
 	seedLock(t, atmosConfig, "v1.9.0")
 
 	update, err := UpdateTrack(atmosConfig, "prod", "", nil)
@@ -153,6 +163,26 @@ func TestUpdateTrackCooldownHoldsBackFreshRelease(t *testing.T) {
 	}
 	if !strings.Contains(result.Reason, "holds back v1.11.0") {
 		t.Fatalf("expected cooldown block reason, got %q", result.Reason)
+	}
+}
+
+func TestUpdateTrackCooldownInitialLockWritesVersion(t *testing.T) {
+	atmosConfig := policyConfig(t, &schema.VersionUpdatePolicy{Strategy: StrategyMinor, Cooldown: "14d"})
+
+	update, err := UpdateTrack(atmosConfig, "prod", "", nil)
+	if err != nil {
+		t.Fatalf("UpdateTrack returned error: %v", err)
+	}
+	result := update.Results[0]
+	if result.To == "" {
+		t.Fatal("expected initial update to write a concrete version")
+	}
+	lock, err := LoadLock(atmosConfig)
+	if err != nil {
+		t.Fatalf("LoadLock returned error: %v", err)
+	}
+	if lock.Tracks["prod"]["thing"].Version == "" {
+		t.Fatal("expected lock entry to contain a concrete version")
 	}
 }
 
@@ -208,5 +238,24 @@ func TestStatusReportsBlockedNewerVersion(t *testing.T) {
 	// Verify must pass: the locked version is policy-current.
 	if _, err := VerifyTrack(atmosConfig, "prod"); err != nil {
 		t.Fatalf("expected blocked entry to pass verification, got %v", err)
+	}
+}
+
+func TestVerifyTrackFailsWhenLockedEntryCannotResolve(t *testing.T) {
+	atmosConfig := policyConfig(t, &schema.VersionUpdatePolicy{})
+	entry := atmosConfig.Version.Tracks["prod"].Dependencies["thing"]
+	entry.Datasource = "fake-policy-error"
+	atmosConfig.Version.Tracks["prod"].Dependencies["thing"] = entry
+	seedLock(t, atmosConfig, "v1.9.0")
+
+	status, err := VerifyTrack(atmosConfig, "prod")
+	if err == nil {
+		t.Fatal("expected VerifyTrack to fail")
+	}
+	if !errors.Is(err, ErrTrackNotVerified) {
+		t.Fatalf("expected ErrTrackNotVerified, got %v", err)
+	}
+	if len(status.Entries) != 1 || status.Entries[0].Status != StatusLocked {
+		t.Fatalf("expected locked status from resolver error, got %#v", status)
 	}
 }

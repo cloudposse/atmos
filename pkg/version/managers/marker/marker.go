@@ -14,12 +14,12 @@ package marker
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"regexp"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 	"github.com/cloudposse/atmos/pkg/version/managers"
@@ -31,7 +31,7 @@ const Name = "marker"
 var (
 	// ErrBadMatchExpression is returned for a match= regex that does not
 	// compile or lacks a capture group.
-	ErrBadMatchExpression = errors.New("marker match expression must compile and contain one capture group")
+	ErrBadMatchExpression = errUtils.ErrVersionMarkerBadMatch
 
 	// Extracts the entry name and optional match override from an annotation.
 	markerPattern = regexp.MustCompile(`atmos:version\s+([A-Za-z0-9_-]+)(?:\s+match=(\S+))?`)
@@ -154,14 +154,31 @@ func parseAnnotation(line string) *annotation {
 	// Locate the comment delimiter introducing the annotation: the rightmost
 	// delimiter before the marker text.
 	for _, delimiter := range commentDelimiters {
-		if idx := strings.LastIndex(line[:markerIndex], delimiter); idx > note.commentStart {
-			note.commentStart = idx
+		idx := strings.LastIndex(line[:markerIndex], delimiter)
+		if idx < 0 || idx <= note.commentStart {
+			continue
 		}
+		if nestedInChosenDelimiter(line, note.commentStart, idx) {
+			continue
+		}
+		note.commentStart = idx
 	}
 	if note.commentStart >= 0 && strings.TrimSpace(line[:note.commentStart]) == "" {
 		note.commentStart = -1 // Comment-only line: standalone annotation.
 	}
 	return note
+}
+
+func nestedInChosenDelimiter(line string, chosenStart, candidateStart int) bool {
+	if chosenStart < 0 {
+		return false
+	}
+	for _, delimiter := range commentDelimiters {
+		if strings.HasPrefix(line[chosenStart:], delimiter) {
+			return candidateStart < chosenStart+len(delimiter)
+		}
+	}
+	return false
 }
 
 // nextTargetLine returns the index of the next non-blank, non-comment line.

@@ -4,7 +4,6 @@
 package manager
 
 import (
-	"errors"
 	"fmt"
 	"path"
 	"sort"
@@ -24,11 +23,11 @@ const (
 )
 
 var (
-	ErrTrackNotFound          = errors.New("version track not found")
-	ErrVersionNotFound        = errors.New("version not found")
-	ErrVersionNotLocked       = errors.New("version not locked")
-	ErrTrackNotVerified       = errors.New("version track is not verified")
-	ErrDesiredVersionRequired = errors.New("desired version is required")
+	ErrTrackNotFound          = errUtils.ErrVersionTrackNotFound
+	ErrVersionNotFound        = errUtils.ErrVersionNotFound
+	ErrVersionNotLocked       = errUtils.ErrVersionNotLocked
+	ErrTrackNotVerified       = errUtils.ErrVersionTrackNotVerified
+	ErrDesiredVersionRequired = errUtils.ErrDesiredVersionRequired
 )
 
 // EffectiveEntry is a version entry after defaults and groups are applied.

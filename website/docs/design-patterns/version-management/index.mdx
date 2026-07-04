@@ -188,9 +188,9 @@ Use Git Flow when you need version control to represent **current state versus d
 
 **Remember**: The best approach is what your engineering organization already follows. If your team has established Git Flow practices, extending them to infrastructure management keeps the mental model consistent. This isn't about one approach being universally better—it's about alignment with your team's workflows and culture.
 
-### Complementary Technique: Atmos-Managed Version Tracks
+### Atmos Version Tracker
 
-Atmos-managed version tracks are a complementary technique for external artifacts and runtime dependencies. They do not replace component source versioning patterns such as folder-based versioning, release channels, or strict component pinning. Instead, they give Atmos a native catalog and lock file for versions that appear throughout configuration and CI:
+The Atmos Version Manager tracks external artifacts and runtime dependencies. They work together with component source versioning patterns such as folder-based versioning, release channels, or strict component pinning. Version tracks provide a native catalog and lock file for versions that appear throughout configuration and CI:
 
 - Toolchain dependencies such as OpenTofu, Terraform, Helmfile, `kubectl`, and `jq`
 - GitHub Actions refs such as `actions/checkout@v6`

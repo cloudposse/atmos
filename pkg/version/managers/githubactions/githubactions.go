@@ -113,7 +113,11 @@ func rewriteWorkflow(content []byte, byPackage map[string]manager.VersionRef) []
 		if !ok {
 			continue
 		}
-		lines[i] = prefix + action + "@" + actionRef(&ref)
+		if ref.Pin == manager.PinDigest && ref.Digest != "" {
+			lines[i] = prefix + action + "@" + actionRef(&ref)
+		} else {
+			lines[i] = prefix + action + "@" + ref.Version + match[4]
+		}
 	}
 	return []byte(strings.Join(lines, "\n"))
 }

@@ -18,7 +18,7 @@ var trackVerifyCmd = &cobra.Command{
 		defer perf.Track(atmosConfig, "version.track.verify.RunE")()
 
 		track := trackFromArgs(cmd, args)
-		status, err := manager.VerifyTrack(atmosConfig, track)
+		status, err := manager.VerifyTrackWithContext(cmd.Context(), atmosConfig, track)
 		if err != nil {
 			return err
 		}

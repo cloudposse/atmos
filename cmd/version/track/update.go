@@ -18,7 +18,7 @@ var trackUpdateCmd = &cobra.Command{
 
 		group, _ := cmd.Flags().GetString("group")
 		only, _ := cmd.Flags().GetStringSlice("only")
-		update, err := manager.UpdateTrack(atmosConfig, trackFromArgs(cmd, args), group, only)
+		update, err := manager.UpdateTrackWithContext(cmd.Context(), atmosConfig, trackFromArgs(cmd, args), group, only)
 		if err != nil {
 			return err
 		}

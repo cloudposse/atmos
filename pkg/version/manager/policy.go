@@ -2,7 +2,6 @@ package manager
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version/resolver"
 )
@@ -35,7 +35,7 @@ const (
 )
 
 // ErrInvalidCooldown is returned for unparseable cooldown values.
-var ErrInvalidCooldown = errors.New("invalid cooldown")
+var ErrInvalidCooldown = errUtils.ErrInvalidVersionCooldown
 
 // policyDecision is the outcome of applying an entry's update policy.
 type policyDecision struct {
@@ -125,7 +125,7 @@ type policyInputs struct {
 
 // decideUpdate applies an entry's effective update policy against its
 // datasource candidates, deciding the version an update may advance to.
-func decideUpdate(atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry, locked string, now time.Time) (policyDecision, error) {
+func decideUpdate(ctx context.Context, atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry, locked string, now time.Time) (policyDecision, error) {
 	strategy := entry.Update.Strategy
 	if locked != "" && (strategy == StrategyPin || strategy == StrategyDigest) {
 		return policyDecision{
@@ -140,7 +140,7 @@ func decideUpdate(atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry,
 	if !ok || concrete {
 		// Without an enumerating datasource (or with a concrete pin), the
 		// desired version is both the raw and the policy target.
-		candidate, err := ResolveEntry(atmosConfig, entry, false)
+		candidate, err := ResolveEntryWithContext(ctx, atmosConfig, entry, false)
 		if err != nil {
 			return policyDecision{}, err
 		}
@@ -151,7 +151,9 @@ func decideUpdate(atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry,
 	if err != nil {
 		return policyDecision{}, fmt.Errorf("%s: %w", entry.Name, err)
 	}
-	candidates, err := res.Versions(context.Background(), resolverRequest(atmosConfig, entry, datasource))
+	ctx, cancel := resolverContext(ctx)
+	defer cancel()
+	candidates, err := res.Versions(ctx, resolverRequest(atmosConfig, entry, datasource))
 	if err != nil {
 		return policyDecision{}, err
 	}
@@ -184,8 +186,17 @@ func decidePolicy(entry *EffectiveEntry, candidates []resolver.Candidate, inputs
 	})
 	target, err := resolver.Select(cooled, entry.Desired, entry.Allow, entry.Ignore)
 	if err != nil {
-		// Nothing eligible under policy: hold the locked version.
-		target = resolver.Candidate{Version: inputs.locked}
+		switch {
+		case inputs.locked != "":
+			// Nothing eligible under policy: hold the locked version.
+			target = resolver.Candidate{Version: inputs.locked}
+		case capErr == nil && capBest.Version != "":
+			// First lock: avoid writing an empty version when cooldown holds
+			// back every candidate.
+			target = capBest
+		default:
+			return policyDecision{}, err
+		}
 	}
 
 	decision := policyDecision{Target: target, Raw: raw}

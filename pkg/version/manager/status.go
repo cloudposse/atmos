@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -48,6 +49,14 @@ type TrackStatus struct {
 func StatusTrack(atmosConfig *schema.AtmosConfiguration, track, group string) (*TrackStatus, error) {
 	defer perf.Track(atmosConfig, "manager.StatusTrack")()
 
+	return StatusTrackWithContext(context.Background(), atmosConfig, track, group)
+}
+
+// StatusTrackWithContext returns status for all entries in a track while
+// honoring caller cancellation and deadlines for resolver calls.
+func StatusTrackWithContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, track, group string) (*TrackStatus, error) {
+	defer perf.Track(atmosConfig, "manager.StatusTrackWithContext")()
+
 	track = EffectiveTrack(atmosConfig, track)
 	entries, err := EffectiveEntries(atmosConfig, track)
 	if err != nil {
@@ -64,7 +73,7 @@ func StatusTrack(atmosConfig *schema.AtmosConfiguration, track, group string) (*
 		if group != "" && entry.Group != group {
 			continue
 		}
-		status.Entries = append(status.Entries, statusForEntry(atmosConfig, lockedEntries, &entry))
+		status.Entries = append(status.Entries, statusForEntry(ctx, atmosConfig, lockedEntries, &entry))
 	}
 	return status, nil
 }
@@ -73,7 +82,7 @@ func StatusTrack(atmosConfig *schema.AtmosConfiguration, track, group string) (*
 // Resolved reflects the policy-eligible target, so StatusUpdateAvailable
 // means an update the policy would actually take; a newer version held back
 // by strategy or cooldown reports StatusBlocked with the reason in Message.
-func statusForEntry(atmosConfig *schema.AtmosConfiguration, lockedEntries map[string]LockEntry, entry *EffectiveEntry) StatusEntry {
+func statusForEntry(ctx context.Context, atmosConfig *schema.AtmosConfiguration, lockedEntries map[string]LockEntry, entry *EffectiveEntry) StatusEntry {
 	row := StatusEntry{
 		Name:       entry.Name,
 		Ecosystem:  entry.Ecosystem,
@@ -88,7 +97,7 @@ func statusForEntry(atmosConfig *schema.AtmosConfiguration, lockedEntries map[st
 		row.Locked = locked.Version
 		row.Status = StatusLocked
 	}
-	decision, err := decideUpdate(atmosConfig, entry, row.Locked, time.Now())
+	decision, err := decideUpdate(ctx, atmosConfig, entry, row.Locked, time.Now())
 	if err != nil {
 		row.Message = err.Error()
 		return row
@@ -112,7 +121,15 @@ func statusForEntry(atmosConfig *schema.AtmosConfiguration, lockedEntries map[st
 func VerifyTrack(atmosConfig *schema.AtmosConfiguration, track string) (*TrackStatus, error) {
 	defer perf.Track(atmosConfig, "manager.VerifyTrack")()
 
-	status, err := StatusTrack(atmosConfig, track, "")
+	return VerifyTrackWithContext(context.Background(), atmosConfig, track)
+}
+
+// VerifyTrackWithContext checks that all configured entries are locked and
+// satisfy resolvable policy while honoring caller cancellation and deadlines.
+func VerifyTrackWithContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, track string) (*TrackStatus, error) {
+	defer perf.Track(atmosConfig, "manager.VerifyTrackWithContext")()
+
+	status, err := StatusTrackWithContext(ctx, atmosConfig, track, "")
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +137,7 @@ func VerifyTrack(atmosConfig *schema.AtmosConfiguration, track string) (*TrackSt
 		entry := &status.Entries[i]
 		// A policy-blocked newer version is not a verification failure: the
 		// locked version is exactly what the policy wants deployed.
-		if entry.Status != StatusCurrent && entry.Status != StatusLocked && entry.Status != StatusBlocked {
+		if entry.Status != StatusCurrent && entry.Status != StatusBlocked {
 			return status, fmt.Errorf("%w: %s: %s is %s", ErrTrackNotVerified, status.Track, entry.Name, entry.Status)
 		}
 	}

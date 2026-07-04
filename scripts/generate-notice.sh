@@ -63,22 +63,26 @@ EOF
 }
 
 # Check if go-licenses is installed
-if ! command -v go-licenses &> /dev/null; then
+GO_LICENSES_BIN="$(command -v go-licenses || true)"
+if [ -z "${GO_LICENSES_BIN}" ]; then
+    GO_LICENSES_BIN="$(go env GOPATH)/bin/go-licenses"
+fi
+if [ ! -x "${GO_LICENSES_BIN}" ]; then
     echo "Installing go-licenses..."
     go install github.com/google/go-licenses@latest
 fi
 
 # Generate license report
 echo "Generating license report..."
-go-licenses report . 2>&1 | grep -v "^W" | grep -v "^E" > "${TEMP_DIR}/license-report.csv" || true
+"${GO_LICENSES_BIN}" report ./... 2>&1 | grep -v "^W" | grep -v "^E" > "${TEMP_DIR}/license-report.csv"
 
 # Replace non-deterministic (vanity-path) URLs with deterministic overrides.
 apply_url_overrides "${TEMP_DIR}/license-report.csv"
 
 # Count dependencies
 TOTAL_DEPS=$(wc -l < "${TEMP_DIR}/license-report.csv" | tr -d ' ')
-APACHE_DEPS=$(grep -c "Apache-2.0" "${TEMP_DIR}/license-report.csv" || echo "0")
-BSD_DEPS=$(grep -cE "BSD-.*Clause" "${TEMP_DIR}/license-report.csv" || echo "0")
+APACHE_DEPS=$(awk '/Apache-2.0/ {count++} END {print count+0}' "${TEMP_DIR}/license-report.csv")
+BSD_DEPS=$(awk '/BSD-.*Clause/ {count++} END {print count+0}' "${TEMP_DIR}/license-report.csv")
 
 echo "Found ${TOTAL_DEPS} total dependencies"
 echo "  - ${APACHE_DEPS} Apache-2.0 licenses"
@@ -129,7 +133,7 @@ grep -E "BSD-.*Clause" "${TEMP_DIR}/license-report.csv" | \
     awk -F',' '{printf "  - %s\n    License: %s\n    URL: %s\n\n", $1, $3, $2}' >> "${NOTICE_FILE}"
 
 # Add MPL section if there are any
-MPL_COUNT=$(grep -c "MPL-2.0" "${TEMP_DIR}/license-report.csv" || echo "0")
+MPL_COUNT=$(awk '/MPL-2.0/ {count++} END {print count+0}' "${TEMP_DIR}/license-report.csv")
 if [ "${MPL_COUNT}" -gt 0 ]; then
     cat >> "${NOTICE_FILE}" <<'EOF'
 
@@ -146,7 +150,7 @@ EOF
 fi
 
 # Add MIT section (optional, for completeness)
-MIT_COUNT=$(grep -c ",MIT" "${TEMP_DIR}/license-report.csv" || echo "0")
+MIT_COUNT=$(awk '/,MIT/ {count++} END {print count+0}' "${TEMP_DIR}/license-report.csv")
 if [ "${MIT_COUNT}" -gt 0 ]; then
     cat >> "${NOTICE_FILE}" <<'EOF'
 
@@ -168,7 +172,7 @@ cat >> "${NOTICE_FILE}" <<'EOF'
 ================================================================================
 
 For the complete list of dependencies and their licenses, run:
-  go-licenses report .
+  go-licenses report ./...
 
 To view the full license text for a specific dependency, visit the URL
 listed above or check the dependency's repository.

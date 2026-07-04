@@ -4,12 +4,12 @@
 package track
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -32,11 +32,11 @@ func GetTrackCommand() *cobra.Command {
 
 var (
 	// ErrRenderFileRequired is returned when render is invoked without --file.
-	ErrRenderFileRequired = errors.New("--file is required")
+	ErrRenderFileRequired = errUtils.ErrVersionRenderFileRequired
 	// ErrRenderDrift is returned when rendered output differs from the committed file.
-	ErrRenderDrift = errors.New("rendered output differs from committed file")
+	ErrRenderDrift = errUtils.ErrVersionRenderDrift
 	// ErrUnsupportedFormat is returned for unknown --format values.
-	ErrUnsupportedFormat = errors.New("unsupported output format (supported: yaml, json)")
+	ErrUnsupportedFormat = errUtils.ErrUnsupportedVersionTrackFormat
 )
 
 // trackCmd is the parent for all Atmos Version Tracker verbs. The version
