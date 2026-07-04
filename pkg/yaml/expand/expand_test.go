@@ -128,6 +128,26 @@ func TestKeyDelimiters(t *testing.T) {
 			},
 		},
 		{
+			name:      "traditional_wins_reverse_conflict",
+			yaml:      "a.b: new\na:\n  b: old",
+			delimiter: ".",
+			check: func(t *testing.T, result map[string]any) {
+				a, ok := result["a"].(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "old", a["b"])
+			},
+		},
+		{
+			name:      "metadata_description_mixed_syntax_later_wins",
+			yaml:      "metadata:\n  description: from nesting\nmetadata.description: from dot notation",
+			delimiter: ".",
+			check: func(t *testing.T, result map[string]any) {
+				metadata, ok := result["metadata"].(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "from dot notation", metadata["description"])
+			},
+		},
+		{
 			name:      "recursive_expansion",
 			yaml:      "p:\n  c.k: v",
 			delimiter: ".",

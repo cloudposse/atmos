@@ -151,6 +151,23 @@ components:
 ```
 </File>
 
+When dot notation and traditional nesting set the same nested key in the same file, the later entry wins:
+
+<File title="stacks/prod.yaml">
+```yaml
+# Result: metadata.description is "from dot notation"
+metadata:
+  description: from nesting
+metadata.description: from dot notation
+
+# Result: settings.spacelift.workspace_enabled is false
+settings.spacelift.workspace_enabled: true
+settings:
+  spacelift:
+    workspace_enabled: false
+```
+</File>
+
 ### Quoting Preserves Literal Keys
 
 When `key_delimiter` is enabled, you can use YAML quoting (single or double quotes) to prevent mapping key expansion. Quoted keys are always treated as literal key names:
