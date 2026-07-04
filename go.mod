@@ -111,7 +111,7 @@ require (
 	github.com/otiai10/copy v1.14.1
 	github.com/pact-foundation/pact-go/v2 v2.5.1
 	github.com/pkg/errors v0.9.1
-	github.com/playwright-community/playwright-go v0.5700.1
+	github.com/playwright-community/playwright-go v0.5700.1 // indirect
 	github.com/posthog/posthog-go v1.12.6
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/samber/lo v1.53.0
@@ -478,6 +478,7 @@ require github.com/aws/aws-sdk-go-v2/service/kms v1.51.1
 require (
 	github.com/databus23/helm-diff/v3 v3.15.10
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
+	github.com/mxschmitt/playwright-go v0.6100.0
 )
 
 require (
