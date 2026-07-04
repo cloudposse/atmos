@@ -7,13 +7,16 @@ commands:
         env: &go_auto_env
           GOTOOLCHAIN: auto
         steps:
-          - |
-            set -eu
-            atmos build deps
-            atmos lint lintroller
-            atmos lint gomodcheck
-            atmos lint custom-gcl
-            scripts/run-custom-golangci-lint.sh
+          - type: atmos
+            command: build deps
+          - type: atmos
+            command: lint lintroller
+          - type: atmos
+            command: lint gomodcheck
+          - type: atmos
+            command: lint custom-gcl
+          - type: shell
+            command: scripts/run-custom-golangci-lint.sh
 
       - name: custom-gcl
         description: Build the custom golangci-lint binary with the lintroller plugin
