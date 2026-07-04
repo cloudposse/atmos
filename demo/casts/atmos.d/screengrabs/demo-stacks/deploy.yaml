@@ -1,6 +1,9 @@
 commands:
   - name: casts generate screengrabs demo-stacks deploy
     description: Regenerate the "deploy everywhere" docs screengrab cast
+    dependencies:
+      tools:
+        hashicorp/terraform: "1.15.6"
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
