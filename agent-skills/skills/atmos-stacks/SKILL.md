@@ -1,6 +1,6 @@
 ---
 name: atmos-stacks
-description: "Stack configuration: imports, inheritance, deep merging, locals, vars, settings, metadata, overrides"
+description: "Stack configuration: local and remote imports, inheritance, deep merging, locals, vars, settings, metadata, overrides, dependencies, and modernization"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -15,6 +15,15 @@ Stacks are YAML configuration files that define which components to deploy, with
 A stack manifest is a YAML file that declares components and their configuration for a specific combination of organization, tenant, account, region, and stage. Atmos discovers stack manifests based on `included_paths` and `excluded_paths` in `atmos.yaml`, then deep-merges all imported configurations to produce the final resolved state for each component.
 
 Stacks are not Terraform workspaces, although Atmos derives workspace names from stack names. A single stack manifest can configure multiple components, and a single component can appear across many stacks with different variable values.
+
+## Related Skills
+
+| Need | Load |
+|---|---|
+| Local and remote import mechanics | [atmos-imports](../atmos-imports/SKILL.md) |
+| Modernizing legacy stack patterns | [atmos-modernization](../atmos-modernization/SKILL.md) |
+| YAML function inventory | [atmos-yaml-functions](../atmos-yaml-functions/SKILL.md) |
+| Component source provisioning | [atmos-components](../atmos-components/SKILL.md) |
 
 ## Stack Discovery
 
@@ -44,6 +53,8 @@ import:
   - catalog/vpc/defaults
   - mixins/region/us-east-2
   - orgs/acme/plat/prod/_defaults
+  # Remote imports are supported, but they import stack config only:
+  # - github://acme/config/main/stacks/catalog/vpc.yaml
 
 # Global-scope sections (apply to all components)
 vars: {}
@@ -340,6 +351,10 @@ Atmos provides YAML functions for dynamic value resolution at runtime:
 - `!env <VAR_NAME>` -- Read environment variables with optional defaults.
 - `!exec <command>` -- Execute shell commands and use output.
 - `!include <path>` -- Load content from external files.
+- `!secret <name>` -- Resolve declared secrets.
+- `!append` and `!unset` -- Control inherited list/key merge behavior.
+
+For the full current function inventory, load `atmos-yaml-functions`.
 
 ## Common Patterns and Best Practices
 
@@ -350,6 +365,8 @@ Atmos provides YAML functions for dynamic value resolution at runtime:
 5. **Exclude non-deployable files**: Configure `excluded_paths` to prevent catalog, mixin, and defaults files from being treated as top-level stacks.
 6. **Use `name` or `name_template` for stack naming**: If legacy `name_pattern` is present, migrate it.
 7. **Use `atmos describe stacks` liberally**: Always verify the resolved configuration before applying changes.
+8. **Treat remote imports as config only**: use component `source:` or `atmos vendor pull` when imported
+   config references component code that is not already local.
 
 ## References
 

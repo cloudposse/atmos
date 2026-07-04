@@ -4,6 +4,7 @@ package git
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -283,11 +284,11 @@ func TestExecuteCommit_WithIdentity(t *testing.T) {
 
 func TestRunCloneAll_PartialFailure(t *testing.T) {
 	failErr := errors.New("authentication required")
-	callCount := 0
+	var callCount atomic.Int32
 	privateDest := t.TempDir()
 	withTestProvider(t, &stubGitProvider{
 		cloneFn: func(_ context.Context, opts *atmosgit.CloneOptions) error {
-			callCount++
+			callCount.Add(1)
 			// Fail for the private repo by checking the URI.
 			if opts.URI == "https://github.com/acme/private.git" {
 				return failErr
@@ -311,7 +312,7 @@ func TestRunCloneAll_PartialFailure(t *testing.T) {
 	err := runCloneAll(context.Background(), opts)
 
 	// Both repos were attempted.
-	assert.Equal(t, 2, callCount, "both repos should be attempted")
+	assert.Equal(t, int32(2), callCount.Load(), "both repos should be attempted")
 
 	// Error is returned (aggregated via errors.Join).
 	require.Error(t, err)

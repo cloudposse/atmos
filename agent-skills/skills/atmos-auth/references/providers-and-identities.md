@@ -459,6 +459,41 @@ auth:
 ECR tokens expire after approximately 12 hours (AWS-enforced). Credentials are written to
 `~/.docker/config.json`. Integration failures during `atmos auth login` are non-blocking.
 
+## Atmos Pro GitHub STS
+
+Use `atmos/pro` plus `github/sts` when CI needs private GitHub access for remote imports,
+component `source:`, vendoring, Terraform modules, or managed Git operations.
+
+```yaml
+auth:
+  providers:
+    atmos-pro:
+      kind: atmos/pro
+      spec:
+        workspace_id: !env ATMOS_PRO_WORKSPACE_ID
+  identities:
+    atmos-pro:
+      kind: atmos/pro
+      via:
+        provider: atmos-pro
+  integrations:
+    github-sts:
+      kind: github/sts
+      via:
+        provider: atmos-pro
+      spec:
+        auto_provision: true
+        repos: [acme/modules]
+        policy_name: default
+        git_config_mode: env
+        revoke_on_exit: true
+        token_env: ATMOS_PRO_GITHUB_TOKEN
+```
+
+In GitHub Actions, grant `permissions.id-token: write`. In CI, Atmos can lazily provision
+`github/sts` before the first private remote read; an explicit `atmos auth login` is not required
+for normal remote import/source/vendor reads when `auto_provision` is enabled.
+
 ## Keyring Configuration
 
 ### System Keyring (Default)

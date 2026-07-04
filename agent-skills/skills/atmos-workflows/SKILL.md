@@ -1,6 +1,6 @@
 ---
 name: atmos-workflows
-description: "Workflow automation: multi-step workflows, Go template support, cross-component orchestration"
+description: "Workflow automation: multi-step workflows, parallel/matrix/wait/container/emulator steps, Go templates, retries, dependencies, and cross-component orchestration"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -14,10 +14,23 @@ operations across multiple components and stacks.
 
 ## What Workflows Are
 
-A workflow is a named sequence of steps defined in a YAML file. Each step is either:
+A workflow is a named sequence of steps defined in a YAML file. Modern workflows support command
+steps, orchestration steps, interactive steps, output/UI steps, and utility steps.
 
-- An **Atmos command** (type `atmos`, the default) -- any Atmos CLI command without the `atmos` prefix
-- A **Shell command** (type `shell`) -- any shell script or command
+Core command step types:
+
+- `atmos` -- any Atmos CLI command without the `atmos` prefix
+- `shell` or `exec` -- shell/process execution
+- `container` -- build, run, push, or operate containers
+- `emulator` -- start or operate emulators
+- `http` -- HTTP calls
+
+Key orchestration step types:
+
+- `parallel` -- run child steps concurrently
+- `matrix` -- expand axes into a cartesian product and run with the parallel scheduler
+- `wait` and `wait-all` -- wait for background services or multiple dependencies
+- `cancel` -- cancel running work
 
 Workflows solve the problem of needing to run multiple Terraform operations in a specific order,
 such as provisioning a VPC before an EKS cluster, or deploying the same component across multiple
@@ -148,6 +161,40 @@ steps:
       multiplier: 2                 # Multiplier for exponential backoff
       max_elapsed_time: 4m          # Total timeout for all retries (default: 30m)
 ```
+
+### Modern Orchestration Steps
+
+Use `parallel` when independent steps can run at the same time:
+
+```yaml
+steps:
+  - type: parallel
+    name: plan-all
+    max_concurrency: 4
+    fail:
+      mode: wait_all
+    steps:
+      - type: atmos
+        command: terraform plan vpc
+      - type: atmos
+        command: terraform plan eks/cluster
+```
+
+Use `matrix` when the same step should run for many stack/component combinations:
+
+```yaml
+steps:
+  - type: matrix
+    axes:
+      stack: [dev, staging]
+      component: [vpc, eks/cluster]
+    steps:
+      - type: atmos
+        command: terraform plan {{ .matrix.component }} -s {{ .matrix.stack }}
+```
+
+Use `wait` or `wait-all` for background containers/emulators that must become healthy before
+dependent steps run.
 
 ### Working Directory
 
@@ -426,8 +473,9 @@ atmos describe workflows
 4. **Use dry-run before executing.** Always preview workflows with `--dry-run` before running
    them, especially in production environments.
 
-5. **Order steps by dependency.** List steps in dependency order (VPC before EKS, database before
-   application) since steps execute sequentially.
+5. **Use dependencies or orchestration steps intentionally.** Sequential lists are still valid, but
+   use `parallel`, `matrix`, `wait`, and explicit dependency fields when the workflow should run
+   concurrently or wait for background services.
 
 6. **Use shell steps for verification.** Insert shell steps between Atmos commands to verify
    infrastructure state before proceeding.

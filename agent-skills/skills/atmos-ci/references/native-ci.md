@@ -171,7 +171,41 @@ manual gates or GitHub environments for production.
   run: atmos list instances --format=matrix
 ```
 
-Use this for full deploys, initial bootstraps, or drift sweeps. Prefer affected matrices for PRs.
+Use this for full deploys, initial bootstraps, or Atmos Pro inventory/drift workflows. Prefer
+affected matrices for PRs.
+
+## Atmos Pro Uploads and Drift
+
+Upload affected stack data for PR and merge-queue correlation:
+
+```yaml
+- run: atmos describe affected --upload
+```
+
+Upload inventory for Atmos Pro:
+
+```yaml
+- run: atmos list instances --upload
+```
+
+For drift detection, configure `settings.pro.drift_detection.enabled: true` in stack config and
+upload plan status from the workflow Atmos Pro dispatches:
+
+```yaml
+- run: atmos terraform plan "${{ matrix.component }}" -s "${{ matrix.stack }}" --upload-status
+```
+
+Prefer Atmos Pro drift detection over hand-rolled scheduled GitHub Actions.
+
+## Cache
+
+Use `atmos ci cache` for CI cache and `atmos terraform cache` for the Terraform registry cache.
+They are different from Terraform's own provider plugin cache.
+
+```yaml
+- id: cache
+  run: atmos ci cache paths
+```
 
 ## Profiles and OIDC
 
@@ -212,6 +246,8 @@ Replace deprecated wrapper actions with direct commands:
 | Deprecated `cloudposse/github-action-atmos-affected-stacks` | `atmos describe affected --format=matrix` |
 | Deprecated `cloudposse/github-action-atmos-terraform-plan` | `atmos terraform plan <component> -s <stack>` |
 | Deprecated `cloudposse/github-action-atmos-terraform-apply` | `atmos terraform deploy <component> -s <stack>` |
+| Deprecated `cloudposse/github-action-atmos-terraform-drift-detection` | Atmos Pro drift detection |
+| Deprecated `cloudposse/github-action-atmos-terraform-drift-remediation` | Atmos Pro remediation workflow |
 | Deprecated `cloudposse/github-action-setup-atmos` | `container: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}` |
 
 Deprecated: do not use `integrations.github.gitops`; model CI behavior directly in workflows and stack settings.

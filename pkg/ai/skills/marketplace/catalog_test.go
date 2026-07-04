@@ -40,7 +40,7 @@ func TestCatalog(t *testing.T) {
 	require.NoError(t, err)
 
 	// The repository bundles exactly the official skills in agent-skills/skills.
-	require.Len(t, catalog, 30)
+	require.Len(t, catalog, 41)
 
 	// Entries are sorted by name; assert first and last by value, not just length.
 	first := catalog[0]
