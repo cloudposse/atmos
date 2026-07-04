@@ -202,7 +202,7 @@ The pattern is:
 1. Define policy and desired ranges in `atmos.yaml` under [`version.tracks`](/cli/configuration/version/managed-versions).
 2. Commit deterministic resolved versions in `versions.lock.yaml`.
 3. Use `!version name` for YAML values and `{{ .version.name }}` for embedded strings.
-4. Use [`atmos version tracks`](/cli/commands/version/tracks) in CI to check status, update locks, verify locks, and render files that must contain literal refs.
+4. Use [`atmos version track`](/cli/commands/version/track) in CI to check status, update locks, verify locks, and render files that must contain literal refs.
 
 This is congruent with the Atmos version-management philosophy: humans declare desired convergence and policy; Atmos owns deterministic resolution, locking, and CI-native rendering. It avoids scattering pins throughout stacks while still making the actual runtime versions explicit and reviewable in Git.
 
@@ -232,7 +232,7 @@ A technique that works with any deployment strategy to automate copying componen
 
 **Vendoring Component Versions**: Works with any deployment strategy and folder approach. Automates copying external component versions locally with manifest tracking for origin/lineage.
 
-**Atmos-Managed Version Tracks**: Works with any deployment strategy and folder approach. Manages external artifact versions through `atmos.yaml`, `versions.lock.yaml`, `!version`, `.version`, and CI-native `atmos version tracks` commands.
+**Atmos-Managed Version Tracks**: Works with any deployment strategy and folder approach. Manages external artifact versions through `atmos.yaml`, `versions.lock.yaml`, `!version`, `.version`, and CI-native `atmos version track` commands.
 
 ## Choosing a Pattern
 

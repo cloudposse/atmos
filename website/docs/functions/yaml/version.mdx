@@ -71,7 +71,22 @@ vars:
 
 Use `!version` when the whole YAML value is the version. Use `{{ .version.name }}` when the version is part of a larger string.
 
+## Pinned Entries
+
+For entries with `pin: digest` (alias: `sha`) in their [update policy](/cli/configuration/version/managed-versions#update-policy), the two surfaces behave differently:
+
+- **`!version name` always returns the version** (for example, `v6.1.0`) — never the digest.
+- **`{{ .version.name }}`** emits the pinned form: the digest for pinned entries, the version otherwise. This is what rendered files and file managers embed.
+- **`{{ .version.name.Version }}`** and **`{{ .version.name.Digest }}`** are individually addressable when you need one specific form:
+
+```yaml
+vars:
+  image:
+    uri: "ghcr.io/example/app@{{ .version.app.Digest }}"
+    tag: "{{ .version.app.Version }}"
+```
+
 ## See Also
 
 - [Managed Versions Configuration](/cli/configuration/version/managed-versions)
-- [`atmos version tracks`](/cli/commands/version/tracks)
+- [`atmos version track`](/cli/commands/version/track)

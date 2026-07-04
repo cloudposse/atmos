@@ -1,10 +1,13 @@
-# PRD: Atmos Version Management
+# PRD: Atmos Version Tracker
 
-## Status: Draft
+> The version tracker tracks: it discovers, locks, and applies the external
+> versions your infrastructure depends on.
 
-**Last Updated**: 2026-07-03
+## Status: Implemented (phases 1-6); PR automation planned
 
-**Implementation Package**: `pkg/version/manager`
+**Last Updated**: 2026-07-04
+
+**Implementation Packages**: `pkg/version/manager` (catalog, lock, policy, CRUD), `pkg/version/resolver` (datasource registry), `pkg/version/managers` (file managers), `cmd/version/track` (command group)
 
 **Related PRDs**:
 - [Toolchain Implementation](./toolchain-implementation.md)
@@ -14,11 +17,33 @@
 
 ---
 
+## Implemented Decisions (v2)
+
+These decisions were made during implementation and supersede earlier drafts:
+
+1. **Branding and namespace.** The feature is the **Atmos Version Tracker**. The command group is `atmos version track <verb>` (singular noun, alias `tracks`), implemented as a nested command package (`cmd/version/track`) following the `cmd/terraform/cache` precedent. The top-level `atmos version` command remains about the Atmos CLI's own version. Track selection falls back positional argument → `--track` flag → `version.track` in `atmos.yaml`.
+
+2. **Datasource resolver registry.** `pkg/version/resolver` defines the `Resolver` interface (`Versions`, `Pin`) with init-time registration and ecosystem aliases (`github` → `github-tags`, `docker` → `docker-tags`, ...). Implemented resolvers: `toolchain` (Aqua registry), `github-tags`/`github-releases` (via `pkg/github`; tags carry commit SHAs, releases carry publish timestamps), and `oci-tags`/`docker-tags` (go-containerregistry; tag listing plus manifest digests, default-keychain auth with a GHCR token fallback in `pkg/oci`). Version selection (`latest`, SemVer constraints, `allow`/`ignore`) wraps the updatecli versionfilter engine (`github.com/updatecli/updatecli/pkg/plugins/utils/version`) — imported directly after verifying the module-graph impact (one indirect patch bump).
+
+3. **SHA/digest pinning.** An opt-in `pin: digest` (alias: `sha`) field on the update policy inherits through defaults → track → entry → group. Locking resolves the immutable identifier (git commit SHA for GitHub, sha256 manifest digest for OCI) into `LockEntry.digest`, plus `released_at` for cooldown checks. Rendered output uses the Renovate/Dependabot round-trip convention: `uses: owner/repo@<sha> # <version>`. A configured pin on a datasource that cannot pin fails loudly. The `.version` template context yields `VersionRef` values whose `String()` emits the pinned form; `.Version`/`.Digest` are individually addressable; `!version` always returns the version.
+
+4. **`update` ≠ `lock`.** `lock` resolves desired expressions as-is (bootstrap/repair). `update` advances from the locked state within policy: strategy caps (`major`/`minor`/`patch`; `pin`/`digest` never advance and only refresh digests), cooldown windows against `released_at` (`14d`, `2w`, Go durations), and `allow`/`ignore` rules. Every held-back candidate produces a structured reason. Status is policy-aware: `update-available` means an update the policy would take; a newer version held back reports `newer-available (blocked)` with the reason and passes `verify`.
+
+5. **File managers (three tiers).** `pkg/version/managers` is a registry of pure-`Plan()` file rewriters driven by shared `Apply`/`Check` drivers, configured via `version.files` rules (`{manager, paths, options}`):
+   - `github-actions` (native): scans workflow `uses:` lines and rewrites refs from the lock by owner/repo package (subdirectory actions and reusable workflows included; `./local` and `docker://` refs never match). Line-based rewriting preserves formatting.
+   - `marker` (annotation): `<comment> atmos:version <name> [match=<regex>]` marks a line (trailing comment) or the next line (standalone comment) for in-place rewriting; comment delimiters are detected across languages (`#`, `//`, `;`, `--`, `<!--`, `/*`); pinned entries replace digest tokens. This is the Renovate regex-manager equivalent and solves round-tripping for rendered files without templates.
+   - `template`: `*.tmpl` sources render to a sibling file with the `.version` context; covers comment-hostile formats (JSON).
+   `atmos version track apply` (alias `sync`) rewrites everything in one command; `--check` fails listing stale paths; `verify` also fails when managed files drift.
+
+6. **CRUD without YAML editing.** `atmos version track add|set|remove|get` edit `atmos.yaml` through the format-preserving `pkg/yaml` engine (PR #2664), preserving comments and anchors, targeting the file resolved by the same precedence as `atmos config set`. `add` infers the ecosystem from the package coordinate (`actions/*` → github-actions, registry-hosted → oci, bare tool name → toolchain, `owner/repo` → github).
+
+---
+
 ## Summary
 
 Build Atmos-native version management for external versions used by infrastructure, workflows, CI, and toolchain dependencies.
 
-Atmos owns discovery, policy, grouping, locking, rendering, status, and CI workflows. The design borrows useful capabilities from tools such as Dependabot and Renovate, but does not integrate with them, invoke them, or generate their config.
+Atmos owns discovery, policy, grouping, locking, rendering, status, and CI workflows. The design borrows useful capabilities from Updatecli, Renovate, and Dependabot, but does not integrate with them, invoke them, or generate their config.
 
 Human-authored configuration lives in `atmos.yaml`. Resolved versions live in `versions.lock.yaml`.
 
@@ -70,7 +95,7 @@ This keeps version definitions out of individual stacks where possible, while st
 ## Goals
 
 1. Manage arbitrary external versions as first-class Atmos configuration.
-2. Provide Dependabot/Renovate-style capabilities through an Atmos-native schema and command surface.
+2. Provide Updatecli/Renovate/Dependabot-inspired capabilities through an Atmos-native schema and command surface.
 3. Support multiple ecosystems and providers:
    - GitHub
    - GitLab
@@ -168,7 +193,7 @@ version:
 
 A batch of related updates with match rules and shared policy.
 
-Groups are similar in spirit to Dependabot or Renovate groups, but they are Atmos-native and are not compatible with either external config format.
+Groups are similar in spirit to Updatecli policies and Renovate or Dependabot groups, but they are Atmos-native and are not compatible with those external config formats.
 
 ### Manager
 
@@ -435,9 +460,9 @@ uses: actions/checkout@v6
 The intended workflow is:
 
 1. Author workflow templates.
-2. Run `atmos version tracks render <track>`.
+2. Run `atmos version track render <track>`.
 3. Commit rendered workflow YAML.
-4. Run `atmos version tracks render <track> --check` in CI.
+4. Run `atmos version track render <track> --check` in CI.
 
 ---
 
@@ -477,40 +502,40 @@ Runtime resolution reads from the lock file only. This keeps local runs and CI d
 All commands live under the existing `atmos version` namespace:
 
 ```shell
-atmos version tracks list
-atmos version tracks show prod
-atmos version tracks lock prod
-atmos version tracks update prod
-atmos version tracks update prod --group infrastructure
-atmos version tracks status prod --format json
-atmos version tracks diff prod
-atmos version tracks verify prod
-atmos version tracks render prod --check
+atmos version track list
+atmos version track show prod
+atmos version track lock prod
+atmos version track update prod
+atmos version track update prod --group infrastructure
+atmos version track status prod --format json
+atmos version track diff prod
+atmos version track verify prod
+atmos version track render prod --check
 ```
 
-### `atmos version tracks list`
+### `atmos version track list`
 
 List configured tracks.
 
-### `atmos version tracks show <track>`
+### `atmos version track show <track>`
 
 Show the effective track configuration after defaults and groups are applied.
 
-### `atmos version tracks lock <track>`
+### `atmos version track lock <track>`
 
 Resolve configured desired versions and write lock entries.
 
-### `atmos version tracks update <track>`
+### `atmos version track update <track>`
 
 Update locked versions according to policy.
 
 Initial behavior may be equivalent to `lock`. Future behavior should respect schedules, cooldowns, update strategy, ignore rules, and allowed versions.
 
-### `atmos version tracks update <track> --group <group>`
+### `atmos version track update <track> --group <group>`
 
 Update only entries in the selected group.
 
-### `atmos version tracks status <track> --format json`
+### `atmos version track status <track> --format json`
 
 Report current lock status for CI.
 
@@ -522,15 +547,15 @@ Statuses:
 - `update-available`
 - `error`
 
-### `atmos version tracks diff <track>`
+### `atmos version track diff <track>`
 
 Show entries where the lock differs from the currently resolved target or is missing.
 
-### `atmos version tracks verify <track>`
+### `atmos version track verify <track>`
 
 Fail if the lock is missing, stale, or invalid.
 
-### `atmos version tracks render <track> --check`
+### `atmos version track render <track> --check`
 
 Render managed files and fail if the generated outputs are not current.
 
@@ -686,25 +711,25 @@ Required CI flows:
 1. Check whether versions are current:
 
    ```shell
-   atmos version tracks status prod --format json
+   atmos version track status prod --format json
    ```
 
 2. Verify lock determinism:
 
    ```shell
-   atmos version tracks verify prod
+   atmos version track verify prod
    ```
 
 3. Check rendered workflow files:
 
    ```shell
-   atmos version tracks render prod --check
+   atmos version track render prod --check
    ```
 
 4. Update a specific group:
 
    ```shell
-   atmos version tracks update prod --group infrastructure
+   atmos version track update prod --group infrastructure
    ```
 
 Future CI automation may open PRs, attach labels, group updates, and apply automerge intent, but the first responsibility is deterministic status/update/render behavior.
@@ -783,7 +808,7 @@ Errors should distinguish:
 2. Add `pkg/version/manager`.
 3. Add lock file load/save support.
 4. Add effective policy merge support.
-5. Add `atmos version tracks` command group.
+5. Add `atmos version track` command group.
 6. Add `!version` YAML tag.
 7. Add `.version` template context for stack rendering.
 8. Support exact desired versions for all datasources.
@@ -837,7 +862,7 @@ Expected first slice:
 - Schema fields under `version`.
 - `pkg/version/manager` package.
 - `versions.lock.yaml` load/save.
-- `atmos version tracks` command group.
+- `atmos version track` command group.
 - Exact version locking for all datasources.
 - Toolchain SemVer constraint resolution by reusing toolchain registry behavior.
 - `!version` runtime resolution from lock file.
@@ -934,7 +959,7 @@ Future resolver tests:
 
 ## Open Questions
 
-1. Should `atmos version tracks update` eventually create PRs itself, or should it only update local files and let CI handle PR creation?
+1. Should `atmos version track update` eventually create PRs itself, or should it only update local files and let CI handle PR creation?
 2. Should schedules use a strict machine-readable schema instead of natural language strings?
 3. Should `allow` and `ignore` use a common expression language for all datasources?
 4. Should GitHub Actions rendering manage only explicit files, or should it include a manager that scans `.github/workflows/*.yaml.tmpl` automatically?
@@ -953,6 +978,6 @@ Future resolver tests:
 5. Toolchain dependencies can consume managed versions.
 6. GitHub Actions workflows can be generated or checked with literal refs.
 7. CI can detect stale locks and rendered files.
-8. The schema leaves room for provider parity with Dependabot/Renovate-style capabilities without adopting their config formats.
+8. The schema leaves room for provider parity with Updatecli/Renovate/Dependabot-inspired capabilities without adopting their config formats.
 9. Runtime commands do not perform network version lookup.
 10. The feature fits the existing Atmos version-management positioning without replacing component versioning patterns.

@@ -38,6 +38,11 @@ version:
       type: oci
       url: ghcr.io
 
+    local_registry:
+      type: oci
+      url: localhost:5000
+      insecure: true   # plain-HTTP access; local/emulated registries only
+
   defaults:
     update:
       strategy: patch
@@ -74,6 +79,8 @@ version:
           provider: github
           package: actions/checkout
           desired: "v6"
+          update:
+            pin: sha   # lock and render the commit SHA, not the mutable tag
 
         nginx:
           ecosystem: oci
@@ -81,6 +88,18 @@ version:
           provider: dockerhub
           package: library/nginx
           desired: "1.28.0"
+
+  # Which project files the file managers maintain (see File Managers below).
+  files:
+    - manager: github-actions
+      paths:
+        - .github/workflows/*.yaml
+    - manager: marker
+      paths:
+        - Dockerfile
+    - manager: template
+      paths:
+        - "**/*.tmpl"
 ```
 </File>
 
@@ -94,6 +113,36 @@ version:
 | `track` | Named version lane, such as `dev`, `staging`, or `prod`. |
 | `group` | Batch of related updates with shared match rules and policy. |
 | `lock_file` | File that stores resolved versions. Defaults to `versions.lock.yaml`. |
+| `files` | Rules mapping [file managers](#file-managers) to the project files they maintain. |
+
+Ecosystem names alias to their default datasource: `github` and `github-actions` resolve via `github-tags`, `docker` via `docker-tags`, and `oci` via `oci-tags`. Set `datasource` explicitly to override (for example, `github-releases` to follow published releases instead of tags).
+
+## Update Policy
+
+The `update` policy inherits through `version.defaults` → track `defaults` → entry → group:
+
+<dl>
+  <dt>`strategy`</dt>
+  <dd>How far [`atmos version track update`](/cli/commands/version/track#update) may advance a locked version: `major`, `minor`, or `patch`. `pin` (alias: `digest`) never advances the version and only refreshes digests.</dd>
+
+  <dt>`cooldown`</dt>
+  <dd>Minimum age of a release before it is eligible, checked against the upstream release timestamp: `14d`, `2w`, or Go durations such as `36h`.</dd>
+
+  <dt>`pin`</dt>
+  <dd>Artifact form emitted for the entry: `digest` (alias: `sha`) locks and renders the immutable identifier — the git commit SHA for GitHub datasources, the `sha256:` manifest digest for OCI registries — alongside the human-readable version. `none` or empty keeps plain version references. Strategy decides how far updates may advance; pin decides which form is written. Configuring a pin on a datasource that cannot provide immutable identifiers fails loudly.</dd>
+
+  <dt>`allow` / `ignore`</dt>
+  <dd>Pattern lists (on the policy, group, or entry) that permit or exclude candidate versions.</dd>
+</dl>
+
+### Update vs. Lock
+
+[`lock`](/cli/commands/version/track#lock) and [`update`](/cli/commands/version/track#update) answer different questions:
+
+- **`lock`** resolves each entry's `desired` expression as-is and writes the lock file. Use it to bootstrap a catalog or repair a lock.
+- **`update`** starts from the locked state and advances only as far as the policy allows. Every newer candidate held back by a strategy cap or cooldown produces a structured reason.
+
+Status reporting is policy-aware: `update-available` means an update the policy would actually take. A newer upstream version held back by policy reports `newer-available (blocked)` with the blocking reason — and still passes [`verify`](/cli/commands/version/track#verify), because the locked version is exactly what the policy wants deployed.
 
 ## Tracks
 
@@ -126,13 +175,86 @@ vars:
     uri: "public.ecr.aws/datadog/lambda-extension:{{ .version.dd_forwarder }}"
 ```
 
-GitHub Actions workflow templates can also use `.version`:
+For pinned entries, `{{ .version.name }}` emits the pinned form (the digest), while `{{ .version.name.Version }}` and `{{ .version.name.Digest }}` are individually addressable. [`!version`](/functions/yaml/version) always returns the version, never the digest.
+
+GitHub Actions workflow files need literal refs (GitHub parses them before Atmos runs). Maintain them with the [`github-actions` file manager](#file-managers), or author `*.tmpl` templates and render them with [`atmos version track render`](/cli/commands/version/track#render).
+
+## File Managers
+
+`version.files` declares which project files carry managed versions, so a single [`atmos version track apply`](/cli/commands/version/track#apply) (alias: `sync`) sweeps everything, and [`verify`](/cli/commands/version/track#verify) fails in CI when any of them drifts from the lock. Each rule maps a manager to the glob paths it maintains:
 
 ```yaml
-uses: "actions/checkout@{{ .version.checkout }}"
+version:
+  files:
+    - manager: github-actions
+      paths:
+        - .github/workflows/*.yaml
+    - manager: marker
+      paths:
+        - Dockerfile
+        - scripts/**/*.sh
+    - manager: template
+      paths:
+        - "**/*.tmpl"
 ```
 
-Render them with [`atmos version tracks render`](/cli/commands/version/tracks) so committed workflow files contain literal refs.
+When `files` is empty, managers with default paths (`github-actions`, `template`) run over those defaults.
+
+### `github-actions`
+
+Scans workflow files for `uses:` lines and rewrites the ref from the lock, matching entries by `owner/repo` package. Subdirectory actions (`owner/repo/subdir`) and reusable workflows (`owner/repo/.github/workflows/x.yml`) are included; local (`./path`) and `docker://` references never match. Rewriting is line-based, so formatting and unrelated comments are preserved.
+
+Pinned entries use the Renovate/Dependabot round-trip convention — the immutable SHA with the human-readable version as a trailing comment:
+
+```yaml
+- uses: actions/checkout@8edcb1bdb4e267140fa742c62e395cd74f332709 # v6.1.0
+```
+
+### `marker`
+
+The Renovate regex-manager equivalent for arbitrary text files. A comment annotation marks which line carries a managed version:
+
+```text
+<comment> atmos:version <entry-name> [match=<regex-with-one-capture-group>]
+```
+
+A **trailing** comment marks its own line; a **standalone** comment marks the next non-blank, non-comment line. The manager rewrites the version token in place from the lock; pinned entries replace digest tokens (`sha256:` digests and 40-character git SHAs).
+
+```dockerfile
+# atmos:version opentofu
+ENV TOFU_VERSION=1.10.6
+```
+
+```yaml
+tofu_version: 1.10.6 # atmos:version opentofu
+```
+
+Comment delimiters are detected per language:
+
+| Delimiter | Languages |
+|-----------|-----------|
+| `#` | YAML, shell, Dockerfile, Python, TOML |
+| `//` | Go, JavaScript, TypeScript, C-family |
+| `/*` | CSS, C-family block comments |
+| `;` | INI, Lisp, assembly |
+| `--` | SQL, Lua, Haskell |
+| `<!--` | HTML, XML, Markdown |
+
+Use the optional `match=` regex (with exactly one capture group) when the default version-token detection is ambiguous on the target line. Formats without comments (JSON) should use the `template` manager instead.
+
+### `template`
+
+`*.tmpl` files are the human-edited source of truth and render to a sibling file with the `.tmpl` suffix stripped (for example, `versions.json.tmpl` → `versions.json`), using the `.version` context resolved from the lock. This covers comment-hostile formats and any file where an explicit template beats in-place rewriting.
+
+## Editing the Catalog
+
+The [`add`, `set`, `remove`, and `get`](/cli/commands/version/track#add) subcommands edit managed version entries in `atmos.yaml` without hand-editing YAML, preserving comments, anchors, and formatting. `add` infers the ecosystem from the package coordinate:
+
+```shell
+atmos version track add checkout --package=actions/checkout --pin=sha
+atmos version track set nginx --desired=1.29.0
+atmos version track remove legacy-tool
+```
 
 ## Lock File
 
@@ -149,24 +271,36 @@ tracks:
       resolved_at: "2026-07-03T00:00:00Z"
 
     checkout:
-      version: v6
+      version: v6.1.0
       ecosystem: github-actions
       datasource: github-tags
       provider: github
       package: actions/checkout
+      digest: 8edcb1bdb4e267140fa742c62e395cd74f332709
       resolved_at: "2026-07-03T00:00:00Z"
+      released_at: "2026-06-12T00:00:00Z"
 ```
 </File>
 
-Atmos runtime resolution reads from the lock file. This keeps local runs and CI deterministic.
+Atmos runtime resolution reads from the lock file. This keeps local runs and CI deterministic. Entries with `pin: digest` also record the immutable identifier (`digest`) and the upstream release timestamp (`released_at`) used by cooldown checks.
 
 ## Resolver Support
 
-The schema supports multiple ecosystems, datasources, and providers. Exact `desired` versions can be locked for any datasource. SemVer constraint resolution is currently implemented for `datasource: toolchain`; additional provider-specific resolvers can be added behind the same schema without changing stack usage.
+Implemented datasources:
+
+| Datasource | Backend | Notes |
+|------------|---------|-------|
+| `toolchain` | Aqua registry | Tool versions for toolchain packages. |
+| `github-tags` | GitHub API | Tags carry commit SHAs for pinning. |
+| `github-releases` | GitHub API | Releases carry publish timestamps for cooldown. |
+| `oci-tags` | OCI registries | Tag listing plus manifest digests. |
+| `docker-tags` | Docker registries | Same engine as `oci-tags` against Docker Hub-style registries. |
+
+`desired` accepts a concrete version, a SemVer constraint (for example, `~1.10`), or `latest`. Providers configured under `version.providers` supply the registry `url` and options such as `insecure` for plain-HTTP local or emulated registries.
 
 ## See Also
 
-- [`atmos version tracks`](/cli/commands/version/tracks)
+- [`atmos version track`](/cli/commands/version/track)
 - [`!version`](/functions/yaml/version)
 - [Version Management Patterns](/design-patterns/version-management)
 - [Toolchain Configuration](/cli/configuration/toolchain)

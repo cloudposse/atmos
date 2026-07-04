@@ -1,0 +1,468 @@
+---
+title: atmos version track
+sidebar_position: 40
+sidebar_label: track
+sidebar_class_name: command
+id: track
+description: Manage tracked external versions with the Atmos Version Tracker — lock, update, verify, apply, and edit the version catalog.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use `atmos version track` (alias: `tracks`) to manage the Atmos Version Tracker: external versions declared under `version:` in `atmos.yaml`, resolved deterministically into `versions.lock.yaml`, and applied to project files by the file managers.
+</Intro>
+
+The version tracker manages externally versioned dependencies — GitHub Actions refs, container images, toolchain tools, release tags — declared in [`version.tracks`](/cli/configuration/version/managed-versions) in `atmos.yaml`. The top-level `atmos version` command remains about the Atmos CLI itself.
+
+## Usage
+
+```shell
+atmos version track <subcommand> [track] [flags]
+```
+
+Most subcommands accept an optional `[track]` argument. The target track resolves in this order: positional argument → `--track` flag → `version.track` in `atmos.yaml` → `default`.
+
+## Subcommands
+
+<dl>
+  <dt>[`list`](#list)</dt>
+  <dd>List configured version tracks.</dd>
+
+  <dt>[`show`](#show)</dt>
+  <dd>Show a track's effective entries after defaults and group policies are applied.</dd>
+
+  <dt>[`lock`](#lock)</dt>
+  <dd>Resolve desired versions as-is and write `versions.lock.yaml`.</dd>
+
+  <dt>[`update`](#update)</dt>
+  <dd>Advance locked versions within the update policy (strategy caps, cooldown, allow/ignore).</dd>
+
+  <dt>[`status`](#status)</dt>
+  <dd>Show policy-aware lock and update status for each entry.</dd>
+
+  <dt>[`diff`](#diff)</dt>
+  <dd>Show entries that are unlocked or differ from the policy-eligible target.</dd>
+
+  <dt>[`verify`](#verify)</dt>
+  <dd>CI gate: fail unless the lock is fresh and version-managed files are current.</dd>
+
+  <dt>[`apply`](#apply) (alias: `sync`)</dt>
+  <dd>Rewrite version-managed files from the lock using the file managers.</dd>
+
+  <dt>[`render`](#render)</dt>
+  <dd>Render a single template file with locked `.version` values.</dd>
+
+  <dt>[`add`](#add) / [`set`](#set) / [`remove`](#remove) / [`get`](#get)</dt>
+  <dd>Edit managed version entries in `atmos.yaml` without hand-editing YAML, preserving comments and formatting.</dd>
+</dl>
+
+## Global Flags
+
+All subcommands support these flags:
+
+<dl>
+  <dt>`--format`</dt>
+  <dd>Output format: `yaml` (default) or `json`. Not available on `render`, which writes the rendered file content.</dd>
+
+  <dt>`--track`</dt>
+  <dd>Version track to operate on. Defaults to `version.track` in `atmos.yaml`. A positional `[track]` argument takes precedence.</dd>
+</dl>
+
+## `list`
+
+List configured version tracks.
+
+```shell
+atmos version track list
+atmos version track list --format=json
+```
+
+## `show`
+
+Show a track's entries after global defaults, track defaults, and group policies are applied.
+
+```shell
+atmos version track show prod
+atmos version track show --track=prod --format=json
+```
+
+## `lock`
+
+Resolve each entry's desired version expression to a concrete version and write `versions.lock.yaml`. `lock` resolves the desired versions **as-is** — use it to bootstrap a new catalog or repair a lock file. Use [`update`](#update) to advance versions within the update policy.
+
+When an entry's effective policy sets `pin: digest`, locking also resolves the immutable identifier — the git commit SHA for GitHub datasources, the `sha256:` manifest digest for OCI registries — into the lock entry, along with the upstream release timestamp used by cooldown checks.
+
+### Flags
+
+<dl>
+  <dt>`--group`</dt>
+  <dd>Limit locking to entries in the named version group.</dd>
+</dl>
+
+### Examples
+
+```shell
+# Bootstrap the lock file for the prod track
+atmos version track lock prod
+
+# Re-resolve only the infrastructure group
+atmos version track lock prod --group=infrastructure
+```
+
+## `update`
+
+Advance locked versions to the newest candidates allowed by each entry's effective update policy, and write the lock file. Unlike `lock`, `update` starts from the locked state and respects:
+
+- **Strategy caps**: `major`, `minor`, or `patch` limit how far a version may advance; `pin` (alias: `digest`) never advances the version and only refreshes digests.
+- **Cooldown windows**: `14d`, `2w`, or Go durations like `36h`, checked against the upstream release timestamp.
+- **Allow/ignore rules**: pattern lists that permit or exclude candidate versions.
+
+Every newer candidate held back by policy is reported with a structured reason.
+
+### Flags
+
+<dl>
+  <dt>`--group`</dt>
+  <dd>Limit the update to entries in the named version group.</dd>
+
+  <dt>`--only`</dt>
+  <dd>Limit the update to the named entries (repeatable).</dd>
+</dl>
+
+### Examples
+
+```shell
+# Update every entry in the default track within policy
+atmos version track update
+
+# Update only the infrastructure group in prod
+atmos version track update prod --group=infrastructure
+
+# Update two specific entries
+atmos version track update prod --only=checkout --only=nginx
+```
+
+Example output — one entry updated, one held back by cooldown:
+
+```yaml
+track: prod
+results:
+  - name: checkout
+    from: v6.1.0
+    to: v6.2.0
+    updated: true
+  - name: nginx
+    from: 1.29.0
+    updated: false
+    reason: "1.30.0 released 3d ago; cooldown 14d has not elapsed"
+```
+
+## `status`
+
+Show lock and update status for each entry in a track. Status is policy-aware:
+
+<dl>
+  <dt>`current`</dt>
+  <dd>The locked version matches the policy-eligible target.</dd>
+
+  <dt>`update-available`</dt>
+  <dd>A policy-eligible update differs from the locked version — `update` would take it.</dd>
+
+  <dt>`newer-available (blocked)`</dt>
+  <dd>A newer version exists upstream, but the update policy (strategy cap or cooldown) holds it back. The blocking reason is reported in the message, and the entry still passes `verify` — the locked version is exactly what the policy wants deployed.</dd>
+
+  <dt>`unlocked`</dt>
+  <dd>The entry has no lock file record.</dd>
+
+  <dt>`locked`</dt>
+  <dd>The entry is locked but its target could not be resolved.</dd>
+</dl>
+
+### Flags
+
+<dl>
+  <dt>`--group`</dt>
+  <dd>Limit status to entries in the named version group.</dd>
+</dl>
+
+### Examples
+
+```shell
+atmos version track status prod
+atmos version track status prod --format=json
+```
+
+## `diff`
+
+Show only the entries that are unlocked or have a policy-eligible update available — the subset of `status` that `update` would change.
+
+### Flags
+
+<dl>
+  <dt>`--group`</dt>
+  <dd>Limit the diff to entries in the named version group.</dd>
+</dl>
+
+### Examples
+
+```shell
+atmos version track diff prod
+```
+
+## `verify`
+
+The CI gate. Fails when any configured entry is unlocked, has a policy-eligible update available, or when version-managed files differ from the lock. Both conditions must hold for `verify` to pass:
+
+1. The lock file is fresh (every entry is `current`, `locked`, or `newer-available (blocked)`).
+2. Every file maintained by the [file managers](#apply) matches what `apply` would write.
+
+### Examples
+
+```shell
+atmos version track verify prod
+```
+
+## `apply`
+
+Alias: `sync`. Run the file managers over the paths configured in `version.files` (or the managers' default paths) and rewrite version references from the lock:
+
+<dl>
+  <dt>`github-actions`</dt>
+  <dd>Scans workflow files for `uses:` lines and rewrites the ref from the lock by `owner/repo` package. Subdirectory actions and reusable workflows are included; local (`./path`) and `docker://` references never match. Rewriting is line-based, so formatting is preserved.</dd>
+
+  <dt>`marker`</dt>
+  <dd>Rewrites version tokens on lines annotated with a `<comment> atmos:version <name> [match=<regex>]` comment. Works across languages (`#`, `//`, `;`, `--`, `<!--`, `/*`).</dd>
+
+  <dt>`template`</dt>
+  <dd>Renders `*.tmpl` files to a sibling file (with the `.tmpl` suffix stripped) using the `.version` context. Covers comment-hostile formats such as JSON.</dd>
+</dl>
+
+See [Managed Versions](/cli/configuration/version/managed-versions#file-managers) for `version.files` configuration and the full marker syntax.
+
+### Flags
+
+<dl>
+  <dt>`--check`</dt>
+  <dd>Fail without writing when managed files are out of date, listing the stale paths. Intended for CI.</dd>
+
+  <dt>`--dir`</dt>
+  <dd>Root directory to resolve managed paths from. Defaults to the current directory.</dd>
+
+  <dt>`--manager`</dt>
+  <dd>Limit the run to the named file managers (repeatable).</dd>
+</dl>
+
+### Examples
+
+```shell
+# Rewrite everything managed from the lock
+atmos version track apply
+
+# CI: fail if any managed file is stale
+atmos version track apply --check
+
+# Only rewrite GitHub Actions workflow refs
+atmos version track apply --manager=github-actions
+```
+
+## `render`
+
+Render a single template file with the `.version` context resolved from the lock file. For sweeping every managed file at once, use [`apply`](#apply) with the `template` manager instead.
+
+### Flags
+
+<dl>
+  <dt>`--file` <em>(required)</em></dt>
+  <dd>Template source file to render.</dd>
+
+  <dt>`--output`</dt>
+  <dd>Destination file for the rendered output. When omitted, the result is written to stdout.</dd>
+
+  <dt>`--check`</dt>
+  <dd>Fail if the committed output file does not match the rendered output.</dd>
+</dl>
+
+### Examples
+
+```shell
+# Render a workflow template to a committed workflow file
+atmos version track render prod \
+  --file=.github/workflows/deploy.yaml.tmpl \
+  --output=.github/workflows/deploy.yaml
+
+# CI: verify the committed file is current
+atmos version track render prod \
+  --file=.github/workflows/deploy.yaml.tmpl \
+  --output=.github/workflows/deploy.yaml \
+  --check
+```
+
+## `add`
+
+Add a managed version entry to the version track in `atmos.yaml`, preserving comments and formatting. When `--ecosystem` is omitted, it is inferred from the package coordinate:
+
+- `actions/*` (and other `owner/repo` action paths) → `github-actions`
+- Registry-hosted images (`ghcr.io/...`, `registry/...`) → `oci`
+- Bare tool names (`opentofu`, `kubectl`) → `toolchain`
+- `owner/repo` → `github`
+
+### Arguments
+
+<dl>
+  <dt>`NAME` <em>(required)</em></dt>
+  <dd>The entry name used by `!version`, `{{ .version.name }}`, and marker annotations.</dd>
+</dl>
+
+### Flags
+
+<dl>
+  <dt>`--package`</dt>
+  <dd>Package coordinate (e.g. `actions/checkout`, `library/nginx`, `opentofu`). Defaults to `NAME`.</dd>
+
+  <dt>`--ecosystem`</dt>
+  <dd>Ecosystem (`github-actions`, `github`, `oci`, `docker`, `toolchain`, ...). Inferred from the package when omitted.</dd>
+
+  <dt>`--datasource`</dt>
+  <dd>Datasource override (`github-tags`, `github-releases`, `oci-tags`, `docker-tags`, `toolchain`).</dd>
+
+  <dt>`--provider`</dt>
+  <dd>Provider name from `version.providers`.</dd>
+
+  <dt>`--desired`</dt>
+  <dd>Desired version: concrete, SemVer constraint, or `latest` (default).</dd>
+
+  <dt>`--group`</dt>
+  <dd>Version group name.</dd>
+
+  <dt>`--pin`</dt>
+  <dd>Pin policy: `digest` (alias: `sha`) locks and renders the immutable identifier.</dd>
+</dl>
+
+### Examples
+
+```shell
+# Ecosystem inferred as github-actions; desired defaults to latest
+atmos version track add checkout --package=actions/checkout --pin=sha
+
+# A toolchain tool with a SemVer constraint
+atmos version track add opentofu --desired="~1.10"
+
+# A container image on a specific track
+atmos version track add nginx --package=library/nginx --track=prod
+```
+
+## `set`
+
+Update fields of an existing managed version entry in `atmos.yaml`, preserving comments and formatting. Only the flags you pass are changed.
+
+### Arguments
+
+<dl>
+  <dt>`NAME` <em>(required)</em></dt>
+  <dd>The entry name to update.</dd>
+</dl>
+
+### Flags
+
+<dl>
+  <dt>`--desired`</dt>
+  <dd>Desired version: concrete, SemVer constraint, or `latest`.</dd>
+
+  <dt>`--package`</dt>
+  <dd>Package coordinate.</dd>
+
+  <dt>`--provider`</dt>
+  <dd>Provider name from `version.providers`.</dd>
+
+  <dt>`--group`</dt>
+  <dd>Version group name.</dd>
+
+  <dt>`--pin`</dt>
+  <dd>Pin policy: `digest` (alias: `sha`), or `none`.</dd>
+</dl>
+
+### Examples
+
+```shell
+atmos version track set checkout --desired=v6
+atmos version track set nginx --pin=digest
+```
+
+## `remove`
+
+Alias: `rm`. Remove a managed version entry from the version track in `atmos.yaml`, preserving comments and formatting.
+
+### Arguments
+
+<dl>
+  <dt>`NAME` <em>(required)</em></dt>
+  <dd>The entry name to remove.</dd>
+</dl>
+
+### Examples
+
+```shell
+atmos version track remove nginx
+```
+
+## `get`
+
+Show a managed version entry with its effective policy (after defaults and groups are applied) and its locked state.
+
+### Arguments
+
+<dl>
+  <dt>`NAME` <em>(required)</em></dt>
+  <dd>The entry name to show.</dd>
+</dl>
+
+### Examples
+
+```shell
+atmos version track get checkout --format=json
+```
+
+## Pinning Workflow
+
+With `pin: digest` (alias: `sha`) on an entry's update policy, `lock` resolves the immutable identifier and `apply` writes it using the Renovate/Dependabot round-trip convention — the SHA next to a human-readable version comment:
+
+```shell
+atmos version track add checkout --package=actions/checkout --pin=sha
+atmos version track lock
+atmos version track apply
+```
+
+The `github-actions` manager rewrites workflow refs to:
+
+```yaml
+steps:
+  - uses: actions/checkout@8edcb1bdb4e267140fa742c62e395cd74f332709 # v6.1.0
+```
+
+OCI entries lock the `sha256:` manifest digest. In templates, `{{ .version.checkout }}` emits the pinned form (the digest) for pinned entries, while `{{ .version.checkout.Version }}` and `{{ .version.checkout.Digest }}` remain individually addressable. The [`!version`](/functions/yaml/version) YAML function always returns the version, never the digest.
+
+Because `pin` strategies never advance the version, `atmos version track update` only refreshes digests for pinned entries — moving the version requires changing `desired`.
+
+## CI Usage
+
+Use `verify` and `apply --check` to make version drift a failing check before infrastructure changes apply:
+
+```yaml
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: atmos version track status --format=json
+      - run: atmos version track apply --check
+      - run: atmos version track verify
+```
+
+`verify` alone covers both conditions — lock freshness and managed-file currency — so it is the single gate to require. GitHub parses workflow files before Atmos runs, so workflow refs must be literal: maintain them with the `github-actions` manager, or author `*.tmpl` templates and commit the rendered output.
+
+## See Also
+
+- [Managed Versions Configuration](/cli/configuration/version/managed-versions)
+- [`!version`](/functions/yaml/version)
+- [Version Management Patterns](/design-patterns/version-management)
