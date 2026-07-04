@@ -361,6 +361,54 @@ func TestCustomCommandIntegration_RetriesShellStep(t *testing.T) {
 	assert.Equal(t, "2", strings.TrimSpace(string(attempts)))
 }
 
+func TestCustomCommandIntegration_ShellStepWithoutRetryRunsOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	testDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	_ = NewTestKit(t)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	attemptsFile := filepath.Join(tmpDir, "attempts.txt")
+
+	testCommand := schema.Command{
+		Name:        "test-no-retry-shell-step",
+		Description: "Test no retry shell step",
+		Steps: schema.Tasks{
+			{
+				Command: customCommandAttemptHelperCommand(t, attemptsFile),
+				Type:    "shell",
+			},
+		},
+	}
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-no-retry-shell-step" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
+
+	attempts, err := os.ReadFile(attemptsFile)
+	require.NoError(t, err)
+	assert.Equal(t, "1", strings.TrimSpace(string(attempts)))
+}
+
 func customCommandWriteHelperCommand(t *testing.T, path, value string) string {
 	t.Helper()
 
@@ -378,6 +426,15 @@ func customCommandRetryHelperCommand(t *testing.T, path string) string {
 	require.NoError(t, err)
 	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
 	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationRetryHelper -- %s", exe, encodedPath)
+}
+
+func customCommandAttemptHelperCommand(t *testing.T, path string) string {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationAttemptHelper -- %s", exe, encodedPath)
 }
 
 func TestCustomCommandIntegrationWriteHelper(t *testing.T) {
@@ -430,6 +487,34 @@ func TestCustomCommandIntegrationRetryHelper(t *testing.T) {
 	if attempt < 2 {
 		os.Exit(1)
 	}
+	os.Exit(0)
+}
+
+func TestCustomCommandIntegrationAttemptHelper(t *testing.T) {
+	separator := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 1)
+	pathBytes, err := base64.RawURLEncoding.DecodeString(args[0])
+	require.NoError(t, err)
+	path := string(pathBytes)
+
+	attempt := 1
+	if existing, err := os.ReadFile(path); err == nil {
+		parsed, parseErr := strconv.Atoi(strings.TrimSpace(string(existing)))
+		require.NoError(t, parseErr)
+		attempt = parsed + 1
+	}
+	require.NoError(t, os.WriteFile(path, []byte(strconv.Itoa(attempt)), 0o600))
 	os.Exit(0)
 }
 

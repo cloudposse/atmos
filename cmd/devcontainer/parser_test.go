@@ -273,3 +273,80 @@ func TestDevcontainerExecParser(t *testing.T) {
 		assert.Equal(t, []string{"echo", "hello"}, command)
 	})
 }
+
+func TestDevcontainerCommandsRejectInvalidInputBeforeManager(t *testing.T) {
+	SetAtmosConfig(nil)
+	t.Cleanup(func() {
+		SetAtmosConfig(nil)
+	})
+
+	tests := []struct {
+		name    string
+		command *cobra.Command
+		args    []string
+		wantErr error
+	}{
+		{
+			name:    "attach requires name",
+			command: attachCmd,
+			args:    []string{},
+			wantErr: errUtils.ErrInvalidPositionalArgs,
+		},
+		{
+			name:    "config requires name",
+			command: configCmd,
+			args:    []string{},
+			wantErr: errUtils.ErrInvalidPositionalArgs,
+		},
+		{
+			name:    "logs requires name",
+			command: logsCmd,
+			args:    []string{},
+			wantErr: errUtils.ErrInvalidPositionalArgs,
+		},
+		{
+			name:    "remove requires name",
+			command: removeCmd,
+			args:    []string{},
+			wantErr: errUtils.ErrInvalidPositionalArgs,
+		},
+		{
+			name:    "stop requires name",
+			command: stopCmd,
+			args:    []string{},
+			wantErr: errUtils.ErrInvalidPositionalArgs,
+		},
+		{
+			name:    "exec requires name and command",
+			command: execCmd,
+			args:    []string{},
+			wantErr: errUtils.ErrInvalidArguments,
+		},
+		{
+			name:    "rebuild requires initialized config",
+			command: rebuildCmd,
+			args:    []string{"app"},
+			wantErr: errUtils.ErrAtmosConfigIsNil,
+		},
+		{
+			name:    "shell requires initialized config",
+			command: shellCmd,
+			args:    []string{"app"},
+			wantErr: errUtils.ErrAtmosConfigIsNil,
+		},
+		{
+			name:    "start requires initialized config",
+			command: startCmd,
+			args:    []string{"app"},
+			wantErr: errUtils.ErrAtmosConfigIsNil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.command.RunE(tt.command, tt.args)
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, tt.wantErr), "got %v, want %v", err, tt.wantErr)
+		})
+	}
+}

@@ -494,7 +494,7 @@ jobs:
 
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
-        timeout-minutes: 25
+        timeout-minutes: 45
         uses: ./.github/actions/setup-colima
 
       - name: Download build artifacts
