@@ -19,10 +19,12 @@ import (
 const renderOutputPerm os.FileMode = 0o644
 
 var trackRenderCmd = &cobra.Command{
-	Use:   "render [track]",
-	Short: "Render a template file with locked .version values",
-	Long:  "Render a single template file with the .version context resolved from the lock file. Use --output to write the result and --check to verify a committed file is current.",
-	Args:  cobra.MaximumNArgs(1),
+	Use:        "render [track]",
+	Short:      "Render a template file with locked .version values",
+	Long:       "Render a single template file with the .version context resolved from the lock file. Use `atmos version track apply` for version-managed files.",
+	Deprecated: "use `atmos version track apply` for version-managed files",
+	Hidden:     true,
+	Args:       cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfig, "version.track.render.RunE")()
 

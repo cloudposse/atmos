@@ -36,7 +36,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Build atmos
-        run: go build -o build/atmos .
+        run: make build
 
       - name: Verify committed lock and managed files are current
         working-directory: examples/demo-version-tracker

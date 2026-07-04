@@ -75,6 +75,7 @@ var (
 // so entries can rely on the ecosystem when the datasource is omitted.
 var datasourceAliases = map[string]string{
 	"github":         "github-tags",
+	"github/actions": "github-tags",
 	"github-actions": "github-tags",
 	"docker":         "docker-tags",
 	"oci":            "oci-tags",

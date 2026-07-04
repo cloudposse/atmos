@@ -50,9 +50,6 @@ Most subcommands accept an optional `[track]` argument. The target track resolve
   <dt>[`apply`](#apply) (alias: `sync`)</dt>
   <dd>Rewrite version-managed files from the lock using the file managers.</dd>
 
-  <dt>[`render`](#render)</dt>
-  <dd>Render a single template file with locked `.version` values.</dd>
-
   <dt>[`add`](#add) / [`set`](#set) / [`remove`](#remove) / [`get`](#get)</dt>
   <dd>Edit managed version entries in `atmos.yaml` without hand-editing YAML, preserving comments and formatting.</dd>
 </dl>
@@ -63,7 +60,7 @@ All subcommands support these flags:
 
 <dl>
   <dt>`--format`</dt>
-  <dd>Output format: `yaml` (default) or `json`. Not available on `render`, which writes the rendered file content.</dd>
+  <dd>Output format: `yaml` (default) or `json`.</dd>
 
   <dt>`--track`</dt>
   <dd>Version track to operate on. Defaults to `version.track` in `atmos.yaml`. A positional `[track]` argument takes precedence.</dd>
@@ -266,43 +263,11 @@ atmos version track apply --check
 atmos version track apply --manager=github-actions
 ```
 
-## `render`
-
-Render a single template file with the `.version` context resolved from the lock file. For sweeping every managed file at once, use [`apply`](#apply) with the `template` manager instead.
-
-### Flags
-
-<dl>
-  <dt>`--file` <em>(required)</em></dt>
-  <dd>Template source file to render.</dd>
-
-  <dt>`--output`</dt>
-  <dd>Destination file for the rendered output. When omitted, the result is written to stdout.</dd>
-
-  <dt>`--check`</dt>
-  <dd>Fail if the committed output file does not match the rendered output.</dd>
-</dl>
-
-### Examples
-
-```shell
-# Render a workflow template to a committed workflow file
-atmos version track render prod \
-  --file=.github/workflows/deploy.yaml.tmpl \
-  --output=.github/workflows/deploy.yaml
-
-# CI: verify the committed file is current
-atmos version track render prod \
-  --file=.github/workflows/deploy.yaml.tmpl \
-  --output=.github/workflows/deploy.yaml \
-  --check
-```
-
 ## `add`
 
 Add a managed version entry to the version track in `atmos.yaml`, preserving comments and formatting. When `--ecosystem` is omitted, it is inferred from the package coordinate:
 
-- `actions/*` (and other `owner/repo` action paths) → `github-actions`
+- `actions/*` (and other `owner/repo` action paths) → `github/actions`
 - Registry-hosted images (`ghcr.io/...`, `registry/...`) → `oci`
 - Bare tool names (`opentofu`, `kubectl`) → `toolchain`
 - `owner/repo` → `github`
@@ -321,7 +286,7 @@ Add a managed version entry to the version track in `atmos.yaml`, preserving com
   <dd>Package coordinate (e.g. `actions/checkout`, `library/nginx`, `opentofu`). Defaults to `NAME`.</dd>
 
   <dt>`--ecosystem`</dt>
-  <dd>Ecosystem (`github-actions`, `github`, `oci`, `docker`, `toolchain`, ...). Inferred from the package when omitted.</dd>
+  <dd>Ecosystem (`github/actions`, `github`, `oci`, `docker`, `toolchain`, ...). Inferred from the package when omitted.</dd>
 
   <dt>`--datasource`</dt>
   <dd>Datasource override (`github-tags`, `github-releases`, `oci-tags`, `docker-tags`, `toolchain`).</dd>
@@ -342,7 +307,7 @@ Add a managed version entry to the version track in `atmos.yaml`, preserving com
 ### Examples
 
 ```shell
-# Ecosystem inferred as github-actions; desired defaults to latest
+# Ecosystem inferred as github/actions; desired defaults to latest
 atmos version track add checkout --package=actions/checkout --pin=sha
 
 # A toolchain tool with a SemVer constraint
@@ -459,7 +424,7 @@ jobs:
       - run: atmos version track verify
 ```
 
-`verify` alone covers both conditions — lock freshness and managed-file currency — so it is the single gate to require. GitHub parses workflow files before Atmos runs, so workflow refs must be literal: maintain them with the `github-actions` manager, or author `*.tmpl` templates and commit the rendered output.
+`verify` alone covers both conditions — lock freshness and managed-file currency — so it is the single gate to require. GitHub parses workflow files before Atmos runs, so workflow refs must be literal: maintain them with the `github-actions` manager, or author `*.tmpl` templates and commit the generated output.
 
 ## See Also
 

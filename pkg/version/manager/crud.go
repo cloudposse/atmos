@@ -107,7 +107,7 @@ func InferEcosystem(pkg string) string {
 
 	switch {
 	case strings.HasPrefix(pkg, "actions/"):
-		return "github-actions"
+		return "github/actions"
 	case strings.Contains(strings.SplitN(pkg, "/", 2)[0], "."): //nolint:mnd // Split into host and remainder.
 		return "oci"
 	case strings.Contains(pkg, "/"):

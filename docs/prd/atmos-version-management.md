@@ -23,7 +23,7 @@ These decisions were made during implementation and supersede earlier drafts:
 
 1. **Branding and namespace.** The feature is the **Atmos Version Tracker**. The command group is `atmos version track <verb>` (singular noun, alias `tracks`), implemented as a nested command package (`cmd/version/track`) following the `cmd/terraform/cache` precedent. The top-level `atmos version` command remains about the Atmos CLI's own version. Track selection falls back positional argument → `--track` flag → `version.track` in `atmos.yaml`.
 
-2. **Datasource resolver registry.** `pkg/version/resolver` defines the `Resolver` interface (`Versions`, `Pin`) with init-time registration and ecosystem aliases (`github` → `github-tags`, `docker` → `docker-tags`, ...). Implemented resolvers: `toolchain` (Aqua registry), `github-tags`/`github-releases` (via `pkg/github`; tags carry commit SHAs, releases carry publish timestamps), and `oci-tags`/`docker-tags` (go-containerregistry; tag listing plus manifest digests, default-keychain auth with a GHCR token fallback in `pkg/oci`). Version selection (`latest`, SemVer constraints, `allow`/`ignore`) wraps the updatecli versionfilter engine (`github.com/updatecli/updatecli/pkg/plugins/utils/version`) — imported directly after verifying the module-graph impact (one indirect patch bump).
+2. **Datasource resolver registry.** `pkg/version/resolver` defines the `Resolver` interface (`Versions`, `Pin`) with init-time registration and ecosystem aliases (`github` → `github-tags`, `github/actions` → `github-tags`, `docker` → `docker-tags`, ...). Implemented resolvers: `toolchain` (Aqua registry), `github-tags`/`github-releases` (via `pkg/github`; tags carry commit SHAs, releases carry publish timestamps), and `oci-tags`/`docker-tags` (go-containerregistry; tag listing plus manifest digests, default-keychain auth with a GHCR token fallback in `pkg/oci`). Version selection (`latest`, SemVer constraints, `allow`/`ignore`) wraps the updatecli versionfilter engine (`github.com/updatecli/updatecli/pkg/plugins/utils/version`) — imported directly after verifying the module-graph impact (one indirect patch bump).
 
 3. **SHA/digest pinning.** An opt-in `pin: digest` (alias: `sha`) field on the update policy inherits through defaults → track → entry → group. Locking resolves the immutable identifier (git commit SHA for GitHub, sha256 manifest digest for OCI) into `LockEntry.digest`, plus `released_at` for cooldown checks. Rendered output uses the Renovate/Dependabot round-trip convention: `uses: owner/repo@<sha> # <version>`. A configured pin on a datasource that cannot pin fails loudly. The `.version` template context yields `VersionRef` values whose `String()` emits the pinned form; `.Version`/`.Digest` are individually addressable; `!version` always returns the version.
 
@@ -35,7 +35,7 @@ These decisions were made during implementation and supersede earlier drafts:
    - `template`: `*.tmpl` sources render to a sibling file with the `.version` context; covers comment-hostile formats (JSON).
    `atmos version track apply` (alias `sync`) rewrites everything in one command; `--check` fails listing stale paths; `verify` also fails when managed files drift.
 
-6. **CRUD without YAML editing.** `atmos version track add|set|remove|get` edit `atmos.yaml` through the format-preserving `pkg/yaml` engine (PR #2664), preserving comments and anchors, targeting the file resolved by the same precedence as `atmos config set`. `add` infers the ecosystem from the package coordinate (`actions/*` → github-actions, registry-hosted → oci, bare tool name → toolchain, `owner/repo` → github).
+6. **CRUD without YAML editing.** `atmos version track add|set|remove|get` edit `atmos.yaml` through the format-preserving `pkg/yaml` engine (PR #2664), preserving comments and anchors, targeting the file resolved by the same precedence as `atmos config set`. `add` infers the ecosystem from the package coordinate (`actions/*` → github/actions, registry-hosted → oci, bare tool name → toolchain, `owner/repo` → github).
 
 ---
 
@@ -43,7 +43,7 @@ These decisions were made during implementation and supersede earlier drafts:
 
 Build Atmos-native version management for external versions used by infrastructure, workflows, CI, and toolchain dependencies.
 
-Atmos owns discovery, policy, grouping, locking, rendering, status, and CI workflows. The design borrows useful capabilities from Updatecli, Renovate, and Dependabot, but does not integrate with them, invoke them, or generate their config.
+Atmos owns discovery, policy, grouping, locking, applying managed files, status, and CI workflows. The design borrows useful capabilities from Updatecli, Renovate, and Dependabot, but does not integrate with them, invoke them, or generate their config.
 
 Human-authored configuration lives in `atmos.yaml`. Resolved versions live in `versions.lock.yaml`.
 
@@ -86,7 +86,7 @@ It is complementary to the existing Atmos design patterns for component versioni
 
 Those patterns answer, "Which component source should this environment run?"
 
-Atmos version management answers, "Which external artifact versions should Atmos resolve, lock, inject, render, and verify for this track?"
+Atmos version management answers, "Which external artifact versions should Atmos resolve, lock, inject, apply to managed files, and verify for this track?"
 
 This keeps version definitions out of individual stacks where possible, while still allowing stacks to assert the track they require.
 
@@ -107,13 +107,13 @@ This keeps version definitions out of individual stacks where possible, while st
    - Atmos toolchain registries
 4. Support deterministic runtime resolution through lock files.
 5. Support tracks such as `dev`, `staging`, and `prod`.
-6. Support grouped updates, defaults, cooldowns, schedules, labels, ignore rules, allowed version policies, and automerge intent.
+6. Support grouped updates, defaults, cooldowns, schedules, labels, ignore rules, and allowed version policies.
 7. Support runtime usage from stack/config YAML:
    - `!version name`
    - `{{ .version.name }}`
    - `dependencies.tools`
 8. Support generated or checked GitHub Actions workflow refs with literal `uses:` output.
-9. Provide CI-native commands for status, update, render checks, and verification.
+9. Provide CI-native commands for status, update, apply checks, and verification.
 10. Keep all human-authored version policy in `atmos.yaml`; do not introduce a separate authored config file.
 
 ---
@@ -142,7 +142,7 @@ Examples:
 
 - `docker`
 - `oci`
-- `github-actions`
+- `github/actions`
 - `helm`
 - `terraform`
 - `opentofu`
@@ -197,9 +197,9 @@ Groups are similar in spirit to Updatecli policies and Renovate or Dependabot gr
 
 ### Manager
 
-An Atmos-native scanner or renderer for files that need literal version output.
+An Atmos-native scanner, rewriter, or template renderer for files that need literal version output.
 
-The first required manager is a renderer for GitHub Actions workflow templates, because GitHub workflow YAML must contain literal `uses:` refs when GitHub reads it.
+The first required manager rewrites GitHub Actions workflow refs, because GitHub workflow YAML must contain literal `uses:` refs when GitHub reads it.
 
 ---
 
@@ -216,29 +216,28 @@ version:
 
   providers:
     dockerhub:
-      type: docker
+      kind: docker
       url: registry-1.docker.io
 
     ecr_prod:
-      type: ecr
+      kind: aws/ecr
       region: us-east-1
       registry_id: "123456789012"
 
     ghcr:
-      type: oci
+      kind: oci
       url: ghcr.io
 
   defaults:
     update:
       strategy: patch
       cooldown: 14d
-      automerge: true
     allow: [stable]
     labels: [dependencies]
 
   groups:
     infrastructure:
-      ecosystems: [docker, oci, helm, terraform, opentofu, github-actions]
+      ecosystems: [docker, oci, helm, terraform, opentofu, github/actions]
       patterns: ["terraform*", "opentofu", "actions/*", "nginx"]
       update:
         strategy: minor
@@ -280,7 +279,7 @@ version:
           desired: "~2.7"
 
         checkout:
-          ecosystem: github-actions
+          ecosystem: github/actions
           datasource: github-tags
           provider: github
           package: actions/checkout
@@ -325,7 +324,6 @@ Supported fields:
 - `update.strategy`
 - `update.cooldown`
 - `update.schedule`
-- `update.automerge`
 - `allow`
 - `ignore`
 - `labels`
@@ -451,7 +449,7 @@ Author workflow templates with `.version`:
 uses: "actions/checkout@{{ .version.checkout }}"
 ```
 
-Render literal workflow YAML:
+Generate literal workflow YAML:
 
 ```yaml
 uses: actions/checkout@v6
@@ -460,9 +458,9 @@ uses: actions/checkout@v6
 The intended workflow is:
 
 1. Author workflow templates.
-2. Run `atmos version track render <track>`.
-3. Commit rendered workflow YAML.
-4. Run `atmos version track render <track> --check` in CI.
+2. Run `atmos version track apply <track>`.
+3. Commit generated workflow YAML.
+4. Run `atmos version track apply <track> --check` in CI.
 
 ---
 
@@ -510,7 +508,7 @@ atmos version track update prod --group infrastructure
 atmos version track status prod --format json
 atmos version track diff prod
 atmos version track verify prod
-atmos version track render prod --check
+atmos version track apply prod --check
 ```
 
 ### `atmos version track list`
@@ -555,9 +553,9 @@ Show entries where the lock differs from the currently resolved target or is mis
 
 Fail if the lock is missing, stale, or invalid.
 
-### `atmos version track render <track> --check`
+### `atmos version track apply <track> --check`
 
-Render managed files and fail if the generated outputs are not current.
+Apply managed-file rewrites and fail if the generated outputs are not current.
 
 ---
 
@@ -696,10 +694,6 @@ Ignore rules for versions or patterns.
 
 Labels used by CI automation and PR creation.
 
-### Automerge
-
-Boolean intent. Atmos records whether an update may be automatically merged, but actual merge behavior belongs to the CI workflow or future PR automation.
-
 ---
 
 ## CI Requirements
@@ -720,10 +714,10 @@ Required CI flows:
    atmos version track verify prod
    ```
 
-3. Check rendered workflow files:
+3. Check managed workflow files:
 
    ```shell
-   atmos version track render prod --check
+   atmos version track apply prod --check
    ```
 
 4. Update a specific group:
@@ -732,7 +726,7 @@ Required CI flows:
    atmos version track update prod --group infrastructure
    ```
 
-Future CI automation may open PRs, attach labels, group updates, and apply automerge intent, but the first responsibility is deterministic status/update/render behavior.
+Future CI automation may open PRs, attach labels, and group updates, but the first responsibility is deterministic status/update/apply behavior. Atmos itself never merges: an `automerge` intent flag was considered and removed because merge behavior belongs entirely to the CI platform.
 
 ---
 
@@ -796,7 +790,7 @@ Errors should distinguish:
 - Constraint parse failure
 - No matching version
 - Digest lookup failure
-- Render mismatch
+- Apply/check mismatch
 
 ---
 
@@ -847,7 +841,6 @@ Errors should distinguish:
 
 1. Add optional PR creation flow.
 2. Apply group labels.
-3. Apply automerge intent.
 4. Add changelog/release note summaries where datasource supports them.
 5. Add security-focused update mode.
 
@@ -867,7 +860,7 @@ Expected first slice:
 - Toolchain SemVer constraint resolution by reusing toolchain registry behavior.
 - `!version` runtime resolution from lock file.
 - `.version` template context.
-- Render/check support for template files.
+- Apply/check support for template-managed files.
 - Documentation for configuration, commands, YAML function, and design pattern positioning.
 
 Explicit first-slice limitation:
@@ -944,15 +937,15 @@ Future resolver tests:
 - `tracks status --format json`
 - `tracks diff`
 - `tracks verify`
-- `tracks render`
-- `tracks render --check`
+- `tracks apply`
+- `tracks apply --check`
 - `--group` filtering
 
 ### CI Tests
 
 - Status command emits stable JSON.
 - Verify fails on stale/missing locks.
-- Render check fails on stale generated workflows.
+- Apply check fails on stale generated workflows.
 - Update produces deterministic lock output.
 
 ---
@@ -962,7 +955,7 @@ Future resolver tests:
 1. Should `atmos version track update` eventually create PRs itself, or should it only update local files and let CI handle PR creation?
 2. Should schedules use a strict machine-readable schema instead of natural language strings?
 3. Should `allow` and `ignore` use a common expression language for all datasources?
-4. Should GitHub Actions rendering manage only explicit files, or should it include a manager that scans `.github/workflows/*.yaml.tmpl` automatically?
+4. Should the GitHub Actions manager apply only explicit files, or should it include a manager that scans `.github/workflows/*.yaml.tmpl` automatically?
 5. Should lock entries include changelog URLs and release timestamps?
 6. How should provider auth reuse existing Atmos auth patterns for GitHub, GitLab, ECR, GHCR, and generic registries?
 7. Should update groups be eligible to define commit message or PR title templates?
@@ -977,7 +970,7 @@ Future resolver tests:
 4. `!version` and `{{ .version.name }}` work in normal Atmos stack/config processing.
 5. Toolchain dependencies can consume managed versions.
 6. GitHub Actions workflows can be generated or checked with literal refs.
-7. CI can detect stale locks and rendered files.
+7. CI can detect stale locks and managed files.
 8. The schema leaves room for provider parity with Updatecli/Renovate/Dependabot-inspired capabilities without adopting their config formats.
 9. Runtime commands do not perform network version lookup.
 10. The feature fits the existing Atmos version-management positioning without replacing component versioning patterns.

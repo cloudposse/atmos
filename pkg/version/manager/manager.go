@@ -136,7 +136,7 @@ func collectTrackEntries(atmosConfig *schema.AtmosConfiguration, versionTrack *s
 func buildEffectiveEntry(atmosConfig *schema.AtmosConfiguration, versionTrack *schema.VersionTrack, name string, entry *schema.VersionEntry) EffectiveEntry {
 	effective := EffectiveEntry{
 		Name:       name,
-		Ecosystem:  entry.Ecosystem,
+		Ecosystem:  canonicalEcosystem(entry.Ecosystem),
 		Datasource: entry.Datasource,
 		Provider:   entry.Provider,
 		Package:    entry.Package,
@@ -175,7 +175,7 @@ func matchingGroup(groups map[string]schema.VersionGroup, name string, entry *Ef
 	sort.Strings(groupNames)
 	for _, groupName := range groupNames {
 		group := groups[groupName]
-		if !matchesAny(group.Ecosystems, entry.Ecosystem) {
+		if !matchesAnyEcosystem(group.Ecosystems, entry.Ecosystem) {
 			continue
 		}
 		if !matchesAny(group.Datasources, entry.Datasource) {
@@ -192,6 +192,28 @@ func matchingGroup(groups map[string]schema.VersionGroup, name string, entry *Ef
 		}
 	}
 	return ""
+}
+
+func canonicalEcosystem(value string) string {
+	switch value {
+	case "github-actions":
+		return "github/actions"
+	default:
+		return value
+	}
+}
+
+func matchesAnyEcosystem(values []string, actual string) bool {
+	if len(values) == 0 {
+		return true
+	}
+	actual = canonicalEcosystem(actual)
+	for _, value := range values {
+		if canonicalEcosystem(value) == actual {
+			return true
+		}
+	}
+	return false
 }
 
 func matchesAny(values []string, actual string) bool {
@@ -234,9 +256,6 @@ func mergeUpdatePolicy(policies ...schema.VersionUpdatePolicy) schema.VersionUpd
 		}
 		if len(policy.Schedule) > 0 {
 			result.Schedule = append([]string{}, policy.Schedule...)
-		}
-		if policy.Automerge != nil {
-			result.Automerge = policy.Automerge
 		}
 		if policy.Pin != "" {
 			result.Pin = policy.Pin

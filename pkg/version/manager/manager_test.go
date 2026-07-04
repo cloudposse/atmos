@@ -9,21 +9,19 @@ import (
 )
 
 func TestEffectiveEntriesAppliesDefaultsTrackAndGroup(t *testing.T) {
-	automerge := true
 	atmosConfig := &schema.AtmosConfiguration{
 		Version: schema.Version{
 			Defaults: schema.VersionPolicy{
 				Update: schema.VersionUpdatePolicy{
-					Strategy:  "patch",
-					Cooldown:  "14d",
-					Automerge: &automerge,
+					Strategy: "patch",
+					Cooldown: "14d",
 				},
 				Allow:  []string{"stable"},
 				Labels: []string{"dependencies"},
 			},
 			Groups: map[string]schema.VersionGroup{
 				"infrastructure": {
-					Ecosystems: []string{"github-actions"},
+					Ecosystems: []string{"github/actions"},
 					Patterns:   []string{"actions/*"},
 					Update: schema.VersionUpdatePolicy{
 						Strategy: "minor",
@@ -40,7 +38,7 @@ func TestEffectiveEntriesAppliesDefaultsTrackAndGroup(t *testing.T) {
 					},
 					Versions: map[string]schema.VersionEntry{
 						"checkout": {
-							Ecosystem: "github-actions",
+							Ecosystem: "github/actions",
 							Provider:  "github",
 							Package:   "actions/checkout",
 							Desired:   "v6",
@@ -65,11 +63,39 @@ func TestEffectiveEntriesAppliesDefaultsTrackAndGroup(t *testing.T) {
 	if checkout.Update.Cooldown != "30d" {
 		t.Fatalf("expected track cooldown, got %q", checkout.Update.Cooldown)
 	}
-	if checkout.Update.Automerge == nil || !*checkout.Update.Automerge {
-		t.Fatalf("expected inherited automerge")
-	}
 	if len(checkout.Labels) != 2 || checkout.Labels[0] != "dependencies" || checkout.Labels[1] != "infrastructure" {
 		t.Fatalf("expected merged labels, got %#v", checkout.Labels)
+	}
+}
+
+func TestEffectiveEntriesTreatsLegacyGitHubActionsEcosystemAsGitHubActions(t *testing.T) {
+	cfg := &schema.AtmosConfiguration{
+		Version: schema.Version{
+			Groups: map[string]schema.VersionGroup{
+				"infrastructure": {
+					Ecosystems: []string{"github-actions"},
+				},
+			},
+			Tracks: map[string]schema.VersionTrack{
+				"prod": {
+					Versions: map[string]schema.VersionEntry{
+						"checkout": {
+							Ecosystem: "github/actions",
+							Package:   "actions/checkout",
+							Desired:   "v6",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	entries, err := EffectiveEntries(cfg, "prod")
+	if err != nil {
+		t.Fatalf("EffectiveEntries returned error: %v", err)
+	}
+	if entries["checkout"].Group != "infrastructure" {
+		t.Fatalf("expected legacy github-actions group match, got %q", entries["checkout"].Group)
 	}
 }
 
@@ -83,7 +109,7 @@ func TestLockTrackAndVersionMap(t *testing.T) {
 				"prod": {
 					Versions: map[string]schema.VersionEntry{
 						"checkout": {
-							Ecosystem:  "github-actions",
+							Ecosystem:  "github/actions",
 							Datasource: "github-tags",
 							Provider:   "github",
 							Package:    "actions/checkout",

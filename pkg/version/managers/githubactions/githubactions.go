@@ -87,7 +87,7 @@ func packageRefs(in *managers.Input) map[string]manager.VersionRef {
 	for name := range in.Entries {
 		entry := in.Entries[name]
 		switch entry.Datasource {
-		case "github-tags", "github-releases", "github", "github-actions":
+		case "github-tags", "github-releases", "github", "github/actions", "github-actions":
 		default:
 			continue
 		}

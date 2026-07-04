@@ -43,7 +43,7 @@ func TestAddEntryPreservesCommentsAndFailsOnDuplicate(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	entry := &schema.VersionEntry{
-		Ecosystem: "github-actions",
+		Ecosystem: "github/actions",
 		Package:   "actions/checkout",
 		Desired:   "v6",
 		Update:    schema.VersionUpdatePolicy{Pin: "sha"},
@@ -114,7 +114,7 @@ func TestSetEntryFieldsAndRemoveEntry(t *testing.T) {
 
 func TestInferEcosystem(t *testing.T) {
 	cases := map[string]string{
-		"actions/checkout":                   "github-actions",
+		"actions/checkout":                   "github/actions",
 		"ghcr.io/acme/app":                   "oci",
 		"library/nginx":                      "github",
 		"cloudposse/atmos":                   "github",

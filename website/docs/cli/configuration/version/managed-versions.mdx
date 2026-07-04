@@ -26,20 +26,20 @@ version:
 
   providers:
     dockerhub:
-      type: docker
+      kind: docker
       url: registry-1.docker.io
 
     ecr_prod:
-      type: ecr
+      kind: aws/ecr
       region: us-east-1
       registry_id: "123456789012"
 
     ghcr:
-      type: oci
+      kind: oci
       url: ghcr.io
 
     local_registry:
-      type: oci
+      kind: oci
       url: localhost:5000
       insecure: true   # plain-HTTP access; local/emulated registries only
 
@@ -47,13 +47,12 @@ version:
     update:
       strategy: patch
       cooldown: 14d
-      automerge: true
     allow: [stable]
     labels: [dependencies]
 
   groups:
     infrastructure:
-      ecosystems: [docker, oci, helm, terraform, opentofu, github-actions]
+      ecosystems: [docker, oci, helm, terraform, opentofu, github/actions]
       patterns: ["terraform*", "opentofu", "actions/*", "nginx"]
       update:
         strategy: minor
@@ -74,13 +73,13 @@ version:
           desired: "~1.10"
 
         checkout:
-          ecosystem: github-actions
+          ecosystem: github/actions
           datasource: github-tags
           provider: github
           package: actions/checkout
           desired: "v6"
           update:
-            pin: sha   # lock and render the commit SHA, not the mutable tag
+            pin: sha   # lock and apply the commit SHA, not the mutable tag
 
         nginx:
           ecosystem: oci
@@ -107,7 +106,7 @@ version:
 
 | Field | Description |
 |-------|-------------|
-| `ecosystem` | Dependency domain, such as `toolchain`, `github-actions`, `docker`, `oci`, `helm`, `terraform`, or `opentofu`. |
+| `ecosystem` | Dependency domain, such as `toolchain`, `github/actions`, `docker`, `oci`, `helm`, `terraform`, or `opentofu`. |
 | `datasource` | Version lookup strategy, such as `toolchain`, `github-tags`, `github-releases`, `docker-tags`, `oci-tags`, or `helm`. |
 | `provider` | Concrete backend or auth target, such as `github`, `dockerhub`, `ecr_prod`, or `ghcr`. |
 | `track` | Named version lane, such as `dev`, `staging`, or `prod`. |
@@ -115,7 +114,7 @@ version:
 | `lock_file` | File that stores resolved versions. Defaults to `versions.lock.yaml`. |
 | `files` | Rules mapping [file managers](#file-managers) to the project files they maintain. |
 
-Ecosystem names alias to their default datasource: `github` and `github-actions` resolve via `github-tags`, `docker` via `docker-tags`, and `oci` via `oci-tags`. Set `datasource` explicitly to override (for example, `github-releases` to follow published releases instead of tags).
+Ecosystem names alias to their default datasource: `github` and `github/actions` resolve via `github-tags`, `docker` via `docker-tags`, and `oci` via `oci-tags`. Set `datasource` explicitly to override (for example, `github-releases` to follow published releases instead of tags).
 
 ## Update Policy
 
@@ -177,7 +176,7 @@ vars:
 
 For pinned entries, `{{ .version.name }}` emits the pinned form (the digest), while `{{ .version.name.Version }}` and `{{ .version.name.Digest }}` are individually addressable. [`!version`](/functions/yaml/version) always returns the version, never the digest.
 
-GitHub Actions workflow files need literal refs (GitHub parses them before Atmos runs). Maintain them with the [`github-actions` file manager](#file-managers), or author `*.tmpl` templates and render them with [`atmos version track render`](/cli/commands/version/track#render).
+GitHub Actions workflow files need literal refs (GitHub parses them before Atmos runs). Maintain them with the [`github-actions` file manager](#file-managers), or author `*.tmpl` templates and apply them with [`atmos version track apply`](/cli/commands/version/track#apply).
 
 ## File Managers
 
@@ -272,7 +271,7 @@ tracks:
 
     checkout:
       version: v6.1.0
-      ecosystem: github-actions
+      ecosystem: github/actions
       datasource: github-tags
       provider: github
       package: actions/checkout
