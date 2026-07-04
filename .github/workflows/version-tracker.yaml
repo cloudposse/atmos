@@ -1,0 +1,65 @@
+# Demonstrates and validates the Atmos Version Tracker end-to-end: builds
+# atmos, then exercises lock/status/verify/apply --check against the committed
+# examples/demo-version-tracker fixture. The fixture's desired versions are
+# concrete, so the whole flow runs offline.
+name: Version Tracker
+
+on:
+  pull_request:
+    paths:
+      - pkg/version/**
+      - cmd/version/**
+      - examples/demo-version-tracker/**
+      - .github/workflows/version-tracker.yaml
+
+permissions:
+  contents: read
+
+jobs:
+  demo:
+    name: Version Tracker E2E
+    runs-on:
+      - runs-on=${{github.run_id}}
+      - runner=terraform
+      - tag=atmos
+      - extras=s3-cache
+      - private=false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build atmos
+        run: go build -o build/atmos .
+
+      - name: Verify committed lock and managed files are current
+        working-directory: examples/demo-version-tracker
+        run: |
+          ../../build/atmos version track status
+          ../../build/atmos version track verify
+
+      - name: Detect drift with apply --check
+        working-directory: examples/demo-version-tracker
+        run: |
+          # Simulate a stale workflow ref; the check must fail.
+          sed -i.bak 's/actions\/checkout@v6.1.0/actions\/checkout@v4/' workflows/ci.yaml
+          rm workflows/ci.yaml.bak
+          if ../../build/atmos version track apply --check; then
+            echo "::error::apply --check passed on a stale file"
+            exit 1
+          fi
+
+      - name: Repair drift with apply
+        working-directory: examples/demo-version-tracker
+        run: |
+          ../../build/atmos version track apply
+          ../../build/atmos version track verify
+
+      - name: Applied files match the committed state exactly
+        run: git diff --exit-code examples/demo-version-tracker
