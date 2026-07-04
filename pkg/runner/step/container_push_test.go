@@ -20,6 +20,8 @@ type pushRuntime struct {
 	tagErr      error
 	pushResults map[string]*container.PushResult
 	pushErrs    map[string]error
+	imageInfos  map[string]*container.ImageInfo
+	inspectErrs map[string]error
 }
 
 func (r *pushRuntime) Build(context.Context, *container.BuildConfig) error { return nil }
@@ -62,8 +64,8 @@ func (r *pushRuntime) Push(_ context.Context, image string) (*container.PushResu
 	return r.pushResults[image], r.pushErrs[image]
 }
 
-func (r *pushRuntime) ImageInspect(context.Context, string) (*container.ImageInfo, error) {
-	return nil, nil
+func (r *pushRuntime) ImageInspect(_ context.Context, image string) (*container.ImageInfo, error) {
+	return r.imageInfos[image], r.inspectErrs[image]
 }
 
 func (r *pushRuntime) Logs(context.Context, string, bool, string, io.Writer, io.Writer) error {
@@ -163,6 +165,11 @@ func TestRunPushImagesPushErrorKeepsPartialResultMetadata(t *testing.T) {
 	assert.Equal(t, "app:local", result.Metadata["image"])
 	assert.Equal(t, "sha256:partial", result.Metadata["digest"])
 	assert.Equal(t, "partial output", result.Metadata["stdout"])
+	assert.Equal(t, []*container.PushResult{{
+		Image:  "app:local",
+		Digest: "sha256:partial",
+		Output: "partial output",
+	}}, pushResultsFromMetadata(result.Metadata))
 	assert.Equal(t, 1, result.Metadata[exitCodeMetadata])
 	assert.Equal(t, "push failed", result.Error)
 }

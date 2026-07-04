@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 
 	crdberrors "github.com/cockroachdb/errors"
@@ -142,10 +143,10 @@ func TestRunStatusNamedRequiresClonedWorkdir(t *testing.T) {
 }
 
 func TestRunStatusAll_WithConfiguredRepos(t *testing.T) {
-	callCount := 0
+	var callCount atomic.Int32
 	withTestProvider(t, &stubGitProvider{
 		statusFn: func(_ context.Context, _ *atmosgit.StatusOptions) (*atmosgit.StatusResult, error) {
-			callCount++
+			callCount.Add(1)
 			return &atmosgit.StatusResult{Clean: true}, nil
 		},
 	})
@@ -167,7 +168,7 @@ func TestRunStatusAll_WithConfiguredRepos(t *testing.T) {
 
 	err := runStatusAll(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, 2, callCount, "both repos should have been queried")
+	assert.Equal(t, int32(2), callCount.Load(), "both repos should have been queried")
 }
 
 // ---- runPullOne with stub ----
@@ -327,10 +328,10 @@ func TestRunPullNoArg_UsesSingleConfiguredRepository(t *testing.T) {
 }
 
 func TestRunPullAll_WithRepos(t *testing.T) {
-	callCount := 0
+	var callCount atomic.Int32
 	withTestProvider(t, &stubGitProvider{
 		pullFn: func(_ context.Context, _ *atmosgit.PullOptions) error {
-			callCount++
+			callCount.Add(1)
 			return nil
 		},
 	})
@@ -355,7 +356,7 @@ func TestRunPullAll_WithRepos(t *testing.T) {
 
 	err := runPullAll(context.Background(), &pullOptions{})
 	require.NoError(t, err)
-	assert.Equal(t, 3, callCount, "all repos should be pulled")
+	assert.Equal(t, int32(3), callCount.Load(), "all repos should be pulled")
 }
 
 // ---- runDiff with stub (path case) ----
