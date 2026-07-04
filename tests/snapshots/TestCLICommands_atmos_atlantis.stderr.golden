@@ -10,6 +10,4 @@ Valid subcommands are:
 
  atmos atlantis [sub-command] [flags]
 
-## Hints
-
 💡 Run atmos atlantis --help for usage

@@ -7,12 +7,12 @@ A standalone tool to install CLI binaries using registry metadata.
 
 USAGE
 
-                                             
-    $ atmos toolchain [flags]                
-    $ atmos toolchain [sub-command] [flags]  
-                                             
 
-AVAILABLE COMMANDS
+    $ atmos toolchain [flags]
+    $ atmos toolchain [sub-command] [flags]
+
+
+BUILT-IN COMMANDS
 
       add                 Add tools to .tool-versions file
       clean               Clean tools and cache directories

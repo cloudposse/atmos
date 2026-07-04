@@ -660,7 +660,7 @@ func ExecuteWorkflow(
 			if !stepPkg.IsExtendedStepType(commandType) {
 				err = errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
 					WithTitle(WorkflowErrTitle).
-					WithHintf("Step type '%s' is not supported", commandType).
+					WithExplanationf("Step type '%s' is not supported", commandType).
 					WithHint("Each step must specify a valid type: 'atmos', 'shell', 'script', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
 					WithExitCode(1).
 					Err()

@@ -6,15 +6,15 @@ Helmfile.
 
 USAGE
 
-                                            
-    $ atmos helmfile [sub-command] [flags]  
-                                            
+
+    $ atmos helmfile [sub-command] [flags]
+
 
 ALIASES
 
   helmfile, hf
 
-AVAILABLE COMMANDS
+BUILT-IN COMMANDS
 
       apply               Apply changes to align the actual state of Helm
                           releases with the desired state.

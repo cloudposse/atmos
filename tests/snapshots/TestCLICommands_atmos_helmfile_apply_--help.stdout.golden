@@ -11,9 +11,9 @@ apply echo-server -s tenant1-ue2-dev --redirect-stderr /dev/stdout
 
 USAGE
 
-                                    
-    $ atmos helmfile apply [flags]  
-                                    
+
+    $ atmos helmfile apply [flags]
+
 
 FLAGS
 

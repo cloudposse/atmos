@@ -98,7 +98,7 @@ func TestCalculateCommandWidth(t *testing.T) {
 
 func TestCalculateMaxCommandWidth(t *testing.T) {
 	t.Run("empty list", func(t *testing.T) {
-		result := calculateMaxCommandWidth([]*cobra.Command{}, false)
+		result := calculateMaxCommandWidth([]*cobra.Command{}, false, false)
 		if result != 0 {
 			t.Errorf("Expected 0 for empty list, got %d", result)
 		}
@@ -108,7 +108,7 @@ func TestCalculateMaxCommandWidth(t *testing.T) {
 		commands := []*cobra.Command{
 			{Use: "test", Run: func(cmd *cobra.Command, args []string) {}},
 		}
-		result := calculateMaxCommandWidth(commands, false)
+		result := calculateMaxCommandWidth(commands, false, false)
 		if result != 4 {
 			t.Errorf("Expected 4, got %d", result)
 		}
@@ -120,7 +120,7 @@ func TestCalculateMaxCommandWidth(t *testing.T) {
 			{Use: "muchlongercommandname", Run: func(cmd *cobra.Command, args []string) {}},
 			{Use: "mid", Run: func(cmd *cobra.Command, args []string) {}},
 		}
-		result := calculateMaxCommandWidth(commands, false)
+		result := calculateMaxCommandWidth(commands, false, false)
 		expected := len("muchlongercommandname")
 		if result != expected {
 			t.Errorf("Expected %d, got %d", expected, result)
@@ -132,9 +132,20 @@ func TestCalculateMaxCommandWidth(t *testing.T) {
 			{Use: "short", Run: func(cmd *cobra.Command, args []string) {}},
 			{Use: "verylongbutthisishidden", Hidden: true, Run: func(cmd *cobra.Command, args []string) {}},
 		}
-		result := calculateMaxCommandWidth(commands, false)
+		result := calculateMaxCommandWidth(commands, false, false)
 		if result != 5 { // Length of "short".
 			t.Errorf("Expected 5 (ignoring hidden), got %d", result)
+		}
+	})
+
+	t.Run("filters by custom command bucket", func(t *testing.T) {
+		commands := []*cobra.Command{
+			{Use: "verylongbuiltin", Run: func(cmd *cobra.Command, args []string) {}},
+			{Use: "custom", Annotations: map[string]string{annotationCustomCommand: annotationValueTrue}, Run: func(cmd *cobra.Command, args []string) {}},
+		}
+		result := calculateMaxCommandWidth(commands, false, true)
+		if result != len("custom") {
+			t.Errorf("Expected custom command width, got %d", result)
 		}
 	})
 }
@@ -652,6 +663,61 @@ func TestIsConfigAlias(t *testing.T) {
 	}
 }
 
+func TestIsCustomCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		cmd      *cobra.Command
+		expected bool
+	}{
+		{
+			name: "command with custom command annotation",
+			cmd: &cobra.Command{
+				Use: "deploy",
+				Annotations: map[string]string{
+					annotationCustomCommand: annotationValueTrue,
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "command without annotations",
+			cmd: &cobra.Command{
+				Use: "apply",
+			},
+			expected: false,
+		},
+		{
+			name: "command with different annotation",
+			cmd: &cobra.Command{
+				Use: "tp",
+				Annotations: map[string]string{
+					annotationConfigAlias: "terraform plan",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "command with false custom command annotation",
+			cmd: &cobra.Command{
+				Use: "deploy",
+				Annotations: map[string]string{
+					annotationCustomCommand: "false",
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isCustomCommand(tt.cmd)
+			if result != tt.expected {
+				t.Errorf("isCustomCommand() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestFormatCommandLine(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -722,6 +788,7 @@ func TestPrintAvailableCommands(t *testing.T) {
 		subcommands []*cobra.Command
 		shouldPrint bool
 		contains    []string
+		notContains []string
 	}{
 		{
 			name: "with available subcommands",
@@ -731,7 +798,38 @@ func TestPrintAvailableCommands(t *testing.T) {
 				{Use: "destroy", Short: "Destroy resources", Run: func(cmd *cobra.Command, args []string) {}},
 			},
 			shouldPrint: true,
-			contains:    []string{"AVAILABLE COMMANDS", "apply", "plan", "destroy"},
+			contains:    []string{"BUILT-IN COMMANDS", "apply", "plan", "destroy"},
+			notContains: []string{"CUSTOM COMMANDS"},
+		},
+		{
+			name: "with custom subcommands only",
+			subcommands: []*cobra.Command{
+				{Use: "deploy", Short: "Deploy service", Annotations: map[string]string{annotationCustomCommand: annotationValueTrue}, Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "release", Short: "Release service", Annotations: map[string]string{annotationCustomCommand: annotationValueTrue}, Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: true,
+			contains:    []string{"CUSTOM COMMANDS", "deploy", "release"},
+			notContains: []string{"BUILT-IN COMMANDS"},
+		},
+		{
+			name: "with built-in and custom subcommands",
+			subcommands: []*cobra.Command{
+				{Use: "terraform", Short: "Execute Terraform commands", Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "deploy", Short: "Deploy service", Annotations: map[string]string{annotationCustomCommand: annotationValueTrue}, Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: true,
+			contains:    []string{"BUILT-IN COMMANDS", "terraform", "CUSTOM COMMANDS", "deploy"},
+		},
+		{
+			name: "config aliases excluded from command sections",
+			subcommands: []*cobra.Command{
+				{Use: "terraform", Short: "Execute Terraform commands", Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "deploy", Short: "Deploy service", Annotations: map[string]string{annotationCustomCommand: annotationValueTrue}, Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "tp", Short: "alias for `terraform plan`", Annotations: map[string]string{annotationConfigAlias: "terraform plan"}, Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: true,
+			contains:    []string{"BUILT-IN COMMANDS", "terraform", "CUSTOM COMMANDS", "deploy"},
+			notContains: []string{"tp", "alias for"},
 		},
 		{
 			name: "with hidden commands",
@@ -740,7 +838,8 @@ func TestPrintAvailableCommands(t *testing.T) {
 				{Use: "hidden", Short: "Hidden command", Hidden: true, Run: func(cmd *cobra.Command, args []string) {}},
 			},
 			shouldPrint: true,
-			contains:    []string{"AVAILABLE COMMANDS", "apply"},
+			contains:    []string{"BUILT-IN COMMANDS", "apply"},
+			notContains: []string{"CUSTOM COMMANDS", "hidden"},
 		},
 		{
 			name:        "no subcommands",
@@ -792,6 +891,11 @@ func TestPrintAvailableCommands(t *testing.T) {
 			for _, expected := range tt.contains {
 				if !strings.Contains(output, expected) {
 					t.Errorf("Expected output to contain %q, got: %q", expected, output)
+				}
+			}
+			for _, unexpected := range tt.notContains {
+				if strings.Contains(output, unexpected) {
+					t.Errorf("Expected output not to contain %q, got: %q", unexpected, output)
 				}
 			}
 		})
@@ -957,7 +1061,7 @@ func TestPrintAvailableCommandsWithAtmosConfig(t *testing.T) {
 				{Use: "plan", Short: "Plan changes", Run: func(cmd *cobra.Command, args []string) {}},
 			},
 			shouldPrint: true,
-			contains:    []string{"AVAILABLE COMMANDS", "apply", "plan"},
+			contains:    []string{"BUILT-IN COMMANDS", "apply", "plan"},
 		},
 		{
 			name: "with markdown in command descriptions",
@@ -966,7 +1070,7 @@ func TestPrintAvailableCommandsWithAtmosConfig(t *testing.T) {
 				{Use: "describe", Short: "Describe **components**", Run: func(cmd *cobra.Command, args []string) {}},
 			},
 			shouldPrint: true,
-			contains:    []string{"AVAILABLE COMMANDS", "validate", "describe"},
+			contains:    []string{"BUILT-IN COMMANDS", "validate", "describe"},
 		},
 	}
 

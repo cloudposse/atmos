@@ -8,9 +8,9 @@ errors.
 
 USAGE
 
-                                   
-    $ atmos auth validate [flags]  
-                                   
+
+    $ atmos auth validate [flags]
+
 
 FLAGS
 

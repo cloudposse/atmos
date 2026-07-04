@@ -7,11 +7,11 @@ streamlined infrastructure automation.
 
 USAGE
 
-                                            
-    $ atmos atlantis [sub-command] [flags]  
-                                            
 
-AVAILABLE COMMANDS
+    $ atmos atlantis [sub-command] [flags]
+
+
+BUILT-IN COMMANDS
 
       generate [command]  Generate Atlantis configuration files
 

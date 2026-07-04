@@ -7,10 +7,10 @@ management.
 
 USAGE
 
-                                             
-    $ atmos terraform [flags]                
-    $ atmos terraform [sub-command] [flags]  
-                                             
+
+    $ atmos terraform [flags]
+    $ atmos terraform [sub-command] [flags]
+
 
 ALIASES
 
@@ -18,14 +18,14 @@ ALIASES
 
 EXAMPLES
 
-                                                                      
-    – Execute a terraform subcommand                                  
-                                                                      
-                                                                      
-     $ atmos terraform [subcommand] <component-name> -s <stack-name>  
-                                                                      
 
-AVAILABLE COMMANDS
+    – Execute a terraform subcommand
+
+
+     $ atmos terraform [subcommand] <component-name> -s <stack-name>
+
+
+BUILT-IN COMMANDS
 
       apply                             Apply changes to infrastructure
       backend [command] [EXPERIMENTAL]  Manage Terraform state backends
@@ -66,8 +66,6 @@ AVAILABLE COMMANDS
       planfile [command]                Manage Terraform plan files
       providers [command]               Show the providers required for this
                                         configuration
-      provision                         This command provisions terraform
-                                        components
       refresh                           Update the state to match remote systems
       shell                             Configure an environment for an Atmos
                                         component and start a new shell
@@ -85,6 +83,10 @@ AVAILABLE COMMANDS
       version                           Show the current Terraform version
       workdir [command] [EXPERIMENTAL]  Manage component working directories
       workspace [command]               Manage Terraform workspaces
+
+CUSTOM COMMANDS
+
+      provision  This command provisions terraform components
 
 FLAGS
 

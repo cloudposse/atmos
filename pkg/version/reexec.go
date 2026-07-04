@@ -275,7 +275,7 @@ func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 //
 //nolint:revive // os.Exit is intentional for hard failures.
 func fatalFormattedErr(formatted string) {
-	ui.Writeln(formatted)
+	ui.Writeln(strings.TrimRight(formatted, "\n"))
 	os.Exit(1)
 }
 
