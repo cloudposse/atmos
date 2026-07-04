@@ -63,9 +63,9 @@ func TestFormatAnnotation(t *testing.T) {
 
 func TestProvider_Annotate_WritesOneLinePerFinding(t *testing.T) {
 	var buf bytes.Buffer
-	prev := annotationsOut
-	annotationsOut = &buf
-	defer func() { annotationsOut = prev }()
+	prev := workflowCommandsOut
+	workflowCommandsOut = &buf
+	defer func() { workflowCommandsOut = prev }()
 
 	p := NewProvider()
 	err := p.Annotate([]provider.Annotation{
@@ -88,9 +88,9 @@ func (failWriter) Write([]byte) (int, error) { return 0, errors.New("write faile
 // A write failure on the annotation stream surfaces as an error rather than
 // being silently dropped.
 func TestProvider_Annotate_WriteErrorPropagates(t *testing.T) {
-	prev := annotationsOut
-	annotationsOut = failWriter{}
-	defer func() { annotationsOut = prev }()
+	prev := workflowCommandsOut
+	workflowCommandsOut = failWriter{}
+	defer func() { workflowCommandsOut = prev }()
 
 	p := NewProvider()
 	err := p.Annotate([]provider.Annotation{
