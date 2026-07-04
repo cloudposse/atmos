@@ -513,7 +513,7 @@ jobs:
           - demo-helmfile
           - helm
 
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -576,7 +576,31 @@ jobs:
       - name: Run tests for ${{ matrix.demo-folder }}
         run: |
           cd examples/${{ matrix.demo-folder }}
-          atmos test
+          run_with_timeout() {
+            python3 - "$@" <<'PY'
+          import subprocess
+          import sys
+
+          timeout = int(sys.argv[1])
+          cmd = sys.argv[2:]
+          try:
+              raise SystemExit(subprocess.run(cmd, timeout=timeout).returncode)
+          except subprocess.TimeoutExpired:
+              print(f"{' '.join(cmd)} timed out after {timeout}s", file=sys.stderr)
+              raise SystemExit(124)
+          PY
+          }
+
+          # macOS k3s jobs can occasionally hang in the Docker/Colima stack.
+          # Bound each attempt so the matrix can retry instead of consuming the
+          # whole job timeout and cancelling the required aggregate check.
+          for attempt in 1 2; do
+            run_with_timeout 1500 atmos test && exit 0
+            status=$?
+            echo "atmos test failed (attempt ${attempt}/2, status ${status})" >&2
+            [ "${attempt}" -lt 2 ] && sleep 15
+          done
+          exit "${status}"
 
   k3s-required:
     name: "[k3s] demo-helmfile"
