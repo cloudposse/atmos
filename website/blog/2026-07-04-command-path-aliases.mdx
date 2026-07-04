@@ -1,0 +1,42 @@
+---
+slug: command-path-aliases
+title: "Command Aliases Now Rewrite Command Paths"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+Atmos command aliases now behave more like shell aliases: they rewrite argv prefixes before command parsing, and they can match full command paths, including subcommands.
+
+<!--truncate-->
+
+## What Changed
+
+The `aliases` section is now the single interface for shortcuts and command defaults. Alias keys and values are parsed like shell fields, the longest matching command path wins, and expansion happens before flag normalization.
+
+That means a short alias can still point at a command:
+
+```yaml
+aliases:
+  tp: terraform plan
+```
+
+And a command-path alias can target a specific subcommand:
+
+```yaml
+aliases:
+  terraform: terraform --identity=false
+  "terraform apply": terraform apply -auto-approve
+  "describe component": describe component --process-functions=false
+```
+
+Running `atmos terraform apply app -s dev` expands the command path first, then passes the remaining arguments through normal command and flag handling.
+
+## Why It Matters
+
+- **One configuration surface.** Aliases now cover both shortcuts and command defaults without a separate `args` section.
+- **Subcommands work naturally.** Multi-word aliases such as `"terraform apply"` can add behavior to one command path without affecting siblings like `terraform plan`.
+- **User flags still win.** Defaults injected by an alias appear earlier in argv, so explicit flags typed by the user later on the command line can override them.
+
+## Get Involved
+
+See the [aliases configuration reference](/cli/configuration/aliases) for examples of shortcuts, same-name aliases, command-path aliases, and quoting rules.
