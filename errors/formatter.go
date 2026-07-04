@@ -36,7 +36,7 @@ const (
 )
 
 var newMarkdownRendererWithWidth = func(config schema.AtmosConfiguration, width int) (*markdown.Renderer, error) {
-	return markdown.NewRenderer(config, markdown.WithWidth(uint(width))) //nolint:gosec // width is normalized by renderMarkdown before conversion.
+	return markdown.NewRenderer(config, markdown.WithWidth(uint(width)))
 }
 
 const (

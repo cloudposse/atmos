@@ -17,6 +17,7 @@ tests:
         - "Authentication configuration validation failed"
         - "invalid-provider"
         - "unsupported provider kind"
+        - "provider kind: invalid/provider"
         - "^\\s+provider$"  # Orphaned continuation line from wrapping
         - "^\\s+kind:"  # Orphaned continuation line from wrapping
       stderr:

@@ -66,7 +66,7 @@ func InitializeMarkdown(config *schema.AtmosConfiguration) {
 		width = DefaultMarkdownWidth
 	}
 
-	render, err = markdown.NewRenderer(*config, markdown.WithWidth(uint(width))) //nolint:gosec // width is normalized above before conversion.
+	render, err = markdown.NewRenderer(*config, markdown.WithWidth(uint(width)))
 	if err != nil {
 		log.Error("failed to initialize Markdown renderer", "error", err)
 	}
