@@ -238,6 +238,9 @@ func mergeUpdatePolicy(policies ...schema.VersionUpdatePolicy) schema.VersionUpd
 		if policy.Automerge != nil {
 			result.Automerge = policy.Automerge
 		}
+		if policy.Pin != "" {
+			result.Pin = policy.Pin
+		}
 	}
 	return result
 }

@@ -43,6 +43,10 @@ type VersionProvider struct {
 	URL        string `yaml:"url,omitempty" mapstructure:"url" json:"url,omitempty"`
 	Region     string `yaml:"region,omitempty" mapstructure:"region" json:"region,omitempty"`
 	RegistryID string `yaml:"registry_id,omitempty" mapstructure:"registry_id" json:"registry_id,omitempty"`
+
+	// Insecure allows plain-HTTP access to the registry (local/emulated
+	// registries only).
+	Insecure bool `yaml:"insecure,omitempty" mapstructure:"insecure" json:"insecure,omitempty"`
 }
 
 // VersionUpdatePolicy configures update intent for managed versions.
@@ -51,6 +55,13 @@ type VersionUpdatePolicy struct {
 	Cooldown  string   `yaml:"cooldown,omitempty" mapstructure:"cooldown" json:"cooldown,omitempty"`
 	Schedule  []string `yaml:"schedule,omitempty" mapstructure:"schedule" json:"schedule,omitempty"`
 	Automerge *bool    `yaml:"automerge,omitempty" mapstructure:"automerge" json:"automerge,omitempty"`
+
+	// Pin selects the artifact form emitted for the entry: "digest" (alias
+	// "sha") locks and renders the immutable identifier (git commit SHA or
+	// OCI sha256 digest) alongside the human-readable version; "none" or
+	// empty keeps plain version references. Strategy decides how far updates
+	// may advance; Pin decides which form is written.
+	Pin string `yaml:"pin,omitempty" mapstructure:"pin" json:"pin,omitempty"`
 }
 
 // VersionPolicy configures shared defaults for managed versions.

@@ -65,12 +65,12 @@ func TestAddTemplateContextAddsVersionToNonEmptyContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddTemplateContext returned error: %v", err)
 	}
-	versionMap, ok := result["version"].(map[string]string)
+	versionMap, ok := result["version"].(map[string]VersionRef)
 	if !ok {
 		t.Fatalf("expected version map in context, got %#v", result["version"])
 	}
-	if versionMap["opentofu"] != "1.10.6" {
-		t.Fatalf("expected locked version 1.10.6, got %q", versionMap["opentofu"])
+	if versionMap["opentofu"].Version != "1.10.6" {
+		t.Fatalf("expected locked version 1.10.6, got %q", versionMap["opentofu"].Version)
 	}
 
 	// An existing version key is left untouched.

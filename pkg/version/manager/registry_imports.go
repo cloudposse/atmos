@@ -4,5 +4,6 @@ package manager
 // registry so any consumer of the manager package gets them.
 import (
 	_ "github.com/cloudposse/atmos/pkg/version/resolver/github"
+	_ "github.com/cloudposse/atmos/pkg/version/resolver/oci"
 	_ "github.com/cloudposse/atmos/pkg/version/resolver/toolchain"
 )

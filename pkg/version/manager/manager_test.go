@@ -109,7 +109,7 @@ func TestLockTrackAndVersionMap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("VersionMap returned error: %v", err)
 	}
-	if versionMap["checkout"] != "v6" {
-		t.Fatalf("expected v6 in version map, got %q", versionMap["checkout"])
+	if versionMap["checkout"].Version != "v6" {
+		t.Fatalf("expected v6 in version map, got %q", versionMap["checkout"].Version)
 	}
 }

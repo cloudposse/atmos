@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,6 +37,9 @@ type LockEntry struct {
 	Package    string `yaml:"package,omitempty" json:"package,omitempty"`
 	Digest     string `yaml:"digest,omitempty" json:"digest,omitempty"`
 	ResolvedAt string `yaml:"resolved_at,omitempty" json:"resolved_at,omitempty"`
+	// ReleasedAt is the upstream release timestamp when the datasource
+	// provides one; used by update cooldown checks.
+	ReleasedAt string `yaml:"released_at,omitempty" json:"released_at,omitempty"`
 }
 
 // LockFilePath returns the absolute lock file path.
@@ -134,8 +138,11 @@ func ResolveLocked(atmosConfig *schema.AtmosConfiguration, track, name string) (
 	return entry.Version, nil
 }
 
-// VersionMap returns a map usable as template context at .version.
-func VersionMap(atmosConfig *schema.AtmosConfiguration, track string) (map[string]string, error) {
+// VersionMap returns a map usable as template context at .version. Each value
+// is a VersionRef whose String() form honors the entry's pin policy, so
+// `{{ .version.name }}` renders the digest for pinned entries while
+// `.Version` and `.Digest` stay individually addressable.
+func VersionMap(atmosConfig *schema.AtmosConfiguration, track string) (map[string]VersionRef, error) {
 	defer perf.Track(atmosConfig, "manager.VersionMap")()
 
 	track = EffectiveTrack(atmosConfig, track)
@@ -143,10 +150,21 @@ func VersionMap(atmosConfig *schema.AtmosConfiguration, track string) (map[strin
 	if err != nil {
 		return nil, err
 	}
-	entries := lock.Tracks[track]
-	result := map[string]string{}
-	for name, entry := range entries {
-		result[name] = entry.Version
+	// Pin preferences come from configuration; tolerate lock entries whose
+	// track is no longer configured (they resolve with pin "none").
+	configured, err := EffectiveEntries(atmosConfig, track)
+	if err != nil && !errors.Is(err, ErrTrackNotFound) {
+		return nil, err
+	}
+	lockedEntries := lock.Tracks[track]
+	result := map[string]VersionRef{}
+	for name := range lockedEntries {
+		entry := lockedEntries[name]
+		ref := VersionRef{Version: entry.Version, Digest: entry.Digest}
+		if configuredEntry, ok := configured[name]; ok {
+			ref.Pin = normalizePin(configuredEntry.Update.Pin)
+		}
+		result[name] = ref
 	}
 	return result, nil
 }
@@ -172,18 +190,23 @@ func LockTrack(atmosConfig *schema.AtmosConfiguration, track, group string) (*Lo
 		if group != "" && entry.Group != group {
 			continue
 		}
-		resolved, err := ResolveTarget(atmosConfig, &entry)
+		candidate, err := ResolveEntry(atmosConfig, &entry, pinEnabled(&entry))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", entry.Name, err)
 		}
-		lock.Tracks[track][entry.Name] = LockEntry{
-			Version:    resolved,
+		lockEntry := LockEntry{
+			Version:    candidate.Version,
 			Ecosystem:  entry.Ecosystem,
 			Datasource: entry.Datasource,
 			Provider:   entry.Provider,
 			Package:    entry.Package,
+			Digest:     candidate.Digest,
 			ResolvedAt: time.Now().UTC().Format(time.RFC3339),
 		}
+		if candidate.ReleasedAt != nil {
+			lockEntry.ReleasedAt = candidate.ReleasedAt.UTC().Format(time.RFC3339)
+		}
+		lock.Tracks[track][entry.Name] = lockEntry
 	}
 	return lock, SaveLock(atmosConfig, lock)
 }
