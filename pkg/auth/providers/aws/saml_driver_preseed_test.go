@@ -9,7 +9,9 @@ import (
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -22,6 +24,18 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+type errorReader struct{}
+
+func (errorReader) Read([]byte) (int, error) {
+	return 0, errors.New("read failed")
+}
 
 // makeTgz builds a gzipped tarball with the given entries (name -> content).
 func makeTgz(t *testing.T, entries map[string]string) []byte {
@@ -56,6 +70,16 @@ func makeZip(t *testing.T, entries map[string]string) []byte {
 	return buf.Bytes()
 }
 
+func makeGzip(t *testing.T, content string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gzWriter := gzip.NewWriter(&buf)
+	_, err := gzWriter.Write([]byte(content))
+	require.NoError(t, err)
+	require.NoError(t, gzWriter.Close())
+	return buf.Bytes()
+}
+
 // overridePreseedHosts points the pre-seeder's download hosts at test servers
 // and restores them on cleanup.
 func overridePreseedHosts(t *testing.T, npmBase, nodeBase string) {
@@ -65,6 +89,13 @@ func overridePreseedHosts(t *testing.T, npmBase, nodeBase string) {
 	t.Cleanup(func() {
 		npmRegistryBase, nodejsDistBase = origNpm, origNode
 	})
+}
+
+func overridePreseedHTTPClient(t *testing.T, client *http.Client) {
+	t.Helper()
+	original := preseedHTTPClient
+	preseedHTTPClient = client
+	t.Cleanup(func() { preseedHTTPClient = original })
 }
 
 // nodeArchive builds a platform-appropriate fake Node.js archive plus its
@@ -216,6 +247,280 @@ func TestEnsurePlaywrightDriver_NodeChecksumMismatchFails(t *testing.T) {
 	err := ensurePlaywrightDriver()
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
+}
+
+func TestSeedPlaywrightCoreDownloadFailures(t *testing.T) {
+	t.Run("metadata download error", func(t *testing.T) {
+		overridePreseedHTTPClient(t, &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("network down")
+		})})
+
+		err := seedPlaywrightCore(t.TempDir(), "1.2.3")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "could not download")
+	})
+
+	t.Run("tarball download error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/playwright-core/1.2.3" {
+				fmt.Fprintf(w, `{"dist":{"tarball":%q,"integrity":"sha512-any"}}`, serverURL(t, r)+"/missing.tgz")
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+		overridePreseedHosts(t, server.URL, server.URL)
+
+		err := seedPlaywrightCore(t.TempDir(), "1.2.3")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
+		assert.Contains(t, err.Error(), "returned status 404")
+	})
+}
+
+func serverURL(t *testing.T, r *http.Request) string {
+	t.Helper()
+	return "http://" + r.Host
+}
+
+func TestNpmPackageDistFailures(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		statusCode int
+		wantText   string
+	}{
+		{
+			name:       "invalid json",
+			body:       "{not json",
+			statusCode: http.StatusOK,
+			wantText:   "could not parse npm metadata",
+		},
+		{
+			name:       "missing tarball",
+			body:       `{"dist":{"integrity":"sha512-value"}}`,
+			statusCode: http.StatusOK,
+			wantText:   "has no tarball URL",
+		},
+		{
+			name:       "registry status error",
+			body:       "not found",
+			statusCode: http.StatusNotFound,
+			wantText:   "returned status 404",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tt.statusCode)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer server.Close()
+			overridePreseedHosts(t, server.URL, server.URL)
+
+			tarballURL, integrity, err := npmPackageDist("playwright-core", "1.2.3")
+			require.Error(t, err)
+			assert.Empty(t, tarballURL)
+			assert.Empty(t, integrity)
+			assert.Contains(t, err.Error(), tt.wantText)
+		})
+	}
+}
+
+func TestExtractNpmPackageFailures(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     []byte
+		wantText string
+	}{
+		{
+			name:     "invalid gzip",
+			body:     []byte("not a gzip"),
+			wantText: "could not read playwright-core archive",
+		},
+		{
+			name:     "no package files",
+			body:     makeTgz(t, map[string]string{"unrelated/file.txt": "skip"}),
+			wantText: "no files extracted",
+		},
+		{
+			name:     "corrupt tar",
+			body:     makeGzip(t, "not a tar stream"),
+			wantText: "could not read playwright-core archive",
+		},
+		{
+			name:     "entry escapes driver directory",
+			body:     makeTgz(t, map[string]string{"package/../../escape.txt": "bad"}),
+			wantText: "escapes the driver directory",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := extractNpmPackage(tt.body, t.TempDir())
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantText)
+		})
+	}
+}
+
+func TestExtractNpmPackageWriteFailure(t *testing.T) {
+	driverDir := filepath.Join(t.TempDir(), "driver-file")
+	require.NoError(t, os.WriteFile(driverDir, []byte("not a directory"), 0o644))
+
+	err := extractNpmPackage(makeTgz(t, map[string]string{"package/cli.js": "cli"}), driverDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not create directory")
+}
+
+func TestSeedNodeBinaryShortCircuits(t *testing.T) {
+	t.Run("node path set", func(t *testing.T) {
+		t.Setenv("PLAYWRIGHT_NODEJS_PATH", "/usr/bin/node")
+		overridePreseedHosts(t, "http://127.0.0.1:1", "http://127.0.0.1:1")
+
+		assert.NoError(t, seedNodeBinary(t.TempDir()))
+	})
+
+	t.Run("node already exists", func(t *testing.T) {
+		t.Setenv("PLAYWRIGHT_NODEJS_PATH", "")
+		overridePreseedHosts(t, "http://127.0.0.1:1", "http://127.0.0.1:1")
+
+		driverDir := t.TempDir()
+		nodeName := "node"
+		if runtime.GOOS == windowsOS {
+			nodeName = "node.exe"
+		}
+		require.NoError(t, os.WriteFile(filepath.Join(driverDir, nodeName), []byte("node"), 0o755))
+
+		assert.NoError(t, seedNodeBinary(driverDir))
+	})
+}
+
+func TestSeedNodeBinaryDownloadFailure(t *testing.T) {
+	skipIfNodejsOrgArchiveUnsupported(t)
+	t.Setenv("PLAYWRIGHT_NODEJS_PATH", "")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	overridePreseedHosts(t, server.URL, server.URL)
+
+	err := seedNodeBinary(t.TempDir())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
+	assert.Contains(t, err.Error(), "returned status 404")
+}
+
+func TestVerifyNodeChecksumMissingEntry(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("deadbeef  other-archive.tar.gz\n"))
+	}))
+	defer server.Close()
+	overridePreseedHosts(t, server.URL, server.URL)
+
+	err := verifyNodeChecksum([]byte("node archive"), "node-archive.tar.gz")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
+	assert.Contains(t, err.Error(), "no published checksum found")
+}
+
+func TestVerifyNodeChecksumDownloadFailure(t *testing.T) {
+	overridePreseedHTTPClient(t, &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("network down")
+	})})
+
+	err := verifyNodeChecksum([]byte("node archive"), "node-archive.tar.gz")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not download")
+}
+
+func TestExtractTarGzSingleEntryFailures(t *testing.T) {
+	destPath := filepath.Join(t.TempDir(), "node")
+
+	err := extractTarGzSingleEntry([]byte("not a gzip"), "node/bin/node", destPath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not read Node.js archive")
+
+	err = extractTarGzSingleEntry(makeGzip(t, "not a tar stream"), "node/bin/node", destPath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not read Node.js archive")
+
+	err = extractTarGzSingleEntry(makeTgz(t, map[string]string{"other": "content"}), "node/bin/node", destPath)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
+	assert.Contains(t, err.Error(), "entry node/bin/node not found")
+}
+
+func TestExtractZipSingleEntry(t *testing.T) {
+	destPath := filepath.Join(t.TempDir(), "node.exe")
+	err := extractZipSingleEntry(makeZip(t, map[string]string{"node/node.exe": "zip node"}), "node/node.exe", destPath)
+	require.NoError(t, err)
+	body, err := os.ReadFile(destPath)
+	require.NoError(t, err)
+	assert.Equal(t, "zip node", string(body))
+
+	err = extractZipSingleEntry(makeZip(t, map[string]string{"other": "content"}), "node/node.exe", filepath.Join(t.TempDir(), "missing.exe"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
+	assert.Contains(t, err.Error(), "entry node/node.exe not found")
+
+	err = extractZipSingleEntry([]byte("not a zip"), "node/node.exe", filepath.Join(t.TempDir(), "bad.exe"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not read Node.js archive")
+}
+
+func TestWritePreseedFileCopyError(t *testing.T) {
+	err := writePreseedFile(filepath.Join(t.TempDir(), "node"), errorReader{}, preseedFileMode)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not write file")
+}
+
+func TestWritePreseedFileOpenError(t *testing.T) {
+	err := writePreseedFile(t.TempDir(), bytes.NewReader([]byte("node")), preseedFileMode)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "could not create file")
+}
+
+func TestPreseedDownloadFailures(t *testing.T) {
+	t.Run("request error", func(t *testing.T) {
+		overridePreseedHTTPClient(t, &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("dial failed")
+		})})
+
+		body, err := preseedDownload("http://example.invalid/archive.tgz")
+		require.Error(t, err)
+		assert.Nil(t, body)
+		assert.Contains(t, err.Error(), "could not download")
+	})
+
+	t.Run("status error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "missing", http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		body, err := preseedDownload(server.URL)
+		require.Error(t, err)
+		assert.Nil(t, body)
+		assert.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
+		assert.Contains(t, err.Error(), "returned status 404")
+	})
+
+	t.Run("read error", func(t *testing.T) {
+		overridePreseedHTTPClient(t, &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(errorReader{}),
+			}, nil
+		})})
+
+		body, err := preseedDownload("http://example.invalid/archive.tgz")
+		require.Error(t, err)
+		assert.Nil(t, body)
+		assert.Contains(t, err.Error(), "could not read")
+	})
 }
 
 func TestVerifyNpmIntegrity(t *testing.T) {

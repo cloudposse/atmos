@@ -40,6 +40,7 @@ var (
 	runAllHooks                      = func(hookSet *hooks.Hooks, event hooks.HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 		return hookSet.RunAll(event, atmosConfig, info, nil, nil)
 	}
+	runKubernetesCIHooks    = hooks.RunCIHooks
 	runKubernetesCIHookFunc = runKubernetesCIHook
 	newKubernetesSDKClient  = newSDKClient
 )
@@ -469,7 +470,7 @@ func runKubernetesCIHook(
 	if commandErr != nil {
 		result.Error = commandErr.Error()
 	}
-	if err := hooks.RunCIHooks(&hooks.RunCIHooksOptions{
+	if err := runKubernetesCIHooks(&hooks.RunCIHooksOptions{
 		Event:        event,
 		AtmosConfig:  atmosConfig,
 		Info:         info,
