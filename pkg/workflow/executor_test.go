@@ -78,9 +78,13 @@ func TestExecutor_Execute_PropagatesLogGroupSentinel(t *testing.T) {
 
 	mockRunner := NewMockCommandRunner(ctrl)
 	mockUI := NewMockUIProvider(ctrl)
+	var capturedEnv []string
 	mockRunner.EXPECT().
-		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{ci.LogGroupSentinelEnv()}, false).
-		Return(nil)
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", gomock.Any(), false).
+		DoAndReturn(func(_ string, _ string, _ string, env []string, _ bool) error {
+			capturedEnv = env
+			return nil
+		})
 
 	executor := NewExecutor(mockRunner, nil, mockUI)
 	workflowDef := &schema.WorkflowDefinition{
@@ -97,6 +101,7 @@ func TestExecutor_Execute_PropagatesLogGroupSentinel(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, result.Success)
+	assert.Contains(t, capturedEnv, ci.LogGroupSentinelEnv())
 }
 
 func TestExecutor_Execute_SkipsStepWhenConditionIsFalse(t *testing.T) {

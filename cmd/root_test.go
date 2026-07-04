@@ -130,7 +130,11 @@ func TestInitFunction(t *testing.T) {
 }
 
 func TestInvocationGroupLabel(t *testing.T) {
-	root := testInvocationRoot()
+	_ = NewTestKit(t)
+	customCmd := &cobra.Command{Use: "my-custom-command [target]"}
+	customCmd.Flags().String("token", "", "")
+	RootCmd.AddCommand(customCmd)
+	t.Cleanup(func() { RootCmd.RemoveCommand(customCmd) })
 
 	tests := []struct {
 		name string
@@ -194,12 +198,12 @@ func TestInvocationGroupLabel(t *testing.T) {
 		},
 		{
 			name: "no opt flag does not consume following positional",
-			args: []string{"terraform", "plan", "--optional", "vpc"},
+			args: []string{"terraform", "plan", "--identity", "vpc"},
 			want: "atmos terraform plan vpc",
 		},
 		{
 			name: "attached shorthand value does not consume following positional",
-			args: []string{"terraform", "plan", "-csecret", "vpc"},
+			args: []string{"terraform", "plan", "-sdev", "vpc"},
 			want: "atmos terraform plan vpc",
 		},
 		{
@@ -211,7 +215,7 @@ func TestInvocationGroupLabel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, invocationGroupLabel(root, tt.args))
+			assert.Equal(t, tt.want, invocationGroupLabel(RootCmd, tt.args))
 		})
 	}
 
@@ -278,36 +282,6 @@ func TestPreprocessArgs_NoArgs(t *testing.T) {
 
 	os.Args = []string{"atmos"}
 	assert.Nil(t, preprocessArgs())
-}
-
-func testInvocationRoot() *cobra.Command {
-	root := &cobra.Command{Use: "atmos"}
-
-	workflowCmd := &cobra.Command{Use: "workflow [name]"}
-	workflowCmd.Flags().StringP("file", "f", "", "")
-	workflowCmd.Flags().StringP("stack", "s", "", "")
-
-	terraformCmd := &cobra.Command{Use: "terraform"}
-	terraformCmd.PersistentFlags().StringP("stack", "s", "", "")
-	terraformPlanCmd := &cobra.Command{Use: "plan [component]"}
-	terraformPlanCmd.Flags().String("var", "", "")
-	terraformPlanCmd.Flags().StringP("config", "c", "", "")
-	terraformPlanCmd.Flags().Bool("dry-run", false, "")
-	terraformPlanCmd.Flags().String("optional", "", "")
-	terraformPlanCmd.Flags().Lookup("optional").NoOptDefVal = "true"
-	terraformApplyCmd := &cobra.Command{Use: "apply [component]"}
-	terraformCmd.AddCommand(terraformPlanCmd, terraformApplyCmd)
-
-	describeCmd := &cobra.Command{Use: "describe"}
-	describeCmd.PersistentFlags().String("stack", "", "")
-	describeAffectedCmd := &cobra.Command{Use: "affected"}
-	describeCmd.AddCommand(describeAffectedCmd)
-
-	customCmd := &cobra.Command{Use: "my-custom-command [target]"}
-	customCmd.Flags().String("token", "", "")
-
-	root.AddCommand(workflowCmd, terraformCmd, describeCmd, customCmd)
-	return root
 }
 
 func TestSetupLogger_TraceLevel(t *testing.T) {

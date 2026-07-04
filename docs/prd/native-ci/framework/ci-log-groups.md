@@ -88,10 +88,14 @@ This keeps grouping a property of each component type's execution rather than a 
 
 CI providers do not support nested groups. The unifying rule is **outermost wins**, enforced two ways:
 
-- **Cross-process:** whenever `GroupingEnabled` is true (any non-`off` mode), the step/command orchestrator appends `LogGroupSentinelEnv()` to the child subprocess's environment. A child `atmos` process sees `ATMOS_CI_LOG_GROUP_ACTIVE` set, so its own grouping is suppressed. This makes a workflow step's group the outer boundary and keeps a nested `atmos terraform apply` (and its phases) flat inside it — and keeps an `invocation`-mode group flat over everything beneath it. The append is gated on `GroupingEnabled` (not on whether *this* command grouped), so it suppresses descendants even in `invocation` mode where steps themselves don't group.
+- **Cross-process:** when a parent group is already open, or when the current subprocess boundary is about to open a group for the selected mode/dimension, the step/command orchestrator appends `LogGroupSentinelEnv()` to the child subprocess's environment. A child `atmos` process sees `ATMOS_CI_LOG_GROUP_ACTIVE` set, so its own grouping is suppressed. This makes a workflow step's group the outer boundary and keeps a nested `atmos terraform apply` (and its phases) flat inside it — and keeps an `invocation`-mode group flat over everything beneath it.
 - **In-process:** a process-local depth counter ensures only the outermost `Group` emits.
 
 A terraform phase spawns the `terraform` binary (not `atmos`), so phases need no sentinel of their own; they're suppressed only when an ancestor `atmos` already grouped.
+
+## Known limitations
+
+- In `invocation` mode, Atmos cannot detect user-written `::group::` wrappers in CI YAML. The sentinel suppresses nested *Atmos* grouping, but it cannot suppress a manual outer wrapper already emitted by the workflow. Users should remove manual outer wrappers when enabling `ci.groups.mode: invocation` to avoid double-grouped logs.
 
 ### Configuration
 
@@ -102,10 +106,6 @@ A terraform phase spawns the `terraform` binary (not `atmos`), so phases need no
 - **Phase-level grouping for helmfile and packer** — same `ci.Group(DimensionPhase, …)` pattern at their exec pipelines.
 - **Phase-level grouping for registry-based / custom component types** — adopt the same call in their `Execute` when they gain phased execution.
 - **GitLab / Azure DevOps `LogGrouper` implementations** — section markers (GitLab uses timestamped `section_start`/`section_end`).
-
-## Open questions
-
-- In `invocation` mode against a user's hand-written `::group::` in their CI YAML, Atmos can't see the raw marker, so it could double-group. The sentinel suppresses nested *Atmos* grouping but not a manual outer wrapper; document that users should drop manual wrappers when using `invocation` mode.
 
 ## Testing
 

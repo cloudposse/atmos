@@ -7,8 +7,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/ci"
+	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+type recordingGitHubProvider struct {
+	*githubprovider.Provider
+	started []string
+	ended   int
+}
+
+func (p *recordingGitHubProvider) StartLogGroup(name string) error {
+	p.started = append(p.started, name)
+	return nil
+}
+
+func (p *recordingGitHubProvider) EndLogGroup() error {
+	p.ended++
+	return nil
+}
 
 func TestGroupLabel(t *testing.T) {
 	tests := []struct {
@@ -43,6 +61,28 @@ func TestRunGrouped_PassthroughWhenInactive(t *testing.T) {
 		return nil
 	}))
 	assert.True(t, called)
+}
+
+func TestRunGrouped_ActiveGroupingUsesStepLabel(t *testing.T) {
+	restore := ci.SwapRegistryForTest()
+	t.Cleanup(restore)
+	provider := &recordingGitHubProvider{Provider: githubprovider.NewProvider()}
+	ci.Register(provider)
+	t.Setenv("GITHUB_ACTIONS", "true")
+
+	cfg := &schema.AtmosConfiguration{}
+	cfg.CI.Enabled = true
+	cfg.CI.Groups.Mode = ci.GroupModeAuto
+
+	called := false
+	require.NoError(t, RunGrouped(cfg, "  deploy  ", "echo deploy", func() error {
+		called = true
+		return nil
+	}))
+
+	assert.True(t, called)
+	assert.Equal(t, []string{groupLabel("  deploy  ", "echo deploy")}, provider.started)
+	assert.Equal(t, 1, provider.ended)
 }
 
 func TestRunGroupedForType_ExecRunsBare(t *testing.T) {

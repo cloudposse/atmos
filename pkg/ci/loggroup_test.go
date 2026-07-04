@@ -208,6 +208,12 @@ func TestGroupingEnabled(t *testing.T) {
 		t.Cleanup(restore)
 		assert.False(t, GroupingEnabled(modeConfig(GroupModeAuto)))
 	})
+
+	t.Run("disabled when parent sentinel is already active", func(t *testing.T) {
+		registerGrouping(t)
+		t.Setenv(logGroupSentinelEnvVar, "1")
+		assert.False(t, GroupingEnabled(modeConfig(GroupModeAuto)))
+	})
 }
 
 func TestShouldPropagateLogGroupSentinel(t *testing.T) {

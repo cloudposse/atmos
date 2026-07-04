@@ -1597,6 +1597,8 @@ func shortChdirHasInlineValue(arg string) bool {
 // command, captures telemetry, and handles unknown-command errors by showing usage.
 // This function is invoked once from main.main.
 func Execute() error {
+	defer perf.Track(&atmosConfig, "cmd.Execute")()
+
 	// CRITICAL: Process --chdir flag BEFORE loading config.
 	// This ensures atmos.yaml is loaded from the correct directory when using --chdir.
 	// We must process chdir early because aliases depend on the config, and the config

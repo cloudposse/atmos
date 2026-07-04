@@ -1,8 +1,10 @@
 package exec
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1393,7 +1395,7 @@ func TestExecuteWorkflow_DryRunShell(t *testing.T) {
 }
 
 func TestExecuteWorkflow_DryRunShellWithCILogGrouping(t *testing.T) {
-	registerGitHubLogGroupingForWorkflowTest(t)
+	groupOutput := registerGitHubLogGroupingForWorkflowTest(t)
 
 	stacksPath := "../../tests/fixtures/scenarios/workflows"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
@@ -1414,6 +1416,8 @@ func TestExecuteWorkflow_DryRunShellWithCILogGrouping(t *testing.T) {
 
 	err = ExecuteWorkflow(atmosConfig, "test-dryrun-ci-group", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
 	require.NoError(t, err)
+	assert.Contains(t, groupOutput.String(), "::group::step1\n")
+	assert.Contains(t, groupOutput.String(), "::endgroup::\n")
 }
 
 func TestExecuteWorkflow_DryRunBackgroundAndControlSteps(t *testing.T) {
@@ -1531,13 +1535,33 @@ func TestExecuteWorkflow_DryRunAtmosStepStackBeforeSeparator(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func registerGitHubLogGroupingForWorkflowTest(t *testing.T) {
+type workflowRecordingGitHubProvider struct {
+	*githubprovider.Provider
+	output *bytes.Buffer
+}
+
+func (p *workflowRecordingGitHubProvider) StartLogGroup(name string) error {
+	_, err := fmt.Fprintf(p.output, "::group::%s\n", name)
+	return err
+}
+
+func (p *workflowRecordingGitHubProvider) EndLogGroup() error {
+	_, err := fmt.Fprintln(p.output, "::endgroup::")
+	return err
+}
+
+func registerGitHubLogGroupingForWorkflowTest(t *testing.T) *bytes.Buffer {
 	t.Helper()
 
 	restore := ci.SwapRegistryForTest()
 	t.Cleanup(restore)
-	ci.Register(githubprovider.NewProvider())
+	output := &bytes.Buffer{}
+	ci.Register(&workflowRecordingGitHubProvider{
+		Provider: githubprovider.NewProvider(),
+		output:   output,
+	})
 	t.Setenv("GITHUB_ACTIONS", "true")
+	return output
 }
 
 // TestExecuteWorkflow_DryRunAtmos tests ExecuteWorkflow with dry run for atmos commands.
