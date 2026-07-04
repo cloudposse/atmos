@@ -883,6 +883,15 @@ func executeCustomCommand(
 			stepVars.SetEnv(key, value)
 		}
 
+		// A command-level env can override PATH (e.g. rebuilding it from the
+		// caller's environment); re-ensure the running binary's directory so a
+		// bare `atmos` in steps still resolves to the SAME binary even when
+		// atmos isn't installed on the system PATH (fresh CI runners).
+		if execPath, execErr := os.Executable(); execErr == nil {
+			env = envpkg.EnsureBinaryInPath(env, execPath)
+			stepVars.EnsureBinaryInPath(execPath)
+		}
+
 		if len(commandConfig.Env) > 0 && commandConfig.Verbose {
 			var envVarsList []string
 			for _, v := range commandConfig.Env {

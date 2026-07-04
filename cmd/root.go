@@ -49,6 +49,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/diagnostics"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -241,8 +242,9 @@ func processEarlyChdirFlag() error {
 		return fmt.Errorf("%w: not a directory: %s", errUtils.ErrWorkdirNotExist, absPath)
 	}
 
-	// Change to the specified directory.
-	if err := os.Chdir(absPath); err != nil {
+	// Change to the specified directory (updates PWD so subprocesses and
+	// templates behave as if Atmos started there).
+	if err := envpkg.Chdir(absPath); err != nil {
 		return fmt.Errorf("%w: failed to change directory to %s", errUtils.ErrPathResolution, absPath)
 	}
 
@@ -346,8 +348,9 @@ func processChdirFlag(cmd *cobra.Command) error {
 		return fmt.Errorf("%w: not a directory: %s", errUtils.ErrWorkdirNotExist, absPath)
 	}
 
-	// Change to the specified directory.
-	if err := os.Chdir(absPath); err != nil {
+	// Change to the specified directory (updates PWD so subprocesses and
+	// templates behave as if Atmos started there).
+	if err := envpkg.Chdir(absPath); err != nil {
 		return fmt.Errorf("%w: failed to change directory to %s", errUtils.ErrPathResolution, absPath)
 	}
 

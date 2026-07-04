@@ -8,6 +8,7 @@ import (
 	"strings"
 	"text/template"
 
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -116,6 +117,26 @@ func (v *Variables) EnvSlice() []string {
 		env = append(env, k+"="+v.Env[k])
 	}
 	return env
+}
+
+// EnsureBinaryInPath prepends the directory of binaryPath to the PATH variable
+// unless it is already present, matching the existing key's casing (Windows
+// uses "Path"). Command- or step-level env can override PATH entirely; calling
+// this afterwards preserves the guarantee that a bare `atmos` in steps
+// resolves to the running binary.
+func (v *Variables) EnsureBinaryInPath(binaryPath string) {
+	defer perf.Track(nil, "step.Variables.EnsureBinaryInPath")()
+
+	updated := envpkg.EnsureBinaryInPath(v.EnvSlice(), binaryPath)
+	pathValue := envpkg.GetPathFromEnvironment(updated)
+	key := "PATH"
+	for k := range v.Env {
+		if strings.EqualFold(k, "PATH") {
+			key = k
+			break
+		}
+	}
+	v.SetEnv(key, pathValue)
 }
 
 // GetValue returns a step's primary value.
