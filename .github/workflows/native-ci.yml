@@ -29,6 +29,9 @@ env:
   ATMOS_VERSION_CHECK_ENABLED: "false"
   NATIVE_CI_TRIVY_VERSION: "0.70.0"
   NATIVE_CI_KICS_VERSION: "2.1.20"
+  # Use pipe fallback so transient proxy.golang.org 5xx errors during
+  # `go mod download` fall back to direct module fetches.
+  GOPROXY: "https://proxy.golang.org|direct"
 
 jobs:
   terraform-plan:

@@ -720,14 +720,18 @@ func executeCustomCommand(
 		finalArgs = args
 	}
 
-	conditionContext := customCommandConditionContext()
+	commandConditionEnv := envpkg.CommandEnvToMap(commandConfig.Env)
 	hasRunnableStep := false
 	for i := range commandConfig.Steps {
 		step := &commandConfig.Steps[i]
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
-		if step.When.Evaluate(conditionContext) {
+		runs, err := step.When.EvaluateE(customCommandConditionContext(commandConfig.Name, step, i, commandConditionEnv))
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+		if runs {
 			hasRunnableStep = true
 			break
 		}
@@ -815,7 +819,11 @@ func executeCustomCommand(
 
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
-		if !step.When.Evaluate(conditionContext) {
+		runs, err := step.When.EvaluateE(customCommandConditionContext(commandConfig.Name, &step, i, commandConditionEnv))
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+		if !runs {
 			log.Debug("Skipping custom command step, `when` condition did not match", customCommandKeyCommand, commandConfig.Name, "step", i)
 			continue
 		}
@@ -1074,10 +1082,33 @@ func executeCustomCommand(
 	}
 }
 
-func customCommandConditionContext() schema.ConditionContext {
+func customCommandConditionContext(commandName string, step *schema.Task, index int, env map[string]string) schema.ConditionContext {
+	stepName := ""
+	stack := ""
+	stepEnv := env
+	if step != nil {
+		stepName = step.Name
+		stack = step.Stack
+		if len(step.Env) > 0 {
+			stepEnv = make(map[string]string, len(env))
+			for key, value := range env {
+				stepEnv[key] = value
+			}
+			for key, value := range step.Env {
+				stepEnv[key] = value
+			}
+		}
+	}
+	if stepName == "" {
+		stepName = fmt.Sprintf("step-%d", index)
+	}
 	return schema.ConditionContext{
-		CI:     telemetry.IsCI(),
-		Status: schema.ConditionPredicateSuccess,
+		CI:       telemetry.IsCI(),
+		Status:   schema.ConditionPredicateSuccess,
+		Stack:    stack,
+		Workflow: commandName,
+		Step:     stepName,
+		Env:      stepEnv,
 	}
 }
 
