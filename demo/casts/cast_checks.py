@@ -111,11 +111,20 @@ def assert_no_error_output(text):
 
 def assert_no_local_paths(text):
     """No machine-specific absolute paths may leak into a committed cast."""
-    for marker in ("/Users/", "/home/", "/private/var/folders/", "C:\\Users\\"):
+    for marker in (
+        "/Users/",
+        "/home/",
+        "/private/var/folders/",
+        "C:\\Users\\",
+        ".cache/atmos/",
+        "stack-imports/",
+    ):
         if marker in text:
             raise SystemExit(
                 f"cast leaks a machine-specific path (contains {marker!r})"
             )
+    if re.search(r"(?:\.\./){4,}", text):
+        raise SystemExit("cast leaks a deeply relative local path")
 
 
 def strip_ansi(text):
