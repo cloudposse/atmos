@@ -8,7 +8,7 @@ description: Update locked versions within the update policy.
 
 Advance locked versions to the newest candidates allowed by each entry's effective update policy, then write the lock file.
 
-Unlike [`lock`](/cli/commands/version/track/lock), `update` starts from the locked state and respects strategy caps, cooldown windows, and allow/ignore rules. Newer candidates held back by policy are reported with a reason.
+Unlike [`lock`](/cli/commands/version/track/lock), `update` starts from the locked state and respects strategy caps, cooldown windows, include/exclude rules, and prerelease policy. Newer candidates held back by policy are reported with a reason.
 
 ## Usage
 

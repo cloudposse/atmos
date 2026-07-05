@@ -30,6 +30,9 @@ version:
       update:
         strategy: minor
         cooldown: 14d
+      exclude:
+        - "1.5.*"
+      prerelease: false
       labels:
         - infrastructure
 ```
@@ -53,7 +56,7 @@ version:
   <dt>`exclude_patterns`</dt>
   <dd>Entry-name patterns excluded from the group.</dd>
 
-  <dt>`update`, `allow`, `ignore`, `labels`</dt>
+  <dt>`update`, `include`, `exclude`, `prerelease`, `labels`</dt>
   <dd>Policy applied to entries that match the group.</dd>
 </dl>
 
@@ -67,6 +70,8 @@ version:
       update:
         strategy: minor
         cooldown: 3d
+      exclude:
+        - "v4.0.0"
 ```
 
 ```shell

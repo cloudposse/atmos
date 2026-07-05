@@ -32,7 +32,7 @@ type TrackUpdate struct {
 
 // UpdateTrack advances locked versions within each entry's effective update
 // policy (strategy caps relative to the locked version, cooldown against the
-// upstream release timestamp, allow/ignore rules) and writes the lock file.
+// upstream release timestamp, include/exclude/prerelease rules) and writes the lock file.
 // Unlike LockTrack, which resolves the desired expression as-is, UpdateTrack
 // starts from the locked state and records a structured reason whenever a
 // newer candidate is held back. The only filter limits the update to the

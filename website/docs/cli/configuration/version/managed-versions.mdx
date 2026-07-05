@@ -47,7 +47,9 @@ version:
     update:
       strategy: patch
       cooldown: 14d
-    allow: [stable]
+    include: ["v1.*"]
+    exclude: ["*-rc*", "*-beta*"]
+    prerelease: false
     labels: [dependencies]
 
   groups:
@@ -57,6 +59,7 @@ version:
       update:
         strategy: minor
         cooldown: 14d
+      exclude: ["1.5.*"]
       labels: [infrastructure]
 
   dependencies:
@@ -135,8 +138,14 @@ The `update` policy inherits through `version.defaults` → track `defaults` →
   <dt>`pin`</dt>
   <dd>Artifact form emitted for the entry: `digest` (alias: `sha`) locks and renders the immutable identifier — the git commit SHA for GitHub datasources, the `sha256:` manifest digest for OCI registries — alongside the human-readable version. `none` or empty keeps plain version references. Strategy decides how far updates may advance; pin decides which form is written. Configuring a pin on a datasource that cannot provide immutable identifiers fails loudly.</dd>
 
-  <dt>`allow` / `ignore`</dt>
-  <dd>Pattern lists (on the policy, group, or entry) that permit or exclude candidate versions.</dd>
+  <dt>`include`</dt>
+  <dd>Candidate version patterns to allow. When set, versions must match at least one include pattern.</dd>
+
+  <dt>`exclude`</dt>
+  <dd>Candidate version patterns to block. Excluded versions cannot be selected, even when requested directly.</dd>
+
+  <dt>`prerelease`</dt>
+  <dd>Whether prerelease candidates are eligible. Defaults to `false`.</dd>
 </dl>
 
 ### Update vs. Lock

@@ -13,9 +13,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// allowPrerelease is the allow-list value that admits prerelease candidates.
-const allowPrerelease = "prerelease"
-
 func init() {
 	// The updatecli version filter logs informational messages through the
 	// global logrus logger on every search. Nothing else in Atmos uses logrus,
@@ -24,17 +21,17 @@ func init() {
 }
 
 // Select returns the best candidate for the desired version expression after
-// applying allow and ignore rules. Desired takes one of three forms: "latest",
-// a SemVer constraint (e.g. "~1.10", ">= 1.2, < 2"), or a concrete version
-// (returned when present in the candidate list). Prerelease candidates are
-// excluded unless allow contains "prerelease". Ignore entries are glob or
-// substring patterns matched against candidate versions.
-func Select(candidates []Candidate, desired string, allow, ignore []string) (Candidate, error) {
+// applying include, exclude, and prerelease rules. Desired takes one of three
+// forms: "latest", a SemVer constraint (e.g. "~1.10", ">= 1.2, < 2"), or a
+// concrete version (returned when present in the candidate list). Prerelease
+// candidates are excluded unless prerelease is true. Include and exclude
+// entries are glob or substring patterns matched against candidate versions.
+func Select(candidates []Candidate, desired string, include, exclude []string, prerelease bool) (Candidate, error) {
 	defer perf.Track(nil, "resolver.Select")()
 
-	filtered := applyRules(candidates, allow, ignore)
+	filtered := applyRules(candidates, include, exclude, prerelease)
 	if len(filtered) == 0 {
-		return Candidate{}, fmt.Errorf("%w: no candidates remain after allow/ignore rules", ErrNoVersionMatch)
+		return Candidate{}, fmt.Errorf("%w: no candidates remain after include/exclude/prerelease rules", ErrNoVersionMatch)
 	}
 
 	if desired != "" && desired != "latest" && !LooksLikeConstraint(desired) {
@@ -52,8 +49,26 @@ func Select(candidates []Candidate, desired string, allow, ignore []string) (Can
 	return selectConstraint(filtered, desired)
 }
 
+// AllowsVersion reports whether one concrete version passes the include,
+// exclude, and prerelease rules.
+func AllowsVersion(version string, include, exclude []string, prerelease bool) bool {
+	defer perf.Track(nil, "resolver.AllowsVersion")()
+
+	return allowsCandidate(&Candidate{Version: version}, include, exclude, prerelease)
+}
+
+func allowsCandidate(candidate *Candidate, include, exclude []string, prerelease bool) bool {
+	if !prerelease && isPrerelease(candidate) {
+		return false
+	}
+	if len(include) > 0 && !matchesVersionPattern(include, candidate.Version) {
+		return false
+	}
+	return !matchesVersionPattern(exclude, candidate.Version)
+}
+
 // selectLatest returns the highest SemVer candidate. Prerelease filtering has
-// already happened via the allow rules, so prereleases that survive count.
+// already happened via the policy rules, so prereleases that survive count.
 // When no candidate parses as SemVer, it falls back to the datasource's own
 // ordering (newest first).
 func selectLatest(candidates []Candidate) Candidate {
@@ -105,20 +120,12 @@ func selectConstraint(candidates []Candidate, desired string) (Candidate, error)
 	return selected, nil
 }
 
-// applyRules drops candidates rejected by the allow and ignore rules.
-func applyRules(candidates []Candidate, allow, ignore []string) []Candidate {
-	prereleaseAllowed := false
-	for _, value := range allow {
-		if value == allowPrerelease {
-			prereleaseAllowed = true
-		}
-	}
+// applyRules drops candidates rejected by the include, exclude, and prerelease
+// rules.
+func applyRules(candidates []Candidate, include, exclude []string, prerelease bool) []Candidate {
 	var result []Candidate
 	for i := range candidates {
-		if !prereleaseAllowed && isPrerelease(&candidates[i]) {
-			continue
-		}
-		if matchesIgnore(ignore, candidates[i].Version) {
+		if !allowsCandidate(&candidates[i], include, exclude, prerelease) {
 			continue
 		}
 		result = append(result, candidates[i])
@@ -136,9 +143,9 @@ func isPrerelease(candidate *Candidate) bool {
 	return err == nil && parsed.Prerelease() != ""
 }
 
-// matchesIgnore reports whether a version matches any ignore pattern, using
+// matchesVersionPattern reports whether a version matches any pattern, using
 // glob patterns with a substring fallback.
-func matchesIgnore(patterns []string, version string) bool {
+func matchesVersionPattern(patterns []string, version string) bool {
 	for _, pattern := range patterns {
 		if ok, _ := path.Match(pattern, version); ok {
 			return true

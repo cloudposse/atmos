@@ -23,11 +23,11 @@ These decisions were made during implementation and supersede earlier drafts:
 
 1. **Branding and namespace.** The feature is the **Atmos Version Tracker**. The command group is `atmos version track <verb>` (singular noun, alias `tracks`), implemented as a nested command package (`cmd/version/track`) following the `cmd/terraform/cache` precedent. The top-level `atmos version` command remains about the Atmos CLI's own version. Track selection falls back positional argument → `--track` flag → `version.track` in `atmos.yaml`.
 
-2. **Datasource resolver registry.** `pkg/version/resolver` defines the `Resolver` interface (`Versions`, `Pin`) with init-time registration and ecosystem aliases (`github` → `github-tags`, `github/actions` → `github-tags`, `docker` → `docker-tags`, ...). Implemented resolvers: `toolchain` (Aqua registry), `github-tags`/`github-releases` (via `pkg/github`; tags carry commit SHAs, releases carry publish timestamps), and `oci-tags`/`docker-tags` (go-containerregistry; tag listing plus manifest digests, default-keychain auth with a GHCR token fallback in `pkg/oci`). Version selection (`latest`, SemVer constraints, `allow`/`ignore`) wraps the updatecli versionfilter engine (`github.com/updatecli/updatecli/pkg/plugins/utils/version`) — imported directly after verifying the module-graph impact (one indirect patch bump).
+2. **Datasource resolver registry.** `pkg/version/resolver` defines the `Resolver` interface (`Versions`, `Pin`) with init-time registration and ecosystem aliases (`github` → `github-tags`, `github/actions` → `github-tags`, `docker` → `docker-tags`, ...). Implemented resolvers: `toolchain` (Aqua registry), `github-tags`/`github-releases` (via `pkg/github`; tags carry commit SHAs, releases carry publish timestamps), and `oci-tags`/`docker-tags` (go-containerregistry; tag listing plus manifest digests, default-keychain auth with a GHCR token fallback in `pkg/oci`). Version selection (`latest`, SemVer constraints, `include`/`exclude`, `prerelease`) wraps the updatecli versionfilter engine (`github.com/updatecli/updatecli/pkg/plugins/utils/version`) — imported directly after verifying the module-graph impact (one indirect patch bump).
 
 3. **SHA/digest pinning.** An opt-in `pin: digest` (alias: `sha`) field on the update policy inherits through defaults → track → entry → group. Locking resolves the immutable identifier (git commit SHA for GitHub, sha256 manifest digest for OCI) into `LockEntry.digest`, plus `released_at` for cooldown checks. Rendered output uses the Renovate/Dependabot round-trip convention: `uses: owner/repo@<sha> # <version>`. A configured pin on a datasource that cannot pin fails loudly. The `.version` template context yields `VersionRef` values whose `String()` emits the pinned form; `.Version`/`.Digest` are individually addressable; `!version` always returns the version.
 
-4. **`update` ≠ `lock`.** `lock` resolves desired expressions as-is (bootstrap/repair). `update` advances from the locked state within policy: strategy caps (`major`/`minor`/`patch`; `pin`/`digest` never advance and only refresh digests), cooldown windows against `released_at` (`14d`, `2w`, Go durations), and `allow`/`ignore` rules. Every held-back candidate produces a structured reason. Status is policy-aware: `update-available` means an update the policy would take; a newer version held back reports `newer-available (blocked)` with the reason and passes `verify`.
+4. **`update` ≠ `lock`.** `lock` resolves desired expressions as-is (bootstrap/repair). `update` advances from the locked state within policy: strategy caps (`major`/`minor`/`patch`; `pin`/`digest` never advance and only refresh digests), cooldown windows against `released_at` (`14d`, `2w`, Go durations), `include`/`exclude` rules, and `prerelease` policy. Every held-back candidate produces a structured reason. Status is policy-aware: `update-available` means an update the policy would take; a newer version held back reports `newer-available (blocked)` with the reason and passes `verify`.
 
 5. **File managers (three tiers).** `pkg/version/managers` is a registry of pure-`Plan()` file rewriters driven by shared `Apply`/`Check` drivers, configured via `version.files` rules (`{manager, paths, options}`):
    - `github-actions` (native): scans workflow `uses:` lines and rewrites refs from the lock by owner/repo package (subdirectory actions and reusable workflows included; `./local` and `docker://` refs never match). Line-based rewriting preserves formatting.
@@ -64,7 +64,7 @@ Atmos projects already need to coordinate versions across several surfaces:
 Today those versions are usually scattered across stack YAML, workflow YAML, toolchain config, vendoring config, and CI scripts. This creates several problems:
 
 1. **Version drift**: different environments silently run different versions.
-2. **No single policy surface**: cooldowns, allowed versions, labels, schedules, and grouping are not expressed consistently.
+2. **No single policy surface**: cooldowns, candidate filters, labels, schedules, and grouping are not expressed consistently.
 3. **Weak CI ergonomics**: CI needs deterministic versions, status checks, and rendered literal files.
 4. **Poor auditability**: desired policy and resolved versions are not clearly separated.
 5. **Duplicated automation**: teams rely on external dependency update tools for behavior Atmos should own natively.
@@ -107,7 +107,7 @@ This keeps version definitions out of individual stacks where possible, while st
    - Atmos toolchain registries
 4. Support deterministic runtime resolution through lock files.
 5. Support tracks such as `dev`, `staging`, and `prod`.
-6. Support grouped updates, defaults, cooldowns, schedules, labels, ignore rules, and allowed version policies.
+6. Support grouped updates, defaults, cooldowns, schedules, labels, include/exclude filters, and prerelease policy.
 7. Support runtime usage from stack/config YAML:
    - `!version name`
    - `{{ .version.name }}`
@@ -232,7 +232,9 @@ version:
     update:
       strategy: patch
       cooldown: 14d
-    allow: [stable]
+    include: ["v1.*"]
+    exclude: ["*-rc*", "*-beta*"]
+    prerelease: false
     labels: [dependencies]
 
   groups:
@@ -328,8 +330,9 @@ Supported fields:
 - `update.strategy`
 - `update.cooldown`
 - `update.schedule`
-- `allow`
-- `ignore`
+- `include`
+- `exclude`
+- `prerelease`
 - `labels`
 
 ### `version.groups`
@@ -347,8 +350,9 @@ Supported match fields:
 Supported policy fields:
 
 - `update`
-- `allow`
-- `ignore`
+- `include`
+- `exclude`
+- `prerelease`
 - `labels`
 
 ### `version.dependencies`
@@ -379,8 +383,9 @@ Supported fields:
 - `desired`
 - `group`
 - `update`
-- `allow`
-- `ignore`
+- `include`
+- `exclude`
+- `prerelease`
 - `labels`
 
 ---
@@ -394,9 +399,13 @@ Effective policy is resolved in this order:
 3. Dependency entry: `version.dependencies.<name>` plus any `version.tracks.<track>.dependencies.<name>` override
 4. Matched group policy: `version.groups.<group>`
 
-Scalar fields use last-writer-wins.
+Existing scalar policy fields use last-writer-wins through the matched group.
 
-List fields merge with de-duplication while preserving order.
+Candidate filtering fields use explicit semantics:
+
+- `exclude` accumulates across defaults, track defaults, matched group, and dependency entry.
+- `include` uses the most specific non-empty list.
+- `prerelease` uses the most specific explicitly-set Boolean.
 
 Group matching should be deterministic. If multiple groups match, the lexically first group name wins unless the entry explicitly sets `group`.
 
@@ -536,7 +545,7 @@ Resolve configured desired versions and write lock entries.
 
 Update locked versions according to policy.
 
-Initial behavior may be equivalent to `lock`. Future behavior should respect schedules, cooldowns, update strategy, ignore rules, and allowed versions.
+Initial behavior may be equivalent to `lock`. Future behavior should respect schedules, cooldowns, update strategy, include/exclude rules, and prerelease policy.
 
 ### `atmos version track update <track> --group <group>`
 
@@ -593,7 +602,7 @@ Required behavior:
 
 - Resolve tags and releases.
 - Support SemVer constraints with optional `v` prefixes.
-- Support prerelease filtering through `allow`.
+- Support prerelease filtering through `prerelease`.
 - Use GitHub auth when configured.
 - Support rate-limit-aware error messages.
 
@@ -683,15 +692,15 @@ update:
 
 The initial implementation may store schedule strings without interpreting every natural language form. The schema should leave room for richer schedule parsing later.
 
-### Allow
+### Include / Exclude / Prerelease
 
-Policy for allowed versions.
+Policy for candidate version filtering.
 
 Initial values:
 
-- `stable`
+- `include`
+- `exclude`
 - `prerelease`
-- `deprecated`
 
 Future values may include explicit patterns or predicates.
 
@@ -834,7 +843,7 @@ Errors should distinguish:
 1. Implement update strategy filtering.
 2. Implement cooldown checks.
 3. Implement schedule checks.
-4. Implement allow and ignore rules.
+4. Implement include and exclude rules.
 5. Implement grouped status/update behavior.
 6. Add structured reasons for skipped updates.
 
@@ -895,9 +904,9 @@ This is preferable to silently treating constraints as concrete versions.
 
 - Global defaults apply.
 - Track defaults override global defaults.
-- Entry policy overrides inherited defaults.
-- Group policy applies after entry policy.
-- Labels and allow/ignore lists merge with de-duplication.
+- Group policy overrides inherited defaults for existing update policy fields.
+- Entry policy overrides inherited defaults and group policy for candidate filtering fields.
+- Labels and exclude lists merge with de-duplication; include uses the most specific non-empty list.
 - Explicit `group` wins over match rules.
 - Group match order is deterministic.
 
@@ -963,7 +972,7 @@ Future resolver tests:
 
 1. Should `atmos version track update` eventually create PRs itself, or should it only update local files and let CI handle PR creation?
 2. Should schedules use a strict machine-readable schema instead of natural language strings?
-3. Should `allow` and `ignore` use a common expression language for all datasources?
+3. Should `include` and `exclude` use a common expression language for all datasources?
 4. Should the GitHub Actions manager apply only explicit files, or should it include a manager that scans `.github/workflows/*.yaml.tmpl` automatically?
 5. Should lock entries include changelog URLs and release timestamps?
 6. How should provider auth reuse existing Atmos auth patterns for GitHub, GitLab, ECR, GHCR, and generic registries?

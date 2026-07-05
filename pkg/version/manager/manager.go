@@ -40,8 +40,9 @@ type EffectiveEntry struct {
 	Desired    string                     `yaml:"desired,omitempty" json:"desired,omitempty"`
 	Group      string                     `yaml:"group,omitempty" json:"group,omitempty"`
 	Update     schema.VersionUpdatePolicy `yaml:"update,omitempty" json:"update,omitempty"`
-	Allow      []string                   `yaml:"allow,omitempty" json:"allow,omitempty"`
-	Ignore     []string                   `yaml:"ignore,omitempty" json:"ignore,omitempty"`
+	Include    []string                   `yaml:"include,omitempty" json:"include,omitempty"`
+	Exclude    []string                   `yaml:"exclude,omitempty" json:"exclude,omitempty"`
+	Prerelease bool                       `yaml:"prerelease,omitempty" json:"prerelease,omitempty"`
 	Labels     []string                   `yaml:"labels,omitempty" json:"labels,omitempty"`
 	Locked     string                     `yaml:"locked,omitempty" json:"locked,omitempty"`
 }
@@ -176,11 +177,12 @@ func mergeEntry(base, override *schema.VersionEntry) schema.VersionEntry {
 		result.Group = override.Group
 	}
 	result.Update = mergeUpdatePolicy(result.Update, override.Update)
-	if len(override.Allow) > 0 {
-		result.Allow = append([]string{}, override.Allow...)
+	if len(override.Include) > 0 {
+		result.Include = append([]string{}, override.Include...)
 	}
-	if len(override.Ignore) > 0 {
-		result.Ignore = append([]string{}, override.Ignore...)
+	result.Exclude = mergeStrings(result.Exclude, override.Exclude)
+	if override.Prerelease != nil {
+		result.Prerelease = boolPtr(*override.Prerelease)
 	}
 	if len(override.Labels) > 0 {
 		result.Labels = append([]string{}, override.Labels...)
@@ -189,8 +191,8 @@ func mergeEntry(base, override *schema.VersionEntry) schema.VersionEntry {
 }
 
 // buildEffectiveEntry applies the policy inheritance chain to a single entry:
-// global defaults, then track defaults, then the entry itself, then the
-// matched group policy.
+// global defaults, then track defaults, then the matched group policy, then the
+// entry itself.
 func buildEffectiveEntry(atmosConfig *schema.AtmosConfiguration, versionTrack *schema.VersionTrack, name string, entry *schema.VersionEntry) EffectiveEntry {
 	effective := EffectiveEntry{
 		Name:       name,
@@ -201,8 +203,9 @@ func buildEffectiveEntry(atmosConfig *schema.AtmosConfiguration, versionTrack *s
 		Desired:    entry.Desired,
 		Group:      entry.Group,
 		Update:     mergeUpdatePolicy(atmosConfig.Version.Defaults.Update, versionTrack.Defaults.Update, entry.Update),
-		Allow:      mergeStrings(atmosConfig.Version.Defaults.Allow, versionTrack.Defaults.Allow, entry.Allow),
-		Ignore:     mergeStrings(atmosConfig.Version.Defaults.Ignore, versionTrack.Defaults.Ignore, entry.Ignore),
+		Include:    mostSpecificStrings(atmosConfig.Version.Defaults.Include, versionTrack.Defaults.Include),
+		Exclude:    mergeStrings(atmosConfig.Version.Defaults.Exclude, versionTrack.Defaults.Exclude),
+		Prerelease: effectivePrerelease(atmosConfig.Version.Defaults.Prerelease, versionTrack.Defaults.Prerelease),
 		Labels:     mergeStrings(atmosConfig.Version.Defaults.Labels, versionTrack.Defaults.Labels, entry.Labels),
 	}
 	if effective.Package == "" {
@@ -216,9 +219,17 @@ func buildEffectiveEntry(atmosConfig *schema.AtmosConfiguration, versionTrack *s
 	}
 	if group, ok := atmosConfig.Version.Groups[effective.Group]; ok && effective.Group != "" {
 		effective.Update = mergeUpdatePolicy(effective.Update, group.Update)
-		effective.Allow = mergeStrings(effective.Allow, group.Allow)
-		effective.Ignore = mergeStrings(effective.Ignore, group.Ignore)
+		effective.Include = mostSpecificStrings(effective.Include, group.Include)
+		effective.Exclude = mergeStrings(effective.Exclude, group.Exclude)
+		if group.Prerelease != nil {
+			effective.Prerelease = *group.Prerelease
+		}
 		effective.Labels = mergeStrings(effective.Labels, group.Labels)
+	}
+	effective.Include = mostSpecificStrings(effective.Include, entry.Include)
+	effective.Exclude = mergeStrings(effective.Exclude, entry.Exclude)
+	if entry.Prerelease != nil {
+		effective.Prerelease = *entry.Prerelease
 	}
 	return effective
 }
@@ -336,6 +347,30 @@ func mergeStrings(values ...[]string) []string {
 		}
 	}
 	return result
+}
+
+// mostSpecificStrings returns the last non-empty list, preserving that scope's
+// order and de-duplicating values within it.
+func mostSpecificStrings(values ...[]string) []string {
+	for i := len(values) - 1; i >= 0; i-- {
+		if len(values[i]) > 0 {
+			return mergeStrings(values[i])
+		}
+	}
+	return nil
+}
+
+func effectivePrerelease(values ...*bool) bool {
+	for i := len(values) - 1; i >= 0; i-- {
+		if values[i] != nil {
+			return *values[i]
+		}
+	}
+	return false
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }
 
 // sortedNames returns the entry names in deterministic sorted order.

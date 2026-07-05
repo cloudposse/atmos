@@ -66,7 +66,7 @@ func AddEntry(atmosConfig *schema.AtmosConfiguration, track, name string, entry 
 
 // SetEntryFields updates fields of an existing dependency entry (dot-relative
 // paths such as "desired" or "update.pin") and returns the file modified.
-func SetEntryFields(atmosConfig *schema.AtmosConfiguration, track, name string, fields map[string]string) (string, error) {
+func SetEntryFields(atmosConfig *schema.AtmosConfiguration, track, name string, fields map[string]any) (string, error) {
 	defer perf.Track(atmosConfig, "manager.SetEntryFields")()
 
 	track = EffectiveTrack(atmosConfig, track)
@@ -79,7 +79,7 @@ func SetEntryFields(atmosConfig *schema.AtmosConfiguration, track, name string, 
 		return "", fmt.Errorf("%w: %s in track %s (%s)", ErrEntryNotFound, name, track, file)
 	}
 	for field, value := range fields {
-		content, err = atmosyaml.Set(content, path+"."+field, value)
+		content, err = setEntryField(content, path+"."+field, value)
 		if err != nil {
 			return "", err
 		}
@@ -144,7 +144,27 @@ func entryDocument(entry *schema.VersionEntry) map[string]any {
 	if entry.Update.Pin != "" {
 		document["update"] = map[string]any{"pin": entry.Update.Pin}
 	}
+	if len(entry.Include) > 0 {
+		document["include"] = entry.Include
+	}
+	if len(entry.Exclude) > 0 {
+		document["exclude"] = entry.Exclude
+	}
+	if entry.Prerelease != nil {
+		document["prerelease"] = *entry.Prerelease
+	}
 	return document
+}
+
+func setEntryField(content []byte, path string, value any) ([]byte, error) {
+	if stringValue, ok := value.(string); ok {
+		return atmosyaml.Set(content, path, stringValue)
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	return atmosyaml.SetRaw(content, path, string(raw))
 }
 
 // readEditableConfig resolves and reads the atmos.yaml file CRUD edits target.

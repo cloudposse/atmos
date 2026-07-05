@@ -83,7 +83,7 @@ func TestSetEntryFieldsAndRemoveEntry(t *testing.T) {
 	file := crudSandbox(t)
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	if _, err := SetEntryFields(atmosConfig, "prod", "opentofu", map[string]string{
+	if _, err := SetEntryFields(atmosConfig, "prod", "opentofu", map[string]any{
 		"desired":    "~1.11",
 		"update.pin": "none",
 	}); err != nil {
@@ -97,7 +97,7 @@ func TestSetEntryFieldsAndRemoveEntry(t *testing.T) {
 		t.Fatalf("expected entry comment preserved, got:\n%s", content)
 	}
 
-	if _, err := SetEntryFields(atmosConfig, "prod", "missing", map[string]string{"desired": "1"}); !errors.Is(err, ErrEntryNotFound) {
+	if _, err := SetEntryFields(atmosConfig, "prod", "missing", map[string]any{"desired": "1"}); !errors.Is(err, ErrEntryNotFound) {
 		t.Fatalf("expected ErrEntryNotFound, got %v", err)
 	}
 

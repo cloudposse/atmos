@@ -19,11 +19,12 @@ version:
     update:
       strategy: patch
       cooldown: 14d
-    allow:
-      - stable
-    ignore:
+    include:
+      - "v1.*"
+    exclude:
       - "*-rc*"
       - "*-beta*"
+    prerelease: false
     labels:
       - dependencies
 ```
@@ -41,11 +42,14 @@ version:
   <dt>`update.pin`</dt>
   <dd>Artifact form to render. Use `digest` or `sha` for immutable identifiers, or `none` for plain versions.</dd>
 
-  <dt>`allow`</dt>
-  <dd>Patterns that are allowed as candidate versions.</dd>
+  <dt>`include`</dt>
+  <dd>Candidate version patterns to allow. When set, versions must match at least one pattern.</dd>
 
-  <dt>`ignore`</dt>
-  <dd>Patterns excluded from candidate versions.</dd>
+  <dt>`exclude`</dt>
+  <dd>Candidate version patterns to block. Excluded versions cannot be selected, even when requested directly.</dd>
+
+  <dt>`prerelease`</dt>
+  <dd>Whether prerelease candidates are eligible. Defaults to `false`.</dd>
 
   <dt>`labels`</dt>
   <dd>Metadata labels for downstream workflows and reports.</dd>
@@ -59,6 +63,7 @@ version:
     update:
       strategy: minor
       cooldown: 7d
-    ignore:
+    exclude:
       - "*-alpha*"
+    prerelease: false
 ```

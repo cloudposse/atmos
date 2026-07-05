@@ -11,7 +11,7 @@ import (
 var trackUpdateCmd = &cobra.Command{
 	Use:   "update [track]",
 	Short: "Update locked versions within the update policy",
-	Long:  "Advance locked versions to the newest candidates allowed by each entry's effective update policy (strategy caps, cooldown, allow/ignore rules) and write the lock file. Newer versions held back by policy are reported with the blocking reason. Use `lock` to resolve desired versions as-is.",
+	Long:  "Advance locked versions to the newest candidates allowed by each entry's effective update policy (strategy caps, cooldown, include/exclude, prerelease rules) and write the lock file. Newer versions held back by policy are reported with the blocking reason. Use `lock` to resolve desired versions as-is.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfig, "version.track.update.RunE")()

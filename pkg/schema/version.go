@@ -66,10 +66,11 @@ type VersionUpdatePolicy struct {
 
 // VersionPolicy configures shared defaults for managed versions.
 type VersionPolicy struct {
-	Update VersionUpdatePolicy `yaml:"update,omitempty" mapstructure:"update" json:"update,omitempty"`
-	Allow  []string            `yaml:"allow,omitempty" mapstructure:"allow" json:"allow,omitempty"`
-	Ignore []string            `yaml:"ignore,omitempty" mapstructure:"ignore" json:"ignore,omitempty"`
-	Labels []string            `yaml:"labels,omitempty" mapstructure:"labels" json:"labels,omitempty"`
+	Update     VersionUpdatePolicy `yaml:"update,omitempty" mapstructure:"update" json:"update,omitempty"`
+	Include    []string            `yaml:"include,omitempty" mapstructure:"include" json:"include,omitempty"`
+	Exclude    []string            `yaml:"exclude,omitempty" mapstructure:"exclude" json:"exclude,omitempty"`
+	Prerelease *bool               `yaml:"prerelease,omitempty" mapstructure:"prerelease" json:"prerelease,omitempty"`
+	Labels     []string            `yaml:"labels,omitempty" mapstructure:"labels" json:"labels,omitempty"`
 }
 
 // VersionGroup configures a Dependabot/Renovate-style batch of updates.
@@ -80,8 +81,9 @@ type VersionGroup struct {
 	Patterns        []string            `yaml:"patterns,omitempty" mapstructure:"patterns" json:"patterns,omitempty"`
 	ExcludePatterns []string            `yaml:"exclude_patterns,omitempty" mapstructure:"exclude_patterns" json:"exclude_patterns,omitempty"`
 	Update          VersionUpdatePolicy `yaml:"update,omitempty" mapstructure:"update" json:"update,omitempty"`
-	Allow           []string            `yaml:"allow,omitempty" mapstructure:"allow" json:"allow,omitempty"`
-	Ignore          []string            `yaml:"ignore,omitempty" mapstructure:"ignore" json:"ignore,omitempty"`
+	Include         []string            `yaml:"include,omitempty" mapstructure:"include" json:"include,omitempty"`
+	Exclude         []string            `yaml:"exclude,omitempty" mapstructure:"exclude" json:"exclude,omitempty"`
+	Prerelease      *bool               `yaml:"prerelease,omitempty" mapstructure:"prerelease" json:"prerelease,omitempty"`
 	Labels          []string            `yaml:"labels,omitempty" mapstructure:"labels" json:"labels,omitempty"`
 }
 
@@ -94,8 +96,9 @@ type VersionEntry struct {
 	Desired    string              `yaml:"desired,omitempty" mapstructure:"desired" json:"desired,omitempty"`
 	Group      string              `yaml:"group,omitempty" mapstructure:"group" json:"group,omitempty"`
 	Update     VersionUpdatePolicy `yaml:"update,omitempty" mapstructure:"update" json:"update,omitempty"`
-	Allow      []string            `yaml:"allow,omitempty" mapstructure:"allow" json:"allow,omitempty"`
-	Ignore     []string            `yaml:"ignore,omitempty" mapstructure:"ignore" json:"ignore,omitempty"`
+	Include    []string            `yaml:"include,omitempty" mapstructure:"include" json:"include,omitempty"`
+	Exclude    []string            `yaml:"exclude,omitempty" mapstructure:"exclude" json:"exclude,omitempty"`
+	Prerelease *bool               `yaml:"prerelease,omitempty" mapstructure:"prerelease" json:"prerelease,omitempty"`
 	Labels     []string            `yaml:"labels,omitempty" mapstructure:"labels" json:"labels,omitempty"`
 }
 

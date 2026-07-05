@@ -16,7 +16,7 @@ var trackSetCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfig, "version.track.set.RunE")()
 
-		fields := map[string]string{}
+		fields := map[string]any{}
 		for flag, path := range map[string]string{
 			"desired":  "desired",
 			"package":  "package",
@@ -28,6 +28,19 @@ var trackSetCmd = &cobra.Command{
 				value, _ := cmd.Flags().GetString(flag)
 				fields[path] = value
 			}
+		}
+		for flag, path := range map[string]string{
+			"include": "include",
+			"exclude": "exclude",
+		} {
+			if cmd.Flags().Changed(flag) {
+				value, _ := cmd.Flags().GetStringSlice(flag)
+				fields[path] = value
+			}
+		}
+		if cmd.Flags().Changed("prerelease") {
+			value, _ := cmd.Flags().GetBool("prerelease")
+			fields["prerelease"] = value
 		}
 		track := manager.EffectiveTrack(atmosConfig, trackFromArgs(cmd, nil))
 		file, err := manager.SetEntryFields(atmosConfig, track, args[0], fields)
@@ -45,6 +58,9 @@ func init() {
 		flags.WithStringFlag("provider", "", "", "Provider name from version.providers"),
 		flags.WithStringFlag("group", "", "", "Version group name"),
 		flags.WithStringFlag("pin", "", "", "Pin policy: digest (alias: sha), or none"),
+		flags.WithStringSliceFlag("include", "", nil, "Candidate version patterns to include (repeatable)"),
+		flags.WithStringSliceFlag("exclude", "", nil, "Candidate version patterns to exclude (repeatable)"),
+		flags.WithBoolFlag("prerelease", "", false, "Allow prerelease candidates"),
 	)...)
 	parser.RegisterFlags(trackSetCmd)
 	trackCmd.AddCommand(trackSetCmd)

@@ -58,7 +58,7 @@ version:
       paths: ["**/*.tmpl"]
 ```
 
-Resolved versions land in a committed `versions.lock.yaml`, so local runs and CI are deterministic. Updates are policy-driven — strategy caps (`major`/`minor`/`patch`), cooldown windows (`14d`, `2w`), allow/ignore rules — and every version held back by policy is reported with the reason instead of silently skipped:
+Resolved versions land in a committed `versions.lock.yaml`, so local runs and CI are deterministic. Updates are policy-driven — strategy caps (`major`/`minor`/`patch`), cooldown windows (`14d`, `2w`), include/exclude rules, and prerelease policy — and every version held back by policy is reported with the reason instead of silently skipped:
 
 ```shell
 atmos version track update

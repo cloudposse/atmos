@@ -241,8 +241,11 @@ func TestTrackAddSetRemoveCommandsEditConfig(t *testing.T) {
 		flags.WithStringFlag("desired", "", "latest", "Desired version"),
 		flags.WithStringFlag("group", "", "", "Version group name"),
 		flags.WithStringFlag("pin", "", "", "Pin policy"),
+		flags.WithStringSliceFlag("include", "", nil, "Include patterns"),
+		flags.WithStringSliceFlag("exclude", "", nil, "Exclude patterns"),
+		flags.WithBoolFlag("prerelease", "", false, "Allow prerelease candidates"),
 	)...)
-	if err := runTrackCommand(t, addCmd, "checkout", "--package", "actions/checkout", "--desired", "v6", "--pin", "sha"); err != nil {
+	if err := runTrackCommand(t, addCmd, "checkout", "--package", "actions/checkout", "--desired", "v6", "--pin", "sha", "--include", "v6.*", "--exclude", "v6.0.0", "--prerelease"); err != nil {
 		t.Fatalf("add command returned error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "name: checkout") {
@@ -254,6 +257,12 @@ func TestTrackAddSetRemoveCommandsEditConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read atmos.yaml: %v", err)
 	}
+	for _, expected := range []string{"checkout:", "pin: sha", "include:", "v6.*", "exclude:", "v6.0.0", "prerelease: true"} {
+		if !strings.Contains(string(content), expected) {
+			t.Fatalf("expected config to contain %q after add:\n%s", expected, content)
+		}
+	}
+
 	if !strings.Contains(string(content), "checkout:") || !strings.Contains(string(content), "pin: sha") {
 		t.Fatalf("config after add =\n%s", content)
 	}
@@ -264,11 +273,19 @@ func TestTrackAddSetRemoveCommandsEditConfig(t *testing.T) {
 		flags.WithStringFlag("provider", "", "", "Provider name"),
 		flags.WithStringFlag("group", "", "", "Version group name"),
 		flags.WithStringFlag("pin", "", "", "Pin policy"),
+		flags.WithStringSliceFlag("include", "", nil, "Include patterns"),
+		flags.WithStringSliceFlag("exclude", "", nil, "Exclude patterns"),
+		flags.WithBoolFlag("prerelease", "", false, "Allow prerelease candidates"),
 	)...)
-	if err := runTrackCommand(t, setCmd, "checkout", "--desired", "v7", "--group", "ci"); err != nil {
+	if err := runTrackCommand(t, setCmd, "checkout", "--desired", "v7", "--group", "ci", "--include", "v7.*", "--exclude", "v7.0.0", "--prerelease=false"); err != nil {
 		t.Fatalf("set command returned error: %v", err)
 	}
 	content, _ = os.ReadFile(configPath)
+	for _, expected := range []string{"desired: v7", "group: ci", "v7.*", "v7.0.0", "prerelease: false"} {
+		if !strings.Contains(string(content), expected) {
+			t.Fatalf("expected config to contain %q after set:\n%s", expected, content)
+		}
+	}
 	if !strings.Contains(string(content), "desired: v7") || !strings.Contains(string(content), "group: ci") {
 		t.Fatalf("config after set =\n%s", content)
 	}

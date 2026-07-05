@@ -38,6 +38,15 @@ atmos version track set NAME [flags]
 
   <dt>`--pin`</dt>
   <dd>Pin policy: `digest`, `sha`, or `none`.</dd>
+
+  <dt>`--include`</dt>
+  <dd>Candidate version patterns to include. Repeat the flag for multiple patterns.</dd>
+
+  <dt>`--exclude`</dt>
+  <dd>Candidate version patterns to exclude. Repeat the flag for multiple patterns.</dd>
+
+  <dt>`--prerelease`</dt>
+  <dd>Allow or disallow prerelease candidates for this entry.</dd>
 </dl>
 
 ## Examples
@@ -48,6 +57,9 @@ atmos version track set checkout --desired=v6
 
 # Render nginx with an immutable OCI digest
 atmos version track set nginx --pin=digest
+
+# Exclude a known vulnerable release and keep prereleases disabled
+atmos version track set checkout --exclude=v6.0.0 --prerelease=false
 
 # Move an entry into a group on prod
 atmos version track set opentofu --track=prod --group=infrastructure

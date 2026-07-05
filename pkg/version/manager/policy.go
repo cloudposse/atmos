@@ -42,7 +42,7 @@ type policyDecision struct {
 	// Target is the best candidate the policy allows.
 	Target resolver.Candidate
 	// Raw is the best candidate ignoring strategy and cooldown (still
-	// honoring the desired expression and allow/ignore rules).
+	// honoring the desired expression and include/exclude/prerelease rules).
 	Raw resolver.Candidate
 	// Reason explains why Target differs from Raw ("" when they match).
 	Reason string
@@ -171,7 +171,7 @@ func decideUpdate(ctx context.Context, atmosConfig *schema.AtmosConfiguration, e
 // two stages so the block reasons can name both the candidate held back by
 // the cap and the one held back by cooldown.
 func decidePolicy(entry *EffectiveEntry, candidates []resolver.Candidate, inputs *policyInputs) (policyDecision, error) {
-	raw, err := resolver.Select(candidates, entry.Desired, entry.Allow, entry.Ignore)
+	raw, err := resolver.Select(candidates, entry.Desired, entry.Include, entry.Exclude, entry.Prerelease)
 	if err != nil {
 		return policyDecision{}, err
 	}
@@ -179,12 +179,12 @@ func decidePolicy(entry *EffectiveEntry, candidates []resolver.Candidate, inputs
 	withinCap := filterCandidates(candidates, func(candidate *resolver.Candidate) bool {
 		return inputs.locked == "" || withinStrategy(inputs.strategy, inputs.locked, candidate.Version)
 	})
-	capBest, capErr := resolver.Select(withinCap, entry.Desired, entry.Allow, entry.Ignore)
+	capBest, capErr := resolver.Select(withinCap, entry.Desired, entry.Include, entry.Exclude, entry.Prerelease)
 
 	cooled := filterCandidates(withinCap, func(candidate *resolver.Candidate) bool {
 		return cooledDown(candidate, inputs.cooldown, inputs.now)
 	})
-	target, err := resolver.Select(cooled, entry.Desired, entry.Allow, entry.Ignore)
+	target, err := resolver.Select(cooled, entry.Desired, entry.Include, entry.Exclude, entry.Prerelease)
 	if err != nil {
 		switch {
 		case inputs.locked != "":

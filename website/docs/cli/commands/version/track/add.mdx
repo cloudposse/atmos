@@ -51,6 +51,15 @@ atmos version track add NAME [flags]
 
   <dt>`--pin`</dt>
   <dd>Pin policy. Use `digest` or `sha` to lock and render the immutable identifier.</dd>
+
+  <dt>`--include`</dt>
+  <dd>Candidate version patterns to include. Repeat the flag for multiple patterns.</dd>
+
+  <dt>`--exclude`</dt>
+  <dd>Candidate version patterns to exclude. Repeat the flag for multiple patterns.</dd>
+
+  <dt>`--prerelease`</dt>
+  <dd>Allow prerelease candidates for this entry.</dd>
 </dl>
 
 ## Examples
@@ -61,6 +70,9 @@ atmos version track add checkout --package=actions/checkout --pin=sha
 
 # Add a toolchain tool with a SemVer constraint
 atmos version track add opentofu --desired="~1.10"
+
+# Add a GitHub Action but exclude a known-bad tag
+atmos version track add checkout --package=actions/checkout --desired=v6 --exclude=v6.0.0
 
 # Add a container image on the prod track
 atmos version track add nginx --package=library/nginx --track=prod

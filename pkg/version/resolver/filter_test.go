@@ -11,7 +11,7 @@ func TestSelectLatestPicksHighestSemverRegardlessOfOrder(t *testing.T) {
 		{Version: "v1.10.3", Digest: "abc123"},
 		{Version: "v1.9.9"},
 	}
-	selected, err := Select(candidates, "latest", nil, nil)
+	selected, err := Select(candidates, "latest", nil, nil, false)
 	if err != nil {
 		t.Fatalf("Select returned error: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestSelectConstraintPicksHighestMatch(t *testing.T) {
 		{Version: "v1.10.7"},
 		{Version: "v1.9.9"},
 	}
-	selected, err := Select(candidates, "~1.10", nil, nil)
+	selected, err := Select(candidates, "~1.10", nil, nil, false)
 	if err != nil {
 		t.Fatalf("Select returned error: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestSelectConcreteVersionReturnsMatchingCandidate(t *testing.T) {
 		{Version: "v6"},
 		{Version: "v5", Digest: "sha-v5"},
 	}
-	selected, err := Select(candidates, "v5", nil, nil)
+	selected, err := Select(candidates, "v5", nil, nil, false)
 	if err != nil {
 		t.Fatalf("Select returned error: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestSelectExcludesPrereleasesByDefault(t *testing.T) {
 		{Version: "v1.9.0", Prerelease: true},
 		{Version: "v1.8.0"},
 	}
-	selected, err := Select(candidates, "latest", nil, nil)
+	selected, err := Select(candidates, "latest", nil, nil, false)
 	if err != nil {
 		t.Fatalf("Select returned error: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestSelectExcludesPrereleasesByDefault(t *testing.T) {
 		t.Fatalf("expected v1.8.0 (prereleases excluded), got %q", selected.Version)
 	}
 
-	selected, err = Select(candidates, "latest", []string{"prerelease"}, nil)
+	selected, err = Select(candidates, "latest", nil, nil, true)
 	if err != nil {
 		t.Fatalf("Select returned error: %v", err)
 	}
@@ -76,26 +76,65 @@ func TestSelectExcludesPrereleasesByDefault(t *testing.T) {
 	}
 }
 
-func TestSelectHonorsIgnorePatterns(t *testing.T) {
+func TestSelectHonorsExcludePatterns(t *testing.T) {
 	candidates := []Candidate{
 		{Version: "v1.10.0"},
 		{Version: "v1.9.0"},
 	}
-	selected, err := Select(candidates, "latest", nil, []string{"v1.10.*"})
+	selected, err := Select(candidates, "latest", nil, []string{"v1.10.*"}, false)
 	if err != nil {
 		t.Fatalf("Select returned error: %v", err)
 	}
 	if selected.Version != "v1.9.0" {
-		t.Fatalf("expected glob-ignored v1.10.0 to be skipped, got %q", selected.Version)
+		t.Fatalf("expected glob-excluded v1.10.0 to be skipped, got %q", selected.Version)
+	}
+}
+
+func TestSelectHonorsExactExcludePattern(t *testing.T) {
+	candidates := []Candidate{
+		{Version: "v1.10.0"},
+		{Version: "v1.9.0"},
+	}
+	selected, err := Select(candidates, "latest", nil, []string{"v1.10.0"}, false)
+	if err != nil {
+		t.Fatalf("Select returned error: %v", err)
+	}
+	if selected.Version != "v1.9.0" {
+		t.Fatalf("expected exact-excluded v1.10.0 to be skipped, got %q", selected.Version)
+	}
+}
+
+func TestSelectHonorsIncludePatterns(t *testing.T) {
+	candidates := []Candidate{
+		{Version: "v2.0.0"},
+		{Version: "v1.10.0"},
+		{Version: "v1.9.0"},
+	}
+	selected, err := Select(candidates, "latest", []string{"v1.*"}, nil, false)
+	if err != nil {
+		t.Fatalf("Select returned error: %v", err)
+	}
+	if selected.Version != "v1.10.0" {
+		t.Fatalf("expected include to restrict latest to v1.10.0, got %q", selected.Version)
+	}
+}
+
+func TestSelectConcreteVersionFailsWhenExcluded(t *testing.T) {
+	candidates := []Candidate{
+		{Version: "v1.10.0"},
+		{Version: "v1.9.0"},
+	}
+	if _, err := Select(candidates, "v1.10.0", nil, []string{"v1.10.0"}, false); !errors.Is(err, ErrNoVersionMatch) {
+		t.Fatalf("expected ErrNoVersionMatch for excluded concrete desired, got %v", err)
 	}
 }
 
 func TestSelectNoMatchReturnsError(t *testing.T) {
 	candidates := []Candidate{{Version: "v1.0.0"}}
-	if _, err := Select(candidates, "~9.9", nil, nil); !errors.Is(err, ErrNoVersionMatch) {
+	if _, err := Select(candidates, "~9.9", nil, nil, false); !errors.Is(err, ErrNoVersionMatch) {
 		t.Fatalf("expected ErrNoVersionMatch, got %v", err)
 	}
-	if _, err := Select(nil, "latest", nil, nil); !errors.Is(err, ErrNoVersionMatch) {
+	if _, err := Select(nil, "latest", nil, nil, false); !errors.Is(err, ErrNoVersionMatch) {
 		t.Fatalf("expected ErrNoVersionMatch for empty candidates, got %v", err)
 	}
 }
@@ -105,7 +144,7 @@ func TestSelectLatestFallsBackToDatasourceOrderForNonSemver(t *testing.T) {
 		{Version: "buster"},
 		{Version: "bullseye"},
 	}
-	selected, err := Select(candidates, "latest", nil, nil)
+	selected, err := Select(candidates, "latest", nil, nil, false)
 	if err != nil {
 		t.Fatalf("Select returned error: %v", err)
 	}

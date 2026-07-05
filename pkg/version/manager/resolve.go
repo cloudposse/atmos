@@ -22,7 +22,7 @@ var (
 // ResolveTarget returns the desired concrete version for an entry. Concrete
 // desired versions pass through unchanged; "latest" and SemVer constraints are
 // resolved against the entry's datasource via the resolver registry, honoring
-// the entry's allow and ignore rules.
+// the entry's include, exclude, and prerelease rules.
 func ResolveTarget(atmosConfig *schema.AtmosConfiguration, entry *EffectiveEntry) (string, error) {
 	defer perf.Track(atmosConfig, "manager.ResolveTarget")()
 
@@ -97,13 +97,16 @@ func resolverContext(ctx context.Context) (context.Context, context.CancelFunc) 
 // version as-is, or the best datasource candidate for latest/constraints.
 func selectCandidate(ctx context.Context, res resolver.Resolver, req *resolver.Request, entry *EffectiveEntry, concrete bool) (resolver.Candidate, error) {
 	if concrete {
+		if !resolver.AllowsVersion(entry.Desired, entry.Include, entry.Exclude, entry.Prerelease) {
+			return resolver.Candidate{}, fmt.Errorf("%w: %s", ErrNoVersionMatch, entry.Desired)
+		}
 		return resolver.Candidate{Version: entry.Desired}, nil
 	}
 	candidates, err := res.Versions(ctx, req)
 	if err != nil {
 		return resolver.Candidate{}, err
 	}
-	return resolver.Select(candidates, entry.Desired, entry.Allow, entry.Ignore)
+	return resolver.Select(candidates, entry.Desired, entry.Include, entry.Exclude, entry.Prerelease)
 }
 
 // resolverRequest builds a resolver request for an entry, attaching the

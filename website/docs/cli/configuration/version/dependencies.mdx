@@ -33,6 +33,9 @@ version:
       desired: v6
       update:
         pin: sha
+      exclude:
+        - v6.0.0
+      prerelease: false
 
     nginx:
       ecosystem: oci
@@ -64,8 +67,8 @@ version:
   <dt>`group`</dt>
   <dd>Group name used for shared policy and filtered operations.</dd>
 
-  <dt>`update`, `allow`, `ignore`, `labels`</dt>
-  <dd>Entry-level policy. These values override defaults before group policy is applied.</dd>
+  <dt>`update`, `include`, `exclude`, `prerelease`, `labels`</dt>
+  <dd>Entry-level policy. Candidate filters on an entry are the most specific policy scope.</dd>
 </dl>
 
 ## Example
@@ -73,4 +76,5 @@ version:
 ```shell
 atmos version track add checkout --package=actions/checkout --desired=v6 --pin=sha
 atmos version track add opentofu --desired="~1.10"
+atmos version track set checkout --exclude=v6.0.0 --prerelease=false
 ```

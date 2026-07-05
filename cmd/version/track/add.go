@@ -38,6 +38,9 @@ var trackAddCmd = &cobra.Command{
 		desired, _ := cmd.Flags().GetString("desired")
 		group, _ := cmd.Flags().GetString("group")
 		pin, _ := cmd.Flags().GetString("pin")
+		include, _ := cmd.Flags().GetStringSlice("include")
+		exclude, _ := cmd.Flags().GetStringSlice("exclude")
+		prerelease, _ := cmd.Flags().GetBool("prerelease")
 
 		entry := &schema.VersionEntry{
 			Ecosystem:  ecosystem,
@@ -47,6 +50,11 @@ var trackAddCmd = &cobra.Command{
 			Desired:    desired,
 			Group:      group,
 			Update:     schema.VersionUpdatePolicy{Pin: pin},
+			Include:    include,
+			Exclude:    exclude,
+		}
+		if cmd.Flags().Changed("prerelease") {
+			entry.Prerelease = &prerelease
 		}
 		track := manager.EffectiveTrack(atmosConfig, trackFromArgs(cmd, nil))
 		file, err := manager.AddEntry(atmosConfig, track, name, entry)
@@ -66,6 +74,9 @@ func init() {
 		flags.WithStringFlag("desired", "", "latest", "Desired version: concrete, SemVer constraint, or latest"),
 		flags.WithStringFlag("group", "", "", "Version group name"),
 		flags.WithStringFlag("pin", "", "", "Pin policy: digest (alias: sha) locks and renders the immutable identifier"),
+		flags.WithStringSliceFlag("include", "", nil, "Candidate version patterns to include (repeatable)"),
+		flags.WithStringSliceFlag("exclude", "", nil, "Candidate version patterns to exclude (repeatable)"),
+		flags.WithBoolFlag("prerelease", "", false, "Allow prerelease candidates"),
 	)...)
 	parser.RegisterFlags(trackAddCmd)
 	trackCmd.AddCommand(trackAddCmd)

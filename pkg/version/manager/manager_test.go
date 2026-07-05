@@ -3,6 +3,7 @@ package manager
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -16,8 +17,10 @@ func TestEffectiveEntriesAppliesDefaultsTrackAndGroup(t *testing.T) {
 					Strategy: "patch",
 					Cooldown: "14d",
 				},
-				Allow:  []string{"stable"},
-				Labels: []string{"dependencies"},
+				Include:    []string{"v1.*"},
+				Exclude:    []string{"v1.0.0"},
+				Prerelease: boolPtr(true),
+				Labels:     []string{"dependencies"},
 			},
 			Groups: map[string]schema.VersionGroup{
 				"infrastructure": {
@@ -26,7 +29,10 @@ func TestEffectiveEntriesAppliesDefaultsTrackAndGroup(t *testing.T) {
 					Update: schema.VersionUpdatePolicy{
 						Strategy: "minor",
 					},
-					Labels: []string{"infrastructure"},
+					Include:    []string{"v6.*"},
+					Exclude:    []string{"v6.0.0"},
+					Prerelease: boolPtr(true),
+					Labels:     []string{"infrastructure"},
 				},
 			},
 			Tracks: map[string]schema.VersionTrack{
@@ -35,13 +41,17 @@ func TestEffectiveEntriesAppliesDefaultsTrackAndGroup(t *testing.T) {
 						Update: schema.VersionUpdatePolicy{
 							Cooldown: "30d",
 						},
+						Exclude: []string{"v1.1.0"},
 					},
 					Dependencies: map[string]schema.VersionEntry{
 						"checkout": {
-							Ecosystem: "github/actions",
-							Provider:  "github",
-							Package:   "actions/checkout",
-							Desired:   "v6",
+							Ecosystem:  "github/actions",
+							Provider:   "github",
+							Package:    "actions/checkout",
+							Desired:    "v6",
+							Include:    []string{"v5.*"},
+							Exclude:    []string{"v5.0.0"},
+							Prerelease: boolPtr(false),
 						},
 					},
 				},
@@ -62,6 +72,16 @@ func TestEffectiveEntriesAppliesDefaultsTrackAndGroup(t *testing.T) {
 	}
 	if checkout.Update.Cooldown != "30d" {
 		t.Fatalf("expected track cooldown, got %q", checkout.Update.Cooldown)
+	}
+	if len(checkout.Include) != 1 || checkout.Include[0] != "v5.*" {
+		t.Fatalf("expected entry include to win, got %#v", checkout.Include)
+	}
+	expectedExclude := []string{"v1.0.0", "v1.1.0", "v6.0.0", "v5.0.0"}
+	if strings.Join(checkout.Exclude, ",") != strings.Join(expectedExclude, ",") {
+		t.Fatalf("expected accumulated excludes %v, got %#v", expectedExclude, checkout.Exclude)
+	}
+	if checkout.Prerelease {
+		t.Fatal("expected entry prerelease=false to override inherited true")
 	}
 	if len(checkout.Labels) != 2 || checkout.Labels[0] != "dependencies" || checkout.Labels[1] != "infrastructure" {
 		t.Fatalf("expected merged labels, got %#v", checkout.Labels)
