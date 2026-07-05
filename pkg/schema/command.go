@@ -6,6 +6,7 @@ package schema
 type Command struct {
 	Name             string `yaml:"name" json:"name" mapstructure:"name"`
 	Description      string `yaml:"description" json:"description" mapstructure:"description"`
+	Default          string `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
 	WorkingDirectory string `yaml:"working_directory,omitempty" json:"working_directory,omitempty" mapstructure:"working_directory"`
 	// Dependencies specifies external tool dependencies that must be installed before running this command.
 	Dependencies    *Dependencies          `yaml:"dependencies,omitempty" json:"dependencies,omitempty" mapstructure:"dependencies"`
