@@ -802,6 +802,12 @@ type CIConfig struct {
 	Templates   CITemplatesConfig   `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Cache       CICacheConfig       `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
 	Groups      CIGroupsConfig      `yaml:"groups,omitempty" json:"groups,omitempty" mapstructure:"groups"`
+	// AllowUnsafeForkExecution opts out of the fork-checkout safety gate that
+	// refuses to clone untrusted fork content under pull_request_target and
+	// workflow_run events. Leave false unless a fork-facing workflow has a
+	// documented reason to bypass it. See
+	// docs/prd/native-ci/framework/fork-pr-trust-gate.md.
+	AllowUnsafeForkExecution bool `yaml:"allow_unsafe_fork_execution,omitempty" json:"allow_unsafe_fork_execution,omitempty" mapstructure:"allow_unsafe_fork_execution"`
 }
 
 // CIGroupsConfig configures collapsible CI log groups. On GitHub Actions this

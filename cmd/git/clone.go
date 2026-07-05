@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -74,21 +75,24 @@ type cloneOptions struct {
 	SingleBranch bool
 	Submodules   bool
 	All          bool
+	// AllowUnsafeFork opts out of the fork-checkout safety gate.
+	AllowUnsafeFork bool
 	// ExtraArgs are native git arguments captured after "--" on the command line.
 	ExtraArgs []string
 }
 
 func parseCloneFlags(v *viper.Viper) *cloneOptions {
 	return &cloneOptions{
-		RepoURI:      v.GetString(viperKey(cloneViperPrefix, flagRepoURI)),
-		Branch:       v.GetString(viperKey(cloneViperPrefix, flagBranch)),
-		Remote:       v.GetString(viperKey(cloneViperPrefix, flagRemote)),
-		Workdir:      v.GetString(viperKey(cloneViperPrefix, flagWorkdir)),
-		Depth:        v.GetInt(viperKey(cloneViperPrefix, flagDepth)),
-		Filter:       v.GetString(viperKey(cloneViperPrefix, flagFilter)),
-		SingleBranch: v.GetBool(viperKey(cloneViperPrefix, flagSingleBr)),
-		Submodules:   v.GetBool(viperKey(cloneViperPrefix, flagSubmodules)),
-		All:          v.GetBool(viperKey(cloneViperPrefix, flagAll)),
+		RepoURI:         v.GetString(viperKey(cloneViperPrefix, flagRepoURI)),
+		Branch:          v.GetString(viperKey(cloneViperPrefix, flagBranch)),
+		Remote:          v.GetString(viperKey(cloneViperPrefix, flagRemote)),
+		Workdir:         v.GetString(viperKey(cloneViperPrefix, flagWorkdir)),
+		Depth:           v.GetInt(viperKey(cloneViperPrefix, flagDepth)),
+		Filter:          v.GetString(viperKey(cloneViperPrefix, flagFilter)),
+		SingleBranch:    v.GetBool(viperKey(cloneViperPrefix, flagSingleBr)),
+		Submodules:      v.GetBool(viperKey(cloneViperPrefix, flagSubmodules)),
+		All:             v.GetBool(viperKey(cloneViperPrefix, flagAll)),
+		AllowUnsafeFork: v.GetBool(viperKey(cloneViperPrefix, flagAllowUnsafeFork)),
 	}
 }
 
@@ -157,6 +161,13 @@ func runCloneNamed(ctx context.Context, name string, opts *cloneOptions) error {
 	depth := resolveIntPrecedence(opts.Depth, resolved.Clone.Depth)
 	filter := resolveStringPrecedence(opts.Filter, resolved.Clone.Filter)
 
+	// Named repositories are admin-declared in atmos.yaml, so a cross-repo URI
+	// is trusted; pass an empty URI so only a pull-request ref override (e.g.
+	// --branch refs/pull/N/merge) trips the gate, not the configured URI.
+	if err := guardForkCheckout(branch, "", opts); err != nil {
+		return err
+	}
+
 	cloneOpts := &atmosgit.CloneOptions{
 		RepoContext: atmosgit.RepoContext{
 			Workdir: workdir,
@@ -190,6 +201,10 @@ func runCloneURI(ctx context.Context, rawURI string, opts *cloneOptions) error {
 	// Flag precedence: flag > query param > 0/empty.
 	branch := resolveStringPrecedence(opts.Branch, parsed.Branch)
 	depth := resolveIntPrecedence(opts.Depth, parsed.Depth)
+
+	if err := guardForkCheckout(branch, parsed.URI, opts); err != nil {
+		return err
+	}
 
 	// Ad hoc clones go to <cwd>/<repo-name>; --workdir overrides.
 	workdir, err := resolveAdHocWorkdir(opts.Workdir, parsed.RepoName)
@@ -292,6 +307,11 @@ func runCICheckout(ctx context.Context, providerName string, ciCtx *ci.Context, 
 	}
 	repository := ciCtx.Repository
 
+	branch := resolveStringPrecedence(opts.Branch, ciCtx.Ref)
+	if err := guardForkCheckout(branch, ciCtx.CloneURL, opts); err != nil {
+		return err
+	}
+
 	workdir, err := resolveCIWorkdir(opts.Workdir)
 	if err != nil {
 		return err
@@ -311,7 +331,7 @@ func runCICheckout(ctx context.Context, providerName string, ciCtx *ci.Context, 
 		RepoContext: atmosgit.RepoContext{
 			Workdir: workdir,
 			Remote:  resolveStringPrecedence(opts.Remote, atmosgit.DefaultRemote),
-			Branch:  resolveStringPrecedence(opts.Branch, ciCtx.Ref),
+			Branch:  branch,
 			Env:     env,
 		},
 		URI:       ciCtx.CloneURL,
@@ -325,6 +345,62 @@ func runCICheckout(ctx context.Context, providerName string, ciCtx *ci.Context, 
 
 	ui.Successf("Checked out CI repository %q into %s (provider: %s).", repository, workdir, providerName)
 	return nil
+}
+
+// allowUnsafeFork reports whether the operator has opted out of the
+// fork-checkout safety gate via flag/env (opts) or atmos.yaml config.
+func allowUnsafeFork(opts *cloneOptions) bool {
+	if opts.AllowUnsafeFork {
+		return true
+	}
+	return atmosConfigPtr != nil && atmosConfigPtr.CI.AllowUnsafeForkExecution
+}
+
+// guardForkCheckout refuses to clone untrusted fork content under an elevated
+// CI event (GitHub's pull_request_target / workflow_run) unless the operator
+// has opted in. It mirrors actions/checkout v7's fork-PR refusal. The ref
+// argument is the resolved ref to be checked out and uri is the clone target.
+// Returns nil when no CI provider is active, the event is not elevated, the
+// clone is trusted, or the opt-in is set.
+// See docs/prd/native-ci/framework/fork-pr-trust-gate.md.
+func guardForkCheckout(ref, uri string, opts *cloneOptions) error {
+	defer perf.Track(nil, "git.guardForkCheckout")()
+
+	if allowUnsafeFork(opts) {
+		return nil
+	}
+
+	detected := ci.Detect()
+	if detected == nil {
+		return nil
+	}
+
+	ciCtx, err := detected.Context()
+	if err != nil {
+		// Fail closed: a detected CI provider whose trust context cannot be
+		// read leaves the event-elevation unknown, so refuse rather than risk
+		// cloning fork content with the job's secrets.
+		log.Debug("Fork-checkout gate: unable to read CI context, failing closed", "error", err)
+		return errUtils.Build(errUtils.ErrUnsafeForkCheckout).
+			WithCause(err).
+			WithExplanation("unable to read CI context for fork-checkout safety evaluation").
+			WithHint("Fix CI metadata detection, or pass --allow-unsafe-fork only if this workflow is intentionally trusted.").
+			WithExitCode(2).
+			Err()
+	}
+
+	verdict := ci.EvaluateForkCheckout(ciCtx, ci.CloneRequest{Ref: ref, URI: uri})
+	if !verdict.Untrusted {
+		return nil
+	}
+
+	return errUtils.Build(errUtils.ErrUnsafeForkCheckout).
+		WithExplanation(verdict.Reason).
+		WithHintf("The %q event runs with this repository's secrets; cloning fork content here is a privilege-escalation risk.", ciCtx.EventName).
+		WithHint("Prefer a 'pull_request' workflow (fork secrets are withheld) for clone-and-plan of fork contributions.").
+		WithHint("To override deliberately, pass --allow-unsafe-fork, set ATMOS_ALLOW_UNSAFE_FORK_EXECUTION=true, or set ci.allow_unsafe_fork_execution: true.").
+		WithExitCode(2).
+		Err()
 }
 
 // resolveCIWorkdir returns workdirFlag if non-empty, otherwise the process cwd.

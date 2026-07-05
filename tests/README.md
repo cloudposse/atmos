@@ -9,11 +9,11 @@ Smoke tests are implemented to verify the basic functionality and expected behav
 ```bash
 # Run quick tests only (skip long-running tests >2s)
 go test -short ./...
-make test-short
+atmos test short
 
 # Run all tests including long-running ones (will skip if preconditions not met)
 go test ./...
-make testacc
+atmos test acc
 
 # Run with verbose output to see skips
 go test -v ./...
@@ -29,7 +29,7 @@ Run quick tests only, skipping tests that take more than 2 seconds:
 
 ```bash
 go test -short ./...
-make test-short
+atmos test short
 ```
 
 Long tests include:
@@ -40,7 +40,7 @@ Long tests include:
 To run all tests including long ones:
 ```bash
 go test ./...
-make testacc
+atmos test acc
 ```
 
 ## Heavy Integration Tests

@@ -53,6 +53,17 @@ ci:
 
     **Default:** Auto-detected
   </dd>
+
+  <dt>`ci.allow_unsafe_fork_execution`</dt>
+  <dd>
+    Opt out of the fork-PR safety gate that makes [`atmos git clone`](/cli/commands/git/clone#fork-pr-safety-gate)
+    refuse to clone untrusted fork content under the elevated `pull_request_target` and
+    `workflow_run` events. **Unsafe** — leave disabled unless a fork-facing workflow has a
+    documented reason to bypass it. Equivalent to the `--allow-unsafe-fork` flag and
+    `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` environment variable.
+
+    **Default:** `false`
+  </dd>
 </dl>
 
 ## Sections
@@ -139,6 +150,7 @@ Native Helm and Helmfile commands use native CI for job summaries only.
 | `ATMOS_CI` | Explicitly enable CI mode (`true`/`false`) |
 | `ATMOS_CI_COMMENTS_ENABLED` | Override `ci.comments.enabled` (`true`/`false`) |
 | `ATMOS_CI_GROUPS_MODE` | Override `ci.groups.mode` (`auto`/`invocation`/`off`) |
+| `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` | Opt out of the [`atmos git clone` fork-PR safety gate](/cli/commands/git/clone#fork-pr-safety-gate) (`true`/`false`, **unsafe**) |
 | `CI` | Standard CI environment variable (set by most CI providers) |
 | `GITHUB_ACTIONS` | Set by GitHub Actions runner |
 | `GITHUB_TOKEN` / `GH_TOKEN` | GitHub API token (required for status checks and PR comments) |
