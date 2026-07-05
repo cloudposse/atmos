@@ -182,7 +182,7 @@ func (e *Executor) prepareSteps(params *WorkflowParams, result *ExecutionResult)
 // runSteps executes each workflow step in order, updating result. It returns the
 // first failing step's error (if any) and marks progress as done.
 func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep, progressRenderer *ProgressRenderer, result *ExecutionResult) error {
-	conditionContext := workflowConditionContext()
+	conditionStatus := schema.ConditionPredicateSuccess
 	for stepIdx := range steps {
 		step := &steps[stepIdx]
 		if err := schema.ValidateStepCondition(step.When); err != nil {
@@ -190,7 +190,15 @@ func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep,
 			result.Error = err
 			return err
 		}
-		if !step.When.EvaluateWithImplicitSuccess(conditionContext) {
+		conditionContext := workflowConditionContext(params.Workflow, params.WorkflowDefinition, step, params.Opts.CommandLineStack)
+		conditionContext.Status = conditionStatus
+		runs, err := step.When.EvaluateWithImplicitSuccessE(conditionContext)
+		if err != nil {
+			result.Success = false
+			result.Error = err
+			return err
+		}
+		if !runs {
 			log.Debug("Skipping workflow step, `when` condition did not match", "step", step.Name)
 			result.Steps = append(result.Steps, StepResult{
 				StepName: step.Name,
@@ -213,7 +221,6 @@ func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep,
 			result.Success = false
 			result.Error = stepResult.Error
 			result.ResumeCommand = e.buildResumeCommand(params.Workflow, params.WorkflowPath, step.Name, stepResult.finalStack, params.AtmosConfig)
-			conditionContext.Status = schema.ConditionPredicateFailure
 			if progressRenderer.IsEnabled() {
 				progressRenderer.Done()
 			}
@@ -229,10 +236,51 @@ func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep,
 	return nil
 }
 
-func workflowConditionContext() schema.ConditionContext {
+func workflowConditionContext(workflow string, workflowDefinition *schema.WorkflowDefinition, step *schema.WorkflowStep, commandLineStack string) schema.ConditionContext {
+	return BuildConditionContext(workflow, workflowDefinition, step, commandLineStack, nil)
+}
+
+// BuildConditionContext constructs the runtime facts exposed to workflow `when`
+// conditions. Step stack overrides workflow stack, command-line stack overrides
+// both, and step env overlays workflow/base env.
+func BuildConditionContext(workflow string, workflowDefinition *schema.WorkflowDefinition, step *schema.WorkflowStep, commandLineStack string, baseEnv map[string]string) schema.ConditionContext {
+	defer perf.Track(nil, "workflow.BuildConditionContext")()
+
+	stack := ""
+	stepName := ""
+	env := baseEnv
+	if workflowDefinition != nil {
+		stack = workflowDefinition.Stack
+		if env == nil {
+			env = workflowDefinition.Env
+		}
+	}
+	if step != nil {
+		if step.Stack != "" {
+			stack = step.Stack
+		}
+		stepName = step.Name
+		if len(step.Env) > 0 {
+			merged := make(map[string]string, len(env))
+			for key, value := range env {
+				merged[key] = value
+			}
+			for key, value := range step.Env {
+				merged[key] = value
+			}
+			env = merged
+		}
+	}
+	if commandLineStack != "" {
+		stack = commandLineStack
+	}
 	return schema.ConditionContext{
-		CI:     telemetry.IsCI(),
-		Status: schema.ConditionPredicateSuccess,
+		CI:       telemetry.IsCI(),
+		Status:   schema.ConditionPredicateSuccess,
+		Stack:    stack,
+		Workflow: workflow,
+		Step:     stepName,
+		Env:      env,
 	}
 }
 

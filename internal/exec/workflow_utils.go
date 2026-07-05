@@ -366,8 +366,6 @@ func ExecuteWorkflow(
 		return err
 	}
 
-	conditionContext := workflowConditionContext()
-
 	// Create auth manager if any runnable step has an identity or if command-line identity is specified.
 	// We check once upfront to avoid repeated initialization.
 	var authManager auth.AuthManager
@@ -378,7 +376,11 @@ func ExecuteWorkflow(
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			return err
 		}
-		if !step.When.EvaluateWithImplicitSuccess(conditionContext) {
+		runs, err := step.When.EvaluateWithImplicitSuccessE(workflowPkg.BuildConditionContext(workflow, workflowDefinition, step, commandLineStack, workflowDefinition.Env))
+		if err != nil {
+			return err
+		}
+		if !runs {
 			continue
 		}
 		if commandLineIdentity != "" || strings.TrimSpace(step.Identity) != "" {
@@ -421,8 +423,15 @@ func ExecuteWorkflow(
 	showRenderer.RenderHeaderIfNeeded(workflowDefinition, workflow, flags)
 
 	var workflowErr error
+	conditionStatus := schema.ConditionPredicateSuccess
 	for stepIdx, step := range steps {
-		if !step.When.EvaluateWithImplicitSuccess(conditionContext) {
+		conditionContext := workflowPkg.BuildConditionContext(workflow, workflowDefinition, &step, commandLineStack, workflowDefinition.Env)
+		conditionContext.Status = conditionStatus
+		runs, err := step.When.EvaluateWithImplicitSuccessE(conditionContext)
+		if err != nil {
+			return err
+		}
+		if !runs {
 			log.Debug("Skipping workflow step, `when` condition did not match", "step", step.Name)
 			continue
 		}
@@ -480,7 +489,7 @@ func ExecuteWorkflow(
 			} else {
 				workflowErr = errors.Join(workflowErr, err)
 			}
-			conditionContext.Status = schema.ConditionPredicateFailure
+			conditionStatus = schema.ConditionPredicateFailure
 			continue
 		}
 		workDir := workflowPkg.CalculateWorkingDirectory(workflowDefinition, &step, atmosConfig.BasePath)
@@ -750,7 +759,7 @@ func ExecuteWorkflow(
 			} else {
 				workflowErr = errors.Join(workflowErr, stepErr)
 			}
-			conditionContext.Status = schema.ConditionPredicateFailure
+			conditionStatus = schema.ConditionPredicateFailure
 		}
 	}
 
@@ -760,13 +769,6 @@ func ExecuteWorkflow(
 	}
 
 	return workflowErr
-}
-
-func workflowConditionContext() schema.ConditionContext {
-	return schema.ConditionContext{
-		CI:     telemetry.IsCI(),
-		Status: schema.ConditionPredicateSuccess,
-	}
 }
 
 // stepExecutorState holds persistent state for extended step execution within a workflow.

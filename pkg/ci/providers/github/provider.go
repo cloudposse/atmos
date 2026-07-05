@@ -124,6 +124,11 @@ func (p *Provider) Context() (*provider.Context, error) {
 		ctx.PullRequest = parsePRInfo()
 	}
 
+	// pull_request_target and workflow_run run with the base repository's
+	// secrets even though the requested checkout may target untrusted fork
+	// content. Mark them elevated so the fork-checkout safety gate engages.
+	ctx.ElevatedEvent = ctx.EventName == "pull_request_target" || ctx.EventName == "workflow_run"
+
 	return ctx, nil
 }
 

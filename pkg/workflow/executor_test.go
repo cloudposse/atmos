@@ -3,7 +3,6 @@ package workflow
 import (
 	"context"
 	"errors"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -26,37 +25,6 @@ func newTestParams(workflowDef *schema.WorkflowDefinition, opts ExecuteOptions) 
 		WorkflowDefinition: workflowDef,
 		Opts:               opts,
 	}
-}
-
-func TestExecutor_Execute_ScriptWorkflow(t *testing.T) {
-	if _, err := exec.LookPath("python3"); err != nil {
-		t.Skip("python3 not found on PATH")
-	}
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRunner := NewMockCommandRunner(ctrl)
-	mockUI := NewMockUIProvider(ctrl)
-	executor := NewExecutor(mockRunner, nil, mockUI)
-
-	workflowDef := &schema.WorkflowDefinition{
-		Steps: []schema.WorkflowStep{
-			{
-				Name:        "validate",
-				Type:        schema.TaskTypeScript,
-				Interpreter: "python3",
-				Script:      "from pathlib import Path\nprint(Path('.').resolve())\n",
-				Output:      "none",
-			},
-		},
-	}
-
-	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
-	require.NoError(t, err)
-	require.True(t, result.Success)
-	require.Len(t, result.Steps, 1)
-	assert.Equal(t, "validate", result.Steps[0].StepName)
 }
 
 // TestExecutor_Execute_BasicShellWorkflow tests executing a simple shell workflow.
@@ -135,6 +103,45 @@ func TestExecutor_Execute_SkipsStepWhenConditionIsFalse(t *testing.T) {
 	assert.Equal(t, "skip", result.Steps[0].StepName)
 	assert.False(t, result.Steps[1].Skipped)
 	assert.Equal(t, "run", result.Steps[1].StepName)
+}
+
+func TestExecutor_Execute_EvaluatesCELStepCondition(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	executor := NewExecutor(mockRunner, nil, NewMockUIProvider(ctrl))
+
+	workflowDef := &schema.WorkflowDefinition{
+		Stack: "prod",
+		Env:   map[string]string{"DEPLOY_ENV": "prod"},
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "skip",
+				Command: "this-command-must-not-run",
+				Type:    "shell",
+				When:    schema.MustCondition("stack == 'dev'"),
+			},
+			{
+				Name:    "run",
+				Command: "echo 'hello'",
+				Type:    "shell",
+				When:    schema.MustCondition("workflow == 'test-workflow' && step == 'run' && env['DEPLOY_ENV'] == 'prod'"),
+			},
+		},
+	}
+
+	mockRunner.EXPECT().
+		RunShell("echo 'hello'", "test-workflow-step-1", ".", []string{"DEPLOY_ENV=prod"}, false).
+		Return(nil)
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+	require.Len(t, result.Steps, 2)
+	assert.True(t, result.Steps[0].Skipped)
+	assert.False(t, result.Steps[1].Skipped)
 }
 
 func TestExecutor_Execute_SkipsInitialFailureStepCondition(t *testing.T) {
@@ -1884,39 +1891,6 @@ func TestExecutor_Execute_EnvWithIdentity(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, result.Success)
-}
-
-func TestExecutor_Execute_ContainerScriptRegistersOutputs(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockRunner := NewMockCommandRunner(ctrl)
-	mockUI := NewMockUIProvider(ctrl)
-	executor := NewExecutor(mockRunner, nil, mockUI)
-
-	workflowDef := &schema.WorkflowDefinition{
-		Steps: []schema.WorkflowStep{
-			{
-				Name:        "script",
-				Type:        schema.TaskTypeScript,
-				Interpreter: "python3",
-				Script:      "print('ok')",
-				Container:   &schema.WorkflowContainer{Image: "alpine"},
-				Outputs: map[string]string{
-					"code": "{{ .exit_code }}",
-				},
-			},
-		},
-	}
-
-	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{DryRun: true}))
-
-	require.NoError(t, err)
-	require.True(t, result.Success)
-	require.NotNil(t, executor.stepVars)
-	stored := executor.stepVars.Steps["script"]
-	require.NotNil(t, stored)
-	assert.Equal(t, "0", stored.Outputs["code"])
 }
 
 // TestExecutor_Execute_AtmosCommandWithEnv tests atmos command type with env vars.

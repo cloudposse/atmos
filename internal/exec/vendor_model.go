@@ -8,13 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
@@ -22,8 +19,11 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -38,6 +38,9 @@ const (
 	pkgTypeRemote      pkgType = iota
 	pkgTypeOci
 	pkgTypeLocal
+
+	// Package status format string for per-package status messages.
+	pkgStatusFmt = "%s %s"
 )
 
 var (
@@ -269,7 +272,7 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 	if msg.err != nil {
 		errMsg = fmt.Sprintf("Failed to vendor %s: error : %s", pkg.name, msg.err)
 		if !m.isTTY {
-			log.Error(errMsg)
+			ui.Error(errMsg)
 		}
 		mark = xMark
 		m.failedPkg++
@@ -282,7 +285,7 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 	if m.index >= len(m.packages)-1 {
 		// Everything's been installed. We're done!
 		m.done = true
-		m.logNonNTYFinalStatus(pkg, &mark)
+		m.logNonNTYFinalStatus(pkg, msg.err != nil)
 		version := grayColor.Render(version)
 		return m, tea.Sequence(
 			tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),
@@ -290,7 +293,11 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 		)
 	}
 	if !m.isTTY {
-		log.Info(mark, "package", pkg.name, "version", version)
+		if msg.err != nil {
+			ui.Errorf(pkgStatusFmt, pkg.name, version)
+		} else {
+			ui.Successf(pkgStatusFmt, pkg.name, version)
+		}
 	}
 	m.index++
 	// Update progress bar
@@ -304,7 +311,7 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 	)
 }
 
-func (m *modelVendor) logNonNTYFinalStatus(pkg pkgVendor, mark *lipgloss.Style) {
+func (m *modelVendor) logNonNTYFinalStatus(pkg pkgVendor, failed bool) {
 	if m.isTTY {
 		return
 	}
@@ -313,16 +320,21 @@ func (m *modelVendor) logNonNTYFinalStatus(pkg pkgVendor, mark *lipgloss.Style) 
 	if pkg.version != "" {
 		version = fmt.Sprintf("(%s)", pkg.version)
 	}
-	log.Info(mark, "package", pkg.name, "version", version)
+
+	if failed {
+		ui.Errorf(pkgStatusFmt, pkg.name, version)
+	} else {
+		ui.Successf(pkgStatusFmt, pkg.name, version)
+	}
 
 	if m.dryRun {
-		log.Info("Done! Dry run completed. No components vendored")
+		ui.Info("Done! Dry run completed. No components vendored")
 	}
 
 	if m.failedPkg > 0 {
-		log.Info("Vendored components", "success", len(m.packages)-m.failedPkg, "failed", m.failedPkg)
+		ui.Errorf("Vendored components (success: %d, failed: %d)", len(m.packages)-m.failedPkg, m.failedPkg)
 	} else {
-		log.Info("Vendored components", "success", len(m.packages))
+		ui.Successf("Vendored components (success: %d)", len(m.packages))
 	}
 }
 

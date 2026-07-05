@@ -3,13 +3,16 @@ package config
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/viper"
 	"go.yaml.in/yaml/v3"
+	legacyyaml "gopkg.in/yaml.v3"
 
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -479,9 +482,11 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 // decodeNodeWithYamlFunctions decodes a YAML node into plain Go values while
 // evaluating Atmos YAML functions on scalar nodes. It is used by config paths
 // that must read raw YAML directly instead of Viper's normalized settings.
-//
-//nolint:gocognit,revive // YAML AST decoding is necessarily branch-heavy by node kind.
 func decodeNodeWithYamlFunctions(node *yaml.Node) (any, error) {
+	return decodeNodeWithYamlFunctionsForFile(node, "")
+}
+
+func decodeNodeWithYamlFunctionsForFile(node *yaml.Node, sourceFile string) (any, error) {
 	if node == nil {
 		return nil, nil
 	}
@@ -491,45 +496,104 @@ func decodeNodeWithYamlFunctions(node *yaml.Node) (any, error) {
 		if len(node.Content) == 0 {
 			return nil, nil
 		}
-		return decodeNodeWithYamlFunctions(node.Content[0])
+		return decodeNodeWithYamlFunctionsForFile(node.Content[0], sourceFile)
 	case yaml.MappingNode:
-		result := make(map[string]interface{}, len(node.Content)/2)
-		for i := 0; i < len(node.Content); i += 2 {
-			keyNode := node.Content[i]
-			valueNode := node.Content[i+1]
-			value, err := decodeNodeWithYamlFunctions(valueNode)
-			if err != nil {
-				return nil, err
-			}
-			result[keyNode.Value] = value
-		}
-		return result, nil
+		return decodeMappingNodeWithYamlFunctions(node, sourceFile)
 	case yaml.SequenceNode:
-		result := make([]interface{}, 0, len(node.Content))
-		for _, child := range node.Content {
-			value, err := decodeNodeWithYamlFunctions(child)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, value)
-		}
-		return result, nil
+		return decodeSequenceNodeWithYamlFunctions(node, sourceFile)
 	case yaml.ScalarNode:
-		if hasCustomTag(node.Tag) {
-			return processScalarNodeValue(node)
-		}
-		var value any
-		if err := node.Decode(&value); err != nil {
-			return nil, err
-		}
-		return value, nil
+		return decodeScalarNodeWithYamlFunctions(node, sourceFile)
 	default:
-		var value any
-		if err := node.Decode(&value); err != nil {
+		return decodePlainYamlNode(node)
+	}
+}
+
+func decodeMappingNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any, error) {
+	result := make(map[string]interface{}, len(node.Content)/2)
+	for i := 0; i < len(node.Content); i += 2 {
+		keyNode := node.Content[i]
+		valueNode := node.Content[i+1]
+		value, err := decodeNodeWithYamlFunctionsForFile(valueNode, sourceFile)
+		if err != nil {
 			return nil, err
 		}
-		return value, nil
+		result[keyNode.Value] = value
 	}
+	return result, nil
+}
+
+func decodeSequenceNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any, error) {
+	result := make([]interface{}, 0, len(node.Content))
+	for _, child := range node.Content {
+		value, err := decodeNodeWithYamlFunctionsForFile(child, sourceFile)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, value)
+	}
+	return result, nil
+}
+
+func decodeScalarNodeWithYamlFunctions(node *yaml.Node, sourceFile string) (any, error) {
+	if hasCustomTag(node.Tag) {
+		return processScalarNodeValueForFile(node, sourceFile)
+	}
+	return decodePlainYamlNode(node)
+}
+
+func decodePlainYamlNode(node *yaml.Node) (any, error) {
+	var value any
+	if err := node.Decode(&value); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+func processScalarNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+	if sourceFile == "" || !isIncludeTag(node.Tag) {
+		return processScalarNodeValue(node)
+	}
+
+	return processIncludeNodeValueForFile(node, sourceFile)
+}
+
+func isIncludeTag(tag string) bool {
+	return tag == u.AtmosYamlFuncInclude || tag == u.AtmosYamlFuncIncludeRaw
+}
+
+func processIncludeNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+	resolved := legacyyaml.Node{
+		Kind:  legacyyaml.ScalarNode,
+		Tag:   node.Tag,
+		Value: node.Value,
+	}
+	basePath := includeBasePathForSourceFile(sourceFile)
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:         basePath,
+		BasePathAbsolute: basePath,
+	}
+	var err error
+	if node.Tag == u.AtmosYamlFuncIncludeRaw {
+		err = u.ProcessIncludeRawTag(atmosConfig, &resolved, node.Value, sourceFile)
+	} else {
+		err = u.ProcessIncludeTag(atmosConfig, &resolved, node.Value, sourceFile)
+	}
+	if err != nil {
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+	}
+	var value any
+	if err := resolved.Decode(&value); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+func includeBasePathForSourceFile(sourceFile string) string {
+	dir := filepath.Dir(sourceFile)
+	if base := filepath.Base(dir); base == ".atmos.d" || base == "atmos.d" {
+		return filepath.Dir(dir)
+	}
+	return dir
 }
 
 // processScalarNode processes a YAML scalar node tagged with an Atmos custom function and stores the resolved value in v.

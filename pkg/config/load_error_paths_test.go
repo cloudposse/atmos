@@ -242,7 +242,7 @@ components:
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	err := processConfigImportsAndReapply(tempDir, v, invalidYAML)
+	_, err := processConfigImportsAndReapply(tempDir, v, invalidYAML)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "parse main config")
 	assert.ErrorIs(t, err, errUtils.ErrMergeConfiguration)
@@ -265,7 +265,7 @@ components:
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	err := processConfigImportsAndReapply(tempDir, v, invalidYAML)
+	_, err := processConfigImportsAndReapply(tempDir, v, invalidYAML)
 	// The error handling path exists, but may not always trigger with this input
 	// This tests that the function handles errors from MergeConfig
 	if err != nil {

@@ -51,7 +51,11 @@ const (
 
 var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 
-var ErrResolvedConfigFileNotFound = errors.New("resolved config file not found")
+var (
+	ErrResolvedConfigFileNotFound    = errors.New("resolved config file not found")
+	errUnsupportedCommandEnvValue    = errors.New("unsupported command env value")
+	errUnsupportedCommandEnvValueKey = errors.New("unsupported command env value key")
+)
 
 // osGetwd wraps os.Getwd, allowing tests to simulate CWD errors.
 var osGetwd = os.Getwd
@@ -383,6 +387,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// for identity names and environment variables.
 	preserveCaseSensitiveMaps(v, &atmosConfig)
 	restoreCaseSensitiveEnvMaps(&atmosConfig)
+	restoreCaseSensitiveCommandEnvMaps(&atmosConfig)
 
 	// Apply git root discovery for default base path.
 	// This enables running Atmos from any subdirectory, similar to Git.
@@ -484,14 +489,6 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "ci.cache.enabled", "ATMOS_CI_CACHE_ENABLED")
 	bindEnv(v, "ci.cache.auto", "ATMOS_CI_CACHE_AUTO")
 
-	// Cast recording settings (env overrides for schema fields with no CLI
-	// flag; recording pipelines set dimensions without editing atmos.yaml).
-	bindEnv(v, "cast.recording.enabled", "ATMOS_CAST_RECORDING_ENABLED")
-	bindEnv(v, "cast.recording.width", "ATMOS_CAST_RECORDING_WIDTH")
-	bindEnv(v, "cast.recording.height", "ATMOS_CAST_RECORDING_HEIGHT")
-	bindEnv(v, "cast.recording.input", "ATMOS_CAST_RECORDING_INPUT")
-	bindEnv(v, "cast.recording.base_path", "ATMOS_CAST_RECORDING_BASE_PATH")
-
 	// Profiler settings
 	bindEnv(v, "profiler.enabled", "ATMOS_PROFILER_ENABLED")
 	bindEnv(v, "profiler.host", "ATMOS_PROFILER_HOST")
@@ -531,11 +528,6 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.terminal.pager", "false") // String value to match the field type
 	v.SetDefault("settings.terminal.speed", 0.0)
 	v.SetDefault("settings.experimental", "warn") // Experimental feature handling: silence, disable, warn, error
-	v.SetDefault("cast.recording.enabled", false)
-	v.SetDefault("cast.recording.base_path", "")
-	v.SetDefault("cast.recording.input", false)
-	v.SetDefault("cast.recording.width", 120)
-	v.SetDefault("cast.recording.height", 36)
 	// Note: force_color is ENV-only (ATMOS_FORCE_COLOR), no config default
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 
@@ -1024,7 +1016,7 @@ func readConfigFileContent(configFilePath string) ([]byte, error) {
 }
 
 // processConfigImportsAndReapply processes imports and re-applies the original config for proper precedence.
-func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content []byte) error {
+func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content []byte) (interface{}, error) {
 	configDir := path
 	configFileForIncludes := path
 	if info, err := os.Stat(path); err == nil && !info.IsDir() { //nolint:gosec // path is an Atmos config path selected by the loader or tests.
@@ -1035,39 +1027,33 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 
 	content, err := resolveDotenvMergeIncludeKeys(configFileForIncludes, content)
 	if err != nil {
-		return fmt.Errorf("%w: parse main config: %w", errUtils.ErrMergeConfiguration, err)
+		return nil, fmt.Errorf("%w: parse main config: %w", errUtils.ErrMergeConfiguration, err)
 	}
 
-	// Parse the main config to get its commands separately.
-	mainViper := viper.New()
-	mainViper.SetConfigType(yamlType)
-	if err = mainViper.ReadConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("%w: parse main config: %w", errUtils.ErrMergeConfiguration, err)
+	// Parse the main config to get its commands separately. Command entries can
+	// contain YAML functions such as !include, so decode them through the
+	// YAML-function path instead of raw Viper settings.
+	mainCommands, err := extractCommandsWithYamlFunctionsForFile(content, configFileForIncludes)
+	if err != nil {
+		return nil, fmt.Errorf("%w: parse main config commands: %w", errUtils.ErrMergeConfiguration, err)
 	}
-	if err = preprocessAtmosYamlFunc(content, mainViper); err != nil {
-		return fmt.Errorf("%w: preprocess main config: %w", errUtils.ErrMergeConfiguration, err)
-	}
-	mainCommands := normalizeCommandArray(mainViper.Get(commandsKey))
 
 	// Process default imports (e.g., .atmos.d) first.
 	// These don't need the main config to be loaded.
 	if err := mergeDefaultImports(configDir, tempViper); err != nil {
 		log.Debug("error process default imports", "path", configDir, "error", err)
 	}
-	defaultCommands := normalizeCommandArray(tempViper.Get(commandsKey))
+	defaultCommands := tempViper.Get(commandsKey)
 
 	// Now load the main config temporarily to process explicit imports.
 	// We need this because the import paths are defined in the main config.
 	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("%w: merge main config: %w", errUtils.ErrMergeConfiguration, err)
+		return nil, fmt.Errorf("%w: merge main config: %w", errUtils.ErrMergeConfiguration, err)
 	}
 
 	// Clear commands before processing imports to collect only imported commands.
-	// The override must be an empty slice, not nil: Viper's Get falls through a nil
-	// override to the raw config map, which still holds the un-preprocessed commands
-	// (with YAML function tags like !include stripped to plain strings) merged by
-	// MergeConfig. Falling through would let those raw commands be captured as
-	// "imported" and silently override the resolved default-import commands below.
+	// Viper keeps raw config values underneath overrides, so use an empty list
+	// instead of nil; nil allows the raw command array to surface again.
 	tempViper.Set(commandsKey, []interface{}{})
 
 	// Process explicit imports.
@@ -1077,13 +1063,13 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	}
 
 	// Get imported commands (without main commands).
-	importedCommands := normalizeCommandArray(tempViper.Get(commandsKey))
+	importedCommands := tempViper.Get(commandsKey)
 
 	// Re-apply this config file's content after processing its imports.
 	// This ensures proper precedence: each config file's own settings override
 	// the settings from any files it imports (directly or transitively).
 	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("%w: re-applying main config after processing imports: %w", errUtils.ErrMergeConfiguration, err)
+		return nil, fmt.Errorf("%w: re-applying main config after processing imports: %w", errUtils.ErrMergeConfiguration, err)
 	}
 
 	// Now merge commands in the correct order with proper override behavior:
@@ -1109,7 +1095,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 
 	tempViper.Set(commandsKey, finalCommands)
 
-	return nil
+	return finalCommands, nil
 }
 
 // marshalViperToYAML marshals a Viper instance's settings to YAML.
@@ -1154,8 +1140,10 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	}
 
 	// Process imports if requested
+	var processedCommands interface{}
 	if processImports {
-		if err := processConfigImportsAndReapply(configFilePath, tempViper, content); err != nil {
+		processedCommands, err = processConfigImportsAndReapply(configFilePath, tempViper, content)
+		if err != nil {
 			return err
 		}
 	}
@@ -1163,6 +1151,9 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	// Process YAML functions
 	if err := preprocessAtmosYamlFunc(content, tempViper); err != nil {
 		return errors.Join(errUtils.ErrPreprocessYAMLFunctions, err)
+	}
+	if processedCommands == nil {
+		processedCommands = tempViper.Get(commandsKey)
 	}
 
 	// Marshal to YAML
@@ -1172,7 +1163,13 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	}
 
 	// Merge into the main Viper instance
-	return mergeYAMLIntoViper(v, configFilePath, yamlBytes)
+	if err := mergeYAMLIntoViper(v, configFilePath, yamlBytes); err != nil {
+		return err
+	}
+	if processedCommands != nil {
+		v.Set(commandsKey, processedCommands)
+	}
+	return nil
 }
 
 // shouldExcludePathForTesting checks if a directory path should be excluded from .atmos.d loading during testing.
@@ -1453,20 +1450,15 @@ func mergeConfigFile(
 	trackMergedConfigFile(path)
 
 	// Save existing commands before merge.
-	existingCommands := normalizeCommandArray(v.Get(commandsKey))
+	existingCommands := v.Get(commandsKey)
 
-	// Parse the new file to get its commands.
-	// We need to do this because viper.MergeConfig doesn't overwrite arrays.
-	tempViper := viper.New()
-	tempViper.SetConfigType(yamlType)
-	tempViper.SetConfigFile(path)
-	if err = tempViper.ReadConfig(bytes.NewReader(content)); err != nil {
+	// Extract commands separately because viper.MergeConfig doesn't overwrite
+	// arrays. Commands are decoded through the YAML-function path so nested
+	// !include/!exec values are resolved before the command tree is merged.
+	newCommands, err := extractCommandsWithYamlFunctionsForFile(content, path)
+	if err != nil {
 		return err
 	}
-	if err = preprocessAtmosYamlFunc(content, tempViper); err != nil {
-		return err
-	}
-	newCommands := normalizeCommandArray(tempViper.Get(commandsKey))
 
 	// Do the normal merge for all other settings (non-array values).
 	// This preserves viper's merge behavior for nested maps.
@@ -1475,20 +1467,66 @@ func mergeConfigFile(
 		return err
 	}
 
-	err = preprocessAtmosYamlFunc(content, v)
+	preprocessContent, err := yamlContentWithoutTopLevelKey(content, commandsKey)
+	if err != nil {
+		return err
+	}
+	err = preprocessAtmosYamlFunc(preprocessContent, v)
 	if err != nil {
 		return err
 	}
 
-	// Now handle command merging manually after YAML functions have been processed.
-	// Processing can set the commands key when command entries contain tags like !include.
-	// Re-applying the merged command tree preserves sibling commands across files.
+	// Now handle command merging manually.
+	// Merge commands: when duplicates exist, the file being processed (new) takes precedence.
+	// This ensures local/main config can override imported/remote commands.
 	if existingCommands != nil || newCommands != nil {
+		// Second parameter wins on duplicates, so new commands override existing
 		merged := mergeCommandArrays(existingCommands, newCommands)
 		v.Set(commandsKey, merged)
 	}
 
 	return nil
+}
+
+func yamlContentWithoutTopLevelKey(content []byte, key string) ([]byte, error) {
+	var root yaml.Node
+	if err := yaml.Unmarshal(content, &root); err != nil {
+		return nil, err
+	}
+	if len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
+		return content, nil
+	}
+
+	mapping := root.Content[0]
+	for i := 0; i < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value != key {
+			continue
+		}
+		mapping.Content = append(mapping.Content[:i], mapping.Content[i+2:]...)
+		return yaml.Marshal(&root)
+	}
+
+	return content, nil
+}
+
+func extractCommandsWithYamlFunctionsForFile(content []byte, sourceFile string) (interface{}, error) {
+	var root goyaml.Node
+	if err := goyaml.Unmarshal(content, &root); err != nil {
+		return nil, err
+	}
+	if len(root.Content) == 0 || root.Content[0].Kind != goyaml.MappingNode {
+		return nil, nil
+	}
+
+	for i := 0; i < len(root.Content[0].Content); i += 2 {
+		keyNode := root.Content[0].Content[i]
+		if keyNode.Value != commandsKey {
+			continue
+		}
+		return decodeNodeWithYamlFunctionsForFile(root.Content[0].Content[i+1], sourceFile)
+	}
+
+	return nil, nil
 }
 
 func mergeConfigFileWithImports(path string, v *viper.Viper) error {
@@ -1650,12 +1688,7 @@ func mergeNormalizedCommandArrays(first, second []interface{}) []interface{} {
 	// Helper function to process a command list.
 	processCommands := func(commands []interface{}) {
 		for _, cmd := range commands {
-			cmdMap, ok := cmd.(map[string]interface{})
-			if !ok {
-				continue
-			}
-
-			name, ok := cmdMap["name"].(string)
+			name, ok := commandName(cmd)
 			if !ok {
 				continue
 			}
@@ -1716,6 +1749,21 @@ func mergeCommandDefinitions(first, second interface{}) interface{} {
 		merged[key] = value
 	}
 	return merged
+}
+
+func commandName(command interface{}) (string, bool) {
+	switch cmd := command.(type) {
+	case map[string]interface{}:
+		name, ok := cmd["name"].(string)
+		return name, ok && name != ""
+	case map[interface{}]interface{}:
+		name, ok := cmd["name"].(string)
+		return name, ok && name != ""
+	case schema.Command:
+		return cmd.Name, cmd.Name != ""
+	default:
+		return "", false
+	}
 }
 
 // loadEmbeddedConfig loads the embedded atmos.yaml configuration.
@@ -1834,11 +1882,112 @@ func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
+		commandEnvMapDecodeHook(),
 		schema.ConditionDecodeHook(),
-		schema.CommandEnvDecodeHook(),
 		schema.WorkflowStepDecodeHook(),
 		schema.TasksDecodeHook(),
 	)
+}
+
+func commandEnvMapDecodeHook() mapstructure.DecodeHookFuncType {
+	commandEnvSliceType := reflect.TypeOf([]schema.CommandEnv{})
+
+	return func(from reflect.Type, to reflect.Type, data any) (any, error) {
+		if to != commandEnvSliceType || from.Kind() != reflect.Map {
+			return data, nil
+		}
+
+		envMap, ok := commandEnvMapFromAny(data)
+		if !ok {
+			return data, nil
+		}
+
+		keys := make([]string, 0, len(envMap))
+		for key := range envMap {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+
+		result := make([]schema.CommandEnv, 0, len(keys))
+		for _, key := range keys {
+			envVar, err := commandEnvFromMapEntry(key, envMap[key])
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, envVar)
+		}
+		return result, nil
+	}
+}
+
+func commandEnvMapFromAny(data any) (map[string]any, bool) {
+	mapValue := reflect.ValueOf(data)
+	if mapValue.Kind() != reflect.Map {
+		return nil, false
+	}
+
+	envMap := make(map[string]any, mapValue.Len())
+	for _, mapKey := range mapValue.MapKeys() {
+		key, ok := mapKey.Interface().(string)
+		if !ok {
+			return nil, false
+		}
+		envMap[key] = mapValue.MapIndex(mapKey).Interface()
+	}
+	return envMap, true
+}
+
+func commandEnvFromMapEntry(key string, value any) (schema.CommandEnv, error) {
+	envVar := schema.CommandEnv{Key: key}
+	switch v := value.(type) {
+	case nil:
+		return envVar, nil
+	case string:
+		envVar.Value = v
+		return envVar, nil
+	case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+		envVar.Value = fmt.Sprint(v)
+		return envVar, nil
+	case map[string]any:
+		return commandEnvFromValueMap(envVar, v), nil
+	case map[string]string:
+		valueMap := make(map[string]any, len(v))
+		for mapKey, mapValue := range v {
+			valueMap[mapKey] = mapValue
+		}
+		return commandEnvFromValueMap(envVar, valueMap), nil
+	case map[any]any:
+		valueMap := make(map[string]any, len(v))
+		for mapKey, mapValue := range v {
+			stringKey, ok := mapKey.(string)
+			if !ok {
+				return envVar, fmt.Errorf("%w for %q: %T", errUnsupportedCommandEnvValueKey, key, mapKey)
+			}
+			valueMap[stringKey] = mapValue
+		}
+		return commandEnvFromValueMap(envVar, valueMap), nil
+	default:
+		return envVar, fmt.Errorf("%w for %q: %T", errUnsupportedCommandEnvValue, key, value)
+	}
+}
+
+func commandEnvFromValueMap(envVar schema.CommandEnv, value map[string]any) schema.CommandEnv {
+	if rawValue, ok := value["value"]; ok && rawValue != nil {
+		envVar.Value = fmt.Sprint(rawValue)
+	}
+	if rawValueCommand, ok := commandEnvValueCommand(value); ok && rawValueCommand != nil {
+		envVar.ValueCommand = fmt.Sprint(rawValueCommand)
+	}
+	return envVar
+}
+
+func commandEnvValueCommand(value map[string]any) (any, bool) {
+	for _, key := range []string{"valueCommand", "valuecommand", "value_command"} {
+		if raw, ok := value[key]; ok {
+			return raw, true
+		}
+	}
+	return nil, false
 }
 
 // preserveCaseSensitiveMaps extracts original case for registered paths from raw YAML files.
@@ -1921,24 +2070,28 @@ func restoreCaseSensitiveEnvMaps(atmosConfig *schema.AtmosConfiguration) {
 	if caseSensitiveEnv := atmosConfig.GetCaseSensitiveMap("templates.settings.env"); len(caseSensitiveEnv) > 0 {
 		atmosConfig.Templates.Settings.Env = caseSensitiveEnv
 	}
-	restoreCommandEnvCase(atmosConfig.Commands, atmosConfig.CaseMaps)
+	restoreCaseSensitiveCommandEnvMaps(atmosConfig)
 }
 
-func restoreCommandEnvCase(commands []schema.Command, caseMaps *casemap.CaseMaps) {
-	if len(commands) == 0 || caseMaps == nil {
+func restoreCaseSensitiveCommandEnvMaps(atmosConfig *schema.AtmosConfiguration) {
+	if atmosConfig.CaseMaps == nil {
 		return
 	}
-	envCaseMap := caseMaps.Get(envKey)
+	envCaseMap := atmosConfig.CaseMaps.Get(envKey)
 	if len(envCaseMap) == 0 {
 		return
 	}
+	restoreCaseSensitiveCommandEnvKeys(atmosConfig.Commands, envCaseMap)
+}
+
+func restoreCaseSensitiveCommandEnvKeys(commands []schema.Command, envCaseMap casemap.CaseMap) {
 	for i := range commands {
 		for j := range commands[i].Env {
-			if original, ok := envCaseMap[strings.ToLower(commands[i].Env[j].Key)]; ok {
-				commands[i].Env[j].Key = original
+			if key, ok := envCaseMap[strings.ToLower(commands[i].Env[j].Key)]; ok {
+				commands[i].Env[j].Key = key
 			}
 		}
-		restoreCommandEnvCase(commands[i].Commands, caseMaps)
+		restoreCaseSensitiveCommandEnvKeys(commands[i].Commands, envCaseMap)
 	}
 }
 
@@ -1952,81 +2105,6 @@ func mergeDotenvIncludeCaseMaps(configFile string, rawYAML []byte, mergedCaseMap
 	for _, path := range []string{envKey, "templates.settings.env"} {
 		node := findYAMLPathNode(&root, strings.Split(path, yamlPathDelimiter))
 		mergeDotenvIncludeCaseMapFromNode(configFile, path, node, mergedCaseMaps)
-	}
-
-	// Also walk the whole tree for nested `env:` blocks (custom-command and
-	// step-level) whose value is produced by the !include YAML function. Keys
-	// sourced from an included file never appear in the raw config text, so
-	// mergeRecursiveEnvCaseKeys cannot recover their original case.
-	mergeNestedEnvIncludeCaseKeys(configFile, &root, mergedCaseMaps)
-}
-
-// mergeNestedEnvIncludeCaseKeys walks the raw YAML node tree and, for every `env:`
-// key whose value carries the !include tag, resolves the include and folds the
-// resolved map's keys into the shared "env" case map.
-func mergeNestedEnvIncludeCaseKeys(configFile string, node *yaml.Node, mergedCaseMaps *casemap.CaseMaps) {
-	if node == nil {
-		return
-	}
-	switch node.Kind {
-	case yaml.DocumentNode, yaml.SequenceNode:
-		for _, child := range node.Content {
-			mergeNestedEnvIncludeCaseKeys(configFile, child, mergedCaseMaps)
-		}
-	case yaml.MappingNode:
-		for i := 0; i+1 < len(node.Content); i += 2 {
-			keyNode := node.Content[i]
-			valueNode := node.Content[i+1]
-			if strings.EqualFold(keyNode.Value, envKey) && isDotenvIncludeNode(valueNode) {
-				mergeEnvIncludeCaseKeys(configFile, valueNode, mergedCaseMaps)
-			}
-			mergeNestedEnvIncludeCaseKeys(configFile, valueNode, mergedCaseMaps)
-		}
-	}
-}
-
-// mergeEnvIncludeCaseKeys resolves a single `env: !include ...` node and folds the
-// resolved env keys into the shared "env" case map. Dotenv targets are read directly
-// (relative to the config file, matching the top-level dotenv include behavior);
-// other targets are resolved with the same include evaluation preprocessing uses,
-// so the recovered keys match the values that actually land in the config.
-func mergeEnvIncludeCaseKeys(configFile string, node *yaml.Node, mergedCaseMaps *casemap.CaseMaps) {
-	if _, isDotenv := parseDotenvIncludeFile(node.Value); isDotenv {
-		mergeDotenvIncludeCaseMap(configFile, envKey, node.Value, mergedCaseMaps)
-		return
-	}
-
-	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
-	data, err := processIncludeTag(node.Tag, node.Value, strFunc)
-	if err != nil {
-		log.Trace("Skipping env include case map extraction", "file", configFile, "include", node.Value, "error", err)
-		return
-	}
-	for _, key := range mapKeysAsStrings(data) {
-		mergeCaseMapKey(envKey, key, mergedCaseMaps)
-	}
-}
-
-// mapKeysAsStrings returns the string keys of a decoded YAML mapping value.
-// Non-mapping values and non-string keys yield no entries.
-func mapKeysAsStrings(data any) []string {
-	switch m := data.(type) {
-	case map[string]any:
-		keys := make([]string, 0, len(m))
-		for key := range m {
-			keys = append(keys, key)
-		}
-		return keys
-	case map[any]any:
-		keys := make([]string, 0, len(m))
-		for key := range m {
-			if s, ok := key.(string); ok {
-				keys = append(keys, s)
-			}
-		}
-		return keys
-	default:
-		return nil
 	}
 }
 

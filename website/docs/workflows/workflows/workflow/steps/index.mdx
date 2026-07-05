@@ -53,6 +53,9 @@ In this example, `spin` is the value of `steps[].type`. The fields `title`, `com
   <dt>`identity`</dt>
   <dd>Step-level auth identity. See [identity](/workflows/steps/identity).</dd>
 
+  <dt>`when`</dt>
+  <dd>Optional condition that decides whether the step runs. Built-in predicate keywords are evaluated first; other non-empty scalar strings are evaluated as CEL.</dd>
+
   <dt>`env`</dt>
   <dd>Step-level environment variables. See [env](/workflows/steps/env).</dd>
 
@@ -76,6 +79,40 @@ In this example, `spin` is the value of `steps[].type`. The fields `title`, `com
 </dl>
 
 Type-specific fields are documented with [type](/workflows/steps/type).
+
+## Conditional Execution
+
+Use `when` to skip a workflow step unless a condition is true. Bare predicate keywords keep their existing behavior:
+
+```yaml
+steps:
+  - name: plan
+    type: atmos
+    command: terraform plan vpc
+    when: ci
+```
+
+Any other non-empty scalar string is evaluated as a CEL expression:
+
+```yaml
+steps:
+  - name: prod-ci-check
+    type: shell
+    command: ./scripts/check-prod.sh
+    when: stack == "prod" && ci
+```
+
+Use the explicit `!cel` tag when the value is intended to be CEL or could look ambiguous:
+
+```yaml
+steps:
+  - name: prod-ci-check
+    type: shell
+    command: ./scripts/check-prod.sh
+    when: !cel 'stack == "prod" && ci'
+```
+
+Workflow step CEL expressions can use `ci`, `status`, `stack`, `component`, `workflow`, `step`, and `env`. Predicate keywords win over CEL for bare strings, so `when: ci` uses the built-in predicate while `when: !cel 'ci'` evaluates CEL. `status` starts as `success` and becomes `failure` after a previous step fails.
 
 ## Cleanup Steps
 

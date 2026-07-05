@@ -52,7 +52,9 @@ Structured custom command steps support the same `when` condition syntax as
 workflow steps. Omitted `when` means the step runs while the command status is
 still `success`. After a step fails, Atmos keeps evaluating later structured
 steps so `when: failure` and `when: always` steps can run. A false condition
-skips the step without failing the command.
+skips the step without failing the command. Atmos evaluates built-in predicate
+keywords first; any other scalar string is evaluated as a CEL expression. Use
+`!cel` when you want to make that explicit.
 
 ```yaml
 commands:
@@ -66,6 +68,9 @@ commands:
         command: ./scripts/local-summary.sh
         when:
           not: ci
+      - type: shell
+        command: ./scripts/prod-only.sh
+        when: !cel 'stack == "prod" && ci'
 ```
 
 String shorthand steps remain plain shell commands and always run. Use the
@@ -118,6 +123,11 @@ Step predicates are:
   <dt>`failure`</dt>
   <dd>Run only after an earlier step has failed.</dd>
 </dl>
+
+CEL expressions can read `ci`, `status`, `stack`, `component`, `workflow`,
+`step`, and `env`. For workflow and custom command steps, `status` is the
+current command status: `success` before any step fails and `failure` after an
+earlier step failed.
 
 ## Step types
 

@@ -59,6 +59,7 @@ const currentDirPath = "."
 const (
 	customCommandKeyCommand  = "command"
 	customCommandKeyIdentity = "identity"
+	annotationDefaultChain   = "atmos.custom.default.chain"
 )
 
 var errCustomCommandFlagNotRegistered = errors.New("flag is not registered")
@@ -161,7 +162,14 @@ func processCommandAliases(
 	for k, v := range aliases {
 		alias := strings.TrimSpace(k)
 
-		if _, exist := existingTopLevelCommands[alias]; !exist && topLevel {
+		if existing, exist := existingTopLevelCommands[alias]; exist && topLevel {
+			if !isCustomCommand(existing) {
+				continue
+			}
+			parentCommand.RemoveCommand(existing)
+		}
+
+		if topLevel {
 			aliasCmd := strings.TrimSpace(v)
 			aliasFor := fmt.Sprintf("alias for `%s`", aliasCmd)
 
@@ -236,6 +244,10 @@ func preCustomCommand(
 	commandConfig *schema.Command,
 ) {
 	var sb strings.Builder
+
+	if shouldRunDefaultSubcommand(args, commandConfig) {
+		return
+	}
 
 	// checking for zero arguments in config
 	if len(commandConfig.Arguments) == 0 {
@@ -318,6 +330,89 @@ func preCustomCommand(
 	}
 }
 
+func shouldRunDefaultSubcommand(args []string, commandConfig *schema.Command) bool {
+	return len(args) == 0 &&
+		strings.TrimSpace(commandConfig.Default) != "" &&
+		len(commandConfig.Commands) > 0
+}
+
+func runDefaultSubcommand(cmd *cobra.Command, commandConfig *schema.Command) bool {
+	defaultName := strings.TrimSpace(commandConfig.Default)
+	if defaultName == "" {
+		return false
+	}
+
+	chain := defaultSubcommandChain(cmd)
+	if Contains(chain, commandConfig.Name) {
+		err := errUtils.Build(errUtils.ErrInvalidConfig).
+			WithExplanationf("Custom command %q has a recursive default subcommand chain", commandConfig.Name).
+			WithHint("Remove the self-reference or cycle from the command's `default` settings").
+			WithContext(customCommandKeyCommand, commandConfig.Name).
+			WithContext("default", defaultName).
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "Invalid Command", "https://atmos.tools/cli/configuration/commands")
+		return true
+	}
+
+	subcommand := findSubcommand(cmd, defaultName)
+	if subcommand == nil {
+		err := errUtils.Build(errUtils.ErrInvalidConfig).
+			WithExplanationf("Custom command %q declares default subcommand %q, but no matching subcommand exists", commandConfig.Name, defaultName).
+			WithHint("Set `default` to one of the command's configured subcommands").
+			WithContext(customCommandKeyCommand, commandConfig.Name).
+			WithContext("default", defaultName).
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "Invalid Command", "https://atmos.tools/cli/configuration/commands")
+		return true
+	}
+
+	_ = subcommand.InheritedFlags()
+	restoreChain := restoreDefaultSubcommandChain(subcommand, append(chain, commandConfig.Name))
+	defer restoreChain()
+
+	if subcommand.PreRunE != nil {
+		errUtils.CheckErrorPrintAndExit(subcommand.PreRunE(subcommand, nil), "", "")
+	} else if subcommand.PreRun != nil {
+		subcommand.PreRun(subcommand, nil)
+	}
+
+	if subcommand.RunE != nil {
+		errUtils.CheckErrorPrintAndExit(subcommand.RunE(subcommand, nil), "", "")
+	} else if subcommand.Run != nil {
+		subcommand.Run(subcommand, nil)
+	} else if err := subcommand.Help(); err != nil {
+		log.Trace("Failed to display default subcommand help", "error", err, customCommandKeyCommand, subcommand.Name())
+	}
+
+	return true
+}
+
+func defaultSubcommandChain(cmd *cobra.Command) []string {
+	if cmd.Annotations == nil {
+		return nil
+	}
+	raw := strings.TrimSpace(cmd.Annotations[annotationDefaultChain])
+	if raw == "" {
+		return nil
+	}
+	return strings.Split(raw, "\n")
+}
+
+func restoreDefaultSubcommandChain(cmd *cobra.Command, chain []string) func() {
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+	previous, hadPrevious := cmd.Annotations[annotationDefaultChain]
+	cmd.Annotations[annotationDefaultChain] = strings.Join(chain, "\n")
+	return func() {
+		if hadPrevious {
+			cmd.Annotations[annotationDefaultChain] = previous
+		} else {
+			delete(cmd.Annotations, annotationDefaultChain)
+		}
+	}
+}
+
 // findSubcommand returns the existing subcommand of parent with the given name, or nil.
 func findSubcommand(parent *cobra.Command, name string) *cobra.Command {
 	for _, c := range parent.Commands() {
@@ -374,6 +469,9 @@ func createCustomCommand(
 			preCustomCommand(cmd, args, parentCommand, commandConfig)
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+			if len(args) == 0 && runDefaultSubcommand(cmd, commandConfig) {
+				return
+			}
 			executeCustomCommand(*atmosConfig, cmd, args, parentCommand, commandConfig)
 		},
 	}
@@ -640,14 +738,18 @@ func executeCustomCommand(
 		finalArgs = args
 	}
 
-	conditionContext := customCommandConditionContext()
+	commandConditionEnv := envpkg.CommandEnvToMap(commandConfig.Env)
 	hasRunnableStep := false
 	for i := range commandConfig.Steps {
 		step := &commandConfig.Steps[i]
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
-		if step.When.EvaluateWithImplicitSuccess(conditionContext) {
+		runs, err := step.When.EvaluateWithImplicitSuccessE(customCommandConditionContext(commandConfig.Name, step, i, commandConditionEnv, schema.ConditionPredicateSuccess))
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+		if runs {
 			hasRunnableStep = true
 			break
 		}
@@ -657,25 +759,11 @@ func executeCustomCommand(
 		return
 	}
 
-	// Resolve and install command dependencies.
-	// First, load tools from .tool-versions (project-wide defaults).
-	// Then merge with command-specific dependencies (command deps override .tool-versions).
+	// Resolve and install dependencies declared by this command.
 	resolver := dependencies.NewResolver(&atmosConfig)
 
-	// Load project-wide tools from .tool-versions.
-	toolVersionsDeps, err := dependencies.LoadToolVersionsDependencies(&atmosConfig)
-	if err != nil {
-		err = errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
-			WithExplanationf("Failed to load .tool-versions for command '%s'", commandConfig.Name).
-			WithHint("Check that .tool-versions file exists and is readable").
-			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
-			Err()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-	}
-
 	// Get command-specific dependencies.
-	commandDeps, err := resolver.ResolveCommandDependencies(commandConfig)
+	deps, err := resolver.ResolveCommandDependencies(commandConfig)
 	if err != nil {
 		err = errUtils.Build(errUtils.ErrDependencyResolution).
 			WithCause(err).
@@ -686,35 +774,24 @@ func executeCustomCommand(
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
-	// Merge: .tool-versions as base, command deps override.
-	deps, err := dependencies.MergeDependencies(toolVersionsDeps, commandDeps)
-	if err != nil {
-		err = errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
-			WithExplanationf("Failed to merge dependencies for command '%s'", commandConfig.Name).
-			WithHint("Check that command dependency versions satisfy constraints from .tool-versions").
-			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
-			Err()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-	}
-
 	if len(deps) > 0 {
-		log.Debug("Installing command dependencies", customCommandKeyCommand, commandConfig.Name, "tools", deps)
 		installer := dependencies.NewInstaller(&atmosConfig)
 		if err := installer.EnsureTools(deps); err != nil {
-			err = errUtils.Build(errUtils.ErrToolInstall).
+			err = errUtils.Build(errUtils.ErrDependencyResolution).
 				WithCause(err).
 				WithExplanationf("Failed to install dependencies for command '%s'", commandConfig.Name).
+				WithHint("Check the command's dependencies section for valid tool specifications").
+				WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
 				Err()
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 
-		// Update PATH to include installed tools.
+		log.Debug("Adding configured command dependencies to PATH", customCommandKeyCommand, commandConfig.Name, "tools", deps)
 		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
 			err = errUtils.Build(errUtils.ErrDependencyResolution).
 				WithCause(err).
 				WithExplanationf("Failed to update PATH for command '%s'", commandConfig.Name).
-				WithHint("Check that toolchain install_path is writable").
+				WithHint("Run `atmos toolchain install` to install tools from .tool-versions").
 				WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
 				Err()
 			errUtils.CheckErrorPrintAndExit(err, "", "")
@@ -760,8 +837,13 @@ func executeCustomCommand(
 
 	// Execute custom command's steps
 	var commandErr error
+	conditionStatus := schema.ConditionPredicateSuccess
 	for i, step := range commandConfig.Steps {
-		if !step.When.EvaluateWithImplicitSuccess(conditionContext) {
+		runs, err := step.When.EvaluateWithImplicitSuccessE(customCommandConditionContext(commandConfig.Name, &step, i, commandConditionEnv, conditionStatus))
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+		if !runs {
 			log.Debug("Skipping custom command step, `when` condition did not match", customCommandKeyCommand, commandConfig.Name, "step", i)
 			continue
 		}
@@ -795,6 +877,8 @@ func executeCustomCommand(
 		// Prepare template data
 		data := map[string]any{
 			"Arguments":    argumentsData,
+			"Cwd":          workDir,
+			"cwd":          workDir,
 			"Flags":        flagsData,
 			"flags":        flagsData,
 			"TrailingArgs": trailingArgs,
@@ -934,6 +1018,18 @@ func executeCustomCommand(
 			}
 		}
 
+		stepEnv := step.Env
+		if atmosConfig.CaseMaps != nil {
+			stepEnv = atmosConfig.CaseMaps.ApplyCase("env", stepEnv)
+		}
+		if len(stepEnv) > 0 {
+			resolvedStepEnv, resolveErr := stepVars.ResolveEnvMap(stepEnv)
+			errUtils.CheckErrorPrintAndExit(resolveErr, "", "")
+			for key, value := range resolvedStepEnv {
+				env = envpkg.UpdateEnvVar(env, key, value)
+			}
+		}
+
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
 		commandToRun, err := stepVars.Resolve(step.Command)
@@ -1044,16 +1140,39 @@ func executeCustomCommand(
 			} else {
 				commandErr = errors.Join(commandErr, err)
 			}
-			conditionContext.Status = schema.ConditionPredicateFailure
+			conditionStatus = schema.ConditionPredicateFailure
 		}
 	}
 	errUtils.CheckErrorPrintAndExit(commandErr, "", "")
 }
 
-func customCommandConditionContext() schema.ConditionContext {
+func customCommandConditionContext(commandName string, step *schema.Task, index int, env map[string]string, status string) schema.ConditionContext {
+	stepName := ""
+	stack := ""
+	stepEnv := env
+	if step != nil {
+		stepName = step.Name
+		stack = step.Stack
+		if len(step.Env) > 0 {
+			stepEnv = make(map[string]string, len(env))
+			for key, value := range env {
+				stepEnv[key] = value
+			}
+			for key, value := range step.Env {
+				stepEnv[key] = value
+			}
+		}
+	}
+	if stepName == "" {
+		stepName = fmt.Sprintf("step-%d", index)
+	}
 	return schema.ConditionContext{
-		CI:     telemetry.IsCI(),
-		Status: schema.ConditionPredicateSuccess,
+		CI:       telemetry.IsCI(),
+		Status:   status,
+		Stack:    stack,
+		Workflow: commandName,
+		Step:     stepName,
+		Env:      stepEnv,
 	}
 }
 

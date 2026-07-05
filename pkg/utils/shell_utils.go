@@ -55,7 +55,12 @@ func ExecuteShellAndReturnOutput(
 	if err != nil {
 		return "", err
 	}
-	env = append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
+	mergedEnv := os.Environ()
+	for _, envVar := range env {
+		key, value, _ := parseEnvVar(envVar)
+		mergedEnv = updateEnvVar(mergedEnv, key, value)
+	}
+	mergedEnv = updateEnvVar(mergedEnv, "ATMOS_SHLVL", strconv.Itoa(newShellLevel))
 
 	log.Debug("Executing", "command", command)
 
@@ -63,7 +68,7 @@ func ExecuteShellAndReturnOutput(
 		return "", nil
 	}
 
-	err = ShellRunner(command, name, dir, env, &b)
+	err = ShellRunner(command, name, dir, mergedEnv, &b)
 	if err != nil {
 		return "", err
 	}
@@ -71,7 +76,26 @@ func ExecuteShellAndReturnOutput(
 	return b.String(), nil
 }
 
-// ShellRunner uses mvdan.cc/sh/v3's parser and interpreter to run a shell script and divert its stdout.
+func parseEnvVar(envVar string) (string, string, bool) {
+	return strings.Cut(envVar, "=")
+}
+
+func updateEnvVar(env []string, key, value string) []string {
+	for i, envVar := range env {
+		existingKey, _, found := parseEnvVar(envVar)
+		if !found {
+			continue
+		}
+		// PATH is compared case-insensitively because Windows may store it as "Path".
+		if existingKey == key || (strings.EqualFold(key, "PATH") && strings.EqualFold(existingKey, key)) {
+			env[i] = existingKey + "=" + value
+			return env
+		}
+	}
+	return append(env, key+"="+value)
+}
+
+// ShellRunner uses mvdan.cc/sh/v3's parser and interpreter to run a shell script and divert its stdout .
 func ShellRunner(command string, name string, dir string, env []string, out io.Writer) error {
 	defer perf.Track(nil, "utils.ShellRunner")()
 
@@ -94,8 +118,8 @@ func ShellRunnerWithWriters(spec *ShellRunnerSpec) error {
 		return err
 	}
 
-	// Use provided environment directly to preserve PATH modifications.
-	// If no environment provided, fall back to current process environment.
+	// Use provided environment directly to preserve PATH modifications
+	// If no environment provided, fall back to current process environment
 	environ := spec.Env
 	if len(environ) == 0 {
 		environ = os.Environ()

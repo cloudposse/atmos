@@ -530,7 +530,9 @@ command steps, plus the hook-specific lifecycle status predicates:
 </dl>
 
 Built-in predicates are `ci`, `local`, `always`, `never`, `success`, and
-`failure`. Compose them with list shorthand, `all`, `any`, and `not`:
+`failure`. Atmos evaluates those keywords first; any other scalar string is a
+CEL expression. Use `!cel` when you want to make that explicit. Compose
+predicates and CEL expressions with list shorthand, `all`, `any`, and `not`:
 
 ```yaml
 hooks:
@@ -555,11 +557,18 @@ hooks:
     command: ./scripts/local-report.sh
     when:
       not: ci
+
+  prod-failure-summary:
+    kind: command
+    events: [after.terraform.apply]
+    command: ./scripts/write-prod-failure-summary.sh
+    when: !cel 'stack == "prod" && status == "failure"'
 ```
 
 Condition filtering also applies during hook preflight. For example,
 `when: ci` hooks are skipped outside CI before Atmos validates or installs the
-hook's tools.
+hook's tools. Hook CEL expressions can read `ci`, `status`, `stack`,
+`component`, `hook`, `event`, and `env`.
 
 The outcome is available to the step both as **template context** and as
 **environment variables**, alongside the component and stack — so a hook can

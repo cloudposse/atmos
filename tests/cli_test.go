@@ -708,7 +708,7 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 func validateAtmosBinary(repoRoot string) (string, string) {
 	binaryPath, err := exec.LookPath("atmos")
 	if err != nil {
-		return "", fmt.Sprintf("Atmos binary not found in PATH: %s. Run 'make build' to build the binary.", os.Getenv("PATH"))
+		return "", fmt.Sprintf("Atmos binary not found in PATH: %s. Run 'atmos build' to build the binary.", os.Getenv("PATH"))
 	}
 
 	rel, err := filepath.Rel(repoRoot, binaryPath)
