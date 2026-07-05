@@ -98,6 +98,12 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 	// Test the actual Playwright driver installation.
 	t.Log("Starting Playwright driver download (this may take 1-2 minutes)...")
 
+	// Pre-seed the driver from the npm registry and nodejs.org, exactly as the
+	// SAML provider does before invoking saml2aws: playwright-go's own driver
+	// download hits a retired CDN and 404s, so the seeded driver must make
+	// playwright.Install skip that path.
+	require.NoError(t, ensurePlaywrightDriver(), "Playwright driver pre-seed should succeed")
+
 	runOptions := playwright.RunOptions{
 		SkipInstallBrowsers: false,
 		Browsers:            []string{"chromium"}, // Only download Chromium to save time.
