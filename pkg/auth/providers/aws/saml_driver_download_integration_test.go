@@ -1,11 +1,15 @@
 package aws
 
 import (
+	"context"
+	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/playwright-community/playwright-go"
 	"github.com/stretchr/testify/assert"
@@ -98,6 +102,8 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 		SkipInstallBrowsers: false,
 		Browsers:            []string{"chromium"}, // Only download Chromium to save time.
 	}
+
+	skipIfPlaywrightDriverUnavailable(t, &runOptions)
 
 	err = playwright.Install(&runOptions)
 	require.NoError(t, err, "Playwright driver installation should succeed")
@@ -212,6 +218,50 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 	assert.False(t, shouldDownloadAuto, "shouldDownloadBrowser should return false when drivers exist and not explicitly configured")
 
 	t.Log("All driver detection checks passed")
+}
+
+// skipIfPlaywrightDriverUnavailable skips the test when the Playwright driver artifact pinned by
+// playwright-go is missing from the upstream CDN. Individual version+platform artifacts can
+// disappear upstream (e.g. playwright-1.57.0-linux.zip vanished in July 2026 while every other
+// version and platform stayed available); that is an upstream outage, not an Atmos regression,
+// so the test skips instead of failing. Genuine installation bugs still fail the test because
+// this pre-flight only checks that the artifact exists.
+func skipIfPlaywrightDriverUnavailable(t *testing.T, runOptions *playwright.RunOptions) {
+	t.Helper()
+
+	driver, err := playwright.NewDriver(runOptions)
+	require.NoError(t, err, "should be able to construct the Playwright driver")
+
+	// Mirror the platform suffix mapping from playwright-go's getDriverURLs.
+	var driverPlatform string
+	switch {
+	case runtime.GOOS == "windows":
+		driverPlatform = "win32_x64"
+	case runtime.GOOS == "darwin" && runtime.GOARCH == "arm64":
+		driverPlatform = "mac-arm64"
+	case runtime.GOOS == "darwin":
+		driverPlatform = "mac"
+	case runtime.GOOS == "linux" && runtime.GOARCH == "arm64":
+		driverPlatform = "linux-arm64"
+	default:
+		driverPlatform = "linux"
+	}
+
+	url := fmt.Sprintf("https://cdn.playwright.dev/builds/driver/playwright-%s-%s.zip", driver.Version, driverPlatform)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+	require.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Skipf("Skipping: cannot reach Playwright CDN (%s): %v", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Skipf("Skipping: Playwright driver artifact unavailable upstream (%s returned %d)", url, resp.StatusCode)
+	}
 }
 
 // TestPlaywrightDriverDownload_WithSAML2AWS validates that saml2aws actually uses LoginDetails.DownloadBrowser.

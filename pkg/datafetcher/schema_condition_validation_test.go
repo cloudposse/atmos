@@ -20,6 +20,8 @@ func TestManifestSchema_WorkflowWhenConditionForms(t *testing.T) {
 
 	validConditions := map[string]any{
 		"scalar":     "ci",
+		"cel":        "ci && stack == 'prod'",
+		"cel-tag":    "!cel ci && status == 'success'",
 		"list":       []any{"ci", "success"},
 		"all":        map[string]any{"all": []any{"ci", "success"}},
 		"all-scalar": map[string]any{"all": "ci"},
@@ -34,12 +36,8 @@ func TestManifestSchema_WorkflowWhenConditionForms(t *testing.T) {
 			})
 		}
 
-		t.Run(schemaName+"/rejects unknown predicate", func(t *testing.T) {
-			assertSchemaInvalid(t, schemaData, workflowManifestWithWhen("expr"))
-		})
-
-		t.Run(schemaName+"/rejects failure predicate", func(t *testing.T) {
-			assertSchemaInvalid(t, schemaData, workflowManifestWithWhen("failure"))
+		t.Run(schemaName+"/accepts failure scalar for runtime validation", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, workflowManifestWithWhen("failure"))
 		})
 	}
 }
@@ -58,6 +56,8 @@ func TestManifestSchema_HookWhenConditionForms(t *testing.T) {
 		"failure":    "failure",
 		"always":     "always",
 		"ci":         "ci",
+		"cel":        "status == 'failure' || ci",
+		"cel-tag":    "!cel status == 'failure' || ci",
 		"ci-always":  []any{"ci", "always"},
 		"all-scalar": map[string]any{"all": "ci"},
 		"compound":   map[string]any{"all": []any{"ci", map[string]any{"not": "never"}}},
@@ -70,8 +70,8 @@ func TestManifestSchema_HookWhenConditionForms(t *testing.T) {
 			})
 		}
 
-		t.Run(schemaName+"/rejects unknown predicate", func(t *testing.T) {
-			assertSchemaInvalid(t, schemaData, hookManifestWithWhen("expr"))
+		t.Run(schemaName+"/accepts unknown scalar as CEL", func(t *testing.T) {
+			assertSchemaValid(t, schemaData, hookManifestWithWhen("expr"))
 		})
 	}
 }
