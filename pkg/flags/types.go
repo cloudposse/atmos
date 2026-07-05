@@ -271,12 +271,13 @@ func (f *IntFlag) GetCompletionFunc() func(*cobra.Command, []string, string) ([]
 //
 //	--config file1.yaml,file2.yaml
 type StringSliceFlag struct {
-	Name        string
-	Shorthand   string
-	Default     []string
-	Description string
-	Required    bool
-	EnvVars     []string // Environment variables to bind.
+	Name           string
+	Shorthand      string
+	Default        []string
+	Description    string
+	Required       bool
+	EnvVars        []string // Environment variables to bind.
+	CompletionFunc func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective)
 }
 
 // GetName implements Flag.
@@ -332,7 +333,7 @@ func (f *StringSliceFlag) GetEnvVars() []string {
 func (f *StringSliceFlag) GetCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	defer perf.Track(nil, "flags.StringSliceFlag.GetCompletionFunc")()
 
-	return nil // StringSlice flags don't use custom completion.
+	return f.CompletionFunc
 }
 
 // positionalArgsConfig stores positional argument configuration.
