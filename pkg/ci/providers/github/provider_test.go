@@ -295,3 +295,29 @@ func TestProviderContextCloneURLEmptyWithoutRepository(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, ctx.CloneURL)
 }
+
+func TestProviderContextElevatedEvent(t *testing.T) {
+	tests := []struct {
+		eventName    string
+		wantElevated bool
+	}{
+		{"pull_request_target", true},
+		{"workflow_run", true},
+		{"pull_request", false},
+		{"push", false},
+		{"merge_group", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.eventName, func(t *testing.T) {
+			t.Setenv("GITHUB_EVENT_NAME", tt.eventName)
+			t.Setenv("GITHUB_EVENT_PATH", "")
+
+			p := NewProvider()
+			ctx, err := p.Context()
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantElevated, ctx.ElevatedEvent)
+		})
+	}
+}

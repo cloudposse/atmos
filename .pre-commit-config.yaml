@@ -43,7 +43,7 @@ repos:
       - id: gomodcheck
         name: Check go.mod install compatibility
         description: Ensure go.mod doesn't have replace/exclude directives that break go install
-        entry: make gomodcheck
+        entry: bash -c 'cd tools/gomodcheck && go run . ../../go.mod'
         language: system
         files: ^go\.mod$
         pass_filenames: false

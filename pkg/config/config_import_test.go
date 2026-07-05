@@ -1,14 +1,19 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const mergeConfigFileExecHelperEnv = "ATMOS_TEST_MERGE_CONFIG_FILE_EXEC_HELPER"
 
 func TestMergeConfig_ImportOverrideBehavior(t *testing.T) {
 	// Test that the main config file's settings override imported settings.
@@ -75,6 +80,89 @@ settings:
 	// from the main config replaces the imported settings section.
 }
 
+func TestMergeConfigFileProcessesCommandYamlFunctionsOnce(t *testing.T) {
+	tempDir := t.TempDir()
+	countPath := filepath.Join(tempDir, "exec-count")
+
+	configPath := filepath.Join(tempDir, "commands.yaml")
+	configContent := fmt.Sprintf(`
+commands:
+  - name: existing
+    description: overridden
+  - name: generated
+    description: !exec >-
+      %s -test.run=^TestMergeConfigFileExecHelper$ -- %s
+`, shellQuote(os.Args[0]), shellQuote(countPath))
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
+
+	t.Setenv(mergeConfigFileExecHelperEnv, "1")
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	v.Set(commandsKey, []interface{}{
+		map[string]interface{}{
+			"name":        "existing",
+			"description": "original",
+		},
+	})
+
+	require.NoError(t, mergeConfigFile(configPath, v))
+
+	count, err := os.ReadFile(countPath)
+	require.NoError(t, err)
+	assert.Equal(t, "1", string(count))
+
+	commands := normalizeCommandArray(v.Get(commandsKey))
+	require.Len(t, commands, 2)
+
+	byName := map[string]map[string]interface{}{}
+	for _, command := range commands {
+		cmd, ok := command.(map[string]interface{})
+		require.True(t, ok)
+		name, ok := cmd["name"].(string)
+		require.True(t, ok)
+		byName[name] = cmd
+	}
+
+	assert.Equal(t, "overridden", byName["existing"]["description"])
+	assert.Equal(t, "resolved-description", byName["generated"]["description"])
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func TestMergeConfigFileExecHelper(t *testing.T) {
+	if os.Getenv(mergeConfigFileExecHelperEnv) != "1" {
+		return
+	}
+
+	args := os.Args
+	for len(args) > 0 && args[0] != "--" {
+		args = args[1:]
+	}
+	if len(args) != 2 {
+		fmt.Fprintf(os.Stderr, "expected count path after --, got %q", os.Args)
+		os.Exit(2)
+	}
+
+	countPath := args[1]
+	count := 0
+	if raw, err := os.ReadFile(countPath); err == nil && len(raw) > 0 {
+		count, err = strconv.Atoi(string(raw))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "invalid count file %q: %v", countPath, err)
+			os.Exit(2)
+		}
+	}
+	if err := os.WriteFile(countPath, []byte(strconv.Itoa(count+1)), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "write count file %q: %v", countPath, err)
+		os.Exit(2)
+	}
+	fmt.Fprint(os.Stdout, "resolved-description")
+	os.Exit(0)
+}
+
 func TestMergeConfig_ImportDeepMerge(t *testing.T) {
 	// Test that imports are deep merged at the top level, but sections are replaced.
 	tempDir := t.TempDir()
@@ -129,13 +217,14 @@ logs:
 func TestMergeConfig_AtmosDCommandsMerging(t *testing.T) {
 	// Test that commands from .atmos.d are merged with main config commands.
 	tempDir := t.TempDir()
+	t.Chdir(tempDir)
 
-	// Create .atmos.d directory with a command file.
+	// Create .atmos.d directory with command files split by command group.
 	atmosDDir := filepath.Join(tempDir, ".atmos.d")
 	err := os.Mkdir(atmosDDir, 0o755)
 	require.NoError(t, err)
 
-	atmosDContent := `
+	devContent := `
 commands:
   - name: "dev"
     description: "Development workflow commands"
@@ -144,8 +233,26 @@ commands:
         description: "Set up development environment"
         steps:
           - echo "Setting up..."
+      - name: "shell"
+        description: "Start a development shell"
+        working_directory: !repo-root .
+        steps:
+          - echo "Entering shell..."
 `
-	createConfigFile(t, atmosDDir, "dev.yaml", atmosDContent)
+	createConfigFile(t, atmosDDir, "dev.yaml", devContent)
+
+	buildContent := `
+commands:
+  - name: "build"
+    description: "Build workflow commands"
+    default: "binary"
+    commands:
+      - name: "binary"
+        description: "Build binary"
+        steps:
+          - echo "Building..."
+`
+	createConfigFile(t, atmosDDir, "build.yaml", buildContent)
 
 	// Create main config with its own commands.
 	mainContent := `
@@ -169,7 +276,7 @@ commands:
 
 	commandsList, ok := commands.([]interface{})
 	assert.True(t, ok, "commands should be a slice")
-	assert.Equal(t, 3, len(commandsList), "should have all 3 commands (1 from .atmos.d + 2 from main)")
+	assert.Equal(t, 4, len(commandsList), "should have all 4 commands (2 from .atmos.d + 2 from main)")
 
 	// Verify all commands are present.
 	commandNames := make(map[string]bool)
@@ -183,6 +290,7 @@ commands:
 	}
 
 	assert.True(t, commandNames["dev"], "dev command from .atmos.d should be present")
+	assert.True(t, commandNames["build"], "build command from .atmos.d should be present")
 	assert.True(t, commandNames["terraform"], "terraform command from main config should be present")
 	assert.True(t, commandNames["helmfile"], "helmfile command from main config should be present")
 }
