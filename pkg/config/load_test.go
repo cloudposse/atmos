@@ -112,6 +112,24 @@ components:
 	}
 }
 
+func TestLoadConfig_YAMLKeyDelimiterFromAtmosYAML(t *testing.T) {
+	tempDir, cleanup := setupTestFiles(t)
+	defer cleanup()
+
+	configPath := createTestConfig(t, tempDir, `
+settings:
+  yaml:
+    key_delimiter: "."
+`)
+
+	config, err := LoadConfig(&schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configPath},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, ".", config.Settings.YAML.KeyDelimiter)
+}
+
 func TestLoadConfigFromDifferentSources(t *testing.T) {
 	tests := []struct {
 		name     string
