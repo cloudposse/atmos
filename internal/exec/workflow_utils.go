@@ -366,8 +366,6 @@ func ExecuteWorkflow(
 		return err
 	}
 
-	conditionContext := workflowConditionContext()
-
 	// Create auth manager if any runnable step has an identity or if command-line identity is specified.
 	// We check once upfront to avoid repeated initialization.
 	var authManager auth.AuthManager
@@ -378,7 +376,11 @@ func ExecuteWorkflow(
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			return err
 		}
-		if !step.When.Evaluate(conditionContext) {
+		runs, err := step.When.EvaluateE(workflowPkg.BuildConditionContext(workflow, workflowDefinition, step, commandLineStack, workflowDefinition.Env))
+		if err != nil {
+			return err
+		}
+		if !runs {
 			continue
 		}
 		if commandLineIdentity != "" || strings.TrimSpace(step.Identity) != "" {
@@ -421,7 +423,11 @@ func ExecuteWorkflow(
 	showRenderer.RenderHeaderIfNeeded(workflowDefinition, workflow, flags)
 
 	for stepIdx, step := range steps {
-		if !step.When.Evaluate(conditionContext) {
+		runs, err := step.When.EvaluateE(workflowPkg.BuildConditionContext(workflow, workflowDefinition, &step, commandLineStack, workflowDefinition.Env))
+		if err != nil {
+			return err
+		}
+		if !runs {
 			log.Debug("Skipping workflow step, `when` condition did not match", "step", step.Name)
 			continue
 		}
@@ -659,8 +665,9 @@ func ExecuteWorkflow(
 					Err()
 			}
 			err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
-				DryRun:     dryRun,
-				FinalStack: finalStack,
+				DryRun:      dryRun,
+				FinalStack:  finalStack,
+				AtmosConfig: &atmosConfig,
 			})
 		}
 
@@ -696,20 +703,14 @@ func ExecuteWorkflow(
 	return nil
 }
 
-func workflowConditionContext() schema.ConditionContext {
-	return schema.ConditionContext{
-		CI:     telemetry.IsCI(),
-		Status: schema.ConditionPredicateSuccess,
-	}
-}
-
 // stepExecutorState holds persistent state for extended step execution within a workflow.
 // This allows step results to be passed between steps for variable templating.
 var stepExecutorState *stepPkg.StepExecutor
 
 type extendedStepOptions struct {
-	DryRun     bool
-	FinalStack string
+	DryRun      bool
+	FinalStack  string
+	AtmosConfig *schema.AtmosConfiguration
 }
 
 // executeExtendedStep runs an extended step type (input, confirm, choose, etc.).
@@ -721,6 +722,7 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 
 	// Set workflow context for output mode inheritance.
 	stepExecutorState.SetWorkflow(workflow)
+	stepExecutorState.SetAtmosConfig(opts.AtmosConfig)
 
 	// Add environment variables to the executor.
 	for _, env := range envVars {

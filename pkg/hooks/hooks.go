@@ -145,6 +145,8 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 		skipPredicate: skipPredicate,
 		status:        outcome.Status,
 		isCI:          telemetry.IsCI(),
+		stack:         info.Stack,
+		component:     info.ComponentFromArg,
 	}
 
 	// Preflight runs once per command lifecycle: install component
@@ -172,7 +174,11 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 		// Filter by the operation outcome. Default (when: success) runs only on
 		// success, so existing hooks keep their behavior; when: failure / always
 		// opt into running after a failed operation.
-		if !hook.RunsWhen(outcome.Status, filter.isCI) {
+		runs, err := hook.RunsWhenE(filter.conditionContext(name))
+		if err != nil {
+			return err
+		}
+		if !runs {
 			log.Debug("Skipping hook, status does not match `when`", "hook", name, "when", hook.When, "status", outcome.Status)
 			continue
 		}
@@ -204,6 +210,7 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 			Info:          info,
 			Cmd:           cmd,
 			Args:          args,
+			HookName:      name,
 			Outcome:       outcome,
 			ToolchainPATH: h.toolchainPATH,
 		}); err != nil {
@@ -498,12 +505,25 @@ type hookFilter struct {
 	skipPredicate func(string) bool
 	status        RunStatus
 	isCI          bool
+	stack         string
+	component     string
 }
 
 type hookPreflightKey struct {
 	event  HookEvent
 	status RunStatus
 	isCI   bool
+}
+
+func (f *hookFilter) conditionContext(hookName string) schema.ConditionContext {
+	return schema.ConditionContext{
+		CI:        f.isCI,
+		Status:    string(f.status),
+		Stack:     f.stack,
+		Component: f.component,
+		Hook:      hookName,
+		Event:     string(f.event),
+	}
 }
 
 func (f hookFilter) preflightKey() hookPreflightKey {
@@ -530,7 +550,11 @@ func (h *Hooks) preflight(atmosConfig *schema.AtmosConfiguration, info *schema.C
 	if len(h.items) == 0 || atmosConfig == nil || info == nil {
 		return nil
 	}
-	if !h.hasUnskippedHooks(filter) {
+	hasHooks, err := h.hasUnskippedHooks(&filter)
+	if err != nil {
+		return err
+	}
+	if !hasHooks {
 		return nil
 	}
 
@@ -562,20 +586,24 @@ func (h *Hooks) markPreflightDone(filter hookFilter) {
 	h.preflightedKeys[filter.preflightKey()] = true
 }
 
-func (h *Hooks) hasUnskippedHooks(filter hookFilter) bool {
+func (h *Hooks) hasUnskippedHooks(filter *hookFilter) (bool, error) {
 	for name := range h.items {
 		hook := h.items[name]
 		if !hook.MatchesEvent(filter.event) {
 			continue
 		}
-		if !hook.RunsWhen(filter.status, filter.isCI) {
+		runs, err := hook.RunsWhenE(filter.conditionContext(name))
+		if err != nil {
+			return false, err
+		}
+		if !runs {
 			continue
 		}
 		if filter.skipPredicate == nil || !filter.skipPredicate(name) {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // resolveDeps walks the global → component-type → component-instance
@@ -660,7 +688,11 @@ func (h *Hooks) verifyAllBinaries(filter hookFilter) error {
 		if !hook.MatchesEvent(filter.event) {
 			continue
 		}
-		if !hook.RunsWhen(filter.status, filter.isCI) {
+		runs, err := hook.RunsWhenE(filter.conditionContext(name))
+		if err != nil {
+			return err
+		}
+		if !runs {
 			continue
 		}
 		if err := h.verifyHookBinary(name, &hook); err != nil {

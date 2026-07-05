@@ -1,0 +1,44 @@
+name: install.sh smoke
+
+on:
+  pull_request:
+    paths:
+      - "website/static/install.sh"
+      - ".github/workflows/install-sh-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: install.sh (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-15
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run installer
+        shell: bash
+        run: bash website/static/install.sh binary
+
+      - name: Verify installed Atmos
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p verify
+          cd verify
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ../atmos.exe version
+          else
+            ../atmos version
+          fi

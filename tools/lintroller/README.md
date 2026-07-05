@@ -115,15 +115,15 @@ go build -o .lintroller ./cmd/lintroller
 ./.lintroller ./...
 ```
 
-### Via Makefile
+### Via Atmos
 
 The recommended way to run Lint Roller locally:
 
 ```bash
-make lintroller
+atmos lint lintroller
 ```
 
-This is automatically run as part of `make lint`.
+This is automatically run as part of `atmos lint changed`.
 
 ### Via golangci-lint (Local Development)
 

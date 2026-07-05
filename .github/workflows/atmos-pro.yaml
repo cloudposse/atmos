@@ -1,6 +1,8 @@
 ---
 name: atmos.ci
 on: pull_request
+env:
+  GOFUMPT_VERSION: v0.9.1
 permissions:
   contents: read
   id-token: write
@@ -34,6 +36,10 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go mod tidy
+      - name: Install Go tools
+        run: |
+          go install mvdan.cc/gofumpt@${GOFUMPT_VERSION}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install toolchain dependencies
         env:

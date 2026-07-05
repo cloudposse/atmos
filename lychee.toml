@@ -1,7 +1,7 @@
 # Lychee link checker configuration
 # https://github.com/lycheeverse/lychee
 #
-# Run locally: make link-check
+# Run locally: atmos lint link-check
 # Or directly: lychee --config lychee.toml '**/*.md'
 
 # Log level: "error", "warn", "info", "debug", "trace"

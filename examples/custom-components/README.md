@@ -27,7 +27,7 @@ examples/custom-components/
 
 1. Build atmos (from repo root):
    ```bash
-   make build
+   atmos build
    ```
 
 2. Run the custom command:

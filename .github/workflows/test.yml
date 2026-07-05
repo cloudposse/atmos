@@ -31,6 +31,7 @@ permissions:
   pull-requests: read
 
 env:
+  ATMOS_BOOTSTRAP_VERSION: "1.222.0"
   OPEN_TOFU_VERSION: "1.12.2"
   HELM_VERSION: "v3.19.2"
   HELMFILE_VERSION: "v1.1.0"
@@ -94,20 +95,27 @@ jobs:
           cache: false
         id: go
 
+      - name: Set up Atmos
+        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
+
       - name: Get dependencies
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
-          make deps
+          atmos build deps
 
       - name: Build
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
-          make build-${{ matrix.target }}
+          atmos build --target ${{ matrix.target }}
 
       - name: Version
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
-          make version-${{ matrix.target }}
+          atmos build version --target ${{ matrix.target }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -233,7 +241,7 @@ jobs:
       - name: Get dependencies
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
-          make deps
+          atmos build deps
 
       - name: Terraform registry cache acceptance test
         timeout-minutes: 25
@@ -260,7 +268,7 @@ jobs:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
-        run: make testacc-cover
+        run: atmos test acc-cover
 
       - name: Acceptance tests
         timeout-minutes: 45
@@ -271,7 +279,7 @@ jobs:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
-        run: make testacc
+        run: atmos test acc
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux' && hashFiles('coverage.out') != ''
@@ -503,7 +511,18 @@ jobs:
             brew untap aws/tap
           fi
           brew install colima docker qemu
-          colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20
+          for attempt in 1 2 3; do
+            if colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20; then
+              break
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+
+            colima delete --force || true
+            sleep $((attempt * 20))
+          done
           docker version
 
       - name: Download build artifacts
@@ -602,7 +621,7 @@ jobs:
           GOCACHE: ${{ runner.temp }}/go-build
           GOTMPDIR: ${{ runner.temp }}/go-tmp
           TMPDIR: ${{ runner.temp }}/tmp
-          # Atmos builds with CGO disabled (see Makefile). Match that here so the
+          # Atmos builds with CGO disabled. Match that here so the
           # toolchain's transitive CGO dependencies (e.g. bearsh/hid → libudev)
           # are not compiled — they are unused and libudev is absent on runners.
           CGO_ENABLED: "0"
@@ -912,6 +931,11 @@ jobs:
           atmos workflow push-local-registry -f container-step
           atmos workflow workspace -f container-step
           atmos workflow env -f container-step
+          grep -q "## .*atmos-container-step:local" "$GITHUB_STEP_SUMMARY"
+          grep -q "## .*localhost:5000/atmos-container-step:local" "$GITHUB_STEP_SUMMARY"
+          grep -q '| Digest | `sha256:' "$GITHUB_STEP_SUMMARY"
+          grep -q "<summary>.*Layers (" "$GITHUB_STEP_SUMMARY"
+          grep -q "<summary>.*Raw JSON</summary>" "$GITHUB_STEP_SUMMARY"
 
       - name: Verify a failing container step propagates a non-zero exit code
         working-directory: examples/container-step
