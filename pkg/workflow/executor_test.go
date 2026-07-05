@@ -105,6 +105,45 @@ func TestExecutor_Execute_SkipsStepWhenConditionIsFalse(t *testing.T) {
 	assert.Equal(t, "run", result.Steps[1].StepName)
 }
 
+func TestExecutor_Execute_EvaluatesCELStepCondition(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	executor := NewExecutor(mockRunner, nil, NewMockUIProvider(ctrl))
+
+	workflowDef := &schema.WorkflowDefinition{
+		Stack: "prod",
+		Env:   map[string]string{"DEPLOY_ENV": "prod"},
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "skip",
+				Command: "this-command-must-not-run",
+				Type:    "shell",
+				When:    schema.MustCondition("stack == 'dev'"),
+			},
+			{
+				Name:    "run",
+				Command: "echo 'hello'",
+				Type:    "shell",
+				When:    schema.MustCondition("workflow == 'test-workflow' && step == 'run' && env['DEPLOY_ENV'] == 'prod'"),
+			},
+		},
+	}
+
+	mockRunner.EXPECT().
+		RunShell("echo 'hello'", "test-workflow-step-1", ".", []string{"DEPLOY_ENV=prod"}, false).
+		Return(nil)
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+	require.Len(t, result.Steps, 2)
+	assert.True(t, result.Steps[0].Skipped)
+	assert.False(t, result.Steps[1].Skipped)
+}
+
 func TestExecutor_Execute_RejectsFailureStepCondition(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
