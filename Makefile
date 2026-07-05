@@ -13,7 +13,7 @@ define MIGRATION_HELP
 @printf "  %-23s -> %s\n" "make version-linux" "atmos build version --target linux"
 @printf "  %-23s -> %s\n" "make version-windows" "atmos build version --target windows"
 @printf "  %-23s -> %s\n" "make version-macos" "atmos build version --target macos"
-@printf "  %-23s -> %s\n" "make lint" "atmos lint changed"
+@printf "  %-23s -> %s\n" "make lint" "atmos lint --changed"
 @printf "  %-23s -> %s\n" "make testacc" "atmos test acceptance"
 @printf "  %-23s -> %s\n" "make testacc-cover" "atmos test acceptance --cover"
 @printf "  %-23s -> %s\n" "make test-short" "atmos test short"
