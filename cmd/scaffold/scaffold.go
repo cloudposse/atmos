@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	gen "github.com/cloudposse/atmos/pkg/generator"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/source"
@@ -109,6 +110,8 @@ If no target directory is specified, you will be prompted for one.`,
 		force := v.GetBool("force")
 		dryRun := v.GetBool("dry-run")
 		sourceOverride := v.GetString("scaffold-source-override")
+		ref := v.GetString("ref")
+		gitEnabled := v.GetBool("git") && !v.GetBool("no-git")
 
 		// Interactive prompting requires both an interactive-capable flag
 		// value AND a real terminal on both stdin and stdout: in CI or
@@ -137,7 +140,7 @@ If no target directory is specified, you will be prompted for one.`,
 			templateValues[k] = val
 		}
 
-		return executeScaffoldGenerate(scaffoldGenerateOptions{
+		return executeScaffoldGenerate(&scaffoldGenerateOptions{
 			templateName:   template,
 			targetDir:      target,
 			force:          force,
@@ -146,6 +149,8 @@ If no target directory is specified, you will be prompted for one.`,
 			useDefaults:    useDefaults,
 			templateValues: templateValues,
 			sourceOverride: sourceOverride,
+			ref:            ref,
+			git:            gitEnabled,
 		})
 	},
 }
@@ -160,6 +165,8 @@ type scaffoldGenerateOptions struct {
 	useDefaults    bool
 	templateValues map[string]interface{}
 	sourceOverride string
+	ref            string
+	git            bool
 }
 
 // scaffoldListCmd represents the scaffold list subcommand.
@@ -204,12 +211,18 @@ func init() {
 		flags.WithBoolFlag("defaults", "", false, "Use field defaults and --set values without prompting"),
 		flags.WithStringMapFlag("set", "", map[string]string{}, "Set template values (can be used multiple times: --set key=value)"),
 		flags.WithStringFlag("scaffold-source-override", "", "", "Resolve catalog templates from this local base directory instead of their remote source (mainly for testing)"),
+		flags.WithStringFlag("ref", "", "", "Git ref for a template repository source (sugar for ?ref=)"),
+		flags.WithBoolFlag("git", "", false, "Initialize a git repository and create the initial commit"),
+		flags.WithBoolFlag("no-git", "", false, "Do not initialize a git repository"),
 		flags.WithEnvVars("force", "ATMOS_SCAFFOLD_FORCE"),
 		flags.WithEnvVars("dry-run", "ATMOS_SCAFFOLD_DRY_RUN"),
 		flags.WithEnvVars("interactive", "ATMOS_SCAFFOLD_INTERACTIVE"),
 		flags.WithEnvVars("defaults", "ATMOS_SCAFFOLD_DEFAULTS"),
 		flags.WithEnvVars("set", "ATMOS_SCAFFOLD_SET"),
 		flags.WithEnvVars("scaffold-source-override", "ATMOS_SCAFFOLD_SOURCE_OVERRIDE"),
+		flags.WithEnvVars("ref", "ATMOS_SCAFFOLD_REF"),
+		flags.WithEnvVars("git", "ATMOS_SCAFFOLD_GIT"),
+		flags.WithEnvVars("no-git", "ATMOS_SCAFFOLD_NO_GIT"),
 	)
 
 	// Register flags to generate subcommand.
@@ -277,7 +290,7 @@ func (s *ScaffoldCommandProvider) GetCompatibilityFlags() map[string]compat.Comp
 
 // executeScaffoldGenerate generates code from a scaffold template.
 // This logic was moved from internal/exec/scaffold.go to keep command logic in cmd/.
-func executeScaffoldGenerate(opts scaffoldGenerateOptions) error {
+func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 	// Convert to absolute path
 	absTargetDir, err := resolveTargetDirectory(opts.targetDir)
 	if err != nil {
@@ -326,7 +339,7 @@ func executeScaffoldGenerate(opts scaffoldGenerateOptions) error {
 // selectGenerateTemplate selects the template for generation, refusing to
 // open an interactive picker when interactivity is unavailable.
 func selectGenerateTemplate(
-	opts scaffoldGenerateOptions,
+	opts *scaffoldGenerateOptions,
 	configs map[string]templates.Configuration,
 	scaffoldUI *generatorUI.InitUI,
 ) (templates.Configuration, error) {
@@ -337,6 +350,17 @@ func selectGenerateTemplate(
 			WithHint("Run `atmos scaffold list` to see available templates").
 			WithExitCode(2).
 			Err()
+	}
+	if opts.templateName != "" {
+		if cfg, ok := configs[opts.templateName]; ok {
+			return cfg, nil
+		}
+		if source.IsTemplateSource(opts.templateName) {
+			return templates.Configuration{
+				Name:   opts.templateName,
+				Source: source.WithRef(opts.templateName, opts.ref),
+			}, nil
+		}
 	}
 	return selectTemplate(opts.templateName, configs, scaffoldUI)
 }
@@ -520,17 +544,36 @@ func selectTemplateByName(
 func executeTemplateGeneration(
 	selectedConfig *templates.Configuration,
 	targetDir string,
-	opts scaffoldGenerateOptions,
+	opts *scaffoldGenerateOptions,
 	scaffoldUI *generatorUI.InitUI,
 ) error {
 	update := false // Update mode (3-way merge) is not yet exposed on the CLI.
 
 	if targetDir == "" {
-		return executeTemplateWithoutTargetDir(selectedConfig, opts, scaffoldUI)
+		finalTargetDir, err := executeTemplateWithoutTargetDir(selectedConfig, opts, scaffoldUI)
+		if err != nil {
+			return err
+		}
+		return maybeInitGeneratedGitRepository(finalTargetDir, selectedConfig, opts)
 	}
 
 	// Target directory provided, use normal Execute.
-	return scaffoldUI.Execute(selectedConfig, targetDir, opts.force, update, opts.useDefaults, opts.templateValues)
+	if err := scaffoldUI.Execute(selectedConfig, targetDir, opts.force, update, opts.useDefaults, opts.templateValues); err != nil {
+		return err
+	}
+	return maybeInitGeneratedGitRepository(targetDir, selectedConfig, opts)
+}
+
+func maybeInitGeneratedGitRepository(targetDir string, selectedConfig *templates.Configuration, opts *scaffoldGenerateOptions) error {
+	if opts.git {
+		_, err := gen.InitGitRepository(gen.InitGitOptions{
+			TargetPath:      targetDir,
+			TemplateName:    selectedConfig.Name,
+			TemplateVersion: selectedConfig.Version,
+		})
+		return err
+	}
+	return nil
 }
 
 // renderDryRunPreview renders a preview of template files without writing to disk.
@@ -656,18 +699,18 @@ func printFilePath(targetDir, renderedPath string) {
 // executeTemplateWithoutTargetDir handles template execution when no target directory is provided.
 func executeTemplateWithoutTargetDir(
 	selectedConfig *templates.Configuration,
-	opts scaffoldGenerateOptions,
+	opts *scaffoldGenerateOptions,
 	scaffoldUI *generatorUI.InitUI,
-) error {
+) (string, error) {
 	const update = false // Update mode (3-way merge) is not yet exposed on the CLI.
 
 	if opts.interactive && !opts.dryRun {
 		// Interactive mode: use ExecuteWithInteractiveFlow which will prompt for target directory.
-		return scaffoldUI.ExecuteWithInteractiveFlow(selectedConfig, "", opts.force, update, opts.useDefaults, opts.templateValues)
+		return scaffoldUI.ExecuteWithInteractiveFlowResult(selectedConfig, "", opts.force, update, opts.useDefaults, opts.templateValues)
 	}
 
 	// Without a terminal (or in dry-run mode) the target cannot be prompted for.
-	return errUtils.Build(errUtils.ErrTargetDirRequired).
+	return "", errUtils.Build(errUtils.ErrTargetDirRequired).
 		WithExplanation("Target directory is required in non-interactive mode").
 		WithHint("Specify target directory: `atmos scaffold generate <template> <target>`").
 		WithContext("interactive", opts.interactive).

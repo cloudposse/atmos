@@ -173,10 +173,10 @@ func buildMarkdownSections(err error, config FormatterConfig, useColor bool) str
 	switch {
 	case errors.As(err, &workflowErr):
 		// Workflow orchestration failures - show workflow-specific message with exit code.
-		md.WriteString(fmt.Sprintf("**Error:** %s%s%s", workflowErr.WorkflowStepMessage(), newline, newline))
+		fmt.Fprintf(&md, "**Error:** %s%s%s", workflowErr.WorkflowStepMessage(), newline, newline)
 	case errors.As(err, &execErr):
 		// External command execution failures - show command and exit code.
-		md.WriteString(fmt.Sprintf("**Error:** %s with exit code %d%s%s", sentinelMsg, execErr.ExitCode, newline, newline))
+		fmt.Fprintf(&md, "**Error:** %s with exit code %d%s%s", sentinelMsg, execErr.ExitCode, newline, newline)
 	default:
 		// All other errors - just show the sentinel message without exit code.
 		md.WriteString("**Error:** " + sentinelMsg + newline + newline)

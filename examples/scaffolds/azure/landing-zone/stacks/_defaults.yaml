@@ -1,0 +1,21 @@
+# atmos:template
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  project: "[[ .Config.project_name ]]"
+  location: "[[ .Config.location ]]"
+
+components:
+  emulator:
+    azure:
+      driver: floci/az
+      container:
+        env:
+          FLOCI_AZ_TLS_ENABLED: "true"
+        ports:
+          - host: 14577
+            container: 4577
+
+  terraform:
+    network:
+      vars: {}

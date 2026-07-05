@@ -21,6 +21,39 @@ import (
 // DefaultFetchTimeout bounds how long a remote scaffold fetch may take.
 const DefaultFetchTimeout = 5 * time.Minute
 
+// IsTemplateSource reports whether an init/scaffold template argument looks
+// like a direct source rather than a catalog or embedded template key.
+func IsTemplateSource(value string) bool {
+	defer perf.Track(nil, "source.IsTemplateSource")()
+
+	if value == "" {
+		return false
+	}
+	return vendor.IsFileURI(value) ||
+		vendor.IsOCIURI(value) ||
+		vendor.IsS3URI(value) ||
+		vendor.IsGitURI(value) ||
+		vendor.HasLocalPathPrefix(value)
+}
+
+// WithRef applies --ref sugar to a go-getter source. Existing ref query
+// parameters win; local paths and file/OCI/S3 sources are returned unchanged.
+func WithRef(src, ref string) string {
+	defer perf.Track(nil, "source.WithRef")()
+
+	if src == "" || ref == "" {
+		return src
+	}
+	if !vendor.IsGitURI(src) || strings.Contains(src, "ref=") {
+		return src
+	}
+	sep := "?"
+	if strings.Contains(src, "?") {
+		sep = "&"
+	}
+	return src + sep + "ref=" + ref
+}
+
 // Resolve fetches a scaffold template from src (a local path, file://, or a
 // go-getter remote such as git/https/s3) into a usable templates.Configuration.
 // The returned cleanup function removes any temporary download directory; it is
@@ -45,8 +78,7 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, name, src string, timeout t
 
 	// Local sources (relative/absolute path or file://) load directly, no fetch.
 	if vendor.IsFileURI(src) || vendor.IsLocalPath(src) {
-		path := strings.TrimPrefix(src, "file://")
-		conf, err := templates.LoadConfigurationFromDir(name, path)
+		conf, err := resolveLocal(name, src)
 		return conf, noop, err
 	}
 
@@ -61,7 +93,8 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, name, src string, timeout t
 	}
 	cleanup := func() { _ = os.RemoveAll(tempDir) }
 
-	if fetchErr := downloader.NewGoGetterDownloader(atmosConfig).Fetch(src, tempDir, downloader.ClientModeDir, timeout); fetchErr != nil {
+	normalized := vendor.NormalizeURI(src)
+	if fetchErr := downloader.NewGoGetterDownloader(atmosConfig).Fetch(normalized, tempDir, downloader.ClientModeDir, timeout); fetchErr != nil {
 		cleanup()
 		return nil, noop, errUtils.Build(errUtils.ErrScaffoldFetchSource).
 			WithCause(fetchErr).
@@ -78,7 +111,35 @@ func Resolve(atmosConfig *schema.AtmosConfiguration, name, src string, timeout t
 		cleanup()
 		return nil, noop, err
 	}
+	if err := requireScaffoldConfig(conf, src); err != nil {
+		cleanup()
+		return nil, noop, err
+	}
 	return conf, cleanup, nil
+}
+
+func resolveLocal(name, src string) (*templates.Configuration, error) {
+	path := strings.TrimPrefix(src, "file://")
+	conf, err := templates.LoadConfigurationFromDir(name, path)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireScaffoldConfig(conf, src); err != nil {
+		return nil, err
+	}
+	return conf, nil
+}
+
+func requireScaffoldConfig(conf *templates.Configuration, src string) error {
+	if conf != nil && templates.HasScaffoldConfig(conf.Files) {
+		return nil
+	}
+	return errUtils.Build(errUtils.ErrScaffoldConfigMissing).
+		WithExplanationf("Template source `%s` does not contain scaffold.yaml at its root", src).
+		WithHint("Point the source at a scaffold template directory, or use go-getter //subdir syntax").
+		WithContext("source", src).
+		WithExitCode(2).
+		Err()
 }
 
 // Hydrate materializes a catalog/remote stub (a Configuration with no Files but

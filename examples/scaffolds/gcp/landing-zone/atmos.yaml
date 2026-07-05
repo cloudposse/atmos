@@ -1,0 +1,51 @@
+# atmos:template
+# Atmos configuration for [[ .Config.project_name ]] (GCP landing zone).
+# https://atmos.tools/cli/configuration
+
+base_path: "./"
+
+components:
+  terraform:
+    command: [[ .Config.terraform_command ]]
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+auth:
+  identities:
+    local:
+      kind: gcp/emulator
+      emulator: gcp
+      default: true
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+commands:
+  - name: test
+    description: Validate stacks, then provision and destroy every environment on the local emulator.
+    steps:
+      - atmos validate stacks
+      - atmos emulator up gcp -s dev
+      - atmos terraform apply --all -s dev -i false
+      - atmos terraform destroy --all -s dev -i false
+      - atmos emulator down gcp -s dev
+      - atmos emulator up gcp -s staging
+      - atmos terraform apply --all -s staging -i false
+      - atmos terraform destroy --all -s staging -i false
+      - atmos emulator down gcp -s staging
+      - atmos emulator up gcp -s prod
+      - atmos terraform apply --all -s prod -i false
+      - atmos terraform destroy --all -s prod -i false
+      - atmos emulator down gcp -s prod

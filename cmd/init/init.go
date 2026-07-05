@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	gen "github.com/cloudposse/atmos/pkg/generator"
 	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/generator/ui"
@@ -35,7 +36,10 @@ Available templates:
 - basic: Minimal cloud-agnostic project layout (atmos.yaml, stacks, and components)
 - simple: Basic Atmos project structure
 - atmos: Complete atmos.yaml configuration only
+- aws/app: AWS application SDLC repository (dev/staging/prod, native CI, emulator-enabled)
 - aws/landing-zone: AWS landing zone (dev/staging/prod environments with a conventional baseline, emulator-enabled)
+- gcp/landing-zone: GCP landing zone (GCS, Secret Manager, service account, emulator-enabled)
+- azure/landing-zone: Azure landing zone (resource group and network baseline, emulator-enabled)
 
 Run "atmos scaffold list" to see all templates, including remote ones.
 
@@ -61,6 +65,8 @@ If no target directory is specified, you will be prompted for one.`,
 		// Get flag values with proper precedence: flag > env > config > default.
 		force := v.GetBool("force")
 		sourceOverride := v.GetString("source-override")
+		ref := v.GetString("ref")
+		gitEnabled := v.GetBool("git") && !v.GetBool("no-git")
 
 		// Interactive prompting requires both an interactive-capable flag
 		// value AND a real terminal on both stdin and stdout: in CI or
@@ -80,13 +86,15 @@ If no target directory is specified, you will be prompted for one.`,
 			templateValues[key] = value
 		}
 
-		return executeInit(cmd.Context(), initOptions{
+		return executeInit(cmd.Context(), &initOptions{
 			templateName:   template,
 			targetDir:      target,
 			interactive:    interactive,
 			force:          force,
 			templateVars:   templateValues,
 			sourceOverride: sourceOverride,
+			ref:            ref,
+			git:            gitEnabled,
 		})
 	},
 }
@@ -100,10 +108,16 @@ func init() {
 		flags.WithBoolFlag("interactive", "i", true, "Interactive mode for template selection and configuration (disabled automatically without a terminal)"),
 		flags.WithStringSliceFlag("set", "", []string{}, "Set template values (can be used multiple times: --set key=value)"),
 		flags.WithStringFlag("source-override", "", "", "Resolve catalog templates from this local base directory instead of their remote source (mainly for testing)"),
+		flags.WithStringFlag("ref", "", "", "Git ref for a template repository source (sugar for ?ref=)"),
+		flags.WithBoolFlag("git", "", true, "Initialize a git repository and create the initial commit"),
+		flags.WithBoolFlag("no-git", "", false, "Do not initialize a git repository"),
 		flags.WithEnvVars("force", "ATMOS_INIT_FORCE"),
 		flags.WithEnvVars("interactive", "ATMOS_INIT_INTERACTIVE"),
 		flags.WithEnvVars("set", "ATMOS_INIT_SET"),
 		flags.WithEnvVars("source-override", "ATMOS_INIT_SOURCE_OVERRIDE", "ATMOS_SCAFFOLD_SOURCE_OVERRIDE"),
+		flags.WithEnvVars("ref", "ATMOS_INIT_REF"),
+		flags.WithEnvVars("git", "ATMOS_INIT_GIT"),
+		flags.WithEnvVars("no-git", "ATMOS_INIT_NO_GIT"),
 	)
 
 	// Register flags on the command.
@@ -188,11 +202,13 @@ type initOptions struct {
 	force          bool
 	templateVars   map[string]interface{}
 	sourceOverride string
+	ref            string
+	git            bool
 }
 
 // executeInit initializes a new Atmos project from a template.
 // This logic was moved from internal/exec/init.go to keep command logic in cmd/.
-func executeInit(_ context.Context, opts initOptions) error {
+func executeInit(_ context.Context, opts *initOptions) error {
 	// Convert to absolute path if provided.
 	opts.targetDir = resolveTargetDir(opts.targetDir)
 
@@ -221,7 +237,7 @@ func executeInit(_ context.Context, opts initOptions) error {
 	}
 
 	// Select the template.
-	selectedConfig, err := selectTemplate(opts.templateName, opts.interactive, initUI, configs)
+	selectedConfig, err := selectTemplate(opts.templateName, opts.interactive, initUI, configs, opts.ref)
 	if err != nil {
 		return err
 	}
@@ -234,8 +250,23 @@ func executeInit(_ context.Context, opts initOptions) error {
 	}
 	defer cleanup()
 
-	// Execute with the selected template.
-	return runInitExecution(initUI, &selectedConfig, opts)
+	finalTargetDir, err := runInitExecution(initUI, &selectedConfig, opts)
+	if err != nil {
+		return err
+	}
+	return maybeInitGeneratedProjectGit(finalTargetDir, &selectedConfig, opts)
+}
+
+func maybeInitGeneratedProjectGit(targetDir string, selectedConfig *templates.Configuration, opts *initOptions) error {
+	if !opts.git || targetDir == "" {
+		return nil
+	}
+	_, err := gen.InitGitRepository(gen.InitGitOptions{
+		TargetPath:      targetDir,
+		TemplateName:    selectedConfig.Name,
+		TemplateVersion: selectedConfig.Version,
+	})
+	return err
 }
 
 // resolveTargetDir converts a target directory to an absolute path if provided.
@@ -262,11 +293,17 @@ func createInitUI() (*ui.InitUI, error) {
 }
 
 // selectTemplate handles template selection, either from argument or interactively.
-func selectTemplate(templateName string, interactive bool, initUI *ui.InitUI, configs map[string]templates.Configuration) (templates.Configuration, error) {
+func selectTemplate(templateName string, interactive bool, initUI *ui.InitUI, configs map[string]templates.Configuration, ref string) (templates.Configuration, error) {
 	// If template name is provided, use it directly.
 	if templateName != "" {
 		config, exists := configs[templateName]
 		if !exists {
+			if source.IsTemplateSource(templateName) {
+				return templates.Configuration{
+					Name:   templateName,
+					Source: source.WithRef(templateName, ref),
+				}, nil
+			}
 			return templates.Configuration{}, fmt.Errorf("%w: template '%s' not found", errUtils.ErrInitTemplateNotFound, templateName)
 		}
 		return config, nil
@@ -286,15 +323,15 @@ func selectTemplate(templateName string, interactive bool, initUI *ui.InitUI, co
 }
 
 // runInitExecution executes the init with the selected template and target directory.
-func runInitExecution(initUI *ui.InitUI, selectedConfig *templates.Configuration, opts initOptions) error {
+func runInitExecution(initUI *ui.InitUI, selectedConfig *templates.Configuration, opts *initOptions) (string, error) {
 	// If target directory is empty, use interactive flow.
 	if opts.targetDir == "" {
 		if !opts.interactive {
-			return fmt.Errorf("%w: target directory is required in non-interactive mode", errUtils.ErrInitialization)
+			return "", fmt.Errorf("%w: target directory is required in non-interactive mode", errUtils.ErrInitialization)
 		}
-		return initUI.ExecuteWithInteractiveFlow(selectedConfig, "", opts.force, false, !opts.interactive, opts.templateVars)
+		return initUI.ExecuteWithInteractiveFlowResult(selectedConfig, "", opts.force, false, !opts.interactive, opts.templateVars)
 	}
 
 	// Target directory provided, use normal Execute.
-	return initUI.Execute(selectedConfig, opts.targetDir, opts.force, false, !opts.interactive, opts.templateVars)
+	return opts.targetDir, initUI.Execute(selectedConfig, opts.targetDir, opts.force, false, !opts.interactive, opts.templateVars)
 }

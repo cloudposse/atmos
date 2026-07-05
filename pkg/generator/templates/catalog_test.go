@@ -18,13 +18,24 @@ func TestLoadCatalog(t *testing.T) {
 		byName[e.Name] = e
 	}
 
-	lz, ok := byName["aws/landing-zone"]
-	require.True(t, ok, "catalog must include aws/landing-zone")
-	assert.Equal(t, "aws", lz.Cloud)
-	assert.Equal(t, "landing-zone", lz.Tier)
-	assert.NotEmpty(t, lz.Source)
-	assert.NotEmpty(t, lz.Version)
-	assert.NotEmpty(t, lz.Description)
+	for _, tc := range []struct {
+		name  string
+		cloud string
+		tier  string
+	}{
+		{"aws/app", "aws", "app"},
+		{"aws/landing-zone", "aws", "landing-zone"},
+		{"gcp/landing-zone", "gcp", "landing-zone"},
+		{"azure/landing-zone", "azure", "landing-zone"},
+	} {
+		entry, ok := byName[tc.name]
+		require.Truef(t, ok, "catalog must include %s", tc.name)
+		assert.Equal(t, tc.cloud, entry.Cloud)
+		assert.Equal(t, tc.tier, entry.Tier)
+		assert.NotEmpty(t, entry.Source)
+		assert.NotEmpty(t, entry.Version)
+		assert.NotEmpty(t, entry.Description)
+	}
 }
 
 func TestCatalogEntry_ResolvedSource(t *testing.T) {
@@ -46,17 +57,22 @@ func TestCatalogStubs(t *testing.T) {
 	stubs, err := CatalogStubs("")
 	require.NoError(t, err)
 
-	stub, ok := stubs["aws/landing-zone"]
-	require.True(t, ok)
-	assert.Equal(t, "aws/landing-zone", stub.Name)
-	assert.NotEmpty(t, stub.Description)
-	assert.NotEmpty(t, stub.Version)
-	assert.NotEmpty(t, stub.Source)
-	assert.Empty(t, stub.Files, "catalog stubs defer file loading until hydration")
+	for _, name := range []string{"aws/app", "aws/landing-zone", "gcp/landing-zone", "azure/landing-zone"} {
+		stub, ok := stubs[name]
+		require.True(t, ok)
+		assert.Equal(t, name, stub.Name)
+		assert.NotEmpty(t, stub.Description)
+		assert.NotEmpty(t, stub.Version)
+		assert.NotEmpty(t, stub.Source)
+		assert.Empty(t, stub.Files, "catalog stubs defer file loading until hydration")
+	}
 
 	// With an override the stub source becomes the local path.
 	base := filepath.Join("repo", "examples", "scaffolds")
 	overridden, err := CatalogStubs(base)
 	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(base, "aws", "app"), overridden["aws/app"].Source)
 	assert.Equal(t, filepath.Join(base, "aws", "landing-zone"), overridden["aws/landing-zone"].Source)
+	assert.Equal(t, filepath.Join(base, "gcp", "landing-zone"), overridden["gcp/landing-zone"].Source)
+	assert.Equal(t, filepath.Join(base, "azure", "landing-zone"), overridden["azure/landing-zone"].Source)
 }

@@ -256,7 +256,7 @@ func TestExecuteTemplateGenerationErrors(t *testing.T) {
 		useDefaults:    true,
 		templateValues: map[string]interface{}{},
 	}
-	err := executeTemplateGeneration(&selectedConfig, "", opts, nil)
+	err := executeTemplateGeneration(&selectedConfig, "", &opts, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrTargetDirRequired)
 }
@@ -269,7 +269,7 @@ func TestScaffoldCommandProvider_UncoveredMetadata(t *testing.T) {
 }
 
 func TestSelectGenerateTemplate_NonInteractiveRequiresName(t *testing.T) {
-	_, err := selectGenerateTemplate(scaffoldGenerateOptions{interactive: false}, map[string]templates.Configuration{}, nil)
+	_, err := selectGenerateTemplate(&scaffoldGenerateOptions{interactive: false}, map[string]templates.Configuration{}, nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrTemplateNameRequired)
@@ -307,7 +307,7 @@ func TestPrintFilePath_WithoutTargetDir(t *testing.T) {
 }
 
 func TestExecuteScaffoldGenerate_DryRunBuiltInTemplate(t *testing.T) {
-	err := executeScaffoldGenerate(scaffoldGenerateOptions{
+	err := executeScaffoldGenerate(&scaffoldGenerateOptions{
 		templateName:   "simple",
 		targetDir:      t.TempDir(),
 		dryRun:         true,
@@ -320,7 +320,7 @@ func TestExecuteScaffoldGenerate_DryRunBuiltInTemplate(t *testing.T) {
 }
 
 func TestExecuteScaffoldGenerate_DryRunRequiresTarget(t *testing.T) {
-	err := executeScaffoldGenerate(scaffoldGenerateOptions{
+	err := executeScaffoldGenerate(&scaffoldGenerateOptions{
 		templateName:   "simple",
 		dryRun:         true,
 		interactive:    false,

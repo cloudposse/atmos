@@ -34,6 +34,23 @@ func writeSampleTemplate(t *testing.T) string {
 	return dir
 }
 
+func TestIsTemplateSource(t *testing.T) {
+	assert.True(t, IsTemplateSource("github.com/acme/template"))
+	assert.True(t, IsTemplateSource("git::https://example.com/acme/template.git"))
+	assert.True(t, IsTemplateSource("./local-template"))
+	assert.True(t, IsTemplateSource("/tmp/local-template"))
+	assert.False(t, IsTemplateSource("aws/landing-zone"))
+	assert.False(t, IsTemplateSource("basic"))
+}
+
+func TestWithRef(t *testing.T) {
+	assert.Equal(t, "github.com/acme/template?ref=v1.2.3", WithRef("github.com/acme/template", "v1.2.3"))
+	assert.Equal(t, "github.com/acme/template//scaffold?ref=v1.2.3", WithRef("github.com/acme/template//scaffold", "v1.2.3"))
+	assert.Equal(t, "github.com/acme/template?depth=1&ref=v1.2.3", WithRef("github.com/acme/template?depth=1", "v1.2.3"))
+	assert.Equal(t, "github.com/acme/template?ref=main", WithRef("github.com/acme/template?ref=main", "v1.2.3"))
+	assert.Equal(t, "./local", WithRef("./local", "v1.2.3"))
+}
+
 func hasSampleFile(files []templates.File) bool {
 	for _, f := range files {
 		if f.Path == "file.txt" {
@@ -77,6 +94,17 @@ func TestResolve_FileURI(t *testing.T) {
 func TestResolve_BadLocalPathReturnsLoadError(t *testing.T) {
 	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "missing", filepath.Join(t.TempDir(), "missing"), time.Minute)
 	require.Error(t, err)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
+func TestResolve_LocalPathMissingScaffoldConfig(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("not a scaffold"), 0o600))
+
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "missing-scaffold", dir, time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldConfigMissing)
 	require.NotNil(t, cleanup)
 	cleanup()
 }

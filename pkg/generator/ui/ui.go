@@ -341,7 +341,8 @@ func (ui *InitUI) ExecuteWithInteractiveFlow(
 	force, update, useDefaults bool,
 	cmdTemplateValues map[string]interface{},
 ) error {
-	return ui.ExecuteWithInteractiveFlowAndBaseRef(embedsConfig, targetPath, force, update, useDefaults, "", cmdTemplateValues)
+	_, err := ui.ExecuteWithInteractiveFlowAndBaseRefResult(embedsConfig, targetPath, force, update, useDefaults, "", cmdTemplateValues)
+	return err
 }
 
 // ExecuteWithInteractiveFlowAndBaseRef provides a unified flow with base ref support.
@@ -354,6 +355,34 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRef(
 	baseRef string,
 	cmdTemplateValues map[string]interface{},
 ) error {
+	_, err := ui.ExecuteWithInteractiveFlowAndBaseRefResult(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues)
+	return err
+}
+
+// ExecuteWithInteractiveFlowResult provides the same flow as ExecuteWithInteractiveFlow
+// and returns the final target path selected by the user.
+//
+//nolint:revive // argument-limit: public API mirrors ExecuteWithInteractiveFlow.
+func (ui *InitUI) ExecuteWithInteractiveFlowResult(
+	embedsConfig *tmpl.Configuration,
+	targetPath string,
+	force, update, useDefaults bool,
+	cmdTemplateValues map[string]interface{},
+) (string, error) {
+	return ui.ExecuteWithInteractiveFlowAndBaseRefResult(embedsConfig, targetPath, force, update, useDefaults, "", cmdTemplateValues)
+}
+
+// ExecuteWithInteractiveFlowAndBaseRefResult provides the interactive flow with
+// base ref support and returns the final target path.
+//
+//nolint:revive // argument-limit: public API mirrors ExecuteWithInteractiveFlowAndBaseRef.
+func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRefResult(
+	embedsConfig *tmpl.Configuration,
+	targetPath string,
+	force, update, useDefaults bool,
+	baseRef string,
+	cmdTemplateValues map[string]interface{},
+) (string, error) {
 	// If no target path was provided (interactive mode), prompt for it after setup.
 	// For scaffold templates, promptForTargetPath also returns the values the user
 	// already entered so we can avoid running the setup form a second time.
@@ -362,7 +391,7 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRef(
 		var err error
 		targetPath, preCollectedValues, err = ui.promptForTargetPath(embedsConfig, useDefaults, cmdTemplateValues)
 		if err != nil {
-			return err
+			return "", err
 		}
 		// If the form was already run to derive the target path, merge the
 		// pre-collected values into cmdTemplateValues and use --use-defaults so
@@ -382,7 +411,10 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRef(
 	}
 
 	// Now execute with the determined target path.
-	return ui.ExecuteWithBaseRef(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues)
+	if err := ui.ExecuteWithBaseRef(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues); err != nil {
+		return "", err
+	}
+	return targetPath, nil
 }
 
 // promptForTargetPath handles interactive target path prompting with scaffold config support.

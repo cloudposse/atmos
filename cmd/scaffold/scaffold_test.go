@@ -86,6 +86,23 @@ func TestScaffoldGenerateCmd_FlagDefinitions(t *testing.T) {
 			flagName:  "set",
 			shorthand: "",
 		},
+		{
+			name:      "ref flag",
+			flagName:  "ref",
+			shorthand: "",
+		},
+		{
+			name:         "git flag",
+			flagName:     "git",
+			shorthand:    "",
+			defaultValue: "false",
+		},
+		{
+			name:         "no-git flag",
+			flagName:     "no-git",
+			shorthand:    "",
+			defaultValue: "false",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1106,7 +1123,7 @@ func TestExecuteTemplateGeneration_ErrorPath(t *testing.T) {
 
 	// Test with nil UI to trigger error.
 	opts := scaffoldGenerateOptions{useDefaults: true, templateValues: map[string]interface{}{}}
-	err := executeTemplateGeneration(&config, t.TempDir(), opts, nil)
+	err := executeTemplateGeneration(&config, t.TempDir(), &opts, nil)
 	assert.Error(t, err)
 }
 

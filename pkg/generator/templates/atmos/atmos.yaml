@@ -49,8 +49,6 @@ components:
 stacks:
   # Path to stack files (relative to `base_path`)
   base_path: "stacks"
-  # Stack file name pattern
-  name_pattern: "{environment}-{stage}.yaml"
   # Default stack name template
   name_template: '{{`{{.environment}}-{{.stage}}`}}'
 

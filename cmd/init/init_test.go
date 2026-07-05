@@ -65,6 +65,24 @@ func TestInitCmd_FlagDefinitions(t *testing.T) {
 			flagName:  "set",
 			shorthand: "",
 		},
+		{
+			name:         "ref flag",
+			flagName:     "ref",
+			shorthand:    "",
+			defaultValue: "",
+		},
+		{
+			name:         "git flag",
+			flagName:     "git",
+			shorthand:    "",
+			defaultValue: "true",
+		},
+		{
+			name:         "no-git flag",
+			flagName:     "no-git",
+			shorthand:    "",
+			defaultValue: "false",
+		},
 	}
 
 	for _, tt := range tests {
@@ -394,6 +412,9 @@ func TestInit_PackageInitialization(t *testing.T) {
 	assert.NotNil(t, initCmd.Flags().Lookup("force"))
 	assert.NotNil(t, initCmd.Flags().Lookup("interactive"))
 	assert.NotNil(t, initCmd.Flags().Lookup("set"))
+	assert.NotNil(t, initCmd.Flags().Lookup("ref"))
+	assert.NotNil(t, initCmd.Flags().Lookup("git"))
+	assert.NotNil(t, initCmd.Flags().Lookup("no-git"))
 }
 
 func TestExecuteInit_WithTemplateDirectory(t *testing.T) {
@@ -401,7 +422,7 @@ func TestExecuteInit_WithTemplateDirectory(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	err := executeInit(context.Background(), initOptions{
+	err := executeInit(context.Background(), &initOptions{
 		templateName: "simple",
 		targetDir:    tmpDir,
 		interactive:  false,
@@ -452,7 +473,7 @@ func TestExecuteInit_ValidatesRequiredArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := executeInit(context.Background(), initOptions{
+			err := executeInit(context.Background(), &initOptions{
 				templateName: tt.templateName,
 				targetDir:    tt.targetDir,
 				interactive:  tt.interactive,

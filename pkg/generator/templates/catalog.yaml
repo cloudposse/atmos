@@ -15,9 +15,27 @@
 apiVersion: atmos/v1
 kind: AtmosScaffoldCatalog
 templates:
+  - name: aws/app
+    cloud: aws
+    tier: app
+    version: v1.0.0
+    description: AWS application SDLC repository — dev/staging/prod stacks, native CI, and one emulator-proven app component.
+    source: github.com/cloudposse/atmos.git//examples/scaffolds/aws/app?ref=main
   - name: aws/landing-zone
     cloud: aws
     tier: landing-zone
     version: v2.0.0
     description: AWS landing zone — dev/staging/prod environments with a conventional baseline (audit trail, KMS, SSM, monitoring, IAM), provisioned end to end on the local emulator.
     source: github.com/cloudposse/atmos.git//examples/scaffolds/aws/landing-zone?ref=main
+  - name: gcp/landing-zone
+    cloud: gcp
+    tier: landing-zone
+    version: v1.0.0
+    description: GCP landing zone — dev/staging/prod environments with GCS, Secret Manager, service account, and bucket IAM, provisioned on the local emulator.
+    source: github.com/cloudposse/atmos.git//examples/scaffolds/gcp/landing-zone?ref=main
+  - name: azure/landing-zone
+    cloud: azure
+    tier: landing-zone
+    version: v1.0.0
+    description: Azure landing zone — dev/staging/prod environments with resource group, virtual network, subnet, and NSG, provisioned on the local emulator.
+    source: github.com/cloudposse/atmos.git//examples/scaffolds/azure/landing-zone?ref=main

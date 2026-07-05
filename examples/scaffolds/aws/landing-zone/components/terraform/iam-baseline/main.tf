@@ -36,7 +36,6 @@ data "aws_iam_policy_document" "deploy" {
       "kms:*",
       "logs:*",
       "sns:*",
-      "cloudtrail:*",
       "cloudwatch:*",
     ]
     resources = ["*"]

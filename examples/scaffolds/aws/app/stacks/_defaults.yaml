@@ -1,0 +1,21 @@
+# atmos:template
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  project: "[[ .Config.project_name ]]"
+  region: "[[ .Config.region ]]"
+
+components:
+  emulator:
+    aws:
+      driver: floci/aws
+      region: "[[ .Config.region ]]"
+      container:
+        image: mirror.gcr.io/floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2
+        ports:
+          - host: 14566
+            container: 4566
+
+  terraform:
+    app:
+      vars: {}

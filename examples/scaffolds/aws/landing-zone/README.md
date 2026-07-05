@@ -2,9 +2,9 @@
 # [[ .Config.project_name ]]
 
 An [Atmos](https://atmos.tools) landing zone for AWS: `dev`, `staging`, and
-`prod` environments, each with a small, conventional baseline — audit trail,
-encryption key, environment metadata, monitoring, and a deployment role — all
-provisionable end to end on a local emulator with no AWS credentials.
+`prod` environments, each with a small, conventional baseline — encrypted audit
+log bucket, encryption key, environment metadata, monitoring, and a deployment
+role — all provisionable end to end on a local emulator with no AWS credentials.
 
 ## Quick start
 
@@ -30,7 +30,7 @@ atmos emulator down aws -s dev
 atmos.yaml                    Atmos config: emulator identity, test command
 components/terraform/
   kms/                        Baseline encryption key + alias
-  audit-trail/                CloudTrail + encrypted, private log bucket
+  audit-trail/                Encrypted, private audit log bucket
   baseline/                   Environment metadata in SSM Parameter Store
   monitoring/                 Log group, alerts topic, log-volume alarm
   iam-baseline/               Environment deployment role
@@ -38,7 +38,7 @@ stacks/
   _defaults.yaml              Shared foundation: emulator, state backend
   dev.yaml                    Development: disposable, short retention
   staging.yaml                Staging: production-like rehearsal
-  prod.yaml                   Production: multi-region trail, long retention
+  prod.yaml                   Production: protected log bucket, long retention
 ```
 
 Every environment is a single flat stack file that imports `_defaults.yaml`
@@ -65,8 +65,9 @@ and carries its own real configuration — no deep directory hierarchy.
    authentication (see [Atmos Auth](https://atmos.tools/cli/commands/auth)).
 3. `atmos terraform plan --all -s dev` and review.
 
-Note: on the emulator, CloudTrail is management-plane only — the trail and
-its bucket are created for real, but no events are delivered.
+Note: this scaffold intentionally excludes CloudTrail because Floci does not
+currently emulate that API. Add CloudTrail only when targeting real AWS or an
+emulator version that supports it.
 
 ## Next steps
 
