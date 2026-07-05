@@ -5,19 +5,19 @@ authors: [osterman]
 tags: [dx, core]
 ---
 
-Atmos now builds itself through the same command surface contributors use locally:
+Atmos now builds itself through a first-class Atmos command:
 
 ```bash
 atmos build --target linux
 ```
 
-That small command is the point. The build exposes the flags developers actually care about, such as the target platform, while Atmos owns the shell details, cross-compilation wiring, output paths, and CI glue behind the command.
+We replaced the old Make-based build and CI entrypoints with Atmos custom commands to improve the developer experience and dogfood our own workflow engine. Build and test workflows now expose the flags developers actually care about, such as the target platform, while Atmos owns the shell details, cross-compilation wiring, output paths, and CI glue behind the command.
 
 <!--truncate-->
 
 ## What Changed
 
-We replaced the old Make-based build and CI entrypoints with Atmos custom commands. The repository's development commands now live in `.atmos.d/` command groups instead of Make targets. The root `atmos.yaml` stays focused on project configuration, while the command surface is split by concern:
+The repository's development commands now live in `.atmos.d/` command groups instead of Make targets. The root `atmos.yaml` stays focused on project configuration, while the command surface is split by concern:
 
 - `atmos build ...` for dependencies, binaries, versions, and docs generation.
 - `atmos test` plus mode flags for short, acceptance, coverage, and race-test workflows.
