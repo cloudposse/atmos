@@ -162,3 +162,37 @@ func TestCommandEngine_Run_WritesSummaryToCIStepSummary(t *testing.T) {
 	assert.Contains(t, string(got), "## checkov")
 	assert.Contains(t, string(got), "CKV_AWS_19")
 }
+
+func TestHookLogGroupTitle(t *testing.T) {
+	tests := []struct {
+		name string
+		ctx  *ExecContext
+		want string
+	}{
+		{
+			name: "name kind and event",
+			ctx:  &ExecContext{HookName: "policy", Event: AfterTerraformPlan, Hook: &Hook{Kind: "checkov", Command: "checkov"}},
+			want: "hook policy (checkov) - after.terraform.plan",
+		},
+		{
+			name: "kind fallback",
+			ctx:  &ExecContext{Event: BeforeTerraformApply, Hook: &Hook{Kind: "trivy", Command: "trivy"}},
+			want: "hook trivy - before.terraform.apply",
+		},
+		{
+			name: "command fallback",
+			ctx:  &ExecContext{Hook: &Hook{Command: "custom-scan"}},
+			want: "hook custom-scan",
+		},
+		{
+			name: "nil context",
+			ctx:  nil,
+			want: "hook",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, hookLogGroupTitle(tt.ctx))
+		})
+	}
+}

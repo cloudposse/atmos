@@ -919,6 +919,11 @@ jobs:
           atmos workflow push-local-registry -f container-step
           atmos workflow workspace -f container-step
           atmos workflow env -f container-step
+          grep -q "## .*atmos-container-step:local" "$GITHUB_STEP_SUMMARY"
+          grep -q "## .*localhost:5000/atmos-container-step:local" "$GITHUB_STEP_SUMMARY"
+          grep -q '| Digest | `sha256:' "$GITHUB_STEP_SUMMARY"
+          grep -q "<summary>.*Layers (" "$GITHUB_STEP_SUMMARY"
+          grep -q "<summary>.*Raw JSON</summary>" "$GITHUB_STEP_SUMMARY"
 
       - name: Verify a failing container step propagates a non-zero exit code
         working-directory: examples/container-step
