@@ -129,15 +129,12 @@ jobs:
       fail-fast: false
       matrix:
         flavor:
-          - { os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false", target: linux }
+          - { os: "ubuntu-latest", target: linux }
           - { os: "windows-latest", target: windows }
           - { os: "macos-15", target: macos }
-    timeout-minutes: 60
+    timeout-minutes: 75
     runs-on: ${{ matrix.flavor.os }}
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
-        if: matrix.flavor.target == 'linux'
-
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -252,7 +249,7 @@ jobs:
       # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
       - name: Acceptance tests with coverage
-        timeout-minutes: 45
+        timeout-minutes: 60
         if: matrix.flavor.target == 'linux'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -502,33 +499,85 @@ jobs:
 
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
+        timeout-minutes: 25
         run: |
+          set -euo pipefail
+
+          run_with_timeout() {
+            local timeout_seconds="$1"
+            shift
+
+            "$@" &
+            local cmd_pid=$!
+
+            (
+              sleep "$timeout_seconds"
+              if kill -0 "$cmd_pid" 2>/dev/null; then
+                echo "::error::Timed out after ${timeout_seconds}s: $*"
+                kill -TERM "$cmd_pid" 2>/dev/null || true
+                sleep 10
+                kill -KILL "$cmd_pid" 2>/dev/null || true
+              fi
+            ) &
+            local timer_pid=$!
+
+            local status=0
+            wait "$cmd_pid" || status=$?
+            kill "$timer_pid" 2>/dev/null || true
+            wait "$timer_pid" 2>/dev/null || true
+            return "$status"
+          }
+
+          diagnose_colima() {
+            echo "::group::Colima diagnostics"
+            colima status || true
+            limactl list || true
+            pgrep -fl 'colima|lima|qemu' || true
+            for log in "$HOME"/.colima/_lima/colima/serial*.log "$HOME"/.colima/_lima/colima/ha.stderr.log; do
+              if [ -f "$log" ]; then
+                echo "---- $log ----"
+                tail -n 200 "$log" || true
+              fi
+            done
+            echo "::endgroup::"
+          }
+
           if brew tap | grep -qx 'aws/tap'; then
             brew untap aws/tap
           fi
-          brew install colima docker qemu
+
+          run_with_timeout 600 brew install colima docker qemu
 
           # Colima/Lima occasionally leaves the VM half-started on macOS runners
           # (SSH/DHCP timeout while QEMU is still exiting). Start from a clean
           # instance and retry before failing the job. Also preflight Docker
           # and pull the k3s image here so emulator startup does not discover a
           # broken runtime halfway through `atmos test`.
-          colima delete --data --force || true
+          run_with_timeout 180 colima delete --data --force || true
           for attempt in 1 2 3; do
-            if colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20 \
-              && docker info \
-              && docker pull rancher/k3s:latest; then
+            echo "::group::Start Colima attempt ${attempt}"
+            if run_with_timeout 720 colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20 \
+              && run_with_timeout 120 docker info \
+              && run_with_timeout 600 docker pull rancher/k3s:latest; then
+              echo "::endgroup::"
               break
             fi
 
+            status=$?
+            echo "::endgroup::"
+            diagnose_colima
+
+            run_with_timeout 180 colima delete --data --force || true
+
             if [ "$attempt" -eq 3 ]; then
-              exit 1
+              exit "$status"
             fi
 
-            colima delete --data --force || true
             sleep $((attempt * 20))
           done
-          docker version
+
+          docker context use colima || true
+          run_with_timeout 120 docker version
 
       - name: Download build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
