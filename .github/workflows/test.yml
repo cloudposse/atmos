@@ -129,15 +129,12 @@ jobs:
       fail-fast: false
       matrix:
         flavor:
-          - { os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false", target: linux }
+          - { os: "ubuntu-latest", target: linux }
           - { os: "windows-latest", target: windows }
           - { os: "macos-15", target: macos }
-    timeout-minutes: 60
+    timeout-minutes: 75
     runs-on: ${{ matrix.flavor.os }}
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
-        if: matrix.flavor.target == 'linux'
-
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -252,7 +249,7 @@ jobs:
       # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
       - name: Acceptance tests with coverage
-        timeout-minutes: 45
+        timeout-minutes: 60
         if: matrix.flavor.target == 'linux'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
