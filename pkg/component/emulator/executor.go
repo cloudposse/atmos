@@ -156,7 +156,7 @@ func executeUp(ctx context.Context, info *schema.ConfigAndStacksInfo, ephemeralO
 				return "", upErr
 			}
 			if url := endpoint.URL("http"); url != "" {
-				return fmt.Sprintf("emulator %s is up at %s", r.component, url), nil
+				return fmt.Sprintf("emulator %s is up at `%s`", r.component, url), nil
 			}
 			return fmt.Sprintf("emulator %s is up", r.component), nil
 		},
@@ -258,7 +258,7 @@ func ExecutePs(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		return nil
 	}
 	for _, status := range statuses {
-		ui.Writef("%s\t%s\t%s\t%s\n", status.Name, status.Image, status.Status, status.ID)
+		ui.Writef("%s\t%s\t%s\t%s\n", status.Name, status.Container, status.Image, status.Status)
 	}
 	return nil
 }

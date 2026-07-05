@@ -24,12 +24,68 @@ commands:
           - type: simulate
             text: "# render, deploy, verify, and tear down the Helm release"
           - type: simulate
-            text: &cmd atmos test
+            text: &validate atmos validate stacks
           - type: shell
-            name: test
+            name: validate
             duration: 650ms
             interval: 750ms
-            command: *cmd
+            command: *validate
+          - type: simulate
+            text: &template atmos helm template demo -s dev
+          - type: shell
+            name: template
+            duration: 650ms
+            interval: 750ms
+            command: *template
+          - type: simulate
+            text: &up atmos emulator up kubernetes -s dev
+          - type: shell
+            name: up
+            duration: 650ms
+            interval: 750ms
+            command: *up
+          - type: simulate
+            text: &diff atmos helm diff demo -s dev --identity local-k3s
+          - type: shell
+            name: diff
+            duration: 650ms
+            interval: 750ms
+            command: *diff
+          - type: simulate
+            text: &apply atmos helm apply demo -s dev --identity local-k3s
+          - type: shell
+            name: apply
+            duration: 650ms
+            interval: 750ms
+            command: *apply
+          - type: simulate
+            text: &deployment atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
+          - type: shell
+            name: deployment
+            duration: 650ms
+            interval: 750ms
+            command: *deployment
+          - type: simulate
+            text: &service atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
+          - type: shell
+            name: service
+            duration: 650ms
+            interval: 750ms
+            command: *service
+          - type: simulate
+            text: &delete atmos helm delete demo -s dev --identity local-k3s
+          - type: shell
+            name: delete
+            duration: 650ms
+            interval: 750ms
+            command: *delete
+          - type: simulate
+            text: &down atmos emulator down kubernetes -s dev
+          - type: shell
+            name: down
+            duration: 650ms
+            interval: 750ms
+            command: *down
       - type: shell
         name: validate
         command: atmos casts validate examples helm lifecycle
@@ -47,8 +103,25 @@ commands:
           plain = strip_ansi(text)
           assert_no_experimental(text)
           assert_body_color(text)
-          for needle in ["atmos test", "apiversion: apps/v1", "kind: deployment", "kind: service", "emulator kubernetes is up", "emulator kubernetes is down"]:
+          for needle in [
+              "atmos validate stacks",
+              "atmos helm template demo -s dev",
+              "atmos emulator up kubernetes -s dev",
+              "atmos helm diff demo -s dev --identity local-k3s",
+              "atmos helm apply demo -s dev --identity local-k3s",
+              "atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo",
+              "atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo",
+              "atmos helm delete demo -s dev --identity local-k3s",
+              "atmos emulator down kubernetes -s dev",
+              "apiversion: apps/v1",
+              "kind: deployment",
+              "kind: service",
+              "emulator kubernetes is up",
+              "emulator kubernetes is down",
+          ]:
               if needle not in plain.lower():
                   raise SystemExit(f"helm cast missing {needle!r}")
+          if "atmos test" in plain.lower():
+              raise SystemExit("helm cast must not run atmos test")
           assert_no_error_output(text)
           assert_no_local_paths(text)

@@ -163,6 +163,14 @@ commands:
     description: Validate every example-sourced cast
     env: !include cast-defaults.yaml .env.command
     steps:
+      - type: script
+        name: terminal-modes
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import assert_no_dumb_term_recordings
+          assert_no_dumb_term_recordings()
       - type: shell
         name: emulator-aws-lifecycle
         command: atmos casts validate examples emulator-aws lifecycle

@@ -29,17 +29,22 @@ func TestCompositionCommandStructure(t *testing.T) {
 	for i, c := range subcommands {
 		names[i] = c.Name()
 	}
+	assert.Contains(t, names, "list")
 	assert.Contains(t, names, "validate")
+	assert.Contains(t, names, "logs")
+	for _, verb := range lifecycleVerbs {
+		assert.Contains(t, names, verb)
+	}
 }
 
-func TestValidateRequiresExactlyOneArg(t *testing.T) {
-	// validate <composition> takes exactly one positional argument.
+func TestValidateAcceptsOptionalCompositionArg(t *testing.T) {
+	// validate [composition] accepts zero or one positional argument.
 	tests := []struct {
 		name    string
 		args    []string
 		wantErr bool
 	}{
-		{name: "no args", args: []string{}, wantErr: true},
+		{name: "no args", args: []string{}, wantErr: false},
 		{name: "exactly one arg", args: []string{"storefront"}, wantErr: false},
 		{name: "too many args", args: []string{"a", "b"}, wantErr: true},
 	}
@@ -53,6 +58,33 @@ func TestValidateRequiresExactlyOneArg(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestLifecycleCommandsAcceptOptionalCompositionArg(t *testing.T) {
+	for _, name := range append(lifecycleVerbs, "logs") {
+		t.Run(name, func(t *testing.T) {
+			cmd, _, err := compositionCmd.Find([]string{name})
+			require.NoError(t, err)
+			require.NotNil(t, cmd)
+			require.NoError(t, cmd.Args(cmd, []string{}))
+			require.NoError(t, cmd.Args(cmd, []string{"storefront"}))
+			require.Error(t, cmd.Args(cmd, []string{"one", "two"}))
+		})
+	}
+}
+
+func TestCompositionVerbFlags(t *testing.T) {
+	cmd := logsCmd
+	require.NoError(t, cmd.Flags().Set("follow", "true"))
+	require.NoError(t, cmd.Flags().Set("tail", "20"))
+	t.Cleanup(func() {
+		_ = cmd.Flags().Set("follow", "false")
+		_ = cmd.Flags().Set("tail", "all")
+	})
+
+	flags := compositionVerbFlags(cmd)
+	assert.Equal(t, true, flags["follow"])
+	assert.Equal(t, "20", flags["tail"])
 }
 
 func TestBuildConfigAndStacksInfo_ResolvesStack(t *testing.T) {

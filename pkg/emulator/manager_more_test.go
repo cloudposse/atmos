@@ -51,6 +51,7 @@ func init() {
 func kubeRunningInfo(hostPort int) container.Info {
 	return container.Info{
 		ID:     "k3s-container-xyz",
+		Name:   "atmos-dev-emulator-k8s",
 		Image:  kubeTestDriverImage,
 		Status: "running",
 		Labels: map[string]string{

@@ -30,7 +30,7 @@ commands:
         env: !include cast-defaults.yaml .env.recording
         steps:
           - type: simulate
-            text: "# start a local AWS emulator, declared as a component in the dev stack"
+            text: "# start a local `AWS` emulator, declared as a component in the dev stack"
           - type: simulate
             text: &emulator_up_cmd atmos emulator up aws -s dev --ephemeral
           - type: shell
@@ -46,7 +46,7 @@ commands:
             interval: 750ms
             command: *emulator_ps_cmd
           - type: simulate
-            text: "# run real terraform against it, no AWS account needed"
+            text: "# run real terraform against it, no `AWS` account needed"
           - type: simulate
             text: &terraform_apply_cmd atmos terraform apply demo -s dev -auto-approve
           - type: shell
@@ -80,12 +80,12 @@ commands:
 
           path = Path("../../website/static/casts/examples/emulator-aws/lifecycle.cast")
           text = path.read_text()
-          text = re.sub(r"http://127\.0\.0\.1:\d+", "http://127.0.0.1:<port>", text)
           text = re.sub(
-              r"aws\\t.*?\\trunning\\t.*?(?=\\n|\")",
-              r"aws\\t<image>\\trunning\\t<container>",
+              r"(?:mirror\\.gcr\\.io/)?floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2",
+              "floci/floci:1.5.23",
               text,
           )
+          text = re.sub(r"(?<=atmos-dev-emulator-aws\\t)c88ec20bf221(?=\\trunning)", "floci/floci:1.5.23", text)
           path.write_text(text)
           import os, sys
           sys.path.insert(0, os.getcwd())
@@ -112,9 +112,11 @@ commands:
           assert_body_color(text)
           assert_colored(text, "Apply complete!")
           for needle in [
-              "# start a local AWS emulator",
+              "# start a local `AWS` emulator",
+              "# run real terraform against it, no `AWS` account needed",
               "emulator aws is up",
-              "aws\t<image>\trunning\t<container>",
+              "emulator aws is up at http://127.0.0.1:",
+              "aws\tatmos-dev-emulator-aws\tfloci/floci:1.5.23\trunning",
               "running",
               "Apply complete!",
               "stage =",
@@ -126,5 +128,8 @@ commands:
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "Error:", "[emulator-up]", "[emulator-down]", "completed"]:
               if bad in plain:
                   raise SystemExit(f"emulator aws lifecycle cast contains {bad!r}")
+          for placeholder in ["<image>", "<container>", "<port>"]:
+              if placeholder in plain:
+                  raise SystemExit(f"emulator aws lifecycle cast contains placeholder {placeholder!r}")
           assert_no_error_output(text)
           assert_no_local_paths(text)

@@ -73,7 +73,7 @@ func RunSession(ctx context.Context, opts *SessionOptions) error {
 	}
 	defer func() { _ = proc.close() }()
 
-	state := newSessionState(ctx, proc.output, proc.close)
+	state := newSessionState(ctx, proc.output, proc.input, proc.close)
 	defer state.stop()
 
 	for i := range opts.Actions {
@@ -99,6 +99,7 @@ type sessionProcess struct {
 type sessionState struct {
 	mu      sync.Mutex
 	output  bytes.Buffer
+	input   io.Writer
 	discard bool
 	changed chan struct{}
 	done    chan error
@@ -164,9 +165,10 @@ func safePTYSize(value int) uint16 {
 	return uint16(value)
 }
 
-func newSessionState(ctx context.Context, output io.Reader, closeOutput func() error) *sessionState {
+func newSessionState(ctx context.Context, output io.Reader, input io.Writer, closeOutput func() error) *sessionState {
 	watchCtx, cancel := context.WithCancel(ctx)
 	state := &sessionState{
+		input:   input,
 		changed: make(chan struct{}, 1),
 		done:    make(chan error, 1),
 		cancel:  cancel,
@@ -197,6 +199,7 @@ func (s *sessionState) readOutput(output io.Reader) {
 
 func (s *sessionState) recordOutputChunk(chunk []byte) {
 	copied := append([]byte(nil), chunk...)
+	answerTerminalQueries(copied, s.input)
 	s.mu.Lock()
 	discard := s.discard
 	if !discard {
@@ -211,6 +214,21 @@ func (s *sessionState) recordOutputChunk(chunk []byte) {
 	default:
 	}
 	_, _ = iolib.GetContext().Data().Write(copied)
+}
+
+func answerTerminalQueries(chunk []byte, input io.Writer) {
+	if input == nil || len(chunk) == 0 {
+		return
+	}
+	if bytes.Contains(chunk, []byte("\x1b]11;?\x07")) || bytes.Contains(chunk, []byte("\x1b]11;?\x1b\\")) {
+		_, _ = input.Write([]byte("\x1b]11;rgb:0000/0000/0000\x1b\\"))
+	}
+	if bytes.Contains(chunk, []byte("\x1b]10;?\x07")) || bytes.Contains(chunk, []byte("\x1b]10;?\x1b\\")) {
+		_, _ = input.Write([]byte("\x1b]10;rgb:ffff/ffff/ffff\x1b\\"))
+	}
+	for i := 0; i < bytes.Count(chunk, []byte("\x1b[6n")); i++ {
+		_, _ = input.Write([]byte("\x1b[1;1R"))
+	}
 }
 
 func (s *sessionState) finishRead(err error) {

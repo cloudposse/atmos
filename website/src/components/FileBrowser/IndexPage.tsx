@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import Layout from '@theme/Layout';
 import Link from '@docusaurus/Link';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFolder } from '@fortawesome/free-solid-svg-icons';
 import CastPlayer from '@site/src/components/CastPlayer';
@@ -82,7 +83,7 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
         </Link>
       )}
       <div className={styles.exampleCardDescription}>
-        <Markdown components={cardMarkdownComponents}>
+        <Markdown components={cardMarkdownComponents} remarkPlugins={[remarkGfm]}>
           {example.description || 'Explore this example project'}
         </Markdown>
       </div>

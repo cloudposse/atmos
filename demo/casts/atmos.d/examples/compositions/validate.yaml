@@ -9,7 +9,7 @@ commands:
       - type: cast
         name: validate
         working_directory: "../../.context/cast-fixtures/compositions"
-        title: "Compositions: environment-specific stack slices"
+        title: "Compositions: local lifecycle"
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast
@@ -22,23 +22,73 @@ commands:
           cast: "../../website/static/casts/examples/compositions/validate.cast"
         steps:
           - type: simulate
-            text: "# local slice: frontend and api; database stays external"
+            text: "# list local composition fulfillment"
           - type: simulate
-            text: &local_cmd atmos composition validate storefront -s local
+            text: &list_cmd atmos composition list -s local
           - type: shell
-            name: local
+            name: list
             duration: 450ms
             interval: 750ms
-            command: *local_cmd
+            command: *list_cmd
           - type: simulate
-            text: "# dev slice: same composition, with database included"
-          - type: simulate
-            text: &dev_cmd atmos composition validate storefront -s dev
+            text: &validate_cmd atmos composition validate -s local
           - type: shell
-            name: dev
+            name: validate
             duration: 450ms
             interval: 750ms
-            command: *dev_cmd
+            command: *validate_cmd
+          - type: simulate
+            text: "# bring up every fulfilled member in local"
+          - type: simulate
+            text: &up_cmd atmos composition up -s local
+          - type: shell
+            name: up
+            duration: 650ms
+            interval: 750ms
+            command: *up_cmd
+          - type: simulate
+            text: &ps_cmd atmos composition ps -s local
+          - type: shell
+            name: ps
+            duration: 450ms
+            interval: 750ms
+            command: *ps_cmd
+          - type: simulate
+            text: &logs_cmd atmos composition logs -s local --tail --follow
+          - type: shell
+            name: logs
+            duration: 650ms
+            interval: 750ms
+            command: |
+              python3 - <<'PY'
+              import os
+              import signal
+              import subprocess
+              import time
+
+              proc = subprocess.Popen(
+                  ["atmos", "composition", "logs", "-s", "local", "--tail", "--follow"],
+                  preexec_fn=os.setsid,
+              )
+              time.sleep(2)
+              os.killpg(proc.pid, signal.SIGINT)
+              try:
+                  proc.wait(timeout=2)
+              except subprocess.TimeoutExpired:
+                  os.killpg(proc.pid, signal.SIGTERM)
+                  try:
+                      proc.wait(timeout=2)
+                  except subprocess.TimeoutExpired:
+                      os.killpg(proc.pid, signal.SIGKILL)
+                      proc.wait()
+              PY
+          - type: simulate
+            text: &down_cmd atmos composition down -s local
+          - type: shell
+            name: down
+            duration: 650ms
+            interval: 750ms
+            command: *down_cmd
       - type: shell
         name: validate
         command: atmos casts validate examples compositions validate
@@ -56,7 +106,18 @@ commands:
           plain = strip_ansi(text)
           assert_no_experimental(text)
           assert_body_color(text)
-          for needle in ["atmos composition validate storefront -s local", "Composition: storefront", "Fulfilled:", "api", "frontend", "atmos composition validate storefront -s dev", "database"]:
+          for needle in [
+              "atmos composition list -s local",
+              "atmos composition validate -s local",
+              "atmos composition up -s local",
+              "atmos composition ps -s local",
+              "atmos composition logs -s local --tail --follow",
+              "atmos composition down -s local",
+              "storefront",
+              "api",
+              "frontend",
+              "database",
+          ]:
               if needle not in plain:
                   raise SystemExit(f"compositions cast missing {needle!r}")
           assert_no_error_output(text)

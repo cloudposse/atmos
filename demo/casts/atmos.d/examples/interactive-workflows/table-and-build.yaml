@@ -9,7 +9,7 @@ commands:
       - type: cast
         name: table-and-build
         working_directory: "../../.context/cast-fixtures/interactive-workflows"
-        title: "Interactive Workflows: choose, confirm, and type"
+        title: "Interactive Workflows: choose and confirm"
         mode: session
         shell: /bin/sh
         write_rate: 25ms
@@ -19,7 +19,7 @@ commands:
           cast: !include cast-defaults.yaml .cast
         env:
           NO_COLOR: ''
-          TERM: dumb
+          TERM: xterm-256color
           COLORTERM: truecolor
           ATMOS_FORCE_COLOR: '1'
           CLICOLOR_FORCE: '1'
@@ -45,6 +45,14 @@ commands:
             text: "Select the target environment"
             timeout: 10s
           - type: key
+            key: down
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: up
+          - type: pause
+            duration: 350ms
+          - type: key
             key: enter
           - type: pause
             duration: 500ms
@@ -54,10 +62,9 @@ commands:
             text: "y"
           - type: key
             key: enter
-          - type: pause
-            duration: 500ms
-          - type: write
-            text: "Routine deployment"
+          - type: wait
+            text: "Enter a deployment message"
+            timeout: 10s
           - type: key
             key: enter
           - type: wait
@@ -88,10 +95,11 @@ commands:
               "You selected: dev",
               "Are you absolutely sure?",
               "Enter a deployment message",
-              "Routine deployment",
               "Deployment configured",
           ]:
               if needle not in plain:
                   raise SystemExit(f"interactive-workflows cast missing {needle!r}")
+          if "enter a number" in plain.lower():
+              raise SystemExit("interactive-workflows cast fell back to numeric selector")
           assert_no_error_output(text)
           assert_no_local_paths(text)

@@ -1,6 +1,7 @@
 package asciicast
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -294,7 +295,7 @@ func TestNewSessionStateCapturesOutputAndEOF(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	state := newSessionState(ctx, reader, reader.Close)
+	state := newSessionState(ctx, reader, nil, reader.Close)
 
 	if _, err := writer.WriteString("hello session"); err != nil {
 		t.Fatal(err)
@@ -326,7 +327,7 @@ func TestSessionStateDiscardOutputKeepsTeardownNoiseOutOfCapture(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	state := newSessionState(ctx, reader, reader.Close)
+	state := newSessionState(ctx, reader, nil, reader.Close)
 
 	if _, err := writer.WriteString("command output"); err != nil {
 		t.Fatal(err)
@@ -357,6 +358,24 @@ func TestSessionStateDiscardOutputKeepsTeardownNoiseOutOfCapture(t *testing.T) {
 	}
 	if outputMatches(state, "$ exit", nil) {
 		t.Fatal("teardown output was captured")
+	}
+}
+
+func TestAnswerTerminalQueries(t *testing.T) {
+	var input bytes.Buffer
+	answerTerminalQueries([]byte("\x1b]11;?\x1b\\\x1b[6n\x1b]10;?\x1b\\\x1b[6n"), &input)
+
+	got := input.String()
+	for _, want := range []string{
+		"\x1b]11;rgb:0000/0000/0000\x1b\\",
+		"\x1b]10;rgb:ffff/ffff/ffff\x1b\\",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("terminal query response missing %q in %q", want, got)
+		}
+	}
+	if count := strings.Count(got, "\x1b[1;1R"); count != 2 {
+		t.Fatalf("cursor position replies = %d, want 2 in %q", count, got)
 	}
 }
 

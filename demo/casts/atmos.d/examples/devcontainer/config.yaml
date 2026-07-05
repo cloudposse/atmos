@@ -10,49 +10,31 @@ commands:
         name: config
         working_directory: "../../.context/cast-fixtures/devcontainer"
         title: "Devcontainer: discover and inspect shells"
-        mode: session
-        shell: /bin/sh
-        write_rate: 25ms
-        key_interval: 250ms
-        timeout: 30s
+        mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast
-        env:
-          TERM: dumb
-          NO_COLOR: ''
-          COLORTERM: truecolor
-          ATMOS_FORCE_COLOR: '1'
-          CLICOLOR_FORCE: '1'
-          FORCE_COLOR: '1'
-          ATMOS_FORCE_TTY: 'true'
-          ATMOS_KEYRING_TYPE: memory
-          ATMOS_EXPERIMENTAL: silence
-          ATMOS_LOGS_LEVEL: Warning
-          PS1: '$ '
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
         show:
           labels: false
         output:
           mode: raw
           cast: "../../website/static/casts/examples/devcontainer/config.cast"
         steps:
-          - type: pause
-            duration: 500ms
-          - type: write
-            text: "atmos devcontainer list"
-          - type: key
-            key: enter
-          - type: wait
-            text: "geodesic"
-            timeout: 10s
-          - type: pause
-            duration: 500ms
-          - type: write
-            text: "atmos devcontainer config geodesic"
-          - type: key
-            key: enter
-          - type: wait
-            text: "Workspace Folder: /workspace"
-            timeout: 10s
+          - type: simulate
+            text: &list atmos devcontainer list
+          - type: shell
+            name: list
+            duration: 650ms
+            interval: 750ms
+            command: *list
+          - type: simulate
+            text: &config atmos devcontainer config geodesic
+          - type: shell
+            name: config
+            duration: 650ms
+            interval: 750ms
+            command: *config
       - type: shell
         name: validate
         command: atmos casts validate examples devcontainer config

@@ -639,11 +639,12 @@ func (m *Manager) Exec(ctx context.Context, stack, name string, command []string
 
 // Status is one row of `atmos emulator ps` / `atmos emulator list`.
 type Status struct {
-	Name   string
-	Stack  string
-	Image  string
-	Status string
-	ID     string
+	Name      string
+	Stack     string
+	Image     string
+	Status    string
+	Container string
+	ID        string
 }
 
 // Ps lists emulator containers (by canonical labels). When stack is non-empty it
@@ -670,11 +671,12 @@ func (m *Manager) Ps(ctx context.Context, stack string) ([]Status, error) {
 			continue
 		}
 		statuses = append(statuses, Status{
-			Name:   infos[i].Labels[container.LabelComponent],
-			Stack:  instanceStack,
-			Image:  infos[i].Image,
-			Status: infos[i].Status,
-			ID:     infos[i].ID,
+			Name:      infos[i].Labels[container.LabelComponent],
+			Stack:     instanceStack,
+			Image:     infos[i].Image,
+			Status:    infos[i].Status,
+			Container: infos[i].Name,
+			ID:        infos[i].ID,
 		})
 	}
 	return statuses, nil

@@ -111,20 +111,49 @@ def assert_no_error_output(text):
 
 def assert_no_local_paths(text):
     """No machine-specific absolute paths may leak into a committed cast."""
+    cache_checked_text = text.replace("/sanitized/.cache/atmos/", "")
     for marker in (
         "/Users/",
         "/home/",
         "/private/var/folders/",
         "C:\\Users\\",
-        ".cache/atmos/",
         "stack-imports/",
     ):
         if marker in text:
             raise SystemExit(
                 f"cast leaks a machine-specific path (contains {marker!r})"
             )
+    if ".cache/atmos/" in cache_checked_text:
+        raise SystemExit("cast leaks a machine-specific path (contains '.cache/atmos/')")
     if re.search(r"(?:\.\./){4,}", text):
         raise SystemExit("cast leaks a deeply relative local path")
+
+
+def assert_no_dumb_term_recordings(
+    source_glob="atmos.d/examples/**/*.yaml",
+    cast_glob="../../website/static/casts/examples/**/*.cast",
+):
+    """Example casts must record with an interactive terminal type."""
+    offenders = []
+    for path in sorted(Path(".").glob(source_glob)):
+        text = path.read_text()
+        if re.search(r"(?m)^\s*TERM:\s*dumb\s*$", text):
+            offenders.append(str(path))
+
+    for path in sorted(Path(".").glob(cast_glob)):
+        first_line = path.read_text().splitlines()[0]
+        try:
+            header = json.loads(first_line)
+        except (json.JSONDecodeError, IndexError):
+            continue
+        if header.get("term", {}).get("type") == "dumb":
+            offenders.append(str(path))
+
+    if offenders:
+        raise SystemExit(
+            "example casts must not use TERM=dumb or record dumb terminal headers:\n"
+            + "\n".join(f"  - {path}" for path in offenders)
+        )
 
 
 def strip_ansi(text):

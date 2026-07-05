@@ -224,6 +224,7 @@
   line-height: 1.5;
   margin: 0 0 1rem 0;
   flex: 1;
+  overflow: visible;
   overflow-wrap: anywhere;
 }
 

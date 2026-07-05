@@ -17,6 +17,7 @@ import (
 func runningEmulatorInfo(hostPort int) container.Info {
 	return container.Info{
 		ID:     "container-abc",
+		Name:   "atmos-dev-emulator-aws",
 		Image:  testDriverImage,
 		Status: "running",
 		Labels: map[string]string{
@@ -93,4 +94,6 @@ func TestManager_Ps_FiltersByStack(t *testing.T) {
 	require.Len(t, statuses, 1)
 	assert.Equal(t, "aws", statuses[0].Name)
 	assert.Equal(t, testDriverImage, statuses[0].Image)
+	assert.Equal(t, "atmos-dev-emulator-aws", statuses[0].Container)
+	assert.Equal(t, "container-abc", statuses[0].ID)
 }
