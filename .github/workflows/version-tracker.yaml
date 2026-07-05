@@ -15,6 +15,9 @@ on:
 permissions:
   contents: read
 
+env:
+  ATMOS_BOOTSTRAP_VERSION: "1.222.0"
+
 jobs:
   demo:
     name: Version Tracker E2E
@@ -35,8 +38,14 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
+
       - name: Build atmos
-        run: make build
+        run: atmos build
 
       - name: Verify committed lock and managed files are current
         working-directory: examples/demo-version-tracker
