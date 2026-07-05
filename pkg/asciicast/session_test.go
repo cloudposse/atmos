@@ -314,6 +314,52 @@ func TestNewSessionStateCapturesOutputAndEOF(t *testing.T) {
 	}
 }
 
+func TestSessionStateDiscardOutputKeepsTeardownNoiseOutOfCapture(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	state := newSessionState(ctx, reader, reader.Close)
+
+	if _, err := writer.WriteString("command output"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-state.changed:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for command output")
+	}
+
+	state.discardOutput()
+	if _, err := writer.WriteString("^D\b\b$ exit"); err != nil {
+		t.Fatal(err)
+	}
+	_ = writer.Close()
+
+	select {
+	case err := <-state.done:
+		if err != nil {
+			t.Fatalf("session read error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for session reader")
+	}
+
+	if !outputMatches(state, "command output", nil) {
+		t.Fatal("command output was not captured")
+	}
+	if outputMatches(state, "$ exit", nil) {
+		t.Fatal("teardown output was captured")
+	}
+}
+
 func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 	if err := iolib.Initialize(); err != nil {
 		t.Fatal(err)

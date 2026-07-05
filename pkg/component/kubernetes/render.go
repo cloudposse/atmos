@@ -13,16 +13,19 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // fileNameSep separates the parts of a generated manifest file name.
 const fileNameSep = "_"
 
 type renderOptions struct {
-	Output    string
-	OutputDir string
-	Split     bool
+	Output      string
+	OutputDir   string
+	Split       bool
+	AtmosConfig *schema.AtmosConfiguration
 }
 
 func resolveRenderOptions(flags map[string]any, componentSection map[string]any) renderOptions {
@@ -106,8 +109,16 @@ func dispatchRender(objects []*unstructured.Unstructured, options renderOptions)
 		if renderErr != nil {
 			return renderErr
 		}
-		return data.Write(string(manifests))
+		return writeRenderedManifestStdout(manifests, options.AtmosConfig)
 	}
+}
+
+func writeRenderedManifestStdout(manifests []byte, atmosConfig *schema.AtmosConfiguration) error {
+	output := string(manifests)
+	if highlighted, err := u.HighlightCodeWithConfig(atmosConfig, output, "yaml"); err == nil {
+		output = highlighted
+	}
+	return data.Write(output)
 }
 
 func writeSingleManifestFile(path string, objects []*unstructured.Unstructured) error {

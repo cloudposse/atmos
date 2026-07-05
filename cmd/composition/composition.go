@@ -31,6 +31,9 @@ var validateCmd = &cobra.Command{
 	Long:  "Show which of a composition's declared services are fulfilled by components in a stack and which are not provided there.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := compositionParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+			return err
+		}
 		info := buildConfigAndStacksInfo(cmd)
 		return pkgcomposition.ExecuteValidate(cmd.Context(), &info, args[0])
 	},

@@ -8,11 +8,16 @@ cast:
 
 # Compositions
 
-A **composition** groups multiple services into one system. Components declare
-membership via the first-class `composition:` field; the top-level `compositions:`
-section declares the closed set of services. Membership is a **closed contract**
-(a component may only claim a service the composition declares) but fulfillment is
-**open** (a declared service with no component in a given stack is allowed).
+A **composition** defines a reusable slice of a stack across environments. The
+top-level `compositions:` section declares every service that can belong to the
+slice, while each stack fulfills the subset it needs. Local development can run
+`frontend` and `api` while pointing at an external `database`; dev can use the
+same composition and provide all three.
+
+Components join the slice with the first-class `composition:` field. Membership
+is a **closed contract** (a component may only claim a service the composition
+declares), but fulfillment is **open** (a declared service with no component in a
+given stack is allowed).
 
 This example declares a `storefront` composition with three services —
 `frontend`, `api`, `database` — and shows the **same composition adapting per

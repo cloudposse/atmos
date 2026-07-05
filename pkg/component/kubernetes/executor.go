@@ -235,7 +235,9 @@ func runOperation(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConf
 func executeKubernetesOperation(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation, objects []*unstructured.Unstructured) ([]objectResult, error) {
 	switch operation {
 	case OperationRender:
-		err := renderObjects(objects, resolveRenderOptions(ctx.Flags, info.ComponentSection))
+		options := resolveRenderOptions(ctx.Flags, info.ComponentSection)
+		options.AtmosConfig = atmosConfig
+		err := renderObjects(objects, options)
 		if err == nil {
 			return objectsToResults("rendered", objects), nil
 		}

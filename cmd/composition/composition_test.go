@@ -57,15 +57,37 @@ func TestValidateRequiresExactlyOneArg(t *testing.T) {
 
 func TestBuildConfigAndStacksInfo_ResolvesStack(t *testing.T) {
 	// Stack is resolved via viper so the full precedence chain is honored.
+	resetCompositionViper(t)
 	v := viper.GetViper()
-	orig := v.GetString("stack")
-	t.Cleanup(func() { v.Set("stack", orig) })
 
 	v.Set("stack", "dev")
 	info := buildConfigAndStacksInfo(compositionCmd)
 	assert.Equal(t, "dev", info.Stack)
 
-	v.Set("stack", "")
+	resetCompositionViper(t)
 	info = buildConfigAndStacksInfo(compositionCmd)
 	assert.Empty(t, info.Stack)
+}
+
+func TestBuildConfigAndStacksInfo_ResolvesStackAfterBindingFlags(t *testing.T) {
+	resetCompositionViper(t)
+	v := viper.GetViper()
+
+	cmd := validateCmd
+	require.NoError(t, compositionCmd.PersistentFlags().Set("stack", "local"))
+	require.NoError(t, compositionParser.BindFlagsToViper(cmd, v))
+	t.Cleanup(func() { _ = compositionCmd.PersistentFlags().Set("stack", "") })
+
+	info := buildConfigAndStacksInfo(cmd)
+	assert.Equal(t, "local", info.Stack)
+}
+
+func resetCompositionViper(t *testing.T) {
+	t.Helper()
+	viper.Reset()
+	require.NoError(t, compositionParser.BindToViper(viper.GetViper()))
+	t.Cleanup(func() {
+		viper.Reset()
+		_ = compositionParser.BindToViper(viper.GetViper())
+	})
 }

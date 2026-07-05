@@ -9,7 +9,7 @@ commands:
       - type: cast
         name: validate
         working_directory: "../../.context/cast-fixtures/compositions"
-        title: "Compositions: validate service membership"
+        title: "Compositions: environment-specific stack slices"
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast
@@ -22,7 +22,7 @@ commands:
           cast: "../../website/static/casts/examples/compositions/validate.cast"
         steps:
           - type: simulate
-            text: "# local provides frontend and api; database can stay external"
+            text: "# local slice: frontend and api; database stays external"
           - type: simulate
             text: &local_cmd atmos composition validate storefront -s local
           - type: shell
@@ -31,7 +31,7 @@ commands:
             interval: 750ms
             command: *local_cmd
           - type: simulate
-            text: "# dev fulfills the full storefront composition"
+            text: "# dev slice: same composition, with database included"
           - type: simulate
             text: &dev_cmd atmos composition validate storefront -s dev
           - type: shell

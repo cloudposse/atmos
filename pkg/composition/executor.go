@@ -37,7 +37,7 @@ func ExecuteValidate(_ context.Context, info *schema.ConfigAndStacksInfo, name s
 		return err
 	}
 
-	report, err := reportForStacks(stacksMap, name, atmosConfig.Compositions)
+	report, err := reportForStacks(stacksMap, info.Stack, name, atmosConfig.Compositions)
 	if err != nil {
 		return err
 	}
@@ -49,17 +49,25 @@ func ExecuteValidate(_ context.Context, info *schema.ConfigAndStacksInfo, name s
 // composition across all stacks and builds the soft fulfillment Report. Split
 // out from ExecuteValidate so the collect→validate core is unit-testable without
 // config init or stack describe.
-func reportForStacks(stacksMap map[string]any, name string, compositions map[string]schema.Composition) (Report, error) {
-	return Validate(name, collectMembers(stacksMap, name), compositions)
+func reportForStacks(stacksMap map[string]any, stack string, name string, compositions map[string]schema.Composition) (Report, error) {
+	return Validate(name, collectMembers(stacksMap, stack, name), compositions)
 }
 
 // collectMembers returns the sorted, de-duplicated set of component names across
 // all stacks that declare membership in the named composition.
-func collectMembers(stacksMap map[string]any, name string) []string {
+func collectMembers(stacksMap map[string]any, stack string, name string) []string {
 	seen := map[string]bool{}
+	if stack != "" {
+		collectStackMembers(stacksMap[stack], name, seen)
+		return sortedMembers(seen)
+	}
 	for _, stackData := range stacksMap {
 		collectStackMembers(stackData, name, seen)
 	}
+	return sortedMembers(seen)
+}
+
+func sortedMembers(seen map[string]bool) []string {
 	members := make([]string, 0, len(seen))
 	for m := range seen {
 		members = append(members, m)

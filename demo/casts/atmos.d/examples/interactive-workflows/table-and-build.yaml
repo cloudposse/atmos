@@ -18,8 +18,12 @@ commands:
         defaults:
           cast: !include cast-defaults.yaml .cast
         env:
+          NO_COLOR: ''
           TERM: dumb
-          NO_COLOR: '1'
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
           ATMOS_FORCE_TTY: 'true'
           ATMOS_KEYRING_TYPE: memory
           ATMOS_EXPERIMENTAL: silence
@@ -42,19 +46,16 @@ commands:
             timeout: 10s
           - type: key
             key: enter
-          - type: wait
-            text: "You selected: dev"
-            timeout: 10s
-          - type: wait
-            text: "Are you absolutely sure?"
-            timeout: 10s
+          - type: pause
+            duration: 500ms
+          - type: pause
+            duration: 500ms
           - type: write
             text: "y"
           - type: key
             key: enter
-          - type: wait
-            text: "Enter a deployment message"
-            timeout: 10s
+          - type: pause
+            duration: 500ms
           - type: write
             text: "Routine deployment"
           - type: key
@@ -74,10 +75,11 @@ commands:
         script: |
           import os, sys
           sys.path.insert(0, os.getcwd())
-          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
           text = load_text("../../website/static/casts/examples/interactive-workflows/table-and-build.cast")
           plain = strip_ansi(text)
           assert_no_experimental(text)
+          assert_body_color(text)
           for needle in [
               "atmos workflow deploy -f interactive",
               "Deployment Wizard",

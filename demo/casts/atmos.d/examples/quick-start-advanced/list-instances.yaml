@@ -39,6 +39,10 @@ commands:
             duration: 450ms
             interval: 750ms
             command: *list_instances_cmd
+          - type: simulate
+            text: "# deploy the whole component graph when the local AWS emulator is running"
+          - type: simulate
+            text: atmos terraform deploy --all -s plat-ue2-dev
       - type: shell
         name: validate
         command: atmos casts validate examples quick-start-advanced list-instances
@@ -57,7 +61,7 @@ commands:
           assert_no_experimental(text)
           assert_body_color(text)
           assert_colored(text, "plat-ue2-dev")
-          for needle in ["Stacks", "Component Instances", "s3-bucket", "app-config"]:
+          for needle in ["Stacks", "Component Instances", "s3-bucket", "app-config", "atmos terraform deploy --all -s plat-ue2-dev"]:
               if needle not in plain:
                   raise SystemExit(f"list-instances cast missing {needle!r}")
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[list-stacks]", "[list-instances]", "completed"]:

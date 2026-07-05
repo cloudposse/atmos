@@ -63,7 +63,7 @@ commands:
             interval: 750ms
             command: *list_stacks_cmd
           - type: simulate
-            text: "# inspect the exports before applying them"
+            text: "# token is masked; normal env stays visible"
           - type: simulate
             text: &env_cmd atmos env
           - type: shell
@@ -87,6 +87,13 @@ commands:
             duration: 450ms
             interval: 750ms
             command: *check_env_file_cmd
+          - type: simulate
+            text: &check_plain_env_file_cmd grep -q '^export DEMO_ENVIRONMENT=local-development$' .env.cast && echo 'normal env preserved too'
+          - type: shell
+            name: check-plain-env-file
+            duration: 450ms
+            interval: 750ms
+            command: *check_plain_env_file_cmd
       - type: shell
         name: cleanup-env-file
         when: always
@@ -114,17 +121,20 @@ commands:
               "# start with the stack that uses the GitHub provider",
               "atmos list stacks",
               "demo",
-              "# inspect the exports before applying them",
+              "# token is masked; normal env stays visible",
               "atmos env",
               "export GITHUB_TOKEN=<MASKED>",
+              "export DEMO_ENVIRONMENT=local-development",
               "# automation output stays raw",
               "atmos env --output-file .env.cast",
               "grep -q '^export GITHUB_TOKEN=gho_' .env.cast",
               "raw token preserved for automation",
+              "grep -q '^export DEMO_ENVIRONMENT=local-development$' .env.cast",
+              "normal env preserved too",
           ]:
               if needle not in plain:
                   raise SystemExit(f"demo-env masked-token cast missing {needle!r}")
-          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "[list-stacks]", "[env]", "[env-file]", "[check-env-file]", "completed"]:
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "[list-stacks]", "[env]", "[env-file]", "[check-env-file]", "[check-plain-env-file]", "completed"]:
               if bad in plain:
                   raise SystemExit(f"demo-env masked-token cast contains {bad!r}")
           if re.search(r"\bgho_[A-Za-z0-9]{36}\b", plain):

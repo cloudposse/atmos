@@ -18,7 +18,7 @@ variable. This example shows how to:
 
 1. Configure `GITHUB_TOKEN` in `atmos.yaml` using the `!exec` YAML function
 2. Export it using `atmos env`
-3. Use it with Terraform to fetch repository data
+3. See the token masked while normal variables remain visible
 
 ## Prerequisites
 
@@ -72,12 +72,14 @@ The `atmos.yaml` configures `GITHUB_TOKEN` in the global `env` section:
 ```yaml
 env:
   GITHUB_TOKEN: !exec gh auth token
+  DEMO_ENVIRONMENT: local-development
 ```
 
 When you run `eval $(atmos env)`, it:
 1. Executes `gh auth token` to get your GitHub token
 2. Exports it as `GITHUB_TOKEN`
-3. Makes it available to all subsequent commands
+3. Exports normal variables like `DEMO_ENVIRONMENT`
+4. Makes them available to all subsequent commands
 
 The GitHub provider in Terraform automatically uses this environment variable
 for authentication.

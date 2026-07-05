@@ -198,7 +198,7 @@ func runOperation(
 	summary := helmSummary(info, spec, ctx.Flags)
 	switch operation {
 	case OperationTemplate:
-		objects, err := runTemplate(ctx, info, spec)
+		objects, err := runTemplate(ctx, atmosConfig, info, spec)
 		addObjectsToSummary(summary, objects)
 		return summary, err
 	case OperationDiff:
@@ -218,12 +218,14 @@ func runOperation(
 }
 
 // runTemplate renders the chart and writes the manifests per the render options.
-func runTemplate(ctx *component.ExecutionContext, info *schema.ConfigAndStacksInfo, spec *chartSpec) ([]*unstructured.Unstructured, error) {
+func runTemplate(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, spec *chartSpec) ([]*unstructured.Unstructured, error) {
 	objects, err := renderObjects(spec)
 	if err != nil {
 		return nil, err
 	}
-	if err := manifest.WriteObjects(objects, resolveRenderOptions(ctx.Flags, info.ComponentSection)); err != nil {
+	options := resolveRenderOptions(ctx.Flags, info.ComponentSection)
+	options.AtmosConfig = atmosConfig
+	if err := manifest.WriteObjects(objects, options); err != nil {
 		return objects, err
 	}
 	return objects, nil

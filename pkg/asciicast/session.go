@@ -18,7 +18,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-const defaultWaitTimeout = 30 * time.Second
+const (
+	defaultWaitTimeout         = 30 * time.Second
+	defaultTeardownQuietPeriod = 500 * time.Millisecond
+	defaultTeardownMaxWait     = 2 * time.Second
+	sessionReadBufferSize      = 4096
+)
 
 var (
 	// ErrUnknownSessionAction indicates an unsupported scripted session action type.
@@ -77,6 +82,8 @@ func RunSession(ctx context.Context, opts *SessionOptions) error {
 			return errors.Join(err, proc.wait())
 		}
 	}
+	waitForSessionQuiet(ctx, state, defaultTeardownQuietPeriod, defaultTeardownMaxWait)
+	state.discardOutput()
 	return finishSession(ctx, proc, state.done)
 }
 
@@ -92,6 +99,7 @@ type sessionProcess struct {
 type sessionState struct {
 	mu      sync.Mutex
 	output  bytes.Buffer
+	discard bool
 	changed chan struct{}
 	done    chan error
 	cancel  context.CancelFunc
@@ -163,31 +171,7 @@ func newSessionState(ctx context.Context, output io.Reader, closeOutput func() e
 		done:    make(chan error, 1),
 		cancel:  cancel,
 	}
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, readErr := output.Read(buf)
-			if n > 0 {
-				chunk := append([]byte(nil), buf[:n]...)
-				state.mu.Lock()
-				_, _ = state.output.Write(chunk)
-				state.mu.Unlock()
-				select {
-				case state.changed <- struct{}{}:
-				default:
-				}
-				_, _ = iolib.GetContext().Data().Write(chunk)
-			}
-			if readErr != nil {
-				if isExpectedSessionReadError(readErr) {
-					state.done <- nil
-				} else {
-					state.done <- readErr
-				}
-				return
-			}
-		}
-	}()
+	go state.readOutput(output)
 	go func() {
 		<-watchCtx.Done()
 		if closeOutput != nil {
@@ -195,6 +179,55 @@ func newSessionState(ctx context.Context, output io.Reader, closeOutput func() e
 		}
 	}()
 	return state
+}
+
+func (s *sessionState) readOutput(output io.Reader) {
+	buf := make([]byte, sessionReadBufferSize)
+	for {
+		n, readErr := output.Read(buf)
+		if n > 0 {
+			s.recordOutputChunk(buf[:n])
+		}
+		if readErr != nil {
+			s.finishRead(readErr)
+			return
+		}
+	}
+}
+
+func (s *sessionState) recordOutputChunk(chunk []byte) {
+	copied := append([]byte(nil), chunk...)
+	s.mu.Lock()
+	discard := s.discard
+	if !discard {
+		_, _ = s.output.Write(copied)
+	}
+	s.mu.Unlock()
+	if discard {
+		return
+	}
+	select {
+	case s.changed <- struct{}{}:
+	default:
+	}
+	_, _ = iolib.GetContext().Data().Write(copied)
+}
+
+func (s *sessionState) finishRead(err error) {
+	if isExpectedSessionReadError(err) {
+		s.done <- nil
+		return
+	}
+	s.done <- err
+}
+
+func (s *sessionState) discardOutput() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.discard = true
 }
 
 func (s *sessionState) stop() {
@@ -356,6 +389,39 @@ func outputMatches(state *sessionState, text string, re *regexp.Regexp) bool {
 	current := state.output.String()
 	state.mu.Unlock()
 	return (text != "" && strings.Contains(current, text)) || (re != nil && re.MatchString(current))
+}
+
+func waitForSessionQuiet(ctx context.Context, state *sessionState, quiet, maxWait time.Duration) {
+	if state == nil || quiet <= 0 || maxWait <= 0 {
+		return
+	}
+	quietTimer := time.NewTimer(quiet)
+	defer quietTimer.Stop()
+	maxTimer := time.NewTimer(maxWait)
+	defer maxTimer.Stop()
+
+	for {
+		select {
+		case <-state.changed:
+			resetTimer(quietTimer, quiet)
+		case <-quietTimer.C:
+			return
+		case <-maxTimer.C:
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func resetTimer(timer *time.Timer, duration time.Duration) {
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+	timer.Reset(duration)
 }
 
 func keySequence(key string) (string, error) {
