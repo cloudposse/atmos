@@ -14,8 +14,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -772,11 +775,40 @@ func (p *Plugin) resolveArtifactPath(ctx *plugin.HookContext) string {
 	ctx.Info.ComponentFolderPrefixReplaced = resolved.ComponentFolderPrefixReplaced
 	ctx.Info.ComponentSection = resolved.ComponentSection
 
+	if !applyResolvedWorkdirArtifactPath(ctx.Config, &resolved) {
+		return ""
+	}
+	ctx.Info.ComponentSection = resolved.ComponentSection
+
 	path := e.ConstructTerraformComponentPlanfilePath(ctx.Config, &resolved)
 	if path != "" {
 		ctx.Info.PlanFile = path
 	}
 	return path
+}
+
+func applyResolvedWorkdirArtifactPath(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
+	if !provWorkdir.IsWorkdirEnabled(info.ComponentSection) {
+		return true
+	}
+
+	candidate, exists, err := component.BuildAndResolveWorkdirPath(config, info, cfg.TerraformComponentType)
+	if err != nil {
+		log.Warn("Failed to resolve workdir artifact path; planfile upload will be skipped", "error", err)
+		return false
+	}
+	if !exists {
+		// A workdir-enabled component whose plan already ran should have a workdir;
+		// falling back to the source path may miss the actual planfile, so say so.
+		log.Warn("Workdir-enabled component's working directory does not exist; falling back to the source path for the planfile",
+			"path", candidate)
+		return true
+	}
+
+	// ComponentSection is never nil here: IsWorkdirEnabled above requires a
+	// populated provision.workdir map inside it.
+	info.ComponentSection[provWorkdir.WorkdirPathKey] = candidate
+	return true
 }
 
 // buildPlanfileMetadata builds metadata for a planfile.
