@@ -28,6 +28,7 @@ const (
 	AtmosYamlFuncTerraformOutput         = "!terraform.output"
 	AtmosYamlFuncTerraformState          = "!terraform.state"
 	AtmosYamlFuncEnv                     = "!env"
+	AtmosYamlFuncCEL                     = "!cel"
 	AtmosYamlFuncInclude                 = "!include"
 	AtmosYamlFuncIncludeRaw              = "!include.raw"
 	AtmosYamlFuncGitRoot                 = atmosGit.YAMLFuncRepoRoot
@@ -65,6 +66,7 @@ var (
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncCEL,
 		AtmosYamlFuncGitRoot,
 		AtmosYamlFuncGitRootAlias,
 		AtmosYamlFuncGitSha,
@@ -100,6 +102,7 @@ var (
 		AtmosYamlFuncTerraformOutput:         true,
 		AtmosYamlFuncTerraformState:          true,
 		AtmosYamlFuncEnv:                     true,
+		AtmosYamlFuncCEL:                     true,
 		AtmosYamlFuncGitRoot:                 true,
 		AtmosYamlFuncGitRootAlias:            true,
 		AtmosYamlFuncGitSha:                  true,

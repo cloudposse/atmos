@@ -139,10 +139,14 @@
       ]
     },
     "step_condition": {
-      "description": "Declarative condition controlling whether a workflow or custom command step runs. A string is a built-in predicate; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
-      "oneOf": [
+      "description": "Declarative condition controlling whether a workflow or custom command step runs. A string is a built-in predicate or CEL expression; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
+      "anyOf": [
         {
           "$ref": "#/definitions/step_condition_predicate"
+        },
+        {
+          "type": "string",
+          "description": "CEL expression. Built-in predicate keywords are evaluated as predicates before CEL."
         },
         {
           "type": "array",
@@ -205,10 +209,14 @@
       ]
     },
     "condition": {
-      "description": "Declarative condition controlling whether a step or hook runs. A string is a built-in predicate; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
-      "oneOf": [
+      "description": "Declarative condition controlling whether a step or hook runs. A string is a built-in predicate or CEL expression; an array is shorthand for all predicates; an object composes conditions with all, any, or not.",
+      "anyOf": [
         {
           "$ref": "#/definitions/condition_predicate"
+        },
+        {
+          "type": "string",
+          "description": "CEL expression. Built-in predicate keywords are evaluated as predicates before CEL."
         },
         {
           "type": "array",
