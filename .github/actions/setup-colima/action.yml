@@ -54,7 +54,7 @@ runs:
 
         run_with_timeout 600 brew install colima docker qemu
 
-        for attempt in 1 2; do
+        for attempt in 1 2 3; do
           echo "::group::Start Colima attempt ${attempt}"
           if run_with_timeout 720 colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20; then
             echo "::endgroup::"
@@ -67,11 +67,11 @@ runs:
 
           run_with_timeout 180 colima delete -f || true
 
-          if [ "$attempt" -eq 2 ]; then
+          if [ "$attempt" -eq 3 ]; then
             exit "$status"
           fi
 
-          sleep 5
+          sleep $((attempt * 20))
         done
 
         docker context use colima || true
