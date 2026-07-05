@@ -529,6 +529,8 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.terminal.speed", 0.0)
 	v.SetDefault("settings.experimental", "warn") // Experimental feature handling: silence, disable, warn, error
 	// Note: force_color is ENV-only (ATMOS_FORCE_COLOR), no config default
+	v.SetDefault("cast.recording.width", 120)
+	v.SetDefault("cast.recording.height", 36)
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 
 	// Atmos Pro defaults

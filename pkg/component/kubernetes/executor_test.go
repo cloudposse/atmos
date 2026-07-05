@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -726,7 +727,7 @@ func TestRunOperationDeleteDispatchesToClient(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, map[string]int{"deleted": 1}, result.ActionCounts)
 	})
-	assert.Contains(t, output, "deleted v1/ConfigMap default/settings")
+	assert.Contains(t, ansi.Strip(output), "deleted v1/ConfigMap default/settings")
 }
 
 func TestRunOperationRejectsUnsupportedOperation(t *testing.T) {
@@ -869,13 +870,13 @@ func TestRunApplyAndDiffPrintResultsOnSuccess(t *testing.T) {
 		_, err := runApply([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
 		require.NoError(t, err)
 	})
-	assert.Contains(t, applyOut, "applied v1/ConfigMap default/settings")
+	assert.Contains(t, ansi.Strip(applyOut), "applied v1/ConfigMap default/settings")
 
 	diffOut := captureKubernetesStderr(t, func() {
 		_, err := runDiff([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
 		require.NoError(t, err)
 	})
-	assert.Contains(t, diffOut, "v1/ConfigMap default/settings")
+	assert.Contains(t, ansi.Strip(diffOut), "v1/ConfigMap default/settings")
 }
 
 func TestObjectCIResultsCarriesDiff(t *testing.T) {
@@ -910,7 +911,7 @@ func TestPrintResultsUsesUIForStatusWithoutDiff(t *testing.T) {
 		})
 	})
 
-	assert.Contains(t, out, "applied v1/ConfigMap default/settings")
+	assert.Contains(t, ansi.Strip(out), "applied v1/ConfigMap default/settings")
 }
 
 func TestEventsFor(t *testing.T) {
@@ -973,8 +974,9 @@ func TestPrintResults(t *testing.T) {
 		})
 	})
 
-	assert.Contains(t, output, "applied v1/Namespace demo")
-	assert.Contains(t, output, "changed apps/v1/Deployment default/api")
+	plainOutput := ansi.Strip(output)
+	assert.Contains(t, plainOutput, "applied v1/Namespace demo")
+	assert.Contains(t, plainOutput, "changed apps/v1/Deployment default/api")
 }
 
 func TestRunOperationsUseSDKClientFactory(t *testing.T) {

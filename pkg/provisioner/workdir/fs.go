@@ -3,6 +3,7 @@ package workdir
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"hash/fnv"
 	"io"
 	"io/fs"
 	"os"
@@ -286,7 +287,7 @@ func NewDefaultHasher() *DefaultHasher {
 func (h *DefaultHasher) HashDir(path string) (string, error) {
 	defer perf.Track(nil, "workdir.DefaultHasher.HashDir")()
 
-	hash := sha256.New()
+	hash := fnv.New128a()
 
 	// Collect all file paths first for sorted order.
 	var files []string
@@ -321,7 +322,6 @@ func (h *DefaultHasher) HashDir(path string) (string, error) {
 			return "", err
 		}
 		// Normalize to forward slashes for cross-platform consistency.
-		// codeql[go/weak-sensitive-data-hashing]: deterministic workdir fingerprint for cache invalidation, not credential storage.
 		hash.Write([]byte(filepath.ToSlash(relPath)))
 
 		// Hash file contents.
@@ -329,7 +329,6 @@ func (h *DefaultHasher) HashDir(path string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		// codeql[go/weak-sensitive-data-hashing]: combines file fingerprints for cache invalidation, not credential storage.
 		hash.Write([]byte(fileHash))
 	}
 
