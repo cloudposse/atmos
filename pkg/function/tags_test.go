@@ -21,6 +21,7 @@ func TestAllTags(t *testing.T) {
 		TagTerraformOutput,
 		TagTerraformState,
 		TagEnv,
+		TagCEL,
 		TagInclude,
 		TagIncludeRaw,
 		TagRepoRoot,
@@ -64,6 +65,7 @@ func TestIsValidTag(t *testing.T) {
 		TagTerraformOutput,
 		TagTerraformState,
 		TagEnv,
+		TagCEL,
 		TagInclude,
 		TagIncludeRaw,
 		TagRepoRoot,
@@ -109,6 +111,7 @@ func TestYAMLTag(t *testing.T) {
 		{TagTemplate, "!template"},
 		{TagTerraformOutput, "!terraform.output"},
 		{TagTerraformState, "!terraform.state"},
+		{TagCEL, "!cel"},
 		{TagInclude, "!include"},
 		{TagIncludeRaw, "!include.raw"},
 		{TagRepoRoot, "!repo-root"},
@@ -156,6 +159,7 @@ func TestFromYAMLTag(t *testing.T) {
 		{"!template", "template"},
 		{"!terraform.output", "terraform.output"},
 		{"!terraform.state", "terraform.state"},
+		{"!cel", "cel"},
 		{"!include", "include"},
 		{"!include.raw", "include.raw"},
 		{"!repo-root", "repo-root"},
@@ -207,6 +211,7 @@ func TestTagConstants(t *testing.T) {
 	assert.Equal(t, "terraform.output", TagTerraformOutput)
 	assert.Equal(t, "terraform.state", TagTerraformState)
 	assert.Equal(t, "env", TagEnv)
+	assert.Equal(t, "cel", TagCEL)
 	assert.Equal(t, "include", TagInclude)
 	assert.Equal(t, "include.raw", TagIncludeRaw)
 	assert.Equal(t, "repo-root", TagRepoRoot)

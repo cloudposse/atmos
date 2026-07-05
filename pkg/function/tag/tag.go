@@ -35,6 +35,9 @@ const (
 	// Env retrieves an environment variable value.
 	Env = "env"
 
+	// CEL evaluates a Common Expression Language condition.
+	CEL = "cel"
+
 	// Include includes content from another file.
 	Include = "include"
 
@@ -121,6 +124,7 @@ func All() []string {
 		TerraformOutput,
 		TerraformState,
 		Env,
+		CEL,
 		Include,
 		IncludeRaw,
 		RepoRoot,
@@ -157,6 +161,7 @@ var tagsMap = map[string]bool{
 	TerraformOutput:         true,
 	TerraformState:          true,
 	Env:                     true,
+	CEL:                     true,
 	Include:                 true,
 	IncludeRaw:              true,
 	RepoRoot:                true,

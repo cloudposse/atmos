@@ -20,6 +20,7 @@ func TestCatalog(t *testing.T) {
 		TerraformOutput,
 		TerraformState,
 		Env,
+		CEL,
 		Include,
 		IncludeRaw,
 		RepoRoot,

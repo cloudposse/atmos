@@ -29,6 +29,9 @@ const (
 	// TagEnv retrieves an environment variable value.
 	TagEnv = fntag.Env
 
+	// TagCEL evaluates a Common Expression Language condition.
+	TagCEL = fntag.CEL
+
 	// TagInclude includes content from another file.
 	TagInclude = fntag.Include
 

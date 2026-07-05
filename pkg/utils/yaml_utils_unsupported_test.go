@@ -256,6 +256,7 @@ func TestAllSupportedYamlTagsList(t *testing.T) {
 		"!terraform.output",
 		"!terraform.state",
 		"!env",
+		"!cel",
 		"!include",
 		"!include.raw",
 		"!repo-root",
