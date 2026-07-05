@@ -2,10 +2,10 @@ package utils
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
+	"hash/maphash"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -51,7 +51,8 @@ const (
 	AtmosYamlFuncAwsOrganizationID       = "!aws.organization_id"
 	AtmosYamlFuncEmulator                = "!emulator"
 
-	DefaultYAMLIndent = 2
+	DefaultYAMLIndent    = 2
+	cacheFingerprintBase = 16
 )
 
 var (
@@ -124,7 +125,7 @@ var (
 
 	// ParsedYAML cache stores parsed yaml.Node objects and their position
 	// information to avoid re-parsing the same files multiple times. Cache key
-	// is file path + content hash. Values are *parsedYAMLCacheEntry and are
+	// is file path + in-process content fingerprint. Values are *parsedYAMLCacheEntry and are
 	// treated as immutable post-insert; readers receive deep copies (the
 	// underlying yaml.Node tree has pointer-sharing aliases that would
 	// otherwise corrupt the cache if mutated).
@@ -146,9 +147,10 @@ var (
 	// Decode + Intern still ran on every call and accounted for ~500-700µs per
 	// invocation, dominating the function's cost once the parsed-node cache hit.
 	//
-	// Cache key: file path + content hash (same as parsedYAMLCache). Values are
-	// *decodedYAMLCacheEntry with both the decoded map and its positions; readers
-	// receive deep copies (DeepCopyMap + clonePositions) to preserve the
+	// Cache key: file path + in-process content fingerprint (same as
+	// parsedYAMLCache). Values are *decodedYAMLCacheEntry with both the decoded
+	// map and its positions; readers receive deep copies (DeepCopyMap +
+	// clonePositions) to preserve the
 	// immutable-post-insert contract. Only the map[string]any generic
 	// instantiation populates this cache; other generic T fall through to the
 	// existing Decode path.
@@ -157,8 +159,9 @@ var (
 	// Per-key locks to prevent race conditions when multiple goroutines
 	// try to parse the same file simultaneously. This prevents 156+ goroutines
 	// from all parsing the same file when they could share the result.
-	parsedYAMLLocks   = make(map[string]*sync.Mutex)
-	parsedYAMLLocksMu sync.Mutex
+	parsedYAMLLocks     = make(map[string]*sync.Mutex)
+	parsedYAMLLocksMu   sync.Mutex
+	parsedYAMLCacheSeed = maphash.MakeSeed()
 
 	// Cache hit/miss counters. Exposed (unexported) so tests can verify that
 	// repeated parses of the same file are served from the cache.
@@ -275,23 +278,25 @@ func cacheDecodedYAML(file, content string, data map[string]any, positions Posit
 }
 
 // generateParsedYAMLCacheKey generates a cache key from file path and content.
-// The content hash ensures that template-processed files with different contexts
-// get different cache entries, while static files benefit from path-only caching.
+// The content fingerprint ensures that template-processed files with different
+// contexts get different cache entries. This is only an in-process cache key,
+// not a security boundary or persisted digest.
 func generateParsedYAMLCacheKey(file string, content string) string {
 	if file == "" || content == "" {
 		return ""
 	}
 
-	// Compute SHA256 hash of content.
-	hash := sha256.Sum256([]byte(content))
-	contentHash := hex.EncodeToString(hash[:])
+	var h maphash.Hash
+	h.SetSeed(parsedYAMLCacheSeed)
+	_, _ = h.WriteString(content)
+	contentFingerprint := strconv.FormatUint(h.Sum64(), cacheFingerprintBase)
 
-	// Cache key format: "filepath:contenthash"
+	// Cache key format: "filepath:content-length:content-fingerprint"
 	// This ensures that:
 	// - Static files (same content): same cache key → cache hit
 	// - Template files with same context: same cache key → cache hit
 	// - Template files with different context: different cache key → cache miss (correct behavior)
-	return file + ":" + contentHash
+	return file + ":" + strconv.Itoa(len(content)) + ":" + contentFingerprint
 }
 
 // getOrCreateCacheLock returns a mutex for the given cache key.
@@ -896,7 +901,7 @@ func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input 
 // The positions map contains line/column information for each value in the YAML.
 // If atmosConfig.TrackProvenance is false, returns an empty position map.
 // Uses caching with content-aware keys to correctly handle template-processed files.
-// The cache key includes both file path and content hash, ensuring that:
+// The cache key includes both file path and content fingerprint, ensuring that:
 // - Static files are cached by path (same content = cache hit)
 // - Template files with same context get cache hits
 // - Template files with different contexts get separate cache entries (correct behavior).
