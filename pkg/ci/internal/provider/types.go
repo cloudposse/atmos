@@ -132,6 +132,14 @@ type Context struct {
 	// EventName is the event that triggered the workflow (e.g., "push", "pull_request").
 	EventName string
 
+	// ElevatedEvent reports whether the triggering event runs with the base
+	// repository's secrets while the workspace may contain untrusted fork
+	// content (GitHub's pull_request_target and workflow_run). Providers set
+	// this so the provider-agnostic fork-checkout safety gate can refuse to
+	// clone fork content under these events without an explicit opt-in.
+	// See docs/prd/native-ci/framework/fork-pr-trust-gate.md.
+	ElevatedEvent bool
+
 	// Ref is the git ref (e.g., "refs/heads/main").
 	Ref string
 

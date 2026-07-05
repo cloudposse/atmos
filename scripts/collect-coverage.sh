@@ -22,16 +22,16 @@ if [ -d "$COVERAGE_DIR/integration" ] && [ "$(ls -A "$COVERAGE_DIR/integration" 
     go tool covdata textfmt -i="$COVERAGE_DIR/integration" -o="$COVERAGE_DIR/subprocess.txt" 2>/dev/null || true
 fi
 
-# Merge coverage files if subprocess coverage exists
-if [ -f "$COVERAGE_DIR/subprocess.txt" ]; then
-    # Try to use gocovmerge if available, otherwise just use unit coverage
-    go run github.com/wadey/gocovmerge@latest \
-        "$COVERAGE_DIR/unit.txt" \
-        "$COVERAGE_DIR/subprocess.txt" > coverage.raw 2>/dev/null || \
-    cp "$COVERAGE_DIR/unit.txt" coverage.raw
-else
-    cp "$COVERAGE_DIR/unit.txt" coverage.raw
-fi
+# Merge coverage files without invoking an extra Go tool. The acceptance job's
+# package profile is large enough that compiling/running gocovmerge can exhaust
+# constrained CI runners after tests have already passed.
+{
+    head -n 1 "$COVERAGE_DIR/unit.txt"
+    tail -n +2 "$COVERAGE_DIR/unit.txt"
+    if [ -f "$COVERAGE_DIR/subprocess.txt" ]; then
+        tail -n +2 "$COVERAGE_DIR/subprocess.txt"
+    fi
+} > coverage.raw
 
 # Filter out mock files - handle cross-platform grep behavior
 if grep -q "mock_" coverage.raw 2>/dev/null; then
