@@ -330,7 +330,9 @@ components:
 
 Per-run overrides: `--verify-plan` forces `fail`, `--verify-plan=false` forces `off`. Precedence is
 **CLI flag > config > CI default**. Verification runs only on `deploy` (not `apply`), and only under CI
-when planfile storage is configured.
+when planfile storage is configured. `--verify-plan` requires planfile storage: when
+`components.terraform.planfiles` is not configured the deploy errors, since there is no stored plan
+to verify against.
 
 ### Missing stored plan
 

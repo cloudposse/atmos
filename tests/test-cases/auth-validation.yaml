@@ -34,7 +34,10 @@ tests:
       - "validate"
       - "--verbose"
     expect:
-      diff: []
+      diff:
+        # GitHub token probing depends on whether the local/CI environment has gh auth.
+        - 'DEBU  GitHub CLI token lookup failed .*'
+        - 'DEBU  No GitHub token resolved; using anonymous .*'
       stderr:
         - "Validating authentication configuration"
         - "Authentication configuration is valid"

@@ -267,6 +267,28 @@ func TestFlagRegistry_SetCompletionFunc(t *testing.T) {
 	assert.Equal(t, []string{"dev", "prod", "staging"}, results)
 }
 
+func TestFlagRegistry_SetCompletionFunc_StringSliceFlag(t *testing.T) {
+	registry := NewFlagRegistry()
+	registry.Register(&StringSliceFlag{Name: "profile"})
+
+	completionFn := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"dev", "production"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	assert.NotPanics(t, func() {
+		registry.SetCompletionFunc("profile", completionFn)
+	})
+
+	flag := registry.Get("profile")
+	sf, ok := flag.(*StringSliceFlag)
+	require.True(t, ok)
+	require.NotNil(t, sf.CompletionFunc)
+
+	results, directive := sf.CompletionFunc(nil, nil, "")
+	assert.Equal(t, []string{"dev", "production"}, results)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
 func TestFlagRegistry_SetCompletionFunc_NonExistentFlag(t *testing.T) {
 	registry := NewFlagRegistry()
 
@@ -288,7 +310,7 @@ func TestFlagRegistry_SetCompletionFunc_BoolFlagIgnored(t *testing.T) {
 		return []string{"true", "false"}, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	// Should not panic, but SetCompletionFunc only works for StringFlags.
+	// Should not panic, but SetCompletionFunc only works for flags with completion support.
 	assert.NotPanics(t, func() {
 		registry.SetCompletionFunc("verbose", completionFn)
 	})
