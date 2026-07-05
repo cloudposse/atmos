@@ -59,5 +59,8 @@ atmos stack set vars.new_flag yes --file stacks/deploy/prod.yaml -s plat-ue2-pro
 
 :::note
 Edits that would alter or expand a YAML anchor or alias are rejected to avoid silently
-mutating shared data. Blank lines between entries are not preserved.
+mutating shared data, as are multi-document manifests and manifests that define the
+same anchor name more than once. Comments, anchors, indentation width, and line
+endings (CRLF/LF) are preserved, but blank lines between entries are dropped and
+non-indented sequence styles are normalized when a file is edited.
 :::

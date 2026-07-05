@@ -61,6 +61,9 @@ atmos config set logs.level Trace --config ./atmos.yaml
 
 :::note
 Edits that would alter or expand a YAML anchor or alias (including changing a value
-shared by an anchor) are rejected to avoid silently mutating shared data. Blank lines
-between entries are not preserved.
+shared by an anchor) are rejected to avoid silently mutating shared data, as are
+multi-document YAML files and files that define the same anchor name more than once.
+Comments, anchors, indentation width, and line endings (CRLF/LF) are preserved, but
+blank lines between entries are dropped and non-indented sequence styles are
+normalized when a file is edited.
 :::

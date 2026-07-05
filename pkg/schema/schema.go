@@ -801,6 +801,12 @@ type CIConfig struct {
 	Comments    CICommentsConfig    `yaml:"comments,omitempty" json:"comments,omitempty" mapstructure:"comments"`
 	Templates   CITemplatesConfig   `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Cache       CICacheConfig       `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+	// AllowUnsafeForkExecution opts out of the fork-checkout safety gate that
+	// refuses to clone untrusted fork content under pull_request_target and
+	// workflow_run events. Leave false unless a fork-facing workflow has a
+	// documented reason to bypass it. See
+	// docs/prd/native-ci/framework/fork-pr-trust-gate.md.
+	AllowUnsafeForkExecution bool `yaml:"allow_unsafe_fork_execution,omitempty" json:"allow_unsafe_fork_execution,omitempty" mapstructure:"allow_unsafe_fork_execution"`
 }
 
 // CICacheConfig configures the CI build cache, which restores a well-known

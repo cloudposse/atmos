@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
@@ -23,16 +25,20 @@ const yqEditSilentLevel = slog.Level(1000)
 // underlying error.
 const errWrapFmt = "%w: %w"
 
+// errNotFoundFmt is the format string for reporting a not-found path or
+// expression alongside its sentinel error.
+const errNotFoundFmt = "%w: %s"
+
 // defaultFileMode is the permission used for newly written files when the
 // destination does not already exist.
 const defaultFileMode os.FileMode = 0o644
 
 // editPreferences are the yqlib YAML preferences used for all edit operations.
-// They favor faithful round-tripping: 2-space indent, no colors, document
-// separators preserved, and scalars unwrapped on read.
-func editPreferences() yqlib.YamlPreferences {
+// They favor faithful round-tripping: the document's own indent width, no
+// colors, document separators preserved, and scalars unwrapped on read.
+func editPreferences(indent int) yqlib.YamlPreferences {
 	return yqlib.YamlPreferences{
-		Indent:                      DefaultIndent,
+		Indent:                      indent,
 		ColorsEnabled:               false,
 		LeadingContentPreProcessing: true,
 		PrintDocSeparators:          true,
@@ -41,15 +47,27 @@ func editPreferences() yqlib.YamlPreferences {
 	}
 }
 
+// mergeKeyTagRe matches the explicit `!!merge` tag the yqlib encoder places
+// before merge keys when re-encoding a document. The tag is redundant — a
+// plain `<<:` key already resolves as a merge in YAML 1.1 — and emitting it
+// would churn every merge key in anchor-heavy documents on each edit, so it
+// is stripped from encoder output.
+var mergeKeyTagRe = regexp.MustCompile(`(?m)^(\s*(?:- )?)!!merge <<:`)
+
 // evaluate runs a yq expression against raw YAML bytes and returns the full
 // resulting document, preserving comments, anchors, and formatting as much as
 // the underlying yqlib encoder allows. This is the single choke point through
-// which every editing operation passes.
+// which every editing operation passes. Multi-document streams are rejected:
+// yq would apply the expression to every document in the stream.
 func evaluate(content []byte, expr string) (string, error) {
+	if err := ensureSingleDocument(content); err != nil {
+		return "", err
+	}
+
 	// Silence yq's internal diagnostics for the duration of the evaluation.
 	yqlib.GetLogger().SetLevel(yqEditSilentLevel)
 
-	pref := editPreferences()
+	pref := editPreferences(detectIndent(content))
 	encoder := yqlib.NewYamlEncoder(pref)
 	decoder := yqlib.NewYamlDecoder(pref)
 
@@ -57,7 +75,7 @@ func evaluate(content []byte, expr string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: %q: %w", ErrInvalidYAMLExpression, expr, err)
 	}
-	return result, nil
+	return mergeKeyTagRe.ReplaceAllString(result, "${1}<<:"), nil
 }
 
 // Eval evaluates an arbitrary yq expression against raw YAML bytes and returns
@@ -67,12 +85,13 @@ func evaluate(content []byte, expr string) (string, error) {
 func Eval(content []byte, expr string) ([]byte, error) {
 	defer perf.Track(nil, "yaml.Eval")()
 
-	result, err := evaluate(content, expr)
+	base := editBase(content)
+	result, err := evaluate(base, expr)
 	if err != nil {
 		return nil, err
 	}
 	out := []byte(result)
-	if err := guardAnchors(content, out); err != nil {
+	if err := guardAnchors(base, out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -93,13 +112,24 @@ func Query(content []byte, expr string) (string, error) {
 	// A legitimate empty scalar prints as a blank line ("\n"), which trims to ""
 	// but must still be returned as a valid value.
 	if result == "" {
-		return "", fmt.Errorf("%w: %s", ErrYAMLPathNotFound, expr)
+		return "", fmt.Errorf(errNotFoundFmt, ErrYAMLPathNotFound, expr)
 	}
 	trimmed := strings.TrimRight(result, "\n")
-	if trimmed == "null" {
-		return "", fmt.Errorf("%w: %s", ErrYAMLPathNotFound, expr)
+	if trimmed == "null" && !resultIsStringScalar(content, expr) {
+		return "", fmt.Errorf(errNotFoundFmt, ErrYAMLPathNotFound, expr)
 	}
 	return trimmed, nil
+}
+
+// resultIsStringScalar reports whether expr resolves to a string scalar. It
+// disambiguates the unwrapped output "null", which yq prints both for a true
+// YAML null (missing key or explicit null) and for the literal string "null".
+func resultIsStringScalar(content []byte, expr string) bool {
+	tag, err := evaluate(content, "("+expr+") | tag")
+	if err != nil {
+		return false
+	}
+	return strings.TrimRight(tag, "\n") == "!!str"
 }
 
 // EvalFile evaluates a yq expression against a file and writes the result back
@@ -132,6 +162,9 @@ func Get(content []byte, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if isEmptyDocument(content) {
+		return "", fmt.Errorf(errNotFoundFmt, ErrYAMLPathNotFound, path)
+	}
 
 	result, err := evaluate(content, yqPath)
 	if err != nil {
@@ -141,9 +174,10 @@ func Get(content []byte, path string) (string, error) {
 
 	// yq emits "null" both for a missing key and for an explicit null value.
 	// For addressing purposes the editor treats both as "not present"; callers
-	// needing to write a key regardless can use Set directly.
-	if trimmed == "null" {
-		return "", fmt.Errorf("%w: %s", ErrYAMLPathNotFound, path)
+	// needing to write a key regardless can use Set directly. The literal
+	// string "null" prints identically, so it is disambiguated by tag.
+	if trimmed == "null" && !resultIsStringScalar(content, yqPath) {
+		return "", fmt.Errorf(errNotFoundFmt, ErrYAMLPathNotFound, path)
 	}
 	return trimmed, nil
 }
@@ -185,26 +219,35 @@ func SetRaw(content []byte, path, rhs string) ([]byte, error) {
 		return nil, err
 	}
 
+	// Seed an empty document with null so the assignment has a document to
+	// create keys in; yq evaluates expressions zero times on empty input,
+	// which would make Set on a new/empty file a silent no-op.
+	base := editBase(content)
 	expr := fmt.Sprintf("%s = %s", yqPath, rhs)
-	result, err := evaluate(content, expr)
+	result, err := evaluate(base, expr)
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFmt, ErrYAMLUpdateFailed, err)
 	}
 
 	out := []byte(result)
-	if err := guardAnchors(content, out); err != nil {
+	if err := guardAnchors(base, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
 // Delete removes the value at a dot-notation (or raw yq) path via yq's `del`.
+// Deleting from an empty document is a no-op, matching yq's del semantics for
+// a missing path.
 func Delete(content []byte, path string) ([]byte, error) {
 	defer perf.Track(nil, "yaml.Delete")()
 
 	yqPath, err := DotPathToYqPath(path)
 	if err != nil {
 		return nil, err
+	}
+	if isEmptyDocument(content) {
+		return content, nil
 	}
 
 	expr := fmt.Sprintf("del(%s)", yqPath)
@@ -225,6 +268,12 @@ func Delete(content []byte, path string) ([]byte, error) {
 // preserving comments and anchors. This powers a `format`/`fmt` capability.
 func Format(content []byte) ([]byte, error) {
 	defer perf.Track(nil, "yaml.Format")()
+
+	// Nothing to normalize in an empty document; formatting must not
+	// materialize a "null" scalar into a previously empty file.
+	if isEmptyDocument(content) {
+		return content, nil
+	}
 
 	result, err := evaluate(content, ".")
 	if err != nil {
@@ -286,8 +335,15 @@ func FormatFile(filePath string) error {
 }
 
 // mutateFile reads a file, applies fn, and writes the result back atomically
-// (temp file + rename) preserving the original file mode.
+// (temp file + rename) preserving the original file mode. Symlinks are
+// resolved first so editing a symlinked config rewrites the target file
+// instead of replacing the link with a regular file, and the original line
+// endings (CRLF vs LF) are preserved.
 func mutateFile(filePath string, fn func([]byte) ([]byte, error)) error {
+	if resolved, err := filepath.EvalSymlinks(filePath); err == nil {
+		filePath = resolved
+	}
+
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf(errWrapFmt, ErrReadFile, err)
@@ -298,7 +354,7 @@ func mutateFile(filePath string, fn func([]byte) ([]byte, error)) error {
 		return err
 	}
 
-	return atomicWrite(filePath, out)
+	return atomicWrite(filePath, restoreLineEndings(content, out))
 }
 
 // atomicWrite writes data to filePath via the shared cross-platform atomic
