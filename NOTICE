@@ -401,6 +401,10 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/google/btree/blob/v1.1.3/LICENSE
 
+  - github.com/google/cel-go
+    License: Apache-2.0
+    URL: https://github.com/google/cel-go/blob/v0.26.0/LICENSE
+
   - github.com/google/gnostic-models
     License: Apache-2.0
     URL: https://github.com/google/gnostic-models/blob/v0.7.1/LICENSE
@@ -841,6 +845,10 @@ BSD LICENSED DEPENDENCIES
   - github.com/andybalholm/cascadia
     License: BSD-2-Clause
     URL: https://github.com/andybalholm/cascadia/blob/v1.3.3/LICENSE
+
+  - github.com/antlr4-go/antlr/v4
+    License: BSD-3-Clause
+    URL: https://github.com/antlr4-go/antlr/blob/v4.13.0/LICENSE
 
   - github.com/atotto/clipboard
     License: BSD-3-Clause
@@ -2018,7 +2026,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/playwright-community/playwright-go
     License: MIT
-    URL: https://github.com/playwright-community/playwright-go/blob/v0.5700.1/LICENSE
+    URL: https://github.com/playwright-community/playwright-go/blob/v0.5200.1/LICENSE
 
   - github.com/posthog/posthog-go
     License: MIT
@@ -2091,6 +2099,10 @@ MIT LICENSED DEPENDENCIES
   - github.com/standard-webhooks/standard-webhooks/libraries/go
     License: MIT
     URL: https://github.com/standard-webhooks/standard-webhooks/blob/libraries/v0.0.1/libraries/LICENSE
+
+  - github.com/stoewer/go-strcase
+    License: MIT
+    URL: https://github.com/stoewer/go-strcase/blob/v1.3.0/LICENSE
 
   - github.com/stretchr/testify
     License: MIT

@@ -6,10 +6,10 @@ across multiple cloud and DevOps toolchains.
 
 USAGE
 
-                                   
-    $ atmos [flags]                
-    $ atmos [sub-command] [flags]  
-                                   
+
+    $ atmos [flags]
+    $ atmos [sub-command] [flags]
+
 
 SUBCOMMAND ALIASES
 
@@ -21,7 +21,7 @@ SUBCOMMAND ALIASES
       pk               Alias of atmos packer command
       tf               Alias of atmos terraform command
 
-AVAILABLE COMMANDS
+BUILT-IN COMMANDS
 
       about                                  Learn about Atmos
       ai [command] [EXPERIMENTAL]            AI-powered assistant for Atmos operations

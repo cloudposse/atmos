@@ -33,11 +33,8 @@ Valid subcommands are:
   • profile
   • scaffold
   • secret
-  • show
   • support
   • terraform
-  • tf
-  • tf-custom
   • theme
   • toolchain
   • validate
@@ -49,7 +46,5 @@ Valid subcommands are:
 
  atmos [flags]
  atmos [sub-command] [flags]
-
-## Hints
 
 💡 Run atmos --help for usage

@@ -66,7 +66,15 @@ func TestParseImageInspectOutput_RichMetadata(t *testing.T) {
 		"Architecture": "arm64",
 		"Os": "linux",
 		"Author": "Cloud Posse",
-		"Config": {"Labels": {"org.opencontainers.image.title": "App", "extra": "x"}},
+		"Config": {
+			"Env": ["PATH=/bin", "APP_ENV=test"],
+			"Cmd": ["./app"],
+			"Entrypoint": ["/entrypoint.sh"],
+			"ExposedPorts": {"8080/tcp": {}, "9090/tcp": {}},
+			"StopSignal": "SIGTERM",
+			"Labels": {"org.opencontainers.image.title": "App", "extra": "x"}
+		},
+		"GraphDriver": {"Name": "overlay2"},
 		"RootFS": {"Type": "layers", "Layers": ["sha256:l1", "sha256:l2", "sha256:l3"]}
 	}`))
 
@@ -77,7 +85,16 @@ func TestParseImageInspectOutput_RichMetadata(t *testing.T) {
 	assert.Equal(t, "linux", info.Os)
 	assert.Equal(t, "Cloud Posse", info.Author)
 	assert.Equal(t, "App", info.Labels["org.opencontainers.image.title"])
+	assert.Equal(t, []string{"PATH=/bin", "APP_ENV=test"}, info.Env)
+	assert.Equal(t, []string{"./app"}, info.Cmd)
+	assert.Equal(t, []string{"/entrypoint.sh"}, info.Entrypoint)
+	assert.Equal(t, []string{"8080/tcp", "9090/tcp"}, info.ExposedPorts)
+	assert.Equal(t, "SIGTERM", info.StopSignal)
+	assert.Equal(t, "overlay2", info.StorageDriver)
+	assert.Equal(t, []string{"sha256:l1", "sha256:l2", "sha256:l3"}, info.LayerDigests)
 	assert.Equal(t, 3, info.Layers)
+	assert.Contains(t, info.RawInspectJSON, "[")
+	assert.Contains(t, info.RawInspectJSON, `"Id": "sha256:image-id"`)
 }
 
 func TestParseImageInspectOutput_InvalidJSON(t *testing.T) {

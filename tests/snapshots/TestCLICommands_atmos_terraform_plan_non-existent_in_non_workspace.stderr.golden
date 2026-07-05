@@ -3,6 +3,4 @@
 
 **Error:** directory for Atmos stacks does not exist
 
-## Hints
-
-💡 Stacks directory not found: /absolute/path/to/repo/stacks
+Stacks directory not found: /absolute/path/to/repo/stacks

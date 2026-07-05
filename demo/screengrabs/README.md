@@ -5,16 +5,22 @@ Add all commands to `commands.txt` (use `#` to disable generation of the command
 Build all colorized HTML snippets of command output by running:
 
 ```shell
-make all
+atmos screengrabs build --all
 ```
 
-Then install those into `../../website/static/screengrabs' by running
+Build a subset by passing text from the command or artifact slug:
 
 ```shell
-make install
+atmos screengrabs build about
 ```
 
-All the files in `website/static/screengrabs` should be committed.
+Then install those into `../../website/src/components/Screengrabs` by running
+
+```shell
+atmos screengrabs install
+```
+
+All the files in `website/src/components/Screengrabs` should be committed.
 
 
 Use these screengrabs then inside of any MDX documentation file, add something like this:
