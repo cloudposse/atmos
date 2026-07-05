@@ -1735,7 +1735,10 @@ func mergeCommandDefinitions(first, second interface{}) interface{} {
 		return second
 	}
 
-	merged := make(map[string]interface{}, len(firstMap)+len(secondMap))
+	// Start with the first map's size. Avoid len(first)+len(second) here
+	// because CodeQL correctly treats unchecked allocation arithmetic as a
+	// potential overflow, and the map will grow if secondMap adds new keys.
+	merged := make(map[string]interface{}, len(firstMap))
 	for key, value := range firstMap {
 		merged[key] = value
 	}

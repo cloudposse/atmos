@@ -321,6 +321,7 @@ func (h *DefaultHasher) HashDir(path string) (string, error) {
 			return "", err
 		}
 		// Normalize to forward slashes for cross-platform consistency.
+		// lgtm[go/weak-sensitive-data-hashing] This hash is a deterministic workdir fingerprint for cache invalidation, not a password hash.
 		hash.Write([]byte(filepath.ToSlash(relPath)))
 
 		// Hash file contents.
@@ -328,6 +329,7 @@ func (h *DefaultHasher) HashDir(path string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		// lgtm[go/weak-sensitive-data-hashing] This hash combines file fingerprints for cache invalidation, not password storage.
 		hash.Write([]byte(fileHash))
 	}
 
@@ -345,6 +347,7 @@ func (h *DefaultHasher) HashFile(path string) (string, error) {
 	defer file.Close()
 
 	hash := sha256.New()
+	// lgtm[go/weak-sensitive-data-hashing] Workdir file hashes detect content changes and are not used for password storage or authentication.
 	if _, err := io.Copy(hash, file); err != nil {
 		return "", err
 	}
