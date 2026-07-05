@@ -40,7 +40,7 @@ if [ ${#MISSING_DEPS[@]} -ne 0 ]; then
                 fi
                 ;;
             atmos)
-                echo "  - atmos: Build with 'make build' from the repository root" >&2
+                echo "  - atmos: Build with 'atmos build' from the repository root" >&2
                 echo "    Or install from: https://atmos.tools/install" >&2
                 ;;
             bat)
@@ -69,7 +69,7 @@ if [ ${#MISSING_DEPS[@]} -ne 0 ]; then
     done
     echo "" >&2
     echo "Alternatively, use Docker to generate screengrabs:" >&2
-    echo "  make -C demo/screengrabs docker-all" >&2
+    echo "  atmos screengrabs docker-all" >&2
     exit 1
 fi
 
@@ -122,7 +122,7 @@ function record() {
     local first_word="${command%% *}"
     local extension="${first_word##*.}" # if any...
     local demo_path=../../examples/$demo
-    local output_base_file=artifacts/$(echo "$command" | sed -E 's/ --charset=UTF-8//g' | sed -E 's/ -/-/g' | sed -E 's/ +/-/g' | sed 's/---/--/g' | sed 's/scripts\///' | sed 's/\.sh$//')
+    local output_base_file=artifacts/$(slugify_command "$command")
     local output_html=${output_base_file}.html
     local output_ansi=${output_base_file}.ansi
     local output_dir=$(dirname $output_base_file)
@@ -159,6 +159,10 @@ function record() {
     if [ -n "$CI" ]; then
         sed_inplace -e '1,1d' -e '$d' "$output_html"
     fi
+}
+
+function slugify_command() {
+    echo "$1" | sed -E 's/ --charset=UTF-8//g' | sed -E 's/ -/-/g' | sed -E 's/ +/-/g' | sed 's/---/--/g' | sed 's/scripts\///' | sed 's/\.sh$//'
 }
 
 postprocess_ansi() {
@@ -201,9 +205,10 @@ postprocess_html() {
 }
 
 manifest=$1
+target=${2:-}
 
 if [ -z "$manifest" ]; then
-    echo "Usage: $0 <manifest>"
+    echo "Usage: $0 <manifest> [command-or-slug]"
     exit 1
 fi
 
@@ -214,9 +219,24 @@ while IFS= read -r command; do
     commands[index++]="$command"
 done < <(grep -v '^#' "$manifest")
 
+matched=0
 for command in "${commands[@]}"; do
+    if [ -n "$target" ]; then
+        slug=$(slugify_command "$command")
+        target_slug=${target%.html}
+        if [ "$command" != "$target" ] && [ "$slug" != "$target_slug" ] && [[ "$command" != *"$target"* ]] && [[ "$slug" != *"$target_slug"* ]]; then
+            continue
+        fi
+    fi
+    matched=1
     record "$demo" "$command"
 done
+
+if [ -n "$target" ] && [ "$matched" -eq 0 ]; then
+    echo "ERROR: No screengrab command matched '$target'" >&2
+    echo "Use text from a command in $manifest or an artifact slug such as atmos--help" >&2
+    exit 1
+fi
 
 if [ "${#SKIPPED_COMMANDS[@]}" -gt 0 ]; then
     echo ""
