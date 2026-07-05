@@ -65,9 +65,15 @@ jobs:
         with:
           go-version-file: "go.mod"
 
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
+
       - name: Build Atmos
         run: |
-          make build-linux
+          atmos build --target linux
           echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
 
       - name: Run workflow log group fixture
