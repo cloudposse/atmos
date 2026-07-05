@@ -160,6 +160,52 @@ components:
     **Default:** `false`
   </dd>
 
+  <dt>`planfiles`</dt>
+  <dd>
+    Configures [planfile storage](/ci/planfile-storage) and
+    [drift verification](/components/terraform/planfiles#drift-verification) for CI pipelines.
+    Storage is opt-in: when this section is absent, planfile upload, download, and verification are
+    skipped (and an explicit `--verify-plan` request errors, since there is no stored plan to verify
+    against).
+
+    ```yaml
+    components:
+      terraform:
+        planfiles:
+          stores:
+            github:
+              type: github/artifacts
+          priority: [github]
+          verify: fail
+    ```
+
+    <dl>
+      <dt>`planfiles.stores`</dt>
+      <dd>Named store definitions. Each store has a `type` (`github/artifacts`, `aws/s3`, or `local/dir`) and backend-specific `options`.</dd>
+
+      <dt>`planfiles.default`</dt>
+      <dd>Name of the store to use when no priority list is set.</dd>
+
+      <dt>`planfiles.priority`</dt>
+      <dd>Ordered list of store names to try in turn for upload and download.</dd>
+
+      <dt>`planfiles.verify`</dt>
+      <dd>
+        Drift-verification behavior on `deploy`: `fail` (default under CI), `warn`, or `off`.
+        Precedence is **CLI flag (`--verify-plan` / `--verify-plan=false`) > config > CI default**.
+
+        **Environment variable (per-run override):** `ATMOS_TERRAFORM_VERIFY_PLAN`
+      </dd>
+
+      <dt>`planfiles.required`</dt>
+      <dd>Whether a stored planfile **must exist** for `deploy` to proceed. Unset, it tracks `verify` strictness (required when verification resolves to `fail`).</dd>
+    </dl>
+
+    See [Planfile Storage](/ci/planfile-storage) for backend configuration and
+    [Terraform Planfiles](/components/terraform/planfiles#drift-verification) for verification
+    semantics.
+  </dd>
+
   <dt>`plugin_cache`</dt>
   <dd>
     When `true`, Atmos enables Terraform provider plugin caching by automatically setting `TF_PLUGIN_CACHE_DIR`. This improves performance by reusing downloaded providers across components, reducing init times and network bandwidth.
