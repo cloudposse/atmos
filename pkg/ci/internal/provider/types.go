@@ -79,6 +79,16 @@ type DebugModeDetector interface {
 	IsDebugMode() bool
 }
 
+// LogGrouper is an optional capability for providers that can group log output
+// in the current run (for example, GitHub Actions' ::group:: workflow command).
+type LogGrouper interface {
+	// StartLogGroup opens a collapsible log group with the given title.
+	StartLogGroup(title string) error
+
+	// EndLogGroup closes the current log group.
+	EndLogGroup() error
+}
+
 // CacheProvider is an optional capability for CI providers that expose a remote
 // build cache (for example, the GitHub Actions cache). Providers implement this
 // when their platform offers a documented cache store reachable from within a

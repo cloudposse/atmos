@@ -653,14 +653,15 @@ func ExecuteWorkflow(
 			if !stepPkg.IsExtendedStepType(commandType) {
 				return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
 					WithTitle(WorkflowErrTitle).
-					WithHintf("Step type '%s' is not supported", commandType).
+					WithExplanationf("Step type '%s' is not supported", commandType).
 					WithHint("Each step must specify a valid type: 'atmos', 'shell', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
 					WithExitCode(1).
 					Err()
 			}
 			err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
-				DryRun:     dryRun,
-				FinalStack: finalStack,
+				DryRun:      dryRun,
+				FinalStack:  finalStack,
+				AtmosConfig: &atmosConfig,
 			})
 		}
 
@@ -708,8 +709,9 @@ func workflowConditionContext() schema.ConditionContext {
 var stepExecutorState *stepPkg.StepExecutor
 
 type extendedStepOptions struct {
-	DryRun     bool
-	FinalStack string
+	DryRun      bool
+	FinalStack  string
+	AtmosConfig *schema.AtmosConfiguration
 }
 
 // executeExtendedStep runs an extended step type (input, confirm, choose, etc.).
@@ -721,6 +723,7 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 
 	// Set workflow context for output mode inheritance.
 	stepExecutorState.SetWorkflow(workflow)
+	stepExecutorState.SetAtmosConfig(opts.AtmosConfig)
 
 	// Add environment variables to the executor.
 	for _, env := range envVars {

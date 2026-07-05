@@ -27,6 +27,7 @@ tests:
       - "plan"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -46,6 +47,7 @@ tests:
       - "provision"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -65,6 +67,7 @@ tests:
       - "component"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -88,6 +91,7 @@ tests:
       - "terraform"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -106,6 +110,7 @@ tests:
       - "component"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
@@ -168,6 +173,7 @@ tests:
     args:
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "USAGE"
@@ -245,6 +251,7 @@ tests:
       - "info"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "verbose"
@@ -300,6 +307,7 @@ tests:
       - "component"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       exit_code: 0
       stdout:
         - "stack"
