@@ -11,6 +11,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+func clearDecodedYAMLCache() {
+	decodedYAMLCache.Range(func(key, _ any) bool {
+		decodedYAMLCache.Delete(key)
+		return true
+	})
+}
+
 // TestUnmarshalYAMLFromFileWithPositions_BasicParsing tests basic YAML unmarshaling behavior.
 func TestUnmarshalYAMLFromFileWithPositions_BasicParsing(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
@@ -111,6 +118,74 @@ func TestUnmarshalYAMLFromFileWithPositions_NilConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "atmosConfig cannot be nil")
 }
 
+func TestUnmarshalYAMLFromFileWithPositions_KeyDelimiterExpansion(t *testing.T) {
+	clearParsedYAMLCache()
+	clearDecodedYAMLCache()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			YAML: schema.AtmosYAMLSettings{KeyDelimiter: "."},
+		},
+	}
+
+	input := `
+metadata.component: vpc-base
+"output.json": true
+image: repo/app:1.2.3
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "stack.yaml")
+	require.NoError(t, err)
+
+	metadata, ok := result["metadata"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "vpc-base", metadata["component"])
+	assert.Equal(t, true, result["output.json"])
+	assert.Equal(t, "repo/app:1.2.3", result["image"], "dotted values are not expanded")
+	assert.NotContains(t, result, "metadata.component")
+}
+
+func TestUnmarshalYAMLFromFile_KeyDelimiterExpansion(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			YAML: schema.AtmosYAMLSettings{KeyDelimiter: "."},
+		},
+	}
+
+	result, err := UnmarshalYAMLFromFile[map[string]any](atmosConfig, "settings.validation.check_cloudformation: true", "stack.yaml")
+	require.NoError(t, err)
+
+	settings, ok := result["settings"].(map[string]any)
+	require.True(t, ok)
+	validation := settings["validation"].(map[string]any)
+	assert.Equal(t, true, validation["check_cloudformation"])
+}
+
+func TestUnmarshalYAMLFromFileWithPositions_KeyDelimiterCacheIsolation(t *testing.T) {
+	clearParsedYAMLCache()
+	clearDecodedYAMLCache()
+
+	input := `metadata.component: vpc-base`
+	file := "same-stack.yaml"
+	withDelimiter := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			YAML: schema.AtmosYAMLSettings{KeyDelimiter: "."},
+		},
+	}
+	withoutDelimiter := &schema.AtmosConfiguration{}
+
+	expanded, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](withDelimiter, input, file)
+	require.NoError(t, err)
+	metadata, ok := expanded["metadata"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "vpc-base", metadata["component"])
+
+	literal, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](withoutDelimiter, input, file)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-base", literal["metadata.component"])
+	assert.NotContains(t, literal, "metadata")
+}
+
 // TestGenerateParsedYAMLCacheKey_Basic tests cache key generation behavior.
 func TestGenerateParsedYAMLCacheKey_Basic(t *testing.T) {
 	// Test with valid inputs
@@ -132,6 +207,10 @@ func TestGenerateParsedYAMLCacheKey_Basic(t *testing.T) {
 	// Same file and content should produce same key
 	key4 := generateParsedYAMLCacheKey("file1.yaml", "content1")
 	assert.Equal(t, key1, key4, "Same file and content should produce same cache key")
+
+	// Same file and content with different key delimiters should produce different keys
+	key5 := generateParsedYAMLCacheKey("file1.yaml", "content1", ".")
+	assert.NotEqual(t, key1, key5, "Different key delimiters should produce different cache keys")
 }
 
 // TestGenerateParsedYAMLCacheKey_EmptyInputs tests cache key generation with empty inputs.
