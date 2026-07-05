@@ -1,0 +1,86 @@
+---
+slug: yaml-key-delimiter
+title: "YAML Key Delimiter for Dot Notation in Stack Files"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports expanding dotted YAML keys into nested maps in stack configuration files. Enable the `key_delimiter` setting in `atmos.yaml` to use concise dot notation like `metadata.component: vpc-base` instead of deeply nested YAML structures.
+
+<!--truncate-->
+
+## What Changed
+
+Stack YAML files now support **key delimiter expansion** — a configurable setting that transforms dotted keys into nested maps during YAML parsing. This brings stack files in line with how `atmos.yaml` already handles dotted keys via Viper.
+
+When enabled, unquoted keys containing the delimiter are automatically expanded:
+
+```yaml
+# Before: deeply nested YAML
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc-base
+      settings:
+        spacelift:
+          workspace_enabled: true
+
+# After: concise dot notation
+components:
+  terraform:
+    vpc:
+      metadata.component: vpc-base
+      settings.spacelift.workspace_enabled: true
+```
+
+## Why This Matters
+
+Infrastructure configurations grow deep fast. Setting a single value like `settings.spacelift.workspace_enabled` previously required creating the full nested hierarchy — four levels of indentation for one boolean. Dot notation eliminates that ceremony while keeping the configuration readable.
+
+The feature is **opt-in**, **backwards compatible**, and marked as **experimental**. Existing configurations work exactly as before. Enable it only when you want it. The `settings.experimental` mode controls the notification behavior — see [Experimental Features](/cli/configuration/settings/experimental) for details.
+
+## How to Use It
+
+Add the `key_delimiter` setting to your `atmos.yaml`:
+
+```yaml
+settings:
+  yaml:
+    key_delimiter: "."
+```
+
+### Quoting as Escape
+
+Quoted keys are never expanded, so you can mix dot notation with literal dotted key names:
+
+```yaml
+# Expanded: becomes metadata: { component: vpc-base }
+metadata.component: vpc-base
+
+# Literal: stays as "output.json"
+"output.json": true
+```
+
+### Custom Delimiters
+
+Use any string as the delimiter:
+
+```yaml
+settings:
+  yaml:
+    key_delimiter: "::"
+```
+
+```yaml
+metadata::component: vpc-base    # Expanded
+output.json: true                # Literal (dots are not the delimiter)
+```
+
+## External Tooling
+
+Dot notation is an Atmos-specific extension to YAML. External tools like IDE linters, `yamllint`, and YAML language servers don't know about key expansion — they see the raw dotted keys and may flag them as schema violations. Atmos validates stack files *after* expansion, so its own validation works correctly. But if your workflow depends on external YAML validation, keep this tradeoff in mind.
+
+## Get Involved
+
+Have feedback on this feature? [Open an issue](https://github.com/cloudposse/atmos/issues) or join the conversation in the [Atmos Slack community](https://slack.cloudposse.com).
