@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	gh "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -78,17 +79,25 @@ func releaseCandidates(owner, repo string) ([]resolver.Candidate, error) {
 		if release == nil || release.TagName == nil {
 			continue
 		}
-		candidate := resolver.Candidate{
-			Version:    release.GetTagName(),
-			Prerelease: release.GetPrerelease(),
-		}
+		var publishedAt *time.Time
 		if release.PublishedAt != nil {
-			publishedAt := release.PublishedAt.Time
-			candidate.ReleasedAt = &publishedAt
+			value := release.PublishedAt.Time
+			publishedAt = &value
 		}
-		candidates = append(candidates, candidate)
+		candidates = appendReleaseCandidate(candidates, release.GetTagName(), release.GetPrerelease(), publishedAt)
 	}
 	return candidates, nil
+}
+
+func appendReleaseCandidate(candidates []resolver.Candidate, version string, prerelease bool, releasedAt *time.Time) []resolver.Candidate {
+	if version == "" {
+		return candidates
+	}
+	return append(candidates, resolver.Candidate{
+		Version:    version,
+		Prerelease: prerelease,
+		ReleasedAt: releasedAt,
+	})
 }
 
 // tagCandidates lists GitHub tags as candidates, carrying commit SHAs.
@@ -102,13 +111,20 @@ func tagCandidates(ctx context.Context, owner, repo string) ([]resolver.Candidat
 		if tag == nil || tag.Name == nil {
 			continue
 		}
-		candidate := resolver.Candidate{Version: tag.GetName()}
+		digest := ""
 		if tag.Commit != nil {
-			candidate.Digest = tag.Commit.GetSHA()
+			digest = tag.Commit.GetSHA()
 		}
-		candidates = append(candidates, candidate)
+		candidates = appendTagCandidate(candidates, tag.GetName(), digest)
 	}
 	return candidates, nil
+}
+
+func appendTagCandidate(candidates []resolver.Candidate, version, digest string) []resolver.Candidate {
+	if version == "" {
+		return candidates
+	}
+	return append(candidates, resolver.Candidate{Version: version, Digest: digest})
 }
 
 // splitPackage parses an owner/repo package coordinate, tolerating extra path

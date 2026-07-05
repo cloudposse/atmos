@@ -254,10 +254,10 @@ func writeFileAtomic(path string, content []byte, perm os.FileMode) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Chmod(tmpName, perm); err != nil {
+	if err := os.Chmod(tmpName, perm); err != nil { // #nosec G703 -- tmpName is returned by os.CreateTemp in the target directory.
 		return err
 	}
-	if err := os.Rename(tmpName, path); err != nil {
+	if err := os.Rename(tmpName, path); err != nil { // #nosec G703 -- path is the caller-selected managed file destination.
 		return err
 	}
 	cleanup = false
@@ -286,27 +286,37 @@ func ExpandPaths(dir string, patterns []string) ([]string, error) {
 	seen := map[string]bool{}
 	var files []string
 	for _, pattern := range patterns {
-		if dir != "" && dir != "." && !filepath.IsAbs(pattern) {
-			pattern = filepath.Join(dir, pattern)
-		}
-		matches, err := u.GetGlobMatches(filepath.ToSlash(pattern))
+		updated, err := expandPattern(dir, pattern, seen)
 		if err != nil {
-			// A pattern with no matches is not an error for file managers.
-			if errors.Is(err, errUtils.ErrFailedToFindImport) {
-				continue
-			}
 			return nil, err
 		}
-		for _, match := range matches {
-			info, err := os.Stat(match)
-			if err != nil || info.IsDir() || seen[match] {
-				continue
-			}
-			seen[match] = true
-			files = append(files, match)
-		}
+		files = append(files, updated...)
 	}
 	sort.Strings(files)
+	return files, nil
+}
+
+func expandPattern(dir, pattern string, seen map[string]bool) ([]string, error) {
+	if dir != "" && dir != "." && !filepath.IsAbs(pattern) {
+		pattern = filepath.Join(dir, pattern)
+	}
+	matches, err := u.GetGlobMatches(filepath.ToSlash(pattern))
+	if err != nil {
+		// A pattern with no matches is not an error for file managers.
+		if errors.Is(err, errUtils.ErrFailedToFindImport) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var files []string
+	for _, match := range matches {
+		info, err := os.Stat(match)
+		if err != nil || info.IsDir() || seen[match] {
+			continue
+		}
+		seen[match] = true
+		files = append(files, match)
+	}
 	return files, nil
 }
 

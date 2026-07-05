@@ -148,13 +148,15 @@ func collectTrackEntries(atmosConfig *schema.AtmosConfiguration, versionTrack *s
 // override only desired, policy, or metadata while inheriting the base catalog
 // coordinate.
 func mergeEntrySet(entries map[string]schema.VersionEntry, overlay map[string]schema.VersionEntry) {
-	for name, entry := range overlay {
-		entries[name] = mergeEntry(entries[name], entry)
+	for name := range overlay {
+		base := entries[name]
+		override := overlay[name]
+		entries[name] = mergeEntry(&base, &override)
 	}
 }
 
-func mergeEntry(base, override schema.VersionEntry) schema.VersionEntry {
-	result := base
+func mergeEntry(base, override *schema.VersionEntry) schema.VersionEntry {
+	result := *base
 	if override.Ecosystem != "" {
 		result.Ecosystem = override.Ecosystem
 	}
