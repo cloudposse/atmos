@@ -35,9 +35,10 @@ tests:
       - "validate"
       - "--verbose"
     expect:
-      # GitHub token resolution logs vary by environment: CI resolves
-      # GITHUB_TOKEN silently, local machines fall back to the gh CLI.
       diff:
+        # GitHub token probing depends on whether local/CI has GitHub auth.
+        - 'DEBU  GitHub CLI token lookup failed .*'
+        - 'DEBU  No GitHub token resolved; using anonymous .*'
         - "GitHub CLI token lookup failed"
         - "No GitHub token resolved"
         - "Using GitHub token from gh CLI"

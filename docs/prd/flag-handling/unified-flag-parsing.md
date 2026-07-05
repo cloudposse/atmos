@@ -2610,6 +2610,7 @@ func NewTerraformCmd(
 - [Docker CLI TopLevelCommand Pattern](https://github.com/docker/cli/blob/master/cli/cobra.go)
 - [Testing Flag Parsing in Go](https://eli.thegreenplace.net/2020/testing-flag-parsing-in-go-programs/)
 - [Functional options in the command registry](./command-registry-colocation.md#functional-options)
+- [Functional Options Pattern](https://dave.cheney.net/2014/10/17/functional-options-for-friendly-apis)
 - Atmos existing PRDs:
   - `docs/prd/command-registry-pattern.md` - Command registration system
   - `docs/prd/testability-refactoring-strategy.md` - Testing approach and coverage

@@ -1731,20 +1731,20 @@ func TestParseProfilesFromOsArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseProfilesFromOsArgs(tt.args)
+			result := ParseProfilesFromOsArgs(tt.args)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
 // TestParseProfilesFromOsArgs_HelpFlagIsSilent is a regression guard:
-// parseProfilesFromOsArgs creates a temporary pflag.FlagSet that pflag would,
+// ParseProfilesFromOsArgs creates a temporary pflag.FlagSet that pflag would,
 // by default, print a "Usage of profile-parser:" block from to stderr whenever
 // args contain --help or -h. Because LoadConfig runs more than once during a
 // command's lifecycle (Execute + PersistentPreRun), this caused 2–4 duplicate
 // "Usage of profile-parser:" blocks to leak into the stderr of any
 // `atmos … --help` invocation. The fix is `fs.Usage = func() {}` in
-// parseProfilesFromOsArgs; this test makes sure nobody removes it.
+// ParseProfilesFromOsArgs; this test makes sure nobody removes it.
 func TestParseProfilesFromOsArgs_HelpFlagIsSilent(t *testing.T) {
 	cases := []struct {
 		name string
@@ -1772,12 +1772,12 @@ func TestParseProfilesFromOsArgs_HelpFlagIsSilent(t *testing.T) {
 				captured, _ = io.ReadAll(r)
 			}()
 
-			_ = parseProfilesFromOsArgs(tc.args)
+			_ = ParseProfilesFromOsArgs(tc.args)
 			require.NoError(t, w.Close())
 			<-done
 
 			assert.NotContains(t, string(captured), "Usage of profile-parser:",
-				"parseProfilesFromOsArgs must not leak its temp FlagSet's usage block to stderr when --help is in args")
+				"ParseProfilesFromOsArgs must not leak its temp FlagSet's usage block to stderr when --help is in args")
 		})
 	}
 }
@@ -1883,7 +1883,7 @@ func TestParseProfilesFromEnvString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseProfilesFromEnvString(tt.envValue)
+			result := ParseProfilesFromEnvString(tt.envValue)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

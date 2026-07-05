@@ -145,7 +145,14 @@ jobs:
 ```
 </File>
 
-`atmos terraform deploy` runs a fresh plan and applies it with `-auto-approve`. Pass `--verify-plan` (or set `ATMOS_TERRAFORM_VERIFY_PLAN=true`) to additionally download the planfile uploaded during the PR run, generate a fresh plan, and perform a semantic comparison before applying — this opt-in verification is experimental. You can also run `atmos terraform apply` directly. See [Planfile Storage](/ci/planfile-storage) for details.
+`atmos terraform deploy` runs a fresh plan and applies it with `-auto-approve`. When [planfile storage](/ci/planfile-storage) is configured under `components.terraform.planfiles` in `atmos.yaml`, a CI deploy **automatically** downloads the planfile uploaded during the PR run, generates a fresh plan, and performs a semantic comparison before applying (failing on drift by default). The `--verify-plan` flag (or `ATMOS_TERRAFORM_VERIFY_PLAN=true`) is only a per-run override — it forces verification on (and `--verify-plan=false` forces it off), and it **requires planfile storage to be configured**: without it there is no stored plan to verify against, and the deploy errors. You can also run `atmos terraform apply` directly. See [Planfile Storage](/ci/planfile-storage) for details.
+
+:::note
+Storing planfiles in the `github/artifacts` backend requires the runner's artifact credentials,
+which GitHub withholds from `run:` steps. Add the
+[`github-runtime` action](/ci/planfile-storage#using-github-artifacts-in-github-actions) before the
+`plan`/`deploy` steps in the workflows above.
+:::
 
 ### Deploy Affected
 

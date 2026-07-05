@@ -517,6 +517,7 @@ func TestRunWithHooksEmitsCISummaryWhenBeforeHookFails(t *testing.T) {
 	}
 	runKubernetesCIHookFunc = func(
 		event hooks.HookEvent,
+		flags map[string]any,
 		atmosConfig *schema.AtmosConfiguration,
 		info *schema.ConfigAndStacksInfo,
 		result *schema.KubernetesCIResult,
@@ -571,6 +572,7 @@ func TestRunWithHooksEmitsCISummaryWhenAfterHookFails(t *testing.T) {
 	}
 	runKubernetesCIHookFunc = func(
 		event hooks.HookEvent,
+		flags map[string]any,
 		atmosConfig *schema.AtmosConfiguration,
 		info *schema.ConfigAndStacksInfo,
 		result *schema.KubernetesCIResult,

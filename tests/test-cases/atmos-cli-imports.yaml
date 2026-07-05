@@ -18,8 +18,9 @@ tests:
       diff:
         - "github_token"
         - "Failed to use pager"  # May or may not appear depending on environment
-        # GitHub token resolution logs vary by environment: CI resolves
-        # GITHUB_TOKEN silently, local machines fall back to the gh CLI.
+        # GitHub token probing depends on whether local/CI has GitHub auth.
+        - 'DEBU  GitHub CLI token lookup failed .*'
+        - 'DEBU  No GitHub token resolved; using anonymous .*'
         - "GitHub CLI token lookup failed"
         - "No GitHub token resolved"
         - "Using GitHub token from gh CLI"
@@ -47,8 +48,9 @@ tests:
       diff:
         - "github_token"
         - "Failed to use pager"  # May or may not appear depending on environment
-        # GitHub token resolution logs vary by environment: CI resolves
-        # GITHUB_TOKEN silently, local machines fall back to the gh CLI.
+        # GitHub token probing depends on whether local/CI has GitHub auth.
+        - 'DEBU  GitHub CLI token lookup failed .*'
+        - 'DEBU  No GitHub token resolved; using anonymous .*'
         - "GitHub CLI token lookup failed"
         - "No GitHub token resolved"
         - "Using GitHub token from gh CLI"

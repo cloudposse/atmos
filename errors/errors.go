@@ -146,6 +146,9 @@ var (
 	// ErrStoredPlanfileMissing is returned when a deploy expected a stored planfile to verify against but none was found.
 	ErrStoredPlanfileMissing = errors.New("plan verification failed: no stored planfile was found to verify against")
 
+	// ErrPlanfileStorageNotConfigured is returned when planfile verification is explicitly requested (`--verify-plan`) but no planfile storage is configured.
+	ErrPlanfileStorageNotConfigured = errors.New("planfile verification was requested but planfile storage is not configured")
+
 	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
 	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the component argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
@@ -859,6 +862,7 @@ var (
 	ErrAwsUserNotConfigured         = errors.New("aws user not configured")
 	ErrAwsUserKeyringReadFailed     = errors.New("failed to read AWS user credentials from keyring")
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
+	ErrPlaywrightDriverSeed         = errors.New("failed to pre-seed the Playwright driver")
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
 	ErrChromeNotFound               = errors.New("chrome/chromium not found for isolated browser sessions")
