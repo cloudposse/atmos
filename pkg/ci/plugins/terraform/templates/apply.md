@@ -9,7 +9,11 @@
 ## No Changes Applied for `{{.Component}}` in `{{.Stack}}`
 {{- end }}
 
-<a href="https://atmos.tools/ci"><img src="https://atmos.tools/img/atmos-ci-gradient.svg" alt="Atmos CI" width="220px" align="right"/></a>
+<a href="https://atmos.tools/ci"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg">
+  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" width="220px" align="right">
+</picture></a>
 
 {{- if .Result.HasErrors }}
 [![failed](https://shields.io/badge/APPLY-FAILED-ff0000?style=for-the-badge)](#user-content-result-{{$target}})
