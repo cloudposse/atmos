@@ -388,6 +388,11 @@ func (m *Manager) Resolve(ctx context.Context, spec *Spec, stack, name string) (
 		return Endpoint{}, Profile{}, err
 	}
 	profile := driver.Profile(&endpoint)
+	if driver.Target() == TargetAzure {
+		if err := addAzureTrustEnv(&profile, stack, name); err != nil {
+			return Endpoint{}, Profile{}, err
+		}
+	}
 
 	// Kubernetes profiles are harvested from the running container (the kubeconfig IS
 	// the credential) rather than built from the endpoint, so the driver's Profile leaves
