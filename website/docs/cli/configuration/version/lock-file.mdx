@@ -1,0 +1,63 @@
+---
+title: Version Lock File
+sidebar_position: 51
+sidebar_label: lock file
+sidebar_class_name: command
+description: Configure and understand the managed versions lock file.
+---
+
+import File from '@site/src/components/File'
+
+The version lock file stores resolved software versions for each track. Runtime resolution, file managers, and CI checks read from the lock so local and CI runs use the same versions.
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+version:
+  lock_file: versions.lock.yaml
+```
+</File>
+
+`version.lock_file` is resolved relative to the Atmos base path when it is not absolute. The default is `versions.lock.yaml`.
+
+## Lock File Shape
+
+<File title="versions.lock.yaml">
+```yaml
+version: 1
+tracks:
+  prod:
+    opentofu:
+      version: 1.10.6
+      ecosystem: toolchain
+      datasource: toolchain
+      package: opentofu
+      resolved_at: "2026-07-03T00:00:00Z"
+
+    checkout:
+      version: v6.1.0
+      ecosystem: github/actions
+      datasource: github-tags
+      provider: github
+      package: actions/checkout
+      digest: 8edcb1bdb4e267140fa742c62e395cd74f332709
+      resolved_at: "2026-07-03T00:00:00Z"
+      released_at: "2026-06-12T00:00:00Z"
+```
+</File>
+
+Entries with `pin: digest` or `pin: sha` also store the immutable identifier in `digest`. GitHub entries store a commit SHA, and OCI entries store a `sha256:` manifest digest.
+
+## Examples
+
+```shell
+# Create or repair the lock from desired versions
+atmos version track lock prod
+
+# Advance locked versions within policy
+atmos version track update prod
+
+# Fail CI if the lock or managed files drift
+atmos version track verify prod
+```

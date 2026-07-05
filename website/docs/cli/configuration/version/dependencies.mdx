@@ -1,0 +1,76 @@
+---
+title: Version Dependencies
+sidebar_position: 48
+sidebar_label: dependencies
+sidebar_class_name: command
+description: Define the base catalog of managed software versions.
+---
+
+import File from '@site/src/components/File'
+
+`version.dependencies` is the base catalog of software versions Atmos tracks. Despite the field name, entries do not have to be locally installed dependencies. They can be any software version Atmos should resolve, lock, and optionally render into project files.
+
+Use this catalog for local tool versions, GitHub Actions refs, container images, Helm chart versions, release tags, and other software versions that need deterministic policy.
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+version:
+  dependencies:
+    opentofu:
+      ecosystem: toolchain
+      datasource: toolchain
+      package: opentofu
+      desired: "~1.10"
+      group: infrastructure
+
+    checkout:
+      ecosystem: github/actions
+      datasource: github-tags
+      provider: github
+      package: actions/checkout
+      desired: v6
+      update:
+        pin: sha
+
+    nginx:
+      ecosystem: oci
+      datasource: oci-tags
+      provider: dockerhub
+      package: library/nginx
+      desired: "1.29.0"
+```
+</File>
+
+## Fields
+
+<dl>
+  <dt>`ecosystem`</dt>
+  <dd>Software domain, such as `toolchain`, `github/actions`, `github`, `oci`, `docker`, `helm`, `terraform`, or `opentofu`.</dd>
+
+  <dt>`datasource`</dt>
+  <dd>Version lookup strategy, such as `toolchain`, `github-tags`, `github-releases`, `oci-tags`, `docker-tags`, or `helm`.</dd>
+
+  <dt>`provider`</dt>
+  <dd>Provider name from `version.providers`.</dd>
+
+  <dt>`package`</dt>
+  <dd>Package coordinate understood by the datasource.</dd>
+
+  <dt>`desired`</dt>
+  <dd>Desired version expression: concrete version, SemVer constraint, or `latest`.</dd>
+
+  <dt>`group`</dt>
+  <dd>Group name used for shared policy and filtered operations.</dd>
+
+  <dt>`update`, `allow`, `ignore`, `labels`</dt>
+  <dd>Entry-level policy. These values override defaults before group policy is applied.</dd>
+</dl>
+
+## Example
+
+```shell
+atmos version track add checkout --package=actions/checkout --desired=v6 --pin=sha
+atmos version track add opentofu --desired="~1.10"
+```

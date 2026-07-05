@@ -1,0 +1,36 @@
+---
+title: atmos version track verify
+sidebar_position: 120
+sidebar_label: verify
+sidebar_class_name: command
+description: Verify that a version track is locked, current, and applied.
+---
+
+Fail when any configured entry is unlocked, has a policy-eligible update available, or when version-managed files differ from the lock. `verify` is intended as the CI gate for managed versions.
+
+Both conditions must hold for `verify` to pass:
+
+1. The lock file is fresh.
+2. Every file maintained by the file managers matches what [`apply`](/cli/commands/version/track/apply) would write.
+
+## Usage
+
+```shell
+atmos version track verify [track] [flags]
+```
+
+## Examples
+
+```shell
+# Verify the prod track locally
+atmos version track verify prod
+```
+
+```yaml
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: atmos version track verify prod
+```

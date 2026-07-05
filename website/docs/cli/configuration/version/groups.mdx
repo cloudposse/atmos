@@ -1,0 +1,75 @@
+---
+title: Version Groups
+sidebar_position: 47
+sidebar_label: groups
+sidebar_class_name: command
+description: Group related managed-version updates under shared policies.
+---
+
+import File from '@site/src/components/File'
+
+`version.groups` defines batches of related version entries. Groups let you apply shared policy and limit commands such as `lock`, `update`, `status`, and `diff` with `--group`.
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+version:
+  groups:
+    infrastructure:
+      ecosystems:
+        - toolchain
+        - github/actions
+        - oci
+      patterns:
+        - opentofu
+        - actions/*
+        - nginx
+      exclude_patterns:
+        - experimental/*
+      update:
+        strategy: minor
+        cooldown: 14d
+      labels:
+        - infrastructure
+```
+</File>
+
+## Fields
+
+<dl>
+  <dt>`ecosystems`</dt>
+  <dd>Match entries by ecosystem.</dd>
+
+  <dt>`datasources`</dt>
+  <dd>Match entries by datasource.</dd>
+
+  <dt>`providers`</dt>
+  <dd>Match entries by provider name.</dd>
+
+  <dt>`patterns`</dt>
+  <dd>Entry-name patterns included in the group.</dd>
+
+  <dt>`exclude_patterns`</dt>
+  <dd>Entry-name patterns excluded from the group.</dd>
+
+  <dt>`update`, `allow`, `ignore`, `labels`</dt>
+  <dd>Policy applied to entries that match the group.</dd>
+</dl>
+
+## Examples
+
+```yaml
+version:
+  groups:
+    github_actions:
+      ecosystems: [github/actions]
+      update:
+        strategy: minor
+        cooldown: 3d
+```
+
+```shell
+atmos version track status prod --group=github_actions
+atmos version track update prod --group=github_actions
+```

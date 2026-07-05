@@ -2,17 +2,17 @@
 title: Managed Versions
 sidebar_position: 40
 sidebar_label: managed versions
-description: Configure Atmos-managed external versions, tracks, providers, groups, and lock files.
+description: Configure Atmos-managed software versions, tracks, providers, groups, and lock files.
 ---
 
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Use `version` in `atmos.yaml` to manage external versions with Atmos-native tracks, policies, groups, and lock files.
+Use `version` in `atmos.yaml` to manage software versions with Atmos-native tracks, policies, groups, and lock files.
 </Intro>
 
-Managed versions are for external artifacts that Atmos needs to resolve consistently: toolchain tools, GitHub Actions, OCI and Docker images, Helm charts, Terraform or OpenTofu-related dependencies, and other package versions. Human-authored policy lives in `atmos.yaml`; resolved versions live in `versions.lock.yaml`.
+Managed versions are for software versions Atmos needs to resolve consistently. That includes local tools Atmos can install and run through Toolchain, plus versions Atmos only needs to track and render into files: GitHub Actions refs, OCI and Docker images, Helm charts, Terraform or OpenTofu-related constraints, release tags, and other package versions. Human-authored policy lives in `atmos.yaml`; resolved versions live in `versions.lock.yaml`.
 
 This is separate from `version.use`, `version.check`, and `version.constraint`, which manage the Atmos CLI itself.
 
@@ -115,7 +115,7 @@ version:
 | `provider` | Concrete backend or auth target, such as `github`, `dockerhub`, `ecr_prod`, or `ghcr`. |
 | `track` | Named version lane, such as `dev`, `staging`, or `prod`. |
 | `group` | Batch of related updates with shared match rules and policy. |
-| `dependencies` | Base catalog of external dependencies tracked by Atmos. Track-level `dependencies` override the base catalog. |
+| `dependencies` | Base catalog of software versions tracked by Atmos. Track-level `dependencies` override the base catalog. |
 | `lock_file` | File that stores resolved versions. Defaults to `versions.lock.yaml`. |
 | `files` | Rules mapping [file managers](#file-managers) to the project files they maintain. |
 
@@ -127,7 +127,7 @@ The `update` policy inherits through `version.defaults` → track `defaults` →
 
 <dl>
   <dt>`strategy`</dt>
-  <dd>How far [`atmos version track update`](/cli/commands/version/track#update) may advance a locked version: `major`, `minor`, or `patch`. `pin` (alias: `digest`) never advances the version and only refreshes digests.</dd>
+  <dd>How far [`atmos version track update`](/cli/commands/version/track/update) may advance a locked version: `major`, `minor`, or `patch`. `pin` (alias: `digest`) never advances the version and only refreshes digests.</dd>
 
   <dt>`cooldown`</dt>
   <dd>Minimum age of a release before it is eligible, checked against the upstream release timestamp: `14d`, `2w`, or Go durations such as `36h`.</dd>
@@ -141,12 +141,12 @@ The `update` policy inherits through `version.defaults` → track `defaults` →
 
 ### Update vs. Lock
 
-[`lock`](/cli/commands/version/track#lock) and [`update`](/cli/commands/version/track#update) answer different questions:
+[`lock`](/cli/commands/version/track/lock) and [`update`](/cli/commands/version/track/update) answer different questions:
 
 - **`lock`** resolves each entry's `desired` expression as-is and writes the lock file. Use it to bootstrap a catalog or repair a lock.
 - **`update`** starts from the locked state and advances only as far as the policy allows. Every newer candidate held back by a strategy cap or cooldown produces a structured reason.
 
-Status reporting is policy-aware: `update-available` means an update the policy would actually take. A newer upstream version held back by policy reports `newer-available (blocked)` with the blocking reason — and still passes [`verify`](/cli/commands/version/track#verify), because the locked version is exactly what the policy wants deployed.
+Status reporting is policy-aware: `update-available` means an update the policy would actually take. A newer upstream version held back by policy reports `newer-available (blocked)` with the blocking reason — and still passes [`verify`](/cli/commands/version/track/verify), because the locked version is exactly what the policy wants deployed.
 
 ## Tracks
 
@@ -181,11 +181,11 @@ vars:
 
 For pinned entries, `{{ .version.name }}` emits the pinned form (the digest), while `{{ .version.name.Version }}` and `{{ .version.name.Digest }}` are individually addressable. [`!version`](/functions/yaml/version) always returns the version, never the digest.
 
-GitHub Actions workflow files need literal refs (GitHub parses them before Atmos runs). Maintain them with the [`github-actions` file manager](#file-managers), or author `*.tmpl` templates and apply them with [`atmos version track apply`](/cli/commands/version/track#apply).
+GitHub Actions workflow files need literal refs (GitHub parses them before Atmos runs). Maintain them with the [`github-actions` file manager](#file-managers), or author `*.tmpl` templates and apply them with [`atmos version track apply`](/cli/commands/version/track/apply).
 
 ## File Managers
 
-`version.files` declares which project files carry managed versions, so a single [`atmos version track apply`](/cli/commands/version/track#apply) (alias: `sync`) sweeps everything, and [`verify`](/cli/commands/version/track#verify) fails in CI when any of them drifts from the lock. Each rule maps a manager to the glob paths it maintains:
+`version.files` declares which project files carry managed versions, so a single [`atmos version track apply`](/cli/commands/version/track/apply) (alias: `sync`) sweeps everything, and [`verify`](/cli/commands/version/track/verify) fails in CI when any of them drifts from the lock. Each rule maps a manager to the glob paths it maintains:
 
 ```yaml
 version:
@@ -252,7 +252,7 @@ Use the optional `match=` regex (with exactly one capture group) when the defaul
 
 ## Editing the Catalog
 
-The [`add`, `set`, `remove`, and `get`](/cli/commands/version/track#add) subcommands edit dependency entries in `atmos.yaml` without hand-editing YAML, preserving comments, anchors, and formatting. `add` infers the ecosystem from the package coordinate:
+The [`add`](/cli/commands/version/track/add), [`set`](/cli/commands/version/track/set), [`remove`](/cli/commands/version/track/remove), and [`get`](/cli/commands/version/track/get) subcommands edit dependency entries in `atmos.yaml` without hand-editing YAML, preserving comments, anchors, and formatting. `add` infers the ecosystem from the package coordinate:
 
 ```shell
 atmos version track add checkout --package=actions/checkout --pin=sha
@@ -305,6 +305,13 @@ Implemented datasources:
 ## See Also
 
 - [`atmos version track`](/cli/commands/version/track)
+- [Version Providers](/cli/configuration/version/providers)
+- [Version Defaults](/cli/configuration/version/defaults)
+- [Version Groups](/cli/configuration/version/groups)
+- [Version Dependencies](/cli/configuration/version/dependencies)
+- [Version Tracks](/cli/configuration/version/tracks)
+- [Version Files](/cli/configuration/version/files)
+- [Version Lock File](/cli/configuration/version/lock-file)
 - [`!version`](/functions/yaml/version)
 - [Version Management Patterns](/design-patterns/version-management)
 - [Toolchain Configuration](/cli/configuration/toolchain)

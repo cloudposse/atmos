@@ -1,0 +1,64 @@
+---
+title: Version Defaults
+sidebar_position: 46
+sidebar_label: defaults
+sidebar_class_name: command
+description: Configure shared managed-version policy.
+---
+
+import File from '@site/src/components/File'
+
+`version.defaults` sets shared policy for managed versions. Track defaults, entry fields, and group policies can override these values.
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+version:
+  defaults:
+    update:
+      strategy: patch
+      cooldown: 14d
+    allow:
+      - stable
+    ignore:
+      - "*-rc*"
+      - "*-beta*"
+    labels:
+      - dependencies
+```
+</File>
+
+## Fields
+
+<dl>
+  <dt>`update.strategy`</dt>
+  <dd>Maximum update scope: `major`, `minor`, `patch`, or `pin`.</dd>
+
+  <dt>`update.cooldown`</dt>
+  <dd>Minimum release age before an update is eligible, such as `14d`, `2w`, or `36h`.</dd>
+
+  <dt>`update.pin`</dt>
+  <dd>Artifact form to render. Use `digest` or `sha` for immutable identifiers, or `none` for plain versions.</dd>
+
+  <dt>`allow`</dt>
+  <dd>Patterns that are allowed as candidate versions.</dd>
+
+  <dt>`ignore`</dt>
+  <dd>Patterns excluded from candidate versions.</dd>
+
+  <dt>`labels`</dt>
+  <dd>Metadata labels for downstream workflows and reports.</dd>
+</dl>
+
+## Example
+
+```yaml
+version:
+  defaults:
+    update:
+      strategy: minor
+      cooldown: 7d
+    ignore:
+      - "*-alpha*"
+```
