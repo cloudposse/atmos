@@ -31,9 +31,16 @@ import (
 	// Import adapters to register them with the config package.
 	_ "github.com/cloudposse/atmos/pkg/config/adapters"
 
+	// Import hook format handlers to register them with the hooks package.
+	_ "github.com/cloudposse/atmos/pkg/hooks/sarif"
+
 	// Import component providers to register them with the component registry.
 	// The init() function in each package registers the provider.
 	_ "github.com/cloudposse/atmos/pkg/component/ansible"
+	_ "github.com/cloudposse/atmos/pkg/component/container"
+	_ "github.com/cloudposse/atmos/pkg/component/emulator"
+	_ "github.com/cloudposse/atmos/pkg/component/helm"
+	_ "github.com/cloudposse/atmos/pkg/component/kubernetes"
 	_ "github.com/cloudposse/atmos/pkg/component/mock"
 
 	// Import the Atmos Pro credential broker so it registers itself (init) and is consulted
@@ -42,6 +49,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/diagnostics"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -72,11 +80,16 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/aws"
 	_ "github.com/cloudposse/atmos/cmd/ci"
 	cicache "github.com/cloudposse/atmos/cmd/ci/cache"
+	_ "github.com/cloudposse/atmos/cmd/composition"
+	_ "github.com/cloudposse/atmos/cmd/container"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
+	_ "github.com/cloudposse/atmos/cmd/emulator"
 	_ "github.com/cloudposse/atmos/cmd/env"
 	gitcmd "github.com/cloudposse/atmos/cmd/git"
+	_ "github.com/cloudposse/atmos/cmd/helm"
 	_ "github.com/cloudposse/atmos/cmd/helmfile"
 	"github.com/cloudposse/atmos/cmd/internal"
+	_ "github.com/cloudposse/atmos/cmd/kubernetes"
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/lsp"
 	_ "github.com/cloudposse/atmos/cmd/mcp"
@@ -136,33 +149,7 @@ func parseChdirFromArgs() string {
 // It recognizes `--use-version=value` and `--use-version value` forms.
 // If no --use-version flag is found, it returns an empty string.
 func parseUseVersionFromArgs() string {
-	return parseUseVersionFromArgsInternal(os.Args)
-}
-
-// parseUseVersionFromArgsInternal manually parses --use-version flag from the provided args.
-// This internal version accepts args as a parameter for testability.
-func parseUseVersionFromArgsInternal(args []string) string {
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-
-		// Stop scanning after bare "--" (end-of-flags delimiter).
-		if arg == "--" {
-			break
-		}
-
-		// Check for --use-version=value format.
-		if strings.HasPrefix(arg, "--use-version=") {
-			return strings.TrimPrefix(arg, "--use-version=")
-		}
-
-		// Check for --use-version value format (next arg is the value).
-		if arg == "--use-version" {
-			if i+1 < len(args) {
-				return args[i+1]
-			}
-		}
-	}
-	return ""
+	return pkgversion.ParseUseVersionFromArgs(os.Args)
 }
 
 // parseChdirFromArgsInternal manually parses --chdir or -C flag from the provided args.
@@ -469,6 +456,9 @@ var RootCmd = &cobra.Command{
 				if !isHelpRequested {
 					log.Warn(err.Error())
 				}
+			} else if isCIGitCloneBootstrapRequested() {
+				tmpConfig.CI.Enabled = true
+				log.Debug("CLI configuration error (continuing for CI git clone bootstrap)", "error", err)
 			} else if isVersionCommand() {
 				// Version command should always work, even with invalid config.
 				// Log config error but allow version command to proceed.
@@ -684,6 +674,8 @@ func maybePromoteLogLevelForDebugMode(atmosConfig *schema.AtmosConfiguration, co
 //
 //nolint:revive,cyclop // Function complexity is acceptable for logger configuration.
 func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
+	diagnostics.Configure(atmosConfig.Diagnostics)
+
 	switch atmosConfig.Logs.Level {
 	case "Trace":
 		log.SetLevel(log.TraceLevel)
@@ -1451,6 +1443,12 @@ func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration
 		return nil
 	}
 
+	if isCIGitCloneBootstrapRequested() {
+		atmosConfig.CI.Enabled = true
+		log.Debug("Warning: CLI configuration error (continuing for CI git clone bootstrap)", "error", initErr)
+		return nil
+	}
+
 	if errors.Is(initErr, cfg.NotFound) {
 		// Config not found is acceptable for some commands.
 		return nil
@@ -1478,6 +1476,117 @@ func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration
 
 	// Return other errors as-is.
 	return initErr
+}
+
+func isCIGitCloneBootstrapRequested() bool {
+	return ci.Detect() != nil && argsRequestNoArgGitClone(os.Args[1:])
+}
+
+const (
+	rootFlagChdirShort       = "-C"
+	rootFlagChdirShortPrefix = "-C="
+)
+
+var (
+	gitCloneBootstrapValueFlags = map[string]struct{}{
+		"--repo-uri":       {},
+		"-r":               {},
+		"--branch":         {},
+		"-b":               {},
+		"--remote":         {},
+		"--workdir":        {},
+		"--filter":         {},
+		"--depth":          {},
+		rootFlagChdirShort: {},
+	}
+	rootBootstrapValueFlags = map[string]struct{}{
+		"--chdir":          {},
+		rootFlagChdirShort: {},
+		"--profile":        {},
+		"--config":         {},
+		"--config-path":    {},
+		"--base-path":      {},
+		"--logs-level":     {},
+		"--logs-file":      {},
+		"--use-version":    {},
+	}
+)
+
+func argsRequestNoArgGitClone(args []string) bool {
+	args = stripRootFlagsForBootstrapCheck(args)
+	if len(args) < 2 || args[0] != "git" || args[1] != "clone" {
+		return false
+	}
+	return gitCloneArgsAllowBootstrap(args[2:])
+}
+
+type bootstrapArgAction int
+
+const (
+	bootstrapArgAllow bootstrapArgAction = iota
+	bootstrapArgConsumeNext
+	bootstrapArgReject
+)
+
+func gitCloneArgsAllowBootstrap(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		switch gitCloneBootstrapArgAction(args[i]) {
+		case bootstrapArgReject:
+			return false
+		case bootstrapArgConsumeNext:
+			i++
+		}
+	}
+	return true
+}
+
+func gitCloneBootstrapArgAction(arg string) bootstrapArgAction {
+	switch {
+	case arg == "--" || arg == "--all":
+		return bootstrapArgReject
+	case flagTakesSeparateValue(arg, gitCloneBootstrapValueFlags):
+		return bootstrapArgConsumeNext
+	case flagHasInlineValue(arg, gitCloneBootstrapValueFlags), shortChdirHasInlineValue(arg), strings.HasPrefix(arg, "-"):
+		return bootstrapArgAllow
+	default:
+		return bootstrapArgReject
+	}
+}
+
+func stripRootFlagsForBootstrapCheck(args []string) []string {
+	for len(args) > 0 {
+		arg := args[0]
+		switch {
+		case flagTakesSeparateValue(arg, rootBootstrapValueFlags):
+			if len(args) < 2 {
+				return nil
+			}
+			args = args[2:]
+		case flagHasInlineValue(arg, rootBootstrapValueFlags):
+			args = args[1:]
+		default:
+			return args
+		}
+	}
+	return args
+}
+
+func flagTakesSeparateValue(arg string, flags map[string]struct{}) bool {
+	_, ok := flags[arg]
+	return ok
+}
+
+func flagHasInlineValue(arg string, flags map[string]struct{}) bool {
+	for flag := range flags {
+		if strings.HasPrefix(arg, flag+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func shortChdirHasInlineValue(arg string) bool {
+	return strings.HasPrefix(arg, rootFlagChdirShort) && len(arg) > len(rootFlagChdirShort)
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -1983,7 +2092,7 @@ func initCobraConfig() {
 				command.SetOut(&buf)
 				applyColoredHelpTemplate(command)
 				_ = command.Help()
-				pager := pager.NewWithAtmosConfig(true)
+				pager := pager.NewWithAtmosConfig(true, atmosConfig.Settings.Terminal.Speed)
 				_ = pager.Run("Atmos CLI Help", buf.String())
 			} else {
 				// Default: render help directly to stdout without pager.
@@ -2010,7 +2119,7 @@ func initCobraConfig() {
 				}
 			}
 
-			pager := pager.NewWithAtmosConfig(pagerEnabled)
+			pager := pager.NewWithAtmosConfig(pagerEnabled, atmosConfig.Settings.Terminal.Speed)
 			if err := pager.Run("Atmos CLI Help", buf.String()); err != nil {
 				// Pager already falls back to direct output (pkg/pager/pager.go:88-92).
 				// Just log a warning - help was still shown successfully.

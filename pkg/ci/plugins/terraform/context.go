@@ -48,6 +48,9 @@ type TerraformTemplateContext struct {
 
 	// Warnings contains full warning block text extracted from terraform output.
 	Warnings []string
+
+	// TestResult contains terraform test results (set for the `test` command only).
+	TestResult *plugin.TerraformTestOutputData
 }
 
 // NewTemplateContext creates a TerraformTemplateContext from a base context and parsed output.

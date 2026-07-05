@@ -36,10 +36,12 @@ jobs:
             VERSION="v1.190.0"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "atmos-version=${VERSION#v}" >> $GITHUB_OUTPUT
           echo "Using Atmos version: $VERSION"
 
     outputs:
       version: ${{ steps.get-version.outputs.version }}
+      atmos-version: ${{ steps.get-version.outputs.atmos-version }}
 
   build:
     needs: [prepare]
@@ -49,7 +51,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y aha util-linux make jq bat
+          sudo apt-get install -y aha util-linux jq bat
           sudo ln -s /usr/bin/batcat /usr/bin/bat
 
       - name: Set Git Preferences for windows
@@ -62,37 +64,35 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Atmos
-        uses: jaxxstorm/action-install-gh-release@v2.1.0
+      - name: Set up Atmos
+        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
         with:
-          repo: cloudposse/atmos
-          tag: ${{ needs.prepare.outputs.version }}
-          chmod: 0755
-          extension-matching: disable
-          rename-to: atmos
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          atmos-version: ${{ needs.prepare.outputs.atmos-version }}
+          install-wrapper: false
 
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Run make build-all install
+      - name: Add Terraform from Atmos toolchain to PATH
         run: |
-          make -C demo/screengrabs build-all install
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain env --format=github
+
+      - name: Generate and install screengrabs
+        run: |
+          atmos screengrabs all
           git add -A
           git status
         env:
           ATMOS_PAGER: "false"
 
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: github-app
         with:
           app-id: ${{ vars.BOT_GITHUB_APP_ID }}
           private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Create or update PR
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           token: ${{ steps.github-app.outputs.token }}
           branch: "chore/update-build-screengrabs-for-${{ needs.prepare.outputs.version }}"

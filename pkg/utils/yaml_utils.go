@@ -27,6 +27,7 @@ const (
 	AtmosYamlFuncTerraformOutput         = "!terraform.output"
 	AtmosYamlFuncTerraformState          = "!terraform.state"
 	AtmosYamlFuncEnv                     = "!env"
+	AtmosYamlFuncCEL                     = "!cel"
 	AtmosYamlFuncInclude                 = "!include"
 	AtmosYamlFuncIncludeRaw              = "!include.raw"
 	AtmosYamlFuncGitRoot                 = atmosGit.YAMLFuncRepoRoot
@@ -49,6 +50,7 @@ const (
 	AtmosYamlFuncAwsCallerIdentityUserID = "!aws.caller_identity_user_id"
 	AtmosYamlFuncAwsRegion               = "!aws.region"
 	AtmosYamlFuncAwsOrganizationID       = "!aws.organization_id"
+	AtmosYamlFuncEmulator                = "!emulator"
 
 	DefaultYAMLIndent = 2
 )
@@ -63,6 +65,7 @@ var (
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncCEL,
 		AtmosYamlFuncGitRoot,
 		AtmosYamlFuncGitRootAlias,
 		AtmosYamlFuncGitSha,
@@ -83,6 +86,7 @@ var (
 		AtmosYamlFuncAwsCallerIdentityUserID,
 		AtmosYamlFuncAwsRegion,
 		AtmosYamlFuncAwsOrganizationID,
+		AtmosYamlFuncEmulator,
 	}
 
 	// AtmosYamlTagsMap provides O(1) lookup for custom tag checking.
@@ -97,6 +101,7 @@ var (
 		AtmosYamlFuncTerraformOutput:         true,
 		AtmosYamlFuncTerraformState:          true,
 		AtmosYamlFuncEnv:                     true,
+		AtmosYamlFuncCEL:                     true,
 		AtmosYamlFuncGitRoot:                 true,
 		AtmosYamlFuncGitRootAlias:            true,
 		AtmosYamlFuncGitSha:                  true,
@@ -117,6 +122,7 @@ var (
 		AtmosYamlFuncAwsCallerIdentityUserID: true,
 		AtmosYamlFuncAwsRegion:               true,
 		AtmosYamlFuncAwsOrganizationID:       true,
+		AtmosYamlFuncEmulator:                true,
 	}
 
 	// ParsedYAML cache stores parsed yaml.Node objects and their position

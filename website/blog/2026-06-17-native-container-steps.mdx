@@ -1,0 +1,148 @@
+---
+slug: native-container-steps
+title: "Native Container Steps in Atmos Workflows"
+authors: [osterman]
+tags: [feature, experimental]
+date: 2026-06-17
+---
+
+Atmos workflows and custom commands can now run containers natively. A new `type: container` step
+builds images, pushes them to registries, and runs containerized tools — Docker or Podman — through
+the same reusable step library that powers the rest of your automation.
+
+<!--truncate-->
+
+This is not about Dev Containers. Dev Containers put a developer in a reproducible workspace. Container
+steps are procedural actions inside a workflow: build an image, push it, run a one-shot command in a
+container, and pass the result to the next step.
+
+## Container Actions
+
+`type: container` is a small action family — `build`, `push`, and `run` — that reuses the existing
+Atmos container runtime (Docker/Podman detection, mounts, env, ports, PTY handling).
+
+```yaml
+steps:
+  - name: build
+    type: container
+    action: build
+    with:
+      context: app
+      tags:
+        - "localhost:5001/app:{{ .git.sha }}"
+
+  - name: push
+    type: container
+    action: push
+    with:
+      image: "localhost:5001/app:{{ .git.sha }}"
+
+  - name: smoke
+    type: container
+    action: run
+    with:
+      image: "localhost:5001/app:{{ .git.sha }}"
+      command: uname -a
+```
+
+Every action takes its parameters under a single `with:` block:
+
+```yaml
+- name: hello
+  type: container
+  action: run
+  with:
+    image: alpine:latest
+    command: echo hello
+```
+
+Docker Buildx and Buildx Bake are supported for builds; Podman uses the native `podman build` path.
+Podman machine start is opt-in via `runtime_auto_start: true`, and each step can carry its own
+`identity` for registry authentication.
+
+## Step Outputs
+
+Steps now expose a structured result so a build step can hand an image reference to later steps without
+shell parsing or temporary files:
+
+```yaml
+- name: build
+  type: container
+  action: build
+  with:
+    context: .
+    tags: ["123456789012.dkr.ecr.us-east-2.amazonaws.com/app:{{ .env.GIT_SHA }}"]
+  outputs:
+    image: "{{ .metadata.image }}"
+
+- name: push
+  type: container
+  action: push
+  with:
+    image: "{{ .steps.build.outputs.image }}"
+```
+
+Every named step exposes `value`, `values`, `metadata`, `outputs`, `skipped`, and `error`;
+command-like steps add `stdout`, `stderr`, and `exit_code`. Existing `{{ .steps.<name>.value }}`
+references keep working.
+
+## Pushing to ECR with an Identity
+
+Container steps don't reinvent registry login — they reuse Atmos
+[auth integrations](/cli/configuration/auth). Put `identity:` on the step (or pass `--identity`) and
+authenticating that identity auto-provisions its linked integrations. An `aws/ecr` integration performs
+the Docker login, and the step's `push` uses it — no `aws ecr get-login-password | docker login` dance:
+
+```yaml
+# atmos.yaml
+auth:
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      via: { provider: company-sso }
+      principal: { name: AdministratorAccess, account: dev }
+  integrations:
+    dev/ecr/primary:
+      kind: aws/ecr
+      via: { identity: dev-admin }
+      spec:
+        registry: { account_id: "123456789012", region: us-east-2 }
+```
+
+```yaml
+# workflow step
+- name: push
+  type: container
+  action: push
+  identity: dev-admin
+  with:
+    image: "{{ .steps.build.outputs.image }}"
+```
+
+The identity-resolved environment — including the `DOCKER_CONFIG` the integration exports and any
+`AWS_*` credentials — is forwarded to the container runtime subprocess, so private base-image pulls
+during `build` and pushes to private registries work even with an isolated Docker config directory.
+
+## Try It
+
+The new `examples/container-step` example demonstrates build, push, run, Bake, and step outputs:
+
+```shell
+cd examples/container-step
+atmos workflow build -f container-step
+```
+
+## What Comes Next
+
+Container steps are the procedural, ephemeral building block. The next pieces extend the same idea into
+stack-scoped, declarative infrastructure, and are specified as PRDs today:
+
+- **Container components** (`components.container`) — stack-scoped image artifacts and long-running
+  containers with component-instance identity, secrets, and lifecycle commands.
+- **Compose components** (`components.compose`) — wrap an existing native `compose.yaml` project as an
+  Atmos component.
+- **Compositions** — group the components that make up a system and operate them together across
+  environments with one command.
+
+The goal is consistent: run the same declared system locally, in CI, and against real environments,
+without GitHub Actions-only logic or one-off shell scripts.

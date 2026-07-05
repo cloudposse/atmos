@@ -11,6 +11,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -137,24 +138,44 @@ func runStepHandler(ctx context.Context, task *Task, handler step.StepHandler, o
 	if vars == nil {
 		vars = step.NewVariables()
 	}
+	if opts.AtmosConfig != nil {
+		vars.SetAtmosConfig(opts.AtmosConfig)
+	}
 
 	// Convert Task to WorkflowStep for handler compatibility.
 	workflowStep := task.ToWorkflowStep()
+	workflowStep.DryRun = opts.DryRun
+	if task.Type == "container" && workflowStep.WorkingDirectory == "" && opts.Dir != "" {
+		workflowStep.WorkingDirectory = opts.Dir
+	}
 
 	// Validate step configuration.
 	if err := handler.Validate(&workflowStep); err != nil {
 		return fmt.Errorf("step validation failed: %w", err)
 	}
 
-	// Execute the step handler.
-	result, err := handler.Execute(ctx, &workflowStep, vars)
+	var result *step.StepResult
+	execute := func() error {
+		var execErr error
+		result, execErr = handler.Execute(ctx, &workflowStep, vars)
+		return execErr
+	}
+
+	var err error
+	if task.Retry != nil {
+		err = retry.Do(ctx, task.Retry, execute)
+	} else {
+		err = execute()
+	}
 	if err != nil {
 		return err
 	}
 
 	// Store result in variables if the step has a name.
 	if task.Name != "" && result != nil {
-		vars.Set(task.Name, result)
+		if outputErr := vars.SetWithOutputs(task.Name, result, workflowStep.Outputs); outputErr != nil {
+			return outputErr
+		}
 	}
 
 	return nil

@@ -24,6 +24,22 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+func TestEnvSliceToMap(t *testing.T) {
+	assert.Nil(t, envSliceToMap(nil))
+	assert.Nil(t, envSliceToMap([]string{}))
+	assert.Equal(t, map[string]string{
+		"A":     "override",
+		"B":     "2",
+		"EMPTY": "",
+	}, envSliceToMap([]string{
+		"A=1",
+		"malformed",
+		"B=2",
+		"EMPTY=",
+		"A=override",
+	}))
+}
+
 func TestVerifyInsideGitRepo(t *testing.T) {
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
@@ -121,6 +137,86 @@ func TestCommandUsageLines(t *testing.T) {
 	assert.Equal(t, "atmos git push <name-or-path> [flags]", commandUsageLines(pushCmd))
 	assert.Equal(t, "atmos git [sub-command] [flags]", commandUsageLines(gitCmd))
 	assert.Empty(t, commandUsageLines(nil))
+}
+
+func TestRunDefaultSubcommandMergesInheritedFlags(t *testing.T) {
+	parent := &cobra.Command{Use: "parent"}
+	parent.PersistentFlags().String("profile", "default", "test profile")
+	require.NoError(t, parent.PersistentFlags().Set("profile", "prod"))
+
+	var got string
+	child := &cobra.Command{
+		Use: "child",
+		Run: func(cmd *cobra.Command, args []string) {
+			flag := cmd.Flag("profile")
+			require.NotNil(t, flag)
+			got = flag.Value.String()
+		},
+	}
+	parent.AddCommand(child)
+
+	handled := runDefaultSubcommand(parent, &schema.Command{
+		Name:    "parent",
+		Default: "child",
+		Commands: []schema.Command{
+			{Name: "child"},
+		},
+	})
+
+	assert.True(t, handled)
+	assert.Equal(t, "prod", got)
+}
+
+func TestRunDefaultSubcommandDetectsCycle(t *testing.T) {
+	originalOsExit := errUtils.OsExit
+	t.Cleanup(func() {
+		errUtils.OsExit = originalOsExit
+	})
+
+	type exitPanic struct {
+		code int
+	}
+	var exitCode int
+	errUtils.OsExit = func(code int) {
+		exitCode = code
+		panic(exitPanic{code: code})
+	}
+
+	aConfig := schema.Command{
+		Name:    "a",
+		Default: "b",
+		Commands: []schema.Command{
+			{Name: "b"},
+		},
+	}
+	bConfig := schema.Command{
+		Name:    "b",
+		Default: "a",
+		Commands: []schema.Command{
+			{Name: "a"},
+		},
+	}
+
+	aCmd := &cobra.Command{Use: "a"}
+	bCmd := &cobra.Command{
+		Use: "b",
+		Run: func(cmd *cobra.Command, args []string) {
+			runDefaultSubcommand(cmd, &bConfig)
+		},
+	}
+	nestedACmd := &cobra.Command{
+		Use: "a",
+		Run: func(cmd *cobra.Command, args []string) {
+			runDefaultSubcommand(cmd, &aConfig)
+		},
+	}
+	bCmd.AddCommand(nestedACmd)
+	aCmd.AddCommand(bCmd)
+
+	assert.Panics(t, func() {
+		runDefaultSubcommand(aCmd, &aConfig)
+	})
+	assert.Equal(t, 1, exitCode)
 }
 
 func TestAppendUsageSection(t *testing.T) {
@@ -1014,6 +1110,8 @@ func TestValidateAtmosConfigWithOptions(t *testing.T) {
 
 // TestErrorWrappingInGetConfigAndStacksInfo verifies proper error wrapping.
 func TestErrorWrappingInGetConfigAndStacksInfo(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
 	cmd := &cobra.Command{
 		Use: "terraform",
 	}
@@ -1030,6 +1128,11 @@ func TestErrorWrappingInGetConfigAndStacksInfo(t *testing.T) {
 
 	// Verify error contains useful context.
 	assert.NotEmpty(t, err.Error(), "Error should have a message")
+
+	formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+	assert.Contains(t, formatted, "Stacks directory not found:")
+	assert.NotContains(t, formatted, "💡 Stacks directory not found:")
+	assert.NotContains(t, formatted, "## Hints")
 }
 
 // TestDetermineComponentTypeFromCommand tests component type detection from command hierarchy.
@@ -1122,11 +1225,13 @@ func TestCloneCommand(t *testing.T) {
 			input: &schema.Command{
 				Name:        "test",
 				Description: "Test command",
+				Default:     "run",
 			},
 			wantErr: false,
 			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
 				assert.Equal(t, orig.Name, clone.Name)
 				assert.Equal(t, orig.Description, clone.Description)
+				assert.Equal(t, orig.Default, clone.Default)
 			},
 		},
 		{
@@ -1732,6 +1837,33 @@ func TestProcessCommandAliases_DoesNotOverrideExistingCommands(t *testing.T) {
 	assert.True(t, newAliasFound, "test-alias-new2 should be added")
 }
 
+func TestProcessCommandAliases_OverridesConfigCustomCommand(t *testing.T) {
+	_ = NewTestKit(t)
+
+	customCommand := &cobra.Command{
+		Use:   "test-alias-custom",
+		Short: "custom command",
+		Annotations: map[string]string{
+			annotationCustomCommand: "true",
+		},
+	}
+	RootCmd.AddCommand(customCommand)
+
+	aliases := schema.CommandAliases{
+		"test-alias-custom": "terraform plan",
+	}
+
+	err := processCommandAliases(schema.AtmosConfiguration{}, aliases, RootCmd, true)
+	require.NoError(t, err)
+
+	cmd, _, err := RootCmd.Find([]string{"test-alias-custom"})
+	require.NoError(t, err)
+	require.NotNil(t, cmd)
+	assert.Contains(t, cmd.Short, "alias for")
+	assert.Equal(t, "terraform plan", cmd.Annotations["configAlias"])
+	assert.NotEqual(t, "true", cmd.Annotations[annotationCustomCommand])
+}
+
 // TestProcessCommandAliases_NonTopLevel tests that non-top-level aliases are NOT added.
 // The processCommandAliases function only adds aliases when topLevel=true.
 func TestProcessCommandAliases_NonTopLevel(t *testing.T) {
@@ -2111,6 +2243,8 @@ func TestProcessCustomCommands(t *testing.T) {
 				for _, cmd := range parentCmd.Commands() {
 					if cmd.Name() == expectedCmd {
 						found = true
+						require.NotNil(t, cmd.Annotations, "Expected command %q to have annotations", expectedCmd)
+						assert.Equal(t, annotationValueTrue, cmd.Annotations[annotationCustomCommand], "Expected command %q to be marked as a custom command", expectedCmd)
 						break
 					}
 				}

@@ -1,0 +1,68 @@
+---
+slug: flag-aware-custom-commands
+title: "Flag-Aware Custom Commands and Dynamic Tables"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+Custom command steps can now read their own command-line flags through `{{ .Flags.<name> }}`, and the [`table`](/workflows/steps/type/table) step templates its `data`, `columns`, and `title` per-step. Together they let you build flag-driven runbooks — rich, dynamic output assembled declaratively in `atmos.yaml`, no shell scripting required.
+
+<!--truncate-->
+
+## What Changed
+
+Two things came together:
+
+1. **Flags are now template variables.** When a custom command declares flags, each one is exposed to its steps as `{{ .Flags.<name> }}`. Step titles, shell commands, working directories, and [`table`](/workflows/steps/type/table) data all resolve those values.
+2. **`table` steps are fully templated.** A `table` step's `title`, `columns`, and every cell in `data` are rendered as Go templates, so the table content can depend on flags and other [step variables](/workflows/steps/type).
+
+## How to Use It
+
+Here's a real example now shipping in `examples/demo-stacks` — a `platform` command group whose subcommands take a `--stack` flag and build their output from it:
+
+```yaml
+commands:
+  - name: platform
+    description: Platform team shortcuts for stack discovery and day-two commands.
+    commands:
+      - name: status
+        description: Show stacks, components, and common next actions for one stack.
+        flags:
+          - name: stack
+            shorthand: s
+            description: Target stack.
+            required: true
+        steps:
+          - type: stage
+            title: Components in {{ .Flags.stack }}
+          - type: shell
+            command: atmos list components -s {{ .Flags.stack }}
+          - type: table
+            title: Platform commands
+            columns:
+              - task
+              - command
+            data:
+              - task: Show variables
+                command: atmos list vars myapp -s {{ .Flags.stack }}
+              - task: Plan affected
+                command: atmos terraform plan --affected
+```
+
+Run it like any other command:
+
+```shell
+atmos platform status -s plat-ue2-dev
+```
+
+Every `{{ .Flags.stack }}` resolves to `plat-ue2-dev`, the stage titles and table rows fill in, and the shell steps run against the right stack.
+
+## Why It Matters
+
+- **Build your own shortcuts.** Wrap your team's day-two operations — discovery, planning, secret access — into named commands that adapt to their flags.
+- **Rich output without scripts.** Tables, staged sections, and dynamic titles are declared in YAML, not hand-rolled in bash with `printf` and `column`.
+- **Consistent across workflows and custom commands.** The same step library powers both, so what you learn in one applies to the other.
+
+## Get Involved
+
+See the [workflow step types](/workflows/steps/type) and the [`table` step](/workflows/steps/type/table) reference to start building. Share what you create with the [Atmos community](https://github.com/cloudposse/atmos).

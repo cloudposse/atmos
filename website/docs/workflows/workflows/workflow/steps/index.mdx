@@ -1,0 +1,112 @@
+---
+title: steps
+sidebar_label: steps
+slug: /workflows/steps
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `steps` field is an ordered array of step objects. Atmos executes the steps in the order they appear.
+</Intro>
+
+```yaml
+workflows:
+  deploy:
+    steps:
+      - name: plan
+        type: atmos
+        command: terraform plan vpc
+      - name: apply
+        type: atmos
+        command: terraform apply vpc -auto-approve
+```
+
+Each array item is a step — the unit of work Atmos runs, whether it executes a command or renders interactive UI. The `type` field selects step behavior. Fields such as `title`, `columns`, `prompt`, `retry`, and `timeout` are parameters on that same step object; they are not separate steps.
+
+```yaml
+steps:
+  - name: building
+    type: spin
+    title: Building application
+    command: npm run build
+    timeout: 60s
+```
+
+In this example, `spin` is the value of `steps[].type`. The fields `title`, `command`, and `timeout` configure that `spin` step.
+
+## Common Fields
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Optional step identifier. Atmos generates names like `step1` when omitted. Names are used by `--from-step` and by templates such as `{{ .steps.plan.value }}`.</dd>
+
+  <dt>`type`</dt>
+  <dd>Step behavior selector. Type `atmos` is the default for command steps. See [type](/workflows/steps/type).</dd>
+
+  <dt>`command`</dt>
+  <dd>Command text for command-running step types such as `atmos`, `shell`, `spin`, and `container` run actions.</dd>
+
+  <dt>`stack`</dt>
+  <dd>Step-level stack override for `type: atmos` steps.</dd>
+
+  <dt>`identity`</dt>
+  <dd>Step-level auth identity. See [identity](/workflows/steps/identity).</dd>
+
+  <dt>`when`</dt>
+  <dd>Optional condition that decides whether the step runs. Built-in predicate keywords are evaluated first; other non-empty scalar strings are evaluated as CEL.</dd>
+
+  <dt>`env`</dt>
+  <dd>Step-level environment variables. See [env](/workflows/steps/env).</dd>
+
+  <dt>`working_directory`</dt>
+  <dd>Step-level working directory override. See [working_directory](/workflows/steps/working-directory).</dd>
+
+  <dt>`retry`</dt>
+  <dd>Retry policy for the step. See [retry](/workflows/steps/retry).</dd>
+
+  <dt>`output`</dt>
+  <dd>Step-level output mode override. See [output](/workflows/steps/output).</dd>
+
+  <dt>`show`</dt>
+  <dd>Step-level display settings override. See [show](/workflows/steps/show).</dd>
+
+  <dt>`outputs`</dt>
+  <dd>Declared outputs derived from the step result. See [outputs](/workflows/steps/outputs).</dd>
+</dl>
+
+Type-specific fields are documented with [type](/workflows/steps/type).
+
+## Conditional Execution
+
+Use `when` to skip a workflow step unless a condition is true. Bare predicate keywords keep their existing behavior:
+
+```yaml
+steps:
+  - name: plan
+    type: atmos
+    command: terraform plan vpc
+    when: ci
+```
+
+Any other non-empty scalar string is evaluated as a CEL expression:
+
+```yaml
+steps:
+  - name: prod-ci-check
+    type: shell
+    command: ./scripts/check-prod.sh
+    when: stack == "prod" && ci
+```
+
+Use the explicit `!cel` tag when the value is intended to be CEL or could look ambiguous:
+
+```yaml
+steps:
+  - name: prod-ci-check
+    type: shell
+    command: ./scripts/check-prod.sh
+    when: !cel 'stack == "prod" && ci'
+```
+
+Workflow step CEL expressions can use `ci`, `status`, `stack`, `component`, `workflow`, `step`, and `env`. Predicate keywords win over CEL for bare strings, so `when: ci` uses the built-in predicate while `when: !cel 'ci'` evaluates CEL. Workflow steps do not support the built-in `failure` predicate; in this version, step CEL sees `status == "success"`.

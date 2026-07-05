@@ -20,6 +20,10 @@ func setupTest(t *testing.T) func() {
 	// Reset viper for clean test state
 	viper.Reset()
 
+	for _, envVar := range []string{"NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "FORCE_COLOR", "TERM", "COLORTERM", "CI"} {
+		t.Setenv(envVar, "")
+	}
+
 	// Return cleanup function that restores original state
 	return func() {
 		viper.Reset()

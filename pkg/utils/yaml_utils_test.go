@@ -767,6 +767,7 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncCEL,
 		AtmosYamlFuncGitRoot,
 		AtmosYamlFuncGitRootAlias,
 		AtmosYamlFuncGitSha,
@@ -787,6 +788,7 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncAwsCallerIdentityUserID,
 		AtmosYamlFuncAwsRegion,
 		AtmosYamlFuncAwsOrganizationID,
+		AtmosYamlFuncEmulator,
 	}
 
 	for _, tag := range expectedTags {
@@ -814,6 +816,7 @@ func TestAtmosYamlTagsMap_O1Lookup(t *testing.T) {
 		{AtmosYamlFuncTerraformOutput, true},
 		{AtmosYamlFuncTerraformState, true},
 		{AtmosYamlFuncEnv, true},
+		{AtmosYamlFuncCEL, true},
 		{AtmosYamlFuncGitRoot, true},
 		{AtmosYamlFuncGitRootAlias, true},
 		{AtmosYamlFuncGitSha, true},

@@ -102,7 +102,7 @@ This separation allows you to:
 
 ## Component Types
 
-Atmos natively supports four component types:
+Atmos natively supports six component types:
 
 | Type | Implementation | Description |
 |------|----------------|-------------|
@@ -110,6 +110,8 @@ Atmos natively supports four component types:
 | **[Helmfile](/components/helmfile)** | Helmfile configurations | Deploy Helm charts to Kubernetes |
 | **[Packer](/components/packer)** | Packer templates | Build machine images |
 | **[Ansible](/components/ansible)** | Ansible playbooks | Configuration management and automation |
+| **[Container](/components/container)** | Container images & services | Build and run persistent, stack-scoped containers |
+| **[Emulator](/components/emulator)** | Stack config via `components.emulator.*.driver` (no `components/emulator/` directory) | Run cloud-API, Kubernetes, and backing-service emulators offline |
 
 Each type has its own configuration schema, but they share common patterns for `metadata` and `settings`.
 
@@ -131,8 +133,10 @@ components/
 │   └── cert-manager/
 ├── packer/              # Packer templates
 │   └── ubuntu-base/
-└── ansible/             # Ansible playbooks
-    └── webserver/
+├── ansible/             # Ansible playbooks
+│   └── webserver/
+└── container/           # Container build contexts
+    └── api/
 ```
 
 :::tip
@@ -197,3 +201,5 @@ For more powerful filtering options, consider [describing stacks](/describe/stac
 - [Packer Components](/components/packer) — Packer templates
 - [Ansible Components](/components/ansible) — Ansible playbooks
 - [Custom Component Types](/components/custom) — Bring any tool under stack-based config
+- [Container Components](/components/container) — Build and run persistent, stack-scoped containers
+- [Emulator Components](/components/emulator) — Run cloud-API, Kubernetes, and backing-service emulators offline

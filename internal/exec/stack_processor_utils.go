@@ -2047,8 +2047,15 @@ func processBaseComponentConfigInternal(
 	var baseComponentLocals map[string]any
 	var baseComponentProviders map[string]any
 	var baseComponentHooks map[string]any
+	var baseComponentTest map[string]any
 	var baseComponentGenerate map[string]any
 	var baseComponentCommand string
+	var baseComponentProvider string
+	var baseComponentPaths any
+	var baseComponentManifests any
+	var baseComponentPlugins any
+	var baseComponentRender map[string]any
+	var baseComponentHelm map[string]any
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[string]any
 	var baseComponentRemoteStateBackendType string
@@ -2238,12 +2245,48 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		if baseComponentTestSection, baseComponentTestSectionExist := baseComponentMap[cfg.TestSectionName]; baseComponentTestSectionExist {
+			baseComponentTest, ok = baseComponentTestSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.test' in the stack '%s'", errUtils.ErrInvalidConfig, baseComponent, stack)
+			}
+		}
+
 		if baseComponentGenerateSection, baseComponentGenerateSectionExist := baseComponentMap[cfg.GenerateSectionName]; baseComponentGenerateSectionExist {
 			baseComponentGenerate, ok = baseComponentGenerateSection.(map[string]any)
 			if !ok {
 				return fmt.Errorf("%w '%s.generate' in the stack '%s'", errUtils.ErrInvalidComponentGenerate, baseComponent, stack)
 			}
 		}
+
+		if baseComponentProviderSection, baseComponentProviderSectionExist := baseComponentMap[cfg.ProviderSectionName]; baseComponentProviderSectionExist {
+			baseComponentProvider, ok = baseComponentProviderSection.(string)
+			if !ok {
+				return fmt.Errorf("%w '%s.provider' in the stack '%s'", errUtils.ErrInvalidConfig, baseComponent, stack)
+			}
+		}
+
+		if baseComponentPathsSection, baseComponentPathsSectionExist := baseComponentMap[cfg.PathsSectionName]; baseComponentPathsSectionExist {
+			baseComponentPaths = baseComponentPathsSection
+		}
+
+		if baseComponentManifestsSection, baseComponentManifestsSectionExist := baseComponentMap[cfg.ManifestsSectionName]; baseComponentManifestsSectionExist {
+			baseComponentManifests = baseComponentManifestsSection
+		}
+
+		if baseComponentPluginsSection, baseComponentPluginsSectionExist := baseComponentMap[cfg.PluginsSectionName]; baseComponentPluginsSectionExist {
+			baseComponentPlugins = baseComponentPluginsSection
+		}
+
+		if baseComponentRenderSection, baseComponentRenderSectionExist := baseComponentMap[cfg.RenderSectionName]; baseComponentRenderSectionExist {
+			baseComponentRender, ok = baseComponentRenderSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.render' in the stack '%s'", errUtils.ErrInvalidConfig, baseComponent, stack)
+			}
+		}
+
+		// Base component native Helm fields (chart, values, etc.).
+		baseComponentHelm = extractHelmComponentSection(baseComponentMap)
 
 		// Base component backend
 		if i, ok2 := baseComponentMap[cfg.BackendTypeSectionName]; ok2 {
@@ -2427,12 +2470,59 @@ func processBaseComponentConfigInternal(
 		}
 		baseComponentConfig.BaseComponentHooks = merged
 
+		// Base component `test`
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentTest, baseComponentTest})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentTest = merged
+
 		// Base component `generate`
 		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentGenerate, baseComponentGenerate})
 		if err != nil {
 			return err
 		}
 		baseComponentConfig.BaseComponentGenerate = merged
+
+		// Base component `provider`
+		if baseComponentProvider != "" {
+			baseComponentConfig.BaseComponentProvider = baseComponentProvider
+		}
+
+		// Base component `paths`
+		mergedAny, err := mergeComponentAnySection(levelMergeConfig, cfg.PathsSectionName, baseComponentConfig.BaseComponentPaths, baseComponentPaths)
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentPaths = mergedAny
+
+		// Base component `manifests`
+		mergedAny, err = mergeComponentAnySection(levelMergeConfig, cfg.ManifestsSectionName, baseComponentConfig.BaseComponentManifests, baseComponentManifests)
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentManifests = mergedAny
+
+		// Base component `plugins` (Helm CLI plugins list).
+		mergedAny, err = mergeComponentAnySection(levelMergeConfig, cfg.PluginsSectionName, baseComponentConfig.BaseComponentPlugins, baseComponentPlugins)
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentPlugins = mergedAny
+
+		// Base component `render`
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentRender, baseComponentRender})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentRender = merged
+
+		// Base component native Helm fields.
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentHelm, baseComponentHelm})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentHelm = merged
 
 		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand

@@ -1,0 +1,67 @@
+name: Backend
+description: Operator workflows for exploring and running the application backend
+
+workflows:
+  operator/orient:
+    description: |
+      Show the stack tree, component instances, component catalog, validation
+      command, and day-to-day commands an operator uses for this quick-start stack.
+    steps:
+      - name: stacks
+        type: stage
+        title: Stack import tree
+
+      - name: show-stacks
+        type: shell
+        command: atmos list stacks --format tree --provenance
+
+      - name: instances
+        type: stage
+        title: Component instances
+
+      - name: show-instances
+        command: list instances --format tree --provenance
+
+      - name: catalog
+        type: stage
+        title: Component catalog
+
+      - name: list-components
+        type: spin
+        title: Preparing component catalog command
+        command: true
+
+      - name: show-components
+        command: list components
+
+      - name: commands
+        type: stage
+        title: Operator commands
+
+      - name: validation-note
+        type: markdown
+        content: |
+          Run `atmos validate stacks` after the sandbox is started to validate the stack manifests with runtime-backed functions enabled.
+
+      - name: command-table
+        type: table
+        title: Quick-start operator commands
+        columns:
+          - task
+          - command
+        data:
+          - task: Start sandbox
+            command: atmos emulator up aws -s <stack>
+          - task: Validate manifests
+            command: atmos validate stacks
+          - task: Deploy stack
+            command: atmos terraform deploy --all -s <stack>
+          - task: Inspect provenance
+            command: atmos describe component app-config -s <stack> --provenance
+          - task: Destroy stack
+            command: atmos terraform destroy --all -s <stack> -auto-approve
+
+      - name: done
+        type: toast
+        level: info
+        content: "Use `atmos terraform deploy --all -s <stack>` and `atmos terraform destroy --all -s <stack>` for graph-backed operations."

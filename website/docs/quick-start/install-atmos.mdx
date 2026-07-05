@@ -7,12 +7,12 @@ id: install-atmos
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import Link from '@docusaurus/Link';
 import Intro from '@site/src/components/Intro'
 import LatestRelease from '@site/src/components/LatestRelease'
 import File from '@site/src/components/File'
 import CodeBlock from '@theme/CodeBlock';
 import InstallWidget from '@site/src/components/InstallWidget'
+import ActionCard from '@site/src/components/ActionCard'
 
 <InstallWidget />
 
@@ -399,7 +399,11 @@ We recommend the "Fira Code" NerdFont version, which is what all our screenshots
 
 ## Next Steps
 
-Now, try one of our Quick Start guides to get started with Atmos
-
-<Link to="/quick-start/simple" className="button button--lg button--primary"><p>Simple Tutorial</p></Link>
-<Link to="/quick-start/advanced" className="button button--lg button--outline button--primary ml20"><p>Advanced Tutorial</p></Link>
+<ActionCard
+  title="Choose a Quick Start"
+  primaryCtaText="Simple Tutorial"
+  primaryCtaLink="/quick-start/simple"
+  secondaryCtaText="Advanced Tutorial"
+  secondaryCtaLink="/quick-start/advanced">
+  Now, try one of our Quick Start guides to get started with Atmos.
+</ActionCard>

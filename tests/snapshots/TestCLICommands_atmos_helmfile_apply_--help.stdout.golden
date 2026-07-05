@@ -11,9 +11,9 @@ apply echo-server -s tenant1-ue2-dev --redirect-stderr /dev/stdout
 
 USAGE
 
-                                    
-    $ atmos helmfile apply [flags]  
-                                    
+
+    $ atmos helmfile apply [flags]
+
 
 FLAGS
 
@@ -31,6 +31,8 @@ GLOBAL FLAGS
 
   -C, --chdir string                         Change working directory before executing the command (run as if Atmos
                                              started in this directory)
+
+      --ci                                   Enable CI mode for automated pipelines (writes job summary).
 
       --config strings                       Paths to configuration files (comma-separated or repeated flag)
 

@@ -1,0 +1,113 @@
+---
+slug: hooks-step-types
+title: "Run Any Step Type as a Lifecycle Hook"
+authors: [osterman]
+tags: [feature]
+date: 2026-06-23
+---
+
+Atmos hooks can now run any workflow step type. A new `kind: step` hook bridges the
+component lifecycle (before/after `terraform plan`, `apply`, `deploy`, `init`) to the same
+step registry that powers workflows and custom commands — so a `container`, `toast`, `log`,
+`markdown`, or `http` step you already use elsewhere runs identically as a hook.
+
+<!--truncate-->
+
+## What Changed
+
+Until now, a hook's `kind` selected from a fixed list — `store`, `command`, `infracost`,
+`checkov`, `kics`, `trivy`, `git`. Anything else meant falling back to `kind: command` and
+hand-rolling a shell invocation. Every new capability meant a new hook kind.
+
+`kind: step` removes that ceiling. Instead of growing the hook-kind list one tool at a time,
+hooks now reach the entire step library:
+
+```yaml
+hooks:
+  notify-slack:
+    kind: step
+    type: http                 # any registered step type
+    events: [after-terraform-apply]
+    on_failure: warn           # warn | fail | ignore
+    retry:
+      max_attempts: 3
+    with:                      # the step's own parameters
+      url: https://hooks.slack.com/services/XXX
+      method: POST
+      body: '{"text": "Deployed {{ .atmos_component }} to {{ .stack }}"}'
+```
+
+The split is deliberate: the **envelope** (`kind`, `type`, `events`, `on_failure`, `retry`,
+`env`) is what the hook runner interprets; **`with:`** is the step's own parameter block,
+written exactly as you'd write it in a workflow. `on_failure` and `retry` are applied *around*
+the step — the step never sees them.
+
+## Why This Matters
+
+You already describe a lot of automation as steps. Reusing those steps as lifecycle hooks means
+one mental model and zero duplication:
+
+```yaml
+# Build and push an image after apply — retried, non-blocking.
+hooks:
+  publish-image:
+    kind: step
+    type: container
+    action: build
+    events: [after-terraform-apply]
+    on_failure: warn
+    with:
+      context: .
+      tags: [example:latest]
+```
+
+Values inside `with:` are rendered with the standard hook template context and YAML functions,
+so `{{ .atmos_component }}` and `!store ...` work there. Each step receives the usual `ATMOS_*`
+environment (`ATMOS_STACK`, `ATMOS_COMPONENT`, `ATMOS_COMPONENT_PATH`, …) plus any `env:` you add.
+
+## Announce Success — or Failure
+
+Hooks can now react to the operation's outcome. By default an `after-*` hook
+runs only on success (so a `store` hook never writes outputs after a failed
+apply), but `when: failure` / `when: always` opt in to failures — and the
+outcome, component, and stack are all available to the step:
+
+```yaml
+hooks:
+  announce:
+    kind: step
+    type: say                 # (or http/toast)
+    events: [after-terraform-apply]
+    when: always
+    with:
+      message: >-
+        The {{ .atmos_component }} component in the {{ .stack }} stack
+        {{ if eq .status "failure" }}failed{{ else }}deployed{{ end }}
+```
+
+The same values are exported as `ATMOS_HOOK_STATUS`, `ATMOS_HOOK_EXIT_CODE`,
+`ATMOS_HOOK_ERROR`, `ATMOS_COMPONENT`, and `ATMOS_STACK` for steps that read the
+environment. Under the hood, user hooks now fire on the failure path too — not
+just on success — so "deployment failed" announcements actually reach you.
+
+## How to Use It
+
+1. Set `kind: step` and a `type:` naming any registered step type.
+2. Put the step's parameters under `with:`.
+3. Use `events:` to choose when it fires, `on_failure:` for warn/fail/ignore, and `retry:` to
+   wrap the step in Atmos's retry policy.
+
+A typo'd `type:` fails the preflight check *before* Terraform runs, so you find out immediately.
+All step types are available, including interactive ones — whether an interactive step makes
+sense on a (usually headless) lifecycle event is the step's responsibility, not the hook's.
+
+:::note The `http` step ships separately
+The Slack example needs the `http` step type. If your build doesn't have it yet, use a
+registered step type such as `container`, `toast`, `log`, or `markdown` — the bridge works with
+every registered step type.
+:::
+
+## Get Involved
+
+See the [Hooks reference](/stacks/hooks#kind-step-run-a-step-type) for the full `kind: step`
+documentation, and the [step types](/workflows/steps/type) reference for the available steps.
