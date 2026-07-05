@@ -149,6 +149,7 @@ func TestGetOperationFlags(t *testing.T) {
 	cmd := configuredOperationCommand(t, "render", map[string]string{
 		"all":                "true",
 		"affected":           "false",
+		"ci":                 "true",
 		"include-dependents": "true",
 		"clone-target-ref":   "true",
 		"repo-path":          "/repo",
@@ -166,6 +167,7 @@ func TestGetOperationFlags(t *testing.T) {
 
 	assert.Equal(t, true, flags["all"])
 	assert.Equal(t, false, flags["affected"])
+	assert.Equal(t, true, flags["ci"])
 	assert.Equal(t, true, flags["include-dependents"])
 	assert.Equal(t, true, flags["clone-target-ref"])
 	assert.Equal(t, "/repo", flags["repo-path"])
