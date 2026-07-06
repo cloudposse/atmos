@@ -38,11 +38,8 @@ atmos emulator down kubernetes -s dev          # stop (state persists)
 # atmos emulator reset kubernetes -s dev       # stop and delete cluster state
 ```
 
-Or run the whole round trip in one step:
-
-```shell
-atmos test
-```
+The `atmos test` custom command remains available as the CI smoke wrapper for
+this same lifecycle.
 
 ## Key Files
 
