@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -247,6 +248,47 @@ func TestPrepareSubprocess_MissingCommandReturnsCommandNotFound(t *testing.T) {
 	_, err := prepareSubprocess(ctx, t.TempDir(), filepath.Join(t.TempDir(), "output"))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
+}
+
+func TestPrepareSubprocess_PropagatesCILogGroupSentinel(t *testing.T) {
+	t.Setenv("ATMOS_CI_LOG_GROUP_ACTIVE", "")
+	prev := shouldPropagateHookLogGroupSentinel
+	t.Cleanup(func() { shouldPropagateHookLogGroupSentinel = prev })
+
+	tests := []struct {
+		name      string
+		propagate bool
+		want      bool
+	}{
+		{name: "propagates when hook group is active", propagate: true, want: true},
+		{name: "does not propagate when hook group is inactive", propagate: false, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			shouldPropagateHookLogGroupSentinel = func(*schema.AtmosConfiguration, ci.Dimension) bool {
+				return tt.propagate
+			}
+
+			ctx := &ExecContext{
+				Hook: &Hook{
+					Kind:    "command",
+					Command: testExePath(t),
+				},
+				Kind:        &Kind{Name: "command"},
+				AtmosConfig: &schema.AtmosConfiguration{},
+			}
+
+			prep, err := prepareSubprocess(ctx, t.TempDir(), filepath.Join(t.TempDir(), "output"))
+			require.NoError(t, err)
+
+			if tt.want {
+				assert.Contains(t, prep.env, ci.LogGroupSentinelEnv())
+			} else {
+				assert.NotContains(t, prep.env, ci.LogGroupSentinelEnv())
+			}
+		})
+	}
 }
 
 func TestResolveBinaryOnPath_RejectsNonExecutableUnixFile(t *testing.T) {

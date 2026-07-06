@@ -18,6 +18,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/ci"
+	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/reexec"
@@ -2236,6 +2238,44 @@ func TestProcessCustomCommands(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExecuteCustomCommandShellStepPropagatesCILogGroupSentinel(t *testing.T) {
+	_ = NewTestKit(t)
+
+	restore := ci.SwapRegistryForTest()
+	t.Cleanup(restore)
+	ci.Register(githubprovider.NewProvider())
+	t.Setenv("GITHUB_ACTIONS", "true")
+
+	workDir := t.TempDir()
+	sentinelFile := filepath.Join(workDir, "sentinel.txt")
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: workDir,
+		CI:       schema.CIConfig{Enabled: true},
+	}
+	parentCmd := &cobra.Command{Use: "atmos"}
+	commands := []schema.Command{{
+		Name:             "cover-ci-shell",
+		Description:      "exercise shell dispatch with CI grouping",
+		WorkingDirectory: workDir,
+		Steps: []schema.Task{{
+			Name:    "capture-sentinel",
+			Type:    schema.TaskTypeShell,
+			Command: `printf %s "$ATMOS_CI_LOG_GROUP_ACTIVE" > sentinel.txt`,
+		}},
+	}}
+
+	require.NoError(t, processCustomCommands(atmosConfig, commands, parentCmd))
+	customCmd := findSubcommand(parentCmd, "cover-ci-shell")
+	require.NotNil(t, customCmd)
+
+	customCmd.PreRun(customCmd, nil)
+	customCmd.Run(customCmd, nil)
+
+	got, err := os.ReadFile(sentinelFile)
+	require.NoError(t, err)
+	assert.Equal(t, "1", string(got))
 }
 
 func TestFindTypedValue(t *testing.T) {

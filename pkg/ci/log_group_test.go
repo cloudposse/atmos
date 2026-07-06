@@ -38,6 +38,23 @@ func TestStartLogGroup_DispatchesToCapableProvider(t *testing.T) {
 	assert.Equal(t, 1, m.ended)
 }
 
+func TestStartLogGroup_NoopsWhenGroupAlreadyActive(t *testing.T) {
+	restore := SwapRegistryForTest()
+	defer restore()
+
+	m := &logGroupMockProvider{mockProvider: mockProvider{name: "cap", detected: true}}
+	Register(m)
+
+	err := Group(modeConfig(GroupModeAuto), DimensionPhase, "outer", func() error {
+		StartLogGroup("inner")()
+		return nil
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"outer"}, m.started)
+	assert.Equal(t, 1, m.ended)
+}
+
 func TestStartLogGroup_NoopCases(t *testing.T) {
 	t.Run("empty title", func(t *testing.T) {
 		restore := SwapRegistryForTest()
