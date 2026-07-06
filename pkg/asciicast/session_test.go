@@ -419,6 +419,7 @@ func TestRunSessionAppliesDirectoryAndEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cwdPattern := "cwd=(" + regexp.QuoteMeta(dir) + "|" + regexp.QuoteMeta(expectedDir) + ")"
 	t.Setenv(asciicastSessionHelperEnv, "1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -432,7 +433,7 @@ func TestRunSessionAppliesDirectoryAndEnvironment(t *testing.T) {
 		Actions: []SessionAction{
 			{Type: "write", Text: "print context", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "cwd=" + expectedDir, Timeout: "2s"},
+			{Type: "wait", Regex: cwdPattern, Timeout: "2s"},
 			{Type: "wait", Text: "marker=from-session", Timeout: "2s"},
 		},
 	})

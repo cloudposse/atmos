@@ -644,12 +644,13 @@ func TestChdir(t *testing.T) {
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
 	origPWD := os.Getenv("PWD")
+	target := t.TempDir()
+
 	t.Cleanup(func() {
 		require.NoError(t, os.Chdir(origDir))
 		require.NoError(t, os.Setenv("PWD", origPWD))
 	})
 
-	target := t.TempDir()
 	require.NoError(t, Chdir(target))
 
 	cwd, err := os.Getwd()
