@@ -85,7 +85,7 @@ func TestWriteOuterTopLevelFile(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	dummyFileURL := "dummyFileURL"
-	finalURL, err := writeOuterTopLevelFile(tempDir, dummyFileURL)
+	finalURL, err := writeOuterTopLevelFile(tempDir, dummyFileURL, map[string]interface{}{"name": "Atmos"})
 	if err != nil {
 		t.Fatalf("writeOuterTopLevelFile returned error: %v", err)
 	}
@@ -129,6 +129,9 @@ func TestWriteOuterTopLevelFile(t *testing.T) {
 	if !strings.Contains(string(content), dummyFileURL) {
 		t.Errorf("Expected file content to contain %q, got %q", dummyFileURL, string(content))
 	}
+	if !strings.Contains(string(content), `"name":"Atmos"`) {
+		t.Errorf("Expected file content to contain root data, got %q", string(content))
+	}
 }
 
 // TestProcessTmplWithDatasourcesGomplate tests that a static template is rendered correctly.
@@ -151,7 +154,7 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 	mergedData = map[string]interface{}{
 		"name": "Atmos",
 	}
-	tmpl = " {{- $data := (ds \"config\") -}}\n\nHello {{ $data.name | default \"Project Title\" }}!"
+	tmpl = "Hello {{ .name }}!"
 
 	result, err = ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, false)
 	if err != nil {
@@ -162,7 +165,19 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 		t.Errorf("Expected result to be %q, got %q", expected, result)
 	}
 
-	// Test case 3: Nested variable access
+	// Test case 3: Template with config datasource interpolation
+	tmpl = " {{- $data := (ds \"config\") -}}\n\nHello {{ $data.name | default \"Project Title\" }}!"
+
+	result, err = ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, false)
+	if err != nil {
+		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
+	}
+	expected = "Hello Atmos!"
+	if result != expected {
+		t.Errorf("Expected result to be %q, got %q", expected, result)
+	}
+
+	// Test case 4: Nested variable access
 	mergedData = map[string]interface{}{
 		"config": map[string]interface{}{
 			"version": "1.0.0",

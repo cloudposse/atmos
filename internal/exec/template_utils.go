@@ -478,13 +478,23 @@ func writeMergedDataToFile(tempDir string, mergedData map[string]interface{}) (*
 }
 
 // Write the 'outer' top-level file and return its final file URL.
-func writeOuterTopLevelFile(tempDir string, fileURL string) (*url.URL, error) {
-	// Write the 'outer' top-level file.
-	topLevel := map[string]interface{}{
-		"Env": map[string]interface{}{
-			"README_YAML": fileURL,
-		},
+func writeOuterTopLevelFile(tempDir string, fileURL string, mergedData map[string]interface{}) (*url.URL, error) {
+	// Keep merged data at the template root for templates that use `.name`,
+	// while preserving the historical Env.README_YAML helper.
+	topLevel := make(map[string]interface{}, len(mergedData)+1)
+	for k, v := range mergedData {
+		topLevel[k] = v
 	}
+
+	envData := map[string]interface{}{}
+	if existingEnv, ok := topLevel["Env"].(map[string]interface{}); ok {
+		for k, v := range existingEnv {
+			envData[k] = v
+		}
+	}
+	envData["README_YAML"] = fileURL
+	topLevel["Env"] = envData
+
 	outerJSON, err := json.Marshal(topLevel)
 	if err != nil {
 		return nil, err
@@ -533,7 +543,7 @@ func ProcessTmplWithDatasourcesGomplate(
 		return "", err
 	}
 
-	finalTopLevelFileURL, err := writeOuterTopLevelFile(tempDir, finalFileUrl.String())
+	finalTopLevelFileURL, err := writeOuterTopLevelFile(tempDir, finalFileUrl.String(), mergedData)
 	if err != nil {
 		return "", err
 	}

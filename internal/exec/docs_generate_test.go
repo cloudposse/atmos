@@ -155,6 +155,49 @@ func TestGetTemplateContent(t *testing.T) {
 	}
 }
 
+func TestGetTemplateContent_Remote(t *testing.T) {
+	templateContent := "This is a remote template."
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(templateContent))
+	}))
+	defer server.Close()
+
+	atmosConfig := schema.AtmosConfiguration{}
+	got, err := getTemplateContent(&atmosConfig, server.URL+"/README.md.gotmpl", "")
+	if err != nil {
+		t.Fatalf("getTemplateContent failed: %v", err)
+	}
+	if got != templateContent {
+		t.Errorf("Expected template %q, got %q", templateContent, got)
+	}
+}
+
+func TestFetchTemplate_ConfiguredTemplateFailure(t *testing.T) {
+	docsGen := schema.DocsGenerate{
+		Template: "./missing-template.gotmpl",
+	}
+
+	_, err := fetchTemplate(&schema.AtmosConfiguration{}, &docsGen, t.TempDir())
+	if err == nil {
+		t.Fatal("expected missing configured template to return an error")
+	}
+	if !strings.Contains(err.Error(), "missing-template.gotmpl") {
+		t.Errorf("expected error to include template path, got %v", err)
+	}
+}
+
+func TestFetchTemplate_DefaultWhenUnconfigured(t *testing.T) {
+	docsGen := schema.DocsGenerate{}
+
+	got, err := fetchTemplate(&schema.AtmosConfiguration{}, &docsGen, t.TempDir())
+	if err != nil {
+		t.Fatalf("expected default template without error, got %v", err)
+	}
+	if got != defaultDocsTemplate() {
+		t.Errorf("expected default template, got %q", got)
+	}
+}
+
 // TestApplyTerraformDocs_Disabled tests that when terraform docs are disabled, nothing is added.
 func TestApplyTerraformDocs_Disabled(t *testing.T) {
 	docsGen := schema.DocsGenerate{
@@ -492,5 +535,17 @@ common: remote
 				}
 			}
 		})
+	}
+}
+
+func TestMergeInputs_MissingLocalInputFails(t *testing.T) {
+	dg := &schema.DocsGenerate{Input: []any{"missing.yaml"}}
+
+	_, err := mergeInputs(&schema.AtmosConfiguration{}, t.TempDir(), dg)
+	if err == nil {
+		t.Fatal("expected missing configured input to return an error")
+	}
+	if !strings.Contains(err.Error(), "missing.yaml") {
+		t.Errorf("expected error to include input path, got %v", err)
 	}
 }
