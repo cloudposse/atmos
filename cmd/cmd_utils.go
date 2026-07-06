@@ -34,6 +34,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/reexec"
+	"github.com/cloudposse/atmos/pkg/retry"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -1013,71 +1014,77 @@ func executeCustomCommand(
 			stepType = "shell"
 		}
 
-		// Execute the step based on type.
-		//
-		// shell/exec/atmos use the legacy, cross-platform, child-reaping paths
-		// below; only genuinely-extended step types (container, input, confirm,
-		// …) route through the registered step handlers via the default case.
-		// Routing shell/atmos through the handlers regressed Windows (handlers
-		// hardcode `sh -c` → exit 126) and leaked orphaned `atmos` child
-		// processes on Linux (no process-group cleanup), so they stay on the
-		// legacy paths.
-		switch stepType {
-		case "shell":
-			// Execute shell command (backward compatible).
-			// Steps with tty/interactive attach the user's terminal so commands
-			// like `aws ssm start-session` get a real TTY and own Ctrl-C.
-			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-			err = process.RunShellStep(context.Background(), &process.ShellSessionSpec{
-				Command:     commandToRun,
-				Name:        commandName,
-				Dir:         workDir,
-				Env:         env,
-				TTY:         step.Tty,
-				Interactive: step.Interactive,
-			}, func() error {
-				return e.ExecuteShell(commandToRun, commandName, workDir, env, false)
-			})
-		case schema.TaskTypeExec:
-			// Replace the Atmos process with the command (shell exec semantics).
-			err = process.ReplaceShellSession(&process.ExecSpec{
-				Command: commandToRun,
-				Name:    fmt.Sprintf("%s-step-%d", commandConfig.Name, i),
-				Dir:     workDir,
-				Env:     env,
-			})
-		case "atmos":
-			// Execute atmos command.
-			args := strings.Fields(commandToRun)
-			execPath, execErr := os.Executable()
-			if execErr != nil {
-				err = execErr
-				break
-			}
-			err = e.ExecuteShellCommand(atmosConfig, execPath, args, workDir, env, false, "")
-		default:
-			// Check if this is an extended step type (input, confirm, choose, etc.).
-			if stepPkg.IsExtendedStepType(stepType) {
-				// Convert Task to WorkflowStep for handler compatibility.
-				workflowStep := step.ToWorkflowStep()
-				// Carry the resolved process env onto the step so handlers that read
-				// step.Env (e.g. the container handler's in-container env) see the
-				// same command/component/auth/step env used by shell and atmos steps.
-				workflowStep.Env = envSliceToMap(env)
-				// Propagate working directory to extended step if not already set.
-				if workflowStep.WorkingDirectory == "" {
-					workflowStep.WorkingDirectory = workDir
+		runStep := func() error {
+			// Execute the step based on type.
+			//
+			// shell/exec/atmos use the legacy, cross-platform, child-reaping paths
+			// below; only genuinely-extended step types (container, input, confirm,
+			// …) route through the registered step handlers via the default case.
+			// Routing shell/atmos through the handlers regressed Windows (handlers
+			// hardcode `sh -c` → exit 126) and leaked orphaned `atmos` child
+			// processes on Linux (no process-group cleanup), so they stay on the
+			// legacy paths.
+			switch stepType {
+			case "shell":
+				// Execute shell command (backward compatible).
+				// Steps with tty/interactive attach the user's terminal so commands
+				// like `aws ssm start-session` get a real TTY and own Ctrl-C.
+				commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+				return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+					Command:     commandToRun,
+					Name:        commandName,
+					Dir:         workDir,
+					Env:         env,
+					TTY:         step.Tty,
+					Interactive: step.Interactive,
+				}, func() error {
+					return e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+				})
+			case schema.TaskTypeExec:
+				// Replace the Atmos process with the command (shell exec semantics).
+				return process.ReplaceShellSession(&process.ExecSpec{
+					Command: commandToRun,
+					Name:    fmt.Sprintf("%s-step-%d", commandConfig.Name, i),
+					Dir:     workDir,
+					Env:     env,
+				})
+			case "atmos":
+				// Execute atmos command.
+				args := strings.Fields(commandToRun)
+				execPath, execErr := os.Executable()
+				if execErr != nil {
+					return execErr
 				}
+				return e.ExecuteShellCommand(atmosConfig, execPath, args, workDir, env, false, "")
+			default:
+				// Check if this is an extended step type (input, confirm, choose, etc.).
+				if stepPkg.IsExtendedStepType(stepType) {
+					// Convert Task to WorkflowStep for handler compatibility.
+					workflowStep := step.ToWorkflowStep()
+					// Carry the resolved process env onto the step so handlers that read
+					// step.Env (e.g. the container handler's in-container env) see the
+					// same command/component/auth/step env used by shell and atmos steps.
+					workflowStep.Env = envSliceToMap(env)
+					// Propagate working directory to extended step if not already set.
+					if workflowStep.WorkingDirectory == "" {
+						workflowStep.WorkingDirectory = workDir
+					}
 
-				if stack, ok := flagsData["stack"].(string); ok && stack != "" {
-					executor.SetFlag("stack", stack)
+					if stack, ok := flagsData["stack"].(string); ok && stack != "" {
+						executor.SetFlag("stack", stack)
+					}
+
+					// Execute the extended step.
+					_, execErr := executor.Execute(context.Background(), &workflowStep)
+					return execErr
 				}
-
-				// Execute the extended step.
-				_, err = executor.Execute(context.Background(), &workflowStep)
-			} else {
-				err = fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
+				return fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
 			}
+		}
+		if step.Retry != nil {
+			err = retry.Do(context.Background(), step.Retry, runStep)
+		} else {
+			err = runStep()
 		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
