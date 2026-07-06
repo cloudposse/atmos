@@ -166,6 +166,75 @@ func TestTopicHelpRendering_RootDefaultFiltersPersistentGlobals(t *testing.T) {
 	assert.NotContains(t, output, "--global")
 }
 
+func TestCommandSpecificFlagSetNilCommand(t *testing.T) {
+	assert.Nil(t, commandSpecificFlagSet(nil))
+}
+
+func TestPrintLocalFlagsOnlySkipsCommandsWithoutLocalFlags(t *testing.T) {
+	var buf bytes.Buffer
+	renderer := lipgloss.NewRenderer(&buf)
+	styles := createHelpStyles(renderer)
+	cmd := &cobra.Command{Use: "empty"}
+
+	printLocalFlagsOnly(&buf, cmd, nil, &styles)
+
+	assert.Empty(t, buf.String())
+}
+
+func TestPreprocessHelpTopicArgs(t *testing.T) {
+	originalArgs := os.Args
+	originalTopic := currentHelpTopic
+	t.Cleanup(func() {
+		os.Args = originalArgs
+		currentHelpTopic = originalTopic
+		RootCmd.SetArgs(nil)
+	})
+
+	tests := []struct {
+		name         string
+		args         []string
+		expectedArgs []string
+		expected     helpTopicRequest
+	}{
+		{
+			name:         "no arguments",
+			args:         []string{"atmos"},
+			expectedArgs: []string{"atmos"},
+			expected:     helpTopicRequest{valid: true},
+		},
+		{
+			name:         "bare help unchanged",
+			args:         []string{"atmos", "--help"},
+			expectedArgs: []string{"atmos", "--help"},
+			expected:     helpTopicRequest{valid: true},
+		},
+		{
+			name:         "topic normalized",
+			args:         []string{"atmos", "terraform", "plan", "--help=usage"},
+			expectedArgs: []string{"atmos", "terraform", "plan", "--help"},
+			expected: helpTopicRequest{
+				topic:    helpTopicUsage,
+				raw:      "usage",
+				explicit: true,
+				valid:    true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Args = append([]string(nil), tt.args...)
+			currentHelpTopic = helpTopicRequest{topic: helpTopic("stale"), explicit: true}
+			RootCmd.SetArgs(nil)
+
+			preprocessHelpTopicArgs()
+
+			assert.Equal(t, tt.expectedArgs, os.Args)
+			assert.Equal(t, tt.expected, currentHelpTopic)
+		})
+	}
+}
+
 func TestTopicHelpRendering_InvalidTopicExits(t *testing.T) {
 	if os.Getenv("ATMOS_TEST_INVALID_HELP_TOPIC") == "1" {
 		var buf bytes.Buffer

@@ -843,7 +843,7 @@ func applyColoredHelpTemplate(cmd *cobra.Command) {
 }
 
 func applyColoredHelpTemplateForTopic(cmd *cobra.Command, topic helpTopicRequest) {
-	defer perf.Track(nil, "cmd.applyColoredHelpTemplate")()
+	defer perf.Track(nil, "cmd.applyColoredHelpTemplateForTopic")()
 
 	// Detect and configure color settings.
 	colorConf := detectColorConfig()
