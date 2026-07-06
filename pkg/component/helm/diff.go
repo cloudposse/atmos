@@ -3,13 +3,17 @@ package helm
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	hd "github.com/databus23/helm-diff/v3/diff"
 	"github.com/databus23/helm-diff/v3/manifest"
 	"github.com/mgutz/ansi"
+	"github.com/muesli/termenv"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // defaultDiffContextLines is the number of unchanged context lines shown around
@@ -61,4 +65,44 @@ func unifiedDiff(oldManifest, newManifest, namespace string, contextLines int) (
 	changed = hd.Manifests(oldIndex, newIndex, options, &buf)
 
 	return buf.String(), changed, nil
+}
+
+func colorizeUnifiedDiff(diffText string) string {
+	if diffText == "" || ui.GetColorProfile() == termenv.Ascii {
+		return diffText
+	}
+
+	added := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	removed := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+	hunk := lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
+	meta := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+
+	var b strings.Builder
+	for _, line := range strings.SplitAfter(diffText, "\n") {
+		if line == "" {
+			continue
+		}
+
+		hasNewline := strings.HasSuffix(line, "\n")
+		text := strings.TrimSuffix(line, "\n")
+		switch {
+		case strings.HasPrefix(text, "+") && !strings.HasPrefix(text, "+++"):
+			text = added.Render(text)
+		case strings.HasPrefix(text, "-") && !strings.HasPrefix(text, "---"):
+			text = removed.Render(text)
+		case strings.HasPrefix(text, "@@"):
+			text = hunk.Render(text)
+		case strings.HasPrefix(text, "diff ") ||
+			strings.HasPrefix(text, "index ") ||
+			strings.HasPrefix(text, "---") ||
+			strings.HasPrefix(text, "+++"):
+			text = meta.Render(text)
+		}
+
+		b.WriteString(text)
+		if hasNewline {
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
 }

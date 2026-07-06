@@ -41,39 +41,52 @@ commands:
       - type: atmos
         command: >-
           test
-          {{- if .Flags.full }} acc
+          {{- if .Flags.full }} acceptance
           {{- else if .Flags.coverage }} acc-coverage
           {{- else if .Flags.race }} race
           {{- else if index .Flags "generate-mocks" }} generate-auth-http-mocks
           {{- else }} short
           {{- end }}
     commands:
-      - name: acc
+      - name: acceptance
         description: Run acceptance tests
         env: &go_auto_env
           GOTOOLCHAIN: &go_auto_toolchain auto
           CGO_ENABLED: &go_cgo_disabled "0"
+        flags:
+          - name: cover
+            type: bool
+            description: Collect subprocess coverage into coverage.out
+            default: false
         steps:
           - type: atmos
             command: build deps
           - type: shell
-            command: go test ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 40m
+            command: |
+              if [ "{{ .Flags.cover }}" = "true" ]; then
+                scripts/collect-coverage.sh "${TEST:-$(go list ./...)}" "${TESTARGS:-}"
+              else
+                go test ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 40m
+              fi
+
+      - name: acc
+        description: Run acceptance tests
+        steps:
+          - type: atmos
+            command: test acceptance
 
       - name: acc-cover
         description: Run acceptance tests with subprocess coverage collection
-        env: *go_auto_env
         steps:
           - type: atmos
-            command: build deps
-          - type: shell
-            command: scripts/collect-coverage.sh "${TEST:-$(go list ./...)}" "${TESTARGS:-}"
+            command: test acceptance --cover
 
       - name: acc-coverage
         description: Run acceptance tests and generate an HTML coverage report
         env: *go_auto_env
         steps:
           - type: atmos
-            command: test acc-cover
+            command: test acceptance --cover
           - type: shell
             command: go tool cover -html=coverage.out -o coverage.html
 

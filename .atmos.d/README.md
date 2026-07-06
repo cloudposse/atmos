@@ -9,7 +9,7 @@ This directory contains custom Atmos commands that are automatically loaded when
 - `check.yaml` - `atmos check staged`, `atmos check pr`, `atmos check all`, and Codecov validation
 - `format.yaml` - `atmos format staged`, `atmos format pr`, and `atmos format all`
 - `cache.yaml` - `atmos cache list` and `atmos cache clear`
-- `lint.yaml` - `atmos lint changed`, lintroller, gomodcheck, custom golangci-lint, and link checks
+- `lint.yaml` - `atmos lint --changed`, lintroller, gomodcheck, custom golangci-lint, and link checks
 - `test.yaml` - `atmos test`, mode flags, legacy test subcommands, race, and mock generation commands
 - `screengrabs.yaml` - `atmos screengrabs ...` commands for generating website screengrabs
 - `toolchain.yaml` - toolchain aliases and registries
