@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"io"
 
@@ -13,10 +12,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var errUnknownHelpTopic = errors.New("unknown help topic")
-
 func printLocalFlagsOnly(w io.Writer, cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, styles *helpStyles) {
-	defer perf.Track(nil, "cmd.printLocalFlagsOnly")()
+	defer perf.Track(atmosConfig, "cmd.printLocalFlagsOnly")()
 
 	localFlags := commandSpecificFlagSet(cmd)
 	if localFlags == nil || !localFlags.HasAvailableFlags() {
@@ -59,7 +56,7 @@ func isRootPersistentFlag(cmd *cobra.Command, name string) bool {
 func printHelpForTopic(ctx *helpRenderContext, cmd *cobra.Command, topic helpTopicRequest) {
 	if topic.explicit && !topic.valid {
 		errUtils.CheckErrorPrintAndExit(
-			fmt.Errorf("%w: %q", errUnknownHelpTopic, topic.raw),
+			fmt.Errorf("%w: %q", errUtils.ErrUnknownHelpTopic, topic.raw),
 			"Invalid Help Topic",
 			"Valid help topics: "+validHelpTopics(),
 		)
@@ -80,7 +77,7 @@ func printHelpForTopic(ctx *helpRenderContext, cmd *cobra.Command, topic helpTop
 	}
 }
 
-func printFullHelp(ctx *helpRenderContext, cmd *cobra.Command) {
+func printCommonHelpSections(ctx *helpRenderContext, cmd *cobra.Command) {
 	printLogoAndVersion(ctx.writer, ctx.styles)
 	printDescription(ctx.writer, cmd, ctx.styles)
 	printUsageSection(ctx.writer, cmd, ctx.renderer, ctx.styles)
@@ -89,20 +86,17 @@ func printFullHelp(ctx *helpRenderContext, cmd *cobra.Command) {
 	printExamples(ctx.writer, cmd, ctx.renderer, ctx.styles)
 	printAvailableCommands(ctx, cmd)
 	printConfigAliases(ctx, cmd)
+}
+
+func printFullHelp(ctx *helpRenderContext, cmd *cobra.Command) {
+	printCommonHelpSections(ctx, cmd)
 	printFlags(ctx.writer, cmd, ctx.atmosConfig, ctx.styles)
 	printCompatibilityFlags(ctx.writer, cmd, ctx.styles)
 	printFooter(ctx.writer, cmd, ctx.styles)
 }
 
 func printDefaultHelp(ctx *helpRenderContext, cmd *cobra.Command) {
-	printLogoAndVersion(ctx.writer, ctx.styles)
-	printDescription(ctx.writer, cmd, ctx.styles)
-	printUsageSection(ctx.writer, cmd, ctx.renderer, ctx.styles)
-	printAliases(ctx.writer, cmd, ctx.styles)
-	printSubcommandAliases(ctx, cmd)
-	printExamples(ctx.writer, cmd, ctx.renderer, ctx.styles)
-	printAvailableCommands(ctx, cmd)
-	printConfigAliases(ctx, cmd)
+	printCommonHelpSections(ctx, cmd)
 	printLocalFlagsOnly(ctx.writer, cmd, ctx.atmosConfig, ctx.styles)
 	printCompatibilityFlags(ctx.writer, cmd, ctx.styles)
 	printFooter(ctx.writer, cmd, ctx.styles)

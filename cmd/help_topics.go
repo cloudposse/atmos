@@ -53,6 +53,7 @@ func isBoolHelpValue(value string) bool {
 }
 
 func parseHelpTopic(value string) helpTopicRequest {
+	value = strings.ToLower(value)
 	request := helpTopicRequest{
 		topic:    helpTopic(value),
 		raw:      value,

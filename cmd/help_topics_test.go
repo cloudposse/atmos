@@ -51,6 +51,16 @@ func TestNormalizeHelpTopicArgs(t *testing.T) {
 			expectedChange: true,
 		},
 		{
+			name:           "uppercase topic",
+			args:           []string{"terraform", "plan", "--help=USAGE"},
+			expectedArgs:   []string{"terraform", "plan", "--help"},
+			expectedTopic:  helpTopicUsage,
+			expectedRaw:    "usage",
+			expectedValid:  true,
+			expectedSet:    true,
+			expectedChange: true,
+		},
+		{
 			name:           "unknown topic",
 			args:           []string{"terraform", "plan", "--help=advanced"},
 			expectedArgs:   []string{"terraform", "plan", "--help"},
