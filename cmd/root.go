@@ -2167,20 +2167,20 @@ func initCobraConfig() {
 				// User explicitly requested pager for flag help.
 				var buf bytes.Buffer
 				command.SetOut(&buf)
-				applyColoredHelpTemplate(command)
+				applyColoredHelpTemplateForTopic(command, currentHelpTopic)
 				_ = command.Help()
 				pager := pager.NewWithAtmosConfig(true, atmosConfig.Settings.Terminal.Speed)
 				_ = pager.Run("Atmos CLI Help", buf.String())
 			} else {
 				// Default: render help directly to stdout without pager.
-				applyColoredHelpTemplate(command)
+				applyColoredHelpTemplateForTopic(command, currentHelpTopic)
 				_ = command.Help()
 			}
 		case isInteractiveHelp:
 			// Interactive 'atmos help' command - use pager if configured.
 			var buf bytes.Buffer
 			command.SetOut(&buf)
-			applyColoredHelpTemplate(command)
+			applyColoredHelpTemplateForTopic(command, currentHelpTopic)
 			_ = command.Help()
 
 			// Check pager configuration from flag, env, or config.
@@ -2204,7 +2204,7 @@ func initCobraConfig() {
 			}
 		default:
 			// Fallback for other cases.
-			applyColoredHelpTemplate(command)
+			applyColoredHelpTemplateForTopic(command, currentHelpTopic)
 			_ = command.Help()
 		}
 

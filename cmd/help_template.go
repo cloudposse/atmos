@@ -839,6 +839,10 @@ func renderCompatFlags(w io.Writer, flags map[string]compat.CompatibilityFlag, f
 // This approach ensures colors work in both interactive terminals and redirected output (screengrabs).
 // Colors are automatically enabled when ATMOS_FORCE_COLOR, CLICOLOR_FORCE, or FORCE_COLOR is set.
 func applyColoredHelpTemplate(cmd *cobra.Command) {
+	applyColoredHelpTemplateForTopic(cmd, helpTopicRequest{valid: true})
+}
+
+func applyColoredHelpTemplateForTopic(cmd *cobra.Command, topic helpTopicRequest) {
 	defer perf.Track(nil, "cmd.applyColoredHelpTemplate")()
 
 	// Detect and configure color settings.
@@ -877,7 +881,7 @@ func applyColoredHelpTemplate(cmd *cobra.Command) {
 
 	// Set custom help function.
 	cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
-		printHelpForTopic(ctx, c, currentHelpTopic)
+		printHelpForTopic(ctx, c, topic)
 	})
 }
 

@@ -11,6 +11,12 @@ const (
 	helpTopicAll     helpTopic = "all"
 )
 
+var supportedHelpTopics = []helpTopic{
+	helpTopicUsage,
+	helpTopicFlags,
+	helpTopicAll,
+}
+
 type helpTopicRequest struct {
 	topic    helpTopic
 	raw      string
@@ -54,22 +60,35 @@ func isBoolHelpValue(value string) bool {
 
 func parseHelpTopic(value string) helpTopicRequest {
 	value = strings.ToLower(value)
+	topic := helpTopic(value)
 	request := helpTopicRequest{
-		topic:    helpTopic(value),
+		topic:    topic,
 		raw:      value,
 		explicit: true,
 		valid:    true,
 	}
 
-	switch helpTopic(value) {
-	case helpTopicUsage, helpTopicFlags, helpTopicAll:
-		return request
-	default:
-		request.valid = false
+	if isSupportedHelpTopic(topic) {
 		return request
 	}
+
+	request.valid = false
+	return request
+}
+
+func isSupportedHelpTopic(topic helpTopic) bool {
+	for _, supported := range supportedHelpTopics {
+		if topic == supported {
+			return true
+		}
+	}
+	return false
 }
 
 func validHelpTopics() string {
-	return "usage, flags, all"
+	topics := make([]string, 0, len(supportedHelpTopics))
+	for _, topic := range supportedHelpTopics {
+		topics = append(topics, string(topic))
+	}
+	return strings.Join(topics, ", ")
 }

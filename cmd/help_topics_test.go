@@ -2,8 +2,12 @@ package cmd
 
 import (
 	"bytes"
+	"os"
+	"os/exec"
+	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -162,6 +166,37 @@ func TestTopicHelpRendering_RootDefaultFiltersPersistentGlobals(t *testing.T) {
 	assert.NotContains(t, output, "--global")
 }
 
+func TestTopicHelpRendering_InvalidTopicExits(t *testing.T) {
+	if os.Getenv("ATMOS_TEST_INVALID_HELP_TOPIC") == "1" {
+		var buf bytes.Buffer
+		renderer := lipgloss.NewRenderer(&buf)
+		styles := createHelpStyles(renderer)
+		ctx := &helpRenderContext{
+			writer: &buf,
+			styles: &styles,
+		}
+		printHelpForTopic(ctx, testHelpCommand(t), helpTopicRequest{
+			topic:    helpTopic("advanced"),
+			raw:      "advanced",
+			explicit: true,
+			valid:    false,
+		})
+		return
+	}
+
+	execPath, err := exec.LookPath(os.Args[0])
+	require.NoError(t, err)
+
+	cmd := exec.Command(execPath, "-test.run=^TestTopicHelpRendering_InvalidTopicExits$")
+	cmd.Env = append(os.Environ(), "ATMOS_TEST_INVALID_HELP_TOPIC=1", "NO_COLOR=1")
+	output, err := cmd.CombinedOutput()
+
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 1, exitErr.ExitCode())
+	assert.True(t, strings.Contains(string(output), "unknown help topic") || strings.Contains(string(output), "Invalid Help Topic"))
+}
+
 func testHelpCommand(t *testing.T) *cobra.Command {
 	t.Helper()
 
@@ -191,15 +226,9 @@ func renderTopicHelpForTest(t *testing.T, topic helpTopicRequest, cmd *cobra.Com
 	t.Helper()
 	t.Setenv(envNoColor, valueOne)
 
-	previousTopic := currentHelpTopic
-	t.Cleanup(func() {
-		currentHelpTopic = previousTopic
-	})
-	currentHelpTopic = topic
-
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
-	applyColoredHelpTemplate(cmd)
+	applyColoredHelpTemplateForTopic(cmd, topic)
 	require.NoError(t, cmd.Help())
 	return buf.String()
 }
