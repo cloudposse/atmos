@@ -7,16 +7,16 @@ package step
 import (
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -228,74 +228,64 @@ func renderCastTypedLineParts(prompt *schema.SimulatePrompt, line string) (strin
 	return rendered[:index], rendered[index+len(line):], nil
 }
 
-// castStyleMu serializes the global color-profile force/restore in
-// renderCastStyledText: concurrent cast branches (e.g. control steps with
-// MaxConcurrency) would otherwise interleave the toggles and restore the
-// wrong profile, corrupting generated ANSI output.
-var castStyleMu sync.Mutex
-
 func renderCastStyledText(text, styleName string, bold bool) (string, error) {
-	castStyleMu.Lock()
-	defer castStyleMu.Unlock()
-
-	restoreColorProfile := forceCastColorProfile()
-	defer restoreColorProfile()
-
 	styles := theme.GetCurrentStyles()
 	if styles == nil {
 		return text, nil
 	}
+	renderer := lipgloss.NewRenderer(io.Discard)
+	renderer.SetColorProfile(termenv.TrueColor)
+	renderer.SetHasDarkBackground(true)
+
 	switch styleName {
 	case "body":
-		return styles.Body.Render(text), nil
+		return styles.Body.Renderer(renderer).Render(text), nil
 	case "command":
 		style := styles.Command
 		if bold {
 			style = style.Bold(true)
 		}
-		return style.Render(text), nil
+		return style.Renderer(renderer).Render(text), nil
 	case "label":
-		return styles.Label.Render(text), nil
+		return styles.Label.Renderer(renderer).Render(text), nil
 	case "muted":
-		return styles.Muted.Render(text), nil
+		return styles.Muted.Renderer(renderer).Render(text), nil
 	case "info":
-		return styles.Info.Render(text), nil
+		return styles.Info.Renderer(renderer).Render(text), nil
 	case "notice":
-		return styles.Notice.Render(text), nil
+		return styles.Notice.Renderer(renderer).Render(text), nil
 	default:
 		return "", fmt.Errorf(wrappedQuotedErrorFormat, ErrUnsupportedPromptStyle, styleName)
-	}
-}
-
-func forceCastColorProfile() func() {
-	profile := ui.GetColorProfile()
-	if profile == termenv.TrueColor {
-		return func() {}
-	}
-	ui.SetColorProfile(termenv.TrueColor)
-	return func() {
-		ui.SetColorProfile(profile)
 	}
 }
 
 func validateCastSimulateStep(step *schema.WorkflowStep) error {
 	switch castSimulateMode(step) {
 	case "typed":
-		if strings.TrimRight(step.Text, "\n") == "" {
-			return ErrSimulateTypedRequiresText
-		}
-		if _, err := parseDurationDefault(step.Rate, 0); step.Rate != "" && err != nil {
-			return err
-		}
-		if _, err := castStepEnterDelay(step); err != nil {
-			return err
-		}
-		if step.Jitter < 0 || step.Jitter > 1 {
-			return fmt.Errorf("%w: %v", ErrInvalidSimulateJitter, step.Jitter)
-		}
+		return validateTypedCastSimulateStep(step)
 	case "prompt":
 	default:
 		return fmt.Errorf(wrappedQuotedErrorFormat, ErrInvalidSimulateMode, step.Mode)
+	}
+	_, err := renderCastPrompt(step.SimulatePrompt)
+	return err
+}
+
+func validateTypedCastSimulateStep(step *schema.WorkflowStep) error {
+	if strings.TrimRight(step.Text, "\n") == "" {
+		return ErrSimulateTypedRequiresText
+	}
+	if _, err := parseDurationDefault(step.Rate, 0); step.Rate != "" && err != nil {
+		return err
+	}
+	if _, err := parseDurationDefault(step.Interval, 0); step.Interval != "" && err != nil {
+		return err
+	}
+	if _, err := castStepEnterDelay(step); err != nil {
+		return err
+	}
+	if step.Jitter < 0 || step.Jitter > 1 {
+		return fmt.Errorf("%w: %v", ErrInvalidSimulateJitter, step.Jitter)
 	}
 	_, err := renderCastPrompt(step.SimulatePrompt)
 	return err
@@ -362,12 +352,8 @@ func castStepEnterDelay(child *schema.WorkflowStep) (time.Duration, error) {
 	return parseDurationDefault(child.Duration, defaultCastEnterDelay)
 }
 
-func castStepPauseDelay(child *schema.WorkflowStep) time.Duration {
-	delay, err := parseDurationDefault(child.Interval, defaultCastStepPauseDelay)
-	if err != nil {
-		return defaultCastStepPauseDelay
-	}
-	return delay
+func castStepPauseDelay(child *schema.WorkflowStep) (time.Duration, error) {
+	return parseDurationDefault(child.Interval, defaultCastStepPauseDelay)
 }
 
 func sleepCastInput(ctx context.Context, delay time.Duration) error {

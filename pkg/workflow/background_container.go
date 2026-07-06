@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/background"
 	"github.com/cloudposse/atmos/pkg/container"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -58,7 +59,7 @@ func (cr *ContainerRunner) Start(ctx context.Context, step *schema.WorkflowStep,
 		Command:          command,
 		Ports:            toPortBindings(run.Ports),
 		Mounts:           toMounts(run.Mounts),
-		Env:              envSliceToMap(env),
+		Env:              envpkg.SliceToMap(env),
 		User:             run.User,
 		Restart:          toRestartPolicy(run.Restart),
 		HealthCheck:      toHealthCheck(run.HealthCheck),

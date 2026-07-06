@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func execHelperEnv(t *testing.T, mode string) []string {
@@ -100,5 +101,29 @@ func TestExecRecordPropagatesStartupErrors(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error for missing executable")
+	}
+}
+
+func TestExecRecordTreatsCancellationAsError(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	result, err := ExecRecord(ctx, &ExecOptions{
+		Command: []string{exe},
+		Env:     execHelperEnv(t, "sleep"),
+		Path:    filepath.Join(t.TempDir(), "exec-cancel.cast"),
+	})
+	if err == nil {
+		t.Fatal("expected cancellation error")
+	}
+	if result != nil {
+		t.Fatalf("result = %#v, want nil", result)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded error, got %v", err)
 	}
 }

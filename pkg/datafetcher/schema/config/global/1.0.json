@@ -1406,6 +1406,10 @@
                         "type": "string",
                         "description": "Delay between simulated typed characters, e.g. 35ms. Use 0 to write immediately."
                       },
+                      "write_rate": {
+                        "type": "string",
+                        "description": "Default delay between cast session text writes, e.g. 35ms. Use 0 to write immediately."
+                      },
                       "text": {
                         "type": "string",
                         "description": "Text for write, wait, or simulate steps."

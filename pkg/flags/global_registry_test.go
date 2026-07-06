@@ -652,6 +652,11 @@ func TestGlobalFlagsRegistry_ContainsNoOptDefValFlags(t *testing.T) {
 	pagerFlag := registry.Get("pager")
 	assert.NotNil(t, pagerFlag, "pager flag should be registered")
 	assert.Equal(t, "true", pagerFlag.GetNoOptDefVal(), "pager should have NoOptDefVal set")
+
+	castFlag := registry.Get(cfg.CastFlagName)
+	assert.NotNil(t, castFlag, "cast flag should be registered")
+	assert.Equal(t, cfg.CastFlagAutoValue, castFlag.GetNoOptDefVal(), "cast should have NoOptDefVal set")
+	assert.False(t, castFlag.GetNoOptDefValConsumesNextArg(), "cast must not consume the next positional arg")
 }
 
 func TestGlobalFlagsRegistry_PreprocessesIdentityFlag(t *testing.T) {
@@ -686,6 +691,16 @@ func TestGlobalFlagsRegistry_PreprocessesIdentityFlag(t *testing.T) {
 			name:     "identity with equals syntax unchanged",
 			input:    []string{"auth", "login", "--identity=prod-admin"},
 			expected: []string{"auth", "login", "--identity=prod-admin"},
+		},
+		{
+			name:     "cast bare flag does not consume command",
+			input:    []string{"--cast", "terraform", "plan"},
+			expected: []string{"--cast", "terraform", "plan"},
+		},
+		{
+			name:     "cast with equals syntax unchanged",
+			input:    []string{"--cast=demo.cast", "terraform", "plan"},
+			expected: []string{"--cast=demo.cast", "terraform", "plan"},
 		},
 		{
 			name:     "identity at end unchanged",

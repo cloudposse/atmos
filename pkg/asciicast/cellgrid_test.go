@@ -97,6 +97,13 @@ func TestSanitizeStreamExpandsTabs(t *testing.T) {
 	}
 }
 
+func TestSanitizeStreamHandlesIncompleteEscape(t *testing.T) {
+	got := sanitizeStream("before\x1b")
+	if got != "before" {
+		t.Fatalf("sanitized = %q", got)
+	}
+}
+
 func TestMeasureContentWidthUsesWidestSegment(t *testing.T) {
 	width, height := measureContent("short\r123456789\nab\n")
 	if width != 9 || height != 2 {

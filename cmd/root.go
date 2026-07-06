@@ -2038,7 +2038,6 @@ func init() {
 	if err := globalParser.BindToViper(viper.GetViper()); err != nil {
 		log.Error("Failed to bind global flags to viper", "error", err)
 	}
-	castcmd.RegisterRecordingFlag(RootCmd.PersistentFlags())
 
 	// Register --version as a LOCAL flag (not inherited by subcommands).
 	// This allows custom commands to define their own --version flag (e.g., for tool versions).

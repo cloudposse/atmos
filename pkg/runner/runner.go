@@ -266,7 +266,7 @@ func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts Options
 		if err := schema.ValidateStepCondition(task.When); err != nil {
 			return err
 		}
-		runs, err := task.When.EvaluateWithImplicitSuccessE(taskConditionContext(&task, i, opts, schema.ConditionPredicateSuccess))
+		runs, err := task.When.EvaluateWithImplicitSuccessE(taskConditionContext(&task, i, &opts, schema.ConditionPredicateSuccess))
 		if err != nil {
 			return err
 		}
@@ -280,7 +280,7 @@ func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts Options
 	return nil
 }
 
-func taskConditionContext(task *Task, index int, opts Options, status string) schema.ConditionContext {
+func taskConditionContext(task *Task, index int, opts *Options, status string) schema.ConditionContext {
 	env := envpkg.EnvironToMap()
 	if env == nil {
 		env = make(map[string]string)

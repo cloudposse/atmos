@@ -1214,8 +1214,8 @@ func TestCastSimulateHelpers(t *testing.T) {
 	if _, err := parseDurationDefault("invalid", 0); err == nil {
 		t.Fatal("expected invalid duration error")
 	}
-	if delay := castStepPauseDelay(&schema.WorkflowStep{Interval: "bad"}); delay != defaultCastStepPauseDelay {
-		t.Fatalf("fallback pause delay = %s", delay)
+	if _, err := castStepPauseDelay(&schema.WorkflowStep{Interval: "bad"}); err == nil {
+		t.Fatal("expected invalid pause delay error")
 	}
 	if delay, err := castStepEnterDelay(&schema.WorkflowStep{Duration: "2ms"}); err != nil || delay != 2*time.Millisecond {
 		t.Fatalf("enter delay = %s err=%v", delay, err)
@@ -1281,6 +1281,7 @@ func TestValidateCastSimulateStepModesAndDurations(t *testing.T) {
 		{name: "typed valid", step: schema.WorkflowStep{Mode: "typed", Text: "atmos version"}},
 		{name: "prompt valid", step: schema.WorkflowStep{Mode: "prompt"}},
 		{name: "typed rate invalid", step: schema.WorkflowStep{Mode: "typed", Text: "x", Rate: "bad"}, expectErr: true},
+		{name: "typed interval invalid", step: schema.WorkflowStep{Mode: "typed", Text: "x", Interval: "bad"}, expectErr: true},
 		{name: "typed duration invalid", step: schema.WorkflowStep{Mode: "typed", Text: "x", Duration: "bad"}, expectErr: true},
 		{name: "typed jitter invalid", step: schema.WorkflowStep{Mode: "typed", Text: "x", Jitter: 1.25}, want: ErrInvalidSimulateJitter, expectErr: true},
 		{name: "invalid mode", step: schema.WorkflowStep{Mode: "movie"}, want: ErrInvalidSimulateMode, expectErr: true},

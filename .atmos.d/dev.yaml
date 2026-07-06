@@ -117,3 +117,26 @@ commands:
         description: Run tests with coverage report
         steps:
           - atmos test coverage
+
+      - name: generate
+        description: Generate development artifacts
+        commands:
+          - name: notices
+            description: Regenerate NOTICE from Go dependency licenses
+            working_directory: !repo-root .
+            env: *go_auto_env
+            steps:
+              - type: spin
+                title: Generating NOTICE from Go dependency licenses
+                command: ./scripts/generate-notice.sh
+                timeout: 10m
+              - type: toast
+                level: success
+                content: NOTICE regenerated.
+
+          - name: mocks
+            description: Regenerate auth/http mocks using go:generate directives
+            env: *go_auto_env
+            steps:
+              - type: atmos
+                command: test generate-auth-http-mocks

@@ -54,7 +54,7 @@ var (
 	ErrRenderOutputExists                    = errors.New("render output already exists")
 	ErrMissingAgg                            = errors.New("missing required tool `agg`; install asciinema agg and retry")
 	ErrMissingFFmpeg                         = errors.New("missing required tool `ffmpeg`; install FFmpeg and retry")
-	ErrMissingRenderOutput                   = errors.New("specify at least one output flag: --gif, --mp4, --html, --ascii, --png, or --jpg")
+	ErrMissingRenderOutput                   = errors.New("specify an output path with --output")
 	ErrUnknownSessionAction                  = errors.New("unknown cast session action type")
 	ErrWaitTimeout                           = errors.New("timed out waiting for cast output")
 	ErrUnsupportedCastKey                    = errors.New("unsupported cast key")

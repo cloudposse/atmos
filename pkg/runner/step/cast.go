@@ -296,7 +296,11 @@ func runCastChildStep(ctx context.Context, castStep, child *schema.WorkflowStep,
 	if _, err := executor.Execute(ctx, child); err != nil {
 		return err
 	}
-	return sleepCastInput(ctx, castStepPauseDelay(child))
+	delay, err := castStepPauseDelay(child)
+	if err != nil {
+		return err
+	}
+	return sleepCastInput(ctx, delay)
 }
 
 func applyCastStepEnv(castStep *schema.WorkflowStep, vars *Variables) error {

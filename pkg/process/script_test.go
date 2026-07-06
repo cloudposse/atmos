@@ -1,10 +1,13 @@
 package process
 
 import (
+	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,6 +42,20 @@ func TestScriptInvocation(t *testing.T) {
 			wantArgv: []string{"node", "-e", "console.log('ok')"},
 		},
 		{
+			name:      "pwsh uses command stdin",
+			interp:    "pwsh",
+			script:    "Write-Output ok",
+			wantArgv:  []string{"pwsh", "-NoProfile", "-NonInteractive", "-Command", "-"},
+			wantStdin: "Write-Output ok",
+			hasStdin:  true,
+		},
+		{
+			name:     "cmd uses command shell",
+			interp:   "cmd.exe",
+			script:   "echo ok",
+			wantArgv: []string{"cmd.exe", "/S", "/C", "echo ok"},
+		},
+		{
 			name:      "unknown uses stdin",
 			interp:    "ruby",
 			script:    "puts 'ok'",
@@ -69,4 +86,14 @@ func TestFormatScriptDisplay(t *testing.T) {
 	assert.True(t, strings.HasPrefix(display, "python3 <<'SCRIPT'\n"))
 	assert.Contains(t, display, "print('ok')")
 	assert.True(t, strings.HasSuffix(display, "\nSCRIPT"))
+}
+
+func TestRunScriptWrapsErrors(t *testing.T) {
+	err := RunScript(context.Background(), &ScriptSpec{
+		Interpreter: "definitely-not-a-real-interpreter",
+		Script:      "echo ok",
+	}, io.Discard, io.Discard)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrProcessWaitFailed), "error = %v", err)
 }
