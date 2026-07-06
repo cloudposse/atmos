@@ -1,6 +1,6 @@
 ---
 name: atmos-workflows
-description: "Workflow automation: multi-step workflows, parallel/matrix/wait/container/emulator steps, Go templates, retries, dependencies, and cross-component orchestration"
+description: "Workflow automation: native step types, multi-step workflows, parallel/matrix/wait/container/emulator steps, output steps, retries, dependencies, and cross-component orchestration"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -9,13 +9,13 @@ metadata:
 # Atmos Workflows
 
 Atmos workflows combine multiple commands into executable units of work. They allow you to define
-multi-step sequences of Atmos commands and shell scripts, run them in order, and coordinate
-operations across multiple components and stacks.
+multi-step sequences of typed steps, run them in order, and coordinate operations across multiple
+components and stacks.
 
 ## What Workflows Are
 
-A workflow is a named sequence of steps defined in a YAML file. Modern workflows support command
-steps, orchestration steps, interactive steps, output/UI steps, and utility steps.
+A workflow is a named sequence of typed steps. Default to native step types before inline shell
+scripts; large shell blocks, repeated `echo`, hand-rolled parallelism, and sleeps are red flags.
 
 Core command step types:
 
@@ -32,12 +32,8 @@ Key orchestration step types:
 - `wait` and `wait-all` -- wait for background services or multiple dependencies
 - `cancel` -- cancel running work
 
-Workflows solve the problem of needing to run multiple Terraform operations in a specific order,
-such as provisioning a VPC before an EKS cluster, or deploying the same component across multiple
-environments sequentially.
-
-You can use Atmos Custom Commands in workflows, and workflows in Custom Commands -- they are
-fully interoperable.
+Output and UI step types include `toast`, `markdown`, `table`, `pager`, `format`, `join`, `style`,
+`log`, `spin`, `stage`, and `linebreak`; use them instead of `echo` for operator-facing output.
 
 ## Workflow File Location and Discovery
 
@@ -134,16 +130,16 @@ command line.
 
 ```yaml
 steps:
-  - command: echo "Starting deployment..."
-    type: shell
-  - command: |
-      echo "Running multi-line script"
-      aws sts get-caller-identity
-      kubectl get nodes
+  - type: toast
+    level: info
+    content: Starting deployment...
+  - command: kubectl get nodes
     type: shell
 ```
 
-Shell commands can be any simple or complex script. Use YAML multiline strings for complex scripts.
+Shell commands can be any script, but use them intentionally: external CLIs, short glue commands,
+terminal-native tools, or checked-in scripts. If a block mostly prints status, branches, starts
+services, loops, waits, formats output, or writes CI metadata, replace it with native step types.
 
 ### Retry Configuration
 
@@ -406,7 +402,7 @@ workflows:
 atmos workflow deploy-all -f deploy -s plat-ue2-dev
 ```
 
-### Mixed Atmos and Shell Commands
+### Native Steps with Shell Where Needed
 
 ```yaml
 workflows:
@@ -476,12 +472,13 @@ atmos describe workflows
 4. **Use dry-run before executing.** Always preview workflows with `--dry-run` before running
    them, especially in production environments.
 
-5. **Use dependencies or orchestration steps intentionally.** Sequential lists are still valid, but
-   use `parallel`, `matrix`, `wait`, and explicit dependency fields when the workflow should run
-   concurrently or wait for background services.
+5. **Prefer native step types over inline shell orchestration.** Use `parallel`, `matrix`, `wait`,
+   `wait-all`, `container`, `emulator`, output/UI steps, and explicit dependencies before writing
+   shell loops, sleeps, background jobs, or status `echo` blocks.
 
-6. **Use shell steps for verification.** Insert shell steps between Atmos commands to verify
-   infrastructure state before proceeding.
+6. **Keep shell steps small and purposeful.** Shell is fine for external CLIs, probes, repo scripts,
+   and terminal-native commands, but a long shell block usually belongs in a script or should become
+   typed workflow steps.
 
 7. **Use retry for flaky operations.** Configure `retry` for steps that may fail transiently,
    such as cloud API calls that hit rate limits.

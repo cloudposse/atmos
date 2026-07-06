@@ -87,8 +87,8 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | helmfile sync/apply/destroy/diff, Kubernetes deployments, EKS integration, varfile generation                         | `atmos-helmfile`        | `agent-skills/skills/atmos-helmfile/SKILL.md`        |
 | packer init/build/validate/inspect/output, machine image building, template management                                | `atmos-packer`          | `agent-skills/skills/atmos-packer/SKILL.md`          |
 | ansible playbook execution, variable passing, inventory management, configuration management                          | `atmos-ansible`         | `agent-skills/skills/atmos-ansible/SKILL.md`         |
-| Multi-step workflows, Go template support in workflows, cross-component orchestration                                 | `atmos-workflows`       | `agent-skills/skills/atmos-workflows/SKILL.md`       |
-| Custom CLI commands in atmos.yaml, arguments, flags, steps, env vars, subcommands                                     | `atmos-custom-commands` | `agent-skills/skills/atmos-custom-commands/SKILL.md` |
+| Multi-step workflows, native step types, output/UI steps, cross-component orchestration                               | `atmos-workflows`       | `agent-skills/skills/atmos-workflows/SKILL.md`       |
+| Custom CLI commands in atmos.yaml, arguments, flags, native steps, env vars, subcommands                              | `atmos-custom-commands` | `agent-skills/skills/atmos-custom-commands/SKILL.md` |
 | Authentication: providers, identities, keyring, login/exec/shell, Atmos Pro `github/sts`                              | `atmos-auth`            | `agent-skills/skills/atmos-auth/SKILL.md`            |
 | Atmos Pro: setup, OIDC, uploads, workflow dispatch, locks, Pro commits, merge queues, drift detection                 | `atmos-pro`             | `agent-skills/skills/atmos-pro/SKILL.md`             |
 | Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory), hooks, data sharing                    | `atmos-stores`          | `agent-skills/skills/atmos-stores/SKILL.md`          |
@@ -136,6 +136,10 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 - **Toolchain**: Use `dependencies.tools` for stack/component/workflow/custom-command requirements and
   `.tool-versions` for repo-wide developer shell defaults. Atmos auto-installs and injects missing tools
   during execution; reserve `atmos toolchain install` for shell bootstrap, cache warming, or troubleshooting.
+- **Workflow/custom command steps**: Prefer native typed steps over large inline shell scripts. Repeated
+  `echo`, shell loops, ad hoc sleeps, and hand-formatted output usually mean the step should become
+  `atmos`, `toast`, `table`, `parallel`, `matrix`, `wait`, `container`, `emulator`, `http`, or another
+  typed step. Keep shell for short glue commands, external CLIs, terminal-native tools, or checked-in scripts.
 - **AI/MCP**: Configure AI providers and MCP servers in `atmos.yaml`; use `atmos mcp export` so AI clients get
   auth-wrapped MCP commands and toolchain-aware `PATH` entries.
 - **Dependencies**: use `dependencies.components` for component, file, and folder dependencies. Treat

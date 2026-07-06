@@ -1,6 +1,6 @@
 ---
 name: atmos-custom-commands
-description: "Custom CLI commands: command definition in atmos.yaml, arguments, flags, steps, env vars"
+description: "Custom CLI commands: command definition in atmos.yaml, arguments, flags, native step types, output/UI steps, env vars"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -22,7 +22,7 @@ Each command can have:
 - Positional arguments and flags (with shorthand, required/optional, defaults)
 - Boolean flags
 - Environment variables (supporting Go templates)
-- One or more execution steps (shell commands, also supporting Go templates)
+- One or more execution steps using the same native step types as workflows
 - Nested subcommands
 - Access to resolved component configuration via `component_config`
 - Authentication via `identity`
@@ -31,6 +31,13 @@ Each command can have:
 
 Custom commands can call Atmos built-in commands, shell scripts, workflows, or any other CLI tools.
 They are fully interoperable with Atmos workflows.
+
+Default rule: use structured native step types before inline shell scripts. A custom command with
+many `echo` lines, a large multiline shell block, ad hoc prompts, hand-formatted tables, or shell
+loops over components is probably doing too much in shell. Prefer `atmos`, `toast`, `table`, `pager`,
+`format`, `spin`, `parallel`, `matrix`, `container`, `emulator`, `http`, and other typed steps when
+they express the intent directly. Shell is still appropriate for short glue commands, external CLIs,
+terminal-native sessions, or invoking a real script checked into the repo.
 
 ## Defining Commands in atmos.yaml
 
@@ -406,8 +413,9 @@ dependencies:
 ## Common Patterns
 
 Common custom command patterns include: listing stacks/components, setting EKS cluster context,
-security scanning, cost estimation, and documentation generation. For complete examples of each,
-see [references/command-syntax.md](references/command-syntax.md).
+security scanning, cost estimation, and documentation generation. Prefer typed output/UI steps for
+operator-facing messages instead of chains of `echo` commands. For complete examples, see
+[references/command-syntax.md](references/command-syntax.md).
 
 ### Quick Example: List Stacks
 
@@ -459,16 +467,20 @@ commands:
 6. **Leverage tool dependencies.** Instead of documenting prerequisites or adding preinstall
    steps, declare every command-owned CLI in `dependencies.tools` so it is auto-installed.
 
-7. **Organize with nested subcommands.** Use nested `commands` for related operations
+7. **Prefer native step types over shell-heavy commands.** Use structured steps for Atmos commands,
+   output, prompts, tables, containers, matrices, and CI-aware behavior. Keep shell for short glue or
+   external CLIs.
+
+8. **Organize with nested subcommands.** Use nested `commands` for related operations
    (e.g., `atmos list stacks`, `atmos list components`).
 
-8. **Combine with workflows.** Use custom commands for atomic operations and workflows for
+9. **Combine with workflows.** Use custom commands for atomic operations and workflows for
    multi-step orchestration. They can call each other.
 
-9. **Use `!repo-root .` for working_directory** when commands need to run from the repository
+10. **Use `!repo-root .` for working_directory** when commands need to run from the repository
    root regardless of where `atmos` is invoked.
 
-10. **Use environment variables for shared values.** Define values once in `env` and reference
+11. **Use environment variables for shared values.** Define values once in `env` and reference
     them in multiple steps via shell variables like `$ATMOS_COMPONENT`.
 
 ## Additional Resources
