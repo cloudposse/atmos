@@ -60,23 +60,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      - name: Set up and build Atmos
+        uses: ./.github/actions/setup-atmos-build
         with:
-          go-version-file: "go.mod"
-
-      - name: Set up Atmos
-        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
-        with:
-          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
-          install-wrapper: false
-
-      - name: Build Atmos
-        run: |
-          # TODO: switch back to `atmos build --target linux` after the bug
-          # fix for running repo-local custom commands is in the bootstrap Atmos version.
-          sh scripts/build-atmos.sh linux test
-          echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
+          atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
       - name: Run workflow log group fixture
         working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
@@ -117,21 +104,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      - name: Set up and build Atmos
+        uses: ./.github/actions/setup-atmos-build
         with:
-          go-version-file: "go.mod"
-
-      - name: Set up Atmos
-        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
-        with:
-          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
-          install-wrapper: false
-
-      - name: Build Atmos
-        run: |
-          sh scripts/build-atmos.sh linux test
-          echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
+          atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
       - name: Restore Atmos native CI cache
         uses: ./actions/cache
@@ -174,21 +150,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      - name: Set up and build Atmos
+        uses: ./.github/actions/setup-atmos-build
         with:
-          go-version-file: "go.mod"
-
-      - name: Set up Atmos
-        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
-        with:
-          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
-          install-wrapper: false
-
-      - name: Build Atmos
-        run: |
-          sh scripts/build-atmos.sh linux test
-          echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
+          atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
       - name: Restore Atmos native CI cache
         uses: ./actions/cache
