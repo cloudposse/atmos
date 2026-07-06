@@ -59,6 +59,30 @@ func TestStartRecordingSkipsHelpCompletionAndDisabled(t *testing.T) {
 	}
 }
 
+func TestStartRecordingSkipsCompletionCommandWithImplicitConfig(t *testing.T) {
+	activeCast = nil
+	t.Cleanup(func() {
+		if activeCast != nil {
+			FinalizeRecording()
+		}
+	})
+
+	completionCmd := newRecordingTestCommand("__complete")
+	err := StartRecordingIfRequested(
+		completionCmd,
+		&schema.AtmosConfiguration{
+			Cast: &schema.CastConfig{Recording: &schema.CastRecordingConfig{Enabled: true, BasePath: t.TempDir()}},
+		},
+		[]string{"__complete", "terraform"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if activeCast != nil {
+		t.Fatal("implicit config-enabled recording should not capture completion command output")
+	}
+}
+
 func TestStartRecordingWithExplicitPath(t *testing.T) {
 	activeCast = nil
 	castPath := filepath.Join(t.TempDir(), "demo.cast")
@@ -575,6 +599,17 @@ func TestRenderRecordedCastDispatchesStaticFormats(t *testing.T) {
 	}
 }
 
+func TestRenderRecordedCastRejectsUnsupportedExtension(t *testing.T) {
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	if err := os.WriteFile(castPath, []byte(`{"version":3,"term":{"cols":10,"rows":2}}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(t.TempDir(), "out.unsupported")
+	if err := renderRecordedCast(castPath, output); !errors.Is(err, errUtils.ErrUnsupportedCastOutputExtension) {
+		t.Fatalf("expected unsupported extension error, got %v", err)
+	}
+}
+
 func TestPlanRecordingOutputRejectsExistingRenderedOutput(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "demo.gif")
 	if err := os.WriteFile(output, []byte("exists"), 0o644); err != nil {
@@ -593,4 +628,325 @@ func newRecordingTestCommand(name string) *cobra.Command {
 	)
 	parser.RegisterFlags(cmd)
 	return cmd
+}
+
+func TestIsCompletionCommandNilCommand(t *testing.T) {
+	if isCompletionCommand(nil) {
+		t.Fatal("nil command should not be treated as a completion command")
+	}
+}
+
+func TestIsCompletionCommandNames(t *testing.T) {
+	for _, name := range []string{"completion", "__complete", "__completeNoDesc"} {
+		if !isCompletionCommand(newRecordingTestCommand(name)) {
+			t.Fatalf("%q should be treated as a completion command", name)
+		}
+	}
+	if isCompletionCommand(newRecordingTestCommand("terraform")) {
+		t.Fatal("terraform should not be treated as a completion command")
+	}
+}
+
+func TestIsCompletionCommandCompLineEnv(t *testing.T) {
+	t.Setenv("COMP_LINE", "atmos terraform pl")
+	if !isCompletionCommand(newRecordingTestCommand("terraform")) {
+		t.Fatal("COMP_LINE should mark the invocation as a completion command")
+	}
+}
+
+func TestIsCompletionCommandArgcompleteEnv(t *testing.T) {
+	t.Setenv("_ARGCOMPLETE", "1")
+	if !isCompletionCommand(newRecordingTestCommand("terraform")) {
+		t.Fatal("_ARGCOMPLETE should mark the invocation as a completion command")
+	}
+}
+
+func TestPlanRenderedRecordingOutputStatErrorOtherThanNotExist(t *testing.T) {
+	// A NUL byte makes os.Stat fail with an error that is not os.ErrNotExist
+	// on every platform Go supports, driving planRenderedRecordingOutput's
+	// "stat failed for a reason other than missing file" branch.
+	output := "bad\x00path.gif"
+	if _, err := planRenderedRecordingOutput(output); !errors.Is(err, errUtils.ErrStatFile) {
+		t.Fatalf("expected ErrStatFile, got %v", err)
+	}
+}
+
+func TestPlanRenderedRecordingOutputMissingParentSucceeds(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "missing-parent", "demo.gif")
+	plan, err := planRenderedRecordingOutput(output)
+	if err != nil {
+		t.Fatalf("unexpected error for missing parent dir: %v", err)
+	}
+	if plan.renderOutput != output {
+		t.Fatalf("plan = %#v, want renderOutput %q", plan, output)
+	}
+}
+
+func TestRecordingBasePathPrefersPlanBasePath(t *testing.T) {
+	plan := recordingOutputPlan{castBasePath: "/plan/base"}
+	if got := recordingBasePath(plan, nil); got != "/plan/base" {
+		t.Fatalf("recordingBasePath = %q, want /plan/base", got)
+	}
+}
+
+func TestRecordingBasePathNilAtmosConfig(t *testing.T) {
+	if got := recordingBasePath(recordingOutputPlan{}, nil); got != "" {
+		t.Fatalf("recordingBasePath = %q, want empty string", got)
+	}
+}
+
+func TestRecordingBasePathFallsBackToConfig(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Cast: &schema.CastConfig{Recording: &schema.CastRecordingConfig{BasePath: "/config/base"}},
+	}
+	if got := recordingBasePath(recordingOutputPlan{}, atmosConfig); got != "/config/base" {
+		t.Fatalf("recordingBasePath = %q, want /config/base", got)
+	}
+}
+
+func TestStartRecorderRemovesIntermediateCastOnFailure(t *testing.T) {
+	// startRecorder's error branch tries to remove the intermediate cast path
+	// it planned when asciicast.Start fails. Point BasePath somewhere
+	// unwritable (a file, not a directory) so asciicast.Start fails, and
+	// confirm the function still returns a (nil, error) pair instead of
+	// panicking while attempting the best-effort cleanup.
+	blockedBase := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blockedBase, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	castPath := filepath.Join(blockedBase, "nested", "demo.cast")
+
+	_, _, err := startRecorder(castPath, true, &schema.AtmosConfiguration{
+		Cast: &schema.CastConfig{Recording: &schema.CastRecordingConfig{}},
+	}, []string{"terraform", "plan"})
+	if err == nil {
+		t.Fatal("expected error when cast path cannot be created")
+	}
+}
+
+func TestStartHelpRecordingReturnsWriterWhenAlreadyActive(t *testing.T) {
+	activeCast = nil
+	castPath := filepath.Join(t.TempDir(), "help.cast")
+	t.Cleanup(func() {
+		if activeCast != nil {
+			FinalizeRecording()
+		}
+	})
+
+	cmd := newRecordingTestCommand("about")
+	if err := cmd.Flags().Set(FlagName, castPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := StartRecordingIfRequested(cmd, &schema.AtmosConfiguration{}, []string{"--cast=" + castPath, "about"}); err != nil {
+		t.Fatal(err)
+	}
+	if activeCast == nil {
+		t.Fatal("expected active recording before StartHelpRecording")
+	}
+
+	writer := StartHelpRecording(cmd, &schema.AtmosConfiguration{})
+	if writer == nil {
+		t.Fatal("expected a non-nil writer when a recording is already active")
+	}
+	n, err := writer.Write([]byte("help text"))
+	if err != nil {
+		t.Fatalf("write to help recorder: %v", err)
+	}
+	if n != len("help text") {
+		t.Fatalf("write count = %d, want %d", n, len("help text"))
+	}
+	FinalizeRecording()
+
+	content, err := os.ReadFile(castPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "help text") {
+		t.Fatalf("recorded cast missing help text:\n%s", content)
+	}
+}
+
+func TestStartHelpRecordingStartsRecordingWhenNoneActive(t *testing.T) {
+	activeCast = nil
+	castPath := filepath.Join(t.TempDir(), "help-start.cast")
+	t.Cleanup(func() {
+		if activeCast != nil {
+			FinalizeRecording()
+		}
+	})
+
+	cmd := newRecordingTestCommand("about")
+	if err := cmd.Flags().Set(FlagName, castPath); err != nil {
+		t.Fatal(err)
+	}
+	writer := StartHelpRecording(cmd, &schema.AtmosConfiguration{})
+	if writer == nil {
+		t.Fatal("expected StartHelpRecording to start a recording and return a writer")
+	}
+	if activeCast == nil {
+		t.Fatal("expected StartHelpRecording to populate activeCast")
+	}
+	FinalizeRecording()
+	if _, err := os.Stat(castPath); err != nil {
+		t.Fatalf("cast file missing: %v", err)
+	}
+}
+
+func TestStartHelpRecordingReturnsNilOnStartError(t *testing.T) {
+	activeCast = nil
+	t.Cleanup(func() {
+		if activeCast != nil {
+			FinalizeRecording()
+		}
+	})
+
+	castPath := filepath.Join(t.TempDir(), "demo.unsupported")
+	cmd := newRecordingTestCommand("about")
+	if err := cmd.Flags().Set(FlagName, castPath); err != nil {
+		t.Fatal(err)
+	}
+
+	writer := StartHelpRecording(cmd, &schema.AtmosConfiguration{})
+	if writer != nil {
+		t.Fatal("expected nil writer when starting the recording fails")
+	}
+	if activeCast != nil {
+		t.Fatal("expected no active recording after a start failure")
+	}
+}
+
+func TestStartHelpRecordingReturnsNilWhenNoRecordingRequested(t *testing.T) {
+	activeCast = nil
+	t.Cleanup(func() {
+		if activeCast != nil {
+			FinalizeRecording()
+		}
+	})
+
+	writer := StartHelpRecording(newRecordingTestCommand("about"), &schema.AtmosConfiguration{})
+	if writer != nil {
+		t.Fatal("expected nil writer when no recording is requested")
+	}
+	if activeCast != nil {
+		t.Fatal("expected no active recording")
+	}
+}
+
+func TestFinalizeRecordingNoActiveCastIsNoop(t *testing.T) {
+	activeCast = nil
+	FinalizeRecording()
+	if activeCast != nil {
+		t.Fatal("expected activeCast to remain nil")
+	}
+}
+
+func TestFinalizeRecordingRendersOutputAndReportsSuccess(t *testing.T) {
+	activeCast = nil
+	tmpDir := t.TempDir()
+	renderOutput := filepath.Join(tmpDir, "demo.html")
+	t.Setenv(EnvName, renderOutput)
+	t.Cleanup(func() {
+		if activeCast != nil {
+			FinalizeRecording()
+		}
+	})
+
+	err := StartRecordingIfRequested(
+		newRecordingTestCommand("workflow"),
+		&schema.AtmosConfiguration{},
+		[]string{"workflow", "demo"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if activeCast == nil {
+		t.Fatal("expected active recording")
+	}
+	castPath := activeCast.recorder.Path()
+
+	FinalizeRecording()
+
+	if _, err := os.Stat(renderOutput); err != nil {
+		t.Fatalf("rendered output missing: %v", err)
+	}
+	if _, err := os.Stat(castPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("intermediate cast should be removed after rendering, stat err: %v", err)
+	}
+}
+
+func TestFinalizeRecordingReportsRenderFailure(t *testing.T) {
+	activeCast = nil
+	// An unsupported rendered extension makes planRecordingOutput reject the
+	// path up front, so instead force a render failure by pointing PATH at an
+	// empty directory: the static renderers for html/ascii/png/jpeg do not
+	// require external tools, but gif/mp4 require agg/ffmpeg, which will be
+	// unresolvable and surface as a render error from FinalizeRecording.
+	t.Setenv("PATH", t.TempDir())
+	tmpDir := t.TempDir()
+	renderOutput := filepath.Join(tmpDir, "demo.gif")
+	t.Setenv(EnvName, renderOutput)
+	t.Cleanup(func() {
+		if activeCast != nil {
+			FinalizeRecording()
+		}
+	})
+
+	err := StartRecordingIfRequested(
+		newRecordingTestCommand("workflow"),
+		&schema.AtmosConfiguration{},
+		[]string{"workflow", "demo"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if activeCast == nil {
+		t.Fatal("expected active recording")
+	}
+
+	// FinalizeRecording swallows the render error internally (it reports to
+	// UI and returns), so simply confirm it does not panic and clears state.
+	FinalizeRecording()
+	if activeCast != nil {
+		t.Fatal("expected activeCast to be cleared even when rendering fails")
+	}
+	if _, err := os.Stat(renderOutput); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("render output should not exist after failed render, stat err: %v", err)
+	}
+}
+
+func TestFinalizeRecordingReportsCloseFailure(t *testing.T) {
+	activeCast = nil
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	t.Cleanup(func() {
+		if activeCast != nil {
+			FinalizeRecording()
+		}
+	})
+
+	cmd := newRecordingTestCommand("terraform")
+	if err := cmd.Flags().Set(FlagName, castPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := StartRecordingIfRequested(cmd, &schema.AtmosConfiguration{}, []string{"--cast=" + castPath, "terraform", "plan"}); err != nil {
+		t.Fatal(err)
+	}
+	if activeCast == nil {
+		t.Fatal("expected active recording")
+	}
+
+	// Occupy the target cast path with a non-empty directory (the temp file
+	// still being written lives elsewhere) so Recorder.Close's commit step
+	// fails to rename or remove the target, driving FinalizeRecording's
+	// close-error branch.
+	if err := os.Mkdir(castPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(castPath, "occupied.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	FinalizeRecording()
+	if activeCast != nil {
+		t.Fatal("expected activeCast to be cleared even when close fails")
+	}
 }

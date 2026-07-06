@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/cellbuf"
 )
 
 func TestRenderASCIIWritesPlainText(t *testing.T) {
@@ -149,6 +150,163 @@ func TestRenderJPEGProducesDecodableImage(t *testing.T) {
 	}
 	if img.Bounds().Dx() <= 2*imagePadding {
 		t.Fatalf("image too small: %v", img.Bounds())
+	}
+}
+
+func TestRenderHTMLStyleCombinations(t *testing.T) {
+	tests := []struct {
+		name string
+		sgr  string
+		want []string
+		none []string
+	}{
+		{
+			name: "italic",
+			sgr:  "\x1b[3m",
+			want: []string{"font-style:italic"},
+		},
+		{
+			name: "faint",
+			sgr:  "\x1b[2m",
+			want: []string{"opacity:0.7"},
+		},
+		{
+			name: "underline",
+			sgr:  "\x1b[4m",
+			want: []string{"text-decoration:underline"},
+		},
+		{
+			name: "strikethrough",
+			sgr:  "\x1b[9m",
+			want: []string{"text-decoration:line-through"},
+		},
+		{
+			name: "underline and strikethrough combine decorations",
+			sgr:  "\x1b[4;9m",
+			want: []string{"text-decoration:underline line-through"},
+		},
+		{
+			name: "no style produces no span",
+			sgr:  "",
+			want: []string{"plain"},
+			none: []string{"<span"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cast := writeTestCast(t, 20, 3, tt.sgr+"plain\x1b[0m\n")
+			out := filepath.Join(t.TempDir(), "out.html")
+			if err := RenderHTML(cast, out); err != nil {
+				t.Fatal(err)
+			}
+			got, err := os.ReadFile(out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			html := string(got)
+			for _, want := range tt.want {
+				if !strings.Contains(html, want) {
+					t.Fatalf("html missing %q:\n%s", want, html)
+				}
+			}
+			for _, notWant := range tt.none {
+				if strings.Contains(html, notWant) {
+					t.Fatalf("html unexpectedly contains %q:\n%s", notWant, html)
+				}
+			}
+		})
+	}
+}
+
+func TestRenderHTMLColorOverrideAppliesToResolvedHex(t *testing.T) {
+	// bat's GitHub blue (#183691) must be remapped to the Atmos brand blue via
+	// htmlColorOverrides, exercising the override-hit branch of cssColor
+	// (distinct from the ansi.BasicColor blue fast path already covered by
+	// TestRenderHTMLMapsANSIBlueToAtmosBlue).
+	hex, ok := htmlColorOverrides["#183691"]
+	if !ok {
+		t.Fatal("expected #183691 override to be registered")
+	}
+	if hex != atmosBlue {
+		t.Fatalf("override = %q, want %q", hex, atmosBlue)
+	}
+
+	got := cssColor(ansi.RGBColor{R: 0x18, G: 0x36, B: 0x91})
+	if got != atmosBlue {
+		t.Fatalf("cssColor override = %q, want %q", got, atmosBlue)
+	}
+}
+
+func TestCssColorNilReturnsEmptyString(t *testing.T) {
+	if got := cssColor(nil); got != "" {
+		t.Fatalf("cssColor(nil) = %q, want empty string", got)
+	}
+}
+
+func TestColorHexFormatsRGBAsLowercaseHex(t *testing.T) {
+	// colorHex itself has no nil guard (nil-safety is cssColor's
+	// responsibility, covered by TestCssColorNilReturnsEmptyString); it only
+	// needs to format a resolved color.Color as "#rrggbb".
+	got := colorHex(ansi.RGBColor{R: 0x18, G: 0x36, B: 0x91})
+	if got != "#183691" {
+		t.Fatalf("colorHex = %q, want %q", got, "#183691")
+	}
+}
+
+func TestTextDecorationsEmptyWhenNoDecorations(t *testing.T) {
+	style := cellbuf.Style{}
+	decorations := textDecorations(&style)
+	if len(decorations) != 0 {
+		t.Fatalf("decorations = %v, want none", decorations)
+	}
+}
+
+func TestRenderHTMLSkipsNilAndZeroWidthCells(t *testing.T) {
+	// A wide rune (e.g. CJK) followed by its zero-width continuation cell
+	// exercises the `cell == nil || cell.Width == 0` skip in the draw loop.
+	cast := writeTestCast(t, 10, 2, "你好\n") // "ni hao" - two wide runes
+	out := filepath.Join(t.TempDir(), "out.html")
+	if err := RenderHTML(cast, out); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "你好") {
+		t.Fatalf("wide runes missing from html: %q", got)
+	}
+}
+
+func TestRenderHTMLReturnsErrorOnMissingInput(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out.html")
+	err := RenderHTML(filepath.Join(t.TempDir(), "does-not-exist.cast"), out)
+	if err == nil {
+		t.Fatal("expected error for missing input cast file")
+	}
+}
+
+func TestRenderASCIIReturnsErrorOnMissingInput(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out.ascii")
+	err := RenderASCII(filepath.Join(t.TempDir(), "does-not-exist.cast"), out)
+	if err == nil {
+		t.Fatal("expected error for missing input cast file")
+	}
+}
+
+func TestRenderASCIISkipsNilAndZeroWidthCells(t *testing.T) {
+	cast := writeTestCast(t, 10, 2, "你好\n")
+	out := filepath.Join(t.TempDir(), "out.ascii")
+	if err := RenderASCII(cast, out); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "你好\n" {
+		t.Fatalf("ascii = %q, want wide runes with no duplication from zero-width continuations", got)
 	}
 }
 

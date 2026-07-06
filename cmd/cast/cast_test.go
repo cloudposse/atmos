@@ -2,6 +2,7 @@ package cast
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -123,6 +124,21 @@ func TestRenderOptionsFromFlagsUnsupportedExtension(t *testing.T) {
 	}
 }
 
+func TestRenderOptionsFromFlagsUnsupportedFormat(t *testing.T) {
+	resetRenderCommand(t)
+	if err := renderCmd.Flags().Set("output", filepath.Join(t.TempDir(), "out.custom")); err != nil {
+		t.Fatal(err)
+	}
+	if err := renderCmd.Flags().Set("format", "bogus"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := renderOptionsFromFlags(renderCmd, []string{"input.cast"})
+	if !errors.Is(err, errUtils.ErrInvalidFlag) {
+		t.Fatalf("error = %v, want ErrInvalidFlag", err)
+	}
+}
+
 func TestRenderOptionsFromBoundFlags(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "out.png")
 	viper.Set(renderFlagOutput, output)
@@ -187,4 +203,105 @@ func TestCommandProvider(t *testing.T) {
 func resetRenderCommand(t *testing.T) {
 	t.Helper()
 	flagspkg.ResetCommandFlags(renderCmd)
+}
+
+// clearRenderViperOverrides removes any explicit viper.Set() override left by
+// other tests (e.g. TestRenderOptionsFromBoundFlagsMissingOutput's cleanup)
+// so that renderCmd.RunE's BindFlagsToViper -> BindPFlag wiring is not shadowed
+// by a stale explicit value, which viper always prioritizes over bound flags.
+func clearRenderViperOverrides(t *testing.T) {
+	t.Helper()
+	v := viper.GetViper()
+	for _, key := range []string{renderFlagOutput, renderFlagFormat} {
+		v.Set(key, nil)
+	}
+	t.Cleanup(func() {
+		for _, key := range []string{renderFlagOutput, renderFlagFormat} {
+			v.Set(key, nil)
+		}
+	})
+}
+
+func TestPlayCmdRunEPlaysCastFile(t *testing.T) {
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	castContent := `{"version":3,"term":{"cols":10,"rows":2}}` + "\n" + `[0,"o","hello\n"]` + "\n"
+	if err := os.WriteFile(castPath, []byte(castContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := playCmd.RunE(playCmd, []string{castPath}); err != nil {
+		t.Fatalf("play command failed: %v", err)
+	}
+}
+
+func TestPlayCmdRunEReturnsErrorForMissingFile(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.cast")
+	if err := playCmd.RunE(playCmd, []string{missing}); err == nil {
+		t.Fatal("expected an error for a missing cast file")
+	}
+}
+
+func TestRenderCmdRunERendersFromBoundFlags(t *testing.T) {
+	resetRenderCommand(t)
+	clearRenderViperOverrides(t)
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	castContent := `{"version":3,"term":{"cols":10,"rows":2}}` + "\n" + `[0,"o","hello\n"]` + "\n"
+	if err := os.WriteFile(castPath, []byte(castContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(t.TempDir(), "out.html")
+	if err := renderCmd.Flags().Set(renderFlagOutput, output); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := renderCmd.RunE(renderCmd, []string{castPath}); err != nil {
+		t.Fatalf("render command failed: %v", err)
+	}
+	info, err := os.Stat(output)
+	if err != nil || info.Size() == 0 {
+		t.Fatalf("rendered output missing or empty: %v", err)
+	}
+}
+
+func TestRenderCmdRunEReturnsErrorForMissingOutput(t *testing.T) {
+	resetRenderCommand(t)
+	clearRenderViperOverrides(t)
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	if err := os.WriteFile(castPath, []byte(`{"version":3,"term":{"cols":10,"rows":2}}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := renderCmd.RunE(renderCmd, []string{castPath})
+	if !errors.Is(err, errUtils.ErrMissingRenderOutput) {
+		t.Fatalf("expected ErrMissingRenderOutput, got %v", err)
+	}
+}
+
+func TestRenderCmdRunEReturnsRenderError(t *testing.T) {
+	resetRenderCommand(t)
+	clearRenderViperOverrides(t)
+	missing := filepath.Join(t.TempDir(), "missing.cast")
+	output := filepath.Join(t.TempDir(), "out.html")
+	if err := renderCmd.Flags().Set(renderFlagOutput, output); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := renderCmd.RunE(renderCmd, []string{missing}); err == nil {
+		t.Fatal("expected render to fail for a missing input cast file")
+	}
+}
+
+func TestRenderOptionsForFormatDefaultReturnsEmptyOptions(t *testing.T) {
+	opts := renderOptionsForFormat("out.bin", "unknown-format")
+	if opts != (asciicast.RenderOptions{}) {
+		t.Fatalf("options = %#v, want zero value", opts)
+	}
+}
+
+func TestRenderOptionsForFormatMP4(t *testing.T) {
+	output := "out.mp4"
+	opts := renderOptionsForFormat(output, renderFormatMP4)
+	if opts != (asciicast.RenderOptions{MP4: output}) {
+		t.Fatalf("options = %#v, want MP4 output", opts)
+	}
 }

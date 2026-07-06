@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"os"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -1202,4 +1203,32 @@ func TestHeight_EdgeCases(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestIsPiped verifies IsPiped for real stream handles (unlikely to be named
+// pipes under `go test`) and for an invalid Stream value (streamToFile nil branch).
+func TestIsPiped(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	term := New()
+
+	t.Run("invalid stream returns false", func(t *testing.T) {
+		assert.False(t, term.IsPiped(Stream(999)))
+	})
+
+	t.Run("stdin/stdout/stderr do not panic", func(t *testing.T) {
+		for _, s := range []Stream{Stdin, Stdout, Stderr} {
+			assert.NotPanics(t, func() { term.IsPiped(s) })
+		}
+	})
+}
+
+// TestStreamToFile verifies streamToFile returns the expected *os.File for
+// each Stream constant, and nil for an unrecognized value.
+func TestStreamToFile(t *testing.T) {
+	assert.Equal(t, os.Stdin, streamToFile(Stdin))
+	assert.Equal(t, os.Stdout, streamToFile(Stdout))
+	assert.Equal(t, os.Stderr, streamToFile(Stderr))
+	assert.Nil(t, streamToFile(Stream(999)))
 }

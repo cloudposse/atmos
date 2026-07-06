@@ -310,14 +310,14 @@ func (r *Recorder) closeFile() (string, error) {
 // replaces the target atomically on POSIX; on Windows it fails when the
 // target exists, so retry once after removing it.
 func (r *Recorder) commit(tempPath string) error {
-	if err := os.Rename(tempPath, r.path); err == nil {
+	if err := os.Rename(tempPath, r.path); err == nil { // #nosec G703 -- r.path is this recorder's own resolved output path, not external input.
 		return nil
 	}
-	if err := os.Remove(r.path); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(r.path); err != nil && !os.IsNotExist(err) { // #nosec G703 -- r.path is this recorder's own resolved output path, not external input.
 		_ = os.Remove(tempPath)
 		return fmt.Errorf("commit cast file: %w", err)
 	}
-	if err := os.Rename(tempPath, r.path); err != nil {
+	if err := os.Rename(tempPath, r.path); err != nil { // #nosec G703 -- r.path is this recorder's own resolved output path, not external input.
 		_ = os.Remove(tempPath)
 		return fmt.Errorf("commit cast file: %w", err)
 	}

@@ -1,7 +1,10 @@
 package asciicast
 
 import (
+	"bufio"
+	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -105,6 +108,139 @@ func TestRenderMP4WithFakeTools(t *testing.T) {
 		t.Fatalf("mp4 output = %q", content)
 	}
 }
+
+func TestReadEventsRejectsOversizedEventLine(t *testing.T) {
+	// A single event token larger than maxEventTokenSize forces the scanner
+	// to give up mid-scan with bufio.ErrTooLong, exercising the
+	// scanner.Err() failure path (distinct from a clean EOF).
+	path := filepath.Join(t.TempDir(), "oversized.cast")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.WriteString(`{"version":3,"term":{"cols":80,"rows":24}}` + "\n"); err != nil {
+		t.Fatal(err)
+	}
+	huge := strings.Repeat("x", maxEventTokenSize+1)
+	encoded, err := json.Marshal([]any{0.1, "o", huge})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write(encoded); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.WriteString("\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = ReadEvents(path)
+	if err == nil {
+		t.Fatal("expected scanner error for oversized event line")
+	}
+	if !errors.Is(err, bufio.ErrTooLong) {
+		t.Fatalf("expected bufio.ErrTooLong, got %v", err)
+	}
+}
+
+// errWriter is a pure-Go io.Writer stand-in for an OS-level write failure
+// (e.g. a closed pipe or full disk), used to exercise io.WriteString error
+// propagation without any platform-specific binary or file-descriptor trick.
+type errWriter struct {
+	failAfter int
+	writes    int
+}
+
+var errSimulatedWrite = errors.New("simulated write failure")
+
+func (w *errWriter) Write(p []byte) (int, error) {
+	w.writes++
+	if w.writes > w.failAfter {
+		return 0, errSimulatedWrite
+	}
+	return len(p), nil
+}
+
+func TestPlayPropagatesReadEventsError(t *testing.T) {
+	err := Play(filepath.Join(t.TempDir(), "does-not-exist.cast"), &strings.Builder{})
+	if err == nil {
+		t.Fatal("expected error for missing cast file")
+	}
+}
+
+func TestPlayPropagatesWriteError(t *testing.T) {
+	cast := writeTestCast(t, 20, 3, "first\n", "second\n")
+	w := &errWriter{failAfter: 0}
+	err := Play(cast, w)
+	if !errors.Is(err, errSimulatedWrite) {
+		t.Fatalf("expected simulated write error, got %v", err)
+	}
+}
+
+func TestPlaySucceedsWithWorkingWriter(t *testing.T) {
+	cast := writeTestCast(t, 20, 3, "first\n")
+	var sb strings.Builder
+	if err := Play(cast, &sb); err != nil {
+		t.Fatal(err)
+	}
+	if sb.String() != "first\n" {
+		t.Fatalf("played output = %q", sb.String())
+	}
+}
+
+func TestRenderNilOptionsReturnsNil(t *testing.T) {
+	if err := Render("input.cast", nil); err != nil {
+		t.Fatalf("Render with nil opts: %v", err)
+	}
+}
+
+func TestPrepareRenderOutputBareFilenameSkipsMkdirAll(t *testing.T) {
+	// filepath.Dir("out.gif") == "." — this must short-circuit without
+	// attempting to create a directory.
+	dir := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldwd) }()
+
+	if err := prepareRenderOutput("out.gif"); err != nil {
+		t.Fatalf("prepareRenderOutput bare filename: %v", err)
+	}
+}
+
+func TestRenderMP4PropagatesAggFailureAfterFFmpegFound(t *testing.T) {
+	// ffmpeg is present but agg is not: renderMP4 must surface renderWithAgg's
+	// error (the temp-gif render step) rather than proceeding to invoke ffmpeg.
+	bin := t.TempDir()
+	installFakeTool(t, bin, "ffmpeg")
+	t.Setenv("PATH", bin)
+	t.Setenv(asciicastHelperEnv, "1")
+
+	output := filepath.Join(t.TempDir(), "out.mp4")
+	err := Render("input.cast", &RenderOptions{MP4: output})
+	if !errors.Is(err, ErrMissingAgg) {
+		t.Fatalf("expected missing agg error, got %v", err)
+	}
+}
+
+func TestRenderPropagatesAggFailure(t *testing.T) {
+	// renderWithAgg's error must propagate through Render's target loop
+	// (renderTargets -> target.render -> Render's error return).
+	t.Setenv("PATH", t.TempDir())
+	output := filepath.Join(t.TempDir(), "out.gif")
+	err := Render("input.cast", &RenderOptions{GIF: output})
+	if !errors.Is(err, ErrMissingAgg) {
+		t.Fatalf("expected missing agg error propagated from Render, got %v", err)
+	}
+}
+
+var _ io.Writer = (*errWriter)(nil)
 
 func installFakeTool(t *testing.T, dir, name string) {
 	t.Helper()

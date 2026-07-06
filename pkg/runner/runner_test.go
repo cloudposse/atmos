@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/signals"
 )
@@ -681,4 +682,412 @@ func TestRunAll_RejectsInvalidWhenBeforeRunningTasks(t *testing.T) {
 	err := RunAll(ctx, tasks, mockRunner, Options{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, schema.ErrInvalidWhenCondition)
+}
+
+// TestRun_StepHandlerTaskSuccess covers runStepHandler's happy path: an
+// extended step type (registered in the step handler registry, not one of
+// the core CommandRunner types) is validated, executed, and its result is
+// stored in the shared step Variables under the task's name.
+func TestRun_StepHandlerTaskSuccess(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	vars := step.NewVariables()
+	task := Task{
+		Name:    "print-hint",
+		Type:    "hint",
+		Content: "Run `atmos dev shell`.",
+	}
+	opts := Options{StepVars: vars}
+
+	// The step handler registry path never touches the CommandRunner.
+	err := Run(ctx, &task, mockRunner, opts)
+	require.NoError(t, err)
+
+	value, ok := vars.GetValue("print-hint")
+	require.True(t, ok)
+	assert.Equal(t, "Run `atmos dev shell`.", value)
+}
+
+// TestRun_StepHandlerTaskCreatesVariablesWhenNil covers the `vars ==
+// nil` branch in runStepHandler, where a local Variables instance is
+// created because Options.StepVars was not supplied.
+func TestRun_StepHandlerTaskCreatesVariablesWhenNil(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	task := Task{
+		Type:    "hint",
+		Content: "no vars supplied",
+	}
+	opts := Options{} // No StepVars and no AtmosConfig.
+
+	err := Run(ctx, &task, mockRunner, opts)
+	require.NoError(t, err)
+}
+
+// TestRun_StepHandlerTaskSetsAtmosConfig covers the `if opts.AtmosConfig !=
+// nil { vars.SetAtmosConfig(...) }` branch in runStepHandler.
+func TestRun_StepHandlerTaskSetsAtmosConfig(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	vars := step.NewVariables()
+	task := Task{
+		Type:    "hint",
+		Content: "with atmos config",
+	}
+	opts := Options{
+		StepVars:    vars,
+		AtmosConfig: &schema.AtmosConfiguration{BasePath: "/base"},
+	}
+
+	err := Run(ctx, &task, mockRunner, opts)
+	require.NoError(t, err)
+	assert.Equal(t, "/base", vars.AtmosConfig.BasePath)
+}
+
+// TestRun_StepHandlerTaskValidationFailure covers the validation-error
+// branch in runStepHandler: a hint step without required content must fail
+// Validate() before Execute() is ever invoked.
+func TestRun_StepHandlerTaskValidationFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	task := Task{
+		Name: "missing-content",
+		Type: "hint",
+		// Content intentionally omitted - required field.
+	}
+	opts := Options{}
+
+	err := Run(ctx, &task, mockRunner, opts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "step validation failed")
+}
+
+// TestRun_StepHandlerTaskExecuteError covers the branch where Execute()
+// itself fails and the error propagates out of runStepHandler without
+// storing any result in Variables.
+func TestRun_StepHandlerTaskExecuteError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	vars := step.NewVariables()
+	task := Task{
+		Name:    "bad-hint-template",
+		Type:    "hint",
+		Content: "{{ range .steps }}",
+	}
+	opts := Options{StepVars: vars}
+
+	err := Run(ctx, &task, mockRunner, opts)
+	require.Error(t, err)
+
+	_, ok := vars.GetValue("bad-hint-template")
+	assert.False(t, ok, "no result should be stored when Execute fails")
+}
+
+// TestRun_StepHandlerTaskWithRetry covers the `task.Retry != nil` branch in
+// runStepHandler, routing execution through retry.Do instead of a direct
+// call.
+func TestRun_StepHandlerTaskWithRetry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	maxAttempts := 2
+	initialDelay := time.Millisecond
+	vars := step.NewVariables()
+	task := Task{
+		Name:    "retry-hint",
+		Type:    "hint",
+		Content: "retried hint",
+		Retry: &schema.RetryConfig{
+			MaxAttempts:  &maxAttempts,
+			InitialDelay: &initialDelay,
+		},
+	}
+	opts := Options{StepVars: vars}
+
+	err := Run(ctx, &task, mockRunner, opts)
+	require.NoError(t, err)
+
+	value, ok := vars.GetValue("retry-hint")
+	require.True(t, ok)
+	assert.Equal(t, "retried hint", value)
+}
+
+// TestRun_StepHandlerTaskWithoutNameSkipsOutputStorage covers the `if
+// task.Name != "" && result != nil` guard: unnamed steps must succeed
+// without attempting to store a result in Variables.
+func TestRun_StepHandlerTaskWithoutNameSkipsOutputStorage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	vars := step.NewVariables()
+	task := Task{
+		Type:    "hint",
+		Content: "unnamed hint",
+		// Name intentionally omitted.
+	}
+	opts := Options{StepVars: vars}
+
+	err := Run(ctx, &task, mockRunner, opts)
+	require.NoError(t, err)
+}
+
+// TestRun_StepHandlerTaskOutputResolutionErrorPropagates covers the `if
+// outputErr := vars.SetWithOutputs(...); outputErr != nil { return outputErr
+// }` branch in runStepHandler: the step itself succeeds, but a declared
+// `outputs` template fails to resolve against the result.
+func TestRun_StepHandlerTaskOutputResolutionErrorPropagates(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	vars := step.NewVariables()
+	task := Task{
+		Name:    "hint-with-bad-output",
+		Type:    "hint",
+		Content: "hint succeeds",
+		Outputs: map[string]string{
+			"broken": "{{ range .steps }}",
+		},
+	}
+	opts := Options{StepVars: vars}
+
+	err := Run(ctx, &task, mockRunner, opts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to resolve output")
+}
+
+// TestRun_ContainerStepDefaultsWorkingDirectoryFromOptsDir covers the
+// `if task.Type == "container" && workflowStep.WorkingDirectory == "" &&
+// opts.Dir != ""` branch in runStepHandler: a container step with no
+// explicit working_directory inherits opts.Dir. DryRun is used so no real
+// container runtime is invoked; the resulting preview command mounts
+// opts.Dir as the workspace host path, proving the default was applied.
+func TestRun_ContainerStepDefaultsWorkingDirectoryFromOptsDir(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	task := Task{
+		Name: "container-step",
+		Type: "container",
+		Run: &schema.ContainerRunStep{
+			Image:   "alpine:latest",
+			Command: "echo hi",
+		},
+		// WorkingDirectory intentionally omitted so opts.Dir is used.
+	}
+	opts := Options{
+		Dir:    dir,
+		DryRun: true,
+	}
+
+	// No mock expectations: container steps never touch the CommandRunner.
+	err := Run(ctx, &task, mockRunner, opts)
+	require.NoError(t, err)
+}
+
+// TestTaskConditionContext_ResolvesTaskEnvError covers the error branch in
+// taskConditionContext where resolveTaskConditionEnv fails to parse a
+// malformed Go template in a task's env value.
+func TestTaskConditionContext_ResolvesTaskEnvError(t *testing.T) {
+	task := Task{
+		Name: "bad-env-task",
+		Env: map[string]string{
+			"BROKEN": "{{ range .steps }}",
+		},
+	}
+
+	_, err := taskConditionContext(&task, 0, &Options{}, schema.ConditionPredicateSuccess)
+	require.Error(t, err)
+}
+
+// TestResolveTaskConditionEnv_ParseTemplateError covers the `if err != nil {
+// return nil, fmt.Errorf("failed to parse env var %s: %w", ...) }` branch:
+// a template referencing an undefined function fails at Parse time.
+func TestResolveTaskConditionEnv_ParseTemplateError(t *testing.T) {
+	taskEnv := map[string]string{
+		"BROKEN": "{{ fail }}",
+	}
+
+	_, err := resolveTaskConditionEnv(taskEnv, map[string]string{}, &Options{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse env var")
+}
+
+// TestResolveTaskConditionEnv_ExecuteTemplateError covers the `if err :=
+// tmpl.Execute(&buf, data); err != nil` branch, distinct from a template
+// parse failure: this template parses successfully (valid syntax and
+// pipeline) but fails at execution time because the value produced by
+// `.Env.MISSING` is a string, and strings have no field named SubField.
+func TestResolveTaskConditionEnv_ExecuteTemplateError(t *testing.T) {
+	taskEnv := map[string]string{
+		"BROKEN": "{{ .Env.MISSING.SubField }}",
+	}
+
+	_, err := resolveTaskConditionEnv(taskEnv, map[string]string{"MISSING": "a-string"}, &Options{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to resolve env var")
+}
+
+// TestResolveTaskConditionEnv_UsesStepVarsTemplateData covers the `if opts
+// != nil && opts.StepVars != nil` branch in resolveTaskConditionEnv, merging
+// step template data (e.g. prior step outputs) into the env-resolution data
+// map alongside Env/env.
+func TestResolveTaskConditionEnv_UsesStepVarsTemplateData(t *testing.T) {
+	vars := step.NewVariables()
+	vars.Set("build", step.NewStepResult("build-output"))
+
+	taskEnv := map[string]string{
+		"FROM_STEP": "{{ .steps.build.value }}",
+		"FROM_ENV":  "{{ .env.BASE }}",
+	}
+	env := map[string]string{"BASE": "base-value"}
+	opts := &Options{StepVars: vars}
+
+	resolved, err := resolveTaskConditionEnv(taskEnv, env, opts)
+	require.NoError(t, err)
+	assert.Equal(t, "build-output", resolved["FROM_STEP"])
+	assert.Equal(t, "base-value", resolved["FROM_ENV"])
+}
+
+// TestRunAll_TaskConditionContextEnvParsingError ensures RunAll propagates
+// the error returned by taskConditionContext (via resolveTaskConditionEnv)
+// when a task's env template fails to parse, covering the `if err != nil {
+// return err }` guard in RunAll right after taskConditionContext is called.
+func TestRunAll_TaskConditionContextEnvParsingError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	tasks := Tasks{
+		{
+			Name:    "bad-env-condition",
+			Command: "echo unreached",
+			Type:    "shell",
+			Env: map[string]string{
+				"BROKEN": "{{ range .steps }}",
+			},
+		},
+	}
+
+	// No mock expectations: the task must never reach RunShell.
+	err := RunAll(ctx, tasks, mockRunner, Options{})
+	require.Error(t, err)
+}
+
+// TestRunAll_EvaluateWhenErrorPropagates covers the `if err != nil { return
+// err }` guard in RunAll right after
+// task.When.EvaluateWithImplicitSuccessE(conditionContext) is called: an
+// otherwise-valid condition that references an undefined variable fails at
+// evaluation time (not at the earlier ValidateStepCondition check).
+func TestRunAll_EvaluateWhenErrorPropagates(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	tasks := Tasks{
+		{
+			// This condition compiles (the CEL env declares `env` as a
+			// map[string]string) and passes ValidateStepCondition (it
+			// mentions neither "failure" nor lifecycle status), but fails at
+			// evaluation time because the referenced key is absent from the
+			// map, which CEL treats as a runtime "no such key" error.
+			Name:    "undefined-var-condition",
+			Command: "echo unreached",
+			Type:    "shell",
+			When:    schema.MustCondition(`env["MISSING_KEY_XYZ"] == "1"`),
+		},
+	}
+
+	// No mock expectations: the task must never reach RunShell.
+	err := RunAll(ctx, tasks, mockRunner, Options{})
+	require.Error(t, err)
+}
+
+// TestRunStepHandler_ContainerTaskInheritsOptsDirAsWorkingDirectory covers
+// the `if task.Type == "container" && workflowStep.WorkingDirectory == "" &&
+// opts.Dir != ""` branch in runStepHandler: a container-type task with no
+// working_directory of its own must inherit opts.Dir. The container step
+// then fails Validate() (no run.image/run.command configured), which is
+// sufficient to prove the wiring executed without needing a real container
+// runtime.
+func TestRunStepHandler_ContainerTaskInheritsOptsDirAsWorkingDirectory(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	task := Task{
+		Name: "container-task",
+		Type: "container",
+		// WorkingDirectory intentionally empty so opts.Dir is inherited.
+	}
+	opts := Options{Dir: "/opt/app"}
+
+	err := Run(ctx, &task, mockRunner, opts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "step validation failed")
+}
+
+// TestRunAll_TaskConditionContextSkipsEnvItemsWithoutEquals covers the `key,
+// value, ok := strings.Cut(item, "="); if !ok { continue }` branch in
+// taskConditionContext: a malformed opts.Env entry lacking "=" must be
+// skipped rather than corrupting the condition environment.
+func TestRunAll_TaskConditionContextSkipsEnvItemsWithoutEquals(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	tasks := Tasks{
+		{
+			Name:    "run",
+			Command: "echo run",
+			Type:    "shell",
+			When:    schema.MustCondition(`env["GOOD_VAR"] == "1"`),
+		},
+	}
+	opts := Options{Env: []string{"MALFORMED_NO_EQUALS", "GOOD_VAR=1"}}
+
+	mockRunner.EXPECT().RunShell(ctx, "echo run", "run", ".", opts.Env, false).Return(nil)
+
+	err := RunAll(ctx, tasks, mockRunner, opts)
+	require.NoError(t, err)
 }

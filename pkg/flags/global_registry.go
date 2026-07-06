@@ -51,7 +51,7 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		ForceColor: v.GetBool("force-color"),
 		ForceTTY:   v.GetBool("force-tty"),
 		Mask:       v.GetBool("mask"),
-		Cast:       parseStringNoOptFlag(cmd, v, cfg.CastFlagName),
+		Cast:       parseCastFlag(cmd, v),
 
 		// Output configuration.
 		Pager: parsePagerFlag(cmd, v),
@@ -178,16 +178,19 @@ func normalizeIdentityValue(value string) string {
 	return cfg.NormalizeIdentityValue(value)
 }
 
-func parseStringNoOptFlag(cmd *cobra.Command, v *viper.Viper, flagName string) string {
-	flag, changed := lookupCommandFlag(cmd, flagName)
+// parseCastFlag handles the cast flag's NoOptDefVal pattern, mirroring parsePagerFlag/parseIdentityFlag.
+func parseCastFlag(cmd *cobra.Command, v *viper.Viper) string {
+	defer perf.Track(nil, "flags.parseCastFlag")()
+
+	flag, changed := lookupCommandFlag(cmd, cfg.CastFlagName)
 	if flag == nil {
 		return ""
 	}
 	if changed {
 		return flag.Value.String()
 	}
-	if v.IsSet(flagName) {
-		return v.GetString(flagName)
+	if v.IsSet(cfg.CastFlagName) {
+		return v.GetString(cfg.CastFlagName)
 	}
 	return ""
 }
