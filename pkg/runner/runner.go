@@ -138,6 +138,9 @@ func runStepHandler(ctx context.Context, task *Task, handler step.StepHandler, o
 	if vars == nil {
 		vars = step.NewVariables()
 	}
+	if opts.AtmosConfig != nil {
+		vars.SetAtmosConfig(opts.AtmosConfig)
+	}
 
 	// Convert Task to WorkflowStep for handler compatibility.
 	workflowStep := task.ToWorkflowStep()

@@ -249,6 +249,11 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
 
         Verification is **automatic** under `--ci` when planfile storage is configured (default behavior is `fail`); this flag is only needed to force it on outside CI or override `verify: warn`/`off`.
 
+        This flag **requires planfile storage** to be configured under
+        [`components.terraform.planfiles`](/ci/planfile-storage) in `atmos.yaml` — without it there is
+        no stored plan to verify against, and the deploy errors instead of silently applying an
+        unverified fresh plan.
+
         Pass `--verify-plan=false` to **disable** verification, overriding both the `planfiles.verify` config and the CI default. The stored planfile is not downloaded and no drift check runs; `deploy` performs a normal plan-and-apply.
 
         **Environment variables:** `ATMOS_TERRAFORM_VERIFY_PLAN` (set to `false` to disable)

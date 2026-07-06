@@ -95,6 +95,29 @@ test(
 );
 
 test(
+  "live Algolia returns snippet content for the top atmos auth hit",
+  { skip: !LIVE_RELEVANCE_ENABLED },
+  async () => {
+    // Regression guard for hierarchy-only hits: when "atmos auth" matches
+    // the page title (`hierarchy.lvl1`), the distinct dedup must surface a
+    // record with snippetable content (the page `<Intro>`), not a bare
+    // `lvl1` record. Bare lvl1 records render in the UI as title-only,
+    // with no subtext — which is exactly what we want to prevent here.
+    const { hits } = await search("atmos auth");
+    const topHit = hits[0];
+    const snippet = topHit && topHit._snippetResult && topHit._snippetResult.content;
+    const snippetValue = snippet && snippet.value;
+
+    assert.ok(
+      snippetValue && snippetValue.trim().length > 0,
+      `Expected the top "atmos auth" hit to include a content snippet. Got top hit:\n${
+        JSON.stringify(topHit, null, 2)
+      }`,
+    );
+  },
+);
+
+test(
   "live Algolia does not return slash and non-slash duplicates for auth config",
   { skip: !LIVE_RELEVANCE_ENABLED },
   async () => {

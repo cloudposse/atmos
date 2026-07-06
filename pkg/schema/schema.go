@@ -406,9 +406,20 @@ type SyntaxHighlighting struct {
 	Wrap        bool   `yaml:"wrap" json:"wrap" mapstructure:"wrap"`
 }
 
+// AtmosYAMLSettings controls YAML parsing behavior for stack files.
+type AtmosYAMLSettings struct {
+	// KeyDelimiter enables nested key expansion in stack YAML files.
+	// When set (e.g., "."), unquoted keys containing the delimiter are expanded
+	// into nested map structures (e.g., "a.b: v" becomes "a: {b: v}").
+	// Quoted keys are preserved as literal keys.
+	// Empty string (default) disables expansion, preserving current behavior.
+	KeyDelimiter string `yaml:"key_delimiter" json:"key_delimiter" mapstructure:"key_delimiter"`
+}
+
 type AtmosSettings struct {
-	ListMergeStrategy string   `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
-	Terminal          Terminal `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	ListMergeStrategy string            `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
+	Terminal          Terminal          `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	YAML              AtmosYAMLSettings `yaml:"yaml,omitempty" json:"yaml,omitempty" mapstructure:"yaml"`
 	// Experimental controls how experimental features are handled.
 	// Values: "silence" (no output), "disable" (disabled), "warn" (default), "error" (exit).
 	Experimental string `yaml:"experimental" json:"experimental" mapstructure:"experimental"`
@@ -801,6 +812,12 @@ type CIConfig struct {
 	Comments    CICommentsConfig    `yaml:"comments,omitempty" json:"comments,omitempty" mapstructure:"comments"`
 	Templates   CITemplatesConfig   `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 	Cache       CICacheConfig       `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache"`
+	// AllowUnsafeForkExecution opts out of the fork-checkout safety gate that
+	// refuses to clone untrusted fork content under pull_request_target and
+	// workflow_run events. Leave false unless a fork-facing workflow has a
+	// documented reason to bypass it. See
+	// docs/prd/native-ci/framework/fork-pr-trust-gate.md.
+	AllowUnsafeForkExecution bool `yaml:"allow_unsafe_fork_execution,omitempty" json:"allow_unsafe_fork_execution,omitempty" mapstructure:"allow_unsafe_fork_execution"`
 }
 
 // CICacheConfig configures the CI build cache, which restores a well-known

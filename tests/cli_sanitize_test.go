@@ -127,6 +127,19 @@ func TestSanitizeOutput(t *testing.T) {
 			input:    "TRCE  Checking for atmos.yaml in home directory path=/absolute/path/to/repo/some/subdir/.atmos",
 			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
 		},
+		{
+			name: "GitHub auth debug logs should be removed",
+			input: strings.Join([]string{
+				"DEBU  before",
+				"DEBU  GitHub CLI token lookup failed (CLI may not be installed or authenticated) cli=gh error=\"exit status 1\"",
+				"DEBU  No GitHub token resolved; using anonymous (unauthenticated) GitHub access (subject to rate limits)",
+				"DEBU  after",
+			}, "\n"),
+			expected: strings.Join([]string{
+				"DEBU  before",
+				"DEBU  after",
+			}, "\n"),
+		},
 	}
 
 	for _, tt := range tests {
@@ -733,9 +746,7 @@ func TestSanitizeOutput_WordWrappedPathsRealWorldScenarios(t *testing.T) {
 					wrappedPath := repoRoot[:breakPoint] + "\n" + repoRoot[breakPoint:]
 					return fmt.Sprintf(`**Error:** path is not within Atmos component directories
 
-## Hints
-
-💡 Path points to the stacks configuration directory, not a component:
+Path points to the stacks configuration directory, not a component:
 %s/tests/fixtures/scenarios/complete/stacks
 
 Stacks directory: %s/tests/fixtures/scenarios/complete/stacks
@@ -744,9 +755,7 @@ Stacks directory: %s/tests/fixtures/scenarios/complete/stacks
 				}
 				return fmt.Sprintf(`**Error:** path is not within Atmos component directories
 
-## Hints
-
-💡 Path points to the stacks configuration directory, not a component:
+Path points to the stacks configuration directory, not a component:
 %s
 
 Stacks directory: %s
@@ -755,9 +764,7 @@ Stacks directory: %s
 			},
 			expected: `**Error:** path is not within Atmos component directories
 
-## Hints
-
-💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks
+Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks
 
 Stacks directory: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks
 
@@ -807,8 +814,8 @@ func TestSanitizeOutput_WindowsLineEndingsInHintPaths(t *testing.T) {
 		},
 		{
 			name:     "Multi-line error with Windows CRLF",
-			input:    fmt.Sprintf("**Error:** path is not within Atmos component directories\r\n\r\n## Hints\r\n\r\n💡 Path points to the stacks configuration directory, not a component:\r\n%s\r\n\r\nStacks directory: %s", testPath, testPath),
-			expected: "**Error:** path is not within Atmos component directories\n\n## Hints\n\n💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks\n\nStacks directory: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+			input:    fmt.Sprintf("**Error:** path is not within Atmos component directories\r\n\r\nPath points to the stacks configuration directory, not a component:\r\n%s\r\n\r\nStacks directory: %s", testPath, testPath),
+			expected: "**Error:** path is not within Atmos component directories\n\nPath points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks\n\nStacks directory: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
 		},
 	}
 

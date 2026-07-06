@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -257,8 +258,36 @@ func parsePodmanContainer(containerJSON map[string]interface{}) Info {
 	if raw, ok := containerJSON["Ports"]; ok {
 		info.Ports = parsePodmanPorts(raw)
 	}
+	if networks := parsePodmanNetworks(containerJSON["Networks"]); len(networks) > 0 {
+		info.Networks = networks
+	}
 
 	return info
+}
+
+func parsePodmanNetworks(raw interface{}) []string {
+	switch v := raw.(type) {
+	case []interface{}:
+		networks := make([]string, 0, len(v))
+		for _, item := range v {
+			if name, ok := item.(string); ok && name != "" {
+				networks = append(networks, name)
+			}
+		}
+		sort.Strings(networks)
+		return networks
+	case map[string]interface{}:
+		networks := make([]string, 0, len(v))
+		for name := range v {
+			if name != "" {
+				networks = append(networks, name)
+			}
+		}
+		sort.Strings(networks)
+		return networks
+	default:
+		return nil
+	}
 }
 
 // parsePodmanPorts extracts published port bindings from a podman `ps --format json`

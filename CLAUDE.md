@@ -35,10 +35,11 @@ Multiple Claude sessions may be working on the same branch or worktree simultane
 
 ```bash
 # Build & Test
-make build                   # Build to ./build/atmos
-make testacc                 # Run tests
-make testacc-cover           # Tests with coverage
-make lint                    # golangci-lint on changed files
+atmos build           # Build to ./build/atmos
+atmos test                   # Run short tests
+atmos test --full            # Run full tests
+atmos test --coverage        # Tests with coverage
+atmos lint changed           # golangci-lint on changed files
 ```
 
 ## Architecture
@@ -158,6 +159,9 @@ Three groups separated by blank lines, sorted alphabetically:
 
 Maintain aliases: `cfg`, `log`, `u`, `errUtils`
 
+### Go Formatting (MANDATORY)
+Use `gofumpt`, not `gofmt`, when formatting Go files. The repository enables `gofumpt` and `goimports` in `.golangci.yml`; using plain `gofmt` can leave files inconsistent with CI.
+
 ### Performance Tracking (MANDATORY)
 Add `defer perf.Track(atmosConfig, "pkg.FuncName")()` + blank line to all public functions. Use `nil` if no atmosConfig param.
 
@@ -233,7 +237,7 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 
 **Preconditions**: Tests skip gracefully with helpers from `tests/test_preconditions.go`. See `docs/prd/testing-strategy.md`.
 
-**Commands**: `make test-short` (quick), `make testacc` (all), `make testacc-cover` (coverage)
+**Commands**: `atmos test` (quick), `atmos test --full` (all), `atmos test --coverage` (coverage)
 
 **Fixtures**: `tests/test-cases/` for integration tests
 
@@ -292,8 +296,8 @@ ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken
 
 **How (Linux/CI only):**
 1. GitHub Actions: `gh workflow run screengrabs.yaml` (creates PR)
-2. Local Linux: `cd demo/screengrabs && make all`
-3. Docker (macOS): `make -C demo/screengrabs docker-all`
+2. Local Linux: `atmos screengrabs all`
+3. Docker (macOS): `atmos screengrabs docker-all`
 
 **Notes:** Captures exact output, ANSI→HTML, `script` syntax differs BSD/GNU, regenerate all together, no pipe indirection.
 
@@ -375,7 +379,7 @@ Don't commit: todos, research, scratch files. Do commit: code, tests, requested 
 Always ask first: "This will discard uncommitted changes. Proceed? [y/N]"
 
 ### Test Coverage (MANDATORY)
-80% minimum (CodeCov enforced). All features need tests. `make testacc-coverage` for reports.
+80% minimum (CodeCov enforced). All features need tests. `atmos test --coverage` for reports.
 
 ### Cyclomatic Complexity (MANDATORY)
 golangci-lint enforces `cyclop: max-complexity: 15` and `funlen: lines: 60, statements: 40`.
@@ -455,7 +459,7 @@ Auto-enabled via `RootCmd.ExecuteC()`. Non-standard paths use `telemetry.Capture
 ALWAYS compile after changes: `go build . && go test ./...`. Fix errors immediately.
 
 ### Pre-commit (MANDATORY)
-NEVER use `--no-verify`. Run `make lint` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
+NEVER use `--no-verify`. Run `atmos lint changed` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,

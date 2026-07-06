@@ -34,6 +34,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/reexec"
+	"github.com/cloudposse/atmos/pkg/retry"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -57,6 +58,7 @@ const currentDirPath = "."
 const (
 	customCommandKeyCommand  = "command"
 	customCommandKeyIdentity = "identity"
+	annotationDefaultChain   = "atmos.custom.default.chain"
 )
 
 var errCustomCommandFlagNotRegistered = errors.New("flag is not registered")
@@ -159,7 +161,14 @@ func processCommandAliases(
 	for k, v := range aliases {
 		alias := strings.TrimSpace(k)
 
-		if _, exist := existingTopLevelCommands[alias]; !exist && topLevel {
+		if existing, exist := existingTopLevelCommands[alias]; exist && topLevel {
+			if !isCustomCommand(existing) {
+				continue
+			}
+			parentCommand.RemoveCommand(existing)
+		}
+
+		if topLevel {
 			aliasCmd := strings.TrimSpace(v)
 			aliasFor := fmt.Sprintf("alias for `%s`", aliasCmd)
 
@@ -234,6 +243,10 @@ func preCustomCommand(
 	commandConfig *schema.Command,
 ) {
 	var sb strings.Builder
+
+	if shouldRunDefaultSubcommand(args, commandConfig) {
+		return
+	}
 
 	// checking for zero arguments in config
 	if len(commandConfig.Arguments) == 0 {
@@ -316,6 +329,89 @@ func preCustomCommand(
 	}
 }
 
+func shouldRunDefaultSubcommand(args []string, commandConfig *schema.Command) bool {
+	return len(args) == 0 &&
+		strings.TrimSpace(commandConfig.Default) != "" &&
+		len(commandConfig.Commands) > 0
+}
+
+func runDefaultSubcommand(cmd *cobra.Command, commandConfig *schema.Command) bool {
+	defaultName := strings.TrimSpace(commandConfig.Default)
+	if defaultName == "" {
+		return false
+	}
+
+	chain := defaultSubcommandChain(cmd)
+	if Contains(chain, commandConfig.Name) {
+		err := errUtils.Build(errUtils.ErrInvalidConfig).
+			WithExplanationf("Custom command %q has a recursive default subcommand chain", commandConfig.Name).
+			WithHint("Remove the self-reference or cycle from the command's `default` settings").
+			WithContext(customCommandKeyCommand, commandConfig.Name).
+			WithContext("default", defaultName).
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "Invalid Command", "https://atmos.tools/cli/configuration/commands")
+		return true
+	}
+
+	subcommand := findSubcommand(cmd, defaultName)
+	if subcommand == nil {
+		err := errUtils.Build(errUtils.ErrInvalidConfig).
+			WithExplanationf("Custom command %q declares default subcommand %q, but no matching subcommand exists", commandConfig.Name, defaultName).
+			WithHint("Set `default` to one of the command's configured subcommands").
+			WithContext(customCommandKeyCommand, commandConfig.Name).
+			WithContext("default", defaultName).
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "Invalid Command", "https://atmos.tools/cli/configuration/commands")
+		return true
+	}
+
+	_ = subcommand.InheritedFlags()
+	restoreChain := restoreDefaultSubcommandChain(subcommand, append(chain, commandConfig.Name))
+	defer restoreChain()
+
+	if subcommand.PreRunE != nil {
+		errUtils.CheckErrorPrintAndExit(subcommand.PreRunE(subcommand, nil), "", "")
+	} else if subcommand.PreRun != nil {
+		subcommand.PreRun(subcommand, nil)
+	}
+
+	if subcommand.RunE != nil {
+		errUtils.CheckErrorPrintAndExit(subcommand.RunE(subcommand, nil), "", "")
+	} else if subcommand.Run != nil {
+		subcommand.Run(subcommand, nil)
+	} else if err := subcommand.Help(); err != nil {
+		log.Trace("Failed to display default subcommand help", "error", err, customCommandKeyCommand, subcommand.Name())
+	}
+
+	return true
+}
+
+func defaultSubcommandChain(cmd *cobra.Command) []string {
+	if cmd.Annotations == nil {
+		return nil
+	}
+	raw := strings.TrimSpace(cmd.Annotations[annotationDefaultChain])
+	if raw == "" {
+		return nil
+	}
+	return strings.Split(raw, "\n")
+}
+
+func restoreDefaultSubcommandChain(cmd *cobra.Command, chain []string) func() {
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+	previous, hadPrevious := cmd.Annotations[annotationDefaultChain]
+	cmd.Annotations[annotationDefaultChain] = strings.Join(chain, "\n")
+	return func() {
+		if hadPrevious {
+			cmd.Annotations[annotationDefaultChain] = previous
+		} else {
+			delete(cmd.Annotations, annotationDefaultChain)
+		}
+	}
+}
+
 // findSubcommand returns the existing subcommand of parent with the given name, or nil.
 func findSubcommand(parent *cobra.Command, name string) *cobra.Command {
 	for _, c := range parent.Commands() {
@@ -364,10 +460,16 @@ func createCustomCommand(
 		Use:   commandConfig.Name,
 		Short: commandConfig.Description,
 		Long:  commandConfig.Description,
+		Annotations: map[string]string{
+			annotationCustomCommand: annotationValueTrue,
+		},
 		PreRun: func(cmd *cobra.Command, args []string) {
 			preCustomCommand(cmd, args, parentCommand, commandConfig)
 		},
 		Run: func(cmd *cobra.Command, args []string) {
+			if len(args) == 0 && runDefaultSubcommand(cmd, commandConfig) {
+				return
+			}
 			executeCustomCommand(*atmosConfig, cmd, args, parentCommand, commandConfig)
 		},
 	}
@@ -619,14 +721,18 @@ func executeCustomCommand(
 		finalArgs = args
 	}
 
-	conditionContext := customCommandConditionContext()
+	commandConditionEnv := envpkg.CommandEnvToMap(commandConfig.Env)
 	hasRunnableStep := false
 	for i := range commandConfig.Steps {
 		step := &commandConfig.Steps[i]
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
-		if step.When.Evaluate(conditionContext) {
+		runs, err := step.When.EvaluateE(customCommandConditionContext(commandConfig.Name, step, i, commandConditionEnv))
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+		if runs {
 			hasRunnableStep = true
 			break
 		}
@@ -636,25 +742,11 @@ func executeCustomCommand(
 		return
 	}
 
-	// Resolve and install command dependencies.
-	// First, load tools from .tool-versions (project-wide defaults).
-	// Then merge with command-specific dependencies (command deps override .tool-versions).
+	// Resolve and install dependencies declared by this command.
 	resolver := dependencies.NewResolver(&atmosConfig)
 
-	// Load project-wide tools from .tool-versions.
-	toolVersionsDeps, err := dependencies.LoadToolVersionsDependencies(&atmosConfig)
-	if err != nil {
-		err = errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
-			WithExplanationf("Failed to load .tool-versions for command '%s'", commandConfig.Name).
-			WithHint("Check that .tool-versions file exists and is readable").
-			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
-			Err()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-	}
-
 	// Get command-specific dependencies.
-	commandDeps, err := resolver.ResolveCommandDependencies(commandConfig)
+	deps, err := resolver.ResolveCommandDependencies(commandConfig)
 	if err != nil {
 		err = errUtils.Build(errUtils.ErrDependencyResolution).
 			WithCause(err).
@@ -665,35 +757,24 @@ func executeCustomCommand(
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
-	// Merge: .tool-versions as base, command deps override.
-	deps, err := dependencies.MergeDependencies(toolVersionsDeps, commandDeps)
-	if err != nil {
-		err = errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
-			WithExplanationf("Failed to merge dependencies for command '%s'", commandConfig.Name).
-			WithHint("Check that command dependency versions satisfy constraints from .tool-versions").
-			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
-			Err()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-	}
-
 	if len(deps) > 0 {
-		log.Debug("Installing command dependencies", customCommandKeyCommand, commandConfig.Name, "tools", deps)
 		installer := dependencies.NewInstaller(&atmosConfig)
 		if err := installer.EnsureTools(deps); err != nil {
-			err = errUtils.Build(errUtils.ErrToolInstall).
+			err = errUtils.Build(errUtils.ErrDependencyResolution).
 				WithCause(err).
 				WithExplanationf("Failed to install dependencies for command '%s'", commandConfig.Name).
+				WithHint("Check the command's dependencies section for valid tool specifications").
+				WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
 				Err()
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 
-		// Update PATH to include installed tools.
+		log.Debug("Adding configured command dependencies to PATH", customCommandKeyCommand, commandConfig.Name, "tools", deps)
 		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
 			err = errUtils.Build(errUtils.ErrDependencyResolution).
 				WithCause(err).
 				WithExplanationf("Failed to update PATH for command '%s'", commandConfig.Name).
-				WithHint("Check that toolchain install_path is writable").
+				WithHint("Run `atmos toolchain install` to install tools from .tool-versions").
 				WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
 				Err()
 			errUtils.CheckErrorPrintAndExit(err, "", "")
@@ -739,7 +820,11 @@ func executeCustomCommand(
 
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
-		if !step.When.Evaluate(conditionContext) {
+		runs, err := step.When.EvaluateE(customCommandConditionContext(commandConfig.Name, &step, i, commandConditionEnv))
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+		if !runs {
 			log.Debug("Skipping custom command step, `when` condition did not match", customCommandKeyCommand, commandConfig.Name, "step", i)
 			continue
 		}
@@ -773,6 +858,8 @@ func executeCustomCommand(
 		// Prepare template data
 		data := map[string]any{
 			"Arguments":    argumentsData,
+			"Cwd":          workDir,
+			"cwd":          workDir,
 			"Flags":        flagsData,
 			"flags":        flagsData,
 			"TrailingArgs": trailingArgs,
@@ -903,6 +990,18 @@ func executeCustomCommand(
 			}
 		}
 
+		stepEnv := step.Env
+		if atmosConfig.CaseMaps != nil {
+			stepEnv = atmosConfig.CaseMaps.ApplyCase("env", stepEnv)
+		}
+		if len(stepEnv) > 0 {
+			resolvedStepEnv, resolveErr := stepVars.ResolveEnvMap(stepEnv)
+			errUtils.CheckErrorPrintAndExit(resolveErr, "", "")
+			for key, value := range resolvedStepEnv {
+				env = envpkg.UpdateEnvVar(env, key, value)
+			}
+		}
+
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
 		commandToRun, err := stepVars.Resolve(step.Command)
@@ -914,90 +1013,109 @@ func executeCustomCommand(
 			stepType = "shell"
 		}
 
-		// Execute the step based on type.
-		//
-		// shell/exec/atmos use the legacy, cross-platform, child-reaping paths
-		// below; only genuinely-extended step types (container, input, confirm,
-		// …) route through the registered step handlers via the default case.
-		// Routing shell/atmos through the handlers regressed Windows (handlers
-		// hardcode `sh -c` → exit 126) and leaked orphaned `atmos` child
-		// processes on Linux (no process-group cleanup), so they stay on the
-		// legacy paths.
-		switch stepType {
-		case "shell":
-			// Execute shell command (backward compatible).
-			// Steps with tty/interactive attach the user's terminal so commands
-			// like `aws ssm start-session` get a real TTY and own Ctrl-C.
-			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-			err = process.RunShellStep(context.Background(), &process.ShellSessionSpec{
-				Command:     commandToRun,
-				Name:        commandName,
-				Dir:         workDir,
-				Env:         env,
-				TTY:         step.Tty,
-				Interactive: step.Interactive,
-			}, func() error {
-				return e.ExecuteShell(commandToRun, commandName, workDir, env, false)
-			})
-		case schema.TaskTypeExec:
-			// Replace the Atmos process with the command (shell exec semantics).
-			err = process.ReplaceShellSession(&process.ExecSpec{
-				Command: commandToRun,
-				Name:    fmt.Sprintf("%s-step-%d", commandConfig.Name, i),
-				Dir:     workDir,
-				Env:     env,
-			})
-		case "atmos":
-			// Execute atmos command.
-			args := strings.Fields(commandToRun)
-			execPath, execErr := os.Executable()
-			if execErr != nil {
-				err = execErr
-				break
-			}
-			err = e.ExecuteShellCommand(atmosConfig, execPath, args, workDir, env, false, "")
-		default:
-			// Check if this is an extended step type (input, confirm, choose, etc.).
-			if stepPkg.IsExtendedStepType(stepType) {
-				// Convert Task to WorkflowStep for handler compatibility.
-				workflowStep := step.ToWorkflowStep()
-				// Carry env onto the step so handlers that read step.Env (e.g. the
-				// container handler's in-container env) see it. The step's own
-				// declared `env:` had its map keys lowercased by Viper, so restore
-				// the original case from the shared env case map, then merge it over
-				// the resolved command/process env (step vars win on collisions).
-				stepOwnEnv := workflowStep.Env
-				if atmosConfig.CaseMaps != nil {
-					stepOwnEnv = atmosConfig.CaseMaps.ApplyCase("env", stepOwnEnv)
+		runStep := func() error {
+			// Execute the step based on type.
+			//
+			// shell/exec/atmos use the legacy, cross-platform, child-reaping paths
+			// below; only genuinely-extended step types (container, input, confirm,
+			// …) route through the registered step handlers via the default case.
+			// Routing shell/atmos through the handlers regressed Windows (handlers
+			// hardcode `sh -c` → exit 126) and leaked orphaned `atmos` child
+			// processes on Linux (no process-group cleanup), so they stay on the
+			// legacy paths.
+			switch stepType {
+			case "shell":
+				// Execute shell command (backward compatible).
+				// Steps with tty/interactive attach the user's terminal so commands
+				// like `aws ssm start-session` get a real TTY and own Ctrl-C.
+				commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+				return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+					Command:     commandToRun,
+					Name:        commandName,
+					Dir:         workDir,
+					Env:         env,
+					TTY:         step.Tty,
+					Interactive: step.Interactive,
+				}, func() error {
+					return e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+				})
+			case schema.TaskTypeExec:
+				// Replace the Atmos process with the command (shell exec semantics).
+				return process.ReplaceShellSession(&process.ExecSpec{
+					Command: commandToRun,
+					Name:    fmt.Sprintf("%s-step-%d", commandConfig.Name, i),
+					Dir:     workDir,
+					Env:     env,
+				})
+			case "atmos":
+				// Execute atmos command.
+				args := strings.Fields(commandToRun)
+				execPath, execErr := os.Executable()
+				if execErr != nil {
+					return execErr
 				}
-				mergedStepEnv := envSliceToMap(env)
-				for key, value := range stepOwnEnv {
-					mergedStepEnv[key] = value
-				}
-				workflowStep.Env = mergedStepEnv
-				// Propagate working directory to extended step if not already set.
-				if workflowStep.WorkingDirectory == "" {
-					workflowStep.WorkingDirectory = workDir
-				}
+				return e.ExecuteShellCommand(atmosConfig, execPath, args, workDir, env, false, "")
+			default:
+				// Check if this is an extended step type (input, confirm, choose, etc.).
+				if stepPkg.IsExtendedStepType(stepType) {
+					// Convert Task to WorkflowStep for handler compatibility.
+					workflowStep := step.ToWorkflowStep()
+					// Carry the resolved process env onto the step so handlers that read
+					// step.Env (e.g. the container handler's in-container env) see the
+					// same command/component/auth/step env used by shell and atmos steps.
+					workflowStep.Env = envSliceToMap(env)
+					// Propagate working directory to extended step if not already set.
+					if workflowStep.WorkingDirectory == "" {
+						workflowStep.WorkingDirectory = workDir
+					}
 
-				if stack, ok := flagsData["stack"].(string); ok && stack != "" {
-					executor.SetFlag("stack", stack)
-				}
+					if stack, ok := flagsData["stack"].(string); ok && stack != "" {
+						executor.SetFlag("stack", stack)
+					}
 
-				// Execute the extended step.
-				_, err = executor.Execute(context.Background(), &workflowStep)
-			} else {
-				err = fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
+					// Execute the extended step.
+					_, execErr := executor.Execute(context.Background(), &workflowStep)
+					return execErr
+				}
+				return fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
 			}
+		}
+		if step.Retry != nil {
+			err = retry.Do(context.Background(), step.Retry, runStep)
+		} else {
+			err = runStep()
 		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
 
-func customCommandConditionContext() schema.ConditionContext {
+func customCommandConditionContext(commandName string, step *schema.Task, index int, env map[string]string) schema.ConditionContext {
+	stepName := ""
+	stack := ""
+	stepEnv := env
+	if step != nil {
+		stepName = step.Name
+		stack = step.Stack
+		if len(step.Env) > 0 {
+			stepEnv = make(map[string]string, len(env))
+			for key, value := range env {
+				stepEnv[key] = value
+			}
+			for key, value := range step.Env {
+				stepEnv[key] = value
+			}
+		}
+	}
+	if stepName == "" {
+		stepName = fmt.Sprintf("step-%d", index)
+	}
 	return schema.ConditionContext{
-		CI:     telemetry.IsCI(),
-		Status: schema.ConditionPredicateSuccess,
+		CI:       telemetry.IsCI(),
+		Status:   schema.ConditionPredicateSuccess,
+		Stack:    stack,
+		Workflow: commandName,
+		Step:     stepName,
+		Env:      stepEnv,
 	}
 }
 
@@ -1115,7 +1233,7 @@ func validateAtmosConfig(opts ...AtmosValidateOption) error {
 		if !atmosConfigExists || err != nil {
 			// Return an error with context instead of printing and exiting
 			return errUtils.Build(errUtils.ErrStacksDirectoryDoesNotExist).
-				WithHintf("Stacks directory not found:  \n%s", atmosConfig.StacksBaseAbsolutePath).
+				WithExplanationf("Stacks directory not found:  \n%s", atmosConfig.StacksBaseAbsolutePath).
 				WithContext("base_path", atmosConfig.BasePath).
 				WithContext("stacks_base_path", atmosConfig.Stacks.BasePath).
 				Err()

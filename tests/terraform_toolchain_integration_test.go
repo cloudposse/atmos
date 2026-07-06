@@ -18,12 +18,14 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 )
 
+var runningInGitHubActionsAtStartup = os.Getenv("GITHUB_ACTIONS") == "true" || os.Getenv("RUNNER_OS") != ""
+
 // skipInMacOSCI skips the test if running on macOS in a CI environment.
 // These integration tests can cause timeouts on slower macOS CI runners.
 func skipInMacOSCI(t *testing.T) {
 	t.Helper()
 	isMacOS := runtime.GOOS == "darwin"
-	isCI := os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != ""
+	isCI := os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || runningInGitHubActionsAtStartup
 	if isMacOS && isCI {
 		t.Skip("Skipping toolchain integration test on macOS CI (can cause timeouts)")
 	}

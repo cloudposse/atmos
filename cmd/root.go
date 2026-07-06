@@ -58,6 +58,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
+	atmosprofile "github.com/cloudposse/atmos/pkg/profile"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -116,6 +117,8 @@ const (
 	verboseFlagName = "verbose"
 	// AnsiEscapePrefix is the ANSI escape sequence prefix.
 	ansiEscapePrefix = "\x1b["
+	// ProfileFlagName is the name of the profile flag.
+	profileFlagName = "profile"
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -456,6 +459,9 @@ var RootCmd = &cobra.Command{
 				if !isHelpRequested {
 					log.Warn(err.Error())
 				}
+			} else if isCIGitCloneBootstrapRequested() {
+				tmpConfig.CI.Enabled = true
+				log.Debug("CLI configuration error (continuing for CI git clone bootstrap)", "error", err)
 			} else if isVersionCommand() {
 				// Version command should always work, even with invalid config.
 				// Log config error but allow version command to proceed.
@@ -595,6 +601,10 @@ var RootCmd = &cobra.Command{
 				)
 			}
 		}
+
+		// Check for experimental settings (non-command features gated by config values).
+		// This extends the experimental check above to cover settings like key_delimiter.
+		checkExperimentalSettings(&tmpConfig)
 
 		// Configure lipgloss color profile based on terminal capabilities.
 		// This ensures tables and styled output degrade gracefully when piped or in non-TTY environments.
@@ -984,6 +994,56 @@ func findExperimentalParent(cmd *cobra.Command) string {
 	}
 
 	return ""
+}
+
+// checkExperimentalSettings checks if any experimental settings are enabled in the config
+// and applies the same experimental mode handling (silence/warn/error/disable) as commands.
+// This extends the experimental system to cover non-command features gated by config values.
+func checkExperimentalSettings(atmosConfig *schema.AtmosConfiguration) {
+	if atmosConfig == nil {
+		return
+	}
+
+	// Collect experimental settings that are enabled.
+	var features []string
+	if atmosConfig.Settings.YAML.KeyDelimiter != "" {
+		features = append(features, "settings.yaml.key_delimiter")
+	}
+
+	if len(features) == 0 {
+		return
+	}
+
+	experimentalMode := atmosConfig.Settings.Experimental
+	if experimentalMode == "" {
+		experimentalMode = "warn"
+	}
+
+	for _, feature := range features {
+		switch experimentalMode {
+		case "silence":
+			// Do nothing.
+		case "disable":
+			errUtils.CheckErrorPrintAndExit(
+				errUtils.Build(errUtils.ErrExperimentalDisabled).
+					WithContext("setting", feature).
+					WithHint("Enable with settings.experimental: warn").
+					Err(),
+				"", "",
+			)
+		case "warn":
+			ui.Experimental(feature)
+		case "error":
+			ui.Experimental(feature)
+			errUtils.CheckErrorPrintAndExit(
+				errUtils.Build(errUtils.ErrExperimentalRequiresIn).
+					WithContext("setting", feature).
+					WithHint("Enable with settings.experimental: warn").
+					Err(),
+				"", "",
+			)
+		}
+	}
 }
 
 // isTopLevelCommand returns true if cmd is a direct child of the root command.
@@ -1440,6 +1500,12 @@ func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration
 		return nil
 	}
 
+	if isCIGitCloneBootstrapRequested() {
+		atmosConfig.CI.Enabled = true
+		log.Debug("Warning: CLI configuration error (continuing for CI git clone bootstrap)", "error", initErr)
+		return nil
+	}
+
 	if errors.Is(initErr, cfg.NotFound) {
 		// Config not found is acceptable for some commands.
 		return nil
@@ -1469,6 +1535,117 @@ func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration
 	return initErr
 }
 
+func isCIGitCloneBootstrapRequested() bool {
+	return ci.Detect() != nil && argsRequestNoArgGitClone(os.Args[1:])
+}
+
+const (
+	rootFlagChdirShort       = "-C"
+	rootFlagChdirShortPrefix = "-C="
+)
+
+var (
+	gitCloneBootstrapValueFlags = map[string]struct{}{
+		"--repo-uri":       {},
+		"-r":               {},
+		"--branch":         {},
+		"-b":               {},
+		"--remote":         {},
+		"--workdir":        {},
+		"--filter":         {},
+		"--depth":          {},
+		rootFlagChdirShort: {},
+	}
+	rootBootstrapValueFlags = map[string]struct{}{
+		"--chdir":          {},
+		rootFlagChdirShort: {},
+		"--profile":        {},
+		"--config":         {},
+		"--config-path":    {},
+		"--base-path":      {},
+		"--logs-level":     {},
+		"--logs-file":      {},
+		"--use-version":    {},
+	}
+)
+
+func argsRequestNoArgGitClone(args []string) bool {
+	args = stripRootFlagsForBootstrapCheck(args)
+	if len(args) < 2 || args[0] != "git" || args[1] != "clone" {
+		return false
+	}
+	return gitCloneArgsAllowBootstrap(args[2:])
+}
+
+type bootstrapArgAction int
+
+const (
+	bootstrapArgAllow bootstrapArgAction = iota
+	bootstrapArgConsumeNext
+	bootstrapArgReject
+)
+
+func gitCloneArgsAllowBootstrap(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		switch gitCloneBootstrapArgAction(args[i]) {
+		case bootstrapArgReject:
+			return false
+		case bootstrapArgConsumeNext:
+			i++
+		}
+	}
+	return true
+}
+
+func gitCloneBootstrapArgAction(arg string) bootstrapArgAction {
+	switch {
+	case arg == "--" || arg == "--all":
+		return bootstrapArgReject
+	case flagTakesSeparateValue(arg, gitCloneBootstrapValueFlags):
+		return bootstrapArgConsumeNext
+	case flagHasInlineValue(arg, gitCloneBootstrapValueFlags), shortChdirHasInlineValue(arg), strings.HasPrefix(arg, "-"):
+		return bootstrapArgAllow
+	default:
+		return bootstrapArgReject
+	}
+}
+
+func stripRootFlagsForBootstrapCheck(args []string) []string {
+	for len(args) > 0 {
+		arg := args[0]
+		switch {
+		case flagTakesSeparateValue(arg, rootBootstrapValueFlags):
+			if len(args) < 2 {
+				return nil
+			}
+			args = args[2:]
+		case flagHasInlineValue(arg, rootBootstrapValueFlags):
+			args = args[1:]
+		default:
+			return args
+		}
+	}
+	return args
+}
+
+func flagTakesSeparateValue(arg string, flags map[string]struct{}) bool {
+	_, ok := flags[arg]
+	return ok
+}
+
+func flagHasInlineValue(arg string, flags map[string]struct{}) bool {
+	for flag := range flags {
+		if strings.HasPrefix(arg, flag+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func shortChdirHasInlineValue(arg string) bool {
+	return strings.HasPrefix(arg, rootFlagChdirShort) && len(arg) > len(rootFlagChdirShort)
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // Execute runs the root CLI command and performs one-time global startup tasks.
 // It processes a leading --chdir before loading configuration, loads and wires the CLI
@@ -1494,7 +1671,7 @@ func Execute() error {
 	// Here we need the custom commands from the config.
 	// Note: --version flag is now handled in main.go before calling Execute().
 	var initErr error
-	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, initErr = cfg.InitCliConfig(cfg.EarlyConfigAndStacksInfoFromArgs(os.Args[1:]), false)
 
 	// Set atmosConfig for commands that need access to config.
 	version.SetAtmosConfig(&atmosConfig)
@@ -1797,6 +1974,12 @@ func init() {
 	//   - Consistent with other command builders
 	//   - Testable flag precedence
 	globalParser := flags.NewGlobalOptionsBuilder().Build()
+
+	// Set profile completion function on the flag registry to avoid import cycle.
+	// This must be done before RegisterPersistentFlags() so the completion
+	// function is registered when the flag is registered.
+	globalParser.Registry().SetCompletionFunc(profileFlagName, profileFlagCompletion)
+
 	globalParser.RegisterPersistentFlags(RootCmd)
 	if err := globalParser.BindToViper(viper.GetViper()); err != nil {
 		log.Error("Failed to bind global flags to viper", "error", err)
@@ -2013,6 +2196,39 @@ func initCobraConfig() {
 
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	})
+}
+
+// profileFlagCompletion provides shell completion for the global --profile flag.
+func profileFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	defer perf.Track(nil, "cmd.profileFlagCompletion")()
+
+	// Parse global flags to honor config selection flags.
+	v := viper.GetViper()
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
+	}
+
+	atmosCfg, err := cfg.InitCliConfig(configAndStacksInfo, false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	manager := atmosprofile.NewProfileManager()
+	profiles, err := manager.ListProfiles(&atmosCfg)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var names []string
+	for _, p := range profiles {
+		names = append(names, p.Name)
+	}
+
+	return names, cobra.ShellCompDirectiveNoFileComp
 }
 
 // https://www.sobyte.net/post/2021-12/create-cli-app-with-cobra/
