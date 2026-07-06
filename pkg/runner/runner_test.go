@@ -639,3 +639,21 @@ func TestRunAll_RejectsNonFinalExecTask(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, schema.ErrExecStepNotLast)
 }
+
+func TestRunAll_RejectsInvalidWhenBeforeRunningTasks(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	tasks := Tasks{
+		{Name: "before-invalid", Command: "echo should not run", Type: schema.TaskTypeShell},
+		{Name: "invalid", Command: "echo invalid", Type: schema.TaskTypeShell, When: schema.MustCondition("failure")},
+	}
+
+	// Validation must fail before any task executes (no mock expectations).
+	err := RunAll(ctx, tasks, mockRunner, Options{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, schema.ErrInvalidWhenCondition)
+}

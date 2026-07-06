@@ -261,11 +261,13 @@ func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts Options
 	if err := schema.ValidateExecTasks(tasks); err != nil {
 		return err
 	}
-
-	for i, task := range tasks {
-		if err := schema.ValidateStepCondition(task.When); err != nil {
+	for i := range tasks {
+		if err := schema.ValidateStepCondition(tasks[i].When); err != nil {
 			return err
 		}
+	}
+
+	for i, task := range tasks {
 		runs, err := task.When.EvaluateWithImplicitSuccessE(taskConditionContext(&task, i, &opts, schema.ConditionPredicateSuccess))
 		if err != nil {
 			return err
