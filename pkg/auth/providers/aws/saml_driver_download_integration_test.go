@@ -21,8 +21,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-const playwrightIntegrationDriverVersion = "1.60.0"
-
 // TestPlaywrightDriverDownload_Integration validates that the actual Playwright driver download works.
 // This is an integration test that downloads real browser drivers (~100-300MB).
 // It is skipped by default and must be explicitly enabled with:
@@ -100,19 +98,21 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 	// Test the actual Playwright driver installation.
 	t.Log("Starting Playwright driver download (this may take 1-2 minutes)...")
 
-	driverDir := filepath.Join(testHomeDir, ".cache", "ms-playwright-go", playwrightIntegrationDriverVersion)
+	// Pre-seed the driver from the npm registry and nodejs.org, exactly as the
+	// SAML provider does before invoking saml2aws: playwright-go's own driver
+	// download hits a retired CDN and 404s, so the seeded driver must make
+	// playwright.Install skip that path.
+	require.NoError(t, ensurePlaywrightDriver(), "Playwright driver pre-seed should succeed")
+
 	runOptions := playwright.RunOptions{
-		DriverDirectory:     driverDir,
 		SkipInstallBrowsers: false,
 		Browsers:            []string{"chromium"}, // Only download Chromium to save time.
 	}
 
-	driver, err := playwright.NewDriver(&runOptions)
-	require.NoError(t, err)
-	driver.Version = playwrightIntegrationDriverVersion
+	skipIfPlaywrightDriverUnavailable(t, &runOptions)
 
-	skipIfPlaywrightDriverUnavailable(t, driver.Version)
-	require.NoError(t, driver.Install(), "Playwright driver installation should succeed")
+	err = playwright.Install(&runOptions)
+	require.NoError(t, err, "Playwright driver installation should succeed")
 
 	t.Log("Playwright drivers downloaded successfully")
 
@@ -232,8 +232,11 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 // version and platform stayed available); that is an upstream outage, not an Atmos regression,
 // so the test skips instead of failing. Genuine installation bugs still fail the test because
 // this pre-flight only checks that the artifact exists.
-func skipIfPlaywrightDriverUnavailable(t *testing.T, driverVersion string) {
+func skipIfPlaywrightDriverUnavailable(t *testing.T, runOptions *playwright.RunOptions) {
 	t.Helper()
+
+	driver, err := playwright.NewDriver(runOptions)
+	require.NoError(t, err, "should be able to construct the Playwright driver")
 
 	// Mirror the platform suffix mapping from playwright-go's getDriverURLs.
 	var driverPlatform string
@@ -250,7 +253,7 @@ func skipIfPlaywrightDriverUnavailable(t *testing.T, driverVersion string) {
 		driverPlatform = "linux"
 	}
 
-	url := fmt.Sprintf("https://cdn.playwright.dev/builds/driver/playwright-%s-%s.zip", driverVersion, driverPlatform)
+	url := fmt.Sprintf("https://cdn.playwright.dev/builds/driver/playwright-%s-%s.zip", driver.Version, driverPlatform)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

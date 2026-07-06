@@ -71,27 +71,37 @@ func TestResolveVerifyPlanMode(t *testing.T) {
 	})
 }
 
-// writeTempAtmosProject creates a minimal, self-contained atmos project (atmos.yaml
-// + stacks/ + a terraform component dir) in a temp dir and chdirs into it so
-// cfg.InitCliConfig succeeds. Planfile storage is always configured (so
-// verifyStoredPlanForDeploy runs past its storage gate); the verify argument, when
-// non-empty, sets components.terraform.planfiles.verify. It returns the deploy info
-// that resolves to the created component.
+// writeTempAtmosProject creates a minimal, self-contained atmos project with
+// planfile storage configured (so verifyStoredPlanForDeploy runs past its storage
+// gate); the verify argument, when non-empty, sets
+// components.terraform.planfiles.verify. It returns the deploy info that resolves
+// to the created component.
 func writeTempAtmosProject(t *testing.T, verify string) *schema.ConfigAndStacksInfo {
+	t.Helper()
+
+	planfiles := "    planfiles:\n      priority:\n        - github\n"
+	if verify != "" {
+		planfiles += "      verify: " + verify + "\n"
+	}
+	return writeTempAtmosProjectWithPlanfiles(t, planfiles)
+}
+
+// writeTempAtmosProjectWithPlanfiles creates a minimal, self-contained atmos
+// project (atmos.yaml + stacks/ + a terraform component dir) in a temp dir and
+// chdirs into it so cfg.InitCliConfig succeeds. The planfilesYAML argument is spliced verbatim
+// under components.terraform (empty means no planfiles section, i.e. planfile
+// storage unconfigured). It returns the deploy info that resolves to the created
+// component.
+func writeTempAtmosProjectWithPlanfiles(t *testing.T, planfilesYAML string) *schema.ConfigAndStacksInfo {
 	t.Helper()
 	tmpDir := t.TempDir()
 
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "stacks"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "components", "terraform", "mycomponent"), 0o755))
 
-	// Always configure planfile storage so the storage gate is satisfied.
-	planfiles := "    planfiles:\n      priority:\n        - github\n"
-	if verify != "" {
-		planfiles += "      verify: " + verify + "\n"
-	}
 	atmosYAML := "base_path: \".\"\n" +
 		"stacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\n" +
-		"components:\n  terraform:\n    base_path: components/terraform\n" + planfiles
+		"components:\n  terraform:\n    base_path: components/terraform\n" + planfilesYAML
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
 
 	// A parseable stack file so InitCliConfig's import glob succeeds (an empty
@@ -139,20 +149,54 @@ func TestVerifyStoredPlanForDeploy(t *testing.T) {
 	t.Run("deploy without planfile storage is a silent no-op", func(t *testing.T) {
 		// Regression guard: a deploy with no planfile storage configured must not
 		// run verification or emit a "no stored planfile" warning (the storage gate).
-		tmpDir := t.TempDir()
-		require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "stacks"), 0o755))
-		require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "components", "terraform", "mycomponent"), 0o755))
-		atmosYAML := "base_path: \".\"\n" +
-			"stacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\n" +
-			"components:\n  terraform:\n    base_path: components/terraform\n" // no planfiles section.
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYAML), 0o644))
-		stackYAML := "vars:\n  stage: test-stack\ncomponents:\n  terraform:\n    mycomponent:\n      vars:\n        foo: bar\n"
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "stacks", "test-stack.yaml"), []byte(stackYAML), 0o644))
-		t.Chdir(tmpDir)
-		t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
-
-		info := &schema.ConfigAndStacksInfo{Stack: "test-stack", ComponentFromArg: "mycomponent", Component: "mycomponent", FinalComponent: "mycomponent", ContextPrefix: "test-stack"}
+		info := writeTempAtmosProjectWithPlanfiles(t, "") // no planfiles section.
+		info.VerifyPlanMode = ""                          // flag unset.
 		assert.NoError(t, verifyStoredPlanForDeploy("deploy", info))
+	})
+
+	t.Run("explicit --verify-plan without planfile storage errors", func(t *testing.T) {
+		// An explicit verification request that cannot be honored must fail loudly,
+		// not silently apply an unverified fresh plan.
+		info := writeTempAtmosProjectWithPlanfiles(t, "") // no planfiles section.
+		info.VerifyPlanMode = schema.PlanfileVerifyFail   // --verify-plan(=true).
+		err := verifyStoredPlanForDeploy("deploy", info)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrPlanfileStorageNotConfigured)
+	})
+
+	t.Run("env-var verify-plan without planfile storage errors", func(t *testing.T) {
+		// ATMOS_TERRAFORM_VERIFY_PLAN=true resolves to the same explicit request as
+		// the CLI flag and must error the same way without storage.
+		info := writeTempAtmosProjectWithPlanfiles(t, "") // no planfiles section.
+		t.Setenv("ATMOS_TERRAFORM_VERIFY_PLAN", "true")
+		info.VerifyPlanMode = resolveVerifyPlanMode(newVerifyPlanCmd())
+		err := verifyStoredPlanForDeploy("deploy", info)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrPlanfileStorageNotConfigured)
+	})
+
+	t.Run("explicit --verify-plan=false without planfile storage is a no-op", func(t *testing.T) {
+		info := writeTempAtmosProjectWithPlanfiles(t, "") // no planfiles section.
+		info.VerifyPlanMode = schema.PlanfileVerifyOff    // --verify-plan=false.
+		assert.NoError(t, verifyStoredPlanForDeploy("deploy", info))
+	})
+
+	t.Run("config-set verify without planfile storage warns but proceeds", func(t *testing.T) {
+		// verify set in atmos.yaml with no storage is a misconfiguration, but
+		// pre-existing configs may carry it: warn (in logs), do not block.
+		info := writeTempAtmosProjectWithPlanfiles(t, "    planfiles:\n      verify: fail\n")
+		info.VerifyPlanMode = "" // flag unset.
+		assert.NoError(t, verifyStoredPlanForDeploy("deploy", info))
+	})
+
+	t.Run("explicit --verify-plan with storage but no stored plan requires it", func(t *testing.T) {
+		// Regression guard: with storage configured the explicit flag keeps its
+		// existing behavior — a missing stored plan is required and blocks.
+		info := writeTempAtmosProject(t, "")
+		info.VerifyPlanMode = schema.PlanfileVerifyFail // --verify-plan(=true).
+		err := verifyStoredPlanForDeploy("deploy", info)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrStoredPlanfileMissing)
 	})
 
 	t.Run("deploy with no stored planfile does not block (verify off)", func(t *testing.T) {

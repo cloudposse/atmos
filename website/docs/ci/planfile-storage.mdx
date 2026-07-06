@@ -66,6 +66,10 @@ components:
 :::tip
 If `components.terraform.planfiles` is not configured, planfile storage operations are silently
 skipped. CI summaries and status checks still work without planfile storage.
+
+The one exception: explicitly requesting verification with `--verify-plan` (or
+`ATMOS_TERRAFORM_VERIFY_PLAN=true`) errors when planfile storage is not configured — there is no
+stored plan to verify against, and the flag cannot stand in for the storage settings it depends on.
 :::
 
 ## Using GitHub Artifacts in GitHub Actions

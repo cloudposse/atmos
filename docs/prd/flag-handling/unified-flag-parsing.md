@@ -2609,7 +2609,7 @@ func NewTerraformCmd(
 - [Sting of the Viper: Cobra and Viper Integration](https://carolynvanslyck.com/blog/2020/08/sting-of-the-viper/)
 - [Docker CLI TopLevelCommand Pattern](https://github.com/docker/cli/blob/master/cli/cobra.go)
 - [Testing Flag Parsing in Go](https://eli.thegreenplace.net/2020/testing-flag-parsing-in-go-programs/)
-- [Functional options for friendly APIs](https://dave.cheney.net/2014/10/17/functional-options-for-friendly-apis)
+- [Functional Options Pattern](https://dave.cheney.net/2014/10/17/functional-options-for-friendly-apis)
 - Atmos existing PRDs:
   - `docs/prd/command-registry-pattern.md` - Command registration system
   - `docs/prd/testability-refactoring-strategy.md` - Testing approach and coverage
