@@ -1,11 +1,13 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"text/template"
 
 	"mvdan.cc/sh/v3/shell"
 
@@ -268,7 +270,11 @@ func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts Options
 	}
 
 	for i, task := range tasks {
-		runs, err := task.When.EvaluateWithImplicitSuccessE(taskConditionContext(&task, i, &opts, schema.ConditionPredicateSuccess))
+		conditionContext, err := taskConditionContext(&task, i, &opts, schema.ConditionPredicateSuccess)
+		if err != nil {
+			return err
+		}
+		runs, err := task.When.EvaluateWithImplicitSuccessE(conditionContext)
 		if err != nil {
 			return err
 		}
@@ -282,7 +288,7 @@ func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts Options
 	return nil
 }
 
-func taskConditionContext(task *Task, index int, opts *Options, status string) schema.ConditionContext {
+func taskConditionContext(task *Task, index int, opts *Options, status string) (schema.ConditionContext, error) {
 	env := envpkg.EnvironToMap()
 	if env == nil {
 		env = make(map[string]string)
@@ -302,7 +308,11 @@ func taskConditionContext(task *Task, index int, opts *Options, status string) s
 			stack = task.Stack
 		}
 		stepName = task.Name
-		for key, value := range task.Env {
+		resolvedEnv, err := resolveTaskConditionEnv(task.Env, env, opts)
+		if err != nil {
+			return schema.ConditionContext{}, err
+		}
+		for key, value := range resolvedEnv {
 			env[key] = value
 		}
 	}
@@ -316,7 +326,39 @@ func taskConditionContext(task *Task, index int, opts *Options, status string) s
 		Stack:  stack,
 		Step:   stepName,
 		Env:    env,
+	}, nil
+}
+
+func resolveTaskConditionEnv(taskEnv map[string]string, env map[string]string, opts *Options) (map[string]string, error) {
+	if len(taskEnv) == 0 {
+		return nil, nil
 	}
+
+	data := map[string]any{
+		"Env": env,
+		"env": env,
+	}
+	if opts != nil && opts.StepVars != nil {
+		for key, value := range opts.StepVars.TemplateData() {
+			data[key] = value
+		}
+		data["Env"] = env
+		data["env"] = env
+	}
+
+	resolved := make(map[string]string, len(taskEnv))
+	for key, value := range taskEnv {
+		tmpl, err := template.New("task-condition-env-" + key).Parse(value)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse env var %s: %w", key, err)
+		}
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, data); err != nil {
+			return nil, fmt.Errorf("failed to resolve env var %s: %w", key, err)
+		}
+		resolved[key] = buf.String()
+	}
+	return resolved, nil
 }
 
 // taskName returns a display name for the task.

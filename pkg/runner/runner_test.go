@@ -342,6 +342,31 @@ func TestRunAll_WhenConditionUsesEnv(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRunAll_WhenConditionUsesResolvedTaskEnv(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	tasks := Tasks{
+		{
+			Name:    "templated-env",
+			Command: "echo rendered",
+			Type:    "shell",
+			Env: map[string]string{
+				"TARGET_ENV": "{{ .Env.BASE_ENV }}-suffix",
+			},
+			When: schema.MustCondition(`env["TARGET_ENV"] == "base-suffix"`),
+		},
+	}
+
+	mockRunner.EXPECT().RunShell(ctx, "echo rendered", "templated-env", ".", []string{"BASE_ENV=base"}, false).Return(nil)
+
+	err := RunAll(ctx, tasks, mockRunner, Options{Env: []string{"BASE_ENV=base"}})
+	require.NoError(t, err)
+}
+
 func TestAppendStackArg_NoSeparator(t *testing.T) {
 	args := []string{"terraform", "plan", "vpc"}
 	result := appendStackArg(args, "dev")

@@ -1,12 +1,15 @@
 package asciicast
 
 import (
+	"image/color"
 	"image/jpeg"
 	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestRenderASCIIWritesPlainText(t *testing.T) {
@@ -62,6 +65,28 @@ func TestRenderHTMLMapsANSIBlueToAtmosBlue(t *testing.T) {
 	}
 	if count := strings.Count(string(got), "color:"+atmosBlue); count != 2 {
 		t.Fatalf("atmos blue occurrences = %d, want 2:\n%s", count, got)
+	}
+}
+
+func TestImageColorMapsANSIBlueToAtmosBlue(t *testing.T) {
+	if got := imageColor(ansi.Blue); got != imageAtmosBlue {
+		t.Fatalf("blue = %#v, want Atmos blue %#v", got, imageAtmosBlue)
+	}
+	if got := imageColor(ansi.BrightBlue); got != imageAtmosBlue {
+		t.Fatalf("bright blue = %#v, want Atmos blue %#v", got, imageAtmosBlue)
+	}
+
+	red := imageColor(ansi.Red)
+	if red == imageAtmosBlue {
+		t.Fatal("red should not map to Atmos blue")
+	}
+}
+
+func TestDimColorPreservesAlpha(t *testing.T) {
+	got := dimColor(color.RGBA{R: 100, G: 50, B: 25, A: 200})
+	want := color.RGBA{R: 60, G: 30, B: 15, A: 200}
+	if got != want {
+		t.Fatalf("dim color = %#v, want %#v", got, want)
 	}
 }
 

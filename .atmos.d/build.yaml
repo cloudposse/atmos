@@ -2,7 +2,7 @@ commands:
   - name: build
     description: Build and documentation commands for Atmos development
     default: binary
-    working_directory: !repo-root .
+    working_directory: &repo_root !repo-root .
     env: &build_env
       - key: GOTOOLCHAIN
         value: auto
@@ -35,7 +35,7 @@ commands:
     commands:
       - name: deps
         description: Download Go module dependencies
-        working_directory: !repo-root .
+        working_directory: *repo_root
         env:
           - key: GOTOOLCHAIN
             value: auto
@@ -44,7 +44,7 @@ commands:
 
       - name: binary
         description: Build the Atmos binary
-        working_directory: !repo-root .
+        working_directory: *repo_root
         env: *build_env
         flags:
           - name: target
@@ -63,7 +63,7 @@ commands:
 
       - name: version
         description: Print the version from an already-built Atmos binary
-        working_directory: !repo-root .
+        working_directory: *repo_root
         env:
           - key: ATMOS_BUILD_TARGET
             value: "{{ .Flags.target }}"
@@ -94,7 +94,7 @@ commands:
 
       - name: readme
         description: Regenerate README.md from README.yaml
-        working_directory: !repo-root .
+        working_directory: *repo_root
         env:
           - key: GOTOOLCHAIN
             value: auto

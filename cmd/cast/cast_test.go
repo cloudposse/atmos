@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	flagspkg "github.com/cloudposse/atmos/pkg/flags"
@@ -118,6 +120,67 @@ func TestRenderOptionsFromFlagsUnsupportedExtension(t *testing.T) {
 	_, _, err := renderOptionsFromFlags(renderCmd, []string{"input.cast"})
 	if !errors.Is(err, errUtils.ErrUnsupportedCastOutputExtension) {
 		t.Fatalf("error = %v, want ErrUnsupportedCastOutputExtension", err)
+	}
+}
+
+func TestRenderOptionsFromBoundFlags(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "out.png")
+	viper.Set(renderFlagOutput, output)
+	viper.Set(renderFlagFormat, renderFormatPNG)
+	t.Cleanup(func() {
+		viper.Set(renderFlagOutput, "")
+		viper.Set(renderFlagFormat, "")
+	})
+
+	opts, err := renderOptionsFromBoundFlags()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts != (asciicast.RenderOptions{PNG: output}) {
+		t.Fatalf("options = %#v, want PNG output", opts)
+	}
+}
+
+func TestRenderOptionsFromBoundFlagsMissingOutput(t *testing.T) {
+	viper.Set(renderFlagOutput, "")
+	viper.Set(renderFlagFormat, "")
+	t.Cleanup(func() {
+		viper.Set(renderFlagOutput, "")
+		viper.Set(renderFlagFormat, "")
+	})
+
+	_, err := renderOptionsFromBoundFlags()
+	if !errors.Is(err, errUtils.ErrMissingRenderOutput) {
+		t.Fatalf("error = %v, want ErrMissingRenderOutput", err)
+	}
+}
+
+func TestCommandProvider(t *testing.T) {
+	provider := &CommandProvider{}
+
+	if provider.GetCommand() != castCmd {
+		t.Fatal("provider returned unexpected command")
+	}
+	if provider.GetName() != "cast" {
+		t.Fatalf("name = %q, want cast", provider.GetName())
+	}
+	if provider.GetGroup() != "Other Commands" {
+		t.Fatalf("group = %q, want Other Commands", provider.GetGroup())
+	}
+	if provider.GetFlagsBuilder() != nil {
+		t.Fatal("expected nil flags builder")
+	}
+	if provider.GetPositionalArgsBuilder() != nil {
+		t.Fatal("expected nil positional args builder")
+	}
+	if provider.GetCompatibilityFlags() != nil {
+		t.Fatal("expected nil compatibility flags")
+	}
+	if provider.GetAliases() != nil {
+		t.Fatal("expected nil aliases")
+	}
+	if provider.IsExperimental() {
+		t.Fatal("expected non-experimental provider")
 	}
 }
 

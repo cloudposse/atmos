@@ -6,6 +6,7 @@
   <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg">
   <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" width="220px" align="right">
 </picture></a>
+
 [![failed](https://shields.io/badge/PLAN-FAILED-ff0000?style=for-the-badge)](#user-content-result-dev-broken)
 <details><summary><a id="result-dev-broken" />:warning: Error summary</summary>
 

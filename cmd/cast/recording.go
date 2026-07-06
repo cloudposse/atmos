@@ -152,7 +152,7 @@ func skipRecording(cmd *cobra.Command, request recordingRequest) bool {
 	if request.source == recordingSourceNone {
 		return true
 	}
-	explicit := request.source == recordingSourceFlag || request.source == recordingSourceEnv
+	explicit := request.hasPath()
 	if isCompletionCommand(cmd) && !explicit {
 		return true
 	}

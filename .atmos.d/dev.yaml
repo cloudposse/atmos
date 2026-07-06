@@ -140,3 +140,43 @@ commands:
             steps:
               - type: atmos
                 command: test generate-auth-http-mocks
+
+          - name: snapshots
+            description: Regenerate CLI golden snapshots
+            working_directory: !repo-root .
+            env:
+              - key: GOTOOLCHAIN
+                value: auto
+              - key: ATMOS_SNAPSHOT_FILTER
+                value: "{{ .Flags.filter }}"
+            flags:
+              - name: all
+                type: bool
+                description: Regenerate all CLI golden snapshots
+                default: false
+              - name: filter
+                type: string
+                description: Go test -run regex for focused CLI snapshot regeneration
+                default: ""
+            steps:
+              - type: shell
+                command: |
+                  set -eu
+                  filter="${ATMOS_SNAPSHOT_FILTER:-}"
+
+                  selected=0
+                  [ "{{ .Flags.all }}" = "true" ] && selected=$((selected + 1))
+                  [ -n "$filter" ] && selected=$((selected + 1))
+
+                  if [ "$selected" -ne 1 ]; then
+                    echo "Usage: atmos dev generate snapshots --all" >&2
+                    echo "   or: atmos dev generate snapshots --filter '<go-test-run-regex>'" >&2
+                    echo "Select exactly one of --all or --filter." >&2
+                    exit 1
+                  fi
+
+                  if [ "{{ .Flags.all }}" = "true" ]; then
+                    go test ./tests -v -count=1 -timeout 40m -regenerate-snapshots
+                  else
+                    go test ./tests -v -count=1 -timeout 40m -run "$filter" -regenerate-snapshots
+                  fi

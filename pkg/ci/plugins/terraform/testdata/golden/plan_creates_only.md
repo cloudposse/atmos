@@ -5,7 +5,9 @@
   <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg">
   <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" width="220px" align="right">
-</picture></a> [![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#user-content-create-dev-us-east-1-vpc)
+</picture></a>
+
+[![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#user-content-create-dev-us-east-1-vpc)
 <details><summary><a id="result-dev-us-east-1-vpc" />Plan: 3 to add, 0 to change, 0 to destroy.</summary>
 
 <br/>

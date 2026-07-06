@@ -38,6 +38,17 @@ func TestCommandSlugSkipsOnlyExactAtmosBinary(t *testing.T) {
 	}
 }
 
+func TestRecorderWidth(t *testing.T) {
+	if got := (*Recorder)(nil).Width(); got != 0 {
+		t.Fatalf("nil recorder width = %d, want 0", got)
+	}
+
+	rec := &Recorder{width: 132}
+	if got := rec.Width(); got != 132 {
+		t.Fatalf("width = %d, want 132", got)
+	}
+}
+
 func TestStartFailsWhenExplicitPathExists(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "demo.cast")
 	if err := os.WriteFile(path, []byte("exists"), 0o644); err != nil {
