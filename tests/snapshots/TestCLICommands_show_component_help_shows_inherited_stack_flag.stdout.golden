@@ -5,9 +5,9 @@ Execute 'show component' command
 
 USAGE
 
-                                    
-    $ atmos show component [flags]  
-                                    
+
+    $ atmos show component [flags]
+
 
 FLAGS
 

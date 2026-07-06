@@ -124,6 +124,7 @@ var (
 	ErrAuthConsole            = errors.New("auth console operation failed")
 	ErrProviderNotSupported   = errors.New("provider does not support this operation")
 	ErrUnknownServiceAlias    = errors.New("unknown service alias")
+	ErrUnknownHelpTopic       = errors.New("unknown help topic")
 	ErrTTYRequired            = errors.New("requires a TTY")
 	ErrInvalidAuthManagerType = errors.New("invalid authManager type")
 

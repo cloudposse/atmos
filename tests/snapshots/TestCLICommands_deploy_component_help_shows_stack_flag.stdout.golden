@@ -5,9 +5,9 @@ Deploy a component to a stack
 
 USAGE
 
-                                      
-    $ atmos deploy component [flags]  
-                                      
+
+    $ atmos deploy component [flags]
+
 
 FLAGS
 

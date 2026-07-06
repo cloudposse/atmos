@@ -33,6 +33,12 @@ const (
 	spaceChar                 = " " // Space character for padding.
 )
 
+// Environment variable name/value constants used by help rendering tests to force a deterministic, colorless output.
+const (
+	envNoColor = "NO_COLOR"
+	valueOne   = "1"
+)
+
 // Command annotation constants.
 const (
 	annotationExperimental  = "experimental"
@@ -567,7 +573,11 @@ func renderCompatFlags(w io.Writer, flags map[string]compat.CompatibilityFlag, f
 // renderer then inherits the resulting global profile via ui.NewRenderer(). Help must
 // render correctly even when the Atmos configuration is missing or invalid.
 func applyColoredHelpTemplate(cmd *cobra.Command) {
-	defer perf.Track(nil, "cmd.applyColoredHelpTemplate")()
+	applyColoredHelpTemplateForTopic(cmd, helpTopicRequest{valid: true})
+}
+
+func applyColoredHelpTemplateForTopic(cmd *cobra.Command, topic helpTopicRequest) {
+	defer perf.Track(nil, "cmd.applyColoredHelpTemplateForTopic")()
 
 	// Refine the global color profile from the parsed --no-color/--force-color flags.
 	configureEarlyColorProfile(cmd)
@@ -608,17 +618,7 @@ func applyColoredHelpTemplate(cmd *cobra.Command) {
 
 	// Set custom help function.
 	cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
-		printLogoAndVersion(ctx.writer, ctx.styles)
-		printDescription(ctx.writer, c, ctx.styles)
-		printUsageSection(ctx.writer, c, ctx.renderer, ctx.styles)
-		printAliases(ctx.writer, c, ctx.styles)
-		printSubcommandAliases(ctx, c)
-		printExamples(ctx.writer, c, ctx.renderer, ctx.styles)
-		printAvailableCommands(ctx, c)
-		printConfigAliases(ctx, c)
-		printFlags(ctx.writer, c, ctx.atmosConfig, ctx.styles)
-		printCompatibilityFlags(ctx.writer, c, ctx.styles)
-		printFooter(ctx.writer, c, ctx.styles)
+		printHelpForTopic(ctx, c, topic)
 	})
 }
 

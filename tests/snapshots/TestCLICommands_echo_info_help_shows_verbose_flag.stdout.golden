@@ -5,9 +5,9 @@ Echo information with optional verbose output
 
 USAGE
 
-                               
-    $ atmos echo info [flags]  
-                               
+
+    $ atmos echo info [flags]
+
 
 FLAGS
 
