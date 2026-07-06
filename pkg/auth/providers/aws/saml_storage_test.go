@@ -461,27 +461,24 @@ func TestSAMLProvider_BrowserSetupGatedOnDriverType(t *testing.T) {
 
 func TestSAMLProvider_Authenticate_BrowserGateCreatesDir(t *testing.T) {
 	// Verify the browser gate in Authenticate: when driver is "Browser",
-	// the storage directory is created. Uses a non-download config so
-	// saml2aws.NewSAMLClient is fast (no Playwright initialization).
+	// the storage setup path creates the directory. Keep this focused on
+	// setupBrowserAutomation rather than the full saml2aws browser runtime:
+	// on Windows, Playwright can leave node.exe locked under t.TempDir and
+	// make Go's automatic TempDir cleanup fail even after the test body passes.
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
 	homedir.Reset()
 
-	browserPath := filepath.Join(homeDir, "test-browser")
-	require.NoError(t, os.WriteFile(browserPath, []byte("#!/bin/sh\nexit 0\n"), 0o755))
-
 	p := &samlProvider{
 		name:                      "test",
-		config:                    &schema.Provider{Driver: "Browser", BrowserExecutablePath: browserPath},
+		config:                    &schema.Provider{Driver: "Browser"},
 		url:                       "https://idp.example.com/saml",
 		region:                    "us-east-1",
 		RoleToAssumeFromAssertion: "arn:aws:iam::123456789012:role/test",
 	}
 
-	// Authenticate fails downstream (no real IDP), but the browser gate
-	// runs first and creates the storage directory.
-	_, _ = p.Authenticate(context.TODO())
+	require.NoError(t, p.setupBrowserAutomation())
 
 	saml2awsDir := filepath.Join(homeDir, ".aws", "saml2aws")
 	info, err := os.Stat(saml2awsDir)
