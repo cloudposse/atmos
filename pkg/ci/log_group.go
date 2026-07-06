@@ -1,7 +1,9 @@
 package ci
 
 import (
+	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -19,20 +21,31 @@ func StartLogGroup(title string) func() {
 	if title == "" {
 		return func() {}
 	}
+	if os.Getenv(logGroupSentinelEnvVar) != "" {
+		return func() {}
+	}
+	if atomic.AddInt32(&logGroupDepth, 1) > 1 {
+		atomic.AddInt32(&logGroupDepth, -1)
+		return func() {}
+	}
 
 	p := Detect()
 	if p == nil {
+		atomic.AddInt32(&logGroupDepth, -1)
 		return func() {}
 	}
 	g, ok := p.(provider.LogGrouper)
 	if !ok {
+		atomic.AddInt32(&logGroupDepth, -1)
 		return func() {}
 	}
 	if err := g.StartLogGroup(title); err != nil {
+		atomic.AddInt32(&logGroupDepth, -1)
 		log.Debug("Failed to start CI log group", "provider", p.Name(), "title", title, "error", err)
 		return func() {}
 	}
 	return func() {
+		defer atomic.AddInt32(&logGroupDepth, -1)
 		if err := g.EndLogGroup(); err != nil {
 			log.Debug("Failed to end CI log group", "provider", p.Name(), "title", title, "error", err)
 		}

@@ -53,6 +53,12 @@ const executableBits os.FileMode = 0o111
 // every log line so log search by `kind=trivy` etc. works consistently.
 const logKeyKind = "kind"
 
+// shouldPropagateHookLogGroupSentinel is a test seam for subprocess environment
+// construction.
+//
+//nolint:gochecknoglobals // test seam for CI log grouping.
+var shouldPropagateHookLogGroupSentinel = ci.ShouldPropagateLogGroupSentinel
+
 // init registers the generic `command` kind so users can invoke arbitrary
 // toolchain-resolved binaries without writing Go.
 func init() {
@@ -202,10 +208,15 @@ func prepareSubprocess(ctx *ExecContext, tmpDir, outputFile string) (*subprocess
 		captureStdoutPath = outputFile
 	}
 
+	env := mergeEnv(prependToolchainPATH(os.Environ(), ctx.ToolchainPATH), envVars, hookEnv)
+	if shouldPropagateHookLogGroupSentinel(ctx.AtmosConfig, ci.DimensionPhase) {
+		env = append(env, ci.LogGroupSentinelEnv())
+	}
+
 	return &subprocessPrep{
 		binary:            resolved,
 		args:              args,
-		env:               mergeEnv(prependToolchainPATH(os.Environ(), ctx.ToolchainPATH), envVars, hookEnv),
+		env:               env,
 		captureStdoutPath: captureStdoutPath,
 	}, nil
 }
