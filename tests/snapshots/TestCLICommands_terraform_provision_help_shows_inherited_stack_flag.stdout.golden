@@ -5,9 +5,9 @@ This command provisions terraform components
 
 USAGE
 
-                                         
-    $ atmos terraform provision [flags]  
-                                         
+
+    $ atmos terraform provision [flags]
+
 
 FLAGS
 

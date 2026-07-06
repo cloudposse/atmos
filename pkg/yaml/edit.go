@@ -60,6 +60,10 @@ var mergeKeyTagRe = regexp.MustCompile(`(?m)^(\s*(?:- )?)!!merge <<:`)
 // which every editing operation passes. Multi-document streams are rejected:
 // yq would apply the expression to every document in the stream.
 func evaluate(content []byte, expr string) (string, error) {
+	return evaluateWithOptions(content, expr, defaultEditOptions(content))
+}
+
+func evaluateWithOptions(content []byte, expr string, opts editOptions) (string, error) {
 	if err := ensureSingleDocument(content); err != nil {
 		return "", err
 	}
@@ -67,7 +71,7 @@ func evaluate(content []byte, expr string) (string, error) {
 	// Silence yq's internal diagnostics for the duration of the evaluation.
 	yqlib.GetLogger().SetLevel(yqEditSilentLevel)
 
-	pref := editPreferences(detectIndent(content))
+	pref := editPreferences(opts.indent)
 	encoder := yqlib.NewYamlEncoder(pref)
 	decoder := yqlib.NewYamlDecoder(pref)
 
@@ -85,8 +89,12 @@ func evaluate(content []byte, expr string) (string, error) {
 func Eval(content []byte, expr string) ([]byte, error) {
 	defer perf.Track(nil, "yaml.Eval")()
 
+	return evalWithOptions(content, expr, defaultEditOptions(editBase(content)))
+}
+
+func evalWithOptions(content []byte, expr string, opts editOptions) ([]byte, error) {
 	base := editBase(content)
-	result, err := evaluate(base, expr)
+	result, err := evaluateWithOptions(base, expr, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -137,8 +145,8 @@ func resultIsStringScalar(content []byte, expr string) bool {
 func EvalFile(filePath, expr string) error {
 	defer perf.Track(nil, "yaml.EvalFile")()
 
-	return mutateFile(filePath, func(content []byte) ([]byte, error) {
-		return Eval(content, expr)
+	return mutateFile(filePath, fileMutationPreserve, func(content []byte, opts editOptions) ([]byte, error) {
+		return evalWithOptions(content, expr, opts)
 	})
 }
 
@@ -214,6 +222,10 @@ func Set(content []byte, path, value string) ([]byte, error) {
 func SetRaw(content []byte, path, rhs string) ([]byte, error) {
 	defer perf.Track(nil, "yaml.SetRaw")()
 
+	return setRawWithOptions(content, path, rhs, defaultEditOptions(editBase(content)))
+}
+
+func setRawWithOptions(content []byte, path, rhs string, opts editOptions) ([]byte, error) {
 	yqPath, err := DotPathToYqPath(path)
 	if err != nil {
 		return nil, err
@@ -224,7 +236,7 @@ func SetRaw(content []byte, path, rhs string) ([]byte, error) {
 	// which would make Set on a new/empty file a silent no-op.
 	base := editBase(content)
 	expr := fmt.Sprintf("%s = %s", yqPath, rhs)
-	result, err := evaluate(base, expr)
+	result, err := evaluateWithOptions(base, expr, opts)
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFmt, ErrYAMLUpdateFailed, err)
 	}
@@ -242,6 +254,10 @@ func SetRaw(content []byte, path, rhs string) ([]byte, error) {
 func Delete(content []byte, path string) ([]byte, error) {
 	defer perf.Track(nil, "yaml.Delete")()
 
+	return deleteWithOptions(content, path, defaultEditOptions(content))
+}
+
+func deleteWithOptions(content []byte, path string, opts editOptions) ([]byte, error) {
 	yqPath, err := DotPathToYqPath(path)
 	if err != nil {
 		return nil, err
@@ -251,7 +267,7 @@ func Delete(content []byte, path string) ([]byte, error) {
 	}
 
 	expr := fmt.Sprintf("del(%s)", yqPath)
-	result, err := evaluate(content, expr)
+	result, err := evaluateWithOptions(content, expr, opts)
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFmt, ErrYAMLUpdateFailed, err)
 	}
@@ -269,13 +285,17 @@ func Delete(content []byte, path string) ([]byte, error) {
 func Format(content []byte) ([]byte, error) {
 	defer perf.Track(nil, "yaml.Format")()
 
+	return formatWithOptions(content, defaultEditOptions(content))
+}
+
+func formatWithOptions(content []byte, opts editOptions) ([]byte, error) {
 	// Nothing to normalize in an empty document; formatting must not
 	// materialize a "null" scalar into a previously empty file.
 	if isEmptyDocument(content) {
 		return content, nil
 	}
 
-	result, err := evaluate(content, ".")
+	result, err := evaluateWithOptions(content, ".", opts)
 	if err != nil {
 		return nil, err
 	}
@@ -304,8 +324,8 @@ func GetFile(filePath, path string) (string, error) {
 func SetFile(filePath, path, value string) error {
 	defer perf.Track(nil, "yaml.SetFile")()
 
-	return mutateFile(filePath, func(content []byte) ([]byte, error) {
-		return Set(content, path, value)
+	return mutateFile(filePath, fileMutationPreserve, func(content []byte, opts editOptions) ([]byte, error) {
+		return setRawWithOptions(content, path, encodeStringValue(value), opts)
 	})
 }
 
@@ -313,8 +333,8 @@ func SetFile(filePath, path, value string) error {
 func SetFileRaw(filePath, path, rhs string) error {
 	defer perf.Track(nil, "yaml.SetFileRaw")()
 
-	return mutateFile(filePath, func(content []byte) ([]byte, error) {
-		return SetRaw(content, path, rhs)
+	return mutateFile(filePath, fileMutationPreserve, func(content []byte, opts editOptions) ([]byte, error) {
+		return setRawWithOptions(content, path, rhs, opts)
 	})
 }
 
@@ -322,8 +342,8 @@ func SetFileRaw(filePath, path, rhs string) error {
 func DeleteFile(filePath, path string) error {
 	defer perf.Track(nil, "yaml.DeleteFile")()
 
-	return mutateFile(filePath, func(content []byte) ([]byte, error) {
-		return Delete(content, path)
+	return mutateFile(filePath, fileMutationPreserve, func(content []byte, opts editOptions) ([]byte, error) {
+		return deleteWithOptions(content, path, opts)
 	})
 }
 
@@ -331,15 +351,16 @@ func DeleteFile(filePath, path string) error {
 func FormatFile(filePath string) error {
 	defer perf.Track(nil, "yaml.FormatFile")()
 
-	return mutateFile(filePath, Format)
+	return mutateFile(filePath, fileMutationFormat, formatWithOptions)
 }
 
 // mutateFile reads a file, applies fn, and writes the result back atomically
 // (temp file + rename) preserving the original file mode. Symlinks are
 // resolved first so editing a symlinked config rewrites the target file
-// instead of replacing the link with a regular file, and the original line
-// endings (CRLF vs LF) are preserved.
-func mutateFile(filePath string, fn func([]byte) ([]byte, error)) error {
+// instead of replacing the link with a regular file. Regular edits preserve
+// detected file style, while format operations normalize to EditorConfig when
+// it declares a style.
+func mutateFile(filePath string, mode fileMutationMode, fn func([]byte, editOptions) ([]byte, error)) error {
 	if resolved, err := filepath.EvalSymlinks(filePath); err == nil {
 		filePath = resolved
 	}
@@ -349,12 +370,13 @@ func mutateFile(filePath string, fn func([]byte) ([]byte, error)) error {
 		return fmt.Errorf(errWrapFmt, ErrReadFile, err)
 	}
 
-	out, err := fn(content)
+	style := resolveEditorConfigStyle(filePath)
+	out, err := fn(content, editOptionsForFile(content, style, mode))
 	if err != nil {
 		return err
 	}
 
-	return atomicWrite(filePath, restoreLineEndings(content, out))
+	return atomicWrite(filePath, applyFileStyle(content, out, style, mode))
 }
 
 // atomicWrite writes data to filePath via the shared cross-platform atomic

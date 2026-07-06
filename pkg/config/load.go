@@ -617,6 +617,9 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "ci.cache.enabled", "ATMOS_CI_CACHE_ENABLED")
 	bindEnv(v, "ci.cache.auto", "ATMOS_CI_CACHE_AUTO")
 
+	// CI log-group settings (env override for the schema field with no CLI flag).
+	bindEnv(v, "ci.groups.mode", "ATMOS_CI_GROUPS_MODE")
+
 	// Profiler settings
 	bindEnv(v, "profiler.enabled", "ATMOS_PROFILER_ENABLED")
 	bindEnv(v, "profiler.host", "ATMOS_PROFILER_HOST")

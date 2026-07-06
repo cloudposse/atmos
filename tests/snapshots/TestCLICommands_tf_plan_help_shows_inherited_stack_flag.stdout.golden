@@ -13,18 +13,18 @@ https://opentofu.org/docs/cli/commands/plan
 
 USAGE
 
-                                    
-    $ atmos terraform plan [flags]  
-                                    
+
+    $ atmos terraform plan [flags]
+
 
 EXAMPLES
 
-                                                              
-    – Execute a terraform plan                                
-                                                              
-                                                              
-     $ atmos terraform plan <component-name> -s <stack-name>  
-                                                              
+
+    – Execute a terraform plan
+
+
+     $ atmos terraform plan <component-name> -s <stack-name>
+
 
 FLAGS
 

@@ -248,6 +248,8 @@ jobs:
       # dogfoods Atmos's own schema validator (the engine behind `atmos validate schema`).
       # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
+      # TestTerraformRegistryCache runs once above on every active OS. Skip it
+      # here so Linux coverage does not execute the same trust/cache test twice.
       - name: Acceptance tests with coverage
         timeout-minutes: 60
         if: matrix.flavor.target == 'linux'
@@ -259,7 +261,7 @@ jobs:
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           # Enable Playwright integration tests to validate browser driver download
           RUN_PLAYWRIGHT_INTEGRATION: 1
-        run: atmos test acc-cover
+        run: TESTARGS="-skip=^TestTerraformRegistryCache$" atmos test acceptance --cover
 
       - name: Acceptance tests
         timeout-minutes: 45
@@ -272,15 +274,46 @@ jobs:
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           # Enable Playwright integration tests to validate browser driver download
           RUN_PLAYWRIGHT_INTEGRATION: 1
-        run: atmos test acc
+        run: atmos test acceptance
+
+      - name: Upload coverage report artifact
+        if: matrix.flavor.target == 'linux' && hashFiles('coverage.out') != ''
+        timeout-minutes: 5
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-coverage-linux
+          path: coverage.out
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  coverage:
+    name: Upload acceptance coverage to Codecov
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download linux coverage report artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: acceptance-coverage-linux
+          path: ${{ github.workspace }}
 
       - name: Upload coverage report to Codecov
-        if: matrix.flavor.target == 'linux' && hashFiles('coverage.out') != ''
+        timeout-minutes: 10
+        continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
           files: coverage.out
+          disable_search: true
           # Codecov's uploader downloads its CLI and verifies the binary's GPG
           # signature. Transient Codecov-side issues (e.g. an empty public-key
           # import: "gpg: no valid OpenPGP data found" / "Can't check signature:
@@ -499,77 +532,8 @@ jobs:
 
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
-        timeout-minutes: 25
-        run: |
-          set -euo pipefail
-
-          run_with_timeout() {
-            local timeout_seconds="$1"
-            shift
-
-            "$@" &
-            local cmd_pid=$!
-
-            (
-              sleep "$timeout_seconds"
-              if kill -0 "$cmd_pid" 2>/dev/null; then
-                echo "::error::Timed out after ${timeout_seconds}s: $*"
-                kill -TERM "$cmd_pid" 2>/dev/null || true
-                sleep 10
-                kill -KILL "$cmd_pid" 2>/dev/null || true
-              fi
-            ) &
-            local timer_pid=$!
-
-            local status=0
-            wait "$cmd_pid" || status=$?
-            kill "$timer_pid" 2>/dev/null || true
-            wait "$timer_pid" 2>/dev/null || true
-            return "$status"
-          }
-
-          diagnose_colima() {
-            echo "::group::Colima diagnostics"
-            colima status || true
-            limactl list || true
-            pgrep -fl 'colima|lima|qemu' || true
-            for log in "$HOME"/.colima/_lima/colima/serial*.log "$HOME"/.colima/_lima/colima/ha.stderr.log; do
-              if [ -f "$log" ]; then
-                echo "---- $log ----"
-                tail -n 200 "$log" || true
-              fi
-            done
-            echo "::endgroup::"
-          }
-
-          if brew tap | grep -qx 'aws/tap'; then
-            brew untap aws/tap
-          fi
-
-          run_with_timeout 600 brew install colima docker qemu
-
-          for attempt in 1 2 3; do
-            echo "::group::Start Colima attempt ${attempt}"
-            if run_with_timeout 720 colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20; then
-              echo "::endgroup::"
-              break
-            fi
-
-            status=$?
-            echo "::endgroup::"
-            diagnose_colima
-
-            run_with_timeout 180 colima delete -f || true
-
-            if [ "$attempt" -eq 3 ]; then
-              exit "$status"
-            fi
-
-            sleep $((attempt * 20))
-          done
-
-          docker context use colima || true
-          run_with_timeout 120 docker version
+        timeout-minutes: 45
+        uses: ./.github/actions/setup-colima
 
       - name: Download build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
