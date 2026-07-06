@@ -92,7 +92,7 @@ commands:
             type: require
             files:
               - ../../build/atmos
-            hint: "run `make build` from the repository root before recording"
+            hint: "run `atmos build` from the repository root before recording"
           - name: require recording tools
             type: require
             tools:
@@ -106,7 +106,7 @@ commands:
               repo="$(git rev-parse --show-toplevel)"
               # The tapes type `atmos …`; make sure the inner VHS shell uses the freshly
               # built binary (emulator is newer than any published release), not whatever
-              # `atmos` is on PATH. `make build` writes ./build/atmos.
+              # `atmos` is on PATH. `atmos build` writes ./build/atmos.
               export PATH="$repo/build:$PATH"
               # Slow the spinner redraw rate for recordings only. The default (~10/sec) of
               # off-camera `atmos emulator up` spinners scrolls enough to trip VHS's
@@ -185,7 +185,7 @@ commands:
             type: require
             files:
               - ../../build/atmos
-            hint: "run `make build` from the repository root before checking a tape"
+            hint: "run `atmos build` from the repository root before checking a tape"
           - name: require recording tools
             type: require
             tools:
