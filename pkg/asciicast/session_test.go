@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -460,5 +462,48 @@ func TestRunSessionReturnsActionErrors(t *testing.T) {
 	})
 	if !errors.Is(err, ErrUnknownSessionAction) {
 		t.Fatalf("expected unknown action error, got %v", err)
+	}
+}
+
+func TestSessionProcessWaitIsIdempotent(t *testing.T) {
+	want := errors.New("process exited")
+	var calls atomic.Int32
+	wait := newSessionProcessWait(func() error {
+		calls.Add(1)
+		time.Sleep(10 * time.Millisecond)
+		return want
+	})
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 3)
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- wait()
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	if calls.Load() != 1 {
+		t.Fatalf("wait function calls = %d, want 1", calls.Load())
+	}
+	for err := range errs {
+		if !errors.Is(err, want) {
+			t.Fatalf("wait error = %v, want %v", err, want)
+		}
+	}
+}
+
+func TestWaitForSessionProcessTimesOut(t *testing.T) {
+	err := waitForSessionProcess(&sessionProcess{
+		wait: newSessionProcessWait(func() error {
+			time.Sleep(time.Hour)
+			return nil
+		}),
+	}, time.Nanosecond)
+	if !errors.Is(err, errSessionProcessWaitTimeout) {
+		t.Fatalf("expected session process wait timeout, got %v", err)
 	}
 }
