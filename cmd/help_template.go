@@ -877,17 +877,7 @@ func applyColoredHelpTemplate(cmd *cobra.Command) {
 
 	// Set custom help function.
 	cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
-		printLogoAndVersion(ctx.writer, ctx.styles)
-		printDescription(ctx.writer, c, ctx.styles)
-		printUsageSection(ctx.writer, c, ctx.renderer, ctx.styles)
-		printAliases(ctx.writer, c, ctx.styles)
-		printSubcommandAliases(ctx, c)
-		printExamples(ctx.writer, c, ctx.renderer, ctx.styles)
-		printAvailableCommands(ctx, c)
-		printConfigAliases(ctx, c)
-		printFlags(ctx.writer, c, ctx.atmosConfig, ctx.styles)
-		printCompatibilityFlags(ctx.writer, c, ctx.styles)
-		printFooter(ctx.writer, c, ctx.styles)
+		printHelpForTopic(ctx, c, currentHelpTopic)
 	})
 }
 

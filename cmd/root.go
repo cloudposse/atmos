@@ -1665,6 +1665,7 @@ func Execute() error {
 	if err := processEarlyChdirFlag(); err != nil {
 		return err
 	}
+	preprocessHelpTopicArgs()
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
@@ -1817,6 +1818,19 @@ func preprocessArgs() {
 	if !hasCompatFlags && !slicesEqual(processedArgs, osArgs) {
 		RootCmd.SetArgs(processedArgs)
 	}
+}
+
+func preprocessHelpTopicArgs() {
+	currentHelpTopic = helpTopicRequest{valid: true}
+
+	normalizedArgs, request, changed := normalizeHelpTopicArgs(os.Args[1:])
+	currentHelpTopic = request
+	if !changed {
+		return
+	}
+
+	os.Args = append([]string{os.Args[0]}, normalizedArgs...)
+	RootCmd.SetArgs(normalizedArgs)
 }
 
 // slicesEqual compares two string slices for equality.
