@@ -1705,6 +1705,7 @@ func shortChdirHasInlineValue(arg string) bool {
 // command, captures telemetry, and handles unknown-command errors by showing usage.
 // This function is invoked once from main.main.
 func Execute() error {
+	defer perf.Track(&atmosConfig, "cmd.Execute")()
 	defer castcmd.FinalizeRecording()
 
 	// CRITICAL: Process --chdir flag BEFORE loading config.
@@ -1802,7 +1803,7 @@ func Execute() error {
 
 	// Preprocess args before Cobra parses.
 	// This orchestrates multiple preprocessing steps in the correct order.
-	preprocessArgs()
+	effectiveArgs := preprocessArgs()
 
 	// Set up AI output capture if --ai flag is present (flag parsing in cmd/ai,
 	// orchestration in pkg/ai/analyze, skill loading in pkg/ai/skills).
@@ -1814,7 +1815,16 @@ func Execute() error {
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
-	cmd, err := internal.Execute(RootCmd)
+
+	// Invocation-level CI log grouping (Dimension "invocation"): wrap the whole
+	// command run in one collapsible group. A no-op unless ci.groups.mode is
+	// "invocation" (the finer step/phase grouping owns "auto"), and outside CI.
+	var cmd *cobra.Command
+	err = ci.Group(&atmosConfig, ci.DimensionInvocation, invocationGroupLabel(RootCmd, effectiveArgs), func() error {
+		var execErr error
+		cmd, execErr = internal.Execute(RootCmd)
+		return execErr
+	})
 
 	telemetry.CaptureCmd(cmd, err)
 
@@ -1834,6 +1844,32 @@ func Execute() error {
 	return err
 }
 
+// invocationGroupLabel builds the label for the invocation-level CI log group
+// from the resolved Atmos command path plus the first remaining positional
+// argument. Flags, flag values, and args after "--" are intentionally omitted.
+func invocationGroupLabel(root *cobra.Command, args []string) string {
+	if root == nil || len(args) == 0 {
+		return "atmos"
+	}
+
+	cmd, remaining, err := root.Find(args)
+	if err != nil || cmd == nil {
+		if first := flags.FirstPositionalArg(nil, args); first != "" {
+			return "atmos " + first
+		}
+		return "atmos"
+	}
+
+	label := strings.TrimSpace(cmd.CommandPath())
+	if label == "" {
+		label = "atmos"
+	}
+	if first := flags.FirstPositionalArg(cmd, remaining); first != "" {
+		label += " " + first
+	}
+	return label
+}
+
 // unknownSubcommand reports whether err represents an unknown Atmos subcommand
 // (as converted from Cobra in cmd/internal/executor.go) and returns the offending
 // command name. It deliberately does NOT match ErrCommandNotFound, which is used
@@ -1850,10 +1886,10 @@ func unknownSubcommand(err error) (string, bool) {
 // This orchestrates multiple preprocessing steps in the correct order:
 //  1. NoOptDefVal flags: Rewrites --flag value → --flag=value for native Atmos flags
 //  2. Compatibility flags: Separates Atmos flags from pass-through flags for external tools
-func preprocessArgs() {
+func preprocessArgs() []string {
 	osArgs := os.Args[1:]
 	if len(osArgs) == 0 {
-		return
+		return nil
 	}
 
 	// Step 1: Preprocess NoOptDefVal flags (native Atmos flags like --identity, --pager).
@@ -1863,13 +1899,17 @@ func preprocessArgs() {
 	// Step 2: Preprocess compatibility flags (external tool syntax like -var).
 	// This separates Atmos flags from pass-through flags.
 	// Note: This may call RootCmd.SetArgs() if there are compat flags.
-	hasCompatFlags := preprocessCompatibilityFlags(processedArgs)
+	atmosArgs, hasCompatFlags := preprocessCompatibilityFlags(processedArgs)
+	if hasCompatFlags {
+		return atmosArgs
+	}
 
 	// If no compat flags were processed but NoOptDefVal changed the args,
 	// we need to set the processed args for Cobra to use.
-	if !hasCompatFlags && !slicesEqual(processedArgs, osArgs) {
+	if !slicesEqual(processedArgs, osArgs) {
 		RootCmd.SetArgs(processedArgs)
 	}
+	return processedArgs
 }
 
 // slicesEqual compares two string slices for equality.
@@ -1896,12 +1936,13 @@ func slicesEqual(a, b []string) bool {
 // The separated args are stored globally via compat.SetSeparated() and can be
 // retrieved in RunE via compat.GetSeparated().
 //
-// Returns true if compatibility flags were processed and SetArgs was called.
-func preprocessCompatibilityFlags(args []string) bool {
+// Returns the Atmos args and true if compatibility flags were processed and
+// SetArgs was called.
+func preprocessCompatibilityFlags(args []string) ([]string, bool) {
 	// Find target command without parsing flags.
 	targetCmd, _, _ := RootCmd.Find(args)
 	if targetCmd == nil {
-		return false
+		return args, false
 	}
 
 	// Get the top-level command name (e.g., "terraform").
@@ -1911,13 +1952,13 @@ func preprocessCompatibilityFlags(args []string) bool {
 		cmdName = c.Name()
 	}
 	if cmdName == "" {
-		return false
+		return args, false
 	}
 
 	// Get compatibility flags from the command registry.
 	compatFlags := internal.GetCompatFlagsForCommand(cmdName)
 	if len(compatFlags) == 0 {
-		return false
+		return args, false
 	}
 
 	// Translate args: separate Atmos flags from pass-through flags.
@@ -1930,7 +1971,7 @@ func preprocessCompatibilityFlags(args []string) bool {
 	// Store separated args globally via compat package.
 	compat.SetSeparated(separatedArgs)
 
-	return true
+	return atmosArgs, true
 }
 
 // preprocessNoOptDefValFlags rewrites space-separated NoOptDefVal flags to equals syntax.

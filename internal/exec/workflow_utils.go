@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	"github.com/cloudposse/atmos/pkg/background"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
@@ -504,179 +505,96 @@ func ExecuteWorkflow(
 			progressRenderer.RenderPermanent(label)
 		}
 
-		// Background steps (start/wait/wait-all/cancel) are coordinated by the
-		// run-scoped registry; everything else falls through to the normal switch.
-		handled := true
-		switch {
-		case step.BackgroundAsync:
-			// Start the container service detached (non-blocking): consecutive background
-			// steps come up concurrently. Readiness is enforced by the implicit gate before
-			// the next foreground step (and by `wait`/`wait-all`).
-			err = workflowPkg.StartBackground(runCtx, bgRegistry, bgRunner, &steps[stepIdx], stepEnv)
-		case commandType == schema.TaskTypeWait:
-			err = workflowPkg.WaitBackground(runCtx, bgRegistry, step.For)
-			if err == nil {
-				for _, name := range step.For {
-					bgGated[name] = true
-				}
-			}
-		case commandType == schema.TaskTypeWaitAll:
-			err = workflowPkg.WaitAllBackground(runCtx, bgRegistry)
-			if err == nil {
-				for _, name := range bgRegistry.Names() {
-					bgGated[name] = true
-				}
-			}
-		case commandType == schema.TaskTypeCancel:
-			err = workflowPkg.CancelBackground(runCtx, bgRegistry, step.For)
-			for _, name := range step.For {
-				delete(bgGated, name)
-			}
-		default:
-			handled = false
+		// Reject unknown step types before opening a log group so the precise
+		// validation error is returned directly (not wrapped as a step failure).
+		if commandType != "shell" &&
+			commandType != schema.TaskTypeExec &&
+			commandType != "atmos" &&
+			commandType != schema.TaskTypeWait &&
+			commandType != schema.TaskTypeWaitAll &&
+			commandType != schema.TaskTypeCancel &&
+			commandType != schema.TaskTypeParallel &&
+			commandType != schema.TaskTypeMatrix &&
+			!stepPkg.IsExtendedStepType(commandType) {
+			return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
+				WithTitle(WorkflowErrTitle).
+				WithExplanationf("Workflow `%s` step `%s` uses unsupported type `%s`.", workflow, step.Name, commandType).
+				WithContext("workflow", workflow).
+				WithContext("step", step.Name).
+				WithHintf("Step type '%s' is not supported", commandType).
+				WithHint("Each step must specify a valid type: 'atmos', 'shell', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
+				WithExitCode(1).
+				Err()
 		}
 
-		// Implicit readiness gate: before running a foreground step, block until every
-		// background service started so far is healthy. Already-gated services are skipped.
-		if !handled && err == nil {
-			err = workflowPkg.GatePendingBackground(runCtx, bgRegistry, bgGated)
+		// If this step will be enclosed in a CI log group, mark the subprocess
+		// environment so a nested `atmos` invocation skips unsupported nested
+		// grouping.
+		if commandType != schema.TaskTypeExec && ci.ShouldPropagateLogGroupSentinel(&atmosConfig, ci.DimensionStep) {
+			stepEnv = append(stepEnv, ci.LogGroupSentinelEnv())
 		}
 
-		switch {
-		case handled:
-			// already executed above
-		case err != nil:
-			// A failed readiness gate skips this step's foreground work; the error
-			// handler below reports it.
-		case commandType == schema.TaskTypeParallel, commandType == schema.TaskTypeMatrix:
-			err = executeWorkflowControlStep(context.Background(), &workflowControlContext{
-				atmosConfig:         atmosConfig,
-				workflowDefinition:  workflowDefinition,
-				dryRun:              dryRun,
-				commandLineStack:    commandLineStack,
-				commandLineIdentity: stepIdentity,
-				baseEnv:             baseEnv,
-				authManager:         authManager,
-			}, &steps[stepIdx])
-		case commandType == "shell":
-			// Render command before execution if show.command is enabled.
-			// Steps with tty/interactive attach the user's terminal; plain
-			// steps keep the existing masked shell-interpreter behavior.
-			stepPkg.RenderCommand(&step, workflowDefinition, command)
-			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
+		executeStep := func() error {
+			// Background steps (start/wait/wait-all/cancel) are coordinated by the
+			// run-scoped registry; everything else falls through to the normal switch.
+			handled := true
 			switch {
-			case workflowPkg.StepContainerOverride(&step):
-				err = retry.Do(context.Background(), step.Retry, func() error {
-					return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
-						Workflow:     workflow,
-						WorkflowPath: workflowPath,
-						BasePath:     atmosConfig.BasePath,
-						WorkflowDef:  workflowDefinition,
-						Step:         &step,
-						HostWorkDir:  workDir,
-						Command:      command,
-						StepEnv:      stepEnv,
-						RuntimeEnv:   stepEnv,
-						DryRun:       dryRun,
-					})
-				})
-			case workflowDefinition.Container != nil && workflowDefinition.Container.IsEnabled() && !workflowPkg.StepContainerDisabled(&step):
-				if activeContainer == nil {
-					activeContainer, err = workflowPkg.StartWorkflowContainer(context.Background(), &workflowPkg.ContainerStepParams{
-						Workflow:     workflow,
-						WorkflowPath: workflowPath,
-						BasePath:     atmosConfig.BasePath,
-						WorkflowDef:  workflowDefinition,
-						RuntimeEnv:   stepEnv,
-						DryRun:       dryRun,
-					})
-					if err != nil {
-						break
+			case step.BackgroundAsync:
+				// Start the container service detached (non-blocking): consecutive background
+				// steps come up concurrently. Readiness is enforced by the implicit gate before
+				// the next foreground step (and by `wait`/`wait-all`).
+				err = workflowPkg.StartBackground(runCtx, bgRegistry, bgRunner, &steps[stepIdx], stepEnv)
+			case commandType == schema.TaskTypeWait:
+				err = workflowPkg.WaitBackground(runCtx, bgRegistry, step.For)
+				if err == nil {
+					for _, name := range step.For {
+						bgGated[name] = true
 					}
 				}
-				err = retry.Do(context.Background(), step.Retry, func() error {
-					return activeContainer.ExecShell(context.Background(), &workflowPkg.ContainerStepParams{
-						Step:        &step,
-						WorkflowDef: workflowDefinition,
-						HostWorkDir: workDir,
-						Command:     command,
-						StepEnv:     stepEnv,
-					})
-				})
-			default:
-				err = retry.Do(context.Background(), step.Retry, func() error {
-					return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
-						Command:     command,
-						Name:        commandName,
-						Dir:         workDir,
-						Env:         stepEnv,
-						TTY:         step.Tty,
-						Interactive: step.Interactive,
-						DryRun:      dryRun,
-					}, func() error {
-						return ExecuteShell(command, commandName, workDir, stepEnv, dryRun)
-					})
-				})
-			}
-		case commandType == schema.TaskTypeExec:
-			// Replace the Atmos process with the command (shell exec semantics).
-			// Validated earlier to be the final step; no retry wrapper (the
-			// process is replaced, so a retry could never run).
-			stepPkg.RenderCommand(&step, workflowDefinition, command)
-			err = process.ReplaceShellSession(&process.ExecSpec{
-				Command: command,
-				Name:    fmt.Sprintf("%s-step-%d", workflow, stepIdx),
-				Dir:     ".",
-				Env:     stepEnv,
-				DryRun:  dryRun,
-			})
-		case commandType == "atmos":
-			// Parse command using shell.Fields for proper quote handling.
-			// This correctly handles arguments like -var="foo=bar" by stripping quotes.
-			args, parseErr := shell.Fields(command, nil)
-			if parseErr != nil {
-				log.Debug("Shell parsing failed, falling back to strings.Fields", "error", parseErr, "command", command)
-				args = strings.Fields(command)
-			}
-
-			if finalStack != "" {
-				if idx := slices.Index(args, "--"); idx != -1 {
-					// Insert before the "--"
-					// Take everything up to idx, then add "-s", finalStack, then tack on the rest
-					args = append(args[:idx], append([]string{"-s", finalStack}, args[idx:]...)...)
-				} else {
-					// just append at the end
-					args = append(args, []string{"-s", finalStack}...)
+			case commandType == schema.TaskTypeWaitAll:
+				err = workflowPkg.WaitAllBackground(runCtx, bgRegistry)
+				if err == nil {
+					for _, name := range bgRegistry.Names() {
+						bgGated[name] = true
+					}
 				}
-
-				log.Debug("Using stack", "stack", finalStack)
+			case commandType == schema.TaskTypeCancel:
+				err = workflowPkg.CancelBackground(runCtx, bgRegistry, step.For)
+				for _, name := range step.For {
+					delete(bgGated, name)
+				}
+			default:
+				handled = false
 			}
 
-			// Build display command for RenderCommand.
-			displayCmd := "atmos " + command
-			if finalStack != "" {
-				displayCmd = fmt.Sprintf("atmos %s -s %s", command, finalStack)
+			// Implicit readiness gate: before running a foreground step, block until every
+			// background service started so far is healthy. Already-gated services are skipped.
+			if !handled && err == nil {
+				err = workflowPkg.GatePendingBackground(runCtx, bgRegistry, bgGated)
 			}
-			// Render command before execution if show.command is enabled.
-			stepPkg.RenderCommand(&step, workflowDefinition, displayCmd)
 
-			ui.Infof("Executing command: `atmos %s`", command)
-			err = retry.Do(context.Background(), step.Retry, func() error {
-				return ExecuteShellCommand(atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
-			})
-		default:
-			// Check if this is an extended step type (input, confirm, choose, etc.).
-			if !stepPkg.IsExtendedStepType(commandType) {
-				err = errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
-					WithTitle(WorkflowErrTitle).
-					WithExplanationf("Step type '%s' is not supported", commandType).
-					WithHint("Each step must specify a valid type: 'atmos', 'shell', 'script', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
-					WithExitCode(1).
-					Err()
-				break
-			}
-			if commandType == schema.TaskTypeScript {
-				stepPkg.RenderCommand(&step, workflowDefinition, process.FormatScriptDisplay(step.Interpreter, step.Script))
+			switch {
+			case handled:
+				// already executed above
+			case err != nil:
+				// A failed readiness gate skips this step's foreground work; the error
+				// handler below reports it.
+			case commandType == schema.TaskTypeParallel, commandType == schema.TaskTypeMatrix:
+				err = executeWorkflowControlStep(context.Background(), &workflowControlContext{
+					atmosConfig:         atmosConfig,
+					workflowDefinition:  workflowDefinition,
+					dryRun:              dryRun,
+					commandLineStack:    commandLineStack,
+					commandLineIdentity: stepIdentity,
+					baseEnv:             baseEnv,
+					authManager:         authManager,
+				}, &steps[stepIdx])
+			case commandType == "shell":
+				// Render command before execution if show.command is enabled.
+				// Steps with tty/interactive attach the user's terminal; plain
+				// steps keep the existing masked shell-interpreter behavior.
+				stepPkg.RenderCommand(&step, workflowDefinition, command)
+				commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
 				switch {
 				case workflowPkg.StepContainerOverride(&step):
 					err = retry.Do(context.Background(), step.Retry, func() error {
@@ -687,7 +605,7 @@ func ExecuteWorkflow(
 							WorkflowDef:  workflowDefinition,
 							Step:         &step,
 							HostWorkDir:  workDir,
-							Command:      process.FormatScriptDisplay(step.Interpreter, step.Script),
+							Command:      command,
 							StepEnv:      stepEnv,
 							RuntimeEnv:   stepEnv,
 							DryRun:       dryRun,
@@ -712,28 +630,147 @@ func ExecuteWorkflow(
 							Step:        &step,
 							WorkflowDef: workflowDefinition,
 							HostWorkDir: workDir,
-							Command:     process.FormatScriptDisplay(step.Interpreter, step.Script),
+							Command:     command,
 							StepEnv:     stepEnv,
 						})
 					})
 				default:
-					err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
-						DryRun:      dryRun,
-						FinalStack:  finalStack,
-						AtmosConfig: &atmosConfig,
+					err = retry.Do(context.Background(), step.Retry, func() error {
+						return process.RunShellStep(context.Background(), &process.ShellSessionSpec{
+							Command:     command,
+							Name:        commandName,
+							Dir:         workDir,
+							Env:         stepEnv,
+							TTY:         step.Tty,
+							Interactive: step.Interactive,
+							DryRun:      dryRun,
+						}, func() error {
+							return ExecuteShell(command, commandName, workDir, stepEnv, dryRun)
+						})
 					})
 				}
-				break
-			}
-			if err == nil {
+			case commandType == schema.TaskTypeExec:
+				// Replace the Atmos process with the command (shell exec semantics).
+				// Validated earlier to be the final step; no retry wrapper (the
+				// process is replaced, so a retry could never run).
+				stepPkg.RenderCommand(&step, workflowDefinition, command)
+				err = process.ReplaceShellSession(&process.ExecSpec{
+					Command: command,
+					Name:    fmt.Sprintf("%s-step-%d", workflow, stepIdx),
+					Dir:     ".",
+					Env:     stepEnv,
+					DryRun:  dryRun,
+				})
+			case commandType == "atmos":
+				// Parse command using shell.Fields for proper quote handling.
+				// This correctly handles arguments like -var="foo=bar" by stripping quotes.
+				args, parseErr := shell.Fields(command, nil)
+				if parseErr != nil {
+					log.Debug("Shell parsing failed, falling back to strings.Fields", "error", parseErr, "command", command)
+					args = strings.Fields(command)
+				}
+
+				if finalStack != "" {
+					if idx := slices.Index(args, "--"); idx != -1 {
+						// Insert before the "--"
+						// Take everything up to idx, then add "-s", finalStack, then tack on the rest
+						args = append(args[:idx], append([]string{"-s", finalStack}, args[idx:]...)...)
+					} else {
+						// just append at the end
+						args = append(args, []string{"-s", finalStack}...)
+					}
+
+					log.Debug("Using stack", "stack", finalStack)
+				}
+
+				// Build display command for RenderCommand.
+				displayCmd := "atmos " + command
+				if finalStack != "" {
+					displayCmd = fmt.Sprintf("atmos %s -s %s", command, finalStack)
+				}
+				// Render command before execution if show.command is enabled.
+				stepPkg.RenderCommand(&step, workflowDefinition, displayCmd)
+
+				ui.Infof("Executing command: `atmos %s`", command)
+				err = retry.Do(context.Background(), step.Retry, func() error {
+					return ExecuteShellCommand(atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
+				})
+			default:
+				// Check if this is an extended step type (input, confirm, choose, etc.).
+				if !stepPkg.IsExtendedStepType(commandType) {
+					return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
+						WithTitle(WorkflowErrTitle).
+						WithExplanationf("Workflow `%s` step `%s` uses unsupported type `%s`.", workflow, step.Name, commandType).
+						WithContext("workflow", workflow).
+						WithContext("step", step.Name).
+						WithHintf("Step type '%s' is not supported", commandType).
+						WithHint("Each step must specify a valid type: 'atmos', 'shell', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
+						WithExitCode(1).
+						Err()
+				}
+				if commandType == schema.TaskTypeScript {
+					stepPkg.RenderCommand(&step, workflowDefinition, process.FormatScriptDisplay(step.Interpreter, step.Script))
+					switch {
+					case workflowPkg.StepContainerOverride(&step):
+						err = retry.Do(context.Background(), step.Retry, func() error {
+							return workflowPkg.RunStepContainerOverride(context.Background(), &workflowPkg.ContainerStepParams{
+								Workflow:     workflow,
+								WorkflowPath: workflowPath,
+								BasePath:     atmosConfig.BasePath,
+								WorkflowDef:  workflowDefinition,
+								Step:         &step,
+								HostWorkDir:  workDir,
+								Command:      process.FormatScriptDisplay(step.Interpreter, step.Script),
+								StepEnv:      stepEnv,
+								RuntimeEnv:   stepEnv,
+								DryRun:       dryRun,
+							})
+						})
+					case workflowDefinition.Container != nil && workflowDefinition.Container.IsEnabled() && !workflowPkg.StepContainerDisabled(&step):
+						if activeContainer == nil {
+							activeContainer, err = workflowPkg.StartWorkflowContainer(context.Background(), &workflowPkg.ContainerStepParams{
+								Workflow:     workflow,
+								WorkflowPath: workflowPath,
+								BasePath:     atmosConfig.BasePath,
+								WorkflowDef:  workflowDefinition,
+								RuntimeEnv:   stepEnv,
+								DryRun:       dryRun,
+							})
+							if err != nil {
+								break
+							}
+						}
+						err = retry.Do(context.Background(), step.Retry, func() error {
+							return activeContainer.ExecShell(context.Background(), &workflowPkg.ContainerStepParams{
+								Step:        &step,
+								WorkflowDef: workflowDefinition,
+								HostWorkDir: workDir,
+								Command:     process.FormatScriptDisplay(step.Interpreter, step.Script),
+								StepEnv:     stepEnv,
+							})
+						})
+					default:
+						err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
+							DryRun:      dryRun,
+							FinalStack:  finalStack,
+							AtmosConfig: &atmosConfig,
+						})
+					}
+					break
+				}
 				err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedStepOptions{
 					DryRun:      dryRun,
 					FinalStack:  finalStack,
 					AtmosConfig: &atmosConfig,
 				})
 			}
+			return err
 		}
 
+		// Wrap each step's output in a collapsible CI log group when grouping is
+		// active. Exec steps run bare because a successful Unix exec never returns
+		// to close a deferred group.
+		err = stepPkg.RunGroupedForType(&atmosConfig, step.Name, command, commandType, executeStep)
 		if err != nil {
 			// Terminal-handoff steps (tty/interactive/exec) that exit non-zero
 			// propagate the code silently, like a shell - don't wrap them in a

@@ -1,9 +1,23 @@
 package exec
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/ci"
+	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+const (
+	testEnvFakeTerraform           = "_ATMOS_TEST_FAKE_TERRAFORM"
+	testEnvFakeTerraformSelectFail = "_ATMOS_TEST_FAKE_TERRAFORM_SELECT_FAIL"
+	testEnvRunLogGroupPipeline     = "_ATMOS_TEST_RUN_LOG_GROUP_PIPELINE"
+	testEnvPipelineBackendType     = "_ATMOS_TEST_PIPELINE_BACKEND_TYPE"
+	testEnvPipelineSkipInit        = "_ATMOS_TEST_PIPELINE_SKIP_INIT"
 )
 
 // TestMain is the entry point for the internal/exec test binary.
@@ -22,6 +36,13 @@ import (
 //	_ATMOS_TEST_EXIT_ONE=1           — if set, exit 1 immediately after the optional
 //	                                   counter-file write (for workspace recovery tests).
 func TestMain(m *testing.M) {
+	if os.Getenv(testEnvFakeTerraform) == "1" {
+		os.Exit(runFakeTerraformForTest())
+	}
+	if os.Getenv(testEnvRunLogGroupPipeline) == "1" {
+		os.Exit(runLogGroupPipelineForTest())
+	}
+
 	// Write a single byte to the counter file on every invocation.
 	// This lets tests count how many times the subprocess was spawned by reading
 	// the file length: len(file) == number of invocations.
@@ -80,4 +101,64 @@ func TestMain(m *testing.M) {
 		_ = os.RemoveAll(cacheDir) // os.Exit skips defers; clean up explicitly.
 	}
 	os.Exit(code)
+}
+
+func runFakeTerraformForTest() int {
+	args := os.Args[1:]
+	fmt.Printf("fake terraform %s\n", strings.Join(args, " "))
+	if os.Getenv(testEnvFakeTerraformSelectFail) == "1" &&
+		len(args) >= 3 &&
+		args[0] == subcommandWorkspace &&
+		args[1] == "select" {
+		fmt.Fprintf(os.Stderr, "Workspace %q doesn't exist.\n", args[2])
+		return 1
+	}
+	return 0
+}
+
+func runLogGroupPipelineForTest() int {
+	ci.Register(githubprovider.NewProvider())
+
+	componentPath := filepath.Join(os.TempDir(), fmt.Sprintf("atmos-log-group-pipeline-%d", os.Getpid()))
+	if err := os.MkdirAll(componentPath, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "creating temp component path: %v\n", err)
+		return 1
+	}
+	defer func() { _ = os.RemoveAll(componentPath) }()
+
+	exePath, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "resolving test executable: %v\n", err)
+		return 1
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.CI.Enabled = true
+	atmosConfig.CI.Groups.Mode = ci.GroupModeAuto
+
+	componentEnv := []string{testEnvFakeTerraform + "=1"}
+	if os.Getenv(testEnvFakeTerraformSelectFail) == "1" {
+		componentEnv = append(componentEnv, testEnvFakeTerraformSelectFail+"=1")
+	}
+
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:           "plan",
+		SkipInit:             os.Getenv(testEnvPipelineSkipInit) == "1",
+		ComponentBackendType: os.Getenv(testEnvPipelineBackendType),
+		TerraformWorkspace:   "dev",
+		Command:              exePath,
+		ComponentEnvList:     componentEnv,
+	}
+	execCtx := &componentExecContext{
+		componentPath: componentPath,
+		varFile:       "vars.tfvars",
+		planFile:      "plan.tfplan",
+		workingDir:    componentPath,
+	}
+
+	if err := executeCommandPipeline(&atmosConfig, &info, execCtx); err != nil {
+		fmt.Fprintf(os.Stderr, "pipeline failed: %v\n", err)
+		return 1
+	}
+	return 0
 }

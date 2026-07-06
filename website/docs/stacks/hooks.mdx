@@ -204,7 +204,7 @@ hooks:
   <dd>The `kics` binary on PATH. Declare it in `dependencies.tools` to have Atmos auto-install through the toolchain — Atmos ships a curated registry override so `kics: "<version>"` resolves correctly even though the upstream Aqua entry uses an unsupported `go_build` type.</dd>
 
   <dt>`KICS_QUERIES_PATH`</dt>
-  <dd>Required at runtime. The KICS release tarball does not include the query library. Homebrew install: `export KICS_QUERIES_PATH=$(brew --prefix kics)/share/kics/assets/queries`. For toolchain installs, point at the unpacked `assets/queries` directory shipped alongside the release archive.</dd>
+  <dd>Required at runtime. The KICS release tarball does not include the query library, so Atmos toolchain installs provide the binary only. Homebrew install: `export KICS_QUERIES_PATH=$(brew --prefix kics)/share/kics/assets/queries`. For toolchain installs, supply a trusted KICS query library separately and point `KICS_QUERIES_PATH` at its `assets/queries` directory.</dd>
 </dl>
 
 All three scanner kinds emit SARIF and share a result handler that renders

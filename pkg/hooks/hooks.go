@@ -29,6 +29,12 @@ import (
 
 var errRenderedHookNotMap = errors.New("rendered hook is not a map")
 
+// runHookLogGroup is a test seam for wrapping each lifecycle hook in CI log
+// group markers without making hooks tests depend on the active CI provider.
+//
+//nolint:gochecknoglobals // test seam for CI log grouping.
+var runHookLogGroup = ci.Group
+
 type Hooks struct {
 	config *schema.AtmosConfiguration
 	info   *schema.ConfigAndStacksInfo
@@ -160,64 +166,100 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 		return err
 	}
 
-	for name, hook := range h.items {
-		if !hook.MatchesEvent(filter.event) {
-			log.Debug("Skipping hook, event not in hook events list", "hook", name, "event", event, "hook_events", hook.Events)
-			continue
-		}
-
-		if skipPredicate(name) {
-			log.Info("Skipping hook (--skip-hooks)", "hook", name, "kind", hook.Kind)
-			continue
-		}
-
-		// Filter by the operation outcome. Default (when: success) runs only on
-		// success, so existing hooks keep their behavior; when: failure / always
-		// opt into running after a failed operation.
-		runs, err := hook.RunsWhenE(filter.conditionContext(name))
-		if err != nil {
-			return err
-		}
-		if !runs {
-			log.Debug("Skipping hook, status does not match `when`", "hook", name, "when", hook.When, "status", outcome.Status)
-			continue
-		}
-
-		// CI commands are deprecated — use RunCIHooks instead, which automatically
-		// triggers CI actions based on component provider bindings.
-		if isDeprecatedCIKind(hook.Kind) {
-			log.Debug("CI hook command deprecated, use RunCIHooks instead", "kind", hook.Kind)
-			continue
-		}
-
-		kind, ok := GetKind(hook.Kind)
-		if !ok {
-			log.Debug("Unknown hook kind", "kind", hook.Kind)
-			continue
-		}
-
-		executionHook, err := h.resolveHookForExecution(name, &hook, atmosConfig, info, outcome)
-		if err != nil {
-			return err
-		}
-
-		resolved := kind.ResolveDefaults(executionHook)
-		if _, err := kind.Engine.Run(&ExecContext{
-			Hook:          resolved,
-			Kind:          kind,
-			Event:         event,
-			AtmosConfig:   atmosConfig,
-			Info:          info,
-			Cmd:           cmd,
-			Args:          args,
-			HookName:      name,
-			Outcome:       outcome,
-			ToolchainPATH: h.toolchainPATH,
-		}); err != nil {
+	runCtx := hookRunContext{
+		event:       event,
+		atmosConfig: atmosConfig,
+		info:        info,
+		cmd:         cmd,
+		args:        args,
+		filter:      filter,
+		outcome:     outcome,
+	}
+	for name := range h.items {
+		hook := h.items[name]
+		if err := h.runHookIfMatch(name, &hook, &runCtx); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+type hookRunContext struct {
+	event       HookEvent
+	atmosConfig *schema.AtmosConfiguration
+	info        *schema.ConfigAndStacksInfo
+	cmd         *cobra.Command
+	args        []string
+	filter      hookFilter
+	outcome     Outcome
+}
+
+func (h *Hooks) runHookIfMatch(name string, hook *Hook, ctx *hookRunContext) error {
+	if !hook.MatchesEvent(ctx.filter.event) {
+		log.Debug("Skipping hook, event not in hook events list", "hook", name, "event", ctx.event, "hook_events", hook.Events)
+		return nil
+	}
+
+	if ctx.filter.skipPredicate(name) {
+		log.Info("Skipping hook (--skip-hooks)", "hook", name, "kind", hook.Kind)
+		return nil
+	}
+
+	// Filter by the operation outcome. Default (when: success) runs only on
+	// success, so existing hooks keep their behavior; when: failure / always
+	// opt into running after a failed operation.
+	runs, err := hook.RunsWhenE(ctx.filter.conditionContext(name))
+	if err != nil {
+		return err
+	}
+	if !runs {
+		log.Debug("Skipping hook, status does not match `when`", "hook", name, "when", hook.When, "status", ctx.outcome.Status)
+		return nil
+	}
+
+	// CI commands are deprecated — use RunCIHooks instead, which automatically
+	// triggers CI actions based on component provider bindings.
+	if isDeprecatedCIKind(hook.Kind) {
+		log.Debug("CI hook command deprecated, use RunCIHooks instead", "kind", hook.Kind)
+		return nil
+	}
+
+	kind, ok := GetKind(hook.Kind)
+	if !ok {
+		log.Debug("Unknown hook kind", "kind", hook.Kind)
+		return nil
+	}
+
+	executionHook, err := h.resolveHookForExecution(name, hook, ctx.atmosConfig, ctx.info, ctx.outcome)
+	if err != nil {
+		return err
+	}
+
+	return h.runResolvedHook(name, kind, executionHook, ctx)
+}
+
+func (h *Hooks) runResolvedHook(name string, kind *Kind, executionHook *Hook, ctx *hookRunContext) error {
+	resolved := kind.ResolveDefaults(executionHook)
+	execCtx := &ExecContext{
+		Hook:          resolved,
+		Kind:          kind,
+		Event:         ctx.event,
+		AtmosConfig:   ctx.atmosConfig,
+		Info:          ctx.info,
+		Cmd:           ctx.cmd,
+		Args:          ctx.args,
+		HookName:      name,
+		Outcome:       ctx.outcome,
+		ToolchainPATH: h.toolchainPATH,
+	}
+	return runHookLogGroup(ctx.atmosConfig, ci.DimensionPhase, hookLogGroupLabel(name, ctx.event), func() error {
+		_, err := kind.Engine.Run(execCtx)
+		return err
+	})
+}
+
+func hookLogGroupLabel(name string, event HookEvent) string {
+	return fmt.Sprintf("hook %s (%s)", name, event.Normalize())
 }
 
 // resolveHookForExecution renders a hook's fields at execution time. GetHooks
