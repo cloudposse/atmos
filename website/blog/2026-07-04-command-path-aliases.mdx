@@ -1,11 +1,13 @@
 ---
 slug: command-path-aliases
-title: "Command Aliases Now Rewrite Command Paths"
+title: "Command Aliases Can Now Set Your Defaults"
 authors: [osterman]
 tags: [enhancement, dx]
 ---
 
-Atmos command aliases now behave more like shell aliases: they rewrite argv prefixes before command parsing, and they can match full command paths, including subcommands.
+Sometimes the built-in command defaults do not match how your team actually works. When that happens, every run starts to collect the same extra flags: disable identity for a specific workflow, auto-approve a safe apply path, or skip function processing for a common describe command.
+
+Atmos aliases can now encode those defaults directly. They behave more like shell aliases: rewrite argv prefixes before command parsing, and match full command paths, including subcommands.
 
 <!--truncate-->
 
@@ -20,7 +22,7 @@ aliases:
   tp: terraform plan
 ```
 
-And a command-path alias can target a specific subcommand:
+And when a default flag belongs to a command or subcommand, the alias can define that too:
 
 ```yaml
 aliases:
