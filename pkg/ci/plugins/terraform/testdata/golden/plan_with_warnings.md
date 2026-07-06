@@ -7,7 +7,7 @@
   <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" width="220px" align="right">
 </picture></a>
 
-[![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#user-content-create-prod-mycomponent)
+[![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#create-prod-mycomponent)
 <details><summary><a id="result-prod-mycomponent" />Plan: 1 to add, 0 to change, 0 to destroy.</summary>
 
 <br/>

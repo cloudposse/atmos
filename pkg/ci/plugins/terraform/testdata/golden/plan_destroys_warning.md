@@ -7,7 +7,7 @@
   <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" width="220px" align="right">
 </picture></a>
 
-[![destroy](https://shields.io/badge/PLAN-DESTROY-critical?style=for-the-badge)](#user-content-destroy-prod-legacy)
+[![destroy](https://shields.io/badge/PLAN-DESTROY-critical?style=for-the-badge)](#destroy-prod-legacy)
 
 > [!CAUTION]
 > **Terraform will delete resources!**
