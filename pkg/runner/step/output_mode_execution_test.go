@@ -1,27 +1,86 @@
 package step
 
 import (
+	"bytes"
+	"io"
+	"os"
 	"os/exec"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
-
-var outputModeInitOnce sync.Once
 
 // initOutputModeTestIO initializes the I/O context for output mode tests.
 func initOutputModeTestIO(t *testing.T) {
 	t.Helper()
-	outputModeInitOnce.Do(func() {
-		ioCtx, err := iolib.NewContext()
-		require.NoError(t, err)
-		ui.InitFormatter(ioCtx)
-	})
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+}
+
+func setupOutputModeCapture(t *testing.T) (*bytes.Buffer, *bytes.Buffer, func()) {
+	t.Helper()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	require.NoError(t, err)
+	stderrReader, stderrWriter, err := os.Pipe()
+	require.NoError(t, err)
+
+	stdoutDone := make(chan error, 1)
+	stderrDone := make(chan error, 1)
+	go func() {
+		_, copyErr := io.Copy(stdout, stdoutReader)
+		stdoutDone <- copyErr
+	}()
+	go func() {
+		_, copyErr := io.Copy(stderr, stderrReader)
+		stderrDone <- copyErr
+	}()
+
+	os.Stdout = stdoutWriter
+	os.Stderr = stderrWriter
+	iolib.Reset()
+	ui.Reset()
+	data.Reset()
+	require.NoError(t, iolib.Initialize())
+	ioCtx := iolib.GetContext()
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	var cleaned bool
+	cleanup := func() {
+		if cleaned {
+			return
+		}
+		cleaned = true
+
+		_ = stdoutWriter.Close()
+		_ = stderrWriter.Close()
+		require.NoError(t, <-stdoutDone)
+		require.NoError(t, <-stderrDone)
+		_ = stdoutReader.Close()
+		_ = stderrReader.Close()
+
+		os.Stdout = oldStdout
+		os.Stderr = oldStderr
+		iolib.Reset()
+		ui.Reset()
+		data.Reset()
+	}
+
+	return stdout, stderr, cleanup
 }
 
 // OutputModeWriter creation is tested in output_mode_test.go.
@@ -98,6 +157,36 @@ func TestOutputModeWriterExecuteRawWithStderr(t *testing.T) {
 	assert.Contains(t, stderr, "stderr")
 }
 
+func TestOutputModeWriterRawLabelsEnabledByDefault(t *testing.T) {
+	_, stderr, cleanup := setupOutputModeCapture(t)
+	defer cleanup()
+
+	writer := NewOutputModeWriter(OutputModeRaw, "raw_step", nil)
+	_, _, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+		return nil
+	})
+
+	require.NoError(t, err)
+	cleanup()
+	assert.Contains(t, stderr.String(), "[raw_step]")
+	assert.Contains(t, stderr.String(), "raw_step completed")
+}
+
+func TestOutputModeWriterRawLabelsCanBeDisabled(t *testing.T) {
+	_, stderr, cleanup := setupOutputModeCapture(t)
+	defer cleanup()
+
+	writer := NewOutputModeWriter(OutputModeRaw, "raw_step", nil, &schema.ShowConfig{Labels: BoolPtr(false)})
+	_, _, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+		return nil
+	})
+
+	require.NoError(t, err)
+	cleanup()
+	assert.NotContains(t, stderr.String(), "[raw_step]")
+	assert.NotContains(t, stderr.String(), "raw_step completed")
+}
+
 func TestOutputModeWriterExecuteLog(t *testing.T) {
 	initOutputModeTestIO(t)
 	writer := NewOutputModeWriter(OutputModeLog, "test_step", nil)
@@ -135,6 +224,24 @@ func TestOutputModeWriterExecuteLogWithStderr(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, stdout, "stdout")
 	assert.Contains(t, stderr, "stderr")
+}
+
+func TestOutputModeWriterLogLabelsCanBeDisabled(t *testing.T) {
+	stdout, stderr, cleanup := setupOutputModeCapture(t)
+	defer cleanup()
+
+	writer := NewOutputModeWriter(OutputModeLog, "log_step", nil, &schema.ShowConfig{Labels: BoolPtr(false)})
+	out, _, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+		_, _ = io.WriteString(stdout, "logged output")
+		return nil
+	})
+
+	require.NoError(t, err)
+	cleanup()
+	assert.Equal(t, "logged output", out)
+	assert.Equal(t, "logged output", stdout.String())
+	assert.NotContains(t, stderr.String(), "[log_step]")
+	assert.NotContains(t, stderr.String(), "log_step completed")
 }
 
 func TestOutputModeWriterExecuteDefaultMode(t *testing.T) {

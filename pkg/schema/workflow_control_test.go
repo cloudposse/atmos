@@ -33,6 +33,144 @@ steps:
 	assert.Equal(t, "{{ .step.name }}", step.ParallelOutput.Prefix)
 }
 
+func TestWorkflowStep_UnmarshalYAML_StructuredCastOutputMode(t *testing.T) {
+	input := `
+name: demo
+type: cast
+output:
+  mode: raw
+  cast: demo.cast
+  gif: demo.gif
+steps:
+  - name: list
+    command: atmos list stacks
+`
+	var step WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte(input), &step))
+
+	assert.Equal(t, "raw", step.Output)
+	require.NotNil(t, step.CastOutput)
+	assert.Equal(t, "raw", step.CastOutput.Mode)
+	assert.Equal(t, "demo.cast", step.CastOutput.Cast)
+	assert.Equal(t, "demo.gif", step.CastOutput.GIF)
+}
+
+func TestWorkflowStep_UnmarshalYAML_AliasedStructuredCastOutput(t *testing.T) {
+	input := `
+output: &demo_output
+  mode: raw
+  cast: demo.cast
+type: cast
+steps:
+  - name: nested
+    type: cast
+    output: *demo_output
+`
+	var step WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte(input), &step))
+
+	require.Len(t, step.Steps, 1)
+	assert.Equal(t, "raw", step.Steps[0].Output)
+	require.NotNil(t, step.Steps[0].CastOutput)
+	assert.Equal(t, "raw", step.Steps[0].CastOutput.Mode)
+	assert.Equal(t, "demo.cast", step.Steps[0].CastOutput.Cast)
+}
+
+func TestWorkflowStep_UnmarshalYAML_StructuredSimulatePromptAndCommandAnchor(t *testing.T) {
+	input := `
+type: cast
+mode: steps
+steps:
+  - type: simulate
+    mode: typed
+    cursor: true
+    jitter: 0.25
+    prompt: &demo_prompt
+      text: "> "
+      style: command
+    text: &list_cmd atmos secret list --stack dev --component api
+  - type: shell
+    name: list-secrets
+    command: *list_cmd
+  - type: simulate
+    mode: prompt
+    prompt: *demo_prompt
+`
+	var step WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte(input), &step))
+
+	require.Len(t, step.Steps, 3)
+	require.NotNil(t, step.Steps[0].SimulatePrompt)
+	assert.Equal(t, "> ", step.Steps[0].SimulatePrompt.Text)
+	assert.Equal(t, "command", step.Steps[0].SimulatePrompt.Style)
+	assert.True(t, step.Steps[0].Cursor)
+	assert.Equal(t, 0.25, step.Steps[0].Jitter)
+	assert.Equal(t, "atmos secret list --stack dev --component api", step.Steps[0].Text)
+	assert.Equal(t, "atmos secret list --stack dev --component api", step.Steps[1].Command)
+	require.NotNil(t, step.Steps[2].SimulatePrompt)
+	assert.Equal(t, "> ", step.Steps[2].SimulatePrompt.Text)
+	assert.Equal(t, "command", step.Steps[2].SimulatePrompt.Style)
+}
+
+func TestWorkflowStep_UnmarshalYAML_CastSimulateDefaults(t *testing.T) {
+	input := `
+type: cast
+defaults:
+  cast:
+    rate: 12ms
+    width: 120
+    height: 36
+  simulate:
+    mode: typed
+    cursor: true
+    rate: 35ms
+    jitter: 0.25
+    duration: 10ms
+    interval: 20ms
+    prompt:
+      text: "> "
+      style: command
+steps:
+  - type: simulate
+    cursor: false
+    text: atmos version
+`
+	var step WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte(input), &step))
+
+	require.NotNil(t, step.Defaults)
+	require.NotNil(t, step.Defaults.Cast)
+	assert.Equal(t, "12ms", step.Defaults.Cast.Rate)
+	assert.Equal(t, 120, step.Defaults.Cast.Width)
+	assert.Equal(t, 36, step.Defaults.Cast.Height)
+	require.NotNil(t, step.Defaults.Simulate)
+	assert.Equal(t, "typed", step.Defaults.Simulate.Mode)
+	require.NotNil(t, step.Defaults.Simulate.Cursor)
+	assert.True(t, *step.Defaults.Simulate.Cursor)
+	assert.Equal(t, "35ms", step.Defaults.Simulate.Rate)
+	assert.Equal(t, 0.25, step.Defaults.Simulate.Jitter)
+	assert.Equal(t, "10ms", step.Defaults.Simulate.Duration)
+	assert.Equal(t, "20ms", step.Defaults.Simulate.Interval)
+	require.NotNil(t, step.Defaults.Simulate.Prompt)
+	assert.Equal(t, "> ", step.Defaults.Simulate.Prompt.Text)
+	assert.Equal(t, "command", step.Defaults.Simulate.Prompt.Style)
+	require.Len(t, step.Steps, 1)
+	assert.False(t, step.Steps[0].Cursor)
+	assert.True(t, step.Steps[0].CursorSet)
+}
+
+func TestWorkflowStep_UnmarshalYAML_ScalarPromptStillDecodesForInteractiveStep(t *testing.T) {
+	input := `
+type: input
+prompt: Continue?
+`
+	var step WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte(input), &step))
+
+	assert.Equal(t, "Continue?", step.Prompt)
+	assert.Nil(t, step.SimulatePrompt)
+}
+
 func TestValidateWorkflowSteps_ControlSteps(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -47,6 +185,16 @@ func TestValidateWorkflowSteps_ControlSteps(t *testing.T) {
 				Steps: []WorkflowStep{
 					{Name: "lint", Type: TaskTypeShell, Command: "make lint"},
 					{Name: "test", Type: TaskTypeShell, Command: "make test", Needs: []string{"lint"}},
+				},
+			}},
+		},
+		{
+			name: "valid parallel script child",
+			steps: []WorkflowStep{{
+				Name: "checks",
+				Type: TaskTypeParallel,
+				Steps: []WorkflowStep{
+					{Name: "script", Type: TaskTypeScript, Interpreter: "python3", Script: "print('ok')"},
 				},
 			}},
 		},

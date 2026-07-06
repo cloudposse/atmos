@@ -357,6 +357,8 @@ func TestTaskWorkflowStepControlFieldsRoundTrip(t *testing.T) {
 		Identity:         "id",
 		Stack:            "dev",
 		Command:          "run",
+		Script:           "print('ok')",
+		Interpreter:      "python3",
 	}
 
 	step := task.ToWorkflowStep()
@@ -371,6 +373,8 @@ func TestTaskWorkflowStepControlFieldsRoundTrip(t *testing.T) {
 	assert.Equal(t, task.Name, roundTripped.Name)
 	assert.Equal(t, task.Needs, roundTripped.Needs)
 	assert.Equal(t, task.Output, roundTripped.Output)
+	assert.Equal(t, task.Script, roundTripped.Script)
+	assert.Equal(t, task.Interpreter, roundTripped.Interpreter)
 	assert.Equal(t, task.ParallelOutput, roundTripped.ParallelOutput)
 	assert.Equal(t, task.Timeout, roundTripped.Timeout)
 	assert.Equal(t, task.Steps, roundTripped.Steps)
@@ -430,6 +434,250 @@ func TestTasksDecodeHook_StructuredParallelOutput(t *testing.T) {
 	assert.Equal(t, "{{ .step.name }}", result.Steps[0].ParallelOutput.Prefix)
 }
 
+func TestTasksDecodeHook_StructuredCastOutputMode(t *testing.T) {
+	input := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"name": "demo",
+				"type": TaskTypeCast,
+				"output": map[string]any{
+					"mode": "raw",
+					"cast": "demo.cast",
+				},
+				"steps": []any{
+					map[string]any{"name": "list", "command": "atmos list stacks"},
+				},
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	assert.Equal(t, "raw", result.Steps[0].Output)
+	require.NotNil(t, result.Steps[0].CastOutput)
+	assert.Equal(t, "raw", result.Steps[0].CastOutput.Mode)
+	assert.Equal(t, "demo.cast", result.Steps[0].CastOutput.Cast)
+}
+
+func TestTasksDecodeHook_StructuredSimulatePrompt(t *testing.T) {
+	input := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"type":   TaskTypeSimulate,
+				"mode":   "typed",
+				"cursor": true,
+				"jitter": 0.25,
+				"prompt": map[string]any{
+					"text":  "> ",
+					"style": "command",
+				},
+				"text": "atmos version",
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	require.NotNil(t, result.Steps[0].SimulatePrompt)
+	assert.Equal(t, "> ", result.Steps[0].SimulatePrompt.Text)
+	assert.Equal(t, "command", result.Steps[0].SimulatePrompt.Style)
+	assert.True(t, result.Steps[0].Cursor)
+	assert.Equal(t, 0.25, result.Steps[0].Jitter)
+	assert.Equal(t, "atmos version", result.Steps[0].Text)
+}
+
+func TestTasksDecodeHook_CastSimulateDefaults(t *testing.T) {
+	input := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"type": TaskTypeCast,
+				"defaults": map[string]any{
+					"cast": map[string]any{
+						"rate":   "12ms",
+						"width":  120,
+						"height": 36,
+					},
+					"simulate": map[string]any{
+						"mode":   "typed",
+						"cursor": true,
+						"rate":   "35ms",
+						"prompt": map[string]any{
+							"text":  "> ",
+							"style": "command",
+						},
+					},
+				},
+				"steps": []any{
+					map[string]any{
+						"type":   TaskTypeSimulate,
+						"cursor": false,
+						"text":   "atmos version",
+					},
+				},
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	defaults := result.Steps[0].Defaults
+	require.NotNil(t, defaults)
+	require.NotNil(t, defaults.Cast)
+	assert.Equal(t, "12ms", defaults.Cast.Rate)
+	assert.Equal(t, 120, defaults.Cast.Width)
+	assert.Equal(t, 36, defaults.Cast.Height)
+	require.NotNil(t, defaults.Simulate)
+	require.NotNil(t, defaults.Simulate.Cursor)
+	assert.True(t, *defaults.Simulate.Cursor)
+	assert.Equal(t, "35ms", defaults.Simulate.Rate)
+	require.NotNil(t, defaults.Simulate.Prompt)
+	assert.Equal(t, "> ", defaults.Simulate.Prompt.Text)
+	assert.Equal(t, "command", defaults.Simulate.Prompt.Style)
+	require.Len(t, result.Steps[0].Steps, 1)
+	assert.False(t, result.Steps[0].Steps[0].Cursor)
+	assert.True(t, result.Steps[0].Steps[0].CursorSet)
+}
+
+func TestTasksDecodeHook_NestedCastSimulatePrompt(t *testing.T) {
+	input := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"type": TaskTypeCast,
+				"mode": "steps",
+				"steps": []any{
+					map[string]any{
+						"type": TaskTypeSimulate,
+						"mode": "typed",
+						"prompt": map[string]any{
+							"text":  "> ",
+							"style": "command",
+						},
+						"text": "atmos secret list --stack dev --component api",
+					},
+					map[string]any{
+						"type":    TaskTypeShell,
+						"command": "atmos secret list --stack dev --component api",
+					},
+				},
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	require.Len(t, result.Steps[0].Steps, 2)
+	require.NotNil(t, result.Steps[0].Steps[0].SimulatePrompt)
+	assert.Equal(t, "> ", result.Steps[0].Steps[0].SimulatePrompt.Text)
+	assert.Equal(t, "command", result.Steps[0].Steps[0].SimulatePrompt.Style)
+	assert.Equal(t, "atmos secret list --stack dev --component api", result.Steps[0].Steps[1].Command)
+}
+
+func TestTasksDecodeHook_NestedCastSimulatePromptFromTypedSlice(t *testing.T) {
+	input := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"type": TaskTypeCast,
+				"mode": "steps",
+				"steps": []map[string]any{
+					{
+						"type": TaskTypeSimulate,
+						"mode": "typed",
+						"prompt": map[string]any{
+							"text":  "> ",
+							"style": "command",
+						},
+						"text": "atmos secret list --stack dev --component api",
+					},
+				},
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	require.Len(t, result.Steps[0].Steps, 1)
+	require.NotNil(t, result.Steps[0].Steps[0].SimulatePrompt)
+	assert.Equal(t, "> ", result.Steps[0].Steps[0].SimulatePrompt.Text)
+	assert.Equal(t, "command", result.Steps[0].Steps[0].SimulatePrompt.Style)
+}
+
+func TestTasksDecodeHook_NestedCastSimulatePromptFromAnyMap(t *testing.T) {
+	input := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"type": TaskTypeCast,
+				"mode": "steps",
+				"steps": []any{
+					map[any]any{
+						"type": TaskTypeSimulate,
+						"mode": "typed",
+						"prompt": map[string]any{
+							"text":  "> ",
+							"style": "command",
+						},
+						"text": "atmos secret list --stack dev --component api",
+					},
+				},
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	require.Len(t, result.Steps[0].Steps, 1)
+	require.NotNil(t, result.Steps[0].Steps[0].SimulatePrompt)
+	assert.Equal(t, "> ", result.Steps[0].Steps[0].SimulatePrompt.Text)
+	assert.Equal(t, "command", result.Steps[0].Steps[0].SimulatePrompt.Style)
+}
+
 func TestTasksDecodeHook_InvalidOutputType(t *testing.T) {
 	input := map[string]any{
 		"steps": []any{
@@ -450,6 +698,98 @@ func TestTasksDecodeHook_InvalidOutputType(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Error(t, decoder.Decode(input))
+}
+
+func TestTasksDecodeHook_TypedRootSlice(t *testing.T) {
+	input := map[string]any{
+		"steps": []map[string]any{
+			{
+				"name":    "typed",
+				"command": "echo typed",
+			},
+		},
+	}
+
+	var result testConfigWithTasks
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       TasksDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	assert.Equal(t, "typed", result.Steps[0].Name)
+	assert.Equal(t, "echo typed", result.Steps[0].Command)
+	assert.Equal(t, TaskTypeShell, result.Steps[0].Type)
+}
+
+func TestWorkflowStepDecodeHookRejectsStructuredPromptForShellStep(t *testing.T) {
+	input := map[string]any{
+		"step": map[string]any{
+			"type": TaskTypeShell,
+			"prompt": map[string]any{
+				"text":  "> ",
+				"style": "command",
+			},
+			"command": "echo no",
+		},
+	}
+
+	var result struct {
+		Step WorkflowStep `mapstructure:"step"`
+	}
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       WorkflowStepDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	err = decoder.Decode(input)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWorkflowControlStepInvalid)
+}
+
+func TestWorkflowStepDecodeHookNormalizesNestedTypedSlices(t *testing.T) {
+	input := map[string]any{
+		"steps": []map[string]any{
+			{
+				"type": TaskTypeCast,
+				"mode": "steps",
+				"steps": []map[string]any{
+					{
+						"type": TaskTypeSimulate,
+						"mode": "typed",
+						"prompt": map[string]any{
+							"text":  "$ ",
+							"style": "command",
+						},
+						"text": "atmos version",
+					},
+				},
+			},
+		},
+	}
+
+	var result struct {
+		Steps []WorkflowStep `mapstructure:"steps"`
+	}
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           &result,
+		WeaklyTypedInput: true,
+		DecodeHook:       WorkflowStepDecodeHook(),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, decoder.Decode(input))
+	require.Len(t, result.Steps, 1)
+	require.Len(t, result.Steps[0].Steps, 1)
+	require.NotNil(t, result.Steps[0].Steps[0].SimulatePrompt)
+	assert.Equal(t, "$ ", result.Steps[0].Steps[0].SimulatePrompt.Text)
+	assert.Equal(t, "command", result.Steps[0].Steps[0].SimulatePrompt.Style)
+	assert.Equal(t, "atmos version", result.Steps[0].Steps[0].Text)
 }
 
 // Tests for TasksDecodeHook and related functions.

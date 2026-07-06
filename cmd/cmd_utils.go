@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,6 +30,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	pkgFlags "github.com/cloudposse/atmos/pkg/flags"
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -459,6 +461,7 @@ func createCustomCommand(
 		Use:   commandConfig.Name,
 		Short: commandConfig.Description,
 		Long:  commandConfig.Description,
+		Args:  customCommandArgsValidator(commandConfig),
 		Annotations: map[string]string{
 			annotationCustomCommand: annotationValueTrue,
 		},
@@ -493,6 +496,21 @@ func createCustomCommand(
 	registerSemanticFlagCompletions(customCommand, commandConfig)
 
 	return customCommand, nil
+}
+
+func customCommandArgsValidator(commandConfig *schema.Command) cobra.PositionalArgs {
+	if len(commandConfig.Arguments) == 0 {
+		return pkgFlags.SeparatorAwareValidator(cobra.NoArgs)
+	}
+
+	requiredNoDefaultCount := 0
+	for _, arg := range commandConfig.Arguments {
+		if arg.Required && arg.Default == "" {
+			requiredNoDefaultCount++
+		}
+	}
+
+	return pkgFlags.SeparatorAwareValidator(cobra.RangeArgs(requiredNoDefaultCount, len(commandConfig.Arguments)))
 }
 
 // validateCustomCommandFlags checks for duplicate flags and type conflicts
@@ -727,7 +745,7 @@ func executeCustomCommand(
 		if err := schema.ValidateStepCondition(step.When); err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
-		runs, err := step.When.EvaluateE(customCommandConditionContext(commandConfig.Name, step, i, commandConditionEnv))
+		runs, err := step.When.EvaluateWithImplicitSuccessE(customCommandConditionContext(commandConfig.Name, step, i, commandConditionEnv, schema.ConditionPredicateSuccess))
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
@@ -818,8 +836,10 @@ func executeCustomCommand(
 	stepVars.ProtectTemplateRoots("Arguments", "Flags", "flags", "TrailingArgs")
 
 	// Execute custom command's steps
+	var commandErr error
+	conditionStatus := schema.ConditionPredicateSuccess
 	for i, step := range commandConfig.Steps {
-		runs, err := step.When.EvaluateE(customCommandConditionContext(commandConfig.Name, &step, i, commandConditionEnv))
+		runs, err := step.When.EvaluateWithImplicitSuccessE(customCommandConditionContext(commandConfig.Name, &step, i, commandConditionEnv, conditionStatus))
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
@@ -964,6 +984,15 @@ func executeCustomCommand(
 			stepVars.SetEnv(key, value)
 		}
 
+		// A command-level env can override PATH (e.g. rebuilding it from the
+		// caller's environment); re-ensure the running binary's directory so a
+		// bare `atmos` in steps still resolves to the SAME binary even when
+		// atmos isn't installed on the system PATH (fresh CI runners).
+		if execPath, execErr := os.Executable(); execErr == nil {
+			env = envpkg.EnsureBinaryInPath(env, execPath)
+			stepVars.EnsureBinaryInPath(execPath)
+		}
+
 		if len(commandConfig.Env) > 0 && commandConfig.Verbose {
 			var envVarsList []string
 			for _, v := range commandConfig.Env {
@@ -1006,6 +1035,12 @@ func executeCustomCommand(
 		commandToRun, err := stepVars.Resolve(step.Command)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
+		stepWorkDir := workDir
+		if strings.TrimSpace(step.WorkingDirectory) != "" {
+			stepWorkDir, err = resolveWorkingDirectory(step.WorkingDirectory, workDir, workDir)
+			errUtils.CheckErrorPrintAndExit(err, "Invalid working_directory", "https://atmos.tools/cli/configuration/commands/working-directory")
+		}
+
 		// Determine step type - default to shell if not specified.
 		stepType := strings.TrimSpace(step.Type)
 		if stepType == "" {
@@ -1030,19 +1065,29 @@ func executeCustomCommand(
 			err = process.RunShellStep(context.Background(), &process.ShellSessionSpec{
 				Command:     commandToRun,
 				Name:        commandName,
-				Dir:         workDir,
+				Dir:         stepWorkDir,
 				Env:         env,
 				TTY:         step.Tty,
 				Interactive: step.Interactive,
 			}, func() error {
-				return e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+				if step.Output == string(stepPkg.OutputModeNone) {
+					return e.ExecuteShellWithWriters(&e.ExecuteShellSpec{
+						Command: commandToRun,
+						Name:    commandName,
+						Dir:     stepWorkDir,
+						EnvVars: env,
+						Stdout:  io.Discard,
+						Stderr:  io.Discard,
+					})
+				}
+				return e.ExecuteShell(commandToRun, commandName, stepWorkDir, env, false)
 			})
 		case schema.TaskTypeExec:
 			// Replace the Atmos process with the command (shell exec semantics).
 			err = process.ReplaceShellSession(&process.ExecSpec{
 				Command: commandToRun,
 				Name:    fmt.Sprintf("%s-step-%d", commandConfig.Name, i),
-				Dir:     workDir,
+				Dir:     stepWorkDir,
 				Env:     env,
 			})
 		case "atmos":
@@ -1053,20 +1098,27 @@ func executeCustomCommand(
 				err = execErr
 				break
 			}
-			err = e.ExecuteShellCommand(atmosConfig, execPath, args, workDir, env, false, "")
+			err = e.ExecuteShellCommand(atmosConfig, execPath, args, stepWorkDir, env, false, "")
 		default:
 			// Check if this is an extended step type (input, confirm, choose, etc.).
 			if stepPkg.IsExtendedStepType(stepType) {
 				// Convert Task to WorkflowStep for handler compatibility.
 				workflowStep := step.ToWorkflowStep()
-				// Carry the resolved process env onto the step so handlers that read
-				// step.Env (e.g. the container handler's in-container env) see the
-				// same command/component/auth/step env used by shell and atmos steps.
-				workflowStep.Env = envSliceToMap(env)
-				// Propagate working directory to extended step if not already set.
-				if workflowStep.WorkingDirectory == "" {
-					workflowStep.WorkingDirectory = workDir
+				// Carry env onto the step so handlers that read step.Env (e.g. the
+				// container handler's in-container env) see it. The step's own
+				// declared `env:` had its map keys lowercased by Viper, so restore
+				// the original case from the shared env case map, then merge it over
+				// the resolved command/process env (step vars win on collisions).
+				stepOwnEnv := workflowStep.Env
+				if atmosConfig.CaseMaps != nil {
+					stepOwnEnv = atmosConfig.CaseMaps.ApplyCase("env", stepOwnEnv)
 				}
+				mergedStepEnv := envSliceToMap(env)
+				for key, value := range stepOwnEnv {
+					mergedStepEnv[key] = value
+				}
+				workflowStep.Env = mergedStepEnv
+				workflowStep.WorkingDirectory = stepWorkDir
 
 				if stack, ok := flagsData["stack"].(string); ok && stack != "" {
 					executor.SetFlag("stack", stack)
@@ -1078,11 +1130,23 @@ func executeCustomCommand(
 				err = fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
 			}
 		}
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			var silentExit errUtils.ExitCodeError
+			if errors.As(err, &silentExit) && silentExit.Silent {
+				errUtils.CheckErrorPrintAndExit(err, "", "")
+			}
+			if commandErr == nil {
+				commandErr = err
+			} else {
+				commandErr = errors.Join(commandErr, err)
+			}
+			conditionStatus = schema.ConditionPredicateFailure
+		}
 	}
+	errUtils.CheckErrorPrintAndExit(commandErr, "", "")
 }
 
-func customCommandConditionContext(commandName string, step *schema.Task, index int, env map[string]string) schema.ConditionContext {
+func customCommandConditionContext(commandName string, step *schema.Task, index int, env map[string]string, status string) schema.ConditionContext {
 	stepName := ""
 	stack := ""
 	stepEnv := env
@@ -1104,7 +1168,7 @@ func customCommandConditionContext(commandName string, step *schema.Task, index 
 	}
 	return schema.ConditionContext{
 		CI:       telemetry.IsCI(),
-		Status:   schema.ConditionPredicateSuccess,
+		Status:   status,
 		Stack:    stack,
 		Workflow: commandName,
 		Step:     stepName,
@@ -1380,6 +1444,14 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 // Check Atmos is version command.
 func isVersionCommand() bool {
 	return len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version")
+}
+
+// isHelpRequestedInArgs reports whether this invocation is a help request.
+// Help screens must always render — even when atmos.yaml is missing or
+// invalid — so config-load failures are tolerated when this returns true.
+// Uses the same argument matching as the root help function.
+func isHelpRequestedInArgs() bool {
+	return Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")
 }
 
 // isVersionManagementCommand checks if the current command is a version management command.

@@ -14,7 +14,6 @@ import (
 	"syscall"
 
 	"github.com/charmbracelet/lipgloss"
-	xterm "github.com/charmbracelet/x/term"
 	"github.com/elewis787/boa"
 	"github.com/muesli/reflow/wordwrap"
 	"github.com/muesli/termenv"
@@ -50,6 +49,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/diagnostics"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -79,6 +79,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/ansible"
 	_ "github.com/cloudposse/atmos/cmd/auth"
 	_ "github.com/cloudposse/atmos/cmd/aws"
+	castcmd "github.com/cloudposse/atmos/cmd/cast"
 	_ "github.com/cloudposse/atmos/cmd/ci"
 	cicache "github.com/cloudposse/atmos/cmd/ci/cache"
 	_ "github.com/cloudposse/atmos/cmd/composition"
@@ -244,8 +245,9 @@ func processEarlyChdirFlag() error {
 		return fmt.Errorf("%w: not a directory: %s", errUtils.ErrWorkdirNotExist, absPath)
 	}
 
-	// Change to the specified directory.
-	if err := os.Chdir(absPath); err != nil {
+	// Change to the specified directory (updates PWD so subprocesses and
+	// templates behave as if Atmos started there).
+	if err := envpkg.Chdir(absPath); err != nil {
 		return fmt.Errorf("%w: failed to change directory to %s", errUtils.ErrPathResolution, absPath)
 	}
 
@@ -349,8 +351,9 @@ func processChdirFlag(cmd *cobra.Command) error {
 		return fmt.Errorf("%w: not a directory: %s", errUtils.ErrWorkdirNotExist, absPath)
 	}
 
-	// Change to the specified directory.
-	if err := os.Chdir(absPath); err != nil {
+	// Change to the specified directory (updates PWD so subprocesses and
+	// templates behave as if Atmos started there).
+	if err := envpkg.Chdir(absPath); err != nil {
 		return fmt.Errorf("%w: failed to change directory to %s", errUtils.ErrPathResolution, absPath)
 	}
 
@@ -459,6 +462,9 @@ var RootCmd = &cobra.Command{
 				if !isHelpRequested {
 					log.Warn(err.Error())
 				}
+			} else if isHelpRequested {
+				// Help screens should always render, even with invalid config.
+				log.Debug("CLI configuration error (continuing for help)", "error", err)
 			} else if isCIGitCloneBootstrapRequested() {
 				tmpConfig.CI.Enabled = true
 				log.Debug("CLI configuration error (continuing for CI git clone bootstrap)", "error", err)
@@ -565,6 +571,10 @@ var RootCmd = &cobra.Command{
 		data.InitWriter(ioCtx)
 		data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
 
+		if castErr := castcmd.StartRecordingIfRequested(cmd, &tmpConfig, os.Args[1:]); castErr != nil {
+			errUtils.CheckErrorPrintAndExit(castErr, "Failed to start cast recording", "")
+		}
+
 		// Check if running an experimental command.
 		// This happens after I/O init so ui.Experimental() can output properly.
 		// Walk up the command tree to find if any parent is experimental.
@@ -607,9 +617,19 @@ var RootCmd = &cobra.Command{
 		checkExperimentalSettings(&tmpConfig)
 
 		// Configure lipgloss color profile based on terminal capabilities.
-		// This ensures tables and styled output degrade gracefully when piped or in non-TTY environments.
-		term := terminal.New()
-		lipgloss.SetColorProfile(convertToTermenvProfile(term.ColorProfile()))
+		// Forced color is intentionally honored even when stdout is non-TTY,
+		// which is how deterministic asciicast generation runs in CI.
+		if tmpConfig.Settings.Terminal.ForceColor || viper.GetBool("force-color") {
+			lipgloss.SetColorProfile(termenv.TrueColor)
+			log.SetColorProfile(termenv.TrueColor)
+			theme.InvalidateStyleCache()
+		} else {
+			term := terminal.New()
+			profile := convertToTermenvProfile(term.ColorProfile())
+			lipgloss.SetColorProfile(profile)
+			log.SetColorProfile(profile)
+			theme.InvalidateStyleCache()
+		}
 
 		// Automatic CI cache restore-on-start (and register save-on-exit) when
 		// enabled. No-op outside a supported CI provider or for help commands.
@@ -618,6 +638,8 @@ var RootCmd = &cobra.Command{
 		}
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		castcmd.FinalizeRecording()
+
 		// Stop profiler after command execution.
 		if profilerServer != nil {
 			if stopErr := profilerServer.Stop(); stopErr != nil {
@@ -681,6 +703,12 @@ func maybePromoteLogLevelForDebugMode(atmosConfig *schema.AtmosConfiguration, co
 //
 //nolint:revive,cyclop // Function complexity is acceptable for logger configuration.
 func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
+	forceColor := atmosConfig.Settings.Terminal.ForceColor || viper.GetBool("force-color")
+	if forceColor {
+		lipgloss.SetColorProfile(termenv.TrueColor)
+		log.SetColorProfile(termenv.TrueColor)
+		theme.InvalidateStyleCache()
+	}
 	diagnostics.Configure(atmosConfig.Diagnostics)
 
 	switch atmosConfig.Logs.Level {
@@ -700,7 +728,7 @@ func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 
 	// Get theme-aware log styles.
 	var styles *log.Styles
-	if atmosConfig.Settings.Terminal.IsColorEnabled(term.IsTTYSupportForStderr()) {
+	if forceColor || atmosConfig.Settings.Terminal.IsColorEnabled(term.IsTTYSupportForStderr()) {
 		// Get color scheme for the configured theme.
 		scheme, err := theme.GetColorSchemeForTheme(atmosConfig.Settings.Terminal.Theme)
 		if err == nil && scheme != nil {
@@ -817,7 +845,7 @@ func setupColorProfileFromEnv() {
 
 	// Check environment variable first using global viper.
 	// Note: ATMOS env prefix and AutomaticEnv are configured in init().
-	forceColor := viper.GetBool("FORCE_COLOR")
+	forceColor := viper.GetBool("force-color")
 
 	// Also check --force-color CLI flag by manually parsing os.Args.
 	// This is needed because Cobra hasn't parsed flags yet during init().
@@ -825,6 +853,11 @@ func setupColorProfileFromEnv() {
 		for _, arg := range os.Args {
 			if arg == "--force-color" {
 				forceColor = true
+				break
+			}
+			if strings.HasPrefix(arg, "--force-color=") {
+				value := strings.TrimPrefix(arg, "--force-color=")
+				forceColor = value == "true" || value == "1"
 				break
 			}
 		}
@@ -1172,15 +1205,31 @@ func formatFlagName(f *pflag.Flag) string {
 	return flagName
 }
 
-// getTerminalWidth returns the current terminal width, with a fallback default.
+// getTerminalWidth returns the width used to lay out help output.
+//
+// Precedence: the active --cast recording width (so recorded output matches the
+// recorded terminal), then the detected terminal width (real TTY size, or the
+// COLUMNS environment variable on pipes), then the default. The result is
+// capped at the default for readability, or at Settings.Terminal.MaxWidth when
+// configured (config refines, but is never required — help must lay out
+// correctly with no atmos.yaml at all).
 func getTerminalWidth() int {
 	const defaultWidth = 120 // Fang's max width
-	width, _, err := xterm.GetSize(os.Stdout.Fd())
-	if err != nil || width <= 0 {
-		return defaultWidth
+
+	width := castcmd.ActiveRecordingWidth()
+	if width <= 0 {
+		width = ui.TerminalWidth()
 	}
-	if width > defaultWidth {
-		return defaultWidth // Cap at maximum for readability
+	if width <= 0 {
+		width = defaultWidth
+	}
+
+	maxWidth := defaultWidth
+	if atmosConfig.Settings.Terminal.MaxWidth > 0 {
+		maxWidth = atmosConfig.Settings.Terminal.MaxWidth
+	}
+	if width > maxWidth {
+		return maxWidth
 	}
 	return width
 }
@@ -1296,10 +1345,6 @@ func stripBackgroundCodes(s string) string {
 
 	return result
 }
-
-// applyColoredHelpTemplate applies a custom colored help template using colorprofile.Writer and lipgloss.
-// This approach ensures colors work in both interactive terminals and redirected output (screengrabs).
-// Colors are automatically enabled when ATMOS_FORCE_COLOR, CLICOLOR_FORCE, or FORCE_COLOR is set.
 
 // setupProfiler initializes and starts the profiler if enabled.
 func setupProfiler(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) error {
@@ -1500,6 +1545,12 @@ func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration
 		return nil
 	}
 
+	if isHelpRequestedInArgs() {
+		// Help screens should always render, even with invalid config.
+		log.Debug("Warning: CLI configuration error (continuing for help)", "error", initErr)
+		return nil
+	}
+
 	if isCIGitCloneBootstrapRequested() {
 		atmosConfig.CI.Enabled = true
 		log.Debug("Warning: CLI configuration error (continuing for CI git clone bootstrap)", "error", initErr)
@@ -1654,6 +1705,8 @@ func shortChdirHasInlineValue(arg string) bool {
 // command, captures telemetry, and handles unknown-command errors by showing usage.
 // This function is invoked once from main.main.
 func Execute() error {
+	defer castcmd.FinalizeRecording()
+
 	// CRITICAL: Process --chdir flag BEFORE loading config.
 	// This ensures atmos.yaml is loaded from the correct directory when using --chdir.
 	// We must process chdir early because aliases depend on the config, and the config
@@ -1984,6 +2037,7 @@ func init() {
 	if err := globalParser.BindToViper(viper.GetViper()); err != nil {
 		log.Error("Failed to bind global flags to viper", "error", err)
 	}
+	castcmd.RegisterRecordingFlag(RootCmd.PersistentFlags())
 
 	// Register --version as a LOCAL flag (not inherited by subcommands).
 	// This allows custom commands to define their own --version flag (e.g., for tool versions).
@@ -2118,6 +2172,14 @@ func initCobraConfig() {
 			// Get actual arguments (handles DisableFlagParsing=true case).
 			arguments := flags.GetActualArgs(command, os.Args)
 			showUsageAndExit(command, arguments)
+		}
+
+		// Cobra renders help before the persistent pre-run hooks fire, so an
+		// explicit --cast flag starts its recording here and tees the rendered
+		// help output into the cast (used by the docs screengrab pipeline).
+		if recordWriter := castcmd.StartHelpRecording(command, &atmosConfig); recordWriter != nil {
+			command.SetOut(io.MultiWriter(command.OutOrStdout(), recordWriter))
+			defer castcmd.FinalizeRecording()
 		}
 
 		// Distinguish between interactive 'atmos help' and flag-based '--help':

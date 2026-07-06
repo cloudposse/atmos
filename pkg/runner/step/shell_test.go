@@ -85,6 +85,54 @@ func TestShellHandlerExecution(t *testing.T) {
 		assert.Contains(t, result.Value, "custom_value")
 	})
 
+	t.Run("inherits variable environment", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_inherited_env",
+			Type:    "shell",
+			Command: "echo $INHERITED_VAR",
+			Output:  "capture",
+		}
+		vars := NewVariables()
+		vars.SetEnv("INHERITED_VAR", "from_variables")
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		require.NoError(t, err)
+		assert.Contains(t, result.Value, "from_variables")
+	})
+
+	t.Run("step environment overrides variable environment", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_env_override",
+			Type:    "shell",
+			Command: "echo $OVERRIDE_VAR",
+			Output:  "capture",
+			Env: map[string]string{
+				"OVERRIDE_VAR": "from_step",
+			},
+		}
+		vars := NewVariables()
+		vars.SetEnv("OVERRIDE_VAR", "from_variables")
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		require.NoError(t, err)
+		assert.Contains(t, result.Value, "from_step")
+	})
+
+	t.Run("preserves baseline OS environment", func(t *testing.T) {
+		t.Setenv("BASELINE_OS_ENV", "from_os")
+		step := &schema.WorkflowStep{
+			Name:    "test_baseline_env",
+			Type:    "shell",
+			Command: "echo $BASELINE_OS_ENV",
+			Output:  "capture",
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		require.NoError(t, err)
+		assert.Contains(t, result.Value, "from_os")
+	})
+
 	t.Run("command with template in command", func(t *testing.T) {
 		step := &schema.WorkflowStep{
 			Name:    "test_template",

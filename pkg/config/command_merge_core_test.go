@@ -7,9 +7,251 @@ import (
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNormalizeCommandArrayPathNames(t *testing.T) {
+	commands := []interface{}{
+		map[string]interface{}{
+			"name":        "casts generate demo",
+			"description": "Demo command",
+		},
+	}
+
+	normalized := normalizeCommandArray(commands)
+	require.Len(t, normalized, 1)
+
+	casts := requireCommandMap(t, normalized, "casts")
+	generate := requireCommandMap(t, casts[commandsKey], "generate")
+	demo := requireCommandMap(t, generate[commandsKey], "demo")
+	assert.Equal(t, "Demo command", demo["description"])
+}
+
+func TestNormalizeCommandArrayPreservesNestedCommands(t *testing.T) {
+	commands := []interface{}{
+		map[string]interface{}{
+			"name":        "casts",
+			"description": "Casts root",
+			commandsKey: []interface{}{
+				map[string]interface{}{
+					"name":        "generate",
+					"description": "Generate casts",
+				},
+			},
+		},
+	}
+
+	normalized := normalizeCommandArray(commands)
+	require.Len(t, normalized, 1)
+
+	casts := requireCommandMap(t, normalized, "casts")
+	assert.Equal(t, "Casts root", casts["description"])
+	generate := requireCommandMap(t, casts[commandsKey], "generate")
+	assert.Equal(t, "Generate casts", generate["description"])
+}
+
+func TestNormalizeCommandArrayPathWithNestedChildren(t *testing.T) {
+	commands := []interface{}{
+		map[string]interface{}{
+			"name": "casts generate",
+			commandsKey: []interface{}{
+				map[string]interface{}{
+					"name":        "demo",
+					"description": "Demo child",
+				},
+			},
+		},
+	}
+
+	normalized := normalizeCommandArray(commands)
+	require.Len(t, normalized, 1)
+
+	casts := requireCommandMap(t, normalized, "casts")
+	generate := requireCommandMap(t, casts[commandsKey], "generate")
+	demo := requireCommandMap(t, generate[commandsKey], "demo")
+	assert.Equal(t, "Demo child", demo["description"])
+}
+
+func TestMergeCommandArraysPathNamesSharePrefix(t *testing.T) {
+	commands := []interface{}{
+		map[string]interface{}{
+			"name":        "casts generate demo",
+			"description": "Demo command",
+		},
+		map[string]interface{}{
+			"name":        "casts generate examples",
+			"description": "Examples command",
+		},
+	}
+
+	merged := mergeCommandArrays(nil, commands)
+	require.Len(t, merged, 1)
+
+	casts := requireCommandMap(t, merged, "casts")
+	generate := requireCommandMap(t, casts[commandsKey], "generate")
+	demo := requireCommandMap(t, generate[commandsKey], "demo")
+	examples := requireCommandMap(t, generate[commandsKey], "examples")
+	assert.Equal(t, "Demo command", demo["description"])
+	assert.Equal(t, "Examples command", examples["description"])
+}
+
+func TestMergeConfigFilePathCommandsAcrossFiles(t *testing.T) {
+	tempDir := t.TempDir()
+	files := map[string]string{
+		"basic.yaml": `
+commands:
+  - name: casts generate demo fixtures basic list-stacks
+    description: List stacks
+`,
+		"native.yaml": `
+commands:
+  - name: casts generate demo fixtures native-terraform plan
+    description: Terraform plan
+`,
+	}
+	for name, content := range files {
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, name), []byte(content), 0o644))
+	}
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+	require.NoError(t, mergeConfigFile(filepath.Join(tempDir, "basic.yaml"), v))
+	require.NoError(t, mergeConfigFile(filepath.Join(tempDir, "native.yaml"), v))
+
+	casts := requireCommandMap(t, v.Get(commandsKey), "casts")
+	generate := requireCommandMap(t, casts[commandsKey], "generate")
+	demo := requireCommandMap(t, generate[commandsKey], "demo")
+	fixtures := requireCommandMap(t, demo[commandsKey], "fixtures")
+	basic := requireCommandMap(t, fixtures[commandsKey], "basic")
+	listStacks := requireCommandMap(t, basic[commandsKey], "list-stacks")
+	nativeTerraform := requireCommandMap(t, fixtures[commandsKey], "native-terraform")
+	plan := requireCommandMap(t, nativeTerraform[commandsKey], "plan")
+	assert.Equal(t, "List stacks", listStacks["description"])
+	assert.Equal(t, "Terraform plan", plan["description"])
+}
+
+func TestLoadAtmosDPathCommandsPreservesSiblings(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosD := filepath.Join(tempDir, "atmos.d")
+	files := map[string]string{
+		"all.yaml": `
+commands:
+  - name: casts
+    description: Root command
+    commands:
+      - name: generate
+        commands:
+          - name: cli
+            description: CLI casts
+`,
+		"examples/quick-start-simple.yaml": `
+commands:
+  - name: casts generate examples quick-start-simple list-and-plan
+    description: Example cast
+`,
+		"demo/fixtures/basic.yaml": `
+commands:
+  - name: casts generate demo fixtures basic list-stacks
+    description: Fixture cast
+`,
+	}
+	for name, content := range files {
+		path := filepath.Join(atmosD, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+
+	absAtmosD, err := filepath.Abs(atmosD)
+	require.NoError(t, err)
+	pattern := filepath.Join(absAtmosD, "**", "*")
+	require.NoError(t, loadAtmosConfigsFromDirectory(pattern, v, "test atmos.d"))
+
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("commands: %#v", v.Get(commandsKey))
+		}
+	})
+	casts := requireCommandMap(t, v.Get(commandsKey), "casts")
+	generate := requireCommandMap(t, casts[commandsKey], "generate")
+	requireCommandMap(t, generate[commandsKey], "cli")
+	requireCommandMap(t, generate[commandsKey], "examples")
+	demo := requireCommandMap(t, generate[commandsKey], "demo")
+	fixtures := requireCommandMap(t, demo[commandsKey], "fixtures")
+	basic := requireCommandMap(t, fixtures[commandsKey], "basic")
+	requireCommandMap(t, basic[commandsKey], "list-stacks")
+}
+
+func TestMergeCommandArraysPathLeafOverridesNestedAndPreservesSiblings(t *testing.T) {
+	base := []interface{}{
+		map[string]interface{}{
+			"name": "casts",
+			commandsKey: []interface{}{
+				map[string]interface{}{
+					"name": "generate",
+					commandsKey: []interface{}{
+						map[string]interface{}{
+							"name":        "demo",
+							"description": "Base demo",
+						},
+						map[string]interface{}{
+							"name":        "examples",
+							"description": "Base examples",
+						},
+					},
+				},
+				map[string]interface{}{
+					"name":        "setup",
+					"description": "Base setup",
+				},
+			},
+		},
+	}
+	local := []interface{}{
+		map[string]interface{}{
+			"name":        "casts generate demo",
+			"description": "Local demo",
+		},
+	}
+
+	merged := mergeCommandArrays(base, local)
+	require.Len(t, merged, 1)
+
+	casts := requireCommandMap(t, merged, "casts")
+	findCommandMap(t, casts[commandsKey], "setup")
+	generate := requireCommandMap(t, casts[commandsKey], "generate")
+	demo := requireCommandMap(t, generate[commandsKey], "demo")
+	examples := requireCommandMap(t, generate[commandsKey], "examples")
+	assert.Equal(t, "Local demo", demo["description"])
+	assert.Equal(t, "Base examples", examples["description"])
+}
+
+func requireCommandMap(t *testing.T, commands interface{}, name string) map[string]interface{} {
+	t.Helper()
+	command := findCommandMap(t, commands, name)
+	require.NotNil(t, command, "command %q not found", name)
+	return command
+}
+
+func findCommandMap(t *testing.T, commands interface{}, name string) map[string]interface{} {
+	t.Helper()
+	cmdSlice, ok := commands.([]interface{})
+	require.True(t, ok, "commands should be []interface{}")
+	for _, cmd := range cmdSlice {
+		cmdMap, ok := cmd.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if cmdMap["name"] == name {
+			return cmdMap
+		}
+	}
+	return nil
+}
 
 // TestCommandMergeCore validates the core command merging functionality,
 // ensuring that commands from imported configurations are properly merged

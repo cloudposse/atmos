@@ -3,6 +3,7 @@ package terminal
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -274,23 +275,30 @@ func (t *terminal) Width(stream Stream) int {
 
 	fd := streamToFd(stream)
 	if fd < 0 {
-		// If --force-tty is set, return sane default width.
-		if t.forceTTY {
-			return defaultForcedWidth
-		}
-		return 0
+		return t.fallbackWidth()
 	}
 
 	width, _, err := term.GetSize(fd)
 	if err != nil {
-		// If --force-tty is set and detection fails, return sane default width.
-		if t.forceTTY {
-			return defaultForcedWidth
-		}
-		return 0
+		return t.fallbackWidth()
 	}
 
 	return width
+}
+
+// fallbackWidth returns the terminal width when no real TTY size is available:
+// the standard COLUMNS environment variable when set to a positive integer
+// (the conventional non-TTY width contract, e.g. for recording pipelines),
+// the forced default when --force-tty is set, and 0 otherwise.
+func (t *terminal) fallbackWidth() int {
+	//nolint:forbidigo // COLUMNS is a standard terminal env var, read before/without config.
+	if columns, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && columns > 0 {
+		return columns
+	}
+	if t.forceTTY {
+		return defaultForcedWidth
+	}
+	return 0
 }
 
 func (t *terminal) Height(stream Stream) int {

@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	xterm "golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -20,7 +21,7 @@ func setupTest(t *testing.T) func() {
 	// Reset viper for clean test state
 	viper.Reset()
 
-	for _, envVar := range []string{"NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "FORCE_COLOR", "TERM", "COLORTERM", "CI"} {
+	for _, envVar := range []string{"NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "FORCE_COLOR", "TERM", "COLORTERM", "CI", "COLUMNS"} {
 		t.Setenv(envVar, "")
 	}
 
@@ -123,6 +124,73 @@ func TestForceTTY_Width(t *testing.T) {
 				// Just verify it doesn't panic
 				assert.NotNil(t, term)
 			}
+		})
+	}
+}
+
+// TestWidth_ColumnsFallback verifies the COLUMNS env var supplies the width on
+// non-TTY streams (the recording/screengrab contract) and that malformed
+// values are ignored. These tests only assert when the stream is genuinely not
+// a TTY, which is the normal `go test` environment.
+func TestWidth_ColumnsFallback(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	if xterm.IsTerminal(streamToFd(Stdout)) {
+		t.Skip("stdout is a real TTY; COLUMNS fallback does not apply")
+	}
+
+	tests := []struct {
+		name     string
+		columns  string
+		forceTTY bool
+		expected int
+	}{
+		{
+			name:     "positive COLUMNS is honored on non-TTY",
+			columns:  "90",
+			forceTTY: false,
+			expected: 90,
+		},
+		{
+			name:     "COLUMNS wins over force-tty default",
+			columns:  "80",
+			forceTTY: true,
+			expected: 80,
+		},
+		{
+			name:     "malformed COLUMNS is ignored",
+			columns:  "wide",
+			forceTTY: false,
+			expected: 0,
+		},
+		{
+			name:     "zero COLUMNS is ignored",
+			columns:  "0",
+			forceTTY: false,
+			expected: 0,
+		},
+		{
+			name:     "negative COLUMNS is ignored",
+			columns:  "-5",
+			forceTTY: false,
+			expected: 0,
+		},
+		{
+			name:     "malformed COLUMNS falls back to force-tty default",
+			columns:  "wide",
+			forceTTY: true,
+			expected: defaultForcedWidth,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("COLUMNS", tt.columns)
+			viper.Set("force-tty", tt.forceTTY)
+
+			term := New()
+			assert.Equal(t, tt.expected, term.Width(Stdout))
 		})
 	}
 }
@@ -753,6 +821,15 @@ func TestDetectColorProfile_RespectsTTY(t *testing.T) {
 			isTTY:    false,
 			expected: ColorTrue,
 			reason:   "Should return ColorTrue for non-TTY with --force-color",
+		},
+		{
+			name: "Non-TTY with CLICOLOR_FORCE",
+			config: Config{
+				EnvCLIColorForce: true,
+			},
+			isTTY:    false,
+			expected: ColorTrue,
+			reason:   "Should return ColorTrue on pipes with CLICOLOR_FORCE (screengrab recording contract)",
 		},
 		{
 			name: "TTY with no-color",
