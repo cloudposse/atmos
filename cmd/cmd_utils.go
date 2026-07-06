@@ -26,6 +26,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component/custom"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
@@ -1009,27 +1010,42 @@ func executeCustomCommand(
 			}
 		}
 
-		// Process Go templates in the command's steps.
-		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
-		commandToRun, err := stepVars.Resolve(step.Command)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-
 		// Determine step type - default to shell if not specified.
 		stepType := strings.TrimSpace(step.Type)
 		if stepType == "" {
 			stepType = "shell"
 		}
 
+		// If this step will be enclosed in a CI log group, mark the subprocess
+		// environment so a nested `atmos` invocation skips unsupported nested
+		// grouping.
+		if stepType != schema.TaskTypeExec && ci.ShouldPropagateLogGroupSentinel(&atmosConfig, ci.DimensionStep) {
+			sentinel := ci.LogGroupSentinelEnv()
+			env = append(env, sentinel)
+			if key, value, ok := strings.Cut(sentinel, "="); ok {
+				stepVars.SetEnv(key, value)
+			}
+		}
+
+		// Process Go templates in the command's steps.
+		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
+		commandToRun, err := stepVars.Resolve(step.Command)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+
+		// Execute the step based on type.
+		//
+		// shell/exec/atmos use the legacy, cross-platform, child-reaping paths
+		// below; only genuinely-extended step types (container, input, confirm,
+		// …) route through the registered step handlers via the default case.
+		// Routing shell/atmos through the handlers regressed Windows (handlers
+		// hardcode `sh -c` → exit 126) and leaked orphaned `atmos` child
+		// processes on Linux (no process-group cleanup), so they stay on the
+		// legacy paths.
+		//
+		// The dispatch is wrapped in a collapsible CI log group (no-op outside
+		// CI / when disabled), labeled with the step name or command. Exec steps
+		// run bare because a successful Unix exec never returns to close a group.
 		runStep := func() error {
-			// Execute the step based on type.
-			//
-			// shell/exec/atmos use the legacy, cross-platform, child-reaping paths
-			// below; only genuinely-extended step types (container, input, confirm,
-			// …) route through the registered step handlers via the default case.
-			// Routing shell/atmos through the handlers regressed Windows (handlers
-			// hardcode `sh -c` → exit 126) and leaked orphaned `atmos` child
-			// processes on Linux (no process-group cleanup), so they stay on the
-			// legacy paths.
 			switch stepType {
 			case "shell":
 				// Execute shell command (backward compatible).
@@ -1087,11 +1103,12 @@ func executeCustomCommand(
 				return fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
 			}
 		}
-		if step.Retry != nil {
-			err = retry.Do(context.Background(), step.Retry, runStep)
-		} else {
-			err = runStep()
-		}
+		err = stepPkg.RunGroupedForType(&atmosConfig, step.Name, commandToRun, stepType, func() error {
+			if step.Retry != nil {
+				return retry.Do(context.Background(), step.Retry, runStep)
+			}
+			return runStep()
+		})
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
