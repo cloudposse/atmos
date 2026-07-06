@@ -194,13 +194,29 @@ func TestTrackListShowAndGetCommands(t *testing.T) {
 	setTrackConfigForTest(t, cfg)
 	stdout := setupTrackOutput(t)
 
-	listCmd := newTrackCommand(trackListCmd, formatParserOptions()...)
-	if err := runTrackCommand(t, listCmd); err != nil {
+	listCmd := newTrackCommand(trackListCmd, trackListParserOptions()...)
+	if err := runTrackCommand(t, listCmd, "--format", "json"); err != nil {
 		t.Fatalf("list command returned error: %v", err)
 	}
 	output := stdout.String()
-	if !strings.Contains(output, "- dev") || !strings.Contains(output, "- prod") {
+	if !strings.Contains(output, `"dev"`) || !strings.Contains(output, `"prod"`) || !strings.Contains(output, `"opentofu": "1.10.0"`) {
 		t.Fatalf("list output = %q", output)
+	}
+
+	stdout.Reset()
+	listCmd = newTrackCommand(trackListCmd, trackListParserOptions()...)
+	if err := runTrackCommand(t, listCmd, "--format", "json", "--show", "desired"); err != nil {
+		t.Fatalf("list --show desired returned error: %v", err)
+	}
+	output = stdout.String()
+	if !strings.Contains(output, `"opentofu": "1.10.0"`) {
+		t.Fatalf("list --show desired output = %q", output)
+	}
+
+	stdout.Reset()
+	listCmd = newTrackCommand(trackListCmd, trackListParserOptions()...)
+	if err := runTrackCommand(t, listCmd, "--show", "bogus"); !errors.Is(err, manager.ErrUnsupportedVersionShow) {
+		t.Fatalf("list --show bogus error = %v, want %v", err, manager.ErrUnsupportedVersionShow)
 	}
 
 	stdout.Reset()

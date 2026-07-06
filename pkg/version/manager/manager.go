@@ -74,13 +74,20 @@ func EffectiveTrackFromStack(atmosConfig *schema.AtmosConfiguration, stackInfo *
 	return EffectiveTrack(atmosConfig, "")
 }
 
-// TrackNames returns sorted configured track names.
+// TrackNames returns sorted configured track names. It also includes the
+// implicit default track (the one EffectiveTrack resolves to) when it has no
+// entry in version.tracks but is usable via the base dependency catalog, so
+// callers see the same set of usable tracks that EffectiveEntries does.
 func TrackNames(atmosConfig *schema.AtmosConfiguration) []string {
 	defer perf.Track(atmosConfig, "manager.TrackNames")()
 
-	names := make([]string, 0, len(atmosConfig.Version.Tracks))
+	names := make([]string, 0, len(atmosConfig.Version.Tracks)+1)
 	for name := range atmosConfig.Version.Tracks {
 		names = append(names, name)
+	}
+	implicit := EffectiveTrack(atmosConfig, "")
+	if _, ok := atmosConfig.Version.Tracks[implicit]; !ok && canUseBaseCatalogTrack(atmosConfig, implicit) {
+		names = append(names, implicit)
 	}
 	sort.Strings(names)
 	return names
