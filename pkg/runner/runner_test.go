@@ -296,6 +296,52 @@ func TestRunAll_EmptyTasks(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRunAll_SkipsTaskWhenConditionIsFalse(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	tasks := Tasks{
+		{Name: "skip", Command: "echo skip", Type: "shell", When: schema.MustCondition("never")},
+		{Name: "run", Command: "echo run", Type: "shell"},
+	}
+
+	mockRunner.EXPECT().RunShell(ctx, "echo run", "run", ".", []string(nil), false).Return(nil)
+
+	err := RunAll(ctx, tasks, mockRunner, Options{})
+	require.NoError(t, err)
+}
+
+func TestRunAll_WhenConditionUsesEnv(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	ctx := context.Background()
+
+	tasks := Tasks{
+		{
+			Name:    "dev-shell-only",
+			Command: "echo dev shell",
+			Type:    "shell",
+			When:    schema.MustCondition(`env["ATMOS_DEV_SHELL"] == "1"`),
+		},
+		{
+			Name:    "not-dev-shell",
+			Command: "echo not dev shell",
+			Type:    "shell",
+			When:    schema.MustCondition(`!("ATMOS_DEV_SHELL" in env) || env["ATMOS_DEV_SHELL"] != "1"`),
+		},
+	}
+
+	mockRunner.EXPECT().RunShell(ctx, "echo dev shell", "dev-shell-only", ".", []string{"ATMOS_DEV_SHELL=1"}, false).Return(nil)
+
+	err := RunAll(ctx, tasks, mockRunner, Options{Env: []string{"ATMOS_DEV_SHELL=1"}})
+	require.NoError(t, err)
+}
+
 func TestAppendStackArg_NoSeparator(t *testing.T) {
 	args := []string{"terraform", "plan", "vpc"}
 	result := appendStackArg(args, "dev")

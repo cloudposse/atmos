@@ -2,6 +2,7 @@ commands:
   - name: build
     description: Build and documentation commands for Atmos development
     default: binary
+    working_directory: !repo-root .
     env: &build_env
       - key: GOTOOLCHAIN
         value: auto
@@ -71,9 +72,18 @@ commands:
           env ${goos:+GOOS=$goos} ${goarch:+GOARCH=$goarch} \
             go build -o "$output" -v \
             -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$version'"
+      - &build_success_step
+        type: toast
+        level: success
+        content: 'Atmos binary built successfully: `./build/atmos{{ if eq .Flags.target "windows" }}.exe{{ end }}`'
+      - &build_dev_shell_hint_step
+        type: hint
+        when: !cel '!("ATMOS_DEV_SHELL" in env) || env["ATMOS_DEV_SHELL"] != "1"'
+        content: 'Run `atmos dev shell` so `atmos` resolves to `./build/atmos`.'
     commands:
       - name: deps
         description: Download Go module dependencies
+        working_directory: !repo-root .
         env:
           - key: GOTOOLCHAIN
             value: auto
@@ -82,6 +92,7 @@ commands:
 
       - name: binary
         description: Build the Atmos binary
+        working_directory: !repo-root .
         env: *build_env
         flags:
           - name: target
@@ -95,9 +106,12 @@ commands:
             level: info
             content: Building Atmos...
           - *build_binary_step
+          - *build_success_step
+          - *build_dev_shell_hint_step
 
       - name: version
         description: Print the version from an already-built Atmos binary
+        working_directory: !repo-root .
         env:
           - key: ATMOS_BUILD_TARGET
             value: "{{ .Flags.target }}"
@@ -128,6 +142,7 @@ commands:
 
       - name: readme
         description: Regenerate README.md from README.yaml
+        working_directory: !repo-root .
         env:
           - key: GOTOOLCHAIN
             value: auto

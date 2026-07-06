@@ -9,11 +9,13 @@ import (
 
 	"mvdan.cc/sh/v3/shell"
 
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 // Sentinel errors for task execution.
@@ -261,11 +263,58 @@ func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts Options
 	}
 
 	for i, task := range tasks {
+		if err := schema.ValidateStepCondition(task.When); err != nil {
+			return err
+		}
+		runs, err := task.When.EvaluateWithImplicitSuccessE(taskConditionContext(&task, i, opts, schema.ConditionPredicateSuccess))
+		if err != nil {
+			return err
+		}
+		if !runs {
+			continue
+		}
 		if err := Run(ctx, &task, runner, opts); err != nil {
 			return fmt.Errorf("task %d (%s) failed: %w", i, taskName(&task, i), err)
 		}
 	}
 	return nil
+}
+
+func taskConditionContext(task *Task, index int, opts Options, status string) schema.ConditionContext {
+	env := envpkg.EnvironToMap()
+	if env == nil {
+		env = make(map[string]string)
+	}
+	for _, item := range opts.Env {
+		key, value, ok := strings.Cut(item, "=")
+		if !ok {
+			continue
+		}
+		env[key] = value
+	}
+
+	stack := opts.Stack
+	stepName := ""
+	if task != nil {
+		if stack == "" {
+			stack = task.Stack
+		}
+		stepName = task.Name
+		for key, value := range task.Env {
+			env[key] = value
+		}
+	}
+	if stepName == "" {
+		stepName = fmt.Sprintf("step-%d", index)
+	}
+
+	return schema.ConditionContext{
+		CI:     telemetry.IsCI(),
+		Status: status,
+		Stack:  stack,
+		Step:   stepName,
+		Env:    env,
+	}
 }
 
 // taskName returns a display name for the task.

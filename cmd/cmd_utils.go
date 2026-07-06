@@ -738,7 +738,13 @@ func executeCustomCommand(
 		finalArgs = args
 	}
 
-	commandConditionEnv := envpkg.CommandEnvToMap(commandConfig.Env)
+	commandConditionEnv := envpkg.EnvironToMap()
+	if commandConditionEnv == nil {
+		commandConditionEnv = make(map[string]string)
+	}
+	for key, value := range envpkg.CommandEnvToMap(commandConfig.Env) {
+		commandConditionEnv[key] = value
+	}
 	hasRunnableStep := false
 	for i := range commandConfig.Steps {
 		step := &commandConfig.Steps[i]

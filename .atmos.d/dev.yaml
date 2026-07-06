@@ -65,6 +65,7 @@ commands:
               set -eu
               root="$(git rev-parse --show-toplevel)"
               cd "$root"
+              export ATMOS_DEV_SHELL=1
               export PATH="$root/build:$PATH"
               exec "${SHELL:-/bin/sh}"
 
