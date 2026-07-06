@@ -1669,6 +1669,7 @@ func Execute() error {
 	if err := processEarlyChdirFlag(); err != nil {
 		return err
 	}
+	preprocessHelpTopicArgs()
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
@@ -1862,6 +1863,19 @@ func preprocessArgs() []string {
 		RootCmd.SetArgs(processedArgs)
 	}
 	return processedArgs
+}
+
+func preprocessHelpTopicArgs() {
+	currentHelpTopic = helpTopicRequest{valid: true}
+
+	normalizedArgs, request, changed := normalizeHelpTopicArgs(os.Args[1:])
+	currentHelpTopic = request
+	if !changed {
+		return
+	}
+
+	os.Args = append([]string{os.Args[0]}, normalizedArgs...)
+	RootCmd.SetArgs(normalizedArgs)
 }
 
 // slicesEqual compares two string slices for equality.
@@ -2199,20 +2213,20 @@ func initCobraConfig() {
 				// User explicitly requested pager for flag help.
 				var buf bytes.Buffer
 				command.SetOut(&buf)
-				applyColoredHelpTemplate(command)
+				applyColoredHelpTemplateForTopic(command, currentHelpTopic)
 				_ = command.Help()
 				pager := pager.NewWithAtmosConfig(true, atmosConfig.Settings.Terminal.Speed)
 				_ = pager.Run("Atmos CLI Help", buf.String())
 			} else {
 				// Default: render help directly to stdout without pager.
-				applyColoredHelpTemplate(command)
+				applyColoredHelpTemplateForTopic(command, currentHelpTopic)
 				_ = command.Help()
 			}
 		case isInteractiveHelp:
 			// Interactive 'atmos help' command - use pager if configured.
 			var buf bytes.Buffer
 			command.SetOut(&buf)
-			applyColoredHelpTemplate(command)
+			applyColoredHelpTemplateForTopic(command, currentHelpTopic)
 			_ = command.Help()
 
 			// Check pager configuration from flag, env, or config.
@@ -2236,7 +2250,7 @@ func initCobraConfig() {
 			}
 		default:
 			// Fallback for other cases.
-			applyColoredHelpTemplate(command)
+			applyColoredHelpTemplateForTopic(command, currentHelpTopic)
 			_ = command.Help()
 		}
 
