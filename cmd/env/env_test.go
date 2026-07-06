@@ -287,10 +287,9 @@ func TestShouldMaskStdout(t *testing.T) {
 // the real os.Stdout handle for this test process (typically a pipe under `go test`,
 // so it should return false, but the key coverage goal is exercising both branches).
 func TestStdoutIsCharDevice(t *testing.T) {
-	got := stdoutIsCharDevice()
 	// os.Stdout.Stat() should succeed for a real process, so we just assert
-	// the function returns a valid bool without panicking.
-	assert.IsType(t, false, got)
+	// the call completes without panicking.
+	assert.NotPanics(t, func() { stdoutIsCharDevice() })
 }
 
 func TestOutputEnvAsJSON(t *testing.T) {

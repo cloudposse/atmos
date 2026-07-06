@@ -1683,9 +1683,10 @@ func TestRunCastChildStepReturnsPauseDelayError(t *testing.T) {
 	executor := NewStepExecutorWithVars(NewVariables())
 	err := runCastChildStep(context.Background(), &schema.WorkflowStep{}, &schema.WorkflowStep{
 		Name:     "child",
-		Type:     schema.TaskTypeShell,
+		Type:     schema.TaskTypeAtmos,
 		Output:   string(OutputModeNone),
-		Command:  "true",
+		Command:  "terraform plan",
+		Env:      map[string]string{"_ATMOS_STEP_FAKE": "ok"},
 		Interval: "bad-duration",
 	}, NewVariables(), executor)
 	if err == nil {
@@ -1797,9 +1798,13 @@ func TestExecuteWithWorkflowJoinsDiscardError(t *testing.T) {
 		Steps: []schema.WorkflowStep{
 			{
 				Name:    "boom",
-				Type:    schema.TaskTypeShell,
+				Type:    schema.TaskTypeAtmos,
 				Output:  string(OutputModeNone),
-				Command: "rm -f " + filepath.Join(tmpDir, ".demo.cast.tmp-"+"*") + "; exit 1",
+				Command: "terraform plan",
+				Env: map[string]string{
+					"_ATMOS_STEP_FAKE":     "rm-glob-and-fail",
+					atmosStepFakeRMGlobEnv: filepath.Join(tmpDir, ".demo.cast.tmp-*"),
+				},
 			},
 		},
 	}, NewVariables())

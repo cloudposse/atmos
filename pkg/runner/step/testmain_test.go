@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -16,14 +17,22 @@ import (
 // pkg/asciicast's own session test helper.
 const sessionShellHelperEnv = "_ATMOS_STEP_SESSION_SHELL"
 
+// _atmosStepFakeRMGlobEnv names the env var carrying the glob pattern that the
+// "rm-glob-and-fail" _ATMOS_STEP_FAKE mode deletes before exiting non-zero.
+// This lets cast_test.go exercise a child step that deletes a file and fails,
+// without depending on the platform-specific "rm" binary or a shell.
+const atmosStepFakeRMGlobEnv = "_ATMOS_STEP_FAKE_RM_GLOB"
+
 // TestMain lets the test binary impersonate a fake "atmos" executable so that
 // subprocess-executing handlers (e.g. AtmosHandler) can be tested
 // cross-platform without a real atmos install.
 //
 // When _ATMOS_STEP_FAKE is set, the process behaves as the fake binary and
 // exits immediately instead of running the test suite:
-//   - "ok":   print a known marker to stdout, exit 0.
-//   - "fail": print an error marker to stderr, exit 3.
+//   - "ok":               print a known marker to stdout, exit 0.
+//   - "fail":             print an error marker to stderr, exit 3.
+//   - "rm-glob-and-fail": delete files matching atmosStepFakeRMGlobEnv's glob
+//     pattern, then exit 1.
 //
 // AtmosHandler.runAtmosCommand resolves the binary via os.Executable(), which
 // in tests is this binary, so the sentinel is delivered via the step's env.
@@ -39,9 +48,24 @@ func TestMain(m *testing.M) {
 	case "fail":
 		_, _ = os.Stderr.WriteString("fake-atmos-error")
 		os.Exit(3)
+	case "rm-glob-and-fail":
+		removeGlobMatches(os.Getenv(atmosStepFakeRMGlobEnv))
+		os.Exit(1)
 	}
 
 	os.Exit(m.Run())
+}
+
+// removeGlobMatches deletes every file matching pattern, ignoring a pattern
+// that matches nothing.
+func removeGlobMatches(pattern string) {
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return
+	}
+	for _, match := range matches {
+		_ = os.Remove(match)
+	}
 }
 
 // runStepSessionShellHelper is a minimal line-oriented "shell" driven over
