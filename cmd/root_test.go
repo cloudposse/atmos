@@ -129,6 +129,100 @@ func TestInitFunction(t *testing.T) {
 	}
 }
 
+func TestInvocationGroupLabel(t *testing.T) {
+	_ = NewTestKit(t)
+	customCmd := &cobra.Command{Use: "my-custom-command [target]"}
+	customCmd.Flags().String("token", "", "")
+	RootCmd.AddCommand(customCmd)
+	t.Cleanup(func() { RootCmd.RemoveCommand(customCmd) })
+
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "workflow includes first positional after flags",
+			args: []string{"workflow", "--file", "workflows", "deploy"},
+			want: "atmos workflow deploy",
+		},
+		{
+			name: "terraform plan includes component and drops flags",
+			args: []string{"terraform", "plan", "vpc", "-s", "dev", "-var", "secret=x"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "terraform apply ignores args after separator",
+			args: []string{"terraform", "apply", "app", "--", "-target=module.secret"},
+			want: "atmos terraform apply app",
+		},
+		{
+			name: "describe affected uses command path only",
+			args: []string{"describe", "affected", "--stack", "prod"},
+			want: "atmos describe affected",
+		},
+		{
+			name: "custom command includes first positional",
+			args: []string{"my-custom-command", "target", "--token", "secret"},
+			want: "atmos my-custom-command target",
+		},
+		{
+			name: "unknown command falls back to first positional",
+			args: []string{"missing-command", "--token", "secret"},
+			want: "atmos missing-command",
+		},
+		{
+			name: "unknown leading flag is not exposed",
+			args: []string{"--token", "secret"},
+			want: "atmos",
+		},
+		{
+			name: "end of options as first arg is not exposed",
+			args: []string{"--", "secret"},
+			want: "atmos",
+		},
+		{
+			name: "long flag assignment does not consume following positional",
+			args: []string{"terraform", "plan", "--var=secret=x", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "unknown flag consumes following value",
+			args: []string{"terraform", "plan", "--token", "secret", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "bool flag does not consume following positional",
+			args: []string{"terraform", "plan", "--dry-run", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "no opt flag does not consume following positional",
+			args: []string{"terraform", "plan", "--identity", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "attached shorthand value does not consume following positional",
+			args: []string{"terraform", "plan", "-sdev", "vpc"},
+			want: "atmos terraform plan vpc",
+		},
+		{
+			name: "no args",
+			args: nil,
+			want: "atmos",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, invocationGroupLabel(RootCmd, tt.args))
+		})
+	}
+
+	assert.Equal(t, "atmos", invocationGroupLabel(nil, []string{"version"}))
+	assert.Equal(t, "atmos orphan", invocationGroupLabel(&cobra.Command{}, []string{"orphan"}))
+}
+
 func TestArgsRequestNoArgGitClone(t *testing.T) {
 	tests := []struct {
 		name string
@@ -180,6 +274,14 @@ func TestHandleConfigInitError_AllowsCIGitCloneBootstrap(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.True(t, cfg.CI.Enabled, "CI clone bootstrap must enable the no-arg CI checkout path without repo-local config")
+}
+
+func TestPreprocessArgs_NoArgs(t *testing.T) {
+	originalArgs := os.Args
+	t.Cleanup(func() { os.Args = originalArgs })
+
+	os.Args = []string{"atmos"}
+	assert.Nil(t, preprocessArgs())
 }
 
 func TestSetupLogger_TraceLevel(t *testing.T) {

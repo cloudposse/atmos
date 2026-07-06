@@ -3,7 +3,9 @@
 
 **Error:** invalid workflow step type
 
-Step type 'invalid' is not supported
+Workflow invalid-step-type step step1 uses unsupported type invalid.
+
+💡 Step type 'invalid' is not supported
 
 💡 Each step must specify a valid type: 'atmos', 'shell', 'exec', or an interactive type like 'input', 'confirm',
 'choose'
