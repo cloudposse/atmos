@@ -160,7 +160,8 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 		return err
 	}
 
-	for name, hook := range h.items {
+	for name := range h.items {
+		hook := h.items[name]
 		if !hook.MatchesEvent(filter.event) {
 			log.Debug("Skipping hook, event not in hook events list", "hook", name, "event", event, "hook_events", hook.Events)
 			continue

@@ -243,7 +243,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad // indirect
 	github.com/dvsekhvalnov/jose2go v1.8.0 // indirect
-	github.com/editorconfig/editorconfig-core-go/v2 v2.6.4 // indirect
+	github.com/editorconfig/editorconfig-core-go/v2 v2.6.4
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
 	github.com/emicklei/proto v1.14.3 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect

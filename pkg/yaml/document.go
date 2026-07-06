@@ -74,6 +74,13 @@ func editBase(content []byte) []byte {
 // lines following a block-scalar introducer are ignored (they are scalar
 // content). Falls back to DefaultIndent when nothing usable is found.
 func detectIndent(content []byte) int {
+	indent, _ := detectIndentWidth(content)
+	return indent
+}
+
+// detectIndentWidth infers indentation and reports whether the value came
+// from document structure rather than the package default.
+func detectIndentWidth(content []byte) (int, bool) {
 	prev := ""
 	for _, line := range strings.Split(string(content), "\n") {
 		trimmed := strings.TrimLeft(line, " ")
@@ -83,13 +90,13 @@ func detectIndent(content []byte) int {
 		indent := len(line) - len(trimmed)
 		if indent > 0 && prev != "" && !strings.HasPrefix(prev, " ") && !blockScalarIntroRe.MatchString(prev) {
 			if indent >= DefaultIndent && indent <= maxDetectedIndent {
-				return indent
+				return indent, true
 			}
-			return DefaultIndent
+			return DefaultIndent, false
 		}
 		prev = line
 	}
-	return DefaultIndent
+	return DefaultIndent, false
 }
 
 // Line-ending byte sequences used by restoreLineEndings.
