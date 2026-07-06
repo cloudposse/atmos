@@ -3,7 +3,6 @@ package devcontainer
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
@@ -11,7 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-var removeParser *flags.StandardParser
+var removeParser *flags.StandardFlagParser
 
 // RemoveOptions contains parsed flags for the remove command.
 type RemoveOptions struct {
@@ -27,23 +26,17 @@ var removeCmd = &cobra.Command{
 This will stop the container if it's running and remove it completely.
 Use --force to remove a running container without stopping it first.`,
 	Example:           markdown.DevcontainerRemoveUsageMarkdown,
-	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: devcontainerNameCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.remove.RunE")()
 
-		// Parse flags using new options pattern.
-		v := viper.GetViper()
-		if err := removeParser.BindFlagsToViper(cmd, v); err != nil {
-			return err
-		}
-
-		opts, err := parseRemoveOptions(cmd, v, args)
+		parsed, err := removeParser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err
 		}
+		opts := parseRemoveOptions(parsed)
 
-		name := args[0]
+		name := parsed.PositionalArgs[0]
 		mgr := devcontainer.NewManager()
 		return mgr.Remove(atmosConfigPtr, name, opts.Instance, opts.Force)
 	},
@@ -51,26 +44,26 @@ Use --force to remove a running container without stopping it first.`,
 
 // parseRemoveOptions parses command flags into RemoveOptions.
 //
-// ParseRemoveOptions builds a RemoveOptions populated from the Viper configuration.
-// It reads the "instance" and "force" keys from v; the args parameter is unused but retained for API consistency.
-func parseRemoveOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*RemoveOptions, error) {
+// ParseRemoveOptions reads parsed flags into a RemoveOptions value.
+func parseRemoveOptions(parsed *flags.ParsedConfig) *RemoveOptions {
 	return &RemoveOptions{
-		Instance: v.GetString("instance"),
-		Force:    v.GetBool("force"),
-	}, nil
+		Instance: flags.GetString(parsed.Flags, "instance"),
+		Force:    flags.GetBool(parsed.Flags, "force"),
+	}
 }
 
 // init initializes the remove command's flag parser and registers the command with the devcontainer command.
-// It creates a StandardParser with the "instance" and "force" flags (including environment variable bindings),
-// attaches those flags to removeCmd, and adds removeCmd as a subcommand of devcontainerCmd.
 func init() {
 	// Create parser with remove-specific flags using functional options.
-	removeParser = flags.NewStandardParser(
+	var usage string
+	removeParser, usage = newDevcontainerParser(
+		true,
 		flags.WithStringFlag("instance", "", "default", "Instance name for this devcontainer"),
 		flags.WithBoolFlag("force", "f", false, "Force remove even if running"),
 		flags.WithEnvVars("instance", "ATMOS_DEVCONTAINER_INSTANCE"),
 		flags.WithEnvVars("force", "ATMOS_DEVCONTAINER_FORCE"),
 	)
+	removeCmd.Use = "remove " + usage
 
 	initCommandWithFlags(removeCmd, removeParser)
 	devcontainerCmd.AddCommand(removeCmd)

@@ -59,8 +59,16 @@ commands:
   description: "Bring up the local Kubernetes emulator, apply the demo, then tear it down"
   steps:
   - atmos validate stacks
-  - atmos emulator up kubernetes -s dev
-  - atmos helmfile apply demo -s dev
+  - command: atmos emulator up kubernetes -s dev
+    retry:
+      max_attempts: 2
+      initial_delay: 15s
+      backoff_strategy: constant
+  - command: atmos helmfile apply demo -s dev
+    retry:
+      max_attempts: 2
+      initial_delay: 15s
+      backoff_strategy: constant
   - atmos emulator down kubernetes -s dev
 
   # The apply step is equivalent to the following commands:
