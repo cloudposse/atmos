@@ -101,17 +101,22 @@ jobs:
       - name: Get dependencies
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
-          atmos build deps
+          go mod download
 
       - name: Build
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        shell: bash
         run: |
-          atmos build --target ${{ matrix.target }}
+          sh scripts/build-atmos.sh ${{ matrix.target }} test
 
       - name: Version
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        shell: bash
         run: |
-          atmos build version --target ${{ matrix.target }}
+          case "${{ matrix.target }}" in
+            windows) ./build/atmos.exe version ;;
+            *) chmod +x ./build/atmos && ./build/atmos version ;;
+          esac
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -64,7 +64,7 @@ jobs:
 
       - name: Build Atmos
         run: |
-          atmos build --target linux
+          sh scripts/build-atmos.sh linux test
           echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
 
       - name: Restore Atmos native CI cache
@@ -160,7 +160,7 @@ jobs:
 
       - name: Build Atmos
         run: |
-          atmos build --target linux
+          sh scripts/build-atmos.sh linux test
           echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
 
       - name: Restore Atmos native CI cache
