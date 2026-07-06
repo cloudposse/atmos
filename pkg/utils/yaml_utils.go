@@ -5,12 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
 
 	yaml "gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -773,6 +776,14 @@ func processCustomTagsInner(atmosConfig *schema.AtmosConfiguration, node *yaml.N
 			continue
 		}
 
+		// Standard YAML tags (!!str, !!int, etc.) are allowed. Any other explicit
+		// YAML tag must be one of the Atmos-supported function tags.
+		if tag != "" && !strings.HasPrefix(tag, "!!") && !fntag.IsValidYAML(tag) {
+			supportedTags := strings.Join(fntag.AllYAML(), ", ")
+			return fmt.Errorf("%w: '%s' found in file '%s'. Supported tags are: %s",
+				errUtils.ErrUnsupportedYamlTag, tag, file, supportedTags)
+		}
+
 		// Handle !append tag - wrap the sequence in the append metadata so the merge
 		// phase (pkg/merge) appends it to the inherited list instead of replacing it.
 		// This mirrors handleAppend in pkg/config for atmos.yaml, but for stack manifests.
@@ -859,17 +870,16 @@ func rewriteAppendNode(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, fil
 	return nil
 }
 
-// hasCustomTags performs a fast scan to check if a node or any of its children contain custom Atmos tags.
-// This enables early exit optimization in processCustomTags, avoiding expensive recursive processing
-// for YAML subtrees that don't use custom tags (which is the majority of YAML content).
+// hasCustomTags performs a fast scan to check if a node or any of its children contain explicit YAML tags.
+// This includes unsupported tags so processCustomTags can return validation errors instead of skipping them.
 func hasCustomTags(node *yaml.Node) bool {
 	if node == nil {
 		return false
 	}
 
-	// Check if this node has a custom tag.
+	// Check if this node has an explicit custom tag. Standard YAML tags start with !!.
 	tag := strings.TrimSpace(node.Tag)
-	if atmosYamlTagsMap[tag] || tag == AtmosYamlFuncInclude || tag == AtmosYamlFuncIncludeRaw {
+	if strings.HasPrefix(tag, "!") && !strings.HasPrefix(tag, "!!") {
 		return true
 	}
 

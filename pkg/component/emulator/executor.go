@@ -339,6 +339,10 @@ func statusDot(status string, styles *theme.StyleSet) string {
 // shortImage drops the `@sha256:…` digest and the `docker.io/` registry prefix so
 // the image column stays narrow and readable (e.g. `floci/floci`).
 func shortImage(image string) string {
+	image = strings.TrimSpace(image)
+	if image == "" || image == "<image>" {
+		return "unknown"
+	}
 	if idx := strings.Index(image, "@"); idx >= 0 {
 		image = image[:idx]
 	}
@@ -349,6 +353,10 @@ func shortImage(image string) string {
 // shortID truncates a container ID to the conventional 12-character short form.
 func shortID(id string) string {
 	const shortIDLen = 12
+	id = strings.TrimSpace(id)
+	if id == "" || id == "<container>" {
+		return "unknown"
+	}
 	if len(id) > shortIDLen {
 		return id[:shortIDLen]
 	}
