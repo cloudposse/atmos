@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -878,6 +879,21 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 	// Verify the map has exactly the expected number of tags.
 	assert.Equal(t, len(expectedTags), len(atmosYamlTagsMap),
 		"atmosYamlTagsMap should contain exactly %d tags", len(expectedTags))
+}
+
+func TestFntagPackage_ContainsAllSupportedYamlTags(t *testing.T) {
+	expectedTags := append([]string{
+		AtmosYamlFuncInclude,
+		AtmosYamlFuncIncludeRaw,
+	}, AtmosYamlTags...)
+
+	allTags := fntag.AllYAML()
+	for _, expectedTag := range expectedTags {
+		assert.True(t, fntag.IsValidYAML(expectedTag), "fntag.AllYAML() should contain tag: %s", expectedTag)
+	}
+
+	assert.Equal(t, len(expectedTags), len(allTags),
+		"fntag.AllYAML() should contain exactly %d tags", len(expectedTags))
 }
 
 // TestAtmosYamlTagsMap_O1Lookup tests that atmosYamlTagsMap provides O(1) lookup.

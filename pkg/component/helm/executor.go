@@ -262,7 +262,7 @@ func runDiff(
 	if strings.TrimSpace(diffText) == "" {
 		_ = data.Writeln("No changes. The rendered chart matches the baseline.")
 	} else {
-		_ = data.Write(diffText)
+		_ = data.Write(colorizeUnifiedDiff(diffText))
 	}
 	return diffText, nil
 }

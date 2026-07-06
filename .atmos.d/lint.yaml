@@ -1,6 +1,21 @@
 commands:
   - name: lint
     description: Linting commands for Atmos development
+    flags:
+      - name: changed
+        type: bool
+        description: Run lint checks for changes from origin/main
+        default: false
+    steps:
+      - type: shell
+        command: |
+          set -eu
+          if [ "{{ .Flags.changed }}" != "true" ]; then
+            echo "Select a lint mode, for example: atmos lint --changed" >&2
+            exit 1
+          fi
+      - type: atmos
+        command: lint changed
     commands:
       - name: changed
         description: Run lint checks for changes from origin/main
