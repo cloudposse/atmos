@@ -70,7 +70,7 @@ func TestStartRecordingWithExplicitPath(t *testing.T) {
 	err := StartRecordingIfRequested(
 		cmd,
 		&schema.AtmosConfiguration{
-			Cast: schema.CastConfig{Recording: schema.CastRecordingConfig{Width: 100, Height: 30, Input: true}},
+			Cast: &schema.CastConfig{Recording: &schema.CastRecordingConfig{Width: 100, Height: 30, Input: true}},
 		},
 		[]string{"--cast=" + castPath, "terraform", "plan", "--stack", "dev"},
 	)
@@ -125,7 +125,7 @@ func TestActiveRecordingWidth(t *testing.T) {
 	err := StartRecordingIfRequested(
 		cmd,
 		&schema.AtmosConfiguration{
-			Cast: schema.CastConfig{Recording: schema.CastRecordingConfig{Width: 90, Height: 30}},
+			Cast: &schema.CastConfig{Recording: &schema.CastRecordingConfig{Width: 90, Height: 30}},
 		},
 		[]string{"--cast=" + castPath, "terraform", "plan"},
 	)
@@ -153,7 +153,7 @@ func TestStartRecordingWithConfigEnabledUsesBasePath(t *testing.T) {
 	err := StartRecordingIfRequested(
 		newRecordingTestCommand("workflow"),
 		&schema.AtmosConfiguration{
-			Cast: schema.CastConfig{Recording: schema.CastRecordingConfig{Enabled: true, BasePath: basePath}},
+			Cast: &schema.CastConfig{Recording: &schema.CastRecordingConfig{Enabled: true, BasePath: basePath}},
 		},
 		[]string{"workflow", "demo"},
 	)
@@ -242,7 +242,7 @@ func TestStartRecordingStillSkipsHelpWithImplicitRecording(t *testing.T) {
 	err := StartRecordingIfRequested(
 		cmd,
 		&schema.AtmosConfiguration{
-			Cast: schema.CastConfig{Recording: schema.CastRecordingConfig{Enabled: true, BasePath: t.TempDir()}},
+			Cast: &schema.CastConfig{Recording: &schema.CastRecordingConfig{Enabled: true, BasePath: t.TempDir()}},
 		},
 		[]string{"about", "--help"},
 	)

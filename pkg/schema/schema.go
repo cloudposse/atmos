@@ -70,7 +70,7 @@ type ConfigMetadata struct {
 type AtmosConfiguration struct {
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	BasePathSource                string             `yaml:"-" json:"-" mapstructure:"-"` // "runtime" if from env var/CLI/provider, "" if from config file.
-	Cast                          CastConfig         `yaml:"cast,omitempty" json:"cast,omitempty" mapstructure:"cast"`
+	Cast                          *CastConfig        `yaml:"cast,omitempty" json:"cast,omitempty" mapstructure:"cast"`
 	Components                    Components         `yaml:"components" json:"components" mapstructure:"components"`
 	Stacks                        Stacks             `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
 	Imports                       ImportsSettings    `yaml:"imports,omitempty" json:"imports,omitempty" mapstructure:"imports"`
@@ -143,7 +143,7 @@ type AtmosConfiguration struct {
 
 // CastConfig configures Atmos cast recording behavior.
 type CastConfig struct {
-	Recording CastRecordingConfig `yaml:"recording,omitempty" json:"recording,omitempty" mapstructure:"recording"`
+	Recording *CastRecordingConfig `yaml:"recording,omitempty" json:"recording,omitempty" mapstructure:"recording"`
 }
 
 // CastRecordingConfig configures automatic cast recording options.
@@ -153,6 +153,15 @@ type CastRecordingConfig struct {
 	Input    bool   `yaml:"input,omitempty" json:"input,omitempty" mapstructure:"input"`
 	Width    int    `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`
 	Height   int    `yaml:"height,omitempty" json:"height,omitempty" mapstructure:"height"`
+}
+
+// GetCastRecordingConfig returns cast recording settings or zero values when
+// cast recording is not configured.
+func (m *AtmosConfiguration) GetCastRecordingConfig() CastRecordingConfig {
+	if m == nil || m.Cast == nil || m.Cast.Recording == nil {
+		return CastRecordingConfig{}
+	}
+	return *m.Cast.Recording
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {

@@ -21,12 +21,6 @@ var (
 	defaultCliConfig = schema.AtmosConfiguration{
 		Default:  true,
 		BasePath: ".",
-		Cast: schema.CastConfig{
-			Recording: schema.CastRecordingConfig{
-				Width:  120,
-				Height: 36,
-			},
-		},
 		Stacks: schema.Stacks{
 			BasePath:    "stacks",
 			NamePattern: "{tenant}-{environment}-{stage}",

@@ -23,6 +23,15 @@ const (
 	FlagName = "cast"
 
 	autoFlagValue = "__AUTO__"
+
+	castExtension  = ".cast"
+	gifExtension   = ".gif"
+	mp4Extension   = ".mp4"
+	htmlExtension  = ".html"
+	asciiExtension = ".ascii"
+	pngExtension   = ".png"
+	jpgExtension   = ".jpg"
+	jpegExtension  = ".jpeg"
 )
 
 type activeRecording struct {
@@ -39,6 +48,7 @@ func RegisterRecordingFlag(flags *pflag.FlagSet) {
 	flags.String(FlagName, "", "Record command output as an asciinema cast (--cast for generated path, --cast=path with a .cast, .gif, .mp4, .html, .ascii, .png, .jpg, or .jpeg extension for explicit output)")
 	if castFlag := flags.Lookup(FlagName); castFlag != nil {
 		castFlag.NoOptDefVal = autoFlagValue
+		castFlag.Hidden = true
 	}
 }
 
@@ -92,7 +102,8 @@ func skipRecording(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, f
 	if isHelp && !flagChanged {
 		return true
 	}
-	return !atmosConfig.Cast.Recording.Enabled && !flagChanged
+	recording := atmosConfig.GetCastRecordingConfig()
+	return !recording.Enabled && !flagChanged
 }
 
 // castFlagFromArgs extracts the --cast flag from unparsed raw arguments.
@@ -126,13 +137,14 @@ func startRecorder(flagValue string, flagChanged bool, atmosConfig *schema.Atmos
 	if err != nil {
 		return nil, recordingOutputPlan{}, err
 	}
+	recording := atmosConfig.GetCastRecordingConfig()
 	rec, err := asciicast.Start(&asciicast.Options{
 		Path:     plan.castPath,
 		BasePath: recordingBasePath(plan, atmosConfig),
 		Command:  recordedCommandArgs(args),
-		Width:    atmosConfig.Cast.Recording.Width,
-		Height:   atmosConfig.Cast.Recording.Height,
-		RecordIn: atmosConfig.Cast.Recording.Input,
+		Width:    recording.Width,
+		Height:   recording.Height,
+		RecordIn: recording.Input,
 		Explicit: plan.explicitCast,
 		Env:      environment(),
 	})
@@ -162,9 +174,9 @@ func planRecordingOutput(value string, explicit bool) (recordingOutputPlan, erro
 	}
 	ext := strings.ToLower(filepath.Ext(value))
 	switch ext {
-	case ".cast":
+	case castExtension:
 		return recordingOutputPlan{castPath: value, explicitCast: true}, nil
-	case ".gif", ".mp4", ".html", ".ascii", ".png", ".jpg", ".jpeg":
+	case gifExtension, mp4Extension, htmlExtension, asciiExtension, pngExtension, jpgExtension, jpegExtension:
 		return planRenderedRecordingOutput(value)
 	default:
 		return recordingOutputPlan{}, fmt.Errorf("%w: %s", errUtils.ErrUnsupportedCastOutputExtension, value)
@@ -187,7 +199,8 @@ func recordingBasePath(plan recordingOutputPlan, atmosConfig *schema.AtmosConfig
 	if atmosConfig == nil {
 		return ""
 	}
-	return atmosConfig.Cast.Recording.BasePath
+	recording := atmosConfig.GetCastRecordingConfig()
+	return recording.BasePath
 }
 
 func recordedCommandArgs(args []string) []string {
@@ -278,17 +291,17 @@ func FinalizeRecording() {
 
 func renderRecordedCast(castPath, output string) error {
 	switch strings.ToLower(filepath.Ext(output)) {
-	case ".gif":
+	case gifExtension:
 		return asciicast.Render(castPath, &asciicast.RenderOptions{GIF: output})
-	case ".mp4":
+	case mp4Extension:
 		return asciicast.Render(castPath, &asciicast.RenderOptions{MP4: output})
-	case ".html":
+	case htmlExtension:
 		return asciicast.Render(castPath, &asciicast.RenderOptions{HTML: output})
-	case ".ascii":
+	case asciiExtension:
 		return asciicast.Render(castPath, &asciicast.RenderOptions{ASCII: output})
-	case ".png":
+	case pngExtension:
 		return asciicast.Render(castPath, &asciicast.RenderOptions{PNG: output})
-	case ".jpg", ".jpeg":
+	case jpgExtension, jpegExtension:
 		return asciicast.Render(castPath, &asciicast.RenderOptions{JPEG: output})
 	default:
 		return fmt.Errorf("%w: %s", errUtils.ErrUnsupportedCastOutputExtension, output)

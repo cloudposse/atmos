@@ -1687,9 +1687,9 @@ func TestGetTerminalWidth(t *testing.T) {
 }
 
 // TestGetTerminalWidthPrecedence covers the layout-width decision:
-// detected terminal width (COLUMNS on pipes) > default, capped at
-// Settings.Terminal.MaxWidth when configured. A zero-value config must never
-// be required for a sane result (help renders without atmos.yaml).
+// detected real terminal width > default, capped at Settings.Terminal.MaxWidth
+// when configured. A zero-value config must never be required for a sane result
+// (help renders without atmos.yaml).
 func TestGetTerminalWidthPrecedence(t *testing.T) {
 	originalConfig := atmosConfig
 	t.Cleanup(func() {
@@ -1710,15 +1710,15 @@ func TestGetTerminalWidthPrecedence(t *testing.T) {
 		assert.Equal(t, 60, getTerminalWidth())
 	})
 
-	t.Run("COLUMNS supplies the width on non-TTY", func(t *testing.T) {
+	t.Run("COLUMNS is ignored on non-TTY", func(t *testing.T) {
 		if terminal.New().IsTTY(terminal.Stdout) {
-			t.Skip("stdout is a real TTY; COLUMNS fallback does not apply")
+			t.Skip("stdout is a real TTY; non-TTY fallback does not apply")
 		}
 		t.Setenv("COLUMNS", "90")
 		ui.ReinitFormatter()
 		t.Cleanup(ui.Reset)
 		atmosConfig = schema.AtmosConfiguration{}
-		assert.Equal(t, 90, getTerminalWidth())
+		assert.Equal(t, 120, getTerminalWidth())
 	})
 }
 

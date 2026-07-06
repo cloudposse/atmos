@@ -128,16 +128,15 @@ func TestForceTTY_Width(t *testing.T) {
 	}
 }
 
-// TestWidth_ColumnsFallback verifies the COLUMNS env var supplies the width on
-// non-TTY streams (the recording/screengrab contract) and that malformed
-// values are ignored. These tests only assert when the stream is genuinely not
-// a TTY, which is the normal `go test` environment.
-func TestWidth_ColumnsFallback(t *testing.T) {
+// TestWidth_NonTTYFallback verifies non-TTY streams ignore COLUMNS and use
+// only the explicit forced-TTY default. This keeps piped CI output stable while
+// allowing cast recording code to provide its own explicit width.
+func TestWidth_NonTTYFallback(t *testing.T) {
 	cleanup := setupTest(t)
 	defer cleanup()
 
 	if xterm.IsTerminal(streamToFd(Stdout)) {
-		t.Skip("stdout is a real TTY; COLUMNS fallback does not apply")
+		t.Skip("stdout is a real TTY; non-TTY fallback does not apply")
 	}
 
 	tests := []struct {
@@ -147,16 +146,16 @@ func TestWidth_ColumnsFallback(t *testing.T) {
 		expected int
 	}{
 		{
-			name:     "positive COLUMNS is honored on non-TTY",
+			name:     "positive COLUMNS is ignored on non-TTY",
 			columns:  "90",
 			forceTTY: false,
-			expected: 90,
+			expected: 0,
 		},
 		{
-			name:     "COLUMNS wins over force-tty default",
+			name:     "force-tty default wins over COLUMNS",
 			columns:  "80",
 			forceTTY: true,
-			expected: 80,
+			expected: defaultForcedWidth,
 		},
 		{
 			name:     "malformed COLUMNS is ignored",
