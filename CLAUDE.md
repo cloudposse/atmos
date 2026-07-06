@@ -316,7 +316,7 @@ Follow template (what/why/references).
 - **MUST read `website/blog/tags.yml`** - Only use tags defined there, never invent new tags
 - **MUST read `website/blog/authors.yml`** - Use existing author or add new entry for committer
 
-**Blog Template:**
+**Blog Template (LEAD WITH THE PROBLEM, not the feature — people relate to problems, not features):**
 ```markdown
 ---
 slug: descriptive-slug
@@ -324,10 +324,15 @@ title: "Clear Title"
 authors: [username]
 tags: [feature]
 ---
-Brief intro.
+Open on the PAIN the reader already feels — the broken/tedious/confusing thing they live with
+today — then name the change as the relief. The intro (above the truncate) is the announcement;
+do NOT open it with "Atmos now supports X" or "A new flag does Y" (that is feature-first and reads
+like a spec).
 <!--truncate-->
-## What Changed / Why This Matters / How to Use It / Get Involved
+## The Problem / The Fix / How to Use It / Get Involved
 ```
+Structure the body problem-first: frame the pain, THEN the fix, THEN how to use it. Do not lead with
+`## What Changed`.
 
 **Valid Tags (from `website/blog/tags.yml`):**
 - User-facing: `feature`, `enhancement`, `bugfix`, `dx`, `breaking-change`, `security`, `documentation`, `deprecation`
