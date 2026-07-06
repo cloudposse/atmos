@@ -1851,6 +1851,101 @@ func TestExperimentalModeHandling(t *testing.T) {
 	}
 }
 
+func TestCheckExperimentalSettings(t *testing.T) {
+	tests := []struct {
+		name             string
+		config           *schema.AtmosConfiguration
+		expectExit       bool
+		expectedExitCode int
+	}{
+		{
+			name:   "nil config",
+			config: nil,
+		},
+		{
+			name:   "no experimental settings",
+			config: &schema.AtmosConfiguration{},
+		},
+		{
+			name: "key delimiter silence mode",
+			config: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Experimental: "silence",
+					YAML:         schema.AtmosYAMLSettings{KeyDelimiter: "."},
+				},
+			},
+		},
+		{
+			name: "key delimiter warn mode",
+			config: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Experimental: "warn",
+					YAML:         schema.AtmosYAMLSettings{KeyDelimiter: "."},
+				},
+			},
+		},
+		{
+			name: "empty experimental mode defaults to warn",
+			config: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					YAML: schema.AtmosYAMLSettings{KeyDelimiter: "."},
+				},
+			},
+		},
+		{
+			name: "key delimiter disable mode exits",
+			config: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Experimental: "disable",
+					YAML:         schema.AtmosYAMLSettings{KeyDelimiter: "."},
+				},
+			},
+			expectExit:       true,
+			expectedExitCode: 1,
+		},
+		{
+			name: "key delimiter error mode exits",
+			config: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Experimental: "error",
+					YAML:         schema.AtmosYAMLSettings{KeyDelimiter: "."},
+				},
+			},
+			expectExit:       true,
+			expectedExitCode: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			originalOsExit := errUtils.OsExit
+			defer func() {
+				errUtils.OsExit = originalOsExit
+			}()
+
+			var exitCalled bool
+			var exitCode int
+			errUtils.OsExit = func(code int) {
+				exitCalled = true
+				exitCode = code
+				panic(fmt.Sprintf("os.Exit(%d) called", code))
+			}
+
+			run := func() {
+				checkExperimentalSettings(tt.config)
+			}
+			if tt.expectExit {
+				assert.Panics(t, run)
+				assert.True(t, exitCalled)
+				assert.Equal(t, tt.expectedExitCode, exitCode)
+			} else {
+				assert.NotPanics(t, run)
+				assert.False(t, exitCalled)
+			}
+		})
+	}
+}
+
 // TestUnknownSubcommand verifies that only genuine unknown-subcommand errors
 // (ErrUnknownSubcommand, as produced by the registry executor's Cobra-error
 // conversion) are classified as such — and that a missing external executable

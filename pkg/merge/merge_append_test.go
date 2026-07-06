@@ -377,3 +377,41 @@ func TestMergeAppend_EndToEndFromStackManifests(t *testing.T) {
 	// depends_on (list of strings) is appended, not replaced.
 	assert.Equal(t, []any{"vpc", "iam-role", "rds", "elasticache"}, settings["depends_on"])
 }
+
+func TestMergeWithKeyDelimiterExpandedStackManifests(t *testing.T) {
+	cfg := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			YAML: schema.AtmosYAMLSettings{KeyDelimiter: "."},
+		},
+	}
+
+	baseYAML := `components:
+  terraform:
+    vpc:
+      metadata.component: vpc-base
+      settings.spacelift.workspace_enabled: false
+`
+	overlayYAML := `components:
+  terraform:
+    vpc:
+      settings.spacelift.autodeploy: true
+      "output.json": true
+`
+	base, err := u.UnmarshalYAMLFromFile[map[string]any](cfg, baseYAML, "base.yaml")
+	require.NoError(t, err)
+	overlay, err := u.UnmarshalYAMLFromFile[map[string]any](cfg, overlayYAML, "overlay.yaml")
+	require.NoError(t, err)
+
+	result, err := Merge(cfg, []map[string]any{base, overlay})
+	require.NoError(t, err)
+
+	vpc := result["components"].(map[string]any)["terraform"].(map[string]any)["vpc"].(map[string]any)
+	metadata := vpc["metadata"].(map[string]any)
+	settings := vpc["settings"].(map[string]any)
+	spacelift := settings["spacelift"].(map[string]any)
+
+	assert.Equal(t, "vpc-base", metadata["component"])
+	assert.Equal(t, false, spacelift["workspace_enabled"])
+	assert.Equal(t, true, spacelift["autodeploy"])
+	assert.Equal(t, true, vpc["output.json"], "quoted dotted keys stay literal through merge")
+}
