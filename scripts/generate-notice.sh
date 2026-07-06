@@ -10,41 +10,46 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 NOTICE_FILE="${REPO_ROOT}/NOTICE"
 TEMP_DIR=$(mktemp -d)
+GO_LICENSES_BIN="$(command -v go-licenses || true)"
+GO_LICENSES_VERSION="${GO_LICENSES_VERSION:-v1.6.0}"
+LICENSE_GOOS="${LICENSE_GOOS:-linux}"
+LICENSE_GOARCH="${LICENSE_GOARCH:-amd64}"
+LICENSE_CGO_ENABLED="${LICENSE_CGO_ENABLED:-1}"
 
 trap 'rm -rf "${TEMP_DIR}"' EXIT
 
 echo "Generating NOTICE file for Atmos..."
 echo "Working directory: ${REPO_ROOT}"
 echo "Temporary directory: ${TEMP_DIR}"
+echo "License target: GOOS=${LICENSE_GOOS} GOARCH=${LICENSE_GOARCH} CGO_ENABLED=${LICENSE_CGO_ENABLED}"
 
 cd "${REPO_ROOT}"
 
 # Deterministic license-URL overrides for modules that go-licenses cannot resolve
-# reliably. Vanity import paths (e.g. dario.cat/mergo, inet.af/netaddr) live on a
-# different host than their module path, so go-licenses must do a network fetch to
-# map the path to its source repo — when that fetch fails it emits "URL: Unknown",
-# producing a spurious NOTICE diff. Each entry is
-# "<module> <source-repo> [license-path] [ref-prefix]"; the URL is rebuilt from
-# the module's version in the build list (no network), so it is identical on
-# every run regardless of whether go-licenses' resolution succeeded.
+# reliably. Vanity import paths and split-module repos sometimes require
+# network/source metadata lookups; when those fail, go-licenses emits
+# "URL: Unknown", producing a spurious NOTICE diff. Each entry is pipe-delimited:
+# "<module>|<source-repo>|<tag-prefix>|<license-path>". The URL is rebuilt from
+# the module's version in the build list (no network), so it is identical on every
+# run regardless of whether go-licenses' resolution succeeded.
 # A plain newline-delimited list (not a bash 4 associative array) keeps this working
 # on macOS's stock bash 3.2.
 REPO_OVERRIDES="
-cloud.google.com/go github.com/googleapis/google-cloud-go
-cloud.google.com/go/auth github.com/googleapis/google-cloud-go auth/LICENSE auth/
-cloud.google.com/go/auth/oauth2adapt github.com/googleapis/google-cloud-go auth/oauth2adapt/LICENSE auth/oauth2adapt/
-cloud.google.com/go/compute/metadata github.com/googleapis/google-cloud-go compute/metadata/LICENSE compute/metadata/
-cloud.google.com/go/iam github.com/googleapis/google-cloud-go iam/LICENSE iam/
-cloud.google.com/go/kms github.com/googleapis/google-cloud-go kms/LICENSE kms/
-cloud.google.com/go/longrunning github.com/googleapis/google-cloud-go longrunning/LICENSE longrunning/
-cloud.google.com/go/monitoring github.com/googleapis/google-cloud-go monitoring/LICENSE monitoring/
-cloud.google.com/go/secretmanager github.com/googleapis/google-cloud-go secretmanager/LICENSE secretmanager/
-cloud.google.com/go/storage github.com/googleapis/google-cloud-go storage/LICENSE storage/
-dario.cat/mergo github.com/imdario/mergo
-go4.org/intern github.com/go4org/intern
-go4.org/netipx github.com/go4org/netipx
-go4.org/unsafe/assume-no-moving-gc github.com/go4org/unsafe-assume-no-moving-gc
-inet.af/netaddr github.com/inetaf/netaddr
+dario.cat/mergo|github.com/imdario/mergo||LICENSE
+inet.af/netaddr|github.com/inetaf/netaddr||LICENSE
+go4.org/intern|github.com/go4org/intern||LICENSE
+go4.org/netipx|github.com/go4org/netipx||LICENSE
+go4.org/unsafe/assume-no-moving-gc|github.com/go4org/unsafe-assume-no-moving-gc||LICENSE
+cloud.google.com/go|github.com/googleapis/google-cloud-go||LICENSE
+cloud.google.com/go/auth|github.com/googleapis/google-cloud-go|auth|auth/LICENSE
+cloud.google.com/go/auth/oauth2adapt|github.com/googleapis/google-cloud-go|auth/oauth2adapt|auth/oauth2adapt/LICENSE
+cloud.google.com/go/compute/metadata|github.com/googleapis/google-cloud-go|compute/metadata|compute/metadata/LICENSE
+cloud.google.com/go/iam|github.com/googleapis/google-cloud-go|iam|iam/LICENSE
+cloud.google.com/go/kms|github.com/googleapis/google-cloud-go|kms|kms/LICENSE
+cloud.google.com/go/longrunning|github.com/googleapis/google-cloud-go|longrunning|longrunning/LICENSE
+cloud.google.com/go/monitoring|github.com/googleapis/google-cloud-go|monitoring|monitoring/LICENSE
+cloud.google.com/go/secretmanager|github.com/googleapis/google-cloud-go|secretmanager|secretmanager/LICENSE
+cloud.google.com/go/storage|github.com/googleapis/google-cloud-go|storage|storage/LICENSE
 "
 
 # git_ref_from_version maps a module version to a ref usable in a GitHub blob URL:
@@ -62,14 +67,17 @@ git_ref_from_version() {
 # apply_url_overrides rewrites the URL (2nd CSV field) for each overridden module to
 # a deterministic, version-pinned LICENSE URL derived from go.mod (no network fetch).
 apply_url_overrides() {
-    local csv="$1" module repo license_path ref_prefix version ref url
-    while read -r module repo license_path ref_prefix; do
+    local csv="$1" module repo ref_prefix license_path version base_ref ref url
+    while IFS='|' read -r module repo ref_prefix license_path; do
         [ -n "${module}" ] || continue
-        license_path="${license_path:-LICENSE}"
-        ref_prefix="${ref_prefix:-}"
-        version="$(go list -m -f '{{.Version}}' "${module}" 2>/dev/null || true)"
+        version="$(GOOS="${LICENSE_GOOS}" GOARCH="${LICENSE_GOARCH}" CGO_ENABLED="${LICENSE_CGO_ENABLED}" go list -m -f '{{.Version}}' "${module}" 2>/dev/null || true)"
         [ -n "${version}" ] || continue
-        ref="${ref_prefix}$(git_ref_from_version "${version}")"
+        base_ref="$(git_ref_from_version "${version}")"
+        if [ -n "${ref_prefix}" ]; then
+            ref="${ref_prefix}/${base_ref}"
+        else
+            ref="${base_ref}"
+        fi
         url="https://${repo}/blob/${ref}/${license_path}"
         awk -F',' -v OFS=',' -v mod="${module}" -v newurl="${url}" \
             '$1==mod{$2=newurl} {print}' "${csv}" > "${csv}.tmp" && mv "${csv}.tmp" "${csv}"
@@ -79,18 +87,19 @@ EOF
 }
 
 # Check if go-licenses is installed
-GO_LICENSES_BIN="$(command -v go-licenses || true)"
 if [ -z "${GO_LICENSES_BIN}" ]; then
-    GO_LICENSES_BIN="$(go env GOPATH)/bin/go-licenses"
-    if [ ! -x "${GO_LICENSES_BIN}" ]; then
-        echo "Installing go-licenses..."
-        go install github.com/google/go-licenses@latest
+    echo "Installing go-licenses ${GO_LICENSES_VERSION}..."
+    go install "github.com/google/go-licenses@${GO_LICENSES_VERSION}"
+    GOBIN="$(go env GOBIN)"
+    if [ -z "${GOBIN}" ]; then
+        GOBIN="$(go env GOPATH)/bin"
     fi
+    GO_LICENSES_BIN="${GOBIN}/go-licenses"
 fi
 
 # Generate license report
 echo "Generating license report..."
-"${GO_LICENSES_BIN}" report . 2>&1 | awk -F',' 'NF >= 3 {print}' > "${TEMP_DIR}/license-report.csv" || true
+GOOS="${LICENSE_GOOS}" GOARCH="${LICENSE_GOARCH}" CGO_ENABLED="${LICENSE_CGO_ENABLED}" "${GO_LICENSES_BIN}" report . 2>&1 | grep -v "^W" | grep -v "^E" > "${TEMP_DIR}/license-report.csv" || true
 
 # Replace non-deterministic (vanity-path) URLs with deterministic overrides.
 apply_url_overrides "${TEMP_DIR}/license-report.csv"

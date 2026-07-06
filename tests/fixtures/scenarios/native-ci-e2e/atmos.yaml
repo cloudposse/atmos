@@ -6,6 +6,9 @@ toolchain:
       type: aqua
       priority: 10
 
+workflows:
+  base_path: "workflows"
+
 components:
   terraform:
     base_path: "components/terraform"
