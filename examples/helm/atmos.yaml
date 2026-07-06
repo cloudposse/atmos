@@ -42,10 +42,30 @@ commands:
     steps:
       - atmos validate stacks
       - atmos helm template demo -s dev
-      - atmos emulator up kubernetes -s dev
-      - atmos helm diff demo -s dev --identity local-k3s
-      - atmos helm apply demo -s dev --identity local-k3s
-      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
-      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
+      - command: atmos emulator up kubernetes -s dev
+        retry:
+          max_attempts: 2
+          initial_delay: 15s
+          backoff_strategy: constant
+      - command: atmos helm diff demo -s dev --identity local-k3s
+        retry:
+          max_attempts: 2
+          initial_delay: 15s
+          backoff_strategy: constant
+      - command: atmos helm apply demo -s dev --identity local-k3s
+        retry:
+          max_attempts: 2
+          initial_delay: 15s
+          backoff_strategy: constant
+      - command: atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
+        retry:
+          max_attempts: 3
+          initial_delay: 10s
+          backoff_strategy: constant
+      - command: atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
+        retry:
+          max_attempts: 3
+          initial_delay: 10s
+          backoff_strategy: constant
       - atmos helm delete demo -s dev --identity local-k3s
       - atmos emulator down kubernetes -s dev

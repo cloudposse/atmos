@@ -9,11 +9,13 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
@@ -484,6 +486,231 @@ func TestCustomCommandIntegration_SkipsStepWhenConditionIsFalse(t *testing.T) {
 	assert.FileExists(t, ranFile)
 }
 
+func TestCustomCommandIntegration_RetriesShellStep(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	testDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	_ = NewTestKit(t)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	attemptsFile := filepath.Join(tmpDir, "attempts.txt")
+	maxAttempts := 2
+	initialDelay := time.Millisecond
+
+	testCommand := schema.Command{
+		Name:        "test-retry-shell-step",
+		Description: "Test retry shell step",
+		Steps: schema.Tasks{
+			{
+				Command: customCommandRetryHelperCommand(t, attemptsFile),
+				Type:    "shell",
+				Retry: &schema.RetryConfig{
+					MaxAttempts:     &maxAttempts,
+					InitialDelay:    &initialDelay,
+					BackoffStrategy: "constant",
+				},
+			},
+		},
+	}
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-retry-shell-step" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
+
+	attempts, err := os.ReadFile(attemptsFile)
+	require.NoError(t, err)
+	assert.Equal(t, "2", strings.TrimSpace(string(attempts)))
+}
+
+func TestCustomCommandIntegration_ShellStepWithoutRetryRunsOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	testDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	_ = NewTestKit(t)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	attemptsFile := filepath.Join(tmpDir, "attempts.txt")
+
+	testCommand := schema.Command{
+		Name:        "test-no-retry-shell-step",
+		Description: "Test no retry shell step",
+		Steps: schema.Tasks{
+			{
+				Command: customCommandAttemptHelperCommand(t, attemptsFile),
+				Type:    "shell",
+			},
+		},
+	}
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-no-retry-shell-step" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
+
+	attempts, err := os.ReadFile(attemptsFile)
+	require.NoError(t, err)
+	assert.Equal(t, "1", strings.TrimSpace(string(attempts)))
+}
+
+func TestCustomCommandIntegration_ExtendedStepCarriesEnvironmentAndStackFlag(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "extended-step.txt")
+
+	testCommand := schema.Command{
+		Name:        "test-extended-env-step",
+		Description: "Test extended env step",
+		Flags: []schema.CommandFlag{
+			{Name: "stack", Type: "string"},
+		},
+		Steps: schema.Tasks{
+			{
+				Name: "set-env",
+				Type: "env",
+				Vars: map[string]string{
+					"EXTENDED_VALUE": "{{ .flags.stack }}",
+				},
+			},
+			{
+				Command: fmt.Sprintf("printf %%s %q > %q", "{{ .env.EXTENDED_VALUE }}:{{ .flags.stack }}", outputPath),
+				Type:    "shell",
+			},
+		},
+	}
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{testCommand},
+	}
+
+	parentCmd := &cobra.Command{Use: "atmos"}
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd)
+	require.NoError(t, err)
+
+	customCmd := findSubcommand(parentCmd, "test-extended-env-step")
+	require.NotNil(t, customCmd)
+	require.NoError(t, customCmd.PersistentFlags().Set("stack", "plat-ue2-dev"))
+
+	customCmd.Run(customCmd, []string{})
+
+	output, err := os.ReadFile(outputPath)
+	require.NoError(t, err)
+	assert.Equal(t, "plat-ue2-dev:plat-ue2-dev", string(output))
+}
+
+func TestCustomCommandIntegration_AtmosStepUsesCurrentExecutable(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "atmos-step.txt")
+	outputValue := "atmos step ran"
+
+	testCommand := schema.Command{
+		Name:        "test-atmos-step",
+		Description: "Test atmos step",
+		Steps: schema.Tasks{
+			{
+				Command: customCommandAtmosWriteHelperArgs(outputPath, outputValue),
+				Type:    "atmos",
+			},
+		},
+	}
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{testCommand},
+	}
+
+	parentCmd := &cobra.Command{Use: "atmos"}
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd)
+	require.NoError(t, err)
+
+	customCmd := findSubcommand(parentCmd, "test-atmos-step")
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
+
+	output, err := os.ReadFile(outputPath)
+	require.NoError(t, err)
+	assert.Equal(t, outputValue, string(output))
+}
+
+func TestExecuteCustomCommandUnsupportedStepTypeExits(t *testing.T) {
+	_ = NewTestKit(t)
+
+	originalOsExit := errUtils.OsExit
+	t.Cleanup(func() {
+		errUtils.OsExit = originalOsExit
+	})
+
+	type exitPanic struct {
+		code int
+	}
+	var exitCode int
+	errUtils.OsExit = func(code int) {
+		exitCode = code
+		panic(exitPanic{code: code})
+	}
+
+	commandConfig := &schema.Command{
+		Name:        "test-unsupported-step",
+		Description: "Test unsupported step",
+		Steps: schema.Tasks{
+			{
+				Type:    "not-a-step-type",
+				Command: "noop",
+			},
+		},
+	}
+
+	assert.Panics(t, func() {
+		executeCustomCommand(
+			schema.AtmosConfiguration{BasePath: t.TempDir()},
+			&cobra.Command{Use: commandConfig.Name, Annotations: map[string]string{}},
+			nil,
+			&cobra.Command{Use: "atmos"},
+			commandConfig,
+		)
+	})
+	assert.Equal(t, 1, exitCode)
+}
+
 func TestCustomCommandIntegration_DoesNotInstallToolVersionsTools(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Chdir(tmpDir)
@@ -541,6 +768,30 @@ func customCommandWriteHelperCommand(t *testing.T, path, value string) string {
 	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationWriteHelper -- %s %s", exe, encodedPath, encodedValue)
 }
 
+func customCommandAtmosWriteHelperArgs(path, value string) string {
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	encodedValue := base64.RawURLEncoding.EncodeToString([]byte(value))
+	return fmt.Sprintf("-test.run=TestCustomCommandIntegrationWriteHelper -- %s %s", encodedPath, encodedValue)
+}
+
+func customCommandRetryHelperCommand(t *testing.T, path string) string {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationRetryHelper -- %s", exe, encodedPath)
+}
+
+func customCommandAttemptHelperCommand(t *testing.T, path string) string {
+	t.Helper()
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	encodedPath := base64.RawURLEncoding.EncodeToString([]byte(path))
+	return fmt.Sprintf("%q -test.run=TestCustomCommandIntegrationAttemptHelper -- %s", exe, encodedPath)
+}
+
 func TestCustomCommandIntegrationWriteHelper(t *testing.T) {
 	separator := -1
 	for i, arg := range os.Args {
@@ -560,6 +811,65 @@ func TestCustomCommandIntegrationWriteHelper(t *testing.T) {
 	valueBytes, err := base64.RawURLEncoding.DecodeString(args[1])
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(string(pathBytes), valueBytes, 0o600))
+	os.Exit(0)
+}
+
+func TestCustomCommandIntegrationRetryHelper(t *testing.T) {
+	separator := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 1)
+	pathBytes, err := base64.RawURLEncoding.DecodeString(args[0])
+	require.NoError(t, err)
+	path := string(pathBytes)
+
+	attempt := 1
+	if existing, err := os.ReadFile(path); err == nil {
+		parsed, parseErr := strconv.Atoi(strings.TrimSpace(string(existing)))
+		require.NoError(t, parseErr)
+		attempt = parsed + 1
+	}
+	require.NoError(t, os.WriteFile(path, []byte(strconv.Itoa(attempt)), 0o600))
+	if attempt < 2 {
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
+func TestCustomCommandIntegrationAttemptHelper(t *testing.T) {
+	separator := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			separator = i
+			break
+		}
+	}
+	if separator == -1 {
+		return
+	}
+
+	args := os.Args[separator+1:]
+	require.Len(t, args, 1)
+	pathBytes, err := base64.RawURLEncoding.DecodeString(args[0])
+	require.NoError(t, err)
+	path := string(pathBytes)
+
+	attempt := 1
+	if existing, err := os.ReadFile(path); err == nil {
+		parsed, parseErr := strconv.Atoi(strings.TrimSpace(string(existing)))
+		require.NoError(t, parseErr)
+		attempt = parsed + 1
+	}
+	require.NoError(t, os.WriteFile(path, []byte(strconv.Itoa(attempt)), 0o600))
 	os.Exit(0)
 }
 

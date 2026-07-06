@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -243,4 +244,27 @@ func TestValidateStacksSchemaValidationHasTeeth(t *testing.T) {
 	// Positive control: a valid manifest must pass — proving the failure above is the
 	// manifest, not a broken harness.
 	require.NoError(t, validate(validManifest), "valid manifest must pass validation")
+}
+
+func TestValidateStacksRejectsUnsupportedYamlFunction(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks", "deploy"), 0o755))
+
+	atmosYAML := "base_path: \".\"\n" +
+		"stacks:\n  base_path: \"stacks\"\n  included_paths: [\"deploy/**/*\"]\n  name_pattern: \"{stage}\"\n" +
+		"logs:\n  level: \"Warning\"\n"
+	manifest := "vars:\n  stage: !envv ATMOS_TEST_STAGE\n" +
+		"components:\n  terraform:\n    vpc:\n      vars:\n        name: vpc\n"
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "stack.yaml"), []byte(manifest), 0o644))
+
+	t.Chdir(dir)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	atmosConfig.SetSchemaRegistry("atmos", schema.SchemaRegistry{Manifest: inRepoManifestSchemaPath(t)})
+
+	err = ValidateStacks(&atmosConfig)
+	require.ErrorIs(t, err, errUtils.ErrUnsupportedYamlTag)
+	require.Contains(t, err.Error(), "!envv")
 }
