@@ -259,7 +259,7 @@ jobs:
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           # Enable Playwright integration tests to validate browser driver download
           RUN_PLAYWRIGHT_INTEGRATION: 1
-        run: atmos test acc-cover
+        run: atmos test acceptance --cover
 
       - name: Acceptance tests
         timeout-minutes: 45
@@ -272,7 +272,7 @@ jobs:
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           # Enable Playwright integration tests to validate browser driver download
           RUN_PLAYWRIGHT_INTEGRATION: 1
-        run: atmos test acc
+        run: atmos test acceptance
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux' && hashFiles('coverage.out') != ''
