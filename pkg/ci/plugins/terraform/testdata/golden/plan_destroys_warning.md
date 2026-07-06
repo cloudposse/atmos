@@ -1,7 +1,11 @@
 
 ## Resource Changes Found for `legacy` in `prod`
 
-<a href="https://atmos.tools/ci"><img src="https://atmos.tools/img/atmos-ci-gradient.svg" alt="Atmos CI" width="220px" align="right"/></a> [![destroy](https://shields.io/badge/PLAN-DESTROY-critical?style=for-the-badge)](#user-content-destroy-prod-legacy)
+<a href="https://atmos.tools/ci"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg">
+  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" width="220px" align="right">
+</picture></a> [![destroy](https://shields.io/badge/PLAN-DESTROY-critical?style=for-the-badge)](#user-content-destroy-prod-legacy)
 
 > [!CAUTION]
 > **Terraform will delete resources!**

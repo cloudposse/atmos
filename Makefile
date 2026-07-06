@@ -1,145 +1,36 @@
-# This works because `go list ./...` excludes vendor directories by default in modern versions of Go (1.11+).
-# No need for grep or additional filtering.
-TEST ?= $$(go list ./...)
-TESTARGS ?=
-SHELL := /bin/bash
-#GOOS=darwin
-#GOOS=linux
-#GOARCH=amd64
-VERSION=test
+.DEFAULT_GOAL := help
 
-export CGO_ENABLED=0
+define MIGRATION_HELP
+@echo "The root Makefile is no longer used for Atmos development tasks."
+@echo ""
+@echo "Use Atmos custom commands instead:"
+@printf "  %-23s -> %s\n" "make deps" "atmos build deps"
+@printf "  %-23s -> %s\n" "make build" "atmos build"
+@printf "  %-23s -> %s\n" "make build-linux" "atmos build --target linux"
+@printf "  %-23s -> %s\n" "make build-windows" "atmos build --target windows"
+@printf "  %-23s -> %s\n" "make build-macos" "atmos build --target macos"
+@printf "  %-23s -> %s\n" "make build-macos-intel" "atmos build --target macos-intel"
+@printf "  %-23s -> %s\n" "make version-linux" "atmos build version --target linux"
+@printf "  %-23s -> %s\n" "make version-windows" "atmos build version --target windows"
+@printf "  %-23s -> %s\n" "make version-macos" "atmos build version --target macos"
+@printf "  %-23s -> %s\n" "make lint" "atmos lint --changed"
+@printf "  %-23s -> %s\n" "make testacc" "atmos test acceptance"
+@printf "  %-23s -> %s\n" "make testacc-cover" "atmos test acceptance --cover"
+@printf "  %-23s -> %s\n" "make test-short" "atmos test short"
+@printf "  %-23s -> %s\n" "make test-race" "atmos test race"
+@printf "  %-23s -> %s\n" "make generate-mocks" "atmos test generate-mocks"
+@printf "  %-23s -> %s\n" "make link-check" "atmos lint link-check"
+@echo ""
+@exit 1
+endef
 
-# Detect git worktree and set GOFLAGS accordingly.
-# In worktrees, buildvcs fails because .git is in a different location.
-IS_WORKTREE := $(shell [ "$$(git rev-parse --git-dir 2>/dev/null)" != "$$(git rev-parse --git-common-dir 2>/dev/null)" ] && echo true)
-ifdef IS_WORKTREE
-export GOFLAGS := -buildvcs=false
-endif
+.PHONY: help FORCE
+help:
+	$(MIGRATION_HELP)
 
-readme: build
-	./build/atmos docs generate readme
+FORCE:
 
-build: build-default
+Makefile: ;
 
-version: version-default
-
-# The following will lint only files in git. `golangci-lint run --new-from-rev=HEAD` should do it,
-# but it's still including files not in git.
-lint: deps lintroller gomodcheck custom-gcl
-	./custom-gcl run --new-from-rev=origin/main
-
-# Build custom golangci-lint binary with lintroller plugin.
-# Uses a temporary directory to prevent git corruption during pre-commit hooks
-custom-gcl: tools/lintroller/.lintroller .custom-gcl.yml
-	@echo "Building custom golangci-lint binary with lintroller plugin..."
-	@GOFLAGS="-buildvcs=false" GOTOOLCHAIN=go$(shell go env GOVERSION | sed 's/^go//') golangci-lint custom
-	@echo "Custom golangci-lint binary built successfully: ./custom-gcl"
-
-# Custom linter for Atmos-specific rules (t.Setenv misuse, os.Setenv in tests, os.MkdirTemp in tests).
-.PHONY: lintroller
-lintroller: tools/lintroller/.lintroller
-	@echo "Running lintroller (Atmos custom rules)..."
-	@test -x tools/lintroller/.lintroller || (echo "Error: lintroller binary not executable" && exit 1)
-	@tools/lintroller/.lintroller $(shell go list ./... | grep -v '/testdata')
-
-tools/lintroller/.lintroller: tools/lintroller/*.go tools/lintroller/cmd/lintroller/*.go
-	@echo "Building lintroller..."
-	@cd tools/lintroller && go build -o .lintroller ./cmd/lintroller
-	@chmod +x tools/lintroller/.lintroller
-	@test -x tools/lintroller/.lintroller || (echo "Error: Failed to make lintroller executable" && exit 1)
-
-# Check go.mod for replace/exclude directives that break go install.
-.PHONY: gomodcheck
-gomodcheck: tools/gomodcheck/.gomodcheck
-	@tools/gomodcheck/.gomodcheck go.mod
-
-tools/gomodcheck/.gomodcheck: tools/gomodcheck/*.go
-	@echo "Building gomodcheck..."
-	@cd tools/gomodcheck && go build -o .gomodcheck .
-	@chmod +x tools/gomodcheck/.gomodcheck
-	@test -x tools/gomodcheck/.gomodcheck || (echo "Error: Failed to make gomodcheck executable" && exit 1)
-
-build-linux: GOOS=linux
-build-linux: build-default
-
-build-default: deps
-	@echo "Building atmos $(if $(GOOS),GOOS=$(GOOS)) $(if $(GOARCH),GOARCH=$(GOARCH))"
-	env $(if $(GOOS),GOOS=$(GOOS)) $(if $(GOARCH),GOARCH=$(GOARCH)) go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$(VERSION)'"
-
-build-windows: GOOS=windows
-build-windows: deps
-	@echo "Building atmos for $(GOOS) ($(GOARCH))"
-	go build -o build/atmos.exe -v -ldflags "-X github.com/cloudposse/atmos/pkg/version.Version=$(VERSION)"
-
-build-macos: GOOS=darwin
-build-macos: build-default
-
-build-macos-intel: GOOS=darwin
-build-macos-intel: GOARCH=amd64
-build-macos-intel: build-default
-
-version-linux: version-default
-
-version-macos: version-default
-
-version-macos-intel: version-default
-
-version-default:
-	chmod +x ./build/atmos
-	./build/atmos version
-
-# Run the already-built binary; do NOT depend on build-windows. The CI build
-# step runs `make build-windows` before this, so re-declaring the dependency
-# made Windows recompile and re-link the whole binary a second time per job —
-# work that version-linux/version-macos (via version-default) do not repeat.
-# On the slow windows-latest runner that doubled the build phase.
-version-windows:
-	./build/atmos.exe version
-
-deps:
-	go mod download
-
-testacc: deps
-	@echo "Running acceptance tests"
-	go test $(TEST) $(TESTARGS) -timeout 40m
-
-# Run tests with subprocess coverage collection (Go 1.20+)
-testacc-cover: deps
-	@scripts/collect-coverage.sh "$(TEST)" "$(TESTARGS)"
-
-# Run acceptance tests with coverage report
-testacc-coverage: testacc-cover
-	go tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report generated: coverage.html"
-
-# Run quick tests only (skip long-running tests >2 seconds)
-test-short: deps
-	@echo "Running quick tests (skipping long-running tests)"
-	go test -short $(TEST) $(TESTARGS) -timeout 5m
-
-# Run quick tests with coverage
-test-short-cover: deps
-	@echo "Running quick tests with coverage (skipping long-running tests)"
-	@GOCOVERDIR=coverage go test -short -cover $(TEST) $(TESTARGS) -timeout 5m
-
-# Regenerate all mocks using go:generate directives
-generate-mocks:
-	@echo "Regenerating mocks using go:generate directives..."
-	@go generate ./pkg/auth/types/...
-	@go generate ./pkg/http/...
-	@echo "Mocks regenerated successfully"
-
-# Check markdown links (requires lychee: brew install lychee)
-link-check:
-	@command -v lychee >/dev/null 2>&1 || { echo "Install lychee: brew install lychee"; exit 1; }
-	lychee --config lychee.toml --root-dir "$(CURDIR)" '**/*.md'
-
-# Run quick tests with race detector and shuffled order.
-# This target is recommended for CI to catch data races and order-dependent failures.
-# Usage: make test-race
-test-race: deps
-	@echo "Running tests with -race -shuffle=on"
-	CGO_ENABLED=1 go test -race -shuffle=on $(TEST) $(TESTARGS) -timeout 10m
-
-.PHONY: all clean test readme lint lintroller gomodcheck build version build-linux build-windows build-macos build-macos-intel deps version-linux version-windows version-macos version-macos-intel testacc testacc-cover testacc-coverage test-short test-short-cover test-race generate-mocks link-check
+%: FORCE
+	$(MIGRATION_HELP)

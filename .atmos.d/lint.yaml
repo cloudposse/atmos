@@ -1,0 +1,93 @@
+commands:
+  - name: lint
+    description: Linting commands for Atmos development
+    flags:
+      - name: changed
+        type: bool
+        description: Run lint checks for changes from origin/main
+        default: false
+    steps:
+      - type: shell
+        command: |
+          set -eu
+          if [ "{{ .Flags.changed }}" != "true" ]; then
+            echo "Select a lint mode, for example: atmos lint --changed" >&2
+            exit 1
+          fi
+      - type: atmos
+        command: lint changed
+    commands:
+      - name: changed
+        description: Run lint checks for changes from origin/main
+        env: &go_auto_env
+          GOTOOLCHAIN: auto
+        steps:
+          - type: atmos
+            command: build deps
+          - type: atmos
+            command: lint lintroller
+          - type: atmos
+            command: lint gomodcheck
+          - type: atmos
+            command: lint custom-gcl
+          - type: shell
+            command: scripts/run-custom-golangci-lint.sh
+
+      - name: custom-gcl
+        description: Build the custom golangci-lint binary with the lintroller plugin
+        env:
+          GOFLAGS: -buildvcs=false
+          GOTOOLCHAIN:
+            valueCommand: printf 'go%s' "$(go env GOVERSION | sed 's/^go//')"
+        steps:
+          - type: toast
+            level: info
+            content: Building custom golangci-lint binary with lintroller plugin...
+          - |
+            set -eu
+            golangci-lint custom
+          - type: toast
+            level: success
+            content: "Custom golangci-lint binary built successfully: ./custom-gcl"
+
+      - name: lintroller
+        description: Build and run Atmos custom lintroller rules
+        env: *go_auto_env
+        steps:
+          - |
+            set -eu
+            if [ ! -x tools/lintroller/.lintroller ] || \
+              [ "$(find tools/lintroller -name '*.go' -newer tools/lintroller/.lintroller -print -quit)" ]; then
+              echo "Building lintroller..."
+              (cd tools/lintroller && go build -o .lintroller ./cmd/lintroller)
+              chmod +x tools/lintroller/.lintroller
+            fi
+            test -x tools/lintroller/.lintroller || { echo "Error: Failed to make lintroller executable"; exit 1; }
+          - type: toast
+            level: info
+            content: Running lintroller (Atmos custom rules)...
+          - type: shell
+            command: tools/lintroller/.lintroller $(go list ./... | grep -v '/testdata')
+
+      - name: gomodcheck
+        description: Check go.mod for replace/exclude directives that break go install
+        env: *go_auto_env
+        steps:
+          - |
+            set -eu
+            if [ ! -x tools/gomodcheck/.gomodcheck ] || \
+              [ "$(find tools/gomodcheck -name '*.go' -newer tools/gomodcheck/.gomodcheck -print -quit)" ]; then
+              echo "Building gomodcheck..."
+              (cd tools/gomodcheck && go build -o .gomodcheck .)
+              chmod +x tools/gomodcheck/.gomodcheck
+            fi
+            test -x tools/gomodcheck/.gomodcheck || { echo "Error: Failed to make gomodcheck executable"; exit 1; }
+            tools/gomodcheck/.gomodcheck go.mod
+
+      - name: link-check
+        description: Check markdown links with lychee
+        steps:
+          - |
+            set -eu
+            command -v lychee >/dev/null 2>&1 || { echo "Install lychee: brew install lychee"; exit 1; }
+            lychee --config lychee.toml --root-dir "$PWD" '**/*.md'

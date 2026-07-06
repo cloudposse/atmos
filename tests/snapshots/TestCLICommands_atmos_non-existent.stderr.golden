@@ -31,11 +31,8 @@ Valid subcommands are:
   • pro
   • profile
   • secret
-  • show
   • support
   • terraform
-  • tf
-  • tf-custom
   • theme
   • toolchain
   • validate

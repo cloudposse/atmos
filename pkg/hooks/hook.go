@@ -131,10 +131,16 @@ const (
 // state. An empty When defaults to success-only, preserving the pre-When
 // behavior where after-* hooks fired only on success.
 func (h *Hook) RunsWhen(status RunStatus, isCI bool) bool {
-	return h.When.EvaluateWithImplicitSuccess(schema.ConditionContext{
+	ok, err := h.RunsWhenE(schema.ConditionContext{
 		CI:     isCI,
 		Status: string(status),
 	})
+	return err == nil && ok
+}
+
+//nolint:gocritic // Public compatibility API keeps ConditionContext by value.
+func (h *Hook) RunsWhenE(ctx schema.ConditionContext) (bool, error) {
+	return h.When.EvaluateWithImplicitSuccessE(ctx)
 }
 
 // RunsOnStatus reports whether this hook should run given the lifecycle

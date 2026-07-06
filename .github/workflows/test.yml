@@ -31,6 +31,7 @@ permissions:
   pull-requests: read
 
 env:
+  ATMOS_BOOTSTRAP_VERSION: "1.222.0"
   OPEN_TOFU_VERSION: "1.12.2"
   HELM_VERSION: "v3.19.2"
   HELMFILE_VERSION: "v1.1.0"
@@ -90,20 +91,27 @@ jobs:
           go-version-file: "go.mod"
         id: go
 
+      - name: Set up Atmos
+        if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+          install-wrapper: false
+
       - name: Get dependencies
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
-          make deps
+          atmos build deps
 
       - name: Build
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
-          make build-${{ matrix.target }}
+          atmos build --target ${{ matrix.target }}
 
       - name: Version
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
-          make version-${{ matrix.target }}
+          atmos build version --target ${{ matrix.target }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -121,15 +129,12 @@ jobs:
       fail-fast: false
       matrix:
         flavor:
-          - { os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false", target: linux }
+          - { os: "ubuntu-latest", target: linux }
           - { os: "windows-latest", target: windows }
           - { os: "macos-15", target: macos }
-    timeout-minutes: 60
+    timeout-minutes: 75
     runs-on: ${{ matrix.flavor.os }}
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
-        if: matrix.flavor.target == 'linux'
-
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -225,7 +230,7 @@ jobs:
       - name: Get dependencies
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
-          make deps
+          atmos build deps
 
       - name: Terraform registry cache acceptance test
         timeout-minutes: 25
@@ -244,7 +249,7 @@ jobs:
       # That runs in the unit/acceptance test jobs, so no separate CI step is needed here.
 
       - name: Acceptance tests with coverage
-        timeout-minutes: 45
+        timeout-minutes: 60
         if: matrix.flavor.target == 'linux'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -254,7 +259,7 @@ jobs:
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           # Enable Playwright integration tests to validate browser driver download
           RUN_PLAYWRIGHT_INTEGRATION: 1
-        run: make testacc-cover
+        run: atmos test acceptance --cover
 
       - name: Acceptance tests
         timeout-minutes: 45
@@ -267,7 +272,7 @@ jobs:
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
           # Enable Playwright integration tests to validate browser driver download
           RUN_PLAYWRIGHT_INTEGRATION: 1
-        run: make testacc
+        run: atmos test acceptance
 
       - name: Upload coverage report to Codecov
         if: matrix.flavor.target == 'linux' && hashFiles('coverage.out') != ''
@@ -480,7 +485,7 @@ jobs:
           - demo-helmfile
           - helm
 
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -494,13 +499,8 @@ jobs:
 
       - name: Start Docker-compatible runtime on macOS
         if: matrix.flavor.target == 'macos'
-        run: |
-          if brew tap | grep -qx 'aws/tap'; then
-            brew untap aws/tap
-          fi
-          brew install colima docker qemu
-          colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20
-          docker version
+        timeout-minutes: 45
+        uses: ./.github/actions/setup-colima
 
       - name: Download build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -598,7 +598,7 @@ jobs:
           GOCACHE: ${{ runner.temp }}/go-build
           GOTMPDIR: ${{ runner.temp }}/go-tmp
           TMPDIR: ${{ runner.temp }}/tmp
-          # Atmos builds with CGO disabled (see Makefile). Match that here so the
+          # Atmos builds with CGO disabled. Match that here so the
           # toolchain's transitive CGO dependencies (e.g. bearsh/hid → libudev)
           # are not compiled — they are unused and libudev is absent on runners.
           CGO_ENABLED: "0"
