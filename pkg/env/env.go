@@ -20,6 +20,19 @@ const (
 	envVarFormat = "%s=%s"
 )
 
+// Chdir changes the process working directory and updates the PWD environment
+// variable to match, the way a shell's cd does. Anything that reads PWD after
+// the change (subprocesses, `{{ env "PWD" }}` templates) then behaves as if the
+// process started in the new directory — which is what --chdir promises.
+func Chdir(dir string) error {
+	defer perf.Track(nil, "env.Chdir")()
+
+	if err := os.Chdir(dir); err != nil {
+		return err
+	}
+	return os.Setenv("PWD", dir)
+}
+
 // ConvertEnvVars converts ENV vars from a map to a list of strings in the format ["key1=val1", "key2=val2", "key3=val3" ...].
 // Variables with nil or "null" values are skipped.
 func ConvertEnvVars(envVarsMap map[string]any) []string {
@@ -39,12 +52,24 @@ func ConvertEnvVars(envVarsMap map[string]any) []string {
 func EnvironToMap() map[string]string {
 	defer perf.Track(nil, "env.EnvironToMap")()
 
-	envMap := make(map[string]string)
-	for _, e := range os.Environ() {
-		pair := splitStringAtFirstOccurrence(e, "=")
-		k := pair[0]
-		v := pair[1]
-		envMap[k] = v
+	return SliceToMap(os.Environ())
+}
+
+// SliceToMap converts environment variables from KEY=value slice form to a map.
+// Malformed entries without "=" are ignored. Later duplicate keys overwrite earlier ones.
+func SliceToMap(env []string) map[string]string {
+	defer perf.Track(nil, "env.SliceToMap")()
+
+	if len(env) == 0 {
+		return nil
+	}
+	envMap := make(map[string]string, len(env))
+	for _, item := range env {
+		key, value, ok := strings.Cut(item, "=")
+		if !ok {
+			continue
+		}
+		envMap[key] = value
 	}
 	return envMap
 }

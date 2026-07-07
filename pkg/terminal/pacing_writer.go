@@ -26,6 +26,15 @@ func IsTTYWriter(w io.Writer) bool {
 	return term.IsTerminal(int(f.Fd())) //nolint:gosec // File descriptors are small OS-provided values accepted by x/term.
 }
 
+// HasRealTTYInput reports whether stdin is a physical terminal, ignoring
+// --force-tty/ATMOS_FORCE_TTY. Forcing TTY mode can make output render as if a
+// terminal were attached (screenshots, cast recordings), but it cannot conjure
+// an input device — interactive readers (e.g. bubbletea) must not try to open
+// /dev/tty when this returns false.
+func HasRealTTYInput() bool {
+	return term.IsTerminal(int(os.Stdin.Fd())) //nolint:gosec // File descriptors are small OS-provided values accepted by x/term.
+}
+
 // PacingWriter reveals complete lines at a configured lines-per-second rate.
 // Partial trailing output is buffered until another write completes the line or
 // Close is called.

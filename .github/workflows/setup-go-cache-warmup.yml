@@ -34,6 +34,7 @@ jobs:
     steps:
       - name: Add GNU tar to PATH (significantly faster than windows tar)
         if: matrix.target == 'windows'
+        shell: pwsh
         run: echo "C:\Program Files\Git\usr\bin" >> $Env:GITHUB_PATH
 
       - name: Check out code into the Go module directory
@@ -54,4 +55,4 @@ jobs:
           install-wrapper: false
 
       - name: Get deps
-        run: atmos build deps
+        run: go mod download

@@ -59,6 +59,56 @@ run:
 `), &step))
 		assert.Nil(t, step.Run, "legacy run: block must be ignored after the with: hard-cut")
 	})
+
+	t.Run("explicit push action", func(t *testing.T) {
+		var step WorkflowStep
+		require.NoError(t, yaml.Unmarshal([]byte(`
+type: container
+action: push
+with:
+  image: alpine:latest
+  tag: v1
+`), &step))
+		require.NotNil(t, step.Push)
+		assert.Equal(t, "alpine:latest", step.Push.Image)
+		assert.Nil(t, step.Run)
+		assert.Nil(t, step.Build)
+	})
+
+	t.Run("explicit inspect action", func(t *testing.T) {
+		var step WorkflowStep
+		require.NoError(t, yaml.Unmarshal([]byte(`
+type: container
+action: inspect
+with:
+  image: alpine:latest
+`), &step))
+		require.NotNil(t, step.Inspect)
+		assert.Equal(t, "alpine:latest", step.Inspect.Image)
+	})
+
+	t.Run("unknown action with a with block errors", func(t *testing.T) {
+		var step WorkflowStep
+		err := yaml.Unmarshal([]byte(`
+type: container
+action: teleport
+with:
+  image: alpine:latest
+`), &step)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrWorkflowControlStepInvalid)
+	})
+
+	t.Run("with block decode error propagates", func(t *testing.T) {
+		var step WorkflowStep
+		err := yaml.Unmarshal([]byte(`
+type: container
+action: build
+with:
+  tags: "not-a-list"
+`), &step)
+		require.Error(t, err)
+	})
 }
 
 // TestWorkflowStep_DecodeBackground verifies the polymorphic `background:` key:

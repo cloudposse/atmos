@@ -75,7 +75,7 @@ jobs:
           install-wrapper: false
       - name: Build atmos
         run: |
-          atmos build
+          sh scripts/build-atmos.sh default test
           echo "$PWD/build" >> "$GITHUB_PATH"
       - name: Expose GitHub Actions runtime credentials
         uses: ./actions/github-runtime
@@ -118,7 +118,7 @@ jobs:
           install-wrapper: false
       - name: Build atmos
         run: |
-          atmos build
+          sh scripts/build-atmos.sh default test
           echo "$PWD/build" >> "$GITHUB_PATH"
       - name: Expose GitHub Actions runtime credentials
         uses: ./actions/github-runtime
@@ -153,7 +153,7 @@ jobs:
           install-wrapper: false
       - name: Build atmos
         run: |
-          atmos build
+          sh scripts/build-atmos.sh default test
           echo "$PWD/build" >> "$GITHUB_PATH"
       - name: Expose GitHub Actions runtime credentials
         uses: ./actions/github-runtime

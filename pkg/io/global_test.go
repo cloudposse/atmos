@@ -695,3 +695,51 @@ func TestGlobalContainsSecret_NoContext(t *testing.T) {
 		t.Error("expected false when I/O context is not initialized")
 	}
 }
+
+// TestApplyMaskingConfig_NilConfig verifies that ApplyMaskingConfig is a no-op
+// when passed a nil config, without touching the global context.
+func TestApplyMaskingConfig_NilConfig(t *testing.T) {
+	resetGlobals()
+	Initialize()
+
+	// Should not panic and should simply return.
+	ApplyMaskingConfig(nil)
+}
+
+// TestApplyMaskingConfig_LazyInitializesContext verifies that ApplyMaskingConfig
+// works correctly even when called before the global I/O context has been
+// explicitly initialized: GetContext() lazily initializes it, and the masking
+// config is applied to the resulting masker.
+func TestApplyMaskingConfig_LazyInitializesContext(t *testing.T) {
+	resetGlobals()
+
+	// Should not panic even though globalContext starts nil; GetContext()
+	// lazily initializes it.
+	ApplyMaskingConfig(&Config{DisableMasking: true})
+
+	if globalContext == nil {
+		t.Error("expected ApplyMaskingConfig to lazily initialize the global context via GetContext()")
+	}
+	if globalContext.Masker().Enabled() {
+		t.Error("expected masker to be disabled after ApplyMaskingConfig with DisableMasking=true")
+	}
+}
+
+// TestApplyMaskingConfig_UpdatesMaskerState verifies that ApplyMaskingConfig
+// applies the DisableMasking setting from the provided config to the masker.
+func TestApplyMaskingConfig_UpdatesMaskerState(t *testing.T) {
+	resetGlobals()
+	Initialize()
+
+	ApplyMaskingConfig(&Config{DisableMasking: true})
+
+	ctx := GetContext()
+	if ctx.Masker().Enabled() {
+		t.Error("expected masker to be disabled after ApplyMaskingConfig with DisableMasking=true")
+	}
+
+	ApplyMaskingConfig(&Config{DisableMasking: false})
+	if !ctx.Masker().Enabled() {
+		t.Error("expected masker to be enabled after ApplyMaskingConfig with DisableMasking=false")
+	}
+}

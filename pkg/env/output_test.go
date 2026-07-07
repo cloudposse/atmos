@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -144,6 +145,57 @@ func TestOutput(t *testing.T) {
 		assert.Contains(t, output, `"VAR1": "value1"`)
 	})
 
+	t.Run("json format to stdout with atmosConfig and mask", func(t *testing.T) {
+		secret := "gho_json1234567890123456789012345678901"
+		iolib.RegisterSecret(secret)
+		data := map[string]string{
+			"GITHUB_TOKEN": secret,
+		}
+
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		cfg := &schema.AtmosConfiguration{}
+		err := Output(data, "json", "", WithAtmosConfig(cfg), WithMaskStdout(true))
+		w.Close()
+		os.Stdout = oldStdout
+
+		require.NoError(t, err)
+
+		buf := make([]byte, 1024)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		assert.Contains(t, output, "<MASKED>")
+		assert.NotContains(t, output, secret)
+	})
+
+	t.Run("json format to stdout without atmosConfig and mask", func(t *testing.T) {
+		secret := "gho_json0987654321098765432109876543210"
+		iolib.RegisterSecret(secret)
+		data := map[string]string{
+			"GITHUB_TOKEN": secret,
+		}
+
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := Output(data, "json", "", WithMaskStdout(true))
+		w.Close()
+		os.Stdout = oldStdout
+
+		require.NoError(t, err)
+
+		buf := make([]byte, 1024)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		assert.Contains(t, output, "<MASKED>")
+		assert.NotContains(t, output, secret)
+	})
+
 	t.Run("env format to stdout", func(t *testing.T) {
 		data := map[string]string{
 			"VAR1": "value1",
@@ -165,6 +217,76 @@ func TestOutput(t *testing.T) {
 
 		assert.Contains(t, output, "VAR1=value1")
 		assert.NotContains(t, output, "export")
+	})
+
+	t.Run("mask stdout masks secret values", func(t *testing.T) {
+		secret := "gho_123456789012345678901234567890123456"
+		iolib.RegisterSecret(secret)
+		data := map[string]string{
+			"GITHUB_TOKEN": secret,
+			"AWS_REGION":   "us-east-1",
+		}
+
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := Output(data, "bash", "", WithMaskStdout(true))
+		w.Close()
+		os.Stdout = oldStdout
+
+		require.NoError(t, err)
+
+		buf := make([]byte, 1024)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		assert.Contains(t, output, "export GITHUB_TOKEN=<MASKED>")
+		assert.NotContains(t, output, secret)
+		assert.Contains(t, output, "export AWS_REGION=us-east-1")
+	})
+
+	t.Run("stdout remains raw without mask option", func(t *testing.T) {
+		secret := "gho_abcdefghijklmnopqrstuvwxyz1234567890"
+		iolib.RegisterSecret(secret)
+		data := map[string]string{
+			"GITHUB_TOKEN": secret,
+		}
+
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := Output(data, "bash", "")
+		w.Close()
+		os.Stdout = oldStdout
+
+		require.NoError(t, err)
+
+		buf := make([]byte, 1024)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		assert.Contains(t, output, secret)
+		assert.NotContains(t, output, "<MASKED>")
+	})
+
+	t.Run("file output remains raw with mask option", func(t *testing.T) {
+		secret := "gho_012345678901234567890123456789012345"
+		iolib.RegisterSecret(secret)
+		tempDir := t.TempDir()
+		outputFile := filepath.Join(tempDir, "env")
+		data := map[string]string{
+			"GITHUB_TOKEN": secret,
+		}
+
+		err := Output(data, "bash", outputFile, WithMaskStdout(true))
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), secret)
+		assert.NotContains(t, string(content), "<MASKED>")
 	})
 
 	t.Run("json format to file", func(t *testing.T) {
