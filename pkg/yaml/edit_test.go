@@ -366,6 +366,26 @@ func TestQuery_EmptyScalarVsMissing(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrYAMLPathNotFound), "got: %v", err)
 }
 
+// TestSetRawAndDelete_InvalidDotPathErrors verifies that an invalid dot-path
+// surfaces as ErrInvalidYAMLExpression through both the SetRaw and Delete call
+// sites (setRawWithOptions and deleteWithOptions), not just at the
+// DotPathToYqPath unit level already covered by TestDotPathToYqPath_Errors and
+// TestDotPathToYqPath_EmptySegments.
+func TestSetRawAndDelete_InvalidDotPathErrors(t *testing.T) {
+	invalid := []string{"a..b", "a.", `b."x`, "a[0"}
+	for _, path := range invalid {
+		t.Run(path, func(t *testing.T) {
+			_, err := SetRaw([]byte(fixtureWithComments), path, "1")
+			require.Error(t, err, "SetRaw with path %q should error", path)
+			require.ErrorIs(t, err, ErrInvalidYAMLExpression)
+
+			_, err = Delete([]byte(fixtureWithComments), path)
+			require.Error(t, err, "Delete with path %q should error", path)
+			require.ErrorIs(t, err, ErrInvalidYAMLExpression)
+		})
+	}
+}
+
 // TestSetFile_ReplacesExistingFile is a regression test for the atomic write
 // path: editing an already-existing file must replace it in place (the previous
 // os.Rename implementation could not replace an existing file on Windows).

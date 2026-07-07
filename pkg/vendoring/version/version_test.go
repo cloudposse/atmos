@@ -181,3 +181,57 @@ func TestFilterPrereleases(t *testing.T) {
 	got := FilterPrereleases([]string{"1.0.0", "1.1.0-rc.1", "2.0.0-beta"})
 	assert.Equal(t, []string{"1.0.0"}, got)
 }
+
+func TestFilterBySemverConstraint_InvalidConstraint(t *testing.T) {
+	_, err := FilterBySemverConstraint([]string{"1.0.0"}, "not-a-constraint")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidSemverConstraint)
+}
+
+func TestFilterBySemverConstraint_ValidConstraint(t *testing.T) {
+	got, err := FilterBySemverConstraint([]string{"0.9.0", "1.0.0", "1.5.0", "2.0.0"}, "^1.0.0")
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, "1.0.0", got[0])
+	assert.Equal(t, "1.5.0", got[1])
+}
+
+func TestFilterExcludedVersions(t *testing.T) {
+	tests := []struct {
+		name     string
+		versions []string
+		excluded []string
+		want     []string
+	}{
+		{
+			name:     "no exclusions",
+			versions: []string{"1.0.0", "1.1.0"},
+			excluded: nil,
+			want:     []string{"1.0.0", "1.1.0"},
+		},
+		{
+			name:     "exact match excluded",
+			versions: []string{"1.0.0", "1.1.0", "1.2.0"},
+			excluded: []string{"1.1.0"},
+			want:     []string{"1.0.0", "1.2.0"},
+		},
+		{
+			name:     "wildcard match excluded",
+			versions: []string{"1.0.0", "1.5.0", "1.5.1", "2.0.0"},
+			excluded: []string{"1.5.*"},
+			want:     []string{"1.0.0", "2.0.0"},
+		},
+		{
+			name:     "no match keeps everything",
+			versions: []string{"1.0.0", "1.1.0"},
+			excluded: []string{"9.9.9"},
+			want:     []string{"1.0.0", "1.1.0"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FilterExcludedVersions(tt.versions, tt.excluded)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
