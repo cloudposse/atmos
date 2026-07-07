@@ -107,6 +107,16 @@ func VendorSource(
 				WithExplanation("Failed to inspect target directory").
 				WithContext("target", targetDir).
 				Err()
+		} else if targetPathBlockedByFile(targetDir) {
+			// os.Stat(targetDir) alone isn't enough: when an ancestor of targetDir is a
+			// regular file (not a directory), Unix reports ENOTDIR (distinct from
+			// ErrNotExist, caught above), but Windows reports the equivalent stat error
+			// as ErrNotExist, so it would otherwise fall through to a doomed download.
+			return errUtils.Build(errUtils.ErrSourceCopyFailed).
+				WithExplanation("Failed to inspect target directory").
+				WithContext("target", targetDir).
+				WithHint("An ancestor of the target directory is a file, not a directory").
+				Err()
 		}
 	}
 
@@ -240,6 +250,28 @@ func isFilesystemRoot(path string) bool {
 		return filepath.IsAbs(path) && filepath.Dir(path) == path
 	}
 	return filepath.Clean(path) == filepath.Clean(volume+string(filepath.Separator))
+}
+
+// targetPathBlockedByFile reports whether the nearest existing ancestor of path is a
+// regular file rather than a directory, which would prevent path (and any missing
+// intermediate directories) from ever being created. It walks up from path's parent
+// until it finds an ancestor that exists, or reaches the filesystem root.
+func targetPathBlockedByFile(path string) bool {
+	dir := filepath.Dir(path)
+	for {
+		info, err := os.Stat(dir)
+		if err == nil {
+			return !info.IsDir()
+		}
+		if isFilesystemRoot(dir) {
+			return false
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false
+		}
+		dir = parent
+	}
 }
 
 func fileURIPath(uri string) (string, error) {

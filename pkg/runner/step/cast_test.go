@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -1778,6 +1779,16 @@ func TestExecuteWithWorkflowClosesSuccessfully(t *testing.T) {
 }
 
 func TestExecuteWithWorkflowJoinsDiscardError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// The recorder's temp cast file is still open (in this test process) when
+		// the child subprocess below tries to remove it. Go's os.Create on Windows
+		// doesn't grant FILE_SHARE_DELETE by default, so a file can't be deleted by
+		// another handle/process while any handle keeps it open (unlike POSIX
+		// unlink, which succeeds on an open file). The removal silently no-ops,
+		// Discard's own os.Remove then succeeds normally, and no discard error ever
+		// gets joined - so this scenario is only reproducible on POSIX platforms.
+		t.Skip("cross-process deletion of an open file is not possible on Windows")
+	}
 	if err := iolib.Initialize(); err != nil {
 		t.Fatalf("initialize io: %v", err)
 	}

@@ -651,11 +651,27 @@ func TestDiscardReturnsRemoveErrWhenCloseErrIsNil(t *testing.T) {
 		t.Fatal(err)
 	}
 	tempPath := rec.tempPath
-	// Remove the temp file out from under the recorder so Discard's own
-	// os.Remove call fails with a non-nil removeErr while closeFile's err is nil.
+
+	// Close the recorder's real file handle before removing its temp file: on
+	// Windows, os.Remove fails on a file that still has an open handle, unlike
+	// Unix where unlinking an open file succeeds. Swap in a dummy, already-open
+	// file/writer afterward so Discard's own closeFile() (flush + close) still
+	// succeeds cleanly (err == nil), letting Discard's os.Remove(tempPath) fail
+	// because the real temp file is already gone.
+	if err := rec.file.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Remove(tempPath); err != nil {
 		t.Fatal(err)
 	}
+	dummy, err := os.CreateTemp(dir, "dummy-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(dummy.Name()) })
+	rec.file = dummy
+	rec.writer = bufio.NewWriter(dummy)
+
 	err = rec.Discard()
 	if err == nil {
 		t.Fatal("expected remove error from discard")
