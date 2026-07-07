@@ -6,8 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestConvertEnvVars(t *testing.T) {
@@ -58,6 +60,27 @@ func TestEnvironToMap(t *testing.T) {
 
 	// Verify our test variable is present.
 	assert.Equal(t, "test_value", result["TEST_ENVIRON_TO_MAP"])
+}
+
+func TestSliceToMap(t *testing.T) {
+	assert.Nil(t, SliceToMap(nil))
+	assert.Nil(t, SliceToMap([]string{}))
+
+	result := SliceToMap([]string{
+		"NORMAL=value",
+		"WITH_EQUALS=value=with=equals",
+		"MALFORMED",
+		"DUPLICATE=first",
+		"DUPLICATE=second",
+		"EMPTY=",
+	})
+
+	assert.Equal(t, map[string]string{
+		"NORMAL":      "value",
+		"WITH_EQUALS": "value=with=equals",
+		"DUPLICATE":   "second",
+		"EMPTY":       "",
+	}, result)
 }
 
 func TestSplitStringAtFirstOccurrence(t *testing.T) {
@@ -636,4 +659,41 @@ func TestBuilder(t *testing.T) {
 		assert.Equal(t, "LEVEL=5", result[2])
 		assert.Equal(t, "DEBUG=true", result[3])
 	})
+}
+
+func TestChdir(t *testing.T) {
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	origPWD := os.Getenv("PWD")
+	target := t.TempDir()
+
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(origDir))
+		require.NoError(t, os.Setenv("PWD", origPWD))
+	})
+
+	require.NoError(t, Chdir(target))
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	// macOS resolves /tmp symlinks, so compare resolved paths.
+	wantCwd, err := filepath.EvalSymlinks(target)
+	require.NoError(t, err)
+	gotCwd, err := filepath.EvalSymlinks(cwd)
+	require.NoError(t, err)
+	assert.Equal(t, wantCwd, gotCwd)
+
+	// PWD must track the directory passed to Chdir, like a shell's cd,
+	// so templates and subprocesses reading PWD see the new directory.
+	assert.Equal(t, target, os.Getenv("PWD"))
+}
+
+func TestChdirNonexistentDirectory(t *testing.T) {
+	origPWD := os.Getenv("PWD")
+
+	err := Chdir(filepath.Join(t.TempDir(), "does-not-exist"))
+	require.Error(t, err)
+
+	// A failed chdir must not touch PWD.
+	assert.Equal(t, origPWD, os.Getenv("PWD"))
 }

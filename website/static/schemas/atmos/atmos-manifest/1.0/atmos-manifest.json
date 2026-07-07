@@ -1715,12 +1715,46 @@
         "name": {
           "type": "string"
         },
-        "command": {
-          "type": "string"
-        },
-        "stack": {
-          "type": "string"
-        },
+                      "command": {
+                        "type": "string"
+                      },
+                      "prompt": {
+                        "description": "Prompt text for interactive steps, or a structured prompt for cast simulation steps.",
+                        "oneOf": [
+                          { "type": "string" },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "text": { "type": "string", "description": "Prompt text to render before simulated typed text." },
+                              "style": {
+                                "type": "string",
+                                "enum": ["command", "label", "muted", "info", "notice"],
+                                "description": "Semantic Atmos theme style for the simulated prompt."
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "mode": {
+                        "type": "string",
+                        "description": "Mode for cast and simulate steps. Simulate supports typed and prompt."
+                      },
+                      "rate": {
+                        "type": "string",
+                        "description": "Delay between simulated typed characters, e.g. 35ms. Use 0 to write immediately."
+                      },
+                      "write_rate": {
+                        "type": "string",
+                        "description": "Default delay between cast session text writes, e.g. 35ms. Use 0 to write immediately."
+                      },
+                      "text": {
+                        "type": "string",
+                        "description": "Text for write, wait, or simulate steps."
+                      },
+                      "stack": {
+                        "type": "string"
+                      },
         "type": {
           "type": "string"
         },
@@ -1799,7 +1833,8 @@
                   "enum": [
                     "grouped",
                     "prefixed",
-                    "none"
+                    "none",
+                    "raw"
                   ]
                 },
                 "order": {
@@ -1814,6 +1849,34 @@
                 },
                 "prefix": {
                   "type": "string"
+                },
+                "cast": {
+                  "type": "string",
+                  "description": "Path to write the asciicast recording (cast steps)."
+                },
+                "gif": {
+                  "type": "string",
+                  "description": "Path to render an animated GIF from the cast recording (requires agg)."
+                },
+                "mp4": {
+                  "type": "string",
+                  "description": "Path to render an MP4 from the cast recording (requires agg and ffmpeg)."
+                },
+                "html": {
+                  "type": "string",
+                  "description": "Path to render a static HTML fragment of the final terminal content (native)."
+                },
+                "ascii": {
+                  "type": "string",
+                  "description": "Path to render the final terminal content as plain text with no ANSI codes (native)."
+                },
+                "png": {
+                  "type": "string",
+                  "description": "Path to render a static PNG image of the final terminal content (native)."
+                },
+                "jpg": {
+                  "type": "string",
+                  "description": "Path to render a static JPEG image of the final terminal content (native)."
                 }
               }
             }
@@ -1844,7 +1907,27 @@
             }
           ]
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "prompt": {
+                "type": "object"
+              }
+            },
+            "required": ["prompt"]
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "const": "simulate"
+              }
+            },
+            "required": ["type"]
+          }
+        }
+      ]
     },
     "providers": {
       "title": "providers",

@@ -3,6 +3,7 @@ package io
 import (
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -64,4 +65,42 @@ func TestMaskerSetEnabled(t *testing.T) {
 
 	m.SetEnabled(true)
 	assert.Contains(t, m.Mask("x super-secret-value y"), m.Replacement())
+}
+
+// TestReconcileMaskingRegistersLateConfig covers CLIs that initialize global I/O before
+// atmos.yaml is loaded. ReconcileMasking must apply final literals, patterns, and replacement.
+func TestReconcileMaskingRegistersLateConfig(t *testing.T) {
+	t.Cleanup(func() {
+		Reset()
+		viper.Reset()
+	})
+
+	Reset()
+	viper.Reset()
+
+	viper.Set("mask", true)
+	require.NoError(t, Initialize())
+	assert.Equal(t, "prefix demo-key-ABCD1234EFGH5678 suffix", MaskString("prefix demo-key-ABCD1234EFGH5678 suffix"))
+
+	viper.Set("settings", schema.AtmosSettings{
+		Terminal: schema.Terminal{
+			Mask: schema.MaskSettings{
+				Enabled:     true,
+				Replacement: "[REDACTED]",
+				Patterns:    []string{`demo-key-[A-Za-z0-9]+`},
+				Literals:    []string{"super-secret-demo-value"},
+			},
+		},
+	})
+	viper.Set("settings.terminal.mask.enabled", true)
+	viper.Set("settings.terminal.mask.replacement", "[REDACTED]")
+	viper.Set("settings.terminal.mask.patterns", []string{`demo-key-[A-Za-z0-9]+`})
+	viper.Set("settings.terminal.mask.literals", []string{"super-secret-demo-value"})
+
+	ReconcileMasking()
+
+	masked := MaskString("prefix demo-key-ABCD1234EFGH5678 and super-secret-demo-value suffix")
+	assert.Equal(t, "prefix [REDACTED] and [REDACTED] suffix", masked)
+	assert.NotContains(t, masked, "demo-key-ABCD1234EFGH5678")
+	assert.NotContains(t, masked, "super-secret-demo-value")
 }

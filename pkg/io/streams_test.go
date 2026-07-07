@@ -2,6 +2,7 @@ package io
 
 import (
 	"bytes"
+	stdio "io"
 	"testing"
 )
 
@@ -192,4 +193,64 @@ type errorWriter struct{}
 
 func (e *errorWriter) Write(p []byte) (int, error) {
 	return 0, bytes.ErrTooLarge
+}
+
+// shortWriteWriter is a writer that always reports fewer bytes written than
+// provided, without returning an error itself.
+type shortWriteWriter struct {
+	buf bytes.Buffer
+}
+
+func (s *shortWriteWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	n, err := s.buf.Write(p[:len(p)-1])
+	return n, err
+}
+
+func TestDynamicWriter_Write(t *testing.T) {
+	t.Run("full write succeeds", func(t *testing.T) {
+		var buf bytes.Buffer
+		dw := &dynamicWriter{
+			stream:    DataStream,
+			getWriter: func() stdio.Writer { return &buf },
+		}
+
+		n, err := dw.Write([]byte("hello"))
+		if err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		if n != 5 {
+			t.Errorf("Write() returned %d, want 5", n)
+		}
+		if buf.String() != "hello" {
+			t.Errorf("buf = %q, want %q", buf.String(), "hello")
+		}
+	})
+
+	t.Run("underlying writer error propagates", func(t *testing.T) {
+		dw := &dynamicWriter{
+			stream:    DataStream,
+			getWriter: func() stdio.Writer { return &errorWriter{} },
+		}
+
+		_, err := dw.Write([]byte("hello"))
+		if err == nil {
+			t.Fatal("Write() expected error, got nil")
+		}
+	})
+
+	t.Run("short write returns ErrShortWrite", func(t *testing.T) {
+		sw := &shortWriteWriter{}
+		dw := &dynamicWriter{
+			stream:    DataStream,
+			getWriter: func() stdio.Writer { return sw },
+		}
+
+		_, err := dw.Write([]byte("hello"))
+		if err == nil {
+			t.Fatal("Write() expected ErrShortWrite, got nil")
+		}
+	})
 }

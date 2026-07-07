@@ -73,7 +73,7 @@ jobs:
 
       - name: Build atmos
         run: |
-          atmos build
+          sh scripts/build-atmos.sh default test
           echo "$PWD/build" >> "$GITHUB_PATH"
 
       # Surface the runner's ACTIONS_* credentials to every later run step.
@@ -110,7 +110,7 @@ jobs:
 
       - name: Build atmos
         run: |
-          atmos build
+          sh scripts/build-atmos.sh default test
           echo "$PWD/build" >> "$GITHUB_PATH"
 
       - name: Expose GitHub Actions runtime credentials

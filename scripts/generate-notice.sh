@@ -25,6 +25,9 @@ echo "License target: GOOS=${LICENSE_GOOS} GOARCH=${LICENSE_GOARCH} CGO_ENABLED=
 
 cd "${REPO_ROOT}"
 
+GO_BIN="$(go env GOPATH)/bin"
+export PATH="${GO_BIN}:${PATH}"
+
 # Deterministic license-URL overrides for modules that go-licenses cannot resolve
 # reliably. Vanity import paths and split-module repos sometimes require
 # network/source metadata lookups; when those fail, go-licenses emits

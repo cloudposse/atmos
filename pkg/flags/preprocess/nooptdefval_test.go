@@ -8,14 +8,18 @@ import (
 
 // mockFlag implements FlagInfo for testing.
 type mockFlag struct {
-	name        string
-	shorthand   string
-	noOptDefVal string
+	name             string
+	shorthand        string
+	noOptDefVal      string
+	noOptDefValNoArg bool
 }
 
 func (f *mockFlag) GetName() string        { return f.name }
 func (f *mockFlag) GetShorthand() string   { return f.shorthand }
 func (f *mockFlag) GetNoOptDefVal() string { return f.noOptDefVal }
+func (f *mockFlag) GetNoOptDefValConsumesNextArg() bool {
+	return !f.noOptDefValNoArg
+}
 
 func TestNewNoOptDefValPreprocessor(t *testing.T) {
 	t.Parallel()
@@ -80,6 +84,34 @@ func TestNoOptDefValPreprocessor_Preprocess_EqualsSyntaxUnchanged(t *testing.T) 
 
 	// Should remain unchanged.
 	assert.Equal(t, []string{"--identity=prod", "plan"}, result)
+}
+
+func TestNoOptDefValPreprocessor_Preprocess_NoSpaceValueFlag(t *testing.T) {
+	t.Parallel()
+
+	flags := []FlagInfo{
+		&mockFlag{name: "cast", noOptDefVal: "__AUTO__", noOptDefValNoArg: true},
+	}
+	preprocessor := NewNoOptDefValPreprocessor(flags)
+	args := []string{"--cast", "terraform", "plan"}
+
+	result := preprocessor.Preprocess(args)
+
+	assert.Equal(t, []string{"--cast", "terraform", "plan"}, result)
+}
+
+func TestNoOptDefValPreprocessor_Preprocess_NoSpaceValueFlagWithEquals(t *testing.T) {
+	t.Parallel()
+
+	flags := []FlagInfo{
+		&mockFlag{name: "cast", noOptDefVal: "__AUTO__", noOptDefValNoArg: true},
+	}
+	preprocessor := NewNoOptDefValPreprocessor(flags)
+	args := []string{"--cast=demo.cast", "terraform", "plan"}
+
+	result := preprocessor.Preprocess(args)
+
+	assert.Equal(t, []string{"--cast=demo.cast", "terraform", "plan"}, result)
 }
 
 func TestNoOptDefValPreprocessor_Preprocess_PagerWithEquals(t *testing.T) {

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -155,6 +156,67 @@ commands:
 	assert.Equal(t, "shell", atmosConfig.Commands[0].Steps[0].Type)
 	assert.Equal(t, "structured-step", atmosConfig.Commands[0].Steps[1].Name)
 	assert.Equal(t, "echo world", atmosConfig.Commands[0].Steps[1].Command)
+}
+
+func TestLoadConfigFromCLIArgs_WithCommandStepDefaultsInclude(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "atmos.yaml")
+	sharedConfigFile := filepath.Join(tmpDir, "cast-defaults.yaml")
+
+	configContent := fmt.Sprintf(`
+base_path: "."
+commands:
+  - name: test-command
+    steps:
+      - type: cast
+        name: demo
+        command: atmos version
+        mode: steps
+        defaults:
+          simulate: !include %s .simulate
+        rate: 12ms
+        steps:
+          - type: simulate
+            text: atmos version
+`, sharedConfigFile)
+	sharedConfigContent := `
+simulate:
+  mode: typed
+  cursor: true
+  prompt:
+    text: '> '
+    style: command
+  rate: 35ms
+`
+	require.NoError(t, os.WriteFile(configFile, []byte(configContent), 0o644))
+	require.NoError(t, os.WriteFile(sharedConfigFile, []byte(sharedConfigContent), 0o644))
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configFile},
+	}
+
+	var atmosConfig schema.AtmosConfiguration
+	err := loadConfigFromCLIArgs(v, configAndStacksInfo, &atmosConfig)
+	require.NoError(t, err)
+
+	require.Len(t, atmosConfig.Commands, 1)
+	require.Len(t, atmosConfig.Commands[0].Steps, 1)
+	castStep := atmosConfig.Commands[0].Steps[0]
+	assert.Equal(t, schema.TaskTypeCast, castStep.Type)
+	assert.Equal(t, "steps", castStep.Mode)
+	assert.Equal(t, "12ms", castStep.Rate)
+	require.NotNil(t, castStep.Defaults)
+	require.NotNil(t, castStep.Defaults.Simulate)
+	assert.Equal(t, "typed", castStep.Defaults.Simulate.Mode)
+	require.NotNil(t, castStep.Defaults.Simulate.Cursor)
+	assert.True(t, *castStep.Defaults.Simulate.Cursor)
+	require.NotNil(t, castStep.Defaults.Simulate.Prompt)
+	assert.Equal(t, "> ", castStep.Defaults.Simulate.Prompt.Text)
+	assert.Equal(t, "command", castStep.Defaults.Simulate.Prompt.Style)
+	assert.Equal(t, "35ms", castStep.Defaults.Simulate.Rate)
 }
 
 func TestValidatedIsFiles_EmptyPath(t *testing.T) {
