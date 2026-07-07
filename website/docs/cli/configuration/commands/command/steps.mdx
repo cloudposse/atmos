@@ -214,6 +214,35 @@ Beyond `shell`, `atmos`, and `exec`, custom commands support the full set of ext
 the same ones workflows use — enabling interactive CLI wizards directly in your custom commands.
 Use these step types to collect user input, display formatted output, and control execution flow.
 
+### Running Interactive Steps in CI (non-TTY)
+
+Interactive step types (`choose`, `input`, `confirm`, `filter`, `file`, `write`) need a terminal to
+prompt. When a custom command runs without a TTY — most commonly in CI — each interactive step uses
+its `default` value instead of prompting. A step **without** a `default` fails with
+`interactive terminal required for step`, so an unattended run never proceeds with an unintended
+value.
+
+Source the default from the environment with the `!env` function (`!env VAR fallback`) so the same
+command is interactive locally and non-interactive in CI:
+
+```yaml
+commands:
+  - name: deploy
+    description: Deploy to an account
+    steps:
+      - name: account
+        type: choose
+        prompt: "Account"
+        options: [dev, prod]
+        default: !env STACK_ACCOUNT dev
+      - type: shell
+        command: 'echo "Deploying {{ .steps.account.value }}"'
+```
+
+Locally this prompts; in CI it reads `STACK_ACCOUNT` (falling back to `dev`) and passes the value to
+the shell step. The same behavior applies to
+[workflow steps](/workflows/steps#interactive-steps-in-ci-non-tty).
+
 ### Example: Interactive Deployment Command
 
 ```yaml

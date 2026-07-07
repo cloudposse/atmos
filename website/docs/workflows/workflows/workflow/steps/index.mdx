@@ -77,6 +77,28 @@ In this example, `spin` is the value of `steps[].type`. The fields `title`, `com
 
 Type-specific fields are documented with [type](/workflows/steps/type).
 
+## Interactive Steps in CI (non-TTY)
+
+Interactive step types (`choose`, `input`, `confirm`, `filter`, `file`, `write`) prompt for input and need a terminal. When Atmos runs without a TTY — most commonly in CI — a step behaves based on whether it has a `default`:
+
+- **With a `default`**, the step uses the default value without prompting.
+- **Without a `default`**, the step fails with `interactive terminal required for step`. This preserves the previous behavior, so an unattended run never proceeds with an unintended value.
+
+This lets the *same* workflow prompt locally and run unattended in CI. Source the default from the environment with the `!env` function (`!env VAR fallback`):
+
+```yaml
+steps:
+  - name: account
+    type: choose
+    prompt: "Account"
+    options: [dev, prod]
+    default: !env STACK_ACCOUNT dev
+  - type: shell
+    command: 'echo "Deploying {{ .steps.account.value }}"'
+```
+
+Workflow step `default`, `prompt`, `options`, and `placeholder` evaluate the `!env` and `!exec` YAML functions. (Custom commands defined in `atmos.yaml` resolve these during config load.) The captured value — entered interactively or taken from the default — is available to later `shell`, `atmos`, and `exec` steps as `{{ .steps.<name>.value }}`.
+
 ## Conditional Execution
 
 Use `when` to skip a workflow step unless a condition is true. Bare predicate keywords keep their existing behavior:
