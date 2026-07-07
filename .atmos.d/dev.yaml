@@ -123,6 +123,11 @@ commands:
         commands:
           - name: notices
             description: Regenerate NOTICE from Go dependency licenses
+            # No working_directory here: scripts/generate-notice.sh already
+            # resolves the repo root itself via its own script path. Avoiding
+            # the !repo-root tag also keeps this file parseable by the older
+            # bootstrap atmos binary used to self-host CI's first build (see
+            # .atmos.d/build.yaml for the same constraint).
             env: *go_auto_env
             steps:
               - type: spin
@@ -142,6 +147,8 @@ commands:
 
           - name: snapshots
             description: Regenerate CLI golden snapshots
+            # No working_directory here (see the "notices" command above for
+            # why): cd's to the repo root inline in the step below instead.
             env:
               - key: GOTOOLCHAIN
                 value: auto
