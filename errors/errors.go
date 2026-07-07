@@ -82,6 +82,24 @@ var (
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 	ErrSpinnerOperationInterrupted           = errors.New("operation was interrupted")
 
+	// Version Tracker errors.
+	ErrVersionTrackNotFound          = errors.New("version track not found")
+	ErrVersionNotFound               = errors.New("version not found")
+	ErrVersionNotLocked              = errors.New("version not locked")
+	ErrVersionTrackNotVerified       = errors.New("version track is not verified")
+	ErrDesiredVersionRequired        = errors.New("desired version is required")
+	ErrVersionEntryExists            = errors.New("version entry already exists")
+	ErrVersionEntryNotFound          = errors.New("version entry not found")
+	ErrInvalidVersionCooldown        = errors.New("invalid cooldown")
+	ErrVersionRenderFileRequired     = errors.New("--file is required")
+	ErrVersionRenderDrift            = errors.New("rendered output differs from committed file")
+	ErrUnsupportedVersionTrackFormat = errors.New("unsupported output format (supported: yaml, json)")
+	ErrUnsupportedVersionShow        = errors.New("unsupported --show value (supported: desired, locked)")
+	ErrVersionFilesDrift             = errors.New("version-managed files are out of date; run `atmos version track apply`")
+	ErrUnknownVersionFileManager     = errors.New("unknown file manager")
+	ErrDuplicateVersionFileManager   = errors.New("duplicate file manager registration")
+	ErrVersionMarkerBadMatch         = errors.New("marker match expression must compile and contain one capture group")
+
 	// Theme-related errors.
 	ErrThemeNotFound = errors.New("theme not found")
 	ErrInvalidTheme  = errors.New("invalid theme")

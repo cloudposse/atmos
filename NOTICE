@@ -511,7 +511,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/opencontainers/go-digest
     License: Apache-2.0
-    URL: https://github.com/opencontainers/go-digest/blob/v1.0.0/LICENSE
+    URL: https://github.com/opencontainers/go-digest/blob/d50d2fec9c98/LICENSE
 
   - github.com/opencontainers/image-spec/specs-go
     License: Apache-2.0
@@ -608,6 +608,10 @@ APACHE 2.0 LICENSED DEPENDENCIES
   - github.com/uber/jaeger-lib/metrics
     License: Apache-2.0
     URL: https://github.com/uber/jaeger-lib/blob/v2.4.1/LICENSE
+
+  - github.com/updatecli/updatecli/pkg/plugins/utils/version
+    License: Apache-2.0
+    URL: https://github.com/updatecli/updatecli/blob/v0.999.0/LICENSE
 
   - github.com/wk8/go-ordered-map/v2
     License: Apache-2.0
@@ -2228,7 +2232,7 @@ MIT LICENSED DEPENDENCIES
 ================================================================================
 
 For the complete list of dependencies and their licenses, run:
-  go-licenses report .
+  go-licenses report ./...
 
 To view the full license text for a specific dependency, visit the URL
 listed above or check the dependency's repository.
