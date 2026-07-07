@@ -198,6 +198,11 @@ parent:
 			},
 			wantErr: false,
 		},
+		{
+			name:    "process !include directive with missing file returns error",
+			yamlStr: "key: !include /this/path/does/not/exist-atmos-test.yaml",
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1206,6 +1211,65 @@ func TestProcessSequenceElement(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "value", resultMap["key"])
 	})
+}
+
+// TestDecodeNodeWithYamlFunctionsForFile_IncludeTag verifies that decoding a
+// scalar node tagged !include with a non-empty sourceFile resolves the include
+// relative to that source file (processIncludeNodeValueForFile), exercising
+// the AtmosYamlFuncInclude branch and successful resolved.Decode path.
+func TestDecodeNodeWithYamlFunctionsForFile_IncludeTag(t *testing.T) {
+	dir := t.TempDir()
+	includedPath := filepath.Join(dir, "included.yaml")
+	require.NoError(t, os.WriteFile(includedPath, []byte("included_key: included_value"), 0o644))
+
+	sourceFile := filepath.Join(dir, "atmos.yaml")
+
+	var node yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte("key: !include included.yaml"), &node))
+
+	got, err := decodeNodeWithYamlFunctionsForFile(&node, sourceFile)
+	require.NoError(t, err)
+
+	gotMap, ok := got.(map[string]interface{})
+	require.True(t, ok)
+	inner, ok := gotMap["key"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "included_value", inner["included_key"])
+}
+
+// TestDecodeNodeWithYamlFunctionsForFile_IncludeRawTag verifies the
+// !include.raw branch of processIncludeNodeValueForFile with a non-empty
+// sourceFile, reading the raw file contents as a string.
+func TestDecodeNodeWithYamlFunctionsForFile_IncludeRawTag(t *testing.T) {
+	dir := t.TempDir()
+	includedPath := filepath.Join(dir, "raw.txt")
+	require.NoError(t, os.WriteFile(includedPath, []byte("raw file contents"), 0o644))
+
+	sourceFile := filepath.Join(dir, "atmos.yaml")
+
+	var node yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte("key: !include.raw raw.txt"), &node))
+
+	got, err := decodeNodeWithYamlFunctionsForFile(&node, sourceFile)
+	require.NoError(t, err)
+
+	gotMap, ok := got.(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "raw file contents", gotMap["key"])
+}
+
+// TestDecodeNodeWithYamlFunctionsForFile_IncludeTagMissingFile verifies that
+// an !include referencing a nonexistent file returns an error through
+// processIncludeNodeValueForFile's error-wrapping branch.
+func TestDecodeNodeWithYamlFunctionsForFile_IncludeTagMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	sourceFile := filepath.Join(dir, "atmos.yaml")
+
+	var node yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte("key: !include does-not-exist.yaml"), &node))
+
+	_, err := decodeNodeWithYamlFunctionsForFile(&node, sourceFile)
+	assert.Error(t, err)
 }
 
 func TestDecodeNodeWithYamlFunctions(t *testing.T) {

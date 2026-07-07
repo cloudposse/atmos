@@ -1086,6 +1086,10 @@ BSD LICENSED DEPENDENCIES
     License: BSD-3-Clause
     URL: https://cs.opensource.google/go/x/exp/+/74f9aab9:LICENSE
 
+  - golang.org/x/image
+    License: BSD-3-Clause
+    URL: https://cs.opensource.google/go/x/image/+/v0.43.0:LICENSE
+
   - golang.org/x/mod/semver
     License: BSD-3-Clause
     URL: https://cs.opensource.google/go/x/mod/+/v0.36.0:LICENSE

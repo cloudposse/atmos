@@ -554,15 +554,6 @@ func TestExecutor_RunShellStepHostPath(t *testing.T) {
 	require.NoError(t, e.runShellStep(params, step, cmdParams, "/wd"))
 }
 
-func TestEnvSliceToMap(t *testing.T) {
-	assert.Nil(t, envSliceToMap(nil))
-	assert.Equal(
-		t,
-		map[string]string{"A": "1", "B": "2"},
-		envSliceToMap([]string{"A=1", "B=2", "malformed"}), // malformed (no '=') is skipped.
-	)
-}
-
 func TestExecutor_RunShellStep_ContainerOverrideDryRun(t *testing.T) {
 	e := &Executor{}
 	params := &WorkflowParams{

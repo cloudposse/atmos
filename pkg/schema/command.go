@@ -1,5 +1,13 @@
 package schema
 
+import (
+	"fmt"
+	"reflect"
+	"sort"
+
+	"github.com/go-viper/mapstructure/v2"
+)
+
 // Custom CLI commands.
 
 // Command defines a custom CLI command.
@@ -55,6 +63,89 @@ type CommandEnv struct {
 	Key          string `yaml:"key" json:"key" mapstructure:"key"`
 	Value        string `yaml:"value" json:"value" mapstructure:"value"`
 	ValueCommand string `yaml:"valueCommand" json:"valueCommand" mapstructure:"valueCommand"`
+}
+
+const commandEnvDecodeFailedMessage = "failed to decode command env"
+
+// ErrCommandEnvDecodeFailed is returned when command env map decoding fails.
+var ErrCommandEnvDecodeFailed error = commandEnvDecodeError{}
+
+type commandEnvDecodeError struct{}
+
+func (commandEnvDecodeError) Error() string {
+	return commandEnvDecodeFailedMessage
+}
+
+func (commandEnvDecodeError) Is(target error) bool {
+	return target != nil && target.Error() == commandEnvDecodeFailedMessage
+}
+
+// CommandEnvDecodeHook lets command-level env accept both the legacy list form:
+//
+//	env:
+//	  - key: AWS_PROFILE
+//	    value: dev
+//
+// and the map form used by workflow steps:
+//
+//	env:
+//	  AWS_PROFILE: dev
+func CommandEnvDecodeHook() mapstructure.DecodeHookFunc {
+	return func(f reflect.Type, t reflect.Type, data any) (any, error) {
+		if t != reflect.TypeOf([]CommandEnv{}) {
+			return data, nil
+		}
+		if f.Kind() != reflect.Map {
+			return data, nil
+		}
+		envMap, ok := data.(map[string]any)
+		if !ok {
+			return data, nil
+		}
+		return decodeCommandEnvMap(envMap)
+	}
+}
+
+func decodeCommandEnvMap(envMap map[string]any) ([]CommandEnv, error) {
+	keys := make([]string, 0, len(envMap))
+	for key := range envMap {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	env := make([]CommandEnv, 0, len(keys))
+	for _, key := range keys {
+		item, err := decodeCommandEnvMapValue(key, envMap[key])
+		if err != nil {
+			return nil, err
+		}
+		env = append(env, item)
+	}
+	return env, nil
+}
+
+func decodeCommandEnvMapValue(key string, value any) (CommandEnv, error) {
+	switch v := value.(type) {
+	case string:
+		return CommandEnv{Key: key, Value: v}, nil
+	case map[string]any:
+		item := CommandEnv{Key: key}
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result:           &item,
+			TagName:          "mapstructure",
+			WeaklyTypedInput: true,
+		})
+		if err != nil {
+			return CommandEnv{}, fmt.Errorf("%w for %q: %w", ErrCommandEnvDecodeFailed, key, err)
+		}
+		if err := decoder.Decode(v); err != nil {
+			return CommandEnv{}, fmt.Errorf("%w for %q: %w", ErrCommandEnvDecodeFailed, key, err)
+		}
+		item.Key = key
+		return item, nil
+	default:
+		return CommandEnv{}, fmt.Errorf("%w for command env %q: got %T (expected string or map)", ErrTaskUnexpectedNodeKind, key, value)
+	}
 }
 
 // CommandComponent defines a custom component type for a command.

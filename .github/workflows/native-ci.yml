@@ -15,6 +15,12 @@ on:
       - "pkg/ci/**"
       - "pkg/hooks/**"
       - "actions/cache/**"
+      # CI log grouping boundaries exercised by the workflow and Terraform jobs.
+      - "cmd/root.go"
+      - "internal/exec/terraform_execute_helpers_exec.go"
+      - "internal/exec/workflow_utils.go"
+      - "pkg/runner/step/**"
+      - "pkg/workflow/**"
   workflow_dispatch:
 
 permissions:
@@ -34,10 +40,57 @@ env:
   GOPROXY: "https://proxy.golang.org|direct"
 
 jobs:
+  workflow-groups:
+    name: "[native ci] workflow groups (${{ matrix.group_mode }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        group_mode:
+          - auto
+          - invocation
+          - off
+    env:
+      ATMOS_CI_GROUPS_MODE: ${{ matrix.group_mode }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up and build Atmos
+        uses: ./.github/actions/setup-atmos-build
+        with:
+          atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
+
+      - name: Run workflow log group fixture
+        working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
+        run: |
+          echo "ATMOS_CI_GROUPS_MODE=${ATMOS_CI_GROUPS_MODE}"
+          case "${ATMOS_CI_GROUPS_MODE}" in
+            auto)
+              echo "Expected: GitHub log groups named 'first workflow group' and 'second workflow group'."
+              echo "Expected: each workflow shell step prints ATMOS_CI_LOG_GROUP_ACTIVE=1."
+              ;;
+            invocation)
+              echo "Expected: one GitHub log group around the full 'atmos workflow' invocation."
+              echo "Expected: workflow shell steps print ATMOS_CI_LOG_GROUP_ACTIVE=1 because the invocation group is active."
+              ;;
+            off)
+              echo "Expected: no Atmos-created GitHub log groups."
+              echo "Expected: workflow shell steps print ATMOS_CI_LOG_GROUP_ACTIVE=<unset>."
+              ;;
+          esac
+          atmos workflow ci-log-groups -f ci-log-groups
+
   terraform-plan:
     name: "[native ci] terraform plan"
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      ATMOS_CI_GROUPS_MODE: auto
 
     services:
       floci:
@@ -51,21 +104,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      - name: Set up and build Atmos
+        uses: ./.github/actions/setup-atmos-build
         with:
-          go-version-file: "go.mod"
-
-      - name: Set up Atmos
-        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
-        with:
-          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
-          install-wrapper: false
-
-      - name: Build Atmos
-        run: |
-          atmos build --target linux
-          echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
+          atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
       - name: Restore Atmos native CI cache
         uses: ./actions/cache
@@ -80,47 +122,6 @@ jobs:
         working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
         run: atmos terraform cache mirror bucket -s test --platform=linux_amd64 --format=json
 
-      - name: Install scanner tools for native CI fixture
-        run: |
-          scanner_bin="$RUNNER_TEMP/native-ci-scanners/bin"
-          scanner_assets="$RUNNER_TEMP/native-ci-scanners/assets"
-          mkdir -p "$scanner_bin" "$scanner_assets"
-
-          # Download and verify the Trivy binary against its published checksum
-          # before extracting, so a tampered or corrupted archive never executes.
-          curl -fsSL \
-            -o "$RUNNER_TEMP/trivy.tar.gz" \
-            "https://github.com/aquasecurity/trivy/releases/download/v${NATIVE_CI_TRIVY_VERSION}/trivy_${NATIVE_CI_TRIVY_VERSION}_Linux-64bit.tar.gz"
-          curl -fsSL \
-            -o "$RUNNER_TEMP/trivy_checksums.txt" \
-            "https://github.com/aquasecurity/trivy/releases/download/v${NATIVE_CI_TRIVY_VERSION}/trivy_${NATIVE_CI_TRIVY_VERSION}_checksums.txt"
-          trivy_sha="$(grep " trivy_${NATIVE_CI_TRIVY_VERSION}_Linux-64bit.tar.gz$" "$RUNNER_TEMP/trivy_checksums.txt" | awk '{print $1}')"
-          echo "${trivy_sha}  $RUNNER_TEMP/trivy.tar.gz" | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$scanner_bin" trivy
-
-          # Download and verify the KICS binary against its published checksum
-          # before extracting.
-          curl -fsSL \
-            -o "$RUNNER_TEMP/kics.tar.gz" \
-            "https://github.com/Checkmarx/kics/releases/download/v${NATIVE_CI_KICS_VERSION}/kics_${NATIVE_CI_KICS_VERSION}_linux_amd64.tar.gz"
-          curl -fsSL \
-            -o "$RUNNER_TEMP/kics_checksums.txt" \
-            "https://github.com/Checkmarx/kics/releases/download/v${NATIVE_CI_KICS_VERSION}/checksums.txt"
-          kics_sha="$(grep " kics_${NATIVE_CI_KICS_VERSION}_linux_amd64.tar.gz$" "$RUNNER_TEMP/kics_checksums.txt" | awk '{print $1}')"
-          echo "${kics_sha}  $RUNNER_TEMP/kics.tar.gz" | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/kics.tar.gz" -C "$scanner_bin" kics
-
-          # The KICS query assets (extracted-info.zip) have no published checksum,
-          # so they cannot be verified the same way. They are data, not an executable.
-          curl -fsSL \
-            -o "$RUNNER_TEMP/kics-extracted-info.zip" \
-            "https://github.com/Checkmarx/kics/releases/download/v${NATIVE_CI_KICS_VERSION}/extracted-info.zip"
-          unzip -q "$RUNNER_TEMP/kics-extracted-info.zip" -d "$scanner_assets/kics"
-
-          chmod +x "$scanner_bin/trivy" "$scanner_bin/kics"
-          echo "$scanner_bin" >> "$GITHUB_PATH"
-          echo "KICS_QUERIES_PATH=$scanner_assets/kics/assets/queries" >> "$GITHUB_ENV"
-
       - name: Terraform plan
         id: terraform-plan
         working-directory: ${{ env.ATMOS_NATIVE_CI_WORKDIR }}
@@ -134,6 +135,8 @@ jobs:
     needs: terraform-plan
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      ATMOS_CI_GROUPS_MODE: auto
 
     services:
       floci:
@@ -147,21 +150,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      - name: Set up and build Atmos
+        uses: ./.github/actions/setup-atmos-build
         with:
-          go-version-file: "go.mod"
-
-      - name: Set up Atmos
-        uses: cloudposse/github-action-setup-atmos@82ed6d959532148e602fbbbe28b95c4628081561 # v3.1.0
-        with:
-          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
-          install-wrapper: false
-
-      - name: Build Atmos
-        run: |
-          atmos build --target linux
-          echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
+          atmos-bootstrap-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
       - name: Restore Atmos native CI cache
         uses: ./actions/cache
