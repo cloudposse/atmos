@@ -5,7 +5,9 @@
   <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg">
   <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" width="220px" align="right">
-</picture></a> [![create](https://shields.io/badge/APPLY-CREATE-success?style=for-the-badge)](#user-content-create-prod-bucket)
+</picture></a>
+
+[![create](https://shields.io/badge/APPLY-CREATE-success?style=for-the-badge)](#create-prod-bucket)
 <details><summary><a id="result-prod-bucket" />Resources: 1 added, 0 changed, 0 destroyed</summary>
 
 <br/>

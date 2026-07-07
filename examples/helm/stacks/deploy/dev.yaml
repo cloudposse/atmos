@@ -11,6 +11,9 @@ components:
     demo:
       metadata:
         component: demo
+      dependencies:
+        tools:
+          helm: "v3.21.2"
       # The chart reference. "." is the component directory itself
       # (components/helm/demo), which contains Chart.yaml.
       chart: "."
@@ -26,6 +29,9 @@ components:
     demo-repo:
       metadata:
         component: demo
+      dependencies:
+        tools:
+          helm: "v3.21.2"
       repositories:
         - name: local
           url: !env HELM_DEMO_REPO_URL

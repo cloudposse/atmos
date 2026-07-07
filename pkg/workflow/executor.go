@@ -14,6 +14,7 @@ import (
 	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/config"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -210,7 +211,14 @@ func (e *Executor) runSteps(params *WorkflowParams, steps []schema.WorkflowStep,
 			progressRenderer.Render()
 		}
 
-		stepResult := e.executeStep(params, step, stepIdx)
+		// Wrap each step's output in a collapsible CI log group when grouping is
+		// active. Exec steps run bare because a successful Unix exec never returns
+		// to close a deferred group.
+		var stepResult stepResultInternal
+		_ = stepPkg.RunGroupedForType(params.AtmosConfig, step.Name, step.Command, step.Type, func() error {
+			stepResult = e.executeStep(params, step, stepIdx)
+			return nil
+		})
 		result.Steps = append(result.Steps, stepResult.StepResult)
 
 		if !stepResult.Success {
@@ -381,6 +389,13 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 		}
 	}
 
+	// When this step's output is wrapped in a CI log group (see runSteps), mark
+	// the subprocess environment so a nested `atmos workflow`/custom-command
+	// invocation skips unsupported nested grouping.
+	if commandType != schema.TaskTypeExec && ci.ShouldPropagateLogGroupSentinel(params.AtmosConfig, ci.DimensionStep) {
+		stepEnv = append(stepEnv, ci.LogGroupSentinelEnv())
+	}
+
 	// Calculate final stack.
 	finalStack := e.calculateFinalStack(params.WorkflowDefinition, step, params.Opts.CommandLineStack)
 
@@ -433,7 +448,7 @@ func (e *Executor) executeRegisteredStep(params *WorkflowParams, step *schema.Wo
 
 	stepCopy := *step
 	stepCopy.WorkingDirectory = cmdParams.workingDirectory
-	stepCopy.Env = envSliceToMap(cmdParams.stepEnv)
+	stepCopy.Env = envpkg.SliceToMap(cmdParams.stepEnv)
 	stepCopy.DryRun = params.Opts.DryRun
 	stepCopy.Stack = cmdParams.finalStack
 
@@ -522,21 +537,6 @@ func executeStepHandlerWithWorkflow(
 		return wah.ExecuteWithWorkflow(ctx, step, vars, workflow)
 	}
 	return handler.Execute(ctx, step, vars)
-}
-
-func envSliceToMap(env []string) map[string]string {
-	if len(env) == 0 {
-		return nil
-	}
-	result := make(map[string]string, len(env))
-	for _, entry := range env {
-		key, value, ok := strings.Cut(entry, "=")
-		if !ok {
-			continue
-		}
-		result[key] = value
-	}
-	return result
 }
 
 // renderStepCommand renders the command before execution if show.command is enabled.

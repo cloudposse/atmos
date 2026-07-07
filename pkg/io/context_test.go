@@ -1,6 +1,7 @@
 package io
 
 import (
+	"bytes"
 	stdIo "io"
 	"os"
 	"regexp"
@@ -293,6 +294,94 @@ func TestMaskConfiguration(t *testing.T) {
 // boolPtr returns a pointer to a bool value.
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// fakeStreams is a minimal Streams implementation for testing context.Write()
+// against custom raw writers without touching real os.Stdout/os.Stderr.
+type fakeStreams struct {
+	rawOutput stdIo.Writer
+	rawError  stdIo.Writer
+}
+
+func (f *fakeStreams) Input() stdIo.Reader     { return nil }
+func (f *fakeStreams) Output() stdIo.Writer    { return f.rawOutput }
+func (f *fakeStreams) Error() stdIo.Writer     { return f.rawError }
+func (f *fakeStreams) RawOutput() stdIo.Writer { return f.rawOutput }
+func (f *fakeStreams) RawError() stdIo.Writer  { return f.rawError }
+
+// TestContextWrite_ErrorFromUnderlyingWriter verifies that context.Write()
+// wraps and propagates errors returned by the underlying raw writer.
+func TestContextWrite_ErrorFromUnderlyingWriter(t *testing.T) {
+	cfg := &Config{DisableMasking: true}
+	m := newMasker(cfg)
+
+	c := &context{
+		streams: &fakeStreams{rawOutput: &errorWriter{}, rawError: &errorWriter{}},
+		config:  cfg,
+		masker:  m,
+	}
+
+	err := c.Write(DataStream, "hello")
+	if err == nil {
+		t.Fatal("expected error from Write(), got nil")
+	}
+}
+
+// TestContextWrite_ShortWrite verifies that context.Write() reports an error
+// when the underlying writer performs a short write.
+func TestContextWrite_ShortWrite(t *testing.T) {
+	cfg := &Config{DisableMasking: true}
+	m := newMasker(cfg)
+
+	c := &context{
+		streams: &fakeStreams{rawOutput: &shortWriteWriter{}, rawError: &shortWriteWriter{}},
+		config:  cfg,
+		masker:  m,
+	}
+
+	err := c.Write(DataStream, "hello")
+	if err == nil {
+		t.Fatal("expected short-write error from Write(), got nil")
+	}
+}
+
+// TestContextWrite_UnknownStream verifies that context.Write() returns an
+// error for an unrecognized Stream value.
+func TestContextWrite_UnknownStream(t *testing.T) {
+	cfg := &Config{DisableMasking: true}
+	m := newMasker(cfg)
+
+	c := &context{
+		streams: &fakeStreams{rawOutput: &bytes.Buffer{}, rawError: &bytes.Buffer{}},
+		config:  cfg,
+		masker:  m,
+	}
+
+	err := c.Write(Stream(999), "hello")
+	if err == nil {
+		t.Fatal("expected error for unknown stream, got nil")
+	}
+}
+
+// TestContextWrite_Success verifies the happy path where the full masked
+// content is written successfully.
+func TestContextWrite_Success(t *testing.T) {
+	cfg := &Config{DisableMasking: true}
+	m := newMasker(cfg)
+
+	var buf bytes.Buffer
+	c := &context{
+		streams: &fakeStreams{rawOutput: &buf, rawError: &bytes.Buffer{}},
+		config:  cfg,
+		masker:  m,
+	}
+
+	if err := c.Write(DataStream, "hello"); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if buf.String() != "hello" {
+		t.Errorf("buf = %q, want %q", buf.String(), "hello")
+	}
 }
 
 // TestNewContextRegistersCommonSecrets verifies that common secret patterns

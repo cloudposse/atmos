@@ -122,6 +122,59 @@ commands:
 	}, result.Commands[0].Env)
 }
 
+func TestAtmosDecodeHook_NestedCastSimulatePromptInCommandSteps(t *testing.T) {
+	type config struct {
+		Commands []schema.Command `mapstructure:"commands"`
+	}
+
+	yamlContent := `
+commands:
+  - name: casts
+    commands:
+      - name: generate
+        commands:
+          - name: sops-secrets
+            steps:
+              - type: cast
+                mode: steps
+                steps:
+                  - type: simulate
+                    mode: typed
+                    prompt: &demo_prompt
+                      text: "> "
+                      style: command
+                    text: atmos secret list --stack dev --component api
+                  - type: shell
+                    command: atmos secret list --stack dev --component api
+                  - type: simulate
+                    mode: prompt
+                    prompt: *demo_prompt
+`
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	err := v.ReadConfig(bytes.NewReader([]byte(yamlContent)))
+	require.NoError(t, err)
+
+	var result config
+	err = v.Unmarshal(&result, atmosDecodeHook())
+	require.NoError(t, err)
+
+	require.Len(t, result.Commands, 1)
+	require.Len(t, result.Commands[0].Commands, 1)
+	require.Len(t, result.Commands[0].Commands[0].Commands, 1)
+	steps := result.Commands[0].Commands[0].Commands[0].Steps
+	require.Len(t, steps, 1)
+	require.Len(t, steps[0].Steps, 3)
+	require.NotNil(t, steps[0].Steps[0].SimulatePrompt)
+	assert.Equal(t, "> ", steps[0].Steps[0].SimulatePrompt.Text)
+	assert.Equal(t, "command", steps[0].Steps[0].SimulatePrompt.Style)
+	assert.Empty(t, steps[0].Steps[0].Prompt)
+	require.NotNil(t, steps[0].Steps[2].SimulatePrompt)
+	assert.Equal(t, "> ", steps[0].Steps[2].SimulatePrompt.Text)
+	assert.Equal(t, "command", steps[0].Steps[2].SimulatePrompt.Style)
+}
+
 func TestCommandEnvFromMapEntryVariants(t *testing.T) {
 	tests := []struct {
 		name    string
