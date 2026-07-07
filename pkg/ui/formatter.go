@@ -188,9 +188,9 @@ func NewRenderer(w stdio.Writer) *lipgloss.Renderer {
 }
 
 // TerminalWidth returns the stdout width from the global terminal detection:
-// the real TTY size when available, the COLUMNS environment variable on
-// non-TTY streams, or 0 when neither is known (callers apply their own
-// defaults). Returns 0 when the formatter has not been initialized.
+// the real TTY size when available, or 0 when unknown (non-TTY streams ignore
+// COLUMNS so CI snapshots and piped output keep stable wrapping; callers apply
+// their own defaults). Returns 0 when the formatter has not been initialized.
 func TerminalWidth() int {
 	defer perf.Track(nil, "ui.TerminalWidth")()
 

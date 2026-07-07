@@ -145,6 +145,57 @@ func TestOutput(t *testing.T) {
 		assert.Contains(t, output, `"VAR1": "value1"`)
 	})
 
+	t.Run("json format to stdout with atmosConfig and mask", func(t *testing.T) {
+		secret := "gho_json1234567890123456789012345678901"
+		iolib.RegisterSecret(secret)
+		data := map[string]string{
+			"GITHUB_TOKEN": secret,
+		}
+
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		cfg := &schema.AtmosConfiguration{}
+		err := Output(data, "json", "", WithAtmosConfig(cfg), WithMaskStdout(true))
+		w.Close()
+		os.Stdout = oldStdout
+
+		require.NoError(t, err)
+
+		buf := make([]byte, 1024)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		assert.Contains(t, output, "<MASKED>")
+		assert.NotContains(t, output, secret)
+	})
+
+	t.Run("json format to stdout without atmosConfig and mask", func(t *testing.T) {
+		secret := "gho_json0987654321098765432109876543210"
+		iolib.RegisterSecret(secret)
+		data := map[string]string{
+			"GITHUB_TOKEN": secret,
+		}
+
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := Output(data, "json", "", WithMaskStdout(true))
+		w.Close()
+		os.Stdout = oldStdout
+
+		require.NoError(t, err)
+
+		buf := make([]byte, 1024)
+		n, _ := r.Read(buf)
+		output := string(buf[:n])
+
+		assert.Contains(t, output, "<MASKED>")
+		assert.NotContains(t, output, secret)
+	})
+
 	t.Run("env format to stdout", func(t *testing.T) {
 		data := map[string]string{
 			"VAR1": "value1",

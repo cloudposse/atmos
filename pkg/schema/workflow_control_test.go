@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -171,6 +172,107 @@ prompt: Continue?
 	assert.Nil(t, step.SimulatePrompt)
 }
 
+// TestWorkflowStep_UnmarshalYAML_RejectsStructuredPromptForNonSimulateType verifies
+// decodeStepPrompt's mapping-node branch rejects a structured prompt for any type
+// other than TaskTypeSimulate.
+func TestWorkflowStep_UnmarshalYAML_RejectsStructuredPromptForNonSimulateType(t *testing.T) {
+	input := `
+type: input
+prompt:
+  text: "> "
+  style: command
+`
+	var step WorkflowStep
+	err := yaml.Unmarshal([]byte(input), &step)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrWorkflowControlStepInvalid))
+}
+
+// TestWorkflowStep_UnmarshalYAML_PromptDecodeErrorPropagates verifies a structured
+// prompt with a field of the wrong type surfaces the underlying decode error.
+func TestWorkflowStep_UnmarshalYAML_PromptDecodeErrorPropagates(t *testing.T) {
+	input := `
+type: simulate
+prompt:
+  text: [not, a, string]
+`
+	var step WorkflowStep
+	err := yaml.Unmarshal([]byte(input), &step)
+	require.Error(t, err)
+}
+
+// TestWorkflowStep_UnmarshalYAML_PromptDefaultNodeDecode verifies the default branch
+// of decodeStepPrompt (a non-scalar, non-mapping prompt node, e.g. a sequence) is
+// passed through to node.Decode, which fails for a *string destination.
+func TestWorkflowStep_UnmarshalYAML_PromptDefaultNodeDecode(t *testing.T) {
+	input := `
+type: input
+prompt:
+  - a
+  - b
+`
+	var step WorkflowStep
+	err := yaml.Unmarshal([]byte(input), &step)
+	require.Error(t, err)
+}
+
+// TestWorkflowStep_UnmarshalYAML_StepsSequenceDecodeErrorPropagates verifies that an
+// error decoding a nested step in the `steps:` sequence (via the recursive
+// step.UnmarshalYAML call) propagates up through decodeWorkflowStepList.
+func TestWorkflowStep_UnmarshalYAML_StepsSequenceDecodeErrorPropagates(t *testing.T) {
+	input := `
+type: parallel
+steps:
+  - type: input
+    prompt:
+      text: "> "
+`
+	var step WorkflowStep
+	err := yaml.Unmarshal([]byte(input), &step)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrWorkflowControlStepInvalid))
+}
+
+// TestWorkflowStep_UnmarshalYAML_StepsNonSequenceDecodeError verifies decodeWorkflowStepList's
+// non-sequence branch delegates to node.Decode, which fails when `steps:` is a scalar.
+func TestWorkflowStep_UnmarshalYAML_StepsNonSequenceDecodeError(t *testing.T) {
+	input := `
+type: parallel
+steps: not-a-sequence
+`
+	var step WorkflowStep
+	err := yaml.Unmarshal([]byte(input), &step)
+	require.Error(t, err)
+}
+
+// TestWorkflowStep_UnmarshalYAML_SanitizedDecodeErrorPropagates verifies that a decode
+// failure on the sanitized (non-polymorphic) portion of the mapping - here,
+// max_concurrency set to a mapping instead of an int - surfaces as an error from the
+// plain-struct decode step, before any polymorphic-field handling runs.
+func TestWorkflowStep_UnmarshalYAML_SanitizedDecodeErrorPropagates(t *testing.T) {
+	input := `
+type: parallel
+max_concurrency: {a: b}
+`
+	var step WorkflowStep
+	err := yaml.Unmarshal([]byte(input), &step)
+	require.Error(t, err)
+}
+
+// TestWorkflowStep_UnmarshalYAML_BackgroundDecodeErrorPropagates verifies that an
+// error from decodeStepBackground (a non-scalar `background:` value) propagates up
+// through applyStepPolymorphicNodes.
+func TestWorkflowStep_UnmarshalYAML_BackgroundDecodeErrorPropagates(t *testing.T) {
+	input := `
+type: container
+background: [true, false]
+`
+	var step WorkflowStep
+	err := yaml.Unmarshal([]byte(input), &step)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrWorkflowControlStepInvalid))
+}
+
 func TestValidateWorkflowSteps_ControlSteps(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -270,6 +372,20 @@ func TestValidateWorkflowSteps_ControlSteps(t *testing.T) {
 			wantErr: "duplicate step name",
 		},
 		{
+			// The failing child omits Name, so workflowStepName falls back to
+			// "step<index+1>" ("step2") when reporting the unknown `needs` target.
+			name: "unnamed child uses fallback name in needs error",
+			steps: []WorkflowStep{{
+				Name: "checks",
+				Type: TaskTypeParallel,
+				Steps: []WorkflowStep{
+					{Name: "lint", Type: TaskTypeShell, Command: "make lint"},
+					{Type: TaskTypeShell, Command: "make test", Needs: []string{"missing"}},
+				},
+			}},
+			wantErr: `step "step2" in control step "checks" needs unknown step "missing"`,
+		},
+		{
 			name: "invalid output mode",
 			steps: []WorkflowStep{{
 				Name:   "checks",
@@ -364,6 +480,24 @@ func TestValidateWorkflowSteps_ControlSteps(t *testing.T) {
 			}},
 		},
 		{
+			name: "valid fail config allowed",
+			steps: []WorkflowStep{{
+				Name:  "checks",
+				Type:  TaskTypeParallel,
+				Fail:  &ParallelFailConfig{Mode: "fail_fast", MaxFailures: 1},
+				Steps: []WorkflowStep{{Name: "test", Type: TaskTypeShell, Command: "make test"}},
+			}},
+		},
+		{
+			name: "valid matrix allowed",
+			steps: []WorkflowStep{{
+				Name:   "plans",
+				Type:   TaskTypeMatrix,
+				Matrix: map[string][]string{"stack": {"dev", "prod"}},
+				Steps:  []WorkflowStep{{Name: "plan", Type: TaskTypeShell, Command: "plan"}},
+			}},
+		},
+		{
 			name: "child output mode disallowed",
 			steps: []WorkflowStep{{
 				Name:  "checks",
@@ -414,6 +548,37 @@ steps:
 	require.Error(t, yaml.Unmarshal([]byte(input), &step))
 }
 
+// TestWorkflowStep_UnmarshalYAML_InvalidCastOutputMapping verifies decode errors from
+// a mapping-shaped `output:` on a `type: cast` step (the CastOutput decode-error
+// branch, distinct from the ParallelOutputConfig decode-error branch used by other
+// step types).
+func TestWorkflowStep_UnmarshalYAML_InvalidCastOutputMapping(t *testing.T) {
+	input := `
+type: cast
+output:
+  mode: [not, a, string]
+steps:
+  - name: list
+    command: atmos list stacks
+`
+	var step WorkflowStep
+	require.Error(t, yaml.Unmarshal([]byte(input), &step))
+}
+
+// TestWorkflowStep_UnmarshalYAML_OutputSequenceDefaultDecode verifies a non-scalar,
+// non-mapping `output:` node (a plain sequence, with no cast/parallel keys involved)
+// falls through to the default `node.Decode(scalar)` branch, which fails because a
+// sequence cannot decode into a string.
+func TestWorkflowStep_UnmarshalYAML_OutputSequenceDefaultDecode(t *testing.T) {
+	input := `
+type: shell
+command: echo hi
+output: [raw, grouped]
+`
+	var step WorkflowStep
+	require.Error(t, yaml.Unmarshal([]byte(input), &step))
+}
+
 // TestWorkflowStep_UnmarshalYAML_ResetsReusedReceiver verifies that decoding into a
 // reused WorkflowStep clears fields omitted from the second document (Decode merges
 // into the destination, so without a reset the first step's fields would leak).
@@ -449,4 +614,65 @@ func TestWorkflowStep_UnmarshalYAML_ForRejectsNonStringScalar(t *testing.T) {
 		require.Error(t, err, "input %q must be rejected", bad)
 		assert.ErrorIs(t, err, ErrWorkflowControlStepInvalid)
 	}
+}
+
+// TestWorkflowStep_UnmarshalYAML_ScalarOutputMode verifies decodeWorkflowStepOutput's
+// ScalarNode branch: a bare `output: raw` value (not a mapping) sets Output directly
+// without allocating CastOutput or ParallelOutput.
+func TestWorkflowStep_UnmarshalYAML_ScalarOutputMode(t *testing.T) {
+	var step WorkflowStep
+	require.NoError(t, yaml.Unmarshal([]byte("type: shell\ncommand: echo hi\noutput: raw\n"), &step))
+	assert.Equal(t, "raw", step.Output)
+	assert.Nil(t, step.CastOutput)
+	assert.Nil(t, step.ParallelOutput)
+}
+
+// TestWorkflowStep_UnmarshalYAML_StructuredCastOutputDecodeErrorPropagates verifies
+// decodeWorkflowStepOutput's cast-mode decode-error branch surfaces the underlying
+// yaml decode error (a field with the wrong type).
+func TestWorkflowStep_UnmarshalYAML_StructuredCastOutputDecodeErrorPropagates(t *testing.T) {
+	input := `
+type: cast
+output:
+  mode: [not, a, string]
+`
+	var step WorkflowStep
+	err := yaml.Unmarshal([]byte(input), &step)
+	require.Error(t, err)
+}
+
+// TestWorkflowStep_UnmarshalYAML_StructuredParallelOutputDecodeErrorPropagates
+// verifies decodeWorkflowStepOutput's non-cast structured-output decode-error branch
+// surfaces the underlying yaml decode error.
+func TestWorkflowStep_UnmarshalYAML_StructuredParallelOutputDecodeErrorPropagates(t *testing.T) {
+	input := `
+type: parallel
+output:
+  mode: [not, a, string]
+`
+	var step WorkflowStep
+	err := yaml.Unmarshal([]byte(input), &step)
+	require.Error(t, err)
+}
+
+// TestSplitMappingField_NonMappingNodePassesThrough verifies splitMappingField returns
+// a nil field node and the original value unchanged for a nil or non-mapping node.
+func TestSplitMappingField_NonMappingNodePassesThrough(t *testing.T) {
+	fieldNode, rest := splitMappingField(nil, "output")
+	assert.Nil(t, fieldNode)
+	assert.Nil(t, rest)
+
+	scalar := &yaml.Node{Kind: yaml.ScalarNode, Value: "raw"}
+	fieldNode, rest = splitMappingField(scalar, "output")
+	assert.Nil(t, fieldNode)
+	assert.Same(t, scalar, rest)
+}
+
+// TestMappingHasField_NonMappingNodeReturnsFalse verifies mappingHasField returns
+// false for a nil or non-mapping node instead of panicking.
+func TestMappingHasField_NonMappingNodeReturnsFalse(t *testing.T) {
+	assert.False(t, mappingHasField(nil, "cursor"))
+
+	scalar := &yaml.Node{Kind: yaml.ScalarNode, Value: "raw"}
+	assert.False(t, mappingHasField(scalar, "cursor"))
 }

@@ -21,8 +21,8 @@ var (
 	defaultCliConfig = schema.AtmosConfiguration{
 		Default:  true,
 		BasePath: ".",
-		Cast: schema.CastConfig{
-			Recording: schema.CastRecordingConfig{
+		Cast: &schema.CastConfig{
+			Recording: &schema.CastRecordingConfig{
 				Width:  120,
 				Height: 36,
 			},

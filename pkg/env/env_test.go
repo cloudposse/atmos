@@ -62,6 +62,27 @@ func TestEnvironToMap(t *testing.T) {
 	assert.Equal(t, "test_value", result["TEST_ENVIRON_TO_MAP"])
 }
 
+func TestSliceToMap(t *testing.T) {
+	assert.Nil(t, SliceToMap(nil))
+	assert.Nil(t, SliceToMap([]string{}))
+
+	result := SliceToMap([]string{
+		"NORMAL=value",
+		"WITH_EQUALS=value=with=equals",
+		"MALFORMED",
+		"DUPLICATE=first",
+		"DUPLICATE=second",
+		"EMPTY=",
+	})
+
+	assert.Equal(t, map[string]string{
+		"NORMAL":      "value",
+		"WITH_EQUALS": "value=with=equals",
+		"DUPLICATE":   "second",
+		"EMPTY":       "",
+	}, result)
+}
+
 func TestSplitStringAtFirstOccurrence(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -115,3 +115,134 @@ func TestScriptHandlerTemplateResolutionErrorsUseSentinel(t *testing.T) {
 	}, vars)
 	require.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 }
+
+func TestScriptHandlerResolveInvocationInterpreterTemplateError(t *testing.T) {
+	handler := &ScriptHandler{}
+	vars := NewVariables()
+
+	_, err := handler.resolveInvocation(&schema.WorkflowStep{
+		Name:        "bad-interpreter",
+		Interpreter: "{{ range .steps }}",
+		Script:      "print('ok')",
+	}, vars)
+	require.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+	stepName, ok := errUtils.GetContext(err, "step")
+	require.True(t, ok)
+	assert.Equal(t, "bad-interpreter", stepName)
+	field, ok := errUtils.GetContext(err, "field")
+	require.True(t, ok)
+	assert.Equal(t, "interpreter", field)
+}
+
+func TestScriptHandlerResolveInvocationScriptTemplateError(t *testing.T) {
+	handler := &ScriptHandler{}
+	vars := NewVariables()
+
+	_, err := handler.resolveInvocation(&schema.WorkflowStep{
+		Name:        "bad-script",
+		Interpreter: "python3",
+		Script:      "{{ range .steps }}",
+	}, vars)
+	require.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+	stepName, ok := errUtils.GetContext(err, "step")
+	require.True(t, ok)
+	assert.Equal(t, "bad-script", stepName)
+	field, ok := errUtils.GetContext(err, "field")
+	require.True(t, ok)
+	assert.Equal(t, "script", field)
+}
+
+func TestScriptHandlerResolveInvocationSucceedsWithoutWorkingDirectory(t *testing.T) {
+	handler := &ScriptHandler{}
+	vars := NewVariables()
+
+	invocation, err := handler.resolveInvocation(&schema.WorkflowStep{
+		Name:        "no-workdir",
+		Interpreter: "python3",
+		Script:      "print('ok')",
+	}, vars)
+	require.NoError(t, err)
+	assert.Equal(t, "python3", invocation.interpreter)
+	assert.Equal(t, "print('ok')", invocation.script)
+	assert.Empty(t, invocation.workDir)
+}
+
+func TestScriptHandlerResolveEnvDefaultsToOSEnvironWhenVariablesEnvEmpty(t *testing.T) {
+	t.Setenv("SCRIPT_RESOLVEENV_MARKER", "present")
+
+	handler := &ScriptHandler{}
+	// A zero-value Variables has a nil Env map, so EnvSlice() returns an
+	// empty slice and resolveEnv must fall back to os.Environ().
+	vars := &Variables{}
+
+	env, err := handler.resolveEnv(&schema.WorkflowStep{Name: "no-env"}, vars)
+	require.NoError(t, err)
+	require.NotEmpty(t, env)
+
+	found := false
+	for _, entry := range env {
+		if entry == "SCRIPT_RESOLVEENV_MARKER=present" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected os.Environ() fallback to include SCRIPT_RESOLVEENV_MARKER=present")
+}
+
+func TestScriptHandlerExecutePropagatesInvocationResolutionError(t *testing.T) {
+	handler, ok := Get("script")
+	require.True(t, ok)
+
+	step := &schema.WorkflowStep{
+		Name:        "bad-interpreter-execute",
+		Type:        schema.TaskTypeScript,
+		Interpreter: "{{ range .steps }}",
+		Script:      "print('unreachable')",
+	}
+
+	result, err := handler.Execute(context.Background(), step, NewVariables())
+	require.Error(t, err)
+	require.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+}
+
+func TestScriptHandlerExecutePropagatesEnvResolutionError(t *testing.T) {
+	handler, ok := Get("script")
+	require.True(t, ok)
+
+	step := &schema.WorkflowStep{
+		Name:        "bad-env-execute",
+		Type:        schema.TaskTypeScript,
+		Interpreter: "python3",
+		Script:      "print('unreachable')",
+		Env: map[string]string{
+			"BROKEN": "{{ range .steps }}",
+		},
+	}
+
+	result, err := handler.Execute(context.Background(), step, NewVariables())
+	require.Error(t, err)
+	require.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+}
+
+func TestScriptHandlerExecuteDefaultsOutputModeWhenUnset(t *testing.T) {
+	initShellTestIO(t)
+	requirePython3(t)
+
+	handler, ok := Get("script")
+	require.True(t, ok)
+
+	// No Output field set and no workflow passed, so execute() must fall
+	// back to OutputModeLog via `if mode == "" { mode = OutputModeLog }`.
+	step := &schema.WorkflowStep{
+		Name:        "test_default_mode",
+		Type:        schema.TaskTypeScript,
+		Interpreter: "python3",
+		Script:      "print('default_mode_output')\n",
+	}
+
+	result, err := handler.Execute(context.Background(), step, NewVariables())
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.Metadata[exitCodeMetadata])
+}

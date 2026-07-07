@@ -158,6 +158,60 @@ func TestLoadDemoCastPathCommandsPreservesSiblings(t *testing.T) {
 	requireCommandMap(t, basic[commandsKey], "list-stacks")
 }
 
+func TestLoadAtmosDPathCommandsPreservesSiblings(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosD := filepath.Join(tempDir, "atmos.d")
+	files := map[string]string{
+		"all.yaml": `
+commands:
+  - name: casts
+    description: Root command
+    commands:
+      - name: generate
+        commands:
+          - name: cli
+            description: CLI casts
+`,
+		"examples/quick-start-simple.yaml": `
+commands:
+  - name: casts generate examples quick-start-simple list-and-plan
+    description: Example cast
+`,
+		"demo/fixtures/basic.yaml": `
+commands:
+  - name: casts generate demo fixtures basic list-stacks
+    description: Fixture cast
+`,
+	}
+	for name, content := range files {
+		path := filepath.Join(atmosD, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+
+	absAtmosD, err := filepath.Abs(atmosD)
+	require.NoError(t, err)
+	pattern := filepath.Join(absAtmosD, "**", "*")
+	require.NoError(t, loadAtmosConfigsFromDirectory(pattern, v, "test atmos.d"))
+
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("commands: %#v", v.Get(commandsKey))
+		}
+	})
+	casts := requireCommandMap(t, v.Get(commandsKey), "casts")
+	generate := requireCommandMap(t, casts[commandsKey], "generate")
+	requireCommandMap(t, generate[commandsKey], "cli")
+	requireCommandMap(t, generate[commandsKey], "examples")
+	demo := requireCommandMap(t, generate[commandsKey], "demo")
+	fixtures := requireCommandMap(t, demo[commandsKey], "fixtures")
+	basic := requireCommandMap(t, fixtures[commandsKey], "basic")
+	requireCommandMap(t, basic[commandsKey], "list-stacks")
+}
+
 func TestMergeCommandArraysPathLeafOverridesNestedAndPreservesSiblings(t *testing.T) {
 	base := []interface{}{
 		map[string]interface{}{
@@ -200,6 +254,88 @@ func TestMergeCommandArraysPathLeafOverridesNestedAndPreservesSiblings(t *testin
 	examples := requireCommandMap(t, generate[commandsKey], "examples")
 	assert.Equal(t, "Local demo", demo["description"])
 	assert.Equal(t, "Base examples", examples["description"])
+}
+
+// TestNormalizeCommandArraySkipsNilEntries verifies that normalizeCommandArray
+// drops nil command entries (normalizeCommandDefinition returns cmd unchanged
+// when it's not a map, and nil normalizes to nil, which must be skipped).
+func TestNormalizeCommandArraySkipsNilEntries(t *testing.T) {
+	commands := []interface{}{
+		nil,
+		map[string]interface{}{"name": "real-cmd", "description": "Real command"},
+	}
+
+	normalized := normalizeCommandArray(commands)
+	require.Len(t, normalized, 1)
+	real := requireCommandMap(t, normalized, "real-cmd")
+	assert.Equal(t, "Real command", real["description"])
+}
+
+// TestNormalizeCommandDefinitionWithoutName verifies that a command map
+// missing a "name" field (or with a non-string name) is returned unchanged
+// rather than being path-split.
+func TestNormalizeCommandDefinitionWithoutName(t *testing.T) {
+	cmd := map[string]interface{}{"description": "No name here"}
+	result := normalizeCommandDefinition(cmd)
+	resultMap, ok := result.(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "No name here", resultMap["description"])
+	_, hasName := resultMap["name"]
+	assert.False(t, hasName)
+}
+
+// TestMergeCommandDefinitionsNonMapOperands verifies mergeCommandDefinitions
+// returns the second operand unchanged whenever either side isn't a
+// map[string]interface{} (e.g. a schema.Command or a plain scalar).
+func TestMergeCommandDefinitionsNonMapOperands(t *testing.T) {
+	t.Run("first is not a map", func(t *testing.T) {
+		second := map[string]interface{}{"name": "second"}
+		result := mergeCommandDefinitions("not-a-map", second)
+		assert.Equal(t, second, result)
+	})
+
+	t.Run("second is not a map", func(t *testing.T) {
+		first := map[string]interface{}{"name": "first"}
+		result := mergeCommandDefinitions(first, "not-a-map")
+		assert.Equal(t, "not-a-map", result)
+	})
+
+	t.Run("both are not maps", func(t *testing.T) {
+		result := mergeCommandDefinitions(42, "second-value")
+		assert.Equal(t, "second-value", result)
+	})
+}
+
+// TestCommandNameUnsupportedType verifies commandName's default branch: any
+// type other than map[string]interface{}, map[interface{}]interface{}, or
+// schema.Command reports not-ok with an empty name.
+func TestCommandNameUnsupportedType(t *testing.T) {
+	name, ok := commandName(42)
+	assert.False(t, ok)
+	assert.Equal(t, "", name)
+
+	name, ok = commandName(nil)
+	assert.False(t, ok)
+	assert.Equal(t, "", name)
+
+	name, ok = commandName("just-a-string")
+	assert.False(t, ok)
+	assert.Equal(t, "", name)
+}
+
+// TestMergeNormalizedCommandArraysSkipsUnnamedCommands verifies that entries
+// without a resolvable command name are skipped during merge rather than
+// causing a panic or corrupting the ordered result.
+func TestMergeNormalizedCommandArraysSkipsUnnamedCommands(t *testing.T) {
+	first := []interface{}{
+		42, // Not a valid command shape; commandName returns ok=false.
+		map[string]interface{}{"name": "kept", "description": "Kept command"},
+	}
+
+	merged := mergeCommandArrays(first, nil)
+	require.Len(t, merged, 1)
+	kept := requireCommandMap(t, merged, "kept")
+	assert.Equal(t, "Kept command", kept["description"])
 }
 
 func requireCommandMap(t *testing.T, commands interface{}, name string) map[string]interface{} {

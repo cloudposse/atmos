@@ -52,7 +52,7 @@ jobs:
       # in any published release yet.
       - name: Build atmos
         run: |
-          atmos build
+          sh scripts/build-atmos.sh default test
           echo "${{ github.workspace }}/build" >> "$GITHUB_PATH"
 
       # Fonts only. Most CLI tooling comes from the Atmos toolchain: `atmos demo record`

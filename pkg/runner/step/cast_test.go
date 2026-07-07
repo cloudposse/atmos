@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -99,6 +100,28 @@ func TestCastValidateStepsRejectsCastLevelJitter(t *testing.T) {
 	})
 	if !errors.Is(err, ErrInvalidSimulateJitter) {
 		t.Fatalf("expected jitter validation error, got %v", err)
+	}
+}
+
+func TestCastValidateStepsModeAcceptsValidStep(t *testing.T) {
+	h := &CastHandler{}
+	err := h.Validate(&schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		Mode: "steps",
+		Steps: []schema.WorkflowStep{
+			{Type: schema.TaskTypeShell, Command: "echo hi"},
+			{Type: schema.TaskTypeSimulate, Mode: "prompt"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected valid steps-mode cast, got %v", err)
+	}
+}
+
+func TestValidateWaitActionAcceptsValidTimeout(t *testing.T) {
+	if err := validateWaitAction(&schema.WorkflowStep{Text: "ready", Timeout: "5ms"}); err != nil {
+		t.Fatalf("expected valid wait action, got %v", err)
 	}
 }
 
@@ -399,6 +422,40 @@ func TestPrepareCastChildStepDoesNotApplySimulateDefaultsToShell(t *testing.T) {
 
 	if child.Cursor || child.CursorSet || child.Rate != "" {
 		t.Fatalf("simulate defaults leaked to shell child: %#v", child)
+	}
+}
+
+func TestApplyCastSimulatePromptDefaultNilDefaultPromptIsNoop(t *testing.T) {
+	child := &schema.WorkflowStep{
+		SimulatePrompt: &schema.SimulatePrompt{Text: "$ ", Style: "command"},
+	}
+
+	applyCastSimulatePromptDefault(nil, child)
+
+	if child.SimulatePrompt.Text != "$ " || child.SimulatePrompt.Style != "command" {
+		t.Fatalf("child prompt changed unexpectedly: %#v", child.SimulatePrompt)
+	}
+}
+
+func TestApplyCastSimulatePromptDefaultFillsEmptyText(t *testing.T) {
+	defaultPrompt := &schema.SimulatePrompt{Text: "default> ", Style: "info"}
+	child := &schema.WorkflowStep{
+		SimulatePrompt: &schema.SimulatePrompt{Text: "", Style: ""},
+	}
+
+	applyCastSimulatePromptDefault(defaultPrompt, child)
+
+	if child.SimulatePrompt.Text != "default> " {
+		t.Fatalf("child prompt text = %q, want default text", child.SimulatePrompt.Text)
+	}
+	if child.SimulatePrompt.Style != "info" {
+		t.Fatalf("child prompt style = %q, want default style", child.SimulatePrompt.Style)
+	}
+}
+
+func TestCloneSimulatePromptNil(t *testing.T) {
+	if got := cloneSimulatePrompt(nil); got != nil {
+		t.Fatalf("cloneSimulatePrompt(nil) = %#v, want nil", got)
 	}
 }
 
@@ -753,6 +810,32 @@ func TestCastTypedCharDelayUsesDeterministicJitter(t *testing.T) {
 	}
 }
 
+func TestCastTypedCharDelayPunctuationBoundaryAndCommentFactor(t *testing.T) {
+	base := 100 * time.Millisecond
+
+	punctuationLine := "a:b"
+	punctuationChars := []rune(punctuationLine)
+	if got := castTypedCharDelay(punctuationLine, punctuationChars, 2, base, 0.25); got <= base {
+		t.Fatalf("punctuation boundary delay = %s, want greater than %s", got, base)
+	}
+
+	// Recompute the expected delay directly from the same deterministic
+	// jitter formula castTypedCharDelay uses, so the comment-typing
+	// multiplier is checked exactly rather than by an input-dependent
+	// comparison (different line text hashes to a different jitter unit, so
+	// comparing two different lines' delays is not reliably ordered).
+	commentLine := "# atmos version"
+	commentChars := []rune(commentLine)
+	index := 5
+	jitter := 0.25
+	unit := deterministicCastJitterUnit(commentLine, index)
+	wantFactor := (1 - jitter + (2 * jitter * unit)) * castCommentTypingFactor
+	want := time.Duration(float64(base) * wantFactor)
+	if got := castTypedCharDelay(commentLine, commentChars, index, base, jitter); got != want {
+		t.Fatalf("comment typing delay = %s, want %s", got, want)
+	}
+}
+
 func TestRecordCastPromptWritesPromptEvent(t *testing.T) {
 	if err := iolib.Initialize(); err != nil {
 		t.Fatalf("initialize io: %v", err)
@@ -784,6 +867,26 @@ func TestRecordCastPromptWritesPromptEvent(t *testing.T) {
 	}
 	if !strings.Contains(string(content), `\u003e`) {
 		t.Fatalf("prompt event missing in:\n%s", content)
+	}
+}
+
+func TestRecordCastPromptReturnsRenderError(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	err := recordCastPrompt(&schema.SimulatePrompt{Text: "> ", Style: "purple"})
+	if !errors.Is(err, ErrUnsupportedPromptStyle) {
+		t.Fatalf("expected unsupported prompt style error, got %v", err)
+	}
+}
+
+func TestRecordCastPromptWithCursorReturnsRenderError(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	err := recordCastPromptWithCursor(&schema.SimulatePrompt{Text: "> ", Style: "purple"}, true)
+	if !errors.Is(err, ErrUnsupportedPromptStyle) {
+		t.Fatalf("expected unsupported prompt style error, got %v", err)
 	}
 }
 
@@ -829,6 +932,41 @@ func TestRunCastSimulateStepResolvesTextTemplate(t *testing.T) {
 	}
 	if !strings.Contains(castOutputText(t, content), "atmos list vars api --stack dev") {
 		t.Fatalf("simulated command missing in:\n%s", content)
+	}
+}
+
+func TestRunCastSimulateStepReturnsTextResolutionError(t *testing.T) {
+	err := runCastSimulateStep(context.Background(), &schema.WorkflowStep{}, &schema.WorkflowStep{
+		Type: schema.TaskTypeSimulate,
+		Mode: "typed",
+		Text: "{{ .Bad ",
+	}, NewVariables())
+	if err == nil {
+		t.Fatal("expected an error resolving an invalid text template")
+	}
+}
+
+func TestRunCastSimulateStepReturnsWriteRateParseError(t *testing.T) {
+	err := runCastSimulateStep(context.Background(), &schema.WorkflowStep{}, &schema.WorkflowStep{
+		Type: schema.TaskTypeSimulate,
+		Mode: "typed",
+		Text: "atmos version",
+		Rate: "bad-duration",
+	}, NewVariables())
+	if err == nil {
+		t.Fatal("expected an error parsing an invalid write rate")
+	}
+}
+
+func TestRunCastSimulateStepReturnsEnterDelayParseError(t *testing.T) {
+	err := runCastSimulateStep(context.Background(), &schema.WorkflowStep{}, &schema.WorkflowStep{
+		Type:     schema.TaskTypeSimulate,
+		Mode:     "typed",
+		Text:     "atmos version",
+		Duration: "bad-duration",
+	}, NewVariables())
+	if err == nil {
+		t.Fatal("expected an error parsing an invalid enter delay duration")
 	}
 }
 
@@ -903,6 +1041,57 @@ func TestRecordCastTypedLineReturnsContextCancellation(t *testing.T) {
 	restore()
 	if err := rec.Close(); err != nil {
 		t.Fatalf("close recorder: %v", err)
+	}
+}
+
+func TestRecordCastTypedLineReturnsEnterDelayCancellation(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	rec, restore, err := startStepRecorder(&schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("start recorder: %v", err)
+	}
+	t.Cleanup(restore)
+
+	// The context is canceled after the prompt delay and typed characters
+	// complete (WriteRate: 0 skips per-character sleeps) but before the enter
+	// delay elapses, driving recordCastTypedLine's final sleepCastInput error
+	// return.
+	ctx, cancel := context.WithTimeout(context.Background(), defaultCastPromptDelay+50*time.Millisecond)
+	defer cancel()
+	err = recordCastTypedLine(ctx, castTypedLineOptions{
+		Prompt:     &schema.SimulatePrompt{Text: "> ", Style: "command"},
+		Line:       "x",
+		WriteRate:  0,
+		EnterDelay: 2 * time.Second,
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded, got %v", err)
+	}
+	restore()
+	if err := rec.Close(); err != nil {
+		t.Fatalf("close recorder: %v", err)
+	}
+}
+
+func TestRecordCastTypedLineReturnsPromptRenderError(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	err := recordCastTypedLine(context.Background(), castTypedLineOptions{
+		Prompt: &schema.SimulatePrompt{Text: "> ", Style: "purple"},
+		Line:   "atmos version",
+	})
+	if !errors.Is(err, ErrUnsupportedPromptStyle) {
+		t.Fatalf("expected unsupported prompt style error, got %v", err)
 	}
 }
 
@@ -1205,6 +1394,15 @@ func TestCastSimulateHelpers(t *testing.T) {
 	if got := firstNonEmpty("", "first", "second"); got != "first" {
 		t.Fatalf("firstNonEmpty = %q", got)
 	}
+	if got := firstNonEmpty("", ""); got != "" {
+		t.Fatalf("firstNonEmpty all empty = %q, want empty", got)
+	}
+	if got := firstNonZeroFloat(0, 0.5); got != 0.5 {
+		t.Fatalf("firstNonZeroFloat = %v, want 0.5", got)
+	}
+	if got := firstNonZeroFloat(0, 0); got != 0 {
+		t.Fatalf("firstNonZeroFloat all zero = %v, want 0", got)
+	}
 	if got, err := parseDurationDefault("", time.Second); err != nil || got != time.Second {
 		t.Fatalf("default duration = %s err=%v", got, err)
 	}
@@ -1214,8 +1412,8 @@ func TestCastSimulateHelpers(t *testing.T) {
 	if _, err := parseDurationDefault("invalid", 0); err == nil {
 		t.Fatal("expected invalid duration error")
 	}
-	if delay := castStepPauseDelay(&schema.WorkflowStep{Interval: "bad"}); delay != defaultCastStepPauseDelay {
-		t.Fatalf("fallback pause delay = %s", delay)
+	if _, err := castStepPauseDelay(&schema.WorkflowStep{Interval: "bad"}); err == nil {
+		t.Fatal("expected invalid pause delay error")
 	}
 	if delay, err := castStepEnterDelay(&schema.WorkflowStep{Duration: "2ms"}); err != nil || delay != 2*time.Millisecond {
 		t.Fatalf("enter delay = %s err=%v", delay, err)
@@ -1281,6 +1479,7 @@ func TestValidateCastSimulateStepModesAndDurations(t *testing.T) {
 		{name: "typed valid", step: schema.WorkflowStep{Mode: "typed", Text: "atmos version"}},
 		{name: "prompt valid", step: schema.WorkflowStep{Mode: "prompt"}},
 		{name: "typed rate invalid", step: schema.WorkflowStep{Mode: "typed", Text: "x", Rate: "bad"}, expectErr: true},
+		{name: "typed interval invalid", step: schema.WorkflowStep{Mode: "typed", Text: "x", Interval: "bad"}, expectErr: true},
 		{name: "typed duration invalid", step: schema.WorkflowStep{Mode: "typed", Text: "x", Duration: "bad"}, expectErr: true},
 		{name: "typed jitter invalid", step: schema.WorkflowStep{Mode: "typed", Text: "x", Jitter: 1.25}, want: ErrInvalidSimulateJitter, expectErr: true},
 		{name: "invalid mode", step: schema.WorkflowStep{Mode: "movie"}, want: ErrInvalidSimulateMode, expectErr: true},
@@ -1360,6 +1559,364 @@ func TestRenderCastOutputs(t *testing.T) {
 	err := renderCastOutputs(&schema.WorkflowStep{CastOutput: &schema.CastOutput{GIF: filepath.Join(t.TempDir(), "out.gif")}}, "input.cast")
 	if !errors.Is(err, asciicast.ErrMissingAgg) {
 		t.Fatalf("expected missing agg renderer, got %v", err)
+	}
+}
+
+func TestStartStepRecorderDefaultsNilVariables(t *testing.T) {
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	rec, restore, err := startStepRecorder(&schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("start recorder with nil vars: %v", err)
+	}
+	restore()
+	if err := rec.Close(); err != nil {
+		t.Fatalf("close recorder: %v", err)
+	}
+	if _, err := os.Stat(castPath); err != nil {
+		t.Fatalf("cast file missing: %v", err)
+	}
+}
+
+func TestStartStepRecorderReturnsTitleResolutionError(t *testing.T) {
+	_, _, err := startStepRecorder(&schema.WorkflowStep{
+		Name:  "demo",
+		Type:  schema.TaskTypeCast,
+		Title: "{{ .Bad ",
+	}, NewVariables())
+	if err == nil {
+		t.Fatal("expected an error resolving an invalid title template")
+	}
+}
+
+func TestStartStepRecorderReturnsEnvResolutionError(t *testing.T) {
+	_, _, err := startStepRecorder(&schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		Env: map[string]string{
+			"BAD": "{{ .Bad ",
+		},
+	}, NewVariables())
+	if err == nil {
+		t.Fatal("expected an error resolving an invalid env template")
+	}
+}
+
+func TestStartStepRecorderReturnsInvalidRateError(t *testing.T) {
+	_, _, err := startStepRecorder(&schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		Rate: "bad-duration",
+	}, NewVariables())
+	if err == nil {
+		t.Fatal("expected an error parsing an invalid output rate")
+	}
+}
+
+func TestStartStepRecorderReturnsAsciicastStartError(t *testing.T) {
+	// Making a path component of the cast directory an ordinary file (instead
+	// of a directory) makes asciicast.Start's os.MkdirAll(filepath.Dir(path))
+	// fail, driving startStepRecorder's final error return.
+	blockingFile := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blockingFile, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	castPath := filepath.Join(blockingFile, "nested", "demo.cast")
+
+	_, _, err := startStepRecorder(&schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+	}, NewVariables())
+	if err == nil {
+		t.Fatal("expected asciicast.Start to fail when the cast directory cannot be created")
+	}
+}
+
+func TestCastRecorderEnvReturnsResolutionError(t *testing.T) {
+	_, err := castRecorderEnv(&schema.WorkflowStep{
+		Name: "demo",
+		Env: map[string]string{
+			"BAD": "{{ .Bad ",
+		},
+	}, NewVariables())
+	if err == nil {
+		t.Fatal("expected an error resolving an invalid env template")
+	}
+}
+
+func TestApplyCastStepEnvReturnsResolutionError(t *testing.T) {
+	err := applyCastStepEnv(&schema.WorkflowStep{
+		Name: "demo",
+		Env: map[string]string{
+			"BAD": "{{ .Bad ",
+		},
+	}, NewVariables())
+	if err == nil {
+		t.Fatal("expected an error resolving an invalid env template")
+	}
+}
+
+func TestRunCastStepModeReturnsEnvResolutionError(t *testing.T) {
+	err := runCastStepMode(context.Background(), &schema.WorkflowStep{
+		Name: "demo",
+		Env: map[string]string{
+			"BAD": "{{ .Bad ",
+		},
+		Steps: []schema.WorkflowStep{{Type: schema.TaskTypeShell, Command: "true"}},
+	}, NewVariables(), nil)
+	if err == nil {
+		t.Fatal("expected an error resolving an invalid cast step env template")
+	}
+}
+
+func TestRunCastChildStepReturnsPauseDelayError(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	executor := NewStepExecutorWithVars(NewVariables())
+	err := runCastChildStep(context.Background(), &schema.WorkflowStep{}, &schema.WorkflowStep{
+		Name:     "child",
+		Type:     schema.TaskTypeAtmos,
+		Output:   string(OutputModeNone),
+		Command:  "terraform plan",
+		Env:      map[string]string{"_ATMOS_STEP_FAKE": "ok"},
+		Interval: "bad-duration",
+	}, NewVariables(), executor)
+	if err == nil {
+		t.Fatal("expected an error parsing an invalid pause delay")
+	}
+}
+
+func TestRunCastBodyDispatchesSessionMode(t *testing.T) {
+	err := runCastBody(context.Background(), &schema.WorkflowStep{
+		Name:        "demo",
+		Mode:        "session",
+		WriteRate:   "bad-duration",
+		KeyInterval: "0",
+	}, NewVariables(), nil)
+	if err == nil || !strings.Contains(err.Error(), "invalid duration") {
+		t.Fatalf("expected session mode to surface an invalid write rate, got %v", err)
+	}
+}
+
+func TestRunCastSessionModeReturnsEnvResolutionError(t *testing.T) {
+	err := runCastSessionMode(context.Background(), &schema.WorkflowStep{
+		Env: map[string]string{
+			"BAD": "{{ .Bad ",
+		},
+	}, NewVariables())
+	if err == nil {
+		t.Fatal("expected an error resolving an invalid session env template")
+	}
+}
+
+func TestValidateWriteActionAcceptsValidRate(t *testing.T) {
+	if err := validateWriteAction(&schema.WorkflowStep{Text: "echo hi", Rate: "5ms"}); err != nil {
+		t.Fatalf("expected valid write action, got %v", err)
+	}
+}
+
+func TestValidateKeyActionAcceptsEmptyAndValidInterval(t *testing.T) {
+	if err := validateKeyAction(&schema.WorkflowStep{Key: "enter"}); err != nil {
+		t.Fatalf("expected valid key action with no interval, got %v", err)
+	}
+	if err := validateKeyAction(&schema.WorkflowStep{Key: "enter", Interval: "5ms"}); err != nil {
+		t.Fatalf("expected valid key action with interval, got %v", err)
+	}
+}
+
+func TestValidatePauseActionAcceptsValidDuration(t *testing.T) {
+	if err := validatePauseAction(&schema.WorkflowStep{Duration: "5ms"}); err != nil {
+		t.Fatalf("expected valid pause action, got %v", err)
+	}
+}
+
+func TestExecuteWithWorkflowReturnsStartRecorderError(t *testing.T) {
+	_, err := (&CastHandler{}).ExecuteWithWorkflow(context.Background(), &schema.WorkflowStep{
+		Name:  "demo",
+		Type:  schema.TaskTypeCast,
+		Title: "{{ .Bad ",
+	}, NewVariables(), nil)
+	if err == nil {
+		t.Fatal("expected ExecuteWithWorkflow to surface a start-recorder error")
+	}
+}
+
+func TestExecuteWithWorkflowClosesSuccessfully(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	castPath := filepath.Join(t.TempDir(), "demo.cast")
+	result, err := (&CastHandler{}).ExecuteWithWorkflow(context.Background(), &schema.WorkflowStep{
+		Name:   "demo",
+		Type:   schema.TaskTypeCast,
+		Output: string(OutputModeNone),
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{{
+			Type: schema.TaskTypeSimulate,
+			Mode: "prompt",
+		}},
+	}, NewVariables(), nil)
+	if err != nil {
+		t.Fatalf("execute cast: %v", err)
+	}
+	if result.Value != castPath {
+		t.Fatalf("result value = %q, want %q", result.Value, castPath)
+	}
+	if _, err := os.Stat(castPath); err != nil {
+		t.Fatalf("cast file missing: %v", err)
+	}
+}
+
+func TestExecuteWithWorkflowJoinsDiscardError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// The recorder's temp cast file is still open (in this test process) when
+		// the child subprocess below tries to remove it. Go's os.Create on Windows
+		// doesn't grant FILE_SHARE_DELETE by default, so a file can't be deleted by
+		// another handle/process while any handle keeps it open (unlike POSIX
+		// unlink, which succeeds on an open file). The removal silently no-ops,
+		// Discard's own os.Remove then succeeds normally, and no discard error ever
+		// gets joined - so this scenario is only reproducible on POSIX platforms.
+		t.Skip("cross-process deletion of an open file is not possible on Windows")
+	}
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	tmpDir := t.TempDir()
+	castPath := filepath.Join(tmpDir, "demo.cast")
+
+	// The failing child step removes the recorder's own temp cast file (named
+	// ".demo.cast.tmp-*" next to the final path, see asciicast.createCastTempFile)
+	// before it exits non-zero. That makes ExecuteWithWorkflow's subsequent
+	// rec.Discard() fail because the temp file is already gone, driving the
+	// errors.Join(runErr, discardErr) branch.
+	_, err := (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "boom",
+				Type:    schema.TaskTypeAtmos,
+				Output:  string(OutputModeNone),
+				Command: "terraform plan",
+				Env: map[string]string{
+					"_ATMOS_STEP_FAKE":     "rm-glob-and-fail",
+					atmosStepFakeRMGlobEnv: filepath.Join(tmpDir, ".demo.cast.tmp-*"),
+				},
+			},
+		},
+	}, NewVariables())
+	if err == nil {
+		t.Fatal("expected cast step failure")
+	}
+	if !strings.Contains(err.Error(), "no such file") && !strings.Contains(err.Error(), "cannot find") {
+		t.Fatalf("expected discard error joined into the failure, got: %v", err)
+	}
+}
+
+func TestExecuteWithWorkflowReturnsCloseError(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	tmpDir := t.TempDir()
+	castPath := filepath.Join(tmpDir, "demo.cast")
+
+	// Occupy the final cast path with a non-empty directory so that, once all
+	// steps succeed, Recorder.Close's commit-by-rename fails, driving
+	// ExecuteWithWorkflow's "runErr = closeErr" branch in the success path.
+	if err := os.Mkdir(castPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(castPath, "occupied.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+		Name: "demo",
+		Type: schema.TaskTypeCast,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{{
+			Type: schema.TaskTypeSimulate,
+			Mode: "prompt",
+		}},
+	}, NewVariables())
+	if err == nil {
+		t.Fatal("expected a close error when the cast path is occupied by a non-empty directory")
+	}
+}
+
+func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	shell, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(sessionShellHelperEnv, "1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err = runCastSessionMode(ctx, &schema.WorkflowStep{
+		Mode:  "session",
+		Shell: shell,
+		Steps: []schema.WorkflowStep{
+			{Type: "write", Text: "printf ready", Rate: "0"},
+			{Type: "key", Key: "enter"},
+			{Type: "wait", Text: "ready", Timeout: "2s"},
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("runCastSessionMode error: %v", err)
+	}
+}
+
+func TestCastHandlerExecutesSessionModeEndToEnd(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatalf("initialize io: %v", err)
+	}
+	shell, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(sessionShellHelperEnv, "1")
+	castPath := filepath.Join(t.TempDir(), "session.cast")
+
+	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+		Name:  "demo",
+		Type:  schema.TaskTypeCast,
+		Mode:  "session",
+		Shell: shell,
+		CastOutput: &schema.CastOutput{
+			Cast: castPath,
+		},
+		Steps: []schema.WorkflowStep{
+			{Type: "write", Text: "printf ready", Rate: "0"},
+			{Type: "key", Key: "enter"},
+			{Type: "wait", Text: "ready", Timeout: "2s"},
+		},
+	}, NewVariables())
+	if err != nil {
+		t.Fatalf("execute session-mode cast: %v", err)
+	}
+	if _, err := os.Stat(castPath); err != nil {
+		t.Fatalf("cast file missing: %v", err)
 	}
 }
 

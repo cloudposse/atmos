@@ -2,9 +2,9 @@ package asciicast
 
 import (
 	"bufio"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -310,14 +310,14 @@ func (r *Recorder) closeFile() (string, error) {
 // replaces the target atomically on POSIX; on Windows it fails when the
 // target exists, so retry once after removing it.
 func (r *Recorder) commit(tempPath string) error {
-	if err := os.Rename(tempPath, r.path); err == nil {
+	if err := os.Rename(tempPath, r.path); err == nil { // #nosec G703 -- r.path is this recorder's own resolved output path, not external input.
 		return nil
 	}
-	if err := os.Remove(r.path); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(r.path); err != nil && !os.IsNotExist(err) { // #nosec G703 -- r.path is this recorder's own resolved output path, not external input.
 		_ = os.Remove(tempPath)
 		return fmt.Errorf("commit cast file: %w", err)
 	}
-	if err := os.Rename(tempPath, r.path); err != nil {
+	if err := os.Rename(tempPath, r.path); err != nil { // #nosec G703 -- r.path is this recorder's own resolved output path, not external input.
 		_ = os.Remove(tempPath)
 		return fmt.Errorf("commit cast file: %w", err)
 	}
@@ -462,15 +462,11 @@ func RandomID(n int) string {
 
 	const letters = "0123456789abcdef"
 	b := make([]byte, n)
-	f, err := os.Open("/dev/urandom")
-	if err == nil {
-		defer func() { _ = f.Close() }()
-		if _, err := io.ReadFull(f, b); err == nil {
-			for i := range b {
-				b[i] = letters[int(b[i])%len(letters)]
-			}
-			return string(b)
+	if _, err := rand.Read(b); err == nil {
+		for i := range b {
+			b[i] = letters[int(b[i])%len(letters)]
 		}
+		return string(b)
 	}
 	t := time.Now().UnixNano()
 	for i := range b {

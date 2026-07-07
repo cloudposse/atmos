@@ -1,6 +1,8 @@
 package asciicast
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -29,12 +31,41 @@ func TestResolvePathUsesXDGCacheBase(t *testing.T) {
 	}
 }
 
+func TestStartPropagatesResolvePathError(t *testing.T) {
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ATMOS_XDG_CACHE_HOME", blocker)
+
+	// No explicit Path/BasePath, so Start must call ResolvePath, which fails
+	// resolving the XDG cache directory, and Start must propagate that error
+	// directly (the `if err != nil { return nil, err }` branch right after
+	// ResolvePath, before any directory or file is ever created).
+	_, err := Start(&Options{})
+	if err == nil {
+		t.Fatal("expected Start to propagate ResolvePath error")
+	}
+}
+
 func TestCommandSlugSkipsOnlyExactAtmosBinary(t *testing.T) {
 	if got := CommandSlug([]string{"atmos.exe", "workflow", "run"}); got != "workflow-run" {
 		t.Fatalf("slug = %q, want workflow-run", got)
 	}
 	if got := CommandSlug([]string{"atmosphere", "workflow"}); got != "atmosphere-workflow" {
 		t.Fatalf("slug = %q, want atmosphere-workflow", got)
+	}
+}
+
+func TestRecorderWidth(t *testing.T) {
+	if got := (*Recorder)(nil).Width(); got != 0 {
+		t.Fatalf("nil recorder width = %d, want 0", got)
+	}
+
+	rec := &Recorder{width: 132}
+	if got := rec.Width(); got != 132 {
+		t.Fatalf("width = %d, want 132", got)
 	}
 }
 
@@ -339,6 +370,9 @@ func TestRecorderNilAndEmptyOperationsAreNoops(t *testing.T) {
 	if maxDuration(time.Second, time.Millisecond) != time.Second {
 		t.Fatal("maxDuration did not return larger value")
 	}
+	if maxDuration(time.Millisecond, time.Second) != time.Second {
+		t.Fatal("maxDuration did not return larger value when b > a")
+	}
 	if env := safeEnv(map[string]string{"SECRET": "x"}); env != nil {
 		t.Fatalf("safeEnv = %#v, want nil", env)
 	}
@@ -484,4 +518,494 @@ func readCastLines(t *testing.T, path string) []string {
 		t.Fatal(err)
 	}
 	return strings.Split(strings.TrimSpace(string(content)), "\n")
+}
+
+func TestStartDefaultsNilOptions(t *testing.T) {
+	rec, err := Start(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rec.Discard() }()
+
+	if rec.width != DefaultWidth || rec.height != DefaultHeight {
+		t.Fatalf("unexpected defaults: width=%d height=%d", rec.width, rec.height)
+	}
+	if rec.command != "" {
+		t.Fatalf("command = %q, want empty", rec.command)
+	}
+}
+
+func TestStartFailsWhenMkdirAllTargetIsAFile(t *testing.T) {
+	dir := t.TempDir()
+	// Make the parent directory component a plain file so MkdirAll fails
+	// cross-platform (works on both Unix and Windows, no chmod needed).
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(blocker, "nested", "demo.cast")
+
+	_, err := Start(&Options{Path: path, Explicit: true})
+	if err == nil {
+		t.Fatal("expected mkdir failure")
+	}
+	if !strings.Contains(err.Error(), "create cast directory") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCreateCastTempFileErrorsWhenParentDirMissing(t *testing.T) {
+	// CreateTemp fails because the parent directory doesn't exist.
+	path := filepath.Join(t.TempDir(), "missing-parent", "demo.cast")
+	_, err := createCastTempFile(path, true)
+	if err == nil {
+		t.Fatal("expected create temp file error")
+	}
+	if !strings.Contains(err.Error(), "create cast file") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCloseReturnsNilForNilRecorder(t *testing.T) {
+	var rec *Recorder
+	if err := rec.Close(); err != nil {
+		t.Fatalf("nil recorder close error: %v", err)
+	}
+}
+
+func TestDiscardReturnsNilForNilRecorder(t *testing.T) {
+	var rec *Recorder
+	if err := rec.Discard(); err != nil {
+		t.Fatalf("nil recorder discard error: %v", err)
+	}
+}
+
+func TestCloseRemovesTempFileWhenCloseFileErrors(t *testing.T) {
+	dir := t.TempDir()
+	tempFile, err := os.CreateTemp(dir, ".demo.cast.tmp-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tempPath := tempFile.Name()
+
+	rec := &Recorder{
+		file: tempFile,
+		// A flush error from the broken writer surfaces as closeFile's err
+		// while tempPath stays non-empty, so Close must remove the temp
+		// file and return the error directly (bypassing commit).
+		writer:   bufio.NewWriterSize(&errWriter{failAfter: 0}, 1),
+		path:     filepath.Join(dir, "demo.cast"),
+		tempPath: tempPath,
+	}
+	// Buffer something so Flush has content to flush and fail on.
+	_, _ = rec.writer.WriteString("x")
+
+	err = rec.Close()
+	if !errors.Is(err, errSimulatedWrite) {
+		t.Fatalf("expected simulated write error, got %v", err)
+	}
+	if _, statErr := os.Stat(tempPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("temp file was not removed after failed close: %v", statErr)
+	}
+}
+
+func TestDiscardIsNoopAfterAlreadyClosed(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "demo.cast")
+	rec, err := Start(&Options{Path: path, Explicit: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rec.Discard(); err != nil {
+		t.Fatal(err)
+	}
+	// Second Discard: closeFile returns ("", nil) since already closed, so
+	// Discard must short-circuit via tempPath == "" and return nil directly.
+	if err := rec.Discard(); err != nil {
+		t.Fatalf("second discard should be a no-op: %v", err)
+	}
+}
+
+func TestCloseReturnsErrDirectlyWhenTempPathEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "demo.cast")
+	rec, err := Start(&Options{Path: path, Explicit: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rec.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// Second close: closeFile returns ("", nil) since already closed, so
+	// Close must bypass commit and return nil directly (tempPath == "").
+	if err := rec.Close(); err != nil {
+		t.Fatalf("second close should bypass commit and return nil: %v", err)
+	}
+}
+
+func TestDiscardReturnsRemoveErrWhenCloseErrIsNil(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "demo.cast")
+	rec, err := Start(&Options{Path: path, Explicit: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tempPath := rec.tempPath
+
+	// Close the recorder's real file handle before removing its temp file: on
+	// Windows, os.Remove fails on a file that still has an open handle, unlike
+	// Unix where unlinking an open file succeeds. Swap in a dummy, already-open
+	// file/writer afterward so Discard's own closeFile() (flush + close) still
+	// succeeds cleanly (err == nil), letting Discard's os.Remove(tempPath) fail
+	// because the real temp file is already gone.
+	if err := rec.file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(tempPath); err != nil {
+		t.Fatal(err)
+	}
+	dummy, err := os.CreateTemp(dir, "dummy-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(dummy.Name()) })
+	rec.file = dummy
+	rec.writer = bufio.NewWriter(dummy)
+
+	err = rec.Discard()
+	if err == nil {
+		t.Fatal("expected remove error from discard")
+	}
+}
+
+func TestCommitFailsWhenRemovingNonEmptyDestinationDirectory(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "demo.cast")
+	// r.path is a non-empty directory, so os.Remove(r.path) fails on both
+	// Unix and Windows without needing chmod tricks.
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "child"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tempFile, err := os.CreateTemp(dir, ".demo.cast.tmp-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tempPath := tempFile.Name()
+	_ = tempFile.Close()
+
+	rec := &Recorder{path: path}
+	err = rec.commit(tempPath)
+	if err == nil {
+		t.Fatal("expected commit error when destination is a non-empty directory")
+	}
+	if !strings.Contains(err.Error(), "commit cast file") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// commit must clean up the temp file on failure.
+	if _, statErr := os.Stat(tempPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("temp file was not removed after failed commit: %v", statErr)
+	}
+}
+
+func TestCommitSucceedsWhenDestinationMissing(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "demo.cast")
+	tempFile, err := os.CreateTemp(dir, ".demo.cast.tmp-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tempPath := tempFile.Name()
+	if _, err := tempFile.WriteString("payload"); err != nil {
+		t.Fatal(err)
+	}
+	_ = tempFile.Close()
+
+	rec := &Recorder{path: path}
+	if err := rec.commit(tempPath); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "payload" {
+		t.Fatalf("committed content = %q", content)
+	}
+}
+
+func TestCommitRemovesExistingDestinationThenRenamesSuccessfully(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "demo.cast")
+	// An empty directory at r.path makes the first os.Rename fail (renaming
+	// a file onto a directory is rejected on both Unix and Windows), but
+	// os.Remove succeeds because the directory is empty, letting the
+	// second os.Rename succeed and replace it with the temp file's content.
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	tempFile, err := os.CreateTemp(dir, ".demo.cast.tmp-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tempPath := tempFile.Name()
+	if _, err := tempFile.WriteString("recommitted payload"); err != nil {
+		t.Fatal(err)
+	}
+	_ = tempFile.Close()
+
+	rec := &Recorder{path: path}
+	if err := rec.commit(tempPath); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "recommitted payload" {
+		t.Fatalf("committed content = %q", content)
+	}
+}
+
+func TestCommitFailsOnSecondRenameAfterRemovingDestination(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "demo.cast")
+	// An empty directory at r.path makes the first rename fail but the
+	// subsequent os.Remove succeed (removing an empty dir works on both
+	// Unix and Windows). A tempPath that never existed makes the *second*
+	// os.Rename fail identically, exercising commit's final error branch.
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tempPath := filepath.Join(dir, "never-created-temp")
+
+	rec := &Recorder{path: path}
+	err := rec.commit(tempPath)
+	if err == nil {
+		t.Fatal("expected commit error on second rename failure")
+	}
+	if !strings.Contains(err.Error(), "commit cast file") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestWriteJSONPropagatesMarshalWriteAndByteErrors(t *testing.T) {
+	payload := []any{1}
+	marshaled, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A buffer smaller than the marshaled payload forces bufio's "large
+	// write, empty buffer" path, which writes directly to the underlying
+	// writer and surfaces its error immediately from r.writer.Write(b).
+	rec := &Recorder{writer: bufio.NewWriterSize(&errWriter{failAfter: 0}, 1)}
+	if err := rec.writeJSON(payload); !errors.Is(err, errSimulatedWrite) {
+		t.Fatalf("expected write error, got %v", err)
+	}
+
+	// A buffer sized exactly to the marshaled payload lets the first Write
+	// buffer without flushing (bufio only flushes when len(p) exceeds
+	// Available()), so the underlying writer's first call happens on the
+	// subsequent WriteByte('\n') flush instead.
+	rec = &Recorder{writer: bufio.NewWriterSize(&errWriter{failAfter: 0}, len(marshaled))}
+	if err := rec.writeJSON(payload); !errors.Is(err, errSimulatedWrite) {
+		t.Fatalf("expected byte write error, got %v", err)
+	}
+
+	rec = &Recorder{writer: bufio.NewWriter(&bytes.Buffer{})}
+	if err := rec.writeJSON(make(chan int)); err == nil {
+		t.Fatal("expected marshal error for unsupported type")
+	}
+}
+
+func TestWriteRelativeEventPropagatesWriteJSONError(t *testing.T) {
+	rec := &Recorder{writer: bufio.NewWriterSize(&errWriter{failAfter: 0}, 1)}
+	err := rec.writeRelativeEvent(time.Second, "o", "hi")
+	if !errors.Is(err, errSimulatedWrite) {
+		t.Fatalf("expected broken writer error, got %v", err)
+	}
+}
+
+func TestWriteEventLockedPropagatesChunkWriteError(t *testing.T) {
+	rec := &Recorder{
+		writer:     bufio.NewWriterSize(&errWriter{failAfter: 0}, 1),
+		started:    time.Now(),
+		outputRate: time.Second,
+	}
+	if err := rec.writeEventLocked("o", "line one\nline two"); !errors.Is(err, errSimulatedWrite) {
+		t.Fatalf("expected broken writer error, got %v", err)
+	}
+}
+
+func TestWriteRelativeEventClampsNegativeDeltaToZero(t *testing.T) {
+	rec := &Recorder{
+		writer:        bufio.NewWriter(&bytes.Buffer{}),
+		lastEventTime: 5 * time.Second,
+	}
+	// eventTime (1s) is before lastEventTime (5s), producing a negative delta
+	// that must clamp to zero rather than go negative.
+	if err := rec.writeRelativeEvent(time.Second, "o", "late"); err != nil {
+		t.Fatal(err)
+	}
+	if rec.lastEventTime != time.Second {
+		t.Fatalf("lastEventTime = %s, want 1s", rec.lastEventTime)
+	}
+}
+
+func TestResolvePathDefaultsNilOptions(t *testing.T) {
+	temp := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", temp)
+
+	path, err := ResolvePath(nil, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path == "" {
+		t.Fatal("expected non-empty resolved path for nil options")
+	}
+}
+
+func TestResolvePathPropagatesXDGCacheDirError(t *testing.T) {
+	temp := t.TempDir()
+	// Point ATMOS_XDG_CACHE_HOME at a plain file so the underlying
+	// os.MkdirAll inside xdg.GetXDGCacheDir fails, forcing ResolvePath's
+	// error branch when no explicit BasePath is supplied.
+	blocker := filepath.Join(temp, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ATMOS_XDG_CACHE_HOME", blocker)
+
+	_, err := ResolvePath(&Options{}, time.Now())
+	if err == nil {
+		t.Fatal("expected xdg cache dir resolution error")
+	}
+}
+
+func TestSlugResolutionFallsBackToNameThenDefault(t *testing.T) {
+	started := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	base := t.TempDir()
+
+	// No Command, no Title, but Name is set: falls back to CommandSlug([]string{opts.Name}).
+	path, err := ResolvePath(&Options{BasePath: base, Name: "my-recording"}, started)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(filepath.Base(path), "-my-recording-") {
+		t.Fatalf("path %q missing name-derived slug", path)
+	}
+
+	// Nothing at all resolves: falls back to defaultCastCmd ("atmos").
+	path, err = ResolvePath(&Options{BasePath: base}, started)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(filepath.Base(path), "-"+defaultCastCmd+"-") {
+		t.Fatalf("path %q missing default command slug", path)
+	}
+}
+
+func TestRandomIDProducesDistinctHexIDs(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i < 20; i++ {
+		id := RandomID(defaultIDLen)
+		if len(id) != defaultIDLen {
+			t.Fatalf("id length = %d, want %d", len(id), defaultIDLen)
+		}
+		for _, r := range id {
+			if !strings.ContainsRune("0123456789abcdef", r) {
+				t.Fatalf("id %q contains non-hex rune %q", id, r)
+			}
+		}
+		seen[id] = true
+	}
+	if len(seen) < 2 {
+		t.Fatalf("RandomID produced no variation across calls: %v", seen)
+	}
+}
+
+func TestSafeEnvFiltersPresentAbsentAndEmptyKeys(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+		want map[string]string
+	}{
+		{
+			name: "present keys pass through",
+			env:  map[string]string{"SHELL": "/bin/zsh", "TERM": "xterm", "COLORTERM": "truecolor"},
+			want: map[string]string{"SHELL": "/bin/zsh", "TERM": "xterm", "COLORTERM": "truecolor"},
+		},
+		{
+			name: "absent keys are omitted",
+			env:  map[string]string{"OTHER": "value"},
+			want: nil,
+		},
+		{
+			name: "empty-string values are omitted",
+			env:  map[string]string{"SHELL": "", "TERM": "", "COLORTERM": ""},
+			want: nil,
+		},
+		{
+			name: "nil env returns nil",
+			env:  nil,
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := safeEnv(tt.env)
+			if len(got) != len(tt.want) {
+				t.Fatalf("safeEnv(%#v) = %#v, want %#v", tt.env, got, tt.want)
+			}
+			for k, v := range tt.want {
+				if got[k] != v {
+					t.Fatalf("safeEnv(%#v)[%q] = %q, want %q", tt.env, k, got[k], v)
+				}
+			}
+		})
+	}
+}
+
+func TestSafeEnvV3FiltersPresentAbsentAndEmptyKeys(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+		want map[string]string
+	}{
+		{
+			name: "present keys pass through",
+			env:  map[string]string{"SHELL": "/bin/bash", "COLORTERM": "truecolor"},
+			want: map[string]string{"SHELL": "/bin/bash", "COLORTERM": "truecolor"},
+		},
+		{
+			name: "absent keys are omitted",
+			env:  map[string]string{"TERM": "xterm"},
+			want: nil,
+		},
+		{
+			name: "empty-string values are omitted",
+			env:  map[string]string{"SHELL": "", "COLORTERM": ""},
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := safeEnvV3(tt.env)
+			if len(got) != len(tt.want) {
+				t.Fatalf("safeEnvV3(%#v) = %#v, want %#v", tt.env, got, tt.want)
+			}
+			for k, v := range tt.want {
+				if got[k] != v {
+					t.Fatalf("safeEnvV3(%#v)[%q] = %q, want %q", tt.env, k, got[k], v)
+				}
+			}
+		})
+	}
 }

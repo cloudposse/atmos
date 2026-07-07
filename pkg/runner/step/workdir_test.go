@@ -157,3 +157,113 @@ func TestResolveSourceSpecRequiresURI(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrWorkdirSourceRequired))
 }
+
+func TestResolveSourceSpecRejectsInvalidSourceType(t *testing.T) {
+	handler := &WorkdirHandler{BaseHandler: NewBaseHandler(schema.TaskTypeWorkdir, CategoryCommand, false)}
+	// An int source falls through resolveWorkdirSourceValue's default case
+	// unchanged, then ExtractSource rejects it because it is neither a
+	// string nor a map.
+	_, err := handler.resolveSourceSpec(&schema.WorkflowStep{Name: "fixture", Source: 42}, NewVariables())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid source")
+}
+
+func TestWorkdirHandlerExecutePropagatesInvalidSourceSpec(t *testing.T) {
+	handler := &WorkdirHandler{BaseHandler: NewBaseHandler(schema.TaskTypeWorkdir, CategoryCommand, false)}
+
+	_, err := handler.Execute(context.Background(), &schema.WorkflowStep{
+		Name:   "fixture",
+		Type:   schema.TaskTypeWorkdir,
+		Source: 42,
+		Path:   filepath.Join(t.TempDir(), "workdir"),
+	}, NewVariables())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid source")
+}
+
+func TestWorkdirHandlerExecutePropagatesPathTemplateError(t *testing.T) {
+	handler := &WorkdirHandler{BaseHandler: NewBaseHandler(schema.TaskTypeWorkdir, CategoryCommand, false)}
+
+	_, err := handler.Execute(context.Background(), &schema.WorkflowStep{
+		Name:   "fixture",
+		Type:   schema.TaskTypeWorkdir,
+		Source: t.TempDir(),
+		Path:   "{{ range .steps }}",
+	}, NewVariables())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to resolve path")
+}
+
+func TestResolveWorkdirSourceValuePassesThroughUnknownTypes(t *testing.T) {
+	vars := NewVariables()
+
+	// Values that are neither string, map[string]any, map[any]any, nor
+	// []any fall through the default case of the type switch unchanged.
+	resolved, err := resolveWorkdirSourceValue(42, vars)
+	require.NoError(t, err)
+	assert.Equal(t, 42, resolved)
+
+	resolvedBool, err := resolveWorkdirSourceValue(true, vars)
+	require.NoError(t, err)
+	assert.Equal(t, true, resolvedBool)
+}
+
+func TestResolveStringSourceMapPropagatesNestedError(t *testing.T) {
+	vars := NewVariables()
+
+	_, err := resolveStringSourceMap(map[string]any{
+		"uri": "{{ range .steps }}",
+	}, vars)
+	require.Error(t, err)
+}
+
+func TestResolveAnySourceMapPropagatesNestedError(t *testing.T) {
+	vars := NewVariables()
+
+	_, err := resolveAnySourceMap(map[any]any{
+		"uri": "{{ range .steps }}",
+	}, vars)
+	require.Error(t, err)
+}
+
+func TestResolveSourceSlicePropagatesNestedError(t *testing.T) {
+	vars := NewVariables()
+
+	_, err := resolveSourceSlice([]any{
+		"plain",
+		"{{ range .steps }}",
+	}, vars)
+	require.Error(t, err)
+}
+
+func TestWorkdirHandlerExecuteReportsProvisionFailureWithReset(t *testing.T) {
+	handler := &WorkdirHandler{BaseHandler: NewBaseHandler(schema.TaskTypeWorkdir, CategoryCommand, false)}
+
+	nonexistentSource := filepath.Join(t.TempDir(), "does-not-exist")
+	targetDir := filepath.Join(t.TempDir(), "workdir")
+
+	// With Reset: true, a failure to provision the (nonexistent) source
+	// must surface the "failed to provision source" error without the
+	// "set reset: true" hint (since reset was already requested).
+	_, err := handler.Execute(context.Background(), &schema.WorkflowStep{
+		Name:   "fixture",
+		Type:   schema.TaskTypeWorkdir,
+		Source: nonexistentSource,
+		Path:   targetDir,
+		Reset:  true,
+	}, NewVariables())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to provision source")
+	assert.NotContains(t, err.Error(), "set reset: true")
+}
+
+func TestResolveSourceSpecPropagatesSourceResolutionError(t *testing.T) {
+	handler := &WorkdirHandler{BaseHandler: NewBaseHandler(schema.TaskTypeWorkdir, CategoryCommand, false)}
+
+	_, err := handler.resolveSourceSpec(&schema.WorkflowStep{
+		Name:   "fixture",
+		Source: "{{ range .steps }}",
+	}, NewVariables())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to resolve source")
+}

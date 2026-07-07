@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -42,6 +43,8 @@ func runAsciicastExecHelper(mode string) {
 	case "fail":
 		_, _ = os.Stdout.WriteString("about to fail\n")
 		os.Exit(3)
+	case "sleep":
+		time.Sleep(2 * time.Second)
 	}
 }
 

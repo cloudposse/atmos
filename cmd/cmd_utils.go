@@ -740,7 +740,13 @@ func executeCustomCommand(
 		finalArgs = args
 	}
 
-	commandConditionEnv := envpkg.CommandEnvToMap(commandConfig.Env)
+	commandConditionEnv := envpkg.EnvironToMap()
+	if commandConditionEnv == nil {
+		commandConditionEnv = make(map[string]string)
+	}
+	for key, value := range envpkg.CommandEnvToMap(commandConfig.Env) {
+		commandConditionEnv[key] = value
+	}
 	hasRunnableStep := false
 	for i := range commandConfig.Steps {
 		step := &commandConfig.Steps[i]
@@ -1130,7 +1136,7 @@ func executeCustomCommand(
 					if atmosConfig.CaseMaps != nil {
 						stepOwnEnv = atmosConfig.CaseMaps.ApplyCase("env", stepOwnEnv)
 					}
-					mergedStepEnv := envSliceToMap(env)
+					mergedStepEnv := envpkg.SliceToMap(env)
 					for key, value := range stepOwnEnv {
 						mergedStepEnv[key] = value
 					}
@@ -1247,21 +1253,6 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	}
 
 	return &clone, nil
-}
-
-func envSliceToMap(env []string) map[string]string {
-	if len(env) == 0 {
-		return nil
-	}
-	result := make(map[string]string, len(env))
-	for _, entry := range env {
-		key, value, ok := strings.Cut(entry, "=")
-		if !ok {
-			continue
-		}
-		result[key] = value
-	}
-	return result
 }
 
 // findTypedValue finds the value of an argument or flag with the specified semantic type.

@@ -677,6 +677,7 @@ func splitMappingField(value *yaml.Node, field string) (*yaml.Node, *yaml.Node) 
 	return fieldNode, &copied
 }
 
+//nolint:unparam // field parameter kept generic; currently only "cursor" is checked but the helper is shared across task.go and workflow.go for future field checks.
 func mappingHasField(value *yaml.Node, field string) bool {
 	if value == nil || value.Kind != yaml.MappingNode {
 		return false

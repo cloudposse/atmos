@@ -194,6 +194,51 @@ func TestShellHandlerExecution(t *testing.T) {
 		assert.Contains(t, result.Metadata["stderr"], "error")
 		assert.Equal(t, 1, result.Metadata["exit_code"])
 	})
+
+	t.Run("invalid command template", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_bad_command",
+			Type:    "shell",
+			Command: "echo {{ .invalid.template",
+			Output:  "capture",
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		require.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("invalid working_directory template", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:             "test_bad_workdir",
+			Type:             "shell",
+			Command:          "echo hello",
+			WorkingDirectory: "{{ .invalid.template",
+			Output:           "capture",
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "failed to resolve working_directory")
+	})
+
+	t.Run("defaults output mode to log when unset", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_default_mode",
+			Type:    "shell",
+			Command: "echo default_mode_output",
+			// Output intentionally left unset to exercise the
+			// `if mode == "" { mode = OutputModeLog }` fallback.
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		require.NoError(t, err)
+		assert.Equal(t, 0, result.Metadata[exitCodeMetadata])
+	})
 }
 
 func TestShellHandlerExecuteWithWorkflow(t *testing.T) {
@@ -253,6 +298,68 @@ func TestShellHandlerExecuteWithWorkflow(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, result.Value, "resolved_value")
 	})
+
+	// Covers the `if workDir != "" { cmd.Dir = workDir }` assignment in
+	// ExecuteWithWorkflow (shell.go), which only the plain Execute() path
+	// exercised previously.
+	t.Run("with resolved working directory", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:             "test_workflow_workdir",
+			Type:             "shell",
+			Command:          "pwd",
+			Output:           "capture",
+			WorkingDirectory: "/tmp",
+		}
+		workflow := &schema.WorkflowDefinition{}
+		vars := NewVariables()
+
+		result, err := shellHandler.ExecuteWithWorkflow(context.Background(), step, vars, workflow)
+		require.NoError(t, err)
+		// On macOS, /tmp is symlinked to /private/tmp.
+		assert.True(t, strings.Contains(result.Value, "/tmp") || strings.Contains(result.Value, "/private/tmp"))
+	})
+}
+
+func TestShellHandlerExecutePropagatesEnvTemplateError(t *testing.T) {
+	initShellTestIO(t)
+	handler, ok := Get("shell")
+	require.True(t, ok)
+
+	step := &schema.WorkflowStep{
+		Name:    "test_bad_env",
+		Type:    "shell",
+		Command: "echo hello",
+		Output:  "capture",
+		Env: map[string]string{
+			"BAD": "{{ .invalid.template",
+		},
+	}
+
+	result, err := handler.Execute(context.Background(), step, NewVariables())
+	require.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestShellHandlerResolveEnvDefaultsToOSEnvironWhenVariablesEnvEmpty(t *testing.T) {
+	t.Setenv("SHELL_RESOLVEENV_MARKER", "present")
+
+	handler := &ShellHandler{}
+	// A zero-value Variables has a nil Env map, so EnvSlice() returns an
+	// empty slice and resolveEnv must fall back to os.Environ().
+	vars := &Variables{}
+
+	env, err := handler.resolveEnv(&schema.WorkflowStep{Name: "no-env"}, vars)
+	require.NoError(t, err)
+	require.NotEmpty(t, env)
+
+	found := false
+	for _, entry := range env {
+		if entry == "SHELL_RESOLVEENV_MARKER=present" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected os.Environ() fallback to include SHELL_RESOLVEENV_MARKER=present")
 }
 
 func TestGetExitCode(t *testing.T) {
@@ -424,6 +531,23 @@ func TestShellHandlerExecuteWithWorkflowErrorCases(t *testing.T) {
 		result, err := shellHandler.ExecuteWithWorkflow(context.Background(), step, vars, nil)
 		require.NoError(t, err)
 		assert.Contains(t, result.Value, "nil_workflow")
+	})
+
+	t.Run("failing command returns error result", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_failing_command",
+			Type:    "shell",
+			Command: "echo failure_output >&2 && exit 3",
+			Output:  "capture",
+		}
+		workflow := &schema.WorkflowDefinition{}
+		vars := NewVariables()
+
+		result, err := shellHandler.ExecuteWithWorkflow(context.Background(), step, vars, workflow)
+		require.Error(t, err)
+		require.NotNil(t, result)
+		assert.Contains(t, result.Metadata["stderr"], "failure_output")
+		assert.Equal(t, 3, result.Metadata[exitCodeMetadata])
 	})
 
 	t.Run("command with stderr and success", func(t *testing.T) {

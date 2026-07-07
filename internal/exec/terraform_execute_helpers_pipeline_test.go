@@ -128,34 +128,6 @@ func TestExecuteCommandPipeline_TTYError(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrNoTty)
 }
 
-func TestExecuteCommandPipeline_GroupsWorkspaceSetupPhase(t *testing.T) {
-	output := runLogGroupPipelineSubprocess(t, map[string]string{
-		testEnvFakeTerraformSelectFail: "1",
-	})
-	groupLabel := logGroupTestToolLabel(t)
-
-	initStart := strings.Index(output, "::group::"+groupLabel+" init\n")
-	workspaceStart := strings.Index(output, "::group::"+groupLabel+" workspace\n")
-	selectOutput := strings.Index(output, "fake terraform workspace select dev")
-	newOutput := strings.Index(output, "fake terraform workspace new dev")
-	planStart := strings.Index(output, "::group::"+groupLabel+" plan\n")
-
-	require.NotEqual(t, -1, initStart, "init phase must be grouped; output:\n%s", output)
-	require.NotEqual(t, -1, workspaceStart, "workspace phase must be grouped; output:\n%s", output)
-	require.NotEqual(t, -1, selectOutput, "workspace select output must be present; output:\n%s", output)
-	require.NotEqual(t, -1, newOutput, "workspace new fallback output must be present; output:\n%s", output)
-	workspaceEnd := strings.Index(output[workspaceStart:], "::endgroup::\n")
-	require.NotEqual(t, -1, workspaceEnd, "workspace group must close; output:\n%s", output)
-	require.NotEqual(t, -1, planStart, "main terraform phase must be grouped; output:\n%s", output)
-
-	workspaceEnd += workspaceStart
-	assert.Less(t, initStart, workspaceStart, "workspace group must start after init")
-	assert.Less(t, workspaceStart, selectOutput, "workspace select must be inside workspace group")
-	assert.Less(t, selectOutput, newOutput, "workspace new fallback must follow failed select")
-	assert.Less(t, newOutput, workspaceEnd, "workspace fallback must remain inside workspace group")
-	assert.Less(t, workspaceEnd, planStart, "main phase must start after workspace group closes")
-}
-
 func TestExecuteCommandPipeline_SkipsWorkspaceGroupWhenSetupSkipped(t *testing.T) {
 	output := runLogGroupPipelineSubprocess(t, map[string]string{
 		testEnvPipelineBackendType: "http",

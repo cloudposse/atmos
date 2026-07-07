@@ -522,7 +522,7 @@ func ExecuteWorkflow(
 				WithContext("workflow", workflow).
 				WithContext("step", step.Name).
 				WithHintf("Step type '%s' is not supported", commandType).
-				WithHint("Each step must specify a valid type: 'atmos', 'shell', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
+				WithHint("Each step must specify a valid type: 'atmos', 'shell', 'script', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
 				WithExitCode(1).
 				Err()
 		}
@@ -704,7 +704,7 @@ func ExecuteWorkflow(
 						WithContext("workflow", workflow).
 						WithContext("step", step.Name).
 						WithHintf("Step type '%s' is not supported", commandType).
-						WithHint("Each step must specify a valid type: 'atmos', 'shell', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
+						WithHint("Each step must specify a valid type: 'atmos', 'shell', 'script', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
 						WithExitCode(1).
 						Err()
 				}

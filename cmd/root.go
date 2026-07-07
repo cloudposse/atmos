@@ -1208,8 +1208,9 @@ func formatFlagName(f *pflag.Flag) string {
 // getTerminalWidth returns the width used to lay out help output.
 //
 // Precedence: the active --cast recording width (so recorded output matches the
-// recorded terminal), then the detected terminal width (real TTY size, or the
-// COLUMNS environment variable on pipes), then the default. The result is
+// recorded terminal), then the detected real terminal width, then the default.
+// Non-TTY output ignores COLUMNS so CI snapshots and piped output keep stable
+// wrapping unless cast recording provides an explicit width. The result is
 // capped at the default for readability, or at Settings.Terminal.MaxWidth when
 // configured (config refines, but is never required — help must lay out
 // correctly with no atmos.yaml at all).
@@ -1719,6 +1720,7 @@ func Execute() error {
 	if err := processEarlyChdirFlag(); err != nil {
 		return err
 	}
+	preprocessHelpTopicArgs()
 
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
@@ -1912,6 +1914,19 @@ func preprocessArgs() []string {
 	return processedArgs
 }
 
+func preprocessHelpTopicArgs() {
+	currentHelpTopic = helpTopicRequest{valid: true}
+
+	normalizedArgs, request, changed := normalizeHelpTopicArgs(os.Args[1:])
+	currentHelpTopic = request
+	if !changed {
+		return
+	}
+
+	os.Args = append([]string{os.Args[0]}, normalizedArgs...)
+	RootCmd.SetArgs(normalizedArgs)
+}
+
 // slicesEqual compares two string slices for equality.
 func slicesEqual(a, b []string) bool {
 	if len(a) != len(b) {
@@ -2078,7 +2093,6 @@ func init() {
 	if err := globalParser.BindToViper(viper.GetViper()); err != nil {
 		log.Error("Failed to bind global flags to viper", "error", err)
 	}
-	castcmd.RegisterRecordingFlag(RootCmd.PersistentFlags())
 
 	// Register --version as a LOCAL flag (not inherited by subcommands).
 	// This allows custom commands to define their own --version flag (e.g., for tool versions).
@@ -2256,20 +2270,20 @@ func initCobraConfig() {
 				// User explicitly requested pager for flag help.
 				var buf bytes.Buffer
 				command.SetOut(&buf)
-				applyColoredHelpTemplate(command)
+				applyColoredHelpTemplateForTopic(command, currentHelpTopic)
 				_ = command.Help()
 				pager := pager.NewWithAtmosConfig(true, atmosConfig.Settings.Terminal.Speed)
 				_ = pager.Run("Atmos CLI Help", buf.String())
 			} else {
 				// Default: render help directly to stdout without pager.
-				applyColoredHelpTemplate(command)
+				applyColoredHelpTemplateForTopic(command, currentHelpTopic)
 				_ = command.Help()
 			}
 		case isInteractiveHelp:
 			// Interactive 'atmos help' command - use pager if configured.
 			var buf bytes.Buffer
 			command.SetOut(&buf)
-			applyColoredHelpTemplate(command)
+			applyColoredHelpTemplateForTopic(command, currentHelpTopic)
 			_ = command.Help()
 
 			// Check pager configuration from flag, env, or config.
@@ -2293,7 +2307,7 @@ func initCobraConfig() {
 			}
 		default:
 			// Fallback for other cases.
-			applyColoredHelpTemplate(command)
+			applyColoredHelpTemplateForTopic(command, currentHelpTopic)
 			_ = command.Help()
 		}
 

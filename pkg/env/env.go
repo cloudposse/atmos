@@ -52,12 +52,24 @@ func ConvertEnvVars(envVarsMap map[string]any) []string {
 func EnvironToMap() map[string]string {
 	defer perf.Track(nil, "env.EnvironToMap")()
 
-	envMap := make(map[string]string)
-	for _, e := range os.Environ() {
-		pair := splitStringAtFirstOccurrence(e, "=")
-		k := pair[0]
-		v := pair[1]
-		envMap[k] = v
+	return SliceToMap(os.Environ())
+}
+
+// SliceToMap converts environment variables from KEY=value slice form to a map.
+// Malformed entries without "=" are ignored. Later duplicate keys overwrite earlier ones.
+func SliceToMap(env []string) map[string]string {
+	defer perf.Track(nil, "env.SliceToMap")()
+
+	if len(env) == 0 {
+		return nil
+	}
+	envMap := make(map[string]string, len(env))
+	for _, item := range env {
+		key, value, ok := strings.Cut(item, "=")
+		if !ok {
+			continue
+		}
+		envMap[key] = value
 	}
 	return envMap
 }

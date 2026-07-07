@@ -2,6 +2,7 @@ package asciicast
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/cellbuf"
@@ -74,6 +75,15 @@ func sanitizeStream(content string) string {
 	column := 0
 	for len(content) > 0 {
 		seq, width, n, newState := ansi.DecodeSequence(content, state, parser)
+		if n <= 0 {
+			_, size := utf8.DecodeRuneInString(content)
+			if size <= 0 {
+				size = 1
+			}
+			content = content[size:]
+			state = newState
+			continue
+		}
 		switch {
 		case width > 0:
 			out.WriteString(seq)

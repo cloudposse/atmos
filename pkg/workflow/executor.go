@@ -472,7 +472,7 @@ func (e *Executor) executeRegisteredStep(params *WorkflowParams, step *schema.Wo
 
 	stepCopy := *step
 	stepCopy.WorkingDirectory = cmdParams.workingDirectory
-	stepCopy.Env = envSliceToMap(cmdParams.stepEnv)
+	stepCopy.Env = envpkg.SliceToMap(cmdParams.stepEnv)
 	stepCopy.DryRun = params.Opts.DryRun
 	stepCopy.Stack = cmdParams.finalStack
 
@@ -561,21 +561,6 @@ func executeStepHandlerWithWorkflow(
 		return wah.ExecuteWithWorkflow(ctx, step, vars, workflow)
 	}
 	return handler.Execute(ctx, step, vars)
-}
-
-func envSliceToMap(env []string) map[string]string {
-	if len(env) == 0 {
-		return nil
-	}
-	result := make(map[string]string, len(env))
-	for _, entry := range env {
-		key, value, ok := strings.Cut(entry, "=")
-		if !ok {
-			continue
-		}
-		result[key] = value
-	}
-	return result
 }
 
 // renderStepCommand renders the command before execution if show.command is enabled.

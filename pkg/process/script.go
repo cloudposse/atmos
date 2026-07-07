@@ -2,12 +2,14 @@ package process
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -36,6 +38,10 @@ func ScriptInvocation(interpreter, script string) ([]string, io.Reader) {
 		return []string{interp, "-e", script}, nil
 	case "bash", "dash", "ksh", "sh", "zsh":
 		return []string{interp, "-c", script}, nil
+	case "pwsh", "powershell":
+		return []string{interp, "-NoProfile", "-NonInteractive", "-Command", "-"}, strings.NewReader(script)
+	case "cmd":
+		return []string{interp, "/S", "/C", script}, nil
 	default:
 		return []string{interp, "-"}, strings.NewReader(script)
 	}
@@ -70,7 +76,10 @@ func RunScript(ctx context.Context, spec *ScriptSpec, stdout, stderr io.Writer) 
 	cmd := NewScriptCommand(ctx, spec)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessWaitFailed, err)
+	}
+	return nil
 }
 
 // FormatScriptDisplay returns a readable command preview for show.command.

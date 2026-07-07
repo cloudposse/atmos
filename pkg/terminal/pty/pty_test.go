@@ -144,6 +144,27 @@ func TestTerminalResponseReaderAnswersSplitQueries(t *testing.T) {
 	}
 }
 
+// TestTerminalResponseReaderAnswersForegroundColorQuery verifies that the
+// OSC 10 (foreground color) query is answered, exercising the first branch
+// of respond() which TestTerminalResponseReaderAnswersSplitQueries does not cover.
+func TestTerminalResponseReaderAnswersForegroundColorQuery(t *testing.T) {
+	src := strings.NewReader("\x1b]10;?\x1b\\")
+	var responses bytes.Buffer
+	reader := &terminalResponseReader{src: src, responder: &responses}
+
+	var out bytes.Buffer
+	if _, err := io.Copy(&out, reader); err != nil {
+		t.Fatalf("io.Copy() error = %v", err)
+	}
+
+	if out.String() != "\x1b]10;?\x1b\\" {
+		t.Fatalf("output = %q", out.String())
+	}
+	if got := responses.String(); got != "\x1b]10;rgb:ffff/ffff/ffff\x1b\\" {
+		t.Fatalf("responses = %q", got)
+	}
+}
+
 func TestIsSupported(t *testing.T) {
 	supported := IsSupported()
 

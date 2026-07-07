@@ -3,7 +3,6 @@ package terminal
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -287,14 +286,10 @@ func (t *terminal) Width(stream Stream) int {
 }
 
 // fallbackWidth returns the terminal width when no real TTY size is available:
-// the standard COLUMNS environment variable when set to a positive integer
-// (the conventional non-TTY width contract, e.g. for recording pipelines),
-// the forced default when --force-tty is set, and 0 otherwise.
+// the forced default when --force-tty is set, and 0 otherwise. Non-TTY output
+// deliberately ignores COLUMNS so CI snapshots and piped output keep Atmos'
+// stable default wrapping unless a caller provides an explicit recording width.
 func (t *terminal) fallbackWidth() int {
-	//nolint:forbidigo // COLUMNS is a standard terminal env var, read before/without config.
-	if columns, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && columns > 0 {
-		return columns
-	}
 	if t.forceTTY {
 		return defaultForcedWidth
 	}

@@ -9,10 +9,12 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/asciicast"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
+	pkgFlags "github.com/cloudposse/atmos/pkg/flags"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -20,9 +22,30 @@ import (
 
 const (
 	// FlagName is the global flag used to record command output as an asciicast.
-	FlagName = "cast"
+	FlagName = cfg.CastFlagName
 
-	autoFlagValue = "__AUTO__"
+	// EnvName is the environment variable used to request cast recording.
+	EnvName = cfg.CastEnvVarName
+
+	autoFlagValue = cfg.CastFlagAutoValue
+
+	castExtension  = ".cast"
+	gifExtension   = ".gif"
+	mp4Extension   = ".mp4"
+	htmlExtension  = ".html"
+	asciiExtension = ".ascii"
+	pngExtension   = ".png"
+	jpgExtension   = ".jpg"
+	jpegExtension  = ".jpeg"
+)
+
+type recordingSource int
+
+const (
+	recordingSourceNone recordingSource = iota
+	recordingSourceConfig
+	recordingSourceEnv
+	recordingSourceFlag
 )
 
 type activeRecording struct {
@@ -34,38 +57,18 @@ type activeRecording struct {
 
 var activeCast *activeRecording
 
-// RegisterRecordingFlag registers the global --cast flag on the root command.
-func RegisterRecordingFlag(flags *pflag.FlagSet) {
-	flags.String(FlagName, "", "Record command output as an asciinema cast (--cast for generated path, --cast=path with a .cast, .gif, .mp4, .html, .ascii, .png, .jpg, or .jpeg extension for explicit output)")
-	if castFlag := flags.Lookup(FlagName); castFlag != nil {
-		castFlag.NoOptDefVal = autoFlagValue
-	}
-}
-
 // StartRecordingIfRequested starts the root-command cast recorder when enabled by config or flag.
 func StartRecordingIfRequested(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, args []string) error {
 	defer perf.Track(atmosConfig, "cmd.cast.StartRecordingIfRequested")()
 
-	castFlag := cmd.Flags().Lookup(FlagName)
-	flagChanged := castFlag != nil && castFlag.Changed
-	flagValue := ""
-	if flagChanged {
-		var err error
-		flagValue, err = cmd.Flags().GetString(FlagName)
-		if err != nil {
-			return err
-		}
+	request, err := resolveRecordingRequest(cmd, atmosConfig, args)
+	if err != nil {
+		return err
 	}
-	// Commands with DisableFlagParsing (e.g. `git hooks run`) never parse the
-	// global --cast flag, so recover it from the raw arguments — the same way
-	// processChdirFlag recovers --chdir.
-	if !flagChanged && cmd.DisableFlagParsing {
-		flagValue, flagChanged = castFlagFromArgs(args)
-	}
-	if skipRecording(cmd, atmosConfig, flagChanged) {
+	if skipRecording(cmd, request) {
 		return nil
 	}
-	rec, plan, err := startRecorder(flagValue, flagChanged, atmosConfig, args)
+	rec, plan, err := startRecorder(request.value, request.hasPath(), atmosConfig, request.args)
 	if err != nil {
 		return err
 	}
@@ -79,37 +82,84 @@ func StartRecordingIfRequested(cmd *cobra.Command, atmosConfig *schema.AtmosConf
 	return nil
 }
 
-// skipRecording reports whether cast recording should not start for this
-// invocation. Help and completion output are recorded only when --cast is
-// passed explicitly; implicit (config-enabled) recording skips them so casual
-// `--help` calls and shell completion machinery (__complete) are not
-// captured. Explicit help recording powers the docs screengrab pipeline.
-func skipRecording(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, flagChanged bool) bool {
-	if isCompletionCommand(cmd) && !flagChanged {
-		return true
-	}
-	isHelp := cmd.Name() == "help" || cmd.Flags().Changed("help")
-	if isHelp && !flagChanged {
-		return true
-	}
-	return !atmosConfig.Cast.Recording.Enabled && !flagChanged
+type recordingRequest struct {
+	source recordingSource
+	value  string
+	args   []string
 }
 
-// castFlagFromArgs extracts the --cast flag from unparsed raw arguments.
-// Arguments after "--" belong to the downstream command and are not scanned.
-func castFlagFromArgs(args []string) (string, bool) {
-	for _, arg := range args {
-		if arg == "--" {
-			break
-		}
-		if arg == "--"+FlagName {
-			return autoFlagValue, true
-		}
-		if strings.HasPrefix(arg, "--"+FlagName+"=") {
-			return strings.TrimPrefix(arg, "--"+FlagName+"="), true
-		}
+func (r recordingRequest) hasPath() bool {
+	return r.source == recordingSourceFlag || r.source == recordingSourceEnv
+}
+
+func resolveRecordingRequest(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, args []string) (recordingRequest, error) {
+	resolved, err := pkgFlags.ResolveExplicitStringFlag(cmd, args, FlagName)
+	if err != nil {
+		return recordingRequest{}, err
 	}
-	return "", false
+	if resolved.Changed {
+		return recordingRequest{source: recordingSourceFlag, value: resolved.Value, args: resolved.Args}, nil
+	}
+	if value, ok := recordingEnvValue(); ok {
+		return recordingRequest{source: recordingSourceEnv, value: value, args: args}, nil
+	}
+	recording := atmosConfig.GetCastRecordingConfig()
+	if recording.Enabled {
+		return recordingRequest{source: recordingSourceConfig, args: args}, nil
+	}
+	return recordingRequest{args: args}, nil
+}
+
+func recordingEnvValue() (string, bool) {
+	value, ok := os.LookupEnv(EnvName)
+	if !ok {
+		return "", false
+	}
+	value = strings.TrimSpace(value)
+	if value == "" || isFalseEnvValue(value) {
+		return "", false
+	}
+	if isTrueEnvValue(value) {
+		return autoFlagValue, true
+	}
+	return value, true
+}
+
+func isTrueEnvValue(value string) bool {
+	switch strings.ToLower(value) {
+	case "true", "1", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func isFalseEnvValue(value string) bool {
+	switch strings.ToLower(value) {
+	case "false", "0", "no", "off":
+		return true
+	default:
+		return false
+	}
+}
+
+// skipRecording reports whether cast recording should not start for this
+// invocation. Help and completion output are recorded only when requested by an
+// explicit source (`--cast` or ATMOS_CAST); automatic config-enabled recording
+// skips them so casual `--help` calls and shell completion machinery
+// (__complete) are not captured.
+func skipRecording(cmd *cobra.Command, request recordingRequest) bool {
+	if request.source == recordingSourceNone {
+		return true
+	}
+	explicit := request.hasPath()
+	if isCompletionCommand(cmd) && !explicit {
+		return true
+	}
+	if pkgFlags.IsHelpRequested(cmd, request.args) && !explicit {
+		return true
+	}
+	return false
 }
 
 type recordingOutputPlan struct {
@@ -126,13 +176,14 @@ func startRecorder(flagValue string, flagChanged bool, atmosConfig *schema.Atmos
 	if err != nil {
 		return nil, recordingOutputPlan{}, err
 	}
+	recording := atmosConfig.GetCastRecordingConfig()
 	rec, err := asciicast.Start(&asciicast.Options{
 		Path:     plan.castPath,
 		BasePath: recordingBasePath(plan, atmosConfig),
 		Command:  recordedCommandArgs(args),
-		Width:    atmosConfig.Cast.Recording.Width,
-		Height:   atmosConfig.Cast.Recording.Height,
-		RecordIn: atmosConfig.Cast.Recording.Input,
+		Width:    recording.Width,
+		Height:   recording.Height,
+		RecordIn: recording.Input,
 		Explicit: plan.explicitCast,
 		Env:      environment(),
 	})
@@ -146,14 +197,7 @@ func startRecorder(flagValue string, flagChanged bool, atmosConfig *schema.Atmos
 }
 
 func environment() map[string]string {
-	env := make(map[string]string)
-	for _, pair := range os.Environ() {
-		k, v, ok := strings.Cut(pair, "=")
-		if ok {
-			env[k] = v
-		}
-	}
-	return env
+	return envpkg.SliceToMap(os.Environ())
 }
 
 func planRecordingOutput(value string, explicit bool) (recordingOutputPlan, error) {
@@ -162,9 +206,9 @@ func planRecordingOutput(value string, explicit bool) (recordingOutputPlan, erro
 	}
 	ext := strings.ToLower(filepath.Ext(value))
 	switch ext {
-	case ".cast":
+	case castExtension:
 		return recordingOutputPlan{castPath: value, explicitCast: true}, nil
-	case ".gif", ".mp4", ".html", ".ascii", ".png", ".jpg", ".jpeg":
+	case gifExtension, mp4Extension, htmlExtension, asciiExtension, pngExtension, jpgExtension, jpegExtension:
 		return planRenderedRecordingOutput(value)
 	default:
 		return recordingOutputPlan{}, fmt.Errorf("%w: %s", errUtils.ErrUnsupportedCastOutputExtension, value)
@@ -187,18 +231,12 @@ func recordingBasePath(plan recordingOutputPlan, atmosConfig *schema.AtmosConfig
 	if atmosConfig == nil {
 		return ""
 	}
-	return atmosConfig.Cast.Recording.BasePath
+	recording := atmosConfig.GetCastRecordingConfig()
+	return recording.BasePath
 }
 
 func recordedCommandArgs(args []string) []string {
-	result := make([]string, 0, len(args))
-	for _, arg := range args {
-		if arg == "--"+FlagName || strings.HasPrefix(arg, "--"+FlagName+"=") {
-			continue
-		}
-		result = append(result, arg)
-	}
-	return result
+	return append([]string(nil), args...)
 }
 
 // StartHelpRecording starts a cast recording for help output when an explicit
@@ -277,22 +315,11 @@ func FinalizeRecording() {
 }
 
 func renderRecordedCast(castPath, output string) error {
-	switch strings.ToLower(filepath.Ext(output)) {
-	case ".gif":
-		return asciicast.Render(castPath, &asciicast.RenderOptions{GIF: output})
-	case ".mp4":
-		return asciicast.Render(castPath, &asciicast.RenderOptions{MP4: output})
-	case ".html":
-		return asciicast.Render(castPath, &asciicast.RenderOptions{HTML: output})
-	case ".ascii":
-		return asciicast.Render(castPath, &asciicast.RenderOptions{ASCII: output})
-	case ".png":
-		return asciicast.Render(castPath, &asciicast.RenderOptions{PNG: output})
-	case ".jpg", ".jpeg":
-		return asciicast.Render(castPath, &asciicast.RenderOptions{JPEG: output})
-	default:
-		return fmt.Errorf("%w: %s", errUtils.ErrUnsupportedCastOutputExtension, output)
+	opts, err := renderOptionsForOutput(output, "", false)
+	if err != nil {
+		return err
 	}
+	return asciicast.Render(castPath, &opts)
 }
 
 func isCompletionCommand(cmd *cobra.Command) bool {

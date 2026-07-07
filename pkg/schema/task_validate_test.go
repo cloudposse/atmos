@@ -139,6 +139,17 @@ func TestValidateExecTasks_ErrorNamesStep(t *testing.T) {
 	assert.Contains(t, err.Error(), `"session"`)
 }
 
+// TestValidateExecTasks_ScriptErrorNamesStep verifies scriptStepLabel's named branch:
+// when the offending script step has a Name set, the error message identifies it by
+// name (with its index) rather than by index alone.
+func TestValidateExecTasks_ScriptErrorNamesStep(t *testing.T) {
+	err := ValidateExecTasks(Tasks{
+		{Type: TaskTypeScript, Name: "build", Script: "print('ok')"},
+	})
+	require.ErrorIs(t, err, ErrScriptStepFieldRequired)
+	assert.Contains(t, err.Error(), `"build" (index 0)`)
+}
+
 func TestValidateExecWorkflowSteps(t *testing.T) {
 	maxAttempts := 3
 
@@ -232,4 +243,34 @@ func TestValidateExecWorkflowSteps(t *testing.T) {
 			assert.ErrorIs(t, err, tt.wantErr)
 		})
 	}
+}
+
+// TestValidateWorkflowSteps_PropagatesExecStepError verifies ValidateWorkflowSteps
+// surfaces an error from its ValidateExecWorkflowSteps call (an exec step that isn't
+// last) before ever reaching the background/control-step checks.
+func TestValidateWorkflowSteps_PropagatesExecStepError(t *testing.T) {
+	err := ValidateWorkflowSteps([]WorkflowStep{
+		{Type: TaskTypeExec, Command: "ssh host"},
+		{Type: TaskTypeShell, Command: "echo never runs"},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrExecStepNotLast)
+}
+
+// TestValidateWorkflowSteps_PropagatesBackgroundStepError verifies ValidateWorkflowSteps
+// surfaces an error from its validateBackgroundSteps call (background: true on a
+// non-container step type).
+func TestValidateWorkflowSteps_PropagatesBackgroundStepError(t *testing.T) {
+	err := ValidateWorkflowSteps([]WorkflowStep{
+		{Type: TaskTypeShell, Command: "echo hi", BackgroundAsync: true},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWorkflowControlStepInvalid)
+}
+
+// TestWorkflowScope verifies workflowScope labels the top-level workflow as "workflow"
+// (empty parent) and a nested control step by its quoted name.
+func TestWorkflowScope(t *testing.T) {
+	assert.Equal(t, "workflow", workflowScope(""))
+	assert.Equal(t, `control step "checks"`, workflowScope("checks"))
 }

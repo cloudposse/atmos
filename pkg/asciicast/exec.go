@@ -5,10 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 )
 
 // ErrMissingExecCommand indicates that ExecRecord was called without a command.
@@ -74,43 +75,41 @@ func ExecRecord(ctx context.Context, opts *ExecOptions) (*ExecResult, error) {
 		Title:   opts.Title,
 		Width:   opts.Width,
 		Height:  opts.Height,
-		Env:     envMap(env),
+		Env:     envpkg.SliceToMap(env),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	//nolint:gosec // The command is caller-provided argv for recording, not shell input.
-	cmd := exec.CommandContext(ctx, opts.Command[0], opts.Command[1:]...)
-	cmd.Dir = opts.Dir
-	cmd.Env = env
-	cmd.Stdout = &streamWriter{rec: rec, stream: "o"}
-	cmd.Stderr = &streamWriter{rec: rec, stream: "e"}
-
-	runErr := cmd.Run()
+	result := process.NewDefaultRunner().Run(ctx, process.TaskSpec{
+		Command: opts.Command[0],
+		Args:    opts.Command[1:],
+		Dir:     opts.Dir,
+		Env:     env,
+		Streams: process.Streams{
+			Stdout: &streamWriter{rec: rec, stream: "o"},
+			Stderr: &streamWriter{rec: rec, stream: "e"},
+		},
+	})
 	closeErr := rec.Close()
-	var exitErr *exec.ExitError
-	if errors.As(runErr, &exitErr) {
-		if closeErr != nil {
-			return nil, errors.Join(closeErr, runErr)
-		}
-		return &ExecResult{ExitCode: exitErr.ExitCode()}, nil
-	}
-	if joined := errors.Join(runErr, closeErr); joined != nil {
-		return nil, joined
-	}
-	return &ExecResult{ExitCode: 0}, nil
+	return execRecordResult(&result, closeErr)
 }
 
-func envMap(env []string) map[string]string {
-	result := make(map[string]string, len(env))
-	for _, pair := range env {
-		for i := 0; i < len(pair); i++ {
-			if pair[i] == '=' {
-				result[pair[:i]] = pair[i+1:]
-				break
-			}
+func execRecordResult(result *process.Result, closeErr error) (*ExecResult, error) {
+	if closeErr != nil {
+		if result.Err != nil {
+			return nil, errors.Join(closeErr, result.Err)
 		}
+		return nil, closeErr
 	}
-	return result
+	if result.Err == nil {
+		return &ExecResult{ExitCode: 0}, nil
+	}
+	if result.Canceled {
+		return nil, result.Err
+	}
+	if result.ExitCode >= 0 {
+		return &ExecResult{ExitCode: result.ExitCode}, nil
+	}
+	return nil, result.Err
 }

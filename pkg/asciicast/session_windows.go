@@ -4,9 +4,12 @@ package asciicast
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os/exec"
 	"sync"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func startSessionShell(ctx context.Context, opts *SessionOptions) (*sessionProcess, error) {
@@ -15,7 +18,7 @@ func startSessionShell(ctx context.Context, opts *SessionOptions) (*sessionProce
 	cmd.Env = sessionEnvironment(opts.Env)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessStartFailed, err)
 	}
 
 	outputReader, outputWriter := io.Pipe()
@@ -26,7 +29,7 @@ func startSessionShell(ctx context.Context, opts *SessionOptions) (*sessionProce
 		_ = stdin.Close()
 		_ = outputReader.Close()
 		_ = outputWriter.Close()
-		return nil, err
+		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessStartFailed, err)
 	}
 
 	var once sync.Once

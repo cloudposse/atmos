@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"os"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -128,16 +129,15 @@ func TestForceTTY_Width(t *testing.T) {
 	}
 }
 
-// TestWidth_ColumnsFallback verifies the COLUMNS env var supplies the width on
-// non-TTY streams (the recording/screengrab contract) and that malformed
-// values are ignored. These tests only assert when the stream is genuinely not
-// a TTY, which is the normal `go test` environment.
-func TestWidth_ColumnsFallback(t *testing.T) {
+// TestWidth_NonTTYFallback verifies non-TTY streams ignore COLUMNS and use
+// only the explicit forced-TTY default. This keeps piped CI output stable while
+// allowing cast recording code to provide its own explicit width.
+func TestWidth_NonTTYFallback(t *testing.T) {
 	cleanup := setupTest(t)
 	defer cleanup()
 
 	if xterm.IsTerminal(streamToFd(Stdout)) {
-		t.Skip("stdout is a real TTY; COLUMNS fallback does not apply")
+		t.Skip("stdout is a real TTY; non-TTY fallback does not apply")
 	}
 
 	tests := []struct {
@@ -147,16 +147,16 @@ func TestWidth_ColumnsFallback(t *testing.T) {
 		expected int
 	}{
 		{
-			name:     "positive COLUMNS is honored on non-TTY",
+			name:     "positive COLUMNS is ignored on non-TTY",
 			columns:  "90",
 			forceTTY: false,
-			expected: 90,
+			expected: 0,
 		},
 		{
-			name:     "COLUMNS wins over force-tty default",
+			name:     "force-tty default wins over COLUMNS",
 			columns:  "80",
 			forceTTY: true,
-			expected: 80,
+			expected: defaultForcedWidth,
 		},
 		{
 			name:     "malformed COLUMNS is ignored",
@@ -1203,4 +1203,32 @@ func TestHeight_EdgeCases(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestIsPiped verifies IsPiped for real stream handles (unlikely to be named
+// pipes under `go test`) and for an invalid Stream value (streamToFile nil branch).
+func TestIsPiped(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	term := New()
+
+	t.Run("invalid stream returns false", func(t *testing.T) {
+		assert.False(t, term.IsPiped(Stream(999)))
+	})
+
+	t.Run("stdin/stdout/stderr do not panic", func(t *testing.T) {
+		for _, s := range []Stream{Stdin, Stdout, Stderr} {
+			assert.NotPanics(t, func() { term.IsPiped(s) })
+		}
+	})
+}
+
+// TestStreamToFile verifies streamToFile returns the expected *os.File for
+// each Stream constant, and nil for an unrecognized value.
+func TestStreamToFile(t *testing.T) {
+	assert.Equal(t, os.Stdin, streamToFile(Stdin))
+	assert.Equal(t, os.Stdout, streamToFile(Stdout))
+	assert.Equal(t, os.Stderr, streamToFile(Stderr))
+	assert.Nil(t, streamToFile(Stream(999)))
 }

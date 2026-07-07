@@ -1554,17 +1554,17 @@ func TestTerminalWidth(t *testing.T) {
 	}
 
 	if terminal.New().IsTTY(terminal.Stdout) {
-		t.Skip("stdout is a real TTY; COLUMNS fallback does not apply")
+		t.Skip("stdout is a real TTY; non-TTY fallback does not apply")
 	}
 
 	// After initialization, the global terminal supplies the width. Stdout is
-	// a pipe here, so the COLUMNS fallback applies.
+	// a pipe here, so COLUMNS is ignored and callers apply their own defaults.
 	t.Setenv("COLUMNS", "97")
 	ioCtx := createTestIOContext()
 	InitFormatter(ioCtx)
 	defer Reset()
-	if width := TerminalWidth(); width != 97 {
-		t.Errorf("TerminalWidth() = %d, want 97 from COLUMNS", width)
+	if width := TerminalWidth(); width != 0 {
+		t.Errorf("TerminalWidth() = %d, want 0 for non-TTY COLUMNS fallback", width)
 	}
 }
 
