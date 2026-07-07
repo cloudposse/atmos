@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	stdio "io"
 	"strings"
 	"sync"
 
@@ -169,6 +170,36 @@ func GetColorProfile() termenv.Profile {
 	defer perf.Track(nil, "ui.GetColorProfile")()
 
 	return lipgloss.DefaultRenderer().ColorProfile()
+}
+
+// NewRenderer returns a lipgloss renderer bound to w that uses the globally
+// detected color profile (terminal detection plus force flags) with a dark
+// background assumed. Use this instead of lipgloss.NewRenderer so per-writer
+// renderers share the single Atmos color-detection pipeline instead of
+// re-detecting capabilities from the writer (which degrades to 16 colors on
+// pipes and breaks the --force-color TrueColor contract).
+func NewRenderer(w stdio.Writer) *lipgloss.Renderer {
+	defer perf.Track(nil, "ui.NewRenderer")()
+
+	renderer := lipgloss.NewRenderer(w)
+	renderer.SetColorProfile(GetColorProfile())
+	renderer.SetHasDarkBackground(true)
+	return renderer
+}
+
+// TerminalWidth returns the stdout width from the global terminal detection:
+// the real TTY size when available, the COLUMNS environment variable on
+// non-TTY streams, or 0 when neither is known (callers apply their own
+// defaults). Returns 0 when the formatter has not been initialized.
+func TerminalWidth() int {
+	defer perf.Track(nil, "ui.TerminalWidth")()
+
+	formatterMu.RLock()
+	defer formatterMu.RUnlock()
+	if globalTerminal == nil {
+		return 0
+	}
+	return globalTerminal.Width(terminal.Stdout)
 }
 
 // getFormatter returns the global formatter instance.

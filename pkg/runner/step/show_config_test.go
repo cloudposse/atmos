@@ -30,11 +30,13 @@ func TestGetShowConfig(t *testing.T) {
 				Show: &schema.ShowConfig{
 					Header:   BoolPtr(true),
 					Progress: BoolPtr(true),
+					Labels:   BoolPtr(false),
 				},
 			},
 			expected: &schema.ShowConfig{
 				Header:   BoolPtr(true),
 				Progress: BoolPtr(true),
+				Labels:   BoolPtr(false),
 			},
 		},
 		{
@@ -43,18 +45,21 @@ func TestGetShowConfig(t *testing.T) {
 				Show: &schema.ShowConfig{
 					Header: BoolPtr(false), // Override workflow's true.
 					Count:  BoolPtr(true),  // Add new setting.
+					Labels: BoolPtr(true),  // Override workflow's false.
 				},
 			},
 			workflow: &schema.WorkflowDefinition{
 				Show: &schema.ShowConfig{
 					Header:   BoolPtr(true),
 					Progress: BoolPtr(true),
+					Labels:   BoolPtr(false),
 				},
 			},
 			expected: &schema.ShowConfig{
 				Header:   BoolPtr(false), // From step.
 				Progress: BoolPtr(true),  // From workflow.
 				Count:    BoolPtr(true),  // From step.
+				Labels:   BoolPtr(true),  // From step.
 			},
 		},
 		{
@@ -91,6 +96,7 @@ func TestShowHelpers(t *testing.T) {
 		command  bool
 		count    bool
 		progress bool
+		labels   bool
 	}{
 		{
 			name:     "nil_config_returns_false_for_all",
@@ -100,6 +106,7 @@ func TestShowHelpers(t *testing.T) {
 			command:  false,
 			count:    false,
 			progress: false,
+			labels:   true,
 		},
 		{
 			name:     "empty_config_returns_false_for_all",
@@ -109,6 +116,7 @@ func TestShowHelpers(t *testing.T) {
 			command:  false,
 			count:    false,
 			progress: false,
+			labels:   true,
 		},
 		{
 			name: "explicit_false_returns_false",
@@ -118,12 +126,14 @@ func TestShowHelpers(t *testing.T) {
 				Command:  BoolPtr(false),
 				Count:    BoolPtr(false),
 				Progress: BoolPtr(false),
+				Labels:   BoolPtr(false),
 			},
 			header:   false,
 			flags:    false,
 			command:  false,
 			count:    false,
 			progress: false,
+			labels:   false,
 		},
 		{
 			name: "explicit_true_returns_true",
@@ -133,12 +143,14 @@ func TestShowHelpers(t *testing.T) {
 				Command:  BoolPtr(true),
 				Count:    BoolPtr(true),
 				Progress: BoolPtr(true),
+				Labels:   BoolPtr(true),
 			},
 			header:   true,
 			flags:    true,
 			command:  true,
 			count:    true,
 			progress: true,
+			labels:   true,
 		},
 		{
 			name: "mixed_values",
@@ -151,6 +163,7 @@ func TestShowHelpers(t *testing.T) {
 			command:  true,
 			count:    false,
 			progress: false,
+			labels:   true,
 		},
 	}
 
@@ -162,6 +175,7 @@ func TestShowHelpers(t *testing.T) {
 			assert.Equal(t, tt.command, ShowCommand(tt.cfg), "ShowCommand mismatch")
 			assert.Equal(t, tt.count, ShowCount(tt.cfg), "ShowCount mismatch")
 			assert.Equal(t, tt.progress, ShowProgress(tt.cfg), "ShowProgress mismatch")
+			assert.Equal(t, tt.labels, ShowLabels(tt.cfg), "ShowLabels mismatch")
 		})
 	}
 }
@@ -192,15 +206,18 @@ func TestMergeShowConfig(t *testing.T) {
 			dst: &schema.ShowConfig{
 				Header: BoolPtr(true),
 				Flags:  BoolPtr(true),
+				Labels: BoolPtr(true),
 			},
 			src: &schema.ShowConfig{
 				Header:  BoolPtr(false),
 				Command: BoolPtr(true),
+				Labels:  BoolPtr(false),
 			},
 			expected: &schema.ShowConfig{
 				Header:  BoolPtr(false), // Overridden.
 				Flags:   BoolPtr(true),  // Preserved.
 				Command: BoolPtr(true),  // Added.
+				Labels:  BoolPtr(false), // Overridden.
 			},
 		},
 	}

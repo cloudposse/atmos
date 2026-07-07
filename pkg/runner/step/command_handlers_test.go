@@ -18,6 +18,7 @@ func TestCommandHandlersRegistration(t *testing.T) {
 	}{
 		{"atmos", CategoryCommand, false},
 		{"shell", CategoryCommand, false},
+		{"script", CategoryCommand, false},
 		{"container", CategoryCommand, false},
 	}
 
@@ -149,6 +150,67 @@ func TestShellHandlerValidation(t *testing.T) {
 				Output:  "none",
 			},
 			expectErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := handler.Validate(tt.step)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestScriptHandlerValidation(t *testing.T) {
+	handler, ok := Get("script")
+	require.True(t, ok)
+
+	tests := []struct {
+		name      string
+		step      *schema.WorkflowStep
+		expectErr bool
+	}{
+		{
+			name: "valid script",
+			step: &schema.WorkflowStep{
+				Name:        "test",
+				Type:        "script",
+				Interpreter: "python3",
+				Script:      "print('hello')",
+			},
+		},
+		{
+			name: "missing interpreter",
+			step: &schema.WorkflowStep{
+				Name:   "test",
+				Type:   "script",
+				Script: "print('hello')",
+			},
+			expectErr: true,
+		},
+		{
+			name: "missing script",
+			step: &schema.WorkflowStep{
+				Name:        "test",
+				Type:        "script",
+				Interpreter: "python3",
+			},
+			expectErr: true,
+		},
+		{
+			name: "rejects command",
+			step: &schema.WorkflowStep{
+				Name:        "test",
+				Type:        "script",
+				Interpreter: "python3",
+				Script:      "print('hello')",
+				Command:     "python3 - <<'PY'",
+			},
+			expectErr: true,
 		},
 	}
 
@@ -408,4 +470,5 @@ func TestCommandHandlersByCategory(t *testing.T) {
 	}
 	assert.Contains(t, handlerNames, "atmos")
 	assert.Contains(t, handlerNames, "shell")
+	assert.Contains(t, handlerNames, "script")
 }

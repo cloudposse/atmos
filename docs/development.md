@@ -44,6 +44,7 @@ atmos test             # Run short tests
 atmos test --full      # Run full tests
 atmos build     # Build the Atmos binary
 atmos dev quick        # Quick build and test
+atmos dev generate snapshots --all  # Regenerate all CLI golden snapshots
 atmos dev --help       # Show all available dev commands
 ```
 
@@ -56,6 +57,8 @@ atmos build     # Build the Atmos binary
 atmos test             # Run short tests
 atmos test --full      # Run full tests
 atmos lint changed     # Run golangci-lint on changed files
+# Regenerate focused CLI golden snapshots
+atmos dev generate snapshots --filter 'TestCLICommands/check_atmos_--help_in_empty-dir'
 ```
 
 ## Pre-commit Hooks

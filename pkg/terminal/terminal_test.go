@@ -1,11 +1,13 @@
 package terminal
 
 import (
+	"os"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	xterm "golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -20,7 +22,7 @@ func setupTest(t *testing.T) func() {
 	// Reset viper for clean test state
 	viper.Reset()
 
-	for _, envVar := range []string{"NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "FORCE_COLOR", "TERM", "COLORTERM", "CI"} {
+	for _, envVar := range []string{"NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "FORCE_COLOR", "TERM", "COLORTERM", "CI", "COLUMNS"} {
 		t.Setenv(envVar, "")
 	}
 
@@ -123,6 +125,72 @@ func TestForceTTY_Width(t *testing.T) {
 				// Just verify it doesn't panic
 				assert.NotNil(t, term)
 			}
+		})
+	}
+}
+
+// TestWidth_NonTTYFallback verifies non-TTY streams ignore COLUMNS and use
+// only the explicit forced-TTY default. This keeps piped CI output stable while
+// allowing cast recording code to provide its own explicit width.
+func TestWidth_NonTTYFallback(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	if xterm.IsTerminal(streamToFd(Stdout)) {
+		t.Skip("stdout is a real TTY; non-TTY fallback does not apply")
+	}
+
+	tests := []struct {
+		name     string
+		columns  string
+		forceTTY bool
+		expected int
+	}{
+		{
+			name:     "positive COLUMNS is ignored on non-TTY",
+			columns:  "90",
+			forceTTY: false,
+			expected: 0,
+		},
+		{
+			name:     "force-tty default wins over COLUMNS",
+			columns:  "80",
+			forceTTY: true,
+			expected: defaultForcedWidth,
+		},
+		{
+			name:     "malformed COLUMNS is ignored",
+			columns:  "wide",
+			forceTTY: false,
+			expected: 0,
+		},
+		{
+			name:     "zero COLUMNS is ignored",
+			columns:  "0",
+			forceTTY: false,
+			expected: 0,
+		},
+		{
+			name:     "negative COLUMNS is ignored",
+			columns:  "-5",
+			forceTTY: false,
+			expected: 0,
+		},
+		{
+			name:     "malformed COLUMNS falls back to force-tty default",
+			columns:  "wide",
+			forceTTY: true,
+			expected: defaultForcedWidth,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("COLUMNS", tt.columns)
+			viper.Set("force-tty", tt.forceTTY)
+
+			term := New()
+			assert.Equal(t, tt.expected, term.Width(Stdout))
 		})
 	}
 }
@@ -755,6 +823,15 @@ func TestDetectColorProfile_RespectsTTY(t *testing.T) {
 			reason:   "Should return ColorTrue for non-TTY with --force-color",
 		},
 		{
+			name: "Non-TTY with CLICOLOR_FORCE",
+			config: Config{
+				EnvCLIColorForce: true,
+			},
+			isTTY:    false,
+			expected: ColorTrue,
+			reason:   "Should return ColorTrue on pipes with CLICOLOR_FORCE (screengrab recording contract)",
+		},
+		{
 			name: "TTY with no-color",
 			config: Config{
 				NoColor: true,
@@ -1126,4 +1203,32 @@ func TestHeight_EdgeCases(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestIsPiped verifies IsPiped for real stream handles (unlikely to be named
+// pipes under `go test`) and for an invalid Stream value (streamToFile nil branch).
+func TestIsPiped(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	term := New()
+
+	t.Run("invalid stream returns false", func(t *testing.T) {
+		assert.False(t, term.IsPiped(Stream(999)))
+	})
+
+	t.Run("stdin/stdout/stderr do not panic", func(t *testing.T) {
+		for _, s := range []Stream{Stdin, Stdout, Stderr} {
+			assert.NotPanics(t, func() { term.IsPiped(s) })
+		}
+	})
+}
+
+// TestStreamToFile verifies streamToFile returns the expected *os.File for
+// each Stream constant, and nil for an unrecognized value.
+func TestStreamToFile(t *testing.T) {
+	assert.Equal(t, os.Stdin, streamToFile(Stdin))
+	assert.Equal(t, os.Stdout, streamToFile(Stdout))
+	assert.Equal(t, os.Stderr, streamToFile(Stderr))
+	assert.Nil(t, streamToFile(Stream(999)))
 }
