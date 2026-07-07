@@ -33,11 +33,26 @@ func (h *InputHandler) Validate(step *schema.WorkflowStep) error {
 }
 
 // Execute prompts for user input and returns the result.
+//
+// When there is no TTY (e.g. in CI) and a `default` is configured, the default
+// is returned without prompting. When there is no TTY and no `default` is set,
+// resolveInteractive returns ErrStepTTYRequired.
 func (h *InputHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.InputHandler.Execute")()
 
-	if err := h.CheckTTY(step); err != nil {
+	useTTY, err := h.resolveInteractive(step)
+	if err != nil {
 		return nil, err
+	}
+
+	defaultVal, err := h.resolveOptionalValue(ctx, step, vars, step.Default, "default")
+	if err != nil {
+		return nil, err
+	}
+
+	// Non-TTY with a configured default: use the default without prompting.
+	if !useTTY {
+		return NewStepResult(defaultVal), nil
 	}
 
 	prompt, err := h.ResolvePrompt(ctx, step, vars)
@@ -46,11 +61,6 @@ func (h *InputHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	}
 
 	placeholder, err := h.resolveOptionalValue(ctx, step, vars, step.Placeholder, "placeholder")
-	if err != nil {
-		return nil, err
-	}
-
-	defaultVal, err := h.resolveOptionalValue(ctx, step, vars, step.Default, "default")
 	if err != nil {
 		return nil, err
 	}

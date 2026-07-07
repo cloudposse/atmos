@@ -42,11 +42,26 @@ func (h *ChooseHandler) Validate(step *schema.WorkflowStep) error {
 }
 
 // Execute prompts for selection and returns the chosen value.
+//
+// When there is no TTY (e.g. in CI) and a `default` is configured, the default
+// is returned without prompting. When there is no TTY and no `default` is set,
+// resolveInteractive returns ErrStepTTYRequired.
 func (h *ChooseHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.ChooseHandler.Execute")()
 
-	if err := h.CheckTTY(step); err != nil {
+	useTTY, err := h.resolveInteractive(step)
+	if err != nil {
 		return nil, err
+	}
+
+	defaultVal, err := h.resolveDefault(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	// Non-TTY with a configured default: use the default without prompting.
+	if !useTTY {
+		return NewStepResult(defaultVal), nil
 	}
 
 	prompt, err := h.ResolvePrompt(ctx, step, vars)
@@ -55,11 +70,6 @@ func (h *ChooseHandler) Execute(ctx context.Context, step *schema.WorkflowStep, 
 	}
 
 	options, err := h.resolveOptions(step, vars)
-	if err != nil {
-		return nil, err
-	}
-
-	defaultVal, err := h.resolveDefault(step, vars)
 	if err != nil {
 		return nil, err
 	}

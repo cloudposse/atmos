@@ -282,6 +282,14 @@ func ExecuteWorkflow(
 	// Initialize step executor with stage count for stage step type.
 	initStepExecutorWithStages(workflowDefinition)
 
+	// Evaluate value-producing YAML functions (!env, !exec) in interactive step
+	// fields (default/prompt/placeholder/options). Workflow manifests are parsed
+	// with UnmarshalYAML, which leaves these as literal "!env ..." strings; this
+	// lets interactive steps source defaults from the environment in CI.
+	if err := resolveWorkflowStepFunctions(&atmosConfig, workflowDefinition); err != nil {
+		return err
+	}
+
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
@@ -515,6 +523,25 @@ func ExecuteWorkflow(
 				WithHint("Each step must specify a valid type: 'atmos', 'shell', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
 				WithExitCode(1).
 				Err()
+		}
+
+		// Resolve step-variable templates ({{ .steps.* }}, {{ .env.* }},
+		// {{ .flags.* }}) in the command for command-bearing step types, so values
+		// captured by earlier steps (e.g. interactive input/choose) can be consumed
+		// by shell/atmos/exec steps — parity with custom command steps.
+		if workflowCommandSupportsTemplating(commandType) {
+			resolvedCommand, resolveErr := resolveWorkflowStepCommand(command, stepEnv)
+			if resolveErr != nil {
+				return errUtils.Build(errUtils.ErrWorkflowStepFailed).
+					WithCause(resolveErr).
+					WithTitle(WorkflowErrTitle).
+					WithContext("workflow", workflow).
+					WithContext("step", step.Name).
+					WithExplanation("Failed to resolve templates in the step command").
+					WithExitCode(1).
+					Err()
+			}
+			command = resolvedCommand
 		}
 
 		// If this step will be enclosed in a CI log group, mark the subprocess
