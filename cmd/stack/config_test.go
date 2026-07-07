@@ -132,7 +132,13 @@ func TestProvenanceFileForComponentPath_NoProvenanceForPath(t *testing.T) {
 }
 
 func TestRelativePathForStackDisplay(t *testing.T) {
-	abs := filepath.Join(string(filepath.Separator), "repo", "stacks", "deploy", "prod.yaml")
+	// Use a real, OS-native absolute directory (with a drive letter on
+	// Windows) rather than a synthetic filepath.Separator-prefixed string:
+	// on Windows, filepath.IsAbs requires a volume name, so a drive-less
+	// rooted path like `\repo\stacks` is not actually "absolute" and would
+	// hit the early-return branch instead of exercising filepath.Rel.
+	base := t.TempDir()
+	abs := filepath.Join(base, "deploy", "prod.yaml")
 
 	tests := []struct {
 		name     string
@@ -149,25 +155,25 @@ func TestRelativePathForStackDisplay(t *testing.T) {
 		{
 			name:     "normal relative case",
 			file:     abs,
-			basePath: filepath.Join(string(filepath.Separator), "repo", "stacks"),
+			basePath: base,
 			want:     filepath.ToSlash(filepath.Join("deploy", "prod.yaml")),
 		},
 		{
 			name:     "rel is dot returns file as-is",
-			file:     filepath.Join(string(filepath.Separator), "repo", "stacks"),
-			basePath: filepath.Join(string(filepath.Separator), "repo", "stacks"),
-			want:     filepath.ToSlash(filepath.Join(string(filepath.Separator), "repo", "stacks")),
+			file:     base,
+			basePath: base,
+			want:     filepath.ToSlash(base),
 		},
 		{
 			name:     "rel escapes basePath (..) returns file as-is",
-			file:     filepath.Join(string(filepath.Separator), "repo", "other", "prod.yaml"),
-			basePath: filepath.Join(string(filepath.Separator), "repo", "stacks"),
-			want:     filepath.ToSlash(filepath.Join(string(filepath.Separator), "repo", "other", "prod.yaml")),
+			file:     filepath.Join(filepath.Dir(base), "other", "prod.yaml"),
+			basePath: base,
+			want:     filepath.ToSlash(filepath.Join(filepath.Dir(base), "other", "prod.yaml")),
 		},
 		{
 			name:     "non-absolute file returns as-is even with basePath set",
 			file:     filepath.Join("relative", "prod.yaml"),
-			basePath: filepath.Join(string(filepath.Separator), "repo", "stacks"),
+			basePath: base,
 			want:     filepath.ToSlash(filepath.Join("relative", "prod.yaml")),
 		},
 	}
