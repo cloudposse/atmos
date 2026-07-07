@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -65,4 +66,31 @@ workflows:
 	assert.True(t, step.Container.IsEnabled())
 	assert.Equal(t, "node:22", step.Container.Image)
 	assert.Equal(t, "test", step.Container.Env["NODE_ENV"])
+}
+
+// TestWorkflowContainerUnmarshalRejectsInvalidScalar verifies a non-boolean scalar
+// value for `container:` fails to decode, rather than being silently coerced.
+func TestWorkflowContainerUnmarshalRejectsInvalidScalar(t *testing.T) {
+	var c WorkflowContainer
+	err := yaml.Unmarshal([]byte("not-a-bool"), &c)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
+}
+
+// TestWorkflowContainerUnmarshalRejectsInvalidMapping verifies a mapping whose fields
+// fail typed decoding (e.g. image is a list, not a string) surfaces a wrapped error.
+func TestWorkflowContainerUnmarshalRejectsInvalidMapping(t *testing.T) {
+	var c WorkflowContainer
+	err := yaml.Unmarshal([]byte("image: [not, a, string]\n"), &c)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
+}
+
+// TestWorkflowContainerUnmarshalRejectsSequence verifies the default-kind branch
+// rejects a YAML sequence value for `container:`.
+func TestWorkflowContainerUnmarshalRejectsSequence(t *testing.T) {
+	var c WorkflowContainer
+	err := yaml.Unmarshal([]byte("- a\n- b\n"), &c)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidWorkflowContainer))
 }

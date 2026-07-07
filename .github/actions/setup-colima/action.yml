@@ -52,35 +52,45 @@ runs:
           brew untap aws/tap
         fi
 
-        run_with_timeout 600 brew install colima docker qemu
+        run_with_timeout 420 brew install colima docker
 
         # Colima/Lima occasionally leaves the VM half-started on macOS runners
         # (SSH/DHCP timeout while QEMU is still exiting). Start from a clean
         # instance and retry before failing the job. Also preflight Docker
         # and pull the k3s image here so emulator startup does not discover a
         # broken runtime halfway through `atmos test`.
-        run_with_timeout 180 colima delete --data --force || true
-        for attempt in 1 2 3; do
-          echo "::group::Start Colima attempt ${attempt}"
-          if run_with_timeout 720 colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20 \
-            && run_with_timeout 120 docker info \
-            && run_with_timeout 600 docker pull rancher/k3s:latest; then
-            echo "::endgroup::"
-            break
-          fi
-
-          status=$?
-          echo "::endgroup::"
-          diagnose_colima
+        start_colima() {
+          local status=1
 
           run_with_timeout 180 colima delete --data --force || true
 
-          if [ "$attempt" -eq 3 ]; then
-            exit "$status"
-          fi
+          for vm_type in vz qemu; do
+            if [ "$vm_type" = "qemu" ]; then
+              run_with_timeout 420 brew install qemu
+            fi
 
-          sleep $((attempt * 20))
-        done
+            for attempt in 1 2; do
+              echo "::group::Start Colima (${vm_type}) attempt ${attempt}"
+              if run_with_timeout 480 colima start --runtime docker --vm-type "$vm_type" --cpu 2 --memory 4 --disk 20 \
+                && run_with_timeout 120 docker info \
+                && run_with_timeout 600 docker pull rancher/k3s:latest; then
+                echo "::endgroup::"
+                return 0
+              fi
+
+              status=$?
+              echo "::endgroup::"
+              diagnose_colima
+
+              run_with_timeout 180 colima delete --data --force || true
+              sleep $((attempt * 20))
+            done
+          done
+
+          return "$status"
+        }
+
+        start_colima
 
         docker context use colima || true
         run_with_timeout 120 docker version

@@ -65,6 +65,7 @@ commands:
               set -eu
               root="$(git rev-parse --show-toplevel)"
               cd "$root"
+              export ATMOS_DEV_SHELL=1
               export PATH="$root/build:$PATH"
               exec "${SHELL:-/bin/sh}"
 
@@ -116,3 +117,66 @@ commands:
         description: Run tests with coverage report
         steps:
           - atmos test coverage
+
+      - name: generate
+        description: Generate development artifacts
+        commands:
+          - name: notices
+            description: Regenerate NOTICE from Go dependency licenses
+            working_directory: !repo-root .
+            env: *go_auto_env
+            steps:
+              - type: spin
+                title: Generating NOTICE from Go dependency licenses
+                command: ./scripts/generate-notice.sh
+                timeout: 10m
+              - type: toast
+                level: success
+                content: NOTICE regenerated.
+
+          - name: mocks
+            description: Regenerate auth/http mocks using go:generate directives
+            env: *go_auto_env
+            steps:
+              - type: atmos
+                command: test generate-auth-http-mocks
+
+          - name: snapshots
+            description: Regenerate CLI golden snapshots
+            working_directory: !repo-root .
+            env:
+              - key: GOTOOLCHAIN
+                value: auto
+              - key: ATMOS_SNAPSHOT_FILTER
+                value: "{{ .Flags.filter }}"
+            flags:
+              - name: all
+                type: bool
+                description: Regenerate all CLI golden snapshots
+                default: false
+              - name: filter
+                type: string
+                description: Go test -run regex for focused CLI snapshot regeneration
+                default: ""
+            steps:
+              - type: shell
+                command: |
+                  set -eu
+                  filter="${ATMOS_SNAPSHOT_FILTER:-}"
+
+                  selected=0
+                  [ "{{ .Flags.all }}" = "true" ] && selected=$((selected + 1))
+                  [ -n "$filter" ] && selected=$((selected + 1))
+
+                  if [ "$selected" -ne 1 ]; then
+                    echo "Usage: atmos dev generate snapshots --all" >&2
+                    echo "   or: atmos dev generate snapshots --filter '<go-test-run-regex>'" >&2
+                    echo "Select exactly one of --all or --filter." >&2
+                    exit 1
+                  fi
+
+                  if [ "{{ .Flags.all }}" = "true" ]; then
+                    go test ./tests -v -count=1 -timeout 40m -regenerate-snapshots
+                  else
+                    go test ./tests -v -count=1 -timeout 40m -run "$filter" -regenerate-snapshots
+                  fi

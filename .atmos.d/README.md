@@ -4,7 +4,7 @@ This directory contains custom Atmos commands that are automatically loaded when
 
 ## Command Groups
 
-- `dev.yaml` - local setup, `atmos dev shell`, and quick validation workflow commands
+- `dev.yaml` - local setup, `atmos dev shell`, quick validation, and generated artifact commands including snapshots
 - `build.yaml` - `atmos build deps`, `atmos build`, `atmos build version`, and README generation
 - `check.yaml` - `atmos check staged`, `atmos check pr`, `atmos check all`, and Codecov validation
 - `format.yaml` - `atmos format staged`, `atmos format pr`, and `atmos format all`
