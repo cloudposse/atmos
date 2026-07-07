@@ -254,8 +254,22 @@ func (m *masker) SetEnabled(enabled bool) {
 	m.enabled = enabled
 }
 
+func (m *masker) SetReplacement(replacement string) {
+	defer perf.Track(nil, "io.masker.SetReplacement")()
+
+	if replacement == "" {
+		replacement = MaskReplacement
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.replacement = replacement
+}
+
 func (m *masker) Replacement() string {
 	defer perf.Track(nil, "io.masker.Replacement")()
 
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.replacement
 }

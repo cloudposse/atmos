@@ -1,6 +1,7 @@
 package flags
 
 import (
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -110,6 +111,10 @@ func (b *GlobalOptionsBuilder) registerTerminalFlags(defaults *global.Flags) {
 	b.options = append(b.options, WithStringFlag("pager", "", defaults.Pager.Value(), "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)"))
 	b.options = append(b.options, WithEnvVars("pager", "ATMOS_PAGER", "PAGER"))
 	b.options = append(b.options, WithNoOptDefVal("pager", "true"))
+
+	b.options = append(b.options, WithStringFlag(cfg.CastFlagName, "", defaults.Cast, "Record command output as an asciinema cast (--cast for generated path, --cast=path with a .cast, .gif, .mp4, .html, .ascii, .png, .jpg, or .jpeg extension for explicit output)"))
+	b.options = append(b.options, WithEnvVars(cfg.CastFlagName, cfg.CastEnvVarName))
+	b.options = append(b.options, WithNoOptDefValNoSpaceValue(cfg.CastFlagName, cfg.CastFlagAutoValue))
 }
 
 // registerAuthenticationFlags registers authentication flags.

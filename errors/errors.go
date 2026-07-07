@@ -3,6 +3,8 @@ package errors
 import (
 	"errors"
 	"fmt"
+
+	schemaPkg "github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -46,6 +48,17 @@ var (
 	ErrUIFormatterNotInitialized             = errors.New("ui formatter not initialized")
 	ErrMarkdownRendererInit                  = errors.New("failed to initialize markdown renderer")
 	ErrMarkdownRender                        = errors.New("failed to render markdown content")
+	ErrCastOutputExists                      = errors.New("cast output already exists")
+	ErrEmptyCastFile                         = errors.New("empty cast file")
+	ErrUnsupportedCastOutputExtension        = errors.New("unsupported cast output extension")
+	ErrRenderOutputExists                    = errors.New("render output already exists")
+	ErrMissingAgg                            = errors.New("missing required tool `agg`; install asciinema agg and retry")
+	ErrMissingFFmpeg                         = errors.New("missing required tool `ffmpeg`; install FFmpeg and retry")
+	ErrMissingRenderOutput                   = errors.New("specify an output path with --output")
+	ErrUnknownSessionAction                  = errors.New("unknown cast session action type")
+	ErrWaitTimeout                           = errors.New("timed out waiting for cast output")
+	ErrUnsupportedCastKey                    = errors.New("unsupported cast key")
+	ErrMissingExecCommand                    = errors.New("exec recording requires a command")
 	ErrIOContextNotInitialized               = errors.New("global I/O context is nil after initialization")
 	ErrNoFilesFound                          = errors.New("no files found in directory")
 	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
@@ -57,6 +70,23 @@ var (
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
 	ErrInvalidTemplateSettings               = errors.New("invalid template settings")
 	ErrTemplateEvaluation                    = errors.New("template evaluation failed")
+	ErrCommandEnvDecodeFailed                = schemaPkg.ErrCommandEnvDecodeFailed
+	ErrCastStepRequiresSteps                 = errors.New("cast step requires nested steps")
+	ErrCastSessionRequiresActions            = errors.New("cast session step requires session actions")
+	ErrInvalidCastMode                       = errors.New("cast step has invalid mode")
+	ErrWriteActionRequiresText               = errors.New("write action requires text")
+	ErrKeyActionRequiresKey                  = errors.New("key action requires key")
+	ErrPauseActionRequiresDuration           = errors.New("pause action requires duration")
+	ErrWaitActionRequiresTextOrRegex         = errors.New("wait action requires exactly one of text or regex")
+	ErrUnsupportedSessionAction              = errors.New("unsupported session action type")
+	ErrInvalidSimulateMode                   = errors.New("simulate step has invalid mode")
+	ErrSimulateTypedRequiresText             = errors.New("simulate typed step requires text")
+	ErrInvalidSimulateJitter                 = errors.New("simulate typed step jitter must be between 0 and 1")
+	ErrUnsupportedPromptStyle                = errors.New("unsupported simulate prompt style")
+	ErrWorkdirPathRequired                   = errors.New("workdir path is required")
+	ErrWorkdirSourceRequired                 = errors.New("workdir source is required")
+	ErrWorkdirSourceKeyInvalid               = errors.New("workdir source map keys must be strings")
+	ErrUnsafeVendorTarget                    = errors.New("unsafe vendor target directory")
 	ErrInvalidConfig                         = errors.New("invalid configuration")
 	ErrRefuseDeleteSymbolicLink              = errors.New("refusing to delete symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
@@ -94,6 +124,7 @@ var (
 	ErrAuthConsole            = errors.New("auth console operation failed")
 	ErrProviderNotSupported   = errors.New("provider does not support this operation")
 	ErrUnknownServiceAlias    = errors.New("unknown service alias")
+	ErrUnknownHelpTopic       = errors.New("unknown help topic")
 	ErrTTYRequired            = errors.New("requires a TTY")
 	ErrInvalidAuthManagerType = errors.New("invalid authManager type")
 

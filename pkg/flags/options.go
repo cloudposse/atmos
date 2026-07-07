@@ -295,6 +295,21 @@ func WithNoOptDefVal(flagName, value string) Option {
 	}
 }
 
+// WithNoOptDefValNoSpaceValue sets NoOptDefVal for a string flag without
+// allowing "--flag value" preprocessing. This is for flags where the bare
+// flag has meaning and the following positional argument must remain positional.
+func WithNoOptDefValNoSpaceValue(flagName, value string) Option {
+	defer perf.Track(nil, "flags.WithNoOptDefValNoSpaceValue")()
+
+	return func(cfg *parserConfig) {
+		flag := cfg.registry.Get(flagName)
+		if strFlag, ok := flag.(*StringFlag); ok {
+			strFlag.NoOptDefVal = value
+			strFlag.NoOptDefValNoSpaceValue = true
+		}
+	}
+}
+
 // WithValidValues sets the list of valid values for a string flag.
 // During parsing, the flag value will be validated against this list.
 //

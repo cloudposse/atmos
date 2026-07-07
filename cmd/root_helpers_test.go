@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -1685,6 +1686,42 @@ func TestGetTerminalWidth(t *testing.T) {
 	width := getTerminalWidth()
 	assert.Greater(t, width, 0)
 	assert.LessOrEqual(t, width, 120) // Max width is 120
+}
+
+// TestGetTerminalWidthPrecedence covers the layout-width decision:
+// detected real terminal width > default, capped at Settings.Terminal.MaxWidth
+// when configured. A zero-value config must never be required for a sane result
+// (help renders without atmos.yaml).
+func TestGetTerminalWidthPrecedence(t *testing.T) {
+	originalConfig := atmosConfig
+	t.Cleanup(func() {
+		atmosConfig = originalConfig
+		ui.Reset()
+	})
+
+	t.Run("default when no terminal width is known", func(t *testing.T) {
+		ui.Reset() // TerminalWidth() returns 0 when uninitialized.
+		atmosConfig = schema.AtmosConfiguration{}
+		assert.Equal(t, 120, getTerminalWidth())
+	})
+
+	t.Run("MaxWidth config caps the width", func(t *testing.T) {
+		ui.Reset()
+		atmosConfig = schema.AtmosConfiguration{}
+		atmosConfig.Settings.Terminal.MaxWidth = 60
+		assert.Equal(t, 60, getTerminalWidth())
+	})
+
+	t.Run("COLUMNS is ignored on non-TTY", func(t *testing.T) {
+		if terminal.New().IsTTY(terminal.Stdout) {
+			t.Skip("stdout is a real TTY; non-TTY fallback does not apply")
+		}
+		t.Setenv("COLUMNS", "90")
+		ui.ReinitFormatter()
+		t.Cleanup(ui.Reset)
+		atmosConfig = schema.AtmosConfiguration{}
+		assert.Equal(t, 120, getTerminalWidth())
+	})
 }
 
 // TestCalculateMaxFlagWidth tests flag width calculation.

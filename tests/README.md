@@ -345,9 +345,9 @@ The tests will automatically set some environment variables:
 - `HOME` is set to an empty temporary directory
 - `XDG_*` is set to an empty temporary directory
 
-### Flags
+### Snapshot Regeneration
 
-To regenerate ALL snapshots pass the `-regenerate-snapshots` flag.
+To regenerate ALL snapshots, use the Atmos development command:
 
 > ![WARNING]
 >
@@ -359,13 +359,19 @@ To regenerate ALL snapshots pass the `-regenerate-snapshots` flag.
 > git diff tests/snapshots
 > ```
 
+```shell
+atmos dev generate snapshots --all
+```
+
 To regenerate the snapshots for a specific test, just run:
 
 (replace `TestCLICommands/check_atmos_--help_in_empty-dir` with your test name)
 
 ```shell
-go test ./tests -v -run 'TestCLICommands/check_atmos_--help_in_empty-dir' -timeout 2m -regenerate-snapshots
+atmos dev generate snapshots --filter 'TestCLICommands/check_atmos_--help_in_empty-dir'
 ```
+
+The `--filter` value is passed to Go's `-run` flag as a regular expression.
 
 After generating new golden snapshots, don't forget to add them.
 

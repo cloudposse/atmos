@@ -69,7 +69,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60 # v2.1.2
         if: matrix.target == 'linux'
 
-      - name: Build
+      - name: Announce build target
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         run: echo "Building on ${{ matrix.os }}"
 
@@ -102,17 +102,22 @@ jobs:
       - name: Get dependencies
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         run: |
-          atmos build deps
+          go mod download
 
       - name: Build
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        shell: bash
         run: |
-          atmos build --target ${{ matrix.target }}
+          sh scripts/build-atmos.sh ${{ matrix.target }} test
 
       - name: Version
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        shell: bash
         run: |
-          atmos build version --target ${{ matrix.target }}
+          case "${{ matrix.target }}" in
+            windows) ./build/atmos.exe version ;;
+            *) chmod +x ./build/atmos && ./build/atmos version ;;
+          esac
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -533,12 +538,23 @@ jobs:
       # kubernetes`), which runs the privileged k3s container itself on the runner's
       # Docker, and the helmfile component harvests its kubeconfig via `!emulator`.
 
-      - name: Start Docker-compatible runtime on macOS
-        if: matrix.flavor.target == 'macos'
-        timeout-minutes: 45
-        uses: ./.github/actions/setup-colima
-
+      # Download the build artifact before starting Colima. Colima's VM bring-up
+      # attaches new virtual network interfaces on the macOS host, which can
+      # transiently disrupt host DNS resolution right as it happens; this is the
+      # only step in the job that needs public DNS from the host, so keep it away
+      # from that window. actions/download-artifact also doesn't retry network
+      # errors like ENOTFOUND (only retries HTTP 5xx/429), so add a manual retry
+      # as defense-in-depth, mirroring the retry loop used below for `atmos test`.
       - name: Download build artifacts
+        id: download_artifacts_1
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: build-artifacts-${{ matrix.flavor.artifact }}
+          path: /usr/local/bin
+
+      - name: Download build artifacts (retry)
+        if: steps.download_artifacts_1.outcome == 'failure'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: build-artifacts-${{ matrix.flavor.artifact }}
@@ -546,6 +562,11 @@ jobs:
 
       - name: Set execute permissions on atmos
         run: chmod +x /usr/local/bin/atmos
+
+      - name: Start Docker-compatible runtime on macOS
+        if: matrix.flavor.target == 'macos'
+        timeout-minutes: 45
+        uses: ./.github/actions/setup-colima
 
       - name: Write a default AWS profile to the AWS config file
         run: |
