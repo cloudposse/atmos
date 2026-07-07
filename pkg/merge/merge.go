@@ -205,30 +205,42 @@ func copyMapValue(value reflect.Value, elemType reflect.Type) reflect.Value {
 	return value
 }
 
-// normalizeMapReflect converts a typed map to map[string]any (for string keys) or deep copies it (for non-string keys).
+// normalizeMapReflect converts a typed map to map[string]any (for string or interface{} keys)
+// or deep copies it (for other concrete non-string keys).
 func normalizeMapReflect(rv reflect.Value) any {
 	keyKind := rv.Type().Key().Kind()
 
 	// Empty map - return properly typed empty map.
 	if rv.Len() == 0 {
-		if keyKind != reflect.String {
+		if keyKind != reflect.String && keyKind != reflect.Interface {
 			return reflect.MakeMapWithSize(rv.Type(), 0).Interface()
 		}
 		return make(map[string]any, 0)
 	}
 
 	iter := rv.MapRange()
-	_ = iter // We'll iterate below using Next().
 
-	// Non-string keys: copy to same type, ensuring value type matches Elem().
-	if keyKind != reflect.String {
+	// Concrete non-string, non-interface keys (e.g. map[int]schema.Provider): copy to the same
+	// type, preserving the key type — there is no map[string]any shape to merge into.
+	if keyKind != reflect.String && keyKind != reflect.Interface {
 		return copyNonStringKeyMap(rv, iter)
 	}
 
-	// String keys: convert to map[string]any.
+	// String keys, or interface{} keys (e.g. yaml.v3 decodes a mapping with an unquoted
+	// non-string key like `1:` as map[interface{}]interface{}, not map[string]interface{}):
+	// stringify every key so this collapses onto the same map[string]any shape as an
+	// all-string-keyed sibling map, letting deepMergeNative's map[string]any fast path recurse
+	// into it instead of treating it as an opaque leaf that gets replaced wholesale.
 	result := make(map[string]any, rv.Len())
 	for iter.Next() {
-		result[iter.Key().String()] = deepCopyValue(iter.Value().Interface())
+		key := iter.Key()
+		var keyStr string
+		if key.Kind() == reflect.String {
+			keyStr = key.String()
+		} else {
+			keyStr = fmt.Sprintf("%v", key.Interface())
+		}
+		result[keyStr] = deepCopyValue(iter.Value().Interface())
 	}
 	return result
 }
