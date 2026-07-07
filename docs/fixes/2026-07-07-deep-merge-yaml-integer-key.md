@@ -141,7 +141,16 @@ for iter.Next() {
     } else {
         keyStr = fmt.Sprintf("%v", key.Interface())
     }
-    result[keyStr] = deepCopyValue(iter.Value().Interface())
+    normalizedVal := deepCopyValue(iter.Value().Interface())
+    if existing, collided := result[keyStr]; collided {
+        if existingMap, ok := existing.(map[string]any); ok {
+            if newMap, ok := normalizedVal.(map[string]any); ok {
+                _ = deepMergeNative(existingMap, newMap, false, false)
+                continue
+            }
+        }
+    }
+    result[keyStr] = normalizedVal
 }
 return result
 ```
@@ -150,6 +159,21 @@ No other call sites needed changes: `deepCopyValue` (merge.go:54) and `deepMerge
 (merge_native.go:41) already route any value that isn't a fast-path `map[string]any`/`[]any`/
 primitive through this function, on both the "key only in src" insertion path and the "both sides
 are maps after normalization" recursion path.
+
+### Follow-up: collision on stringified keys (PR #2700 review)
+
+Stringifying interface{} keys introduces a new (narrow) risk that didn't exist before this fix:
+two *distinct* original keys can stringify to the same string — e.g. YAML `1` (int) and `1.0`
+(float) both format to `"1"` via `fmt.Sprintf("%v", ...)`. Before this fix, `map[interface{}]interface{}`
+kept its native keys, so such a collision was impossible; a naive stringify-and-overwrite would
+silently drop one entry, and since Go map iteration order is unspecified, which entry survived
+would vary run to run.
+
+The fix above detects the collision (`result[keyStr]` already set) and, when both the existing and
+new values are `map[string]any`, merges them via `deepMergeNative` instead of overwriting — so no
+data is lost. Non-map collisions (rare in practice) still fall back to overwrite, which is no worse
+than not having the case at all. See
+`TestNormalizeMapReflect_CollidingStringifiedKeysAreMerged` for the regression test.
 
 ---
 

@@ -231,6 +231,15 @@ func normalizeMapReflect(rv reflect.Value) any {
 	// stringify every key so this collapses onto the same map[string]any shape as an
 	// all-string-keyed sibling map, letting deepMergeNative's map[string]any fast path recurse
 	// into it instead of treating it as an opaque leaf that gets replaced wholesale.
+	//
+	// Distinct original keys can still stringify to the same string (e.g. YAML `1` and `1.0`,
+	// or `true` and a differently-quoted equivalent) — this is the same collision risk any
+	// YAML-to-map[string]any normalization has. Map[interface{}]interface{} iteration order is
+	// unspecified, so a plain overwrite would silently and non-deterministically drop one
+	// entry's data. If both colliding values are maps, merge them instead of dropping either;
+	// otherwise fall back to overwrite (still non-deterministic, but no worse than before this
+	// case existed, and collisions of non-map scalars under ambiguous keys are vanishingly rare
+	// in real stack configs).
 	result := make(map[string]any, rv.Len())
 	for iter.Next() {
 		key := iter.Key()
@@ -240,7 +249,16 @@ func normalizeMapReflect(rv reflect.Value) any {
 		} else {
 			keyStr = fmt.Sprintf("%v", key.Interface())
 		}
-		result[keyStr] = deepCopyValue(iter.Value().Interface())
+		normalizedVal := deepCopyValue(iter.Value().Interface())
+		if existing, collided := result[keyStr]; collided {
+			if existingMap, ok := existing.(map[string]any); ok {
+				if newMap, ok := normalizedVal.(map[string]any); ok {
+					_ = deepMergeNative(existingMap, newMap, false, false)
+					continue
+				}
+			}
+		}
+		result[keyStr] = normalizedVal
 	}
 	return result
 }

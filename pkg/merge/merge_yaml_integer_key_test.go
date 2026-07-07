@@ -64,3 +64,28 @@ func TestNormalizeMapReflect_InterfaceKeyedMap(t *testing.T) {
 	assert.Equal(t, "one", stringKeyed["1"])
 	assert.Equal(t, "two", stringKeyed["name"])
 }
+
+// TestNormalizeMapReflect_CollidingStringifiedKeysAreMerged covers a review finding on PR #2700:
+// distinct original keys can stringify to the same string (e.g. int(1) and float64(1), both
+// formatting to "1" via fmt.Sprintf("%v", ...)). Map[interface{}]interface{} iteration order is
+// unspecified, so a plain overwrite on collision would silently and non-deterministically drop
+// one entry. When both colliding values are maps, they must be merged so no data is lost.
+func TestNormalizeMapReflect_CollidingStringifiedKeysAreMerged(t *testing.T) {
+	src := map[interface{}]interface{}{
+		1:          map[interface{}]interface{}{"from_int_key": true, "shared": "int_value"},
+		float64(1): map[interface{}]interface{}{"from_float_key": true, "shared": "float_value"},
+	}
+
+	result := deepCopyValue(src)
+
+	stringKeyed, ok := result.(map[string]any)
+	require.True(t, ok, "map[interface{}]interface{} must normalize to map[string]any")
+	require.Len(t, stringKeyed, 1, "colliding keys must merge into a single entry, not two")
+
+	entry, ok := stringKeyed["1"].(map[string]any)
+	require.True(t, ok, "merged collision entry should normalize to map[string]any")
+	assert.Equal(t, true, entry["from_int_key"], "data from the int-keyed entry must survive the collision")
+	assert.Equal(t, true, entry["from_float_key"], "data from the float-keyed entry must survive the collision")
+	assert.Contains(t, []string{"int_value", "float_value"}, entry["shared"],
+		"the overlapping subkey wins non-deterministically, but must hold one of the two values, not be dropped")
+}
