@@ -2,9 +2,9 @@ package asciicast
 
 import (
 	"bufio"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -462,15 +462,11 @@ func RandomID(n int) string {
 
 	const letters = "0123456789abcdef"
 	b := make([]byte, n)
-	f, err := os.Open("/dev/urandom")
-	if err == nil {
-		defer func() { _ = f.Close() }()
-		if _, err := io.ReadFull(f, b); err == nil {
-			for i := range b {
-				b[i] = letters[int(b[i])%len(letters)]
-			}
-			return string(b)
+	if _, err := rand.Read(b); err == nil {
+		for i := range b {
+			b[i] = letters[int(b[i])%len(letters)]
 		}
+		return string(b)
 	}
 	t := time.Now().UnixNano()
 	for i := range b {
