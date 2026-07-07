@@ -55,6 +55,7 @@ const (
 	AtmosYamlFuncAwsRegion               = "!aws.region"
 	AtmosYamlFuncAwsOrganizationID       = "!aws.organization_id"
 	AtmosYamlFuncEmulator                = "!emulator"
+	AtmosYamlFuncVersion                 = "!version"
 
 	DefaultYAMLIndent = 2
 )
@@ -91,6 +92,7 @@ var (
 		AtmosYamlFuncAwsRegion,
 		AtmosYamlFuncAwsOrganizationID,
 		AtmosYamlFuncEmulator,
+		AtmosYamlFuncVersion,
 	}
 
 	// AtmosYamlTagsMap provides O(1) lookup for custom tag checking.
@@ -127,6 +129,7 @@ var (
 		AtmosYamlFuncAwsRegion:               true,
 		AtmosYamlFuncAwsOrganizationID:       true,
 		AtmosYamlFuncEmulator:                true,
+		AtmosYamlFuncVersion:                 true,
 	}
 
 	// ParsedYAML cache stores parsed yaml.Node objects and their position

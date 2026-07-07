@@ -21,6 +21,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
+	"github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -198,46 +199,10 @@ func isOCIAuthRejection(err error) bool {
 }
 
 // getGHCRAuth returns authentication credentials for GitHub Container Registry (ghcr.io).
-// It tries ATMOS_GITHUB_TOKEN first, then falls back to GITHUB_TOKEN.
-// Requires github_username to be configured for authentication.
 func getGHCRAuth(atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, string) {
-	atmosToken := strings.TrimSpace(atmosConfig.Settings.AtmosGithubToken)
-	githubToken := strings.TrimSpace(atmosConfig.Settings.GithubToken)
-	githubUsername := strings.TrimSpace(atmosConfig.Settings.GithubUsername)
-
-	var token string
-	var tokenSource string
-
-	if atmosToken != "" {
-		token = atmosToken
-		tokenSource = "ATMOS_GITHUB_TOKEN"
-	} else if githubToken != "" {
-		token = githubToken
-		tokenSource = "GITHUB_TOKEN"
-	}
-
-	if token == "" {
-		return nil, ""
-	}
-
-	// GHCR requires a username; use configured github_username.
-	username := githubUsername
-	if username == "" {
-		// No safe implicit fallback here; return nil to allow caller to choose anon/fail.
-		log.Warn("GHCR token found but no username provided; set settings.github_username or ATMOS_GITHUB_USERNAME/GITHUB_ACTOR.")
-		return nil, ""
-	}
-
-	authMethod := &authn.Basic{
-		Username: username,
-		Password: token,
-	}
-	authSource := fmt.Sprintf("environment variable (%s with username %s)", tokenSource, username)
-
-	return authMethod, authSource
+	return oci.GHCRAuth(atmosConfig)
 }
 
-// processLayer processes a single OCI layer and extracts its contents to the specified destination directory.
 func processLayer(layer v1.Layer, index int, destDir string) error {
 	layerDesc, err := layer.Digest()
 	if err != nil {
