@@ -64,17 +64,10 @@ Resolved versions land in a committed `versions.lock.yaml`, so local runs and CI
 atmos version track update
 ```
 
-```yaml
-track: prod
-results:
-  - name: checkout
-    from: v6.1.0
-    to: v6.2.0
-    updated: true
-  - name: nginx
-    from: 1.29.0
-    updated: false
-    reason: "1.30.0 released 3d ago; cooldown 14d has not elapsed"
+```shell
+Track  Name      From     To       Updated  Reason
+prod   checkout  v6.1.0   v6.2.0   true
+prod   nginx     1.29.0            false    1.30.0 released 3d ago; cooldown 14d has not elapsed
 ```
 
 File managers then rewrite your actual project files from the lock. Pinned entries get the immutable SHA with the human-readable version as a trailing comment — the same round-trip convention Renovate and Dependabot use:

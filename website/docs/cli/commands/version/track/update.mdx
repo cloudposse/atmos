@@ -24,6 +24,9 @@ atmos version track update [track] [flags]
 
   <dt>`--only`</dt>
   <dd>Limit the update to the named entries. Repeat the flag for multiple entries.</dd>
+
+  <dt>`--format string`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
 </dl>
 
 ## Examples
@@ -39,7 +42,20 @@ atmos version track update prod --group=infrastructure
 atmos version track update prod --only=checkout --only=nginx
 ```
 
-Example output:
+## Example Output
+
+In an interactive terminal, `--format=table` (the default) renders a styled table. Non-interactive
+output (e.g. piped, or `--format=csv`) looks like:
+
+```shell
+> atmos version track update --format=csv
+Track,Name,From,To,Updated,Reason
+prod,checkout,v6.1.0,v6.2.0,true,
+prod,nginx,1.29.0,,false,"1.30.0 released 3d ago; cooldown 14d has not elapsed"
+```
+
+Use `--format=yaml` or `--format=json` for the full-fidelity result, including fields the table
+omits (e.g. digests):
 
 ```yaml
 track: prod

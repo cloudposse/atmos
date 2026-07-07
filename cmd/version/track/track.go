@@ -12,7 +12,11 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/renderer"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // atmosConfig is set by SetAtmosConfig before command execution.
@@ -39,6 +43,9 @@ var (
 	ErrUnsupportedFormat = errUtils.ErrUnsupportedVersionTrackFormat
 )
 
+// formatFlagName is the shared --format flag name used by all track verbs.
+const formatFlagName = "format"
+
 // trackCmd is the parent for all Atmos Version Tracker verbs. The version
 // tracker manages externally versioned dependencies declared in atmos.yaml;
 // the top-level `atmos version` command remains about the Atmos CLI itself.
@@ -50,9 +57,12 @@ var trackCmd = &cobra.Command{
 }
 
 // formatParserOptions returns the flag options shared by all track verbs.
+// The format flag defaults to empty, which resolves to a human-readable,
+// TTY-aware table (matching `version track list`); yaml/json remain
+// available as an explicit opt-in for full-fidelity, machine-readable output.
 func formatParserOptions() []flags.Option {
 	return []flags.Option{
-		flags.WithStringFlag("format", "", "yaml", "Output format: yaml, json"),
+		flags.WithStringFlag(formatFlagName, "", "", "Output format: table, json, yaml, csv, tsv"),
 	}
 }
 
@@ -81,15 +91,60 @@ func trackFromArgs(cmd *cobra.Command, args []string) string {
 	return track
 }
 
-// writeFormatted writes v to the data channel in the requested --format.
+// writeFormatted writes v, the full-fidelity result struct, to the data
+// channel in the requested --format=yaml or --format=json (empty defaults to
+// yaml). Verbs with a curated table view (update/lock/status/diff) check
+// isStructuredFormat first and use writeRows instead for the table default;
+// verbs without one (show/get/add/set/remove) call this directly.
 func writeFormatted(cmd *cobra.Command, v any) error {
-	format, _ := cmd.Flags().GetString("format")
-	switch strings.ToLower(format) {
+	formatStr, _ := cmd.Flags().GetString(formatFlagName)
+	switch strings.ToLower(formatStr) {
 	case "", "yaml":
 		return data.WriteYAML(v)
 	case "json":
 		return data.WriteJSON(v)
 	default:
-		return fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
+		return fmt.Errorf("%w: %q", ErrUnsupportedFormat, formatStr)
 	}
+}
+
+// isStructuredFormat reports whether --format requests full-fidelity
+// yaml/json output (via writeFormatted) rather than the curated table/csv/tsv
+// row view (via writeRows). The default (empty) format resolves to table.
+func isStructuredFormat(cmd *cobra.Command) bool {
+	formatStr, _ := cmd.Flags().GetString(formatFlagName)
+	switch strings.ToLower(formatStr) {
+	case "yaml", "json":
+		return true
+	default:
+		return false
+	}
+}
+
+// writeRows renders rows as a human-readable table by default (TTY-aware),
+// or as csv/tsv on request, via the same pkg/list/renderer pipeline used by
+// `version track list` and `secret list`. An empty rows slice prints
+// emptyMessage instead of an empty table.
+func writeRows(cmd *cobra.Command, columns []column.Config, rows []map[string]any, emptyMessage string) error {
+	if len(rows) == 0 {
+		ui.Info(emptyMessage)
+		return nil
+	}
+
+	formatStr, _ := cmd.Flags().GetString(formatFlagName)
+	formatStr = strings.ToLower(formatStr)
+	switch formatStr {
+	case "", string(format.FormatTable), string(format.FormatCSV), string(format.FormatTSV):
+		// Valid: table (default) or a delimited row export.
+	default:
+		return fmt.Errorf("%w: %q", ErrUnsupportedFormat, formatStr)
+	}
+
+	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
+	if err != nil {
+		return fmt.Errorf("error creating column selector: %w", err)
+	}
+
+	r := renderer.New(nil, selector, nil, format.Format(formatStr), "")
+	return r.Render(rows)
 }

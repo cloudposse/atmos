@@ -2,6 +2,7 @@ package track
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	stdio "io"
 	"os"
@@ -16,7 +17,50 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version/manager"
+	"github.com/cloudposse/atmos/pkg/version/resolver"
 )
+
+// tableDemoResolver serves the "track-table-demo" datasource with a single
+// candidate, used to exercise update/lock/status/diff's output-format
+// dispatch without requiring network access.
+type tableDemoResolver struct{}
+
+func (tableDemoResolver) Names() []string { return []string{"track-table-demo"} }
+
+func (tableDemoResolver) Versions(_ context.Context, _ *resolver.Request) ([]resolver.Candidate, error) {
+	return []resolver.Candidate{{Version: "v1.0.0"}}, nil
+}
+
+func (tableDemoResolver) Pin(_ context.Context, _ *resolver.Request, version string) (string, error) {
+	return "pinned-" + version, nil
+}
+
+func init() {
+	resolver.Register(tableDemoResolver{})
+}
+
+// tableDemoConfig builds a fresh config with one unlocked entry served by
+// tableDemoResolver, suitable for exercising update/lock/status/diff.
+func tableDemoConfig(t *testing.T) *schema.AtmosConfiguration {
+	t.Helper()
+	return &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+		Version: schema.Version{
+			Track: "prod",
+			Tracks: map[string]schema.VersionTrack{
+				"prod": {
+					Dependencies: map[string]schema.VersionEntry{
+						"widget": {
+							Datasource: "track-table-demo",
+							Package:    "acme/widget",
+							Desired:    "latest",
+						},
+					},
+				},
+			},
+		},
+	}
+}
 
 type trackTestStreams struct {
 	stdin  stdio.Reader
@@ -342,4 +386,112 @@ func TestTrackRenderCommandCheckMode(t *testing.T) {
 	if err := runTrackCommand(t, newRenderCommand()); !errors.Is(err, ErrRenderFileRequired) {
 		t.Fatalf("render missing file error = %v, want %v", err, ErrRenderFileRequired)
 	}
+}
+
+func newUpdateCommand() *cobra.Command {
+	return newTrackCommand(trackUpdateCmd, trackParserOptions(
+		groupFlagOption(),
+		flags.WithStringSliceFlag("only", "", nil, "Limit the update to the named entries (repeatable)"),
+	)...)
+}
+
+func newLockCommand() *cobra.Command {
+	return newTrackCommand(trackLockCmd, trackParserOptions(groupFlagOption())...)
+}
+
+func newStatusCommand() *cobra.Command {
+	return newTrackCommand(trackStatusCmd, trackParserOptions(groupFlagOption())...)
+}
+
+func newDiffCommand() *cobra.Command {
+	return newTrackCommand(trackDiffCmd, trackParserOptions(groupFlagOption())...)
+}
+
+// TestTrackUpdateLockStatusDiffDefaultToTable verifies that update/lock/status/diff
+// default to a human-readable table (not raw YAML), while --format=yaml and
+// --format=json continue to return the original full-fidelity struct.
+func TestTrackUpdateLockStatusDiffDefaultToTable(t *testing.T) {
+	commands := []struct {
+		name         string
+		new          func() *cobra.Command
+		yamlFidelity string // A string only present in the full-fidelity YAML/JSON dump.
+		jsonFidelity string
+	}{
+		{"update", newUpdateCommand, "name: widget", `"name": "widget"`},
+		// LockFile keys entries by name (map[name]LockEntry) rather than
+		// carrying a Name field, so full fidelity shows up as the map key.
+		{"lock", newLockCommand, "widget:", `"widget": {`},
+		{"status", newStatusCommand, "name: widget", `"name": "widget"`},
+		{"diff", newDiffCommand, "name: widget", `"name": "widget"`},
+	}
+
+	for _, tc := range commands {
+		t.Run(tc.name+"/default is not YAML", func(t *testing.T) {
+			setTrackConfigForTest(t, tableDemoConfig(t))
+			stdout := setupTrackOutput(t)
+
+			if err := runTrackCommand(t, tc.new()); err != nil {
+				t.Fatalf("%s command returned error: %v", tc.name, err)
+			}
+			output := stdout.String()
+			if strings.Contains(output, "track: prod") || strings.Contains(output, "results:") || strings.Contains(output, "entries:") {
+				t.Fatalf("%s default output looks like YAML, want a table: %q", tc.name, output)
+			}
+			if !strings.Contains(output, "widget") {
+				t.Fatalf("%s default output = %q, want it to mention the entry name", tc.name, output)
+			}
+		})
+
+		t.Run(tc.name+"/format=yaml keeps full fidelity", func(t *testing.T) {
+			setTrackConfigForTest(t, tableDemoConfig(t))
+			stdout := setupTrackOutput(t)
+
+			cmd := tc.new()
+			if err := runTrackCommand(t, cmd, "--format", "yaml"); err != nil {
+				t.Fatalf("%s --format=yaml returned error: %v", tc.name, err)
+			}
+			output := stdout.String()
+			if !strings.Contains(output, tc.yamlFidelity) {
+				t.Fatalf("%s --format=yaml output = %q, want full-fidelity YAML containing %q", tc.name, output, tc.yamlFidelity)
+			}
+		})
+
+		t.Run(tc.name+"/format=json keeps full fidelity", func(t *testing.T) {
+			setTrackConfigForTest(t, tableDemoConfig(t))
+			stdout := setupTrackOutput(t)
+
+			cmd := tc.new()
+			if err := runTrackCommand(t, cmd, "--format", "json"); err != nil {
+				t.Fatalf("%s --format=json returned error: %v", tc.name, err)
+			}
+			output := stdout.String()
+			if !strings.Contains(output, tc.jsonFidelity) {
+				t.Fatalf("%s --format=json output = %q, want full-fidelity JSON containing %q", tc.name, output, tc.jsonFidelity)
+			}
+		})
+	}
+
+	t.Run("status/format=csv smoke test", func(t *testing.T) {
+		setTrackConfigForTest(t, tableDemoConfig(t))
+		stdout := setupTrackOutput(t)
+
+		if err := runTrackCommand(t, newStatusCommand(), "--format", "csv"); err != nil {
+			t.Fatalf("status --format=csv returned error: %v", err)
+		}
+		output := stdout.String()
+		if !strings.Contains(output, "Name") || !strings.Contains(output, ",") || !strings.Contains(output, "widget") {
+			t.Fatalf("status --format=csv output = %q, want a CSV header and row", output)
+		}
+	})
+
+	t.Run("format=toml is rejected", func(t *testing.T) {
+		for _, tc := range commands {
+			setTrackConfigForTest(t, tableDemoConfig(t))
+			setupTrackOutput(t)
+
+			if err := runTrackCommand(t, tc.new(), "--format", "toml"); !errors.Is(err, ErrUnsupportedFormat) {
+				t.Fatalf("%s --format=toml error = %v, want %v", tc.name, err, ErrUnsupportedFormat)
+			}
+		}
+	})
 }

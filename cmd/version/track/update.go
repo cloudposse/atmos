@@ -1,9 +1,12 @@
 package track
 
 import (
+	"strconv"
+
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 )
@@ -22,8 +25,41 @@ var trackUpdateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return writeFormatted(cmd, update)
+		if isStructuredFormat(cmd) {
+			return writeFormatted(cmd, update)
+		}
+		return writeRows(cmd, updateColumns(), updateRows(update), "No entries in track.")
 	},
+}
+
+// updateColumns defines the default table columns for `version track update`.
+// Digests are omitted from the table for readability; use --format=yaml or
+// --format=json for full-fidelity output.
+func updateColumns() []column.Config {
+	return []column.Config{
+		{Name: "Track", Value: "{{ .track }}"},
+		{Name: "Name", Value: "{{ .name }}"},
+		{Name: "From", Value: "{{ .from }}"},
+		{Name: "To", Value: "{{ .to }}"},
+		{Name: "Updated", Value: "{{ .updated }}"},
+		{Name: "Reason", Value: "{{ .reason }}"},
+	}
+}
+
+// updateRows adapts a TrackUpdate to the renderer's row shape.
+func updateRows(u *manager.TrackUpdate) []map[string]any {
+	rows := make([]map[string]any, 0, len(u.Results))
+	for _, r := range u.Results {
+		rows = append(rows, map[string]any{
+			"track":   u.Track,
+			"name":    r.Name,
+			"from":    r.From,
+			"to":      r.To,
+			"updated": strconv.FormatBool(r.Updated),
+			"reason":  r.Reason,
+		})
+	}
+	return rows
 }
 
 func init() {

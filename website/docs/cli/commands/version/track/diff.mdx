@@ -19,6 +19,9 @@ atmos version track diff [track] [flags]
 <dl>
   <dt>`--group`</dt>
   <dd>Limit the diff to entries in the named version group.</dd>
+
+  <dt>`--format string`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
 </dl>
 
 ## Examples
@@ -30,3 +33,16 @@ atmos version track diff prod
 # Show only infrastructure group changes
 atmos version track diff prod --group=infrastructure
 ```
+
+## Example Output
+
+In an interactive terminal, `--format=table` (the default) renders a styled table. Non-interactive
+output (e.g. piped, or `--format=csv`) looks like:
+
+```shell
+> atmos version track diff prod --format=csv
+Track,Name,Group,Desired,Locked,Resolved,Status,Message
+prod,checkout,infrastructure,v6,v6.1.0,v6.2.0,update-available,
+```
+
+Use `--format=yaml` or `--format=json` for the full-fidelity result.
