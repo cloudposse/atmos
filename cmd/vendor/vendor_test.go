@@ -22,6 +22,16 @@ import (
 	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
+// initVendorTestWriter wires a fresh data writer for RunE calls that write to stdout
+// (get/list commands), cleaning up afterward.
+func initVendorTestWriter(t *testing.T) {
+	t.Helper()
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	t.Cleanup(data.Reset)
+}
+
 var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 // TestVendorPullCmd_ExecutorError tests that vendor pull executor handles unexpected args.
@@ -336,4 +346,89 @@ func TestRenderUpdateReport_AllStatuses(t *testing.T) {
 	assert.NotContains(t, got, "current")
 	assert.NotContains(t, got, "skipped")
 	assert.NotContains(t, got, "failed")
+}
+
+// --- edit.go error paths -----------------------------------------------------
+
+func TestVendorGetCmd_MissingFile(t *testing.T) {
+	resetCommandFlags(t, vendorGetCmd)
+
+	missing := filepath.Join(t.TempDir(), "does-not-exist.yaml")
+	require.NoError(t, vendorGetCmd.Flags().Set("file", missing))
+
+	err := vendorGetCmd.RunE(vendorGetCmd, []string{"vpc"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, atmosyaml.ErrReadFile)
+}
+
+func TestVendorGetCmd_MissingComponent(t *testing.T) {
+	resetCommandFlags(t, vendorGetCmd)
+
+	file := writeCommandVendorManifest(t, `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/vpc"]
+`)
+	require.NoError(t, vendorGetCmd.Flags().Set("file", file))
+
+	err := vendorGetCmd.RunE(vendorGetCmd, []string{"missing-component"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound)
+}
+
+func TestVendorSetCmd_MissingFile(t *testing.T) {
+	resetCommandFlags(t, vendorSetCmd)
+
+	missing := filepath.Join(t.TempDir(), "does-not-exist.yaml")
+	require.NoError(t, vendorSetCmd.Flags().Set("file", missing))
+
+	err := vendorSetCmd.RunE(vendorSetCmd, []string{"vpc", "v0.2.0"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, atmosyaml.ErrReadFile)
+}
+
+func TestVendorSetCmd_ComponentNotFound(t *testing.T) {
+	resetCommandFlags(t, vendorSetCmd)
+
+	file := writeCommandVendorManifest(t, `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/vpc"]
+`)
+	require.NoError(t, vendorSetCmd.Flags().Set("file", file))
+
+	// SetComponentVersion fails because "missing-component" is not declared in
+	// the manifest, surfacing ErrYAMLPathNotFound from the pre-check in
+	// vendoring.SetComponentVersion.
+	err := vendorSetCmd.RunE(vendorSetCmd, []string{"missing-component", "v0.2.0"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound)
+}
+
+func TestSplitTags(t *testing.T) {
+	tests := []struct {
+		name string
+		csv  string
+		want []string
+	}{
+		{"empty string", "", nil},
+		{"whitespace only", "   ", nil},
+		{"single tag", "prod", []string{"prod"}},
+		{"leading and trailing commas", ",prod,staging,", []string{"prod", "staging"}},
+		{"whitespace around tags", " prod , staging ", []string{"prod", "staging"}},
+		{"empty segments between commas", "prod,,staging", []string{"prod", "staging"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, splitTags(tt.csv))
+		})
+	}
 }

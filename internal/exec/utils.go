@@ -801,7 +801,7 @@ func ProcessStacks(
 			settingsSectionStruct.Templates.Settings.Env = envMap
 		}
 
-		componentTemplateContext := make(map[string]any, len(configAndStacksInfo.ComponentSection)+1)
+		componentTemplateContext := make(map[string]any, len(configAndStacksInfo.ComponentSection))
 		for k, v := range configAndStacksInfo.ComponentSection {
 			componentTemplateContext[k] = v
 		}
