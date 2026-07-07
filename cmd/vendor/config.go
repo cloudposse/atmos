@@ -42,12 +42,19 @@ var vendorConfigGetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		value, err := atmosyaml.GetFile(file, args[0])
-		if err != nil {
-			return err
-		}
-		return data.Writeln(value)
+		return runVendorConfigGet(file, args[0])
 	},
+}
+
+// runVendorConfigGet reads the raw value at path from a vendor manifest file
+// and writes it to stdout. Shared by vendor config get and its vendor get
+// alias.
+func runVendorConfigGet(file, path string) error {
+	value, err := atmosyaml.GetFile(file, path)
+	if err != nil {
+		return err
+	}
+	return data.Writeln(value)
 }
 
 var vendorConfigSetCmd = &cobra.Command{
@@ -64,12 +71,18 @@ strings; use --type for int, bool, float, null, or raw YAML literals.`,
 		if err != nil {
 			return err
 		}
-		if err := atmosyaml.SetFileWithType(file, args[0], args[1], vendorConfigType); err != nil {
-			return err
-		}
-		ui.Successf("Updated %s in %s", args[0], file)
-		return nil
+		return runVendorConfigSet(file, args[0], args[1], vendorConfigType)
 	},
+}
+
+// runVendorConfigSet writes value at path in a vendor manifest file. Shared by
+// vendor config set and its vendor set alias.
+func runVendorConfigSet(file, path, value, valueType string) error {
+	if err := atmosyaml.SetFileWithType(file, path, value, valueType); err != nil {
+		return err
+	}
+	ui.Successf("Updated %s in %s", path, file)
+	return nil
 }
 
 var vendorConfigDeleteCmd = &cobra.Command{

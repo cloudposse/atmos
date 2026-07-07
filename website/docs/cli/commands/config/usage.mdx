@@ -8,8 +8,10 @@ description: Read and edit your atmos.yaml configuration using dot-notation path
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `atmos config` commands read and edit values in your `atmos.yaml` configuration
-using dot-notation paths. Edits preserve comments, anchors/aliases, Atmos YAML
+The `atmos config get|set|delete|list|format` commands read and edit values in your
+`atmos.yaml` configuration using dot-notation paths — this is already the canonical
+form for the config domain (there's no separate `atmos config config` sub-namespace,
+unlike `stack`/`vendor`). Edits preserve comments, anchors/aliases, Atmos YAML
 functions, and Go templates, so you can script configuration changes without
 `sed`/`yq` and without losing formatting.
 </Intro>
@@ -20,6 +22,8 @@ functions, and Go templates, so you can script configuration changes without
 atmos config get <path>
 atmos config set <path> <value> [--type <type>]
 atmos config delete <path>
+atmos config list [path-pattern] [--format <format>]
+atmos config format
 ```
 
 By default these commands target the `atmos.yaml` (or `.atmos.yaml`) in the current
@@ -30,6 +34,8 @@ directory or git root. Use the global `--config` flag to target a specific file.
 - [`atmos config get`](/cli/commands/config/config-get) — read a value by path.
 - [`atmos config set`](/cli/commands/config/config-set) — set a value by path.
 - [`atmos config delete`](/cli/commands/config/config-delete) — delete a value by path.
+- [`atmos config list`](/cli/commands/config/config-list) — list editable setting paths.
+- [`atmos config format`](/cli/commands/config/config-format) — format the active `atmos.yaml` file.
 
 ## Examples
 
@@ -45,6 +51,12 @@ atmos config set --type=bool components.terraform.apply_auto_approve true
 
 # Delete a value.
 atmos config delete logs.file
+
+# List every editable path.
+atmos config list
+
+# Format the active atmos.yaml file.
+atmos config format
 
 # Target a specific file.
 atmos config set logs.level Trace --config ./atmos.yaml

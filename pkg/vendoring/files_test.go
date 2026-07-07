@@ -9,7 +9,25 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
+
+const versionPathFixture = `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: example
+spec:
+  sources:
+    # VPC component.
+    - component: "vpc"
+      source: "oci://ghcr.io/cloudposse/atmos/mock:{{.Version}}"
+      version: "v0"  # pinned version
+      targets:
+        - "components/terraform/vpc"
+    - component: "eks"
+      source: "github.com/cloudposse/terraform-aws-eks?ref={{.Version}}"
+      version: "1.2.3"
+`
 
 func writeFile(t *testing.T, dir, name, body string) string {
 	t.Helper()
@@ -118,6 +136,85 @@ func TestFindSource(t *testing.T) {
 	_, _, err = FindSource(files, "does-not-exist")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrVendorSourceNotFound)
+}
+
+func TestComponentVersionPath(t *testing.T) {
+	file := writeFile(t, t.TempDir(), "vendor.yaml", versionPathFixture)
+
+	path, err := ComponentVersionPath(file, "vpc")
+	require.NoError(t, err)
+	assert.Equal(t, "spec.sources[0].version", path)
+
+	path, err = ComponentVersionPath(file, "eks")
+	require.NoError(t, err)
+	assert.Equal(t, "spec.sources[1].version", path)
+}
+
+func TestComponentVersionPath_NotFound(t *testing.T) {
+	file := writeFile(t, t.TempDir(), "vendor.yaml", versionPathFixture)
+
+	_, err := ComponentVersionPath(file, "missing")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound)
+}
+
+func TestComponentVersionPath_MissingFile(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does-not-exist.yaml")
+
+	_, err := ComponentVersionPath(missing, "vpc")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, atmosyaml.ErrReadFile)
+}
+
+func TestSetComponentVersion_PreservesFormatting(t *testing.T) {
+	file := writeFile(t, t.TempDir(), "vendor.yaml", versionPathFixture)
+
+	require.NoError(t, SetComponentVersion(file, "vpc", "v1.5.0"))
+
+	got, err := os.ReadFile(file)
+	require.NoError(t, err)
+	s := string(got)
+
+	assert.Contains(t, s, `version: "v1.5.0"`, "vpc version updated")
+	assert.Contains(t, s, "# VPC component.", "comment preserved")
+	assert.Contains(t, s, "# pinned version", "inline comment preserved")
+	assert.Contains(t, s, "{{.Version}}", "template in source preserved")
+	// eks untouched.
+	v, err := atmosyaml.GetFile(file, "spec.sources[1].version")
+	require.NoError(t, err)
+	assert.Equal(t, "1.2.3", v)
+}
+
+func TestSetComponentVersion_NotFound(t *testing.T) {
+	file := writeFile(t, t.TempDir(), "vendor.yaml", versionPathFixture)
+
+	err := SetComponentVersion(file, "nope", "v9")
+	require.Error(t, err)
+	// A genuinely missing component is reported as path-not-found.
+	assert.ErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound)
+}
+
+// TestSetComponentVersion_SurfacesRealError verifies that a non "component
+// missing" failure (here, an unreadable/nonexistent manifest file) is returned
+// as-is rather than being rewritten as "component not found".
+func TestSetComponentVersion_SurfacesRealError(t *testing.T) {
+	missingFile := filepath.Join(t.TempDir(), "does-not-exist.yaml")
+	err := SetComponentVersion(missingFile, "vpc", "v9")
+	require.Error(t, err)
+	// The real cause (read failure) must surface, not a bogus "component not found".
+	assert.ErrorIs(t, err, atmosyaml.ErrReadFile)
+	assert.NotErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound)
+}
+
+// TestSetComponentVersion_InvalidYAML verifies that invalid YAML surfaces a
+// parse error, not a "component not found" message.
+func TestSetComponentVersion_InvalidYAML(t *testing.T) {
+	file := writeFile(t, t.TempDir(), "vendor.yaml", "spec: {sources: [ unclosed\n")
+
+	err := SetComponentVersion(file, "vpc", "v9")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrParseVendorFile)
+	assert.NotErrorIs(t, err, atmosyaml.ErrYAMLPathNotFound, "invalid YAML must not be reported as component-not-found")
 }
 
 func TestCollectManifestFiles_CyclicImportsTerminate(t *testing.T) {

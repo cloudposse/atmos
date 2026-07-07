@@ -3,13 +3,27 @@
 ## Status
 
 - **Phase 1 (core engine in `pkg/yaml`)**: implemented and tested.
-- **Phase 2 — Config** (`atmos config get|set|delete`): implemented and tested
-  (E2E verified).
-- **Phase 2 — Stack** (`atmos stack get|set|delete`): implemented and tested;
-  provenance-based file resolution + `--file` override (E2E verified).
-- **Phase 2 — Vendor** (`atmos vendor get|set`): implemented and tested — version
-  pinning by component name, on the shared core (generalizes the superseded
-  branch's hardcoded `sources[].version` writer).
+- **Phase 2 — Config** (`atmos config get|set|delete|list|format`): implemented and
+  tested (E2E verified). `atmos config` has no separate `config` sub-namespace — this
+  flat surface *is* the canonical form for the config domain.
+- **Phase 2 — Stack**: `atmos stack config get|set|delete|format|list`
+  (`cmd/stack/config.go`) is the canonical command set, all built on shared free
+  functions (`runStackGet`/`runStackSet`/`runStackDelete`/`runStackFormat` in
+  `cmd/stack/operations.go`). `atmos stack get|set|delete|format`
+  (`cmd/stack/operations.go`) are literal code-level aliases — the flat `RunE`
+  closures call the exact same functions. `list` has no flat form: a flat
+  `atmos stack list` would collide with the existing `atmos list stacks`, so
+  `atmos stack config list` is the only way to invoke it. Provenance-based file
+  resolution + `--file` override, E2E verified.
+- **Phase 2 — Vendor**: `atmos vendor config get|set|delete|format|list`
+  (`cmd/vendor/config.go`) is the canonical command set, addressing `vendor.yaml` by
+  arbitrary dot-notation path (e.g. `spec.sources[0].version`) via the shared
+  `pkg/yaml` engine. `atmos vendor get|set` (`cmd/vendor/edit.go`) are aliases that
+  resolve a **component name** to its `spec.sources[N].version` path (via
+  `pkg/vendoring.ComponentVersionPath`, matched by name so manifest ordering does
+  not matter) and delegate to the same `get`/`set` engine as `vendor config` — not a
+  separate implementation. `delete`, `format`, and `list` have no component-name
+  shortcut and are only available via `atmos vendor config`.
 - **Follow-up within this effort**: port the remaining `feat/vendor-diff-and-update`
   feature set (`atmos vendor diff` / `atmos vendor update`, version-constraint
   resolution, git-diff, source providers) and close that branch. That branch is
@@ -125,24 +139,44 @@ restructure.
 ### Domain commands (Phase 2)
 
 The three domains never re-implement YAML editing; they only (a) resolve **which
-file**, (b) shape the **dot-path** for their schema, (c) optionally validate.
+file**, (b) shape the **dot-path** for their schema, (c) optionally validate. For
+each domain, `get|set|delete|format|list` is the **canonical** command set; where a
+flat/shorthand command exists, it is a convenience alias of the canonical form, not a
+separate implementation.
 
-- **Config** — `atmos config get|set|delete <dot-path> [value]`. Auto-resolves
-  the active `atmos.yaml` (with `--config` override). Paths are config-relative.
-- **Stack** — `atmos stack get|set|delete -s <stack> -c <component> '<dot-path> [= value]'`.
-  Uses the existing **provenance** package (`pkg/merge` + `internal/exec`
-  merge-context store) to find the *winning* source manifest for a merged value
-  (`ProvenanceStorage.GetLatest(path).File`), then edits that file. If the path
-  is defined nowhere, an explicit `--file` is required (never guess where to
-  create new keys). The edited file is always reported.
-- **Vendor** — `atmos vendor get|set` (by component/source name) plus the ported
-  `atmos vendor update` / `atmos vendor diff` feature set, with all YAML writes
-  routed through `pkg/yaml.SetFile`.
+- **Config** — `atmos config get|set|delete|list|format <dot-path> [value]`.
+  Auto-resolves the active `atmos.yaml` (with `--config` override). Paths are
+  config-relative. This flat surface is already canonical — there is no separate
+  `atmos config config` sub-namespace.
+- **Stack** — canonical: `atmos stack config get|set|delete|format|list -s <stack>
+  -c <component> '<dot-path> [= value]'` (`cmd/stack/config.go`). Uses the existing
+  **provenance** package (`pkg/merge` + `internal/exec` merge-context store) to find
+  the *winning* source manifest for a merged value
+  (`ProvenanceStorage.GetLatest(path).File`), then edits that file. If the path is
+  defined nowhere, an explicit `--file` is required (never guess where to create new
+  keys). The edited file is always reported. `atmos stack get|set|delete|format`
+  (`cmd/stack/operations.go`) are code-level aliases — their `RunE` closures call the
+  identical `runStackGet`/`runStackSet`/`runStackDelete`/`runStackFormat` functions
+  used by the `stack config` subcommands. `list` has no flat form (would collide
+  with `atmos list stacks`), so it is only reachable via `atmos stack config list`.
+- **Vendor** — canonical: `atmos vendor config get|set|delete|format|list`
+  (`cmd/vendor/config.go`), addressing `vendor.yaml` by arbitrary dot-notation path,
+  with all YAML writes routed through `pkg/yaml.SetFile`. `atmos vendor get|set`
+  (`cmd/vendor/edit.go`) are aliases: they resolve a **component name** to its
+  `spec.sources[N].version` path (`pkg/vendoring.ComponentVersionPath`, matched by
+  name on every invocation so manifest ordering never matters) and then call the
+  same `runVendorConfigGet`/`runVendorConfigSet` functions the `vendor config`
+  subcommands use — not the separate hardcoded `sources[].version` writer the
+  superseded branch used. `delete`, `format`, and `list` have no component-name
+  shortcut; use `atmos vendor config` for those. Also ported: the remaining
+  `atmos vendor update` / `atmos vendor diff` feature set.
 
-### Optional: `format`
+### `format`
 
-`Format`/`FormatFile` enable a normalize/format capability (e.g. `atmos fmt`
-with `--check` for CI and `-w` to write). Surface TBD in Phase 2.
+`Format`/`FormatFile` power `<domain> [config] format` in all three domains: `atmos
+config format`, `atmos stack config format` (alias: `atmos stack format`), and
+`atmos vendor config format`. Each formats the relevant manifest(s) in place,
+preserving comments, anchors, YAML functions, and templates.
 
 ## Errors
 

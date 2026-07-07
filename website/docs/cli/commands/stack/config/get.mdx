@@ -1,35 +1,32 @@
 ---
-title: atmos stack get
+title: atmos stack config get
 sidebar_label: get
 sidebar_class_name: command
-id: stack-get
+id: get
 description: Read a component-relative value from a stack and show which manifest defines it.
 ---
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 
 <Intro>
-Read the effective value of a component-relative dot-path for a component in a stack,
-and see which manifest file currently defines it.
+Read the effective value of a component-relative dot-path (e.g. `vars.region`) for a
+component in a stack, and see which manifest file currently defines it. This is the
+canonical form; [`atmos stack get`](/cli/commands/stack/stack-get) is a convenience
+alias for this command.
 </Intro>
 
-:::info
-`atmos stack get` is an alias for [`atmos stack config get`](/cli/commands/stack/config/get), the canonical form.
-:::
-
-<Screengrab title="atmos stack get --help" slug="atmos-stack-get--help" />
+<Screengrab title="atmos stack config get --help" slug="atmos-stack-config-get--help" />
 
 ## Usage
 
 ```shell
-atmos stack get <path> -s <stack> -c <component>
+atmos stack config get <path> -s <stack> -c <component>
 ```
 
 ## Examples
 
 ```shell
-atmos stack get vars.region -s plat-ue2-prod -c vpc
-atmos stack get settings.spacelift.workspace_enabled -s plat-ue2-prod -c vpc
+atmos stack config get vars.region -s plat-ue2-prod -c vpc
 ```
 
 ## Arguments
@@ -47,3 +44,7 @@ atmos stack get settings.spacelift.workspace_enabled -s plat-ue2-prod -c vpc
   <dt>`--component` / `-c` (string, required)</dt>
   <dd>The component name.</dd>
 </dl>
+
+## Related
+
+- Alias: [`atmos stack get`](/cli/commands/stack/stack-get)

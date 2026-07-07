@@ -7,10 +7,9 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendoring"
+	atmosyaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 // DefaultVendorManifest is the default vendor manifest filename.
@@ -19,7 +18,10 @@ const DefaultVendorManifest = "vendor.yaml"
 // vendorFileFlag overrides which vendor manifest to read/edit.
 var vendorFileFlag string
 
-// vendorGetCmd reads the pinned version of a component from the vendor manifest.
+// vendorGetCmd reads the pinned version of a component from the vendor
+// manifest. It is a thin alias of "vendor config get": it resolves the
+// component's dot-notation path (spec.sources[<i>].version) and delegates to
+// the same path-based engine.
 var vendorGetCmd = &cobra.Command{
 	Use:     "get <component>",
 	Short:   "Read the pinned version of a vendored component",
@@ -33,15 +35,18 @@ var vendorGetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		version, err := vendoring.GetComponentVersion(file, args[0])
+		path, err := vendoring.ComponentVersionPath(file, args[0])
 		if err != nil {
 			return err
 		}
-		return data.Writeln(version)
+		return runVendorConfigGet(file, path)
 	},
 }
 
-// vendorSetCmd updates the pinned version of a component in the vendor manifest.
+// vendorSetCmd updates the pinned version of a component in the vendor
+// manifest. It is a thin alias of "vendor config set": it resolves the
+// component's dot-notation path (spec.sources[<i>].version) and delegates to
+// the same path-based engine.
 var vendorSetCmd = &cobra.Command{
 	Use:   "set <component> <version>",
 	Short: "Set the pinned version of a vendored component",
@@ -57,11 +62,11 @@ The source is matched by component name, so manifest ordering does not matter.`,
 		if err != nil {
 			return err
 		}
-		if err := vendoring.SetComponentVersion(file, args[0], args[1]); err != nil {
+		path, err := vendoring.ComponentVersionPath(file, args[0])
+		if err != nil {
 			return err
 		}
-		ui.Successf("Set %s version to %s in %s", args[0], args[1], file)
-		return nil
+		return runVendorConfigSet(file, path, args[1], atmosyaml.TypeString)
 	},
 }
 

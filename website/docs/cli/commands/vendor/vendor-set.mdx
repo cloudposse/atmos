@@ -14,6 +14,10 @@ matched by component name (not by index), and the edit preserves comments, ancho
 and Go templates such as `{{.Version}}` in source URLs.
 </Intro>
 
+:::info
+`atmos vendor set` is an alias for [`atmos vendor config set`](/cli/commands/vendor/config/set): it resolves `<component>` to its `spec.sources[N].version` path and delegates to the canonical form.
+:::
+
 <Screengrab title="atmos vendor set --help" slug="atmos-vendor-set--help" />
 
 ## Usage
