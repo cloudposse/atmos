@@ -123,12 +123,11 @@ commands:
         commands:
           - name: notices
             description: Regenerate NOTICE from Go dependency licenses
-            working_directory: !repo-root .
             env: *go_auto_env
             steps:
               - type: spin
                 title: Generating NOTICE from Go dependency licenses
-                command: ./scripts/generate-notice.sh
+                command: cd "$(git rev-parse --show-toplevel)" && ./scripts/generate-notice.sh
                 timeout: 10m
               - type: toast
                 level: success
@@ -143,7 +142,6 @@ commands:
 
           - name: snapshots
             description: Regenerate CLI golden snapshots
-            working_directory: !repo-root .
             env:
               - key: GOTOOLCHAIN
                 value: auto
@@ -162,6 +160,7 @@ commands:
               - type: shell
                 command: |
                   set -eu
+                  cd "$(git rev-parse --show-toplevel)"
                   filter="${ATMOS_SNAPSHOT_FILTER:-}"
 
                   selected=0
