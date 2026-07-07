@@ -274,23 +274,26 @@ func (t *terminal) Width(stream Stream) int {
 
 	fd := streamToFd(stream)
 	if fd < 0 {
-		// If --force-tty is set, return sane default width.
-		if t.forceTTY {
-			return defaultForcedWidth
-		}
-		return 0
+		return t.fallbackWidth()
 	}
 
 	width, _, err := term.GetSize(fd)
 	if err != nil {
-		// If --force-tty is set and detection fails, return sane default width.
-		if t.forceTTY {
-			return defaultForcedWidth
-		}
-		return 0
+		return t.fallbackWidth()
 	}
 
 	return width
+}
+
+// fallbackWidth returns the terminal width when no real TTY size is available:
+// the forced default when --force-tty is set, and 0 otherwise. Non-TTY output
+// deliberately ignores COLUMNS so CI snapshots and piped output keep Atmos'
+// stable default wrapping unless a caller provides an explicit recording width.
+func (t *terminal) fallbackWidth() int {
+	if t.forceTTY {
+		return defaultForcedWidth
+	}
+	return 0
 }
 
 func (t *terminal) Height(stream Stream) int {

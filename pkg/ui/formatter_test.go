@@ -1521,6 +1521,53 @@ func TestSetColorProfile(t *testing.T) {
 	SetColorProfile(termenv.TrueColor)
 }
 
+func TestNewRenderer(t *testing.T) {
+	// NewRenderer must inherit the globally detected profile instead of
+	// re-detecting from the writer (a pipe/buffer would degrade to Ascii and
+	// break the --force-color TrueColor contract for recorded help output).
+	original := GetColorProfile()
+	defer SetColorProfile(original)
+
+	var buf strings.Builder
+
+	SetColorProfile(termenv.TrueColor)
+	renderer := NewRenderer(&buf)
+	if renderer.ColorProfile() != termenv.TrueColor {
+		t.Errorf("NewRenderer profile = %v, want TrueColor from global profile", renderer.ColorProfile())
+	}
+	if !renderer.HasDarkBackground() {
+		t.Error("NewRenderer should assume a dark background")
+	}
+
+	SetColorProfile(termenv.Ascii)
+	renderer = NewRenderer(&buf)
+	if renderer.ColorProfile() != termenv.Ascii {
+		t.Errorf("NewRenderer profile = %v, want Ascii from global profile", renderer.ColorProfile())
+	}
+}
+
+func TestTerminalWidth(t *testing.T) {
+	// Uninitialized formatter returns 0 (callers apply their own defaults).
+	Reset()
+	if width := TerminalWidth(); width != 0 {
+		t.Errorf("TerminalWidth() = %d before InitFormatter, want 0", width)
+	}
+
+	if terminal.New().IsTTY(terminal.Stdout) {
+		t.Skip("stdout is a real TTY; non-TTY fallback does not apply")
+	}
+
+	// After initialization, the global terminal supplies the width. Stdout is
+	// a pipe here, so COLUMNS is ignored and callers apply their own defaults.
+	t.Setenv("COLUMNS", "97")
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+	defer Reset()
+	if width := TerminalWidth(); width != 0 {
+		t.Errorf("TerminalWidth() = %d, want 0 for non-TTY COLUMNS fallback", width)
+	}
+}
+
 func TestHint(t *testing.T) {
 	ioCtx := createTestIOContext()
 	InitFormatter(ioCtx)

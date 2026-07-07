@@ -33,16 +33,18 @@ func newStreams(masker Masker, config *Config) Streams {
 	// allowing tests to capture output by redirecting these variables.
 	if masker.Enabled() {
 		s.output = &dynamicMaskedWriter{
+			stream:    DataStream,
 			masker:    masker,
 			getWriter: func() stdio.Writer { return os.Stdout },
 		}
 		s.error = &dynamicMaskedWriter{
+			stream:    UIStream,
 			masker:    masker,
 			getWriter: func() stdio.Writer { return os.Stderr },
 		}
 	} else {
-		s.output = &dynamicWriter{getWriter: func() stdio.Writer { return os.Stdout }}
-		s.error = &dynamicWriter{getWriter: func() stdio.Writer { return os.Stderr }}
+		s.output = &dynamicWriter{stream: DataStream, getWriter: func() stdio.Writer { return os.Stdout }}
+		s.error = &dynamicWriter{stream: UIStream, getWriter: func() stdio.Writer { return os.Stderr }}
 	}
 
 	return s
@@ -84,6 +86,7 @@ func (s *streams) RawError() stdio.Writer {
 // This allows the underlying writer to be resolved at write time,
 // supporting test output capture via os.Stdout redirection.
 type dynamicWriter struct {
+	stream    Stream
 	getWriter func() stdio.Writer
 }
 
@@ -91,7 +94,17 @@ type dynamicWriter struct {
 func (dw *dynamicWriter) Write(p []byte) (n int, err error) {
 	defer perf.Track(nil, "io.dynamicWriter.Write")()
 
-	return dw.getWriter().Write(p)
+	written, err := dw.getWriter().Write(p)
+	if written > 0 {
+		recordOutput(dw.stream, string(p[:min(written, len(p))]))
+	}
+	if err != nil {
+		return written, err
+	}
+	if written < len(p) {
+		return written, stdio.ErrShortWrite
+	}
+	return written, nil
 }
 
 // maskedWriter wraps a stdio.Writer and automatically masks sensitive data.
@@ -110,6 +123,15 @@ func (mw *maskedWriter) Write(p []byte) (n int, err error) {
 	maskedBytes := []byte(masked)
 
 	written, err := mw.underlying.Write(maskedBytes)
+	if written > 0 {
+		recorded := string(maskedBytes[:min(written, len(maskedBytes))])
+		switch mw.underlying {
+		case os.Stdout:
+			recordOutput(DataStream, recorded)
+		case os.Stderr:
+			recordOutput(UIStream, recorded)
+		}
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -127,6 +149,7 @@ func (mw *maskedWriter) Write(p []byte) (n int, err error) {
 // This allows the underlying writer to be resolved at write time,
 // supporting test output capture via os.Stdout redirection.
 type dynamicMaskedWriter struct {
+	stream    Stream
 	masker    Masker
 	getWriter func() stdio.Writer
 }
@@ -140,6 +163,9 @@ func (dmw *dynamicMaskedWriter) Write(p []byte) (n int, err error) {
 	maskedBytes := []byte(masked)
 
 	written, err := dmw.getWriter().Write(maskedBytes)
+	if written > 0 {
+		recordOutput(dmw.stream, string(maskedBytes[:min(written, len(maskedBytes))]))
+	}
 	if err != nil {
 		return 0, err
 	}

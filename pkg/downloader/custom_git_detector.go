@@ -71,7 +71,9 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	d.normalizeRepositorySubdirPath(parsedURL)
 
 	// Check if token injection is enabled for this host and inject if appropriate.
-	if shouldInjectTokenForHost(host, &d.atmosConfig.Settings) {
+	// atmosConfig may be nil (e.g. callers that don't need token injection), in which
+	// case there is nothing to inject.
+	if d.atmosConfig != nil && shouldInjectTokenForHost(host, &d.atmosConfig.Settings) {
 		log.Debug("Token injection enabled for host", keyHost, rawHost)
 		d.injectToken(parsedURL, host)
 	} else {

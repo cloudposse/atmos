@@ -11,12 +11,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/diagnostics"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	process "github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -39,6 +41,8 @@ func TestShellHelperProcess(t *testing.T) {
 	case "stdout-stderr":
 		_, _ = os.Stdout.Write([]byte("stdout"))
 		_, _ = os.Stderr.Write([]byte("stderr"))
+	case "secret-output":
+		_, _ = os.Stdout.Write([]byte("token=demo-key-ABCD1234EFGH5678 literal=super-secret-demo-value"))
 	case "exit":
 		os.Exit(2)
 	default:
@@ -303,6 +307,50 @@ func TestExecuteShellCommandRedirectsStderrToStdoutCapture(t *testing.T) {
 	assert.Empty(t, terminalErr.String())
 	assert.Contains(t, captureOut.String(), "stdout")
 	assert.Contains(t, captureOut.String(), "stderr")
+}
+
+func TestExecuteShellCommandAppliesAtmosMaskSettingsToSubprocessOutput(t *testing.T) {
+	t.Cleanup(func() {
+		iolib.Reset()
+		viper.Reset()
+	})
+
+	iolib.Reset()
+	viper.Reset()
+
+	var terminalOut bytes.Buffer
+	helper := shellHelperCommand(t, "secret-output")
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{
+				Mask: schema.MaskSettings{
+					Enabled:     true,
+					Replacement: "[REDACTED]",
+					Patterns:    []string{`demo-key-[A-Za-z0-9]{16}`},
+					Literals:    []string{"super-secret-demo-value"},
+				},
+			},
+		},
+	}
+
+	err := ExecuteShellCommand(
+		atmosConfig,
+		helper.command,
+		helper.args,
+		"",
+		helper.env,
+		false,
+		"",
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &bytes.Buffer{},
+		}),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "token=[REDACTED] literal=[REDACTED]", terminalOut.String())
+	assert.NotContains(t, terminalOut.String(), "demo-key-ABCD1234EFGH5678")
+	assert.NotContains(t, terminalOut.String(), "super-secret-demo-value")
 }
 
 type shellHelperInvocation struct {
