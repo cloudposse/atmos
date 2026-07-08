@@ -1,0 +1,36 @@
+---
+title: "!git.sha"
+sidebar_position: 10
+sidebar_label: "!git.sha"
+sidebar_class_name: command
+description: Get the current HEAD commit SHA of the current Git repository
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `!git.sha` Atmos YAML function returns the full commit SHA of the current Git `HEAD`.
+</Intro>
+
+## Usage
+
+```yaml
+  # Get the current HEAD commit SHA.
+  # If the SHA cannot be resolved, it returns a default value if specified; otherwise, it returns an error.
+  !git.sha <default-value>
+```
+
+## Examples
+
+```yaml
+vars:
+  build_sha: !git.sha
+
+  # With a fallback value when the SHA cannot be resolved (e.g. not a Git repository).
+  build_sha_safe: !git.sha unknown
+```
+
+## Related Functions
+
+- [`!git.ref`](/functions/yaml/git.ref) — alias of `!git.sha`, intended for source-pinning use cases
+- [`!git.branch`](/functions/yaml/git.branch) — the current branch name
+- [`!git.repository`](/functions/yaml/git.repository) — the full `<owner>/<name>` slug

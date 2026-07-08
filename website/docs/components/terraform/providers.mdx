@@ -142,6 +142,72 @@ The generated `providers_override.tf.json` file would look like this:
 Terraform then uses the values in the generated `providers_override.tf.json` to
 [override](https://developer.hashicorp.com/terraform/language/files/override) the parameters for all the providers in the file.
 
+## Setting Default Tags
+
+A common requirement across any cloud account is making sure every resource carries a consistent set of tags — the
+repository, the commit, the branch, the team, the cost center — so that ownership and change history are always
+traceable straight from the console or a cost report. Outside of Atmos, teams often reach for a post-processing tool
+like [Yor](https://github.com/bridgecrewio/yor) to inject these tags into Terraform code after the fact.
+
+With Atmos, you don't need a separate tagging tool. The AWS provider's `default_tags` argument tags every resource a
+provider manages without touching a single resource block, and since Atmos already generates the provider
+configuration for you, `default_tags` is the most convenient way to guarantee consistent tagging across every
+component and stack. Combine it with Atmos's built-in [YAML functions](/functions/yaml) — such as
+[`!git.repository`](/functions/yaml/git.repository), [`!git.sha`](/functions/yaml/git.sha), and
+[`!git.branch`](/functions/yaml/git.branch) — to populate those tags dynamically from the state of your repository
+at plan/apply time, the same way `default_tags` is configured for any other value:
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+    ```yaml
+    terraform:
+      providers:
+        aws:
+          region: "us-east-2"
+          default_tags:
+            tags:
+              Tenant: "{{ .vars.tenant }}"
+              Stage: "{{ .vars.stage }}"
+              Repository: !git.repository
+              Commit: !git.sha
+              Branch: !git.branch
+              ManagedBy: "Atmos"
+    ```
+</File>
+
+This generates the following `providers_override.tf.json`:
+
+<File title="providers_override.tf.json">
+    ```json
+    {
+        "provider": {
+          "aws": {
+            "region": "us-east-2",
+            "default_tags": {
+              "tags": {
+                "Tenant": "plat",
+                "Stage": "prod",
+                "Repository": "acme/infrastructure",
+                "Commit": "a1b2c3d4e5f67890abcdef1234567890abcdef12",
+                "Branch": "main",
+                "ManagedBy": "Atmos"
+              }
+            }
+          }
+        }
+    }
+    ```
+</File>
+
+:::tip
+CI pipelines often check out a detached `HEAD`, where [`!git.branch`](/functions/yaml/git.branch) cannot resolve a
+branch name. Provide a default value (for example, `!git.branch "${GITHUB_REF_NAME}"` combined with an `!env`
+fallback, or a plain default like `!git.branch detached`) so tagging doesn't fail the plan/apply.
+:::
+
+Like any other `providers` setting, `default_tags` can be defined at the global, OU/tenant, account, or region scope
+and overridden per component. See [Generate Terraform Providers](/stacks/providers) for the full configuration
+reference, merge behavior, and additional `default_tags` examples.
+
 ## `alias`: Multiple Provider Configuration in Atmos Manifests
 
 Atmos allows you to define multiple configurations for the same provider using a list of provider blocks and the
