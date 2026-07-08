@@ -1,0 +1,87 @@
+---
+title: atmos vendor update
+sidebar_label: update
+sidebar_class_name: command
+id: vendor-update
+description: Update vendored component versions to the latest allowed release, preserving comments, anchors, and templates.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Check each Git-backed source in your `vendor.yaml` for a newer version — honoring any
+per-source constraints — and update the `version` field in place, preserving comments,
+anchors, and Go templates such as `{{.Version}}` in source URLs.
+</Intro>
+
+<Screengrab title="atmos vendor update --help" slug="atmos-vendor-update--help" />
+
+## Usage
+
+```shell
+atmos vendor update [--check] [--pull] [--component <name>] [--tags <a,b>] [--outdated]
+```
+
+Sources whose version is templated (`{{...}}`) or whose source is not a Git repository
+are skipped and reported. Updates are written to the file that declares each source,
+including imported manifests.
+
+## Examples
+
+```shell
+# Dry run: show what would be updated.
+atmos vendor update --check
+
+# Update all Git-backed sources.
+atmos vendor update
+
+# Update versions and then pull the new components.
+atmos vendor update --pull
+
+# Update a single component, or by tags.
+atmos vendor update --component vpc
+atmos vendor update --tags networking,aws
+
+# Show only sources with an available update.
+atmos vendor update --check --outdated
+```
+
+## Version constraints
+
+Per-source constraints control which upstream versions are eligible:
+
+```yaml
+sources:
+  - component: "vpc"
+    source: "github.com/cloudposse/terraform-aws-components"
+    version: "1.323.0"
+    constraints:
+      version: "^1.0.0"            # semver constraint (Masterminds/semver)
+      excluded_versions:
+        - "1.2.3"                  # a specific bad version
+        - "1.5.*"                  # an entire broken series
+      no_prereleases: true         # skip alpha/beta/rc
+```
+
+## Flags
+
+<dl>
+  <dt>`--check`</dt>
+  <dd>Dry run: show available updates without modifying any files.</dd>
+  <dt>`--pull`</dt>
+  <dd>After updating versions, run <a href="/cli/commands/vendor/pull">`atmos vendor pull`</a>.</dd>
+  <dt>`--component` / `-c` (string)</dt>
+  <dd>Update only this component.</dd>
+  <dt>`--tags` (string)</dt>
+  <dd>Update only components carrying any of these comma-separated tags.</dd>
+  <dt>`--outdated`</dt>
+  <dd>Show only sources with an available update.</dd>
+  <dt>`--file` (string, default `./vendor.yaml`)</dt>
+  <dd>The vendor manifest to start from (imports are followed).</dd>
+</dl>
+
+:::note
+Version detection is supported for Git sources only (tags via `git ls-remote`), which
+covers GitHub, GitLab, Bitbucket, and self-hosted Git. OCI, S3, GCS, and HTTP sources
+are skipped. Private repositories are not yet supported.
+:::

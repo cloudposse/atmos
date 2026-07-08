@@ -7,6 +7,7 @@ import {
   RiBox3Line,
   RiDatabase2Line,
   RiToolsLine,
+  RiPriceTag3Line,
   RiTerminalBoxLine,
   RiGitMergeLine,
   RiRobot2Line,
@@ -45,9 +46,16 @@ const BATTERIES = [
   {
     icon: RiToolsLine,
     title: 'Toolchain',
-    desc: 'Auto-installs the exact Terraform, OpenTofu, and Helmfile versions your stacks need — verified by checksum.',
-    tag: 'AUTO-INSTALL · VERIFIED',
+    desc: 'Installs and runs the exact Terraform, OpenTofu, Helmfile, and CLI tool versions your stacks need — verified by checksum.',
+    tag: 'INSTALL · RUN · VERIFY',
     to: '/cli/configuration/toolchain',
+  },
+  {
+    icon: RiPriceTag3Line,
+    title: 'Version Management',
+    desc: 'Tracks software versions whether Atmos installs the tool locally or only renders the version into workflows, images, and config files.',
+    tag: 'TRACK · LOCK · APPLY',
+    to: '/cli/configuration/version/managed-versions',
   },
   {
     icon: RiTerminalBoxLine,

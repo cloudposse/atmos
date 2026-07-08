@@ -27,6 +27,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version/manager"
 )
 
 // Mutex to serialize writes to importsConfig maps during parallel import processing.
@@ -34,11 +35,12 @@ var importsConfigLock = &sync.Mutex{}
 
 // extractLocalsResult holds the results of parsing raw YAML and extracting locals.
 type extractLocalsResult struct {
-	locals    map[string]any // Resolved locals.
-	settings  map[string]any // Settings section (for template context).
-	vars      map[string]any // Vars section (for template context).
-	env       map[string]any // Env section (for template context).
-	hasLocals bool           // Whether any locals section exists in the file (including empty locals).
+	locals       map[string]any // Resolved locals.
+	settings     map[string]any // Settings section (for template context).
+	vars         map[string]any // Vars section (for template context).
+	env          map[string]any // Env section (for template context).
+	versionTrack string         // Stack-asserted version track.
+	hasLocals    bool           // Whether any locals section exists in the file (including empty locals).
 }
 
 // localsExtractionCache memoizes extractLocalsFromRawYAML results keyed by a
@@ -89,7 +91,8 @@ func cloneExtractLocalsResult(src *extractLocalsResult) *extractLocalsResult {
 		return nil
 	}
 	dst := &extractLocalsResult{
-		hasLocals: src.hasLocals,
+		hasLocals:    src.hasLocals,
+		versionTrack: src.versionTrack,
 	}
 	if src.locals != nil {
 		if cloned, err := m.DeepCopyMap(src.locals); err == nil {
@@ -301,6 +304,11 @@ func buildLocalsResult(rawConfig map[string]any, localsCtx *LocalsContext) *extr
 	if env, ok := rawConfig[cfg.EnvSectionName].(map[string]any); ok {
 		result.env = env
 	}
+	if versionSection, ok := rawConfig["version"].(map[string]any); ok {
+		if track, ok := versionSection["track"].(string); ok {
+			result.versionTrack = track
+		}
+	}
 
 	return result
 }
@@ -414,7 +422,7 @@ func extractAndAddLocalsToContext(
 	// We check hasLocals instead of len(locals) to support empty locals: {} sections,
 	// which should still enable template context.
 	if !extractResult.hasLocals {
-		return context, nil
+		return manager.AddTemplateContext(atmosConfig, yamlContent, context, extractResult.versionTrack)
 	}
 
 	// context is never nil here: the clone above always allocates a fresh map
@@ -424,6 +432,11 @@ func extractAndAddLocalsToContext(
 	// Add resolved locals to the template context first.
 	// This allows settings/vars/env templates to reference locals.
 	context[cfg.LocalsSectionName] = extractResult.locals
+	var versionContextErr error
+	context, versionContextErr = manager.AddTemplateContext(atmosConfig, yamlContent, context, extractResult.versionTrack)
+	if versionContextErr != nil {
+		return context, versionContextErr
+	}
 	log.Trace("Extracted and resolved locals", "file", relativeFilePath, "count", len(extractResult.locals))
 
 	// Process templates in settings, vars, env sections using the resolved locals.
