@@ -431,6 +431,7 @@ var (
 	ErrMerge                         = errors.New("merge error")
 	ErrMergeNilDst                   = errors.New("merge destination must not be nil")
 	ErrMergeTypeMismatch             = errors.New("cannot override two slices with different type")
+	ErrMergeKeyCollision             = errors.New("distinct map keys collide after normalization")
 	ErrEncode                        = errors.New("encoding error")
 	ErrDecode                        = errors.New("decoding error")
 

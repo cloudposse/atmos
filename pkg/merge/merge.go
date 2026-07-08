@@ -23,6 +23,36 @@ const (
 	maxSliceCapacity = 1 << 30
 )
 
+// mapKeyCollisionPanic carries a deliberate, expected error through Go's panic/recover
+// mechanism, raised by normalizeMapReflect when two distinct original keys stringify to the
+// same string but cannot be safely merged (see normalizeMapReflect for details). The
+// deepCopyValue function has ~20 call sites across this package's hot merge path, so threading
+// an error return through all of them would add a return-value check to every recursive step;
+// recover-and-convert at this package's two independent entry points (DeepCopyMap,
+// deepMergeNativeTopLevel) achieves the same "abort the whole merge on ambiguous data" outcome
+// without that cost. No value of this type is ever allowed to escape the merge package — see
+// recoveredMapKeyCollision.
+type mapKeyCollisionPanic struct {
+	err error
+}
+
+// recoveredMapKeyCollision inspects a recover()'d panic value and, if it is a
+// mapKeyCollisionPanic raised by normalizeMapReflect, returns its wrapped error. Returns nil
+// for a nil input (no panic occurred). Any other panic value is re-panicked immediately: this
+// must never mask a genuine bug (e.g. a nil-map SetMapIndex panic) as a merge-collision error,
+// and genuine bugs should still reach Atmos's global panic handler (pkg/panics) with their real
+// value and stack trace.
+func recoveredMapKeyCollision(r any) error {
+	if r == nil {
+		return nil
+	}
+	collision, ok := r.(mapKeyCollisionPanic)
+	if !ok {
+		panic(r)
+	}
+	return collision.err
+}
+
 // DeepCopyMap performs a deep copy of a map optimized for map[string]any structures.
 // This custom implementation avoids reflection overhead for common cases (maps, slices, primitives)
 // and uses reflection-based normalization for rare complex types (typed slices/maps).
@@ -30,15 +60,21 @@ const (
 // generic reflection-based copying. The data is already in Go map format with custom tags already processed,
 // so structural copying is needed to ensure accumulated merge results are independent of their inputs.
 // Uses properly-sized allocations to reduce GC pressure during high-volume operations (118k+ calls per run).
-func DeepCopyMap(m map[string]any) (map[string]any, error) {
+func DeepCopyMap(m map[string]any) (result map[string]any, err error) {
 	defer perf.Track(nil, "merge.DeepCopyMap")()
+	defer func() {
+		if e := recoveredMapKeyCollision(recover()); e != nil {
+			result = nil
+			err = e
+		}
+	}()
 
 	if m == nil {
 		return nil, nil
 	}
 
 	// Allocate map with exact size to avoid resizing.
-	result := make(map[string]any, len(m))
+	result = make(map[string]any, len(m))
 
 	// Copy all key-value pairs.
 	for k, v := range m {
@@ -236,10 +272,11 @@ func normalizeMapReflect(rv reflect.Value) any {
 	// or `true` and a differently-quoted equivalent) — this is the same collision risk any
 	// YAML-to-map[string]any normalization has. Map[interface{}]interface{} iteration order is
 	// unspecified, so a plain overwrite would silently and non-deterministically drop one
-	// entry's data. If both colliding values are maps, merge them instead of dropping either;
-	// otherwise fall back to overwrite (still non-deterministic, but no worse than before this
-	// case existed, and collisions of non-map scalars under ambiguous keys are vanishingly rare
-	// in real stack configs).
+	// entry's data. If both colliding values are maps, merge them instead of dropping either.
+	// Otherwise the collision is genuinely ambiguous — there is no safe way to combine two
+	// scalars (or a scalar and a map) without picking one arbitrarily — so abort the merge via
+	// mapKeyCollisionPanic rather than silently dropping data; DeepCopyMap and
+	// deepMergeNativeTopLevel recover it into a normal returned error.
 	result := make(map[string]any, rv.Len())
 	for iter.Next() {
 		key := iter.Key()
@@ -251,12 +288,19 @@ func normalizeMapReflect(rv reflect.Value) any {
 		}
 		normalizedVal := deepCopyValue(iter.Value().Interface())
 		if existing, collided := result[keyStr]; collided {
-			if existingMap, ok := existing.(map[string]any); ok {
-				if newMap, ok := normalizedVal.(map[string]any); ok {
-					_ = deepMergeNative(existingMap, newMap, false, false)
-					continue
-				}
+			existingMap, existingIsMap := existing.(map[string]any)
+			newMap, newIsMap := normalizedVal.(map[string]any)
+			if existingIsMap && newIsMap {
+				_ = deepMergeNative(existingMap, newMap, false, false)
+				continue
 			}
+			panic(mapKeyCollisionPanic{
+				err: errUtils.Build(errUtils.ErrMergeKeyCollision).
+					WithExplanationf("multiple keys normalize to %q but are not both maps, so they cannot be merged safely", keyStr).
+					WithHint("quote ambiguous scalar keys (e.g. \"1\" instead of 1, or \"1.0\" instead of 1.0) so they don't collide after normalization").
+					WithContext("key", keyStr).
+					Err(),
+			})
 		}
 		result[keyStr] = normalizedVal
 	}
@@ -409,7 +453,7 @@ func MergeWithOptions(
 		// the new items so deepMergeNative's append adds them without duplication; otherwise
 		// it returns existing+new concatenated so the override replaces with the appended list.
 		current = processAppendTags(current, merged, appendSlice)
-		if err := deepMergeNative(merged, current, appendSlice, sliceDeepCopy); err != nil {
+		if err := deepMergeNativeTopLevel(merged, current, appendSlice, sliceDeepCopy); err != nil {
 			return nil, fmt.Errorf("%w: %w", errUtils.ErrMerge, err)
 		}
 	}

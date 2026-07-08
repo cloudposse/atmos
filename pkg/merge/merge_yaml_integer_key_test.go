@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v3"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // TestDeepMergeNative_YAMLIntegerMapKey reproduces cloudposse/atmos#2376: a nested map whose
@@ -88,4 +90,61 @@ func TestNormalizeMapReflect_CollidingStringifiedKeysAreMerged(t *testing.T) {
 	assert.Equal(t, true, entry["from_float_key"], "data from the float-keyed entry must survive the collision")
 	assert.Contains(t, []string{"int_value", "float_value"}, entry["shared"],
 		"the overlapping subkey wins non-deterministically, but must hold one of the two values, not be dropped")
+}
+
+// TestDeepCopyMap_NonMapKeyCollisionReturnsError covers a follow-up CodeRabbit review finding
+// on PR #2700 (upgraded to Major): when colliding stringified keys are NOT both maps (e.g. two
+// scalars, or a scalar and a map), there is no safe way to combine them, so silently falling
+// back to overwrite could non-deterministically drop data. Function normalizeMapReflect now
+// raises a mapKeyCollisionPanic instead, which DeepCopyMap recovers into a normal wrapped
+// error — the panic must never escape the public API.
+func TestDeepCopyMap_NonMapKeyCollisionReturnsError(t *testing.T) {
+	input := map[string]any{
+		"config": map[interface{}]interface{}{
+			1:          "from_int_key",
+			float64(1): "from_float_key",
+		},
+	}
+
+	result, err := DeepCopyMap(input)
+	require.Error(t, err, "a non-map collision must be rejected, not silently resolved")
+	assert.ErrorIs(t, err, errUtils.ErrMergeKeyCollision)
+	assert.Nil(t, result, "no partial result should be returned alongside the error")
+}
+
+// TestMergeWithOptions_NonMapKeyCollisionReturnsError verifies the same collision rejection
+// surfaces through MergeWithOptions (the multi-input merge path, via deepMergeNativeTopLevel)
+// and not just through DeepCopyMap's single-input fast path.
+func TestMergeWithOptions_NonMapKeyCollisionReturnsError(t *testing.T) {
+	base := map[string]any{"config": map[string]any{"other": "value"}}
+	overlay := map[string]any{
+		"config": map[interface{}]interface{}{
+			1:          "from_int_key",
+			float64(1): "from_float_key",
+		},
+	}
+
+	result, err := MergeWithOptions(nil, []map[string]any{base, overlay}, false, false)
+	require.Error(t, err, "a non-map collision during merge must be rejected, not silently resolved")
+	assert.ErrorIs(t, err, errUtils.ErrMergeKeyCollision)
+	assert.Nil(t, result)
+}
+
+// TestRecoveredMapKeyCollision_DoesNotMaskOtherPanics ensures recoveredMapKeyCollision only
+// converts our own deliberate mapKeyCollisionPanic into an error. Any other panic value (a
+// genuine bug) must re-panic unchanged so it still reaches Atmos's global panic handler with
+// its real value and stack trace, instead of being misreported as a merge-collision error.
+func TestRecoveredMapKeyCollision_DoesNotMaskOtherPanics(t *testing.T) {
+	run := func() (err error) {
+		defer func() {
+			if e := recoveredMapKeyCollision(recover()); e != nil {
+				err = e
+			}
+		}()
+		panic("unrelated bug: nil pointer dereference")
+	}
+
+	assert.PanicsWithValue(t, "unrelated bug: nil pointer dereference", func() {
+		_ = run()
+	})
 }
