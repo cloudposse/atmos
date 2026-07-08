@@ -1,0 +1,39 @@
+---
+title: atmos vendor config format
+sidebar_label: format
+sidebar_class_name: command
+id: format
+description: Format vendor manifest config files.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Format the root vendor manifest and any imported vendor manifest files in place,
+preserving comments, anchors, YAML functions, and templates. There is no flat alias for
+`format` — use this command directly.
+</Intro>
+
+<Screengrab title="atmos vendor config format --help" slug="atmos-vendor-config-format--help" />
+
+## Usage
+
+```shell
+atmos vendor config format [--file <manifest>]
+```
+
+The `fmt` alias is also accepted.
+
+## Examples
+
+```shell
+atmos vendor config format
+atmos vendor config format --file ./vendor.yaml
+```
+
+## Flags
+
+<dl>
+  <dt>`--file` (string, default `./vendor.yaml`)</dt>
+  <dd>The vendor manifest file to format (along with any manifests it imports).</dd>
+</dl>

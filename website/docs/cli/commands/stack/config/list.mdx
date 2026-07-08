@@ -1,0 +1,60 @@
+---
+title: atmos stack config list
+sidebar_label: list
+sidebar_class_name: command
+id: list
+description: List editable component config paths for a stack.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+List every editable component-relative dot-notation path for a component in a stack,
+along with the manifest file that defines each one, its type, and its value. This
+subcommand has no flat equivalent — a flat `atmos stack list` would collide with the
+existing [`atmos list stacks`](/cli/commands/list/stacks) — so `atmos stack config list`
+is the only way to invoke it.
+</Intro>
+
+<Screengrab title="atmos stack config list --help" slug="atmos-stack-config-list--help" />
+
+## Usage
+
+```shell
+atmos stack config list [path-pattern] -s <stack> -c <component> [--format <format>] [--delimiter <delimiter>]
+```
+
+## Examples
+
+```shell
+# List every editable path for the component.
+atmos stack config list -s plat-ue2-prod -c vpc
+
+# Filter by a glob pattern.
+atmos stack config list 'vars.*' -s plat-ue2-prod -c vpc
+
+# Machine-readable output.
+atmos stack config list -s plat-ue2-prod -c vpc --format json
+```
+
+## Arguments
+
+<dl>
+  <dt>`[path-pattern]` (optional)</dt>
+  <dd>A glob pattern to filter the listed paths (e.g. `vars.*`).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s` (string, required)</dt>
+  <dd>The stack name.</dd>
+  <dt>`--component` / `-c` (string, required)</dt>
+  <dd>The component name.</dd>
+  <dt>`--file` (string)</dt>
+  <dd>List paths from this manifest file explicitly instead of the merged component config.</dd>
+  <dt>`--format` / `-f` (string, default `paths`)</dt>
+  <dd>Output format: `paths`, `table`, `json`, `yaml`, `csv`, or `tsv`.</dd>
+  <dt>`--delimiter` (string)</dt>
+  <dd>Delimiter to use for `csv`/`tsv` output.</dd>
+</dl>
