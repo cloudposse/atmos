@@ -116,11 +116,14 @@ tools/lintroller/.lintroller
 /custom-gcl
 tools/gomodcheck/.gomodcheck
 
-# golangci-lint cache. Worktrees point GOLANGCI_LINT_CACHE at a repo-local dir to
-# avoid cross-worktree lock contention; it's large (100MB+) and machine-local, so
-# never commit it.
+# golangci-lint per-worktree cache + lock isolation (see
+# scripts/run-custom-golangci-lint.sh). The cache is large (100MB+); .golangci-tmp
+# holds the relocated golangci-lint.lock (via TMPDIR) so parallel worktree lints
+# don't serialize on the machine-global lock. Both are machine-local — never commit.
 .golangci-cache/
 **/.golangci-cache/
+.golangci-tmp/
+**/.golangci-tmp/
 
 # Generic repo-local cache dir (e.g. GOLANGCI_LINT_CACHE, tool scratch space).
 .cache/
