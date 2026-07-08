@@ -99,6 +99,10 @@ YAML supports three types of data: core, defined, and user-defined.
    bypassing all template processing. Use it to pass template-like syntax (e.g., `{{...}}` or `${...}`)
    to downstream tools like Terraform, Helm, or ArgoCD without Atmos attempting to evaluate them.
 
+ - The [__`!version`__](/functions/yaml/version) YAML function resolves a value from the active
+   Atmos-managed version track lock file. Use it for locked toolchain versions, image tags,
+   GitHub Actions refs, and other external version values.
+
  - The [__`!aws.account_id`__](/functions/yaml/aws.account-id) YAML function retrieves the AWS account ID
    of the current caller identity using STS GetCallerIdentity.
 

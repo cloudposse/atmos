@@ -1,0 +1,18 @@
+version: 1
+tracks:
+  demo:
+    checkout:
+      version: v6.1.0
+      ecosystem: github-actions
+      datasource: github-actions
+      package: actions/checkout
+    nginx:
+      version: 1.29.0
+      ecosystem: oci
+      datasource: oci
+      package: library/nginx
+    opentofu:
+      version: 1.10.6
+      ecosystem: toolchain
+      datasource: toolchain
+      package: opentofu

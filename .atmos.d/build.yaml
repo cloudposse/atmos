@@ -2,7 +2,12 @@ commands:
   - name: build
     description: Build and documentation commands for Atmos development
     default: binary
-    working_directory: &repo_root !repo-root .
+    # No working_directory here (unlike other custom commands): this command
+    # bootstraps the very first build using a pinned, possibly-older atmos
+    # release (see .github/workflows/version-tracker.yaml's
+    # ATMOS_BOOTSTRAP_VERSION), so it must not depend on YAML tags newer than
+    # that pin (e.g. !repo-root). Each step below resolves the repo root
+    # itself via `git rev-parse --show-toplevel` instead.
     env: &build_env
       - key: GOTOOLCHAIN
         value: auto
@@ -35,16 +40,14 @@ commands:
     commands:
       - name: deps
         description: Download Go module dependencies
-        working_directory: *repo_root
         env:
           - key: GOTOOLCHAIN
             value: auto
         steps:
-          - go mod download
+          - cd "$(git rev-parse --show-toplevel)" && go mod download
 
       - name: binary
         description: Build the Atmos binary
-        working_directory: *repo_root
         env: *build_env
         flags:
           - name: target
@@ -63,7 +66,6 @@ commands:
 
       - name: version
         description: Print the version from an already-built Atmos binary
-        working_directory: *repo_root
         env:
           - key: ATMOS_BUILD_TARGET
             value: "{{ .Flags.target }}"
@@ -74,6 +76,7 @@ commands:
         steps:
           - |
             set -eu
+            cd "$(git rev-parse --show-toplevel)"
 
             target="${ATMOS_BUILD_TARGET:-default}"
 
@@ -94,12 +97,12 @@ commands:
 
       - name: readme
         description: Regenerate README.md from README.yaml
-        working_directory: *repo_root
         env:
           - key: GOTOOLCHAIN
             value: auto
         steps:
           - |
             set -eu
+            cd "$(git rev-parse --show-toplevel)"
             atmos build
             ./build/atmos docs generate readme
