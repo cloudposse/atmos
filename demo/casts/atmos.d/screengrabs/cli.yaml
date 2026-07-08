@@ -195,6 +195,31 @@ commands:
           atmos validate stacks --help
           atmos vendor --help
           atmos vendor pull --help
+          atmos config get --help
+          atmos config set --help
+          atmos config delete --help
+          atmos config format --help
+          atmos config list --help
+          atmos stack get --help
+          atmos stack set --help
+          atmos stack delete --help
+          atmos stack format --help
+          atmos stack config --help
+          atmos stack config get --help
+          atmos stack config set --help
+          atmos stack config delete --help
+          atmos stack config format --help
+          atmos stack config list --help
+          atmos vendor get --help
+          atmos vendor set --help
+          atmos vendor update --help
+          atmos vendor diff --help
+          atmos vendor config --help
+          atmos vendor config get --help
+          atmos vendor config set --help
+          atmos vendor config delete --help
+          atmos vendor config format --help
+          atmos vendor config list --help
           atmos version
           atmos version --help
           atmos version list --help
@@ -535,6 +560,31 @@ commands:
           atmos validate stacks --help
           atmos vendor --help
           atmos vendor pull --help
+          atmos config get --help
+          atmos config set --help
+          atmos config delete --help
+          atmos config format --help
+          atmos config list --help
+          atmos stack get --help
+          atmos stack set --help
+          atmos stack delete --help
+          atmos stack format --help
+          atmos stack config --help
+          atmos stack config get --help
+          atmos stack config set --help
+          atmos stack config delete --help
+          atmos stack config format --help
+          atmos stack config list --help
+          atmos vendor get --help
+          atmos vendor set --help
+          atmos vendor update --help
+          atmos vendor diff --help
+          atmos vendor config --help
+          atmos vendor config get --help
+          atmos vendor config set --help
+          atmos vendor config delete --help
+          atmos vendor config format --help
+          atmos vendor config list --help
           atmos version
           atmos version --help
           atmos version list --help

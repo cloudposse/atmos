@@ -620,6 +620,10 @@ func setEnv(v *viper.Viper) {
 	// CI log-group settings (env override for the schema field with no CLI flag).
 	bindEnv(v, "ci.groups.mode", "ATMOS_CI_GROUPS_MODE")
 
+	// Cast recording dimensions (env override for recording pipelines, e.g. docs screengrabs).
+	bindEnv(v, "cast.recording.width", "ATMOS_CAST_RECORDING_WIDTH")
+	bindEnv(v, "cast.recording.height", "ATMOS_CAST_RECORDING_HEIGHT")
+
 	// Profiler settings
 	bindEnv(v, "profiler.enabled", "ATMOS_PROFILER_ENABLED")
 	bindEnv(v, "profiler.host", "ATMOS_PROFILER_HOST")

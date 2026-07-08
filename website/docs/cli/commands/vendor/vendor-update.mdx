@@ -6,7 +6,7 @@ id: vendor-update
 description: Update vendored component versions to the latest allowed release, preserving comments, anchors, and templates.
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Check each Git-backed source in your `vendor.yaml` for a newer version — honoring any
@@ -14,7 +14,7 @@ per-source constraints — and update the `version` field in place, preserving c
 anchors, and Go templates such as `{{.Version}}` in source URLs.
 </Intro>
 
-<Screengrab title="atmos vendor update --help" slug="atmos-vendor-update--help" />
+<CastPlayer title="atmos vendor update --help" src="/casts/screengrabs/atmos-vendor-update--help.cast" static chrome />
 
 ## Usage
 
