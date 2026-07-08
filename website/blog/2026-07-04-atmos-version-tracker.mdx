@@ -1,0 +1,120 @@
+---
+slug: atmos-version-tracker
+title: "One Catalog for Every Version Pin: the Atmos Version Tracker"
+authors: [osterman]
+tags: [feature]
+---
+
+Your infrastructure's versions live everywhere except one place. `actions/checkout@v4` in a dozen workflow files, `TOFU_VERSION=1.9.0` in a Dockerfile, `nginx:1.27` in a stack, `kubectl` wherever your bootstrap script says. When a version needs to move, you grep and hope. When it shouldn't move, nothing enforces that either — and every unpinned mutable tag is a supply-chain incident waiting for its moment. The Atmos Version Tracker gives all of those versions a single source of truth: a catalog in `atmos.yaml`, a deterministic lock file, policy-driven updates, and file managers that rewrite your workflows, Dockerfiles, and rendered files from the lock.
+
+<!--truncate-->
+
+## The Problem
+
+Version pins are configuration, but nobody manages them like configuration:
+
+- **No source of truth.** The same tool version is repeated across workflow YAML, Dockerfiles, stack manifests, and CI scripts. Environments drift silently because there is nothing to drift *from*.
+- **Bolt-on updaters don't understand your stacks.** Renovate and Dependabot see files, not Atmos configuration. They can't resolve a version into a stack, don't know your tracks or environments, and produce PR noise you tune with regex managers instead of policy.
+- **Mutable tags are a supply-chain risk.** `actions/checkout@v4` and `nginx:latest` can change underneath you. Pinning to SHAs by hand is the fix everyone agrees on and nobody keeps up with.
+
+## The Fix
+
+The Atmos Version Tracker makes external versions first-class Atmos configuration. You declare a catalog under `version:` in `atmos.yaml`; Atmos owns resolution, locking, policy, and file rewriting:
+
+```yaml title="atmos.yaml"
+version:
+  track: prod
+
+  dependencies:
+    checkout:
+      ecosystem: github-actions
+      package: actions/checkout
+      desired: v6
+      update:
+        pin: sha        # lock and render the immutable commit SHA
+
+    opentofu:
+      ecosystem: toolchain
+      package: opentofu
+      desired: "~1.10"
+
+    nginx:
+      ecosystem: oci
+      package: library/nginx
+      desired: "1.29.0"
+
+  tracks:
+    prod:
+      dependencies:
+        nginx:
+          desired: "1.29.1"
+
+  files:
+    - manager: github-actions
+      paths: [.github/workflows/*.yaml]
+    - manager: marker
+      paths: [Dockerfile]
+    - manager: template
+      paths: ["**/*.tmpl"]
+```
+
+Resolved versions land in a committed `versions.lock.yaml`, so local runs and CI are deterministic. Updates are policy-driven — strategy caps (`major`/`minor`/`patch`), cooldown windows (`14d`, `2w`), include/exclude rules, and prerelease policy — and every version held back by policy is reported with the reason instead of silently skipped:
+
+```shell
+atmos version track update
+```
+
+```yaml
+track: prod
+results:
+  - name: checkout
+    from: v6.1.0
+    to: v6.2.0
+    updated: true
+  - name: nginx
+    from: 1.29.0
+    updated: false
+    reason: "1.30.0 released 3d ago; cooldown 14d has not elapsed"
+```
+
+File managers then rewrite your actual project files from the lock. Pinned entries get the immutable SHA with the human-readable version as a trailing comment — the same round-trip convention Renovate and Dependabot use:
+
+```yaml title=".github/workflows/ci.yaml"
+- uses: actions/checkout@8edcb1bdb4e267140fa742c62e395cd74f332709 # v6.1.0
+```
+
+Any text file with comments can carry a managed version via a marker annotation:
+
+```dockerfile title="Dockerfile"
+# atmos:version opentofu
+ENV TOFU_VERSION=1.10.6
+```
+
+And comment-hostile formats (like JSON) render from `*.tmpl` templates with the `.version` context. In stacks, `!version name` and `{{ .version.name }}` resolve from the lock, so versions stop being copy-pasted into stack manifests at all.
+
+## How to Use It
+
+Add an entry (the ecosystem is inferred from the package), lock, and apply:
+
+```shell
+atmos version track add checkout --package=actions/checkout --pin=sha
+atmos version track lock      # resolve desired versions into versions.lock.yaml
+atmos version track apply     # rewrite managed files from the lock
+```
+
+Then gate CI on the whole thing staying honest:
+
+```yaml title=".github/workflows/version-check.yaml"
+steps:
+  - uses: actions/checkout@v6
+  - run: atmos version track apply --check   # fail if any managed file is stale
+  - run: atmos version track verify          # lock fresh AND files current
+```
+
+`atmos version track status` shows where you stand at any time — including `newer-available (blocked)` when a newer version exists upstream but your cooldown or strategy is deliberately holding it back. That's a passing state, not a failure: the locked version is exactly what your policy wants deployed.
+
+See the [`atmos version track` command reference](/cli/commands/version/track) and [Managed Versions configuration](/cli/configuration/version/managed-versions) for the full surface, or try the runnable [`examples/demo-version-tracker`](https://github.com/cloudposse/atmos/tree/main/examples/demo-version-tracker) example.
+
+## Get Involved
+
+If you've been stitching together Renovate configs to approximate this, we'd love to hear which datasources and ecosystems you need next. Open a discussion or issue in the [Atmos repo](https://github.com/cloudposse/atmos), or join us in the [Cloud Posse Slack](https://cloudposse.com/slack).

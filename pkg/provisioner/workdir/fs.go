@@ -322,6 +322,7 @@ func (h *DefaultHasher) HashDir(path string) (string, error) {
 			return "", err
 		}
 		// Normalize to forward slashes for cross-platform consistency.
+		// codeql[go/weak-sensitive-data-hashing] -- this hashes a file path for a workdir content-checksum cache, never a password or credential.
 		hash.Write([]byte(filepath.ToSlash(relPath)))
 
 		// Hash file contents.

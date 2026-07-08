@@ -1,0 +1,45 @@
+---
+title: atmos vendor config delete
+sidebar_label: delete
+sidebar_class_name: command
+id: delete
+description: Delete a raw value from vendor.yaml by dot-notation path.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Delete a raw value from `vendor.yaml` using an arbitrary dot-notation path, preserving
+the rest of the file's comments, anchors, and formatting. There is no flat/component-name
+alias for `delete` — use this command directly.
+</Intro>
+
+<Screengrab title="atmos vendor config delete --help" slug="atmos-vendor-config-delete--help" />
+
+## Usage
+
+```shell
+atmos vendor config delete <path> [--file <manifest>]
+```
+
+The `del` and `unset` aliases are also accepted.
+
+## Examples
+
+```shell
+atmos vendor config delete spec.sources[0].tags
+```
+
+## Arguments
+
+<dl>
+  <dt>`<path>` (required)</dt>
+  <dd>Dot-notation path into the vendor manifest to delete (e.g. `spec.sources[0].tags`).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--file` (string, default `./vendor.yaml`)</dt>
+  <dd>The vendor manifest file to edit.</dd>
+</dl>

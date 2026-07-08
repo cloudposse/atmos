@@ -103,6 +103,9 @@ const (
 
 	// TagEmulator resolves a value from a local emulator.
 	TagEmulator = fntag.Emulator
+
+	// TagVersion resolves a locked version from the Atmos Version Tracker.
+	TagVersion = fntag.Version
 )
 
 // YAMLTagPrefix is the prefix used for YAML custom tags.
