@@ -90,12 +90,8 @@ func cacheResolvedPaths(cfg *cachepkg.Config) []string {
 }
 
 // cacheResolvedExcludes returns the absolute directories that must never be
-// cached, unless the user explicitly opted out via
-// ci.cache.allow_unsafe_auth_cache.
+// cached.
 func cacheResolvedExcludes(cfg *cachepkg.Config) []string {
-	if cfg.AllowUnsafeAuthCache {
-		return nil
-	}
 	defaults := cachepkg.DefaultExcludedPaths()
 	out := make([]string, 0, len(defaults))
 	for _, ex := range defaults {

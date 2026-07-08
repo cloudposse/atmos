@@ -27,19 +27,19 @@ const (
 // archiveRoot writes a gzip-compressed tar of root to w. When includes is
 // non-empty, only entries whose path (relative to root) is within one of the
 // listed relative subpaths are included; otherwise the whole root is archived.
-// The state directory (stateDirName) is always skipped. Unless
-// allowUnsafeAuthCache is true, the default-excluded auth-cache subpaths
-// (DefaultExcludedPaths) are also always skipped, regardless of includes.
+// The state directory (stateDirName) is always skipped, as are the
+// default-excluded auth-cache subpaths (DefaultExcludedPaths), regardless of
+// includes.
 //
 // Tar entry names are stored relative to root with forward slashes so archives
 // are portable across platforms.
-func archiveRoot(w io.Writer, root string, includes []string, allowUnsafeAuthCache bool) error {
+func archiveRoot(w io.Writer, root string, includes []string) error {
 	defer perf.Track(nil, "cache.archiveRoot")()
 
 	gw := gzip.NewWriter(w)
 	tw := tar.NewWriter(gw)
 
-	a := &archiver{tw: tw, root: root, includes: includes, allowUnsafeAuthCache: allowUnsafeAuthCache}
+	a := &archiver{tw: tw, root: root, includes: includes}
 	walkErr := filepath.WalkDir(root, a.walk)
 
 	if walkErr != nil {
@@ -62,10 +62,9 @@ func archiveRoot(w io.Writer, root string, includes []string, allowUnsafeAuthCac
 // archiver carries the state needed to archive a directory tree, keeping the
 // WalkDir callback to a small signature.
 type archiver struct {
-	tw                   *tar.Writer
-	root                 string
-	includes             []string
-	allowUnsafeAuthCache bool
+	tw       *tar.Writer
+	root     string
+	includes []string
 }
 
 // walk decides what to do with a single walked entry and writes it when it is in
@@ -83,7 +82,7 @@ func (a *archiver) walk(path string, d os.DirEntry, err error) error {
 		return nil
 	}
 
-	if handled, action := archiveSkipDecision(rel, a.includes, d.IsDir(), a.allowUnsafeAuthCache); handled {
+	if handled, action := archiveSkipDecision(rel, a.includes, d.IsDir()); handled {
 		return action
 	}
 
@@ -93,16 +92,16 @@ func (a *archiver) walk(path string, d os.DirEntry, err error) error {
 // archiveSkipDecision decides whether a walked entry is out of scope. It returns
 // handled=true with the walk action (nil to skip the single entry, or
 // filepath.SkipDir to prune a directory) when the entry should not be archived.
-func archiveSkipDecision(rel string, includes []string, isDir bool, allowUnsafeAuthCache bool) (bool, error) {
+func archiveSkipDecision(rel string, includes []string, isDir bool) (bool, error) {
 	// Always exclude the state directory.
 	if isStateDir(rel) {
 		return true, pruneAction(isDir)
 	}
 
-	// Always exclude default auth-cache subpaths, regardless of includes,
-	// unless the user explicitly opted out. Evaluated before the includes
-	// check so an explicit `ci.cache.paths: [auth]` cannot re-include it.
-	if !allowUnsafeAuthCache && isUnderPrefix(rel, defaultExcludedPaths) {
+	// Always exclude default auth-cache subpaths, regardless of includes.
+	// Evaluated before the includes check so an explicit
+	// `ci.cache.paths: [auth]` cannot re-include it.
+	if isUnderPrefix(rel, defaultExcludedPaths) {
 		return true, pruneAction(isDir)
 	}
 

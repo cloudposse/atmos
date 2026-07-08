@@ -80,11 +80,6 @@ func TestCacheResolvedExcludes(t *testing.T) {
 			assert.Equal(t, filepath.Join(root, ex), got[i])
 		}
 	})
-
-	t.Run("allow unsafe auth cache disables excludes", func(t *testing.T) {
-		got := cacheResolvedExcludes(&cachepkg.Config{Root: root, AllowUnsafeAuthCache: true})
-		assert.Empty(t, got)
-	})
 }
 
 func TestGithubGlobLines_PairsIncludeExcludeAtSameDepth(t *testing.T) {

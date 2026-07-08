@@ -3,8 +3,7 @@ package cache
 import "github.com/cloudposse/atmos/pkg/perf"
 
 // defaultExcludedPaths are root-relative subpaths that are pruned from the CI
-// cache unconditionally (regardless of ci.cache.paths), unless the user
-// explicitly opts out via ci.cache.allow_unsafe_auth_cache. Each entry is a
+// cache unconditionally, regardless of ci.cache.paths. Each entry is a
 // well-known Atmos auth cache directory that lives under the same XDG cache
 // root (~/.cache/atmos) that ci.cache archives by default, and persists real
 // session material (tokens, refresh tokens, client secrets) or provisioned

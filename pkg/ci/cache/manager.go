@@ -151,7 +151,7 @@ func (m *Manager) buildArchive() (string, int64, error) {
 	}
 	defer tmp.Close()
 
-	if err := archiveRoot(tmp, m.cfg.Root, m.cfg.Includes, m.cfg.AllowUnsafeAuthCache); err != nil {
+	if err := archiveRoot(tmp, m.cfg.Root, m.cfg.Includes); err != nil {
 		_ = os.Remove(tmp.Name()) //nolint:gosec // G703: path is from os.CreateTemp, not user input.
 		return "", 0, err
 	}

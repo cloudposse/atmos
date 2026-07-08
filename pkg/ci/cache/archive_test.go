@@ -33,7 +33,7 @@ func TestArchiveRoot_RoundTrip(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(src, stateDirName, "state.json"), []byte("{}"), 0o644))
 
 	var buf bytes.Buffer
-	require.NoError(t, archiveRoot(&buf, src, nil, false))
+	require.NoError(t, archiveRoot(&buf, src, nil))
 
 	dst := t.TempDir()
 	require.NoError(t, extractToRoot(&buf, dst))
@@ -64,7 +64,7 @@ func TestArchiveRoot_IncludesFilter(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(src, "other", "skip"), []byte("drop"), 0o644))
 
 	var buf bytes.Buffer
-	require.NoError(t, archiveRoot(&buf, src, []string{"toolchain"}, false))
+	require.NoError(t, archiveRoot(&buf, src, []string{"toolchain"}))
 
 	dst := t.TempDir()
 	require.NoError(t, extractToRoot(&buf, dst))
@@ -92,7 +92,7 @@ func TestArchiveRoot_DefaultExcludesAuthCaches(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, archiveRoot(&buf, src, nil, false))
+	require.NoError(t, archiveRoot(&buf, src, nil))
 
 	dst := t.TempDir()
 	require.NoError(t, extractToRoot(&buf, dst))
@@ -104,22 +104,6 @@ func TestArchiveRoot_DefaultExcludesAuthCaches(t *testing.T) {
 		_, err := os.Stat(filepath.Join(dst, excluded))
 		assert.True(t, os.IsNotExist(err), "%q must be excluded from the default archive", excluded)
 	}
-}
-
-func TestArchiveRoot_AllowUnsafeAuthCache(t *testing.T) {
-	src := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(src, "aws-sso", "sessions"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(src, "aws-sso", "sessions", "x.json"), []byte("sso-token"), 0o644))
-
-	var buf bytes.Buffer
-	require.NoError(t, archiveRoot(&buf, src, nil, true))
-
-	dst := t.TempDir()
-	require.NoError(t, extractToRoot(&buf, dst))
-
-	got, err := os.ReadFile(filepath.Join(dst, "aws-sso", "sessions", "x.json"))
-	require.NoError(t, err, "opted-in auth cache must be archived")
-	assert.Equal(t, "sso-token", string(got))
 }
 
 func TestSafeJoin_RejectsEscape(t *testing.T) {
@@ -149,67 +133,62 @@ func TestArchiveSkipDecision(t *testing.T) {
 	sep := string(os.PathSeparator)
 
 	t.Run("state dir is pruned", func(t *testing.T) {
-		handled, action := archiveSkipDecision(stateDirName, nil, true, false)
+		handled, action := archiveSkipDecision(stateDirName, nil, true)
 		assert.True(t, handled)
 		assert.Equal(t, filepath.SkipDir, action)
 	})
 
 	t.Run("file under state dir is skipped", func(t *testing.T) {
-		handled, action := archiveSkipDecision(stateDirName+sep+"state.json", nil, false, false)
+		handled, action := archiveSkipDecision(stateDirName+sep+"state.json", nil, false)
 		assert.True(t, handled)
 		assert.NoError(t, action)
 	})
 
 	t.Run("empty includes match everything", func(t *testing.T) {
-		handled, _ := archiveSkipDecision("anything", nil, false, false)
+		handled, _ := archiveSkipDecision("anything", nil, false)
 		assert.False(t, handled)
 	})
 
 	t.Run("dir outside includes is pruned", func(t *testing.T) {
-		handled, action := archiveSkipDecision("other", []string{"toolchain"}, true, false)
+		handled, action := archiveSkipDecision("other", []string{"toolchain"}, true)
 		assert.True(t, handled)
 		assert.Equal(t, filepath.SkipDir, action)
 	})
 
 	t.Run("file outside includes is skipped", func(t *testing.T) {
-		handled, action := archiveSkipDecision("other.txt", []string{"toolchain"}, false, false)
+		handled, action := archiveSkipDecision("other.txt", []string{"toolchain"}, false)
 		assert.True(t, handled)
 		assert.NoError(t, action)
 	})
 
 	t.Run("ancestor dir of an include is kept", func(t *testing.T) {
-		handled, _ := archiveSkipDecision("toolchain", []string{filepath.Join("toolchain", "bin")}, true, false)
+		handled, _ := archiveSkipDecision("toolchain", []string{filepath.Join("toolchain", "bin")}, true)
 		assert.False(t, handled)
 	})
 
 	t.Run("matching path is kept", func(t *testing.T) {
-		handled, _ := archiveSkipDecision("toolchain", []string{"toolchain"}, true, false)
+		handled, _ := archiveSkipDecision("toolchain", []string{"toolchain"}, true)
 		assert.False(t, handled)
 	})
 
 	t.Run("each default excluded subdir is pruned", func(t *testing.T) {
 		for _, ex := range defaultExcludedPaths {
-			handled, action := archiveSkipDecision(ex, nil, true, false)
+			handled, action := archiveSkipDecision(ex, nil, true)
 			assert.True(t, handled, "expected %q to be pruned", ex)
 			assert.Equal(t, filepath.SkipDir, action)
 		}
 	})
 
 	t.Run("file under a default excluded dir is skipped", func(t *testing.T) {
-		handled, action := archiveSkipDecision(filepath.Join("aws-sso", "sessions", "x.json"), nil, false, false)
+		handled, action := archiveSkipDecision(filepath.Join("aws-sso", "sessions", "x.json"), nil, false)
 		assert.True(t, handled)
 		assert.NoError(t, action)
 	})
 
 	t.Run("default excluded dir is pruned even when explicitly included", func(t *testing.T) {
-		handled, action := archiveSkipDecision("aws-sso", []string{"aws-sso"}, true, false)
+		handled, action := archiveSkipDecision("aws-sso", []string{"aws-sso"}, true)
 		assert.True(t, handled, "explicit include must not override the default exclusion")
 		assert.Equal(t, filepath.SkipDir, action)
-	})
-
-	t.Run("allowUnsafeAuthCache opts back in", func(t *testing.T) {
-		handled, _ := archiveSkipDecision("aws-sso", nil, true, true)
-		assert.False(t, handled)
 	})
 }
 
@@ -221,7 +200,7 @@ func TestExtractToRoot_InvalidGzip(t *testing.T) {
 func TestArchiveRoot_NonExistentRoot(t *testing.T) {
 	// WalkDir on a missing root surfaces as an archive failure.
 	var buf bytes.Buffer
-	err := archiveRoot(&buf, filepath.Join(t.TempDir(), "missing"), nil, false)
+	err := archiveRoot(&buf, filepath.Join(t.TempDir(), "missing"), nil)
 	require.ErrorIs(t, err, errUtils.ErrCacheArchiveFailed)
 }
 
@@ -293,7 +272,7 @@ func TestArchiveRoot_SkipsSymlink(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, archiveRoot(&buf, src, nil, false))
+	require.NoError(t, archiveRoot(&buf, src, nil))
 
 	dst := t.TempDir()
 	require.NoError(t, extractToRoot(&buf, dst))

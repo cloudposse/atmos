@@ -104,24 +104,6 @@ func TestResolveConfig_WithIncludes(t *testing.T) {
 	assert.Equal(t, []string{"toolchain"}, cfg.Includes)
 }
 
-func TestResolveConfig_AllowUnsafeAuthCache_Default(t *testing.T) {
-	useTempCacheHome(t)
-
-	cfg, err := ResolveConfig(nil)
-	require.NoError(t, err)
-	assert.False(t, cfg.AllowUnsafeAuthCache)
-}
-
-func TestResolveConfig_AllowUnsafeAuthCache_Explicit(t *testing.T) {
-	useTempCacheHome(t)
-
-	ac := &schema.AtmosConfiguration{}
-	ac.CI.Cache.AllowUnsafeAuthCache = true
-	cfg, err := ResolveConfig(ac)
-	require.NoError(t, err)
-	assert.True(t, cfg.AllowUnsafeAuthCache)
-}
-
 func TestDefaultLockfilePath(t *testing.T) {
 	root := t.TempDir()
 

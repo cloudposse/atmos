@@ -47,9 +47,9 @@ fallback — mirroring `actions/cache`.
 A fixed set of Atmos's own auth session-cache subdirectories — `aws-sso`, `azure-device-code`,
 `aws-webflow`, and `auth` (AWS SSO tokens, Azure device-code tokens, AWS webflow refresh
 tokens, and provisioned-identity metadata) — is **always excluded** from the cache, regardless
-of `ci.cache.paths`, unless `ci.cache.allow_unsafe_auth_cache` is set. This is a hardening
-default, not a response to a known exploit: nothing should depend on every `ci.cache.paths`
-configuration remembering to avoid these directories by hand.
+of `ci.cache.paths`, with no opt-out. This is defensive hardening: it makes it structurally
+impossible for these directories to end up in a cache archive, rather than relying on every
+`ci.cache.paths` configuration to avoid them by convention.
 
 Cache entries are **write-once**. To keep automatic and manual usage from conflicting, Atmos
 records how each key was restored and whether it was saved: a save is skipped when the exact
@@ -99,8 +99,7 @@ supported CI provider, the cache is a no-op.
   <dt>`ci.cache.paths`</dt>
   <dd>
     Root-relative subpaths to include in the cache. When empty, the entire cache root is
-    cached, **except** the default-excluded auth-cache subdirectories (see
-    `ci.cache.allow_unsafe_auth_cache` below).
+    cached, **except** the default-excluded auth-cache subdirectories, which are never cached.
 
     **Default:** the entire cache root, minus the default-excluded auth-cache subdirectories
   </dd>
@@ -126,21 +125,6 @@ supported CI provider, the cache is a no-op.
     Archive compression. Currently only `gzip` is supported.
 
     **Default:** `gzip`
-  </dd>
-
-  <dt>`ci.cache.allow_unsafe_auth_cache`</dt>
-  <dd>
-    Opts out of the default exclusion of Atmos's own auth session caches (AWS SSO tokens,
-    Azure device-code tokens, AWS webflow refresh tokens, provisioned-identity metadata) from
-    the CI cache.
-
-    :::danger
-    Setting this to `true` uploads live AWS SSO/Azure/webflow session tokens to your CI
-    provider's cache store. Only enable it if you have a specific, trusted reason to cache
-    your own credential material.
-    :::
-
-    **Default:** `false`
   </dd>
 </dl>
 
@@ -273,7 +257,6 @@ The actions ship inside the Atmos repository, so pin them to an Atmos release (`
 |----------|-------------|
 | `ATMOS_CI_CACHE_ENABLED` | Override `ci.cache.enabled` (`true`/`false`) |
 | `ATMOS_CI_CACHE_AUTO` | Override `ci.cache.auto` (`off`/`restore`/`save`/`both`) |
-| `ATMOS_CI_CACHE_ALLOW_UNSAFE_AUTH_CACHE` | Override `ci.cache.allow_unsafe_auth_cache` (`true`/`false`) |
 | `ATMOS_CI_CACHE_KEY` | Override the cache key (`--key`) |
 | `ATMOS_CI_CACHE_ROOT` | Override the cache root (`--root`) |
 | `ATMOS_CI_CACHE_PATHS` | Override the cached paths (`--path`) |

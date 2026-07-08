@@ -141,8 +141,6 @@ ci:
     key: ""                 # template; default derived from toolchain.lock.yaml + os/arch
     restore_keys: []        # prefix fallbacks
     compression: gzip       # gzip (default)
-    allow_unsafe_auth_cache: false  # opt out of the default auth-path exclusion
-                                    # (env: ATMOS_CI_CACHE_ALLOW_UNSAFE_AUTH_CACHE)
 ```
 
 CLI overrides on the subcommands: `--key`, `--restore-key`, `--path`, `--root`,
@@ -180,14 +178,16 @@ vendoring caches, remote stack-import clones, and plugin caches inherit CI cachi
 without every new regenerable-data subdirectory needing a config change. But that same root
 is where several Atmos auth flows persist session credentials to disk, so a whole-root default
 needs an unconditional carve-out rather than relying on operators to hand-configure
-`ci.cache.paths` correctly. This is hardening against a foot-gun, not a fix for a disclosed
-exploit — access to a repo's Actions cache is already scoped to that repo, and everything
-below is short-lived, rotating session material rather than static long-lived secrets.
+`ci.cache.paths` correctly. This is defensive hardening, not a fix for an incident or
+demonstrated exploit — a repo's Actions cache is already scoped to that repo, and everything
+below is short-lived, rotating session material rather than static long-lived secrets. The
+carve-out simply makes it structurally impossible for these directories to end up in a cache
+archive, rather than relying on convention.
 
 `pkg/ci/cache.DefaultExcludedPaths()` (`pkg/ci/cache/exclusions.go`) is pruned unconditionally
-in `archive.go`'s `archiveSkipDecision` — regardless of `ci.cache.paths` — unless
-`ci.cache.allow_unsafe_auth_cache` is set. The same list is rendered as `!`-prefixed glob
-exclusions by `atmos ci cache paths` for the native-`actions/cache` integration path.
+in `archive.go`'s `archiveSkipDecision` — regardless of `ci.cache.paths`, with no opt-out. The
+same list is rendered as `!`-prefixed glob exclusions by `atmos ci cache paths` for the
+native-`actions/cache` integration path.
 
 | Root-relative path | Owning file | Contains |
 | --- | --- | --- |

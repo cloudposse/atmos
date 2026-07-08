@@ -55,11 +55,6 @@ type Config struct {
 
 	// Compression is the archive compression (currently always gzip).
 	Compression string
-
-	// AllowUnsafeAuthCache opts out of the default exclusion of Atmos's own
-	// auth session-cache subdirectories from the archive (see
-	// DefaultExcludedPaths).
-	AllowUnsafeAuthCache bool
 }
 
 // CacheRoot returns the absolute path of the well-known cache root that the CI
@@ -103,12 +98,11 @@ func ResolveConfig(atmosConfig *schema.AtmosConfiguration) (*Config, error) {
 	}
 
 	cfg := &Config{
-		Enabled:              cc.Enabled,
-		Auto:                 auto,
-		Root:                 root,
-		Includes:             normalizeIncludes(cc.Paths),
-		Compression:          compression,
-		AllowUnsafeAuthCache: cc.AllowUnsafeAuthCache,
+		Enabled:     cc.Enabled,
+		Auto:        auto,
+		Root:        root,
+		Includes:    normalizeIncludes(cc.Paths),
+		Compression: compression,
 	}
 
 	if err := resolveKeys(cfg, &cc, root, atmosConfig); err != nil {
