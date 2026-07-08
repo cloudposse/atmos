@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	agentskills "github.com/cloudposse/atmos/agent-skills"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
@@ -40,7 +41,9 @@ func TestCatalog(t *testing.T) {
 	require.NoError(t, err)
 
 	// The repository bundles exactly the official skills in agent-skills/skills.
-	require.Len(t, catalog, 41)
+	skillDirs, err := agentskills.Skills.ReadDir("skills")
+	require.NoError(t, err)
+	require.Len(t, catalog, len(skillDirs))
 
 	// Entries are sorted by name; assert first and last by value, not just length.
 	first := catalog[0]
