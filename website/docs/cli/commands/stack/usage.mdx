@@ -13,6 +13,13 @@ for a component in a stack. Because stack configuration is assembled by deep-mer
 many manifests, Atmos uses [provenance](/stacks/imports) to find the
 manifest file that actually defines the effective value, then edits that file in place —
 preserving comments, anchors/aliases, Atmos YAML functions, and Go templates.
+
+[`atmos stack config get|set|delete|format|list`](/cli/commands/stack/config) is
+the **canonical** command set. The flat commands documented below (`get`, `set`,
+`delete`, `format`) are convenience aliases of the matching `stack config` subcommand.
+`list` has no flat form — a flat `atmos stack list` would collide with the existing
+[`atmos list stacks`](/cli/commands/list/stacks) — so use `atmos stack config list`
+directly.
 </Intro>
 
 ## Usage
@@ -21,15 +28,19 @@ preserving comments, anchors/aliases, Atmos YAML functions, and Go templates.
 atmos stack get <path> -s <stack> -c <component>
 atmos stack set <path> <value> -s <stack> -c <component> [--type <type>] [--file <manifest>]
 atmos stack delete <path> -s <stack> -c <component> [--file <manifest>]
+atmos stack format -s <stack> -c <component> [--file <manifest>]
+atmos stack config list [path-pattern] -s <stack> -c <component> [--format <format>]
 ```
 
 Paths are component-relative (e.g. `vars.region`, `settings.spacelift.workspace_enabled`).
 
 ## Subcommands
 
-- [`atmos stack get`](/cli/commands/stack/stack-get) — read a value and show where it resolves from.
-- [`atmos stack set`](/cli/commands/stack/stack-set) — set a value in the manifest that defines it.
-- [`atmos stack delete`](/cli/commands/stack/stack-delete) — delete a value from the manifest that defines it.
+- [`atmos stack get`](/cli/commands/stack/stack-get) — read a value and show where it resolves from. Alias of [`atmos stack config get`](/cli/commands/stack/config/get).
+- [`atmos stack set`](/cli/commands/stack/stack-set) — set a value in the manifest that defines it. Alias of [`atmos stack config set`](/cli/commands/stack/config/set).
+- [`atmos stack delete`](/cli/commands/stack/stack-delete) — delete a value from the manifest that defines it. Alias of [`atmos stack config delete`](/cli/commands/stack/config/delete).
+- [`atmos stack format`](/cli/commands/stack/stack-format) — format the manifest files that define a component. Alias of [`atmos stack config format`](/cli/commands/stack/config/format).
+- [`atmos stack config`](/cli/commands/stack/config) — the canonical `get`/`set`/`delete`/`format`/`list` command set.
 
 ## Examples
 
@@ -42,6 +53,12 @@ atmos stack set vars.region us-west-2 -s plat-ue2-prod -c vpc
 
 # Target a specific manifest explicitly (also used to create new keys).
 atmos stack set vars.new_flag true --type=bool -s plat-ue2-prod -c vpc --file stacks/deploy/prod.yaml
+
+# Format the manifest files that define a component.
+atmos stack format -s plat-ue2-prod -c vpc
+
+# List every editable path for a component (canonical form only, no flat alias).
+atmos stack config list -s plat-ue2-prod -c vpc
 ```
 
 ## How file resolution works

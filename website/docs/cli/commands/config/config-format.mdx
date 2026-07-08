@@ -1,0 +1,38 @@
+---
+title: atmos config format
+sidebar_label: format
+sidebar_class_name: command
+id: config-format
+description: Format the active atmos.yaml file.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Format the active `atmos.yaml` file in place, preserving comments, anchors, Atmos YAML
+functions, and Go templates.
+</Intro>
+
+<Screengrab title="atmos config format --help" slug="atmos-config-format--help" />
+
+## Usage
+
+```shell
+atmos config format
+```
+
+The `fmt` alias is also accepted.
+
+## Examples
+
+```shell
+atmos config format
+atmos --config ./config/atmos.yaml config format
+```
+
+## Flags
+
+<dl>
+  <dt>`--config` (string, inherited)</dt>
+  <dd>Target a specific `atmos.yaml` file instead of the one discovered in the current directory or git root.</dd>
+</dl>

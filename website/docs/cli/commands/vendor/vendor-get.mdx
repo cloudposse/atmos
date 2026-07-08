@@ -13,6 +13,10 @@ Read the version pinned for a component in your `vendor.yaml` manifest. The comp
 is matched by name, so manifest ordering does not matter.
 </Intro>
 
+:::info
+`atmos vendor get` is an alias for [`atmos vendor config get`](/cli/commands/vendor/config/get): it resolves `<component>` to its `spec.sources[N].version` path and delegates to the canonical form.
+:::
+
 <Screengrab title="atmos vendor get --help" slug="atmos-vendor-get--help" />
 
 ## Usage

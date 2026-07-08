@@ -1,0 +1,49 @@
+---
+title: atmos vendor config get
+sidebar_label: get
+sidebar_class_name: command
+id: get
+description: Read a raw value from vendor.yaml by dot-notation path.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Read a raw value from `vendor.yaml` using an arbitrary dot-notation path. This is the
+canonical form. [`atmos vendor get <component>`](/cli/commands/vendor/vendor-get) is a
+convenience alias that resolves a component name to its `spec.sources[N].version`
+path and calls this same engine — use `atmos vendor config get` directly for paths
+other than a component's pinned version.
+</Intro>
+
+<Screengrab title="atmos vendor config get --help" slug="atmos-vendor-config-get--help" />
+
+## Usage
+
+```shell
+atmos vendor config get <path> [--file <manifest>]
+```
+
+## Examples
+
+```shell
+atmos vendor config get spec.sources[0].version
+```
+
+## Arguments
+
+<dl>
+  <dt>`<path>` (required)</dt>
+  <dd>Dot-notation path into the vendor manifest (e.g. `spec.sources[0].version`).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--file` (string, default `./vendor.yaml`)</dt>
+  <dd>The vendor manifest file to read.</dd>
+</dl>
+
+## Related
+
+- Alias (by component name): [`atmos vendor get`](/cli/commands/vendor/vendor-get)

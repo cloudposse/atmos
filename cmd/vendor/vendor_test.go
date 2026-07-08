@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -160,7 +161,9 @@ spec:
 	})
 
 	require.NoError(t, vendorSetCmd.RunE(vendorSetCmd, []string{"vpc", "v0.2.0"}))
-	got, err := vendoring.GetComponentVersion(file, "vpc")
+	path, err := vendoring.ComponentVersionPath(file, "vpc")
+	require.NoError(t, err)
+	got, err := atmosyaml.GetFile(file, path)
 	require.NoError(t, err)
 	assert.Equal(t, "v0.2.0", got)
 
@@ -168,6 +171,77 @@ spec:
 	require.NoError(t, err)
 	data.InitWriter(ioCtx)
 	require.NoError(t, vendorGetCmd.RunE(vendorGetCmd, []string{"vpc"}))
+}
+
+// captureVendorStdout wires a data writer backed by a buffer so RunE calls
+// that write to stdout (get) can be asserted against.
+func captureVendorStdout(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	stdout := &bytes.Buffer{}
+	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: stdout, stderr: &bytes.Buffer{}}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	t.Cleanup(data.Reset)
+	return stdout
+}
+
+// TestVendorGetSetAliasesVendorConfig proves "vendor get/set" are true thin
+// aliases of "vendor config get/set": for the same component in the same
+// manifest, both command pairs resolve/write the identical value.
+func TestVendorGetSetAliasesVendorConfig(t *testing.T) {
+	file := writeCommandVendorManifest(t, `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: eks
+      source: github.com/cloudposse/terraform-aws-eks?ref={{.Version}}
+      version: v1.0.0
+      targets: ["components/terraform/eks"]
+    - component: vpc
+      source: oci://ghcr.io/cloudposse/mock:{{.Version}}
+      version: v0.1.0
+      targets: ["components/terraform/vpc"]
+`)
+	const configPath = "spec.sources[1].version"
+
+	resetCommandFlags(t, vendorGetCmd)
+	resetCommandFlags(t, vendorConfigGetCmd)
+	resetCommandFlags(t, vendorSetCmd)
+	resetCommandFlags(t, vendorConfigSetCmd)
+	require.NoError(t, vendorGetCmd.Flags().Set("file", file))
+	require.NoError(t, vendorConfigGetCmd.Flags().Set("file", file))
+	require.NoError(t, vendorSetCmd.Flags().Set("file", file))
+	require.NoError(t, vendorConfigSetCmd.Flags().Set("file", file))
+
+	// get: "vendor get vpc" and "vendor config get spec.sources[1].version"
+	// must read the identical value.
+	flatOut := captureVendorStdout(t)
+	require.NoError(t, vendorGetCmd.RunE(vendorGetCmd, []string{"vpc"}))
+	configOut := captureVendorStdout(t)
+	require.NoError(t, vendorConfigGetCmd.RunE(vendorConfigGetCmd, []string{configPath}))
+	assert.Equal(t, "v0.1.0", strings.TrimSpace(plainOutput(configOut.String())))
+	assert.Equal(t, strings.TrimSpace(plainOutput(configOut.String())), strings.TrimSpace(plainOutput(flatOut.String())))
+
+	// set: "vendor set vpc <version>" must write the exact same node that
+	// "vendor config set spec.sources[1].version <version>" would.
+	setupVendorUICapture(t)
+	require.NoError(t, vendorSetCmd.RunE(vendorSetCmd, []string{"vpc", "v9.9.9"}))
+	got, err := atmosyaml.GetFile(file, configPath)
+	require.NoError(t, err)
+	assert.Equal(t, "v9.9.9", got)
+
+	setupVendorUICapture(t)
+	require.NoError(t, vendorConfigSetCmd.RunE(vendorConfigSetCmd, []string{configPath, "v10.0.0"}))
+	got, err = atmosyaml.GetFile(file, configPath)
+	require.NoError(t, err)
+	assert.Equal(t, "v10.0.0", got)
+
+	// eks (index 0) must be untouched by either alias.
+	eksVersion, err := atmosyaml.GetFile(file, "spec.sources[0].version")
+	require.NoError(t, err)
+	assert.Equal(t, "v1.0.0", eksVersion)
 }
 
 func TestResolveVendorFileWithOverrideAndDefault(t *testing.T) {
