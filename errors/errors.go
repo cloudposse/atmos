@@ -112,6 +112,24 @@ var (
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 	ErrSpinnerOperationInterrupted           = errors.New("operation was interrupted")
 
+	// Version Tracker errors.
+	ErrVersionTrackNotFound          = errors.New("version track not found")
+	ErrVersionNotFound               = errors.New("version not found")
+	ErrVersionNotLocked              = errors.New("version not locked")
+	ErrVersionTrackNotVerified       = errors.New("version track is not verified")
+	ErrDesiredVersionRequired        = errors.New("desired version is required")
+	ErrVersionEntryExists            = errors.New("version entry already exists")
+	ErrVersionEntryNotFound          = errors.New("version entry not found")
+	ErrInvalidVersionCooldown        = errors.New("invalid cooldown")
+	ErrVersionRenderFileRequired     = errors.New("--file is required")
+	ErrVersionRenderDrift            = errors.New("rendered output differs from committed file")
+	ErrUnsupportedVersionTrackFormat = errors.New("unsupported output format (supported: yaml, json)")
+	ErrUnsupportedVersionShow        = errors.New("unsupported --show value (supported: desired, locked)")
+	ErrVersionFilesDrift             = errors.New("version-managed files are out of date; run `atmos version track apply`")
+	ErrUnknownVersionFileManager     = errors.New("unknown file manager")
+	ErrDuplicateVersionFileManager   = errors.New("duplicate file manager registration")
+	ErrVersionMarkerBadMatch         = errors.New("marker match expression must compile and contain one capture group")
+
 	// Theme-related errors.
 	ErrThemeNotFound = errors.New("theme not found")
 	ErrInvalidTheme  = errors.New("invalid theme")
@@ -1364,6 +1382,32 @@ var (
 	// ErrInvalidSettingsDependsOn indicates a `settings.depends_on` value does not
 	// resolve to a known component in a known stack.
 	ErrInvalidSettingsDependsOn = errors.New("invalid 'settings.depends_on' dependency")
+)
+
+// Vendor update/diff errors.
+var (
+	// ErrGitLsRemoteFailed indicates listing refs from a remote Git repository failed.
+	ErrGitLsRemoteFailed = errors.New("failed to list refs from remote Git repository")
+	// ErrNoVersionsAvailable indicates no versions were found for a source.
+	ErrNoVersionsAvailable = errors.New("no versions available")
+	// ErrNoVersionsMatchConstraints indicates no available version satisfies the configured constraints.
+	ErrNoVersionsMatchConstraints = errors.New("no versions match the configured constraints")
+	// ErrInvalidSemverConstraint indicates a constraints.version value is not a valid semver constraint.
+	ErrInvalidSemverConstraint = errors.New("invalid semver constraint")
+	// ErrVendorSourceNotFound indicates a requested component/source was not found in the vendor manifest.
+	ErrVendorSourceNotFound = errors.New("vendor source not found")
+	// ErrVendorSourceNotGit indicates a vendor source is not a Git repository (unsupported for update/diff).
+	ErrVendorSourceNotGit = errors.New("vendor source is not a Git repository")
+	// ErrVendorDiffFailed indicates the vendor diff operation failed.
+	ErrVendorDiffFailed = errors.New("failed to produce vendor diff")
+	// ErrVendorUpdateFailed indicates the vendor update operation failed.
+	ErrVendorUpdateFailed = errors.New("failed to update vendor manifest")
+	// ErrReadVendorFile indicates a vendor manifest file could not be read.
+	ErrReadVendorFile = errors.New("failed to read vendor manifest")
+	// ErrParseVendorFile indicates a vendor manifest file could not be parsed.
+	ErrParseVendorFile = errors.New("failed to parse vendor manifest")
+	// ErrInvalidGitRef indicates a Git ref (tag, branch, or commit) could not be resolved.
+	ErrInvalidGitRef = errors.New("invalid Git ref")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

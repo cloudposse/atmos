@@ -1,0 +1,49 @@
+---
+title: atmos stack get
+sidebar_label: get
+sidebar_class_name: command
+id: stack-get
+description: Read a component-relative value from a stack and show which manifest defines it.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Read the effective value of a component-relative dot-path for a component in a stack,
+and see which manifest file currently defines it.
+</Intro>
+
+:::info
+`atmos stack get` is an alias for [`atmos stack config get`](/cli/commands/stack/config/get), the canonical form.
+:::
+
+<Screengrab title="atmos stack get --help" slug="atmos-stack-get--help" />
+
+## Usage
+
+```shell
+atmos stack get <path> -s <stack> -c <component>
+```
+
+## Examples
+
+```shell
+atmos stack get vars.region -s plat-ue2-prod -c vpc
+atmos stack get settings.spacelift.workspace_enabled -s plat-ue2-prod -c vpc
+```
+
+## Arguments
+
+<dl>
+  <dt>`<path>` (required)</dt>
+  <dd>Component-relative dot-notation path (e.g. `vars.region`).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s` (string, required)</dt>
+  <dd>The stack name.</dd>
+  <dt>`--component` / `-c` (string, required)</dt>
+  <dd>The component name.</dd>
+</dl>

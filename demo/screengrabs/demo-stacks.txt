@@ -65,6 +65,9 @@ atmos completion bash
 atmos completion fish
 atmos completion powershell
 atmos completion zsh
+atmos config get --help
+atmos config set --help
+atmos config delete --help
 atmos describe --help
 atmos describe affected --help
 atmos describe component --help
@@ -161,6 +164,9 @@ atmos terraform workspace list --help
 atmos terraform workspace new --help
 atmos terraform workspace select --help
 atmos terraform workspace show --help
+atmos stack get --help
+atmos stack set --help
+atmos stack delete --help
 atmos support
 atmos support --help
 atmos theme --help
@@ -173,6 +179,8 @@ atmos validate schema --help
 atmos validate stacks --help
 atmos vendor --help
 atmos vendor pull --help
+atmos vendor get --help
+atmos vendor set --help
 atmos version
 atmos version --help
 atmos version list --help
