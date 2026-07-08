@@ -616,6 +616,7 @@ func setEnv(v *viper.Viper) {
 	// CI cache settings (env overrides for schema fields with no CLI flag).
 	bindEnv(v, "ci.cache.enabled", "ATMOS_CI_CACHE_ENABLED")
 	bindEnv(v, "ci.cache.auto", "ATMOS_CI_CACHE_AUTO")
+	bindEnv(v, "ci.cache.allow_unsafe_auth_cache", "ATMOS_CI_CACHE_ALLOW_UNSAFE_AUTH_CACHE")
 
 	// CI log-group settings (env override for the schema field with no CLI flag).
 	bindEnv(v, "ci.groups.mode", "ATMOS_CI_GROUPS_MODE")

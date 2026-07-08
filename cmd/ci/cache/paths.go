@@ -44,9 +44,10 @@ outputs.`,
 
 // cachePathsData is the structured form used for json/yaml output.
 type cachePathsData struct {
-	Key         string   `json:"key" yaml:"key"`
-	Paths       []string `json:"paths" yaml:"paths"`
-	RestoreKeys []string `json:"restore_keys" yaml:"restore_keys"`
+	Key          string   `json:"key" yaml:"key"`
+	Paths        []string `json:"paths" yaml:"paths"`
+	ExcludePaths []string `json:"exclude_paths,omitempty" yaml:"exclude_paths,omitempty"`
+	RestoreKeys  []string `json:"restore_keys" yaml:"restore_keys"`
 }
 
 func runCachePaths(cmd *cobra.Command, _ []string) error {
@@ -69,7 +70,9 @@ func runCachePaths(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	return emitCachePaths(formatStr, resolved, cacheResolvedPaths(resolved))
+	paths := cacheResolvedPaths(resolved)
+	excludes := cacheResolvedExcludes(resolved)
+	return emitCachePaths(formatStr, resolved, paths, excludes)
 }
 
 // cacheResolvedPaths returns the absolute paths a cache should store: the whole
@@ -86,27 +89,63 @@ func cacheResolvedPaths(cfg *cachepkg.Config) []string {
 	return out
 }
 
+// cacheResolvedExcludes returns the absolute directories that must never be
+// cached, unless the user explicitly opted out via
+// ci.cache.allow_unsafe_auth_cache.
+func cacheResolvedExcludes(cfg *cachepkg.Config) []string {
+	if cfg.AllowUnsafeAuthCache {
+		return nil
+	}
+	defaults := cachepkg.DefaultExcludedPaths()
+	out := make([]string, 0, len(defaults))
+	for _, ex := range defaults {
+		out = append(out, filepath.Join(cfg.Root, ex))
+	}
+	return out
+}
+
+// githubGlobLines renders paths/excludes as actions/cache-compatible glob
+// lines for the `path:` input, pairing include/exclude patterns at the same
+// wildcard depth. @actions/glob (which actions/cache uses to resolve `path:`)
+// only honors a `!`-prefixed exclusion of a subdirectory when the paired
+// include is also a wildcard pattern at the same depth — a bare directory
+// include makes actions/cache use implicitDescendants:false, under which the
+// exclusion silently matches nothing (see the still-open
+// https://github.com/actions/toolkit/issues/713). Suffixing both include and
+// exclude with "/**" is the documented workaround.
+func githubGlobLines(paths, excludes []string) []string {
+	lines := make([]string, 0, len(paths)+len(excludes))
+	for _, p := range paths {
+		lines = append(lines, filepath.ToSlash(filepath.Join(p, "**")))
+	}
+	for _, ex := range excludes {
+		lines = append(lines, "!"+filepath.ToSlash(filepath.Join(ex, "**")))
+	}
+	return lines
+}
+
 // emitCachePaths renders the key/paths/restore-keys in the requested format.
-func emitCachePaths(formatStr string, cfg *cachepkg.Config, paths []string) error {
+func emitCachePaths(formatStr string, cfg *cachepkg.Config, paths []string, excludes []string) error {
 	switch formatStr {
 	case formatGitHub:
 		// key, path (multiline), restore-keys (multiline) → $GITHUB_OUTPUT
 		// (heredoc handled by pkg/env); falls back to stdout when not in CI.
 		return env.Output(map[string]string{
 			"key":          cfg.Key,
-			"path":         strings.Join(paths, "\n"),
+			"path":         strings.Join(githubGlobLines(paths, excludes), "\n"),
 			"restore-keys": strings.Join(cfg.RestoreKeys, "\n"),
 		}, formatGitHub, ghactions.GetOutputPath())
 	case "env":
 		return env.Output(map[string]string{
-			"ATMOS_CI_CACHE_KEY":          cfg.Key,
-			"ATMOS_CI_CACHE_PATHS":        strings.Join(paths, string(os.PathListSeparator)),
-			"ATMOS_CI_CACHE_RESTORE_KEYS": strings.Join(cfg.RestoreKeys, "\n"),
+			"ATMOS_CI_CACHE_KEY":           cfg.Key,
+			"ATMOS_CI_CACHE_PATHS":         strings.Join(paths, string(os.PathListSeparator)),
+			"ATMOS_CI_CACHE_EXCLUDE_PATHS": strings.Join(excludes, string(os.PathListSeparator)),
+			"ATMOS_CI_CACHE_RESTORE_KEYS":  strings.Join(cfg.RestoreKeys, "\n"),
 		}, "env", "")
 	case "json":
-		return data.WriteJSON(cachePathsData{Key: cfg.Key, Paths: paths, RestoreKeys: cfg.RestoreKeys})
+		return data.WriteJSON(cachePathsData{Key: cfg.Key, Paths: paths, ExcludePaths: excludes, RestoreKeys: cfg.RestoreKeys})
 	case "yaml":
-		return data.WriteYAML(cachePathsData{Key: cfg.Key, Paths: paths, RestoreKeys: cfg.RestoreKeys})
+		return data.WriteYAML(cachePathsData{Key: cfg.Key, Paths: paths, ExcludePaths: excludes, RestoreKeys: cfg.RestoreKeys})
 	default:
 		return errUtils.Build(errUtils.ErrInvalidFormat).
 			WithExplanationf("unsupported format: %s", formatStr).

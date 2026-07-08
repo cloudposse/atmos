@@ -7,8 +7,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
+	cachepkg "github.com/cloudposse/atmos/pkg/ci/cache"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// TestSSOTokenCacheSubdir_MatchesCICacheDefaultExcludes guards against
+// silently reopening the ci.cache credential-exposure hole: if this subdir is
+// ever renamed here without updating pkg/ci/cache's default exclusion list,
+// this test fails instead of the drift going unnoticed.
+func TestSSOTokenCacheSubdir_MatchesCICacheDefaultExcludes(t *testing.T) {
+	assert.Contains(t, cachepkg.DefaultExcludedPaths(), ssoTokenCacheSubdir)
+}
 
 // mockCacheStorage is a mock implementation of CacheStorage for testing.
 type mockCacheStorage struct {

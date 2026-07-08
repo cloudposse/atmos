@@ -870,6 +870,12 @@ type CIGroupsConfig struct {
 // cache root) at Atmos startup and saves it at exit, using the active CI
 // provider's cache store (e.g. the GitHub Actions cache). All operations are
 // no-ops when no cache-capable CI provider is detected (i.e. outside CI).
+//
+// A fixed set of Atmos's own auth session-cache subdirectories (AWS SSO
+// tokens, Azure device-code tokens, AWS webflow refresh tokens, provisioned
+// identity metadata) is always excluded from the cache, regardless of Paths,
+// unless AllowUnsafeAuthCache is set. See
+// docs/prd/native-ci/framework/ci-cache.md#default-excluded-auth-paths.
 type CICacheConfig struct {
 	// Enabled is the master switch for the CI cache (env: ATMOS_CI_CACHE_ENABLED).
 	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
@@ -900,6 +906,13 @@ type CICacheConfig struct {
 	// Compression selects the archive compression. Currently only "gzip" (the
 	// default) is supported.
 	Compression string `yaml:"compression,omitempty" json:"compression,omitempty" mapstructure:"compression"`
+
+	// AllowUnsafeAuthCache opts out of the default exclusion of Atmos's own
+	// auth session caches (AWS SSO tokens, Azure device-code tokens, AWS
+	// webflow refresh tokens, provisioned-identity metadata) from the CI
+	// cache. Leave false unless you have a specific, trusted reason to cache
+	// your own credential material (env: ATMOS_CI_CACHE_ALLOW_UNSAFE_AUTH_CACHE).
+	AllowUnsafeAuthCache bool `yaml:"allow_unsafe_auth_cache,omitempty" json:"allow_unsafe_auth_cache,omitempty" mapstructure:"allow_unsafe_auth_cache"`
 }
 
 // CIOutputConfig configures CI output variables for downstream jobs.

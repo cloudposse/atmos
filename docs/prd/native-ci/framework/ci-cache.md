@@ -136,10 +136,13 @@ ci:
     enabled: false          # master switch (env: ATMOS_CI_CACHE_ENABLED)
     auto: off               # off | restore | save | both (env: ATMOS_CI_CACHE_AUTO)
     root: ""                # override the well-known cache root (default ~/.cache/atmos)
-    paths: []               # root-relative subpaths to cache (default: the whole root)
+    paths: []               # root-relative subpaths to cache (default: the whole root,
+                            # minus the default-excluded auth paths below)
     key: ""                 # template; default derived from toolchain.lock.yaml + os/arch
     restore_keys: []        # prefix fallbacks
     compression: gzip       # gzip (default)
+    allow_unsafe_auth_cache: false  # opt out of the default auth-path exclusion
+                                    # (env: ATMOS_CI_CACHE_ALLOW_UNSAFE_AUTH_CACHE)
 ```
 
 CLI overrides on the subcommands: `--key`, `--restore-key`, `--path`, `--root`,
@@ -169,6 +172,48 @@ atmos ci cache delete    # delete a cache entry by key
 | Schema | `pkg/schema/schema.go` (`CICacheConfig`), env binding in `pkg/config/load.go` |
 | Toolchain consolidation | `pkg/toolchain/setup.go` (`GetInstallPath` → XDG cache sub-path) |
 | Errors | `errors/errors.go` (`ErrCache*`) |
+
+## Default-Excluded Auth Paths
+
+Caching the whole XDG cache root by default is intentional (§ What This Enables) — it lets
+vendoring caches, remote stack-import clones, and plugin caches inherit CI caching for free
+without every new regenerable-data subdirectory needing a config change. But that same root
+is where several Atmos auth flows persist session credentials to disk, so a whole-root default
+needs an unconditional carve-out rather than relying on operators to hand-configure
+`ci.cache.paths` correctly. This is hardening against a foot-gun, not a fix for a disclosed
+exploit — access to a repo's Actions cache is already scoped to that repo, and everything
+below is short-lived, rotating session material rather than static long-lived secrets.
+
+`pkg/ci/cache.DefaultExcludedPaths()` (`pkg/ci/cache/exclusions.go`) is pruned unconditionally
+in `archive.go`'s `archiveSkipDecision` — regardless of `ci.cache.paths` — unless
+`ci.cache.allow_unsafe_auth_cache` is set. The same list is rendered as `!`-prefixed glob
+exclusions by `atmos ci cache paths` for the native-`actions/cache` integration path.
+
+| Root-relative path | Owning file | Contains |
+| --- | --- | --- |
+| `aws-sso` | `pkg/auth/providers/aws/sso_cache.go` (`ssoTokenCacheSubdir`) | AWS SSO access token, refresh token, OAuth client secret |
+| `azure-device-code` | `pkg/auth/providers/azure/device_code_cache.go` (`deviceCodeTokenCacheSubdir`) | Azure access token, Graph API token |
+| `aws-webflow` | `pkg/auth/identities/aws/webflow.go` (`webflowCacheSubdir`) | Refresh token for Atmos's browser-based AWS identity flow |
+| `auth` | `pkg/auth/provisioning/writer.go` (`authSubDir`) | Provisioned identity/role metadata (not raw secrets; excluded defensively anyway) |
+
+Each owning package carries a drift-guard test (e.g.
+`TestSSOTokenCacheSubdir_MatchesCICacheDefaultExcludes`) asserting its subdir constant is
+present in `DefaultExcludedPaths()`, so a rename there without updating the exclusion list
+fails a test immediately rather than silently reopening the gap.
+
+Deliberately **not** on this list, verified directly rather than assumed:
+
+- **OIDC-based auth** (`pkg/auth/providers/github/oidc.go`, `gcp_wif/provider.go`,
+  `azure/oidc.go`) writes nothing to any cache directory — credentials are minted fresh
+  in-memory from the CI-native OIDC token every run.
+- **`saml2aws`** browser storage lives at `~/.aws/saml2aws/` — outside the Atmos XDG cache
+  root entirely.
+- **GCP ADC/config** (`pkg/auth/cloud/gcp/files.go`) resolves via the XDG **config** dir
+  (`~/.config/atmos`), a different XDG base than `ci.cache`'s root.
+- **`auth/github-sts`** (`pkg/auth/integrations/github/sts.go`, `stsDataSubdir`) resolves via
+  the XDG **data** dir, not the XDG cache dir — already outside `ci.cache`'s scan root today,
+  though incidentally so, not as a designed boundary. If a future refactor moves it under XDG
+  cache, it will need to be added to `DefaultExcludedPaths()`.
 
 ## Out of Scope (future work)
 
