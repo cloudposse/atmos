@@ -149,10 +149,10 @@ repository, the commit, the branch, the team, the cost center — so that owners
 traceable straight from the console or a cost report. Outside of Atmos, teams often reach for a post-processing tool
 like [Yor](https://github.com/bridgecrewio/yor) to inject these tags into Terraform code after the fact.
 
-With Atmos, you don't need a separate tagging tool. The AWS provider's `default_tags` argument tags every resource a
-provider manages without touching a single resource block, and since Atmos already generates the provider
-configuration for you, `default_tags` is the most convenient way to guarantee consistent tagging across every
-component and stack. Combine it with Atmos's built-in [YAML functions](/functions/yaml) — such as
+With Atmos, you don't need a separate tagging tool. The AWS provider's `default_tags` argument tags every resource
+that supports Terraform's `tags` argument (with a small number of exceptions, such as `aws_autoscaling_group`)
+without touching a single resource block, and since Atmos already generates the provider configuration for you,
+`default_tags` is the most convenient way to guarantee consistent tagging across every component and stack. Combine it with Atmos's built-in [YAML functions](/functions/yaml) — such as
 [`!git.repository`](/functions/yaml/git.repository), [`!git.sha`](/functions/yaml/git.sha), and
 [`!git.branch`](/functions/yaml/git.branch) — to populate those tags dynamically from the state of your repository
 at plan/apply time, the same way `default_tags` is configured for any other value:
