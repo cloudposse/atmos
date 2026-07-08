@@ -1,4 +1,4 @@
-# Hardening: CI cache excludes Atmos's own auth session caches by default
+# Hardening: CI cache excludes Atmos's own auth session caches unconditionally
 
 **Date:** 2026-07-08
 
