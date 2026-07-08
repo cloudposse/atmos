@@ -1,0 +1,47 @@
+---
+title: atmos vendor get
+sidebar_label: get
+sidebar_class_name: command
+id: vendor-get
+description: Read the pinned version of a vendored component from vendor.yaml.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Read the version pinned for a component in your `vendor.yaml` manifest. The component
+is matched by name, so manifest ordering does not matter.
+</Intro>
+
+:::info
+`atmos vendor get` is an alias for [`atmos vendor config get`](/cli/commands/vendor/config/get): it resolves `<component>` to its `spec.sources[N].version` path and delegates to the canonical form.
+:::
+
+<Screengrab title="atmos vendor get --help" slug="atmos-vendor-get--help" />
+
+## Usage
+
+```shell
+atmos vendor get <component> [--file <manifest>]
+```
+
+## Examples
+
+```shell
+atmos vendor get vpc
+atmos vendor get vpc --file ./vendor.yaml
+```
+
+## Arguments
+
+<dl>
+  <dt>`<component>` (required)</dt>
+  <dd>The component name as it appears in `spec.sources[].component`.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--file` (string, default `./vendor.yaml`)</dt>
+  <dd>The vendor manifest file to read.</dd>
+</dl>

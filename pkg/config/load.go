@@ -77,9 +77,18 @@ func resetMergedConfigFiles() {
 
 // trackMergedConfigFile records a config file path for case-sensitive key extraction.
 func trackMergedConfigFile(path string) {
-	if path != "" {
+	if path != "" && !slices.Contains(mergedConfigFiles, path) {
 		mergedConfigFiles = append(mergedConfigFiles, path)
 	}
+}
+
+// LoadedConfigFiles returns the physical config files merged during the most
+// recent LoadConfig call. Embedded defaults and runtime/env overrides are not
+// included.
+func LoadedConfigFiles() []string {
+	files := make([]string, len(mergedConfigFiles))
+	copy(files, mergedConfigFiles)
+	return files
 }
 
 const (
@@ -1250,6 +1259,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	}
 
 	configFilePath := tempViper.ConfigFileUsed()
+	trackMergedConfigFile(configFilePath)
 
 	// Read the config file's content
 	content, err := readConfigFileContent(configFilePath)

@@ -1,0 +1,32 @@
+---
+title: atmos version track get
+sidebar_position: 30
+sidebar_label: get
+sidebar_class_name: command
+description: Show one dependency entry with effective policy and lock state.
+---
+
+Show one dependency entry after defaults and groups are applied. If the entry is locked, the output includes the lock state.
+
+## Usage
+
+```shell
+atmos version track get NAME [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`NAME` <em>required</em></dt>
+  <dd>Entry name to show.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Show an entry from the default track
+atmos version track get checkout
+
+# Show an entry from prod as JSON
+atmos version track get checkout --track=prod --format=json
+```

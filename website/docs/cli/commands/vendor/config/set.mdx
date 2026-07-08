@@ -1,0 +1,55 @@
+---
+title: atmos vendor config set
+sidebar_label: set
+sidebar_class_name: command
+id: set
+description: Set a raw value in vendor.yaml by dot-notation path, preserving comments, anchors, and templates.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Set a raw value in `vendor.yaml` using an arbitrary dot-notation path. Values default
+to strings; use `--type` for int, bool, float, null, or raw YAML literals. This is the
+canonical form. [`atmos vendor set <component> <version>`](/cli/commands/vendor/vendor-set)
+is a convenience alias that resolves a component name to its `spec.sources[N].version`
+path and calls this same engine — use `atmos vendor config set` directly for paths
+other than a component's pinned version.
+</Intro>
+
+<Screengrab title="atmos vendor config set --help" slug="atmos-vendor-config-set--help" />
+
+## Usage
+
+```shell
+atmos vendor config set <path> <value> [--type <type>] [--file <manifest>]
+```
+
+## Examples
+
+```shell
+atmos vendor config set spec.sources[0].version v1.2.3
+atmos vendor config set --type=yaml 'spec.sources[0].tags' '["a", "b"]'
+```
+
+## Arguments
+
+<dl>
+  <dt>`<path>` (required)</dt>
+  <dd>Dot-notation path into the vendor manifest (e.g. `spec.sources[0].version`).</dd>
+  <dt>`<value>` (required)</dt>
+  <dd>The value to set, interpreted according to `--type`.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--type` (string, default `string`)</dt>
+  <dd>How to interpret `<value>`: `string`, `int`, `bool`, `float`, `null`, or `yaml` (raw literal).</dd>
+  <dt>`--file` (string, default `./vendor.yaml`)</dt>
+  <dd>The vendor manifest file to edit.</dd>
+</dl>
+
+## Related
+
+- Alias (by component name): [`atmos vendor set`](/cli/commands/vendor/vendor-set)

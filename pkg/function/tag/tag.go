@@ -106,6 +106,9 @@ const (
 
 	// Emulator resolves a value from a local emulator.
 	Emulator = "emulator"
+
+	// Version resolves a locked version from the Atmos Version Tracker.
+	Version = "version"
 )
 
 // YAMLPrefix is the prefix used for YAML custom tags.
@@ -148,6 +151,7 @@ func All() []string {
 		AwsRegion,
 		AwsOrganizationID,
 		Emulator,
+		Version,
 	}
 }
 
@@ -185,6 +189,7 @@ var tagsMap = map[string]bool{
 	AwsRegion:               true,
 	AwsOrganizationID:       true,
 	Emulator:                true,
+	Version:                 true,
 }
 
 // IsValid checks if a tag name is registered. The name should not include the YAML prefix.

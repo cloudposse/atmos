@@ -44,6 +44,7 @@ func TestCatalog(t *testing.T) {
 		AwsRegion,
 		AwsOrganizationID,
 		Emulator,
+		Version,
 	}
 
 	assert.Equal(t, expectedTags, tags)

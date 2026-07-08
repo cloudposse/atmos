@@ -1,0 +1,79 @@
+---
+title: atmos version track add
+sidebar_position: 40
+sidebar_label: add
+sidebar_class_name: command
+description: Add a dependency entry to atmos.yaml.
+---
+
+Add a dependency entry to a version track in `atmos.yaml`, preserving comments and formatting.
+
+When `--ecosystem` is omitted, Atmos infers it from the package coordinate:
+
+- `actions/*` and other `owner/repo` action paths resolve to `github/actions`
+- registry-hosted images such as `ghcr.io/...` resolve to `oci`
+- bare tool names such as `opentofu` or `kubectl` resolve to `toolchain`
+- other `owner/repo` coordinates resolve to `github`
+
+## Usage
+
+```shell
+atmos version track add NAME [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`NAME` <em>required</em></dt>
+  <dd>Entry name used by `!version`, `{{ .version.name }}`, and marker annotations.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--package`</dt>
+  <dd>Package coordinate. Defaults to `NAME`.</dd>
+
+  <dt>`--ecosystem`</dt>
+  <dd>Ecosystem such as `github/actions`, `github`, `oci`, `docker`, or `toolchain`.</dd>
+
+  <dt>`--datasource`</dt>
+  <dd>Datasource override, such as `github-tags`, `github-releases`, `oci-tags`, `docker-tags`, or `toolchain`.</dd>
+
+  <dt>`--provider`</dt>
+  <dd>Provider name from `version.providers`.</dd>
+
+  <dt>`--desired`</dt>
+  <dd>Desired version: concrete, SemVer constraint, or `latest`. Default is `latest`.</dd>
+
+  <dt>`--group`</dt>
+  <dd>Version group name.</dd>
+
+  <dt>`--pin`</dt>
+  <dd>Pin policy. Use `digest` or `sha` to lock and render the immutable identifier.</dd>
+
+  <dt>`--include`</dt>
+  <dd>Candidate version patterns to include. Repeat the flag for multiple patterns.</dd>
+
+  <dt>`--exclude`</dt>
+  <dd>Candidate version patterns to exclude. Repeat the flag for multiple patterns.</dd>
+
+  <dt>`--prerelease`</dt>
+  <dd>Allow prerelease candidates for this entry.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Add a GitHub Action and pin it to the resolved commit SHA
+atmos version track add checkout --package=actions/checkout --pin=sha
+
+# Add a toolchain tool with a SemVer constraint
+atmos version track add opentofu --desired="~1.10"
+
+# Add a GitHub Action but exclude a known-bad tag
+atmos version track add checkout --package=actions/checkout --desired=v6 --exclude=v6.0.0
+
+# Add a container image on the prod track
+atmos version track add nginx --package=library/nginx --track=prod
+```
