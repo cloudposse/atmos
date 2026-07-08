@@ -40,3 +40,6 @@ stacks/dev.yaml
 stacks/staging.yaml
 stacks/prod.yaml
 ```
+
+`stacks/_defaults.yaml` pins the Terraform/OpenTofu toolchain version via
+`dependencies.tools` (https://atmos.tools/cli/commands/toolchain).

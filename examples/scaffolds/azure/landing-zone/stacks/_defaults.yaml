@@ -5,6 +5,14 @@ vars:
   project: "[[ .Config.project_name ]]"
   location: "[[ .Config.location ]]"
 
+# Pin the toolchain for every component. `dependencies.tools` is the current,
+# integrated way to declare required tool versions (installed/resolved by
+# `atmos toolchain` and recorded in toolchain.lock.yaml).
+# https://atmos.tools/cli/commands/toolchain
+dependencies:
+  tools:
+    [[ .Config.terraform_command ]]: "latest"
+
 components:
   emulator:
     azure:

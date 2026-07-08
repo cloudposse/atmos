@@ -10,6 +10,14 @@ vars:
   # <project>-<stage>-audit-logs.
   project: "[[ .Config.project_name ]]"
 
+# Pin the toolchain for every component in this landing zone. `dependencies.tools`
+# is the current, integrated way to declare required tool versions (installed/
+# resolved by `atmos toolchain` and recorded in toolchain.lock.yaml).
+# https://atmos.tools/cli/commands/toolchain
+dependencies:
+  tools:
+    [[ .Config.terraform_command ]]: "latest"
+
 components:
   emulator:
     # The local AWS emulator, stack-scoped: `atmos emulator up aws -s dev`.
@@ -35,11 +43,30 @@ components:
     kms:
       vars: {}
     audit-trail:
-      vars: {}
+      # Component dependencies declare the apply order in the DAG (consumed by
+      # `atmos describe dependents`, `atmos describe affected`, and
+      # `atmos terraform apply --all`). This is the current form; the legacy
+      # `settings.depends_on` map is deprecated.
+      # https://atmos.tools/stacks/dependencies/components
+      dependencies:
+        components:
+          - name: kms
+      vars:
+        # Read straight from kms's Terraform state so this can never drift
+        # from what was actually deployed.
+        kms_key_arn: !terraform.state kms key_arn
     baseline:
-      vars: {}
+      dependencies:
+        components:
+          - name: kms
+      vars:
+        kms_key_arn: !terraform.state kms key_arn
     monitoring:
-      vars: {}
+      dependencies:
+        components:
+          - name: kms
+      vars:
+        kms_key_arn: !terraform.state kms key_arn
     iam-baseline:
       vars: {}
 

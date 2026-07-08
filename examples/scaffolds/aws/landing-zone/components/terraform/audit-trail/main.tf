@@ -12,7 +12,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "audit_logs" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = var.kms_key_arn == "" ? "AES256" : "aws:kms"
+      kms_master_key_id = var.kms_key_arn == "" ? null : var.kms_key_arn
     }
   }
 }

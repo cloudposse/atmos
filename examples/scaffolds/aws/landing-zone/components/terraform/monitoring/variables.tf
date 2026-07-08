@@ -19,3 +19,9 @@ variable "alarm_threshold_bytes" {
   type        = number
   default     = 536870912
 }
+
+variable "kms_key_arn" {
+  description = "ARN of a KMS key used to encrypt the log group. Empty string leaves logs encrypted with the default CloudWatch Logs service key."
+  type        = string
+  default     = ""
+}

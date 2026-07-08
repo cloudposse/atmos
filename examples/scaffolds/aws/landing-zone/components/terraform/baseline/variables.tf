@@ -13,3 +13,9 @@ variable "parameters" {
   type        = map(string)
   default     = {}
 }
+
+variable "kms_key_arn" {
+  description = "ARN of a KMS key used to encrypt SecureString parameters. Empty string uses the AWS-managed alias/aws/ssm key instead."
+  type        = string
+  default     = ""
+}

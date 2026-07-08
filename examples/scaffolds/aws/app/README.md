@@ -38,3 +38,6 @@ stacks/prod.yaml
 Use this scaffold for an application repository that deploys into already
 created environments. Use `aws/landing-zone` for the environment foundation
 itself.
+
+`stacks/_defaults.yaml` pins the Terraform/OpenTofu toolchain version via
+`dependencies.tools` (https://atmos.tools/cli/commands/toolchain).

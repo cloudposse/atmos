@@ -55,6 +55,16 @@ and carries its own real configuration — no deep directory hierarchy.
   `providers.tf` and no endpoint configuration.
 - **Environments** — per-stage substance (retention, alarm thresholds, bucket
   protection) lives visibly in `dev.yaml` / `staging.yaml` / `prod.yaml`.
+- **Dependencies** — `stacks/_defaults.yaml` pins the toolchain version via
+  `dependencies.tools`, and declares `audit-trail`, `baseline`, and
+  `monitoring` as dependents of `kms` via `dependencies.components` — their
+  key ARN is read live from `kms`'s Terraform state with `!terraform.state`,
+  which is what `atmos terraform apply --all` uses to build its apply order.
+  Inspect the graph with
+  `atmos describe dependents kms -s dev --process-functions=false` (the flag
+  skips YAML-function evaluation so the command doesn't need every stage's
+  emulator running at once), or see what a change impacts with
+  `atmos describe affected`.
 
 ## Moving to real AWS
 
@@ -63,7 +73,11 @@ and carries its own real configuration — no deep directory hierarchy.
    bucket name.
 2. In `atmos.yaml`, replace the `local` emulator identity with your real
    authentication (see [Atmos Auth](https://atmos.tools/cli/commands/auth)).
-3. `atmos terraform plan --all -s dev` and review.
+3. `atmos terraform apply --all -s dev` and review. (`dependencies.components`
+   makes `kms` apply first, so `audit-trail`, `baseline`, and `monitoring` can
+   read its real key ARN via `!terraform.state`. A bare `plan --all` on a
+   brand-new environment will fail for those three until `kms` has actually
+   been applied at least once — apply `kms` first, or use `apply --all`.)
 
 Note: this scaffold intentionally excludes CloudTrail because Floci does not
 currently emulate that API. Add CloudTrail only when targeting real AWS or an

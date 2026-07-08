@@ -37,3 +37,6 @@ stacks/prod.yaml
 
 Each environment is a single stack file that imports `_defaults.yaml` and
 overrides only the values that differ for that stage.
+
+`stacks/_defaults.yaml` pins the Terraform/OpenTofu toolchain version via
+`dependencies.tools` (https://atmos.tools/cli/commands/toolchain).
