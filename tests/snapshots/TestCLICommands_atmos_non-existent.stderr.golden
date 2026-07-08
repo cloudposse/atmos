@@ -10,9 +10,11 @@ Valid subcommands are:
   • atlantis
   • auth
   • aws
+  • cast
   • ci
   • completion
   • composition
+  • config
   • container
   • describe
   • devcontainer
@@ -31,6 +33,7 @@ Valid subcommands are:
   • pro
   • profile
   • secret
+  • stack
   • support
   • terraform
   • theme

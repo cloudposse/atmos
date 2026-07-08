@@ -66,3 +66,8 @@ var DevcontainerShellUsageMarkdown string
 //
 //go:embed atmos_git_usage.md
 var AtmosGitMarkdown string
+
+// CastRenderUsageMarkdown contains usage examples for the cast render command.
+//
+//go:embed atmos_cast_render_usage.md
+var CastRenderUsageMarkdown string

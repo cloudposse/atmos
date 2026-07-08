@@ -2027,6 +2027,41 @@
                       "command": {
                         "type": "string"
                       },
+                      "prompt": {
+                        "description": "Prompt text for interactive steps, or a structured prompt for cast simulation steps.",
+                        "oneOf": [
+                          { "type": "string" },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "text": { "type": "string", "description": "Prompt text to render before simulated typed text." },
+                              "style": {
+                                "type": "string",
+                                "enum": ["command", "label", "muted", "info", "notice"],
+                                "description": "Semantic Atmos theme style for the simulated prompt."
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": ["steps", "session", "typed", "prompt"],
+                        "description": "Mode for cast and simulate steps. Cast supports steps and session; simulate supports typed and prompt."
+                      },
+                      "rate": {
+                        "type": "string",
+                        "description": "Delay between simulated typed characters, e.g. 35ms. Use 0 to write immediately."
+                      },
+                      "write_rate": {
+                        "type": "string",
+                        "description": "Default delay between cast session text writes, e.g. 35ms. Use 0 to write immediately."
+                      },
+                      "text": {
+                        "type": "string",
+                        "description": "Text for write, wait, or simulate steps."
+                      },
                       "stack": {
                         "type": "string"
                       },
@@ -2198,7 +2233,27 @@
                         "description": "Parameters for the step named by 'type' (and 'action' where applicable). Validated by the step handler at run time. For container steps this holds image, command, ports, mounts, build context, etc.",
                         "additionalProperties": true
                       }
-                    }
+                    },
+                    "allOf": [
+                      {
+                        "if": {
+                          "properties": {
+                            "prompt": {
+                              "type": "object"
+                            }
+                          },
+                          "required": ["prompt"]
+                        },
+                        "then": {
+                          "properties": {
+                            "type": {
+                              "const": "simulate"
+                            }
+                          },
+                          "required": ["type"]
+                        }
+                      }
+                    ]
                   }
                 }
               ]

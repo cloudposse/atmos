@@ -111,6 +111,9 @@ type Masker interface {
 	// resolved `--mask` flag after CLI flags are parsed (the masker may be created before then).
 	SetEnabled(enabled bool)
 
+	// SetReplacement updates the string used when masking values.
+	SetReplacement(replacement string)
+
 	// Replacement returns the configured mask replacement string.
 	Replacement() string
 }

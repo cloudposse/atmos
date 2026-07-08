@@ -19,6 +19,7 @@ define MIGRATION_HELP
 @printf "  %-23s -> %s\n" "make test-short" "atmos test short"
 @printf "  %-23s -> %s\n" "make test-race" "atmos test race"
 @printf "  %-23s -> %s\n" "make generate-mocks" "atmos test generate-mocks"
+@printf "  %-23s -> %s\n" "make snapshots" "atmos dev generate snapshots --all"
 @printf "  %-23s -> %s\n" "make link-check" "atmos lint link-check"
 @echo ""
 @exit 1

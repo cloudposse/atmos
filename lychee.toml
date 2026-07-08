@@ -116,4 +116,8 @@ exclude = [
   # google-gemini/gemini-cli repo deep-links intermittently return 502 Bad Gateway
   # from GitHub's gateway in CI; the pages are valid and load in a browser.
   "github\\.com/google-gemini/gemini-cli",
+  # This specific older release tag page intermittently returns 500 Internal
+  # Server Error from GitHub's gateway in CI; the page is valid and loads in
+  # a browser (verified via `gh api repos/cloudposse/atmos/releases/tags/v1.203.0`).
+  "github\\.com/cloudposse/atmos/releases/tag/v1\\.203\\.0",
 ]
