@@ -172,8 +172,12 @@ func TestRunCachePaths_JSON_ExcludePathsField(t *testing.T) {
 
 	s := out()
 	assert.Contains(t, s, "exclude_paths")
+	// Check for the bare subdir name rather than a joined path: json/yaml
+	// output (unlike the github format) uses raw, OS-native separators with
+	// no slash normalization, and on Windows those get backslash-escaped in
+	// the JSON text, so asserting on the full path is platform-fragile.
 	for _, ex := range cachepkg.DefaultExcludedPaths() {
-		assert.Contains(t, s, filepath.ToSlash(filepath.Join(root, ex)))
+		assert.Contains(t, s, ex)
 	}
 }
 
@@ -187,7 +191,7 @@ func TestRunCachePaths_YAML_ExcludePathsField(t *testing.T) {
 	s := out()
 	assert.Contains(t, s, "exclude_paths")
 	for _, ex := range cachepkg.DefaultExcludedPaths() {
-		assert.Contains(t, s, filepath.ToSlash(filepath.Join(root, ex)))
+		assert.Contains(t, s, ex)
 	}
 }
 
