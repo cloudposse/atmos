@@ -1,0 +1,64 @@
+---
+slug: yaml-editing-config-stack-vendor
+title: "Edit Atmos config, stacks, and vendor manifests without breaking YAML"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Atmos can now read and edit your YAML — `atmos.yaml`, stack manifests, and `vendor.yaml` —
+through first-class commands that **preserve comments, anchors, YAML functions, and Go templates**.
+No more `sed` or `yq` one-liners that strip your comments and reformat the file.
+
+<!--truncate-->
+
+## What Changed
+
+Three new sets of dot-notation get/set/delete commands, all built on a shared,
+format-preserving YAML engine:
+
+- **`atmos config get|set|delete <path>`** — edit the active `atmos.yaml`.
+- **`atmos stack get|set|delete <path> -s <stack> -c <component>`** — edit a component's value in
+  a stack. Atmos uses **provenance** to find the manifest that actually defines the effective
+  (post-merge) value and edits that file.
+- **`atmos vendor get|set <component> [version]`** — read or pin a vendored component's version,
+  matched by name.
+
+```shell
+atmos config set logs.level Debug
+atmos stack set vars.region us-west-2 -s plat-ue2-prod -c vpc
+atmos vendor set vpc v1.5.0
+```
+
+## Why This Matters
+
+Atmos YAML is human-authored: comments explain intent, anchors keep it DRY, and `!terraform.output`
+functions and `{{ … }}` templates carry real behavior. A naive "parse → re-serialize" edit destroys
+all of that. These commands operate at the node level (via the `yq` engine Atmos already ships) and
+are verified to preserve comments, anchors/aliases, Atmos YAML functions, and templates. A **strict
+guard** even refuses edits that would silently mutate a value shared through a YAML anchor.
+
+## How to Use It
+
+Paths are dot-notation by default (`vars.region`, `sources[0].version`), and `--type` lets you write
+typed values (`--type=bool`, `int`, `float`, `null`, or a raw `yaml` literal). For stacks, `get`
+reports where a value resolves from, and `--file` lets you target a manifest explicitly. See the
+[`config`](/cli/commands/config/usage), [`stack`](/cli/commands/stack/usage), and
+[`vendor`](/cli/commands/vendor/usage) command docs.
+
+## Bonus: vendor update and diff
+
+Built on the same engine, two more commands manage vendored components:
+
+- **`atmos vendor update`** checks each Git source for a newer version (honoring per-source
+  semver `constraints`) and updates the `version` field in place — preserving comments,
+  anchors, and `{{.Version}}` templates. Use `--check` for a dry run and `--pull` to fetch
+  afterward.
+- **`atmos vendor diff`** shows the Git diff between two versions of a component, without a
+  local checkout.
+
+Both use go-git (no `git` binary required) and the same format-preserving writer.
+
+## Get Involved
+
+This is the foundation for scripted, comment-safe configuration changes across Atmos. A normalize
+(`fmt`) command builds on the same engine and is on the way.

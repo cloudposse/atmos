@@ -194,7 +194,15 @@ func applyTerraformDocsWithRunner(dir string, docsGenerate *schema.DocsGenerate,
 }
 
 func defaultDocsTemplate() string {
-	return "# {{ .name | default \"Project\" }}\n\n{{ .description | default \"No description.\"}}\n\n{{ .terraform_docs }}"
+	// ProcessTmplWithDatasourcesGomplate only exposes the merged input data via the
+	// "config" datasource (root "." is bound to the outer Env wrapper), so the default
+	// template must read through (ds "config") rather than bare fields like .name.
+	// Use `index` rather than dot-field access: dot access on a map errors when the key is
+	// entirely absent (not just empty), which would defeat the `default` fallback below;
+	// `index` returns the zero value instead, letting `default` take over as intended.
+	return "# {{ index (ds \"config\") \"name\" | default \"Project\" }}\n\n" +
+		"{{ index (ds \"config\") \"description\" | default \"No description.\" }}\n\n" +
+		"{{ index (ds \"config\") \"terraform_docs\" | default \"\" }}"
 }
 
 func fetchTemplate(atmosConfig *schema.AtmosConfiguration, docsGenerate *schema.DocsGenerate, dir string) (string, error) {

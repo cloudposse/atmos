@@ -84,6 +84,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/ci"
 	cicache "github.com/cloudposse/atmos/cmd/ci/cache"
 	_ "github.com/cloudposse/atmos/cmd/composition"
+	configcmd "github.com/cloudposse/atmos/cmd/config"
 	_ "github.com/cloudposse/atmos/cmd/container"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/emulator"
@@ -99,6 +100,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/profile"
 	_ "github.com/cloudposse/atmos/cmd/scaffold"
 	_ "github.com/cloudposse/atmos/cmd/secret"
+	stackcmd "github.com/cloudposse/atmos/cmd/stack"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	terraformcache "github.com/cloudposse/atmos/cmd/terraform/cache"
@@ -1745,6 +1747,8 @@ func Execute() error {
 
 	// Set atmosConfig for commands that need access to config.
 	version.SetAtmosConfig(&atmosConfig)
+	configcmd.SetAtmosConfig(&atmosConfig)
+	stackcmd.SetAtmosConfig(&atmosConfig)
 	gitcmd.SetAtmosConfig(&atmosConfig)
 	devcontainer.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)

@@ -154,7 +154,11 @@ func NewAquaRegistry(opts ...RegistryOption) *AquaRegistry {
 // get performs an HTTP GET request and returns the response.
 // This is a helper method to adapt the pkg/http Client interface.
 func (ar *AquaRegistry) get(url string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	return ar.getWithContext(context.Background(), url)
+}
+
+func (ar *AquaRegistry) getWithContext(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create request: %w", registry.ErrHTTPRequest, err)
 	}

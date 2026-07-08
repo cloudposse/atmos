@@ -24,6 +24,12 @@ jobs:
             target: windows
           - os: macos-latest
             target: macos
+          # Build (macos-intel) uses this Intel runner and has no self-hosted
+          # s3-cache like Linux, so without a nightly warmup here its Go build
+          # cache is always cold — risking the 30m build timeout that a warm
+          # ARM `macos` cache comfortably avoids.
+          - os: macos-15-intel
+            target: macos-intel
     runs-on: ${{ matrix.os }}
     steps:
       - name: Add GNU tar to PATH (significantly faster than windows tar)

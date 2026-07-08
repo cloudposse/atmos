@@ -45,6 +45,7 @@ func TestAllTags(t *testing.T) {
 		TagAwsRegion,
 		TagAwsOrganizationID,
 		TagEmulator,
+		TagVersion,
 	}
 
 	assert.Equal(t, len(expectedTags), len(tags))
@@ -89,6 +90,7 @@ func TestIsValidTag(t *testing.T) {
 		TagAwsRegion,
 		TagAwsOrganizationID,
 		TagEmulator,
+		TagVersion,
 	}
 
 	for _, tag := range expectedTags {
@@ -135,6 +137,7 @@ func TestYAMLTag(t *testing.T) {
 		{TagAwsRegion, "!aws.region"},
 		{TagAwsOrganizationID, "!aws.organization_id"},
 		{TagEmulator, "!emulator"},
+		{TagVersion, "!version"},
 		{"custom", "!custom"},
 		{"", "!"},
 	}
@@ -183,6 +186,7 @@ func TestFromYAMLTag(t *testing.T) {
 		{"!aws.region", "aws.region"},
 		{"!aws.organization_id", "aws.organization_id"},
 		{"!emulator", "emulator"},
+		{"!version", "version"},
 		{"!custom", "custom"},
 		// Without prefix - returns as-is.
 		{"env", "env"},
@@ -235,6 +239,7 @@ func TestTagConstants(t *testing.T) {
 	assert.Equal(t, "aws.region", TagAwsRegion)
 	assert.Equal(t, "aws.organization_id", TagAwsOrganizationID)
 	assert.Equal(t, "emulator", TagEmulator)
+	assert.Equal(t, "version", TagVersion)
 }
 
 func TestYAMLTag_RoundTrip(t *testing.T) {

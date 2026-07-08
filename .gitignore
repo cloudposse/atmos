@@ -122,6 +122,9 @@ tools/gomodcheck/.gomodcheck
 .golangci-cache/
 **/.golangci-cache/
 
+# Generic repo-local cache dir (e.g. GOLANGCI_LINT_CACHE, tool scratch space).
+.cache/
+
 # Claude Code and Hive Mind development tools
 .claude-flow/
 .hive-mind/

@@ -1,0 +1,60 @@
+---
+title: atmos vendor diff
+sidebar_label: diff
+sidebar_class_name: command
+id: vendor-diff
+description: Show the Git diff between two versions of a vendored component without a local checkout.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Show the changes between two versions (tags, branches, or commits) of a vendored Git
+component, without a local checkout — useful for assessing impact before adopting a
+new version.
+</Intro>
+
+<Screengrab title="atmos vendor diff --help" slug="atmos-vendor-diff--help" />
+
+## Usage
+
+```shell
+atmos vendor diff --component <name> [--from <ref>] [--to <ref>] [--diff-file <path>]
+```
+
+`--from` defaults to the component's current pinned version and `--to` defaults to the
+latest tag. A missing or extra leading `v` is tolerated, so `2.0.0` resolves a `v2.0.0`
+tag and vice versa.
+
+## Examples
+
+```shell
+# Diff the current pinned version against the latest tag.
+atmos vendor diff --component vpc
+
+# Diff two specific versions.
+atmos vendor diff -c vpc --from 1.0.0 --to 2.0.0
+
+# Restrict the diff to a single file.
+atmos vendor diff -c vpc --from 1.0.0 --to 2.0.0 --diff-file variables.tf
+```
+
+## Flags
+
+<dl>
+  <dt>`--component` / `-c` (string, required)</dt>
+  <dd>The component to diff.</dd>
+  <dt>`--from` (string)</dt>
+  <dd>Starting ref (tag, branch, or commit). Defaults to the current pinned version.</dd>
+  <dt>`--to` (string)</dt>
+  <dd>Ending ref. Defaults to the latest tag.</dd>
+  <dt>`--diff-file` (string)</dt>
+  <dd>Restrict the diff to a single file path within the component.</dd>
+  <dt>`--file` (string, default `./vendor.yaml`)</dt>
+  <dd>The vendor manifest to read the component's source from (imports are followed).</dd>
+</dl>
+
+:::note
+Git sources only. The command performs a temporary clone (removed afterward); large
+repositories take proportionally longer. Private repositories are not yet supported.
+:::
