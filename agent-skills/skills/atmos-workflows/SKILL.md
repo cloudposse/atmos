@@ -1,6 +1,6 @@
 ---
 name: atmos-workflows
-description: "Workflow automation: native step types, multi-step workflows, parallel/matrix/wait/container/emulator steps, output steps, retries, dependencies, and cross-component orchestration"
+description: "Workflow automation: native step types, multi-step workflows, parallel/matrix/wait/container/emulator steps, when: conditions (CEL), require/assert preconditions, output steps, retries, dependencies, and cross-component orchestration"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -24,6 +24,8 @@ Core command step types:
 - `container` -- build, run, push, or operate containers
 - `emulator` -- start or operate emulators
 - `http` -- HTTP calls
+- `require` (alias `assert`) -- verify required tools/files/dirs are present before continuing;
+  never installs anything (see [Preconditions with `require`](#preconditions-with-require-alias-assert))
 
 Key orchestration step types:
 
@@ -34,6 +36,9 @@ Key orchestration step types:
 
 Output and UI step types include `toast`, `markdown`, `table`, `pager`, `format`, `join`, `style`,
 `log`, `spin`, `stage`, and `linebreak`; use them instead of `echo` for operator-facing output.
+
+For the `cast` and `simulate` step types (recording a workflow run or a scripted demo session as
+an asciicast), see [atmos-cast](../atmos-cast/SKILL.md).
 
 ## Workflow File Location and Discovery
 
@@ -141,6 +146,69 @@ Shell commands can be any script, but use them intentionally: external CLIs, sho
 terminal-native tools, or checked-in scripts. If a block mostly prints status, branches, starts
 services, loops, waits, formats output, or writes CI metadata, replace it with native step types.
 
+### Conditional Execution with `when`
+
+Any step can carry a `when` field that decides whether the step runs. Atmos evaluates `when` with
+[CEL](https://github.com/google/cel-go) (Common Expression Language) rather than Go templating: CEL is
+a small, side-effect-free expression language -- no file access, no loops, no arbitrary code execution
+-- which makes it safe to evaluate against CI-controlled or otherwise untrusted values.
+
+Built-in predicate keywords are checked first and keep a fixed meaning: `ci`, `local`, `always`,
+`never`, `success`, `failure`.
+
+```yaml
+steps:
+  - name: plan
+    type: atmos
+    command: terraform plan vpc
+    when: ci               # only runs when Atmos detects it is running in CI
+```
+
+Any other non-empty scalar string that is not a predicate keyword is evaluated as a bare CEL
+expression:
+
+```yaml
+steps:
+  - name: prod-ci-check
+    type: shell
+    command: ./scripts/check-prod.sh
+    when: stack == "prod" && ci
+```
+
+Use the explicit `!cel` tag when a value is intended as CEL, or could otherwise be mistaken for a
+predicate keyword:
+
+```yaml
+steps:
+  - name: prod-ci-check
+    type: shell
+    command: ./scripts/check-prod.sh
+    when: !cel 'stack == "prod" && ci'
+```
+
+`when` also accepts a YAML list. Every item in the list must evaluate true (the items are ANDed, not
+ORed) for the step to run:
+
+```yaml
+steps:
+  - name: cleanup
+    type: shell
+    command: ./scripts/cleanup.sh
+    when: [ci, always]      # runs only when BOTH ci and always evaluate true
+```
+
+Workflow step CEL expressions can use `ci`, `status`, `stack`, `component`, `workflow`, `step`, and
+`env`. Predicate keywords win over CEL for bare strings, so `when: ci` uses the built-in predicate
+while `when: !cel 'ci'` evaluates CEL. Workflow steps do not support the built-in `failure` predicate;
+in this version, step CEL sees `status == "success"`.
+
+`when: manual` is **not** an Atmos step predicate -- there is no built-in "requires manual approval"
+gate on workflow steps. If you see `when: manual` in a CI example (for instance, inside a
+`.gitlab-ci.yml` snippet in the planfile docs), that is GitLab CI's own job-level `when:` keyword,
+unrelated to the Atmos workflow step `when:` documented here. Atmos's own manual-gate pattern is the
+plan/apply split: generate a planfile in one step (or CI job), then require a human, or a CI
+environment protection rule, to trigger the `apply --from-plan` step.
+
 ### Retry Configuration
 
 Steps can be retried on failure:
@@ -192,6 +260,59 @@ steps:
 Use `wait` or `wait-all` for background containers/emulators that must become healthy before
 dependent steps run.
 
+#### Background Steps with `background: true`, `with:`, and `for:` Targeting
+
+A step becomes a background step by setting `background: true`. Atmos starts it and immediately
+continues to the next step while it supervises the background step in a run-scoped registry. In v1,
+`background: true` is only accepted on `type: container` steps (background `shell`/`atmos` support is
+planned); a background step also cannot set `tty` or `interactive`.
+
+Container steps configure their build/run/push/inspect behavior through a `with:` block (the block's
+shape depends on the container action). For a run action, `with:` accepts fields including: `image`,
+`command`, `shell`, `provider`, `runtime_auto_start`, `runtime`, `pull`, `workspace`,
+`workspace_read_only`, `cleanup`, `user`, `run_args`, `mounts` (each with `type`/`source`/`target`/
+`read_only`), `ports` (each with `host`/`container`/`protocol`), `restart` (`policy`/`max_retries`),
+and `healthcheck` (`test`/`interval`/`timeout`/`start_period`/`start_interval`/`retries`/`disable`).
+
+`wait`, `wait-all`, and `cancel` steps then coordinate with background steps using `for:`:
+
+- `wait` blocks until the background step(s) named in `for:` become ready/healthy. `for:` is
+  **required** and names one or more background step names (a scalar or a YAML sequence).
+- `wait-all` blocks until every background step started so far in the workflow is ready; it takes no
+  `for:` and is useful after `parallel`/`matrix` steps started several background containers and you
+  just need all of them ready without naming each one.
+- `cancel` tears down the background step(s) named in `for:` (also **required**).
+
+```yaml
+steps:
+  - name: start-postgres
+    type: container
+    background: true
+    with:
+      image: postgres:16
+      ports:
+        - host: 5432
+          container: 5432
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U postgres"]
+        interval: 2s
+        retries: 10
+
+  - name: wait-for-postgres
+    type: wait
+    for: [start-postgres]
+
+  - command: terraform apply rds-consumer -auto-approve
+    name: apply-consumer
+
+  - name: stop-postgres
+    type: cancel
+    for: [start-postgres]
+```
+
+A background step's name must stay unique while it is live; reuse of the same name is only allowed
+after it has been `cancel`led.
+
 ### Working Directory
 
 Control where steps execute:
@@ -237,6 +358,38 @@ compatible (`^1.10.0`), or `latest`.
 
 No separate `atmos toolchain install` step is needed for workflow-declared tools; Atmos installs and
 injects them when the workflow runs. Reserve explicit installs for cache warming or job-level scripts.
+
+### Preconditions with `require` (alias `assert`)
+
+The `require` step type (also usable as `type: assert`) is a read-only preconditions gate: it checks
+that tools, files, and/or directories already exist, and fails fast with a single aggregated, hinted
+error listing everything missing. It never installs anything and never mutates `PATH` or the
+environment.
+
+```yaml
+steps:
+  - name: check-prereqs
+    type: require
+    tools:
+      - kubectl
+      - helm
+    files:
+      - kubeconfig.yaml
+    dirs:
+      - ./manifests
+    hint: "Run `atmos toolchain install`, or open this repo in the devcontainer, then retry."
+```
+
+- `tools` -- executable names (or paths) that must resolve on `PATH` (supports templates).
+- `files` -- paths that must exist (supports templates).
+- `dirs` -- paths that must exist and be directories (supports templates).
+- `hint` -- an optional extra remediation note appended to the failure error (supports templates).
+
+At least one of `tools`, `files`, or `dirs` must be set; an empty `require` step fails validation.
+
+**Unlike `dependencies.tools`, `require` never installs -- it only verifies.** Use it when a tool must
+already be present (e.g. provided by the CI runner image or devcontainer) and you want a clear, early
+failure instead of a confusing downstream error when the real command finally runs.
 
 ## Working with Stacks in Workflows
 

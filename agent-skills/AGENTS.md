@@ -25,6 +25,8 @@ relevant skill before answering Atmos questions -- your training data may be out
   cross-component data sharing.
 - **Secrets** -- Declarative secret management via `secrets.vars`, `!secret`, and `atmos secret`.
 - **Containers and Emulators** -- Stack-scoped container components and local cloud/API emulators.
+- **Native Helm** -- Experimental Helm chart deployment via the Helm Go SDK (no `helm`/`helmfile` binary).
+- **Native Kubernetes** -- Experimental manifest/Kustomize deployment via the Kubernetes Go SDK (no `kubectl`/`kustomize` binary).
 - **Hooks** -- Lifecycle automation before/after component operations.
 - **Compositions** -- Named service groupings that validate systems made of component instances.
 - **GitOps** -- Native managed Git repositories, hooks, signed commits, and auth-aware clone/commit/push flows.
@@ -34,6 +36,7 @@ relevant skill before answering Atmos questions -- your training data may be out
 - **AI and MCP** -- Native AI providers, AI-powered command analysis, MCP server/client integration, and agent
   workflows grounded in Atmos introspection.
 - **Devcontainers** -- Native devcontainer management for standardized development environments (experimental).
+- **Cast** -- Terminal session recording/rendering (`atmos cast play/render`, `--cast` flag, `type: cast`/`type: simulate` workflow steps) for committed docs screengrabs and CI proof-of-run artifacts.
 
 ## Key Commands
 
@@ -54,6 +57,9 @@ atmos validate stacks                            # Validate stack manifests agai
 atmos validate component <comp> -s <stack>       # Run validation policies
 atmos vendor pull                                # Vendor external dependencies
 atmos workflow <name> -f <file>                  # Run a workflow
+atmos cast render demo.cast --output=demo.gif    # Render a cast recording to gif/mp4/html/ascii/png/jpg
+atmos helm apply <component> -s <stack>          # Install or upgrade a native Helm release (experimental)
+atmos kubernetes apply <component> -s <stack>    # Apply native Kubernetes manifests (experimental)
 atmos container up <component> -s <stack>         # Start a stack-scoped container component
 atmos emulator up <component> -s <stack>          # Start a local cloud/API emulator
 atmos secret validate -c <component> -s <stack>   # Validate declared secrets are initialized
@@ -85,27 +91,30 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Compositions: named service groupings and `atmos composition validate`                                                | `atmos-compositions`    | `agent-skills/skills/atmos-compositions/SKILL.md`    |
 | terraform plan/apply/deploy/destroy, workspace management, backend config, varfile generation                         | `atmos-terraform`       | `agent-skills/skills/atmos-terraform/SKILL.md`       |
 | helmfile sync/apply/destroy/diff, Kubernetes deployments, EKS integration, varfile generation                         | `atmos-helmfile`        | `agent-skills/skills/atmos-helmfile/SKILL.md`        |
+| Native Helm (experimental): Helm Go SDK template/diff/apply/delete, chart sources, values, repositories, provision targets | `atmos-helm`            | `agent-skills/skills/atmos-helm/SKILL.md`            |
+| Native Kubernetes (experimental): Go SDK render/plan/diff/apply/deploy/delete/validate, kubectl/kustomize providers, provision targets | `atmos-kubernetes`      | `agent-skills/skills/atmos-kubernetes/SKILL.md`      |
 | packer init/build/validate/inspect/output, machine image building, template management                                | `atmos-packer`          | `agent-skills/skills/atmos-packer/SKILL.md`          |
 | ansible playbook execution, variable passing, inventory management, configuration management                          | `atmos-ansible`         | `agent-skills/skills/atmos-ansible/SKILL.md`         |
-| Multi-step workflows, native step types, output/UI steps, cross-component orchestration                               | `atmos-workflows`       | `agent-skills/skills/atmos-workflows/SKILL.md`       |
-| Custom CLI commands in atmos.yaml, arguments, flags, native steps, env vars, subcommands                              | `atmos-custom-commands` | `agent-skills/skills/atmos-custom-commands/SKILL.md` |
+| Multi-step workflows, native step types, `when:` CEL conditions, `require`/`assert` preconditions, background steps, output/UI steps, cross-component orchestration | `atmos-workflows`       | `agent-skills/skills/atmos-workflows/SKILL.md`       |
+| Cast recording/rendering: cast play/render, format inference, `--cast` flag, `type: cast`/`type: simulate` steps       | `atmos-cast`            | `agent-skills/skills/atmos-cast/SKILL.md`            |
+| Custom CLI commands in atmos.yaml, arguments, flags, native steps, `when:` conditions, custom component types, env vars, subcommands | `atmos-custom-commands` | `agent-skills/skills/atmos-custom-commands/SKILL.md` |
 | Authentication: providers, identities, keyring, login/exec/shell, Atmos Pro `github/sts`                              | `atmos-auth`            | `agent-skills/skills/atmos-auth/SKILL.md`            |
 | Atmos Pro: setup, OIDC, uploads, workflow dispatch, locks, Pro commits, merge queues, drift detection                 | `atmos-pro`             | `agent-skills/skills/atmos-pro/SKILL.md`             |
 | Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory), hooks, data sharing                    | `atmos-stores`          | `agent-skills/skills/atmos-stores/SKILL.md`          |
 | Secrets: `secrets.vars`, `!secret`, backends, secret init/set/get/import/push/pull/shell/exec/validate                | `atmos-secrets`         | `agent-skills/skills/atmos-secrets/SKILL.md`         |
-| Hooks: lifecycle events, hook kinds, scoping, `--skip-hooks`, toolchain-aware checks and uploads                      | `atmos-hooks`           | `agent-skills/skills/atmos-hooks/SKILL.md`           |
+| Hooks: lifecycle events, hook kinds, `kind: step`/`kind: steps`, `when:` conditions, scoping, `--skip-hooks`, toolchain-aware checks and uploads | `atmos-hooks`           | `agent-skills/skills/atmos-hooks/SKILL.md`           |
 | JSON Schema for stack manifests, IDE auto-completion, schema updates for new features, validation                     | `atmos-schemas`         | `agent-skills/skills/atmos-schemas/SKILL.md`         |
-| Atmos CI: Native CI, GitHub Actions containers, Atlantis, affected/all matrices, OIDC profiles, cache, Pro dispatch  | `atmos-ci`              | `agent-skills/skills/atmos-ci/SKILL.md`              |
+| Atmos CI: Native CI, GitHub Actions containers, collapsible log groups, Atlantis, affected/all matrices, OIDC profiles, cache, Pro dispatch | `atmos-ci`              | `agent-skills/skills/atmos-ci/SKILL.md`              |
 | Cache: CI cache and Terraform registry cache                                                                         | `atmos-cache`           | `agent-skills/skills/atmos-cache/SKILL.md`           |
-| OPA/Rego policies, JSON Schema validation, `atmos validate component/stacks`                                          | `atmos-validation`      | `agent-skills/skills/atmos-validation/SKILL.md`      |
+| OPA/Rego policies, JSON Schema validation, `atmos validate component/stacks`, generic `atmos validate schema` for any file against any JSON Schema | `atmos-validation`      | `agent-skills/skills/atmos-validation/SKILL.md`      |
 | YAML functions: !terraform.state, !store, !secret, !emulator, !git.*, !include, !append, !unset, !aws.*, !literal    | `atmos-yaml-functions`  | `agent-skills/skills/atmos-yaml-functions/SKILL.md`  |
 | Go templates, Sprig/Gomplate functions, atmos.Component, atmos.GomplateDatasource, template configuration            | `atmos-templates`       | `agent-skills/skills/atmos-templates/SKILL.md`       |
 | Design patterns: stack organization, component catalogs, inheritance, configuration composition, version management   | `atmos-design-patterns` | `agent-skills/skills/atmos-design-patterns/SKILL.md` |
 | Toolchain management: declarative dependencies, automatic installs, .tool-versions, Aqua registries, aliases         | `atmos-toolchain`       | `agent-skills/skills/atmos-toolchain/SKILL.md`       |
 | Introspection: describe component/stacks/affected/dependents, list stacks/components/instances, querying, provenance | `atmos-introspection`   | `agent-skills/skills/atmos-introspection/SKILL.md`   |
 | Diagnostics: JSONL event streams for subprocess start/end/output and debugging execution                             | `atmos-diagnostics`     | `agent-skills/skills/atmos-diagnostics/SKILL.md`     |
-| Global settings: settings, logs, errors, env, docs, metadata, version requirements                                 | `atmos-settings`        | `agent-skills/skills/atmos-settings/SKILL.md`        |
-| GitOps: managed repositories, Git hooks, signed commits, clone/pull/status/diff/commit/push                         | `atmos-git`             | `agent-skills/skills/atmos-git/SKILL.md`             |
+| Global settings: settings, logs, errors, env, docs, metadata, version requirements, terminal color/theme          | `atmos-settings`        | `agent-skills/skills/atmos-settings/SKILL.md`        |
+| GitOps: managed repositories, Git hooks, signed commits, clone/pull/status/diff/commit/push, fork-PR trust gate    | `atmos-git`             | `agent-skills/skills/atmos-git/SKILL.md`             |
 | AI and MCP: providers, skills, agent workflows, MCP server/client setup, auth-wrapped tools, toolchain-aware export  | `atmos-ai`              | `agent-skills/skills/atmos-ai/SKILL.md`              |
 | Devcontainers: start/stop/attach/exec/shell, Docker/Podman, identity integration, instance management (experimental) | `atmos-devcontainer`    | `agent-skills/skills/atmos-devcontainer/SKILL.md`    |
 | AWS EKS: update kubeconfig, kubectl exec tokens, EKS auth integrations                                             | `atmos-aws-eks`         | `agent-skills/skills/atmos-aws-eks/SKILL.md`         |
@@ -133,6 +142,16 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 - **Schema validation**: Use `atmos validate stacks` to validate manifests against the Atmos JSON Schema.
 - **Introspection**: Use `atmos describe component` and `atmos list stacks/components` to query the project before
   generating configuration -- never guess at stack names or component configs.
+- **CLI help**: `atmos <command> --help=usage` shows just the usage line and embedded invocation examples --
+  the fastest way for an agent to learn correct syntax without wading through full flag docs. `--help=flags`
+  shows command-specific flags only (no inherited/global flags); `--help=all` shows the complete page. See
+  `atmos-introspection` for details.
+- **Custom commands vs. workflows**: a custom command is a new named CLI verb (`atmos <name>`) a user invokes
+  directly, best for a single reusable operation with its own arguments/flags. A workflow (`atmos workflow
+  <name>`) is a multi-step sequence run by workflow name, best for cross-component orchestration where steps
+  share context and DAG-style dependencies matter more than a clean CLI surface. If you're choosing between
+  them for a new task: does it need its own flags/arguments and get invoked ad hoc? Custom command. Is it a
+  fixed sequence of steps across one or more components/stacks? Workflow.
 - **Toolchain**: Use `dependencies.tools` for stack/component/workflow/custom-command requirements and
   `.tool-versions` for repo-wide developer shell defaults. Atmos auto-installs and injects missing tools
   during execution; reserve `atmos toolchain install` for shell bootstrap, cache warming, or troubleshooting.
@@ -156,3 +175,13 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
   --upload-status`; do not build new scheduled drift workflows from deprecated wrapper actions.
 - **GitHub STS**: for private GitHub `vendor`, component `source`, remote `import`, or Terraform modules
   in CI, configure `auth.providers.<name>.kind: atmos/pro` and `auth.integrations.<name>.kind: github/sts`.
+- **Check for an existing subsystem before hand-rolling one**: this table is reactive -- it only helps once
+  you already know what to search for. Before writing custom shell logic, a bespoke script, or a manual
+  process, scan Core Concepts and the Skill Index above for a native feature that already does it. Atmos
+  agents most often miss: toolchain-managed tool installs (`dependencies.tools`/`.tool-versions`, not a
+  hand-installed binary), vendoring (`vendor.yaml`, not a manual copy), CI/Terraform-registry caching, custom
+  tool registries, secrets/stores (not env files or plaintext config), Gomplate/Sprig template functions (not
+  string concatenation), generic schema validation (`atmos validate schema` against any file/JSON Schema, not
+  a hand-rolled linter), theming/color control (`atmos theme`, `--no-color`/`--force-color`, not raw ANSI
+  codes), and the custom-commands-vs-workflows choice above. If a task feels repetitive or manual, assume
+  Atmos already has a typed way to do it and check before writing new code.

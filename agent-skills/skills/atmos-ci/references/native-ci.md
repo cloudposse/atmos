@@ -22,10 +22,15 @@ ci:
     enabled: true
     variables:
       - has_changes
-      - has_additions
-      - has_destructions
-      - artifact_key
-      - plan_summary
+      - has_errors
+      - exit_code
+      - resources_to_create
+      - resources_to_change
+      - resources_to_replace
+      - resources_to_destroy
+      - stack
+      - component
+      - summary
   summary:
     enabled: true
   checks:
@@ -41,10 +46,20 @@ ci:
     behavior: upsert
 ```
 
+`ci.output.variables` is an allowlist filter over the variables the terraform CI plugin already
+builds (an empty list means write all of them); it never invents new names. Only the terraform
+plugin implements native output variables today (helm/helmfile/kubernetes plugins do not). Beyond
+`has_changes`/`has_errors`/`exit_code`/`stack`/`component`/`command`/`summary`, plan/apply/destroy
+add `resources_to_create`/`resources_to_change`/`resources_to_replace`/`resources_to_destroy`,
+apply/test add `success`, and test adds `tests_total`/`tests_passed`/`tests_failed`/
+`tests_errored`/`tests_skipped`. After a successful `apply`, each Terraform output is also written
+as `output_<name>` — those bypass the allowlist and are always included.
+
 | Native CI feature | Atmos config | GitHub permission |
 |---|---|---|
 | Job summaries | `ci.summary.enabled` | none |
 | Output variables | `ci.output.enabled` | none |
+| Log groups | `ci.groups.mode` | none |
 | Commit statuses/checks | `ci.checks.enabled` | `statuses: write` or `checks: write` |
 | PR comments | `ci.comments.enabled` | `pull-requests: write` |
 
@@ -53,6 +68,25 @@ Set `GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}` when checks or comments are enab
 Native CI writes outputs to `$GITHUB_OUTPUT` when `ci.enabled: true`, `ci.output.enabled: true`, and
 GitHub Actions provides the output file. Give Atmos steps an `id`, expose job outputs when another
 job needs them, and read those values through `needs.<job>.outputs.*`.
+
+## Log Groups
+
+Configure `ci.groups.mode` to fold Atmos output into collapsible GitHub Actions `::group::` regions:
+
+```yaml
+ci:
+  enabled: true
+  groups:
+    mode: auto      # auto (default) | invocation | off
+```
+
+- `auto` (default): finest grouping per command — one group per workflow/custom-command step, and
+  one group per phase (`terraform init`, `terraform apply`, etc.) of a terraform/tofu invocation.
+- `invocation`: one group around the whole top-level `atmos <command>` run; suppresses finer
+  step/phase grouping.
+- `off`: no grouping.
+
+Modes are mutually exclusive; CI providers do not support nested groups.
 
 ## Terraform/OpenTofu Toolchain
 

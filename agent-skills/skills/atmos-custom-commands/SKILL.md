@@ -1,6 +1,6 @@
 ---
 name: atmos-custom-commands
-description: "Custom CLI commands: command definition in atmos.yaml, arguments, flags, native step types, output/UI steps, env vars"
+description: "Custom CLI commands: command definition in atmos.yaml, arguments, flags, native step types, when: conditions, output/UI steps, env vars, custom component types"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -275,6 +275,60 @@ Available fields: `.ComponentConfig.component`, `.ComponentConfig.backend`, `.Co
 `.ComponentConfig.metadata`. For the complete field reference, see
 [references/command-syntax.md](references/command-syntax.md).
 
+## Custom Component Types
+
+The top-level `component` key is a distinct, narrower, more advanced mechanism from
+`component_config` above: instead of resolving an already-known component/stack pair,
+`component: {type, base_path}` registers a brand-new Atmos component *type* on the fly, backed by
+a generic provider, and exposes the resolved config as `{{ .Component.* }}`:
+
+```yaml
+commands:
+  - name: run-script
+    description: Execute a custom "script"-type component
+    component:
+      type: script
+      base_path: components/script    # optional; defaults to "components/<type>"
+    arguments:
+      - name: component
+        description: Script component name
+        type: component                # semantic type: resolves the component argument
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        description: Stack name
+        semantic_type: stack           # semantic type: resolves the stack flag
+        required: true
+    steps:
+      - "echo Running {{ .Component.component }} in stack {{ .Flags.stack }}"
+```
+
+When this command runs, Atmos:
+
+1. Finds the argument tagged `type: component` (or flag tagged `semantic_type: component`) and the
+   argument tagged `type: stack` (or flag tagged `semantic_type: stack`) to get the component and
+   stack names (`pkg/schema/command.go`'s `CommandArgument.Type` / `CommandFlag.SemanticType`).
+2. Registers a `component.ComponentProvider` for the declared `type` on demand -- idempotent, safe
+   across repeated invocations -- via `pkg/component/custom.EnsureRegistered`, using `base_path`
+   (or the `components/<type>` default) as the type's base directory.
+3. Resolves the component's full configuration in that stack and exposes it as `{{ .Component.* }}`
+   in templates -- note this is `.Component`, not `.ComponentConfig` (the separate,
+   pre-existing mechanism documented above).
+
+Because step 2 registers into Atmos's shared component provider registry -- the same registry
+built-in `terraform`/`helmfile`/`packer` types use -- this unlocks generic tooling for the new
+type for free: `atmos list components --component-types=script` and `atmos describe component`
+recognize `script` components declared under `components.script.<name>` in stacks, the same way
+they recognize built-in types.
+
+**`component:` vs `component_config:`**: `component_config` only resolves a *known* existing
+component/stack pair into `{{ .ComponentConfig.* }}` -- it never creates a new component type.
+`component: {type, base_path}` defines an entirely new component type, dynamically, from within a
+single command definition. This is a narrower, more advanced feature than `component_config`, and
+there is no dedicated website docs page for it yet -- this skill is currently the most complete
+reference for it.
+
 ## Go Templates in Steps
 
 Steps support Go template syntax. Access arguments with `{{ .Arguments.name }}`, flags with
@@ -293,6 +347,28 @@ steps:
 
 Supports `if`/`else`, `not`, `eq`, and boolean-to-shell conversion. For complete template
 examples, see [references/command-syntax.md](references/command-syntax.md).
+
+## Conditional Steps
+
+Custom command steps support `when:` conditions too, through the same step engine and syntax as
+workflow steps. Omitting `when` always runs the step; a false condition skips it without failing
+the command:
+
+```yaml
+commands:
+  - name: release
+    description: Run release checks
+    steps:
+      - type: shell
+        command: ./scripts/ci-release-checks.sh
+        when: ci
+      - type: shell
+        command: ./scripts/prod-only.sh
+        when: !cel 'stack == "prod" && ci'
+```
+
+See [atmos-workflows](../atmos-workflows/SKILL.md#conditional-execution-with-when) for the full
+`when:`/CEL syntax reference.
 
 ## Authentication
 

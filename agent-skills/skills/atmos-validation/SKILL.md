@@ -1,6 +1,6 @@
 ---
 name: atmos-validation
-description: "Policy validation: OPA/Rego policies, JSON Schema, schema manifests"
+description: "Policy validation: OPA/Rego policies, JSON Schema, schema manifests, and generic `atmos validate schema` glob-to-JSON-Schema file validation"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -66,6 +66,68 @@ This command checks:
 
 If the same component is defined in multiple stack manifest files for the same stack with
 different configurations, Atmos reports it as an error.
+
+### `atmos validate schema <key>` -- Generic File Validation
+
+Unlike `atmos validate component` and `atmos validate stacks`, which are specific to Atmos stack
+manifests and components, `atmos validate schema` is a **generic** validator: it can validate
+**any** glob-matched set of files against **any** JSON Schema, not just Atmos configuration. Use
+it to enforce schema compliance on arbitrary YAML files in a repository (CI workflows, Kubernetes
+manifests, custom app config, etc.).
+
+Define one or more entries under a user-defined `schemas` map in `atmos.yaml`. Each entry is keyed
+by an arbitrary name you choose, and specifies:
+- `schema` -- Path or URL to the JSON Schema file (supports `!import` for remote schemas)
+- `matches` -- One or more glob patterns selecting which files to validate
+
+```yaml
+# atmos.yaml
+schemas:
+  my_custom_key:
+    schema: !import https://www.jsonschema.com/example.json
+    matches:
+      - folder/*.yaml
+```
+
+Run validation for a specific key by name:
+
+```shell
+atmos validate schema my_custom_key
+```
+
+Running `atmos validate schema` with no argument validates every entry defined under `schemas`
+(excluding the reserved `cue`/`opa`/`jsonschema` keys -- see below).
+
+#### Practical Example: Validating GitHub Actions Workflows
+
+A common use case is validating `.github/workflows/*.yml` files against the public GitHub Actions
+JSON Schema from SchemaStore, catching malformed workflow YAML before it reaches CI:
+
+```yaml
+# atmos.yaml
+schemas:
+  github-actions:
+    schema: https://json.schemastore.org/github-workflow.json
+    matches:
+      - .github/workflows/*.yml
+```
+
+```shell
+atmos validate schema github-actions
+```
+
+Each matching file is parsed, converted to JSON, and validated against the schema. Atmos prints a
+checkmark for each file that passes and reports field-level errors (field, type, description) for
+files that fail, exiting non-zero if any file is invalid.
+
+#### Reserved `schemas` Keys
+
+The `cue`, `opa`, and `jsonschema` keys under `schemas` are **reserved** and special-cased for the
+Atmos-specific base-path configuration documented below (see [Schema Base Paths in
+`atmos.yaml`](#schema-base-paths-in-atmosyaml)) -- they configure *where* Atmos looks for
+component/manifest validation schemas, not arbitrary file validators. `atmos validate schema` skips
+these keys when iterating `schemas` entries. Don't reuse them as your own custom key names (e.g.
+`my_custom_key`, `github-actions` above are safe; `opa` or `jsonschema` are not).
 
 ## Configuring Validation
 

@@ -46,6 +46,51 @@ metadata:
   name: platform-infrastructure
 ```
 
+## Terminal Appearance and Color
+
+`settings.terminal` controls Atmos's terminal output appearance (color, theme, width, unicode,
+syntax highlighting, pager). Fields (from `pkg/schema/schema.go` `Terminal` struct):
+
+```yaml
+settings:
+  terminal:
+    color: true               # Explicitly force color on (overrides TTY auto-detection)
+    no_color: false           # Deprecated: use the --no-color flag or ATMOS_NO_COLOR/NO_COLOR/CLICOLOR env vars instead
+    force_color: false        # ENV-only (ATMOS_FORCE_COLOR) -- not settable from this config field
+    theme: dracula             # Theme name; see `atmos theme list` for available names
+    max_width: 120
+    unicode: true
+    syntax_highlighting:
+      enabled: true
+    pager: false               # false/true/off/on/"less"/a specific pager command
+```
+
+Precedence: `no_color` (config) is deprecated in favor of the `--no-color` flag/env vars below.
+`IsColorEnabled` logic: `no_color` forces color off; else explicit `color: true` forces it on;
+otherwise Atmos falls back to TTY auto-detection.
+
+### Flags and Environment Variables
+
+| Flag | Env vars | Effect |
+|---|---|---|
+| `--no-color` | `ATMOS_NO_COLOR`, `NO_COLOR`, `CLICOLOR` | Disable color output |
+| `--force-color` | `ATMOS_FORCE_COLOR`, `CLICOLOR_FORCE` | Force color output even when not a TTY (e.g. piped/CI output, screenshots) |
+
+### `atmos theme` Commands
+
+Discover and preview themes (a theme controls tables, markdown rendering, and help text colors):
+
+```shell
+atmos theme list                 # List all available themes
+atmos theme list --recommended   # Only themes tested for optimal compatibility
+atmos theme show <theme-name>    # Preview a theme's palette and sample UI elements
+atmos theme browse               # Interactive/searchable theme gallery (docs site)
+atmos list themes                # Alias for 'theme list'; defaults to recommended-only, use --all for all
+```
+
+Activate a theme via `ATMOS_THEME=<theme-name>` env var or `settings.terminal.theme` in
+`atmos.yaml`.
+
 ## Routing
 
 | Need | Load |

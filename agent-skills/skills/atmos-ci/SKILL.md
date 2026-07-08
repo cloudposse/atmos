@@ -1,6 +1,6 @@
 ---
 name: atmos-ci
-description: "Atmos CI: Native CI with GitHub Actions containers, native outputs, affected/all matrix workflows, OIDC profiles, toolchain-aware jobs, drift routing to Atmos Pro, deployment approvals, merge queues, environments, statuses, and Atlantis integration"
+description: "Atmos CI: Native CI with GitHub Actions containers, native outputs, collapsible log groups, affected/all matrix workflows, OIDC profiles, toolchain-aware jobs, drift routing to Atmos Pro, deployment approvals, merge queues, environments, statuses, and Atlantis integration"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -45,10 +45,15 @@ ci:
     enabled: true
     variables:
       - has_changes
-      - has_additions
-      - has_destructions
-      - artifact_key
-      - plan_summary
+      - has_errors
+      - exit_code
+      - resources_to_create
+      - resources_to_change
+      - resources_to_replace
+      - resources_to_destroy
+      - stack
+      - component
+      - summary
   summary:
     enabled: true
   checks:
@@ -63,6 +68,37 @@ ci:
     enabled: true
     behavior: upsert
 ```
+
+`ci.output.variables` is an allowlist filter over the variables the terraform CI plugin already
+builds (an empty list means write all of them); it never invents new names. Only the terraform
+plugin implements native output variables today (helm/helmfile/kubernetes plugins do not). Beyond
+`has_changes`/`has_errors`/`exit_code`/`stack`/`component`/`command`/`summary`, plan/apply/destroy
+add `resources_to_create`/`resources_to_change`/`resources_to_replace`/`resources_to_destroy`,
+apply/test add `success`, and test adds `tests_total`/`tests_passed`/`tests_failed`/
+`tests_errored`/`tests_skipped`. After a successful `apply`, each Terraform output is also written
+as `output_<name>` — those bypass the allowlist and are always included.
+
+### Log Groups
+
+Configure `ci.groups.mode` to fold Atmos output into collapsible GitHub Actions `::group::` regions
+and cut log noise:
+
+```yaml
+ci:
+  enabled: true
+  groups:
+    mode: auto      # auto (default) | invocation | off
+```
+
+- `auto` (default): the finest grouping that applies to each command — one group per
+  workflow/custom-command step, and one group per phase (`terraform init`, `terraform apply`, etc.)
+  of a terraform/tofu invocation.
+- `invocation`: one group around the whole top-level `atmos <command>` run; suppresses finer
+  step/phase grouping.
+- `off`: no grouping.
+
+Modes are mutually exclusive because CI providers do not support nested groups; do not try to
+combine step-level and invocation-level grouping.
 
 Use the Atmos toolchain for Terraform/OpenTofu and related tools so CI does not depend on runner
 images or external setup actions:
@@ -183,6 +219,11 @@ repo:ORG/REPO:environment:prod
 
 Use GitHub environments for approval gates and environment-scoped claims. Treat environment names
 as GitHub deployment controls; they are independent from Atmos stack names.
+
+`atmos git clone` (the native `actions/checkout` replacement used in these workflows) applies a
+fork-PR trust gate in `pull_request_target`/`workflow_run` contexts, refusing to clone untrusted
+fork content into a job holding base-repo secrets. See [atmos-git](../atmos-git/SKILL.md) for
+details.
 
 ## Workflow Guidance
 

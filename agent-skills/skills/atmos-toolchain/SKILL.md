@@ -26,6 +26,29 @@ them into `PATH` for that execution context.
 Use explicit `atmos toolchain install` only for shell bootstrap, cache warming, ad-hoc
 troubleshooting, or job-level tools that are not owned by a component, workflow, custom command, or hook.
 
+Agents repeatedly get two things wrong here: putting an operation-specific tool version only in
+`.tool-versions`, and wrapping `atmos` itself in `atmos toolchain exec`. Both are covered below.
+
+❌ **Wrong** — a component needs a pinned Terraform version, declared only in `.tool-versions`:
+```text
+# .tool-versions
+terraform 1.10.3
+```
+This is a repo-wide default. Nothing ties it to the `vpc` component, so a different component (or a
+different environment's `.tool-versions`) can silently drift the version this component actually needs.
+
+✅ **Right** — pin it on the component that requires it:
+```yaml
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "1.10.3"
+```
+`.tool-versions` still sets the repo-wide developer-shell default; `dependencies.tools` overrides it for
+this component's execution context, and travels with the component if it's vendored or reused elsewhere.
+
 ## Core Concepts
 
 ### .tool-versions File
@@ -220,6 +243,18 @@ atmos toolchain env --format=bash                # Export PATH for shell
 atmos toolchain path                             # Print PATH entries
 ```
 
+**Anti-pattern: never run `atmos toolchain exec -- atmos ...`.** Every `atmos` command is already
+toolchain-aware — it resolves and injects declared tool paths for its own execution automatically (see
+"Default Rule" above). Wrapping `atmos` in `atmos toolchain exec` is redundant at best and a sign the
+tool declaration is missing at worst. `toolchain exec` exists only to run a **third-party** binary
+(`terraform`, `kubectl`, a scanner CLI) directly, pinned to a specific managed version, outside of an
+atmos-orchestrated command — never to invoke `atmos` itself.
+
+If a workflow/custom-command/hook step needs to confirm a tool is present on `PATH` **without**
+installing it, use the `require` step type (alias `assert`) instead of `dependencies.tools` (which
+auto-installs) or a hand-rolled `command -v` shell check — see `atmos-workflows` for the `tools:`/`files:`/
+`dirs:` config.
+
 ### Registry Management
 
 ```bash
@@ -246,6 +281,11 @@ atmos toolchain registry search jq         # Search across registries
 5. `.tools` fallback
 
 ## Shell Integration
+
+If you only ever run `atmos <subcommand>`, you do not need shell integration — Atmos resolves and
+injects declared tool paths for its own execution automatically. Shell integration is only for getting
+the raw tool binary directly into an interactive shell or a non-Atmos script (e.g. running `terraform`
+by hand outside of `atmos terraform ...`).
 
 Add to `~/.bashrc` or `~/.zshrc` for automatic PATH setup:
 

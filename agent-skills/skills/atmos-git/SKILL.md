@@ -1,6 +1,6 @@
 ---
 name: atmos-git
-description: "Atmos Git and GitOps: git.repositories, clone/pull/status/diff/commit/push/clean, local Git hook shims, signed commits, managed workdirs, and auth via identities or github/sts"
+description: "Atmos Git and GitOps: git.repositories, clone/pull/status/diff/commit/push/clean, local Git hook shims, signed commits, managed workdirs, fork-PR trust gate, and auth via identities or github/sts"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -68,3 +68,22 @@ repository.
 - Use `atmos pro commit` when CI-generated commits must trigger follow-on GitHub Actions workflows.
 - Keep generated commits traceable with clear messages and commit trailers when the project uses
   provenance conventions.
+
+### Fork-PR Trust Gate
+
+`atmos git clone` is Atmos's native replacement for `actions/checkout`, including a no-arg mode
+that checks out the current CI repository directly from CI environment variables. In
+`pull_request_target` and `workflow_run` contexts the job holds base-repository secrets and
+`GITHUB_TOKEN` — the same privilege GitHub hardened `actions/checkout@v7` against by refusing to
+fetch fork PR code by default (the "pwn request" class of risk). Atmos guards the equivalent gap:
+when it detects an elevated event (`pull_request_target`/`workflow_run`) combined with a
+fork-targeting clone request — an explicit `--branch refs/pull/<N>/merge`/`refs/pull/<N>/head`
+override, or an ad-hoc clone URI whose host or `owner/repo` differs from the base repository — it
+refuses to clone and exits non-zero. The safe no-arg default (base repository at its base ref) is
+never gated, and `pull_request`/`push` events are not gated since they don't hold elevated
+credentials against untrusted code. Opt in explicitly and only with a documented reason via
+`--allow-unsafe-fork`, `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION`, or
+`ci.allow_unsafe_fork_execution: true`; the bypass logs a prominent warning so it stays visible in
+CI logs and easy to grep for in review. Prefer `pull_request` (not `pull_request_target`) for
+workflows that clone and plan fork contributions, since `pull_request` withholds fork secrets. See
+`docs/prd/native-ci/framework/fork-pr-trust-gate.md` for the full design.

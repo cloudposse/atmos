@@ -144,13 +144,13 @@ components:
       backend_type: s3
       backend:
         s3:
-          bucket: cplive-core-ue2-root-tfstate-plat            # Platform team's state bucket
+          bucket: platform-team-tfstate                        # Platform team's state bucket
           encrypt: true
           key: terraform.tfstate
           acl: bucket-owner-full-control
           region: us-east-2
           assume_role:
-            role_arn: arn:aws:iam::828744362454:role/cplive-core-gbl-root-tfstate-plat-ro  # READ-ONLY role
+            role_arn: arn:aws:iam::123456789012:role/TerraformStateReadOnly  # READ-ONLY role
 ```
 
 ### Why `type: abstract` instead of `enabled: false`
