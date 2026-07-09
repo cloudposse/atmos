@@ -159,6 +159,15 @@ commands:
       - type: shell
         name: local-gitops-lifecycle
         command: atmos casts generate examples local-gitops lifecycle
+      - type: shell
+        name: init-init-basic
+        command: atmos casts generate examples init init-basic
+      - type: shell
+        name: scaffolding-generate-example
+        command: atmos casts generate examples scaffolding generate-example
+      - type: shell
+        name: scaffolds-aws-landing-zone-lifecycle
+        command: atmos casts generate examples scaffolds aws-landing-zone-lifecycle
   - name: casts validate examples
     description: Validate every example-sourced cast
     env: !include cast-defaults.yaml .env.command
@@ -327,3 +336,12 @@ commands:
       - type: shell
         name: local-gitops-lifecycle
         command: atmos casts validate examples local-gitops lifecycle
+      - type: shell
+        name: init-init-basic
+        command: atmos casts validate examples init init-basic
+      - type: shell
+        name: scaffolding-generate-example
+        command: atmos casts validate examples scaffolding generate-example
+      - type: shell
+        name: scaffolds-aws-landing-zone-lifecycle
+        command: atmos casts validate examples scaffolds aws-landing-zone-lifecycle

@@ -1,0 +1,185 @@
+commands:
+  - name: casts generate examples scaffolds aws-landing-zone-lifecycle
+    description: Regenerate the Scaffolds (AWS landing zone) example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-stale-state
+        working_directory: &scaffolds_fixture "../../.context/cast-fixtures/scaffolds"
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: |
+          atmos --logs-level=Off emulator down aws -s dev || true
+          rm -rf my-landing-zone || true
+      - type: shell
+        name: warm-up-workspaces
+        # Terraform prints a "workspace doesn't exist, created" banner the
+        # first time it initializes a workspace against a fresh S3 backend;
+        # cast_checks treats that banner as error-adjacent noise. Apply and
+        # destroy every component once here (hidden) so the workspaces
+        # already exist by the time the recorded steps apply for real.
+        working_directory: *scaffolds_fixture
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: |
+          atmos scaffold generate ./aws/landing-zone ./my-landing-zone --set project_name=my-landing-zone --no-git
+          cd my-landing-zone
+          atmos emulator up aws -s dev --ephemeral
+          atmos terraform apply kms -s dev -auto-approve
+          atmos terraform apply audit-trail -s dev -auto-approve
+          atmos terraform apply baseline -s dev -auto-approve
+          atmos terraform apply monitoring -s dev -auto-approve
+          atmos terraform destroy monitoring -s dev -auto-approve
+          atmos terraform destroy baseline -s dev -auto-approve
+          atmos terraform destroy audit-trail -s dev -auto-approve
+          atmos terraform destroy kms -s dev -auto-approve
+      - type: cast
+        name: aws-landing-zone-lifecycle
+        working_directory: *scaffolds_fixture
+        title: "atmos scaffold: a real AWS landing zone, end to end"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/scaffolds/aws-landing-zone-lifecycle.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# generate a real landing zone from the local scaffold template"
+          - type: simulate
+            text: &scaffold_generate_cmd atmos scaffold generate ./aws/landing-zone ./my-landing-zone --set project_name=my-landing-zone --force
+          - type: shell
+            name: scaffold-generate
+            duration: 550ms
+            interval: 900ms
+            command: *scaffold_generate_cmd
+          - type: simulate
+            text: "# start the local AWS emulator, no real account needed"
+          - type: simulate
+            text: &emulator_up_cmd atmos --chdir=my-landing-zone emulator up aws -s dev --ephemeral
+          - type: shell
+            name: emulator-up
+            duration: 450ms
+            interval: 750ms
+            command: *emulator_up_cmd
+          - type: simulate
+            text: "# kms applies first; audit-trail, baseline, and monitoring read its key via !terraform.state"
+          - type: simulate
+            text: &apply_kms_cmd atmos --chdir=my-landing-zone terraform apply kms -s dev -auto-approve
+          - type: shell
+            name: apply-kms
+            duration: 550ms
+            interval: 900ms
+            command: *apply_kms_cmd
+          - type: simulate
+            text: "# apply the rest of the baseline"
+          - type: simulate
+            text: &apply_rest_cmd |-
+              atmos --chdir=my-landing-zone terraform apply audit-trail -s dev -auto-approve && \
+              atmos --chdir=my-landing-zone terraform apply baseline -s dev -auto-approve && \
+              atmos --chdir=my-landing-zone terraform apply monitoring -s dev -auto-approve
+          - type: shell
+            name: apply-rest
+            duration: 700ms
+            interval: 1100ms
+            command: *apply_rest_cmd
+          - type: simulate
+            text: "# check what monitoring produced"
+          - type: simulate
+            text: &terraform_output_cmd atmos --chdir=my-landing-zone terraform output monitoring -s dev
+          - type: shell
+            name: terraform-output
+            duration: 450ms
+            interval: 750ms
+            command: *terraform_output_cmd
+          - type: simulate
+            text: "# tear it down when you're done"
+          - type: simulate
+            text: &emulator_down_cmd atmos --chdir=my-landing-zone emulator down aws -s dev
+          - type: shell
+            name: emulator-down
+            when: always
+            duration: 450ms
+            interval: 750ms
+            command: *emulator_down_cmd
+      - type: script
+        name: sanitize-runtime-values
+        interpreter: python3
+        script: |
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path("../../website/static/casts/examples/scaffolds/aws-landing-zone-lifecycle.cast")
+          text = path.read_text()
+          text = re.sub(
+              r"(?:mirror\.gcr\.io/)?floci/floci@sha256:[0-9a-f]{64}",
+              "floci/floci:1.5.23",
+              text,
+          )
+          path.write_text(text)
+
+          repo_root = Path("../..").resolve()
+          roots = {str(repo_root), os.path.realpath(str(repo_root))}
+          roots.update("/private" + root for root in list(roots) if not root.startswith("/private"))
+
+          lines = path.read_text().splitlines()
+          rewritten = [lines[0]]
+          for line in lines[1:]:
+              event = json.loads(line)
+              if event[1] in ("o", "e"):
+                  for root in sorted(roots, key=len, reverse=True):
+                      event[2] = event[2].replace(root, "/absolute/path/to/repo")
+              rewritten.append(json.dumps(event, separators=(",", ":")))
+          path.write_text("\n".join(rewritten) + "\n")
+
+          import sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/examples/scaffolds/aws-landing-zone-lifecycle.cast")
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)
+      - type: shell
+        name: validate
+        command: atmos casts validate examples scaffolds aws-landing-zone-lifecycle
+  - name: casts validate examples scaffolds aws-landing-zone-lifecycle
+    description: Validate the Scaffolds (AWS landing zone) example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/scaffolds/aws-landing-zone-lifecycle.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          assert_colored(text, "Apply complete!")
+          for needle in [
+              "# generate a real landing zone from the local scaffold template",
+              "Generating aws-landing-zone in",
+              "# start the local AWS emulator, no real account needed",
+              "emulator aws is up",
+              "# kms applies first",
+              "Apply complete!",
+              "alerts_topic_arn",
+              "log_group_name",
+              "emulator aws is down",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"scaffolds aws-landing-zone-lifecycle cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "No valid credential sources", "[scaffold-generate]", "[emulator-up]", "[apply-kms]", "[apply-rest]", "[terraform-output]", "[emulator-down]"]:
+              if bad in plain:
+                  raise SystemExit(f"scaffolds aws-landing-zone-lifecycle cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

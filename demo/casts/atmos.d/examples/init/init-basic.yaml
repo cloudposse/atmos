@@ -1,0 +1,96 @@
+commands:
+  - name: casts generate examples init init-basic
+    description: Regenerate the Init example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: init-basic
+        working_directory: "../../.context/cast-fixtures/init"
+        title: "atmos init: bootstrap a new project"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/init/init-basic.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# bootstrap a brand-new Atmos project from a built-in template"
+          - type: simulate
+            text: &init_cmd atmos init basic ./my-project --set project_name=my-project
+          - type: shell
+            name: init-basic
+            duration: 550ms
+            interval: 900ms
+            command: *init_cmd
+          - type: simulate
+            text: "# the generated project is immediately valid, no manual wiring needed"
+          - type: simulate
+            text: &validate_cmd atmos --chdir=my-project validate stacks
+          - type: shell
+            name: validate-stacks
+            duration: 450ms
+            interval: 750ms
+            command: *validate_cmd
+      - type: script
+        name: sanitize
+        interpreter: python3
+        script: |
+          import json
+          import os
+          from pathlib import Path
+
+          cast = Path("../../website/static/casts/examples/init/init-basic.cast")
+          repo_root = Path("../..").resolve()
+          roots = {str(repo_root), os.path.realpath(str(repo_root))}
+          roots.update("/private" + root for root in list(roots) if not root.startswith("/private"))
+
+          lines = cast.read_text().splitlines()
+          rewritten = [lines[0]]
+          for line in lines[1:]:
+              event = json.loads(line)
+              if event[1] in ("o", "e"):
+                  for root in sorted(roots, key=len, reverse=True):
+                      event[2] = event[2].replace(root, "/absolute/path/to/repo")
+              rewritten.append(json.dumps(event, separators=(",", ":")))
+          cast.write_text("\n".join(rewritten) + "\n")
+      - type: shell
+        name: validate
+        command: atmos casts validate examples init init-basic
+  - name: casts validate examples init init-basic
+    description: Validate the Init example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/init/init-basic.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          assert_colored(text, "All stacks validated successfully")
+          for needle in [
+              "# bootstrap a brand-new Atmos project",
+              "Generating basic in",
+              "atmos.yaml",
+              "stacks/dev.yaml",
+              "Generated 6 files.",
+              "All stacks validated successfully",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"init-basic cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[init-basic]", "[validate-stacks]"]:
+              if bad in plain:
+                  raise SystemExit(f"init-basic cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

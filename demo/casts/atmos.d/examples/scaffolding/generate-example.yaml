@@ -1,0 +1,96 @@
+commands:
+  - name: casts generate examples scaffolding generate-example
+    description: Regenerate the Scaffolding example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: generate-example
+        working_directory: "../../.context/cast-fixtures/scaffolding"
+        title: "atmos scaffold: generate from a template"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/scaffolding/generate-example.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# atmos.yaml-registered scaffold templates show up in the catalog"
+          - type: simulate
+            text: &scaffold_list_cmd atmos scaffold list
+          - type: shell
+            name: scaffold-list
+            duration: 450ms
+            interval: 750ms
+            command: *scaffold_list_cmd
+          - type: simulate
+            text: "# generate a new project from the template, overriding one prompt"
+          - type: simulate
+            text: &scaffold_generate_cmd atmos scaffold generate example ./my-project --set project_name=my-app
+          - type: shell
+            name: scaffold-generate
+            duration: 550ms
+            interval: 900ms
+            command: *scaffold_generate_cmd
+      - type: script
+        name: sanitize
+        interpreter: python3
+        script: |
+          import json
+          import os
+          from pathlib import Path
+
+          cast = Path("../../website/static/casts/examples/scaffolding/generate-example.cast")
+          repo_root = Path("../..").resolve()
+          roots = {str(repo_root), os.path.realpath(str(repo_root))}
+          roots.update("/private" + root for root in list(roots) if not root.startswith("/private"))
+
+          lines = cast.read_text().splitlines()
+          rewritten = [lines[0]]
+          for line in lines[1:]:
+              event = json.loads(line)
+              if event[1] in ("o", "e"):
+                  for root in sorted(roots, key=len, reverse=True):
+                      event[2] = event[2].replace(root, "/absolute/path/to/repo")
+              rewritten.append(json.dumps(event, separators=(",", ":")))
+          cast.write_text("\n".join(rewritten) + "\n")
+      - type: shell
+        name: validate
+        command: atmos casts validate examples scaffolding generate-example
+  - name: casts validate examples scaffolding generate-example
+    description: Validate the Scaffolding example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/scaffolding/generate-example.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          assert_colored(text, "README.md")
+          for needle in [
+              "# atmos.yaml-registered scaffold templates show up in the catalog",
+              "Available Scaffold Templates",
+              "example",
+              "# generate a new project from the template",
+              "Generating example in",
+              "Generated 2 files.",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"scaffolding generate-example cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[scaffold-list]", "[scaffold-generate]"]:
+              if bad in plain:
+                  raise SystemExit(f"scaffolding generate-example cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

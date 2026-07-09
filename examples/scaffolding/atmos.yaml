@@ -1,29 +1,25 @@
-# Atmos CLI Configuration Template
-# This file is processed by the scaffold command with Go templates.
-# Variables from prompts are accessible via {{ .Config.<name> }}
-# See: https://atmos.tools/cli/configuration
+# Atmos CLI configuration for this example.
+# https://atmos.tools/cli/configuration
 
-version: 1
-
-# Base path for components, stacks and workflows
+# Base path for components, stacks and workflows.
 base_path: "."
 
-# Component configuration
+# Component configuration.
 components:
   terraform:
-    # Path to Terraform components (relative to base_path)
+    # Path to Terraform components (relative to base_path).
     base_path: "components/terraform"
-    # Apply auto-generated backend configuration
+    # Apply auto-generated backend configuration.
     apply_auto_generated_backend_file: true
 
-# Stack configuration
+# Stack configuration.
 stacks:
-  # Path to stack files (relative to base_path)
+  # Path to stack files (relative to base_path).
   base_path: "stacks"
-  # Stack naming pattern
+  # Stack naming pattern.
   name_pattern: "{environment}-{stage}"
 
-# Template configuration
+# Template configuration.
 templates:
   settings:
     enabled: true
@@ -32,6 +28,15 @@ templates:
     gomplate:
       enabled: true
 
-# Logging
+# Register the local `scaffold.yaml` in this directory as the "example"
+# template, so `atmos scaffold generate example <target>` resolves it by
+# name instead of requiring a local path argument.
+scaffold:
+  templates:
+    example:
+      description: Example scaffold template for demonstration
+      source: "."
+
+# Logging.
 logs:
   level: info

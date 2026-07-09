@@ -11,6 +11,11 @@ on:
     # runs on 19:17 every Tuesday
     - cron: "27 19 * * 2"
 
+env:
+  # Use pipe fallback so transient proxy.golang.org 5xx errors during
+  # `go mod download` fall back to direct module fetches.
+  GOPROXY: "https://proxy.golang.org|direct"
+
 jobs:
   analyze:
     name: Analyze

@@ -37,6 +37,9 @@ env:
   HELM_DIFF_VERSION: "v3.15.10"
   HELMFILE_VERSION: "v1.1.0"
   PACKER_VERSION: "1.14.2"
+  # Use pipe fallback so transient proxy.golang.org 5xx errors during
+  # `go mod download` fall back to direct module fetches.
+  GOPROXY: "https://proxy.golang.org|direct"
 
 jobs:
   # ensure the code builds...

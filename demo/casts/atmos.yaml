@@ -281,6 +281,21 @@ commands:
         source: "../../examples/container-component"
         path: "../../.context/cast-fixtures/container-component"
         reset: true
+      - type: workdir
+        name: init-fixture
+        source: "../../examples/init"
+        path: "../../.context/cast-fixtures/init"
+        reset: true
+      - type: workdir
+        name: scaffolding-fixture
+        source: "../../examples/scaffolding"
+        path: "../../.context/cast-fixtures/scaffolding"
+        reset: true
+      - type: workdir
+        name: scaffolds-fixture
+        source: "../../examples/scaffolds"
+        path: "../../.context/cast-fixtures/scaffolds"
+        reset: true
       - type: shell
         name: build-atmos
         # CGO off to match the release build; with CGO on, transitive deps
