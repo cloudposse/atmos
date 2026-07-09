@@ -6,7 +6,7 @@ id: stats
 description: Show cache size, object count, and provider/module breakdown.
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Report filesystem facts about the registry cache: total size, object count, the provider-vs-module breakdown, and the largest and oldest objects. Counts include only cached registry artifacts (providers and modules) — proxy infrastructure co-located in the cache root, such as the self-signed TLS certificate, is not counted.
@@ -16,7 +16,7 @@ Report filesystem facts about the registry cache: total size, object count, the 
 These stats describe the **registry cache** (the proxy-managed cache of provider and module registry traffic), not Terraform's separate [provider plugin cache](/cli/configuration/components/terraform) (`plugin_cache`).
 :::
 
-<Screengrab title="atmos terraform cache stats --help" slug="atmos-terraform-cache-stats--help" />
+<CastPlayer title="atmos terraform cache stats --help" src="/casts/screengrabs/atmos-terraform-cache-stats--help.cast" static chrome />
 
 ## Usage
 

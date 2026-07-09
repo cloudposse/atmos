@@ -1,3 +1,8 @@
+---
+title: MCP for AI Coding Assistants
+tags: [AI]
+---
+
 # Example: MCP for AI Coding Assistants
 
 Configure MCP servers ([Atmos MCP server](https://atmos.tools/ai/mcp-server) plus the

@@ -1,3 +1,11 @@
+---
+title: Auth Identities for Stores
+tags: [Stacks]
+cast:
+  file: /casts/examples/auth-stores/identity-backed-stores.cast
+  title: atmos auth-backed stores
+---
+
 # Auth Identity for Stores Example
 
 Demonstrates how stores authenticate using Atmos auth identities instead of the default credential chain.

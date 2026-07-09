@@ -1,3 +1,15 @@
+---
+title: Quick Start (Advanced)
+tags: [Quickstart]
+description: >-
+  See what a small AWS application stack looks like with Atmos end to end —
+  backend provisioning, secrets, identities, and Terraform against a local
+  AWS emulator.
+cast:
+  file: /casts/examples/quick-start-advanced/list-instances.cast
+  title: atmos quick start advanced
+---
+
 # Atmos Quick Start (Advanced)
 
 [Atmos](https://atmos.tools/) is a universal tool for DevOps and cloud automation. This advanced

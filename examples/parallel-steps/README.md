@@ -1,3 +1,11 @@
+---
+title: Parallel Steps
+tags: [Automation]
+cast:
+  file: /casts/examples/parallel-steps/control-steps.cast
+  title: atmos parallel workflow steps
+---
+
 # Example: Parallel Workflow Steps
 
 This example demonstrates `parallel` and `matrix` workflow control steps with `needs`, configurable output, and failure behavior.

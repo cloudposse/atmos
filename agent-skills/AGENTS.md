@@ -19,8 +19,10 @@ relevant skill before answering Atmos questions -- your training data may be out
 - **Authentication** -- Multi-provider auth system with SSO, SAML, OIDC, identity chaining, and keyring storage.
 - **Stores** -- External key-value stores (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory) for
   cross-component data sharing.
-- **Workflows** -- Multi-step sequences of Atmos and shell commands for cross-component orchestration.
+- **Steps** -- Shared typed actions used by workflows, custom commands, hooks, and cast recordings.
+- **Workflows** -- Multi-step sequences of Atmos steps for cross-component orchestration.
 - **Custom Commands** -- User-defined CLI commands in `atmos.yaml` that extend `atmos` with project-specific tooling.
+- **Hooks** -- Lifecycle automation for Terraform operations, including store publishing, scanners, and step hooks.
 - **Toolchain** -- Built-in CLI tool version management via Aqua registry integration and `.tool-versions` files.
 - **Devcontainers** -- Native devcontainer management for standardized development environments (experimental).
 
@@ -60,8 +62,11 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | helmfile sync/apply/destroy/diff, Kubernetes deployments, EKS integration, varfile generation                         | `atmos-helmfile`        | `agent-skills/skills/atmos-helmfile/SKILL.md`        |
 | packer init/build/validate/inspect/output, machine image building, template management                                | `atmos-packer`          | `agent-skills/skills/atmos-packer/SKILL.md`          |
 | ansible playbook execution, variable passing, inventory management, configuration management                          | `atmos-ansible`         | `agent-skills/skills/atmos-ansible/SKILL.md`         |
+| Terminal cast recording workflows, fixtures, validation, and website cast assets                                      | `atmos-asciicast`       | `agent-skills/skills/atmos-asciicast/SKILL.md`       |
+| Shared step DSL: step types, env, output, working_directory, retry, script, workdir, cast, hook `with:` payloads     | `atmos-steps`           | `agent-skills/skills/atmos-steps/SKILL.md`           |
 | Multi-step workflows, Go template support in workflows, cross-component orchestration                                 | `atmos-workflows`       | `agent-skills/skills/atmos-workflows/SKILL.md`       |
 | Custom CLI commands in atmos.yaml, arguments, flags, steps, env vars, subcommands                                     | `atmos-custom-commands` | `agent-skills/skills/atmos-custom-commands/SKILL.md` |
+| Terraform lifecycle hooks, store/scanner/git/command hooks, `kind: step`, hook events and failure policy             | `atmos-hooks`           | `agent-skills/skills/atmos-hooks/SKILL.md`           |
 | Authentication: providers (SSO/SAML/OIDC/GCP), identities (AWS/Azure/GCP), keyring, login/exec/shell                  | `atmos-auth`            | `agent-skills/skills/atmos-auth/SKILL.md`            |
 | Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory), hooks, data sharing                    | `atmos-stores`          | `agent-skills/skills/atmos-stores/SKILL.md`          |
 | JSON Schema for stack manifests, IDE auto-completion, schema updates for new features, validation                     | `atmos-schemas`         | `agent-skills/skills/atmos-schemas/SKILL.md`         |
@@ -86,6 +91,8 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 - **Cross-stack references**: Use `!terraform.output` YAML function or `{{ atmos.Component }}` Go template to read
   outputs from other components.
 - **Data sharing via stores**: Write outputs to stores with hooks after apply, read them with `!store` YAML function.
+- **Native step fields**: Prefer `working_directory`, `env`, `output`, `script`, and `workdir` fields over shell glue
+  such as `cd`, inline `PATH=`, redirection, heredocs, `mkdir`, `rm -rf`, and `cp`.
 - **Authentication**: Configure providers and identities in `atmos.yaml`, use `atmos auth login` to authenticate,
   `atmos auth shell` for authenticated sessions.
 - **Validation before apply**: Attach JSON Schema or OPA policies via `settings.validation` in stack manifests; runs

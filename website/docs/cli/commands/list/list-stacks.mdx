@@ -5,18 +5,17 @@ sidebar_class_name: command
 id: stacks
 description: Use this command to list all Stack configurations or stacks for a specified component
 ---
-import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
-import DemoVideo from '@site/src/components/Video/DemoVideo'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Use this command to list all stacks in your Atmos configuration, optionally filtering by component. View stacks in multiple formats including tables, JSON, YAML, or hierarchical trees with import provenance to understand configuration inheritance.
 </Intro>
 
-<DemoVideo id="list-stacks" title="atmos list stacks" showCaption={false} />
+<CastPlayer src="/casts/demo/fixtures/basic/list-stacks.cast" title="atmos list stacks" chrome controls scrubber />
 
-<Screengrab title="atmos list stacks --help" slug="atmos-list-stacks--help" />
+<CastPlayer title="atmos list stacks --help" src="/casts/screengrabs/atmos-list-stacks--help.cast" static chrome />
 
 ## Usage
 

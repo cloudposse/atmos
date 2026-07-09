@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -178,22 +179,26 @@ func (s *ContainerSession) ExecShell(ctx context.Context, params *ContainerStepP
 	}
 	shell := defaultString(s.config.Shell, workflowContainerDefaultShell)
 	env := mergeEnvSlices(envMapToSlice(s.config.Env), params.StepEnv)
-	cmd := []string{shell, "-lc", params.Command}
+	cmd, stdin := containerStepCommand(step, shell, params.Command)
 	if s.backend.ID() == s.backend.Name() {
 		ui.Writef("%s exec %s %s\n", runtimePreviewName(s.config.Provider), s.backend.Name(), strings.Join(cmd, " "))
 		return nil
 	}
 
 	if step.Tty || step.Interactive {
+		attachedStdin := stdin
+		if attachedStdin == nil && step.Interactive {
+			attachedStdin = os.Stdin
+		}
 		return s.backend.Exec(ctx, cmd, &container.ExecOptions{
 			User:         s.config.User,
 			WorkingDir:   containerWorkDir,
 			Env:          env,
-			AttachStdin:  step.Interactive,
+			AttachStdin:  step.Interactive || stdin != nil,
 			AttachStdout: true,
 			AttachStderr: true,
 			Tty:          step.Tty,
-			Stdin:        os.Stdin,
+			Stdin:        attachedStdin,
 		})
 	}
 
@@ -203,8 +208,10 @@ func (s *ContainerSession) ExecShell(ctx context.Context, params *ContainerStepP
 			User:         s.config.User,
 			WorkingDir:   containerWorkDir,
 			Env:          env,
+			AttachStdin:  stdin != nil,
 			AttachStdout: true,
 			AttachStderr: true,
+			Stdin:        stdin,
 			Stdout:       stdout,
 			Stderr:       stderr,
 		})
@@ -267,10 +274,11 @@ func resolveStepHostWorkspace(params *ContainerStepParams) (string, error) {
 func buildEphemeralStepConfig(params *ContainerStepParams, cfg *schema.WorkflowContainer, absHostWorkspace string) *container.EphemeralConfig {
 	step := params.Step
 	shell := defaultString(cfg.Shell, workflowContainerDefaultShell)
+	cmd, stdin := containerStepCommand(step, shell, params.Command)
 	return &container.EphemeralConfig{
 		Name:              fmt.Sprintf("atmos-step-%s", step.Name),
 		Image:             cfg.Image,
-		Command:           []string{shell, "-lc", params.Command},
+		Command:           cmd,
 		WorkspaceHostPath: absHostWorkspace,
 		WorkspaceFolder:   defaultString(cfg.Workspace, "/workspace"),
 		WorkspaceReadOnly: cfg.WorkspaceReadOnly,
@@ -283,12 +291,20 @@ func buildEphemeralStepConfig(params *ContainerStepParams, cfg *schema.WorkflowC
 		CleanupPolicy:     cfg.Cleanup,
 		TTY:               step.Tty,
 		Interactive:       step.Interactive,
+		Stdin:             stdin,
 		Labels: map[string]string{
 			container.SandboxLabelType:         container.SandboxTypeWorkflow,
 			container.SandboxLabelWorkflow:     params.Workflow,
 			container.SandboxLabelWorkflowPath: params.WorkflowPath,
 		},
 	}
+}
+
+func containerStepCommand(step *schema.WorkflowStep, shell, command string) ([]string, io.Reader) {
+	if step != nil && step.Type == schema.TaskTypeScript {
+		return process.ScriptInvocation(step.Interpreter, step.Script)
+	}
+	return []string{shell, "-lc", command}, nil
 }
 
 // writeEphemeralResult renders captured stdout/stderr from a one-shot step container.
