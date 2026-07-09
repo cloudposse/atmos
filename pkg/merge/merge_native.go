@@ -109,6 +109,22 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 	return nil
 }
 
+// deepMergeNativeTopLevel wraps deepMergeNative's single non-recursive call site (see
+// MergeWithOptions) with a recover boundary so a mapKeyCollisionPanic raised deep inside
+// normalizeMapReflect surfaces as a normal returned error instead of crashing the process. The
+// recursive calls that deepMergeNative makes to itself stay defer-free — a panic anywhere in
+// that recursion unwinds all the way up to this single wrapper, so recovering here is
+// sufficient without paying defer/recover overhead on every nested submap in this hot,
+// perf-tuned path.
+func deepMergeNativeTopLevel(dst, src map[string]any, appendSlice, sliceDeepCopy bool) (err error) {
+	defer func() {
+		if e := recoveredMapKeyCollision(recover()); e != nil {
+			err = e
+		}
+	}()
+	return deepMergeNative(dst, src, appendSlice, sliceDeepCopy)
+}
+
 // toAnySlice tries to return v as []any without allocating when possible.
 // Typed slices (e.g. []string) are normalised via deepCopyValue.
 func toAnySlice(v any) ([]any, bool) {

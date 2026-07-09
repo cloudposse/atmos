@@ -1,14 +1,23 @@
+---
+title: 1Password Secrets
+tags: [Stacks]
+cast:
+  file: /casts/examples/onepassword-secrets/connect-mock.cast
+  title: atmos 1Password Connect mock
+---
+
 # 1Password secrets example
 
 Declarative secrets backed by [1Password](https://developer.1password.com/), resolved with the
 `!secret` YAML function and the `atmos secret` CLI.
 
-Unlike the [`sops-secrets`](../sops-secrets) example, this one is **not run by `atmos test`** in CI:
-resolving values requires real 1Password credentials and a vault you control. The files here show
-the configuration shape; the steps below let you try it against your own account.
+This example runs against a local [Mockoon](https://mockoon.com/) 1Password Connect mock through
+Atmos emulator components, so it is testable without a 1Password account.
 
 ## How it works
 
+- **Emulator** (`stacks/catalog/emulator/onepassword-connect.yaml`): a `mockoon/1password-connect`
+  emulator that serves a local 1Password Connect mock data file.
 - **Store** (`atmos.yaml`): a `type: onepassword` store named `op`. `secret: true` is implied — a
   1Password store is always a secret backend (resolved via `!secret`, never `!store`). It supports
   full CRUD: `atmos secret set` writes the value to the field the reference points to (creating the
@@ -35,24 +44,23 @@ Force one with `options.mode: service-account` or `options.mode: connect`.
 
 ## Try it
 
-1. Create the referenced items in a vault you own (or edit the `reference` values to point at
-   existing items), e.g. an item `Datadog` with a field `api_key` in a `Shared` vault.
-2. Export a credential:
-   ```shell
-   export OP_SERVICE_ACCOUNT_TOKEN="ops_..."
-   ```
-3. Resolve a secret (masked by default):
-   ```shell
-   atmos secret get DATADOG_API_KEY --stack dev --component api
-   atmos secret get DATADOG_API_KEY --stack dev --component api --mask=false
-   ```
-4. Write and remove a secret (creates/updates/deletes the referenced 1Password item):
-   ```shell
-   atmos secret set DB_PASSWORD=s3cr3t --stack dev --component api
-   atmos secret delete DB_PASSWORD --stack dev --component api
-   ```
-5. Check declared-secret status and validation:
-   ```shell
-   atmos secret list --stack dev --component api
-   atmos secret validate --stack dev --component api
-   ```
+```shell
+cd examples/onepassword-secrets
+
+# Start the local 1Password Connect mock
+atmos emulator up onepassword-connect --stack dev --ephemeral
+
+# Resolve a mocked secret
+atmos secret get DATADOG_API_KEY --stack dev --component api --mask=false
+
+# Check declared-secret status and validation
+atmos secret list --stack dev --component api
+atmos secret validate --stack dev --component api
+
+# Write and remove a mocked secret
+atmos secret set DB_PASSWORD=rotated-password --stack dev --component api
+atmos secret delete DB_PASSWORD --stack dev --component api --force
+
+# Stop the emulator
+atmos emulator down onepassword-connect --stack dev
+```

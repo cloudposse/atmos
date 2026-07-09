@@ -3,6 +3,7 @@ package marketplace
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	agentskills "github.com/cloudposse/atmos/agent-skills"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
@@ -39,8 +41,10 @@ func TestCatalog(t *testing.T) {
 	catalog, err := Catalog()
 	require.NoError(t, err)
 
-	// The repository bundles exactly the 22 official skills.
-	require.Len(t, catalog, 22)
+	// The catalog should expose every valid bundled official skill. Keep this
+	// tied to the embedded skill tree so adding a skill does not require updating
+	// a stale magic number.
+	require.Len(t, catalog, bundledSkillCount(t))
 
 	// Entries are sorted by name; assert first and last by value, not just length.
 	first := catalog[0]
@@ -63,6 +67,24 @@ func TestCatalog(t *testing.T) {
 		assert.NotEmpty(t, s.Version)
 		assert.Contains(t, s.Source, "github.com/cloudposse/atmos//agent-skills/skills/")
 	}
+}
+
+func bundledSkillCount(t *testing.T) int {
+	t.Helper()
+
+	entries, err := fs.ReadDir(agentskills.Skills, bundledSkillsRoot)
+	require.NoError(t, err)
+
+	count := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, ok := LookupBundledSkill(entry.Name()); ok {
+			count++
+		}
+	}
+	return count
 }
 
 func TestLookupBundledSkill(t *testing.T) {

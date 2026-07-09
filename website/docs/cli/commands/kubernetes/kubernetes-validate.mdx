@@ -9,7 +9,7 @@ description: Validate rendered Kubernetes manifests offline by default, with opt
 import Intro from "@site/src/components/Intro";
 import ActionCard from "@site/src/components/ActionCard";
 import PrimaryCTA from "@site/src/components/PrimaryCTA";
-import Screengrab from "@site/src/components/Screengrab";
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
   Catch broken manifests before they reach the cluster. `validate` renders the
@@ -19,7 +19,7 @@ import Screengrab from "@site/src/components/Screengrab";
   objects against the live cluster using a server-side dry-run apply.
 </Intro>
 
-<Screengrab title="atmos kubernetes validate --help" slug="atmos-kubernetes-validate--help" />
+<CastPlayer title="atmos kubernetes validate --help" src="/casts/screengrabs/atmos-kubernetes-validate--help.cast" static chrome />
 
 <ActionCard title="Configure Kubernetes Components">
   `validate` uses the same stack inputs as the rest of the lifecycle:

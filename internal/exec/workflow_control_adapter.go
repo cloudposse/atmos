@@ -24,6 +24,7 @@ type workflowControlContext struct {
 func executeWorkflowControlStep(ctx context.Context, control *workflowControlContext, parent *schema.WorkflowStep) error {
 	childExecutor := &workflow.ControlCommandExecutor{
 		WorkflowDefinition:  control.workflowDefinition,
+		BasePath:            control.atmosConfig.BasePath,
 		BaseEnv:             control.baseEnv,
 		CommandLineStack:    control.commandLineStack,
 		CommandLineIdentity: control.commandLineIdentity,
@@ -35,7 +36,7 @@ func executeWorkflowControlStep(ctx context.Context, control *workflowControlCon
 				control.atmosConfig,
 				request.Program,
 				request.Args,
-				".",
+				request.Dir,
 				nil,
 				control.dryRun,
 				"",

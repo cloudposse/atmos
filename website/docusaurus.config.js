@@ -72,6 +72,10 @@ const config = {
                         to: '/changelog'
                     },
                     {
+                        from: '/examples/aws-security-compliance',
+                        to: '/gists/aws-security-compliance'
+                    },
+                    {
                         from: '/introduction',
                         to: '/intro'
                     },
@@ -487,6 +491,8 @@ const config = {
                 githubRepo: 'cloudposse/atmos',
                 githubBranch: 'main',
                 githubPath: 'gists',
+                // Gist chapters, in display order (gist README front matter `tags:` assigns each gist).
+                tagOrder: ['AWS', 'AI', 'CI/CD', 'Secrets', 'Hooks'],
                 disclaimer: 'Gists are examples that demonstrate a concept, but are not actively maintained and may not work in your environment or current versions of Atmos without adaptations.',
             },
         ],

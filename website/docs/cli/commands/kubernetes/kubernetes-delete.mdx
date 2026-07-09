@@ -9,7 +9,7 @@ description: Delete the Kubernetes objects managed by a stack-configured compone
 import Intro from "@site/src/components/Intro";
 import ActionCard from "@site/src/components/ActionCard";
 import PrimaryCTA from "@site/src/components/PrimaryCTA";
-import Screengrab from "@site/src/components/Screengrab";
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
   Remove the Kubernetes objects managed by a stack-configured component. Atmos
@@ -17,7 +17,7 @@ import Screengrab from "@site/src/components/Screengrab";
   deletes it from the target cluster by name and namespace.
 </Intro>
 
-<Screengrab title="atmos kubernetes delete --help" slug="atmos-kubernetes-delete--help" />
+<CastPlayer title="atmos kubernetes delete --help" src="/casts/screengrabs/atmos-kubernetes-delete--help.cast" static chrome />
 
 <ActionCard title="Configure Kubernetes Components">
   Keep the desired objects in stack configuration, then use `delete` when a

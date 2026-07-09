@@ -5,14 +5,14 @@ sidebar_class_name: command
 id: push
 description: Push commits to a remote Git repository with bounded retry and no force push.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
 Push commits from a repository configured under [`git.repositories`](/cli/configuration/git), or from any local path, to its remote. Atmos **never force-pushes**. When a push is rejected because the remote moved (another job or human pushed first), Atmos automatically retries: `pull --ff-only`, then re-push, bounded by `push.retries` (default `3`).
 </Intro>
 
-<Screengrab title="atmos git push --help" slug="atmos-git-push--help" />
+<CastPlayer title="atmos git push --help" src="/casts/screengrabs/atmos-git-push--help.cast" static chrome />
 
 ## Usage
 

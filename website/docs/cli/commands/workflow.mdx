@@ -2,9 +2,9 @@
 title: atmos workflow
 sidebar_label: workflow
 sidebar_class_name: command
-description: Use this command to perform sequential execution of `atmos` and `shell` commands defined as workflow steps.
+description: Use this command to perform sequential execution of `atmos`, `shell`, and `script` commands defined as workflow steps.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
@@ -12,7 +12,7 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
-Use this command to perform sequential execution of `atmos` and `shell` commands defined as workflow steps.
+Use this command to perform sequential execution of `atmos`, `shell`, and `script` commands defined as workflow steps.
 </Intro>
 
 <DemoVideo id="workflow-run" title="atmos workflow" showCaption={false} />
@@ -33,13 +33,13 @@ Use this command to perform sequential execution of `atmos` and `shell` commands
 
 ## Usage
 
-<Screengrab title="atmos workflow --help" slug="atmos-workflow--help" />
+<CastPlayer title="atmos workflow --help" src="/casts/screengrabs/atmos-workflow--help.cast" static chrome />
 
 An Atmos workflow is a series of steps that are run in order to achieve some outcome. Every workflow has a name and is
 easily executed from the
 command line by calling `atmos workflow`. Use workflows to orchestrate any number of commands. Workflows can call
 any `atmos` subcommand (including
-[Atmos Custom Commands](/cli/configuration/commands)), shell commands, and have access to the stack configurations.
+[Atmos Custom Commands](/cli/configuration/commands)), shell commands, inline scripts, and have access to the stack configurations.
 
 :::note
 You can use [Atmos Custom Commands](/cli/configuration/commands) in [Atmos Workflows](/workflows),
@@ -87,6 +87,26 @@ atmos workflow apply-all-components -f networking --dry-run
 
 # Start from a specific step
 atmos workflow test-1 -f workflow1 --from-step step2
+```
+
+### Inline Script Step
+
+Use `type: script` when the step body should be interpreted by a non-shell runtime:
+
+```yaml
+workflows:
+  validate-cast:
+    steps:
+      - name: validate
+        type: script
+        interpreter: python3
+        script: |
+          from pathlib import Path
+
+          text = Path("../../website/static/casts/examples/sops-secrets/secret-lifecycle.cast").read_text()
+          for needle in ["describe (masking on)", "encrypted at rest", "All proofs passed"]:
+              if needle not in text:
+                  raise SystemExit(f"missing {needle!r}")
 ```
 
 ### Interactive UI

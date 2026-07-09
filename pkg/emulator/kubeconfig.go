@@ -30,8 +30,9 @@ var (
 	// Poll interval while waiting for the kubeconfig to be written.
 	kubeconfigPollInterval = time.Second
 	// KubernetesReadyTimeout bounds how long `emulator up` waits for k3s to
-	// register a Ready node after kubeconfig is harvestable.
-	kubernetesReadyTimeout = 2 * time.Minute
+	// register a Ready node after kubeconfig is harvestable. MacOS virtualized
+	// Docker runtimes can take several minutes to settle a fresh k3s node.
+	kubernetesReadyTimeout = 5 * time.Minute
 	// Poll interval while waiting for the k3s node to become Ready.
 	kubernetesReadyPollInterval = 2 * time.Second
 )

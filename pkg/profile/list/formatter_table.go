@@ -122,7 +122,7 @@ func buildProfileRows(profiles []profile.ProfileInfo, activeProfiles map[string]
 
 	for _, p := range sortedProfiles {
 		// Truncate path if too long.
-		displayPath := p.Path
+		displayPath := profile.DisplayPath(p.Path)
 		if len(displayPath) > pathWidth {
 			displayPath = "..." + displayPath[len(displayPath)-pathWidth+3:]
 		}
