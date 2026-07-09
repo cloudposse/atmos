@@ -281,6 +281,11 @@ commands:
         source: "../../examples/container-component"
         path: "../../.context/cast-fixtures/container-component"
         reset: true
+      - type: workdir
+        name: version-tracker-fixture
+        source: "../../examples/version-tracker"
+        path: "../../.context/cast-fixtures/version-tracker"
+        reset: true
       - type: shell
         name: build-atmos
         # CGO off to match the release build; with CGO on, transitive deps

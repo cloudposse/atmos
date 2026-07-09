@@ -6,9 +6,31 @@ commands:
       - type: shell
         name: setup
         command: atmos casts setup
+      - type: shell
+        name: reset-stale-state
+        working_directory: &quick_start_advanced_fixture "../../.context/cast-fixtures/quick-start-advanced"
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: |
+          atmos --logs-level=Off emulator down aws -s plat-ue2-dev || true
+          atmos --logs-level=Off terraform reset || true
+      - type: shell
+        name: emulator-up
+        working_directory: *quick_start_advanced_fixture
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: atmos emulator up aws -s plat-ue2-dev --ephemeral
+      - type: shell
+        name: seed-secrets
+        working_directory: *quick_start_advanced_fixture
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        command: |
+          atmos secret set API_KEY=sk-quickstart-example -s plat-ue2-dev -c app-config --force
+          atmos secret set 'DB_CONFIG={"username":"app","password":"s3cr3t"}' -s plat-ue2-dev -c app-config --force
       - type: cast
         name: list-instances
-        working_directory: "../../.context/cast-fixtures/quick-start-advanced"
+        working_directory: *quick_start_advanced_fixture
         title: "Quick Start Advanced: list instances"
         mode: steps
         defaults:
@@ -42,7 +64,21 @@ commands:
           - type: simulate
             text: "# deploy the whole component graph when the local AWS emulator is running"
           - type: simulate
-            text: atmos terraform deploy --all -s plat-ue2-dev
+            text: &deploy_all_cmd atmos terraform deploy --all -s plat-ue2-dev
+          - type: shell
+            name: deploy-all
+            duration: 550ms
+            interval: 900ms
+            command: *deploy_all_cmd
+      - type: shell
+        name: teardown
+        working_directory: *quick_start_advanced_fixture
+        env: !include cast-defaults.yaml .env.recording
+        output: none
+        when: always
+        command: |
+          atmos --logs-level=Off terraform destroy --all -s plat-ue2-dev -auto-approve || true
+          atmos --logs-level=Off emulator down aws -s plat-ue2-dev || true
       - type: shell
         name: validate
         command: atmos casts validate examples quick-start-advanced list-instances

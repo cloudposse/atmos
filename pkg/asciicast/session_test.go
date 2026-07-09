@@ -39,6 +39,19 @@ func TestNormalizeSessionOptionsDefaultsAndClampsDurations(t *testing.T) {
 	if opts.KeyInterval != 0 {
 		t.Fatalf("key interval = %s, want 0", opts.KeyInterval)
 	}
+	ps1, ok := opts.Env["PS1"]
+	if !ok || !strings.Contains(ps1, "> ") {
+		t.Fatalf("PS1 = %q, want a default prompt containing %q", ps1, "> ")
+	}
+}
+
+func TestNormalizeSessionOptionsPreservesExplicitPS1(t *testing.T) {
+	opts := &SessionOptions{Env: map[string]string{"PS1": "$ "}}
+	normalizeSessionOptions(opts)
+
+	if got := opts.Env["PS1"]; got != "$ " {
+		t.Fatalf("PS1 = %q, want caller-supplied %q to be preserved", got, "$ ")
+	}
 }
 
 func TestSessionShellPrefersConfiguredThenEnvironment(t *testing.T) {

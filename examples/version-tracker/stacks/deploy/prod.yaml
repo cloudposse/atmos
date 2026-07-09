@@ -1,0 +1,16 @@
+# Prod stack: asserts the "prod" version track. Same component, same
+# !version / {{ .version.* }} references, independently resolved versions.
+version:
+  track: prod
+
+vars:
+  stage: prod
+
+components:
+  terraform:
+    app:
+      vars:
+        environment: prod
+        kubectl_version: !version kubectl
+        redis_image: "redis:{{ .version.redis }}"
+        ci_action_ref: !version setup_node

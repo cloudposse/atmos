@@ -5,6 +5,8 @@ authors: [osterman]
 tags: [feature, experimental]
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Atmos now treats Helm as a first-class component type. Define a Helm release —
 local chart, remote repository chart, or OCI chart — in your stack configuration,
 then `template`, `diff`, `apply`, and `delete` it through the Helm Go SDK. No
@@ -68,6 +70,12 @@ atmos helm template monitoring -s plat-ue2-dev
 atmos helm diff monitoring -s plat-ue2-dev
 atmos helm apply monitoring -s plat-ue2-dev
 ```
+
+Here's the full lifecycle end to end:
+
+<CastPlayer src="/casts/examples/helm/lifecycle.cast" title="atmos native helm lifecycle" chrome controls scrubber />
+
+[View the full example](/examples/helm)
 
 Publish to a GitOps repo instead of a cluster:
 
