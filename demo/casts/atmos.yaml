@@ -286,6 +286,11 @@ commands:
         source: "../../examples/version-tracker"
         path: "../../.context/cast-fixtures/version-tracker"
         reset: true
+      - type: workdir
+        name: packer-docker-fixture
+        source: "../../examples/packer-docker"
+        path: "../../.context/cast-fixtures/packer-docker"
+        reset: true
       - type: shell
         name: build-atmos
         # CGO off to match the release build; with CGO on, transitive deps

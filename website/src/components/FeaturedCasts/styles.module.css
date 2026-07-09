@@ -1,0 +1,103 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+@media screen and (max-width: 640px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  background: white;
+  border-radius: 12px;
+  padding: 1rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s ease;
+}
+
+.card:hover {
+  border-color: rgba(30, 91, 184, 0.3);
+  box-shadow: 0 4px 16px rgba(30, 91, 184, 0.1);
+  transform: translateY(-2px);
+}
+
+:global(html[data-theme='dark']) .card {
+  background: #1e1e2e;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+:global(html[data-theme='dark']) .card:hover {
+  border-color: rgba(83, 140, 233, 0.4);
+  box-shadow: 0 4px 16px rgba(83, 140, 233, 0.15);
+}
+
+/* The cast preview is a link to the example; the player itself must not
+   swallow clicks (thumbnail mode, controls off), so navigation always wins. */
+.cardCastLink {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  cursor: pointer;
+}
+
+.cardCastLink:hover {
+  text-decoration: none;
+}
+
+.cardCast {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0 0 1rem;
+  overflow: hidden;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.cardCast > div {
+  min-width: 0;
+  width: 100%;
+  max-width: none;
+}
+
+.cardBody {
+  min-width: 0;
+}
+
+.cardTitle {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.35rem 0;
+  color: var(--ifm-heading-color);
+}
+
+.cardDescription {
+  font-size: 0.88rem;
+  color: var(--ifm-color-emphasis-600);
+  line-height: 1.5;
+  margin: 0 0 0.75rem 0;
+  overflow-wrap: anywhere;
+}
+
+.cardCta {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ifm-color-primary);
+  text-decoration: none;
+}
+
+.cardCta:hover {
+  color: var(--ifm-color-primary-dark);
+  text-decoration: none;
+}

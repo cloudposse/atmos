@@ -7,12 +7,13 @@ sidebar_position: 1
 description: This command starts an interactive UI to select an Atmos command, component and stack. Press "Enter" to execute the command
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
-import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import FeaturedCasts from '@site/src/components/FeaturedCasts'
 
 <Intro>
-Use this command to start an interactive UI to run Atmos commands against any component or stack. Press `Enter` to execute the command for the selected
-stack and component
+Atmos is a CLI for provisioning infrastructure with Terraform, Helmfile, Packer, and more, using stack-based configuration. Run it with a subcommand for
+scripting and automation, or with no arguments at all to launch an interactive UI for running Atmos commands against any component or stack. Press `Enter`
+to execute the command for the selected stack and component
 </Intro>
 
 ## Usage
@@ -42,25 +43,60 @@ To quickly check the Atmos version, use `atmos --version` or `atmos version`. Se
 
 - Press `Enter` to execute the selected command for the selected stack and component
 
-## Screenshots
+## Interactive Picker
 
-To get an idea of what it looks like using `atmos` on the command line, just [try our quickstart](/quick-start/) and run the [`atmos`](/cli) command to start
-an interactive UI in the terminal. Use the arrow keys to select stacks and components to deploy.
+To get an idea of what it looks like, just [try our quickstart](/quick-start/) and run the [`atmos`](/cli) command to start an interactive UI in the
+terminal. The recording below browses stacks and components, filters the list, flips between Mode 1 and Mode 2 with `Tab`, and finally presses `Enter` to
+execute `describe component`.
 
-![Atmos Screenshot](../../../docs/demo.gif)
+<CastPlayer src="/casts/cli/interactive-menu.cast" title="atmos (interactive)" chrome controls scrubber />
 
-### Components in Stacks (Mode 1)
+## Featured Examples
 
-In Atmos, you can easily search and navigate your configuration from the built-in UI.
+Interactive mode is one way in — Atmos is a full CLI you can script and automate. Here's a taste of what it can do; browse the [full list of
+examples](/examples) for more.
 
-<Terminal title="atmos (interactive)">
-![`atmos` CLI command mode 1](/img/cli/atmos/atmos-cli-command-1.png)
-</Terminal>
-
-### Stacks for Components (Mode 2)
-
-You can also search for the stacks where a component is configured.
-
-<Terminal title="atmos (interactive)">
-![`atmos` CLI command mode 2](/img/cli/atmos/atmos-cli-command-2.png)
-</Terminal>
+<FeaturedCasts casts={[
+  {
+    example: 'quick-start-simple',
+    title: 'Quick Start (Simple)',
+    description: 'Minimal Atmos setup with a single component and three environments — no cloud credentials or access required.',
+    castFile: '/casts/examples/quick-start-simple/list-and-plan.cast',
+    castTitle: 'atmos quick start simple',
+  },
+  {
+    example: 'quick-start-advanced',
+    title: 'Quick Start (Advanced)',
+    description: 'A small AWS application stack end to end — backend provisioning, secrets, identities, and Terraform against a local AWS emulator.',
+    castFile: '/casts/examples/quick-start-advanced/list-instances.cast',
+    castTitle: 'atmos quick start advanced',
+  },
+  {
+    example: 'sops-secrets',
+    title: 'SOPS Secrets',
+    description: 'Declare, encrypt, and read secrets with a SOPS backend (age encryption) — no cloud credentials required.',
+    castFile: '/casts/examples/sops-secrets/secret-lifecycle.cast',
+    castTitle: 'atmos sops secrets lifecycle',
+  },
+  {
+    example: 'toolchain',
+    title: 'Toolchain',
+    description: 'Define the tool versions your stacks depend on — registries, aliases, and pinned versions Atmos installs on demand.',
+    castFile: '/casts/examples/toolchain/demo-convert.cast',
+    castTitle: 'atmos toolchain demo',
+  },
+  {
+    example: 'custom-commands',
+    title: 'Custom Commands',
+    description: 'Extend the Atmos CLI with custom commands defined in atmos.yaml — arguments, flags, nested subcommands, and shell steps.',
+    castFile: '/casts/examples/custom-commands/hello-greet.cast',
+    castTitle: 'atmos custom commands',
+  },
+  {
+    example: 'emulator-aws',
+    title: 'AWS Emulator',
+    description: 'Declare the AWS emulator as a stack component and Atmos starts, binds, and stops it around your Terraform runs.',
+    castFile: '/casts/examples/emulator-aws/lifecycle.cast',
+    castTitle: 'atmos emulator aws lifecycle',
+  },
+]} />

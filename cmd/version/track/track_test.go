@@ -230,16 +230,32 @@ func TestTrackListShowAndGetCommands(t *testing.T) {
 	}
 
 	stdout.Reset()
-	getCmd := newTrackCommand(trackGetCmd, trackParserOptions()...)
+	getCmd := newTrackCommand(trackGetCmd, trackGetParserOptions()...)
 	if err := runTrackCommand(t, getCmd, "opentofu"); err != nil {
 		t.Fatalf("get command returned error: %v", err)
 	}
 	output = stdout.String()
-	if !strings.Contains(output, "locked: 1.10.0") {
-		t.Fatalf("get output = %q", output)
+	if strings.TrimSpace(output) != "1.10.0" {
+		t.Fatalf("get output = %q, want just the locked version", output)
 	}
 
-	if err := runTrackCommand(t, newTrackCommand(trackGetCmd, trackParserOptions()...), "missing"); !errors.Is(err, manager.ErrEntryNotFound) {
+	stdout.Reset()
+	getCmd = newTrackCommand(trackGetCmd, trackGetParserOptions()...)
+	if err := runTrackCommand(t, getCmd, "opentofu", "--show", "ecosystem"); err != nil {
+		t.Fatalf("get --show ecosystem returned error: %v", err)
+	}
+	output = stdout.String()
+	if strings.TrimSpace(output) != "toolchain" {
+		t.Fatalf("get --show ecosystem output = %q", output)
+	}
+
+	stdout.Reset()
+	getCmd = newTrackCommand(trackGetCmd, trackGetParserOptions()...)
+	if err := runTrackCommand(t, getCmd, "opentofu", "--show", "bogus"); !errors.Is(err, manager.ErrUnsupportedEntryField) {
+		t.Fatalf("get --show bogus error = %v, want %v", err, manager.ErrUnsupportedEntryField)
+	}
+
+	if err := runTrackCommand(t, newTrackCommand(trackGetCmd, trackGetParserOptions()...), "missing"); !errors.Is(err, manager.ErrEntryNotFound) {
 		t.Fatalf("missing get error = %v, want %v", err, manager.ErrEntryNotFound)
 	}
 }

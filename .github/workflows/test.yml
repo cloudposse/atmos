@@ -901,6 +901,7 @@ jobs:
           - custom-components
           - sops-secrets
           - onepassword-secrets
+          - packer-docker
           # quick-start-advanced and native-terraform are intentionally NOT validated here:
           #   - quick-start-advanced: its `stacks/workflows/*.yaml` manifests use newer workflow
           #     step types (`type: stage`/`spin`, `title:`) that the atmos-manifest JSON Schema

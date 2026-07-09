@@ -57,7 +57,7 @@ export default function CastPlayer({
   maxScrollRate = DEFAULT_MAX_CAST_SPEED,
   idleSkip = true,
   thumbnail = false,
-  preWrap = true,
+  preWrap = false,
   showCommand = true,
   prompt = "\x1b[1;38;2;0;95;135m>\x1b[0m ",
   typeRate = 0.035,
