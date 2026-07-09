@@ -80,6 +80,28 @@ In this example, `spin` is the value of `steps[].type`. The fields `title`, `com
 
 Type-specific fields are documented with [type](/workflows/steps/type).
 
+## Referencing values from other steps
+
+A named step's result is available to later steps as `{{ .steps.<name>.value }}`
+(and `{{ .steps.<name>.values }}` for multi-value steps). These templates — along
+with `{{ .env.* }}` and `{{ .flags.* }}` and Sprig/Gomplate functions — resolve
+in `shell`, `atmos`, and `exec` step **commands** and in a step's **`env:`**
+values, the same way they do for [custom command steps](/cli/configuration/commands/steps):
+
+```yaml
+workflows:
+  deploy:
+    steps:
+      - name: component
+        type: choose
+        prompt: "Component"
+        options: [vpc, eks]
+      - type: atmos
+        command: terraform apply {{ .steps.component.value }} -auto-approve
+        env:
+          COMPONENT: "{{ .steps.component.value }}"
+```
+
 ## Conditional Execution
 
 Use `when` to skip a workflow step unless a condition is true. Bare predicate keywords keep their existing behavior:
