@@ -28,6 +28,7 @@ relevant skill before answering Atmos questions -- your training data may be out
 - **Native Helm** -- Experimental Helm chart deployment via the Helm Go SDK (no `helm`/`helmfile` binary).
 - **Native Kubernetes** -- Experimental manifest/Kustomize deployment via the Kubernetes Go SDK (no `kubectl`/`kustomize` binary).
 - **Hooks** -- Lifecycle automation before/after component operations.
+- **Steps** -- Shared typed actions used by workflows, custom commands, hooks, and cast recordings.
 - **Compositions** -- Named service groupings that validate systems made of component instances.
 - **GitOps** -- Native managed Git repositories, hooks, signed commits, and auth-aware clone/commit/push flows.
 - **Workflows** -- Multi-step sequences of Atmos and shell commands for cross-component orchestration.
@@ -36,7 +37,8 @@ relevant skill before answering Atmos questions -- your training data may be out
 - **AI and MCP** -- Native AI providers, AI-powered command analysis, MCP server/client integration, and agent
   workflows grounded in Atmos introspection.
 - **Devcontainers** -- Native devcontainer management for standardized development environments (experimental).
-- **Cast** -- Terminal session recording/rendering (`atmos cast play/render`, `--cast` flag, `type: cast`/`type: simulate` workflow steps) for committed docs screengrabs and CI proof-of-run artifacts.
+- **Cast and Asciicast** -- Terminal session recording/rendering (`atmos cast play/render`, `--cast` flag,
+  `type: cast`/`type: simulate` workflow steps, `.cast` demos) for docs screengrabs and CI proof-of-run artifacts.
 
 ## Key Commands
 
@@ -95,6 +97,8 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Native Kubernetes (experimental): Go SDK render/plan/diff/apply/deploy/delete/validate, kubectl/kustomize providers, provision targets | `atmos-kubernetes`      | `agent-skills/skills/atmos-kubernetes/SKILL.md`      |
 | packer init/build/validate/inspect/output, machine image building, template management                                | `atmos-packer`          | `agent-skills/skills/atmos-packer/SKILL.md`          |
 | ansible playbook execution, variable passing, inventory management, configuration management                          | `atmos-ansible`         | `agent-skills/skills/atmos-ansible/SKILL.md`         |
+| Terminal asciicast demos for community-facing docs, examples, and training materials                                  | `atmos-asciicast`       | `agent-skills/skills/atmos-asciicast/SKILL.md`       |
+| Shared step DSL: step types, env, output, working_directory, retry, script, workdir, cast, hook `with:` payloads     | `atmos-steps`           | `agent-skills/skills/atmos-steps/SKILL.md`           |
 | Multi-step workflows, native step types, `when:` CEL conditions, `require`/`assert` preconditions, background steps, output/UI steps, cross-component orchestration | `atmos-workflows`       | `agent-skills/skills/atmos-workflows/SKILL.md`       |
 | Cast recording/rendering: cast play/render, format inference, `--cast` flag, `type: cast`/`type: simulate` steps       | `atmos-cast`            | `agent-skills/skills/atmos-cast/SKILL.md`            |
 | Custom CLI commands in atmos.yaml, arguments, flags, native steps, `when:` conditions, custom component types, env vars, subcommands | `atmos-custom-commands` | `agent-skills/skills/atmos-custom-commands/SKILL.md` |

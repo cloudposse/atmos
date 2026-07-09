@@ -261,8 +261,36 @@ func parsePodmanContainer(containerJSON map[string]interface{}) Info {
 	if networks := parsePodmanNetworks(containerJSON["Networks"]); len(networks) > 0 {
 		info.Networks = networks
 	}
+	if networkIPs := parsePodmanNetworkIPs(containerJSON["Networks"]); len(networkIPs) > 0 {
+		info.NetworkIPs = networkIPs
+	}
 
 	return info
+}
+
+func parsePodmanNetworkIPs(raw interface{}) map[string]string {
+	networks, ok := raw.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	result := make(map[string]string, len(networks))
+	for name, networkRaw := range networks {
+		network, ok := networkRaw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if ip := getString(network, "IPAddress"); ip != "" {
+			result[name] = ip
+			continue
+		}
+		if ip := getString(network, "ip_address"); ip != "" {
+			result[name] = ip
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 func parsePodmanNetworks(raw interface{}) []string {

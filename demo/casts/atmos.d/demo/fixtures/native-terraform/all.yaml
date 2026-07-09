@@ -1,0 +1,27 @@
+commands:
+  - name: casts generate demo fixtures native-terraform
+    description: Regenerate casts sourced from demo/casts/fixtures/native-terraform
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: casts-fixtures-native-terraform-plan
+        command: atmos casts generate demo fixtures native-terraform plan
+      - type: shell
+        name: casts-fixtures-native-terraform-deploy
+        command: atmos casts generate demo fixtures native-terraform deploy
+      - type: shell
+        name: casts-fixtures-native-terraform-output
+        command: atmos casts generate demo fixtures native-terraform output
+  - name: casts validate demo fixtures native-terraform
+    description: Validate casts sourced from demo/casts/fixtures/native-terraform
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: casts-fixtures-native-terraform-plan
+        command: atmos casts validate demo fixtures native-terraform plan
+      - type: shell
+        name: casts-fixtures-native-terraform-deploy
+        command: atmos casts validate demo fixtures native-terraform deploy
+      - type: shell
+        name: casts-fixtures-native-terraform-output
+        command: atmos casts validate demo fixtures native-terraform output

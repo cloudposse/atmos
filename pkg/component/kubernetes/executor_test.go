@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
+	stdio "io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,12 +14,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/hooks"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -714,7 +718,7 @@ func TestRunOperationDeleteDispatchesToClient(t *testing.T) {
 		return newFakeSDKClient(object.DeepCopy()), nil
 	}
 
-	output := captureKubernetesStdout(t, func() {
+	output := captureKubernetesStderr(t, func() {
 		result, err := runOperation(
 			&component.ExecutionContext{},
 			&schema.AtmosConfiguration{},
@@ -725,7 +729,7 @@ func TestRunOperationDeleteDispatchesToClient(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, map[string]int{"deleted": 1}, result.ActionCounts)
 	})
-	assert.Contains(t, output, "deleted v1/ConfigMap default/settings")
+	assert.Contains(t, ansi.Strip(output), "deleted v1/ConfigMap default/settings")
 }
 
 func TestRunOperationRejectsUnsupportedOperation(t *testing.T) {
@@ -864,17 +868,17 @@ func TestRunApplyAndDiffPrintResultsOnSuccess(t *testing.T) {
 		return client, nil
 	}
 
-	applyOut := captureKubernetesStdout(t, func() {
+	applyOut := captureKubernetesStderr(t, func() {
 		_, err := runApply([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
 		require.NoError(t, err)
 	})
-	assert.Contains(t, applyOut, "applied v1/ConfigMap default/settings")
+	assert.Contains(t, ansi.Strip(applyOut), "applied v1/ConfigMap default/settings")
 
-	diffOut := captureKubernetesStdout(t, func() {
+	diffOut := captureKubernetesStderr(t, func() {
 		_, err := runDiff([]*unstructured.Unstructured{kubernetesObject("v1", "ConfigMap", "settings", "")})
 		require.NoError(t, err)
 	})
-	assert.Contains(t, diffOut, "v1/ConfigMap default/settings")
+	assert.Contains(t, ansi.Strip(diffOut), "v1/ConfigMap default/settings")
 }
 
 func TestObjectCIResultsCarriesDiff(t *testing.T) {
@@ -902,14 +906,14 @@ func TestPrintResultsEmitsDiffBodyWhenPresent(t *testing.T) {
 	assert.Contains(t, out, "+  key: new")
 }
 
-func TestPrintResultsStaysSingleLineWithoutDiff(t *testing.T) {
-	out := captureKubernetesStdout(t, func() {
+func TestPrintResultsUsesUIForStatusWithoutDiff(t *testing.T) {
+	out := captureKubernetesStderr(t, func() {
 		printResults([]objectResult{
 			{Action: "applied", Resource: "v1/ConfigMap", Namespace: "default", Name: "settings"},
 		})
 	})
 
-	assert.Equal(t, "applied v1/ConfigMap default/settings\n", out)
+	assert.Contains(t, ansi.Strip(out), "applied v1/ConfigMap default/settings")
 }
 
 func TestEventsFor(t *testing.T) {
@@ -965,14 +969,16 @@ func TestApplyEnvironmentSetsAndRestoresValues(t *testing.T) {
 }
 
 func TestPrintResults(t *testing.T) {
-	output := captureKubernetesStdout(t, func() {
+	output := captureKubernetesStderr(t, func() {
 		printResults([]objectResult{
 			{Action: "applied", Resource: "v1/Namespace", Name: "demo"},
 			{Action: "changed", Resource: "apps/v1/Deployment", Namespace: "default", Name: "api"},
 		})
 	})
 
-	assert.Equal(t, "applied v1/Namespace demo\nchanged apps/v1/Deployment default/api\n", output)
+	plainOutput := ansi.Strip(output)
+	assert.Contains(t, plainOutput, "applied v1/Namespace demo")
+	assert.Contains(t, plainOutput, "changed apps/v1/Deployment default/api")
 }
 
 func TestRunOperationsUseSDKClientFactory(t *testing.T) {
@@ -1001,24 +1007,62 @@ func TestRunOperationsUseSDKClientFactory(t *testing.T) {
 	require.ErrorContains(t, err, "server dry-run apply")
 }
 
+type kubernetesTestStreams struct {
+	stdin  stdio.Reader
+	stdout stdio.Writer
+	stderr stdio.Writer
+}
+
+func (s *kubernetesTestStreams) Input() stdio.Reader     { return s.stdin }
+func (s *kubernetesTestStreams) Output() stdio.Writer    { return s.stdout }
+func (s *kubernetesTestStreams) Error() stdio.Writer     { return s.stderr }
+func (s *kubernetesTestStreams) RawOutput() stdio.Writer { return s.stdout }
+func (s *kubernetesTestStreams) RawError() stdio.Writer  { return s.stderr }
+
 func captureKubernetesStdout(t *testing.T, fn func()) string {
 	t.Helper()
 
-	old := os.Stdout
-	reader, writer, err := os.Pipe()
+	stdout, _ := captureKubernetesOutput(t, fn)
+	return stdout
+}
+
+func captureKubernetesStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	_, stderr := captureKubernetesOutput(t, fn)
+	return stderr
+}
+
+func captureKubernetesOutput(t *testing.T, fn func()) (string, string) {
+	t.Helper()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	streams := &kubernetesTestStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: stdout,
+		stderr: stderr,
+	}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
 	require.NoError(t, err)
-	os.Stdout = writer
-	t.Cleanup(func() { os.Stdout = old })
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(func() {
+		initKubernetesTestOutput(t)
+	})
 
 	fn()
 
-	require.NoError(t, writer.Close())
-	os.Stdout = old
+	return stdout.String(), stderr.String()
+}
 
-	var buffer bytes.Buffer
-	_, err = io.Copy(&buffer, reader)
+func initKubernetesTestOutput(t *testing.T) {
+	t.Helper()
+
+	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err)
-	return buffer.String()
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
 }
 
 func stubAffectedExecutionFailures(t *testing.T) func() {

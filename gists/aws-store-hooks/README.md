@@ -1,3 +1,8 @@
+---
+title: AWS Store Hooks
+tags: [AWS]
+---
+
 # AWS Store Hooks with SSM and Secrets Manager
 
 This gist validates the full store-output loop:

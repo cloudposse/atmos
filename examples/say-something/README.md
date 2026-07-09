@@ -1,8 +1,20 @@
+---
+title: Say Something
+tags: [Automation]
+description: >-
+  Add text-to-speech (TTS) announcements to workflows, custom commands, and
+  lifecycle hooks while still printing deterministic output in headless runs.
+cast:
+  file: /casts/examples/say-something/pipeline.cast
+  title: atmos say steps
+---
+
 # Say Something Demo
 
-This example demonstrates the `say` step type in custom commands, workflows,
-and Terraform lifecycle hooks. Use this type of step to announce when things
-happen in your workflows, like when something completes or fails.
+This example demonstrates the `say` step type for text-to-speech (TTS) in custom
+commands, workflows, and Terraform lifecycle hooks. Use this type of step to
+announce when things happen in your workflows, like when something completes or
+fails.
 
 `say` works across platforms by detecting an available speech engine (`say` on macOS, `spd-say`/`espeak`/`espeak-ng` on Linux, PowerShell's `System.Speech` on Windows). When no engine is available — or when running in CI or another headless environment — it degrades gracefully according to the `print` policy (by default, printing the message as a Markdown blockquote).
 

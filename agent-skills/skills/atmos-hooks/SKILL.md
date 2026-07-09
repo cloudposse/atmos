@@ -18,6 +18,7 @@ toolchain-aware automation around Terraform, Helm, Kubernetes, and other compone
 | Need | Load |
 |---|---|
 | Store output hooks | [atmos-stores](../atmos-stores/SKILL.md) |
+| Shared step fields and `kind: step` payloads | [atmos-steps](../atmos-steps/SKILL.md) |
 | Git hooks and GitOps repositories | [atmos-git](../atmos-git/SKILL.md) |
 | Tool installation for hook commands | [atmos-toolchain](../atmos-toolchain/SKILL.md) |
 | CI summaries and Atmos Pro upload | [atmos-ci](../atmos-ci/SKILL.md) and [atmos-pro](../atmos-pro/SKILL.md) |
@@ -100,7 +101,8 @@ When the hooked component declares the hook binary in `dependencies.tools`, do n
 
 ## Step-Backed Hook Kinds
 
-Hooks can also delegate to the same step-type registry that workflows and custom commands use,
+Hooks can also delegate to the same step-type registry that workflows, custom commands, and cast
+recordings use,
 instead of one of the named kinds above:
 
 - `kind: step` runs **one** registered step type. Set the step type with the hook's `type:` field and

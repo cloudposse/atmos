@@ -1,6 +1,6 @@
 ---
 name: atmos-custom-commands
-description: "Custom CLI commands: command definition in atmos.yaml, arguments, flags, native step types, when: conditions, output/UI steps, env vars, custom component types"
+description: "Custom CLI commands: command definition in atmos.yaml, arguments, flags, shared native step types, when: conditions, output/UI steps, env vars, custom component types"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -16,6 +16,9 @@ Use this skill when users define or modify project-specific Atmos CLI commands i
 Custom commands replace scattered scripts with discoverable CLI commands that can use arguments,
 flags, environment variables, authentication identities, tool dependencies, component config, nested
 subcommands, and typed execution steps.
+
+When a task is mainly about `steps`, step `type`, `working_directory`, step `env`, `output`,
+scripts, workdirs, or hook-compatible step payloads, also load `atmos-steps`.
 
 ## Quick Shape
 
@@ -137,6 +140,7 @@ commands:
 |---|---|
 | Complete command schema and examples | [references/command-syntax.md](references/command-syntax.md) |
 | Reusable multi-step orchestration | `atmos-workflows` |
+| Shared step fields and step types | `atmos-steps` |
 | Tool versions and PATH behavior | `atmos-toolchain` |
 | Auth providers, identities, assume role/root, OIDC | `atmos-auth` |
 | Components and component inheritance | `atmos-components` |

@@ -14,6 +14,9 @@ Use this skill for reusable orchestration in `workflows:` files: multi-step depl
 parallel or matrix execution, cross-component operations, preconditions, retries, typed UI/output
 steps, container/emulator steps, and workflow-level dependencies.
 
+When a task is primarily about shared step fields (`type`, `working_directory`, `env`, `output`,
+`retry`, `script`, `workdir`, or hook `with:` payloads), also load `atmos-steps`.
+
 For full workflow syntax, read [references/workflow-syntax.md](references/workflow-syntax.md).
 
 ## Quick Shape
@@ -158,6 +161,7 @@ Route provider, identity, OIDC, assume role/root, and profile details to `atmos-
 |---|---|
 | Complete workflow schema and examples | [references/workflow-syntax.md](references/workflow-syntax.md) |
 | Custom CLI commands under `commands` | `atmos-custom-commands` |
+| Shared step fields and step types | `atmos-steps` |
 | Cast/simulate workflow recordings | `atmos-cast` |
 | Tool installation and PATH behavior | `atmos-toolchain` |
 | Auth identities and providers | `atmos-auth` |

@@ -58,8 +58,8 @@ func startSessionShell(ctx context.Context, opts *SessionOptions) (*sessionProce
 				_ = cmd.Process.Kill()
 			}
 		},
-		wait: func() error {
+		wait: newSessionProcessWait(func() error {
 			return <-waitCh
-		},
+		}),
 	}, nil
 }

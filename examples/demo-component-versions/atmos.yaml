@@ -17,6 +17,9 @@ stacks:
     - "**/_defaults.yaml"
   name_pattern: "{stage}"
 
+vendor:
+  base_path: "./vendor.yaml"
+
 logs:
   file: "/dev/stderr"
   level: Info
