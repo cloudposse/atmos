@@ -1,6 +1,6 @@
 ---
 name: atmos-vendoring
-description: "Component vendoring: vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry"
+description: "Component vendoring: vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry, native vendor update, vendor diff, vendor config, and reviewed local component copies"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -151,7 +151,7 @@ The most common source type. Supports GitHub, GitLab, Bitbucket, and any Git hos
 source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref={{.Version}}"
 
 # GitHub with subdirectory
-source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
+source: "github.com/org/terraform-components.git//modules/vpc?ref={{.Version}}"
 
 # Explicit Git protocol
 source: "git::https://github.com/org/repo.git?ref={{.Version}}"
@@ -303,7 +303,7 @@ metadata:
   description: Vendoring config for VPC component
 spec:
   source:
-    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}
+    uri: github.com/cloudposse-terraform-components/aws-vpc.git?ref={{.Version}}
     version: 1.398.0
     included_paths:
       - "**/*.tf"
@@ -351,6 +351,54 @@ atmos vendor pull --component eks-cluster
 atmos vendor pull --tags networking
 atmos vendor pull --tags networking,compute
 ```
+
+## Native Vendor Update and Diff
+
+Use native `atmos vendor update` and `atmos vendor diff` before editing versions by hand.
+
+```bash
+# Dry run: show what Git-backed sources would update
+atmos vendor update --check
+
+# Update version fields in-place, preserving comments, anchors, and templates
+atmos vendor update
+
+# Update versions, then pull the changed sources
+atmos vendor update --pull
+
+# Scope updates
+atmos vendor update --component vpc
+atmos vendor update --tags networking,aws
+atmos vendor update --check --outdated
+
+# Review upstream changes without a local checkout
+atmos vendor diff --component vpc
+atmos vendor diff -c vpc --from 1.0.0 --to 2.0.0
+atmos vendor diff -c vpc --from 1.0.0 --to 2.0.0 --diff-file variables.tf
+```
+
+`vendor update` follows imports and writes the manifest file that declares each source. It supports
+Git-backed sources and reports skipped templated versions or non-Git sources. Use source-level
+constraints (`constraints.version`, `excluded_versions`, `no_prereleases`) to define eligible
+updates.
+
+`vendor diff` compares Git refs for one component. `--from` defaults to the current pinned version,
+and `--to` defaults to the latest tag. Use it for review before `vendor update --pull`.
+
+## Vendor Config Editing
+
+Use `atmos vendor config` for path-based, format-preserving edits to vendor manifests:
+
+```bash
+atmos vendor config get spec.sources[0].version
+atmos vendor config set spec.sources[0].version v1.2.3
+atmos vendor config delete spec.sources[0].tags
+atmos vendor config format
+atmos vendor config list 'spec.sources[*].version'
+```
+
+`atmos vendor get <component>` and `atmos vendor set <component> <version>` are component-name
+aliases for common version lookups and edits.
 
 ## Version Pinning
 
@@ -413,9 +461,11 @@ Groups by major.minor version (e.g., `vpc/1.398/`).
 2. **Pin versions by default**: Use exact version tags or commit SHAs whenever possible. Use branch names only as an explicit exception when pinning is impractical.
 3. **Review changes via git diff**: After running `atmos vendor pull`, review the diff before committing.
 4. **Use tags for selective vendoring**: Tag sources by layer (networking, compute, security) for partial updates.
-5. **Automate with CI/CD**: Set up GitHub Actions to periodically run `atmos vendor pull` and open PRs with changes.
-6. **Include only what you need**: Use `included_paths` and `excluded_paths` to avoid vendoring test files, examples, and other unnecessary artifacts.
-7. **Use retry for flaky networks**: Configure `retry` with exponential backoff for CI/CD environments.
+5. **Use native update/diff**: Run `atmos vendor update --check` and `atmos vendor diff` before adopting a new version.
+6. **Automate with CI/CD**: Set up GitHub Actions to run `atmos vendor update --check`, then update, pull, and open PRs when desired.
+7. **Include only what you need**: Use `included_paths` and `excluded_paths` to avoid vendoring test files, examples, and other unnecessary artifacts.
+8. **Use retry for flaky networks**: Configure `retry` with exponential backoff for CI/CD environments.
+9. **Use Version Tracker for cross-surface versions**: If the same version feeds vendor manifests, CI workflows, images, or toolchain entries, route version policy to `atmos-version` and use vendoring to materialize reviewed source copies.
 
 ## References
 

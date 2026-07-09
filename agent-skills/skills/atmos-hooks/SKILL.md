@@ -96,14 +96,13 @@ Use the specific kind when Atmos has one; use `command` for project-specific scr
 Hooks can use `dependencies.tools` so required scanners or CLIs are installed and placed on `PATH`
 for the hook execution context.
 
-When the hooked component declares the hook binary in `dependencies.tools`, do not add a separate
+When the hook declares the required binary in `dependencies.tools`, do not add a separate
 `atmos toolchain install` step. Atmos resolves, installs, and injects the tool before the hook fires.
 
 ## Step-Backed Hook Kinds
 
 Hooks can also delegate to the same step-type registry that workflows, custom commands, and cast
-recordings use,
-instead of one of the named kinds above:
+recordings use, instead of one of the named kinds above:
 
 - `kind: step` runs **one** registered step type. Set the step type with the hook's `type:` field and
   configure it with `with:`, exactly like a workflow step.

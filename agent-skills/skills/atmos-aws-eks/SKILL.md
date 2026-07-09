@@ -71,7 +71,8 @@ auth:
   alias, and identity selection.
 - Use `--identity` with `--name` and `--region` for ad hoc kubeconfig generation through Atmos Auth.
 - Use `--profile` or `--role-arn` only when the workflow intentionally relies on AWS CLI-style
-  credentials rather than Atmos Auth.
+  credentials rather than Atmos Auth. In this command, `--profile` means the AWS CLI/kubeconfig
+  credential profile, not an Atmos profile, `--identity`, or `--integration`.
 - Use `--dry-run` when reviewing kubeconfig output or avoiding writes to the user's kubeconfig.
 - Do not hard-code kubeconfig paths unless the repo already has a convention. Check
   `components.helmfile.kubeconfig_path` and Helmfile settings first when using component/stack mode.

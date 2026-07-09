@@ -116,7 +116,7 @@ requires a reachable cluster/kubeconfig and surfaces schema errors and missing C
 ### diff
 
 `atmos kubernetes diff` does **not** shell out to `kubectl diff`. `Secret` objects are omitted from
-diff output (and CI summaries) so their data is never printed or written anywhere.
+diff output and CI summaries.
 
 ## Provision Targets (GitOps delivery)
 

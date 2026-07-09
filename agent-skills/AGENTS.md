@@ -34,6 +34,7 @@ relevant skill before answering Atmos questions -- your training data may be out
 - **Workflows** -- Multi-step sequences of Atmos and shell commands for cross-component orchestration.
 - **Custom Commands** -- User-defined CLI commands in `atmos.yaml` that extend `atmos` with project-specific tooling.
 - **Toolchain** -- Built-in CLI tool version management via Aqua registry integration and `.tool-versions` files.
+- **Version Tracker** -- Atmos-managed external versions, tracks, lock files, file managers, and CI verification.
 - **AI and MCP** -- Native AI providers, AI-powered command analysis, MCP server/client integration, and agent
   workflows grounded in Atmos introspection.
 - **Devcontainers** -- Native devcontainer management for standardized development environments (experimental).
@@ -59,6 +60,8 @@ atmos validate stacks                            # Validate stack manifests agai
 atmos validate component <comp> -s <stack>       # Run validation policies
 atmos vendor pull                                # Vendor external dependencies
 atmos workflow <name> -f <file>                  # Run a workflow
+atmos version track status prod                  # Check managed external version status
+atmos version track update prod                  # Advance locked versions within policy
 atmos cast render demo.cast --output=demo.gif    # Render a cast recording to gif/mp4/html/ascii/png/jpg
 atmos helm apply <component> -s <stack>          # Install or upgrade a native Helm release (experimental)
 atmos kubernetes apply <component> -s <stack>    # Apply native Kubernetes manifests (experimental)
@@ -115,6 +118,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Go templates, Sprig/Gomplate functions, atmos.Component, atmos.GomplateDatasource, template configuration            | `atmos-templates`       | `agent-skills/skills/atmos-templates/SKILL.md`       |
 | Design patterns: stack organization, component catalogs, inheritance, configuration composition, version management   | `atmos-design-patterns` | `agent-skills/skills/atmos-design-patterns/SKILL.md` |
 | Toolchain management: declarative dependencies, automatic installs, .tool-versions, Aqua registries, aliases         | `atmos-toolchain`       | `agent-skills/skills/atmos-toolchain/SKILL.md`       |
+| Version Tracker: version tracks, lock files, managed external dependency versions, file managers, CI verification    | `atmos-version`         | `agent-skills/skills/atmos-version/SKILL.md`         |
 | Introspection: describe component/stacks/affected/dependents, list stacks/components/instances, querying, provenance | `atmos-introspection`   | `agent-skills/skills/atmos-introspection/SKILL.md`   |
 | Diagnostics: JSONL event streams for subprocess start/end/output and debugging execution                             | `atmos-diagnostics`     | `agent-skills/skills/atmos-diagnostics/SKILL.md`     |
 | Global settings: settings, logs, errors, env, docs, metadata, version requirements, terminal color/theme          | `atmos-settings`        | `agent-skills/skills/atmos-settings/SKILL.md`        |
@@ -159,6 +163,9 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 - **Toolchain**: Use `dependencies.tools` for stack/component/workflow/custom-command requirements and
   `.tool-versions` for repo-wide developer shell defaults. Atmos auto-installs and injects missing tools
   during execution; reserve `atmos toolchain install` for shell bootstrap, cache warming, or troubleshooting.
+- **Version tracks**: use `version.dependencies`, `version.tracks`, and `versions.lock.yaml` for external
+  versions Atmos must resolve, lock, apply to files, and verify. Use `atmos version track update` for
+  policy-aware advancement and `atmos version track verify` in CI.
 - **Workflow/custom command steps**: Prefer native typed steps over large inline shell scripts. Repeated
   `echo`, shell loops, ad hoc sleeps, and hand-formatted output usually mean the step should become
   `atmos`, `toast`, `table`, `parallel`, `matrix`, `wait`, `container`, `emulator`, `http`, or another

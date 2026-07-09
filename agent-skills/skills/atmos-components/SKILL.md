@@ -160,7 +160,7 @@ execution directory.
 components:
   terraform:
     vpc:
-      source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0"
+      source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.450.0"
       provision:
         workdir:
           enabled: true

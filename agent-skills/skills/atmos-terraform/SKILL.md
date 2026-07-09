@@ -331,7 +331,7 @@ components:
   terraform:
     vpc:
       source:
-        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        uri: github.com/cloudposse-terraform-components/aws-vpc.git
         version: 1.450.0
       provision:
         workdir:

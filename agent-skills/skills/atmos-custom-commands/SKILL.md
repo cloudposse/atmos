@@ -106,6 +106,9 @@ commands:
 ```yaml
 commands:
   - name: prod-whoami
+    dependencies:
+      tools:
+        aws-cli: "^2.0.0"
     identity: prod-readonly
     steps:
       - type: shell

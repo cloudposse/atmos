@@ -182,6 +182,9 @@ components:
           DATADOG_API_KEY:
             store: app-secrets
             required: true
+          DATABASE_CONFIG:
+            store: app-secrets
+            required: true
       vars:
         datadog_api_key: !secret DATADOG_API_KEY
         db_host: !secret DATABASE_CONFIG | path ".host" | default "localhost"
@@ -198,10 +201,10 @@ Use `!append` to concatenate lists during stack inheritance instead of replacing
 components:
   terraform:
     eks:
-      settings:
-        depends_on: !append
-          - rds
-          - elasticache
+      dependencies:
+        components: !append
+          - component: rds
+          - component: elasticache
 ```
 
 Use `!unset` to delete inherited keys:

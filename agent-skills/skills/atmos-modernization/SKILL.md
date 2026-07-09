@@ -23,10 +23,11 @@ the umbrella term for replacing legacy patterns with supported, current patterns
 | Manual `atmos toolchain install <tool>` preinstall steps for Atmos-owned tools | Declarative `dependencies.tools` at the owning component, workflow, hook, or custom command |
 | Large inline workflow/custom-command shell scripts, repeated `echo`, shell loops, ad hoc sleeps | Native step types such as `atmos`, `toast`, `table`, `parallel`, `matrix`, `wait`, `container`, `emulator`, and `http` |
 | Hand-rolled scheduled drift GitHub Actions | Atmos Pro drift detection |
-| `cloudposse/github-action-atmos-terraform-drift-*` | `settings.pro.drift_detection` plus `terraform plan --upload-status` |
+| `cloudposse/github-action-atmos-terraform-drift-*` | `settings.pro.drift_detection` plus `atmos terraform plan --upload-status` |
 | Secret values through raw store calls | Declared `secrets.vars` plus `!secret` |
 | Legacy hook event spelling | Modern dotted lifecycle events such as `after.terraform.plan` |
 | Static GitHub tokens in URLs | Atmos Auth `github/sts` through Atmos Pro |
+| `cloudposse/terraform-aws-components` sources | Repos in the `cloudposse-terraform-components` organization |
 
 ## Process
 
@@ -93,3 +94,24 @@ dependencies:
 ```
 
 Treat `settings.depends_on` as migration-only syntax.
+
+## Component Source Repository Direction
+
+Check `source`, `vendor.yaml`, `component.yaml`, Terraform module sources, and documentation
+examples for `cloudposse/terraform-aws-components`. That monorepo is deprecated; components moved
+to individual repositories in the `cloudposse-terraform-components` organization.
+
+For example, migrate VPC references from the old monorepo form:
+
+```yaml
+source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.450.0"
+```
+
+to the component repository form:
+
+```yaml
+source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.450.0"
+```
+
+Keep versions pinned when changing sources, and validate the target repository/tag exists before
+updating production stacks.
