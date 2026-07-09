@@ -22,6 +22,7 @@ const (
 	defaultWaitTimeout         = 30 * time.Second
 	defaultTeardownQuietPeriod = 500 * time.Millisecond
 	defaultTeardownMaxWait     = 2 * time.Second
+	defaultProcessExitMaxWait  = 2 * time.Second
 	sessionReadBufferSize      = 4096
 )
 
@@ -32,6 +33,8 @@ var (
 	ErrWaitTimeout = errUtils.ErrWaitTimeout
 	// ErrUnsupportedCastKey indicates that a key action requested an unknown key sequence.
 	ErrUnsupportedCastKey = errUtils.ErrUnsupportedCastKey
+
+	errSessionProcessWaitTimeout = errors.New("timed out waiting for cast session process to exit")
 )
 
 // SessionAction describes one scripted action to perform in an interactive cast session.
@@ -79,7 +82,7 @@ func RunSession(ctx context.Context, opts *SessionOptions) error {
 	for i := range opts.Actions {
 		if err := runAction(ctx, proc.input, state, &opts.Actions[i], opts); err != nil {
 			proc.kill()
-			return errors.Join(err, proc.wait())
+			return errors.Join(err, waitForSessionProcess(proc, defaultProcessExitMaxWait))
 		}
 	}
 	waitForSessionQuiet(ctx, state, defaultTeardownQuietPeriod, defaultTeardownMaxWait)
@@ -94,6 +97,22 @@ type sessionProcess struct {
 	close              func() error
 	kill               func()
 	wait               func() error
+}
+
+func newSessionProcessWait(wait func() error) func() error {
+	done := make(chan struct{})
+	var once sync.Once
+	var err error
+	return func() error {
+		once.Do(func() {
+			go func() {
+				err = wait()
+				close(done)
+			}()
+		})
+		<-done
+		return err
+	}
 }
 
 type sessionState struct {
@@ -267,7 +286,7 @@ func finishSession(ctx context.Context, proc *sessionProcess, done <-chan error)
 	}
 	select {
 	case err := <-done:
-		waitErr := proc.wait()
+		waitErr := waitForSessionProcess(proc, defaultProcessExitMaxWait)
 		if err == nil {
 			return waitErr
 		}
@@ -277,10 +296,28 @@ func finishSession(ctx context.Context, proc *sessionProcess, done <-chan error)
 		return err
 	case <-ctx.Done():
 		proc.kill()
-		return errors.Join(ctx.Err(), proc.wait())
+		return errors.Join(ctx.Err(), waitForSessionProcess(proc, defaultProcessExitMaxWait))
 	case <-time.After(2 * time.Second):
 		proc.kill()
-		return proc.wait()
+		return waitForSessionProcess(proc, defaultProcessExitMaxWait)
+	}
+}
+
+func waitForSessionProcess(proc *sessionProcess, timeout time.Duration) error {
+	if proc == nil || proc.wait == nil {
+		return nil
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- proc.wait()
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		return err
+	case <-timer.C:
+		return errSessionProcessWaitTimeout
 	}
 }
 

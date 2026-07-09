@@ -669,3 +669,18 @@ func TestGetNetworksFromInspect(t *testing.T) {
 
 	assert.Equal(t, []string{"bridge", "github_network_123"}, got)
 }
+
+func TestGetNetworkIPsFromInspect(t *testing.T) {
+	data := map[string]interface{}{
+		"NetworkSettings": map[string]interface{}{
+			"Networks": map[string]interface{}{
+				"atmos-emulator-local": map[string]interface{}{"IPAddress": "172.20.0.2"},
+				"bridge":               map[string]interface{}{"IPAddress": ""},
+			},
+		},
+	}
+
+	got := getNetworkIPsFromInspect(data)
+
+	assert.Equal(t, map[string]string{"atmos-emulator-local": "172.20.0.2"}, got)
+}

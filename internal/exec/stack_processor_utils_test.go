@@ -3399,6 +3399,66 @@ func TestProcessTemplatesInSection(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "acme-prod", nested["name"])
 	})
+
+	t.Run("injects structured map for exact field refs", func(t *testing.T) {
+		section := map[string]any{
+			"tags": "{{ .locals.default_tags }}",
+		}
+		context := map[string]any{
+			"locals": map[string]any{
+				"default_tags": map[string]any{
+					"ManagedBy": "Atmos",
+					"Team":      "Platform",
+				},
+			},
+		}
+		result, err := processTemplatesInSection(atmosConfig, section, context, "test.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, map[string]any{"ManagedBy": "Atmos", "Team": "Platform"}, result["tags"])
+	})
+
+	t.Run("injects typed scalar for exact field refs", func(t *testing.T) {
+		section := map[string]any{
+			"replicas": "{{ .locals.replicas }}",
+			"enabled":  "{{ .locals.enabled }}",
+		}
+		context := map[string]any{
+			"locals": map[string]any{
+				"replicas": 3,
+				"enabled":  true,
+			},
+		}
+		result, err := processTemplatesInSection(atmosConfig, section, context, "test.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, 3, result["replicas"])
+		assert.Equal(t, true, result["enabled"])
+	})
+
+	t.Run("piped and partial refs remain string templates", func(t *testing.T) {
+		section := map[string]any{
+			"piped":   "{{ .locals.name | upper }}",
+			"partial": "svc-{{ .locals.name }}",
+		}
+		context := map[string]any{
+			"locals": map[string]any{"name": "myapp"},
+		}
+		result, err := processTemplatesInSection(atmosConfig, section, context, "test.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, "MYAPP", result["piped"])
+		assert.Equal(t, "svc-myapp", result["partial"])
+	})
+
+	t.Run("missing exact ref keeps current missing-value error", func(t *testing.T) {
+		section := map[string]any{
+			"value": "{{ .locals.missing }}",
+		}
+		context := map[string]any{
+			"locals": map[string]any{},
+		}
+		_, err := processTemplatesInSection(atmosConfig, section, context, "test.yaml")
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrInvalidStackManifest))
+	})
 }
 
 // TestExtractAndAddLocalsToContext_SectionProcessing tests the template processing pipeline

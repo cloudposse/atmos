@@ -302,22 +302,17 @@ Go template syntax.
 
 ```yaml
 env:
-  - key: string            # Required: Environment variable name
-    value: string          # Required: Value (supports Go templates)
+  NAME: string             # Value supports Go templates
 ```
 
 ### Examples
 
 ```yaml
 env:
-  - key: ATMOS_COMPONENT
-    value: "{{ .Arguments.component }}"
-  - key: ATMOS_STACK
-    value: "{{ .Flags.stack }}"
-  - key: AWS_REGION
-    value: "{{ .ComponentConfig.vars.region }}"
-  - key: KUBECONFIG
-    value: "/dev/shm/kubecfg.{{ .Flags.stack }}-{{ .Flags.role }}"
+  ATMOS_COMPONENT: "{{ .Arguments.component }}"
+  ATMOS_STACK: "{{ .Flags.stack }}"
+  AWS_REGION: "{{ .ComponentConfig.vars.region }}"
+  KUBECONFIG: "/dev/shm/kubecfg.{{ .Flags.stack }}-{{ .Flags.role }}"
 ```
 
 Environment variables are accessible in steps as standard shell variables (`$ATMOS_COMPONENT`).
@@ -406,7 +401,7 @@ commands:
       - name: stacks
         description: List all stacks
         steps:
-          - atmos describe stacks --sections none | grep -e "^\S" | sed s/://g
+          - atmos describe stacks --sections=none | grep -e "^\S" | sed s/://g
       - name: components
         description: List components
         flags:
@@ -416,10 +411,10 @@ commands:
         steps:
           - >
             {{ if .Flags.stack }}
-            atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none |
+            atmos describe stacks --stack={{ .Flags.stack }} --format=json --sections=none |
               jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
             {{ else }}
-            atmos describe stacks --format json --sections none |
+            atmos describe stacks --format=json --sections=none |
               jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
             {{ end }}
 ```
@@ -494,8 +489,7 @@ commands:
       tools:
         terraform: "^1.10.0"
     env:
-      - key: DEPLOY_STACK
-        value: "{{ .Flags.stack }}"
+      DEPLOY_STACK: "{{ .Flags.stack }}"
     steps:
       - |
         {{ if .Flags.verbose }}

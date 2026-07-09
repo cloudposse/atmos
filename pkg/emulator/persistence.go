@@ -1,9 +1,12 @@
 package emulator
 
 import (
+	"os"
 	"path/filepath"
+	"runtime"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/xdg"
@@ -30,6 +33,13 @@ func instanceCacheSubpath(stack, name string) string {
 func InstanceDataDir(stack, name string) (string, error) {
 	defer perf.Track(nil, "emulator.InstanceDataDir")()
 
+	if cacheHome, ok := emulatorCacheHomeForBindMounts(); ok {
+		fullPath := filepath.Join(cacheHome, "atmos", instanceCacheSubpath(stack, name))
+		if err := os.MkdirAll(fullPath, xdg.DefaultCacheDirPerm); err != nil {
+			return "", err
+		}
+		return fullPath, nil
+	}
 	return xdg.GetXDGCacheDir(instanceCacheSubpath(stack, name), xdg.DefaultCacheDirPerm)
 }
 
@@ -39,5 +49,26 @@ func InstanceDataDir(stack, name string) (string, error) {
 func LookupInstanceDataDir(stack, name string) string {
 	defer perf.Track(nil, "emulator.LookupInstanceDataDir")()
 
+	if cacheHome, ok := emulatorCacheHomeForBindMounts(); ok {
+		return filepath.Join(cacheHome, "atmos", instanceCacheSubpath(stack, name))
+	}
 	return xdg.LookupXDGCacheDir(instanceCacheSubpath(stack, name))
+}
+
+func emulatorCacheHomeForBindMounts() (string, bool) {
+	if value, _ := xdg.LookupCacheHomeBase(); value != "" {
+		return "", false
+	}
+	home, err := homedir.Dir()
+	if err != nil {
+		return "", false
+	}
+	return defaultEmulatorCacheHomeForBindMounts(runtime.GOOS, home)
+}
+
+func defaultEmulatorCacheHomeForBindMounts(goos, home string) (string, bool) {
+	if goos != "darwin" || home == "" {
+		return "", false
+	}
+	return filepath.Join(home, "Library", "Caches"), true
 }

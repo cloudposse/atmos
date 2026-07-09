@@ -3,6 +3,9 @@ components:
     api:
       metadata:
         component: api
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
       secrets:
         vars:
           DATADOG_API_KEY:

@@ -12,8 +12,10 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/bedrock"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/claudecode"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/codexcli"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/copilotcli"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/gemini"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/geminicli"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/github"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/grok"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/ollama"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/openai"
@@ -93,6 +95,19 @@ func TestNewClient(t *testing.T) {
 					DefaultProvider: "gemini",
 					Providers: map[string]*schema.AIProviderConfig{
 						"gemini": {},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "GitHub Models provider",
+			atmosConfig: &schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "github",
+					Providers: map[string]*schema.AIProviderConfig{
+						"github": {},
 					},
 				},
 			},

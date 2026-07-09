@@ -1,0 +1,63 @@
+commands:
+  - name: casts generate examples auth-stores identity-backed-stores
+    description: Regenerate the Auth Stores example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: identity-backed-stores
+        working_directory: "../../.context/cast-fixtures/auth-stores"
+        title: "Auth Stores: map stores to identities"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/auth-stores/identity-backed-stores.cast"
+        steps:
+          - type: simulate
+            text: "# show the auth identities available to stores"
+          - type: simulate
+            text: &auth_cmd atmos auth list
+          - type: shell
+            name: auth-list
+            duration: 450ms
+            interval: 750ms
+            command: *auth_cmd
+          - type: simulate
+            text: "# stores reference identities instead of ambient credentials"
+          - type: simulate
+            text: &stores_cmd atmos describe config --config-path . -f yaml -q .stores
+          - type: shell
+            name: stores
+            duration: 450ms
+            interval: 750ms
+            command: *stores_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples auth-stores identity-backed-stores
+  - name: casts validate examples auth-stores identity-backed-stores
+    description: Validate the Auth Stores example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/auth-stores/identity-backed-stores.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in ["atmos auth list", "prod-admin", "azure-prod", "gcp-prod", "prod/ssm", "identity: prod-admin", "prod/keyvault", "prod/gsm"]:
+              if needle not in plain:
+                  raise SystemExit(f"auth-stores cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

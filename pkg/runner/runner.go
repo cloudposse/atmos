@@ -267,6 +267,13 @@ func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts Options
 		if err := schema.ValidateStepCondition(tasks[i].When); err != nil {
 			return err
 		}
+		// RunAll evaluates every task against a hardcoded "success" status (see
+		// taskConditionContext below), unlike workflow/custom-command steps which
+		// track a real lifecycle status. A `failure` predicate here can never
+		// evaluate true, so reject it up front instead of silently never running.
+		if tasks[i].When.MentionsAny(schema.ConditionPredicateFailure) {
+			return fmt.Errorf("%w: task when cannot use %q", schema.ErrInvalidWhenCondition, schema.ConditionPredicateFailure)
+		}
 	}
 
 	for i, task := range tasks {
