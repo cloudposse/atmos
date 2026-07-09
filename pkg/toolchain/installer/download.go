@@ -172,7 +172,10 @@ func writeResponseToCache(body io.Reader, cachePath string) (string, error) {
 	var buf bytes.Buffer
 	_, err := io.Copy(&buf, body)
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to read response body: %w", ErrHTTPRequest, err)
+		return "", errors.Join(
+			errUtils.ErrDownloadRetryable,
+			fmt.Errorf("%w: failed to read response body: %w", ErrHTTPRequest, err),
+		)
 	}
 
 	fs := filesystem.NewOSFileSystem()
