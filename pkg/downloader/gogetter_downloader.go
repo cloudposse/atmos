@@ -9,6 +9,8 @@ import (
 	"github.com/hashicorp/go-getter"
 
 	"github.com/cloudposse/atmos/pkg/auth/broker"
+	github "github.com/cloudposse/atmos/pkg/github"
+	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -60,10 +62,16 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		clientMode = getter.ClientModeFile
 	}
 
-	// Create HTTP getter with optional custom client.
+	// Create HTTP getter with optional custom client. A caller-supplied test client always
+	// wins; otherwise attach a GitHub token when one is available so http(s):// sources with
+	// an explicit scheme (e.g. https://raw.githubusercontent.com/...) get authenticated
+	// requests too — go-getter's Detect() only runs CustomGitDetector (which already handles
+	// token injection) for scheme-less shorthand sources, never for URLs with a scheme.
 	httpGetter := &getter.HttpGetter{}
 	if f.httpClient != nil {
 		httpGetter.Client = f.httpClient
+	} else if token := github.GetGitHubToken(); token != "" {
+		httpGetter.Client = httpClient.NewGitHubAuthenticatedHTTPClient(token)
 	}
 
 	client := &getter.Client{
