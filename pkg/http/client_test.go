@@ -61,6 +61,28 @@ func TestNewDefaultClient(t *testing.T) {
 	}
 }
 
+func TestDefaultClient_HTTPClient(t *testing.T) {
+	t.Run("returns the underlying *http.Client", func(t *testing.T) {
+		client := NewDefaultClient(WithTimeout(5 * time.Second))
+		got := client.HTTPClient()
+		assert.NotNil(t, got)
+		assert.Equal(t, 5*time.Second, got.Timeout)
+	})
+
+	t.Run("reflects transport configured via WithGitHubToken", func(t *testing.T) {
+		client := NewDefaultClient(WithGitHubToken("test-token"))
+		got := client.HTTPClient()
+		assert.NotNil(t, got)
+		_, ok := got.Transport.(*GitHubAuthenticatedTransport)
+		assert.True(t, ok, "expected the GitHub-authenticated transport to be set")
+	})
+
+	t.Run("is the same instance backing Do", func(t *testing.T) {
+		client := NewDefaultClient()
+		assert.Same(t, client.client, client.HTTPClient())
+	})
+}
+
 func TestGetGitHubTokenFromEnv(t *testing.T) {
 	tests := []struct {
 		name        string

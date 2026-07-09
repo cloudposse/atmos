@@ -2,6 +2,7 @@ package downloader
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -89,6 +90,77 @@ func TestGoGetterClientFactory_NewClient(t *testing.T) {
 			assert.Equal(t, tt.expectedMode, gc.client.Mode)
 		})
 	}
+}
+
+// stubGitHubToken overrides getGitHubToken for the duration of the test.
+func stubGitHubToken(t *testing.T, token string) {
+	t.Helper()
+	orig := getGitHubToken
+	t.Cleanup(func() { getGitHubToken = orig })
+	getGitHubToken = func() string { return token }
+}
+
+func TestGoGetterClientFactory_NewClient_GitHubTokenAuth(t *testing.T) {
+	t.Run("github raw URL with token gets an authenticated client", func(t *testing.T) {
+		stubGitHubToken(t, "test-token")
+
+		factory := &goGetterClientFactory{}
+		client, err := factory.NewClient(context.Background(), "https://raw.githubusercontent.com/org/repo/main/file.yaml", "dest.yaml", ClientModeFile)
+		assert.NoError(t, err)
+
+		gc, ok := client.(*goGetterClient)
+		assert.True(t, ok)
+
+		httpGetter, ok := gc.client.Getters["https"].(*getter.HttpGetter)
+		assert.True(t, ok)
+		assert.NotNil(t, httpGetter.Client, "expected an authenticated client to be attached")
+	})
+
+	t.Run("github raw URL with no token leaves the default client untouched", func(t *testing.T) {
+		stubGitHubToken(t, "")
+
+		factory := &goGetterClientFactory{}
+		client, err := factory.NewClient(context.Background(), "https://raw.githubusercontent.com/org/repo/main/file.yaml", "dest.yaml", ClientModeFile)
+		assert.NoError(t, err)
+
+		gc, ok := client.(*goGetterClient)
+		assert.True(t, ok)
+
+		httpGetter, ok := gc.client.Getters["https"].(*getter.HttpGetter)
+		assert.True(t, ok)
+		assert.Nil(t, httpGetter.Client, "no client should be attached without a token")
+	})
+
+	t.Run("non-GitHub URL is never authenticated even when a token is available", func(t *testing.T) {
+		stubGitHubToken(t, "test-token")
+
+		factory := &goGetterClientFactory{}
+		client, err := factory.NewClient(context.Background(), "https://example.com/file.yaml", "dest.yaml", ClientModeFile)
+		assert.NoError(t, err)
+
+		gc, ok := client.(*goGetterClient)
+		assert.True(t, ok)
+
+		httpGetter, ok := gc.client.Getters["https"].(*getter.HttpGetter)
+		assert.True(t, ok)
+		assert.Nil(t, httpGetter.Client, "non-GitHub sources must not receive the authenticated client")
+	})
+
+	t.Run("explicit custom client takes precedence over token auth", func(t *testing.T) {
+		stubGitHubToken(t, "test-token")
+
+		custom := &http.Client{}
+		factory := &goGetterClientFactory{httpClient: custom}
+		client, err := factory.NewClient(context.Background(), "https://raw.githubusercontent.com/org/repo/main/file.yaml", "dest.yaml", ClientModeFile)
+		assert.NoError(t, err)
+
+		gc, ok := client.(*goGetterClient)
+		assert.True(t, ok)
+
+		httpGetter, ok := gc.client.Getters["https"].(*getter.HttpGetter)
+		assert.True(t, ok)
+		assert.Same(t, custom, httpGetter.Client, "an explicitly configured client must win over token auth")
+	})
 }
 
 func TestRegisterCustomDetectors(t *testing.T) {
