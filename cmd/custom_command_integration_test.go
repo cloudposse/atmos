@@ -220,9 +220,12 @@ func TestCustomCommandCastStepInheritsWorkingDirectory(t *testing.T) {
 
 	actual, err := os.ReadFile(outputFile)
 	require.NoError(t, err)
-	expectedDir, err := filepath.EvalSymlinks(tmpDir)
-	require.NoError(t, err)
-	assert.Equal(t, expectedDir, strings.TrimSpace(string(actual)))
+	// The in-process shell interpreter sets $PWD literally to the resolved
+	// working directory (mirroring `pwd`'s default logical, non-symlink-
+	// resolving behavior), so the recorded output must match the raw
+	// tmpDir string rather than its symlink-resolved form (tmpDir sits
+	// under a symlinked path on macOS, e.g. /var -> /private/var).
+	assert.Equal(t, tmpDir, strings.TrimSpace(string(actual)))
 	require.FileExists(t, castPath)
 }
 
