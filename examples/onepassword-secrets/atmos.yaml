@@ -29,6 +29,6 @@ stores:
   op:
     type: onepassword
     options:
-      mode: auto
-      # Optional default vault, so references may be written vault-relative (e.g. "Datadog/api_key"):
-      # vault: Production
+      mode: connect
+      connect_host: http://127.0.0.1:18080
+      connect_token: mockoon-token

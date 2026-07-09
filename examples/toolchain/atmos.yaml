@@ -130,15 +130,15 @@ commands:
         dependencies:
           tools:
             jq: "^1.7.0"
-            yq: "~> 4.40.0"
+            yq: "^4.40.0"
         steps:
           - "echo 'jq (^1.7.0):' && jq --version"
-          - "echo 'yq (~> 4.40.0):' && yq --version"
+          - "echo 'yq (^4.40.0):' && yq --version"
 
       # Example 4: Multi-tool pipeline
       # Use multiple tools together
       - name: convert
         description: Convert YAML to JSON using yq and jq together
         steps:
-          - echo "Converting YAML to formatted JSON"
-          - "echo 'name: atmos' | yq -o json | jq ."
+          - echo "Converting demo.yaml to formatted JSON"
+          - "yq -o json demo.yaml | jq ."

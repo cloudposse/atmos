@@ -1,3 +1,11 @@
+---
+title: Component Versions
+tags: [Components]
+cast:
+  file: /casts/examples/demo-component-versions/vendor-versions.cast
+  title: atmos component version vendoring
+---
+
 # Example: Demo Component Versions
 
 Pin components to specific versions for reproducible deployments.

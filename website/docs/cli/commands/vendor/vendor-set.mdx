@@ -6,7 +6,7 @@ id: vendor-set
 description: Set the pinned version of a vendored component in vendor.yaml, preserving comments, anchors, and templates.
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Set the version pinned for a component in your `vendor.yaml` manifest. The source is
@@ -18,7 +18,7 @@ and Go templates such as `{{.Version}}` in source URLs.
 `atmos vendor set` is an alias for [`atmos vendor config set`](/cli/commands/vendor/config/set): it resolves `<component>` to its `spec.sources[N].version` path and delegates to the canonical form.
 :::
 
-<Screengrab title="atmos vendor set --help" slug="atmos-vendor-set--help" />
+<CastPlayer title="atmos vendor set --help" src="/casts/screengrabs/atmos-vendor-set--help.cast" static chrome />
 
 ## Usage
 

@@ -1,0 +1,15 @@
+commands:
+  - name: casts generate demo fixtures demo-vendoring
+    description: Regenerate casts sourced from demo/casts/fixtures/demo-vendoring
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: casts-fixtures-demo-vendoring-pull
+        command: atmos casts generate demo fixtures demo-vendoring pull
+  - name: casts validate demo fixtures demo-vendoring
+    description: Validate casts sourced from demo/casts/fixtures/demo-vendoring
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: casts-fixtures-demo-vendoring-pull
+        command: atmos casts validate demo fixtures demo-vendoring pull

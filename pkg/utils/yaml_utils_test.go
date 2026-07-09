@@ -47,7 +47,7 @@ list:
 }
 
 // TestUnmarshalYAMLFromFileWithPositions_WithDifferentContent tests that different content produces different results.
-// This indirectly validates the cache key includes content hash.
+// This indirectly validates the cache key includes a content fingerprint.
 func TestUnmarshalYAMLFromFileWithPositions_WithDifferentContent(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -58,7 +58,7 @@ func TestUnmarshalYAMLFromFileWithPositions_WithDifferentContent(t *testing.T) {
 	assert.Equal(t, "value1", result1["key"])
 
 	// Second call with SAME file path but DIFFERENT content "value2"
-	// This tests the P8.1 fix: cache key should include content hash
+	// This tests the P8.1 fix: cache key should include a content fingerprint.
 	input2 := `key: value2`
 	result2, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input2, "test.yaml")
 	require.NoError(t, err)

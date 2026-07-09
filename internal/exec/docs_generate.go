@@ -234,6 +234,9 @@ func generateDocument(
 	if err := applyTerraformDocs(baseDir, docsGenerate, mergedData); err != nil {
 		return err
 	}
+	if _, ok := mergedData["terraform_docs"]; !ok {
+		mergedData["terraform_docs"] = ""
+	}
 
 	// 3) Fetch the template.
 	chosenTemplate, err := fetchTemplate(atmosConfig, docsGenerate, baseDir)

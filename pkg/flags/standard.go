@@ -500,7 +500,7 @@ func (p *StandardFlagParser) BindFlagsToViper(cmd *cobra.Command, v *viper.Viper
 		}
 
 		// Then bind the Cobra pflag to Viper for CLI precedence.
-		cobraFlag := cmd.Flags().Lookup(flag.GetName())
+		cobraFlag, _ := lookupCommandFlag(cmd, flag.GetName())
 		if cobraFlag == nil {
 			continue
 		}

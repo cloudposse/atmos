@@ -9,6 +9,15 @@ variable "redis_url" {
   default = ""
 }
 
+variable "stage" {
+  type    = string
+  default = ""
+}
+
+output "stage" {
+  value = var.stage
+}
+
 output "redis_url" {
   value = var.redis_url
 }

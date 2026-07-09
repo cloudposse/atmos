@@ -1,3 +1,11 @@
+---
+title: Helmfile
+tags: [Kubernetes]
+cast:
+  file: /casts/examples/demo-helmfile/lifecycle.cast
+  title: atmos helmfile lifecycle
+---
+
 # Example: Demo Helmfile
 
 Deploy Kubernetes resources using Helmfile with Atmos stack patterns, against a local Kubernetes emulator (k3s).

@@ -1,3 +1,8 @@
+---
+title: AWS Declared Secrets
+tags: [AWS]
+---
+
 # AWS Declared Secrets
 
 Runnable example for declared secrets backed by AWS SSM Parameter Store and AWS
