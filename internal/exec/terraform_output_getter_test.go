@@ -5,22 +5,23 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 )
 
-// fakeNestedOutputAuthManager is a minimal auth.AuthManager whose GetStackInfo returns a
-// controllable ConfigAndStacksInfo. All other AuthManager methods come from the embedded nil
-// interface and panic if called, which keeps the tests honest about what the code under test uses.
-type fakeNestedOutputAuthManager struct {
-	auth.AuthManager
-	stackInfo *schema.ConfigAndStacksInfo
-}
+// newStackInfoAuthManager returns a generated MockAuthManager whose GetStackInfo yields the given
+// ConfigAndStacksInfo. Only GetStackInfo is stubbed, which keeps the tests honest about what the
+// code under test uses.
+func newStackInfoAuthManager(t *testing.T, stackInfo *schema.ConfigAndStacksInfo) *types.MockAuthManager {
+	t.Helper()
 
-func (f *fakeNestedOutputAuthManager) GetStackInfo() *schema.ConfigAndStacksInfo {
-	return f.stackInfo
+	mgr := types.NewMockAuthManager(gomock.NewController(t))
+	mgr.EXPECT().GetStackInfo().Return(stackInfo).AnyTimes()
+	return mgr
 }
 
 // TestResolveNestedOutputAuth verifies that `!terraform.output` resolves the nested target's own
@@ -32,11 +33,11 @@ func TestResolveNestedOutputAuth(t *testing.T) {
 
 	enclosingContext := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "enclosing-identity"}}
 	targetContext := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "target-identity"}}
-	enclosingMgr := &fakeNestedOutputAuthManager{stackInfo: &schema.ConfigAndStacksInfo{AuthContext: enclosingContext}}
-	targetMgr := &fakeNestedOutputAuthManager{stackInfo: &schema.ConfigAndStacksInfo{AuthContext: targetContext}}
 
 	t.Run("target's own auth section overrides the enclosing component's auth", func(t *testing.T) {
 		t.Parallel()
+		enclosingMgr := newStackInfoAuthManager(t, &schema.ConfigAndStacksInfo{AuthContext: enclosingContext})
+		targetMgr := newStackInfoAuthManager(t, &schema.ConfigAndStacksInfo{AuthContext: targetContext})
 
 		var gotParent auth.AuthManager
 		resolve := func(_ *schema.AtmosConfiguration, component, stack string, parent auth.AuthManager) (auth.AuthManager, error) {
@@ -58,6 +59,7 @@ func TestResolveNestedOutputAuth(t *testing.T) {
 
 	t.Run("target without its own default identity inherits the enclosing auth unchanged", func(t *testing.T) {
 		t.Parallel()
+		enclosingMgr := newStackInfoAuthManager(t, &schema.ConfigAndStacksInfo{AuthContext: enclosingContext})
 
 		resolve := func(_ *schema.AtmosConfiguration, _, _ string, parent auth.AuthManager) (auth.AuthManager, error) {
 			return parent, nil
@@ -74,6 +76,7 @@ func TestResolveNestedOutputAuth(t *testing.T) {
 
 	t.Run("resolver error falls back to the enclosing auth", func(t *testing.T) {
 		t.Parallel()
+		enclosingMgr := newStackInfoAuthManager(t, &schema.ConfigAndStacksInfo{AuthContext: enclosingContext})
 
 		resolve := func(_ *schema.AtmosConfiguration, _, _ string, _ auth.AuthManager) (auth.AuthManager, error) {
 			return nil, assert.AnError
@@ -91,11 +94,11 @@ func TestResolveNestedOutputAuth(t *testing.T) {
 	t.Run("auth disabled on the enclosing component skips resolution entirely", func(t *testing.T) {
 		t.Parallel()
 
-		disabledMgr := &fakeNestedOutputAuthManager{stackInfo: &schema.ConfigAndStacksInfo{AuthDisabled: true}}
+		disabledMgr := newStackInfoAuthManager(t, &schema.ConfigAndStacksInfo{AuthDisabled: true})
 		called := false
 		resolve := func(_ *schema.AtmosConfiguration, _, _ string, _ auth.AuthManager) (auth.AuthManager, error) {
 			called = true
-			return targetMgr, nil
+			return newStackInfoAuthManager(t, &schema.ConfigAndStacksInfo{AuthContext: targetContext}), nil
 		}
 
 		gotCtx, gotMgr := resolveNestedOutputAuth(
@@ -110,6 +113,7 @@ func TestResolveNestedOutputAuth(t *testing.T) {
 
 	t.Run("nil enclosing auth still lets the target resolve its own auth", func(t *testing.T) {
 		t.Parallel()
+		targetMgr := newStackInfoAuthManager(t, &schema.ConfigAndStacksInfo{AuthContext: targetContext})
 
 		var gotParent auth.AuthManager
 		resolve := func(_ *schema.AtmosConfiguration, _, _ string, parent auth.AuthManager) (auth.AuthManager, error) {
@@ -146,7 +150,8 @@ func TestResolveNestedOutputAuth(t *testing.T) {
 	t.Run("resolved manager without an AuthContext keeps the enclosing context", func(t *testing.T) {
 		t.Parallel()
 
-		bareMgr := &fakeNestedOutputAuthManager{stackInfo: nil}
+		enclosingMgr := newStackInfoAuthManager(t, &schema.ConfigAndStacksInfo{AuthContext: enclosingContext})
+		bareMgr := newStackInfoAuthManager(t, nil)
 		resolve := func(_ *schema.AtmosConfiguration, _, _ string, _ auth.AuthManager) (auth.AuthManager, error) {
 			return bareMgr, nil
 		}
@@ -166,7 +171,7 @@ func TestResolveNestedOutputAuth(t *testing.T) {
 		called := false
 		resolve := func(_ *schema.AtmosConfiguration, _, _ string, _ auth.AuthManager) (auth.AuthManager, error) {
 			called = true
-			return targetMgr, nil
+			return newStackInfoAuthManager(t, &schema.ConfigAndStacksInfo{AuthContext: targetContext}), nil
 		}
 
 		gotCtx, gotMgr := resolveNestedOutputAuth(

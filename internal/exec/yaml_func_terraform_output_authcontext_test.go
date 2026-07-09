@@ -4,10 +4,70 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// TestAuthDisabledPropagatesWrapperToOutputGetter verifies that when the enclosing component has
+// auth disabled and no AuthManager was created, processTagTerraformOutputWithContext passes an
+// authContextWrapper carrying the stack info downstream (mirroring !terraform.state), so the
+// output getter can see AuthDisabled and skip resolving the target component's own auth section.
+// The negative path proves the wrapper does NOT appear when auth is enabled: a nil AuthManager
+// stays nil so the target's own auth resolution can engage.
+func TestAuthDisabledPropagatesWrapperToOutputGetter(t *testing.T) {
+	tests := []struct {
+		name         string
+		authDisabled bool
+		wantWrapper  bool
+	}{
+		{name: "auth disabled wraps the stack info", authDisabled: true, wantWrapper: true},
+		{name: "auth enabled keeps a nil auth manager", authDisabled: false, wantWrapper: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockOutputGetter := NewMockTerraformOutputGetter(ctrl)
+			originalGetter := outputGetter
+			outputGetter = mockOutputGetter
+			defer func() { outputGetter = originalGetter }()
+
+			stackInfo := &schema.ConfigAndStacksInfo{AuthDisabled: tt.authDisabled}
+			atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+
+			var gotAuthManager any
+			mockOutputGetter.EXPECT().
+				GetOutput(atmosConfig, "test-stack", "vpc", "bucket_name", false, gomock.Nil(), gomock.Any()).
+				DoAndReturn(func(_ *schema.AtmosConfiguration, _, _, _ string, _ bool, _ *schema.AuthContext, authManager any) (any, bool, error) {
+					gotAuthManager = authManager
+					return "test-bucket-name", true, nil
+				}).
+				Times(1)
+
+			input := schema.AtmosSectionMapType{
+				"backend_config": "!terraform.output vpc test-stack bucket_name",
+			}
+
+			result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, stackInfo)
+			assert.NoError(t, err)
+			assert.Equal(t, "test-bucket-name", result["backend_config"])
+
+			if !tt.wantWrapper {
+				assert.Nil(t, gotAuthManager, "with auth enabled and no AuthManager, nil must be passed downstream")
+				return
+			}
+
+			wrapper, ok := gotAuthManager.(*authContextWrapper)
+			require.True(t, ok, "auth-disabled with no AuthManager must pass an authContextWrapper downstream")
+			require.NotNil(t, wrapper.GetStackInfo())
+			assert.True(t, wrapper.GetStackInfo().AuthDisabled)
+		})
+	}
+}
 
 // TestAuthContextReachesGetTerraformOutput is the IDEAL test that verifies
 // authContext actually flows through to GetTerraformOutput when processing
