@@ -97,25 +97,19 @@ func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 		return v == "0" || v == "false"
 	}
 
-	// Bind environment variables for color control.
-	_ = viper.BindEnv("ATMOS_FORCE_COLOR")
-	_ = viper.BindEnv("CLICOLOR_FORCE")
-	_ = viper.BindEnv("FORCE_COLOR")
-	_ = viper.BindEnv("NO_COLOR")
-
 	// Check if colors are explicitly disabled.
-	atmosForceColor := viper.GetString("ATMOS_FORCE_COLOR")
-	cliColorForce := viper.GetString("CLICOLOR_FORCE")
-	forceColorEnv := viper.GetString("FORCE_COLOR")
-	noColor := viper.GetString("NO_COLOR")
+	atmosForceColor := os.Getenv("ATMOS_FORCE_COLOR") //nolint:forbidigo // Standard Atmos env var
+	cliColorForce := os.Getenv("CLICOLOR_FORCE")      //nolint:forbidigo // Standard terminal env var
+	forceColorEnv := os.Getenv("FORCE_COLOR")         //nolint:forbidigo // Standard terminal env var
+	noColor := os.Getenv("NO_COLOR")                  //nolint:forbidigo // Standard terminal env var
 
 	// If explicitly disabled, return early without printing
-	if isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {
+	if viper.GetBool("no-color") || isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {
 		return nil
 	}
 
 	// Check if colors are supported or forced
-	forceColor := isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv)
+	forceColor := viper.GetBool("force-color") || isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv)
 	if supportscolor.Stdout().SupportsColor || forceColor {
 		// Write to the specified output writer, not os.Stdout
 		return figurine.Write(out, text, AnsiRegularFont)
