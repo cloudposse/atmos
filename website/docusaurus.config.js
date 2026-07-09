@@ -392,6 +392,16 @@ const config = {
                     {from: '/core-concepts/components/packer', to: '/components/packer'},
                     {from: '/core-concepts/components/ansible', to: '/components/ansible'},
                 ],
+                // Blog posts moved from /blog/* to /changelog/* when the blog
+                // plugin's routeBasePath changed. Redirect old /blog/<slug>
+                // URLs (still bookmarked/indexed externally) to their current
+                // /changelog/<slug> location.
+                createRedirects(existingPath) {
+                    if (existingPath.startsWith('/changelog/')) {
+                        return [existingPath.replace('/changelog/', '/blog/')];
+                    }
+                    return undefined;
+                },
             },
         ],
         [
