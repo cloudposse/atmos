@@ -100,9 +100,9 @@ func TestControlBridge_InteractiveChildRejected(t *testing.T) {
 	require.True(t, ok)
 
 	// `input` is a registered interactive (TTY-requiring) step type.
-	if h, ok := stepPkg.Get("input"); !ok || !h.RequiresTTY() {
-		t.Skip("input step type not registered as interactive in this build")
-	}
+	h, ok := stepPkg.Get("input")
+	require.True(t, ok, "input step type must be registered")
+	require.True(t, h.RequiresTTY(), "input step type must require TTY")
 
 	step := &schema.WorkflowStep{
 		Name: "fanout",

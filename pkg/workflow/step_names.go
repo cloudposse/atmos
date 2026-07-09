@@ -13,16 +13,27 @@ func CheckAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefini
 }
 
 // generateWorkflowStepNames names unnamed steps as stepN (or parent_stepN for
-// nested steps), recursing into nested step lists.
+// nested steps), recursing into nested step lists. Generated names never
+// collide with an explicit sibling name, since step results are keyed by name.
 func generateWorkflowStepNames(steps []schema.WorkflowStep, parent string) {
+	used := make(map[string]bool, len(steps))
+	for i := range steps {
+		if steps[i].Name != "" {
+			used[steps[i].Name] = true
+		}
+	}
 	for index := range steps {
 		step := &steps[index]
 		if step.Name == "" {
-			if parent == "" {
-				step.Name = fmt.Sprintf("step%d", index+1)
-			} else {
-				step.Name = fmt.Sprintf("%s_step%d", parent, index+1)
+			candidate := fmt.Sprintf("step%d", index+1)
+			if parent != "" {
+				candidate = fmt.Sprintf("%s_step%d", parent, index+1)
 			}
+			for used[candidate] {
+				candidate += "_"
+			}
+			step.Name = candidate
+			used[candidate] = true
 		}
 		if len(step.Steps) > 0 {
 			generateWorkflowStepNames(step.Steps, step.Name)
