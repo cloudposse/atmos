@@ -19,13 +19,17 @@ commands:
     commands:
       - name: changed
         description: Run lint checks for changes from origin/main
+        # Per-worktree cache + lock isolation for the golangci-lint run is handled in
+        # scripts/run-custom-golangci-lint.sh (the shared entrypoint for this flow and
+        # the pre-commit hook), so it stays in one place.
         env: &go_auto_env
           GOTOOLCHAIN: auto
         steps:
           - type: atmos
             command: build deps
-          - type: atmos
-            command: lint lintroller
+          # lintroller runs as a plugin inside custom-gcl (see .golangci.yml
+          # linters.enable + settings.custom.lintroller), so a separate whole-repo
+          # pass here is redundant and also inconsistent with "changed" semantics.
           - type: atmos
             command: lint gomodcheck
           - type: atmos
@@ -40,15 +44,29 @@ commands:
           GOTOOLCHAIN:
             valueCommand: printf 'go%s' "$(go env GOVERSION | sed 's/^go//')"
         steps:
-          - type: toast
-            level: info
-            content: Building custom golangci-lint binary with lintroller plugin...
           - |
             set -eu
-            golangci-lint custom
-          - type: toast
-            level: success
-            content: "Custom golangci-lint binary built successfully: ./custom-gcl"
+            # `golangci-lint custom` clones and compiles a full binary, so rebuilding
+            # it on every `lint changed` (e.g. during a rebase storm, when the binary
+            # is identical across all worktrees) is the single biggest waste. Rebuild
+            # only when ./custom-gcl is missing or older than its build inputs
+            # (.custom-gcl.yml or the lintroller plugin sources). Mirrors the -newer
+            # staleness guards already used by `lint lintroller` / `lint gomodcheck`.
+            needs_build=0
+            if [ ! -x ./custom-gcl ]; then
+              needs_build=1
+            elif [ .custom-gcl.yml -nt ./custom-gcl ]; then
+              needs_build=1
+            elif [ -n "$(find tools/lintroller -type f \( -name '*.go' -o -name 'go.mod' -o -name 'go.sum' \) -newer ./custom-gcl -print -quit)" ]; then
+              needs_build=1
+            fi
+            if [ "$needs_build" -eq 1 ]; then
+              echo "Building custom golangci-lint binary with lintroller plugin..."
+              golangci-lint custom
+              echo "Custom golangci-lint binary built successfully: ./custom-gcl"
+            else
+              echo "custom-gcl is up to date; skipping rebuild."
+            fi
 
       - name: lintroller
         description: Build and run Atmos custom lintroller rules
