@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -55,11 +56,12 @@ func componentFunc(
 		return existingSections, nil
 	}
 
-	// Create AuthManager wrapper from configAndStacksInfo to propagate auth context.
-	var authMgr auth.AuthManager
-	if configAndStacksInfo != nil && configAndStacksInfo.AuthContext != nil {
-		authMgr = newAuthContextWrapper(configAndStacksInfo.AuthContext)
-	}
+	// Resolve the AuthManager for this nested component. The target's own auth section (when it
+	// declares a default identity) overrides the enclosing component's propagated AuthContext,
+	// mirroring !terraform.state / !terraform.output via resolveAuthManagerForNestedComponent.
+	// Without this, atmos.Component() always reused the enclosing component's credentials verbatim,
+	// even for a target that authenticates independently.
+	resolvedAuthMgr := resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, resolveAuthManagerForNestedComponent)
 
 	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 		Component:            component,
@@ -67,7 +69,7 @@ func componentFunc(
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
 		Skip:                 nil,
-		AuthManager:          authMgr,
+		AuthManager:          resolvedAuthMgr,
 	})
 	if err != nil {
 		return nil, errUtils.WrapComponentDescribeError(component, stack, err, "atmos.Component")
@@ -85,10 +87,14 @@ func componentFunc(
 			// Return the static backend outputs.
 			terraformOutputs = remoteStateBackendStaticTypeOutputs
 		} else {
-			// Execute `terraform output` with authContext from configAndStacksInfo (populated by --identity flag).
+			// Execute `terraform output` using the resolved AuthContext: the target's own if it
+			// authenticated independently, otherwise the enclosing component's (propagated from the
+			// --identity flag).
 			var authContext *schema.AuthContext
-			if configAndStacksInfo != nil {
-				authContext = configAndStacksInfo.AuthContext
+			if resolvedAuthMgr != nil {
+				if si := resolvedAuthMgr.GetStackInfo(); si != nil {
+					authContext = si.AuthContext
+				}
 			}
 			terraformOutputs, err = tfoutput.ExecuteWithSections(atmosConfig, component, stack, sections, authContext)
 			if err != nil {
@@ -119,6 +125,50 @@ func componentFunc(
 	}
 
 	return sections, nil
+}
+
+// componentFuncAuthResolver builds the AuthManager for a nested atmos.Component() target. Matches the
+// signature of resolveAuthManagerForNestedComponent so tests can inject a spy.
+type componentFuncAuthResolver func(
+	atmosConfig *schema.AtmosConfiguration,
+	component, stack string,
+	parentAuthManager auth.AuthManager,
+) (auth.AuthManager, error)
+
+// resolveComponentFuncAuthManager determines the AuthManager atmos.Component() should use for a nested
+// target: it starts from the enclosing component's propagated AuthContext (wrapped so downstream code
+// can read it via GetStackInfo), then lets the target's own auth section override it when the target
+// declares a default identity — the same behavior !terraform.state / !terraform.output get via
+// resolveAuthManagerForNestedComponent. A resolver error, or AuthDisabled on the enclosing component,
+// falls back to the enclosing component's AuthManager unchanged.
+func resolveComponentFuncAuthManager(
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	component, stack string,
+	resolve componentFuncAuthResolver,
+) auth.AuthManager {
+	defer perf.Track(atmosConfig, "exec.resolveComponentFuncAuthManager")()
+
+	var parentAuthMgr auth.AuthManager
+	if configAndStacksInfo != nil && configAndStacksInfo.AuthContext != nil {
+		parentAuthMgr = newAuthContextWrapper(configAndStacksInfo.AuthContext)
+	}
+
+	if configAndStacksInfo != nil && configAndStacksInfo.AuthDisabled {
+		return parentAuthMgr
+	}
+
+	resolved, err := resolve(atmosConfig, component, stack, parentAuthMgr)
+	if err != nil {
+		log.Debug(
+			"Auth does not exist for atmos.Component target, using enclosing component's AuthManager",
+			logKeyComponent, component,
+			logKeyStack, stack,
+			"error", err,
+		)
+		return parentAuthMgr
+	}
+	return resolved
 }
 
 // enclosingComponentDisabled reports whether the component whose template is being rendered (the
