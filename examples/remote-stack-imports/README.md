@@ -1,3 +1,11 @@
+---
+title: Remote Stack Imports
+tags: [Stacks]
+cast:
+  file: /casts/examples/remote-stack-imports/remote-vars.cast
+  title: atmos remote stack imports
+---
+
 # Remote Stack Imports Example
 
 This example demonstrates how to import stack configurations from remote sources using [go-getter](https://github.com/hashicorp/go-getter) URL schemes.

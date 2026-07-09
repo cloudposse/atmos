@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -235,7 +236,9 @@ func runOperation(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConf
 func executeKubernetesOperation(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation, objects []*unstructured.Unstructured) ([]objectResult, error) {
 	switch operation {
 	case OperationRender:
-		err := renderObjects(objects, resolveRenderOptions(ctx.Flags, info.ComponentSection))
+		options := resolveRenderOptions(ctx.Flags, info.ComponentSection)
+		options.AtmosConfig = atmosConfig
+		err := renderObjects(objects, options)
 		if err == nil {
 			return objectsToResults("rendered", objects), nil
 		}
@@ -367,17 +370,24 @@ func runDiff(objects []*unstructured.Unstructured) ([]objectResult, error) {
 
 func printResults(results []objectResult) {
 	for _, result := range results {
-		if result.Namespace == "" {
-			_ = data.Writef("%s %s %s\n", result.Action, result.Resource, result.Name)
-		} else {
-			_ = data.Writef("%s %s %s/%s\n", result.Action, result.Resource, result.Namespace, result.Name)
-		}
+		line := fmt.Sprintf("%s %s", result.Action, objectResultRef(&result))
 		// For plan/diff, print the unified diff body beneath the action line.
-		// Empty for apply/delete/no-change/Secret objects.
+		// Empty for apply/delete/no-change/Secret objects. Lines with diffs
+		// remain data output so the diff body stays pipeable.
 		if result.Diff != "" {
+			_ = data.Writef("%s\n", line)
 			_ = data.Writef("%s\n", result.Diff)
+			continue
 		}
+		ui.Success(line)
 	}
+}
+
+func objectResultRef(result *objectResult) string {
+	if result.Namespace == "" {
+		return fmt.Sprintf("%s %s", result.Resource, result.Name)
+	}
+	return fmt.Sprintf("%s %s/%s", result.Resource, result.Namespace, result.Name)
 }
 
 func eventsFor(operation Operation) (hooks.HookEvent, hooks.HookEvent) {

@@ -24,6 +24,17 @@ func TestEndpoint_PrimaryHostPort_Empty(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestEndpoint_NetworkIP(t *testing.T) {
+	ep := Endpoint{NetworkIPs: map[string]string{
+		"z-net": "",
+		"a-net": "172.20.0.2",
+	}}
+
+	ip, ok := ep.NetworkIP()
+	require.True(t, ok)
+	assert.Equal(t, "172.20.0.2", ip)
+}
+
 func TestEndpoint_URL_DefaultsHostToLoopbackIPv4(t *testing.T) {
 	// No Host set -> URL falls back to the IPv4 loopback literal (see
 	// loopbackHostToIPv4): "localhost" can resolve to IPv6 ::1, which hangs

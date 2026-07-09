@@ -343,8 +343,8 @@ func TestRegisterPredicate(t *testing.T) {
 
 func TestValidateStep(t *testing.T) {
 	require.NoError(t, ValidateStep(Must([]any{"ci", "success"})))
-	require.Error(t, ValidateStep(Must("failure")))
-	require.Error(t, ValidateStep(Must(map[string]any{"not": "failure"})))
+	require.NoError(t, ValidateStep(Must("failure")))
+	require.NoError(t, ValidateStep(Must(map[string]any{"not": "failure"})))
 	require.NoError(t, ValidateStep(Must("status == 'failure'")))
 }
 

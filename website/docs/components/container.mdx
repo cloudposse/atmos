@@ -14,7 +14,9 @@ container lifecycle (`up`/`ps`/`logs`/`exec`/`restart`/`stop`/`rm`/`down`), disc
 derived from the canonical component instance address — not from local state files.
 </Intro>
 
-For the complete command reference, see the [`atmos container`](/cli/commands/container/usage) documentation.
+For the complete command reference, see the [`atmos container`](/cli/commands/container/usage)
+documentation. To operate a group of fulfilled services together, see
+[`atmos composition`](/cli/commands/composition/usage).
 
 This is different from the ephemeral [`type: container` workflow step](/workflows), which is
 `docker run --rm` and workflow-scoped. The component is declarative, addressable infrastructure; the
@@ -100,9 +102,23 @@ compositions:
 ```
 
 Run `atmos composition validate storefront -s dev` to see which services are fulfilled vs. not provided
-in a stack.
+in a stack. Use the first-class composition lifecycle when you want Atmos to operate the fulfilled
+members together:
+
+```bash
+atmos composition list -s dev
+atmos composition up storefront -s dev
+atmos composition ps storefront -s dev
+atmos composition logs storefront -s dev --tail=100
+atmos composition down storefront -s dev
+```
+
+If you omit the composition name from a stack-scoped lifecycle or read command, Atmos targets all
+compositions with fulfilled members in that stack. Startup and read commands process composition names
+alphabetically and services in declared order; teardown commands use the reverse order.
 
 ## Related
 
 - [Container Components](/stacks/components/container) — Full stack-manifest configuration reference
 - [atmos container](/cli/commands/container/usage) — Command reference
+- [atmos composition](/cli/commands/composition/usage) — Composition lifecycle command reference

@@ -9,6 +9,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -28,6 +30,8 @@ type RenderOptions struct {
 	Split bool
 	// Noun is the human-readable object noun used in status output (e.g. "Helm", "Kubernetes").
 	Noun string
+	// AtmosConfig controls TTY-aware syntax highlighting for stdout output.
+	AtmosConfig *schema.AtmosConfiguration
 }
 
 // ValidateRenderOptions verifies the output flag combination is valid.
@@ -66,9 +70,17 @@ func WriteObjects(objects []*unstructured.Unstructured, options RenderOptions) e
 		if err != nil {
 			return err
 		}
-		_, err = os.Stdout.Write(data)
-		return err
+		return writeManifestStdout(data, options.AtmosConfig)
 	}
+}
+
+func writeManifestStdout(manifests []byte, atmosConfig *schema.AtmosConfiguration) error {
+	output := string(manifests)
+	if highlighted, err := u.HighlightCodeWithConfig(atmosConfig, output, "yaml"); err == nil {
+		output = highlighted
+	}
+	_, err := os.Stdout.Write([]byte(output))
+	return err
 }
 
 func writeSingleFile(path string, objects []*unstructured.Unstructured, noun string) error {

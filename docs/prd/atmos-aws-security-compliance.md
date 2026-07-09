@@ -511,6 +511,6 @@ All follow a multi-account delegated admin pattern with the security account as 
 
 - CLI: `website/docs/cli/commands/aws/security/analyze.mdx`, `website/docs/cli/commands/aws/compliance/report.mdx`
 - Config: `website/docs/cli/configuration/aws/security.mdx`
-- Example: `examples/aws-security-compliance/`
+- Gist: `gists/aws-security-compliance/`
 - Blog: `website/blog/2026-04-03-aws-security-compliance.mdx`
 - PRD: `docs/prd/atmos-aws-security-compliance.md` (this file)

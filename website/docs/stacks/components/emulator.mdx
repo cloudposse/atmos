@@ -11,7 +11,7 @@ import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-Emulator components are stack-scoped, long-running containers that stand in for a cloud API (AWS, GCP, Azure), Kubernetes, or a backing service (Vault/OpenBao, an OCI/Terraform registry) during local development and testing. You declare them with the same stack-based configuration used for Terraform, Helmfile, Packer, and Ansible, and operate them with the [`atmos emulator`](/cli/commands/emulator/usage) command group — letting the rest of your stack run offline, with no cloud account.
+Emulator components are stack-scoped, long-running containers that stand in for a cloud API (AWS, GCP, Azure), Kubernetes, or a backing service (Vault/OpenBao, 1Password Connect, an OCI/Terraform registry) during local development and testing. You declare them with the same stack-based configuration used for Terraform, Helmfile, Packer, and Ansible, and operate them with the [`atmos emulator`](/cli/commands/emulator/usage) command group — letting the rest of your stack run offline, with no cloud account.
 </Intro>
 
 <Experimental />
@@ -24,10 +24,10 @@ Emulator components are declared under `components.emulator` and support these f
 
 <dl>
   <dt>`driver`</dt>
-  <dd>**Required.** The built-in driver that selects the image and target, for example `floci/aws`, `k3s`, `openbao`, or `registry`. See [Supported Drivers & Targets](#supported-drivers--targets).</dd>
+  <dd>**Required.** The built-in driver that selects the image and target, for example `floci/aws`, `k3s`, `openbao`, `registry`, or `mockoon/1password-connect`. See [Supported Drivers & Targets](#supported-drivers--targets).</dd>
 
   <dt>`cloud`</dt>
-  <dd>Optional explicit target (`aws`, `gcp`, `azure`, `kubernetes`, `vault`, `registry`). Derived from the driver when omitted; if set, it must match the driver's target.</dd>
+  <dd>Optional explicit target (`aws`, `gcp`, `azure`, `kubernetes`, `vault`, `registry`, `onepassword`). Derived from the driver when omitted; if set, it must match the driver's target.</dd>
 
   <dt>`region`</dt>
   <dd>Cloud region for the `aws`/`gcp`/`azure` targets.</dd>
@@ -77,11 +77,12 @@ Each driver maps to one target and supplies a default image and port. The host p
 | `openbao` *(default for Vault)* | `vault` | `openbao/openbao:latest` | 8200 |
 | `vault` *(opt-in)* | `vault` | `hashicorp/vault:latest` | 8200 |
 | `registry` | `registry` | `registry:2` | 5000 |
+| `mockoon/1password-connect` | `onepassword` | `mockoon/cli:latest` | 3000 |
 
 :::info Two ways emulators are consumed
 The `aws`, `gcp`, `azure`, and `kubernetes` targets bind to your components automatically through an **emulator identity** (`kind: aws/emulator`, `gcp/emulator`, `azure/emulator`, `kubernetes/emulator`): the identity injects the live endpoint, dummy credentials, and provider configuration, so components need no `providers.tf` and no endpoint wiring.
 
-The `vault` and `registry` targets have no identity. You consume their live endpoint with the [`!emulator`](#the-emulator-function) YAML function in stack manifests, or — for a store declared in `atmos.yaml` — by pinning a host port and pointing at it with a static address (see [Vault/OpenBao](#vaultopenbao)).
+The `vault`, `registry`, and `onepassword` targets have no identity. You consume their live endpoint with the [`!emulator`](#the-emulator-function) YAML function in stack manifests, or — for a store declared in `atmos.yaml` — by pinning a host port and pointing at it with a static address (see [Vault/OpenBao](#vaultopenbao) and [1Password Connect](#1password-connect)).
 :::
 
 ## Configuring Each Emulator Type
@@ -205,9 +206,43 @@ components:
         registry_host: !emulator registry url   # e.g. http://localhost:5000
 ```
 
+### 1Password Connect
+
+`mockoon/1password-connect` runs the Mockoon CLI image with a local 1Password Connect mock data file. This is useful for testing `type: onepassword` secret stores without a 1Password account, service account token, or Connect server.
+
+Because stores are declared in `atmos.yaml`, pin the host port and point the store at the static address:
+
+```yaml
+# atmos.yaml
+stores:
+  op:
+    type: onepassword
+    options:
+      mode: connect
+      connect_host: http://127.0.0.1:18080
+      connect_token: mockoon-token
+```
+
+```yaml
+# stack manifest
+components:
+  emulator:
+    onepassword-connect:
+      driver: mockoon/1password-connect
+      container:
+        ports:
+          - host: 18080
+            container: 3000
+        mounts:
+          - type: bind
+            source: ./mockoon/1password-connect.json
+            target: /data/1password-connect.json
+            read_only: true
+```
+
 ## The `!emulator` function
 
-For the `vault` and `registry` targets (which have no emulator identity), the `!emulator` YAML function resolves a running emulator's live connection details in stack manifests:
+For the `vault`, `registry`, and `onepassword` targets (which have no emulator identity), the `!emulator` YAML function resolves a running emulator's live connection details in stack manifests:
 
 ```yaml
 vars:
@@ -249,7 +284,7 @@ You rarely need to write any of this — each built-in driver already supplies s
   <dd>Every built-in driver defaults to `unless-stopped`, so an emulator comes back after a daemon restart or a crash. `atmos emulator down` still stops and removes it.</dd>
 
   <dt>Health check</dt>
-  <dd>The lightweight emulators ship a default readiness probe: **Floci** (AWS/GCP/Azure) and the **registry** probe their listening port from inside the container. **Vault/OpenBao** and **k3s** ship no default probe — their readiness is handled by the automatic Vault bootstrap (init/unseal) and the Kubernetes identity's API wait, respectively. You can still set `container.healthcheck` explicitly on any emulator.</dd>
+  <dd>The lightweight emulators ship a default readiness probe: **Floci** (AWS/GCP/Azure) and the **registry** probe their listening port from inside the container; **Mockoon 1Password Connect** probes `/v1/health`. **Vault/OpenBao** and **k3s** ship no default probe — their readiness is handled by the automatic Vault bootstrap (init/unseal) and the Kubernetes identity's API wait, respectively. You can still set `container.healthcheck` explicitly on any emulator.</dd>
 </dl>
 
 ### Readiness gating
@@ -370,7 +405,7 @@ By default, emulators **persist their state** across `down`/`up`. Atmos bind-mou
   <dd>[`atmos emulator reset`](/cli/commands/emulator/reset) stops the container and deletes its persisted state directory — the next `up` starts fresh. `down` always keeps state.</dd>
 
   <dt>Scope</dt>
-  <dd>Persistence applies to every driver: Floci AWS/GCP/Azure, LocalStack, the registry, and k3s persist their data directories directly. OpenBao/Vault run a file-storage backend that Atmos auto-initializes and unseals on start (recording the unseal key and generated root token under the data dir), so secrets persist too. `reset` wipes the unseal key and token with the rest of the state.</dd>
+  <dd>Persistence applies to every driver: Floci AWS/GCP/Azure, LocalStack, the registry, and k3s persist their data directories directly. OpenBao/Vault run a file-storage backend that Atmos auto-initializes and unseals on start (recording the unseal key and generated root token under the data dir), so secrets persist too. Mockoon-backed 1Password Connect reads the mounted mock environment file; mount your own file when you want deterministic fixtures. `reset` wipes persisted emulator state.</dd>
 </dl>
 
 ## Environment Variables
@@ -395,6 +430,9 @@ Each target publishes the connection environment its SDKs and tools expect. The 
 
   <dt>`ATMOS_REGISTRY_HOST`</dt>
   <dd>Registry target — the live host:port of the OCI/Terraform registry.</dd>
+
+  <dt>`OP_CONNECT_HOST`, `OP_CONNECT_TOKEN`</dt>
+  <dd>1Password target — the Mockoon-backed Connect endpoint and a mock bearer token.</dd>
 </dl>
 
 ## Best Practices

@@ -1,3 +1,11 @@
+---
+title: Kubernetes Emulator
+tags: [Emulators, Kubernetes]
+cast:
+  file: /casts/examples/emulator-k8s/lifecycle.cast
+  title: atmos kubernetes emulator lifecycle
+---
+
 ## Notes
 
 This example deploys a Helm release (nginx) to a **local Kubernetes sandbox** — no EKS, no

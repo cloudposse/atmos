@@ -1,3 +1,8 @@
+---
+title: MCP Server Integrations
+tags: [AI]
+---
+
 # Example: MCP Server Integrations
 
 Connect Atmos to external MCP servers from the AWS ecosystem. Their tools become available

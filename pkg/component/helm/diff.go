@@ -85,19 +85,7 @@ func colorizeUnifiedDiff(diffText string) string {
 
 		hasNewline := strings.HasSuffix(line, "\n")
 		text := strings.TrimSuffix(line, "\n")
-		switch {
-		case strings.HasPrefix(text, "+") && !strings.HasPrefix(text, "+++"):
-			text = added.Render(text)
-		case strings.HasPrefix(text, "-") && !strings.HasPrefix(text, "---"):
-			text = removed.Render(text)
-		case strings.HasPrefix(text, "@@"):
-			text = hunk.Render(text)
-		case strings.HasPrefix(text, "diff ") ||
-			strings.HasPrefix(text, "index ") ||
-			strings.HasPrefix(text, "---") ||
-			strings.HasPrefix(text, "+++"):
-			text = meta.Render(text)
-		}
+		text = colorizeUnifiedDiffLine(text, &added, &removed, &hunk, &meta)
 
 		b.WriteString(text)
 		if hasNewline {
@@ -105,4 +93,26 @@ func colorizeUnifiedDiff(diffText string) string {
 		}
 	}
 	return b.String()
+}
+
+func colorizeUnifiedDiffLine(text string, added, removed, hunk, meta *lipgloss.Style) string {
+	switch {
+	case strings.HasPrefix(text, "+") && !strings.HasPrefix(text, "+++"):
+		return added.Render(text)
+	case strings.HasPrefix(text, "-") && !strings.HasPrefix(text, "---"):
+		return removed.Render(text)
+	case strings.HasPrefix(text, "@@"):
+		return hunk.Render(text)
+	case isUnifiedDiffMetadataLine(text):
+		return meta.Render(text)
+	default:
+		return text
+	}
+}
+
+func isUnifiedDiffMetadataLine(text string) bool {
+	return strings.HasPrefix(text, "diff ") ||
+		strings.HasPrefix(text, "index ") ||
+		strings.HasPrefix(text, "---") ||
+		strings.HasPrefix(text, "+++")
 }

@@ -1,0 +1,56 @@
+commands:
+  - name: casts generate examples container-step build-run
+    description: Regenerate the Container Steps example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: build-run
+        working_directory: "../../.context/cast-fixtures/container-step"
+        title: "Container Steps: build and run an image"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/container-step/build-run.cast"
+        steps:
+          - type: simulate
+            text: "# build a local image, then run it in a later step"
+          - type: simulate
+            text: &cmd atmos workflow build-run -f container-step
+          - type: shell
+            name: build-run
+            duration: 650ms
+            interval: 750ms
+            command: *cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples container-step build-run
+  - name: casts validate examples container-step build-run
+    description: Validate the Container Steps example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/container-step/build-run.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          for needle in [
+              "atmos workflow build-run -f container-step",
+              "hello from the built Atmos example image",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"container-step cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

@@ -1,0 +1,33 @@
+commands:
+  - name: casts generate screengrabs demo-stacks
+    description: Regenerate the demo-stacks docs screengrab casts
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: screengrabs-demo-stacks-start-your-project
+        command: atmos casts generate screengrabs demo-stacks start-your-project
+      - type: shell
+        name: screengrabs-demo-stacks-write-your-components
+        command: atmos casts generate screengrabs demo-stacks write-your-components
+      - type: shell
+        name: screengrabs-demo-stacks-define-your-stacks
+        command: atmos casts generate screengrabs demo-stacks define-your-stacks
+      - type: shell
+        name: screengrabs-demo-stacks-deploy
+        command: atmos casts generate screengrabs demo-stacks deploy
+  - name: casts validate screengrabs demo-stacks
+    description: Validate the demo-stacks docs screengrab casts
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: screengrabs-demo-stacks-start-your-project
+        command: atmos casts validate screengrabs demo-stacks start-your-project
+      - type: shell
+        name: screengrabs-demo-stacks-write-your-components
+        command: atmos casts validate screengrabs demo-stacks write-your-components
+      - type: shell
+        name: screengrabs-demo-stacks-define-your-stacks
+        command: atmos casts validate screengrabs demo-stacks define-your-stacks
+      - type: shell
+        name: screengrabs-demo-stacks-deploy
+        command: atmos casts validate screengrabs demo-stacks deploy

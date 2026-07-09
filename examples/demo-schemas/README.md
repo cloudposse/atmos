@@ -1,3 +1,14 @@
+---
+title: Schema Validation
+tags: [Stacks]
+description: >-
+  Validate YAML files against JSON Schemas from three sources — a local file,
+  a remote URL, and an inline schema — before anything runs.
+cast:
+  file: /casts/examples/demo-schemas/validate.cast
+  title: atmos validate schema
+---
+
 # Example: Demo Schemas
 
 Validate stack configuration against JSON Schema before running Terraform.
@@ -15,11 +26,8 @@ Learn more about [Validation](https://atmos.tools/validation).
 ```shell
 cd examples/demo-schemas
 
-# Validate all matched files
-atmos validate stacks
-
-# See schema configuration
-cat atmos.yaml
+# Validate all matched files against their schemas
+atmos validate schema
 ```
 
 ## Key Files
