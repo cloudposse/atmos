@@ -6,7 +6,7 @@ id: vendor-get
 description: Read the pinned version of a vendored component from vendor.yaml.
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Read the version pinned for a component in your `vendor.yaml` manifest. The component
@@ -17,7 +17,7 @@ is matched by name, so manifest ordering does not matter.
 `atmos vendor get` is an alias for [`atmos vendor config get`](/cli/commands/vendor/config/get): it resolves `<component>` to its `spec.sources[N].version` path and delegates to the canonical form.
 :::
 
-<Screengrab title="atmos vendor get --help" slug="atmos-vendor-get--help" />
+<CastPlayer title="atmos vendor get --help" src="/casts/screengrabs/atmos-vendor-get--help.cast" static chrome />
 
 ## Usage
 

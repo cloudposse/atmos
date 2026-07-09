@@ -1,0 +1,143 @@
+commands:
+  - name: casts generate examples local-gitops lifecycle
+    description: Regenerate the Local GitOps example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset
+        working_directory: &fixture "../../.context/cast-fixtures/local-gitops"
+        output: none
+        command: atmos gitops down || true
+      - type: cast
+        name: lifecycle
+        working_directory: *fixture
+        title: "Local GitOps: Atmos, Git, Flux, and k3s"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/local-gitops/lifecycle.cast"
+        steps:
+          - type: simulate
+            text: "# Atmos renders manifests, pushes Git, and Flux pulls into local k3s"
+          - type: simulate
+            text: &up_cmd atmos gitops up
+          - type: shell
+            name: up
+            duration: 650ms
+            interval: 750ms
+            command: *up_cmd
+          - type: simulate
+            text: "# Atmos Git tracks the managed deployment repo"
+          - type: simulate
+            text: &git_list_cmd atmos git list --check-status
+          - type: shell
+            name: git-list
+            duration: 450ms
+            interval: 750ms
+            command: *git_list_cmd
+          - type: simulate
+            text: "# re-rendering shows Git already has the payload"
+          - type: simulate
+            text: &git_status_cmd atmos git status deployments
+          - type: shell
+            name: git-status
+            duration: 450ms
+            interval: 750ms
+            command: *git_status_cmd
+          - type: simulate
+            text: "# confirm Flux is watching Git inside the local cluster"
+          - type: simulate
+            text: &flux_cmd atmos emulator exec kubernetes -s local -- kubectl -n flux-system get gitrepository,kustomization
+          - type: shell
+            name: flux
+            duration: 450ms
+            interval: 750ms
+            command: *flux_cmd
+          - type: simulate
+            text: "# confirm the app landed in k3s through GitOps"
+          - type: simulate
+            text: &app_cmd atmos emulator exec kubernetes -s local -- kubectl -n gitops-demo get configmap demo-app
+          - type: shell
+            name: app
+            duration: 450ms
+            interval: 750ms
+            command: *app_cmd
+          - type: simulate
+            text: "# tear the local GitOps loop down"
+          - type: simulate
+            text: &down_cmd atmos gitops down
+          - type: shell
+            name: down
+            duration: 450ms
+            interval: 750ms
+            command: *down_cmd
+      - type: script
+        name: sanitize
+        interpreter: python3
+        script: |
+          import json
+          import os
+          from pathlib import Path
+
+          cast = Path("../../website/static/casts/examples/local-gitops/lifecycle.cast")
+          repo_root = Path("../..").resolve()
+          roots = {str(repo_root), os.path.realpath(str(repo_root))}
+          roots.update("/private" + root for root in list(roots) if not root.startswith("/private"))
+
+          lines = cast.read_text().splitlines()
+          rewritten = [lines[0]]
+          for line in lines[1:]:
+              event = json.loads(line)
+              if event[1] in ("o", "e"):
+                  for root in sorted(roots, key=len, reverse=True):
+                      event[2] = event[2].replace(root, "/absolute/path/to/repo")
+              rewritten.append(json.dumps(event, separators=(",", ":")))
+          cast.write_text("\n".join(rewritten) + "\n")
+      - type: shell
+        name: validate
+        command: atmos casts validate examples local-gitops lifecycle
+  - name: casts validate examples local-gitops lifecycle
+    description: Validate the Local GitOps example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/local-gitops/lifecycle.cast")
+          plain = strip_ansi(text).lower()
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "atmos gitops up",
+              "emulator gitserver is up",
+              "emulator kubernetes is up",
+              "applied source.toolkit.fluxcd.io/v1/gitrepository flux-system/deployments",
+              "atmos git list --check-status",
+              "deployments",
+              "atmos git status deployments",
+              "repository at .atmos/git/deployments is clean",
+              "atmos emulator exec kubernetes -s local -- kubectl -n flux-system get gitrepository,kustomization",
+              "kustomization.kustomize.toolkit.fluxcd.io/apps",
+              "atmos emulator exec kubernetes -s local -- kubectl -n gitops-demo get configmap demo-app",
+              "demo-app",
+              "atmos gitops down",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"local-gitops cast missing {needle!r}")
+          for bad in ["git -c", "git -C", "find .atmos/git"]:
+              if bad in plain:
+                  raise SystemExit(f"local-gitops cast contains raw shell verification {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

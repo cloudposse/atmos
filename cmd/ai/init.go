@@ -296,6 +296,7 @@ func resolveAuthProvider(atmosConfig *schema.AtmosConfiguration) mcpclient.AuthE
 var cliProviders = map[string]bool{
 	"claude-code": true,
 	"codex-cli":   true,
+	"copilot-cli": true,
 	"gemini-cli":  true,
 }
 

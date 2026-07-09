@@ -4,9 +4,9 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 import './styles.css';
 
 // DemoVideo renders an autoplaying, looping terminal recording (produced by VHS,
-// see demo/landing/*.tape) inside the same window chrome as <Screengrab>, so the
+// see demo/landing/*.tape) inside the same window chrome as <CastPlayer>, so the
 // landing page's visual language is unchanged whether a section shows a static
-// ANSI capture or a moving recording.
+// cast frame or a moving recording.
 //
 // The rendered binaries are NEVER committed to git. They are synced to S3/CDN and
 // referenced from `customFields.demosBaseUrl` in production. When that field is

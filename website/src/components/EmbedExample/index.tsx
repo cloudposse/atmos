@@ -15,6 +15,8 @@ import {
   faChevronDown,
   faArrowRight,
 } from '@fortawesome/free-solid-svg-icons';
+import CastPlayer from '@site/src/components/CastPlayer';
+import { stripFrontmatter } from '@site/src/components/frontmatter';
 import type { ExampleProject, TreeNode, FileBrowserOptions } from '../FileBrowser/types';
 import styles from './styles.module.css';
 
@@ -25,6 +27,8 @@ interface EmbedExampleProps {
   showReadme?: boolean;
   /** Whether to show the file listing. Default: true. */
   showFiles?: boolean;
+  /** Whether to show the example cast from README frontmatter. Default: true. */
+  showCast?: boolean;
   /** Override the display title. */
   title?: string;
   /** Maximum number of files to show. Default: 10. */
@@ -52,18 +56,6 @@ function collectFiles(node: TreeNode, limit: number, collected: TreeNode[] = [])
   }
 
   return collected;
-}
-
-/**
- * Strips frontmatter from README content.
- */
-function stripFrontmatter(content: string): string {
-  if (!content.startsWith('---')) return content;
-
-  const endIndex = content.indexOf('---', 3);
-  if (endIndex === -1) return content;
-
-  return content.slice(endIndex + 3).trim();
 }
 
 /**
@@ -101,6 +93,7 @@ export default function EmbedExample({
   example,
   showReadme = true,
   showFiles = true,
+  showCast = true,
   title,
   maxFiles = 10,
 }: EmbedExampleProps): JSX.Element | null {
@@ -128,6 +121,7 @@ export default function EmbedExample({
   const readmeContent = exampleData.root.readme?.content;
   const files = collectFiles(exampleData.root, maxFiles);
   const exampleUrl = `${options.routeBasePath}/${exampleData.name}`;
+  const shouldShowCast = showCast && !!exampleData.cast?.file;
 
   return (
     <div className={styles.embedExample}>
@@ -143,6 +137,18 @@ export default function EmbedExample({
           View full example <FontAwesomeIcon icon={faArrowRight} />
         </Link>
       </div>
+
+      {shouldShowCast && (
+        <div className={styles.castSection}>
+          <CastPlayer
+            src={exampleData.cast!.file!}
+            title={exampleData.cast!.title || displayTitle}
+            chrome
+            controls
+            scrubber
+          />
+        </div>
+      )}
 
       {/* README Section */}
       {showReadme && readmeContent && (

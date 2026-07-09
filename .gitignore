@@ -27,7 +27,6 @@
 # Demo binaries and large audio files
 tools/director/director
 demos/audio/
-demo/screengrabs/.bin/
 
 # Generated landing-page demo recordings (VHS output).
 # NEVER commit these — they bloat the repo. The build pipeline renders them and
@@ -175,3 +174,9 @@ reply_to_*.sh
 
 # Generated JUnit test reports from `atmos terraform test` in CI.
 *.junit.xml
+
+# Python bytecode from cast validation helpers (demo/casts/cast_checks.py).
+__pycache__/
+
+# Per-worktree golangci-lint cache (GOLANGCI_LINT_CACHE).
+.cache/
