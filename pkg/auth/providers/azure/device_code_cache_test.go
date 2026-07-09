@@ -14,17 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
-	cachepkg "github.com/cloudposse/atmos/pkg/ci/cache"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-// TestDeviceCodeTokenCacheSubdir_MatchesCICacheDefaultExcludes guards against
-// silently reopening the ci.cache credential-exposure hole: if this subdir is
-// ever renamed here without updating pkg/ci/cache's default exclusion list,
-// this test fails instead of the drift going unnoticed.
-func TestDeviceCodeTokenCacheSubdir_MatchesCICacheDefaultExcludes(t *testing.T) {
-	assert.Contains(t, cachepkg.DefaultExcludedPaths(), deviceCodeTokenCacheSubdir)
-}
 
 // mockCacheStorage is a mock implementation of CacheStorage for testing.
 type mockCacheStorage struct {

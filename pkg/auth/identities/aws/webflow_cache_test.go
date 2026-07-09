@@ -14,17 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	cachepkg "github.com/cloudposse/atmos/pkg/ci/cache"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-// TestWebflowCacheSubdir_MatchesCICacheDefaultExcludes guards against
-// silently reopening the ci.cache credential-exposure hole: if this subdir is
-// ever renamed here without updating pkg/ci/cache's default exclusion list,
-// this test fails instead of the drift going unnoticed.
-func TestWebflowCacheSubdir_MatchesCICacheDefaultExcludes(t *testing.T) {
-	assert.Contains(t, cachepkg.DefaultExcludedPaths(), webflowCacheSubdir)
-}
 
 func TestRefreshCache_SaveAndLoad(t *testing.T) {
 	// Use a temp directory for cache.

@@ -39,7 +39,7 @@ func archiveRoot(w io.Writer, root string, includes []string) error {
 	gw := gzip.NewWriter(w)
 	tw := tar.NewWriter(gw)
 
-	a := &archiver{tw: tw, root: root, includes: includes}
+	a := &archiver{tw: tw, root: root, includes: includes, excludes: DefaultExcludedPaths()}
 	walkErr := filepath.WalkDir(root, a.walk)
 
 	if walkErr != nil {
@@ -65,6 +65,7 @@ type archiver struct {
 	tw       *tar.Writer
 	root     string
 	includes []string
+	excludes []string
 }
 
 // walk decides what to do with a single walked entry and writes it when it is in
@@ -82,7 +83,7 @@ func (a *archiver) walk(path string, d os.DirEntry, err error) error {
 		return nil
 	}
 
-	if handled, action := archiveSkipDecision(rel, a.includes, d.IsDir()); handled {
+	if handled, action := archiveSkipDecision(rel, a.includes, a.excludes, d.IsDir()); handled {
 		return action
 	}
 
@@ -92,7 +93,7 @@ func (a *archiver) walk(path string, d os.DirEntry, err error) error {
 // archiveSkipDecision decides whether a walked entry is out of scope. It returns
 // handled=true with the walk action (nil to skip the single entry, or
 // filepath.SkipDir to prune a directory) when the entry should not be archived.
-func archiveSkipDecision(rel string, includes []string, isDir bool) (bool, error) {
+func archiveSkipDecision(rel string, includes, excludes []string, isDir bool) (bool, error) {
 	// Always exclude the state directory.
 	if isStateDir(rel) {
 		return true, pruneAction(isDir)
@@ -101,7 +102,7 @@ func archiveSkipDecision(rel string, includes []string, isDir bool) (bool, error
 	// Always exclude default auth-cache subpaths, regardless of includes.
 	// Evaluated before the includes check so an explicit
 	// `ci.cache.paths: [auth]` cannot re-include it.
-	if isUnderPrefix(rel, defaultExcludedPaths) {
+	if isUnderPrefix(rel, excludes) {
 		return true, pruneAction(isDir)
 	}
 
