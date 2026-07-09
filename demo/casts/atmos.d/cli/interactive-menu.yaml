@@ -17,7 +17,21 @@ commands:
         timeout: 45s
         defaults:
           cast: !include cast-defaults.yaml .cast
-        env: !include cast-defaults.yaml .env.recording
+        # Inlines cast-defaults.yaml's .env.recording, but with
+        # ATMOS_LOGS_LEVEL: Info (default is Warning) — this demo's whole
+        # point is the "validate component" log.Info confirmation, so unlike
+        # other casts it needs Info-level logs to actually show up.
+        env:
+          NO_COLOR: ''
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+          ATMOS_EXPERIMENTAL: silence
+          ATMOS_LOGS_LEVEL: Info
         show:
           labels: false
         output:
@@ -69,21 +83,21 @@ commands:
             key: tab
           - type: pause
             duration: 500ms
-          # Back to the Commands column, scroll down to "describe component".
+          # Back to the Commands column, scroll down to "validate component".
           - type: key
             key: left
           - type: pause
             duration: 400ms
           - type: key
             key: down
-            repeat: 12
+            repeat: 11
             interval: 90ms
           - type: pause
             duration: 600ms
           - type: key
             key: enter
           - type: wait
-            text: "Stockholm"
+            text: "Validated"
             timeout: 10s
           - type: pause
             duration: 800ms
@@ -127,8 +141,8 @@ commands:
               "Components",
               "staging",
               "station",
-              "describe component",
-              "location: Stockholm",
+              "validate component",
+              "Validated successfully",
           ]:
               if needle not in plain:
                   raise SystemExit(f"interactive-menu cast missing {needle!r}")

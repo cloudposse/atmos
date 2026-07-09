@@ -21,40 +21,39 @@ type Props = {
 };
 
 /**
- * A small, hand-picked grid of example casts, mirroring the "Featured"
+ * A small, hand-picked list of example casts, mirroring the "Featured"
  * section on /examples so a docs page can showcase a taste of Atmos without
  * pulling in the full file-browser plugin.
  */
 export default function FeaturedCasts({ casts }: Props): JSX.Element {
   return (
-    <div className={styles.grid}>
+    <div className={styles.list}>
       {casts.map((cast) => (
-        <article key={cast.example} className={styles.card}>
-          <Link
-            to={`/examples/${cast.example}`}
-            className={styles.cardCastLink}
-            aria-label={`Open the ${cast.title} example`}
-          >
-            <div className={styles.cardCast}>
-              <CastPlayer
-                src={cast.castFile}
-                title={cast.castTitle}
-                chrome
-                thumbnail
-                controls={false}
-                scrubber={false}
-                showCommand={false}
-              />
-            </div>
-          </Link>
-          <div className={styles.cardBody}>
-            <h3 className={styles.cardTitle}>{cast.title}</h3>
-            <p className={styles.cardDescription}>{cast.description}</p>
-            <Link to={`/examples/${cast.example}`} className={styles.cardCta}>
-              Open example
-            </Link>
+        <Link
+          key={cast.example}
+          to={`/examples/${cast.example}`}
+          className={styles.row}
+          aria-label={`Open the ${cast.title} example`}
+        >
+          <div className={styles.rowCast}>
+            <CastPlayer
+              src={cast.castFile}
+              title={cast.castTitle}
+              chrome
+              thumbnail
+              controls={false}
+              scrubber={false}
+              showCommand={false}
+            />
           </div>
-        </article>
+          <div className={styles.rowBody}>
+            <h3 className={styles.rowTitle}>{cast.title}</h3>
+            <p className={styles.rowDescription}>{cast.description}</p>
+          </div>
+          <span className={styles.rowArrow} aria-hidden="true">
+            →
+          </span>
+        </Link>
       ))}
     </div>
   );

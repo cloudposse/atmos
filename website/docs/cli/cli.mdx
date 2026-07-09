@@ -47,7 +47,7 @@ To quickly check the Atmos version, use `atmos --version` or `atmos version`. Se
 
 To get an idea of what it looks like, just [try our quickstart](/quick-start/) and run the [`atmos`](/cli) command to start an interactive UI in the
 terminal. The recording below browses stacks and components, filters the list, flips between Mode 1 and Mode 2 with `Tab`, and finally presses `Enter` to
-execute `describe component`.
+execute `validate component`.
 
 <CastPlayer src="/casts/cli/interactive-menu.cast" title="atmos (interactive)" chrome controls scrubber />
 
@@ -77,26 +77,5 @@ examples](/examples) for more.
     description: 'Declare, encrypt, and read secrets with a SOPS backend (age encryption) — no cloud credentials required.',
     castFile: '/casts/examples/sops-secrets/secret-lifecycle.cast',
     castTitle: 'atmos sops secrets lifecycle',
-  },
-  {
-    example: 'toolchain',
-    title: 'Toolchain',
-    description: 'Define the tool versions your stacks depend on — registries, aliases, and pinned versions Atmos installs on demand.',
-    castFile: '/casts/examples/toolchain/demo-convert.cast',
-    castTitle: 'atmos toolchain demo',
-  },
-  {
-    example: 'custom-commands',
-    title: 'Custom Commands',
-    description: 'Extend the Atmos CLI with custom commands defined in atmos.yaml — arguments, flags, nested subcommands, and shell steps.',
-    castFile: '/casts/examples/custom-commands/hello-greet.cast',
-    castTitle: 'atmos custom commands',
-  },
-  {
-    example: 'emulator-aws',
-    title: 'AWS Emulator',
-    description: 'Declare the AWS emulator as a stack component and Atmos starts, binds, and stops it around your Terraform runs.',
-    castFile: '/casts/examples/emulator-aws/lifecycle.cast',
-    castTitle: 'atmos emulator aws lifecycle',
   },
 ]} />

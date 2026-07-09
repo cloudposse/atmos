@@ -7,6 +7,7 @@ import {
   parseCast,
   resolvePlaybackSpeed,
 } from "./playback.mjs";
+import { CURSOR_MARKER, replayTerminal } from "./terminal.mjs";
 
 type CastEvent = [number, string, string];
 
@@ -322,8 +323,6 @@ type Segment = {
   cursor?: boolean;
 };
 
-const CURSOR_MARKER = "\uE000";
-
 const ANSI_COLORS: Record<number, string> = {
   30: "#111111",
   31: "#ff5f57",
@@ -616,163 +615,6 @@ function stripAnsi(input: string) {
 
 function normalizeTerminalText(input: string) {
   return input.replace(/\r\n/g, "\n");
-}
-
-function replayTerminal(input: string) {
-  const lines = [""];
-  let row = 0;
-  let carriageReturnPending = false;
-  let cursorVisible = false;
-
-  const currentLine = () => lines[row] ?? "";
-  const setCurrentLine = (line: string) => {
-    lines[row] = line;
-  };
-  const removeCursor = () => {
-    setCurrentLine(currentLine().split(CURSOR_MARKER).join(""));
-  };
-  const syncCursor = () => {
-    removeCursor();
-    if (cursorVisible) {
-      setCurrentLine(currentLine() + CURSOR_MARKER);
-    }
-  };
-  const append = (text: string) => {
-    if (carriageReturnPending) {
-      clearLine();
-      carriageReturnPending = false;
-    }
-    removeCursor();
-    setCurrentLine(currentLine() + text);
-    if (cursorVisible) {
-      setCurrentLine(currentLine() + CURSOR_MARKER);
-    }
-  };
-  const clearLine = () => {
-    setCurrentLine("");
-    if (cursorVisible) {
-      setCurrentLine(CURSOR_MARKER);
-    }
-  };
-  const moveToNextLine = () => {
-    removeCursor();
-    row += 1;
-    if (lines[row] === undefined) {
-      lines[row] = "";
-    }
-    syncCursor();
-  };
-
-  for (let index = 0; index < input.length; ) {
-    const char = input[index];
-
-    if (char === "\x1b") {
-      const parsed = parseEscape(input, index);
-      if (!parsed) {
-        index += 1;
-        continue;
-      }
-      if (parsed.kind === "sgr") {
-        append(parsed.sequence);
-      } else if (parsed.kind === "clearLine") {
-        clearLine();
-      } else if (parsed.kind === "cursorShow") {
-        cursorVisible = true;
-        syncCursor();
-      } else if (parsed.kind === "cursorHide") {
-        cursorVisible = false;
-        removeCursor();
-      }
-      index = parsed.nextIndex;
-      continue;
-    }
-
-    if (char === "\r") {
-      carriageReturnPending = true;
-      index += 1;
-      continue;
-    }
-
-    if (char === "\n") {
-      carriageReturnPending = false;
-      moveToNextLine();
-      index += 1;
-      continue;
-    }
-
-    if (char === "\b") {
-      removeCursor();
-      setCurrentLine(removeLastVisibleChar(currentLine()));
-      syncCursor();
-      index += 1;
-      continue;
-    }
-
-    append(char);
-    index += 1;
-  }
-
-  return lines.join("\n");
-}
-
-type ParsedEscape = {
-  kind: "sgr" | "clearLine" | "cursorShow" | "cursorHide" | "ignore";
-  sequence: string;
-  nextIndex: number;
-};
-
-function parseEscape(input: string, start: number): ParsedEscape | null {
-  const next = input[start + 1];
-  if (next === "]") {
-    const bel = input.indexOf("\x07", start + 2);
-    const st = input.indexOf("\x1b\\", start + 2);
-    const end = bel === -1 ? st : st === -1 ? bel : Math.min(bel, st);
-    if (end === -1) {
-      return null;
-    }
-    return {
-      kind: "ignore",
-      sequence: input.slice(start, end + (end === st ? 2 : 1)),
-      nextIndex: end + (end === st ? 2 : 1),
-    };
-  }
-
-  if (next !== "[") {
-    return {
-      kind: "ignore",
-      sequence: input.slice(start, start + 2),
-      nextIndex: start + 2,
-    };
-  }
-
-  const match = /\x1b\[[0-?]*[ -/]*[@-~]/.exec(input.slice(start));
-  if (!match || match.index !== 0) {
-    return null;
-  }
-
-  const sequence = match[0];
-  const final = sequence.at(-1);
-  if (final === "m") {
-    return { kind: "sgr", sequence, nextIndex: start + sequence.length };
-  }
-  if (sequence === "\x1b[?25h") {
-    return { kind: "cursorShow", sequence, nextIndex: start + sequence.length };
-  }
-  if (sequence === "\x1b[?25l") {
-    return { kind: "cursorHide", sequence, nextIndex: start + sequence.length };
-  }
-  if (final === "K") {
-    return { kind: "clearLine", sequence, nextIndex: start + sequence.length };
-  }
-  return { kind: "ignore", sequence, nextIndex: start + sequence.length };
-}
-
-function removeLastVisibleChar(input: string) {
-  const match = /\x1b\[[0-?]*[ -/]*[@-~]$/.exec(input);
-  if (match) {
-    return input.slice(0, match.index);
-  }
-  return input.slice(0, -1);
 }
 
 function formatTime(seconds: number) {
