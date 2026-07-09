@@ -17,6 +17,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	github "github.com/cloudposse/atmos/pkg/github"
+	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
@@ -352,7 +354,15 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 }
 
 func (i *Installer) verifyDownloadedAsset(tool *registry.Tool, version, assetURL, assetPath string) (*verification.Result, error) {
-	verifier := verification.Verifier{}
+	// Attach a GitHub token when available so checksum/signature/SLSA sidecar fetches from
+	// GitHub release assets (verification.HTTPDownloader's default is an unauthenticated
+	// http.DefaultClient) get the same rate-limit headroom as the asset download itself
+	// (downloadToCacheOnce, a few functions away in this package, already does this).
+	verifier := verification.Verifier{
+		Downloader: verification.HTTPDownloader{
+			Client: httpClient.NewGitHubAuthenticatedHTTPClient(github.GetGitHubToken()),
+		},
+	}
 	result, err := verifier.Verify(context.Background(), verification.Request{
 		Tool:      tool,
 		Version:   version,

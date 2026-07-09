@@ -138,6 +138,36 @@ func (m *ThreeWayMerger) resolveConflictBlock(conflictLines []string, fileName s
 	return resolved
 }
 
+// mapKeyCollisionPanic carries a deliberate, expected error through Go's panic/recover
+// mechanism, raised by normalizeMapReflect when two distinct original keys stringify to the
+// same string but cannot be safely merged (see normalizeMapReflect for details). The
+// deepCopyValue function has ~20 call sites across this package's hot merge path, so threading
+// an error return through all of them would add a return-value check to every recursive step;
+// recover-and-convert at this package's two independent entry points (DeepCopyMap,
+// deepMergeNativeTopLevel) achieves the same "abort the whole merge on ambiguous data" outcome
+// without that cost. No value of this type is ever allowed to escape the merge package — see
+// recoveredMapKeyCollision.
+type mapKeyCollisionPanic struct {
+	err error
+}
+
+// recoveredMapKeyCollision inspects a recover()'d panic value and, if it is a
+// mapKeyCollisionPanic raised by normalizeMapReflect, returns its wrapped error. Returns nil
+// for a nil input (no panic occurred). Any other panic value is re-panicked immediately: this
+// must never mask a genuine bug (e.g. a nil-map SetMapIndex panic) as a merge-collision error,
+// and genuine bugs should still reach Atmos's global panic handler (pkg/panics) with their real
+// value and stack trace.
+func recoveredMapKeyCollision(r any) error {
+	if r == nil {
+		return nil
+	}
+	collision, ok := r.(mapKeyCollisionPanic)
+	if !ok {
+		panic(r)
+	}
+	return collision.err
+}
+
 // DeepCopyMap performs a deep copy of a map optimized for map[string]any structures.
 // This custom implementation avoids reflection overhead for common cases (maps, slices, primitives)
 // and uses reflection-based normalization for rare complex types (typed slices/maps).
@@ -145,15 +175,21 @@ func (m *ThreeWayMerger) resolveConflictBlock(conflictLines []string, fileName s
 // generic reflection-based copying. The data is already in Go map format with custom tags already processed,
 // so structural copying is needed to ensure accumulated merge results are independent of their inputs.
 // Uses properly-sized allocations to reduce GC pressure during high-volume operations (118k+ calls per run).
-func DeepCopyMap(m map[string]any) (map[string]any, error) {
+func DeepCopyMap(m map[string]any) (result map[string]any, err error) {
 	defer perf.Track(nil, "merge.DeepCopyMap")()
+	defer func() {
+		if e := recoveredMapKeyCollision(recover()); e != nil {
+			result = nil
+			err = e
+		}
+	}()
 
 	if m == nil {
 		return nil, nil
 	}
 
 	// Allocate map with exact size to avoid resizing.
-	result := make(map[string]any, len(m))
+	result = make(map[string]any, len(m))
 
 	// Copy all key-value pairs.
 	for k, v := range m {
@@ -320,30 +356,68 @@ func copyMapValue(value reflect.Value, elemType reflect.Type) reflect.Value {
 	return value
 }
 
-// normalizeMapReflect converts a typed map to map[string]any (for string keys) or deep copies it (for non-string keys).
+// normalizeMapReflect converts a typed map to map[string]any (for string or interface{} keys)
+// or deep copies it (for other concrete non-string keys).
 func normalizeMapReflect(rv reflect.Value) any {
 	keyKind := rv.Type().Key().Kind()
 
 	// Empty map - return properly typed empty map.
 	if rv.Len() == 0 {
-		if keyKind != reflect.String {
+		if keyKind != reflect.String && keyKind != reflect.Interface {
 			return reflect.MakeMapWithSize(rv.Type(), 0).Interface()
 		}
 		return make(map[string]any, 0)
 	}
 
 	iter := rv.MapRange()
-	_ = iter // We'll iterate below using Next().
 
-	// Non-string keys: copy to same type, ensuring value type matches Elem().
-	if keyKind != reflect.String {
+	// Concrete non-string, non-interface keys (e.g. map[int]schema.Provider): copy to the same
+	// type, preserving the key type — there is no map[string]any shape to merge into.
+	if keyKind != reflect.String && keyKind != reflect.Interface {
 		return copyNonStringKeyMap(rv, iter)
 	}
 
-	// String keys: convert to map[string]any.
+	// String keys, or interface{} keys (e.g. yaml.v3 decodes a mapping with an unquoted
+	// non-string key like `1:` as map[interface{}]interface{}, not map[string]interface{}):
+	// stringify every key so this collapses onto the same map[string]any shape as an
+	// all-string-keyed sibling map, letting deepMergeNative's map[string]any fast path recurse
+	// into it instead of treating it as an opaque leaf that gets replaced wholesale.
+	//
+	// Distinct original keys can still stringify to the same string (e.g. YAML `1` and `1.0`,
+	// or `true` and a differently-quoted equivalent) — this is the same collision risk any
+	// YAML-to-map[string]any normalization has. Map[interface{}]interface{} iteration order is
+	// unspecified, so a plain overwrite would silently and non-deterministically drop one
+	// entry's data. If both colliding values are maps, merge them instead of dropping either.
+	// Otherwise the collision is genuinely ambiguous — there is no safe way to combine two
+	// scalars (or a scalar and a map) without picking one arbitrarily — so abort the merge via
+	// mapKeyCollisionPanic rather than silently dropping data; DeepCopyMap and
+	// deepMergeNativeTopLevel recover it into a normal returned error.
 	result := make(map[string]any, rv.Len())
 	for iter.Next() {
-		result[iter.Key().String()] = deepCopyValue(iter.Value().Interface())
+		key := iter.Key()
+		var keyStr string
+		if key.Kind() == reflect.String {
+			keyStr = key.String()
+		} else {
+			keyStr = fmt.Sprintf("%v", key.Interface())
+		}
+		normalizedVal := deepCopyValue(iter.Value().Interface())
+		if existing, collided := result[keyStr]; collided {
+			existingMap, existingIsMap := existing.(map[string]any)
+			newMap, newIsMap := normalizedVal.(map[string]any)
+			if existingIsMap && newIsMap {
+				_ = deepMergeNative(existingMap, newMap, false, false)
+				continue
+			}
+			panic(mapKeyCollisionPanic{
+				err: errUtils.Build(errUtils.ErrMergeKeyCollision).
+					WithExplanationf("multiple keys normalize to %q but are not both maps, so they cannot be merged safely", keyStr).
+					WithHint("quote ambiguous scalar keys (e.g. \"1\" instead of 1, or \"1.0\" instead of 1.0) so they don't collide after normalization").
+					WithContext("key", keyStr).
+					Err(),
+			})
+		}
+		result[keyStr] = normalizedVal
 	}
 	return result
 }
@@ -494,7 +568,7 @@ func MergeWithOptions(
 		// the new items so deepMergeNative's append adds them without duplication; otherwise
 		// it returns existing+new concatenated so the override replaces with the appended list.
 		current = processAppendTags(current, merged, appendSlice)
-		if err := deepMergeNative(merged, current, appendSlice, sliceDeepCopy); err != nil {
+		if err := deepMergeNativeTopLevel(merged, current, appendSlice, sliceDeepCopy); err != nil {
 			return nil, fmt.Errorf("%w: %w", errUtils.ErrMerge, err)
 		}
 	}
