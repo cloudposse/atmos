@@ -1,7 +1,16 @@
 base_path: "./"
 
+toolchain:
+  install_path: .tools
+  registries:
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
 components:
   terraform:
+    command: tofu
     base_path: "components/terraform"
     apply_auto_approve: false
     deploy_run_init: true

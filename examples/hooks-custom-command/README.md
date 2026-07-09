@@ -1,3 +1,11 @@
+---
+title: Custom Command Hook
+tags: [Hooks]
+cast:
+  file: /casts/examples/hooks-custom-command/hook-config.cast
+  title: atmos custom command hook
+---
+
 # `hooks-custom-command`
 
 Demonstrates the generic **`kind: command`** hook by wiring a custom

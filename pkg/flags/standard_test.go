@@ -1318,6 +1318,39 @@ func TestStandardFlagParser_BindFlagsToViper_WithPrefix(t *testing.T) {
 	})
 }
 
+func TestStandardFlagParser_BindFlagsToViper_BindsRegistryPersistentFlagOnChildCommand(t *testing.T) {
+	for _, tt := range []struct {
+		name              string
+		addChildBeforeReg bool
+	}{
+		{name: "child added before persistent flags", addChildBeforeReg: true},
+		{name: "child added after persistent flags", addChildBeforeReg: false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			parser := NewStandardFlagParser(
+				WithStringFlag("stack", "s", "", "Stack name"),
+				WithEnvVars("stack", "ATMOS_STACK"),
+			)
+
+			parent := &cobra.Command{Use: "parent"}
+			child := &cobra.Command{Use: "child"}
+			if tt.addChildBeforeReg {
+				parent.AddCommand(child)
+			}
+			parser.RegisterPersistentFlags(parent)
+			if !tt.addChildBeforeReg {
+				parent.AddCommand(child)
+			}
+			require.NoError(t, parser.BindToViper(v))
+			require.NoError(t, parent.PersistentFlags().Set("stack", "local"))
+
+			require.NoError(t, parser.BindFlagsToViper(child, v))
+			assert.Equal(t, "local", v.GetString("stack"))
+		})
+	}
+}
+
 // TestStringFlag_GetValidValues tests the GetValidValues method.
 func TestStringFlag_GetValidValues(t *testing.T) {
 	t.Run("returns valid values when set", func(t *testing.T) {

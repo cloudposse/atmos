@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: dependencies
 description: Use this command to visualize the dependency relationships between Atmos components as a tree.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
@@ -13,7 +13,7 @@ import Intro from '@site/src/components/Intro'
 Use this command to visualize the dependency relationships between Atmos components across stacks. By default it renders a tree showing both directions for every component &mdash; what each component depends on, and what depends on it. Dependencies are read from both `dependencies.components` (preferred) and the legacy `settings.depends_on`, so the output stays consistent with [`atmos describe dependents`](/cli/commands/describe/dependents).
 </Intro>
 
-<Screengrab title="atmos list dependencies --help" slug="atmos-list-dependencies--help" />
+<CastPlayer title="atmos list dependencies --help" src="/casts/screengrabs/atmos-list-dependencies--help.cast" static chrome />
 
 ## Usage
 

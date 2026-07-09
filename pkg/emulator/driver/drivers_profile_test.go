@@ -85,6 +85,13 @@ func TestBuiltinDrivers_NameTargetDefaults(t *testing.T) {
 			image:  registryImage,
 			ports:  []int{registryPort},
 		},
+		{
+			name:    "mockoon/1password-connect",
+			target:  emu.TargetOnePassword,
+			image:   mockoonImage,
+			ports:   []int{mockoonPort},
+			command: []string{"--data", mockoonOnePasswordDataFile, "--port", "3000", "--hostname", "0.0.0.0", "--disable-log-to-file"},
+		},
 	}
 
 	for _, tc := range cases {

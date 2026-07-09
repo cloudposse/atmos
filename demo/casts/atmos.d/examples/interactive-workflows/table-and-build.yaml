@@ -1,0 +1,105 @@
+commands:
+  - name: casts generate examples interactive-workflows table-and-build
+    description: Regenerate the Interactive Workflows example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: table-and-build
+        working_directory: "../../.context/cast-fixtures/interactive-workflows"
+        title: "Interactive Workflows: choose and confirm"
+        mode: session
+        shell: /bin/sh
+        write_rate: 25ms
+        key_interval: 250ms
+        timeout: 45s
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+        env:
+          NO_COLOR: ''
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+          ATMOS_EXPERIMENTAL: silence
+          ATMOS_LOGS_LEVEL: Warning
+          PS1: '$ '
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/interactive-workflows/table-and-build.cast"
+        steps:
+          - type: pause
+            duration: 500ms
+          - type: write
+            text: "atmos workflow deploy -f interactive"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Select the target environment"
+            timeout: 10s
+          - type: key
+            key: down
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: up
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: enter
+          - type: pause
+            duration: 500ms
+          - type: pause
+            duration: 500ms
+          - type: write
+            text: "y"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Enter a deployment message"
+            timeout: 10s
+          - type: key
+            key: enter
+          - type: wait
+            text: "Deployment configured"
+            timeout: 10s
+      - type: shell
+        name: validate
+        command: atmos casts validate examples interactive-workflows table-and-build
+  - name: casts validate examples interactive-workflows table-and-build
+    description: Validate the Interactive Workflows example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/interactive-workflows/table-and-build.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "atmos workflow deploy -f interactive",
+              "Deployment Wizard",
+              "Select the target environment",
+              "dev",
+              "You selected: dev",
+              "Are you absolutely sure?",
+              "Enter a deployment message",
+              "Deployment configured",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"interactive-workflows cast missing {needle!r}")
+          if "enter a number" in plain.lower():
+              raise SystemExit("interactive-workflows cast fell back to numeric selector")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

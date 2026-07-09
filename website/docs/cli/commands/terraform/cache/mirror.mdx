@@ -6,13 +6,13 @@ id: mirror
 description: Pre-seed the registry cache with providers for multiple platforms.
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Eagerly mirror the providers required by one or more components into the cache for multiple platforms, using `terraform/tofu providers mirror`. This is the eager counterpart to the lazy proxy: where the proxy caches only the platform Terraform requests at run time, `cache mirror` pre-fetches every configured platform — for mixed CI/developer fleets and air-gapped reproducible builds.
 </Intro>
 
-<Screengrab title="atmos terraform cache mirror --help" slug="atmos-terraform-cache-mirror--help" />
+<CastPlayer title="atmos terraform cache mirror --help" src="/casts/screengrabs/atmos-terraform-cache-mirror--help.cast" static chrome />
 
 The mirror writes the canonical `filesystem_mirror` layout the proxy already serves, so the same cache directory works three ways: lazily (proxy), eagerly (mirror), and offline (`filesystem_mirror`).
 

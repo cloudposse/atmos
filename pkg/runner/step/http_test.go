@@ -483,6 +483,36 @@ func TestHTTPHandler_WebhookAlias(t *testing.T) {
 	assert.Equal(t, "ok", result.Value)
 }
 
+func TestHTTPHandler_SanitizeHTTPDestination(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{
+			name: "drops path query and userinfo",
+			raw:  "https://token@example.com/hook?secret=x",
+			want: "example.com",
+		},
+		{
+			name: "keeps port",
+			raw:  "http://127.0.0.1:18765/hook",
+			want: "127.0.0.1:18765",
+		},
+		{
+			name: "invalid url falls back",
+			raw:  "://not-a-url",
+			want: "://not-a-url",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, sanitizeHTTPDestination(tt.raw))
+		})
+	}
+}
+
 // badTemplate is a template string that fails to parse, used to exercise
 // template-resolution error paths.
 const badTemplate = "{{ range .steps }}{{ . }}"

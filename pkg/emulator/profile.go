@@ -16,6 +16,8 @@ type Endpoint struct {
 	Host string
 	// Ports maps a container port to its live host port.
 	Ports map[int]int
+	// NetworkIPs maps container network names to the container IP on that network.
+	NetworkIPs map[string]string
 	// Region is the cloud region (aws/gcp/azure), when configured.
 	Region string
 	// Project is the GCP project, when configured.
@@ -48,6 +50,26 @@ func (e *Endpoint) PrimaryHostPort() (int, bool) {
 	}
 	sort.Ints(containerPorts)
 	return e.Ports[containerPorts[0]], true
+}
+
+// NetworkIP returns the first container-network IP in stable network-name order.
+func (e *Endpoint) NetworkIP() (string, bool) {
+	defer perf.Track(nil, "emulator.Endpoint.NetworkIP")()
+
+	if len(e.NetworkIPs) == 0 {
+		return "", false
+	}
+	networks := make([]string, 0, len(e.NetworkIPs))
+	for network := range e.NetworkIPs {
+		networks = append(networks, network)
+	}
+	sort.Strings(networks)
+	for _, network := range networks {
+		if ip := e.NetworkIPs[network]; ip != "" {
+			return ip, true
+		}
+	}
+	return "", false
 }
 
 // loopbackHostToIPv4 rewrites a loopback or wildcard host to the IPv4 loopback

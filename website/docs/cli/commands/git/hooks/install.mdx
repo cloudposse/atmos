@@ -6,14 +6,14 @@ id: install
 slug: /cli/commands/git/hooks/install
 description: Install local .git/hooks shims that delegate to atmos git hooks run.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
 Write local `.git/hooks/<hook>` shim scripts for the hooks configured under [`git.hooks`](/cli/configuration/git#local-git-hooks). Each shim is a one-liner that delegates to `atmos git hooks run`, keeping all hook logic in `atmos.yaml` where it is versioned, shared, and executed through Atmos workflows and custom commands.
 </Intro>
 
-<Screengrab title="atmos git hooks install --help" slug="atmos-git-hooks-install--help" />
+<CastPlayer title="atmos git hooks install --help" src="/casts/screengrabs/atmos-git-hooks-install--help.cast" static chrome />
 
 ## Usage
 

@@ -1,3 +1,11 @@
+---
+title: Kustomize
+tags: [Kubernetes]
+cast:
+  file: /casts/examples/kustomize/lifecycle.cast
+  title: atmos kustomize lifecycle
+---
+
 # Example: Kustomize Components
 
 Render and deploy Kustomize overlays with Atmos-native Kubernetes components against a local Kubernetes emulator (k3s).
