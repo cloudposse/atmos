@@ -1,6 +1,9 @@
 package function
 
-import fntag "github.com/cloudposse/atmos/pkg/function/tag"
+import (
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
 
 // Tag constants for Atmos configuration functions.
 // These are compatibility aliases; pkg/function/tag is the central tag catalog.
@@ -100,6 +103,9 @@ const (
 
 	// TagEmulator resolves a value from a local emulator.
 	TagEmulator = fntag.Emulator
+
+	// TagVersion resolves a locked version from the Atmos Version Tracker.
+	TagVersion = fntag.Version
 )
 
 // YAMLTagPrefix is the prefix used for YAML custom tags.
@@ -128,10 +134,14 @@ func FromYAMLTag(tag string) string {
 // AllYAMLTags returns all registered tag names with the YAML prefix (e.g., "!env", "!exec").
 // This is useful for error messages that need to show supported YAML tags.
 func AllYAMLTags() []string {
+	defer perf.Track(nil, "function.AllYAMLTags")()
+
 	return fntag.AllYAML()
 }
 
 // IsValidYAMLTag checks if a YAML tag is registered. The tag should include the YAML prefix.
 func IsValidYAMLTag(tag string) bool {
+	defer perf.Track(nil, "function.IsValidYAMLTag")()
+
 	return fntag.IsValidYAML(tag)
 }

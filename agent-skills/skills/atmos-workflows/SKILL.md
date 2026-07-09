@@ -1,6 +1,6 @@
 ---
 name: atmos-workflows
-description: "Workflow automation: multi-step workflows, Go template support, cross-component orchestration"
+description: "Workflow automation: multi-step workflows using the shared Atmos step DSL, Go template support, cross-component orchestration"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -9,15 +9,18 @@ metadata:
 # Atmos Workflows
 
 Atmos workflows combine multiple commands into executable units of work. They allow you to define
-multi-step sequences of Atmos commands and shell scripts, run them in order, and coordinate
-operations across multiple components and stacks.
+multi-step sequences of shared Atmos steps, run them in order, and coordinate operations across
+multiple components and stacks.
+
+When a task is about step fields or step types, also load `atmos-steps`. Workflows share the same
+step DSL with custom commands, hooks (`kind: step`), and cast recordings.
 
 ## What Workflows Are
 
-A workflow is a named sequence of steps defined in a YAML file. Each step is either:
-
-- An **Atmos command** (type `atmos`, the default) -- any Atmos CLI command without the `atmos` prefix
-- A **Shell command** (type `shell`) -- any shell script or command
+A workflow is a named sequence of steps defined in a YAML file. Workflow command steps default to
+`type: atmos`, but workflows can use the full shared step library: command steps, scripts,
+interactive prompts, output rendering, HTTP calls, parallel/matrix orchestration, workdir
+provisioning, casts, and more.
 
 Workflows solve the problem of needing to run multiple Terraform operations in a specific order,
 such as provisioning a VPC before an EKS cluster, or deploying the same component across multiple
@@ -105,7 +108,9 @@ workflows:
 
 ### Step Types
 
-**Atmos steps** (default type, `type: atmos` is implicit):
+Use `atmos-steps` as the canonical skill for step fields and step types. The most common workflow
+step is an Atmos command. The `atmos` prefix is automatically prepended, so write commands as you
+would after `atmos` on the command line:
 
 ```yaml
 steps:
@@ -114,10 +119,7 @@ steps:
   - command: terraform deploy eks/cluster
 ```
 
-The `atmos` prefix is automatically prepended. Write commands as you would after `atmos` on the
-command line.
-
-**Shell steps** (require `type: shell`):
+Use `type: shell` only when the step genuinely needs shell behavior:
 
 ```yaml
 steps:
@@ -130,7 +132,9 @@ steps:
     type: shell
 ```
 
-Shell commands can be any simple or complex script. Use YAML multiline strings for complex scripts.
+For inline scripts, prefer `type: script` with `interpreter` and `script` instead of shell heredocs.
+For paths, environment, and quiet setup, prefer `working_directory`, `env`, and `output` fields
+instead of `cd`, inline exports, and pipe redirection.
 
 ### Retry Configuration
 
@@ -429,8 +433,8 @@ atmos describe workflows
 5. **Order steps by dependency.** List steps in dependency order (VPC before EKS, database before
    application) since steps execute sequentially.
 
-6. **Use shell steps for verification.** Insert shell steps between Atmos commands to verify
-   infrastructure state before proceeding.
+6. **Use typed steps for verification.** Use `atmos`, `script`, `http`, `require`, or `shell` steps
+   as appropriate. Do not default to shell when a native step type or field expresses the intent.
 
 7. **Use retry for flaky operations.** Configure `retry` for steps that may fail transiently,
    such as cloud API calls that hit rate limits.

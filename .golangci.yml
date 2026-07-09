@@ -20,6 +20,11 @@
 version: "2"
 run:
   tests: true
+  # golangci-lint takes a machine-global single-instance lock. Parallel
+  # worktree sessions (and pre-commit hooks racing manual runs) otherwise fail
+  # with "parallel golangci-lint is running"; serializing makes the second
+  # instance wait instead.
+  allow-serial-runners: true
 linters:
   enable:
     - bodyclose

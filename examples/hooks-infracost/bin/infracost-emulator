@@ -1,0 +1,48 @@
+#!/usr/bin/env sh
+set -eu
+
+out_file="${ATMOS_OUTPUT_FILE:-}"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --out-file)
+      shift
+      out_file="${1:-}"
+      ;;
+  esac
+  shift || true
+done
+
+if [ -z "$out_file" ]; then
+  echo "missing --out-file or ATMOS_OUTPUT_FILE" >&2
+  exit 2
+fi
+
+mkdir -p "$(dirname "$out_file")"
+cat > "$out_file" <<'JSON'
+{
+  "currency": "USD",
+  "pastTotalMonthlyCost": "0",
+  "totalMonthlyCost": "36.15",
+  "diffTotalMonthlyCost": "36.15",
+  "projects": [
+    {
+      "name": "nat-gateway",
+      "breakdown": {
+        "totalMonthlyCost": "36.15",
+        "resources": [
+          {
+            "name": "aws_nat_gateway.main",
+            "resourceType": "aws_nat_gateway",
+            "monthlyCost": "32.50"
+          },
+          {
+            "name": "aws_eip.nat",
+            "resourceType": "aws_eip",
+            "monthlyCost": "3.65"
+          }
+        ]
+      }
+    }
+  ]
+}
+JSON

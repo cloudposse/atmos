@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	"github.com/cloudposse/atmos/pkg/ui/spinner/fps"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -301,6 +302,10 @@ func executeMirrorModel(targets []Target, args []string, cacheSetup *tfcache.Set
 	if !isTTY {
 		opts = append(opts, tea.WithoutRenderer(), tea.WithInput(nil))
 		log.Debug("No TTY detected. Falling back to basic output for mirror TUI.")
+	} else if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
 	}
 	p := tea.NewProgram(model, opts...)
 

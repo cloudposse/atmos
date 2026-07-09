@@ -1,0 +1,101 @@
+commands:
+  - name: casts generate examples demo-helmfile lifecycle
+    description: Regenerate the Helmfile example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: lifecycle
+        working_directory: "../../.context/cast-fixtures/demo-helmfile"
+        title: "Helmfile: deploy to a local emulator"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/demo-helmfile/lifecycle.cast"
+        steps:
+          - type: simulate
+            text: "# bring up k3s, apply the Helmfile release, then tear it down"
+          - type: simulate
+            text: &validate atmos validate stacks
+          - type: shell
+            name: validate
+            duration: 650ms
+            interval: 750ms
+            command: *validate
+          - type: simulate
+            text: &up atmos emulator up kubernetes -s dev
+          - type: shell
+            name: up
+            duration: 650ms
+            interval: 750ms
+            command: *up
+          - type: simulate
+            text: &apply atmos helmfile apply demo -s dev
+          - type: shell
+            name: apply
+            duration: 650ms
+            interval: 750ms
+            command: *apply
+          - type: simulate
+            text: &ps atmos emulator ps kubernetes -s dev
+          - type: shell
+            name: ps
+            duration: 650ms
+            interval: 750ms
+            command: *ps
+          - type: simulate
+            text: &destroy atmos helmfile destroy demo -s dev
+          - type: shell
+            name: destroy
+            duration: 650ms
+            interval: 750ms
+            command: *destroy
+          - type: simulate
+            text: &down atmos emulator down kubernetes -s dev
+          - type: shell
+            name: down
+            duration: 650ms
+            interval: 750ms
+            command: *down
+      - type: shell
+        name: validate
+        command: atmos casts validate examples demo-helmfile lifecycle
+  - name: casts validate examples demo-helmfile lifecycle
+    description: Validate the Helmfile example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/demo-helmfile/lifecycle.cast")
+          plain = strip_ansi(text).lower()
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "atmos validate stacks",
+              "atmos emulator up kubernetes -s dev",
+              "atmos helmfile apply demo -s dev",
+              "atmos emulator ps kubernetes -s dev",
+              "atmos helmfile destroy demo -s dev",
+              "atmos emulator down kubernetes -s dev",
+              "emulator kubernetes is up",
+              "helmfile",
+              "emulator kubernetes is down",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"demo-helmfile cast missing {needle!r}")
+          if "atmos test" in plain:
+              raise SystemExit("demo-helmfile cast must not run atmos test")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

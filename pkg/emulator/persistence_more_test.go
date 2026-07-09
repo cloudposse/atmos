@@ -150,6 +150,21 @@ func TestInstanceDataDir_HonorsEnvSanitizesAndCreates(t *testing.T) {
 	assert.True(t, info.IsDir())
 }
 
+func TestDefaultEmulatorCacheHomeForBindMounts(t *testing.T) {
+	home := filepath.Join(string(filepath.Separator), "Users", "alice")
+	got, ok := defaultEmulatorCacheHomeForBindMounts("darwin", home)
+	require.True(t, ok)
+	assert.Equal(t, filepath.Join(home, "Library", "Caches"), got)
+
+	got, ok = defaultEmulatorCacheHomeForBindMounts("linux", "/home/alice")
+	assert.False(t, ok)
+	assert.Empty(t, got)
+
+	got, ok = defaultEmulatorCacheHomeForBindMounts("darwin", "")
+	assert.False(t, ok)
+	assert.Empty(t, got)
+}
+
 func TestInstanceDataDir_CollisionFreeAcrossInstances(t *testing.T) {
 	t.Setenv(xdg.EnvAtmosXDGCacheHome, t.TempDir())
 

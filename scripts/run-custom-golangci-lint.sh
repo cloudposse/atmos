@@ -42,9 +42,59 @@ if [[ -z "${GOLANGCI_LINT_CACHE:-}" ]]; then
     export GOLANGCI_LINT_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/golangci-lint/checkouts/${checkout_key}"
 fi
 
+args=(
+    run
+    --config=.golangci.yml
+)
+
+if [[ -n "${GOLANGCI_CONCURRENCY:-}" ]]; then
+    args+=(--concurrency="${GOLANGCI_CONCURRENCY}")
+fi
+
 # --allow-serial-runners: within a single checkout, queue concurrent runs around
 # the cache lock (wait) instead of failing fast. Cross-checkout runs already use
 # separate caches and never contend, so this only smooths the same-checkout case
 # (e.g. a manual `make lint` racing a pre-commit). The lock is kept, so the cache
 # is never written by two runners at once.
-./custom-gcl run --allow-serial-runners --new-from-rev=origin/main --config=.golangci.yml
+args+=(--allow-serial-runners)
+
+# --allow-parallel-runners drops the lock entirely (real risk of racing writes to
+# the same cache), so it stays opt-in via GOLANGCI_ALLOW_PARALLEL rather than on
+# by default.
+if [[ "${GOLANGCI_ALLOW_PARALLEL:-0}" != "0" ]]; then
+    args+=(--allow-parallel-runners)
+fi
+
+staged_patch=""
+cleanup() {
+    if [[ -n "${staged_patch}" ]]; then
+        rm -f "${staged_patch}"
+    fi
+}
+trap cleanup EXIT
+
+if git diff --cached --quiet -- '*.go'; then
+    ./custom-gcl "${args[@]}" --new-from-rev="${GOLANGCI_NEW_FROM_REV:-origin/main}"
+else
+    staged_patch="$(mktemp "${TMPDIR:-/tmp}/atmos-golangci-staged.XXXXXX")"
+    git diff --cached --binary -- '*.go' > "${staged_patch}"
+    package_list="$(
+        git diff --cached --name-only --diff-filter=ACMR -- '*.go' |
+            while IFS= read -r file; do
+                dir="$(dirname "${file}")"
+                if [[ "${dir}" == "." ]]; then
+                    printf '.\n'
+                else
+                    printf './%s\n' "${dir}"
+                fi
+            done |
+            sort -u
+    )"
+    packages=()
+    while IFS= read -r package; do
+        if [[ -n "${package}" ]]; then
+            packages+=("${package}")
+        fi
+    done <<< "${package_list}"
+    ./custom-gcl "${args[@]}" --new-from-patch="${staged_patch}" "${packages[@]}"
+fi

@@ -388,6 +388,7 @@ func TestNormalizeURI(t *testing.T) {
 
 func TestIsFileURI(t *testing.T) {
 	assert.True(t, IsFileURI("file:///absolute/path"))
+	assert.True(t, IsFileURI("file:C:/Users/runneradmin/AppData/Local/Temp/source"))
 	assert.False(t, IsFileURI("https://example.com"))
 	assert.False(t, IsFileURI(""))
 }

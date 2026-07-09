@@ -9,7 +9,7 @@ description: Show what would change in the cluster for a stack-configured Kubern
 import Intro from "@site/src/components/Intro";
 import ActionCard from "@site/src/components/ActionCard";
 import PrimaryCTA from "@site/src/components/PrimaryCTA";
-import Screengrab from "@site/src/components/Screengrab";
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
   Check what would change in the cluster before you deploy. `diff` renders the
@@ -17,7 +17,7 @@ import Screengrab from "@site/src/components/Screengrab";
   and reports which objects would be created, changed, or left alone.
 </Intro>
 
-<Screengrab title="atmos kubernetes diff --help" slug="atmos-kubernetes-diff--help" />
+<CastPlayer title="atmos kubernetes diff --help" src="/casts/screengrabs/atmos-kubernetes-diff--help.cast" static chrome />
 
 <ActionCard title="Configure Kubernetes Components">
   `diff` uses the same stack inputs as deployment: `provider`, `paths`,

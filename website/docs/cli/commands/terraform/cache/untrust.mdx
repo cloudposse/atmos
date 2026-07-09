@@ -6,13 +6,13 @@ id: untrust
 description: Remove the registry cache proxy certificate from the OS trust store.
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Remove the registry cache's self-signed certificate from the operating system trust store — the inverse of [`atmos terraform cache trust`](/cli/commands/terraform/cache/trust). Relevant on **macOS and Windows**, where trust is installed in the OS store; on Linux/BSD it is a no-op because no OS trust change was ever made.
 </Intro>
 
-<Screengrab title="atmos terraform cache untrust --help" slug="atmos-terraform-cache-untrust--help" />
+<CastPlayer title="atmos terraform cache untrust --help" src="/casts/screengrabs/atmos-terraform-cache-untrust--help.cast" static chrome />
 
 Use this when you stop using the cache, or before regenerating the certificate, to remove the previously trusted certificate:
 

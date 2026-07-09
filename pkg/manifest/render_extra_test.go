@@ -1,12 +1,15 @@
 package manifest
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const listYAML = `apiVersion: v1
@@ -62,4 +65,40 @@ func TestWriteObjects_DefaultStdout(t *testing.T) {
 
 	// With no Output/OutputDir, the multi-document YAML goes to stdout.
 	require.NoError(t, WriteObjects(objects, RenderOptions{Noun: "Helm"}))
+}
+
+func TestWriteObjects_HighlightsStdoutWhenColorForced(t *testing.T) {
+	objects, err := DecodeObjects([]byte(twoDocYAML))
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Settings.Terminal.ForceColor = true
+	atmosConfig.Settings.Terminal.SyntaxHighlighting.Enabled = true
+
+	output := captureManifestStdout(t, func() {
+		require.NoError(t, WriteObjects(objects, RenderOptions{Noun: "Helm", AtmosConfig: atmosConfig}))
+	})
+
+	require.Contains(t, output, "\x1b[")
+	require.Contains(t, output, "Service")
+}
+
+func captureManifestStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	originalStdout := os.Stdout
+	reader, writer, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = writer
+	t.Cleanup(func() {
+		os.Stdout = originalStdout
+		_ = reader.Close()
+	})
+
+	fn()
+
+	require.NoError(t, writer.Close())
+	output, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	return string(output)
 }

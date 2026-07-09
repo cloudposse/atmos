@@ -77,9 +77,18 @@ func resetMergedConfigFiles() {
 
 // trackMergedConfigFile records a config file path for case-sensitive key extraction.
 func trackMergedConfigFile(path string) {
-	if path != "" {
+	if path != "" && !slices.Contains(mergedConfigFiles, path) {
 		mergedConfigFiles = append(mergedConfigFiles, path)
 	}
+}
+
+// LoadedConfigFiles returns the physical config files merged during the most
+// recent LoadConfig call. Embedded defaults and runtime/env overrides are not
+// included.
+func LoadedConfigFiles() []string {
+	files := make([]string, len(mergedConfigFiles))
+	copy(files, mergedConfigFiles)
+	return files
 }
 
 const (
@@ -611,6 +620,10 @@ func setEnv(v *viper.Viper) {
 	// CI log-group settings (env override for the schema field with no CLI flag).
 	bindEnv(v, "ci.groups.mode", "ATMOS_CI_GROUPS_MODE")
 
+	// Cast recording dimensions (env override for recording pipelines, e.g. docs screengrabs).
+	bindEnv(v, "cast.recording.width", "ATMOS_CAST_RECORDING_WIDTH")
+	bindEnv(v, "cast.recording.height", "ATMOS_CAST_RECORDING_HEIGHT")
+
 	// Profiler settings
 	bindEnv(v, "profiler.enabled", "ATMOS_PROFILER_ENABLED")
 	bindEnv(v, "profiler.host", "ATMOS_PROFILER_HOST")
@@ -651,6 +664,8 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.terminal.speed", 0.0)
 	v.SetDefault("settings.experimental", "warn") // Experimental feature handling: silence, disable, warn, error
 	// Note: force_color is ENV-only (ATMOS_FORCE_COLOR), no config default
+	v.SetDefault("cast.recording.width", 120)
+	v.SetDefault("cast.recording.height", 36)
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 
 	// Atmos Pro defaults
@@ -1250,6 +1265,7 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 	}
 
 	configFilePath := tempViper.ConfigFileUsed()
+	trackMergedConfigFile(configFilePath)
 
 	// Read the config file's content
 	content, err := readConfigFileContent(configFilePath)

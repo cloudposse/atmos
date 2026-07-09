@@ -1,5 +1,11 @@
 {
   "base_path": "./",
+  "cast": {
+    "recording": {
+      "width": 120,
+      "height": 36
+    }
+  },
   "components": {
     "terraform": {
       "base_path": "components/terraform",
@@ -235,7 +241,10 @@
   "default": false,
   "version": {
     "check": {},
-    "constraint": {}
+    "constraint": {},
+    "defaults": {
+      "update": {}
+    }
   },
   "validate": {
     "editorconfig": {}

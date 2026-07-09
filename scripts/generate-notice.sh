@@ -89,7 +89,27 @@ ${REPO_OVERRIDES}
 EOF
 }
 
+apply_google_cloud_go_overrides() {
+    local csv="$1" module version subpath ref url
+    while read -r module version; do
+        [ -n "${module}" ] || continue
+        ref="$(git_ref_from_version "${version}")"
+        subpath="${module#cloud.google.com/go}"
+        subpath="${subpath#/}"
+        if [ -z "${subpath}" ]; then
+            url="https://github.com/googleapis/google-cloud-go/blob/${ref}/LICENSE"
+        else
+            url="https://github.com/googleapis/google-cloud-go/blob/${subpath}/${ref}/${subpath}/LICENSE"
+        fi
+        awk -F',' -v OFS=',' -v mod="${module}" -v newurl="${url}" \
+            '$1==mod{$2=newurl} {print}' "${csv}" > "${csv}.tmp" && mv "${csv}.tmp" "${csv}"
+    done <<EOF
+$(go list -m -f '{{.Path}} {{.Version}}' all | awk '$1=="cloud.google.com/go" || index($1,"cloud.google.com/go/")==1')
+EOF
+}
+
 # Check if go-licenses is installed
+GO_LICENSES_BIN="$(command -v go-licenses || true)"
 if [ -z "${GO_LICENSES_BIN}" ]; then
     echo "Installing go-licenses ${GO_LICENSES_VERSION}..."
     go install "github.com/google/go-licenses@${GO_LICENSES_VERSION}"
@@ -100,17 +120,23 @@ if [ -z "${GO_LICENSES_BIN}" ]; then
     GO_LICENSES_BIN="${GOBIN}/go-licenses"
 fi
 
+if [ ! -x "${GO_LICENSES_BIN}" ]; then
+    echo "go-licenses binary not found at ${GO_LICENSES_BIN}" >&2
+    exit 1
+fi
+
 # Generate license report
 echo "Generating license report..."
 GOOS="${LICENSE_GOOS}" GOARCH="${LICENSE_GOARCH}" CGO_ENABLED="${LICENSE_CGO_ENABLED}" "${GO_LICENSES_BIN}" report . 2>&1 | grep -v "^W" | grep -v "^E" > "${TEMP_DIR}/license-report.csv" || true
 
 # Replace non-deterministic (vanity-path) URLs with deterministic overrides.
 apply_url_overrides "${TEMP_DIR}/license-report.csv"
+apply_google_cloud_go_overrides "${TEMP_DIR}/license-report.csv"
 
 # Count dependencies
 TOTAL_DEPS=$(wc -l < "${TEMP_DIR}/license-report.csv" | tr -d ' ')
-APACHE_DEPS=$(grep -c "Apache-2.0" "${TEMP_DIR}/license-report.csv" || true)
-BSD_DEPS=$(grep -cE "BSD-.*Clause" "${TEMP_DIR}/license-report.csv" || true)
+APACHE_DEPS=$(awk '/Apache-2.0/ {count++} END {print count+0}' "${TEMP_DIR}/license-report.csv")
+BSD_DEPS=$(awk '/BSD-.*Clause/ {count++} END {print count+0}' "${TEMP_DIR}/license-report.csv")
 
 echo "Found ${TOTAL_DEPS} total dependencies"
 echo "  - ${APACHE_DEPS} Apache-2.0 licenses"
@@ -143,7 +169,7 @@ echo "" >> "${NOTICE_FILE}"
 # Add Apache-2.0 dependencies
 grep "Apache-2.0" "${TEMP_DIR}/license-report.csv" | \
     sort | \
-    awk -F',' '{printf "  - %s\n    License: Apache-2.0\n    URL: %s\n\n", $1, $2}' >> "${NOTICE_FILE}"
+    awk -F',' '{printf "  - %s\n    License: Apache-2.0\n    URL: %s\n\n", $1, $2}' >> "${NOTICE_FILE}" || true
 
 # Add BSD section
 cat >> "${NOTICE_FILE}" <<'EOF'
@@ -158,10 +184,10 @@ echo "" >> "${NOTICE_FILE}"
 # Add BSD dependencies
 grep -E "BSD-.*Clause" "${TEMP_DIR}/license-report.csv" | \
     sort | \
-    awk -F',' '{printf "  - %s\n    License: %s\n    URL: %s\n\n", $1, $3, $2}' >> "${NOTICE_FILE}"
+    awk -F',' '{printf "  - %s\n    License: %s\n    URL: %s\n\n", $1, $3, $2}' >> "${NOTICE_FILE}" || true
 
 # Add MPL section if there are any
-MPL_COUNT=$(grep -c "MPL-2.0" "${TEMP_DIR}/license-report.csv" || true)
+MPL_COUNT=$(awk '/MPL-2.0/ {count++} END {print count+0}' "${TEMP_DIR}/license-report.csv")
 if [ "${MPL_COUNT}" -gt 0 ]; then
     cat >> "${NOTICE_FILE}" <<'EOF'
 
@@ -178,7 +204,7 @@ EOF
 fi
 
 # Add MIT section (optional, for completeness)
-MIT_COUNT=$(grep -c ",MIT" "${TEMP_DIR}/license-report.csv" || true)
+MIT_COUNT=$(awk '/,MIT/ {count++} END {print count+0}' "${TEMP_DIR}/license-report.csv")
 if [ "${MIT_COUNT}" -gt 0 ]; then
     cat >> "${NOTICE_FILE}" <<'EOF'
 
@@ -200,7 +226,7 @@ cat >> "${NOTICE_FILE}" <<'EOF'
 ================================================================================
 
 For the complete list of dependencies and their licenses, run:
-  go-licenses report .
+  go-licenses report ./...
 
 To view the full license text for a specific dependency, visit the URL
 listed above or check the dependency's repository.
