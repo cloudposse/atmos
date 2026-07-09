@@ -632,9 +632,9 @@ settings:
   config:
     is_prod: false
   depends_on:
-    1:
+    "1":
       component: test/test-component-override
-    2:
+    "2":
       component: test/test-component
       stage: dev
   integrations:
@@ -871,9 +871,9 @@ sources:
             is_prod: false
     depends_on:
       final_value:
-        1:
+        "1":
           component: test/test-component-override
-        2:
+        "2":
           component: test/test-component
           stage: dev
       name: depends_on

@@ -5,7 +5,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	cp "github.com/otiai10/copy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,27 +57,7 @@ func TestDescribeAffectedWithInclude(t *testing.T) {
 		},
 	}
 
-	// Copy the local repository into a temp dir (this becomes the "remote" base-ref).
-	err = cp.Copy(pathPrefix, tempDir, copyOptions)
-	require.NoError(t, err)
-
-	// Copy the affected stacks (with changed vars) into the temp dir's stacks folder.
-	// This simulates the base-ref having different var values.
-	err = cp.Copy(
-		filepath.Join(stacksPath, "stacks-affected"),
-		filepath.Join(tempDir, basePath, "stacks"),
-		copyOptions,
-	)
-	require.NoError(t, err)
-
-	// Also copy the config directory to the temp dir so !include can resolve files
-	// in the base-ref repo.
-	err = cp.Copy(
-		filepath.Join(stacksPath, "config"),
-		filepath.Join(tempDir, basePath, "config"),
-		copyOptions,
-	)
-	require.NoError(t, err)
+	prepareDescribeAffectedWithIncludeBaseRepo(t, pathPrefix, tempDir, basePath, stacksPath, &copyOptions)
 
 	// Set BasePath for the fixture.
 	atmosConfig.BasePath = basePath
@@ -177,6 +161,76 @@ func TestDescribeAffectedWithIncludeSelfComparison(t *testing.T) {
 		"describe affected should not fail when stacks use !include (self-comparison)")
 	assert.Equal(t, 0, len(affected),
 		"self-comparison should produce empty affected list")
+}
+
+func prepareDescribeAffectedWithIncludeBaseRepo(
+	t *testing.T,
+	sourceRoot string,
+	tempDir string,
+	basePath string,
+	stacksPath string,
+	copyOptions *cp.Options,
+) {
+	t.Helper()
+
+	copyFixturePath(
+		t,
+		filepath.Join(sourceRoot, "tests", "fixtures", "components"),
+		filepath.Join(tempDir, "tests", "fixtures", "components"),
+		copyOptions,
+	)
+	copyFixturePath(
+		t,
+		filepath.Join(stacksPath, "atmos.yaml"),
+		filepath.Join(tempDir, basePath, "atmos.yaml"),
+		copyOptions,
+	)
+	copyFixturePath(
+		t,
+		filepath.Join(stacksPath, "config"),
+		filepath.Join(tempDir, basePath, "config"),
+		copyOptions,
+	)
+
+	// Copy the affected stacks over the normal stacks path in the temp repo. This
+	// simulates a base ref with different vars without copying the full checkout.
+	copyFixturePath(
+		t,
+		filepath.Join(stacksPath, "stacks-affected"),
+		filepath.Join(tempDir, basePath, "stacks"),
+		copyOptions,
+	)
+
+	repo, err := git.PlainInit(tempDir, false)
+	require.NoError(t, err)
+
+	_, err = repo.CreateRemote(&config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{"https://github.com/cloudposse/atmos.git"},
+	})
+	require.NoError(t, err)
+
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+
+	_, err = worktree.Add(".")
+	require.NoError(t, err)
+
+	_, err = worktree.Commit("base fixture", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Atmos Tests",
+			Email: "test@example.com",
+			When:  time.Unix(0, 0),
+		},
+	})
+	require.NoError(t, err)
+}
+
+func copyFixturePath(t *testing.T, src string, dest string, copyOptions *cp.Options) {
+	t.Helper()
+
+	require.NoError(t, os.MkdirAll(filepath.Dir(dest), 0o755))
+	require.NoError(t, cp.Copy(src, dest, *copyOptions))
 }
 
 // TestDescribeAffectedWithIncludeComponentsLoadCorrectly verifies that all

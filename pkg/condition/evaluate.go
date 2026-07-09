@@ -82,14 +82,12 @@ func (c Condition) MentionsLifecycleStatus() bool {
 	return c.MentionsAny(PredicateSuccess, PredicateFailure, PredicateAlways) || c.node.mentionsCELStatus()
 }
 
-// ValidateStep rejects predicates that workflow and custom command steps
-// cannot evaluate because they do not run against a failure lifecycle.
+// ValidateStep validates predicates used by workflow and custom command steps.
+// Step runners evaluate lifecycle predicates against the current run status so
+// cleanup steps can use `failure` and `always`.
 //
 //nolint:lintroller // This package cannot import perf because schema aliases condition.
 func ValidateStep(condition Condition) error {
-	if condition.MentionsAny(PredicateFailure) {
-		return fmt.Errorf("%w: step when cannot use %q", ErrInvalidWhenCondition, PredicateFailure)
-	}
 	return nil
 }
 

@@ -5,14 +5,14 @@ sidebar_class_name: command
 id: init
 description: Initialize a managed Git repository from scratch, optionally seeded from another repository.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
 Initialize a named repository configured under [`git.repositories`](/cli/configuration/git) whose remote has no content yet — the inverse of [`atmos git clone`](/cli/commands/git/clone). Atmos creates the workdir, runs `git init` on the configured branch, and wires the configured remote so [`atmos git commit`](/cli/commands/git/commit) and [`atmos git push`](/cli/commands/git/push) work immediately. With `--from=<uri>`, the new repository is seeded from a template or migrated from an existing repository.
 </Intro>
 
-<Screengrab title="atmos git init --help" slug="atmos-git-init--help" />
+<CastPlayer title="atmos git init --help" src="/casts/screengrabs/atmos-git-init--help.cast" static chrome />
 
 ## Usage
 

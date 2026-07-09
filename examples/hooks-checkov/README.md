@@ -1,3 +1,11 @@
+---
+title: Checkov Hook
+tags: [Hooks]
+cast:
+  file: /casts/examples/hooks-checkov/security-scan.cast
+  title: atmos Checkov hook
+---
+
 # `hooks-checkov`
 
 Demonstrates the **`checkov`** hook kind: an `after.terraform.plan` hook

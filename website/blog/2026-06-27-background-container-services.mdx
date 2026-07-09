@@ -114,6 +114,12 @@ Background services turn "stand up a dependency for these steps" into a first-cl
 
 This is especially useful for end-to-end tests against emulators, integration steps that need a database or registry, and any workflow where a service has to be up *while* the real work runs.
 
+Atmos's built-in emulator drivers cover AWS (`floci/aws`, `ministack/aws`, `localstack/aws`),
+GCP (`floci/gcp`), Azure (`floci/az`), Kubernetes (`k3s`), Vault/OpenBao (`openbao`,
+`vault`), OCI/Terraform registries (`registry`), and a Mockoon-backed 1Password Connect server
+(`mockoon/1password-connect`). See the [emulator component reference](/stacks/components/emulator#supported-drivers--targets)
+for the current driver and target list.
+
 ## Get Involved
 
 For the full reference, see [background services](/workflows/steps/type/container#background-services) on the `container` step page, and the [`wait`](/workflows/steps/type/wait) and [`cancel`](/workflows/steps/type/cancel) step types. Try it on a real end-to-end workflow and tell us where the readiness and teardown semantics feel right — or where you want more control.

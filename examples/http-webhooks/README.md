@@ -1,3 +1,11 @@
+---
+title: HTTP Webhooks
+tags: [Hooks, Automation]
+cast:
+  file: /casts/examples/http-webhooks/local-endpoints.cast
+  title: atmos HTTP webhooks
+---
+
 # HTTP Step Type
 
 This example demonstrates the `http` workflow step type, which performs an HTTP

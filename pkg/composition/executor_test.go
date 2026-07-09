@@ -78,15 +78,26 @@ func TestCollectMembers_DedupesAndSorts(t *testing.T) {
 		"staging": stackWithComponents(map[string]string{"api": "storefront", "database": "other"}),
 		"prod":    "not-a-map", // ignored, no panic
 	}
-	members := collectMembers(stacksMap, "storefront")
+	members := collectMembers(stacksMap, "", "storefront")
 	assert.Equal(t, []string{"api", "worker"}, members) // sorted + deduped
+}
+
+func TestCollectMembers_SelectedStack(t *testing.T) {
+	stacksMap := map[string]any{
+		"local": stackWithComponents(map[string]string{"frontend": "storefront", "api": "storefront"}),
+		"dev":   stackWithComponents(map[string]string{"frontend": "storefront", "api": "storefront", "database": "storefront"}),
+	}
+
+	assert.Equal(t, []string{"api", "frontend"}, collectMembers(stacksMap, "local", "storefront"))
+	assert.Equal(t, []string{"api", "database", "frontend"}, collectMembers(stacksMap, "dev", "storefront"))
+	assert.Empty(t, collectMembers(stacksMap, "missing", "storefront"))
 }
 
 func TestReportForStacks(t *testing.T) {
 	stacksMap := map[string]any{
 		"dev": stackWithComponents(map[string]string{"api": "storefront", "worker": "storefront"}),
 	}
-	report, err := reportForStacks(stacksMap, "storefront", compositions())
+	report, err := reportForStacks(stacksMap, "", "storefront", compositions())
 	require.NoError(t, err)
 	assert.Equal(t, "storefront", report.Composition)
 	assert.Equal(t, []string{"api", "worker"}, report.Fulfilled)
@@ -94,8 +105,19 @@ func TestReportForStacks(t *testing.T) {
 	assert.Empty(t, report.Unknown)
 }
 
+func TestReportForStacks_SelectedStack(t *testing.T) {
+	stacksMap := map[string]any{
+		"local": stackWithComponents(map[string]string{"worker": "storefront", "api": "storefront"}),
+		"dev":   stackWithComponents(map[string]string{"worker": "storefront", "api": "storefront", "database": "storefront"}),
+	}
+	report, err := reportForStacks(stacksMap, "local", "storefront", compositions())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"api", "worker"}, report.Fulfilled)
+	assert.Equal(t, []string{"database"}, report.NotProvided)
+}
+
 func TestReportForStacks_UnknownComposition(t *testing.T) {
-	_, err := reportForStacks(map[string]any{}, "missing", compositions())
+	_, err := reportForStacks(map[string]any{}, "", "missing", compositions())
 	require.Error(t, err)
 }
 
