@@ -127,7 +127,8 @@ func componentFunc(
 	return sections, nil
 }
 
-// componentFuncAuthResolver builds the AuthManager for a nested atmos.Component() target. Matches the
+// componentFuncAuthResolver builds the AuthManager for a nested target — used by atmos.Component()
+// (resolveComponentFuncAuthManager) and `!terraform.output` (resolveNestedOutputAuth). Matches the
 // signature of resolveAuthManagerForNestedComponent so tests can inject a spy.
 type componentFuncAuthResolver func(
 	atmosConfig *schema.AtmosConfiguration,
