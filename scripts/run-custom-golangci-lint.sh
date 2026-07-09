@@ -10,36 +10,32 @@ if [[ ! -x ./custom-gcl ]]; then
     exit 1
 fi
 
-# Make the lint cache checkout-aware.
+# --- Per-worktree isolation so parallel worktree lints (e.g. rebase storms) don't
+# --- serialize on golangci-lint's machine-global single-instance lock.
 #
-# golangci-lint defaults to a single machine-global cache directory
-# (~/.cache/golangci-lint) guarded by a file lock, so concurrent runs from
-# different checkouts of this repo fail fast with "parallel golangci-lint is
-# running". This bites anyone with more than one checkout on the machine:
-# multiple clones, or git worktrees (e.g. Conductor sessions).
+# golangci-lint's runner lock is a FIXED path: `os.TempDir()/golangci-lint.lock`
+# (e.g. /var/folders/.../T/golangci-lint.lock on macOS, /tmp/golangci-lint.lock on
+# Linux). It is NOT inside GOLANGCI_LINT_CACHE, so isolating only the cache does not
+# isolate the lock: every worktree still blocks on one machine-global lock, and a
+# stuck run (or one orphaned by a tool timeout) freezes every other worktree.
 #
-# Keying the cache by the checkout's root path gives each checkout its own cache
-# directory (and therefore its own lock), so different checkouts lint in parallel
-# with no contention. This needs no opt-in and is universal:
-#   - single clone  -> one stable cache dir (identical behavior to before);
-#   - many clones   -> one cache dir each (also fixes their contention);
-#   - worktrees     -> one cache dir each.
+# os.TempDir() honors $TMPDIR, so pointing TMPDIR at a repo-local dir moves the lock
+# into this worktree -> lints in different worktrees run in parallel. GOLANGCI_LINT_CACHE
+# is isolated alongside it so those parallel runs never write the same cache (which
+# is exactly what allow-serial-runners protected against within a shared cache).
+# Within one worktree, concurrent lints (pre-commit + pre-push + retries) still
+# serialize on the worktree-local lock, so the cache stays consistent and an orphan
+# can only ever block its own worktree.
 #
-# The cache lives OUTSIDE the checkout (under the user cache dir), so a commit
-# never writes into the worktree -- avoiding the class of worktree corruption
-# that motivated keeping builds out of the pre-commit hook in the first place.
+# GOCACHE is deliberately left shared/global so the expensive compile+typecheck
+# export data stays warm across all worktrees.
 #
-# An explicitly-set GOLANGCI_LINT_CACHE (e.g. in CI) is always respected.
-if [[ -z "${GOLANGCI_LINT_CACHE:-}" ]]; then
-    checkout_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-    if command -v shasum >/dev/null 2>&1; then
-        checkout_key="$(printf '%s' "$checkout_root" | shasum | cut -c1-16)"
-    elif command -v sha1sum >/dev/null 2>&1; then
-        checkout_key="$(printf '%s' "$checkout_root" | sha1sum | cut -c1-16)"
-    else
-        checkout_key="$(printf '%s' "$checkout_root" | cksum | tr -d ' ')"
-    fi
-    export GOLANGCI_LINT_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/golangci-lint/checkouts/${checkout_key}"
+# Set ATMOS_LINT_SHARED_CACHE=1 to opt back into the old machine-global shared cache
+# and serialized lock (e.g. if per-worktree disk usage is a concern).
+if [[ "${ATMOS_LINT_SHARED_CACHE:-}" != "1" ]]; then
+    export GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE:-$PWD/.golangci-cache}"
+    export TMPDIR="$PWD/.golangci-tmp"
+    mkdir -p "$TMPDIR"
 fi
 
 args=(
