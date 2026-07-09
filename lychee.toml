@@ -100,6 +100,11 @@ exclude = [
   "clau\\.de",
   # Anthropic docs intermittently return 503 Service Unavailable from CI runners.
   "docs\\.anthropic\\.com",
+  # OpenAI's docs (platform.openai.com, developers.openai.com) are Cloudflare-fronted
+  # and return inconsistent 403/404 responses to non-browser/CI requests depending on
+  # path, even with a browser User-Agent; the pages resolve fine in a real browser.
+  "platform\\.openai\\.com",
+  "developers\\.openai\\.com",
   # luigi.readthedocs.io (intermittent 502 Bad Gateway in CI)
   "luigi\\.readthedocs\\.io",
   # tldp.org (intermittent 502 Bad Gateway in CI; sibling exit-code references

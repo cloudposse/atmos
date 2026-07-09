@@ -162,7 +162,8 @@ components:
         ansible:
           playbook: deploy.yml
           inventory: inventory/production
-        depends_on:
+      dependencies:
+        components:
           - component: webserver
 ```
 
@@ -449,8 +450,8 @@ atmos ansible playbook webserver -s prod --dry-run
 2. **Centralize defaults in catalog files.** Define common settings in catalog defaults and override only
    what differs per environment.
 
-3. **Use `depends_on` for ordering.** Define dependencies when playbooks need to run after infrastructure
-   is provisioned (e.g., after Terraform components).
+3. **Use `dependencies.components` for ordering.** Define dependencies when playbooks need to run
+   after infrastructure is provisioned, such as after Terraform components.
 
 4. **Keep playbooks focused.** Create small, task-specific playbooks rather than monolithic automation.
 
