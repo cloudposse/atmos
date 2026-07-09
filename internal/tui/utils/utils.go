@@ -17,6 +17,7 @@ import (
 	xterm "golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -59,18 +60,18 @@ func PrintStyledText(text string) error {
 	// Check --force-color flag (via Viper).
 	// This allows `atmos version --force-color` to work for screenshot generation.
 	if viper.GetBool("force-color") {
-		return figurine.Write(os.Stdout, text, AnsiRegularFont)
+		return figurine.Write(iolib.Data, text, AnsiRegularFont)
 	}
 
 	// Check standard CLICOLOR_FORCE and FORCE_COLOR env vars.
 	if os.Getenv("CLICOLOR_FORCE") != "" || os.Getenv("FORCE_COLOR") != "" { //nolint:forbidigo // Standard terminal env vars
-		return figurine.Write(os.Stdout, text, AnsiRegularFont)
+		return figurine.Write(iolib.Data, text, AnsiRegularFont)
 	}
 
 	// Fall back to automatic color detection.
 	// supportscolor automatically detects TTY and other standard environment variables.
 	if supportscolor.Stdout().SupportsColor {
-		return figurine.Write(os.Stdout, text, AnsiRegularFont)
+		return figurine.Write(iolib.Data, text, AnsiRegularFont)
 	}
 	return nil
 }

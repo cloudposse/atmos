@@ -182,15 +182,16 @@ type NetworkAttachment struct {
 
 // Info represents container state information.
 type Info struct {
-	ID       string
-	Name     string
-	Image    string
-	Status   string // running, stopped, exited, etc.
-	Health   string // healthy, unhealthy, starting, or "" when no healthcheck.
-	Created  time.Time
-	Ports    []PortBinding
-	Networks []string
-	Labels   map[string]string
+	ID         string
+	Name       string
+	Image      string
+	Status     string // running, stopped, exited, etc.
+	Health     string // healthy, unhealthy, starting, or "" when no healthcheck.
+	Created    time.Time
+	Ports      []PortBinding
+	Networks   []string
+	NetworkIPs map[string]string
+	Labels     map[string]string
 }
 
 // ExecOptions represents options for executing commands in containers.

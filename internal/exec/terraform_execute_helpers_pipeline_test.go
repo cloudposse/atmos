@@ -22,6 +22,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -127,34 +128,6 @@ func TestExecuteCommandPipeline_TTYError(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrNoTty)
 }
 
-func TestExecuteCommandPipeline_GroupsWorkspaceSetupPhase(t *testing.T) {
-	output := runLogGroupPipelineSubprocess(t, map[string]string{
-		testEnvFakeTerraformSelectFail: "1",
-	})
-	groupLabel := logGroupTestToolLabel(t)
-
-	initStart := strings.Index(output, "::group::"+groupLabel+" init\n")
-	workspaceStart := strings.Index(output, "::group::"+groupLabel+" workspace\n")
-	selectOutput := strings.Index(output, "fake terraform workspace select dev")
-	newOutput := strings.Index(output, "fake terraform workspace new dev")
-	planStart := strings.Index(output, "::group::"+groupLabel+" plan\n")
-
-	require.NotEqual(t, -1, initStart, "init phase must be grouped; output:\n%s", output)
-	require.NotEqual(t, -1, workspaceStart, "workspace phase must be grouped; output:\n%s", output)
-	require.NotEqual(t, -1, selectOutput, "workspace select output must be present; output:\n%s", output)
-	require.NotEqual(t, -1, newOutput, "workspace new fallback output must be present; output:\n%s", output)
-	workspaceEnd := strings.Index(output[workspaceStart:], "::endgroup::\n")
-	require.NotEqual(t, -1, workspaceEnd, "workspace group must close; output:\n%s", output)
-	require.NotEqual(t, -1, planStart, "main terraform phase must be grouped; output:\n%s", output)
-
-	workspaceEnd += workspaceStart
-	assert.Less(t, initStart, workspaceStart, "workspace group must start after init")
-	assert.Less(t, workspaceStart, selectOutput, "workspace select must be inside workspace group")
-	assert.Less(t, selectOutput, newOutput, "workspace new fallback must follow failed select")
-	assert.Less(t, newOutput, workspaceEnd, "workspace fallback must remain inside workspace group")
-	assert.Less(t, workspaceEnd, planStart, "main phase must start after workspace group closes")
-}
-
 func TestExecuteCommandPipeline_SkipsWorkspaceGroupWhenSetupSkipped(t *testing.T) {
 	output := runLogGroupPipelineSubprocess(t, map[string]string{
 		testEnvPipelineBackendType: "http",
@@ -224,6 +197,57 @@ func TestExecuteShellCommand_PropagatesEnvToSubprocess(t *testing.T) {
 	var exitErr errUtils.ExitCodeError
 	require.True(t, errors.As(execErr, &exitErr), "exit-1 must be wrapped as ExitCodeError, got: %T (%v)", execErr, execErr)
 	assert.Equal(t, 1, exitErr.Code, "ExitCodeError.Code must be 1")
+}
+
+func TestRunWorkspaceSetup_UsesSelectOrCreate(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err, "os.Executable() must succeed")
+
+	argsFile := filepath.Join(t.TempDir(), "args.txt")
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:         "plan",
+		TerraformWorkspace: "dev",
+		Command:            exePath,
+		ComponentEnvList:   []string{"_ATMOS_TEST_ARGS_FILE=" + argsFile},
+	}
+
+	require.NoError(t, runWorkspaceSetup(&atmosConfig, &info, t.TempDir()))
+
+	argsBytes, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	assert.Equal(t, "workspace\nselect\n-or-create\ndev", string(argsBytes))
+}
+
+func TestRunWorkspaceSetup_SuppressesTerraformWorkspaceOutput(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err, "os.Executable() must succeed")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	atmosConfig := schema.AtmosConfiguration{}
+	info := schema.ConfigAndStacksInfo{
+		SubCommand:         "plan",
+		TerraformWorkspace: "dev",
+		Command:            exePath,
+		ComponentEnvList: []string{
+			`_ATMOS_TEST_STDOUT=Workspace "dev" doesn't exist.` + "\n",
+			"_ATMOS_TEST_STDERR=You're now on a new, empty workspace.\n",
+		},
+	}
+
+	require.NoError(t, runWorkspaceSetup(
+		&atmosConfig,
+		&info,
+		t.TempDir(),
+		WithProcessStreams(process.Streams{
+			Stdout: &stdout,
+			Stderr: &stderr,
+		}),
+	))
+
+	assert.Empty(t, stdout.String())
+	assert.Empty(t, stderr.String())
 }
 
 // TestRunWorkspaceSetup_RecoveryPath verifies that when both "workspace select" and

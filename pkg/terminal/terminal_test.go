@@ -195,6 +195,61 @@ func TestWidth_NonTTYFallback(t *testing.T) {
 	}
 }
 
+// TestWidth_ForceTTYRecordingWidthOverride verifies that ATMOS_CAST_RECORDING_WIDTH,
+// unlike the general-purpose COLUMNS variable, can pin an explicit width under
+// --force-tty. Recording pipelines (e.g. docs screengrabs) set this variable
+// deliberately, so honoring it does not reintroduce ambient-COLUMNS instability.
+func TestWidth_ForceTTYRecordingWidthOverride(t *testing.T) {
+	cleanup := setupTest(t)
+	defer cleanup()
+
+	if xterm.IsTerminal(streamToFd(Stdout)) {
+		t.Skip("stdout is a real TTY; force-tty fallback does not apply")
+	}
+
+	tests := []struct {
+		name           string
+		recordingWidth string
+		forceTTY       bool
+		expected       int
+	}{
+		{
+			name:           "recording width is honored under force-tty",
+			recordingWidth: "90",
+			forceTTY:       true,
+			expected:       90,
+		},
+		{
+			name:           "recording width is ignored without force-tty",
+			recordingWidth: "90",
+			forceTTY:       false,
+			expected:       0,
+		},
+		{
+			name:           "malformed recording width falls back to force-tty default",
+			recordingWidth: "wide",
+			forceTTY:       true,
+			expected:       defaultForcedWidth,
+		},
+		{
+			name:           "unset recording width falls back to force-tty default",
+			recordingWidth: "",
+			forceTTY:       true,
+			expected:       defaultForcedWidth,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_CAST_RECORDING_WIDTH", tt.recordingWidth)
+			viper.Set("force-tty", tt.forceTTY)
+
+			term := New()
+			assert.Equal(t, tt.expected, term.Width(Stdout))
+		})
+	}
+}
+
 func TestForceTTY_Height(t *testing.T) {
 	cleanup := setupTest(t)
 	defer cleanup()

@@ -132,6 +132,32 @@ commands:
 	assert.Equal(t, "Terraform plan", plan["description"])
 }
 
+func TestLoadDemoCastPathCommandsPreservesSiblings(t *testing.T) {
+	t.Chdir(filepath.Join("..", "..", "demo", "casts"))
+
+	v := viper.New()
+	v.SetConfigType(yamlType)
+
+	absAtmosD, err := filepath.Abs("atmos.d")
+	require.NoError(t, err)
+	pattern := filepath.Join(absAtmosD, "**", "*")
+	require.NoError(t, loadAtmosConfigsFromDirectory(pattern, v, "demo casts atmos.d"))
+
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("commands: %#v", v.Get(commandsKey))
+		}
+	})
+	casts := requireCommandMap(t, v.Get(commandsKey), "casts")
+	generate := requireCommandMap(t, casts[commandsKey], "generate")
+	requireCommandMap(t, generate[commandsKey], "cli")
+	requireCommandMap(t, generate[commandsKey], "examples")
+	demo := requireCommandMap(t, generate[commandsKey], "demo")
+	fixtures := requireCommandMap(t, demo[commandsKey], "fixtures")
+	basic := requireCommandMap(t, fixtures[commandsKey], "basic")
+	requireCommandMap(t, basic[commandsKey], "list-stacks")
+}
+
 func TestLoadAtmosDPathCommandsPreservesSiblings(t *testing.T) {
 	tempDir := t.TempDir()
 	atmosD := filepath.Join(tempDir, "atmos.d")

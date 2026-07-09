@@ -1,3 +1,15 @@
+---
+title: AWS Emulator
+tags: [Emulators]
+description: >-
+  Learn how to use the AWS emulator with Atmos — declare it as a stack
+  component and Atmos starts, binds, and stops it around your Terraform
+  runs.
+cast:
+  file: /casts/examples/emulator-aws/lifecycle.cast
+  title: atmos emulator aws lifecycle
+---
+
 ## Notes
 
 This example provisions an S3 bucket against a **local AWS sandbox** — no AWS account or

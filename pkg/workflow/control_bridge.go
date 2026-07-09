@@ -90,6 +90,7 @@ func plainControlRunCommand(request *ControlCommandRequest) error {
 	}
 
 	cmd := exec.CommandContext(request.Context, program, request.Args...)
+	cmd.Dir = request.Dir
 	if len(request.Env) > 0 {
 		cmd.Env = request.Env
 	} else {
