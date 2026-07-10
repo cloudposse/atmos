@@ -76,8 +76,35 @@ export default function CastPlayer({
   const renderedEventTime = useRef<number>(-1);
   const [seekVersion, setSeekVersion] = useState(0);
   const screenRef = useRef<HTMLPreElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [shouldLoad, setShouldLoad] = useState(false);
+
+  // Defer fetching the cast until the player is near the viewport. Pages
+  // like the examples gallery mount dozens of players at once; fetching
+  // them all immediately queues behind the browser's per-host connection
+  // limit and leaves most cards blank for a long time.
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") {
+      setShouldLoad(true);
+      return undefined;
+    }
+    const node = containerRef.current;
+    if (!node) return undefined;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoad(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "300px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
+    if (!shouldLoad) return undefined;
     let cancelled = false;
     fetch(src, { cache: "no-store" })
       .then((response) => {
@@ -138,6 +165,7 @@ export default function CastPlayer({
       cancelled = true;
     };
   }, [
+    shouldLoad,
     src,
     command,
     title,
@@ -244,9 +272,11 @@ export default function CastPlayer({
     setPlaying(true);
   };
 
+  const isLoading = content === "";
   const screenClassName = [
     styles.screen,
     preWrap ? "" : styles.noPreWrap,
+    isLoading ? styles.screenLoading : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -265,7 +295,7 @@ export default function CastPlayer({
   const showControls = staticFrame ? false : (controls ?? !thumbnail);
 
   return (
-    <div className={rootClassName}>
+    <div className={rootClassName} ref={containerRef}>
       {chrome && (
         <div className={styles.titlebar}>
           <span className={styles.dots} aria-hidden="true">
