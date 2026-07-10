@@ -10,7 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestGetGHCRAuth tests the getGHCRAuth function which provides authentication
+// TestGetGHCRAuth tests the GHCRAuth function which provides authentication
 // for GitHub Container Registry (ghcr.io).
 func TestGetGHCRAuth(t *testing.T) {
 	tests := []struct {
