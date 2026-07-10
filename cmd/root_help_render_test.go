@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 )
@@ -193,7 +194,9 @@ func TestRenderFlagHelp(t *testing.T) {
 
 		renderFlagHelp(cmd)
 
-		assert.Contains(t, outBuf.String(), "test command description")
+		// Strip ANSI codes before checking text containment (Glamour wraps each word in styling,
+		// e.g. when CI=true forces color output even without a real TTY).
+		assert.Contains(t, ansi.Strip(outBuf.String()), "test command description")
 	})
 
 	t.Run("pager explicitly disabled renders directly", func(t *testing.T) {
@@ -206,7 +209,7 @@ func TestRenderFlagHelp(t *testing.T) {
 
 		renderFlagHelp(cmd)
 
-		assert.Contains(t, outBuf.String(), "test command description")
+		assert.Contains(t, ansi.Strip(outBuf.String()), "test command description")
 	})
 
 	t.Run("pager explicitly enabled buffers then restores original writer", func(t *testing.T) {
