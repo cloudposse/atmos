@@ -47,6 +47,21 @@ func TestPromptForConsent(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+
+	t.Run("closed pipe returns error", func(t *testing.T) {
+		r, w, err := os.Pipe()
+		require.NoError(t, err)
+
+		origStdin := os.Stdin
+		os.Stdin = r
+		t.Cleanup(func() { os.Stdin = origStdin })
+
+		// Close without writing - ReadString returns io.EOF without finding '\n'.
+		require.NoError(t, w.Close())
+
+		_, err = PromptForConsent()
+		assert.Error(t, err)
+	})
 }
 
 func TestFindStackFiles(t *testing.T) {
