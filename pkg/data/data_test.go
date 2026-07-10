@@ -243,18 +243,20 @@ func setupTestIO(t *testing.T) (stdout, stderr *bytes.Buffer, cleanup func()) {
 		t.Fatalf("failed to create I/O context: %v", err)
 	}
 
-	// Save old context.
+	// Save old context and renderer.
 	ioMu.Lock()
 	oldCtx := globalIOContext
+	oldRenderer := globalMarkdownRender
 	ioMu.Unlock()
 
 	// Initialize global writer.
 	InitWriter(ioCtx)
 
-	// Return cleanup function to restore old context.
+	// Return cleanup function to restore old context and renderer.
 	cleanup = func() {
 		ioMu.Lock()
 		globalIOContext = oldCtx
+		globalMarkdownRender = oldRenderer
 		ioMu.Unlock()
 	}
 

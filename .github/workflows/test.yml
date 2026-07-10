@@ -269,7 +269,14 @@ jobs:
         run: TESTARGS="-skip=^TestTerraformRegistryCache$" atmos test acceptance --cover
 
       - name: Acceptance tests
-        timeout-minutes: 45
+        # windows-latest is the slowest target for this suite too (see the
+        # Build job's timeout comment above): it has repeatedly run right up
+        # against a 45-minute cap and then gotten force-cancelled by the step
+        # timeout before finishing, failing the job with no real test failure
+        # in the logs. Give it the same headroom as Linux's coverage-enabled
+        # run (60m); macOS finishes this step in ~35m today so the extra
+        # headroom is a no-op for it.
+        timeout-minutes: 60
         if: matrix.flavor.target == 'macos' || (matrix.flavor.target == 'windows' && ! github.event.pull_request.draft)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
