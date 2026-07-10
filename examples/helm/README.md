@@ -1,3 +1,11 @@
+---
+title: Native Helm
+tags: [Kubernetes]
+cast:
+  file: /casts/examples/helm/lifecycle.cast
+  title: atmos native helm lifecycle
+---
+
 # Native Helm Component Example
 
 A minimal, credential-free example of a native Helm component. The chart lives in

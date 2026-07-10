@@ -2,6 +2,9 @@ package exec
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filematch"
@@ -135,6 +138,21 @@ func (av *atmosValidatorExecutor) validateSchemas(schemas map[string][]string) (
 	return totalErrCount, nil
 }
 
+// displayPath returns the file path relative to the current working directory
+// when the file is inside it; user-facing output must not leak machine-specific
+// absolute paths.
+func displayPath(file string) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return file
+	}
+	rel, err := filepath.Rel(cwd, file)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return file
+	}
+	return rel
+}
+
 func (av *atmosValidatorExecutor) printValidation(schema string, files []string) (uint, error) {
 	count := uint(0)
 	for _, file := range files {
@@ -144,7 +162,7 @@ func (av *atmosValidatorExecutor) printValidation(schema string, files []string)
 			return count, err
 		}
 		if len(validationErrors) == 0 {
-			u.PrintfMessageToTUI("%s Validated %s\n", theme.Styles.Checkmark, file)
+			u.PrintfMessageToTUI("%s Validated %s\n", theme.Styles.Checkmark, displayPath(file))
 			log.Debug("Schema validation passed", "file", file, "schema", schema)
 			continue
 		}

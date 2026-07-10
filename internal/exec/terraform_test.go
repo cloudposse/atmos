@@ -338,12 +338,11 @@ func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read from pipe: %v", err)
 	}
-	output := buf.String()
 
-	// Check the output.
-	if !strings.Contains(output, "workspace \"nonprod-component-1\"") {
-		t.Errorf("The output should contain 'nonprod-component-1'")
-	}
+	envFile := filepath.Join("..", "..", "components", "terraform", "mock", ".terraform", "environment")
+	workspace, err := os.ReadFile(envFile)
+	require.NoError(t, err)
+	assert.Equal(t, "nonprod-component-1", strings.TrimSpace(string(workspace)))
 }
 
 func TestExecuteTerraform_TerraformPlanWithInvalidTemplates(t *testing.T) {

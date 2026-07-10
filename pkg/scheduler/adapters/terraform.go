@@ -40,9 +40,9 @@ const (
 )
 
 const (
-	terraformPlanLogOrderStream  = "stream"
-	terraformPlanLogOrderGrouped = "grouped"
-	terraformPlanHideNoChanges   = "no-changes"
+	terraformLogOrderStream    = "stream"
+	terraformLogOrderGrouped   = "grouped"
+	terraformPlanHideNoChanges = "no-changes"
 )
 
 const (
@@ -974,17 +974,17 @@ func newTerraformOutput(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	if maxConcurrency <= 1 && !hideNoChanges {
 		return nil, nil
 	}
-	logOrder := terraformPlanLogOrderStream
-	if info != nil && info.TerraformPlanLogOrder != "" {
-		logOrder = strings.ToLower(info.TerraformPlanLogOrder)
+	logOrder := terraformLogOrderStream
+	if info != nil && info.TerraformLogOrder != "" {
+		logOrder = strings.ToLower(info.TerraformLogOrder)
 	}
 	if hideNoChanges {
-		logOrder = terraformPlanLogOrderGrouped
+		logOrder = terraformLogOrderGrouped
 	}
 	switch logOrder {
-	case terraformPlanLogOrderStream, terraformPlanLogOrderGrouped:
+	case terraformLogOrderStream, terraformLogOrderGrouped:
 	default:
-		return nil, fmt.Errorf("%w: unsupported Terraform plan log order %q", errUtils.ErrInvalidConfig, logOrder)
+		return nil, fmt.Errorf("%w: unsupported Terraform log order %q", errUtils.ErrInvalidConfig, logOrder)
 	}
 	command := terraformOutputCommand(info)
 	logDir := terraformLogDir(atmosConfig, command)
@@ -998,7 +998,7 @@ func newTerraformOutput(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 
 // captureOutput reports whether the executor should capture stdout and stderr.
 func (o *terraformOutput) captureOutput() bool {
-	return o != nil && o.logOrder == terraformPlanLogOrderGrouped
+	return o != nil && o.logOrder == terraformLogOrderGrouped
 }
 
 // nodeWriters returns stdout/stderr writers, a flush function, and created log paths for a node.
@@ -1007,7 +1007,7 @@ func (o *terraformOutput) nodeWriters(node *dependency.Node) (io.Writer, io.Writ
 		return nil, nil, nil, nil
 	}
 	stdoutFile, stderrFile, logFiles := o.openNodeLogFiles(node)
-	if o.logOrder == terraformPlanLogOrderGrouped {
+	if o.logOrder == terraformLogOrderGrouped {
 		stdout := combineWriters(io.Discard, stdoutFile)
 		stderr := combineWriters(io.Discard, stderrFile)
 		return stdout, stderr, closeTerraformLogFiles(stdoutFile, stderrFile), logFiles
@@ -1139,7 +1139,7 @@ func safeTerraformLogName(label string) string {
 
 // finishNode replays grouped node output after the node completes.
 func (o *terraformOutput) finishNode(node *dependency.Node, result TerraformExecutionResult, execErr error) {
-	if o == nil || o.logOrder != terraformPlanLogOrderGrouped {
+	if o == nil || o.logOrder != terraformLogOrderGrouped {
 		return
 	}
 	if o.hideNoChanges && terraformPlanHasNoChanges(result, execErr) {
@@ -1487,7 +1487,7 @@ func effectiveTerraformFailureMode(info *schema.ConfigAndStacksInfo) string {
 // supportsTerraformConcurrency reports whether subCommand can run through the scheduler concurrently.
 func supportsTerraformConcurrency(subCommand string) bool {
 	switch subCommand {
-	case "plan", "apply", "destroy":
+	case "plan", "apply", "deploy", "destroy":
 		return true
 	default:
 		return false

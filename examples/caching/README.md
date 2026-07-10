@@ -1,3 +1,11 @@
+---
+title: Terraform Registry Cache
+tags: [Components]
+cast:
+  file: /casts/examples/caching/registry-cache.cast
+  title: atmos terraform registry cache
+---
+
 # Terraform Registry Cache
 
 This example demonstrates the **Terraform registry cache** — transparent **provider and
@@ -26,6 +34,9 @@ providers via `atmos terraform cache mirror`.
 ## Try it
 
 ```shell
+# On macOS/Windows, trust the local cache proxy certificate once.
+atmos terraform cache trust
+
 # Plan the component. Providers and the registry module are fetched through the
 # ephemeral cache proxy and stored on disk. At the end you'll see a report like:
 #   Registry cache: 12 MB downloaded and cached (5 objects)

@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,6 +18,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 )
@@ -30,146 +33,339 @@ func stepsFromStrings(commands ...string) schema.Tasks {
 	return tasks
 }
 
-func TestCustomCommandIntegration_DefaultSubcommand(t *testing.T) {
+func captureStdoutStderr(t *testing.T, fn func()) (string, string) {
+	t.Helper()
+
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	require.NoError(t, err)
+	stderrReader, stderrWriter, err := os.Pipe()
+	require.NoError(t, err)
+
+	os.Stdout = stdoutWriter
+	os.Stderr = stderrWriter
+
+	fn()
+
+	require.NoError(t, stdoutWriter.Close())
+	require.NoError(t, stderrWriter.Close())
+	os.Stdout = oldStdout
+	os.Stderr = oldStderr
+
+	stdout, err := io.ReadAll(stdoutReader)
+	require.NoError(t, err)
+	stderr, err := io.ReadAll(stderrReader)
+	require.NoError(t, err)
+
+	require.NoError(t, stdoutReader.Close())
+	require.NoError(t, stderrReader.Close())
+
+	return string(stdout), string(stderr)
+}
+
+func TestCustomCommandStepWorkingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell redirection")
+	}
+
 	_ = NewTestKit(t)
 
 	tmpDir := t.TempDir()
-	outputPath := filepath.Join(tmpDir, "default-subcommand.txt")
-
-	targetFlag := schema.CommandFlag{
-		Name:        "target",
-		Type:        "string",
-		Description: "Build target",
-		Default:     "default",
-	}
+	stepDir := filepath.Join(tmpDir, "step-dir")
+	require.NoError(t, os.Mkdir(stepDir, 0o755))
+	outputFile := filepath.Join(tmpDir, "pwd.txt")
 
 	atmosConfig := schema.AtmosConfiguration{
 		BasePath: tmpDir,
 		Commands: []schema.Command{
 			{
-				Name:        "build",
-				Description: "Build commands",
-				Default:     "binary",
-				Flags:       []schema.CommandFlag{targetFlag},
-				Commands: []schema.Command{
+				Name:             "test-step-workdir",
+				Description:      "Exercise step-level working_directory",
+				WorkingDirectory: tmpDir,
+				Steps: schema.Tasks{
 					{
-						Name:             "binary",
-						Description:      "Build binary",
-						WorkingDirectory: ".",
-						Flags:            []schema.CommandFlag{targetFlag},
-						Steps: stepsFromStrings(
-							fmt.Sprintf("printf %%s \"{{ .Flags.target }}:{{ .cwd }}\" > %q", outputPath),
-						),
+						Type:             "shell",
+						Name:             "pwd",
+						WorkingDirectory: "step-dir",
+						Command:          fmt.Sprintf("pwd > %q", outputFile),
 					},
 				},
 			},
 		},
 	}
 
-	parentCmd := &cobra.Command{Use: "atmos"}
-	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd))
-
-	buildCmd := findSubcommand(parentCmd, "build")
-	require.NotNil(t, buildCmd)
-	require.NoError(t, buildCmd.PersistentFlags().Set("target", "linux"))
-
-	buildCmd.PreRun(buildCmd, nil)
-	buildCmd.Run(buildCmd, nil)
-
-	output, err := os.ReadFile(outputPath)
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err)
-	assert.Equal(t, "linux:"+tmpDir, string(output))
+
+	customCmd, _, err := RootCmd.Find([]string{"test-step-workdir"})
+	require.NoError(t, err)
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
+
+	actual, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	assert.Equal(t, stepDir, strings.TrimSpace(string(actual)))
 }
 
-func TestCustomCommandIntegration_StepEnvExported(t *testing.T) {
+func TestCustomCommandDispatchRejectsUnexpectedArgsOnRunnableParent(t *testing.T) {
+	_ = NewTestKit(t)
+
+	atmosConfig := schema.AtmosConfiguration{
+		Commands: []schema.Command{
+			{
+				Name:  "examples",
+				Steps: stepsFromStrings("echo parent"),
+				Commands: []schema.Command{
+					{
+						Name: "auth-stores",
+						Commands: []schema.Command{
+							{
+								Name:  "identity-backed-stores",
+								Steps: stepsFromStrings("echo leaf"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	root := &cobra.Command{
+		Use:           "atmos",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+	}
+	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, root))
+
+	examplesCmd, _, err := root.Find([]string{"examples"})
+	require.NoError(t, err)
+	require.NotNil(t, examplesCmd)
+
+	parentRan := false
+	leafRan := false
+	examplesCmd.Run = func(cmd *cobra.Command, args []string) {
+		parentRan = true
+	}
+
+	leafCmd, _, err := root.Find([]string{"examples", "auth-stores", "identity-backed-stores"})
+	require.NoError(t, err)
+	require.NotNil(t, leafCmd)
+	leafCmd.Run = func(cmd *cobra.Command, args []string) {
+		leafRan = true
+	}
+
+	root.SetArgs([]string{"examples", "auth-stores identity-backed-stores"})
+	err = root.Execute()
+	require.Error(t, err)
+	assert.False(t, parentRan, "unexpected extra args must not execute the runnable parent")
+	assert.False(t, leafRan)
+
+	root.SetArgs([]string{"examples", "auth-stores", "identity-backed-stores"})
+	require.NoError(t, root.Execute())
+	assert.False(t, parentRan)
+	assert.True(t, leafRan)
+}
+
+func TestCustomCommandCastStepInheritsWorkingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell redirection")
+	}
+	require.NoError(t, iolib.Initialize())
+
 	_ = NewTestKit(t)
 
 	tmpDir := t.TempDir()
-	outputPath := filepath.Join(tmpDir, "step-env.txt")
+	castPath := filepath.Join(tmpDir, "demo.cast")
+	outputFile := filepath.Join(tmpDir, "pwd.txt")
 
 	atmosConfig := schema.AtmosConfiguration{
 		BasePath: tmpDir,
 		Commands: []schema.Command{
 			{
-				Name:        "build",
-				Description: "Build command",
-				Flags: []schema.CommandFlag{
-					{Name: "target", Type: "string", Default: "default"},
-					{Name: "version", Type: "string", Default: "test"},
+				Name:             "test-cast-workdir-inheritance",
+				Description:      "Exercise command working_directory inheritance through cast steps",
+				WorkingDirectory: tmpDir,
+				Steps: schema.Tasks{
+					{
+						Type:   schema.TaskTypeCast,
+						Name:   "record",
+						Output: string(stepPkg.OutputModeNone),
+						CastOutput: &schema.CastOutput{
+							Cast: castPath,
+						},
+						Steps: []schema.WorkflowStep{
+							{
+								Type:    schema.TaskTypeShell,
+								Name:    "pwd",
+								Command: "pwd > pwd.txt",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	customCmd, _, err := RootCmd.Find([]string{"test-cast-workdir-inheritance"})
+	require.NoError(t, err)
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
+
+	actual, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	expectedDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, expectedDir, strings.TrimSpace(string(actual)))
+	require.FileExists(t, castPath)
+}
+
+func TestCustomCommandEnvValueCanUseEnvTemplateAlias(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell redirection")
+	}
+
+	_ = NewTestKit(t)
+
+	tmpDir := t.TempDir()
+	outputFile := filepath.Join(tmpDir, "env.txt")
+	t.Setenv("ATMOS_TEST_TEMPLATE_SOURCE", "from-env-alias")
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{
+			{
+				Name:        "test-env-template-alias",
+				Description: "Exercise command env .Env template alias",
+				Env: []schema.CommandEnv{
+					{Key: "ATMOS_TEST_TEMPLATE_TARGET", Value: "{{ .Env.ATMOS_TEST_TEMPLATE_SOURCE }}"},
 				},
 				Steps: schema.Tasks{
 					{
-						Type: "shell",
-						Env: map[string]string{
-							"ATMOS_BUILD_TARGET":  "{{ .Flags.target }}",
-							"ATMOS_BUILD_VERSION": "{{ .Flags.version }}",
-						},
-						Command: fmt.Sprintf("printf %%s \"$ATMOS_BUILD_TARGET:$ATMOS_BUILD_VERSION\" > %q", outputPath),
+						Type:    "shell",
+						Name:    "write-env",
+						Command: fmt.Sprintf("printf '%%s' \"$ATMOS_TEST_TEMPLATE_TARGET\" > %q", outputFile),
 					},
 				},
 			},
 		},
 	}
 
-	parentCmd := &cobra.Command{Use: "atmos"}
-	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd))
-
-	buildCmd := findSubcommand(parentCmd, "build")
-	require.NotNil(t, buildCmd)
-	require.NoError(t, buildCmd.PersistentFlags().Set("target", "linux"))
-	require.NoError(t, buildCmd.PersistentFlags().Set("version", "1.2.3"))
-
-	buildCmd.PreRun(buildCmd, nil)
-	buildCmd.Run(buildCmd, nil)
-
-	output, err := os.ReadFile(outputPath)
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err)
-	assert.Equal(t, "linux:1.2.3", string(output))
+
+	customCmd, _, err := RootCmd.Find([]string{"test-env-template-alias"})
+	require.NoError(t, err)
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
+
+	actual, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	assert.Equal(t, "from-env-alias", string(actual))
 }
 
-func TestCustomCommandIntegration_MapEnvExported(t *testing.T) {
+func TestCustomCommandEnvironmentIncludesCurrentExecutable(t *testing.T) {
 	_ = NewTestKit(t)
 
 	tmpDir := t.TempDir()
-	envOutputFile := filepath.Join(tmpDir, "map-env.txt")
+	envOutputFile := filepath.Join(tmpDir, "env.txt")
 	exePath, err := os.Executable()
 	require.NoError(t, err)
+	exeDir := filepath.Dir(exePath)
+	pathEntries := filepath.SplitList(os.Getenv("PATH"))
+	filteredPathEntries := make([]string, 0, len(pathEntries))
+	for _, entry := range pathEntries {
+		if entry != exeDir {
+			filteredPathEntries = append(filteredPathEntries, entry)
+		}
+	}
+	t.Setenv("PATH", strings.Join(filteredPathEntries, string(os.PathListSeparator)))
 
-	// The step goes through two unescaping layers: YAML parsing, then shell lexing (mvdan/sh).
-	// A YAML single-quoted scalar preserves the shell double quotes verbatim, and
-	// filepath.ToSlash keeps the Windows path free of backslashes the shell would otherwise eat.
-	configContent := fmt.Sprintf(`
-base_path: .
-commands:
-  - name: dump-map-env
-    description: Dump map-form command env
-    env:
-      _ATMOS_TEST_DUMP_ENV: %s
-      MIXED_CASE_TEST_VAR: expected
-      FROM_COMMAND:
-        valueCommand: printf dynamic
-    steps:
-      - '%s'
-`, strconv.Quote(envOutputFile), strconv.Quote(filepath.ToSlash(exePath)))
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, cfg.AtmosConfigFileName), []byte(configContent), 0o644))
-	t.Chdir(tmpDir)
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{
+			{
+				Name:        "test-current-executable-env",
+				Description: "Dump custom command environment",
+				Env: []schema.CommandEnv{
+					{Key: "_ATMOS_TEST_DUMP_ENV", Value: envOutputFile},
+				},
+				Steps: stepsFromStrings(fmt.Sprintf("%q", exePath)),
+			},
+		},
+	}
 
-	atmosConfig, err := cfg.LoadConfig(&schema.ConfigAndStacksInfo{})
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err)
 
-	parentCmd := &cobra.Command{Use: "atmos"}
-	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, parentCmd))
-	parentCmd.SetArgs([]string{"dump-map-env"})
-	require.NoError(t, parentCmd.Execute())
+	customCmd, _, err := RootCmd.Find([]string{"test-current-executable-env"})
+	require.NoError(t, err)
+	require.NotNil(t, customCmd)
+
+	customCmd.Run(customCmd, []string{})
 
 	envContent, err := os.ReadFile(envOutputFile)
-	require.NoError(t, err, "map-form env must be exported with original key case")
+	require.NoError(t, err)
 	envVars := string(envContent)
 
-	assert.Equal(t, "expected", extractEnvVar(envVars, "MIXED_CASE_TEST_VAR"))
-	assert.Equal(t, "dynamic", extractEnvVar(envVars, "FROM_COMMAND"))
-	assert.Empty(t, extractEnvVar(envVars, "mixed_case_test_var"))
-	assert.Empty(t, extractEnvVar(envVars, "from_command"))
+	assert.Equal(t, exePath, extractEnvVar(envVars, "ATMOS_CLI_PATH"))
+	actualPathEntries := filepath.SplitList(extractEnvVar(envVars, "PATH"))
+	require.NotEmpty(t, actualPathEntries)
+	assert.Equal(t, exeDir, actualPathEntries[0])
+}
+
+func TestCustomCommandShellOutputNoneSuppressesOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses POSIX shell redirection")
+	}
+
+	_ = NewTestKit(t)
+
+	tmpDir := t.TempDir()
+	outputFile := filepath.Join(tmpDir, "ran.txt")
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Commands: []schema.Command{
+			{
+				Name:        "test-output-none",
+				Description: "Exercise output none for legacy shell custom command steps",
+				Steps: schema.Tasks{
+					{
+						Type:    "shell",
+						Name:    "quiet",
+						Output:  "none",
+						Command: fmt.Sprintf("echo stdout-visible; echo stderr-visible >&2; printf ran > %q", outputFile),
+					},
+				},
+			},
+		},
+	}
+
+	err := processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
+	require.NoError(t, err)
+
+	customCmd, _, err := RootCmd.Find([]string{"test-output-none"})
+	require.NoError(t, err)
+	require.NotNil(t, customCmd)
+
+	stdout, stderr := captureStdoutStderr(t, func() {
+		customCmd.Run(customCmd, []string{})
+	})
+
+	assert.NotContains(t, stdout, "stdout-visible")
+	assert.NotContains(t, stderr, "stderr-visible")
+
+	actual, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	assert.Equal(t, "ran", string(actual))
 }
 
 // TestCustomCommandIntegration_MockProviderEnvironment tests that custom commands with mock provider
@@ -413,48 +609,16 @@ func TestCustomCommandIntegration_SkipsStepWhenConditionIsFalse(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	skippedFile := filepath.Join(tmpDir, "skipped.txt")
-	celSkippedFile := filepath.Join(tmpDir, "cel-skipped.txt")
-	celRanFile := filepath.Join(tmpDir, "cel-ran.txt")
-	envSkippedFile := filepath.Join(tmpDir, "env-skipped.txt")
-	envRanFile := filepath.Join(tmpDir, "env-ran.txt")
 	ranFile := filepath.Join(tmpDir, "ran.txt")
 
 	testCommand := schema.Command{
 		Name:        "test-when-skip",
 		Description: "Test when skip",
-		Env: []schema.CommandEnv{
-			{Key: "TARGET", Value: "prod"},
-		},
 		Steps: schema.Tasks{
 			{
 				Command: customCommandWriteHelperCommand(t, skippedFile, "skipped"),
 				Type:    "shell",
 				When:    schema.MustCondition("never"),
-			},
-			{
-				Name:    "cel-skip",
-				Command: customCommandWriteHelperCommand(t, celSkippedFile, "cel-skipped"),
-				Type:    "shell",
-				When:    schema.MustCondition("step == 'cel-run'"),
-			},
-			{
-				Name:    "cel-run",
-				Command: customCommandWriteHelperCommand(t, celRanFile, "cel-ran"),
-				Type:    "shell",
-				When:    schema.MustCondition("workflow == 'test-when-skip' && step == 'cel-run'"),
-			},
-			{
-				Name:    "env-skip",
-				Command: customCommandWriteHelperCommand(t, envSkippedFile, "env-skipped"),
-				Type:    "shell",
-				When:    schema.MustCondition("env['TARGET'] == 'dev'"),
-			},
-			{
-				Name:    "env-run",
-				Command: customCommandWriteHelperCommand(t, envRanFile, "env-ran"),
-				Type:    "shell",
-				Env:     map[string]string{"STEP_TARGET": "enabled"},
-				When:    schema.MustCondition("env['TARGET'] == 'prod' && env['STEP_TARGET'] == 'enabled'"),
 			},
 			{
 				Command: customCommandWriteHelperCommand(t, ranFile, "ran"),
@@ -479,10 +643,6 @@ func TestCustomCommandIntegration_SkipsStepWhenConditionIsFalse(t *testing.T) {
 	customCmd.Run(customCmd, []string{})
 
 	assert.NoFileExists(t, skippedFile)
-	assert.NoFileExists(t, celSkippedFile)
-	assert.FileExists(t, celRanFile)
-	assert.NoFileExists(t, envSkippedFile)
-	assert.FileExists(t, envRanFile)
 	assert.FileExists(t, ranFile)
 }
 

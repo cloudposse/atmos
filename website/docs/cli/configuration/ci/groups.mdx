@@ -1,0 +1,127 @@
+---
+title: CI Log Groups Configuration
+sidebar_label: groups
+sidebar_class_name: command
+id: groups
+description: Fold Atmos output into collapsible, named CI log groups — by step, by phase, or by whole invocation.
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+The `ci.groups` section of `atmos.yaml` controls collapsible CI log groups. When Atmos runs
+inside a CI provider that supports log grouping (GitHub Actions today), it folds its output into
+named, expandable sections — on GitHub Actions, the `::group::<name>` / `::endgroup::` workflow
+commands. A single `mode` selects the grouping granularity.
+</Intro>
+
+<Experimental />
+
+## Quick Start
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  enabled: true     # master switch (required)
+  groups:
+    mode: auto      # auto | invocation | off  (default: auto)
+```
+</File>
+
+With `ci.enabled: true`, grouping defaults to `auto` in a grouping-capable CI provider — you do
+not need to set `ci.groups.mode` at all.
+
+## Grouping modes
+
+CI providers do **not** support nested groups, so the mode is a single, mutually-exclusive choice
+of granularity:
+
+<dl>
+  <dt>`auto` (default)</dt>
+  <dd>
+    The finest grouping that applies to each command:
+
+    - **Workflow / custom-command steps** — one group per step, labeled with the step name.
+    - **`terraform` / `tofu` phases** — separate groups for `init` and the main subcommand
+      (`plan` / `apply` / `destroy` / …).
+
+    When a step runs `atmos terraform apply`, the step is one group and its internal phases stay
+    flat inside it (the outermost group wins).
+  </dd>
+
+  <dt>`invocation`</dt>
+  <dd>
+    One group around each whole top-level `atmos <command>` run — including plain commands
+    invoked directly from CI YAML (`atmos describe`, `atmos vendor pull`, a bare
+    `atmos terraform plan`). Finer step/phase grouping is suppressed.
+  </dd>
+
+  <dt>`off`</dt>
+  <dd>No grouping.</dd>
+</dl>
+
+## How It Works
+
+In `auto` mode a workflow renders as a list of expandable steps:
+
+```text
+::group::deploy network
+... `atmos terraform apply vpc` output ...
+::endgroup::
+::group::deploy cluster
+... `atmos terraform apply eks` output ...
+::endgroup::
+```
+
+…and a direct `atmos terraform plan` renders as its phases:
+
+```text
+::group::terraform init
+... provider/backend init ...
+::endgroup::
+::group::terraform plan
+... the plan ...
+::endgroup::
+```
+
+A few properties keep the behavior safe and unobtrusive:
+
+- **No-op outside CI.** When no grouping-capable provider is detected, or when `mode: off`, output
+  is unchanged.
+- **No nested groups.** When a command invokes `atmos` again (a custom command calling another, a
+  nested workflow, or a workflow step running `atmos terraform apply`), the child detects the open
+  group and stays flat. You always get one level of grouping.
+- **Secret-safe labels.** Group labels go through the same masking layer as the rest of Atmos
+  output. Invocation labels also omit flags, flag values, and anything after `--`.
+
+:::note Requirements
+Grouping is emitted only when **both** `ci.enabled` is `true` **and** a grouping-capable CI
+provider is detected (GitHub Actions sets `GITHUB_ACTIONS=true`). Outside a supported provider it
+is a no-op.
+:::
+
+## Configuration Reference
+
+<dl>
+  <dt>`ci.groups.mode`</dt>
+  <dd>
+    Grouping granularity: `auto`, `invocation`, or `off`. Effective only when `ci.enabled` is
+    `true` and a grouping-capable provider is detected.
+
+    **Default:** `auto` (when omitted)
+  </dd>
+</dl>
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ATMOS_CI_GROUPS_MODE` | Override `ci.groups.mode` (`auto`/`invocation`/`off`) |
+
+## Related
+
+- [CI Configuration](/cli/configuration/ci) - Parent `ci` section
+- [Custom Commands](/cli/configuration/commands) - Define multi-step custom commands
+- [`atmos workflow`](/cli/commands/workflow) - Run multi-step workflows

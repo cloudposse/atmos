@@ -25,6 +25,9 @@ self-hosted Macs, AWS EC2 Mac, or keep a limited Intel macOS CI leg.
 
 Keep the dedicated k3s macOS example job on `macos-15-intel` for now, and keep
 all ordinary macOS build and acceptance coverage on Apple Silicon (`macos-15`).
+Start Colima with the VZ backend on the Intel runner. The QEMU backend reached
+Lima's `usernet` SSH forwarding path and failed on hosted `macos-15-intel` with
+`usernet unable to resolve IP for SSH forwarding` before any Atmos test ran.
 
 This is not a long-term preference for Intel. It is a narrow compatibility choice
 for the Docker/Colima-backed k3s emulator smoke test because the current CI

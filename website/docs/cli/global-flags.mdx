@@ -132,6 +132,29 @@ These flags are available for every Atmos command:
         - Atmos looks for `atmos.yaml`, `.atmos.yaml`, `atmos.yml`, or `.atmos.yml` in these directories
     </dd>
 
+    <dt>`--cast`</dt>
+    <dd>
+        Record an Atmos command as an asciicast. Use bare `--cast` to write a generated `.cast` file, or pass an output file. The file extension determines the output type:
+        - `.cast` writes the asciicast recording directly
+        - `.gif` records to a temporary cast and renders a GIF (requires `agg`)
+        - `.mp4` records to a temporary cast and renders an MP4 (requires `agg` and `ffmpeg`)
+        - `.html` renders a static HTML fragment of the final terminal content (native, no external tools)
+        - `.ascii` renders the final terminal content as plain text with no ANSI codes (native)
+        - `.png` / `.jpg` render a static image of the final terminal content (native)
+
+        Help output is recorded too when `--cast` is passed explicitly, which makes documentation screenshots one command:
+
+        **Basic Usage:**
+        ```bash
+        atmos about --cast
+        atmos about --cast=artifacts/about.cast
+        atmos about --cast=artifacts/about.gif
+        atmos about --cast=artifacts/about.mp4
+        atmos about --cast=artifacts/about.png
+        atmos about --help --cast=artifacts/about-help.html
+        ```
+    </dd>
+
     <dt>`--profile`</dt>
     <dd>
         Activate configuration profiles for environment-specific settings.

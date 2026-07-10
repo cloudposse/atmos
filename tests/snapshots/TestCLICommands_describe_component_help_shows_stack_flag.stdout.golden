@@ -6,42 +6,42 @@ designated Atmos stack, including its dependencies, settings, and overrides.
 
 USAGE
 
-                                        
-    $ atmos describe component [flags]  
-                                        
+
+    $ atmos describe component [flags]
+
 
 EXAMPLES
 
-                                                                                                    
-    - The output format                                                                             
-                                                                                                    
-                                                                                                    
-     $ atmos describe component <component> -s <stack> --format=yaml|json                           
-                                                                                                    
-                                                                                                    
-    - Write the result to the file                                                                  
-                                                                                                    
-                                                                                                    
-     $ atmos describe component <component> -s <stack> --file component.yaml                        
-                                                                                                    
-                                                                                                    
-    - Enable/disable Go template processing in Atmos stack manifests when executing the command     
-                                                                                                    
-                                                                                                    
-     $ atmos describe component <component> -s <stack> --process-templates=false                    
-                                                                                                    
-                                                                                                    
-    - Enable/disable YAML functions processing in Atmos stack manifests when executing the command  
-                                                                                                    
-                                                                                                    
-     $ atmos describe component <component> -s <stack> --process-functions=false                    
-                                                                                                    
-                                                                                                    
-    - Skip executing a YAML function in the Atmos stack manifests when executing the command        
-                                                                                                    
-                                                                                                    
-     $ atmos describe component <component> -s <stack> --skip=terraform.output                      
-                                                                                                    
+
+    - The output format
+
+
+     $ atmos describe component <component> -s <stack> --format=yaml|json
+
+
+    - Write the result to the file
+
+
+     $ atmos describe component <component> -s <stack> --file component.yaml
+
+
+    - Enable/disable Go template processing in Atmos stack manifests when executing the command
+
+
+     $ atmos describe component <component> -s <stack> --process-templates=false
+
+
+    - Enable/disable YAML functions processing in Atmos stack manifests when executing the command
+
+
+     $ atmos describe component <component> -s <stack> --process-functions=false
+
+
+    - Skip executing a YAML function in the Atmos stack manifests when executing the command
+
+
+     $ atmos describe component <component> -s <stack> --skip=terraform.output
+
 
 FLAGS
 
@@ -70,6 +70,10 @@ GLOBAL FLAGS
       --ai                                   Enable AI-powered analysis of command output
 
       --base-path string                     Base path for Atmos project
+
+      --cast string                          Record command output as an asciinema cast (--cast for generated path, --
+                                             cast=path with a .cast, .gif, .mp4, .html, .ascii, .png, .jpg, or .jpeg
+                                             extension for explicit output)
 
   -C, --chdir string                         Change working directory before executing the command (run as if Atmos
                                              started in this directory)

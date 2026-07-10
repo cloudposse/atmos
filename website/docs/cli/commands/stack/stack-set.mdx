@@ -1,0 +1,70 @@
+---
+title: atmos stack set
+sidebar_label: set
+sidebar_class_name: command
+id: stack-set
+description: Set a component-relative value in the stack manifest that defines it, preserving comments, anchors, and templates.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Set a component-relative value for a component in a stack. Atmos uses provenance to
+find the manifest file that defines the effective value and edits that file in place,
+preserving comments, anchors/aliases, Atmos YAML functions, and Go templates.
+</Intro>
+
+:::info
+`atmos stack set` is an alias for [`atmos stack config set`](/cli/commands/stack/config/set), the canonical form.
+:::
+
+<CastPlayer title="atmos stack set --help" src="/casts/screengrabs/atmos-stack-set--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos stack set <path> <value> -s <stack> -c <component> [--type <type>] [--file <manifest>]
+```
+
+## Examples
+
+```shell
+# Set the value where it currently resolves from.
+atmos stack set vars.region us-west-2 -s plat-ue2-prod -c vpc
+
+# Typed value.
+atmos stack set settings.spacelift.workspace_enabled true --type=bool -s plat-ue2-prod -c vpc
+
+# Edit (or create the key in) a specific manifest.
+atmos stack set vars.new_flag yes --file stacks/deploy/prod.yaml -s plat-ue2-prod -c vpc
+```
+
+## Arguments
+
+<dl>
+  <dt>`<path>` (required)</dt>
+  <dd>Component-relative dot-notation path (e.g. `vars.region`).</dd>
+  <dt>`<value>` (required)</dt>
+  <dd>The value to set, interpreted according to `--type`.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s` (string, required)</dt>
+  <dd>The stack name.</dd>
+  <dt>`--component` / `-c` (string, required)</dt>
+  <dd>The component name.</dd>
+  <dt>`--type` (string, default `string`)</dt>
+  <dd>How to interpret `<value>`: `string`, `int`, `bool`, `float`, `null`, or `yaml` (raw literal).</dd>
+  <dt>`--file` (string)</dt>
+  <dd>Edit this manifest explicitly instead of resolving via provenance. Required when the value is not yet defined anywhere; can also be used to create new keys.</dd>
+</dl>
+
+:::note
+Edits that would alter or expand a YAML anchor or alias are rejected to avoid silently
+mutating shared data, as are multi-document manifests and manifests that define the
+same anchor name more than once. Comments, anchors, indentation width, and line
+endings (CRLF/LF) are preserved, but blank lines between entries are dropped and
+non-indented sequence styles are normalized when a file is edited.
+:::

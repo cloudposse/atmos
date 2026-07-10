@@ -5,15 +5,17 @@ sidebar_class_name: command
 id: deploy
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Use this command to deploy Terraform changes for an Atmos component in a stack with auto-approval. This combines plan and apply operations in a single command.
 </Intro>
 
-<Screengrab title="atmos terraform deploy --help" slug="atmos-terraform-deploy--help" />
+<CastPlayer src="/casts/demo/fixtures/native-terraform/deploy.cast" title="atmos terraform deploy" chrome controls scrubber />
+
+<CastPlayer title="atmos terraform deploy --help" src="/casts/screengrabs/atmos-terraform-deploy--help.cast" static chrome />
 
 ## Usage
 
@@ -183,6 +185,47 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
         ```shell
         atmos terraform deploy <component> -s <stack> --skip=eval --skip=include
         atmos terraform deploy <component> -s <stack> --skip=terraform.output,include
+        ```
+    </dd>
+
+    <dt>`--max-concurrency` <em>(optional)</em></dt>
+    <dd>
+        Maximum number of components to deploy concurrently when running with `--all`, `--affected`, `--components`, or `--query`. Default is `1` (sequential).
+
+        **Environment variable:** `ATMOS_TERRAFORM_DEPLOY_MAX_CONCURRENCY`
+
+        ```shell
+        atmos terraform deploy --all -s prod --max-concurrency 4
+        ```
+    </dd>
+
+    <dt>`--failure-mode` <em>(optional)</em></dt>
+    <dd>
+        Controls how the concurrent scheduler handles a failed component when using `--all`, `--affected`, `--components`, or `--query` with `--max-concurrency > 1`.
+
+        Supported values:
+        - `fail-fast` *(default)* — stop scheduling new components as soon as one fails
+        - `keep-going` — continue deploying independent graph branches even after a failure
+
+        **Environment variable:** `ATMOS_TERRAFORM_DEPLOY_FAILURE_MODE`
+
+        ```shell
+        atmos terraform deploy --all -s prod --max-concurrency 4 --failure-mode keep-going
+        ```
+    </dd>
+
+    <dt>`--log-order` <em>(optional)</em></dt>
+    <dd>
+        Controls how concurrent per-component logs are ordered when `--max-concurrency` is greater than `1`.
+
+        Supported values:
+        - `stream` *(default)* — print log lines as they arrive, interleaved across components
+        - `grouped` — buffer each component's output and print it as a contiguous block after the component finishes
+
+        **Environment variable:** `ATMOS_TERRAFORM_DEPLOY_LOG_ORDER`
+
+        ```shell
+        atmos terraform deploy --all -s prod --max-concurrency 4 --log-order grouped
         ```
     </dd>
 

@@ -12,6 +12,8 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
+	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -63,6 +65,43 @@ func TestExecutor_Execute_BasicShellWorkflow(t *testing.T) {
 	assert.Len(t, result.Steps, 1)
 	assert.True(t, result.Steps[0].Success)
 	assert.Equal(t, "step1", result.Steps[0].StepName)
+}
+
+func TestExecutor_Execute_PropagatesLogGroupSentinel(t *testing.T) {
+	restore := ci.SwapRegistryForTest()
+	t.Cleanup(restore)
+	ci.Register(githubprovider.NewProvider())
+	t.Setenv("GITHUB_ACTIONS", "true")
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+	var capturedEnv []string
+	mockRunner.EXPECT().
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", gomock.Any(), false).
+		DoAndReturn(func(_ string, _ string, _ string, env []string, _ bool) error {
+			capturedEnv = env
+			return nil
+		})
+
+	executor := NewExecutor(mockRunner, nil, mockUI)
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{{
+			Name:    "step1",
+			Command: "echo 'hello'",
+			Type:    "shell",
+		}},
+	}
+	params := newTestParams(workflowDef, ExecuteOptions{})
+	params.AtmosConfig.CI.Enabled = true
+
+	result, err := executor.Execute(params)
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+	assert.Contains(t, capturedEnv, ci.LogGroupSentinelEnv())
 }
 
 func TestExecutor_Execute_SkipsStepWhenConditionIsFalse(t *testing.T) {
@@ -144,7 +183,7 @@ func TestExecutor_Execute_EvaluatesCELStepCondition(t *testing.T) {
 	assert.False(t, result.Steps[1].Skipped)
 }
 
-func TestExecutor_Execute_RejectsFailureStepCondition(t *testing.T) {
+func TestExecutor_Execute_SkipsInitialFailureStepCondition(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -162,9 +201,12 @@ func TestExecutor_Execute_RejectsFailureStepCondition(t *testing.T) {
 
 	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
 
-	require.Error(t, err)
-	assert.ErrorIs(t, err, schema.ErrInvalidWhenCondition)
-	assert.False(t, result.Success)
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+	require.Len(t, result.Steps, 1)
+	assert.True(t, result.Steps[0].Skipped)
+	assert.True(t, result.Steps[0].Success)
+	assert.Equal(t, "failure-only", result.Steps[0].StepName)
 }
 
 // TestExecutor_Execute_BasicAtmosWorkflow tests executing a simple atmos workflow.

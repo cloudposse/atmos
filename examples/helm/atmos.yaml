@@ -26,6 +26,16 @@ logs:
   file: "/dev/stderr"
   level: Info
 
+toolchain:
+  install_path: .tools
+  aliases:
+    helm: helm/helm
+  registries:
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
 commands:
   - name: "test"
     description: "Render the local Helm chart, deploy it to the k3s emulator, verify it, then tear it down"

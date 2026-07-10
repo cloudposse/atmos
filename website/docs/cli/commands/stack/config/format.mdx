@@ -1,0 +1,49 @@
+---
+title: atmos stack config format
+sidebar_label: format
+sidebar_class_name: command
+id: format
+description: Format the manifest files that define a stack component.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Format the manifest files that define the selected component in place, preserving
+comments, anchors, YAML functions, and templates. Atmos uses provenance to find the
+files that contribute effective component values. This is the canonical form;
+[`atmos stack format`](/cli/commands/stack/stack-format) is a convenience alias for
+this command.
+</Intro>
+
+<CastPlayer title="atmos stack config format --help" src="/casts/screengrabs/atmos-stack-config-format--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos stack config format -s <stack> -c <component> [--file <manifest>]
+```
+
+The `fmt` alias is also accepted.
+
+## Examples
+
+```shell
+atmos stack config format -s plat-ue2-prod -c vpc
+atmos stack config format -s plat-ue2-prod -c vpc --file stacks/catalog/vpc.yaml
+```
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s` (string, required)</dt>
+  <dd>The stack name.</dd>
+  <dt>`--component` / `-c` (string, required)</dt>
+  <dd>The component name.</dd>
+  <dt>`--file` (string)</dt>
+  <dd>Format this manifest file explicitly instead of resolving all provenance-contributing files.</dd>
+</dl>
+
+## Related
+
+- Alias: [`atmos stack format`](/cli/commands/stack/stack-format)

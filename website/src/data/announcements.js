@@ -31,7 +31,7 @@ export const announcements = [
   {
     id: 'native-ci-2024',
     content:
-      'New: <a href="/blog/native-ci-integration">Native CI/CD integration</a> for Terraform plan/apply lifecycle',
+      'New: <a href="/changelog/native-ci-integration">Native CI/CD integration</a> for Terraform plan/apply lifecycle',
   },
   {
     id: 'atmos-ai',

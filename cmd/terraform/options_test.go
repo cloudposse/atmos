@@ -56,7 +56,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				All:                     true,
 				Affected:                true,
 				MaxConcurrency:          4,
-				PlanLogOrder:            "grouped",
+				LogOrder:                "grouped",
 				PlanHide:                []string{"no-changes"},
 				PlanHideNoChanges:       true,
 				PlanSummaryFile:         "/tmp/summary.json",
@@ -287,7 +287,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.All, result.All, "All should match")
 			assert.Equal(t, tt.expected.Affected, result.Affected, "Affected should match")
 			assert.Equal(t, tt.expected.MaxConcurrency, result.MaxConcurrency, "MaxConcurrency should match")
-			assert.Equal(t, tt.expected.PlanLogOrder, result.PlanLogOrder, "PlanLogOrder should match")
+			assert.Equal(t, tt.expected.LogOrder, result.LogOrder, "LogOrder should match")
 			assert.Equal(t, tt.expected.PlanHide, result.PlanHide, "PlanHide should match")
 			assert.Equal(t, tt.expected.PlanHideNoChanges, result.PlanHideNoChanges, "PlanHideNoChanges should match")
 			assert.Equal(t, tt.expected.PlanSummaryFile, result.PlanSummaryFile, "PlanSummaryFile should match")
@@ -340,7 +340,7 @@ func TestParseTerraformRunOptionsNormalizesValidatedValues(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, terraformFailureModeKeepGoing, result.FailureMode)
-	assert.Equal(t, terraformPlanLogOrderGrouped, result.PlanLogOrder)
+	assert.Equal(t, terraformLogOrderGrouped, result.LogOrder)
 }
 
 func TestTerraformRunOptions_Fields(t *testing.T) {
@@ -362,7 +362,7 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 		All:                     true,
 		Affected:                true,
 		MaxConcurrency:          4,
-		PlanLogOrder:            "grouped",
+		LogOrder:                "grouped",
 		PlanHide:                []string{"no-changes"},
 		PlanHideNoChanges:       true,
 		PlanSummaryFile:         "/tmp/summary.json",
@@ -385,7 +385,7 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 	assert.True(t, opts.All)
 	assert.True(t, opts.Affected)
 	assert.Equal(t, 4, opts.MaxConcurrency)
-	assert.Equal(t, "grouped", opts.PlanLogOrder)
+	assert.Equal(t, "grouped", opts.LogOrder)
 	assert.Equal(t, []string{"no-changes"}, opts.PlanHide)
 	assert.True(t, opts.PlanHideNoChanges)
 	assert.Equal(t, "/tmp/summary.json", opts.PlanSummaryFile)
@@ -482,7 +482,7 @@ func TestApplyOptionsToInfo(t *testing.T) {
 				InitRunReconfigure:      "false",
 				InitPassVars:            true,
 				MaxConcurrency:          4,
-				PlanLogOrder:            "grouped",
+				LogOrder:                "grouped",
 				PlanHide:                []string{"no-changes"},
 				PlanHideNoChanges:       true,
 				PlanSummaryFile:         "/tmp/summary.json",
@@ -496,7 +496,7 @@ func TestApplyOptionsToInfo(t *testing.T) {
 				assert.Equal(t, "false", info.InitRunReconfigure)
 				assert.Equal(t, "true", info.InitPassVars)
 				assert.Equal(t, 4, info.MaxConcurrency)
-				assert.Equal(t, "grouped", info.TerraformPlanLogOrder)
+				assert.Equal(t, "grouped", info.TerraformLogOrder)
 				assert.Equal(t, []string{"no-changes"}, info.TerraformPlanHide)
 				assert.True(t, info.TerraformPlanHideNoChanges)
 				assert.Equal(t, "/tmp/summary.json", info.TerraformPlanSummaryFile)

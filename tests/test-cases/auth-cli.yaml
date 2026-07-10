@@ -222,7 +222,7 @@ tests:
         - "Authenticate to cloud providers using an identity defined in atmos.yaml"
         - "USAGE"
         - "atmos auth login"
-        - "--identity"
+        - "--help=all"
       sanitize:
         "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0

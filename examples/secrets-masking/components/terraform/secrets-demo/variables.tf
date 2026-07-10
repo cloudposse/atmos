@@ -29,3 +29,21 @@ variable "plain_value" {
   type        = string
   default     = ""
 }
+
+variable "tenant" {
+  description = "Atmos tenant context. Accepted so shared stack vars do not produce Terraform warnings."
+  type        = string
+  default     = ""
+}
+
+variable "environment" {
+  description = "Atmos environment context. Accepted so shared stack vars do not produce Terraform warnings."
+  type        = string
+  default     = ""
+}
+
+variable "stage" {
+  description = "Atmos stage context. Accepted so shared stack vars do not produce Terraform warnings."
+  type        = string
+  default     = ""
+}

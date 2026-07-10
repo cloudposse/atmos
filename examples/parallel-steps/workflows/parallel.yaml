@@ -15,16 +15,16 @@ workflows:
         steps:
           - name: lint
             type: shell
-            command: echo "lint started"; sleep 1; echo "lint passed"
+            command: printf "\033[36mlint started\033[0m\n"; sleep 1; printf "\033[32mlint passed\033[0m\n"
 
           - name: unit
             type: shell
-            command: echo "unit tests started"; sleep 1; echo "unit tests passed"
+            command: printf "\033[36munit tests started\033[0m\n"; sleep 1; printf "\033[32munit tests passed\033[0m\n"
 
           - name: package
             type: shell
             needs: [lint, unit]
-            command: echo "packaging after lint and unit"
+            command: printf "\033[32mpackaging after lint and unit\033[0m\n"
 
   prefixed:
     description: Stream parallel child output live with step-name prefixes.
@@ -63,4 +63,4 @@ workflows:
         steps:
           - name: test
             type: shell
-            command: echo "testing {{ .matrix.os }} with Go {{ .matrix.go }}"
+            command: printf "\033[32mtesting {{ .matrix.os }} with Go {{ .matrix.go }}\033[0m\n"

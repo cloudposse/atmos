@@ -52,27 +52,36 @@ runs:
           brew untap aws/tap
         fi
 
-        run_with_timeout 600 brew install colima docker qemu
+        run_with_timeout 420 brew install colima docker
 
-        for attempt in 1 2 3; do
-          echo "::group::Start Colima attempt ${attempt}"
-          if run_with_timeout 720 colima start --runtime docker --vm-type qemu --cpu 2 --memory 4 --disk 20; then
-            echo "::endgroup::"
-            break
-          fi
+        start_colima() {
+          local status=1
 
-          status=$?
-          echo "::endgroup::"
-          diagnose_colima
+          for vm_type in vz qemu; do
+            if [ "$vm_type" = "qemu" ]; then
+              run_with_timeout 420 brew install qemu
+            fi
 
-          run_with_timeout 180 colima delete -f || true
+            for attempt in 1 2; do
+              echo "::group::Start Colima (${vm_type}) attempt ${attempt}"
+              if run_with_timeout 480 colima start --runtime docker --vm-type "$vm_type" --cpu 2 --memory 4 --disk 20; then
+                echo "::endgroup::"
+                return 0
+              fi
 
-          if [ "$attempt" -eq 3 ]; then
-            exit "$status"
-          fi
+              status=$?
+              echo "::endgroup::"
+              diagnose_colima
 
-          sleep $((attempt * 20))
-        done
+              run_with_timeout 180 colima delete -f || true
+              sleep $((attempt * 20))
+            done
+          done
+
+          return "$status"
+        }
+
+        start_colima
 
         docker context use colima || true
         run_with_timeout 120 docker version

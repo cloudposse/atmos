@@ -1,3 +1,11 @@
+---
+title: Container Components
+tags: [Components]
+cast:
+  file: /casts/examples/container-component/lifecycle.cast
+  title: atmos container component lifecycle
+---
+
 # Container Components
 
 This example demonstrates the **`container` component kind**: stack-scoped,
