@@ -13,6 +13,42 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestPromptForConsent covers the consent prompt's stdout messaging (the
+// warning banner and prompt text) together with both possible stdin
+// responses, by redirecting os.Stdin to a pipe fed with scripted input.
+func TestPromptForConsent(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{name: "yes response", input: "y\n", expected: true},
+		{name: "YES uppercase response", input: "YES\n", expected: true},
+		{name: "no response", input: "n\n", expected: false},
+		{name: "empty response defaults to no", input: "\n", expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, w, err := os.Pipe()
+			require.NoError(t, err)
+
+			origStdin := os.Stdin
+			os.Stdin = r
+			t.Cleanup(func() { os.Stdin = origStdin })
+
+			_, err = w.WriteString(tt.input)
+			require.NoError(t, err)
+			require.NoError(t, w.Close())
+
+			result, err := PromptForConsent()
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestFindStackFiles(t *testing.T) {
 	tests := []struct {
 		name          string

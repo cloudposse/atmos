@@ -2124,3 +2124,31 @@ func TestExecuteWorkflow_ExecStepNotLastFails(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, schema.ErrExecStepNotLast)
 }
+
+// TestExecuteWorkflowUI_TUIStartFailureIsReturned covers the line in
+// ExecuteWorkflowUI right after `w.Execute(...)` (`_ = data.Writeln("")`),
+// which unconditionally runs whether or not the TUI started successfully.
+//
+// In a headless test process there is no controlling TTY, so Bubble Tea's
+// Program.Run() cannot open one (see charmbracelet/bubbletea's
+// openInputTTY, which falls back to opening /dev/tty and fails fast when
+// none is available) and returns an error immediately instead of blocking on
+// input. That lets this test reach the `data.Writeln("")` line and the
+// subsequent `if err != nil { return ..., err }` branch without needing a
+// real interactive session.
+func TestExecuteWorkflowUI_TUIStartFailureIsReturned(t *testing.T) {
+	tmpDir := t.TempDir()
+	workflowsDir := filepath.Join(tmpDir, "workflows")
+	require.NoError(t, os.MkdirAll(workflowsDir, 0o755))
+
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Workflows: schema.Workflows{
+			BasePath: "workflows",
+		},
+	}
+
+	_, _, _, err := ExecuteWorkflowUI(atmosConfig)
+
+	require.Error(t, err)
+}

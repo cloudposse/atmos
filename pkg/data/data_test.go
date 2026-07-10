@@ -490,6 +490,98 @@ func TestWriteUnmasked_BypassesMasking(t *testing.T) {
 	}
 }
 
+// stubWriter is a controllable io.Writer used to exercise WriteUnmasked's
+// write-error, short-write, and over-report-write edge cases, none of which a
+// bytes.Buffer-backed writer can ever produce on its own.
+type stubWriter struct {
+	n   int
+	err error
+}
+
+func (w *stubWriter) Write(_ []byte) (int, error) {
+	return w.n, w.err
+}
+
+func TestWriteUnmasked_WriterEdgeCases(t *testing.T) {
+	boom := errors.New("boom")
+
+	tests := []struct {
+		name    string
+		content string
+		stub    *stubWriter
+		verify  func(t *testing.T, err error)
+	}{
+		{
+			name:    "writer returns an error",
+			content: "export AWS_SECRET_ACCESS_KEY='value'",
+			stub:    &stubWriter{n: 4, err: boom},
+			verify: func(t *testing.T, err error) {
+				t.Helper()
+				if !errors.Is(err, errUtils.ErrWriteToStream) {
+					t.Errorf("WriteUnmasked() error = %v, want errors.Is match for ErrWriteToStream", err)
+				}
+				if !errors.Is(err, boom) {
+					t.Errorf("WriteUnmasked() error = %v, want errors.Is match for underlying write error", err)
+				}
+			},
+		},
+		{
+			name:    "short write with no error",
+			content: "export AWS_SECRET_ACCESS_KEY='value'",
+			stub:    &stubWriter{n: 4, err: nil},
+			verify: func(t *testing.T, err error) {
+				t.Helper()
+				if !errors.Is(err, errUtils.ErrWriteToStream) {
+					t.Errorf("WriteUnmasked() error = %v, want errors.Is match for ErrWriteToStream", err)
+				}
+				if !errors.Is(err, stdio.ErrShortWrite) {
+					t.Errorf("WriteUnmasked() error = %v, want errors.Is match for stdio.ErrShortWrite", err)
+				}
+			},
+		},
+		{
+			name:    "writer reports more bytes written than given - clamped, no error",
+			content: "hi",
+			stub:    &stubWriter{n: 999, err: nil},
+			verify: func(t *testing.T, err error) {
+				t.Helper()
+				if err != nil {
+					t.Errorf("WriteUnmasked() error = %v, want nil", err)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			streams := &testStreams{
+				stdin:  &bytes.Buffer{},
+				stdout: tt.stub,
+				stderr: &bytes.Buffer{},
+			}
+			ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+			if err != nil {
+				t.Fatalf("failed to create I/O context: %v", err)
+			}
+
+			ioMu.Lock()
+			oldCtx := globalIOContext
+			ioMu.Unlock()
+
+			InitWriter(ioCtx)
+
+			defer func() {
+				ioMu.Lock()
+				globalIOContext = oldCtx
+				ioMu.Unlock()
+			}()
+
+			err = WriteUnmasked(tt.content)
+			tt.verify(t, err)
+		})
+	}
+}
+
 func TestWriteUnmaskedf(t *testing.T) {
 	stdout, stderr, cleanup := setupTestIO(t)
 	defer cleanup()
@@ -892,4 +984,62 @@ func TestMarkdown_ContextNotInitialized(t *testing.T) {
 	}()
 
 	_ = Markdown("# Test")
+}
+
+func TestMarkdownNoWrap_ContextNotInitialized(t *testing.T) {
+	// Save current context.
+	ioMu.Lock()
+	oldCtx := globalIOContext
+	globalIOContext = nil
+	ioMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		ioMu.Lock()
+		globalIOContext = oldCtx
+		ioMu.Unlock()
+	}()
+
+	// Should panic when context not initialized.
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("MarkdownNoWrap() did not panic when globalIOContext is nil")
+		}
+	}()
+
+	_ = MarkdownNoWrap("# Test")
+}
+
+func TestMarkdownNoWrap_RendererNotInitialized(t *testing.T) {
+	stdout, stderr, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	// Save old renderer.
+	ioMu.Lock()
+	oldRenderer := globalMarkdownRender
+	globalMarkdownRender = nil
+	ioMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		ioMu.Lock()
+		globalMarkdownRender = oldRenderer
+		ioMu.Unlock()
+	}()
+
+	err := MarkdownNoWrap("# Test")
+	if err == nil {
+		t.Error("MarkdownNoWrap() should return error when renderer not initialized")
+	}
+	if !errors.Is(err, errUtils.ErrUIFormatterNotInitialized) {
+		t.Errorf("MarkdownNoWrap() error = %v, want errors.Is match for ErrUIFormatterNotInitialized", err)
+	}
+
+	// Should not have written anything.
+	if stdout.Len() != 0 {
+		t.Errorf("MarkdownNoWrap() wrote to stdout: %q", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("MarkdownNoWrap() wrote to stderr: %q", stderr.String())
+	}
 }

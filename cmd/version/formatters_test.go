@@ -15,6 +15,29 @@ import (
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
 
+// captureStderr redirects os.Stderr for the duration of fn and returns
+// everything written to it. Several formatter functions write UI output to
+// stderr via pkg/ui rather than returning it, so tests need this to assert
+// on the rendered content.
+func captureStderr(t *testing.T, fn func() error) (string, error) {
+	t.Helper()
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+	defer func() { os.Stderr = oldStderr }()
+	defer r.Close()
+
+	fnErr := fn()
+
+	_ = w.Close()
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	return buf.String(), fnErr
+}
+
 func TestRenderMarkdownInline(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -557,6 +580,79 @@ func TestFormatReleaseDetailText_Prerelease(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, output, "v2.0.0-beta")
 	assert.Contains(t, output, "Pre-release")
+}
+
+// TestFormatReleaseListText_NoReleasesAfterSynthetic covers the
+// `len(releases) == 0` branch in formatReleaseListText. Under the default
+// pkgversion.Version ("test"), addCurrentVersionIfMissing always synthesizes
+// a current-version release, so an empty input never actually stays empty —
+// this branch is otherwise unreachable in tests. Temporarily clearing
+// pkgversion.Version makes addCurrentVersionIfMissing a no-op (mirrors the
+// mutation pattern used by pkg/version's own tests), letting an empty input
+// stay empty and exercise the "No releases found" message.
+func TestFormatReleaseListText_NoReleasesAfterSynthetic(t *testing.T) {
+	originalVersion := pkgversion.Version
+	pkgversion.Version = ""
+	defer func() { pkgversion.Version = originalVersion }()
+
+	output, err := captureStderr(t, func() error {
+		return formatReleaseListText([]*github.RepositoryRelease{})
+	})
+
+	require.NoError(t, err)
+	assert.Contains(t, output, "No releases found")
+}
+
+// TestFormatReleaseDetailText_CurrentVersion covers the "Current: ● Yes
+// (installed)" branch in formatReleaseDetailText, which only renders when
+// isCurrentVersion(release.GetTagName()) is true. Other tests in this file
+// use fixed tags like "v1.0.0" that never match pkgversion.Version.
+func TestFormatReleaseDetailText_CurrentVersion(t *testing.T) {
+	publishedAt := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+
+	release := &github.RepositoryRelease{
+		TagName:     github.String(pkgversion.Version),
+		Name:        github.String("Current Release"),
+		Body:        github.String("Release notes"),
+		PublishedAt: &github.Timestamp{Time: publishedAt},
+		HTMLURL:     github.String("https://github.com/cloudposse/atmos/releases/tag/current"),
+	}
+
+	output, err := captureStderr(t, func() error {
+		return formatReleaseDetailText(release)
+	})
+
+	require.NoError(t, err)
+	assert.Contains(t, output, "Current:")
+}
+
+// TestFormatReleaseDetailText_AssetsNoPlatformMatch covers the "No assets
+// found for %s/%s" branch: release.Assets is non-empty, but none of the
+// asset names match the current OS/arch, so filterAssetsByPlatform returns
+// an empty slice. TestFormatReleaseDetailText_NoAssets instead covers the
+// (len(release.Assets) == 0) case, which takes neither branch.
+func TestFormatReleaseDetailText_AssetsNoPlatformMatch(t *testing.T) {
+	publishedAt := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+
+	release := &github.RepositoryRelease{
+		TagName:     github.String("v1.0.0"),
+		Name:        github.String("Release 1.0.0"),
+		Body:        github.String("Release notes"),
+		PublishedAt: &github.Timestamp{Time: publishedAt},
+		HTMLURL:     github.String("https://github.com/cloudposse/atmos/releases/tag/v1.0.0"),
+		Assets: []*github.ReleaseAsset{
+			// A name with no OS/arch tokens at all, so it can never match
+			// filterAssetsByPlatform on any GOOS/GOARCH.
+			{Name: github.String("readme-notes.txt")},
+		},
+	}
+
+	output, err := captureStderr(t, func() error {
+		return formatReleaseDetailText(release)
+	})
+
+	require.NoError(t, err)
+	assert.Contains(t, output, "No assets found for")
 }
 
 // TestFormatReleaseDetailText_NoAssets tests formatting release without assets.

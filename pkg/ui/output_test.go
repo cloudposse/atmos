@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"errors"
 	stdio "io"
 	"strings"
 	"testing"
@@ -593,6 +594,45 @@ func TestMarkdownMessageNoWrapf(t *testing.T) {
 	}
 }
 
+// errWriter is a stub io.Writer that always fails, used to exercise the
+// write-failure logging branch in MarkdownMessageNoWrap, which a
+// bytes.Buffer-backed writer can never produce.
+type errWriter struct{}
+
+func (errWriter) Write(_ []byte) (int, error) {
+	return 0, errors.New("boom: write failed")
+}
+
+func TestMarkdownMessageNoWrap_WriteFailure(t *testing.T) {
+	streams := &testStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: &bytes.Buffer{},
+		stderr: errWriter{},
+	}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	if err != nil {
+		t.Fatalf("failed to create I/O context: %v", err)
+	}
+
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	oldIO := globalIO
+	formatterMu.Unlock()
+
+	InitFormatter(ioCtx)
+
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		globalIO = oldIO
+		formatterMu.Unlock()
+	}()
+
+	// Must not panic even though the UI writer always errors -
+	// MarkdownMessageNoWrap logs the write failure instead of returning it.
+	MarkdownMessageNoWrap("**Notice:** Telemetry enabled")
+}
+
 func TestGetFormatter_NotInitialized(t *testing.T) {
 	// Save current formatter.
 	formatterMu.Lock()
@@ -658,6 +698,8 @@ func TestPackageFunctions_NotInitialized(t *testing.T) {
 		{"Markdownf", func() { Markdownf("# %s", "test") }},
 		{"MarkdownMessage", func() { MarkdownMessage("**test**") }},
 		{"MarkdownMessagef", func() { MarkdownMessagef("**%s**", "test") }},
+		{"MarkdownMessageNoWrap", func() { MarkdownMessageNoWrap("**test**") }},
+		{"MarkdownMessageNoWrapf", func() { MarkdownMessageNoWrapf("**%s**", "test") }},
 	}
 
 	for _, tt := range tests {

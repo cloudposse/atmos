@@ -432,6 +432,32 @@ func TestFormatter_MarkdownNoWrap(t *testing.T) {
 	}
 }
 
+// TestFormatter_MarkdownWidth_FromTerminal verifies markdownRenderWidth falls
+// back to the detected terminal width (rather than staying 0, which disables
+// wrapping) when Settings.Terminal.MaxWidth is unset, and that
+// buildMarkdownRenderOptions applies that width as the glamour word-wrap
+// width for the word-wrapped (non-no-wrap) render path.
+func TestFormatter_MarkdownWidth_FromTerminal(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := &mockTerminal{profile: terminal.ColorNone, width: 40}
+	f := NewFormatter(ioCtx, term).(*formatter)
+
+	width := f.markdownRenderWidth()
+	if width <= 0 {
+		t.Fatalf("markdownRenderWidth() = %d, want > 0 when terminal width is set", width)
+	}
+
+	// Long enough that word-wrap at the detected width forces a line break.
+	input := strings.Repeat("word ", 30)
+	got, err := f.Markdown(input)
+	if err != nil {
+		t.Fatalf("Markdown() error = %v", err)
+	}
+	if !strings.Contains(got, "\n") {
+		t.Errorf("Markdown() with terminal width %d should wrap long content, got %q", width, got)
+	}
+}
+
 // Helper functions for testing.
 
 func createTestIOContext() iolib.Context {
