@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/oci/ocitest"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendor"
 )
@@ -327,6 +328,32 @@ func TestVendorSourceReportsDownloadFailure(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrSourceProvision))
 	assert.Contains(t, err.Error(), "failed to download")
+}
+
+func TestVendorSourceOCI_Success(t *testing.T) {
+	imageRef := ocitest.NewRegistry(t, "test/component:v1", map[string]string{
+		"main.tf": "# OCI_MARKER\n",
+	})
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{
+		Uri: "oci://" + imageRef,
+	}, targetDir)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(targetDir, "main.tf"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "OCI_MARKER")
+}
+
+func TestVendorSourceOCI_DownloadFailure(t *testing.T) {
+	// Port 1 is a privileged port nothing is listening on in test environments;
+	// the connection is refused immediately (deterministic, no timeout wait).
+	err := VendorSource(context.Background(), nil, &schema.VendorComponentSource{
+		Uri: "oci://127.0.0.1:1/nonexistent/image:v1",
+	}, filepath.Join(t.TempDir(), "target"))
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrSourceProvision))
 }
 
 // TestVendorSourcePostDownloadReplaceTargetFalseFailsWhenTargetExists exercises the
