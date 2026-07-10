@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/project/config"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // UI layout constants.
@@ -818,32 +818,21 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	return nil
 }
 
-// renderMarkdown renders markdown content using glamour.
+// renderMarkdown renders markdown content to the UI channel (stderr).
+// It goes through utils.PrintfMarkdownToTUI (backed by pkg/ui/markdown and
+// pkg/terminal) rather than building a glamour renderer directly, so it
+// honors Atmos's own TTY/color-forcing flags (ATMOS_FORCE_TTY, FORCE_COLOR,
+// CLICOLOR_FORCE, NO_COLOR) instead of glamour's own raw os.Stdout.Fd() check,
+// which otherwise falls back to a style that leaks literal markdown syntax
+// (##, **, *) when stdout isn't a real TTY.
 func (ui *InitUI) renderMarkdown(markdownContent string) error {
-	// Create glamour renderer with dynamic terminal width
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(ui.GetTerminalWidth()),
-		glamour.WithEmoji(),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create markdown renderer: %w", err)
-	}
-
-	// Render the markdown
-	rendered, err := renderer.Render(markdownContent)
-	if err != nil {
-		return fmt.Errorf("failed to render markdown: %w", err)
-	}
-
-	// Display the rendered markdown.
 	atmosui.Writeln("")
-	atmosui.Writeln(rendered)
+	u.PrintfMarkdownToTUI("%s", markdownContent)
 
 	return nil
 }
 
-// renderREADME renders the README content using glamour.
+// renderREADME renders the README content as markdown.
 // The provided delimiters control template rendering so callers that supply
 // custom delimiters (e.g. via ExecuteWithDelimiters) are honoured correctly.
 func (ui *InitUI) renderREADME(readmeContent string, targetPath string, delimiters []string) error {

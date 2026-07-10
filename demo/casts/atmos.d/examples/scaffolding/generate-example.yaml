@@ -10,35 +10,111 @@ commands:
         name: generate-example
         working_directory: "../../.context/cast-fixtures/scaffolding"
         title: "atmos scaffold: generate from a template"
-        mode: steps
+        mode: session
+        shell: /bin/sh
+        write_rate: 25ms
+        key_interval: 250ms
+        timeout: 60s
         defaults:
           cast: !include cast-defaults.yaml .cast
-          simulate: !include cast-defaults.yaml .simulate
+        env:
+          NO_COLOR: ''
+          TERM: xterm-256color
+          COLORTERM: truecolor
+          ATMOS_FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          FORCE_COLOR: '1'
+          ATMOS_FORCE_TTY: 'true'
+          ATMOS_KEYRING_TYPE: memory
+          ATMOS_EXPERIMENTAL: silence
+          ATMOS_LOGS_LEVEL: Warning
+          PS1: '$ '
         show:
           labels: false
         output:
           mode: raw
           cast: "../../website/static/casts/examples/scaffolding/generate-example.cast"
-        env: !include cast-defaults.yaml .env.recording
         steps:
-          - type: simulate
+          - type: pause
+            duration: 500ms
+          - type: write
             text: "# atmos.yaml-registered scaffold templates show up in the catalog"
-          - type: simulate
-            text: &scaffold_list_cmd atmos scaffold list
-          - type: shell
-            name: scaffold-list
-            duration: 450ms
-            interval: 750ms
-            command: *scaffold_list_cmd
-          - type: simulate
+          - type: key
+            key: enter
+          - type: write
+            text: "atmos scaffold list"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Available Scaffold Templates"
+            timeout: 10s
+          - type: pause
+            duration: 500ms
+          - type: write
             text: "# generate a new project from the template, overriding one prompt"
-          - type: simulate
-            text: &scaffold_generate_cmd atmos scaffold generate example ./my-project --set project_name=my-app
-          - type: shell
-            name: scaffold-generate
-            duration: 550ms
-            interval: 900ms
-            command: *scaffold_generate_cmd
+          - type: key
+            key: enter
+          - type: write
+            text: "atmos scaffold generate example ./my-quick-app --set project_name=my-app --defaults"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Generated 2 files."
+            timeout: 10s
+          - type: pause
+            duration: 500ms
+          - type: write
+            text: "# or run it interactively and answer the prompts"
+          - type: key
+            key: enter
+          - type: write
+            text: "atmos scaffold generate example"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Project name"
+            timeout: 10s
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: enter
+          - type: wait
+            text: "Terraform version"
+            timeout: 10s
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: enter
+          - type: wait
+            text: "Default AWS region"
+            timeout: 10s
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: down
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: enter
+          - type: wait
+            text: "Enable component vendoring"
+            timeout: 10s
+          - type: pause
+            duration: 350ms
+          - type: write
+            text: "y"
+          - type: key
+            key: enter
+          - type: wait
+            text: "Target directory"
+            timeout: 10s
+          - type: pause
+            duration: 350ms
+          - type: key
+            key: enter
+          - type: wait
+            text: "Generated"
+            timeout: 10s
       - type: script
         name: sanitize
         interpreter: python3
@@ -86,10 +162,16 @@ commands:
               "# generate a new project from the template",
               "Generating example in",
               "Generated 2 files.",
+              "# or run it interactively and answer the prompts",
+              "Project name",
+              "Terraform version",
+              "Default AWS region",
+              "Enable component vendoring",
+              "Target directory",
           ]:
               if needle not in plain:
                   raise SystemExit(f"scaffolding generate-example cast missing {needle!r}")
-          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "[scaffold-list]", "[scaffold-generate]"]:
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
               if bad in plain:
                   raise SystemExit(f"scaffolding generate-example cast contains {bad!r}")
           assert_no_error_output(text)
