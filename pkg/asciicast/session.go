@@ -150,13 +150,17 @@ func normalizeSessionOptions(opts *SessionOptions) {
 	}
 }
 
+// getCurrentStyles resolves the active theme styles; a package-level var so
+// tests can stub the "no styles available" fallback in defaultSessionPrompt.
+var getCurrentStyles = theme.GetCurrentStyles
+
 // defaultSessionPrompt renders a fixed "> " prompt in the same themed
 // "command" style (bold, theme Primary color) that simulate-mode casts use,
 // so a real shell spawned for a session-mode cast shows a prompt consistent
 // with every other recording instead of leaking the shell's own default
 // PS1 (which would also include the local hostname/cwd).
 func defaultSessionPrompt() string {
-	styles := theme.GetCurrentStyles()
+	styles := getCurrentStyles()
 	if styles == nil {
 		return "> "
 	}

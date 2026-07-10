@@ -7,36 +7,27 @@
 
 .row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 1rem;
   padding: 0.65rem 0.9rem;
   border-radius: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
   color: inherit;
   text-decoration: none;
-  transition:
-    border-color 0.2s ease,
-    background 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .row:hover {
-  border-color: rgba(30, 91, 184, 0.3);
   background: rgba(30, 91, 184, 0.04);
   text-decoration: none;
 }
 
-:global(html[data-theme='dark']) .row {
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
 :global(html[data-theme='dark']) .row:hover {
-  border-color: rgba(83, 140, 233, 0.4);
   background: rgba(83, 140, 233, 0.06);
 }
 
 .rowCast {
   flex: 0 0 auto;
-  width: 180px;
+  width: 216px;
   min-width: 0;
   border-radius: 6px;
   overflow: hidden;
@@ -69,6 +60,7 @@
 
 .rowArrow {
   flex: 0 0 auto;
+  align-self: center;
   font-size: 1.1rem;
   color: var(--ifm-color-primary);
 }
@@ -80,6 +72,6 @@
 
   .rowCast {
     width: 100%;
-    max-width: 220px;
+    max-width: 264px;
   }
 }

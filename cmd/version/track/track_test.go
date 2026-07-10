@@ -359,3 +359,64 @@ func TestTrackRenderCommandCheckMode(t *testing.T) {
 		t.Fatalf("render missing file error = %v, want %v", err, ErrRenderFileRequired)
 	}
 }
+
+func TestWriteFormattedFallbacksAndErrors(t *testing.T) {
+	stdout := setupTrackOutput(t)
+	cmd := newTrackCommand(trackShowCmd, formatParserOptions()...)
+
+	// atmosConfig == nil falls back to the plain data.WriteYAML/WriteJSON writers.
+	setTrackConfigForTest(t, nil)
+
+	if err := cmd.Flags().Set("format", "yaml"); err != nil {
+		t.Fatalf("set format: %v", err)
+	}
+	if err := writeFormatted(cmd, map[string]string{"ok": "true"}); err != nil {
+		t.Fatalf("writeFormatted yaml (nil config) error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "ok:") {
+		t.Fatalf("yaml fallback output = %q", stdout.String())
+	}
+
+	stdout.Reset()
+	if err := cmd.Flags().Set("format", "json"); err != nil {
+		t.Fatalf("set format: %v", err)
+	}
+	if err := writeFormatted(cmd, map[string]string{"ok": "true"}); err != nil {
+		t.Fatalf("writeFormatted json (nil config) error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), `"ok"`) {
+		t.Fatalf("json fallback output = %q", stdout.String())
+	}
+
+	// With atmosConfig set, a value that fails to marshal surfaces the
+	// GetHighlightedYAML/GetHighlightedJSON error instead of writing output.
+	setTrackConfigForTest(t, trackConfig(t))
+
+	if err := cmd.Flags().Set("format", "yaml"); err != nil {
+		t.Fatalf("set format: %v", err)
+	}
+	if err := writeFormatted(cmd, failingYAML{}); err == nil {
+		t.Fatal("expected writeFormatted yaml error for a failing MarshalYAML")
+	}
+
+	if err := cmd.Flags().Set("format", "json"); err != nil {
+		t.Fatalf("set format: %v", err)
+	}
+	if err := writeFormatted(cmd, failingJSON{}); err == nil {
+		t.Fatal("expected writeFormatted json error for a failing MarshalJSON")
+	}
+}
+
+// failingYAML always fails to marshal, forcing writeFormatted's yaml error path.
+type failingYAML struct{}
+
+func (failingYAML) MarshalYAML() (any, error) {
+	return nil, errors.New("boom yaml")
+}
+
+// failingJSON always fails to marshal, forcing writeFormatted's json error path.
+type failingJSON struct{}
+
+func (failingJSON) MarshalJSON() ([]byte, error) {
+	return nil, errors.New("boom json")
+}

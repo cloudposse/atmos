@@ -17,12 +17,15 @@ atmos cast render demo.cast --output=demo.html
 atmos cast render demo.cast --output=demo.out --format=html
 ```
 
-Here's `render` turning a recording into a rendered artifact, `play` replaying a
-recording in the terminal, and `--cast` capturing a command's own session as it runs:
+The `render` command turns a recording into a rendered artifact — here it's converted straight to a GIF:
 
 <CastPlayer src="/casts/cli/commands/cast/render.cast" title="atmos cast render" chrome controls scrubber />
 
+Replaying a recording in the terminal with `play` reproduces it exactly as it was captured:
+
 <CastPlayer src="/casts/cli/commands/cast/play.cast" title="atmos cast play" chrome controls scrubber />
+
+And any command can capture its own session as it runs with `--cast`, no separate recording step required:
 
 <CastPlayer src="/casts/cli/commands/cast/usage.cast" title="record a cast with --cast" chrome controls scrubber />
 
