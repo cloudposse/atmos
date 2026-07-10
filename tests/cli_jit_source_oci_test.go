@@ -69,6 +69,8 @@ components:
 		"--stack", "dev",
 		"--dry-run",
 	})
+	// Execute may error since terraform isn't configured here, but JIT source
+	// provisioning should have already run before that point is reached.
 	_ = cmd.Execute()
 
 	workdirPath := filepath.Join(root, ".workdir", "terraform", "dev-oci-component")
