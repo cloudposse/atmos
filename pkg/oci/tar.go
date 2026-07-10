@@ -51,6 +51,7 @@ func processTarHeader(header *tar.Header, tarReader *tar.Reader, extractPath str
 	cleanExtractPath := filepath.Clean(extractPath)
 	// Clean the file path inside the archive to prevent directory traversal attacks.
 	cleanHeaderName := filepath.Clean(header.Name)
+	// Clean the file path inside the archive to prevent directory traversal attacks.
 	filePath := filepath.Join(cleanExtractPath, cleanHeaderName)
 	// Ensure the target path is within the intended extraction directory.
 	if !strings.HasPrefix(filePath, cleanExtractPath) {
@@ -96,6 +97,7 @@ func createFileFromTar(filePath string, tarReader *tar.Reader, header *tar.Heade
 	}
 	// Remove setuid/setgid bits for security; standard cross-platform.
 	newMode := header.FileInfo().Mode() &^ (os.ModeSetuid | os.ModeSetgid)
+	// Set permissions using os.Chmod for all platforms.
 	if err := os.Chmod(filePath, newMode); err != nil {
 		log.Error("Failed to set file permissions", "path", filePath, "error", err)
 	}

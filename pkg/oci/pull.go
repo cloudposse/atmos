@@ -230,6 +230,7 @@ func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
 		return
 	}
 	if manifest.ArtifactType != targetArtifactType {
+		// log that don't match the target artifact type
 		log.Warn("OCI image does not match the target artifact type", "image", imageName, "artifactType", manifest.ArtifactType)
 	}
 }
