@@ -109,22 +109,16 @@
 }
 
 .screenLoading {
-  background: linear-gradient(
-    100deg,
-    var(--atmos-terminal-bg) 40%,
-    color-mix(in srgb, var(--atmos-terminal-bg) 70%, var(--atmos-terminal-text)) 50%,
-    var(--atmos-terminal-bg) 60%
-  );
-  background-size: 200% 100%;
-  animation: cast-skeleton-shimmer 1.6s ease-in-out infinite;
+  animation: cast-skeleton-pulse 1.6s ease-in-out infinite;
 }
 
-@keyframes cast-skeleton-shimmer {
-  0% {
-    background-position: 100% 0;
-  }
+@keyframes cast-skeleton-pulse {
+  0%,
   100% {
-    background-position: -100% 0;
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
   }
 }
 
