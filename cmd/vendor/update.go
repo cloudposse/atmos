@@ -80,7 +80,7 @@ comments, anchors, and templates. Use --check for a dry run.`,
 			return err
 		}
 
-		if v.GetBool("pull") && !check && report.UpdatedCount() > 0 {
+		if report != nil && v.GetBool("pull") && !check && report.UpdatedCount() > 0 {
 			return runVendorPull(cmd, args, report, vendorPullParams{
 				component:     component,
 				componentType: componentType,
@@ -210,6 +210,15 @@ type vendorPullParams struct {
 //     touching ExecuteAtmosVendorInternal's component-filtering, out of scope for this fix.
 func runVendorPull(cmd *cobra.Command, args []string, report *vendoring.UpdateReport, p vendorPullParams) error {
 	if p.component != "" {
+		// Clear "stack"/"tags" the same way pullUpdatedComponent does: they're vendor update's
+		// own flags of the same name (used, e.g., with a repo-wide "--tags foo --pull" run) and
+		// validateVendorFlags (internal/exec/vendor.go) rejects "component" combined with either.
+		if err := resetUnchangedFlag(cmd, "stack"); err != nil {
+			return err
+		}
+		if err := resetUnchangedFlag(cmd, "tags"); err != nil {
+			return err
+		}
 		return e.ExecuteVendorPullCmd(cmd, args)
 	}
 

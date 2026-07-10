@@ -193,11 +193,11 @@ func ExecuteComponentVendorPullBatch(
 	for _, component := range components {
 		config, componentPath, err := ReadAndProcessComponentVendorConfigFile(atmosConfig, component, componentType)
 		if err != nil {
-			return err
+			return fmt.Errorf("component %q: %w", component, err)
 		}
 		packages, err := buildComponentVendorPackages(&config.Spec, component, componentPath)
 		if err != nil {
-			return err
+			return fmt.Errorf("component %q: %w", component, err)
 		}
 		allPackages = append(allPackages, packages...)
 	}

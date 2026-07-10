@@ -85,18 +85,19 @@ type updateDoneMsg struct {
 // internal/exec/vendor_model.go's modelVendor (the equivalent model for the sibling
 // `atmos vendor pull` command), extended to stream a message per source instead of fetching once.
 type updateSpinnerModel struct {
-	spinner  spinner.Model
-	bar      progress.Model
-	width    int
-	progress updateProgressMsg
-	report   *vendoring.UpdateReport
-	err      error
-	done     bool
-	msgs     <-chan tea.Msg
+	spinner    spinner.Model
+	bar        progress.Model
+	width      int
+	progress   updateProgressMsg
+	report     *vendoring.UpdateReport
+	err        error
+	done       bool
+	progressCh <-chan tea.Msg
+	doneCh     <-chan updateDoneMsg
 }
 
 func (m *updateSpinnerModel) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, waitForUpdateMsg(m.msgs))
+	return tea.Batch(m.spinner.Tick, waitForUpdateMsg(m.progressCh, m.doneCh))
 }
 
 func (m *updateSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -123,7 +124,7 @@ func (m *updateSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.total > 0 {
 			progressCmd = m.bar.SetPercent(float64(msg.index) / float64(msg.total))
 		}
-		return m, tea.Batch(progressCmd, waitForUpdateMsg(m.msgs))
+		return m, tea.Batch(progressCmd, waitForUpdateMsg(m.progressCh, m.doneCh))
 	case updateDoneMsg:
 		m.report = msg.report
 		m.err = msg.err
@@ -169,17 +170,20 @@ func (m *updateSpinnerModel) View() string {
 	return spin + info + gap + bar + count
 }
 
-// waitForUpdateMsg returns a tea.Cmd that blocks for the next message on msgs and returns it.
-// The model re-issues this Cmd every time it handles an updateProgressMsg, so the event loop keeps
-// listening until an updateDoneMsg (or a closed channel) ends it — the standard bubbletea idiom for
-// streaming progress from a background goroutine into a running program.
-func waitForUpdateMsg(msgs <-chan tea.Msg) tea.Cmd {
+// waitForUpdateMsg returns a tea.Cmd that blocks for the next message on either channel and
+// returns it. The model re-issues this Cmd every time it handles an updateProgressMsg, so the
+// event loop keeps listening until an updateDoneMsg ends it — the standard bubbletea idiom for
+// streaming progress from a background goroutine into a running program. ProgressCh and doneCh
+// are separate channels (see runUpdateWithSpinner's doc comment) so a still-buffered progress
+// message can never cause the terminal updateDoneMsg to be dropped.
+func waitForUpdateMsg(progressCh <-chan tea.Msg, doneCh <-chan updateDoneMsg) tea.Cmd {
 	return func() tea.Msg {
-		msg, ok := <-msgs
-		if !ok {
-			return updateDoneMsg{}
+		select {
+		case msg := <-progressCh:
+			return msg
+		case msg := <-doneCh:
+			return msg
 		}
-		return msg
 	}
 }
 
@@ -207,28 +211,31 @@ func runUpdateWithSpinner(doWork vendorUpdateWork) (*vendoring.UpdateReport, err
 		progress.WithoutPercentage(),
 	)
 
-	// msgs streams progress (and the final result) from the goroutine performing the blocking,
+	// progressCh streams best-effort progress from the goroutine performing the blocking,
 	// sequential network checks to the bubbletea event loop. Buffered by 1 so the goroutine
 	// never blocks handing off an update; sends use a non-blocking select so that if the
 	// program has already exited (e.g. the user pressed a key, or a send raced ahead of the
 	// reader) the goroutine drops the message and moves on rather than deadlocking - it still
 	// runs doWork to completion (bounded by resolveLatest's own per-source timeout) and simply
 	// has nothing left to notify once done.
-	msgs := make(chan tea.Msg, 1)
-	m := &updateSpinnerModel{spinner: s, bar: bar, msgs: msgs}
+	//
+	// doneCh is a separate channel (not multiplexed onto progressCh) so the single, terminal
+	// updateDoneMsg can never be dropped by a still-buffered progress message occupying
+	// progressCh's slot: doneCh is buffered by 1 and receives exactly one send, so that send
+	// always succeeds immediately regardless of whether the model has read it yet.
+	progressCh := make(chan tea.Msg, 1)
+	doneCh := make(chan updateDoneMsg, 1)
+	m := &updateSpinnerModel{spinner: s, bar: bar, progressCh: progressCh, doneCh: doneCh}
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
 
 	go func() {
 		report, err := doWork(func(component string, index, total int) {
 			select {
-			case msgs <- updateProgressMsg{component: component, index: index, total: total}:
+			case progressCh <- updateProgressMsg{component: component, index: index, total: total}:
 			default:
 			}
 		})
-		select {
-		case msgs <- updateDoneMsg{report: report, err: err}:
-		default:
-		}
+		doneCh <- updateDoneMsg{report: report, err: err}
 	}()
 
 	finalModel, runErr := p.Run()
