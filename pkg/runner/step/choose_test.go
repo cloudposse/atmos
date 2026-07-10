@@ -1,11 +1,13 @@
 package step
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -80,7 +82,7 @@ func TestChooseHandler_ResolveDefault(t *testing.T) {
 		}
 		vars := NewVariables()
 
-		defaultVal, err := chooseHandler.resolveDefault(step, vars)
+		defaultVal, err := chooseHandler.ResolveDefault(context.Background(), step, vars)
 		require.NoError(t, err)
 		assert.Empty(t, defaultVal)
 	})
@@ -92,7 +94,7 @@ func TestChooseHandler_ResolveDefault(t *testing.T) {
 		}
 		vars := NewVariables()
 
-		defaultVal, err := chooseHandler.resolveDefault(step, vars)
+		defaultVal, err := chooseHandler.ResolveDefault(context.Background(), step, vars)
 		require.NoError(t, err)
 		assert.Equal(t, "production", defaultVal)
 	})
@@ -105,7 +107,7 @@ func TestChooseHandler_ResolveDefault(t *testing.T) {
 		vars := NewVariables()
 		vars.Set("env", NewStepResult("staging"))
 
-		defaultVal, err := chooseHandler.resolveDefault(step, vars)
+		defaultVal, err := chooseHandler.ResolveDefault(context.Background(), step, vars)
 		require.NoError(t, err)
 		assert.Equal(t, "staging", defaultVal)
 	})
@@ -117,9 +119,9 @@ func TestChooseHandler_ResolveDefault(t *testing.T) {
 		}
 		vars := NewVariables()
 
-		_, err := chooseHandler.resolveDefault(step, vars)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to resolve default")
+		_, err := chooseHandler.ResolveDefault(context.Background(), step, vars)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 	})
 }
 

@@ -299,6 +299,14 @@ func ExecuteWorkflow(
 	workflowVars.SetTemplatePasses(workflowTemplatePasses)
 	workflowVars.ProtectTemplateRoots("Flags", "flags")
 
+	// Evaluate value-producing YAML functions (!env, !exec) in interactive step
+	// fields (default/prompt/placeholder/options). Workflow manifests are parsed
+	// with UnmarshalYAML, which leaves these as literal "!env ..." strings; this
+	// lets interactive steps source defaults from the environment in CI.
+	if err := resolveWorkflowStepFunctions(&atmosConfig, workflowDefinition); err != nil {
+		return err
+	}
+
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
