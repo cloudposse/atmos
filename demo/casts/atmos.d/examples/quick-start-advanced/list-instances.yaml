@@ -70,6 +70,26 @@ commands:
             duration: 550ms
             interval: 900ms
             command: *deploy_all_cmd
+      - type: script
+        name: sanitize-cast-paths
+        interpreter: python3
+        script: |
+          # `provision.workdir.enabled` logs the real source path when syncing
+          # component files ("Local component files synced: <path>"), which is the
+          # first thing an examples/* cast has ever captured that contains a
+          # machine-specific absolute path (the type: cast step itself has no
+          # built-in sanitization, unlike the screengrabs recorder). Rewrite it to
+          # the same "/absolute/path/to/repo" placeholder cast_checks.assert_no_local_paths
+          # requires, mirroring atmos.d/screengrabs/cli.yaml's sanitize_paths usage.
+          import os, sys
+          from pathlib import Path
+
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import sanitize_paths
+
+          repo = Path("..", "..").resolve()
+          out = Path("../../website/static/casts/examples/quick-start-advanced/list-instances.cast")
+          out.write_text(sanitize_paths(out.read_text(), repo))
       - type: shell
         name: teardown
         working_directory: *quick_start_advanced_fixture
