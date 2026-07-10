@@ -2277,6 +2277,12 @@ func renderFlagHelp(command *cobra.Command) {
 
 	if pagerExplicitlySet && pagerEnabled {
 		// User explicitly requested pager for flag help.
+		// Restore the original writer (which may carry the --cast tee, see
+		// rootHelpFunc) after buffering, so it isn't left pointed at a
+		// discarded buffer for any output written after this function returns.
+		originalOut := command.OutOrStdout()
+		defer command.SetOut(originalOut)
+
 		var buf bytes.Buffer
 		command.SetOut(&buf)
 		applyColoredHelpTemplateForTopic(command, currentHelpTopic)
@@ -2293,6 +2299,12 @@ func renderFlagHelp(command *cobra.Command) {
 // renderInteractiveHelp renders help for interactive 'atmos help' invocations,
 // buffering into a pager when configured (via flag, env, or config).
 func renderInteractiveHelp(command *cobra.Command) {
+	// Restore the original writer (which may carry the --cast tee, see
+	// rootHelpFunc) after buffering, so it isn't left pointed at a discarded
+	// buffer for any output written after this function returns.
+	originalOut := command.OutOrStdout()
+	defer command.SetOut(originalOut)
+
 	var buf bytes.Buffer
 	command.SetOut(&buf)
 	applyColoredHelpTemplateForTopic(command, currentHelpTopic)

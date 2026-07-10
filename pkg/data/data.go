@@ -19,6 +19,14 @@ type MarkdownRenderer interface {
 	Markdown(content string) (string, error)
 }
 
+// noWrapMarkdownRenderer is implemented by renderers that also support
+// disabling word wrap (currently pkg/ui's formatter, via ui.Format). Checked
+// via type assertion rather than folded into MarkdownRenderer so existing
+// implementers/mocks of that interface aren't forced to grow the method.
+type noWrapMarkdownRenderer interface {
+	MarkdownNoWrap(content string) (string, error)
+}
+
 var (
 	globalIOContext      io.Context
 	globalMarkdownRender MarkdownRenderer
@@ -195,4 +203,47 @@ func Markdownf(format string, a ...interface{}) error {
 
 	content := fmt.Sprintf(format, a...)
 	return Markdown(content)
+}
+
+// MarkdownNoWrap renders markdown content without word-wrapping and writes to
+// the data channel (stdout). Use this instead of Markdown for content with
+// long inline tokens (URLs) that word-wrap can otherwise hard-break mid-token
+// when they don't fit the wrap width. Falls back to Markdown if the
+// registered renderer doesn't support no-wrap rendering.
+func MarkdownNoWrap(content string) error {
+	defer perf.Track(nil, "data.MarkdownNoWrap")()
+
+	ioMu.RLock()
+	renderer := globalMarkdownRender
+	ioCtx := globalIOContext
+	ioMu.RUnlock()
+
+	if ioCtx == nil {
+		panic("data.InitWriter() must be called before using data.MarkdownNoWrap()")
+	}
+
+	if renderer == nil {
+		return errUtils.ErrUIFormatterNotInitialized
+	}
+
+	nw, ok := renderer.(noWrapMarkdownRenderer)
+	if !ok {
+		return Markdown(content)
+	}
+
+	// On error, nw.MarkdownNoWrap already returns trimmed content with a
+	// trailing newline (see pkg/ui/formatter.go's MarkdownNoWrap) - don't
+	// override rendered with raw content, which would drop that newline.
+	rendered, _ := nw.MarkdownNoWrap(content)
+
+	return ioCtx.Write(io.DataStream, rendered)
+}
+
+// MarkdownNoWrapf renders formatted markdown content without word-wrapping
+// and writes to the data channel (stdout). See MarkdownNoWrap.
+func MarkdownNoWrapf(format string, a ...interface{}) error {
+	defer perf.Track(nil, "data.MarkdownNoWrapf")()
+
+	content := fmt.Sprintf(format, a...)
+	return MarkdownNoWrap(content)
 }

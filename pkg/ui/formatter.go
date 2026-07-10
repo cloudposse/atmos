@@ -289,8 +289,9 @@ func MarkdownMessageNoWrap(content string) {
 
 	rendered, err := globalFormatter.MarkdownNoWrap(content)
 	if err != nil {
-		// Degrade gracefully - write plain content if rendering fails
-		rendered = content
+		// Degrade gracefully - MarkdownNoWrap already returns trimmed
+		// content with a trailing newline on render failure.
+		log.Debug("ui.MarkdownMessageNoWrap render failed, using fallback", "error", err)
 	}
 
 	if _, writeErr := fmt.Fprint(globalIO.UI(), rendered); writeErr != nil {

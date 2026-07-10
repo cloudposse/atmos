@@ -21,7 +21,10 @@ var supportCmd = &cobra.Command{
 	SilenceUsage:       true,
 	SilenceErrors:      true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return data.Markdownf("%s", supportMarkdown)
+		// Word-wrap would hard-break the long inline URLs in supportMarkdown
+		// mid-domain when they don't fit the wrap width (e.g. producing
+		// "https://github. com/..."); render without wrapping instead.
+		return data.MarkdownNoWrapf("%s", supportMarkdown)
 	},
 }
 

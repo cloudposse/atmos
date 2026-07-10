@@ -3,6 +3,7 @@ package data
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	stdio "io"
 	"testing"
 
@@ -450,7 +451,19 @@ func TestWriteUnmasked_BypassesMasking(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create I/O context: %v", err)
 	}
+
+	// Save old context.
+	ioMu.Lock()
+	oldCtx := globalIOContext
+	ioMu.Unlock()
+
 	InitWriter(ioCtx)
+
+	defer func() {
+		ioMu.Lock()
+		globalIOContext = oldCtx
+		ioMu.Unlock()
+	}()
 
 	const secret = "super-secret-value"
 	ioCtx.Masker().RegisterValue(secret)
@@ -560,6 +573,20 @@ func (m *mockMarkdownRenderer) Markdown(content string) (string, error) {
 		return m.renderFunc(content)
 	}
 	return "rendered: " + content, nil
+}
+
+// mockNoWrapMarkdownRenderer additionally implements noWrapMarkdownRenderer,
+// for testing MarkdownNoWrap's dedicated rendering path.
+type mockNoWrapMarkdownRenderer struct {
+	mockMarkdownRenderer
+	noWrapFunc func(string) (string, error)
+}
+
+func (m *mockNoWrapMarkdownRenderer) MarkdownNoWrap(content string) (string, error) {
+	if m.noWrapFunc != nil {
+		return m.noWrapFunc(content)
+	}
+	return "no-wrap: " + content, nil
 }
 
 func TestMarkdown(t *testing.T) {
@@ -688,6 +715,95 @@ func TestMarkdownf(t *testing.T) {
 				t.Errorf("Markdownf() wrote to stderr: %q", stderr.String())
 			}
 		})
+	}
+}
+
+func TestMarkdownNoWrap(t *testing.T) {
+	stdout, stderr, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	mockRenderer := &mockNoWrapMarkdownRenderer{}
+	SetMarkdownRenderer(mockRenderer)
+
+	err := MarkdownNoWrap("https://example.com/long/url")
+	if err != nil {
+		t.Errorf("MarkdownNoWrap() error = %v", err)
+	}
+
+	want := "no-wrap: https://example.com/long/url"
+	if got := stdout.String(); got != want {
+		t.Errorf("MarkdownNoWrap() output = %q, want %q", got, want)
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("MarkdownNoWrap() wrote to stderr: %q", stderr.String())
+	}
+}
+
+func TestMarkdownNoWrapf(t *testing.T) {
+	stdout, stderr, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	mockRenderer := &mockNoWrapMarkdownRenderer{}
+	SetMarkdownRenderer(mockRenderer)
+
+	err := MarkdownNoWrapf("%s issues", "https://example.com")
+	if err != nil {
+		t.Errorf("MarkdownNoWrapf() error = %v", err)
+	}
+
+	want := "no-wrap: https://example.com issues"
+	if got := stdout.String(); got != want {
+		t.Errorf("MarkdownNoWrapf() output = %q, want %q", got, want)
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("MarkdownNoWrapf() wrote to stderr: %q", stderr.String())
+	}
+}
+
+// TestMarkdownNoWrap_FallsBackWithoutNoWrapSupport verifies that a renderer
+// implementing only MarkdownRenderer (not noWrapMarkdownRenderer) still works
+// via MarkdownNoWrap, falling back to the regular (word-wrapped) Markdown path
+// rather than erroring.
+func TestMarkdownNoWrap_FallsBackWithoutNoWrapSupport(t *testing.T) {
+	stdout, _, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	mockRenderer := &mockMarkdownRenderer{}
+	SetMarkdownRenderer(mockRenderer)
+
+	if err := MarkdownNoWrap("content"); err != nil {
+		t.Errorf("MarkdownNoWrap() error = %v", err)
+	}
+
+	want := "rendered: content"
+	if got := stdout.String(); got != want {
+		t.Errorf("MarkdownNoWrap() output = %q, want %q (fallback to Markdown)", got, want)
+	}
+}
+
+// TestMarkdownNoWrap_ErrorFallbackPreservesRendererOutput verifies that when
+// the no-wrap renderer returns an error, MarkdownNoWrap still writes whatever
+// content the renderer returned (its own trimmed/newline-terminated fallback)
+// rather than overriding it with raw, untrimmed input - the same class of bug
+// fixed in ui.MarkdownMessageNoWrap.
+func TestMarkdownNoWrap_ErrorFallbackPreservesRendererOutput(t *testing.T) {
+	stdout, _, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	mockRenderer := &mockNoWrapMarkdownRenderer{
+		noWrapFunc: func(content string) (string, error) {
+			return "degraded fallback\n", errors.New("mock render error")
+		},
+	}
+	SetMarkdownRenderer(mockRenderer)
+
+	if err := MarkdownNoWrap("content"); err != nil {
+		t.Errorf("MarkdownNoWrap() error = %v", err)
+	}
+
+	want := "degraded fallback\n"
+	if got := stdout.String(); got != want {
+		t.Errorf("MarkdownNoWrap() output = %q, want %q (renderer's own fallback, not raw content)", got, want)
 	}
 }
 
