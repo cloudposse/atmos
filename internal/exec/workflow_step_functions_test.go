@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -143,4 +144,58 @@ func TestResolveWorkflowStepFunctions_NestedSteps(t *testing.T) {
 func TestResolveWorkflowStepFunctions_NilDefinition(t *testing.T) {
 	err := resolveWorkflowStepFunctions(&schema.AtmosConfiguration{}, nil)
 	require.NoError(t, err)
+}
+
+// TestResolveWorkflowStepFunctions_FieldErrors verifies a malformed function in
+// any interactive field surfaces a wrapped ErrStepExecutionFailed identifying
+// the field (exercises workflowStepFunctionError for each field).
+func TestResolveWorkflowStepFunctions_FieldErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		step schema.WorkflowStep
+	}{
+		{"default", schema.WorkflowStep{Name: "s", Type: "input", Default: "!env"}},
+		{"prompt", schema.WorkflowStep{Name: "s", Type: "input", Prompt: "!env"}},
+		{"placeholder", schema.WorkflowStep{Name: "s", Type: "input", Placeholder: "!env"}},
+		{"options", schema.WorkflowStep{Name: "s", Type: "choose", Options: []string{"ok", "!env"}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			def := &schema.WorkflowDefinition{Steps: []schema.WorkflowStep{tt.step}}
+			err := resolveWorkflowStepFunctions(&schema.AtmosConfiguration{}, def)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrStepExecutionFailed)
+		})
+	}
+}
+
+// TestResolveWorkflowStepFunctions_NestedError verifies an error inside a nested
+// step propagates out of the recursion.
+func TestResolveWorkflowStepFunctions_NestedError(t *testing.T) {
+	def := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{
+				Name: "group",
+				Type: "parallel",
+				Steps: []schema.WorkflowStep{
+					{Name: "inner", Type: "input", Default: "!env"},
+				},
+			},
+		},
+	}
+	err := resolveWorkflowStepFunctions(&schema.AtmosConfiguration{}, def)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStepExecutionFailed)
+}
+
+// TestResolveStepFunctionString_NonStringResult verifies a function returning a
+// non-string value (e.g. !exec yielding JSON) is rejected for a scalar field.
+func TestResolveStepFunctionString_NonStringResult(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell output handling differs on Windows")
+	}
+	// `echo true` -> "true" -> JSON-decoded to a bool, which is not a string.
+	_, err := resolveStepFunctionString(&schema.AtmosConfiguration{}, "!exec echo true")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStepExecutionFailed)
 }

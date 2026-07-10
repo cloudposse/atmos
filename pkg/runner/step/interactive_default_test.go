@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -155,6 +156,61 @@ func TestInteractiveHandlers_NonTTYDefaultTemplating(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "prod", result.Value)
+}
+
+// TestInteractiveHandlers_TTYBranchPromptError forces a TTY so Execute enters
+// the interactive branch, then uses an invalid prompt template so it errors
+// during prompt resolution BEFORE rendering a huh form (which would block).
+// This exercises the TTY-present branch of every interactive handler without a
+// real terminal.
+func TestInteractiveHandlers_TTYBranchPromptError(t *testing.T) {
+	// terminal.New() reads viper's "force-tty"; forcing it makes IsTTY return
+	// true so resolveInteractive selects the prompt path.
+	previous := viper.GetBool("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", previous) })
+
+	ctx := context.Background()
+	names := []string{"choose", "input", "confirm", "filter", "file", "write"}
+
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			handler, ok := Get(name)
+			require.True(t, ok)
+
+			step := &schema.WorkflowStep{
+				Name:    name,
+				Type:    name,
+				Prompt:  "{{ .steps.invalid.value", // Invalid template: errors before any huh form.
+				Options: []string{"a", "b"},        // For choose/filter.
+			}
+
+			result, err := handler.Execute(ctx, step, NewVariables())
+			require.Error(t, err)
+			assert.Nil(t, result)
+			assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+		})
+	}
+}
+
+// TestSplitFilterDefaults covers the comma-splitting helper used by the filter
+// step's multi-select non-TTY default path.
+func TestSplitFilterDefaults(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{"empty", "", nil},
+		{"whitespace only", "   ", nil},
+		{"single value", "vpc", []string{"vpc"}},
+		{"trimmed and empties skipped", " use1 , ,euc1,", []string{"use1", "euc1"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, splitFilterDefaults(tt.input))
+		})
+	}
 }
 
 // TestConfirmHandler_NonTTYDefaultTemplating verifies the confirm handler
