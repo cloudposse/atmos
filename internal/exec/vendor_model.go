@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/downloader"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
@@ -417,7 +418,7 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 
 	case pkgTypeOci:
 		// Process OCI images
-		if err := processOciImage(atmosConfig, p.uri, *tempDir); err != nil {
+		if err := oci.ProcessImage(atmosConfig, p.uri, *tempDir); err != nil {
 			return fmt.Errorf("failed to process OCI image: %w", err)
 		}
 

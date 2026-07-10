@@ -22,6 +22,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	"github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/vendor"
@@ -398,7 +399,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		if err := processOciImage(atmosConfig, p.uri, tempDir); err != nil {
+		if err := oci.ProcessImage(atmosConfig, p.uri, tempDir); err != nil {
 			return fmt.Errorf("Failed to process OCI image %s error %w", p.name, err)
 		}
 
@@ -458,7 +459,7 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		err = processOciImage(atmosConfig, p.uri, tempDir)
+		err = oci.ProcessImage(atmosConfig, p.uri, tempDir)
 		if err != nil {
 			return fmt.Errorf("failed to process OCI image %s error %w", p.name, err)
 		}

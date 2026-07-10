@@ -1,4 +1,4 @@
-package exec
+package oci
 
 import (
 	"bytes"
@@ -21,30 +21,32 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
-	"github.com/cloudposse/atmos/pkg/oci"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 var ErrNoLayers = errors.New("the OCI image does not have any layers")
 
 const (
-	targetArtifactType = "application/vnd.atmos.component.terraform.v1+tar+gzip" // Target artifact type for Atmos components
+	targetArtifactType = "application/vnd.atmos.component.terraform.v1+tar+gzip" // Target artifact type for Atmos components.
 )
 
-var defaultOCIFileSystem = filesystem.NewOSFileSystem()
+var defaultFileSystem = filesystem.NewOSFileSystem()
 
 // remoteGet is the package-level indirection over remote.Get used by pullImage.
 // Tests override this to simulate registry responses without spinning up an
 // httptest server. Production code must not reassign it.
 var remoteGet = remote.Get
 
-// processOciImage processes an OCI image and extracts its layers to the specified destination directory.
-func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string) error {
-	return processOciImageWithFS(atmosConfig, imageName, destDir, defaultOCIFileSystem)
+// ProcessImage pulls an OCI image and extracts its layers to the specified destination directory.
+func ProcessImage(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string) error {
+	defer perf.Track(atmosConfig, "oci.ProcessImage")()
+
+	return processImageWithFS(atmosConfig, imageName, destDir, defaultFileSystem)
 }
 
-// processOciImageWithFS processes an OCI image using a FileSystem implementation.
-func processOciImageWithFS(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string, fs filesystem.FileSystem) error {
+// processImageWithFS processes an OCI image using a FileSystem implementation.
+func processImageWithFS(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string, fs filesystem.FileSystem) error {
 	tempDir, err := fs.MkdirTemp("", uuid.New().String())
 	if err != nil {
 		return errors.Join(errUtils.ErrCreateTempDirectory, err)
@@ -114,17 +116,17 @@ func pullImage(atmosConfig *schema.AtmosConfiguration, ref name.Reference) (*rem
 	if err != nil {
 		log.Debug("DefaultKeychain resolution failed, will try other auth methods", "error", err)
 	} else if keychainAuth != authn.Anonymous {
-		// User has credentials configured for this registry - highest precedence
+		// User has credentials configured for this registry - highest precedence.
 		authMethod = keychainAuth
 		authSource = "Docker keychain (~/.docker/config.json)"
 	}
 
-	// If no user credentials, try environment variable token injection for ghcr.io
+	// If no user credentials, try environment variable token injection for ghcr.io.
 	if authMethod == nil && strings.EqualFold(registry, "ghcr.io") {
-		authMethod, authSource = getGHCRAuth(atmosConfig)
+		authMethod, authSource = GHCRAuth(atmosConfig)
 	}
 
-	// Fall back to anonymous authentication if no credentials found
+	// Fall back to anonymous authentication if no credentials found.
 	if authMethod == nil {
 		authMethod = authn.Anonymous
 		authSource = "anonymous"
@@ -198,11 +200,6 @@ func isOCIAuthRejection(err error) bool {
 	return strings.Contains(err.Error(), "DENIED")
 }
 
-// getGHCRAuth returns authentication credentials for GitHub Container Registry (ghcr.io).
-func getGHCRAuth(atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, string) {
-	return oci.GHCRAuth(atmosConfig)
-}
-
 func processLayer(layer v1.Layer, index int, destDir string) error {
 	layerDesc, err := layer.Digest()
 	if err != nil {
@@ -225,7 +222,7 @@ func processLayer(layer v1.Layer, index int, destDir string) error {
 	return nil
 }
 
-// checkArtifactType to check and log artifact type mismatches .
+// checkArtifactType checks and logs artifact type mismatches.
 func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
 	manifest, err := parseOCIManifest(bytes.NewReader(descriptor.Manifest))
 	if err != nil {
@@ -233,12 +230,11 @@ func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
 		return
 	}
 	if manifest.ArtifactType != targetArtifactType {
-		// log that don't match the target artifact type
 		log.Warn("OCI image does not match the target artifact type", "image", imageName, "artifactType", manifest.ArtifactType)
 	}
 }
 
-// ParseOCIManifest reads and decodes an OCI manifest from a JSON file.
+// parseOCIManifest reads and decodes an OCI manifest from a JSON reader.
 func parseOCIManifest(manifestBytes io.Reader) (*ocispec.Manifest, error) {
 	var manifest ocispec.Manifest
 	if err := json.NewDecoder(manifestBytes).Decode(&manifest); err != nil {
