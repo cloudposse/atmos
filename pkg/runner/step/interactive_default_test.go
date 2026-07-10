@@ -156,3 +156,35 @@ func TestInteractiveHandlers_NonTTYDefaultTemplating(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, "prod", result.Value)
 }
+
+// TestConfirmHandler_NonTTYDefaultTemplating verifies the confirm handler
+// resolves Go templates in its default before parsing the yes/true value, so a
+// templated default behaves the same as in choose/input/write.
+func TestConfirmHandler_NonTTYDefaultTemplating(t *testing.T) {
+	skipIfInteractiveTTY(t)
+
+	handler, ok := Get("confirm")
+	require.True(t, ok)
+
+	t.Run("templated default resolving to true returns true", func(t *testing.T) {
+		vars := NewVariables()
+		vars.SetEnv("CONFIRM", "true")
+		step := &schema.WorkflowStep{Name: "go", Type: "confirm", Prompt: "Proceed?", Default: "{{ .env.CONFIRM }}"}
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, "true", result.Value)
+	})
+
+	t.Run("templated default resolving to no returns false", func(t *testing.T) {
+		vars := NewVariables()
+		vars.SetEnv("CONFIRM", "no")
+		step := &schema.WorkflowStep{Name: "go", Type: "confirm", Prompt: "Proceed?", Default: "{{ .env.CONFIRM }}"}
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, "false", result.Value)
+	})
+}

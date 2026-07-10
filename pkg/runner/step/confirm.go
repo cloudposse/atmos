@@ -46,8 +46,13 @@ func (h *ConfirmHandler) Execute(ctx context.Context, step *schema.WorkflowStep,
 		return nil, err
 	}
 
-	// Parse default value.
-	defaultVal := strings.ToLower(step.Default) == "yes" || strings.ToLower(step.Default) == "true"
+	// Resolve templates in the default, then parse it — consistent with the
+	// other interactive handlers (e.g. a default of "{{ .env.CONFIRM }}").
+	defaultStr, err := h.ResolveDefault(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+	defaultVal := strings.ToLower(defaultStr) == "yes" || strings.ToLower(defaultStr) == "true"
 
 	// Non-TTY with a configured default: use the default without prompting.
 	if !shouldPrompt {
