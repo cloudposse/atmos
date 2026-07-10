@@ -8,7 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/workflow"
 )
 
@@ -123,7 +123,7 @@ func NewWorkflowUIProvider() *WorkflowUIProvider {
 func (p *WorkflowUIProvider) PrintMessage(format string, args ...any) {
 	defer perf.Track(nil, "exec.WorkflowUIProvider.PrintMessage")()
 
-	u.PrintfMessageToTUI(format, args...)
+	ui.Writef(format, args...)
 }
 
 // PrintError prints an error using the error utilities.

@@ -1235,7 +1235,10 @@ func TestCLIPrompter_handleCachedResponse_SaveError(t *testing.T) {
 			r.Close()
 
 			assert.Equal(t, tt.expectedResult, result)
-			assert.Contains(t, buf.String(), "Warning")
+			// The message is rendered via ui.Warningf, which prefixes the
+			// themed warning icon (theme.IconWarning) rather than the
+			// hardcoded "⚠️  Warning: " text previously used.
+			assert.Contains(t, buf.String(), "Failed to save permission")
 		})
 	}
 }

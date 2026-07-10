@@ -15,6 +15,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -128,8 +129,7 @@ var docsCmd = &cobra.Command{
 			return fmt.Errorf("open Atmos docs: %w", err)
 		}
 
-		// UI messages should go to stderr; stdout is for data/results.
-		fmt.Fprintf(os.Stderr, "Opening default browser to '%v'.\n", atmosDocsURL)
+		ui.Writef("Opening default browser to '%v'.\n", atmosDocsURL)
 		return nil
 	},
 }

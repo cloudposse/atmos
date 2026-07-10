@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/xdg"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -33,6 +34,15 @@ const (
 
 	// atmosCommand is the command used in the exec credential plugin.
 	atmosCommand = "atmos"
+
+	// Structured-log key names for the [kubeconfig-diff] debug diagnostics
+	// (see configContentEqual, clusterMapsEqualDebug, contextMapsEqualDebug,
+	// authInfoMapsEqualDebug, and mergeWouldChange below).
+	logKeyA        = "a"
+	logKeyB        = "b"
+	logKeyKey      = "key"
+	logKeyExisting = "existing"
+	logKeyNew      = "new"
 )
 
 // KubeconfigManager manages kubeconfig files for EKS clusters.
@@ -399,7 +409,7 @@ func configContentEqual(a, b *clientcmdapi.Config) bool {
 	debug := kubeconfigDebugDiff()
 	if a.CurrentContext != b.CurrentContext {
 		if debug {
-			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] CurrentContext differs: a=%q b=%q\n", a.CurrentContext, b.CurrentContext)
+			log.Debug("[kubeconfig-diff] CurrentContext differs", logKeyA, a.CurrentContext, logKeyB, b.CurrentContext)
 		}
 		return false
 	}
@@ -415,7 +425,7 @@ func configContentEqual(a, b *clientcmdapi.Config) bool {
 func clusterMapsEqualDebug(a, b map[string]*clientcmdapi.Cluster, debug bool) bool {
 	if len(a) != len(b) {
 		if debug {
-			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters map length differs: a=%d b=%d\n", len(a), len(b))
+			log.Debug("[kubeconfig-diff] Clusters map length differs", logKeyA, len(a), logKeyB, len(b))
 		}
 		return false
 	}
@@ -423,13 +433,13 @@ func clusterMapsEqualDebug(a, b map[string]*clientcmdapi.Cluster, debug bool) bo
 		bv, ok := b[k]
 		if !ok {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters[%q] missing from b\n", k)
+				log.Debug("[kubeconfig-diff] Clusters key missing from b", logKeyKey, k)
 			}
 			return false
 		}
 		if !clustersEqual(av, bv) {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters[%q] differs:\n  a=%#v\n  b=%#v\n", k, av, bv)
+				log.Debug("[kubeconfig-diff] Clusters entry differs", logKeyKey, k, logKeyA, av, logKeyB, bv)
 			}
 			return false
 		}
@@ -440,7 +450,7 @@ func clusterMapsEqualDebug(a, b map[string]*clientcmdapi.Cluster, debug bool) bo
 func contextMapsEqualDebug(a, b map[string]*clientcmdapi.Context, debug bool) bool {
 	if len(a) != len(b) {
 		if debug {
-			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts map length differs: a=%d b=%d\n", len(a), len(b))
+			log.Debug("[kubeconfig-diff] Contexts map length differs", logKeyA, len(a), logKeyB, len(b))
 		}
 		return false
 	}
@@ -448,13 +458,13 @@ func contextMapsEqualDebug(a, b map[string]*clientcmdapi.Context, debug bool) bo
 		bv, ok := b[k]
 		if !ok {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts[%q] missing from b\n", k)
+				log.Debug("[kubeconfig-diff] Contexts key missing from b", logKeyKey, k)
 			}
 			return false
 		}
 		if !contextsEqual(av, bv) {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts[%q] differs:\n  a=%#v\n  b=%#v\n", k, av, bv)
+				log.Debug("[kubeconfig-diff] Contexts entry differs", logKeyKey, k, logKeyA, av, logKeyB, bv)
 			}
 			return false
 		}
@@ -465,7 +475,7 @@ func contextMapsEqualDebug(a, b map[string]*clientcmdapi.Context, debug bool) bo
 func authInfoMapsEqualDebug(a, b map[string]*clientcmdapi.AuthInfo, debug bool) bool {
 	if len(a) != len(b) {
 		if debug {
-			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos map length differs: a=%d b=%d\n", len(a), len(b))
+			log.Debug("[kubeconfig-diff] AuthInfos map length differs", logKeyA, len(a), logKeyB, len(b))
 		}
 		return false
 	}
@@ -473,15 +483,15 @@ func authInfoMapsEqualDebug(a, b map[string]*clientcmdapi.AuthInfo, debug bool) 
 		bv, ok := b[k]
 		if !ok {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos[%q] missing from b\n", k)
+				log.Debug("[kubeconfig-diff] AuthInfos key missing from b", logKeyKey, k)
 			}
 			return false
 		}
 		if !authInfosEqual(av, bv) {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos[%q] differs:\n  a=%#v\n  b=%#v\n", k, av, bv)
+				log.Debug("[kubeconfig-diff] AuthInfos entry differs", logKeyKey, k, logKeyA, av, logKeyB, bv)
 				if av.Exec != nil || bv.Exec != nil {
-					fmt.Fprintf(os.Stderr, "  a.Exec=%#v\n  b.Exec=%#v\n", av.Exec, bv.Exec)
+					log.Debug("[kubeconfig-diff] AuthInfos entry Exec differs", logKeyKey, k, "a.Exec", av.Exec, "b.Exec", bv.Exec)
 				}
 			}
 			return false
@@ -507,8 +517,7 @@ func mergeWouldChange(existing, newConfig *clientcmdapi.Config) bool {
 
 	if newConfig.CurrentContext != "" && existing.CurrentContext != newConfig.CurrentContext {
 		if debug {
-			fmt.Fprintf(os.Stderr, "[kubeconfig-diff] CurrentContext differs: existing=%q new=%q\n",
-				existing.CurrentContext, newConfig.CurrentContext)
+			log.Debug("[kubeconfig-diff] CurrentContext differs", logKeyExisting, existing.CurrentContext, logKeyNew, newConfig.CurrentContext)
 		}
 		return true
 	}
@@ -516,13 +525,13 @@ func mergeWouldChange(existing, newConfig *clientcmdapi.Config) bool {
 		ev, ok := existing.Clusters[k]
 		if !ok {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters[%q] missing from existing\n", k)
+				log.Debug("[kubeconfig-diff] Clusters key missing from existing", logKeyKey, k)
 			}
 			return true
 		}
 		if !clustersEqual(ev, v) {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Clusters[%q] differs:\n  existing=%#v\n  new=%#v\n", k, ev, v)
+				log.Debug("[kubeconfig-diff] Clusters entry differs", logKeyKey, k, logKeyExisting, ev, logKeyNew, v)
 			}
 			return true
 		}
@@ -531,13 +540,13 @@ func mergeWouldChange(existing, newConfig *clientcmdapi.Config) bool {
 		ev, ok := existing.Contexts[k]
 		if !ok {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts[%q] missing from existing\n", k)
+				log.Debug("[kubeconfig-diff] Contexts key missing from existing", logKeyKey, k)
 			}
 			return true
 		}
 		if !contextsEqual(ev, v) {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] Contexts[%q] differs:\n  existing=%#v\n  new=%#v\n", k, ev, v)
+				log.Debug("[kubeconfig-diff] Contexts entry differs", logKeyKey, k, logKeyExisting, ev, logKeyNew, v)
 			}
 			return true
 		}
@@ -546,15 +555,15 @@ func mergeWouldChange(existing, newConfig *clientcmdapi.Config) bool {
 		ev, ok := existing.AuthInfos[k]
 		if !ok {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos[%q] missing from existing\n", k)
+				log.Debug("[kubeconfig-diff] AuthInfos key missing from existing", logKeyKey, k)
 			}
 			return true
 		}
 		if !authInfosEqual(ev, v) {
 			if debug {
-				fmt.Fprintf(os.Stderr, "[kubeconfig-diff] AuthInfos[%q] differs:\n  existing=%#v\n  new=%#v\n", k, ev, v)
+				log.Debug("[kubeconfig-diff] AuthInfos entry differs", logKeyKey, k, logKeyExisting, ev, logKeyNew, v)
 				if ev.Exec != nil || v.Exec != nil {
-					fmt.Fprintf(os.Stderr, "  existing.Exec=%#v\n  new.Exec=%#v\n", ev.Exec, v.Exec)
+					log.Debug("[kubeconfig-diff] AuthInfos entry Exec differs", logKeyKey, k, "existing.Exec", ev.Exec, "new.Exec", v.Exec)
 				}
 			}
 			return true

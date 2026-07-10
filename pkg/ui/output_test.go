@@ -559,6 +559,40 @@ func TestMarkdownMessagef(t *testing.T) {
 	}
 }
 
+func TestMarkdownMessageNoWrap(t *testing.T) {
+	stdout, stderr, cleanup := setupTestUI(t)
+	defer cleanup()
+
+	MarkdownMessageNoWrap("**Notice:** Telemetry enabled")
+
+	// MarkdownMessageNoWrap goes to stderr (UI channel).
+	output := stderr.String()
+	if len(output) == 0 {
+		t.Error("MarkdownMessageNoWrap() did not write to stderr")
+	}
+
+	// Verify nothing written to stdout.
+	if stdout.Len() != 0 {
+		t.Errorf("MarkdownMessageNoWrap() wrote to stdout: %q", stdout.String())
+	}
+}
+
+func TestMarkdownMessageNoWrapf(t *testing.T) {
+	stdout, stderr, cleanup := setupTestUI(t)
+	defer cleanup()
+
+	MarkdownMessageNoWrapf("**%s:** %s", "Notice", "Telemetry enabled")
+
+	output := stderr.String()
+	if len(output) == 0 {
+		t.Error("MarkdownMessageNoWrapf() did not write to stderr")
+	}
+
+	if stdout.Len() != 0 {
+		t.Errorf("MarkdownMessageNoWrapf() wrote to stdout: %q", stdout.String())
+	}
+}
+
 func TestGetFormatter_NotInitialized(t *testing.T) {
 	// Save current formatter.
 	formatterMu.Lock()

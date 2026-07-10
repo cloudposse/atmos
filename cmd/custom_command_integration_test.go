@@ -18,10 +18,12 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // stepsFromStrings is a helper to convert []string to schema.Tasks for tests.
@@ -174,6 +176,9 @@ func TestCustomCommandCastStepInheritsWorkingDirectory(t *testing.T) {
 		t.Skip("uses POSIX shell redirection")
 	}
 	require.NoError(t, iolib.Initialize())
+	ioCtx := iolib.GetContext()
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
 
 	_ = NewTestKit(t)
 

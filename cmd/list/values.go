@@ -11,6 +11,7 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	l "github.com/cloudposse/atmos/pkg/list"
@@ -19,7 +20,6 @@ import (
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
@@ -105,8 +105,7 @@ var valuesCmd = &cobra.Command{
 			return err
 		}
 
-		u.PrintMessage(output)
-		return nil
+		return data.Writeln(output)
 	},
 }
 
@@ -166,8 +165,7 @@ var varsCmd = &cobra.Command{
 			return err
 		}
 
-		u.PrintMessage(output)
-		return nil
+		return data.Writeln(output)
 	},
 }
 
@@ -184,7 +182,8 @@ func init() {
 		WithProcessFunctionsFlag,
 		// Add vars flag only for values command.
 		func(options *[]flags.Option) {
-			*options = append(*options,
+			*options = append(
+				*options,
 				flags.WithBoolFlag("vars", "", false, "Show only vars (equivalent to --query .vars)"),
 				flags.WithEnvVars("vars", "ATMOS_LIST_VARS"),
 			)

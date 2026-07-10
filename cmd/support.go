@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/data"
 )
 
 //go:embed markdown/support.md
@@ -21,8 +21,7 @@ var supportCmd = &cobra.Command{
 	SilenceUsage:       true,
 	SilenceErrors:      true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		utils.PrintfMarkdown("%s", supportMarkdown)
-		return nil
+		return data.Markdownf("%s", supportMarkdown)
 	},
 }
 

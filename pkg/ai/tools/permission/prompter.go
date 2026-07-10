@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // CLIPrompter implements Prompter using command-line prompts.
@@ -42,27 +44,27 @@ func (p *CLIPrompter) checkCachedPermission(toolName string) (bool, bool) {
 
 // displayPrompt shows the tool execution request and prompt options.
 func (p *CLIPrompter) displayPrompt(tool Tool, params map[string]interface{}) {
-	fmt.Fprintf(os.Stderr, "\n🔧 Tool Execution Request\n")
-	fmt.Fprintf(os.Stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-	fmt.Fprintf(os.Stderr, "Tool: %s\n", tool.Name())
-	fmt.Fprintf(os.Stderr, "Description: %s\n", tool.Description())
+	ui.Writef("\n🔧 Tool Execution Request\n")
+	ui.Writef("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	ui.Writef("Tool: %s\n", tool.Name())
+	ui.Writef("Description: %s\n", tool.Description())
 
 	if len(params) > 0 {
-		fmt.Fprintf(os.Stderr, "\nParameters:\n")
+		ui.Writef("\nParameters:\n")
 		for key, value := range params {
-			fmt.Fprintf(os.Stderr, "  %s: %v\n", key, value)
+			ui.Writef("  %s: %v\n", key, value)
 		}
 	}
 
 	if p.cache != nil {
-		fmt.Fprintf(os.Stderr, "\nOptions:\n")
-		fmt.Fprintf(os.Stderr, "  [a] Always allow (save to .atmos/ai.settings.local.json)\n")
-		fmt.Fprintf(os.Stderr, "  [y] Allow once\n")
-		fmt.Fprintf(os.Stderr, "  [n] Deny once\n")
-		fmt.Fprintf(os.Stderr, "  [d] Always deny (save to .atmos/ai.settings.local.json)\n")
-		fmt.Fprintf(os.Stderr, "\nChoice (a/y/n/d): ")
+		ui.Writef("\nOptions:\n")
+		ui.Writef("  [a] Always allow (save to .atmos/ai.settings.local.json)\n")
+		ui.Writef("  [y] Allow once\n")
+		ui.Writef("  [n] Deny once\n")
+		ui.Writef("  [d] Always deny (save to .atmos/ai.settings.local.json)\n")
+		ui.Write("\nChoice (a/y/n/d): ")
 	} else {
-		fmt.Fprintf(os.Stderr, "\nAllow execution? (y/N): ")
+		ui.Write("\nAllow execution? (y/N): ")
 	}
 }
 
@@ -71,18 +73,18 @@ func (p *CLIPrompter) handleCachedResponse(response, toolName string) bool {
 	switch response {
 	case "a", "always":
 		if err := p.cache.AddAllow(toolName); err != nil {
-			fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to save permission: %v\n", err)
+			ui.Warningf("Failed to save permission: %v", err)
 		} else {
-			fmt.Fprintf(os.Stderr, "✅ Permission saved to .atmos/ai.settings.local.json\n")
+			ui.Successf("Permission saved to .atmos/ai.settings.local.json")
 		}
 		return true
 	case "y", "yes":
 		return true
 	case "d", "deny":
 		if err := p.cache.AddDeny(toolName); err != nil {
-			fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to save permission: %v\n", err)
+			ui.Warningf("Failed to save permission: %v", err)
 		} else {
-			fmt.Fprintf(os.Stderr, "✅ Permission saved to .atmos/ai.settings.local.json\n")
+			ui.Successf("Permission saved to .atmos/ai.settings.local.json")
 		}
 		return false
 	default:

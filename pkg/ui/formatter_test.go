@@ -398,6 +398,40 @@ func TestFormatter_Markdown_MaxWidth(t *testing.T) {
 	}
 }
 
+func TestFormatter_MarkdownNoWrap(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	input := "This is a very long single line of prose that would normally be word-wrapped " +
+		"across multiple terminal-width lines when rendered as markdown, but must stay on one " +
+		"line here since word wrap is explicitly disabled for this render."
+
+	got, err := f.MarkdownNoWrap(input)
+	if err != nil {
+		t.Errorf("MarkdownNoWrap() error = %v", err)
+	}
+	if got == "" {
+		t.Error("MarkdownNoWrap() returned empty string")
+	}
+
+	// Glamour wraps rendered paragraphs in leading/trailing blank lines regardless
+	// of word-wrap; strip those to check the prose itself stayed on one line.
+	trimmed := strings.TrimSpace(got)
+	if strings.Contains(trimmed, "\n") {
+		t.Errorf("MarkdownNoWrap() introduced line breaks for a no-wrap render: %q", got)
+	}
+
+	// Must end with EXACTLY one newline: none would run into whatever the
+	// caller writes next (this broke the telemetry disclosure notice, which
+	// glued onto the following debug log line); more than one would
+	// reintroduce the leading/trailing blank-line padding this method exists
+	// to strip.
+	if !strings.HasSuffix(got, "\n") || strings.HasSuffix(got, "\n\n") {
+		t.Errorf("MarkdownNoWrap() must end with exactly one newline, got %q", got)
+	}
+}
+
 // Helper functions for testing.
 
 func createTestIOContext() iolib.Context {

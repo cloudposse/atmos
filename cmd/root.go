@@ -122,6 +122,14 @@ const (
 	ansiEscapePrefix = "\x1b["
 	// ProfileFlagName is the name of the profile flag.
 	profileFlagName = "profile"
+	// RootCommandName is the root command's Use value.
+	rootCommandName = "atmos"
+	// HelpFlagName is the standard --help flag name.
+	helpFlagName = "help"
+	// HelpFlagLong is the long-form --help flag spelling.
+	helpFlagLong = "--help"
+	// HelpFlagShort is the short-form -h flag spelling.
+	helpFlagShort = "-h"
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -1761,10 +1769,9 @@ func Execute() error {
 	// resolution so unknown commands can be delegated to the requested binary.
 	maybeReexecExplicitUseVersion(&atmosConfig)
 
-	// Initialize markdown renderers only if config loaded successfully
+	// Initialize markdown renderer only if config loaded successfully
 	// This prevents deep exits in InitializeMarkdown when config is invalid
 	if initErr == nil {
-		utils.InitializeMarkdown(&atmosConfig)
 		errUtils.InitializeMarkdown(&atmosConfig)
 	}
 
@@ -2045,21 +2052,21 @@ func convertToTermenvProfile(profile terminal.ColorProfile) termenv.Profile {
 func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	// Print performance summary to console, filtering out zero-time functions.
 	snap := perf.SnapshotTopFiltered("total", defaultTopFunctionsMax)
-	utils.PrintfMessageToTUI("\n=== Atmos Performance Summary ===\n")
-	utils.PrintfMessageToTUI("Elapsed: %s  Functions: %d  Calls: %d\n", snap.Elapsed, snap.TotalFuncs, snap.TotalCalls)
-	utils.PrintfMessageToTUI("%-50s %6s %10s %10s %10s %8s\n", "Function", "Count", "Total", "Avg", "Max", "P95")
+	ui.Writef("\n=== Atmos Performance Summary ===\n")
+	ui.Writef("Elapsed: %s  Functions: %d  Calls: %d\n", snap.Elapsed, snap.TotalFuncs, snap.TotalCalls)
+	ui.Writef("%-50s %6s %10s %10s %10s %8s\n", "Function", "Count", "Total", "Avg", "Max", "P95")
 	for _, r := range snap.Rows {
 		p95 := "-"
 		if r.P95 > 0 {
 			p95 = heatmap.FormatDuration(r.P95)
 		}
-		utils.PrintfMessageToTUI("%-50s %6d %10s %10s %10s %8s\n",
+		ui.Writef("%-50s %6d %10s %10s %10s %8s\n",
 			r.Name, r.Count, heatmap.FormatDuration(r.Total), heatmap.FormatDuration(r.Avg), heatmap.FormatDuration(r.Max), p95)
 	}
 
 	// Check if we have a TTY for interactive mode.
 	if !term.IsTTYSupportForStderr() {
-		utils.PrintfMessageToTUI("\n⚠️  No TTY available for interactive visualization. Summary displayed above.\n")
+		ui.Writef("\n⚠️  No TTY available for interactive visualization. Summary displayed above.\n")
 		return nil
 	}
 
@@ -2180,143 +2187,180 @@ func init() {
 	data.InitWriter(ioCtx)
 	data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
 
-	initCobraConfig()
+	initCobraConfig(ioCtx)
 }
 
 // initCobraConfig initializes Cobra command configuration and styling.
-func initCobraConfig() {
-	RootCmd.SetOut(os.Stdout)
+func initCobraConfig(ioCtx iolib.Context) {
+	// RootCmd.SetOut feeds the writer Cobra's help/usage templates receive via
+	// cmd.OutOrStdout() (see help_template.go/help_topics_render.go). Those
+	// templates keep writing via fmt.Fprintf(ctx.writer, ...) directly rather
+	// than ui.Write* on purpose — that's Cobra's idiomatic, test-injectable
+	// writer convention (cmd.SetOut(&buf) in tests, the --cast help tee).
+	// Masking is applied once here at the source instead of at each of those
+	// call sites.
+	RootCmd.SetOut(ioCtx.Streams().Output())
 	styles := boa.DefaultStyles()
 	b := boa.New(boa.WithStyles(styles))
 	RootCmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
 		return showFlagUsageAndExit(c, err)
 	})
 	RootCmd.SetUsageFunc(func(c *cobra.Command) error {
-		if c.Use == "atmos" {
-			return b.UsageFunc(c)
+		return rootUsageFunc(c, b)
+	})
+	RootCmd.SetHelpFunc(rootHelpFunc)
+}
+
+// rootUsageFunc renders usage for the root command via boa's styled usage, and
+// for subcommands either shows valid positional-argument usage or an
+// unknown-command error, depending on whether the given args pass the
+// command's own Args validator.
+func rootUsageFunc(c *cobra.Command, b *boa.Boa) error {
+	if c.Use == rootCommandName {
+		return b.UsageFunc(c)
+	}
+	// Get actual arguments (handles DisableFlagParsing=true case).
+	arguments := flags.GetActualArgs(c, os.Args)
+
+	// IMPORTANT: Check if command has Args validator and args are valid.
+	// If args pass validation, they're positional args, not unknown subcommands.
+	// This prevents "Unknown command component1" errors for valid positional args.
+	if len(arguments) > 0 {
+		if err := flags.ValidateArgsOrNil(c, arguments); err == nil {
+			// Args are valid positional arguments - show usage without "Unknown command" error
+			showErrorExampleFromMarkdown(c, "")
+			errUtils.Exit(1)
+			return nil
 		}
+		// Args validation failed - fall through to show error with first arg as unknown command
+	}
+
+	showUsageAndExit(c, arguments)
+	return nil
+}
+
+// isHelpRequested reports whether help was explicitly requested via os.Args,
+// the args parameter, or the command's own --help flag.
+func isHelpRequested(command *cobra.Command, args []string) bool {
+	helpRequested := Contains(os.Args, helpFlagName) || Contains(os.Args, helpFlagLong) || Contains(os.Args, helpFlagShort) ||
+		Contains(args, helpFlagName) || Contains(args, helpFlagLong) || Contains(args, helpFlagShort)
+	if helpFlag := command.Flag(helpFlagName); helpFlag != nil && helpFlag.Changed {
+		helpRequested = true
+	}
+	return helpRequested
+}
+
+// parsePagerFlagValue interprets the --pager flag's string value as a
+// tri-state boolean: recognized on/off tokens map directly, anything else
+// (e.g. a pager command like "less") is treated as enabling the pager.
+func parsePagerFlagValue(pagerFlag string) bool {
+	switch pagerFlag {
+	case "true", "on", "yes", "1":
+		return true
+	case "false", "off", "no", "0":
+		return false
+	default:
+		// Assume it's a pager command like "less" or "more".
+		return true
+	}
+}
+
+// renderFlagHelp renders help for flag-based invocations ('--help'/'-h'):
+// directly to stdout without buffering, unless --pager was explicitly set.
+func renderFlagHelp(command *cobra.Command) {
+	pagerExplicitlySet := false
+	pagerEnabled := false
+	if pagerFlag, err := command.Flags().GetString("pager"); err == nil && pagerFlag != "" {
+		pagerExplicitlySet = true
+		pagerEnabled = parsePagerFlagValue(pagerFlag)
+	}
+
+	if pagerExplicitlySet && pagerEnabled {
+		// User explicitly requested pager for flag help.
+		var buf bytes.Buffer
+		command.SetOut(&buf)
+		applyColoredHelpTemplateForTopic(command, currentHelpTopic)
+		_ = command.Help()
+		pager := pager.NewWithAtmosConfig(true, atmosConfig.Settings.Terminal.Speed)
+		_ = pager.Run("Atmos CLI Help", buf.String())
+	} else {
+		// Default: render help directly to stdout without pager.
+		applyColoredHelpTemplateForTopic(command, currentHelpTopic)
+		_ = command.Help()
+	}
+}
+
+// renderInteractiveHelp renders help for interactive 'atmos help' invocations,
+// buffering into a pager when configured (via flag, env, or config).
+func renderInteractiveHelp(command *cobra.Command) {
+	var buf bytes.Buffer
+	command.SetOut(&buf)
+	applyColoredHelpTemplateForTopic(command, currentHelpTopic)
+	_ = command.Help()
+
+	// Check pager configuration from flag, env, or config.
+	pagerEnabled := atmosConfig.Settings.Terminal.IsPagerEnabled()
+	if pagerFlag, err := command.Flags().GetString("pager"); err == nil && pagerFlag != "" {
+		pagerEnabled = parsePagerFlagValue(pagerFlag)
+	}
+
+	pager := pager.NewWithAtmosConfig(pagerEnabled, atmosConfig.Settings.Terminal.Speed)
+	if err := pager.Run("Atmos CLI Help", buf.String()); err != nil {
+		// Pager already falls back to direct output (pkg/pager/pager.go:88-92).
+		// Just log a warning - help was still shown successfully.
+		log.Warn("Pager unavailable, content printed directly", "error", err)
+	}
+}
+
+// renderRootHelp dispatches to the appropriate help renderer based on how
+// help was invoked:
+//   - 'atmos --help' / 'atmos cmd --help' → simple output, NO pager unless
+//     --pager explicitly set.
+//   - 'atmos help' → interactive, may use pager.
+//   - anything else → fallback direct render.
+func renderRootHelp(command *cobra.Command) {
+	isInteractiveHelp := Contains(os.Args, helpFlagName) && !Contains(os.Args, helpFlagLong) && !Contains(os.Args, helpFlagShort)
+	isFlagHelp := Contains(os.Args, helpFlagLong) || Contains(os.Args, helpFlagShort)
+
+	switch {
+	case isFlagHelp:
+		renderFlagHelp(command)
+	case isInteractiveHelp:
+		renderInteractiveHelp(command)
+	default:
+		// Fallback for other cases.
+		applyColoredHelpTemplateForTopic(command, currentHelpTopic)
+		_ = command.Help()
+	}
+}
+
+// rootHelpFunc is RootCmd's help renderer, installed via SetHelpFunc.
+func rootHelpFunc(command *cobra.Command, args []string) {
+	contentName := strings.ReplaceAll(strings.ReplaceAll(command.CommandPath(), spaceChar, "_"), "-", "_")
+	if exampleContent, ok := examples[contentName]; ok {
+		command.Example = exampleContent.Content
+	}
+
+	if !isHelpRequested(command, args) {
 		// Get actual arguments (handles DisableFlagParsing=true case).
-		arguments := flags.GetActualArgs(c, os.Args)
+		arguments := flags.GetActualArgs(command, os.Args)
+		showUsageAndExit(command, arguments)
+	}
 
-		// IMPORTANT: Check if command has Args validator and args are valid.
-		// If args pass validation, they're positional args, not unknown subcommands.
-		// This prevents "Unknown command component1" errors for valid positional args.
-		if len(arguments) > 0 {
-			if err := flags.ValidateArgsOrNil(c, arguments); err == nil {
-				// Args are valid positional arguments - show usage without "Unknown command" error
-				showErrorExampleFromMarkdown(c, "")
-				errUtils.Exit(1)
-				return nil
-			}
-			// Args validation failed - fall through to show error with first arg as unknown command
-		}
+	// Cobra renders help before the persistent pre-run hooks fire, so an
+	// explicit --cast flag starts its recording here and tees the rendered
+	// help output into the cast (used by the docs screengrab pipeline).
+	if recordWriter := castcmd.StartHelpRecording(command, &atmosConfig); recordWriter != nil {
+		command.SetOut(io.MultiWriter(command.OutOrStdout(), recordWriter))
+		defer castcmd.FinalizeRecording()
+	}
 
-		showUsageAndExit(c, arguments)
-		return nil
-	})
-	RootCmd.SetHelpFunc(func(command *cobra.Command, args []string) {
-		contentName := strings.ReplaceAll(strings.ReplaceAll(command.CommandPath(), " ", "_"), "-", "_")
-		if exampleContent, ok := examples[contentName]; ok {
-			command.Example = exampleContent.Content
-		}
+	// Logo and version are now printed by customRenderAtmosHelp
+	telemetry.PrintTelemetryDisclosure()
 
-		// Check if help was explicitly requested via os.Args, args parameter, or via the help flag.
-		helpRequested := Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h") ||
-			Contains(args, "help") || Contains(args, "--help") || Contains(args, "-h")
-		if helpFlag := command.Flag("help"); helpFlag != nil && helpFlag.Changed {
-			helpRequested = true
-		}
+	renderRootHelp(command)
 
-		if !helpRequested {
-			// Get actual arguments (handles DisableFlagParsing=true case).
-			arguments := flags.GetActualArgs(command, os.Args)
-			showUsageAndExit(command, arguments)
-		}
-
-		// Cobra renders help before the persistent pre-run hooks fire, so an
-		// explicit --cast flag starts its recording here and tees the rendered
-		// help output into the cast (used by the docs screengrab pipeline).
-		if recordWriter := castcmd.StartHelpRecording(command, &atmosConfig); recordWriter != nil {
-			command.SetOut(io.MultiWriter(command.OutOrStdout(), recordWriter))
-			defer castcmd.FinalizeRecording()
-		}
-
-		// Distinguish between interactive 'atmos help' and flag-based '--help':
-		// - 'atmos help' (Contains "help" but NOT "--help" or "-h") → interactive, may use pager
-		// - 'atmos --help' or 'atmos cmd --help' → simple output, NO pager unless --pager explicitly set
-		isInteractiveHelp := Contains(os.Args, "help") && !Contains(os.Args, "--help") && !Contains(os.Args, "-h")
-		isFlagHelp := Contains(os.Args, "--help") || Contains(os.Args, "-h")
-
-		// Logo and version are now printed by customRenderAtmosHelp
-		telemetry.PrintTelemetryDisclosure()
-
-		// For flag-based help (--help), render directly to stdout without buffering or pager.
-		// Only use pager if --pager flag is explicitly set.
-		switch {
-		case isFlagHelp:
-			// Check if --pager flag was explicitly set.
-			pagerExplicitlySet := false
-			pagerEnabled := false
-			if pagerFlag, err := command.Flags().GetString("pager"); err == nil && pagerFlag != "" {
-				pagerExplicitlySet = true
-				switch pagerFlag {
-				case "true", "on", "yes", "1":
-					pagerEnabled = true
-				case "false", "off", "no", "0":
-					pagerEnabled = false
-				default:
-					// Assume it's a pager command like "less" or "more".
-					pagerEnabled = true
-				}
-			}
-
-			if pagerExplicitlySet && pagerEnabled {
-				// User explicitly requested pager for flag help.
-				var buf bytes.Buffer
-				command.SetOut(&buf)
-				applyColoredHelpTemplateForTopic(command, currentHelpTopic)
-				_ = command.Help()
-				pager := pager.NewWithAtmosConfig(true, atmosConfig.Settings.Terminal.Speed)
-				_ = pager.Run("Atmos CLI Help", buf.String())
-			} else {
-				// Default: render help directly to stdout without pager.
-				applyColoredHelpTemplateForTopic(command, currentHelpTopic)
-				_ = command.Help()
-			}
-		case isInteractiveHelp:
-			// Interactive 'atmos help' command - use pager if configured.
-			var buf bytes.Buffer
-			command.SetOut(&buf)
-			applyColoredHelpTemplateForTopic(command, currentHelpTopic)
-			_ = command.Help()
-
-			// Check pager configuration from flag, env, or config.
-			pagerEnabled := atmosConfig.Settings.Terminal.IsPagerEnabled()
-			if pagerFlag, err := command.Flags().GetString("pager"); err == nil && pagerFlag != "" {
-				switch pagerFlag {
-				case "true", "on", "yes", "1":
-					pagerEnabled = true
-				case "false", "off", "no", "0":
-					pagerEnabled = false
-				default:
-					pagerEnabled = true
-				}
-			}
-
-			pager := pager.NewWithAtmosConfig(pagerEnabled, atmosConfig.Settings.Terminal.Speed)
-			if err := pager.Run("Atmos CLI Help", buf.String()); err != nil {
-				// Pager already falls back to direct output (pkg/pager/pager.go:88-92).
-				// Just log a warning - help was still shown successfully.
-				log.Warn("Pager unavailable, content printed directly", "error", err)
-			}
-		default:
-			// Fallback for other cases.
-			applyColoredHelpTemplateForTopic(command, currentHelpTopic)
-			_ = command.Help()
-		}
-
-		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
-	})
+	CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 }
 
 // profileFlagCompletion provides shell completion for the global --profile flag.

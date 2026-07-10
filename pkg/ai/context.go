@@ -14,6 +14,7 @@ import (
 	aiContext "github.com/cloudposse/atmos/pkg/ai/context"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -168,8 +169,9 @@ func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) 
 
 // PromptForConsent asks the user for consent to send context to AI.
 func PromptForConsent() (bool, error) {
-	fmt.Fprintf(os.Stderr, "\n⚠️  This question may benefit from your stack configurations.\n")
-	fmt.Fprintf(os.Stderr, "📤 Send stack files to AI provider for analysis? (y/N): ")
+	ui.Writeln("")
+	ui.Warning("This question may benefit from your stack configurations.")
+	ui.Write("📤 Send stack files to AI provider for analysis? (y/N): ")
 
 	reader := bufio.NewReader(os.Stdin)
 	response, err := reader.ReadString('\n')

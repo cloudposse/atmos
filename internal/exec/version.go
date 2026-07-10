@@ -11,8 +11,10 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 
@@ -41,7 +43,7 @@ func NewVersionExec(atmosConfig *schema.AtmosConfiguration) *versionExec {
 		getLatestGitHubRepoRelease: func() (string, error) {
 			return u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 		},
-		printMessage: u.PrintMessage,
+		printMessage: func(s string) { _ = data.Writeln(s) },
 		printMessageToUpgradeToAtmosLatestRelease: u.PrintMessageToUpgradeToAtmosLatestRelease,
 		loadCacheConfig:       cfg.LoadCache,
 		shouldCheckForUpdates: cfg.ShouldCheckForUpdates,
@@ -205,7 +207,7 @@ func (v versionExec) checkRelease() {
 	currentRelease := strings.TrimPrefix(version.Version, "v")
 
 	if latestRelease == currentRelease {
-		u.PrintfMessageToTUI("\n%s You are running the latest version of Atmos\n\n", theme.Styles.Checkmark)
+		ui.Writef("\n%s You are running the latest version of Atmos\n\n", theme.Styles.Checkmark)
 		log.Debug("Version check completed", "version", latestRelease)
 	} else {
 		v.printMessageToUpgradeToAtmosLatestRelease(latestRelease)

@@ -15,6 +15,7 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 var (
@@ -139,11 +140,11 @@ func (h *CastHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Work
 		if discardErr := rec.Discard(); discardErr != nil {
 			runErr = errors.Join(runErr, discardErr)
 		}
-		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast discarded (recording failed): %s\n", rec.Path())
+		ui.Writef("Cast discarded (recording failed): %s\n", rec.Path())
 	} else if closeErr := rec.Close(); closeErr != nil {
 		runErr = closeErr
 	} else {
-		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast recorded: %s\n", rec.Path())
+		ui.Writef("Cast recorded: %s\n", rec.Path())
 		runErr = renderCastOutputs(step, rec.Path())
 	}
 	result := NewStepResult(rec.Path()).WithMetadata("cast", rec.Path())

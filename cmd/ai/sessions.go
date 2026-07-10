@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -19,7 +20,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
@@ -286,9 +286,9 @@ func cleanSessionsCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	if count == 0 {
-		u.PrintMessage("No sessions to clean.")
+		_ = data.Writeln("No sessions to clean.")
 	} else {
-		u.PrintMessage(fmt.Sprintf("✅ Deleted %d session(s) older than %s", count, olderThanStr))
+		_ = data.Writeln(fmt.Sprintf("✅ Deleted %d session(s) older than %s", count, olderThanStr))
 	}
 
 	return nil
@@ -364,7 +364,7 @@ func exportSessionCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to export session: %w", err)
 	}
 
-	u.PrintMessage(fmt.Sprintf("✅ Session '%s' exported to '%s'", sessionName, outputPath))
+	_ = data.Writeln(fmt.Sprintf("✅ Session '%s' exported to '%s'", sessionName, outputPath))
 
 	return nil
 }
@@ -405,13 +405,13 @@ func importSessionCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to import session: %w", err)
 	}
 
-	u.PrintMessage(fmt.Sprintf("✅ Session '%s' imported successfully", importedSession.Name))
-	u.PrintMessage(fmt.Sprintf("  ID: %s", importedSession.ID))
-	u.PrintMessage(fmt.Sprintf("  Model: %s", importedSession.Model))
-	u.PrintMessage(fmt.Sprintf("  Provider: %s", importedSession.Provider))
-	u.PrintMessage(fmt.Sprintf("  Messages: %d", importedSession.MessageCount))
-	u.PrintMessage("")
-	u.PrintMessage("Resume the session with: atmos ai chat --session " + importedSession.Name)
+	_ = data.Writeln(fmt.Sprintf("✅ Session '%s' imported successfully", importedSession.Name))
+	_ = data.Writeln(fmt.Sprintf("  ID: %s", importedSession.ID))
+	_ = data.Writeln(fmt.Sprintf("  Model: %s", importedSession.Model))
+	_ = data.Writeln(fmt.Sprintf("  Provider: %s", importedSession.Provider))
+	_ = data.Writeln(fmt.Sprintf("  Messages: %d", importedSession.MessageCount))
+	_ = data.Writeln("")
+	_ = data.Writeln("Resume the session with: atmos ai chat --session " + importedSession.Name)
 
 	return nil
 }

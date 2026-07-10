@@ -3,6 +3,7 @@ package data
 import (
 	"encoding/json"
 	"fmt"
+	stdio "io"
 	"sync"
 
 	"gopkg.in/yaml.v3"
@@ -90,6 +91,49 @@ func Writeln(content string) error {
 	defer perf.Track(nil, "data.Writeln")()
 
 	return getIOContext().Write(io.DataStream, content+"\n")
+}
+
+// WriteUnmasked writes content to the data channel (stdout) WITHOUT secret masking.
+//
+// Escape hatch for the narrow case where a user explicitly requested unmasked output
+// containing their own resolved credentials for consumption by another program (e.g.
+// `atmos auth env` emitting `export AWS_SECRET_ACCESS_KEY='...'` for `eval $(...)`).
+// Routing that through Write() would mask the exact values the user asked for, silently
+// breaking the feature.
+//
+// Still resolves through the same dynamic stdout accessor as Write() (test output-capture
+// via os.Stdout redirection keeps working) and still feeds --cast/session recording via
+// io.RecordMaskedOutput — it only skips the masker.
+//
+// Only use this when BOTH are true: (1) content is exactly what the user explicitly asked
+// to receive unmasked, and (2) masking it would make the output unusable for its stated
+// purpose (shell eval, etc). For everything else, use Write.
+func WriteUnmasked(content string) error {
+	defer perf.Track(nil, "data.WriteUnmasked")()
+
+	w := getIOContext().RawData()
+	n, err := stdio.WriteString(w, content)
+	if n > 0 {
+		if n > len(content) {
+			n = len(content)
+		}
+		io.RecordMaskedOutput(io.DataStream, content[:n])
+	}
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrWriteToStream, err)
+	}
+	if n < len(content) {
+		return fmt.Errorf("%w: %w", errUtils.ErrWriteToStream, stdio.ErrShortWrite)
+	}
+	return nil
+}
+
+// WriteUnmaskedf writes formatted content to the data channel (stdout) WITHOUT secret masking.
+// See WriteUnmasked for when this is (and is not) appropriate to use.
+func WriteUnmaskedf(format string, a ...interface{}) error {
+	defer perf.Track(nil, "data.WriteUnmaskedf")()
+
+	return WriteUnmasked(fmt.Sprintf(format, a...))
 }
 
 // WriteJSON marshals v to JSON and writes to the data channel (stdout).

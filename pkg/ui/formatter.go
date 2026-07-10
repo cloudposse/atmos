@@ -274,6 +274,36 @@ func MarkdownMessagef(format string, a ...interface{}) {
 	MarkdownMessage(content)
 }
 
+// MarkdownMessageNoWrap writes rendered markdown to stderr (UI channel) without
+// word-wrapping long lines. Use for deterministic, snapshot-stable single-line
+// notices where wrapping would otherwise vary by terminal width.
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func MarkdownMessageNoWrap(content string) {
+	formatterMu.RLock()
+	defer formatterMu.RUnlock()
+
+	if globalFormatter == nil || globalIO == nil {
+		log.Debug("ui.MarkdownMessageNoWrap called before InitFormatter")
+		return
+	}
+
+	rendered, err := globalFormatter.MarkdownNoWrap(content)
+	if err != nil {
+		// Degrade gracefully - write plain content if rendering fails
+		rendered = content
+	}
+
+	if _, writeErr := fmt.Fprint(globalIO.UI(), rendered); writeErr != nil {
+		log.Debug("ui.MarkdownMessageNoWrap write failed", "error", writeErr)
+	}
+}
+
+// MarkdownMessageNoWrapf writes formatted markdown to stderr (UI channel) without word-wrapping.
+func MarkdownMessageNoWrapf(format string, a ...interface{}) {
+	content := fmt.Sprintf(format, a...)
+	MarkdownMessageNoWrap(content)
+}
+
 // Success writes a success message with green checkmark to stderr (UI channel).
 // Flow: ui.Success() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 // Write errors are logged but not returned since callers cannot meaningfully handle them.
@@ -998,37 +1028,56 @@ func (f *formatter) Label(text string) string {
 // Markdown returns the rendered markdown string (pure function, no I/O).
 // For writing markdown to channels, use package-level ui.Markdown() or ui.MarkdownMessage().
 func (f *formatter) Markdown(content string) (string, error) {
-	return f.renderMarkdown(content, false)
+	return f.renderMarkdown(content, false, false)
 }
 
-// renderMarkdown is the internal markdown rendering implementation.
-func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (string, error) {
-	// Determine max width from config or terminal
+// MarkdownNoWrap returns rendered markdown without word-wrapping long lines.
+// Use for deterministic, snapshot-stable single-line notices where wrapping
+// would otherwise vary by terminal width.
+func (f *formatter) MarkdownNoWrap(content string) (string, error) {
+	rendered, err := f.renderMarkdown(content, false, true)
+	// Glamour's document rendering pads output with a leading/trailing blank
+	// line, which is fine for multi-line documents but wrong for the
+	// single-line, snapshot-stable notices this method exists for (see
+	// MarkdownMessageNoWrap). Trim them, then restore exactly one trailing
+	// newline so the next line of output doesn't run into this one.
+	trimmed := strings.TrimSpace(rendered) + newline
+	return trimmed, err
+}
+
+// markdownRenderWidth determines the word-wrap width from config or terminal,
+// accounting for the glamour stylesheet's document left indent so wrapped
+// text doesn't overflow. Must match the Indent value in
+// pkg/ui/theme/converter.go.
+func (f *formatter) markdownRenderWidth() int {
 	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
 	if maxWidth == 0 {
-		// Use terminal width if available
-		termWidth := f.terminal.Width(terminal.Stdout)
-		if termWidth > 0 {
+		// Use terminal width if available.
+		if termWidth := f.terminal.Width(terminal.Stdout); termWidth > 0 {
 			maxWidth = termWidth
 		}
 	}
 
-	// Account for document left indent to prevent text overflow.
-	// The glamour stylesheet adds theme.DocumentIndent spaces on the left.
-	// Must match the Indent value in pkg/ui/theme/converter.go.
 	const documentIndent = 2
 	if maxWidth > documentIndent {
 		maxWidth -= documentIndent
 	}
+	return maxWidth
+}
 
-	// Build glamour options with theme-aware styling
+// buildMarkdownRenderOptions builds theme-aware glamour render options for
+// renderMarkdown.
+func (f *formatter) buildMarkdownRenderOptions(preserveNewlines, noWrap bool) []glamour.TermRendererOption {
 	var opts []glamour.TermRendererOption
 
-	if maxWidth > 0 {
+	if noWrap {
+		// Explicitly disable word wrap rather than omitting the option, since
+		// glamour otherwise falls back to its own default wrap width.
+		opts = append(opts, glamour.WithWordWrap(0))
+	} else if maxWidth := f.markdownRenderWidth(); maxWidth > 0 {
 		opts = append(opts, glamour.WithWordWrap(maxWidth))
 	}
 
-	// Preserve newlines if requested
 	if preserveNewlines {
 		opts = append(opts, glamour.WithPreservedNewLines())
 	}
@@ -1051,6 +1100,13 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 	} else {
 		opts = append(opts, glamour.WithStylePath("notty"))
 	}
+
+	return opts
+}
+
+// renderMarkdown is the internal markdown rendering implementation.
+func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool) (string, error) {
+	opts := f.buildMarkdownRenderOptions(preserveNewlines, noWrap)
 
 	renderer, err := glamour.NewTermRenderer(opts...)
 	if err != nil {
