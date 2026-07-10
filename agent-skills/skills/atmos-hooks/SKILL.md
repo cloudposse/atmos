@@ -1,6 +1,6 @@
 ---
 name: atmos-hooks
-description: "Atmos lifecycle hooks for Terraform operations, store publishing, scanner hooks, git hooks, command hooks, and shared step hooks"
+description: "Atmos hooks: lifecycle events, hook kinds, command/store/git/security hooks, step/steps hooks, when: conditions, scoping and overrides, toolchain integration, --skip-hooks, and Atmos Pro/local output"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -8,161 +8,144 @@ metadata:
 
 # Atmos Hooks
 
-Atmos hooks run automated actions around component lifecycle events. Use this
-skill when configuring `hooks:` in stack manifests, debugging hook execution, or
-deciding whether automation belongs in a hook, workflow, or custom command.
+Use this skill for lifecycle hooks that run before or after component operations.
 
-For `kind: step`, also load `atmos-steps`. Hooks share the same step library as
-workflows and custom commands, but hooks add a lifecycle envelope around the
-step.
+Hooks can run scanners, policy checks, store writes, Git actions, custom commands, or other
+toolchain-aware automation around Terraform, Helm, Kubernetes, and other component commands.
 
-## When To Use Hooks
+## Related Skills
 
-Use hooks for automation that is lifecycle-adjacent:
-
-- Publish Terraform outputs to stores after apply.
-- Run cost, security, or policy scanners around plan/apply.
-- Commit or push generated artifacts after successful operations.
-- Send notifications after success or failure.
-- Run cleanup or reporting tied to Terraform operation outcomes.
-
-Prefer workflows or custom commands for user-invoked orchestration, multi-step
-runbooks, and commands that should be discoverable as first-class CLI actions.
-Do not hide broad deployment flows inside hooks.
+| Need | Load |
+|---|---|
+| Store output hooks | [atmos-stores](../atmos-stores/SKILL.md) |
+| Shared step fields and `kind: step` payloads | [atmos-steps](../atmos-steps/SKILL.md) |
+| Git hooks and GitOps repositories | [atmos-git](../atmos-git/SKILL.md) |
+| Tool installation for hook commands | [atmos-toolchain](../atmos-toolchain/SKILL.md) |
+| CI summaries and Atmos Pro upload | [atmos-ci](../atmos-ci/SKILL.md) and [atmos-pro](../atmos-pro/SKILL.md) |
 
 ## Hook Shape
 
-Hooks are stack configuration. They can be defined globally, at the component
-type level, or on a specific component, and Atmos deep-merges them through stack
-inheritance.
+Hooks are configured in stack manifests at global, component-type, or component scope.
 
 ```yaml
+hooks:
+  store-vpc-outputs:
+    events:
+      - after.terraform.apply
+    kind: store
+    name: prod/ssm
+    outputs:
+      vpc_id: .vpc_id
+
 components:
   terraform:
     vpc:
       hooks:
-        publish-outputs:
-          kind: store
-          events: [after.terraform.apply]
-          name: ssm
-          outputs:
-            /network/vpc/id: .vpc_id
+        scan-plan:
+          events:
+            - after.terraform.plan
+          kind: trivy
 ```
 
-Use `website/docs/stacks/hooks.mdx` as the canonical user documentation and
-inspect `pkg/hooks/` when behavior is unclear.
+Modern dotted event names such as `after.terraform.plan` are preferred. Legacy hyphenated event
+names may appear in older stacks; modernize them when editing nearby config.
 
-## Hook Kinds
+## Common Events
 
-Common hook kinds:
+Use before/after events for component operations, for example:
 
-- `store`: Write selected Terraform outputs to a configured store.
-- `command`: Run a custom command or external command.
-- `git`: Commit or push generated artifacts.
-- `step`: Run any registered workflow/custom-command step type.
-- `infracost`, `checkov`, `trivy`, `kics`: Built-in scanner integrations.
+- `before.terraform.init`, `after.terraform.init`
+- `before.terraform.plan`, `after.terraform.plan`
+- `before.terraform.apply`, `after.terraform.apply`
+- `before.terraform.deploy`, `after.terraform.deploy`
+- `before.terraform.test`, `after.terraform.test`
 
-The legacy `command:` field can alias hook kind in older examples. Prefer
-explicit `kind:` in new configuration.
+Check local docs when using Helm, Kubernetes, or newly added component families because event names
+follow the component command surface.
 
-## Step Hooks
+Multi-component DAG runs (e.g. `--affected`, `--query`, or workflows that fan out across several
+components) also fire aggregate events once for the whole run, in addition to the per-component
+events fired for each individual component: `after.terraform.plan.aggregate`,
+`after.terraform.apply.aggregate`, and `after.terraform.destroy.aggregate`. Use a per-component event
+for component-specific behavior (scans, store writes) and an aggregate event for run-level summaries
+or notifications that should fire only once.
 
-`kind: step` bridges hooks to the shared step DSL:
+## Conditional Execution with `when`
+
+Hooks share the same `when:` condition engine as workflow steps: predicate keywords (`ci`, `local`,
+`always`, `never`, `success`, `failure`) or a CEL expression built from runtime facts such as `stack`
+and `component`. For example, restrict a hook to CI runs against the `prod` stack:
 
 ```yaml
 hooks:
-  notify-slack:
-    kind: step
-    type: http
-    events: [after.terraform.apply]
-    on_failure: warn
-    retry:
-      max_attempts: 3
-    with:
-      url: https://hooks.example.com/services/XXX
-      method: POST
-      body: '{"text": "Deployed {{ .atmos_component }} to {{ .stack }}"}'
+  prod-ci-scan:
+    events:
+      - after.terraform.plan
+    kind: trivy
+    when: stack == "prod" && ci
 ```
 
-Keep the separation clear:
+See [atmos-workflows](../atmos-workflows/SKILL.md#conditional-execution-with-when) for the full
+`when:`/CEL syntax reference.
 
-- The hook envelope (`kind`, `type`, `events`, `on_failure`, `retry`, `when`,
-  `env`) is interpreted by the hook runner.
-- `with:` is interpreted by the selected step type and should contain the same
-  fields you would place on that step in a workflow.
+## Hook Kinds
 
-Atmos renders `with:` with the standard hook template context and YAML
-functions, then the step validates its own parameters.
+Common hook kinds include `command`, `store`, `git`, `infracost`, `trivy`, `checkov`, and `kics`.
+Use the specific kind when Atmos has one; use `command` for project-specific scripts.
 
-## Events And Conditions
+Hooks can use `dependencies.tools` so required scanners or CLIs are installed and placed on `PATH`
+for the hook execution context.
 
-Hooks run for lifecycle events such as Terraform plan/apply/deploy stages. Use
-the docs for the exact supported event names before adding a new hook.
+When the hook declares the required binary in `dependencies.tools`, do not add a separate
+`atmos toolchain install` step. Atmos resolves, installs, and injects the tool before the hook fires.
 
-Outcome conditions:
+## Step-Backed Hook Kinds
 
-- Default behavior is success-oriented for after hooks.
-- `when: success` runs only after a successful operation.
-- `when: failure` runs only after a failed operation.
-- `when: always` runs for both outcomes.
-- Conditions such as `ci` can be combined with outcome behavior.
+Hooks can also delegate to the same step-type registry that workflows, custom commands, and cast
+recordings use, instead of one of the named kinds above:
 
-`when` describes the Terraform operation outcome. `on_failure` describes what
-Atmos should do if the hook itself fails.
+- `kind: step` runs **one** registered step type. Set the step type with the hook's `type:` field and
+  configure it with `with:`, exactly like a workflow step.
+- `kind: steps` runs an ordered list of registered step types, provided as a YAML list under `with:`.
 
-## Failure Policy
+Both run strictly in order -- there is no concurrent execution within a step-backed hook.
 
-Every hook can declare `on_failure`:
+```yaml
+hooks:
+  check-prereqs:
+    events:
+      - before.terraform.plan
+    kind: step
+    type: require
+    with:
+      tools:
+        - kubectl
+        - helm
 
-- `warn`: Log a warning and continue.
-- `fail`: Propagate the hook error and abort.
-- `ignore`: Suppress hook failure.
+  bring-up-and-plan:
+    events:
+      - before.terraform.plan
+    kind: steps
+    with:
+      - type: emulator
+        command: up
+      - type: atmos
+        command: terraform plan vpc
+```
 
-Scanner hooks often default to warning behavior. Use `fail` only when a hook
-finding or error should block the operation.
+Use `kind: step`/`kind: steps` when you need a registered step type (`container`, `emulator`,
+`require`, `atmos`, `shell`, and other types workflows support) inside a hook; use the older named
+kinds (`trivy`, `checkov`, `kics`, `infracost`) when Atmos already ships a purpose-built scanner
+integration for the job.
 
-## Environment And Tools
+## Operational Guidance
 
-Hooks receive standard `ATMOS_*` variables such as `ATMOS_STACK`,
-`ATMOS_COMPONENT`, and component path context. Add hook-specific environment
-with `env` maps rather than inline shell exports.
-
-Hooks can declare tool dependencies. Atmos installs and verifies those tools
-through the toolchain before the hook fires. Do not hard-code project-local bin
-paths in shell when the toolchain or inherited PATH should provide the binary.
-
-Atmos also creates per-hook output paths such as `ATMOS_OUTPUT_DIR` and
-`ATMOS_OUTPUT_FILE` for hook artifacts. Use those instead of manually creating
-shared temp directories.
-
-## Native Fields Over Shell
-
-When implementing hook behavior:
-
-- Use `kind: step` plus `atmos-steps` for native step types.
-- Use `env` maps instead of inline `PATH=... command`.
-- Use `output: none` on step hooks instead of shell redirection.
-- Use `working_directory` or step-specific path fields instead of `cd`.
-- Use Terraform/OpenTofu `rc` configuration for CLI config instead of writing
-  temporary rc files in shell.
-- Use store hooks for output publishing instead of custom scripts that parse
-  Terraform output.
-
-Shell command hooks are appropriate when integrating with a tool that has no
-native hook or step support, but they should not be the default design.
-
-## Skip And Preflight
-
-Users can skip hooks with `--skip-hooks` or `ATMOS_SKIP_HOOKS`. The skip setting
-propagates through nested Atmos operations.
-
-Atmos preflights hooks before long Terraform operations when it can. A typo in a
-`kind: step` `type` or missing tool should fail early instead of after a long
-plan/apply.
-
-## Related Skills
-
-- `atmos-steps`: Step types and shared step fields.
-- `atmos-stores`: Store backends and output publishing hooks.
-- `atmos-toolchain`: Declaring hook tool dependencies.
-- `atmos-terraform`: Terraform lifecycle and `--skip-hooks` behavior.
+- Use hooks for repeatable lifecycle behavior, not one-off local scripts.
+- Scope hooks as narrowly as possible: component hooks for component-specific behavior, shared
+  mixins/defaults for organization-wide checks.
+- Use `--skip-hooks` to bypass all hooks for a diagnostic run, or `--skip-hooks=name1,name2` to skip
+  specific hooks by name. This flag is registered on the `terraform` command only today; there is no
+  helmfile or packer equivalent yet.
+- Treat hook output as part of CI evidence. When Atmos Pro is connected and the hook kind supports
+  upload, prefer structured upload; otherwise rely on local/CI summaries.
+- Keep destructive hooks opt-in and visible in stack config.
