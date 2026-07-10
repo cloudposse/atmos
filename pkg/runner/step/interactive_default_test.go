@@ -132,6 +132,36 @@ func TestInteractiveHandlers_NonTTYUsesDefault(t *testing.T) {
 	}
 }
 
+// TestInteractiveHandlers_NonTTYDefaultError verifies that when a default is set
+// but its template is invalid, the non-TTY path surfaces the resolution error
+// (covers the ResolveDefault error branch in each interactive handler).
+func TestInteractiveHandlers_NonTTYDefaultError(t *testing.T) {
+	skipIfInteractiveTTY(t)
+
+	ctx := context.Background()
+	names := []string{"choose", "input", "confirm", "filter", "file", "write"}
+
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			handler, ok := Get(name)
+			require.True(t, ok)
+
+			step := &schema.WorkflowStep{
+				Name:    name,
+				Type:    name,
+				Prompt:  "Prompt",
+				Options: []string{"a", "b"},   // For choose/filter.
+				Default: "{{ .steps.invalid.", // Non-empty default with an invalid template.
+			}
+
+			result, err := handler.Execute(ctx, step, NewVariables())
+			require.Error(t, err)
+			assert.Nil(t, result)
+			assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+		})
+	}
+}
+
 // TestInteractiveHandlers_NonTTYDefaultTemplating verifies the default value is
 // rendered through step variable templating (e.g. {{ .env.VAR }}) before it is
 // returned in the non-TTY path.
