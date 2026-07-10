@@ -366,6 +366,29 @@ func TestModelVendor_Update_WindowSizeMsg_RightAlignsAgainstRealWidth(t *testing
 	assert.Less(t, view, 200, "the rendered live line must still stop short of the true last column")
 }
 
+// TestModelVendor_Update_WindowSizeMsg_ZeroWidthDoesNotResetKnownWidth is a regression test for a
+// hang observed in the CLI acceptance test harness: simulateTtyCommand (tests/cli_test.go) opens a
+// PTY via pty.Start without ever calling Setsize, so term.GetSize on that PTY's fd reports 0x0.
+// Bubbletea's checkResize (tty.go) still queries and delivers that as a real WindowSizeMsg{0, 0}
+// once maskedWriter.Fd() (pkg/io/streams.go) started forwarding to the real fd so bubbletea could
+// detect the terminal at all -- so a zero-size WindowSizeMsg is a real message that must not wipe
+// out the width initialModelWidth already established (with its own fallback), or "Pulling <name>"
+// truncates down to a bare ellipsis (truncate.StringWithTail at width 0) for the run's whole
+// lifetime, since tea.WindowSizeMsg only fires once (bubbletea has no SIGWINCH-driven resends here).
+func TestModelVendor_Update_WindowSizeMsg_ZeroWidthDoesNotResetKnownWidth(t *testing.T) {
+	packages := []pkgVendor{
+		{name: "datadog-monitor", componentPackage: &pkgComponentVendor{name: "datadog-monitor"}},
+	}
+	m := newVendorModelForView(packages, fallbackModelWidth)
+
+	m.Update(tea.WindowSizeMsg{Width: 0, Height: 0})
+
+	assert.Equal(t, fallbackModelWidth, m.width, "a zero-size WindowSizeMsg must not overwrite the already-known width")
+
+	view := m.View()
+	assert.Contains(t, view, "Pulling", "the live status line must still show 'Pulling <name>', not collapse to a bare ellipsis")
+}
+
 // TestModelVendor_View_LiveLine_TruncatesLongName proves the live status line truncates (rather
 // than silently no-op'ing, which lipgloss's own Style.MaxWidth does at width 0) and marks the cut
 // with an ellipsis when the package name doesn't fit.

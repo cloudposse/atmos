@@ -53,8 +53,16 @@ const (
 	// cursor-column rendering is inconsistent across implementations, independent of whether the
 	// cursor is hidden via DECTCEM (\x1b[?25l); reserving a small margin sidesteps that ambiguity
 	// entirely. Matches cmd/vendor/update_spinner.go's identically named const.
-	liveLineMargin         = 1
-	pkgTypeRemote  pkgType = iota
+	liveLineMargin = 1
+	// FallbackModelWidth is the live status line's width when the real terminal width can't be
+	// detected (terminal.Width reports 0, e.g. a PTY that hasn't been given a window size yet, as
+	// in the CLI acceptance test harness). Matches pkg/toolchain/info.go's identically valued
+	// fallbackTerminalWidth. Without this, cellsAvail (this file's View()) would compute to 0 for
+	// the run's entire lifetime -- both initialModelWidth and Update's tea.WindowSizeMsg handler
+	// must apply it, see their doc comments -- and truncate.StringWithTail truncates "Pulling
+	// <name>" down to a bare ellipsis at width 0 instead of the full text.
+	fallbackModelWidth         = 120
+	pkgTypeRemote      pkgType = iota
 	pkgTypeOci
 	pkgTypeLocal
 
@@ -256,23 +264,31 @@ func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
 }
 
 // initialModelWidth returns the real terminal width to use for the live status
-// line, so View() can truncate/pad against it from the very first frame.
+// line, so View() can truncate/pad against it from the very first frame,
+// before bubbletea's own asynchronous WindowSizeMsg (sent by a background
+// goroutine, see tea.Program.checkResize) has had a chance to arrive.
 //
 // The program's output (see executeVendorModel) is wrapped in a masking
-// io.Writer (for secret masking), which doesn't implement the
-// file-descriptor interface bubbletea's renderer needs to auto-detect the
-// terminal size. As a result, tea.WindowSizeMsg is never delivered for this
-// program and m.width would otherwise stay at its zero value for the whole
-// run -- silently disabling all width-based truncation/padding in View() and
-// letting long lines (e.g. a mixin's full source URL) overflow the real
-// terminal, wrap, and corrupt the single-line spinner redraw (each frame
-// appends a new scrollback line instead of updating in place). Querying the
-// real os.Stdout file descriptor directly (bypassing the masking wrapper)
-// avoids that.
+// io.Writer (for secret masking); maskedWriter.Fd() (pkg/io/streams.go)
+// forwards to the real underlying file descriptor so bubbletea's own TTY/size
+// detection still works through it. But a PTY that hasn't been given a
+// window size yet (e.g. one opened via pty.Start without Setsize, as the CLI
+// acceptance test harness's simulateTtyCommand does) reports 0x0 to both this
+// direct query and bubbletea's own -- silently disabling all width-based
+// truncation/padding in View() and letting long lines (e.g. a mixin's full
+// source URL) overflow the real terminal, wrap, and corrupt the single-line
+// spinner redraw (each frame appends a new scrollback line instead of
+// updating in place). FallbackModelWidth covers that case here; the
+// WindowSizeMsg handler in Update must apply the same fallback (by ignoring
+// a non-positive reported size rather than adopting it) since it can
+// otherwise still overwrite this width once its own message arrives.
 func initialModelWidth() int {
 	defer perf.Track(nil, "exec.initialModelWidth")()
 
 	width := terminal.New().Width(terminal.Stdout)
+	if width <= 0 {
+		return fallbackModelWidth
+	}
 	if width > maxWidth {
 		width = maxWidth
 	}
@@ -292,11 +308,21 @@ func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
-		if m.width > maxWidth {
-			m.width = maxWidth
+		// A zero/negative width means the terminal genuinely doesn't have a size yet (e.g. a
+		// freshly opened PTY that hasn't been resized, as in the CLI acceptance test harness's
+		// simulateTtyCommand): keep the fallback initialModelWidth already picked rather than
+		// stomping it down to 0, which would wipe out every truncation-sensitive render for the
+		// run's whole lifetime (see initialModelWidth's and fallbackModelWidth's doc comments).
+		if msg.Width > 0 {
+			m.width = msg.Width
+			if m.width > maxWidth {
+				m.width = maxWidth
+			}
+			m.progress.Width = progressBarWidthFor(m.width)
 		}
-		m.progress.Width = progressBarWidthFor(m.width)
+		if msg.Height > 0 {
+			m.height = msg.Height
+		}
 
 	case tea.KeyMsg:
 		if cmd := m.handleKeyPress(msg); cmd != nil {
