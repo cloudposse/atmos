@@ -33,20 +33,31 @@ func (h *ConfirmHandler) Validate(step *schema.WorkflowStep) error {
 }
 
 // Execute prompts for confirmation and returns "true" or "false".
+//
+// When there is no TTY (e.g. in CI) and a `default` is configured, the default
+// ("yes"/"true" => "true", otherwise "false") is returned without prompting.
+// When there is no TTY and no `default` is set, resolveInteractive returns
+// ErrStepTTYRequired.
 func (h *ConfirmHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.ConfirmHandler.Execute")()
 
-	if err := h.CheckTTY(step); err != nil {
-		return nil, err
-	}
-
-	prompt, err := h.ResolvePrompt(ctx, step, vars)
+	shouldPrompt, err := h.resolveInteractive(step)
 	if err != nil {
 		return nil, err
 	}
 
 	// Parse default value.
 	defaultVal := strings.ToLower(step.Default) == "yes" || strings.ToLower(step.Default) == "true"
+
+	// Non-TTY with a configured default: use the default without prompting.
+	if !shouldPrompt {
+		return NewStepResult(confirmValue(defaultVal)), nil
+	}
+
+	prompt, err := h.ResolvePrompt(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
 
 	var confirmed bool
 
@@ -84,10 +95,13 @@ func (h *ConfirmHandler) Execute(ctx context.Context, step *schema.WorkflowStep,
 			Err()
 	}
 
-	value := "false"
-	if confirmed {
-		value = "true"
-	}
+	return NewStepResult(confirmValue(confirmed)), nil
+}
 
-	return NewStepResult(value), nil
+// confirmValue maps a boolean confirmation to the step's string result.
+func confirmValue(confirmed bool) string {
+	if confirmed {
+		return "true"
+	}
+	return "false"
 }
