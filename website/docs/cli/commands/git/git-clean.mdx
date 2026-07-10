@@ -5,14 +5,14 @@ sidebar_class_name: command
 id: clean
 description: Remove managed Git repository workdirs safely.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
 Remove workdirs for repositories configured under `git.repositories`. Clean only accepts configured repository names, verifies the target is a Git worktree whose `origin` matches the configured repository URI, and refuses dangerous filesystem targets such as roots, the current project, parent directories, symlinks, and invalid XDG cache roots. Clean workdirs do not require `--force`; dirty workdirs require `--force` before local changes are discarded.
 </Intro>
 
-<Screengrab title="atmos git clean --help" slug="atmos-git-clean--help" />
+<CastPlayer title="atmos git clean --help" src="/casts/screengrabs/atmos-git-clean--help.cast" static chrome />
 
 ## Usage
 

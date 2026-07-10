@@ -83,6 +83,16 @@ YAML supports three types of data: core, defined, and user-defined.
    [__`!git.url`__](/functions/yaml/git.url) YAML functions retrieve repository metadata
    (the `<owner>/<name>` slug, owner, name, host, and remote URL) from the current Git repository.
 
+ - The [__`!git.sha`__](/functions/yaml/git.sha), [__`!git.ref`__](/functions/yaml/git.ref), and
+   [__`!git.branch`__](/functions/yaml/git.branch) YAML functions retrieve the current commit SHA
+   (`!git.sha` and its source-pinning alias `!git.ref`) and the current branch name.
+
+ - The [__`!git.root`__](/functions/yaml/git.root) YAML function is an alias of
+   [__`!repo-root`__](/functions/yaml/repo-root) that retrieves the root directory of the current Git repository.
+
+ - The [__`!emulator`__](/functions/yaml/emulator) YAML function retrieves connection information
+   (endpoint, credentials, kubeconfig) from a running [emulator](/cli/commands/emulator/up) component.
+
  - The [__`!cwd`__](/functions/yaml/cwd) YAML function is used to retrieve the current working directory
    where Atmos is executed from. Useful when you need paths relative to where you run Atmos
    rather than relative to the configuration file.

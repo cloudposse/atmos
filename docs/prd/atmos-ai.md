@@ -2031,6 +2031,6 @@ Atmos AI builds upon patterns and ideas from industry-leading AI systems while m
 - [Model Context Protocol](https://modelcontextprotocol.io)
 - [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
 - [Anthropic Documentation](https://docs.anthropic.com)
-- [OpenAI Documentation](https://platform.openai.com/docs)
+- [OpenAI Documentation](https://developers.openai.com/)
 - [Google Gemini API](https://ai.google.dev/gemini-api/docs)
 - [Ollama](https://ollama.com)

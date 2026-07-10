@@ -27,7 +27,9 @@ const (
 // archiveRoot writes a gzip-compressed tar of root to w. When includes is
 // non-empty, only entries whose path (relative to root) is within one of the
 // listed relative subpaths are included; otherwise the whole root is archived.
-// The state directory (stateDirName) is always skipped.
+// The state directory (stateDirName) is always skipped, as are the
+// default-excluded auth-cache subpaths (DefaultExcludedPaths), regardless of
+// includes.
 //
 // Tar entry names are stored relative to root with forward slashes so archives
 // are portable across platforms.
@@ -37,7 +39,7 @@ func archiveRoot(w io.Writer, root string, includes []string) error {
 	gw := gzip.NewWriter(w)
 	tw := tar.NewWriter(gw)
 
-	a := &archiver{tw: tw, root: root, includes: includes}
+	a := &archiver{tw: tw, root: root, includes: includes, excludes: DefaultExcludedPaths()}
 	walkErr := filepath.WalkDir(root, a.walk)
 
 	if walkErr != nil {
@@ -63,6 +65,7 @@ type archiver struct {
 	tw       *tar.Writer
 	root     string
 	includes []string
+	excludes []string
 }
 
 // walk decides what to do with a single walked entry and writes it when it is in
@@ -80,7 +83,7 @@ func (a *archiver) walk(path string, d os.DirEntry, err error) error {
 		return nil
 	}
 
-	if handled, action := archiveSkipDecision(rel, a.includes, d.IsDir()); handled {
+	if handled, action := archiveSkipDecision(rel, a.includes, a.excludes, d.IsDir()); handled {
 		return action
 	}
 
@@ -90,25 +93,51 @@ func (a *archiver) walk(path string, d os.DirEntry, err error) error {
 // archiveSkipDecision decides whether a walked entry is out of scope. It returns
 // handled=true with the walk action (nil to skip the single entry, or
 // filepath.SkipDir to prune a directory) when the entry should not be archived.
-func archiveSkipDecision(rel string, includes []string, isDir bool) (bool, error) {
+func archiveSkipDecision(rel string, includes, excludes []string, isDir bool) (bool, error) {
 	// Always exclude the state directory.
-	if rel == stateDirName || strings.HasPrefix(rel, stateDirName+string(os.PathSeparator)) {
-		if isDir {
-			return true, filepath.SkipDir
-		}
-		return true, nil
+	if isStateDir(rel) {
+		return true, pruneAction(isDir)
+	}
+
+	// Always exclude default auth-cache subpaths, regardless of includes.
+	// Evaluated before the includes check so an explicit
+	// `ci.cache.paths: [auth]` cannot re-include it.
+	if isUnderPrefix(rel, excludes) {
+		return true, pruneAction(isDir)
 	}
 
 	if !matchesIncludes(rel, includes) {
-		// A directory that cannot contain any include can be skipped wholesale.
-		if isDir && !includePrefixPossible(rel, includes) {
-			return true, filepath.SkipDir
-		}
-		if !isDir {
-			return true, nil
-		}
+		return skipOutsideIncludes(rel, includes, isDir)
 	}
 
+	return false, nil
+}
+
+// isStateDir reports whether rel is the cache state marker directory or a
+// path beneath it.
+func isStateDir(rel string) bool {
+	return rel == stateDirName || strings.HasPrefix(rel, stateDirName+string(os.PathSeparator))
+}
+
+// pruneAction returns the walk action for excluding an entry: prune the
+// whole directory, or skip a single file.
+func pruneAction(isDir bool) error {
+	if isDir {
+		return filepath.SkipDir
+	}
+	return nil
+}
+
+// skipOutsideIncludes handles an entry that doesn't match includes: a
+// directory that cannot contain any include is pruned wholesale, a file is
+// skipped, and an ancestor directory of an include is kept for further descent.
+func skipOutsideIncludes(rel string, includes []string, isDir bool) (bool, error) {
+	if !isDir {
+		return true, nil
+	}
+	if !includePrefixPossible(rel, includes) {
+		return true, filepath.SkipDir
+	}
 	return false, nil
 }
 
@@ -159,9 +188,17 @@ func matchesIncludes(rel string, includes []string) bool {
 	if len(includes) == 0 {
 		return true
 	}
-	for _, inc := range includes {
-		inc = filepath.Clean(inc)
-		if rel == inc || strings.HasPrefix(rel, inc+string(os.PathSeparator)) {
+	return isUnderPrefix(rel, includes)
+}
+
+// isUnderPrefix reports whether rel equals or is nested under one of
+// prefixes. Unlike matchesIncludes, an empty prefixes list matches nothing —
+// this is used for exclusion checks, where an empty list must mean "exclude
+// nothing", not "exclude everything".
+func isUnderPrefix(rel string, prefixes []string) bool {
+	for _, p := range prefixes {
+		p = filepath.Clean(p)
+		if rel == p || strings.HasPrefix(rel, p+string(os.PathSeparator)) {
 			return true
 		}
 	}

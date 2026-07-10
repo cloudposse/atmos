@@ -33,6 +33,9 @@ func TestAuthLoginProvider(t *testing.T) {
 		err := cmd.Run()
 		require.NoError(t, err)
 
+		// Help output is colorized in CI (the terminal pipeline emits ANSI on pipes
+		// when CI is set), and the usage line styles each word separately — strip
+		// escape codes so substring assertions see the plain text.
 		output := atmosansi.Strip(stdout.String())
 		assert.Contains(t, output, "atmos auth login", "Help should show usage")
 		assert.Contains(t, output, "--provider", "Help should document --provider flag")

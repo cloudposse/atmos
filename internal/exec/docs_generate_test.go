@@ -235,6 +235,38 @@ func TestGenerateDocument_WithInjectedRenderer(t *testing.T) {
 	}
 }
 
+func TestGenerateDocument_DefaultTemplateFallbackUsesRootData(t *testing.T) {
+	targetDir := t.TempDir()
+	inputPath := filepath.Join(targetDir, "README.yaml")
+	if err := os.WriteFile(inputPath, []byte("name: TestProject\ndescription: A test project\n"), defaultFilePermissions); err != nil {
+		t.Fatalf("failed to write input YAML: %v", err)
+	}
+
+	docsGenerate := schema.DocsGenerate{
+		BaseDir:  ".",
+		Input:    []any{inputPath},
+		Template: "./missing-template.gotmpl",
+		Output:   "README.md",
+		Terraform: schema.TerraformDocsReadmeSettings{
+			Enabled: false,
+		},
+	}
+
+	err := generateDocument(&schema.AtmosConfiguration{}, targetDir, &docsGenerate, defaultTemplateRenderer{})
+	if err != nil {
+		t.Fatalf("generateDocument failed: %v", err)
+	}
+
+	outputPath := filepath.Join(targetDir, "README.md")
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("failed to read generated README: %v", err)
+	}
+	if !strings.Contains(string(data), "# TestProject") {
+		t.Errorf("Expected fallback template to render root name, got %q", string(data))
+	}
+}
+
 // TestGenerateDocument_DefaultTemplateFallback_RealRenderer exercises the default fallback
 // template through the real defaultTemplateRenderer (gomplate), not mockRenderer. It guards
 // against regressions where the fallback template references bare fields (e.g. ".name")

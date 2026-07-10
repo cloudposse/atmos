@@ -1,3 +1,11 @@
+---
+title: Workflows
+tags: [Automation]
+cast:
+  file: /casts/examples/demo-workflows/deploy.cast
+  title: atmos workflows
+---
+
 # Example: Demo Workflows
 
 Run multiple Atmos commands in sequence with a single command.

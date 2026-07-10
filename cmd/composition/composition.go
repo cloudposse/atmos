@@ -14,6 +14,10 @@ import (
 
 var compositionParser *flags.StandardParser
 
+const tailFlagName = "tail"
+
+var lifecycleVerbs = []string{"up", "start", "restart", "stop", "rm", "down", "ps"}
+
 // compositionCmd is the base command for composition operations.
 var compositionCmd = &cobra.Command{
 	Use:   "composition",
@@ -26,13 +30,59 @@ var compositionCmd = &cobra.Command{
 
 // The validate subcommand reports a composition's fulfilled and not-provided services.
 var validateCmd = &cobra.Command{
-	Use:   "validate <composition>",
+	Use:   "validate [composition]",
 	Short: "Report a composition's fulfilled and not-provided services for a stack",
-	Long:  "Show which of a composition's declared services are fulfilled by components in a stack and which are not provided there.",
-	Args:  cobra.ExactArgs(1),
+	Long:  "Show which declared services are fulfilled by components in a stack and which are not provided there.",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := compositionParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+			return err
+		}
 		info := buildConfigAndStacksInfo(cmd)
-		return pkgcomposition.ExecuteValidate(cmd.Context(), &info, args[0])
+		return pkgcomposition.ExecuteValidate(cmd.Context(), &info, optionalCompositionArg(args))
+	},
+}
+
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List declared compositions and stack fulfillment",
+	Long:  "List declared compositions. When --stack is set, include fulfilled and not-provided services for that stack.",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		if err := compositionParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+			return err
+		}
+		info := buildConfigAndStacksInfo(cmd)
+		return pkgcomposition.ExecuteList(cmd.Context(), &info)
+	},
+}
+
+func newLifecycleCmd(verb string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   verb + " [composition]",
+		Short: verb + " composition members in a stack",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := compositionParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+				return err
+			}
+			info := buildConfigAndStacksInfo(cmd)
+			return pkgcomposition.ExecuteLifecycle(cmd.Context(), &info, verb, optionalCompositionArg(args), nil)
+		},
+	}
+	return cmd
+}
+
+var logsCmd = &cobra.Command{
+	Use:   "logs [composition]",
+	Short: "Show logs from composition members in a stack",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := compositionParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+			return err
+		}
+		info := buildConfigAndStacksInfo(cmd)
+		return pkgcomposition.ExecuteLifecycle(cmd.Context(), &info, "logs", optionalCompositionArg(args), compositionVerbFlags(cmd))
 	},
 }
 
@@ -43,8 +93,34 @@ func init() {
 		panic(err)
 	}
 
-	compositionCmd.AddCommand(validateCmd)
+	logsCmd.Flags().BoolP("follow", "f", false, "Follow log output")
+	logsCmd.Flags().String(tailFlagName, "all", "Number of lines to show from the end of the logs, or \"all\"")
+	logsCmd.Flags().Lookup(tailFlagName).NoOptDefVal = "all"
+
+	commands := []*cobra.Command{listCmd, validateCmd, logsCmd}
+	for _, verb := range lifecycleVerbs {
+		commands = append(commands, newLifecycleCmd(verb))
+	}
+	compositionCmd.AddCommand(commands...)
 	internal.Register(&CompositionCommandProvider{})
+}
+
+func optionalCompositionArg(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	return args[0]
+}
+
+func compositionVerbFlags(cmd *cobra.Command) map[string]any {
+	flagValues := map[string]any{}
+	if f := cmd.Flag("follow"); f != nil {
+		flagValues["follow"] = f.Value.String() == "true"
+	}
+	if f := cmd.Flag(tailFlagName); f != nil {
+		flagValues[tailFlagName] = f.Value.String()
+	}
+	return flagValues
 }
 
 // CompositionCommandProvider implements the CommandProvider interface.

@@ -5,15 +5,17 @@ sidebar_class_name: command
 id: deploy
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Use this command to deploy Terraform changes for an Atmos component in a stack with auto-approval. This combines plan and apply operations in a single command.
 </Intro>
 
-<Screengrab title="atmos terraform deploy --help" slug="atmos-terraform-deploy--help" />
+<CastPlayer src="/casts/demo/fixtures/native-terraform/deploy.cast" title="atmos terraform deploy" chrome controls scrubber />
+
+<CastPlayer title="atmos terraform deploy --help" src="/casts/screengrabs/atmos-terraform-deploy--help.cast" static chrome />
 
 ## Usage
 

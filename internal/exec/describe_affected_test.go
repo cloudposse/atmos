@@ -70,8 +70,8 @@ func createExpectedAffectedResults(componentPath string, templatesProcessed bool
 			Dependents:           nil,
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "tgw/hub",
 						"stack":     tgwCrossRegionStack,
 					},
@@ -105,8 +105,8 @@ func createExpectedAffectedResults(componentPath string, templatesProcessed bool
 			Dependents:           nil,
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "vpc",
 						"stack":     tgwHubStack,
 					},
@@ -276,8 +276,10 @@ func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfigurat
 	copyOptions := cp.Options{
 		PreserveTimes: false,
 		PreserveOwner: false,
+		OnSymlink:     func(string) cp.SymlinkAction { return cp.Skip },
 		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
 			if strings.Contains(src, "node_modules") ||
+				strings.Contains(src, ".claude") ||
 				strings.Contains(src, ".terraform") {
 				return true, nil
 			}
@@ -394,8 +396,8 @@ func TestDescribeAffectedWithExcludeLocked(t *testing.T) {
 			Dependents:           nil, // must be nil to match actual
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{ // note: any keys
-					1: map[string]any{
+				"depends_on": map[string]any{ // note: stringified integer keys
+					"1": map[string]any{
 						"component": "vpc",
 						"stack":     "ue1-network",
 					},
@@ -451,11 +453,11 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-attachment",
 					IncludedInDependents: true,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{
+						"depends_on": map[string]any{
+							"1": map[string]any{
 								"component": "vpc",
 							},
-							2: map[string]any{
+							"2": map[string]any{
 								"component": "tgw/hub",
 							},
 						},
@@ -472,8 +474,8 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-hub",
 					IncludedInDependents: false,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{
+						"depends_on": map[string]any{
+							"1": map[string]any{
 								"component": "vpc",
 								"stack":     "ue1-network",
 							},
@@ -490,11 +492,11 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 							StackSlug:            "ue1-network-tgw-attachment",
 							IncludedInDependents: false,
 							Settings: map[string]any{
-								"depends_on": map[any]any{
-									1: map[string]any{
+								"depends_on": map[string]any{
+									"1": map[string]any{
 										"component": "vpc",
 									},
-									2: map[string]any{
+									"2": map[string]any{
 										"component": "tgw/hub",
 									},
 								},
@@ -517,8 +519,8 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: true,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "vpc",
 						"stack":     "ue1-network",
 					},
@@ -535,11 +537,11 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-attachment",
 					IncludedInDependents: false,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{
+						"depends_on": map[string]any{
+							"1": map[string]any{
 								"component": "vpc",
 							},
-							2: map[string]any{
+							"2": map[string]any{
 								"component": "tgw/hub",
 							},
 						},
@@ -560,8 +562,8 @@ func TestDescribeAffectedWithDependents(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "tgw/hub",
 						"stack":     "ue1-network",
 					},
@@ -643,9 +645,9 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-attachment",
 					IncludedInDependents: false,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{"component": "vpc"},
-							2: map[string]any{"component": "tgw/hub"},
+						"depends_on": map[string]any{
+							"1": map[string]any{"component": "vpc"},
+							"2": map[string]any{"component": "tgw/hub"},
 						},
 					},
 					Dependents: []schema.Dependent{},
@@ -664,8 +666,8 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "vpc",
 						"stack":     "{{ .vars.environment }}-{{ .vars.stage }}",
 					},
@@ -682,9 +684,9 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-attachment",
 					IncludedInDependents: false,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{"component": "vpc"},
-							2: map[string]any{"component": "tgw/hub"},
+						"depends_on": map[string]any{
+							"1": map[string]any{"component": "vpc"},
+							"2": map[string]any{"component": "tgw/hub"},
 						},
 					},
 					Dependents: []schema.Dependent{},
@@ -703,8 +705,8 @@ func TestDescribeAffectedWithDependentsWithoutTemplates(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "tgw/hub",
 						"stack":     "ue1-{{ .vars.stage }}",
 					},
@@ -789,11 +791,11 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-attachment",
 					IncludedInDependents: true,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{
+						"depends_on": map[string]any{
+							"1": map[string]any{
 								"component": "vpc",
 							},
-							2: map[string]any{
+							"2": map[string]any{
 								"component": "tgw/hub",
 							},
 						},
@@ -810,8 +812,8 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-hub",
 					IncludedInDependents: false,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{
+						"depends_on": map[string]any{
+							"1": map[string]any{
 								"component": "vpc",
 								"stack":     "ue1-network",
 							},
@@ -828,11 +830,11 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 							StackSlug:            "ue1-network-tgw-attachment",
 							IncludedInDependents: false,
 							Settings: map[string]any{
-								"depends_on": map[any]any{
-									1: map[string]any{
+								"depends_on": map[string]any{
+									"1": map[string]any{
 										"component": "vpc",
 									},
-									2: map[string]any{
+									"2": map[string]any{
 										"component": "tgw/hub",
 									},
 								},
@@ -855,8 +857,8 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: true,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "vpc",
 						"stack":     "ue1-network",
 					},
@@ -873,11 +875,11 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 					StackSlug:            "ue1-network-tgw-attachment",
 					IncludedInDependents: false,
 					Settings: map[string]any{
-						"depends_on": map[any]any{
-							1: map[string]any{
+						"depends_on": map[string]any{
+							"1": map[string]any{
 								"component": "vpc",
 							},
-							2: map[string]any{
+							"2": map[string]any{
 								"component": "tgw/hub",
 							},
 						},
@@ -898,8 +900,8 @@ func TestDescribeAffectedWithDependentsFilteredByStack(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "tgw/hub",
 						"stack":     "ue1-network",
 					},
@@ -989,8 +991,8 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "vpc",
 						"stack":     "ue1-network",
 					},
@@ -1010,8 +1012,8 @@ func TestDescribeAffectedWithDisabledDependents(t *testing.T) {
 			Folder:               "",
 			IncludedInDependents: false,
 			Settings: map[string]any{
-				"depends_on": map[any]any{
-					1: map[string]any{
+				"depends_on": map[string]any{
+					"1": map[string]any{
 						"component": "tgw/hub",
 						"stack":     "ue1-network",
 					},
@@ -1190,8 +1192,10 @@ func setupDescribeAffectedTestWithFixture(t *testing.T, fixtureDir, affectedStac
 	copyOptions := cp.Options{
 		PreserveTimes: false,
 		PreserveOwner: false,
+		OnSymlink:     func(string) cp.SymlinkAction { return cp.Skip },
 		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
 			if strings.Contains(src, "node_modules") ||
+				strings.Contains(src, ".claude") ||
 				strings.Contains(src, ".terraform") {
 				return true, nil
 			}

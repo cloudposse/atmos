@@ -51,11 +51,16 @@ func ExecWithSpinner(progressMsg, completedMsg string, operation func() error) e
 	model := newSpinnerModel(progressMsg, completedMsg)
 
 	// Use inline mode - output to stderr, no alternate screen.
-	p := tea.NewProgram(
-		model,
+	opts := []tea.ProgramOption{
 		tea.WithOutput(iolib.UI),
 		tea.WithoutSignalHandler(),
-	)
+	}
+	if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
+	}
+	p := tea.NewProgram(model, opts...)
 
 	// goroutineDone is closed once the operation finishes, guaranteeing that any
 	// side effects of the operation have completed before ExecWithSpinner returns.
@@ -192,11 +197,16 @@ func ExecWithSpinnerDynamic(progressMsg string, operation func() (string, error)
 	model := newDynamicSpinnerModel(progressMsg)
 
 	// Use inline mode - output to stderr, no alternate screen.
-	p := tea.NewProgram(
-		model,
+	opts := []tea.ProgramOption{
 		tea.WithOutput(iolib.UI),
 		tea.WithoutSignalHandler(),
-	)
+	}
+	if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
+	}
+	p := tea.NewProgram(model, opts...)
 
 	// goroutineDone is closed once the operation finishes, guaranteeing that any
 	// values the operation wrote (e.g. via a closure) are visible to the caller
@@ -353,11 +363,16 @@ func (s *Spinner) Start() {
 	}
 
 	model := newManualSpinnerModel(s.progressMsg)
-	s.program = tea.NewProgram(
-		model,
+	opts := []tea.ProgramOption{
 		tea.WithOutput(iolib.UI),
 		tea.WithoutSignalHandler(),
-	)
+	}
+	if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
+	}
+	s.program = tea.NewProgram(model, opts...)
 	s.done = make(chan struct{})
 
 	go func() {
