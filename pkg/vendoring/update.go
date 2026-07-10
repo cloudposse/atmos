@@ -39,6 +39,11 @@ type SourceUpdateResult struct {
 	LatestVersion  string
 	Status         UpdateStatus
 	Reason         string // Populated for StatusSkipped and StatusFailed.
+	// Archived reports whether the source's upstream Git repository is archived (GitHub sources
+	// only; best-effort). This is orthogonal to Status: a component can be both StatusUpToDate
+	// and Archived at the same time, so it's a separate field rather than another UpdateStatus
+	// value.
+	Archived bool
 }
 
 // UpdateReport summarizes an update run.
@@ -64,6 +69,12 @@ type UpdateParams struct {
 	// VendorFiles are the physical manifest files to process (a vendor.yaml plus
 	// any imported files). Edits are applied to the file that declares each source.
 	VendorFiles []string
+	// ExtraSources are additional already-resolved sources to check/update alongside
+	// VendorFiles — used by the opt-in --component-manifests sweep to fold in
+	// component.yaml-only components. A component name already present in VendorFiles'
+	// sources takes precedence (vendor.yaml wins) and its ExtraSources entry, if any, is
+	// skipped.
+	ExtraSources []*ResolvedSource
 	// Component, when set, restricts updates to that component.
 	Component string
 	// Tags, when set, restricts updates to sources carrying any of these tags.
@@ -74,6 +85,20 @@ type UpdateParams struct {
 	DryRun bool
 	// Lister lists remote tags; defaults to version.DefaultLister when nil.
 	Lister version.RemoteLister
+	// VersionSetter, when set, replaces SetComponentVersion for persisting a resolved
+	// version. Component-manifest (component.yaml) sources need spec.source.version
+	// instead of vendor.yaml's spec.sources[i].version. Defaults to SetComponentVersion.
+	VersionSetter func(file, component, version string) error
+	// OnProgress, when set, is called immediately before each source that passes the
+	// component/tag/type filters is checked against the remote, reporting the source's
+	// component name along with its 1-based position and the total number of sources
+	// that will be checked. Used to drive a live "Checking <component>..." progress
+	// indicator during what is otherwise a sequence of blocking network calls.
+	OnProgress func(component string, index, total int)
+	// ArchivedChecker checks whether a source's upstream Git repository is archived; defaults
+	// to DefaultArchivedChecker when nil. The check is best-effort and non-fatal: an error here
+	// never fails the overall update/check for a source, it only leaves Archived false.
+	ArchivedChecker ArchivedChecker
 }
 
 // Update checks each Git-backed source for a newer allowed version and updates
@@ -87,24 +112,167 @@ func Update(atmosConfig *schema.AtmosConfiguration, params *UpdateParams) (*Upda
 		lister = version.DefaultLister
 	}
 
-	report := &UpdateReport{}
+	fileSources, err := loadVendorFileSources(params.VendorFiles)
+	if err != nil {
+		return nil, err
+	}
+	total := countMatchingSources(fileSources, params.ExtraSources, params)
+
+	walk := &updateWalk{params: params, lister: lister, seen: map[string]bool{}, total: total}
+
+	fileResults, failures := processVendorFileSources(fileSources, walk)
+	extraResults, extraFailures := processExtraUpdateSources(params.ExtraSources, walk)
+	failures = append(failures, extraFailures...)
+
+	report := &UpdateReport{Results: append(fileResults, extraResults...)}
+	return report, errors.Join(failures...)
+}
+
+// updateWalk bundles the state shared across a single Update run's two source-checking passes
+// (an Options-pattern struct, since the helpers below need enough shared context that a positional
+// argument list would exceed a readable length).
+type updateWalk struct {
+	params *UpdateParams
+	lister version.RemoteLister
+	seen   map[string]bool // Components already checked, so ExtraSources can detect vendor.yaml precedence.
+	index  int             // Running 1-based progress counter, shared across both passes.
+	total  int             // Total sources that will be checked, for OnProgress.
+}
+
+// processVendorFileSources checks every source declared across fileSources, marking each
+// component seen (so ExtraSources can detect vendor.yaml precedence) and reporting progress before
+// each check.
+func processVendorFileSources(fileSources []vendorFileSources, walk *updateWalk) ([]SourceUpdateResult, []error) {
+	var results []SourceUpdateResult
 	var failures []error
-	for _, file := range params.VendorFiles {
-		sources, err := readVendorSources(file)
-		if err != nil {
-			return nil, err
-		}
-		for i := range sources {
-			res, err := checkAndUpdateSource(file, &sources[i], params, lister)
+	for _, fs := range fileSources {
+		for i := range fs.sources {
+			walk.seen[fs.sources[i].Component] = true
+			reportProgress(walk.params, &fs.sources[i], &walk.index, walk.total)
+			res, err := checkAndUpdateSource(fs.file, &fs.sources[i], walk.params, walk.lister)
 			if res != nil {
-				report.Results = append(report.Results, *res)
+				results = append(results, *res)
 			}
 			if err != nil {
 				failures = append(failures, err)
 			}
 		}
 	}
-	return report, errors.Join(failures...)
+	return results, failures
+}
+
+// processExtraUpdateSources checks every ExtraSources entry not already seen (a vendor.yaml
+// source of the same component name always wins and skips its ExtraSources duplicate).
+func processExtraUpdateSources(extra []*ResolvedSource, walk *updateWalk) ([]SourceUpdateResult, []error) {
+	var results []SourceUpdateResult
+	var failures []error
+	for _, ex := range extra {
+		if walk.seen[ex.Source.Component] {
+			continue // vendor.yaml already declares this component; it wins.
+		}
+		reportProgress(walk.params, ex.Source, &walk.index, walk.total)
+		res, err := updateResolvedSource(ex, walk.params, walk.lister)
+		if res != nil {
+			results = append(results, *res)
+		}
+		if err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return results, failures
+}
+
+// vendorFileSources pairs a manifest file with the sources it declares, loaded up front so
+// Update can compute a post-filter total for progress reporting without re-parsing files.
+type vendorFileSources struct {
+	file    string
+	sources []schema.AtmosVendorSource
+}
+
+// loadVendorFileSources reads every VendorFiles entry once, up front.
+func loadVendorFileSources(files []string) ([]vendorFileSources, error) {
+	loaded := make([]vendorFileSources, 0, len(files))
+	for _, file := range files {
+		sources, err := readVendorSources(file)
+		if err != nil {
+			return nil, err
+		}
+		loaded = append(loaded, vendorFileSources{file: file, sources: sources})
+	}
+	return loaded, nil
+}
+
+// countMatchingSources counts how many sources (across fileSources and extra, applying the same
+// vendor.yaml-wins dedup Update itself applies) will actually be checked once the
+// component/tags/type filters are applied. Used to give OnProgress a stable total.
+func countMatchingSources(fileSources []vendorFileSources, extra []*ResolvedSource, params *UpdateParams) int {
+	seen := map[string]bool{}
+	total := 0
+	for _, fs := range fileSources {
+		for i := range fs.sources {
+			seen[fs.sources[i].Component] = true
+			if sourceMatchesFilter(&fs.sources[i], params.Component, params.Tags, params.Type) {
+				total++
+			}
+		}
+	}
+	for _, ex := range extra {
+		if seen[ex.Source.Component] {
+			continue
+		}
+		if sourceMatchesFilter(ex.Source, params.Component, params.Tags, params.Type) {
+			total++
+		}
+	}
+	return total
+}
+
+// reportProgress invokes params.OnProgress (when set) for a source that passes the active
+// filters, advancing *index. Sources filtered out are not reported and do not advance the index,
+// matching checkAndUpdateSource's own filtering so the numbers stay in sync.
+func reportProgress(params *UpdateParams, src *schema.AtmosVendorSource, index *int, total int) {
+	if params.OnProgress == nil {
+		return
+	}
+	if !sourceMatchesFilter(src, params.Component, params.Tags, params.Type) {
+		return
+	}
+	*index++
+	params.OnProgress(src.Component, *index, total)
+}
+
+// UpdateResolved evaluates and, unless DryRun, updates a single already-resolved component source
+// (from ResolveComponentSource). Used for --component, which may resolve to either a vendor.yaml
+// source or a component.yaml fallback; auto-selects the component.yaml VersionSetter when
+// resolved.FromComponentManifest and the caller didn't already set one.
+func UpdateResolved(resolved *ResolvedSource, params *UpdateParams) (*UpdateReport, error) {
+	defer perf.Track(nil, "vendoring.UpdateResolved")()
+
+	lister := params.Lister
+	if lister == nil {
+		lister = version.DefaultLister
+	}
+
+	if params.OnProgress != nil {
+		params.OnProgress(resolved.Source.Component, 1, 1)
+	}
+
+	res, err := updateResolvedSource(resolved, params, lister)
+	report := &UpdateReport{}
+	if res != nil {
+		report.Results = append(report.Results, *res)
+	}
+	return report, err
+}
+
+// updateResolvedSource applies a component-manifest-flavored VersionSetter default (unless the
+// caller already set one) and delegates to checkAndUpdateSource.
+func updateResolvedSource(resolved *ResolvedSource, params *UpdateParams, lister version.RemoteLister) (*SourceUpdateResult, error) {
+	p := *params
+	if resolved.FromComponentManifest && p.VersionSetter == nil {
+		p.VersionSetter = func(file, _, ver string) error { return SetComponentManifestVersion(file, ver) }
+	}
+	return checkAndUpdateSource(resolved.File, resolved.Source, &p, lister)
 }
 
 // checkAndUpdateSource evaluates one source and, unless DryRun, applies the update.
@@ -121,6 +289,11 @@ func checkAndUpdateSource(file string, src *schema.AtmosVendorSource, params *Up
 		return res, nil
 	}
 
+	// Archived-ness is orthogonal to the version-check outcome below (a component can be both
+	// up to date and archived upstream), so it's computed once here and applies to every branch,
+	// including the StatusFailed early return.
+	res.Archived = checkArchived(src, params.ArchivedChecker)
+
 	latest, err := resolveLatest(src, lister)
 	if err != nil {
 		res.Status, res.Reason = StatusFailed, err.Error()
@@ -135,7 +308,11 @@ func checkAndUpdateSource(file string, src *schema.AtmosVendorSource, params *Up
 
 	res.Status = StatusUpdated
 	if !params.DryRun {
-		if err := SetComponentVersion(file, src.Component, latest); err != nil {
+		setter := params.VersionSetter
+		if setter == nil {
+			setter = SetComponentVersion
+		}
+		if err := setter(file, src.Component, latest); err != nil {
 			res.Status, res.Reason = StatusFailed, err.Error()
 			return res, vendorUpdateError(src.Component, err)
 		}
