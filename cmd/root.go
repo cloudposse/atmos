@@ -2202,13 +2202,26 @@ func initCobraConfig() {
 		// If args pass validation, they're positional args, not unknown subcommands.
 		// This prevents "Unknown command component1" errors for valid positional args.
 		if len(arguments) > 0 {
-			if err := flags.ValidateArgsOrNil(c, arguments); err == nil {
+			argErr := flags.ValidateArgsOrNil(c, arguments)
+			if argErr == nil {
 				// Args are valid positional arguments - show usage without "Unknown command" error
 				showErrorExampleFromMarkdown(c, "")
 				errUtils.Exit(1)
 				return nil
 			}
-			// Args validation failed - fall through to show error with first arg as unknown command
+			if len(c.Commands()) == 0 {
+				// Leaf command with no subcommands: Cobra already resolved c as
+				// the target (Find() only stops descending when no child name
+				// matches), so a failed Args validator here can only mean the
+				// arguments themselves are wrong -- e.g. too many/too few --
+				// never an unrecognized subcommand name. Report the actual
+				// cause instead of misidentifying arguments[0] as "unknown".
+				showArgCountErrorAndExit(c, argErr)
+				return nil
+			}
+			// c has subcommands and arguments[0] didn't validate as positional
+			// args either -- fall through to show error with first arg as
+			// unknown command, since that's genuinely what happened here.
 		}
 
 		showUsageAndExit(c, arguments)
