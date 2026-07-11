@@ -63,11 +63,14 @@ only for patterns someone remembered to add. Treat the prohibitions above as the
 and the deny list as an incomplete, best-effort mirror of them. When you add a new hard
 prohibition here, add the matching `deny` pattern(s) in `.claude/settings.json` in the same change.
 
-## Audible notifications on human-attention paths
+## Audible notifications
 
 Every "report for human attention" exit path below also invokes the
 [`say` skill](../say/SKILL.md) (`Skill({skill: "say", args: "..."})`) so the user gets an audible
-nudge, not just a written summary. Trigger points:
+nudge, not just a written summary. Six of the seven triggers below are blocking (something needs a
+human to unblock it); the seventh is positive (nothing needs unblocking — the PR needs a human to
+give it final review/merge). Don't assume every `say` call from this skill means something is
+wrong. Trigger points:
 
 1. **A merge conflict `merge-conflict-resolve` aborted rather than guess at**, or a non-fast-forward
    local sync (step 1) — `"PR <number> has a merge conflict, needs your attention."`
@@ -85,6 +88,10 @@ nudge, not just a written summary. Trigger points:
 6. **Lint finding skipped** by `lint-fix` as requiring a broader refactor than patch scope
    (step 6, including a CI-sourced lint finding from step 2) — `"PR <number> has a lint finding
    needing your input."`
+7. **Fully clean cycle: CI green, coverage satisfied, CodeRabbit approved** (step 8) — the positive
+   case, not a blocking one, but still fits the `say` skill's own "task finished in a way that
+   needs human review" trigger, since final review/merge is still a human action —
+   `"PR <number> is ready for final review."`
 
 The `say` skill owns the phrasing rule and the defensive invocation wrapper — this list only says
 *when* to call it, not *how*.
@@ -164,7 +171,37 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
    no uncovered added lines: one-line no-op. Gaps get fixed per that skill's process; anything
    judged genuinely untestable, or a fix attempt that caps out still red, triggers `say` trigger 5.
 
-8. Always end with a clear summary of what was found and fixed, even on the all-clean path.
+8. Check readiness for final human review. This only fires on an otherwise-fully-clean cycle — skip
+   it entirely if any of `say` triggers 1-6 above fired this cycle (a merge conflict, a failing
+   non-lint/test CI check, a CodeRabbit finding skipped as invalid, a pre-existing test failure, an
+   untestable coverage gap, or an unfixable lint finding all mean the PR is NOT ready). Otherwise
+   check all five of:
+
+   - Re-run `atmos fix ci` for a fresh read — not the cached step-2 result, since steps 4/6/7 may
+     have pushed new commits since then, and a fresh push means new CI runs that are likely still
+     pending, not green yet. (That's expected, not an error: this step naturally won't fire on a
+     cycle that just pushed fixes, only on a later cycle once those checks finish.) Requires
+     `STATUS: ALL_CHECKS_GREEN`.
+   - Zero unresolved, non-outdated CodeRabbit threads remain (same signal as step 3, re-verified
+     after any step 4/5 resolutions this cycle).
+   - CodeRabbit's own review verdict is APPROVED, not just "no open threads" — read via:
+     `gh pr view <number> --json reviews -q '[.reviews[] | select(.author.login=="coderabbitai")] | last | .state'`
+     (already-allowlisted `gh pr view:*`, read-only; reviews are returned oldest-first, so `last`
+     is the current verdict). Must equal `APPROVED`.
+   - Step 7 ended clean: `STATUS: OK`/`STATUS: NO_GO_CHANGES` with no remaining gaps or unresolved
+     failures (i.e. `say` triggers 4/5 did not fire).
+   - No local changes are uncommitted or unpushed: `git status --porcelain` is empty AND the local
+     branch has nothing ahead of its upstream (`git rev-list --count @{u}..HEAD` is `0`). Any fix
+     this cycle applied must already be committed and pushed by its own step (4-7 all end with a
+     commit + plain `git push`) — this is a final guard against a fix that got committed but not
+     pushed, or leftover local edits from a prior interrupted run, not a routine expectation.
+
+   If all five hold, invoke `say` trigger 7 (`"PR <number> is ready for final review."`) and make
+   sure the step-9 summary carries a matching banner: `✅ PR #<number> is ready for final review.`
+
+9. Always end with a clear summary of what was found and fixed, even on the all-clean path. If
+   step 8 fired, the summary must include its `✅ PR #<number> is ready for final review.` banner
+   alongside the normal fixed/skipped rundown.
 
 ## Related
 
