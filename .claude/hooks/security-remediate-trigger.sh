@@ -95,12 +95,14 @@ branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
 [ -n "$branch" ] && [ "$branch" != "HEAD" ] || exit 0
 
 # Prefix by source so Dependabot and code-scanning alert numbers (independent
-# numbering spaces) never collide when combined into one set. A 404/403 here
-# (no security_events access - the common case for fork/external
-# contributors) yields empty output, which is handled the same as "no open
-# alerts" below.
-dependabot_ids="$(run_with_timeout 8 gh api "repos/${owner_repo}/dependabot/alerts" --paginate -f state=open --jq '.[] | "db:" + (.number | tostring)' 2>/dev/null)"
-codeql_ids="$(run_with_timeout 8 gh api "repos/${owner_repo}/code-scanning/alerts" --paginate -f state=open --jq '.[] | "cq:" + (.number | tostring)' 2>/dev/null)"
+# numbering spaces) never collide when combined into one set. -X GET is
+# required: gh api implicitly switches to POST when -f/--paginate params are
+# given without an explicit method, and these list endpoints 404 on POST
+# (easy to mistake for a permission gap - it isn't one). A genuine 403/404
+# from lacking security_events access on a private repo yields empty output,
+# which is handled the same as "no open alerts" below.
+dependabot_ids="$(run_with_timeout 8 gh api "repos/${owner_repo}/dependabot/alerts" -X GET --paginate -f state=open --jq '.[] | "db:" + (.number | tostring)' 2>/dev/null)"
+codeql_ids="$(run_with_timeout 8 gh api "repos/${owner_repo}/code-scanning/alerts" -X GET --paginate -f state=open --jq '.[] | "cq:" + (.number | tostring)' 2>/dev/null)"
 
 all_ids="$(printf '%s\n%s\n' "$dependabot_ids" "$codeql_ids" | grep -E '^(db|cq):[0-9]+$' | sort -u)"
 [ -n "$all_ids" ] || exit 0

@@ -12,13 +12,9 @@ Proactively fix GitHub-reported security alerts on the branch you're already wor
 
 ## Fork / permission prerequisite (read first)
 
-Querying alerts requires a `gh` token with the `security_events` scope **and** at least maintain-level access to the repo. Most contributors — including anyone working from a fork — will not have this. That's expected and safe: `.claude/hooks/security-remediate-trigger.sh` treats a 403/404 exactly like "no alerts open" and silently does nothing. If you're invoking this skill manually and see auth/permission errors below, stop and report that instead of attempting fixes — do not try to work around missing scope.
+This repo is public, so a plain `gh` token with `repo` scope (the default from `gh auth login`) is **sufficient** to read both alert endpoints — `security_events` is only required on **private** repos (see GitHub's Dependabot alerts API docs: private repos need `security_events`, public repos only need `public_repo`/`repo`). Don't chase a `security_events` scope refresh for this repo; it's unnecessary and, per `cli/cli#12073` and independent reports (e.g. `microsoft/sarif-sdk#3081`), `gh auth refresh -s security_events` can report success while GitHub silently drops the scope anyway — a dead end that's easy to mistake for a real permission gap.
 
-Check first:
-```bash
-gh auth status
-```
-Look for `security_events` in the token scopes. If it's missing, run `gh auth refresh -s security_events` (requires you actually have access to the repo's security tab) or just stop here and tell the user remediation isn't possible with the current credentials.
+If `gh api` calls below still 404/403 even with `-X GET` present, that's a genuine permission gap (e.g. a fork contributor without repo access, or a future private-repo use of this skill lacking `security_events`) — stop and report it instead of attempting a workaround. `.claude/hooks/security-remediate-trigger.sh` treats that case exactly like "no alerts open" and silently does nothing.
 
 ## Workflow
 
@@ -30,10 +26,14 @@ Look for `security_events` in the token scopes. If it's missing, run `gh auth re
 
 2. **Query both alert sources live** (the hook's cached alert set was only a trigger signal — treat it as stale):
    ```bash
-   gh api "repos/${owner_repo}/dependabot/alerts" --paginate -f state=open
-   gh api "repos/${owner_repo}/code-scanning/alerts" --paginate -f state=open
+   gh api "repos/${owner_repo}/dependabot/alerts" -X GET --paginate -f state=open
+   gh api "repos/${owner_repo}/code-scanning/alerts" -X GET --paginate -f state=open
    ```
-   If either call 403/404s, stop and report the permission gap — do not proceed partway.
+   The `-X GET` is required: `gh api` implicitly sends a `POST` when `-f`/`--paginate`
+   params are given without an explicit method, and these list endpoints 404 on `POST`
+   — indistinguishable from a real permission error unless you notice the verb. If
+   either call still 403/404s with `-X GET` present, stop and report the permission gap
+   — do not proceed partway.
 
 3. **Filter to high-confidence fixes**, following the precedent set by `0e32451913`:
    - **Dependabot alerts**: only fix if a patched version exists *within* what `.github/dependabot.yml`'s `ignore` rules allow (that file currently ignores all major-version bumps across `gomod`, `github-actions`, and `npm`/website). If the only fix requires a major bump the policy blocks, do not bump it — report it as "blocked by dependabot ignore policy" instead.
