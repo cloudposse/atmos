@@ -166,7 +166,7 @@ func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
 	atmosConfig *schema.AtmosConfiguration,
 ) (modelVendor, error) {
 	p := progress.New(
-		progress.WithDefaultGradient(),
+		progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()),
 		progress.WithWidth(progressBarWidth),
 		progress.WithoutPercentage(),
 	)

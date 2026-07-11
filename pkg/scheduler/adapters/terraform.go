@@ -30,8 +30,12 @@ import (
 )
 
 const (
-	terraformDefaultCommand = "terraform"
-	terraformNodeIDFormat   = "%s-%s"
+	terraformDefaultCommand    = "terraform"
+	terraformNodeIDFormat      = "%s-%s"
+	terraformSubCommandPlan    = "plan"
+	terraformSubCommandApply   = "apply"
+	terraformSubCommandDeploy  = "deploy"
+	terraformSubCommandDestroy = "destroy"
 )
 
 const (
@@ -1487,7 +1491,7 @@ func effectiveTerraformFailureMode(info *schema.ConfigAndStacksInfo) string {
 // supportsTerraformConcurrency reports whether subCommand can run through the scheduler concurrently.
 func supportsTerraformConcurrency(subCommand string) bool {
 	switch subCommand {
-	case "plan", "apply", "deploy", "destroy":
+	case terraformSubCommandPlan, terraformSubCommandApply, terraformSubCommandDeploy, terraformSubCommandDestroy:
 		return true
 	default:
 		return false

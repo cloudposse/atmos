@@ -36,6 +36,11 @@ env:
   HELM_VERSION: "v3.19.2"
   HELMFILE_VERSION: "v1.1.0"
   PACKER_VERSION: "1.14.2"
+  # Use pipe fallback so transient proxy.golang.org errors (5xx, HTTP/2 stream
+  # resets) during `go mod download` fall back to direct module fetches. The
+  # default comma-separated GOPROXY list only falls through on "not found"
+  # responses, not network errors. See .github/workflows/native-ci.yml.
+  GOPROXY: "https://proxy.golang.org|direct"
 
 jobs:
   # ensure the code builds...
@@ -901,6 +906,7 @@ jobs:
           - custom-components
           - sops-secrets
           - onepassword-secrets
+          - packer-docker
           # quick-start-advanced and native-terraform are intentionally NOT validated here:
           #   - quick-start-advanced: its `stacks/workflows/*.yaml` manifests use newer workflow
           #     step types (`type: stage`/`spin`, `title:`) that the atmos-manifest JSON Schema

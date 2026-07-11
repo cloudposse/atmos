@@ -6,6 +6,7 @@ id: container
 description: Run persistent, stack-scoped container services with the same stack-based configuration used for Terraform and Helmfile. One component is one container, operated by labels.
 ---
 import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 Atmos natively supports **container components** — stack-scoped, persistent containers. One component
@@ -116,6 +117,12 @@ atmos composition down storefront -s dev
 If you omit the composition name from a stack-scoped lifecycle or read command, Atmos targets all
 compositions with fulfilled members in that stack. Startup and read commands process composition names
 alphabetically and services in declared order; teardown commands use the reverse order.
+
+## Try It
+
+Explore a complete, working example of the container component kind's full lifecycle.
+
+<EmbedExample example="container-component" />
 
 ## Related
 
