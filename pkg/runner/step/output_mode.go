@@ -213,10 +213,21 @@ func (w *OutputModeWriter) executeLogWithIO(runner func(stdout, stderr io.Writer
 // ui.Info pipeline (icon + markdown + masking), so raw/log step banners read
 // as part of Atmos's themed UI instead of ad hoc debug markers.
 func (w *OutputModeWriter) writeStepHeader() {
-	if !ShowLabels(w.show) {
+	AnnounceStepStart(w.show, w.stepName)
+}
+
+// AnnounceStepStart prints the themed "Running `name`" banner. Shared by
+// OutputModeWriter (extended step-type runner, custom commands) and the
+// legacy atmos/shell workflow execution path in internal/exec, so every
+// workflow step announces itself the same way regardless of which engine
+// executes it.
+func AnnounceStepStart(show *schema.ShowConfig, name string) {
+	defer perf.Track(nil, "step.AnnounceStepStart")()
+
+	if !ShowLabels(show) {
 		return
 	}
-	ui.Infof("Running `%s`", w.stepName)
+	ui.Infof("Running `%s`", name)
 }
 
 // fallbackToLog writes captured output with boundaries.
@@ -238,14 +249,25 @@ func (w *OutputModeWriter) fallbackToLog(stdout, stderr string, runErr error) (s
 // ui.Success/ui.Error pipeline (icon + markdown + masking), matching how
 // spin.go and toast.go report step completion, instead of hand-built strings.
 func (w *OutputModeWriter) writeStepFooter(runErr error) {
-	if !ShowLabels(w.show) {
+	AnnounceStepEnd(w.show, w.stepName, runErr)
+}
+
+// AnnounceStepEnd prints the themed completion/failure banner. Shared by
+// OutputModeWriter (extended step-type runner, custom commands) and the
+// legacy atmos/shell workflow execution path in internal/exec, so every
+// workflow step reports completion the same way regardless of which engine
+// executed it.
+func AnnounceStepEnd(show *schema.ShowConfig, name string, runErr error) {
+	defer perf.Track(nil, "step.AnnounceStepEnd")()
+
+	if !ShowLabels(show) {
 		return
 	}
 	if runErr != nil {
-		ui.Errorf("`%s` failed", w.stepName)
+		ui.Errorf("`%s` failed", name)
 		return
 	}
-	ui.Successf("`%s` completed", w.stepName)
+	ui.Successf("`%s` completed", name)
 }
 
 // executeNone runs command silently.

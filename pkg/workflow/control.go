@@ -314,13 +314,25 @@ func renderControlOutput(aggregate *scheduler.AggregateResult, definitionOrder [
 	}
 }
 
+// renderControlChildBlock reports a parallel/matrix child's completion status
+// through the shared ui.Success/ui.Warning/ui.Error pipeline, matching the
+// `AnnounceStepStart`/`AnnounceStepEnd` banner convention used by other
+// workflow step engines instead of a raw "[nodeID] status" line.
 func renderControlChildBlock(result *scheduler.Result) {
 	child, _ := result.Value.(*ControlResult)
-	status := string(result.Status)
-	if child != nil && child.Canceled {
-		status = "canceled"
+	canceled := child != nil && child.Canceled
+
+	switch {
+	case canceled:
+		ui.Warningf("`%s` canceled", result.NodeID)
+	case result.Status == scheduler.StatusFailed:
+		ui.Errorf("`%s` failed", result.NodeID)
+	case result.Status == scheduler.StatusSkipped:
+		ui.Warningf("`%s` skipped", result.NodeID)
+	default:
+		ui.Successf("`%s` completed", result.NodeID)
 	}
-	ui.Writeln(fmt.Sprintf("[%s] %s", result.NodeID, status))
+
 	if child != nil {
 		if child.Stdout != "" {
 			_ = data.Write(child.Stdout)
@@ -336,7 +348,7 @@ func renderControlSummary(parent *schema.WorkflowStep, aggregate *scheduler.Aggr
 		return
 	}
 	counts := countControlResults(aggregate)
-	format := "[%s] summary: %d succeeded, %d failed, %d skipped, %d canceled"
+	format := "`%s` summary: %d succeeded, %d failed, %d skipped, %d canceled"
 	args := []interface{}{parent.Name, counts.succeeded, counts.failed, counts.skipped, counts.canceled}
 	if aggregate.Err != nil || counts.failed > 0 || counts.canceled > 0 {
 		ui.Errorf(format, args...)
