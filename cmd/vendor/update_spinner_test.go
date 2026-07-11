@@ -1,12 +1,17 @@
 package vendor
 
 import (
+	"io"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/creack/pty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -154,4 +159,216 @@ func TestUpdateSpinnerModel_View_TruncatesLongName(t *testing.T) {
 
 	assert.NotContains(t, view, longName, "the full 200-char name must not appear verbatim in a 60-column line")
 	assert.Contains(t, view, ellipsis)
+}
+
+// newTestUpdateSpinnerModel builds a model with real (but unconnected) progress/done channels,
+// matching how runUpdateWithSpinner constructs one, for tests that drive Init/Update directly
+// without running a full tea.Program.
+func newTestUpdateSpinnerModel() *updateSpinnerModel {
+	progressCh := make(chan tea.Msg, 1)
+	doneCh := make(chan updateDoneMsg, 1)
+	m := &updateSpinnerModel{
+		spinner:    spinner.New(),
+		bar:        progress.New(progress.WithWidth(progressBarWidth)),
+		progressCh: progressCh,
+		doneCh:     doneCh,
+	}
+	return m
+}
+
+// TestUpdateSpinnerModel_Init proves Init starts both the spinner's own tick and a listener for
+// the update goroutine's messages, batched together (bubbletea's tea.Batch) rather than only one
+// or the other.
+func TestUpdateSpinnerModel_Init(t *testing.T) {
+	m := newTestUpdateSpinnerModel()
+
+	cmd := m.Init()
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	require.True(t, ok, "Init must batch the spinner tick and waitForUpdateMsg together, got %T", msg)
+	assert.Len(t, batch, 2)
+}
+
+// TestUpdateSpinnerModel_Update_WindowSizeMsg proves a WindowSizeMsg updates both the model's
+// width and the progress bar's configured width to match (mirroring
+// internal/exec/vendor_model.go's equivalent handling).
+func TestUpdateSpinnerModel_Update_WindowSizeMsg(t *testing.T) {
+	m := newTestUpdateSpinnerModel()
+
+	newModel, cmd := m.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
+
+	updated, ok := newModel.(*updateSpinnerModel)
+	require.True(t, ok)
+	assert.Equal(t, 200, updated.width)
+	assert.Equal(t, progressBarWidthFor(200), updated.bar.Width)
+	assert.Nil(t, cmd)
+}
+
+// TestUpdateSpinnerModel_Update_KeyMsg proves any keypress quits the spinner program, the same
+// early-exit path runUpdateWithSpinner's doc comment describes (the trigger for the
+// nil-report/nil-err race cmd/vendor/update.go guards against).
+func TestUpdateSpinnerModel_Update_KeyMsg(t *testing.T) {
+	m := newTestUpdateSpinnerModel()
+
+	_, cmd := m.Update(tea.KeyMsg{})
+
+	require.NotNil(t, cmd)
+	assert.IsType(t, tea.QuitMsg{}, cmd())
+}
+
+// TestUpdateSpinnerModel_Update_SpinnerAndProgressFrames proves the spinner.TickMsg and
+// progress.FrameMsg cases delegate to their respective sub-models without panicking, mirroring
+// bubbletea's standard "delegate to child model, keep its updated copy" pattern.
+func TestUpdateSpinnerModel_Update_SpinnerAndProgressFrames(t *testing.T) {
+	m := newTestUpdateSpinnerModel()
+
+	newModel, _ := m.Update(m.spinner.Tick())
+	_, ok := newModel.(*updateSpinnerModel)
+	assert.True(t, ok)
+
+	newModel, _ = m.Update(progress.FrameMsg{})
+	_, ok = newModel.(*updateSpinnerModel)
+	assert.True(t, ok)
+}
+
+// TestUpdateSpinnerModel_Update_ProgressMsg proves an updateProgressMsg records the current
+// component and, only when total is known (> 0), advances the bar and re-arms waitForUpdateMsg so
+// the event loop keeps listening for the next message.
+func TestUpdateSpinnerModel_Update_ProgressMsg(t *testing.T) {
+	t.Run("with total", func(t *testing.T) {
+		m := newTestUpdateSpinnerModel()
+
+		newModel, cmd := m.Update(updateProgressMsg{component: "vpc", index: 1, total: 3})
+
+		updated, ok := newModel.(*updateSpinnerModel)
+		require.True(t, ok)
+		assert.Equal(t, "vpc", updated.progress.component)
+		assert.Equal(t, 1, updated.progress.index)
+		assert.Equal(t, 3, updated.progress.total)
+		require.NotNil(t, cmd, "must re-arm waitForUpdateMsg so the loop keeps listening")
+	})
+
+	t.Run("without total", func(t *testing.T) {
+		m := newTestUpdateSpinnerModel()
+
+		newModel, cmd := m.Update(updateProgressMsg{component: "vpc", index: 0, total: 0})
+
+		updated, ok := newModel.(*updateSpinnerModel)
+		require.True(t, ok)
+		assert.Equal(t, "vpc", updated.progress.component)
+		require.NotNil(t, cmd, "waitForUpdateMsg must still be re-armed even without a known total")
+	})
+}
+
+// TestUpdateSpinnerModel_Update_DoneMsg proves updateDoneMsg records the final report/error,
+// marks the model done, and quits the program -- the terminal message runUpdateWithSpinner's
+// caller relies on to read final.report/final.err back out.
+func TestUpdateSpinnerModel_Update_DoneMsg(t *testing.T) {
+	want := &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{{Component: "vpc"}}}
+	m := newTestUpdateSpinnerModel()
+
+	newModel, cmd := m.Update(updateDoneMsg{report: want, err: assert.AnError})
+
+	updated, ok := newModel.(*updateSpinnerModel)
+	require.True(t, ok)
+	assert.Same(t, want, updated.report)
+	assert.ErrorIs(t, updated.err, assert.AnError)
+	assert.True(t, updated.done)
+	require.NotNil(t, cmd)
+	assert.IsType(t, tea.QuitMsg{}, cmd())
+}
+
+// TestUpdateSpinnerModel_Update_UnknownMsg proves an unrecognized message type is a no-op:
+// returned unchanged, with no command, rather than panicking on an unhandled type switch case.
+func TestUpdateSpinnerModel_Update_UnknownMsg(t *testing.T) {
+	m := newTestUpdateSpinnerModel()
+
+	newModel, cmd := m.Update(struct{}{})
+
+	assert.Same(t, m, newModel)
+	assert.Nil(t, cmd)
+}
+
+// TestWaitForUpdateMsg_ProgressChannel proves waitForUpdateMsg returns a progress message when
+// one is available on progressCh.
+func TestWaitForUpdateMsg_ProgressChannel(t *testing.T) {
+	progressCh := make(chan tea.Msg, 1)
+	doneCh := make(chan updateDoneMsg, 1)
+	want := updateProgressMsg{component: "vpc", index: 1, total: 2}
+	progressCh <- want
+
+	got := waitForUpdateMsg(progressCh, doneCh)()
+
+	assert.Equal(t, tea.Msg(want), got)
+}
+
+// TestWaitForUpdateMsg_DoneChannel proves waitForUpdateMsg returns the terminal message when one
+// is available on doneCh -- the regression this whole split-channel design (see
+// runUpdateWithSpinner's doc comment) exists to guarantee delivery for.
+func TestWaitForUpdateMsg_DoneChannel(t *testing.T) {
+	progressCh := make(chan tea.Msg, 1)
+	doneCh := make(chan updateDoneMsg, 1)
+	want := updateDoneMsg{report: &vendoring.UpdateReport{}}
+	doneCh <- want
+
+	got := waitForUpdateMsg(progressCh, doneCh)()
+
+	assert.Equal(t, tea.Msg(want), got)
+}
+
+// TestRunUpdateWithSpinner_TTY_RunsSpinnerAndReturnsResult drives runUpdateWithSpinner's TTY
+// branch end to end against a real PTY (stderr must report as a terminal for isatty.IsTerminal to
+// take this path), proving the spinner program starts, streams a progress update, and returns
+// doWork's report/error unchanged once it completes -- the path
+// TestRunUpdateWithSpinner_NonTTY_* deliberately don't exercise.
+func TestRunUpdateWithSpinner_TTY_RunsSpinnerAndReturnsResult(t *testing.T) {
+	ptmx, ttyFile, err := pty.Open()
+	require.NoError(t, err)
+	defer func() { _ = ptmx.Close() }()
+	defer func() { _ = ttyFile.Close() }()
+
+	// bubbletea defaults to os.Stdin for input, and (since go test's own stdin isn't a terminal)
+	// falls back to opening /dev/tty directly when it isn't -- unavailable in a headless sandbox
+	// with no controlling terminal at all. Pointing stdin at the same PTY avoids that fallback,
+	// matching what a real controlling-terminal session (or the CLI acceptance test harness's
+	// own PTY, which attaches to all three of the child process's standard streams) looks like.
+	origStdin := os.Stdin
+	os.Stdin = ttyFile
+	defer func() { os.Stdin = origStdin }()
+
+	origStderr := os.Stderr
+	os.Stderr = ttyFile
+	defer func() { os.Stderr = origStderr }()
+
+	// Drain the PTY's master side so the spinner's writes never block on a full PTY buffer.
+	go func() { _, _ = io.Copy(io.Discard, ptmx) }()
+
+	want := &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{
+		{Component: "vpc", Status: vendoring.StatusUpToDate},
+	}}
+
+	type result struct {
+		report *vendoring.UpdateReport
+		err    error
+	}
+	resultCh := make(chan result, 1)
+	go func() {
+		report, err := runUpdateWithSpinner(func(onProgress vendorProgressFunc) (*vendoring.UpdateReport, error) {
+			if onProgress != nil {
+				onProgress("vpc", 1, 1)
+			}
+			return want, nil
+		})
+		resultCh <- result{report, err}
+	}()
+
+	select {
+	case got := <-resultCh:
+		require.NoError(t, got.err)
+		assert.Same(t, want, got.report)
+	case <-time.After(5 * time.Second):
+		t.Fatal("runUpdateWithSpinner did not return within 5s under a TTY stderr")
+	}
 }

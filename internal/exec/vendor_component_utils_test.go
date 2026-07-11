@@ -30,6 +30,32 @@ spec:
 	return componentDir
 }
 
+// TestExecuteComponentVendorInternal_PullsLocalSource proves the single-component entry point
+// (the "atmos vendor pull --component X" path, invoked by internal/exec/vendor.go's
+// handleComponentVendor) resolves and pulls a local source's files onto disk.
+func TestExecuteComponentVendorInternal_PullsLocalSource(t *testing.T) {
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# vpc\n"), 0o644))
+	componentPath := t.TempDir()
+
+	spec := &schema.VendorComponentSpec{
+		Source: schema.VendorComponentSource{Uri: sourceDir},
+	}
+
+	err := ExecuteComponentVendorInternal(&schema.AtmosConfiguration{}, spec, "vpc", componentPath, false)
+
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(componentPath, "main.tf"))
+}
+
+// TestExecuteComponentVendorInternal_PropagatesBuildError proves an unresolvable spec (missing
+// source URI) fails before executeVendorModel is ever invoked.
+func TestExecuteComponentVendorInternal_PropagatesBuildError(t *testing.T) {
+	err := ExecuteComponentVendorInternal(&schema.AtmosConfiguration{}, &schema.VendorComponentSpec{}, "vpc", t.TempDir(), false)
+
+	assert.Error(t, err)
+}
+
 // TestExecuteComponentVendorPullBatch_PullsAllComponentsInOneCall proves the batched entry point
 // used by "atmos vendor update --pull" (cmd/vendor/update.go's runVendorPull) resolves and pulls
 // every named component, landing each one's files on disk from a single call.
@@ -87,6 +113,33 @@ func TestExecuteComponentVendorPullBatch_PropagatesResolutionError(t *testing.T)
 	assert.Error(t, err, "an unresolvable component must fail the batch")
 }
 
+// TestExecuteComponentVendorPullBatch_PropagatesBuildError proves a component.yaml that resolves
+// fine (valid YAML) but declares no source uri fails the batch via buildComponentVendorPackages,
+// distinct from TestExecuteComponentVendorPullBatch_PropagatesResolutionError's
+// config-resolution failure.
+func TestExecuteComponentVendorPullBatch_PropagatesBuildError(t *testing.T) {
+	tempDir := t.TempDir()
+	basePath := filepath.Join(tempDir, "components", "terraform")
+	componentDir := filepath.Join(basePath, "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "component.yaml"), []byte(`apiVersion: atmos/v1
+kind: ComponentVendorConfig
+spec: {}
+`), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+	}
+
+	err := ExecuteComponentVendorPullBatch(atmosConfig, []string{"vpc"}, cfg.TerraformComponentType, false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `component "vpc"`, "the failing component's name must be identifiable in a multi-component batch")
+}
+
 // TestBuildComponentVendorPackages_ComponentAndMixins proves buildComponentVendorPackages (the
 // helper extracted from ExecuteComponentVendorInternal so ExecuteComponentVendorPullBatch can
 // build package lists for multiple components without executing each one) returns the same shape
@@ -126,5 +179,41 @@ func TestBuildComponentVendorPackages_MissingUri(t *testing.T) {
 	spec := &schema.VendorComponentSpec{}
 	packages, err := buildComponentVendorPackages(spec, "vpc", t.TempDir())
 	assert.Error(t, err)
+	assert.Nil(t, packages)
+}
+
+// TestBuildComponentVendorPackages_InvalidUriTemplate proves a source.uri that fails to parse as
+// a Go template (only attempted when source.version is set) is surfaced rather than silently
+// falling back to the literal, unparsed uri.
+func TestBuildComponentVendorPackages_InvalidUriTemplate(t *testing.T) {
+	spec := &schema.VendorComponentSpec{
+		Source: schema.VendorComponentSource{
+			Uri:     "github.com/cloudposse/terraform-null-label.git//?ref={{.Version",
+			Version: "0.1.0",
+		},
+	}
+
+	packages, err := buildComponentVendorPackages(spec, "vpc", t.TempDir())
+
+	assert.Error(t, err)
+	assert.Nil(t, packages)
+}
+
+// TestBuildComponentVendorPackages_PropagatesMixinError proves a mixin missing its required uri
+// fails the whole component, matching processComponentMixins' own fail-fast validation.
+func TestBuildComponentVendorPackages_PropagatesMixinError(t *testing.T) {
+	spec := &schema.VendorComponentSpec{
+		Source: schema.VendorComponentSource{
+			Uri: "github.com/cloudposse/terraform-null-label.git//?ref=0.1.0",
+		},
+		Mixins: []schema.VendorComponentMixins{
+			{Filename: "context.tf"}, // Missing Uri.
+		},
+	}
+
+	packages, err := buildComponentVendorPackages(spec, "vpc", t.TempDir())
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrMissingMixinURI)
 	assert.Nil(t, packages)
 }

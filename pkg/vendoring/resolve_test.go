@@ -120,6 +120,36 @@ func TestResolveComponentSource_NeitherExists_ReturnsClearError(t *testing.T) {
 	assert.Contains(t, err.Error(), componentDir)
 }
 
+// TestResolveComponentSource_VendorYamlExistsButComponentMissingEverywhere is
+// TestResolveComponentSource_NeitherExists_ReturnsClearError's counterpart when a vendor.yaml IS
+// present (just doesn't declare the requested component): notFoundError's message must say so
+// (mentioning the vendor.yaml, not just "no vendor.yaml found"), distinguishing "nothing at all"
+// from "checked vendor.yaml too, still nothing".
+func TestResolveComponentSource_VendorYamlExistsButComponentMissingEverywhere(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	writeFile(t, dir, "vendor.yaml", `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: other
+      source: github.com/cloudposse/terraform-aws-other
+      version: "1.0.0"
+      targets: ["components/terraform/other"]
+`)
+	componentDir := filepath.Join(dir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	_, err := ResolveComponentSource(&ResolveSourceParams{
+		Component: "vpc",
+		Resolver:  fakeComponentDirResolver{dir: componentDir},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrVendorSourceNotFound)
+	assert.Contains(t, err.Error(), "vendor.yaml", "the error must mention that vendor.yaml itself was checked")
+	assert.Contains(t, err.Error(), componentDir)
+}
+
 func TestResolveComponentSource_PropagatesBrokenVendorYamlError(t *testing.T) {
 	dir := t.TempDir()
 	file := writeFile(t, dir, "vendor.yaml", "spec: [")
@@ -143,6 +173,52 @@ func TestResolveComponentSource_RejectsUnsupportedComponentType(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrUnsupportedComponentType)
+}
+
+// TestResolveComponentSource_DefaultResolver_FindsRealComponentDir proves ResolveComponentSource
+// works end to end through DefaultComponentDirResolver (no Resolver override, the production
+// path), not just the fakeComponentDirResolver every other test in this file injects.
+func TestResolveComponentSource_DefaultResolver_FindsRealComponentDir(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+
+	base := filepath.Join(dir, "components", "terraform")
+	componentDir := filepath.Join(base, "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	writeFile(t, componentDir, "component.yaml", componentManifestFixture)
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", base)
+
+	resolved, err := ResolveComponentSource(&ResolveSourceParams{Component: "vpc"})
+	require.NoError(t, err)
+	assert.True(t, resolved.FromComponentManifest)
+	assert.Equal(t, filepath.Join(componentDir, "component.yaml"), resolved.File)
+}
+
+// TestResolveComponentSource_PropagatesBrokenComponentManifestError proves a malformed
+// component.yaml fallback (found on disk, but unparseable) is surfaced rather than mistaken for
+// "component.yaml doesn't exist".
+func TestResolveComponentSource_PropagatesBrokenComponentManifestError(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	writeFile(t, dir, "vendor.yaml", `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: other
+      source: github.com/cloudposse/terraform-aws-other
+      version: "1.0.0"
+      targets: ["components/terraform/other"]
+`)
+	componentDir := filepath.Join(dir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	writeFile(t, componentDir, "component.yaml", "spec: [")
+
+	_, err := ResolveComponentSource(&ResolveSourceParams{
+		Component: "vpc",
+		Resolver:  fakeComponentDirResolver{dir: componentDir},
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrParseVendorFile)
 }
 
 func TestVendorFilePresent(t *testing.T) {
@@ -182,6 +258,36 @@ func TestVendorFilePresent_HonorsVendorBasePath(t *testing.T) {
 
 	file, ok := VendorFilePresent("")
 	assert.True(t, ok, "vendor.base_path from atmos config should be honored")
+	assert.Equal(t, vendorFile, file)
+}
+
+// TestVendorFilePresent_VendorBasePathConfiguredButMissing proves an explicitly configured
+// vendor.base_path that doesn't exist on disk is treated as "not present" rather than falling
+// back to a bare cwd/atmosConfig.BasePath search -- an explicit setting that points at nothing is
+// a misconfiguration, not "unset".
+func TestVendorFilePresent_VendorBasePathConfiguredButMissing(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+
+	t.Setenv("ATMOS_VENDOR_BASE_PATH", filepath.Join(dir, "does-not-exist.yaml"))
+
+	_, ok := VendorFilePresent("")
+	assert.False(t, ok, "a configured but missing vendor.base_path must not fall back to a cwd search")
+}
+
+// TestVendorFilePresent_FallsBackToAtmosBasePathVendorYaml proves that, with no vendor.base_path
+// configured and no ./vendor.yaml at cwd, VendorFilePresent still finds a vendor.yaml living at
+// atmosConfig.BasePath (the second u.SearchConfigFile fallback), not just a bare cwd-relative one.
+func TestVendorFilePresent_FallsBackToAtmosBasePathVendorYaml(t *testing.T) {
+	cwd := t.TempDir()
+	chdir(t, cwd)
+
+	baseDir := t.TempDir()
+	vendorFile := writeFile(t, baseDir, "vendor.yaml", "spec: {}\n")
+	t.Setenv("ATMOS_BASE_PATH", baseDir)
+
+	file, ok := VendorFilePresent("")
+	require.True(t, ok, "vendor.yaml at atmosConfig.BasePath must be found even without vendor.base_path set")
 	assert.Equal(t, vendorFile, file)
 }
 
@@ -233,6 +339,34 @@ func TestDiscoverComponentManifests_MissingBasePathReturnsEmpty(t *testing.T) {
 	assert.Empty(t, sources)
 }
 
+// TestDiscoverComponentManifests_BasePathIsAFile proves a non-ENOENT os.ReadDir failure (basePath
+// exists but isn't a directory) is surfaced as an error, unlike the missing-basePath case above
+// (a legitimate "nothing vendored this way yet" state) which returns an empty result instead.
+func TestDiscoverComponentManifests_BasePathIsAFile(t *testing.T) {
+	basePath := writeFile(t, t.TempDir(), "not-a-dir", "oops")
+
+	_, err := DiscoverComponentManifests(basePath, "terraform")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrReadVendorFile)
+}
+
+// TestDiscoverComponentManifests_SkipsNonDirectoryEntries proves a stray file sitting alongside
+// real component directories under basePath is skipped rather than mistaken for a component.
+func TestDiscoverComponentManifests_SkipsNonDirectoryEntries(t *testing.T) {
+	base := t.TempDir()
+	vpcDir := filepath.Join(base, "vpc")
+	require.NoError(t, os.MkdirAll(vpcDir, 0o755))
+	writeFile(t, vpcDir, "component.yaml", componentManifestFixture)
+	writeFile(t, base, "README.md", "not a component directory")
+
+	sources, err := DiscoverComponentManifests(base, "terraform")
+
+	require.NoError(t, err)
+	require.Len(t, sources, 1, "the stray README.md file must be skipped, not treated as a component directory")
+	assert.Equal(t, "vpc", sources[0].Source.Component)
+}
+
 func TestDiscoverAllComponentManifests_ScansConfiguredBasePath(t *testing.T) {
 	base := t.TempDir()
 	vpcDir := filepath.Join(base, "vpc")
@@ -251,4 +385,31 @@ func TestDiscoverAllComponentManifests_ScansConfiguredBasePath(t *testing.T) {
 	all, err = DiscoverAllComponentManifests("terraform", false)
 	require.NoError(t, err)
 	require.Len(t, all, 1, "non-terraform base paths point at empty directories")
+}
+
+// TestDiscoverAllComponentManifests_UnsupportedTypePropagatesError proves an unsupported
+// --type (only reachable with onlyType=true, i.e. a "vendor update --type <type>
+// --component-manifests" run) surfaces GetComponentBasePath's error rather than silently
+// scanning nothing.
+func TestDiscoverAllComponentManifests_UnsupportedTypePropagatesError(t *testing.T) {
+	_, err := DiscoverAllComponentManifests("bogus", true)
+
+	require.Error(t, err)
+}
+
+// TestDiscoverAllComponentManifests_PropagatesDiscoverError proves a malformed component.yaml
+// found while sweeping any configured type fails the whole sweep, matching
+// DiscoverComponentManifests's own fail-fast-on-malformed-manifest behavior.
+func TestDiscoverAllComponentManifests_PropagatesDiscoverError(t *testing.T) {
+	base := t.TempDir()
+	brokenDir := filepath.Join(base, "broken")
+	require.NoError(t, os.MkdirAll(brokenDir, 0o755))
+	writeFile(t, brokenDir, "component.yaml", "spec: [")
+
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", base)
+
+	_, err := DiscoverAllComponentManifests("terraform", true)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrParseVendorFile)
 }

@@ -190,6 +190,45 @@ func TestUpdate_HardFailureReturnsReportAndError(t *testing.T) {
 	assert.Contains(t, report.Results[0].Reason, "list failed")
 }
 
+// TestUpdate_LoadVendorFileSourcesError proves a malformed vendor file fails Update immediately
+// (nil report, error returned), before any per-source checking is attempted -- distinct from
+// TestUpdate_HardFailureReturnsReportAndError's per-source failure (a valid file, a source that
+// fails to check), which still returns a partial report.
+func TestUpdate_LoadVendorFileSourcesError(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "vendor.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("spec: ["), 0o644))
+
+	report, err := Update(nil, &UpdateParams{VendorFiles: []string{file}, Lister: newFakeLister()})
+
+	require.Error(t, err)
+	assert.Nil(t, report)
+}
+
+// TestUpdate_ExtraSources_HardFailureReturnsReportAndError is
+// TestUpdate_HardFailureReturnsReportAndError's counterpart for processExtraUpdateSources: a
+// component.yaml-only source (no vendor.yaml) whose version check fails must still be reported
+// (StatusFailed, with the failure's reason), not silently dropped.
+func TestUpdate_ExtraSources_HardFailureReturnsReportAndError(t *testing.T) {
+	componentFile := writeComponentManifestUpdateFixture(t)
+	cfg, err := ReadComponentManifest(componentFile)
+	require.NoError(t, err)
+	extra := &ResolvedSource{
+		Source:                ComponentManifestSource(cfg, "vpc", "terraform"),
+		File:                  componentFile,
+		FromComponentManifest: true,
+	}
+	listErr := errors.New("list failed")
+
+	report, err := Update(nil, &UpdateParams{ExtraSources: []*ResolvedSource{extra}, Lister: &fakeLister{err: listErr}})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, listErr)
+	require.NotNil(t, report)
+	require.Len(t, report.Results, 1)
+	assert.Equal(t, StatusFailed, report.Results[0].Status)
+}
+
 // TestUpdate_DefaultVersionSetterUnchanged is a regression test: a nil VersionSetter must behave
 // exactly as before the VersionSetter field was introduced.
 func TestUpdate_DefaultVersionSetterUnchanged(t *testing.T) {
@@ -204,6 +243,28 @@ func TestUpdate_DefaultVersionSetterUnchanged(t *testing.T) {
 	v, err := ComponentVersionPath(file, "vpc")
 	require.NoError(t, err)
 	assert.Equal(t, "spec.sources[0].version", v)
+}
+
+// TestUpdate_VersionSetterError proves a VersionSetter failure (persisting the resolved version
+// back to disk) marks the result StatusFailed with the setter's error, rather than reporting
+// StatusUpdated for a version that was never actually written.
+func TestUpdate_VersionSetterError(t *testing.T) {
+	file := writeUpdateFixture(t)
+	setterErr := errors.New("write failed")
+
+	report, err := Update(nil, &UpdateParams{
+		VendorFiles:   []string{file},
+		Component:     "vpc",
+		Lister:        newFakeLister(),
+		VersionSetter: func(string, string, string) error { return setterErr },
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, setterErr)
+	vpc := resultFor(report, "vpc")
+	require.NotNil(t, vpc)
+	assert.Equal(t, StatusFailed, vpc.Status)
+	assert.Contains(t, vpc.Reason, "write failed")
 }
 
 func writeComponentManifestUpdateFixture(t *testing.T) string {

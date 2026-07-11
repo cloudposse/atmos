@@ -464,7 +464,17 @@ func (m *modelVendor) logNonNTYFinalStatus(pkg pkgVendor, failed bool) {
 	switch {
 	case m.failedPkg > 0:
 		failedComponents := m.failedComponentCount()
-		ui.Errorf("Vendored components (success: %d, failed: %d)", componentTotal-failedComponents, failedComponents)
+		switch {
+		case failedComponents > 0 && m.failedMixins > 0:
+			ui.Errorf("Vendored components (success: %d, failed: %d, mixins failed: %d)", componentTotal-failedComponents, failedComponents, m.failedMixins)
+		case failedComponents > 0:
+			ui.Errorf("Vendored components (success: %d, failed: %d)", componentTotal-failedComponents, failedComponents)
+		default:
+			// Only mixins failed: components-only counts stay honest ("failed: 0" would
+			// otherwise be indistinguishable from full success), but the failure itself must
+			// still be surfaced -- vendorFailureError still fails the command for this case.
+			ui.Errorf("Vendored components (success: %d, mixins failed: %d)", componentTotal, m.failedMixins)
+		}
 	case m.mixinCount() > 0:
 		ui.Successf("Vendored components (success: %d, mixins: %d)", componentTotal, m.mixinCount())
 	default:
@@ -484,7 +494,17 @@ func (m *modelVendor) View() string {
 		componentTotal := m.componentCount()
 		if m.failedPkg > 0 {
 			failedComponents := m.failedComponentCount()
-			return doneStyle.Render(fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n", componentTotal-failedComponents, failedComponents))
+			switch {
+			case failedComponents > 0 && m.failedMixins > 0:
+				return doneStyle.Render(fmt.Sprintf("Vendored %d components. Failed to vendor %d components and %d mixins.\n", componentTotal-failedComponents, failedComponents, m.failedMixins))
+			case failedComponents > 0:
+				return doneStyle.Render(fmt.Sprintf("Vendored %d components. Failed to vendor %d components.\n", componentTotal-failedComponents, failedComponents))
+			default:
+				// Only mixins failed: the components-only count stays honest, but the failure
+				// must still be surfaced rather than reading as "Failed to vendor 0 components."
+				// (indistinguishable from full success).
+				return doneStyle.Render(fmt.Sprintf("Vendored %d components. Failed to vendor %d mixins.\n", componentTotal, m.failedMixins))
+			}
 		}
 		if mixins := m.mixinCount(); mixins > 0 {
 			return doneStyle.Render(fmt.Sprintf("Vendored %d components (%d mixins).\n", componentTotal, mixins))

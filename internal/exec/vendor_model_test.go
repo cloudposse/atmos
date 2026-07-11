@@ -236,7 +236,7 @@ func TestModelVendor_View_DoneState_CountsExcludeMixins(t *testing.T) {
 		assert.NotContains(t, view, "Vendored 2 components")
 	})
 
-	t.Run("failure", func(t *testing.T) {
+	t.Run("mixin-only failure", func(t *testing.T) {
 		m := newVendorModelForView([]pkgVendor{
 			{name: "vpc", componentPackage: &pkgComponentVendor{name: "vpc"}},
 			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
@@ -247,9 +247,26 @@ func TestModelVendor_View_DoneState_CountsExcludeMixins(t *testing.T) {
 
 		view := atmosansi.Strip(m.View())
 
-		// The component succeeded; only the mixin failed, so the component-only counts must read
-		// "1 vendored, 0 failed" rather than folding the mixin failure into "components".
-		assert.Contains(t, view, "Vendored 1 components. Failed to vendor 0 components.")
+		// The component succeeded; only the mixin failed. The component-only count must still
+		// read "1 vendored, 0 failed" (mixin failures don't fold into "components"), but the
+		// mixin failure itself must be surfaced -- not silently dropped, which would read as a
+		// clean run despite `vendorFailureError` failing the command.
+		assert.Contains(t, view, "Vendored 1 components. Failed to vendor 1 mixins.")
+		assert.NotContains(t, view, "Failed to vendor 0 components.\n")
+	})
+
+	t.Run("component and mixin both failed", func(t *testing.T) {
+		m := newVendorModelForView([]pkgVendor{
+			{name: "vpc", componentPackage: &pkgComponentVendor{name: "vpc"}},
+			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
+		}, 80)
+		m.done = true
+		m.failedPkg = 2
+		m.failedMixins = 1
+
+		view := atmosansi.Strip(m.View())
+
+		assert.Contains(t, view, "Vendored 0 components. Failed to vendor 1 components and 1 mixins.")
 	})
 }
 
@@ -272,6 +289,31 @@ func TestModelVendor_LogNonTTYFinalStatus_CountsExcludeMixins(t *testing.T) {
 	output := atmosansi.Strip(stderr.String())
 	assert.Contains(t, output, "Vendored components (success: 1, mixins: 1)")
 	assert.NotContains(t, output, "success: 2")
+}
+
+// TestModelVendor_LogNonTTYFinalStatus_MixinOnlyFailureSurfaced is a regression test: a mixin-only
+// failure must not render as "failed: 0" (indistinguishable from full success) even though the
+// component-only success count stays honest, mirroring
+// TestModelVendor_View_DoneState_CountsExcludeMixins's "mixin-only failure" case for the TTY path.
+func TestModelVendor_LogNonTTYFinalStatus_MixinOnlyFailureSurfaced(t *testing.T) {
+	stderr, cleanup := setupVendorModelTestUI(t)
+	defer cleanup()
+
+	m := &modelVendor{
+		packages: []pkgVendor{
+			{name: "vpc", version: "1.0.0", componentPackage: &pkgComponentVendor{name: "vpc"}},
+			{name: "mixin https://example.com/a.tf", componentPackage: &pkgComponentVendor{name: "mixin https://example.com/a.tf", IsMixins: true}},
+		},
+		isTTY:        false,
+		failedPkg:    1,
+		failedMixins: 1,
+	}
+
+	m.logNonNTYFinalStatus(m.packages[0], false)
+
+	output := atmosansi.Strip(stderr.String())
+	assert.Contains(t, output, "Vendored components (success: 1, mixins failed: 1)")
+	assert.NotContains(t, output, "failed: 0")
 }
 
 // TestModelVendor_View_LiveLine_NeverWraps is a regression test for the mixin line-stacking bug: a

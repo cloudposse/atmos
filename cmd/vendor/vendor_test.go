@@ -552,6 +552,23 @@ func TestVendorUpdateCommand_AutoSweepsComponentManifestsWithoutVendorYaml(t *te
 	require.NoError(t, vendorUpdateCmd.RunE(vendorUpdateCmd, nil))
 }
 
+// TestVendorUpdateCommand_ExplicitTypeFlagThreadsThrough is a regression test for
+// runRepoWideUpdate's typeChanged branch: passing --type explicitly (even set to its own default
+// value, "terraform") must still thread updateType through to vendoring.Update's Type param,
+// distinguishing "the user asked for this type" from "no --type was given at all" (typeChanged
+// stays false and Type is left blank, letting Update infer per-source types on its own).
+func TestVendorUpdateCommand_ExplicitTypeFlagThreadsThrough(t *testing.T) {
+	resetCommandFlags(t, vendorUpdateCmd)
+	chdirTest(t, t.TempDir())
+	writeComponentManifestFixture(t, "oci://ghcr.io/cloudposse/mock:{{.Version}}")
+
+	require.NoError(t, vendorUpdateCmd.Flags().Set("type", "terraform"))
+	require.NoError(t, vendorUpdateCmd.Flags().Set("check", "true"))
+	require.True(t, vendorUpdateCmd.Flags().Changed("type"))
+
+	require.NoError(t, vendorUpdateCmd.RunE(vendorUpdateCmd, nil))
+}
+
 // TestVendorUpdateCommand_ComponentManifestsFlag_SweepsWithoutVendorYaml proves --component-manifests
 // still opts a component.yaml-only repo (no vendor.yaml at all) into a valid, successful repo-wide
 // sweep, matching the automatic-fallback behavior when the flag is omitted.
@@ -727,6 +744,41 @@ func TestRunVendorPull_ClearsStackAndTagsBetweenIterations(t *testing.T) {
 	assert.Equal(t, "", cmd.Flags().Lookup("tags").Value.String())
 }
 
+// TestRunVendorPull_SingleComponent_ClearsStackAndTags is
+// TestRunVendorPull_ClearsStackAndTagsBetweenIterations's counterpart for the single-component
+// "--component X --pull" path (p.component != ""): a regression test proving "vendor update
+// --component vpc --stack bar --tags foo --pull" doesn't fail validateVendorFlags'
+// component+stack/component+tags mutual-exclusivity checks, since --stack/--tags are vendor
+// update's own flags of the same name, shared with the pull path on the same cmd.
+func TestRunVendorPull_SingleComponent_ClearsStackAndTags(t *testing.T) {
+	repoRoot := t.TempDir()
+	chdirTest(t, repoRoot)
+
+	base := filepath.Join(repoRoot, "components", "terraform")
+	require.NoError(t, os.MkdirAll(base, 0o755))
+
+	sourceDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("# updated\n"), 0o644))
+	componentDir := writeLocalComponentManifestFixture(t, base, "vpc", sourceDir)
+
+	// Simulate "vendor update --component vpc --tags foo --stack bar --pull": all three flags are
+	// Changed on the shared cmd before runVendorPull's single-component path delegates to
+	// ExecuteVendorPullCmd.
+	cmd := newVendorPullTestCmd()
+	require.NoError(t, cmd.Flags().Set("component", "vpc"))
+	require.NoError(t, cmd.Flags().Set("tags", "foo"))
+	require.NoError(t, cmd.Flags().Set("stack", "bar"))
+	require.True(t, cmd.Flags().Changed("stack"))
+
+	err := runVendorPull(cmd, nil, nil, vendorPullParams{component: "vpc", componentType: "terraform"})
+	require.NoError(t, err, "stale --tags/--stack from vendor update must not fail the single-component pull")
+
+	assert.FileExists(t, filepath.Join(componentDir, "main.tf"))
+	assert.False(t, cmd.Flags().Changed("stack"),
+		"'stack' must end up unchanged so a later flags.Changed(\"stack\") check doesn't force stack processing")
+	assert.Equal(t, "", cmd.Flags().Lookup("tags").Value.String())
+}
+
 // TestRunVendorPull_BatchesMultipleComponentManifestUpdates is a regression test for the reported
 // UX bug: "atmos vendor update --pull" against a component.yaml-only repo rendered one separate
 // "0/1" progress-bar-and-completion block per updated component instead of a single unified
@@ -820,6 +872,41 @@ func TestRunVendorPull_MixedManifestAndVendorYamlUpdates(t *testing.T) {
 
 	assert.FileExists(t, filepath.Join(batchedDir, "main.tf"), "the batched component must have been pulled")
 	assert.FileExists(t, filepath.Join(fallbackDir, "main.tf"), "the fallback component must have been pulled")
+}
+
+// TestResetUnchangedFlag covers resetUnchangedFlag's three branches directly: a flag that doesn't
+// exist on cmd (a no-op, not an error), a normal flag whose value and Changed bit both get cleared,
+// and a flag whose underlying Value.Set("") fails (surfaced, not swallowed).
+func TestResetUnchangedFlag(t *testing.T) {
+	t.Run("flag not found is a no-op", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "x"}
+
+		err := resetUnchangedFlag(cmd, "does-not-exist")
+
+		require.NoError(t, err)
+	})
+
+	t.Run("clears value and Changed", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "x"}
+		cmd.Flags().String("stack", "", "")
+		require.NoError(t, cmd.Flags().Set("stack", "bar"))
+		require.True(t, cmd.Flags().Changed("stack"))
+
+		err := resetUnchangedFlag(cmd, "stack")
+
+		require.NoError(t, err)
+		assert.Equal(t, "", cmd.Flags().Lookup("stack").Value.String())
+		assert.False(t, cmd.Flags().Changed("stack"))
+	})
+
+	t.Run("propagates the underlying flag's Set error", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "x"}
+		cmd.Flags().Bool("some-bool", false, "") // boolValue.Set("") fails to parse as a bool.
+
+		err := resetUnchangedFlag(cmd, "some-bool")
+
+		require.Error(t, err)
+	})
 }
 
 // TestVendorUpdateCmd_ArchivedFlagRegistered proves the new --archived bool flag (added alongside
@@ -975,6 +1062,19 @@ func TestBuildUpdateReportRow_StatusDotColors(t *testing.T) {
 			assert.NotContains(t, row.status, theme.IconWarning, "old warning icon must not appear")
 		})
 	}
+}
+
+// TestBuildUpdateReportRow_UnknownStatusIsOmitted proves an unrecognized UpdateStatus value (not
+// one of the four known constants) is omitted from the report rather than rendered as a blank or
+// mishandled row.
+func TestBuildUpdateReportRow_UnknownStatusIsOmitted(t *testing.T) {
+	styles := theme.GetCurrentStyles()
+	result := vendoring.SourceUpdateResult{Component: "vpc", Status: vendoring.UpdateStatus("bogus")}
+
+	row, ok := buildUpdateReportRow(&result, false, false, styles)
+
+	assert.False(t, ok)
+	assert.Equal(t, updateReportRow{}, row)
 }
 
 // TestBuildUpdateReportRows_SplitsCurrentAndLatestColumns proves CURRENT and LATEST are separate

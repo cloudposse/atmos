@@ -344,6 +344,32 @@ func TestMaskedWriter_TermFileCapability(t *testing.T) {
 		}
 	})
 
+	t.Run("Close() delegates to a real (non-stdout/stderr) underlying Closer", func(t *testing.T) {
+		f, err := os.CreateTemp(t.TempDir(), "masked-writer-close-*")
+		if err != nil {
+			t.Fatalf("os.CreateTemp() error = %v", err)
+		}
+
+		mw := &maskedWriter{underlying: f, masker: masker}
+		if err := mw.Close(); err != nil {
+			t.Fatalf("Close() = %v, want nil", err)
+		}
+
+		// The underlying file must have actually been closed this time (unlike os.Stdout/Stderr).
+		if _, err := f.Write([]byte("x")); err == nil {
+			t.Error("expected the underlying file to be closed after maskedWriter.Close()")
+		}
+	})
+
+	t.Run("Read() returns EOF for an underlying writer with no Read method at all", func(t *testing.T) {
+		mw := &maskedWriter{underlying: &errorWriter{}, masker: masker}
+
+		n, err := mw.Read(make([]byte, 10))
+		if n != 0 || !errors.Is(err, stdio.EOF) {
+			t.Errorf("Read() = (%d, %v), want (0, io.EOF)", n, err)
+		}
+	})
+
 	t.Run("Read() delegates to an underlying reader when present", func(t *testing.T) {
 		src := bytes.NewBufferString("hello")
 		mw := &maskedWriter{underlying: readWriteStub{Reader: src}, masker: masker}
