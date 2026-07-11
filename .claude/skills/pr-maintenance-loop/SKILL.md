@@ -56,11 +56,29 @@ Hard prohibitions for every cycle:
 - Never touch `.github/workflows/**`, `Makefile`, `go.mod`, `go.sum`, or anything secret-shaped.
 - Never `gh pr merge` or `gh pr close`. Merge is human-gated, full stop.
 - Never bypass commit signing (`--no-gpg-sign`, `-c commit.gpgsign=false`).
+- Never `git add -A` / `git add .` / `git add --all`. Add only the specific files touched.
+- Never run a GraphQL mutation (only read-only `gh api graphql` queries) or a non-GET
+  (`PATCH`/`POST`/`PUT`/`DELETE`) call against the `pulls` REST endpoint — merging, closing, or
+  editing the PR through the raw API is the same prohibition as `gh pr merge`/`gh pr close` above,
+  just via a different command.
 
 The real enforcement boundary is the `.claude/settings.json` permissions allowlist committed at
 the repo root, not model discipline alone. Anything outside that allowlist stalls on an
 unanswerable approval prompt in this unattended context instead of silently running — fail-closed
-by construction.
+for anything that doesn't match an allow rule.
+
+That guarantee only holds where the allow/deny rules are precise. Several of the allow rules here
+are necessarily broad prefix matches (`git add:*`, `git commit:*`, `git push origin HEAD:*`,
+`gh api graphql:*`, `gh api repos/cloudposse/atmos/pulls/*`) because the loop's legitimate commands
+vary in their trailing arguments. Broad prefixes can also match a prohibited variant (`git add -A`,
+`git commit --no-gpg-sign`, a GraphQL mutation, a non-GET call against the `pulls` endpoint) unless
+an explicit `deny` entry blocks that specific variant first — `deny` always wins over `allow`, but
+only for patterns someone remembered to add. Treat the prohibitions above as the source of truth
+and the deny list as an incomplete, best-effort mirror of them: pattern matching on the literal
+command string can't catch every rephrasing (flag reordering, `-XPATCH` vs `-X PATCH`, a mutation
+loaded from a file instead of inlined). When you add a new hard prohibition to this list, add the
+matching `deny` pattern(s) in `.claude/settings.json` in the same change, and don't assume the
+allowlist alone makes a prohibition self-enforcing.
 
 ## Hourly prompt template
 
