@@ -1,0 +1,90 @@
+---
+title: MCP
+sidebar_position: 1
+sidebar_label: MCP
+description: Connect Atmos to external MCP servers and install them into your AI coding assistant
+id: mcp
+slug: /mcp
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Atmos can connect to external [Model Context Protocol](https://modelcontextprotocol.io) (MCP) servers -- AWS documentation, pricing, security tooling, or your own custom servers -- and install them straight into the AI coding assistant you already use: Claude Code, Cursor, VS Code, Codex, or Gemini.
+</Intro>
+
+<Experimental />
+
+This page covers Atmos as an **MCP client** -- connecting *out* to external MCP servers and installing them into your editor. Atmos can also run as an **MCP server** itself, exposing its own tools (`describe`, `list`, `validate`, and more) to AI assistants -- see [MCP Server Integration](/ai/mcp-server) for that direction.
+
+## Quick Start
+
+### 1. Configure servers in atmos.yaml
+
+<File title="atmos.yaml">
+```yaml
+mcp:
+  servers:
+    aws-docs:
+      command: uvx
+      args: ["awslabs.aws-documentation-mcp-server@latest"]
+      description: "AWS Documentation — search and fetch AWS docs"
+```
+</File>
+
+### 2. List, install, and confirm
+
+<Terminal>
+```shell
+# See what's configured
+atmos mcp list
+
+# Install into detected AI clients (Claude Code, Cursor, VS Code, Codex, Gemini)
+atmos mcp install
+
+# Confirm it's connected
+atmos mcp status
+```
+</Terminal>
+
+That's it — the server is now available inside your AI client alongside its built-in tools.
+
+## Setting Up
+
+### Configuring servers
+
+Servers are declared under `mcp.servers` in `atmos.yaml`, as local `stdio` processes or remote `http` endpoints. Servers with an `identity` are automatically wrapped with `atmos auth exec` so credentials are injected when the client starts them. See [MCP Configuration](/cli/configuration/mcp) for the full settings reference.
+
+### Installing into your client
+
+`atmos mcp install` writes directly into each client's own config format and location:
+
+- **Detected clients** — with no `--client` flag, Atmos detects clients already configured in the project and installs into those.
+- **Explicit clients** — pass `--client` (repeatable) to target specific clients, or `--all-clients` to install into every supported client.
+- **Scope** — `--scope project` (default) writes into the current project; `--scope user` (or the `--global` alias) writes into the client's user-level config so it's available across all your projects.
+- **Preview first** — `--dry-run` shows what would be written without touching any files.
+
+See the [`atmos mcp install`](/cli/commands/mcp/install) command reference for the full flag list and more examples.
+
+Prefer a single portable `.mcp.json` instead of per-client installs? Use [`atmos mcp export`](/cli/commands/mcp/export).
+
+## Managing Servers
+
+<dl>
+  <dt>[`atmos mcp list`](/cli/commands/mcp/list)</dt>
+  <dd>List configured servers and their status.</dd>
+  <dt>[`atmos mcp install`](/cli/commands/mcp/install)</dt>
+  <dd>Install configured servers into your AI client's config.</dd>
+  <dt>[`atmos mcp export`](/cli/commands/mcp/export)</dt>
+  <dd>Export a portable `.mcp.json` file.</dd>
+  <dt>[`atmos mcp status`](/cli/commands/mcp/status)</dt>
+  <dd>Show live connection status for all configured servers.</dd>
+  <dt>[`atmos mcp test`](/cli/commands/mcp/test)</dt>
+  <dd>Test connectivity to a specific server.</dd>
+  <dt>[`atmos mcp restart`](/cli/commands/mcp/restart)</dt>
+  <dd>Validate that a server can stop and restart cleanly.</dd>
+  <dt>[`atmos mcp tools`](/cli/commands/mcp/tools)</dt>
+  <dd>List the tools exposed by a server.</dd>
+</dl>
