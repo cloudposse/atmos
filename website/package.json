@@ -102,7 +102,7 @@
     "overrides": {
       "@babel/core@^7": "^7.29.6",
       "@babel/plugin-transform-modules-systemjs@^7": "^7.29.4",
-      "ajv@^6": "^6.14.0",
+      "ajv@^6": "^8.0.0",
       "brace-expansion@^1": "^1.1.13",
       "brace-expansion@^2": "^2.0.3",
       "dompurify@^3": "^3.4.11",
