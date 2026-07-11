@@ -11,6 +11,8 @@ import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import Experimental from '@site/src/components/Experimental'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <Intro>
 Atmos works with your existing AI tools and brings its own native, built-in capabilities.
@@ -249,12 +251,12 @@ Configure skills in `atmos.yaml`.
 
 ## MCP
 
-Atmos supports the [Model Context Protocol](https://modelcontextprotocol.io) (MCP) in both directions:
+Atmos supports the [Model Context Protocol](https://modelcontextprotocol.io) (MCP) in both directions. See the **[full MCP documentation](/mcp)** for complete setup, configuration, and command reference.
 
-**Atmos as MCP Server** — Exposes Atmos AI tools to external clients (Claude Desktop, Claude Code,
-VS Code, Cursor, Gemini CLI). Use Atmos tools inside your preferred AI assistant.
+<Tabs>
+<TabItem value="client" label="As a Client" default>
 
-**External MCP Servers** — Connect to AWS, GCP, Azure, and custom MCP servers. Their tools become available
+Connect to AWS, GCP, Azure, and custom MCP servers. Their tools become available
 in `atmos ai chat`, `atmos ai ask`, and `atmos ai exec` alongside native Atmos tools.
 
 **Smart Routing** — When multiple MCP servers are configured with API providers, Atmos automatically selects
@@ -323,12 +325,33 @@ mcp:
 ```
 </File>
 
-<ActionCard title="MCP Configuration">
-    Configure the Atmos MCP server and external MCP server connections.
+<ActionCard title="MCP as a Client">
+    Full setup, install/export, and command reference for connecting Atmos to external MCP servers.
     <div>
-        <PrimaryCTA to="/cli/configuration/mcp">Configuration Reference</PrimaryCTA>
+        <PrimaryCTA to="/mcp#as-a-client">MCP Client Documentation</PrimaryCTA>
     </div>
 </ActionCard>
+
+</TabItem>
+<TabItem value="server" label="As a Server">
+
+Exposes Atmos AI tools to external clients (Claude Desktop, Claude Code, VS Code, Cursor, Gemini CLI).
+Use Atmos tools inside your preferred AI assistant.
+
+```bash
+# Enable the Atmos MCP server in atmos.yaml
+atmos config set --type=bool mcp.enabled true
+```
+
+<ActionCard title="MCP as a Server">
+    Full setup and per-client instructions (Claude Desktop, Claude Code, Cursor, VS Code, and more).
+    <div>
+        <PrimaryCTA to="/mcp#as-a-server">MCP Server Documentation</PrimaryCTA>
+    </div>
+</ActionCard>
+
+</TabItem>
+</Tabs>
 
 <ActionCard title="Try the MCP Example">
     Explore a complete example with pre-configured AWS MCP servers for cost analysis, security, IAM, and documentation.

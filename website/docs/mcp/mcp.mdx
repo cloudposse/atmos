@@ -2,7 +2,7 @@
 title: MCP
 sidebar_position: 1
 sidebar_label: MCP
-description: Connect Atmos to external MCP servers and install them into your AI coding assistant
+description: Atmos and the Model Context Protocol -- as a client connecting to external MCP servers, and as a server exposing Atmos's own tools
 id: mcp
 slug: /mcp
 ---
@@ -12,16 +12,23 @@ import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-Atmos can connect to external [Model Context Protocol](https://modelcontextprotocol.io) (MCP) servers -- AWS documentation, pricing, security tooling, or your own custom servers -- and install them straight into the AI coding assistant you already use: Claude Code, Cursor, VS Code, Codex, or Gemini.
+Atmos supports the [Model Context Protocol](https://modelcontextprotocol.io) (MCP) in both directions: connect Atmos *out* to external MCP servers (AWS, GCP, custom tooling), or expose Atmos's *own* tools to your AI assistant.
 </Intro>
 
 <Experimental />
 
-This page covers Atmos as an **MCP client** -- connecting *out* to external MCP servers and installing them into your editor. Atmos can also run as an **MCP server** itself, exposing its own tools (`describe`, `list`, `validate`, and more) to AI assistants -- see [MCP Server Integration](/ai/mcp-server) for that direction.
+| Direction | What it does | Config key |
+|---|---|---|
+| [**As a Client**](#as-a-client) | Connects Atmos to external MCP servers and installs them into your AI coding assistant | `mcp.servers` |
+| [**As a Server**](#as-a-server) | Exposes Atmos's own tools (`describe`, `list`, `validate`, and more) to AI assistants | `mcp.enabled` |
 
-## Quick Start
+## As a Client
 
-### 1. Configure servers in atmos.yaml
+Connect Atmos to external MCP servers -- AWS documentation, pricing, security tooling, or your own custom servers -- and install them straight into the AI coding assistant you already use: Claude Code, Cursor, VS Code, Codex, or Gemini.
+
+### Quick Start
+
+#### 1. Configure servers in atmos.yaml
 
 <File title="atmos.yaml">
 ```yaml
@@ -34,7 +41,7 @@ mcp:
 ```
 </File>
 
-### 2. List, install, and confirm
+#### 2. List, install, and confirm
 
 <Terminal>
 ```shell
@@ -51,13 +58,13 @@ atmos mcp status
 
 That's it — the server is now available inside your AI client alongside its built-in tools.
 
-## Setting Up
+### Setting Up
 
-### Configuring servers
+#### Configuring servers
 
 Servers are declared under `mcp.servers` in `atmos.yaml`, as local `stdio` processes or remote `http` endpoints. Servers with an `identity` are automatically wrapped with `atmos auth exec` so credentials are injected when the client starts them. See [MCP Configuration](/cli/configuration/mcp) for the full settings reference.
 
-### Installing into your client
+#### Installing into your client
 
 `atmos mcp install` writes directly into each client's own config format and location:
 
@@ -70,7 +77,7 @@ See the [`atmos mcp install`](/cli/commands/mcp/install) command reference for t
 
 Prefer a single portable `.mcp.json` instead of per-client installs? Use [`atmos mcp export`](/cli/commands/mcp/export).
 
-## Managing Servers
+### Managing Servers
 
 <dl>
   <dt>[`atmos mcp list`](/cli/commands/mcp/list)</dt>
@@ -88,3 +95,25 @@ Prefer a single portable `.mcp.json` instead of per-client installs? Use [`atmos
   <dt>[`atmos mcp tools`](/cli/commands/mcp/tools)</dt>
   <dd>List the tools exposed by a server.</dd>
 </dl>
+
+## As a Server
+
+Atmos can also run as an MCP server itself, so Claude Desktop, Claude Code, Cursor, VS Code, and other MCP-capable clients can call Atmos's own tools (`describe`, `list`, `validate`, and more) directly, without leaving your AI assistant.
+
+### Quick Start
+
+<Terminal>
+```shell
+# Enable the Atmos MCP server in atmos.yaml
+atmos config set --type=bool mcp.enabled true
+```
+</Terminal>
+
+Then add Atmos to your AI client's MCP config. Each client has its own config file and format — see [MCP Server Integration](/ai/mcp-server) for exact copy-paste steps for Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Cline, Continue, Codex, Gemini CLI, and Grok CLI, plus transport modes and security considerations for remote (HTTP) access.
+
+## As a Client vs. As a Server
+
+Not sure which direction you need? Both can be enabled at once and don't conflict:
+
+- **As a Client** — you want Atmos to *use* other tools (AWS docs, pricing, security scanners) from inside `atmos ai chat`/`ask`/`exec`, or to hand those same external servers to your AI coding assistant.
+- **As a Server** — you want your AI coding assistant to *use* Atmos's own tools (describe stacks, list components, validate config) without shelling out to the `atmos` CLI manually.
