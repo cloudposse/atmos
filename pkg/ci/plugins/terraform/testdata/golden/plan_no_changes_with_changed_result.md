@@ -2,9 +2,9 @@
 ## No Changes for `foobar` in `plat-ue2-sandbox`
 
 <a href="https://atmos.tools/ci"><picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg">
-  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" width="220px" align="right">
+  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg?v=">
+  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=">
+  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v=" alt="Atmos CI" height="32" align="right">
 </picture></a>
 
 [![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#result-plat-ue2-sandbox-foobar)

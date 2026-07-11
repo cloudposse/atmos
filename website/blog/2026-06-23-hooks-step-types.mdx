@@ -6,10 +6,18 @@ tags: [feature]
 date: 2026-06-23
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Atmos hooks can now run any workflow step type. A new `kind: step` hook bridges the
 component lifecycle (before/after `terraform plan`, `apply`, `deploy`, `init`) to the same
 step registry that powers workflows and custom commands — so a `container`, `toast`, `log`,
 `markdown`, or `http` step you already use elsewhere runs identically as a hook.
+
+Here's a `kind: step` hook wired to a custom command, running end to end:
+
+<CastPlayer src="/casts/examples/hooks-custom-command/hook-config.cast" title="atmos custom command hook" chrome controls scrubber />
+
+[View the full example](/examples/hooks-custom-command)
 
 <!--truncate-->
 

@@ -150,6 +150,21 @@ func setColorProfileInternal(profile termenv.Profile) {
 //	ui.SetColorProfile(termenv.Ascii)
 func SetColorProfile(profile termenv.Profile) {
 	setColorProfileInternal(profile)
+
+	// The global formatter caches theme.GetCurrentStyles() as a snapshot at
+	// InitFormatter() time (see NewFormatter below). theme.InvalidateStyleCache
+	// (called by setColorProfileInternal) regenerates that package-level cache
+	// under a new pointer, but doesn't reach the formatter's already-captured
+	// copy — so ui.Success/Error/Warning/Info (which read the formatter's
+	// cached styles) would otherwise keep rendering with the pre-change
+	// profile even though direct theme.GetCurrentStyles() callers (e.g. step
+	// headers) pick up the change immediately. Refresh it here so every
+	// ui.* output function reflects the new profile right away.
+	formatterMu.Lock()
+	defer formatterMu.Unlock()
+	if globalFormatter != nil {
+		globalFormatter.styles = theme.GetCurrentStyles()
+	}
 }
 
 // GetColorProfile returns the configured termenv color profile.
