@@ -31,6 +31,10 @@ Multiple Claude sessions may be working on the same branch or worktree simultane
 
 **Why this matters:** The user may have multiple Claude sessions working in parallel on different aspects of a feature. Deleting “unknown” files destroys that work.
 
+## Hourly PR Maintenance Loop (RECOMMENDED)
+
+On a branch with an open PR, use the **`pr-maintenance-loop`** skill (`.claude/skills/pr-maintenance-loop/SKILL.md`) to start an hourly `/loop` that rebases against `main` when behind and delegates unresolved CodeRabbit threads to the `coderabbit-review` agent. This loop is session-only — it dies with the process and expires after 7 days — so re-invoke the skill each new session; it is not a one-time setup.
+
 ## Essential Commands
 
 ```bash

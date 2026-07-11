@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git fetch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push origin HEAD:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr update-branch:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(gh api graphql:*)",
+      "Bash(gh api repos/cloudposse/atmos/pulls/*)",
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(date:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr close:*)",
+      "Bash(gh workflow:*)",
+      "Bash(gh secret:*)",
+      "Edit(.github/workflows/**)",
+      "Write(.github/workflows/**)",
+      "Edit(Makefile)",
+      "Write(Makefile)",
+      "Edit(go.mod)",
+      "Write(go.mod)",
+      "Edit(go.sum)",
+      "Write(go.sum)"
+    ]
+  }
+}
