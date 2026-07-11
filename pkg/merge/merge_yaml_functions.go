@@ -2,6 +2,7 @@ package merge
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -89,9 +90,7 @@ func WalkAndDeferYAMLFunctions(dctx *DeferredMergeContext, data map[string]inter
 	result := make(map[string]interface{}, len(data))
 
 	for key, value := range data {
-		currentPath := make([]string, len(basePath)+1)
-		copy(currentPath, basePath)
-		currentPath[len(basePath)] = key
+		currentPath := append(slices.Clone(basePath), key)
 
 		// Check if this value is a YAML function string.
 		if strVal, ok := value.(string); ok && isAtmosYAMLFunction(strVal) {
