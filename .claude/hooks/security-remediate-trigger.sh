@@ -65,9 +65,11 @@ tool_name="$(printf '%s' "$payload" | jq -r '.tool_name // ""' 2>/dev/null)"
 cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // ""' 2>/dev/null)"
 
 # Only real pushes: skip dry-runs, tag-only pushes, and non-push commands.
-printf '%s' "$cmd" | grep -Eq '(^|[;&|]|\s)git\s+push\b' || exit 0
+# Uses POSIX bracket classes ([[:space:]], not \s/\b) so this matches on
+# stock BSD grep (e.g. minimal/busybox environments), not just GNU grep.
+printf '%s' "$cmd" | grep -Eq '(^|[[:space:];&|])git[[:space:]]+push($|[[:space:]])' || exit 0
 printf '%s' "$cmd" | grep -Eq -- '--dry-run' && exit 0
-printf '%s' "$cmd" | grep -Eq -- '--tags(\s|$)' && exit 0
+printf '%s' "$cmd" | grep -Eq -- '--tags($|[[:space:]])' && exit 0
 
 stdout="$(printf '%s' "$payload" | jq -r '.tool_response.stdout // ""' 2>/dev/null)"
 stderr="$(printf '%s' "$payload" | jq -r '.tool_response.stderr // ""' 2>/dev/null)"

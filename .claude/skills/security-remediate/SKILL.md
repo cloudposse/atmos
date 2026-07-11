@@ -37,7 +37,7 @@ Look for `security_events` in the token scopes. If it's missing, run `gh auth re
 
 3. **Filter to high-confidence fixes**, following the precedent set by `0e32451913`:
    - **Dependabot alerts**: only fix if a patched version exists *within* what `.github/dependabot.yml`'s `ignore` rules allow (that file currently ignores all major-version bumps across `gomod`, `github-actions`, and `npm`/website). If the only fix requires a major bump the policy blocks, do not bump it — report it as "blocked by dependabot ignore policy" instead.
-   - **CodeQL alerts**: only fix rule IDs with an established safe pattern in this repo. Currently that's `go/allocation-size-overflow`, fixed by combining `len()` sums into one `make(T, len(a)+len(b))` call rather than two separate allocations. Extend this list cautiously — an unfamiliar rule ID with an ambiguous fix goes in the "not auto-fixable" bucket, not a guessed fix.
+   - **CodeQL alerts**: only fix rule IDs with an established safe pattern in this repo. Currently that's `go/allocation-size-overflow`, fixed by avoiding summed `len()` capacity hints (e.g., replacing `make([]T, len(a)+len(b))` with a pattern that doesn't sum lengths as a capacity hint). Extend this list cautiously — an unfamiliar rule ID with an ambiguous fix goes in the "not auto-fixable" bucket, not a guessed fix.
    - **GitHub Action pins**: bump to the patched SHA/tag referenced by the alert.
    - **npm/pnpm alerts** (in `website/`): bump via `pnpm.overrides` in `website/package.json`, then regenerate `NOTICE`:
      ```bash
