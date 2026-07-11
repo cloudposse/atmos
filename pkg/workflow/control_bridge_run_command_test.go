@@ -45,15 +45,17 @@ func TestPlainControlRunCommand_HonorsDirEnvAndTeesOutput(t *testing.T) {
 	require.NoError(t, err)
 
 	tmpDir := t.TempDir()
-	wantDir, err := filepath.EvalSymlinks(tmpDir)
-	require.NoError(t, err)
 
 	request, liveStdout, _, captureStdout, _ := newFakeControlChildRequest(t, exe, tmpDir, "hello123", false)
 
 	require.NoError(t, plainControlRunCommand(request))
 
 	assert.Contains(t, captureStdout.String(), "marker=hello123")
-	assert.Contains(t, captureStdout.String(), wantDir)
+	// The fake child writes a marker file into its cwd; checking for its
+	// existence (rather than string-matching a printed cwd) avoids false
+	// negatives from Windows reporting os.Getwd() as an 8.3 short path.
+	_, statErr := os.Stat(filepath.Join(tmpDir, controlBridgeFakeChildCwdMarkerFile))
+	assert.NoError(t, statErr, "Dir must be honored: expected marker file in %s", tmpDir)
 	assert.Equal(t, liveStdout.String(), captureStdout.String(), "controlWriter must tee identical output to the live stream and the capture buffer")
 }
 
