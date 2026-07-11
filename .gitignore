@@ -133,6 +133,7 @@ tools/gomodcheck/.gomodcheck
 .claude/plans/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.claude/state/
 
 performance-optimization/
 node_modules

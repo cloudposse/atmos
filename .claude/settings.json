@@ -56,5 +56,18 @@
       "Edit(go.sum)",
       "Write(go.sum)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/security-remediate-trigger.sh"
+          }
+        ]
+      }
+    ]
   }
 }
