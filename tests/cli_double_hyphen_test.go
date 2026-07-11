@@ -56,32 +56,26 @@ func TestDoubleHyphenSeparator(t *testing.T) {
 	tests := []struct {
 		name           string
 		args           []string
-		expectedStack  string
 		shouldSucceed  bool
-		stderrContains string
+		outputContains string
 	}{
 		{
-			name:          "stack before double-hyphen is parsed correctly",
-			args:          []string{"terraform", "plan", "mock", "--stack", "nonprod", "--", "-input=false"},
-			expectedStack: "nonprod",
-			shouldSucceed: false, // May still fail due to missing state, but flag parsing succeeds.
-			// The important thing is the stack should be "nonprod" not corrupted.
-			// Use partial match to handle both "Switched to workspace" and "doesn't exist" messages.
-			stderrContains: "workspace \"nonprod\"",
+			name:           "stack before double-hyphen is parsed correctly",
+			args:           []string{"terraform", "plan", "mock", "--stack", "nonprod", "--", "-input=false"},
+			shouldSucceed:  false, // May still fail in environments without Terraform state.
+			outputContains: `stage           = "nonprod"`,
 		},
 		{
 			name:           "short stack flag before double-hyphen",
 			args:           []string{"terraform", "plan", "mock", "-s", "nonprod", "--", "-lock=false"},
-			expectedStack:  "nonprod",
 			shouldSucceed:  false,
-			stderrContains: "workspace \"nonprod\"",
+			outputContains: `stage           = "nonprod"`,
 		},
 		{
 			name:           "stack=value syntax before double-hyphen",
 			args:           []string{"terraform", "plan", "mock", "--stack=nonprod", "--", "-no-color"},
-			expectedStack:  "nonprod",
 			shouldSucceed:  false,
-			stderrContains: "workspace \"nonprod\"",
+			outputContains: `stage           = "nonprod"`,
 		},
 	}
 
@@ -105,11 +99,11 @@ func TestDoubleHyphenSeparator(t *testing.T) {
 			}
 
 			// The key assertion: stack should be correctly parsed.
-			// We check combined output for the workspace message (case-insensitive).
+			// We check combined output for stack-specific Terraform output.
 			combinedOutput := stdout.String() + stderr.String()
-			if tt.stderrContains != "" {
-				assert.Contains(t, strings.ToLower(combinedOutput), strings.ToLower(tt.stderrContains),
-					"output should mention the expected workspace")
+			if tt.outputContains != "" {
+				assert.Contains(t, strings.ToLower(combinedOutput), strings.ToLower(tt.outputContains),
+					"output should prove the expected stack context")
 			}
 
 			// Ensure stack is NOT corrupted (the bug from issue #1967).
@@ -149,11 +143,8 @@ func TestDoubleHyphenWithConsolidateWarnings(t *testing.T) {
 	combinedOutput := stdout.String() + stderr.String()
 	t.Logf("Output:\n%s", combinedOutput)
 
-	// The key assertion: stack should be "nonprod", not corrupted.
-	// Before the fix, the stack would be "olidate-warnings=false".
-	// Use case-insensitive partial match to handle both "Switched to workspace" and "doesn't exist".
-	assert.Contains(t, strings.ToLower(combinedOutput), strings.ToLower("workspace \"nonprod\""),
-		"stack should be correctly parsed as 'nonprod'")
+	assert.Contains(t, strings.ToLower(combinedOutput), "flag provided but not defined: -consolidate-warnings",
+		"terraform should receive the native flag after --")
 
 	// Verify no stack corruption occurred.
 	assert.NotContains(t, combinedOutput, "olidate-warnings=false",
@@ -190,10 +181,8 @@ func TestDoubleHyphenStackNotOverwritten(t *testing.T) {
 	combinedOutput := stdout.String() + stderr.String()
 	t.Logf("Output:\n%s", combinedOutput)
 
-	// Stack should still be "nonprod", not "wrongstack".
-	// Use case-insensitive partial match to handle both "Switched to workspace" and "doesn't exist".
-	assert.Contains(t, strings.ToLower(combinedOutput), strings.ToLower("workspace \"nonprod\""),
-		"stack should remain 'nonprod' even when -s appears after --")
+	assert.Contains(t, strings.ToLower(combinedOutput), "flag provided but not defined: -s",
+		"terraform should receive -s after -- as a native argument")
 
 	// Verify the -s after -- didn't change the stack.
 	assert.NotContains(t, strings.ToLower(combinedOutput), "switched to workspace \"wrongstack\"",

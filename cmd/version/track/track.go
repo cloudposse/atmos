@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // atmosConfig is set by SetAtmosConfig before command execution.
@@ -116,16 +117,34 @@ func trackFromArgs(cmd *cobra.Command, args []string) string {
 
 // writeFormatted writes v, the full-fidelity result struct, to the data
 // channel in the requested --format=yaml or --format=json (empty defaults to
-// yaml). Verbs with a curated table view (update/lock/status/diff) check
+// yaml), using the same canonically-indented, syntax-highlighted rendering as
+// the rest of the CLI (pkg/utils.GetHighlightedYAML/GetHighlightedJSON, which
+// self-detect TTY/ForceColor and degrade to plain output otherwise). Verbs
+// with a curated table view (update/lock/status/diff) check
 // isStructuredFormat first and use writeRows instead for the table default;
-// verbs without one (show/get/add/set/remove) call this directly.
+// verbs without one (show/get/add/set/remove/apply/verify) call this
+// directly.
 func writeFormatted(cmd *cobra.Command, v any) error {
 	formatStr, _ := cmd.Flags().GetString(formatFlagName)
 	switch strings.ToLower(formatStr) {
 	case "", "yaml":
-		return data.WriteYAML(v)
+		if atmosConfig == nil {
+			return data.WriteYAML(v)
+		}
+		y, err := u.GetHighlightedYAML(atmosConfig, v)
+		if err != nil {
+			return err
+		}
+		return data.Write(y)
 	case "json":
-		return data.WriteJSON(v)
+		if atmosConfig == nil {
+			return data.WriteJSON(v)
+		}
+		j, err := u.GetHighlightedJSON(atmosConfig, v)
+		if err != nil {
+			return err
+		}
+		return data.Write(j + "\n")
 	default:
 		return fmt.Errorf("%w: %q", ErrUnsupportedFormat, formatStr)
 	}

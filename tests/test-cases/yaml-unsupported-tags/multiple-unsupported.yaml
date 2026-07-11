@@ -4,6 +4,6 @@ vars:
   custom_value: !custom "some-value"
   unknown_func: !unknown "another-value"
   bad_tag: !bad "bad-value"
-  
+
   # Valid tag for comparison
   env_var: !env HOME

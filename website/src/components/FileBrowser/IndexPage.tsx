@@ -5,8 +5,10 @@ import React, { useState } from 'react';
 import Layout from '@theme/Layout';
 import Link from '@docusaurus/Link';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFolder } from '@fortawesome/free-solid-svg-icons';
+import CastPlayer from '@site/src/components/CastPlayer';
 import type { ExamplesTree, FileBrowserOptions } from './types';
 import styles from './styles.module.css';
 
@@ -35,22 +37,52 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
     ? examples.filter((ex) => ex.tags.includes(activeTag))
     : examples;
 
-  // Render a single example card. Featured cards use the friendly title; the full grid keeps
-  // the directory name so it stays scannable alongside the URL path.
+  // Group the "All" view into visible sections by each example's primary
+  // (first) tag, in the site's tag order; anything untagged lands in "More".
+  const sections = [
+    ...tags.map((tag) => ({
+      tag,
+      examples: examples.filter((ex) => (ex.tags[0] ?? 'More') === tag),
+    })),
+    { tag: 'More', examples: examples.filter((ex) => ex.tags.length === 0) },
+  ].filter((section) => section.examples.length > 0);
+
+  // Render a single example card. All cards use the friendly English title
+  // (README front matter `title:`), falling back to the directory name.
   const renderCard = (example: ExamplesTree['examples'][number], displayName: string) => (
-    <Link
+    <article
       key={example.name}
-      to={`${routeBasePath}/${example.name}`}
       className={styles.exampleCard}
     >
-      <div className={styles.exampleCardHeader}>
-        <div className={styles.exampleCardIcon}>
-          <FontAwesomeIcon icon={faFolder} />
+      <Link to={`${routeBasePath}/${example.name}`} className={styles.exampleCardLink}>
+        <div className={styles.exampleCardHeader}>
+          <div className={styles.exampleCardIcon}>
+            <FontAwesomeIcon icon={faFolder} />
+          </div>
+          <h2 className={styles.exampleCardTitle}>{displayName}</h2>
         </div>
-        <h2 className={styles.exampleCardTitle}>{displayName}</h2>
-      </div>
+      </Link>
+      {example.cast?.file && (
+        <Link
+          to={`${routeBasePath}/${example.name}`}
+          className={styles.exampleCardCastLink}
+          aria-label={`Open the ${displayName} example`}
+        >
+          <div className={styles.exampleCardCast}>
+            <CastPlayer
+              src={example.cast.file}
+              title={example.cast.title || displayName}
+              chrome
+              thumbnail
+              controls={false}
+              scrubber={false}
+              showCommand={false}
+            />
+          </div>
+        </Link>
+      )}
       <div className={styles.exampleCardDescription}>
-        <Markdown components={cardMarkdownComponents}>
+        <Markdown components={cardMarkdownComponents} remarkPlugins={[remarkGfm]}>
           {example.description || 'Explore this example project'}
         </Markdown>
       </div>
@@ -60,8 +92,11 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
             <span key={tag} className={styles.tagBadge}>{tag}</span>
           ))}
         </div>
+        <Link to={`${routeBasePath}/${example.name}`} className={styles.exampleCardCta}>
+          Open
+        </Link>
       </div>
-    </Link>
+    </article>
   );
 
   return (
@@ -101,9 +136,20 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
           ))}
         </div>
 
-        <div className={styles.examplesGrid}>
-          {filteredExamples.map((example) => renderCard(example, example.name))}
-        </div>
+        {activeTag === null ? (
+          sections.map(({ tag, examples: sectionExamples }) => (
+            <section key={tag} className={styles.tagSection}>
+              <h2 className={styles.tagSectionHeading}>{tag}</h2>
+              <div className={styles.examplesGrid}>
+                {sectionExamples.map((example) => renderCard(example, example.title || example.name))}
+              </div>
+            </section>
+          ))
+        ) : (
+          <div className={styles.examplesGrid}>
+            {filteredExamples.map((example) => renderCard(example, example.title || example.name))}
+          </div>
+        )}
       </div>
     </Layout>
   );

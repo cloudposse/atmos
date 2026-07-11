@@ -1,0 +1,90 @@
+---
+slug: path-based-custom-commands
+title: "Path-Based Custom Commands"
+authors: [osterman]
+tags: [enhancement, dx]
+date: 2026-07-02
+---
+
+Atmos custom commands now support path-based names. Instead of writing a deeply nested command tree just to describe a command path, you can put the full command path in `name`.
+
+The result is easier to read, easier to review, and keeps the same recursive merge behavior that existing custom commands rely on.
+
+<!--truncate-->
+
+## What Changed
+
+Before, command hierarchies had to be expressed as nested `commands` arrays:
+
+```yaml
+commands:
+  - name: casts
+    commands:
+      - name: generate
+        commands:
+          - name: examples
+            commands:
+              - name: custom-commands
+                commands:
+                  - name: hello-greet
+                    description: Regenerate the Custom Commands example cast
+                    steps:
+                      - type: shell
+                        command: atmos casts setup
+```
+
+That shape is programmatically consistent, but it is not very friendly when the nesting only exists to spell out the command path.
+
+Now you can write the same command as:
+
+```yaml
+commands:
+  - name: casts generate examples custom-commands hello-greet
+    description: Regenerate the Custom Commands example cast
+    steps:
+      - type: shell
+        command: atmos casts setup
+```
+
+Atmos expands the path-based name into the normal recursive command tree before merging configuration.
+
+## Merge Behavior Is Preserved
+
+This is syntax sugar, not a new command model. A command named `casts generate demo` is normalized to the same internal structure as:
+
+```yaml
+commands:
+  - name: casts
+    commands:
+      - name: generate
+        commands:
+          - name: demo
+```
+
+Because normalization happens before config merge and unmarshal, later configs and imports still override matching command fields by segment name. Nested `commands` arrays still merge recursively, and sibling commands that share a prefix still collapse into one command tree.
+
+That means you can define a shared branch in one config:
+
+```yaml
+commands:
+  - name: casts generate
+    description: Generate casts
+```
+
+And add leaves elsewhere:
+
+```yaml
+commands:
+  - name: casts generate examples sops-secrets secret-lifecycle
+    description: Regenerate the SOPS secrets example cast
+```
+
+Atmos treats both definitions as part of the same `casts -> generate` command branch.
+
+## When to Use It
+
+Use path-based names when the intermediate command levels do not carry their own behavior. This is ideal for demo generation, validation commands, and operational command groups where the path is the structure.
+
+Keep the nested form when an intermediate command needs its own description, flags, environment, steps, or child-specific organization that is clearer when written explicitly.
+
+Both forms can coexist. The important rule is simple: spaces in `commands[].name` are treated as command path separators, so literal spaces inside one command segment are not supported.

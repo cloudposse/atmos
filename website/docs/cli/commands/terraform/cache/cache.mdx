@@ -7,7 +7,7 @@ description: Transparently cache Terraform/OpenTofu providers and modules, and m
 ---
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 
 <Intro>
@@ -22,7 +22,7 @@ The **registry cache** described here is the ephemeral proxy that intercepts tra
 This is a **separate** layer from Terraform's own **provider plugin cache** — the [`plugin_cache`](/cli/configuration/components/terraform) setting (`TF_PLUGIN_CACHE_DIR`), stored at `~/.cache/atmos/terraform/plugins`, which Terraform manages itself. The two are independent and can be used together.
 :::
 
-<Screengrab title="atmos terraform cache --help" slug="atmos-terraform-cache--help" />
+<CastPlayer title="atmos terraform cache --help" src="/casts/screengrabs/atmos-terraform-cache--help.cast" static chrome />
 
 ## Enable the cache
 

@@ -150,6 +150,21 @@ func setColorProfileInternal(profile termenv.Profile) {
 //	ui.SetColorProfile(termenv.Ascii)
 func SetColorProfile(profile termenv.Profile) {
 	setColorProfileInternal(profile)
+
+	// The global formatter caches theme.GetCurrentStyles() as a snapshot at
+	// InitFormatter() time (see NewFormatter below). theme.InvalidateStyleCache
+	// (called by setColorProfileInternal) regenerates that package-level cache
+	// under a new pointer, but doesn't reach the formatter's already-captured
+	// copy — so ui.Success/Error/Warning/Info (which read the formatter's
+	// cached styles) would otherwise keep rendering with the pre-change
+	// profile even though direct theme.GetCurrentStyles() callers (e.g. step
+	// headers) pick up the change immediately. Refresh it here so every
+	// ui.* output function reflects the new profile right away.
+	formatterMu.Lock()
+	defer formatterMu.Unlock()
+	if globalFormatter != nil {
+		globalFormatter.styles = theme.GetCurrentStyles()
+	}
 }
 
 // GetColorProfile returns the configured termenv color profile.
@@ -188,9 +203,9 @@ func NewRenderer(w stdio.Writer) *lipgloss.Renderer {
 }
 
 // TerminalWidth returns the stdout width from the global terminal detection:
-// the real TTY size when available, the COLUMNS environment variable on
-// non-TTY streams, or 0 when neither is known (callers apply their own
-// defaults). Returns 0 when the formatter has not been initialized.
+// the real TTY size when available, or 0 when unknown (non-TTY streams ignore
+// COLUMNS so CI snapshots and piped output keep stable wrapping; callers apply
+// their own defaults). Returns 0 when the formatter has not been initialized.
 func TerminalWidth() int {
 	defer perf.Track(nil, "ui.TerminalWidth")()
 

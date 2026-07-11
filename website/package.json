@@ -19,6 +19,7 @@
     "build:site": "npm run build",
     "algolia:deploy": "node algolia/deploy-crawler-config.mjs",
     "algolia:deploy:dry-run": "node algolia/deploy-crawler-config.mjs --dry-run",
+    "test:cast-player": "node --test src/components/CastPlayer/*.test.mjs",
     "test:algolia": "node --test algolia/atmos-tools.crawler.test.mjs",
     "test:algolia:live": "ALGOLIA_LIVE_RELEVANCE_TESTS=1 node --test algolia/search-relevance.test.mjs"
   },

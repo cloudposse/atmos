@@ -1,6 +1,7 @@
 package list
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -227,7 +228,7 @@ func TestBuildProfileRows(t *testing.T) {
 				assert.Equal(t, " ", rows[0][0]) // No active set → blank indicator.
 				assert.Equal(t, "dev", rows[0][1])
 				assert.Equal(t, "project", rows[0][2])
-				assert.Contains(t, rows[0][3], "/path/to/dev")
+				assert.Contains(t, rows[0][3], filepath.Clean("/path/to/dev"))
 				assert.NotEmpty(t, rows[0][4]) // File count.
 			},
 		},

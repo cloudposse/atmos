@@ -6,6 +6,8 @@ import (
 
 	"github.com/mitchellh/go-wordwrap"
 	"golang.org/x/term"
+
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=term_writer.go -destination=mock_term_writer.go -package=term
@@ -21,25 +23,25 @@ type TTYDetector interface {
 	IsTTYForStdin() bool
 }
 
-// DefaultTTYDetector implements TTYDetector using the actual terminal checks.
+// DefaultTTYDetector implements TTYDetector by delegating to the shared
+// pkg/terminal pipeline, so --force-tty/ATMOS_FORCE_TTY are honored the same
+// way everywhere (TTY-dependent UIs would otherwise fall back to headless
+// output in recordings and screenshot generation).
 type DefaultTTYDetector struct{}
 
 // IsTTYForStdout checks if stdout supports TTY.
 func (d *DefaultTTYDetector) IsTTYForStdout() bool {
-	fd := int(os.Stdout.Fd()) //nolint:gosec // G115: os.Stdout.Fd() is a small process-relative descriptor, safe to convert.
-	return term.IsTerminal(fd)
+	return terminal.New().IsTTY(terminal.Stdout)
 }
 
 // IsTTYForStderr checks if stderr supports TTY.
 func (d *DefaultTTYDetector) IsTTYForStderr() bool {
-	fd := int(os.Stderr.Fd()) //nolint:gosec // G115: os.Stderr.Fd() is a small process-relative descriptor, safe to convert.
-	return term.IsTerminal(fd)
+	return terminal.New().IsTTY(terminal.Stderr)
 }
 
 // IsTTYForStdin checks if stdin supports TTY (interactive input).
 func (d *DefaultTTYDetector) IsTTYForStdin() bool {
-	fd := int(os.Stdin.Fd()) //nolint:gosec // G115: os.Stdin.Fd() is a small process-relative descriptor, safe to convert.
-	return term.IsTerminal(fd)
+	return terminal.New().IsTTY(terminal.Stdin)
 }
 
 // defaultDetector is the global instance used by package-level functions.

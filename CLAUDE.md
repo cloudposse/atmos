@@ -35,11 +35,10 @@ Multiple Claude sessions may be working on the same branch or worktree simultane
 
 ```bash
 # Build & Test
-atmos build           # Build to ./build/atmos
-atmos test                   # Run short tests
-atmos test --full            # Run full tests
-atmos test --coverage        # Tests with coverage
-atmos lint changed           # golangci-lint on changed files
+make build                   # Build to ./build/atmos
+make testacc                 # Run tests
+make testacc-cover           # Tests with coverage
+make lint                    # golangci-lint on changed files
 ```
 
 ## Architecture
@@ -237,7 +236,7 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 
 **Preconditions**: Tests skip gracefully with helpers from `tests/test_preconditions.go`. See `docs/prd/testing-strategy.md`.
 
-**Commands**: `atmos test` (quick), `atmos test --full` (all), `atmos test --coverage` (coverage)
+**Commands**: `make test-short` (quick), `make testacc` (all), `make testacc-cover` (coverage)
 
 **Fixtures**: `tests/test-cases/` for integration tests
 
@@ -294,12 +293,11 @@ ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken
 ### Regenerating Screengrabs (IMPORTANT)
 **When:** After modifying CLI behavior/help/output, adding commands. NOT for doc-only changes.
 
-**How (Linux/CI only):**
-1. GitHub Actions: `gh workflow run screengrabs.yaml` (creates PR)
-2. Local Linux: `atmos screengrabs all`
-3. Docker (macOS): `atmos screengrabs docker-all`
+**How (any OS — native, no containers; screengrabs are casts custom commands, never a side-car tool):**
+1. Local: `atmos --chdir=demo/casts casts generate screengrabs cli` (the `casts setup` step builds atmos from the working tree; the command list lives inline in `demo/casts/atmos.d/screengrabs/cli.yaml` and each command is recorded via the global `--cast` flag into `website/static/casts/screengrabs/<slug>.cast`)
+2. GitHub Actions: `gh workflow run screengrabs.yaml` (creates PR; builds atmos from the checkout the same way)
 
-**Notes:** Captures exact output, ANSI→HTML, `script` syntax differs BSD/GNU, regenerate all together, no pipe indirection.
+**Notes:** Recording uses no PTY; correct TrueColor and layout width come from `ATMOS_FORCE_COLOR` and `COLUMNS`/`ATMOS_CAST_RECORDING_WIDTH` (recorded at 90 cols to fit the docs column). Machine-specific repo paths are rewritten to `/absolute/path/to/repo` (the test-harness convention) and validation (`atmos --chdir=demo/casts casts validate screengrabs cli`) fails on error output, path leaks, or docs referencing a missing cast. Regenerate all together; never pipe the output.
 
 ### PRD Documentation (MANDATORY)
 All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames.
@@ -384,7 +382,7 @@ Don't commit: todos, research, scratch files. Do commit: code, tests, requested 
 Always ask first: "This will discard uncommitted changes. Proceed? [y/N]"
 
 ### Test Coverage (MANDATORY)
-80% minimum (CodeCov enforced). All features need tests. `atmos test --coverage` for reports.
+80% minimum (CodeCov enforced). All features need tests. `make testacc-coverage` for reports.
 
 ### Cyclomatic Complexity (MANDATORY)
 golangci-lint enforces `cyclop: max-complexity: 15` and `funlen: lines: 60, statements: 40`.
@@ -464,7 +462,7 @@ Auto-enabled via `RootCmd.ExecuteC()`. Non-standard paths use `telemetry.Capture
 ALWAYS compile after changes: `go build . && go test ./...`. Fix errors immediately.
 
 ### Pre-commit (MANDATORY)
-NEVER use `--no-verify`. Run `atmos lint changed` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
+NEVER use `--no-verify`. Run `make lint` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,

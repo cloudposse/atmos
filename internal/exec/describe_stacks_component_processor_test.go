@@ -2,6 +2,8 @@ package exec
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1207,6 +1209,28 @@ func TestProcessComponentSectionTemplates_UnmarshalYAMLError(t *testing.T) {
 		// In Go template string literal syntax, "\n" IS a newline, so the template
 		// outputs a newline character that breaks the surrounding YAML single-quoted key.
 		`{{ "\n- list_item" }}`: "value",
+	}
+
+	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})
+	require.Error(t, err)
+}
+
+func TestProcessComponentSectionTemplates_AddTemplateContextError(t *testing.T) {
+	// When the component section references `.version` and the managed
+	// versions lock file is malformed, manager.AddTemplateContext (via
+	// manager.VersionMap/LoadLock) returns an error that propagates out of
+	// processComponentSectionTemplates.
+	basePath := t.TempDir()
+	lockPath := filepath.Join(basePath, "versions.lock.yaml")
+	require.NoError(t, os.WriteFile(lockPath, []byte("tracks: not-a-map\n"), 0o644))
+
+	ac := &schema.AtmosConfiguration{BasePath: basePath}
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}
+
+	componentSection := map[string]any{
+		"vars": map[string]any{
+			"ref": "{{ .version.opentofu }}",
+		},
 	}
 
 	_, err := processComponentSectionTemplates(ac, info, componentSection, map[string]any{})

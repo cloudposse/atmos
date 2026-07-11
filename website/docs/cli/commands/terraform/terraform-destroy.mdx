@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: destroy
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
@@ -15,7 +15,7 @@ Use this command to destroy Terraform-managed infrastructure for an Atmos compon
 
 <DemoVideo id="terraform-destroy" title="atmos terraform destroy" showCaption={false} />
 
-<Screengrab title="atmos terraform destroy --help" slug="atmos-terraform-destroy--help" />
+<CastPlayer title="atmos terraform destroy --help" src="/casts/screengrabs/atmos-terraform-destroy--help.cast" static chrome />
 
 ## Usage
 
@@ -129,6 +129,21 @@ Use `--failure-mode keep-going` to continue independent graph branches after one
 
         ```shell
         atmos terraform destroy vpc -s dev --dry-run
+        ```
+    </dd>
+
+    <dt>`--log-order` <em>(optional)</em></dt>
+    <dd>
+        Controls how concurrent per-component logs are ordered when `--max-concurrency` is greater than `1`.
+
+        Supported values:
+        - `stream` *(default)* — print log lines as they arrive, interleaved across components
+        - `grouped` — buffer each component's output and print it as a contiguous block after the component finishes
+
+        **Environment variable:** `ATMOS_TERRAFORM_DESTROY_LOG_ORDER`
+
+        ```shell
+        atmos terraform destroy --all -s dev --max-concurrency 2 -auto-approve --log-order grouped
         ```
     </dd>
 </dl>

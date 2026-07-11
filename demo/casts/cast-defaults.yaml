@@ -1,0 +1,30 @@
+cast:
+  rate: 12ms
+  width: 120
+  height: 36
+simulate:
+  mode: typed
+  cursor: true
+  prompt:
+    text: '> '
+    style: command
+  rate: 35ms
+  jitter: 0.25
+env:
+  command:
+    PATH: '{{ env "PWD" }}/../../.context/bin:{{ env "PATH" }}'
+  recording:
+    NO_COLOR: ''
+    TERM: xterm-256color
+    COLORTERM: truecolor
+    ATMOS_FORCE_COLOR: '1'
+    CLICOLOR_FORCE: '1'
+    FORCE_COLOR: '1'
+    ATMOS_FORCE_TTY: 'true'
+    ATMOS_KEYRING_TYPE: memory
+    # Hide the experimental (test tube) indicator in recordings; viewers still
+    # see it when they run experimental commands themselves.
+    ATMOS_EXPERIMENTAL: silence
+    # Keep system logs out of demos (some fixtures set logs.level: Info for
+    # their own purposes; env wins so recordings stay clean).
+    ATMOS_LOGS_LEVEL: Warning

@@ -8,6 +8,8 @@ tags:
 date: 2025-12-20T00:00:00.000Z
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Atmos custom commands can now define their own component types beyond `terraform`, `helmfile`, and `packer`. Use Atmos's stack configuration system with any tool: Ansible, Kubernetes manifests, shell scripts, CDK, and more.
 
 <!--truncate-->
@@ -62,6 +64,12 @@ atmos script deploy-app -s dev
 # App: myapp
 # Version: 1.0.0
 ```
+
+Here's the `script` component type running end-to-end:
+
+<CastPlayer src="/casts/examples/custom-components/script-command.cast" title="atmos custom component command" chrome controls scrubber />
+
+[View the full example](/examples/custom-components)
 
 ## Key Features
 

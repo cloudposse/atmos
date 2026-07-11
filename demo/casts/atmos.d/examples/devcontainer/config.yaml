@@ -1,0 +1,68 @@
+commands:
+  - name: casts generate examples devcontainer config
+    description: Regenerate the Devcontainer example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: config
+        working_directory: "../../.context/cast-fixtures/devcontainer"
+        title: "Devcontainer: discover and inspect shells"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/devcontainer/config.cast"
+        steps:
+          - type: simulate
+            text: &list atmos devcontainer list
+          - type: shell
+            name: list
+            duration: 650ms
+            interval: 750ms
+            command: *list
+          - type: simulate
+            text: &config atmos devcontainer config geodesic
+          - type: shell
+            name: config
+            duration: 650ms
+            interval: 750ms
+            command: *config
+      - type: shell
+        name: validate
+        command: atmos casts validate examples devcontainer config
+  - name: casts validate examples devcontainer config
+    description: Validate the Devcontainer example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/devcontainer/config.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "atmos devcontainer list",
+              "geodesic",
+              "terraform",
+              "python",
+              "atmos devcontainer config geodesic",
+              "Runtime: podman",
+              "cloudposse/geodesic:latest",
+              "Workspace Folder: /workspace",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"devcontainer cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

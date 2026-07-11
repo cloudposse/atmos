@@ -18,10 +18,10 @@ import (
 // certCommonName is the subject CN used to locate the certificate for removal.
 const certCommonName = "Atmos Terraform Registry Cache"
 
-const macosSystemKeychainPath = "/Library/Keychains/System.keychain"
-
-// macosSecurityCommand is the macOS `security` CLI used to manage the trust store.
-const macosSecurityCommand = "security"
+const (
+	macosSecurityCommand    = "security"
+	macosSystemKeychainPath = "/Library/Keychains/System.keychain"
+)
 
 type windowsTrustStoreScope string
 
@@ -70,14 +70,7 @@ func InstallTrust(certPath string) error {
 
 	switch trustRuntimeGOOS {
 	case "darwin":
-		if macOSUsesSystemTrustStore() {
-			return runTrustCommandFunc("sudo", macosSecurityCommand, "add-trusted-cert", "-d", "-r", "trustRoot", "-p", "ssl", "-k", macosSystemKeychainPath, certPath)
-		}
-		keychain, err := loginKeychainPath()
-		if err != nil {
-			return err
-		}
-		return runTrustCommandFunc(macosSecurityCommand, "add-trusted-cert", "-r", "trustRoot", "-k", keychain, certPath)
+		return installMacOSTrust(certPath)
 	case "windows":
 		if windowsUsesCertutilTrustCommand() {
 			return runTrustCommandFunc("certutil", "-addstore", "-enterprise", "-f", "Root", certPath)
@@ -97,10 +90,7 @@ func RemoveTrust(certPath string) error {
 
 	switch trustRuntimeGOOS {
 	case "darwin":
-		if macOSUsesSystemTrustStore() {
-			return runTrustCommandFunc("sudo", macosSecurityCommand, "delete-certificate", "-c", certCommonName, macosSystemKeychainPath)
-		}
-		return runTrustCommandFunc(macosSecurityCommand, "remove-trusted-cert", certPath)
+		return removeMacOSTrust(certPath)
 	case "windows":
 		if windowsUsesCertutilTrustCommand() {
 			return runTrustCommandFunc("certutil", "-delstore", "-enterprise", "Root", certCommonName)
@@ -111,6 +101,42 @@ func RemoveTrust(certPath string) error {
 	default:
 		return nil
 	}
+}
+
+func installMacOSTrust(certPath string) error {
+	if macOSUsesSystemTrustStore() {
+		err := runTrustCommandFunc("sudo", macosSecurityCommand, "add-trusted-cert", "-d", "-r", "trustRoot", "-p", "ssl", "-k", macosSystemKeychainPath, certPath)
+		if err == nil {
+			return nil
+		}
+		if fallbackErr := installMacOSLoginKeychainTrust(certPath); fallbackErr != nil {
+			return fmt.Errorf("%w; fallback to login keychain failed: %w", err, fallbackErr)
+		}
+		return nil
+	}
+	return installMacOSLoginKeychainTrust(certPath)
+}
+
+func installMacOSLoginKeychainTrust(certPath string) error {
+	keychain, err := loginKeychainPath()
+	if err != nil {
+		return err
+	}
+	return runTrustCommandFunc(macosSecurityCommand, "add-trusted-cert", "-r", "trustRoot", "-k", keychain, certPath)
+}
+
+func removeMacOSTrust(certPath string) error {
+	if macOSUsesSystemTrustStore() {
+		err := runTrustCommandFunc("sudo", macosSecurityCommand, "delete-certificate", "-c", certCommonName, macosSystemKeychainPath)
+		if err == nil {
+			return nil
+		}
+		if fallbackErr := runTrustCommandFunc(macosSecurityCommand, "remove-trusted-cert", certPath); fallbackErr != nil {
+			return fmt.Errorf("%w; fallback to login keychain failed: %w", err, fallbackErr)
+		}
+		return nil
+	}
+	return runTrustCommandFunc(macosSecurityCommand, "remove-trusted-cert", certPath)
 }
 
 // loginKeychainPath resolves the user's login keychain.
