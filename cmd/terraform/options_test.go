@@ -307,14 +307,14 @@ func TestParseTerraformRunOptionsRejectsInvalidValues(t *testing.T) {
 			setup: func(v *viper.Viper) {
 				v.Set("failure-mode", "eventually")
 			},
-			wantErr: `invalid --failure-mode "eventually": supported values are "fail-fast", "keep-going"`,
+			wantErr: `invalid value for flag: --failure-mode "eventually" (valid values: fail-fast, keep-going)`,
 		},
 		{
 			name: "invalid log order",
 			setup: func(v *viper.Viper) {
 				v.Set("log-order", "interleaved")
 			},
-			wantErr: `invalid --log-order "interleaved": supported values are "stream", "grouped"`,
+			wantErr: `invalid value for flag: --log-order "interleaved" (valid values: stream, grouped)`,
 		},
 	}
 
