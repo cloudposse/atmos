@@ -69,8 +69,8 @@ Every "report for human attention" exit path below also invokes the
 [`say` skill](../say/SKILL.md) (`Skill({skill: "say", args: "..."})`) so the user gets an audible
 nudge, not just a written summary. Trigger points:
 
-1. **DIRTY merge conflict**, or a non-fast-forward local sync (step 1) — `"PR <number> has a merge
-   conflict, needs your attention."`
+1. **A merge conflict `merge-conflict-resolve` aborted rather than guess at**, or a non-fast-forward
+   local sync (step 1) — `"PR <number> has a merge conflict, needs your attention."`
 2. **Failing CI check outside lint/test scope** (step 2 — anything other than a
    `golangci-lint`/`Acceptance Tests`-shaped check, e.g. docs build, markdown links, licensing,
    CodeQL) — never attempted, always reported — `"PR <number> has a failing CI check that needs
@@ -99,10 +99,24 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
    `git push` rejected as non-fast-forward. Confirmed for real: a cycle read `mergeStateStatus` as
    `BLOCKED` (not `BEHIND` — that single GitHub value proved unreliable on its own), skipped the
    rebase, and a later local diff against a stale `origin/main` wrongly flagged an already-merged,
-   unrelated PR's code as a new finding on this patch. The script fails closed: if the local sync
-   isn't a clean fast-forward, it errors instead of forcing a merge — treat that, and a `DIRTY`
-   `mergeStateStatus` (a real conflict), as human-attention cases (`say` trigger 1). Never attempt
-   automatic conflict resolution.
+   unrelated PR's code as a new finding on this patch.
+
+   If `gh pr update-branch` fails on a real conflict (`mergeStateStatus == DIRTY`), the script
+   doesn't just give up — it falls back to a local `git merge origin/main` to surface the actual
+   conflict, and prints `STATUS: MERGE_CONFLICT` with the conflicted files' full content if one
+   exists (leaving the merge in progress, uncommitted). When that happens, delegate to `Agent
+   subagent_type: "merge-conflict-resolve"`, passing that output as DATA. It only resolves
+   conflicts it's confident are structural/non-overlapping (e.g. both sides independently adding
+   different config keys — exactly what happened for real: this loop's own `permissions` block vs.
+   a separately-merged PR's new `hooks` block in `.claude/settings.json`, resolved by keeping
+   both); anything semantically overlapping, or touching `.github/workflows/**`/`Makefile`/
+   `go.mod`/`go.sum`, it aborts the merge and reports rather than guessing — that's still a
+   human-attention case (`say` trigger 1). The agent does its own git-hygiene wrapper (signed
+   commit, only the resolved files, plain push) since resolving *is* the fix here, not a
+   downstream step.
+
+   The final local-checkout fast-forward (after any of the above) is still fail-closed: if it
+   isn't a clean fast-forward, that's also `say` trigger 1.
 
 2. Run `atmos fix ci` to list currently failing CI checks (read-only). `STATUS: ALL_CHECKS_GREEN`:
    one-line no-op, move to step 3. `STATUS: CHECKS_FAILING`: for each failing check —
@@ -159,6 +173,9 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
   caveat); delegates the actual per-cycle work to this skill.
 - **[`coderabbit-review` agent](../../agents/coderabbit-review.md)** — does the actual CodeRabbit
   thread parsing and code fixes for step 4.
+- **[`merge-conflict-resolve` agent](../../agents/merge-conflict-resolve.md)** — resolves real
+  merge conflicts surfaced by `atmos fix sync` at step 1, when confident; aborts and reports
+  otherwise.
 - **[`lint` skill](../lint/SKILL.md)** — patch-aware lint check and fix (step 6, and reused
   directly by step 2 for CI-sourced lint findings).
 - **[`test-coverage` skill](../test-coverage/SKILL.md)** — patch-scoped test-failure and

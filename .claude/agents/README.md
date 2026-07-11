@@ -41,6 +41,12 @@ Fixes in-scope failing tests (never pre-existing ones), then fixes genuine cover
 
 **Use when:** The `test-coverage` skill has failures or coverage gaps to address, either human-invoked or from `pr-maintenance-loop`'s hourly cycle.
 
+### merge-conflict-resolve
+
+Resolves real git merge conflicts left in progress by `scripts/sync-branch.sh` when `origin/main` can't be auto-merged — only when confident it's a structural, non-overlapping conflict; aborts and reports for human attention otherwise.
+
+**Use when:** The `fix-all` skill's sync step reports `STATUS: MERGE_CONFLICT`, either human-invoked or from `pr-maintenance-loop`'s hourly cycle.
+
 ## Strategic Approach
 
 As Atmos grows, we create focused agents for each major subsystem. This scales development velocity through specialized

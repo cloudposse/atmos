@@ -50,8 +50,13 @@ commands:
           then sync this local checkout with the remote PR branch — `gh pr update-branch` only
           updates the remote side via GitHub's API, never the local checkout, so this second half
           is required every time to avoid stale local git state (false lint/coverage findings,
-          rejected pushes). Fails closed: if the local sync isn't a clean fast-forward, this
-          reports an error rather than forcing a merge or rewrite.
+          rejected pushes). On a real conflict (gh pr update-branch fails), falls back to a local
+          merge attempt and reports `STATUS: MERGE_CONFLICT` with the conflicted files' content
+          for the `merge-conflict-resolve` agent (via the `fix-all` skill) to resolve when
+          confident, or abort and report otherwise — this command itself never decides how to
+          resolve content conflicts, only surfaces them. The final local-checkout sync is fail
+          closed: if it isn't a clean fast-forward, this reports an error rather than forcing a
+          merge or rewrite.
         steps:
           - type: toast
             level: info
