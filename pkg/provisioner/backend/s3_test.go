@@ -231,6 +231,33 @@ func TestExtractS3Config(t *testing.T) {
 			},
 			wantErr: nil,
 		},
+		{
+			name: "use_path_style true",
+			backendConfig: map[string]any{
+				"bucket":         "my-terraform-state",
+				"region":         "us-west-2",
+				"use_path_style": true,
+			},
+			want: &s3Config{
+				bucket:       "my-terraform-state",
+				region:       "us-west-2",
+				usePathStyle: true,
+			},
+			wantErr: nil,
+		},
+		{
+			name: "use_path_style absent defaults to false",
+			backendConfig: map[string]any{
+				"bucket": "my-terraform-state",
+				"region": "us-west-2",
+			},
+			want: &s3Config{
+				bucket:       "my-terraform-state",
+				region:       "us-west-2",
+				usePathStyle: false,
+			},
+			wantErr: nil,
+		},
 	}
 
 	for _, tt := range tests {

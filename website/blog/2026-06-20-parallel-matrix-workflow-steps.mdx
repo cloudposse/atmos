@@ -6,6 +6,8 @@ tags: [feature, dx]
 date: 2026-06-20
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Atmos workflows can now run independent work concurrently with first-class `parallel` and `matrix` control steps. Add dependency-aware fan-out, readable grouped or live-prefixed output, and explicit failure behavior directly to your workflow YAML.
 
 <!--truncate-->
@@ -180,6 +182,12 @@ atmos workflow checks -f parallel
 atmos workflow prefixed -f parallel
 atmos workflow matrix -f parallel
 ```
+
+Here are the control steps running end to end:
+
+<CastPlayer src="/casts/examples/parallel-steps/control-steps.cast" title="atmos parallel workflow steps" chrome controls scrubber />
+
+[View the full example](/examples/parallel-steps)
 
 Start with validation and reporting workflows first. They usually have the safest fan-out shape: independent checks, obvious dependencies, and low risk if one branch fails.
 

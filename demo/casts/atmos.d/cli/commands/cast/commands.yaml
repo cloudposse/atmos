@@ -57,10 +57,6 @@ commands:
             command: |
               PATH="$PWD/.context/bin:$PATH" atmos about --cast=.context/cast-command-demo/about.gif
               test -s .context/cast-command-demo/about.gif
-          - type: toast
-            name: recorded-cast
-            level: info
-            content: "Rendered cast: .context/cast-command-demo/about.gif"
       - type: shell
         name: validate
         command: atmos --chdir=demo/casts casts validate cli commands cast usage
@@ -129,17 +125,13 @@ commands:
         env: !include cast-defaults.yaml .env.recording
         steps:
           - type: simulate
-            text: atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --gif=.context/cast-render/hello-greet.gif
-          - type: shell
+            text: atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --output=.context/cast-render/hello-greet.gif
+          - type: spin
             name: render
-            output: raw
+            title: "Rendering hello-greet.gif..."
             command: |
-              PATH="$PWD/.context/bin:$PATH" atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --gif=.context/cast-render/hello-greet.gif
+              PATH="$PWD/.context/bin:$PATH" atmos cast render website/static/casts/examples/custom-commands/hello-greet.cast --output=.context/cast-render/hello-greet.gif
               test -s .context/cast-render/hello-greet.gif
-          - type: toast
-            name: rendered-gif
-            level: success
-            content: "rendered .context/cast-render/hello-greet.gif"
       - type: shell
         name: validate
         command: atmos --chdir=demo/casts casts validate cli commands cast render
@@ -167,22 +159,20 @@ commands:
         script: |
           import os, sys
           sys.path.insert(0, os.path.join(os.getcwd(), "demo", "casts"))
-          from cast_checks import load_text, strip_ansi
-          text = strip_ansi(load_text("website/static/casts/cli/commands/cast/usage.cast"))
-          for needle in ["atmos about --cast=.context/cast-command-demo/about.gif", "About Atmos", "Cast rendered: .context/cast-command-demo/about.gif", "Rendered cast:"]:
-              if needle not in text:
+          from cast_checks import load_text, strip_ansi, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("website/static/casts/cli/commands/cast/usage.cast")
+          plain = strip_ansi(text)
+          for needle in ["atmos about --cast=.context/cast-command-demo/about.gif", "About Atmos", "Cast rendered: .context/cast-command-demo/about.gif"]:
+              if needle not in plain:
                   raise SystemExit(f"cast usage demo missing {needle!r}")
-          if "atmos cast --help" in text:
+          if "atmos cast --help" in plain:
               raise SystemExit("cast usage demo should demonstrate recording, not help output")
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
-              if bad in text:
+              if bad in plain:
                   raise SystemExit(f"cast usage demo contains {bad!r}")
-          import os, sys
-          sys.path.insert(0, os.path.join(os.getcwd(), "demo", "casts"))
-          from cast_checks import load_text, assert_no_error_output, assert_no_local_paths
-          decoded = load_text("website/static/casts/cli/commands/cast/usage.cast")
-          assert_no_error_output(decoded)
-          assert_no_local_paths(decoded)
+          assert_colored(text, "Cast rendered:")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)
   - name: casts validate cli commands cast play
     description: Validate the cast play command demo
     working_directory: *repo_root
@@ -193,20 +183,18 @@ commands:
         script: |
           import os, sys
           sys.path.insert(0, os.path.join(os.getcwd(), "demo", "casts"))
-          from cast_checks import load_text, strip_ansi
-          text = strip_ansi(load_text("website/static/casts/cli/commands/cast/play.cast"))
+          from cast_checks import load_text, strip_ansi, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("website/static/casts/cli/commands/cast/play.cast")
+          plain = strip_ansi(text)
           for needle in ["Hello world!", "Hello, Alice", "atmos cast play"]:
-              if needle not in text:
+              if needle not in plain:
                   raise SystemExit(f"cast play demo missing {needle!r}")
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
-              if bad in text:
+              if bad in plain:
                   raise SystemExit(f"cast play demo contains {bad!r}")
-          import os, sys
-          sys.path.insert(0, os.path.join(os.getcwd(), "demo", "casts"))
-          from cast_checks import load_text, assert_no_error_output, assert_no_local_paths
-          decoded = load_text("website/static/casts/cli/commands/cast/play.cast")
-          assert_no_error_output(decoded)
-          assert_no_local_paths(decoded)
+          assert_colored(text, "[play]")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)
   - name: casts validate cli commands cast render
     description: Validate the cast render command demo
     working_directory: *repo_root
@@ -217,17 +205,15 @@ commands:
         script: |
           import os, sys
           sys.path.insert(0, os.path.join(os.getcwd(), "demo", "casts"))
-          from cast_checks import load_text, strip_ansi
-          text = strip_ansi(load_text("website/static/casts/cli/commands/cast/render.cast"))
-          for needle in ["atmos cast render", "hello-greet.gif", "rendered .context/cast-render/hello-greet.gif"]:
-              if needle not in text:
+          from cast_checks import load_text, strip_ansi, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("website/static/casts/cli/commands/cast/render.cast")
+          plain = strip_ansi(text)
+          for needle in ["atmos cast render", "hello-greet.gif", "Rendering hello-greet.gif"]:
+              if needle not in plain:
                   raise SystemExit(f"cast render demo missing {needle!r}")
           for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
-              if bad in text:
+              if bad in plain:
                   raise SystemExit(f"cast render demo contains {bad!r}")
-          import os, sys
-          sys.path.insert(0, os.path.join(os.getcwd(), "demo", "casts"))
-          from cast_checks import load_text, assert_no_error_output, assert_no_local_paths
-          decoded = load_text("website/static/casts/cli/commands/cast/render.cast")
-          assert_no_error_output(decoded)
-          assert_no_local_paths(decoded)
+          assert_colored(text, "Rendering hello-greet.gif")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

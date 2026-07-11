@@ -6,9 +6,17 @@ tags: [feature, experimental]
 date: 2026-06-06
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Atmos can now transparently **cache Terraform and OpenTofu providers and modules** behind a single feature flag. Turn it on and repeated runs — local or CI — stop re-downloading the same artifacts, keep working when upstream registries are slow or down, and capture the exact versions a deployment used so builds stay reproducible. No changes to your Terraform code, provider declarations, or module sources.
 
 <!--truncate-->
+
+See it in action:
+
+<CastPlayer src="/casts/examples/caching/registry-cache.cast" title="atmos terraform registry cache" chrome controls scrubber />
+
+[View the full example](/examples/caching)
 
 ## Your dependencies are artifacts — treat them that way
 

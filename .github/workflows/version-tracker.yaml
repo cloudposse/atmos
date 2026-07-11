@@ -1,6 +1,6 @@
 # Demonstrates and validates the Atmos Version Tracker end-to-end: builds
 # atmos, then exercises lock/status/verify/apply --check against the committed
-# examples/demo-version-tracker fixture. The fixture's desired versions are
+# examples/version-tracker fixture. The fixture's desired versions are
 # concrete, so the whole flow runs offline.
 name: Version Tracker
 
@@ -9,7 +9,7 @@ on:
     paths:
       - pkg/version/**
       - cmd/version/**
-      - examples/demo-version-tracker/**
+      - examples/version-tracker/**
       - .github/workflows/version-tracker.yaml
 
 permissions:
@@ -48,13 +48,13 @@ jobs:
         run: atmos build
 
       - name: Verify committed lock and managed files are current
-        working-directory: examples/demo-version-tracker
+        working-directory: examples/version-tracker
         run: |
           ../../build/atmos version track status
           ../../build/atmos version track verify
 
       - name: Detect drift with apply --check
-        working-directory: examples/demo-version-tracker
+        working-directory: examples/version-tracker
         run: |
           # Simulate a stale workflow ref; the check must fail.
           sed -i.bak 's/actions\/checkout@v6.1.0/actions\/checkout@v4/' workflows/ci.yaml
@@ -65,10 +65,32 @@ jobs:
           fi
 
       - name: Repair drift with apply
-        working-directory: examples/demo-version-tracker
+        working-directory: examples/version-tracker
         run: |
           ../../build/atmos version track apply
           ../../build/atmos version track verify
 
+      - name: Dev and prod tracks resolve independently
+        working-directory: examples/version-tracker
+        run: |
+          DEV_REDIS=$(../../build/atmos describe component app -s dev --query .vars.redis_image)
+          PROD_REDIS=$(../../build/atmos describe component app -s prod --query .vars.redis_image)
+          echo "dev=$DEV_REDIS prod=$PROD_REDIS"
+          test "$DEV_REDIS" = "redis:7.4.0"
+          test "$PROD_REDIS" = "redis:7.2.5"
+
+      - name: Update dev's track without touching prod's
+        working-directory: examples/version-tracker
+        run: |
+          ../../build/atmos version track set redis --desired=7.4.1 --track=dev
+          ../../build/atmos version track lock dev
+          NEW_DEV_REDIS=$(../../build/atmos describe component app -s dev --query .vars.redis_image)
+          PROD_REDIS_AFTER=$(../../build/atmos describe component app -s prod --query .vars.redis_image)
+          test "$NEW_DEV_REDIS" = "redis:7.4.1"
+          test "$PROD_REDIS_AFTER" = "redis:7.2.5"
+
+      - name: Restore the example to its committed state
+        run: git checkout -- examples/version-tracker/atmos.yaml examples/version-tracker/versions.lock.yaml
+
       - name: Applied files match the committed state exactly
-        run: git diff --exit-code examples/demo-version-tracker
+        run: git diff --exit-code examples/version-tracker

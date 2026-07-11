@@ -59,6 +59,15 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Extract the stack-level 'version' section (e.g. `version.track`, asserting
+	// which Atmos Version Tracker track this stack resolves `!version`/
+	// `{{ .version.* }}` against) if present. Imports are already deep-merged
+	// into `config` by this point, so a single map assertion is sufficient.
+	var stackVersionSection map[string]any
+	if versionSection, ok := config[cfg.VersionSectionName].(map[string]any); ok {
+		stackVersionSection = versionSection
+	}
+
 	globalVarsSection := map[string]any{}
 	globalHooksSection := map[string]any{}
 	globalSettingsSection := map[string]any{}
@@ -1238,6 +1247,12 @@ func ProcessStackConfig(
 	// Include the stack-level 'name' field if it was set.
 	if stackManifestName != "" {
 		result[cfg.NameSectionName] = stackManifestName
+	}
+
+	// Include the stack-level 'version' section if it was set, so
+	// `EffectiveTrackFromStack` can resolve the stack-asserted track.
+	if stackVersionSection != nil {
+		result[cfg.VersionSectionName] = stackVersionSection
 	}
 
 	return result, nil
