@@ -181,7 +181,7 @@ jobs:
 
       # https://github.com/hashicorp/setup-packer
       - name: Install Packer
-        uses: hashicorp/setup-packer@3286471d6cc6756d056a0b199fea5e0becdbc189 # main
+        uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # main
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           version: ${{ env.PACKER_VERSION }}
@@ -329,7 +329,7 @@ jobs:
           # import: "gpg: no valid OpenPGP data found" / "Can't check signature:
           # No public key") make verification exit 1, which would hard-fail this
           # job even when every test passed. Don't let a coverage-upload/infra
-          # flake fail a green test run — the 80% coverage gate is still enforced
+          # flake fail a green test run — the 85% coverage gate is still enforced
           # by Codecov's own PR status check, independent of this step's exit code.
           fail_ci_if_error: false
           flags: unittests
@@ -364,7 +364,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
+      - uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
         id: hadolint
         with:
           dockerfile: Dockerfile
