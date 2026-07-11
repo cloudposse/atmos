@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,6 +34,12 @@ func stepsFromStrings(commands ...string) schema.Tasks {
 	return tasks
 }
 
+// captureStdoutStderr redirects os.Stdout/os.Stderr while fn runs. Restoration
+// and pipe cleanup happen via defer (not just after fn returns normally) so a
+// panic inside fn can't leave the process's stdout/stderr permanently pointed
+// at closed pipes for the rest of the test binary. Draining the pipes on
+// background goroutines (rather than reading after fn returns) lets the close
+// step unblock those reads instead of deadlocking on a deferred restore.
 func captureStdoutStderr(t *testing.T, fn func()) (string, string) {
 	t.Helper()
 
@@ -46,23 +53,42 @@ func captureStdoutStderr(t *testing.T, fn func()) (string, string) {
 
 	os.Stdout = stdoutWriter
 	os.Stderr = stderrWriter
+	defer func() {
+		os.Stdout = oldStdout
+		os.Stderr = oldStderr
+	}()
+
+	var closeOnce sync.Once
+	closeWriters := func() {
+		closeOnce.Do(func() {
+			_ = stdoutWriter.Close()
+			_ = stderrWriter.Close()
+		})
+	}
+	defer closeWriters()
+
+	stdoutCh := make(chan string, 1)
+	stderrCh := make(chan string, 1)
+	go func() {
+		data, _ := io.ReadAll(stdoutReader)
+		stdoutCh <- string(data)
+	}()
+	go func() {
+		data, _ := io.ReadAll(stderrReader)
+		stderrCh <- string(data)
+	}()
 
 	fn()
 
-	require.NoError(t, stdoutWriter.Close())
-	require.NoError(t, stderrWriter.Close())
-	os.Stdout = oldStdout
-	os.Stderr = oldStderr
+	closeWriters()
 
-	stdout, err := io.ReadAll(stdoutReader)
-	require.NoError(t, err)
-	stderr, err := io.ReadAll(stderrReader)
-	require.NoError(t, err)
+	stdout := <-stdoutCh
+	stderr := <-stderrCh
 
 	require.NoError(t, stdoutReader.Close())
 	require.NoError(t, stderrReader.Close())
 
-	return string(stdout), string(stderr)
+	return stdout, stderr
 }
 
 func TestCustomCommandStepWorkingDirectory(t *testing.T) {
