@@ -12,13 +12,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/ansi"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
 )
 
 // captureStderr redirects os.Stderr for the duration of fn and returns
 // everything written to it. Several formatter functions write UI output to
 // stderr via pkg/ui rather than returning it, so tests need this to assert
-// on the rendered content.
+// on the rendered content. ANSI escape codes are stripped since ui.Success/
+// ui.Info/etc. render with icons and color styling that can be enabled
+// under CI (e.g. TestFormatReleaseListText_NoReleasesAfterSynthetic broke
+// under CI=true when "No releases found" moved from a plain ui.Writeln to
+// a styled ui.Info) even though captured output isn't a real TTY.
 func captureStderr(t *testing.T, fn func() error) (string, error) {
 	t.Helper()
 
@@ -35,7 +40,7 @@ func captureStderr(t *testing.T, fn func() error) (string, error) {
 
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)
-	return buf.String(), fnErr
+	return ansi.Strip(buf.String()), fnErr
 }
 
 func TestRenderMarkdownInline(t *testing.T) {
