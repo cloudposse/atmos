@@ -173,11 +173,6 @@ var (
 	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the component argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
 
-	// ErrInvalidFailureMode is returned when --failure-mode is set to an unsupported value.
-	ErrInvalidFailureMode = errors.New("invalid --failure-mode")
-	// ErrInvalidLogOrder is returned when --log-order is set to an unsupported value.
-	ErrInvalidLogOrder = errors.New("invalid --log-order")
-
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrYamlFuncMaxResolutionDepth       = errors.New("Atmos YAML function resolution exceeded the maximum dependency depth (likely an undetected circular dependency)")
 	ErrAwsGetCallerIdentity             = errors.New("failed to get AWS caller identity")
