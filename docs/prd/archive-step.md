@@ -264,7 +264,7 @@ rather than asserting it in prose. `pkg/runner/step/archive_test.go` covers
   the `kind: step` bridge this feature relies on instead of a dedicated hook kind.
 - [Custom Hooks](./custom-hooks.md) — the hook `kind` registration contract; not
   used by this feature, but the reference point for why it wasn't.
-- [Generate Terraform Files](/stacks/generate) — a sibling declarative-file-producing
+- [Generate Terraform Files](https://atmos.tools/stacks/generate) — a sibling declarative-file-producing
   mechanism (text/templated files vs. this PRD's binary archives); worth
   cross-referencing so users know which one fits their need.
 - [DAG-Based Concurrent Execution](./dag-concurrent-execution.md) — component hooks
