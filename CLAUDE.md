@@ -35,10 +35,11 @@ Multiple Claude sessions may be working on the same branch or worktree simultane
 
 ```bash
 # Build & Test
-make build                   # Build to ./build/atmos
-make testacc                 # Run tests
-make testacc-cover           # Tests with coverage
-make lint                    # golangci-lint on changed files
+atmos build                  # Build to ./build/atmos
+atmos test                   # Run short tests
+atmos test --full            # Run full acceptance tests
+atmos test --coverage        # Tests with coverage
+atmos lint --changed         # golangci-lint on changed files
 ```
 
 ## Architecture
@@ -236,7 +237,7 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 
 **Preconditions**: Tests skip gracefully with helpers from `tests/test_preconditions.go`. See `docs/prd/testing-strategy.md`.
 
-**Commands**: `make test-short` (quick), `make testacc` (all), `make testacc-cover` (coverage)
+**Commands**: `atmos test` (quick), `atmos test --full` (all), `atmos test --coverage` (coverage)
 
 **Fixtures**: `tests/test-cases/` for integration tests
 
@@ -382,7 +383,7 @@ Don't commit: todos, research, scratch files. Do commit: code, tests, requested 
 Always ask first: "This will discard uncommitted changes. Proceed? [y/N]"
 
 ### Test Coverage (MANDATORY)
-80% minimum (CodeCov enforced). All features need tests. `make testacc-coverage` for reports.
+80% minimum (CodeCov enforced). All features need tests. `atmos test --coverage` for reports.
 
 ### Cyclomatic Complexity (MANDATORY)
 golangci-lint enforces `cyclop: max-complexity: 15` and `funlen: lines: 60, statements: 40`.
@@ -459,10 +460,10 @@ Auto-enabled via `RootCmd.ExecuteC()`. Non-standard paths use `telemetry.Capture
 **Build**: CGO disabled, cross-platform, version via ldflags, output to `./build/`
 
 ### Compilation (MANDATORY)
-ALWAYS compile after changes: `go build . && go test ./...`. Fix errors immediately.
+ALWAYS compile after changes: `go build ./... && atmos test`. Fix errors immediately. `atmos test` runs short-mode tests only; use `atmos test --full` before opening a PR or when a change touches slow/integration-style tests.
 
 ### Pre-commit (MANDATORY)
-NEVER use `--no-verify`. Run `make lint` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
+NEVER use `--no-verify`. Run `atmos lint --changed` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
