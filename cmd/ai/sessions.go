@@ -11,7 +11,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -286,9 +285,9 @@ func cleanSessionsCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	if count == 0 {
-		_ = data.Writeln("No sessions to clean.")
+		ui.Info("No sessions to clean.")
 	} else {
-		_ = data.Writeln(fmt.Sprintf("✅ Deleted %d session(s) older than %s", count, olderThanStr))
+		ui.Successf("Deleted %d session(s) older than %s", count, olderThanStr)
 	}
 
 	return nil
@@ -364,7 +363,7 @@ func exportSessionCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to export session: %w", err)
 	}
 
-	_ = data.Writeln(fmt.Sprintf("✅ Session '%s' exported to '%s'", sessionName, outputPath))
+	ui.Successf("Session '%s' exported to '%s'", sessionName, outputPath)
 
 	return nil
 }
@@ -405,13 +404,13 @@ func importSessionCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to import session: %w", err)
 	}
 
-	_ = data.Writeln(fmt.Sprintf("✅ Session '%s' imported successfully", importedSession.Name))
-	_ = data.Writeln(fmt.Sprintf("  ID: %s", importedSession.ID))
-	_ = data.Writeln(fmt.Sprintf("  Model: %s", importedSession.Model))
-	_ = data.Writeln(fmt.Sprintf("  Provider: %s", importedSession.Provider))
-	_ = data.Writeln(fmt.Sprintf("  Messages: %d", importedSession.MessageCount))
-	_ = data.Writeln("")
-	_ = data.Writeln("Resume the session with: atmos ai chat --session " + importedSession.Name)
+	ui.Successf("Session '%s' imported successfully", importedSession.Name)
+	ui.Writeln(fmt.Sprintf("  ID: %s", importedSession.ID))
+	ui.Writeln(fmt.Sprintf("  Model: %s", importedSession.Model))
+	ui.Writeln(fmt.Sprintf("  Provider: %s", importedSession.Provider))
+	ui.Writeln(fmt.Sprintf("  Messages: %d", importedSession.MessageCount))
+	ui.Writeln("")
+	ui.Writeln(fmt.Sprintf("Resume the session with: atmos ai chat --session %s", importedSession.Name))
 
 	return nil
 }

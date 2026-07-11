@@ -248,7 +248,7 @@ func formatReleaseListText(releases []*github.RepositoryRelease) error {
 	releases = addCurrentVersionIfMissing(releases)
 
 	if len(releases) == 0 {
-		ui.Writeln("No releases found")
+		ui.Info("No releases found")
 		return nil
 	}
 

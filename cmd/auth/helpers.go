@@ -67,8 +67,9 @@ func formatDuration(d time.Duration) string {
 func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 	defer perf.Track(nil, "auth.displayAuthSuccess")()
 
-	// Display checkmark with success message.
-	ui.Writef("\n%s Authentication successful!\n\n", theme.Styles.Checkmark)
+	// Display success message.
+	ui.Writeln("")
+	ui.Success("Authentication successful!")
 
 	// Build table rows.
 	var rows [][]string

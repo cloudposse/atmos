@@ -16,7 +16,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
 	"github.com/spf13/cobra"
 )
@@ -164,7 +163,7 @@ func executeProLock(a *ProLockCmdArgs, apiClient pro.AtmosProAPIClientInterface,
 		return errors.Join(errUtils.ErrFailedToLockStack, err)
 	}
 
-	ui.Writef("\n%s Stack '%s' successfully locked\n\n", theme.Styles.Checkmark, lock.Data.Key)
+	ui.Successf("Stack '%s' successfully locked", lock.Data.Key)
 	log.Debug("Stack lock acquired", "key", lock.Data.Key, "lockID", lock.Data.ID, "expires", lock.Data.ExpiresAt)
 
 	return nil
@@ -208,7 +207,7 @@ func executeProUnlock(a *ProUnlockCmdArgs, apiClient pro.AtmosProAPIClientInterf
 		return errors.Join(errUtils.ErrFailedToUnlockStack, err)
 	}
 
-	ui.Writef("\n%s Stack '%s' successfully unlocked\n\n", theme.Styles.Checkmark, dto.Key)
+	ui.Successf("Stack '%s' successfully unlocked", dto.Key)
 	log.Debug("Stack lock released", "key", dto.Key)
 
 	return nil

@@ -191,7 +191,7 @@ func handleToolNotFound(owner, repo, version string, err error, showProgressBar 
 	// If the binary is not found, treat as success (idempotent delete)
 	if errors.Is(err, ErrToolNotFound) || os.IsNotExist(err) {
 		if showProgressBar {
-			printStatusLine(fmt.Sprintf("%s %s/%s@%s not installed", theme.Styles.Checkmark, owner, repo, version))
+			ui.Successf("%s/%s@%s not installed", owner, repo, version)
 		}
 		return nil
 	}
@@ -222,12 +222,12 @@ func handleUninstallError(owner, repo, version string, err error, showProgressBa
 	// If the binary is already gone, treat as success
 	if errors.Is(err, ErrToolNotFound) || os.IsNotExist(err) {
 		if showProgressBar {
-			printStatusLine(fmt.Sprintf("%s %s/%s@%s not installed", theme.Styles.Checkmark, owner, repo, version))
+			ui.Successf("%s/%s@%s not installed", owner, repo, version)
 		}
 		return nil
 	}
 	if showProgressBar {
-		printStatusLine(fmt.Sprintf("%s %s/%s@%s failed to uninstall: %v", theme.Styles.XMark, owner, repo, version, err))
+		ui.Errorf("%s/%s@%s failed to uninstall: %v", owner, repo, version, err)
 	}
 	return err
 }
@@ -242,7 +242,7 @@ func showUninstallCompletion(owner, repo, version string) {
 	time.Sleep(100 * time.Millisecond)
 	// Clear the line before printing the summary
 	resetLine()
-	printStatusLine(fmt.Sprintf("%s %s/%s@%s uninstalled", theme.Styles.Checkmark, owner, repo, version))
+	ui.Successf("%s/%s@%s uninstalled", owner, repo, version)
 }
 
 // uninstallToolInfo holds information about a tool to uninstall.
@@ -353,8 +353,9 @@ func processToolUninstalls(installedTools []uninstallToolInfo, installer *Instal
 
 	var result uninstallResult
 	for i, tool := range installedTools {
-		msg := processToolUninstall(tool, installer, &result)
-		showToolUninstallProgress(i, len(installedTools), msg, &spinner, &progressBar)
+		msg, ok := processToolUninstall(tool, installer, &result)
+		percent := float64(i+1) / float64(len(installedTools))
+		showToolUninstallProgress(percent, msg, ok, &spinner, &progressBar)
 	}
 	resetLine()
 	ui.Writeln("")
@@ -363,29 +364,33 @@ func processToolUninstalls(installedTools []uninstallToolInfo, installer *Instal
 }
 
 // processToolUninstall processes a single tool uninstall and updates the result.
-func processToolUninstall(tool uninstallToolInfo, installer *Installer, result *uninstallResult) string {
+// It returns the status message (without an icon) and whether the outcome was successful.
+func processToolUninstall(tool uninstallToolInfo, installer *Installer, result *uninstallResult) (string, bool) {
 	_, err := installer.FindBinaryPath(tool.owner, tool.repo, tool.version)
 	if err != nil {
 		result.alreadyRemoved++
-		return fmt.Sprintf("%s %s/%s@%s not installed", theme.Styles.Checkmark, tool.owner, tool.repo, tool.version)
+		return fmt.Sprintf("%s/%s@%s not installed", tool.owner, tool.repo, tool.version), true
 	}
 
 	err = uninstallSingleTool(installer, tool.owner, tool.repo, tool.version, false)
 	if err == nil {
 		result.installed++
-		return fmt.Sprintf("%s Uninstalled %s/%s@%s", theme.Styles.Checkmark, tool.owner, tool.repo, tool.version)
+		return fmt.Sprintf("Uninstalled %s/%s@%s", tool.owner, tool.repo, tool.version), true
 	}
 
 	result.failed++
-	return fmt.Sprintf("%s Uninstall failed %s/%s@%s: %v", theme.Styles.XMark, tool.owner, tool.repo, tool.version, err)
+	return fmt.Sprintf("Uninstall failed %s/%s@%s: %v", tool.owner, tool.repo, tool.version, err), false
 }
 
 // showToolUninstallProgress displays progress for the current tool uninstall.
-func showToolUninstallProgress(index, total int, msg string, spinner *bspinner.Model, progressBar *progress.Model) {
-	percent := float64(index+1) / float64(total)
+func showToolUninstallProgress(percent float64, msg string, ok bool, spinner *bspinner.Model, progressBar *progress.Model) {
 	bar := progressBar.ViewAs(percent)
 	resetLine()
-	ui.Writeln(msg)
+	if ok {
+		ui.Success(msg)
+	} else {
+		ui.Error(msg)
+	}
 	for j := 0; j < maxSpinnerUpdates; j++ {
 		printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
 		*spinner, _ = spinner.Update(bspinner.TickMsg{})
@@ -397,15 +402,15 @@ func showToolUninstallProgress(index, total int, msg string, spinner *bspinner.M
 func printUninstallSummary(totalTools int, result uninstallResult) {
 	switch {
 	case totalTools == 0:
-		printStatusLine(fmt.Sprintf("%s no tools to uninstall", theme.Styles.Checkmark))
+		ui.Success("no tools to uninstall")
 	case result.failed == 0 && result.alreadyRemoved == 0:
-		printStatusLine(fmt.Sprintf("%s uninstalled %d tools", theme.Styles.Checkmark, result.installed))
+		ui.Successf("uninstalled %d tools", result.installed)
 	case result.failed == 0 && result.alreadyRemoved > 0:
-		printStatusLine(fmt.Sprintf("%s uninstalled %d tools, skipped %d", theme.Styles.Checkmark, result.installed, result.alreadyRemoved))
+		ui.Successf("uninstalled %d tools, skipped %d", result.installed, result.alreadyRemoved)
 	case result.failed > 0:
-		printStatusLine(fmt.Sprintf("%s uninstalled %d tools, %d failed, skipped %d", theme.Styles.XMark, result.installed, result.failed, result.alreadyRemoved))
+		ui.Errorf("uninstalled %d tools, %d failed, skipped %d", result.installed, result.failed, result.alreadyRemoved)
 	default:
-		printStatusLine(fmt.Sprintf("%s uninstalled %d tools, %d failed, skipped %d", theme.Styles.Checkmark, result.installed, result.failed, result.alreadyRemoved))
+		ui.Successf("uninstalled %d tools, %d failed, skipped %d", result.installed, result.failed, result.alreadyRemoved)
 	}
 }
 

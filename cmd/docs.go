@@ -129,7 +129,7 @@ var docsCmd = &cobra.Command{
 			return fmt.Errorf("open Atmos docs: %w", err)
 		}
 
-		ui.Writef("Opening default browser to '%v'.\n", atmosDocsURL)
+		ui.Infof("Opening default browser to '%v'.", atmosDocsURL)
 		return nil
 	},
 }

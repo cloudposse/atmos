@@ -13,7 +13,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/validator"
 )
 
@@ -162,7 +161,7 @@ func (av *atmosValidatorExecutor) printValidation(schema string, files []string)
 			return count, err
 		}
 		if len(validationErrors) == 0 {
-			ui.Writef("%s Validated %s\n", theme.Styles.Checkmark, displayPath(file))
+			ui.Successf("Validated %s", displayPath(file))
 			log.Debug("Schema validation passed", "file", file, "schema", schema)
 			continue
 		}

@@ -15,7 +15,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 
 	"github.com/cloudposse/atmos/pkg/version"
@@ -207,7 +206,7 @@ func (v versionExec) checkRelease() {
 	currentRelease := strings.TrimPrefix(version.Version, "v")
 
 	if latestRelease == currentRelease {
-		ui.Writef("\n%s You are running the latest version of Atmos\n\n", theme.Styles.Checkmark)
+		ui.Success("You are running the latest version of Atmos")
 		log.Debug("Version check completed", "version", latestRelease)
 	} else {
 		v.printMessageToUpgradeToAtmosLatestRelease(latestRelease)

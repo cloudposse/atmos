@@ -22,7 +22,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -241,7 +240,8 @@ func generateDocument(
 		return fmt.Errorf("%w: %s: %s", errUtils.ErrWriteOutput, outputPath, err)
 	}
 
-	ui.Writef("\n%s Generated docs\n\n", theme.Styles.Checkmark)
+	ui.Writeln("")
+	ui.Success("Generated docs")
 	log.Debug("Documentation generated", "output", outputPath)
 	return nil
 }

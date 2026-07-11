@@ -1,13 +1,25 @@
 package permission
 
 import (
-	"bufio"
 	"context"
+	"errors"
 	"fmt"
-	"os"
-	"strings"
 
+	"github.com/charmbracelet/huh"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
+)
+
+// Cached-permission choice values, fed to the huh select and mapped by
+// handleCachedResponse into an allow/deny decision.
+const (
+	choiceAlwaysAllow = "a"
+	choiceAllowOnce   = "y"
+	choiceDenyOnce    = "n"
+	choiceAlwaysDeny  = "d"
 )
 
 // CLIPrompter implements Prompter using command-line prompts.
@@ -55,17 +67,6 @@ func (p *CLIPrompter) displayPrompt(tool Tool, params map[string]interface{}) {
 			ui.Writef("  %s: %v\n", key, value)
 		}
 	}
-
-	if p.cache != nil {
-		ui.Writef("\nOptions:\n")
-		ui.Writef("  [a] Always allow (save to .atmos/ai.settings.local.json)\n")
-		ui.Writef("  [y] Allow once\n")
-		ui.Writef("  [n] Deny once\n")
-		ui.Writef("  [d] Always deny (save to .atmos/ai.settings.local.json)\n")
-		ui.Write("\nChoice (a/y/n/d): ")
-	} else {
-		ui.Write("\nAllow execution? (y/N): ")
-	}
 }
 
 // handleCachedResponse processes a response when cache is available.
@@ -100,17 +101,64 @@ func (p *CLIPrompter) Prompt(ctx context.Context, tool Tool, params map[string]i
 
 	p.displayPrompt(tool, params)
 
-	reader := bufio.NewReader(os.Stdin)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return false, fmt.Errorf("failed to read input: %w", err)
+	// Prompts require a TTY; fail loudly instead of silently defaulting to deny.
+	if !terminal.New().IsTTY(terminal.Stdin) {
+		return false, errUtils.ErrInteractiveNotAvailable
 	}
-
-	response = strings.TrimSpace(strings.ToLower(response))
 
 	if p.cache != nil {
-		return p.handleCachedResponse(response, tool.Name()), nil
+		return p.promptWithCache(tool.Name())
 	}
 
-	return response == "y" || response == "yes", nil
+	return p.promptWithoutCache()
+}
+
+// promptWithCache presents the four cached-permission choices via a huh select
+// and dispatches the selection through handleCachedResponse.
+func (p *CLIPrompter) promptWithCache(toolName string) (bool, error) {
+	var response string
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Allow execution?").
+				Options(
+					huh.NewOption("Always allow (save to .atmos/ai.settings.local.json)", choiceAlwaysAllow),
+					huh.NewOption("Allow once", choiceAllowOnce),
+					huh.NewOption("Deny once", choiceDenyOnce),
+					huh.NewOption("Always deny (save to .atmos/ai.settings.local.json)", choiceAlwaysDeny),
+				).
+				Value(&response),
+		),
+	).WithTheme(uiutils.NewAtmosHuhTheme())
+
+	if err := form.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return false, errUtils.ErrUserAborted
+		}
+		return false, fmt.Errorf("permission prompt failed: %w", err)
+	}
+
+	return p.handleCachedResponse(response, toolName), nil
+}
+
+// promptWithoutCache presents a simple allow/deny confirmation via huh.
+func (p *CLIPrompter) promptWithoutCache() (bool, error) {
+	var allowed bool
+
+	confirm := uiutils.NewAtmosConfirm().
+		Title("Allow execution?").
+		Affirmative("Allow").
+		Negative("Deny").
+		Value(&allowed).
+		WithTheme(uiutils.NewAtmosHuhTheme())
+
+	if err := confirm.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return false, errUtils.ErrUserAborted
+		}
+		return false, fmt.Errorf("permission prompt failed: %w", err)
+	}
+
+	return allowed, nil
 }

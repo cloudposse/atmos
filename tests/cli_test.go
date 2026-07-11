@@ -1732,6 +1732,12 @@ func shouldUnwrapMarkdownProseLine(line, next string) bool {
 	return true
 }
 
+// snapshotLogLevelPrefixRe matches charmbracelet/log's fixed-width, uppercase
+// level prefixes (e.g. "WARN ", "ERRO ", "INFO ", "DEBU ", "FATA ") as emitted
+// at the start of a rendered log line. These must never be merged into
+// adjacent markdown prose during snapshot normalization.
+var snapshotLogLevelPrefixRe = regexp.MustCompile(`^(WARN|ERRO|INFO|DEBU|FATA)\s`)
+
 func isSnapshotStructuralLine(line string) bool {
 	switch {
 	case strings.HasPrefix(line, "#"):
@@ -1740,11 +1746,18 @@ func isSnapshotStructuralLine(line string) bool {
 		return true
 	case strings.HasPrefix(line, "* "):
 		return true
+	// "• " is the glamour-rendered bullet glyph that markdown source "- "/"* "
+	// becomes after rendering; treat it the same as the raw markdown prefixes above.
+	case strings.HasPrefix(line, "• "):
+		return true
 	case strings.HasPrefix(line, "```"):
 		return true
 	case strings.HasPrefix(line, "│"):
 		return true
 	case strings.HasPrefix(line, "╷") || strings.HasPrefix(line, "╵"):
+		return true
+	// charm-log level prefixes must never be merged into adjacent markdown prose.
+	case snapshotLogLevelPrefixRe.MatchString(line):
 		return true
 	default:
 		return false

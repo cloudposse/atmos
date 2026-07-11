@@ -95,7 +95,7 @@ func writeSingleFile(path string, objects []*unstructured.Unstructured, noun str
 	if err := os.WriteFile(path, data, filePerm); err != nil {
 		return fmt.Errorf("failed to write rendered manifests to %q: %w", path, err)
 	}
-	ui.Writef("rendered %d %s object(s) to %s\n", len(objects), noun, path)
+	ui.Successf("Rendered %d %s object(s) to %s", len(objects), noun, path)
 	return nil
 }
 
@@ -115,6 +115,6 @@ func writeSplitFiles(outputDir string, objects []*unstructured.Unstructured, nou
 		}
 	}
 
-	ui.Writef("rendered %d %s object(s) to %s\n", len(objects), noun, outputDir)
+	ui.Successf("Rendered %d %s object(s) to %s", len(objects), noun, outputDir)
 	return nil
 }
