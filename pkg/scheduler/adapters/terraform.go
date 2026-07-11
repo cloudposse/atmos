@@ -30,20 +30,17 @@ import (
 )
 
 const (
-	terraformDefaultCommand = "terraform"
-	terraformNodeIDFormat   = "%s-%s"
+	terraformDefaultCommand    = "terraform"
+	terraformNodeIDFormat      = "%s-%s"
+	terraformSubCommandPlan    = "plan"
+	terraformSubCommandApply   = "apply"
+	terraformSubCommandDeploy  = "deploy"
+	terraformSubCommandDestroy = "destroy"
 )
 
 const (
 	terraformFailureModeFailFast  = "fail-fast"
 	terraformFailureModeKeepGoing = "keep-going"
-)
-
-const (
-	terraformSubCommandPlan    = "plan"
-	terraformSubCommandApply   = "apply"
-	terraformSubCommandDeploy  = "deploy"
-	terraformSubCommandDestroy = "destroy"
 )
 
 const (
