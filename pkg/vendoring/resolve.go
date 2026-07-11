@@ -74,6 +74,12 @@ type ResolvedSource struct {
 	// FromComponentManifest is true when Source was resolved from a component.yaml fallback
 	// rather than a vendor.yaml source.
 	FromComponentManifest bool
+	// ComponentType is the component type ("terraform", "helmfile", "packer") this source was
+	// resolved under, set only alongside FromComponentManifest. A repo-wide sweep
+	// (DiscoverAllComponentManifests) can mix types in one run, so this travels with each
+	// individual source rather than being assumed from a single CLI --type flag; see
+	// SourceUpdateResult.ComponentType, which carries it into an update report.
+	ComponentType string
 }
 
 // ResolveComponentSource finds a component's vendor source, preferring vendor.yaml (--file
@@ -126,6 +132,7 @@ func ResolveComponentSource(params *ResolveSourceParams) (*ResolvedSource, error
 		Source:                ComponentManifestSource(compCfg, params.Component, componentType),
 		File:                  manifestFile,
 		FromComponentManifest: true,
+		ComponentType:         componentType,
 	}, nil
 }
 
@@ -216,6 +223,7 @@ func DiscoverComponentManifests(basePath, componentType string) ([]*ResolvedSour
 			Source:                ComponentManifestSource(compCfg, entry.Name(), componentType),
 			File:                  manifestFile,
 			FromComponentManifest: true,
+			ComponentType:         componentType,
 		})
 	}
 	return sources, nil

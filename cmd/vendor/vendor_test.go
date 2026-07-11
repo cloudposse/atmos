@@ -815,7 +815,8 @@ func TestRunVendorPull_BatchesMultipleComponentManifestUpdates(t *testing.T) {
 			// The real basename a component.yaml-declared source's File carries (see
 			// pkg/vendoring.FindComponentManifestFile), which is what routes this result into the
 			// batched ExecuteComponentVendorPullBatch call instead of the per-component fallback.
-			File: filepath.Join(componentDir, "component.yaml"),
+			File:          filepath.Join(componentDir, "component.yaml"),
+			ComponentType: "terraform",
 		})
 	}
 
@@ -852,9 +853,10 @@ func TestRunVendorPull_MixedManifestAndVendorYamlUpdates(t *testing.T) {
 
 	report := &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{
 		{
-			Component: "batched-component",
-			Status:    vendoring.StatusUpdated,
-			File:      filepath.Join(batchedDir, "component.yaml"),
+			Component:     "batched-component",
+			Status:        vendoring.StatusUpdated,
+			File:          filepath.Join(batchedDir, "component.yaml"),
+			ComponentType: "terraform",
 		},
 		{
 			// File points at a vendor.yaml-style manifest, not a component.yaml, so this result must
@@ -872,6 +874,57 @@ func TestRunVendorPull_MixedManifestAndVendorYamlUpdates(t *testing.T) {
 
 	assert.FileExists(t, filepath.Join(batchedDir, "main.tf"), "the batched component must have been pulled")
 	assert.FileExists(t, filepath.Join(fallbackDir, "main.tf"), "the fallback component must have been pulled")
+}
+
+// TestRunVendorPull_BatchesByComponentType is a regression test for a reported bug: a repo-wide
+// "vendor update --pull" with no explicit --type sweeps every configured component type
+// (DiscoverAllComponentManifests), so a single batch of StatusUpdated results can mix
+// terraform and helmfile component.yaml updates. ExecuteComponentVendorPullBatch only accepts one
+// componentType per call (it resolves every entry's directory under that one type's base path),
+// so forwarding a mixed batch under a single type would resolve the non-matching type's components
+// under the wrong components/<type>/<name> path. PartitionUpdatedResults must group by
+// SourceUpdateResult.ComponentType so each type gets its own ExecuteComponentVendorPullBatch call.
+func TestRunVendorPull_BatchesByComponentType(t *testing.T) {
+	repoRoot := t.TempDir()
+	chdirTest(t, repoRoot)
+
+	terraformBase := filepath.Join(repoRoot, "components", "terraform")
+	require.NoError(t, os.MkdirAll(terraformBase, 0o755))
+	helmfileBase := filepath.Join(repoRoot, "components", "helmfile")
+	require.NoError(t, os.MkdirAll(helmfileBase, 0o755))
+
+	tfSource := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tfSource, "main.tf"), []byte("# vpc\n"), 0o644))
+	tfDir := writeLocalComponentManifestFixture(t, terraformBase, "vpc", tfSource)
+
+	helmfileSource := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(helmfileSource, "helmfile.yaml"), []byte("# nginx\n"), 0o644))
+	helmfileDir := writeLocalComponentManifestFixture(t, helmfileBase, "nginx", helmfileSource)
+
+	report := &vendoring.UpdateReport{Results: []vendoring.SourceUpdateResult{
+		{
+			Component:     "vpc",
+			Status:        vendoring.StatusUpdated,
+			File:          filepath.Join(tfDir, "component.yaml"),
+			ComponentType: "terraform",
+		},
+		{
+			Component:     "nginx",
+			Status:        vendoring.StatusUpdated,
+			File:          filepath.Join(helmfileDir, "component.yaml"),
+			ComponentType: "helmfile",
+		},
+	}}
+
+	// componentType here matches vendorUpdateCmd's own --type default ("terraform"): a repo-wide
+	// "--pull" run with no explicit --type still carries this default through vendorPullParams,
+	// even though (post-fix) it's ignored for the batch path in favor of each result's own
+	// ComponentType.
+	err := runVendorPull(newVendorPullTestCmd(), nil, report, vendorPullParams{componentType: "terraform"})
+	require.NoError(t, err, "a batch mixing terraform and helmfile updates must pull both correctly")
+
+	assert.FileExists(t, filepath.Join(tfDir, "main.tf"), "the terraform component must have been pulled to its own directory")
+	assert.FileExists(t, filepath.Join(helmfileDir, "helmfile.yaml"), "the helmfile component must have been pulled to its own directory, not under components/terraform")
 }
 
 // TestResetUnchangedFlag covers resetUnchangedFlag's three branches directly: a flag that doesn't

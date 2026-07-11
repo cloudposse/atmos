@@ -222,11 +222,16 @@ func runVendorPull(cmd *cobra.Command, args []string, report *vendoring.UpdateRe
 		return e.ExecuteVendorPullCmd(cmd, args)
 	}
 
-	batchComponents, fallback := partitionUpdatedResults(report)
+	batchComponentsByType, fallback := partitionUpdatedResults(report)
 
 	var errs []error
-	if len(batchComponents) > 0 {
-		if err := pullBatchedComponentManifests(batchComponents, p.componentType, p.dryRun); err != nil {
+	// Batch per type: DiscoverAllComponentManifests' repo-wide sweep (no explicit --type) can mix
+	// terraform/helmfile/packer component.yaml updates in one report, and
+	// ExecuteComponentVendorPullBatch only accepts a single type per call (it resolves every
+	// component's directory under that one type's base path) - forwarding a mixed batch under one
+	// type would resolve some components under the wrong components/<type>/<name> path.
+	for componentType, components := range batchComponentsByType {
+		if err := pullBatchedComponentManifests(components, componentType, p.dryRun); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -248,22 +253,24 @@ var componentManifestBasenames = map[string]bool{
 }
 
 // partitionUpdatedResults splits report's StatusUpdated results into components declared via their
-// own component.yaml/component.yml manifest (eligible for the single batched
-// ExecuteComponentVendorPullBatch call) versus everything else (vendor.yaml or an imported
-// manifest file), which keeps using the existing per-component pullUpdatedComponent loop.
-func partitionUpdatedResults(report *vendoring.UpdateReport) (batchComponents []string, fallback []vendoring.SourceUpdateResult) {
+// own component.yaml/component.yml manifest (eligible for the batched ExecuteComponentVendorPullBatch
+// call, grouped by ComponentType since a repo-wide sweep can mix types in one report) versus
+// everything else (vendor.yaml or an imported manifest file), which keeps using the existing
+// per-component pullUpdatedComponent loop.
+func partitionUpdatedResults(report *vendoring.UpdateReport) (batchComponentsByType map[string][]string, fallback []vendoring.SourceUpdateResult) {
+	batchComponentsByType = map[string][]string{}
 	for i := range report.Results {
 		result := report.Results[i]
 		if result.Status != vendoring.StatusUpdated {
 			continue
 		}
 		if componentManifestBasenames[filepath.Base(result.File)] {
-			batchComponents = append(batchComponents, result.Component)
+			batchComponentsByType[result.ComponentType] = append(batchComponentsByType[result.ComponentType], result.Component)
 			continue
 		}
 		fallback = append(fallback, result)
 	}
-	return batchComponents, fallback
+	return batchComponentsByType, fallback
 }
 
 // pullBatchedComponentManifests initializes the CLI config the same way other component-manifest

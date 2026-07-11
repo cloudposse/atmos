@@ -44,6 +44,13 @@ type SourceUpdateResult struct {
 	// and Archived at the same time, so it's a separate field rather than another UpdateStatus
 	// value.
 	Archived bool
+	// ComponentType is the component type ("terraform", "helmfile", "packer") this result was
+	// resolved under, populated only for component.yaml-declared sources (ResolvedSource.ComponentType;
+	// see updateResolvedSource). Empty for vendor.yaml-declared sources, which don't carry a single
+	// type the same way (each source's own Targets can point anywhere). Used by
+	// cmd/vendor/update.go's partitionUpdatedResults to group a repo-wide "--pull" batch by type,
+	// since a component-manifest sweep (DiscoverAllComponentManifests) can mix types in one report.
+	ComponentType string
 }
 
 // UpdateReport summarizes an update run.
@@ -149,7 +156,7 @@ func processVendorFileSources(fileSources []vendorFileSources, walk *updateWalk)
 		for i := range fs.sources {
 			walk.seen[fs.sources[i].Component] = true
 			reportProgress(walk.params, &fs.sources[i], &walk.index, walk.total)
-			res, err := checkAndUpdateSource(fs.file, &fs.sources[i], walk.params, walk.lister)
+			res, err := checkAndUpdateSource(fs.file, &fs.sources[i], "", walk.params, walk.lister)
 			if res != nil {
 				results = append(results, *res)
 			}
@@ -272,17 +279,19 @@ func updateResolvedSource(resolved *ResolvedSource, params *UpdateParams, lister
 	if resolved.FromComponentManifest && p.VersionSetter == nil {
 		p.VersionSetter = func(file, _, ver string) error { return SetComponentManifestVersion(file, ver) }
 	}
-	return checkAndUpdateSource(resolved.File, resolved.Source, &p, lister)
+	return checkAndUpdateSource(resolved.File, resolved.Source, resolved.ComponentType, &p, lister)
 }
 
-// checkAndUpdateSource evaluates one source and, unless DryRun, applies the update.
+// checkAndUpdateSource evaluates one source and, unless DryRun, applies the update. ComponentType
+// is recorded on the result as-is (empty for vendor.yaml-declared sources; see
+// SourceUpdateResult.ComponentType's doc comment) and otherwise has no bearing on the check itself.
 // Returns nil when the source is filtered out.
-func checkAndUpdateSource(file string, src *schema.AtmosVendorSource, params *UpdateParams, lister version.RemoteLister) (*SourceUpdateResult, error) {
+func checkAndUpdateSource(file string, src *schema.AtmosVendorSource, componentType string, params *UpdateParams, lister version.RemoteLister) (*SourceUpdateResult, error) {
 	if !sourceMatchesFilter(src, params.Component, params.Tags, params.Type) {
 		return nil, nil
 	}
 
-	res := &SourceUpdateResult{File: file, Component: src.Component, CurrentVersion: src.Version}
+	res := &SourceUpdateResult{File: file, Component: src.Component, CurrentVersion: src.Version, ComponentType: componentType}
 
 	if reason := skipReason(src); reason != "" {
 		res.Status, res.Reason = StatusSkipped, reason
