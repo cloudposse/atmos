@@ -116,6 +116,8 @@
       "mdast-util-to-hast@^13": "^13.2.1",
       "mermaid@^11": "^11.15.0",
       "minimatch@^9": "^9.0.7",
+      "nanoid@3.3.3": "^3.3.15",
+      "nanoid@4.0.2": "^5.1.16",
       "node-forge@^1": "^1.4.0",
       "path-to-regexp@^0.1": "^0.1.13",
       "picomatch@^2": "^2.3.2",
