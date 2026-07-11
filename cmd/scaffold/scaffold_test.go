@@ -1,7 +1,6 @@
 package scaffold
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/manifest"
@@ -561,41 +561,10 @@ func TestScaffoldCmd_ViperIntegration(t *testing.T) {
 	assert.NotNil(t, v.Get("set"))
 }
 
-func TestExecuteValidateScaffold_EmptyDirectory(t *testing.T) {
-	t.Skip("Integration test - requires UI formatter initialization")
-
-	tmpDir := t.TempDir()
-
-	err := executeValidateScaffold(context.Background(), tmpDir)
-
-	// Empty directory should not error, just report no files found
-	assert.NoError(t, err)
-}
-
-func TestExecuteValidateScaffold_WithValidFile(t *testing.T) {
-	t.Skip("Integration test - requires UI formatter initialization")
-
-	tmpDir := t.TempDir()
-
-	// Create valid scaffold.yaml
-	scaffoldPath := filepath.Join(tmpDir, "scaffold.yaml")
-	content := `apiVersion: atmos/v1
-kind: AtmosScaffoldConfig
-metadata:
-  name: test-scaffold
-  description: Test
-  version: 1.0.0
-spec:
-  fields:
-    - name: test_field
-      type: input
-`
-	err := os.WriteFile(scaffoldPath, []byte(content), 0o644)
-	require.NoError(t, err)
-
-	err = executeValidateScaffold(context.Background(), tmpDir)
-	assert.NoError(t, err)
-}
+// TestExecuteValidateScaffold_EmptyDirectory and TestExecuteValidateScaffold_WithValidFile
+// were removed as dead t.Skip("Integration test...") tests: both scenarios (empty
+// directory, valid scaffold.yaml) are exercised, without skipping, by
+// TestExecuteValidateScaffold_EndToEnd in scaffold_coverage_test.go.
 
 func TestInit_PackageInitialization(t *testing.T) {
 	// Test that init() function was called and registered command
@@ -797,23 +766,12 @@ func TestExecuteScaffoldGenerate_AbsolutePath(t *testing.T) {
 	}
 }
 
-func TestFindScaffoldFiles_WalkError(t *testing.T) {
-	// Create a directory structure where we can't walk
-	tmpDir := t.TempDir()
-	restrictedDir := filepath.Join(tmpDir, "restricted")
-	err := os.MkdirAll(restrictedDir, 0o000) // No permissions
-	if err != nil {
-		t.Skip("Cannot create restricted directory on this system")
-	}
-	defer os.Chmod(restrictedDir, 0o755) // Cleanup
-
-	_, err = findScaffoldFiles(tmpDir)
-	// Should handle walk errors gracefully
-	// Behavior may vary by OS
-	if err != nil {
-		assert.Error(t, err)
-	}
-}
+// TestFindScaffoldFiles_WalkError was removed: it relied on chmod(0o000) to force a
+// walk error, which is a no-op when tests run as root and silently self-skipped
+// (via a t.Skip check on MkdirAll, which never fails) otherwise — so it never
+// reliably exercised the walk-error branch. It is replaced by the deterministic,
+// portable TestFindScaffoldFilesInDirectory_WalkError in scaffold_coverage_test.go,
+// which forces the error via a nonexistent path instead of permission bits.
 
 func TestMergeConfiguredTemplates_NoTemplatesKey(t *testing.T) {
 	// Isolate from the real atmos.yaml in the repo by switching to an
@@ -880,8 +838,6 @@ func TestSelectTemplateByName_Found(t *testing.T) {
 }
 
 func TestValidateAllScaffoldFiles_WithErrors(t *testing.T) {
-	t.Skip("Integration test - requires UI formatter initialization")
-
 	// Create temp files with mix of valid and invalid scaffolds
 	tmpDir := t.TempDir()
 
@@ -910,16 +866,12 @@ spec:
 }
 
 func TestPrintValidationSummary_WithErrors(t *testing.T) {
-	t.Skip("Integration test - requires UI formatter initialization")
-
 	err := printValidationSummary(2, 1)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed validation")
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldValidation)
 }
 
 func TestPrintValidationSummary_NoErrors(t *testing.T) {
-	t.Skip("Integration test - requires UI formatter initialization")
-
 	err := printValidationSummary(3, 0)
 	require.NoError(t, err)
 }
@@ -1113,19 +1065,12 @@ func TestMergeConfiguredTemplates_AllBranches(t *testing.T) {
 	}
 }
 
-func TestExecuteTemplateGeneration_ErrorPath(t *testing.T) {
-	t.Skip("Requires UI initialization - integration test")
-
-	config := templates.Configuration{
-		Name:  "test",
-		Files: []templates.File{{Path: "test.txt", Content: "content"}},
-	}
-
-	// Test with nil UI to trigger error.
-	opts := scaffoldGenerateOptions{useDefaults: true, templateValues: map[string]interface{}{}}
-	err := executeTemplateGeneration(&config, t.TempDir(), &opts, nil)
-	assert.Error(t, err)
-}
+// TestExecuteTemplateGeneration_ErrorPath was removed: it was a dead
+// t.Skip("Requires UI initialization...") test that (if un-skipped as written)
+// would have panicked on a nil UI receiver rather than returning an error. The
+// targetDir != "" success branch it intended to reach is now properly covered,
+// with a real UI, by TestExecuteTemplateGeneration_WithTargetDir in
+// scaffold_coverage_test.go.
 
 func TestResolveTargetDirectory_ErrorPath(t *testing.T) {
 	// Test that filepath.Abs errors are handled

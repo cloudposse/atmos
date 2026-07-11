@@ -2,12 +2,15 @@ package initcmd
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/generator/templates"
 )
 
 func TestNewInitCommandProvider(t *testing.T) {
@@ -417,9 +420,11 @@ func TestInit_PackageInitialization(t *testing.T) {
 	assert.NotNil(t, initCmd.Flags().Lookup("no-git"))
 }
 
+// TestExecuteInit_WithTemplateDirectory covers executeInit's full happy path
+// (non-interactive, target dir provided): useDefaults is derived as
+// !opts.interactive, so with interactive:false the run never invokes a real
+// huh prompt form and is safe to drive end-to-end in a unit test.
 func TestExecuteInit_WithTemplateDirectory(t *testing.T) {
-	t.Skip("Integration test - requires actual template files and generator context")
-
 	tmpDir := t.TempDir()
 
 	err := executeInit(context.Background(), &initOptions{
@@ -432,8 +437,76 @@ func TestExecuteInit_WithTemplateDirectory(t *testing.T) {
 		},
 	})
 
-	// This would test actual execution, skipped for unit tests.
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(tmpDir, "README.md"))
+}
+
+func TestMaybeInitGeneratedProjectGit_GitEnabled(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello"), 0o600))
+
+	cfg := &templates.Configuration{Name: "demo", Version: "1.0.0"}
+	err := maybeInitGeneratedProjectGit(dir, cfg, &initOptions{git: true})
+
+	require.NoError(t, err)
+	assert.DirExists(t, filepath.Join(dir, ".git"))
+}
+
+func TestMaybeInitGeneratedProjectGit_GitDisabled(t *testing.T) {
+	dir := t.TempDir()
+
+	cfg := &templates.Configuration{Name: "demo"}
+	err := maybeInitGeneratedProjectGit(dir, cfg, &initOptions{git: false})
+
+	require.NoError(t, err)
+	assert.NoDirExists(t, filepath.Join(dir, ".git"))
+}
+
+func TestMaybeInitGeneratedProjectGit_EmptyTargetDirNoOp(t *testing.T) {
+	cfg := &templates.Configuration{Name: "demo"}
+	err := maybeInitGeneratedProjectGit("", cfg, &initOptions{git: true})
+
+	require.NoError(t, err)
+}
+
+func TestCreateInitUI_ReturnsUsableInstance(t *testing.T) {
+	initUI, err := createInitUI()
+
+	require.NoError(t, err)
+	assert.NotNil(t, initUI)
+}
+
+// TestRunInitExecution_WithTargetDir covers the targetDir != "" branch of
+// runInitExecution. The targetDir == "" branch always prompts for a target
+// directory via a real terminal form (regardless of useDefaults) and so
+// cannot be safely unit tested.
+func TestRunInitExecution_WithTargetDir(t *testing.T) {
+	initUI, err := createInitUI()
+	require.NoError(t, err)
+
+	configs, err := templates.GetAvailableConfigurations()
+	require.NoError(t, err)
+	cfg := configs["simple"]
+
+	dir := t.TempDir()
+	opts := &initOptions{
+		targetDir:    dir,
+		interactive:  false,
+		templateVars: map[string]interface{}{"project_name": "demo"},
+	}
+
+	finalDir, err := runInitExecution(initUI, &cfg, opts)
+
+	require.NoError(t, err)
+	assert.Equal(t, dir, finalDir)
+	assert.FileExists(t, filepath.Join(dir, "README.md"))
+}
+
+func TestSelectTemplate_TemplateSourceBranch(t *testing.T) {
+	result, err := selectTemplate("./local-template", false, nil, map[string]templates.Configuration{}, "v1")
+
+	require.NoError(t, err)
+	assert.Equal(t, "./local-template", result.Name)
 }
 
 func TestExecuteInit_ValidatesRequiredArgs(t *testing.T) {

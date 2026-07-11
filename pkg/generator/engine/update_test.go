@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/generator/storage"
 )
 
 // gitTestRepo holds common test repository setup.
@@ -331,4 +332,115 @@ func TestProcessorDetermineBaseContentRelFallback(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, shouldSkip)
 	assert.Equal(t, initialContent, base)
+}
+
+// TestProcessorSetupGitStorage_CorruptedRepoError covers the branch where
+// git.PlainOpenWithOptions fails with an error other than git.ErrRepositoryNotExists.
+func TestProcessorSetupGitStorage_CorruptedRepoError(t *testing.T) {
+	repoDir := t.TempDir()
+	// A .git that exists but is not a valid object database triggers an open
+	// error distinct from "repository does not exist".
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, ".git"), []byte("not a real git dir"), 0o644))
+
+	processor := NewProcessor()
+	err := processor.SetupGitStorage(repoDir, "HEAD")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+	assert.NotErrorIs(t, err, git.ErrRepositoryNotExists)
+}
+
+// TestProcessorMergeFile_DetermineBaseContentErrorPropagates covers mergeFile's
+// propagation of a determineBaseContent error (as opposed to testing
+// determineBaseContent in isolation). The base storage is pointed at a
+// nonexistent ref by bypassing SetupGitStorage's own ref validation, so
+// LoadBase fails when mergeFile calls into it.
+func TestProcessorMergeFile_DetermineBaseContentErrorPropagates(t *testing.T) {
+	initialContent := "name: demo\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+
+	repo, err := git.PlainOpen(testRepo.tmpDir)
+	require.NoError(t, err)
+	testRepo.processor.gitStorage = storage.NewGitBaseStorage(repo, "nonexistent-ref")
+
+	templateFile := File{Path: "config.yaml", Content: "name: template\n", Permissions: 0o644}
+	err = testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+}
+
+// TestProcessorMergeFile_TemplateProcessingSuccess covers the success path of
+// template processing inside mergeFile (IsTemplate: true with content that
+// renders cleanly), as opposed to the existing failure-path-only coverage.
+func TestProcessorMergeFile_TemplateProcessingSuccess(t *testing.T) {
+	initialContent := "name: demo\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "name: demo # rendered via a valid, variable-free template\n",
+		IsTemplate:  true,
+		Permissions: 0o644,
+	}
+
+	mergeErr := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.NoError(t, mergeErr)
+
+	mergedContent, readErr := os.ReadFile(testRepo.configPath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(mergedContent), "name: demo")
+}
+
+// TestProcessorMergeFile_ConflictBranchReturnsError raises the merge threshold
+// so that a genuine conflict is not rejected earlier by TextMerger's own
+// threshold check (ErrMergeThresholdExceeded); this isolates mergeFile's own
+// result.HasConflicts branch (ErrMergeConflict).
+func TestProcessorMergeFile_ConflictBranchReturnsError(t *testing.T) {
+	initialContent := "setting: original\n"
+	userContent := "setting: user-change\n"
+	testRepo := setupGitTestRepo(t, initialContent, userContent)
+	testRepo.processor.SetMaxChanges(100)
+
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: template-change\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	err := testRepo.processor.mergeFile(testRepo.configPath, templateFile, testRepo.tmpDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+}
+
+// Note: mergeFile's os.WriteFile failure branch (writing merged content back
+// to existingPath) is not covered here. Reaching it requires existingPath to
+// remain a valid, readable regular file through os.ReadFile at the top of
+// mergeFile, then fail specifically at the write step — the "directory
+// already exists at this path" trick used elsewhere (e.g.
+// templating_coverage_test.go's TestWriteFileErrors) does not apply here,
+// since that trick fails at the read step instead for a path mergeFile
+// requires to already be a regular file. Forcing this branch portably would
+// need either a chmod-based permission trick (root/Windows-unsafe, per repo
+// convention) or a new injectable write seam, both out of scope here.
+
+// TestProcessorDetermineBaseContent_LoadBaseError covers LoadBase returning a
+// non-nil error (as opposed to the found=true and gitStorage==nil cases
+// already covered), by pointing base storage at an unresolvable ref.
+func TestProcessorDetermineBaseContent_LoadBaseError(t *testing.T) {
+	initialContent := "name: demo\n"
+	testRepo := setupGitTestRepo(t, initialContent, initialContent)
+
+	repo, err := git.PlainOpen(testRepo.tmpDir)
+	require.NoError(t, err)
+	testRepo.processor.gitStorage = storage.NewGitBaseStorage(repo, "nonexistent-ref")
+
+	_, shouldSkip, err := testRepo.processor.determineBaseContent(File{Path: "config.yaml"}, testRepo.configPath)
+
+	require.Error(t, err)
+	assert.False(t, shouldSkip)
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
 }

@@ -452,3 +452,166 @@ func TestSelectTemplateErrors(t *testing.T) {
 	_, err = selectTemplate("", configs, nil)
 	assert.Error(t, err)
 }
+
+func TestMaybeInitGeneratedGitRepository_GitEnabled(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello"), 0o600))
+
+	cfg := &templates.Configuration{Name: "demo", Version: "1.0.0"}
+	err := maybeInitGeneratedGitRepository(dir, cfg, &scaffoldGenerateOptions{git: true})
+
+	require.NoError(t, err)
+	assert.DirExists(t, filepath.Join(dir, ".git"))
+}
+
+func TestMaybeInitGeneratedGitRepository_GitDisabled(t *testing.T) {
+	dir := t.TempDir()
+
+	cfg := &templates.Configuration{Name: "demo"}
+	err := maybeInitGeneratedGitRepository(dir, cfg, &scaffoldGenerateOptions{git: false})
+
+	require.NoError(t, err)
+	assert.NoDirExists(t, filepath.Join(dir, ".git"))
+}
+
+// TestExecuteTemplateGeneration_WithTargetDir covers the targetDir != "" branch of
+// executeTemplateGeneration, which drives the real UI (safe: the "simple" built-in
+// template has a scaffold.yaml, and useDefaults:true skips all interactive huh
+// prompts) rather than the targetDir == "" branch, which always prompts for a
+// target directory via a real terminal form and cannot be safely unit tested.
+func TestExecuteTemplateGeneration_WithTargetDir(t *testing.T) {
+	configs, _, scaffoldUI, err := loadScaffoldTemplates("")
+	require.NoError(t, err)
+	cfg := configs["simple"]
+
+	t.Run("success without git", func(t *testing.T) {
+		dir := t.TempDir()
+		opts := &scaffoldGenerateOptions{
+			useDefaults:    true,
+			templateValues: map[string]interface{}{"project_name": "demo"},
+		}
+
+		err := executeTemplateGeneration(&cfg, dir, opts, scaffoldUI)
+
+		require.NoError(t, err)
+		assert.NoDirExists(t, filepath.Join(dir, ".git"))
+	})
+
+	t.Run("success with git", func(t *testing.T) {
+		dir := t.TempDir()
+		opts := &scaffoldGenerateOptions{
+			useDefaults:    true,
+			git:            true,
+			templateValues: map[string]interface{}{"project_name": "demo"},
+		}
+
+		err := executeTemplateGeneration(&cfg, dir, opts, scaffoldUI)
+
+		require.NoError(t, err)
+		assert.DirExists(t, filepath.Join(dir, ".git"))
+	})
+}
+
+func TestSelectGenerateTemplate_ConfigHit(t *testing.T) {
+	configs := map[string]templates.Configuration{
+		"demo": {Name: "demo", Description: "demo template"},
+	}
+
+	result, err := selectGenerateTemplate(&scaffoldGenerateOptions{templateName: "demo"}, configs, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "demo", result.Name)
+}
+
+func TestSelectGenerateTemplate_TemplateSource(t *testing.T) {
+	result, err := selectGenerateTemplate(
+		&scaffoldGenerateOptions{templateName: "./local-template"},
+		map[string]templates.Configuration{},
+		nil,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "./local-template", result.Name)
+}
+
+func TestSelectGenerateTemplate_FallbackNotFound(t *testing.T) {
+	_, err := selectGenerateTemplate(
+		&scaffoldGenerateOptions{templateName: "nonexistent", interactive: false},
+		map[string]templates.Configuration{},
+		nil,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldNotFound)
+}
+
+func TestMergeConfiguredTemplates_Success(t *testing.T) {
+	dir := t.TempDir()
+	srcDir := filepath.Join(dir, "my-template")
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "file.txt"), []byte("hello"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(`scaffold:
+  templates:
+    my-template:
+      description: My template
+      source: ./my-template
+`), 0o600))
+	t.Chdir(dir)
+
+	configs := map[string]templates.Configuration{}
+	origins := map[string]string{}
+	err := mergeConfiguredTemplates(configs, origins)
+
+	require.NoError(t, err)
+	require.Contains(t, configs, "my-template")
+	assert.Equal(t, "atmos.yaml", origins["my-template"])
+}
+
+func TestMergeConfiguredTemplates_WarnsAndContinues(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(`scaffold:
+  templates:
+    broken-template:
+      description: Missing source, cannot be converted
+`), 0o600))
+	t.Chdir(dir)
+
+	configs := map[string]templates.Configuration{}
+	origins := map[string]string{}
+	err := mergeConfiguredTemplates(configs, origins)
+
+	require.NoError(t, err)
+	assert.NotContains(t, configs, "broken-template")
+}
+
+func TestDetermineScaffoldPathsToValidate_EmptyPathDefaultsToCwd(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "scaffold.yaml"), []byte("apiVersion: atmos/v1\n"), 0o600))
+	t.Chdir(dir)
+
+	paths, err := determineScaffoldPathsToValidate("")
+
+	require.NoError(t, err)
+	assert.Len(t, paths, 1)
+}
+
+func TestValidateScaffoldFile_ReadError(t *testing.T) {
+	// A directory can't be read as a file, forcing os.ReadFile to fail.
+	err := validateScaffoldFile(t.TempDir())
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldReadFile)
+}
+
+// TestFindScaffoldFilesInDirectory_WalkError exercises the walk-error branch
+// deterministically (a nonexistent root makes filepath.Walk's initial Lstat
+// fail) instead of relying on chmod-based permission denial, which is
+// unreliable when tests run as root or on Windows.
+func TestFindScaffoldFilesInDirectory_WalkError(t *testing.T) {
+	nonexistent := filepath.Join(t.TempDir(), "does-not-exist")
+
+	_, err := findScaffoldFilesInDirectory(nonexistent, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldDirectoryRead)
+}

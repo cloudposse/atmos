@@ -58,6 +58,19 @@ func TestShouldSkipFile(t *testing.T) {
 			path:     "default/deep.yaml",
 			expected: false,
 		},
+		{
+			// Covers the per-segment isSkippableSegment loop match, as opposed
+			// to the whole-path sentinel and "//"/leading-trailing-slash
+			// shortcuts already covered above.
+			name:     "middle segment is no-value sentinel",
+			path:     "foo/<no value>/bar",
+			expected: true,
+		},
+		{
+			name:     "middle segment is false sentinel",
+			path:     "foo/false/bar",
+			expected: true,
+		},
 	}
 
 	for _, tc := range testCases {

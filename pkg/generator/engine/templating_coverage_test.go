@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
@@ -236,6 +237,40 @@ func TestHandleExistingFileForce(t *testing.T) {
 	content, err := os.ReadFile(filePath)
 	require.NoError(t, err)
 	assert.Equal(t, "new content", string(content))
+}
+
+func TestValidateRenderedPath_PathTraversalRejected(t *testing.T) {
+	err := validateRenderedPath("../escape/file.txt", "{{ .Config.dir }}/file.txt")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathTraversal)
+}
+
+func TestValidateRenderedPath_UnrenderedMarkerInPath(t *testing.T) {
+	err := validateRenderedPath("foo/{{ .Config.missing }}/bar", "foo/{{ .Config.missing }}/bar")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnprocessedTemplate)
+}
+
+// TestHandleExistingFile_UpdateRenderErrorBeforeMerge covers the branch where
+// re-rendering file.Content during --update fails before mergeFile is ever
+// reached. The gitStorage field only needs to be non-nil to pass
+// handleExistingFile's own precondition check; it's never dereferenced
+// before the render error.
+func TestHandleExistingFile_UpdateRenderErrorBeforeMerge(t *testing.T) {
+	processor := NewProcessor()
+	processor.gitStorage = &storage.GitBaseStorage{}
+
+	dir := t.TempDir()
+	fullPath := filepath.Join(dir, "file.txt")
+	require.NoError(t, os.WriteFile(fullPath, []byte("existing"), 0o644))
+
+	file := File{Path: "file.txt", Content: "{{ unterminated", IsTemplate: true, Permissions: 0o644}
+	err := processor.handleExistingFile(file, fullPath, dir, false, true, nil, nil, []string{defaultLeftDelimiter, defaultRightDelimiter})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTemplateExecution)
 }
 
 // TestWriteFileErrors tests various file write error scenarios.
