@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -2136,7 +2137,17 @@ func TestExecuteWorkflow_ExecStepNotLastFails(t *testing.T) {
 // input. That lets this test reach the `data.Writeln("")` line and the
 // subsequent `if err != nil { return ..., err }` branch without needing a
 // real interactive session.
+//
+// This fails-fast behavior is Unix-specific: on Windows, Bubble Tea reads
+// input via syscall.ReadConsole against the process's console handle, which
+// blocks waiting for real input instead of erroring when there's no
+// interactive session, hanging this test (and the whole package's test
+// binary) until the CI job's 40-minute timeout kills it.
 func TestExecuteWorkflowUI_TUIStartFailureIsReturned(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping on Windows: Bubble Tea's console input read blocks instead of failing fast without a TTY")
+	}
+
 	tmpDir := t.TempDir()
 	workflowsDir := filepath.Join(tmpDir, "workflows")
 	require.NoError(t, os.MkdirAll(workflowsDir, 0o755))
