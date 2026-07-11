@@ -14,7 +14,7 @@ cast:
 
 [Atmos](https://atmos.tools/) is a universal tool for DevOps and cloud automation. This advanced
 example provisions a small AWS application stack — **entirely offline** — against a local AWS
-emulator ([Floci](https://floci.io/)), so you can learn the patterns end to end without a real AWS
+emulator ([Floci](https://github.com/floci-io/floci)), so you can learn the patterns end to end without a real AWS
 account or any credentials.
 
 Follow the [Quick Start: Advanced](https://atmos.tools/quick-start/advanced/) guide for a step-by-step
