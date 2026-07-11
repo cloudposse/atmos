@@ -23,6 +23,24 @@ Expert in creating Atmos examples with proper structure, documentation, mock com
 
 **Use when:** Creating new examples/demos, adding mock components, writing test cases for examples, or updating documentation with EmbedFile components.
 
+### coderabbit-review
+
+Reviews and addresses CodeRabbit feedback on code changes: parses review threads, verifies each finding against current code, applies valid fixes, skips stale/wrong ones with explanation.
+
+**Use when:** A CodeRabbit review lands with unresolved feedback, on-demand or from the `pr-maintenance-loop` skill's hourly cycle.
+
+### lint-fix
+
+Fixes `golangci-lint` findings (patch-scoped or full-repo) produced by the `lint` skill, following this repo's formatting/error-handling/comment conventions.
+
+**Use when:** The `lint` skill has findings to fix, either human-invoked or from `pr-maintenance-loop`'s hourly cycle.
+
+### test-coverage-fix
+
+Fixes in-scope failing tests (never pre-existing ones), then fixes genuine coverage gaps on added lines, for the current patch vs `origin/main`. Zero tolerance for coverage theater or weakened assertions.
+
+**Use when:** The `test-coverage` skill has failures or coverage gaps to address, either human-invoked or from `pr-maintenance-loop`'s hourly cycle.
+
 ## Strategic Approach
 
 As Atmos grows, we create focused agents for each major subsystem. This scales development velocity through specialized

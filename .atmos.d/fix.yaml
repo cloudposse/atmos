@@ -1,0 +1,182 @@
+commands:
+  - name: fix
+    description: |
+      Autonomous patch-quality checks for pr-maintenance-loop, scoped to the current branch's
+      diff vs a base ref (default origin/main): lint, failing tests, coverage gaps, and replying
+      to/resolving GitHub PR review threads.
+
+      These commands gather data and apply purely mechanical steps (e.g. running the existing
+      lint gate). The actual "fix this failing test" / "fix this coverage gap" / "fix this lint
+      finding" reasoning is done by Claude Code agents that consume this output — see
+      .claude/skills/lint/SKILL.md and .claude/skills/test-coverage/SKILL.md.
+    flags:
+      - name: all
+        type: bool
+        default: false
+        description: Run sync, ci, threads, lint, then coverage in sequence (omits `comments`, which needs per-thread parameters) — the full pr-maintenance-loop cycle, runnable standalone outside the hourly loop
+    steps:
+      # `when:` conditions only see env/stack/step/status/ci (pkg/runner/runner.go
+      # taskConditionContext) — flag values aren't available there, confirmed by
+      # testing, so this guard has to stay a shell conditional rather than a
+      # native `exit` step gated by `when`.
+      - type: shell
+        command: |
+          set -eu
+          if [ "{{ .Flags.all }}" != "true" ]; then
+            echo "Select a fix mode, for example: atmos fix --all, or atmos fix lint / tests / coverage / comments" >&2
+            exit 1
+          fi
+      - type: atmos
+        command: fix sync
+      - type: atmos
+        command: fix ci
+      - type: atmos
+        command: fix threads
+      - type: toast
+        level: info
+        content: "Running patch-scoped lint, then tests and coverage..."
+      - type: atmos
+        command: fix lint
+      - type: atmos
+        command: fix coverage
+      - type: toast
+        level: success
+        content: "atmos fix --all complete."
+
+    commands:
+      - name: sync
+        description: |
+          Update the PR against origin/main if behind (GitHub-side, via `gh pr update-branch`),
+          then sync this local checkout with the remote PR branch — `gh pr update-branch` only
+          updates the remote side via GitHub's API, never the local checkout, so this second half
+          is required every time to avoid stale local git state (false lint/coverage findings,
+          rejected pushes). Fails closed: if the local sync isn't a clean fast-forward, this
+          reports an error rather than forcing a merge or rewrite.
+        steps:
+          - type: toast
+            level: info
+            content: "Syncing with origin/main and the remote PR branch..."
+          - type: shell
+            command: .claude/skills/pr-maintenance-loop/scripts/sync-branch.sh
+          - type: toast
+            level: success
+            content: "Sync complete."
+
+      - name: lint
+        description: |
+          Patch-aware lint check. Delegates to the existing `atmos lint --changed`, which builds
+          the custom golangci-lint binary (staleness-guarded — only rebuilds when missing or
+          stale) and runs it scoped to lines changed vs origin/main.
+        steps:
+          # Without this, `--new-from-rev=origin/main` diffs against whatever the local
+          # origin/main ref last pointed to — which can be stale in a long-running loop against
+          # an actively-developed repo, wrongly flagging already-merged upstream commits as "new"
+          # findings on this patch. Confirmed for real: a rebase a few cycles back left the local
+          # ref behind, and 3 findings from an already-merged, unrelated PR (#2674) got reported
+          # as if they belonged to this patch.
+          - type: shell
+            command: git fetch origin main --quiet
+          - type: toast
+            level: info
+            content: "Running patch-scoped lint (atmos lint --changed)..."
+          - type: atmos
+            command: lint --changed
+          - type: toast
+            level: success
+            content: "Patch-scoped lint complete."
+
+      - name: coverage
+        description: |
+          Run tests scoped to the packages touched by the diff vs a base ref, and report raw
+          pass/fail status, test output, coverage profile, and the diff itself — no line-level
+          analysis is done here, that's left to the consuming agent.
+        arguments:
+          - name: base-ref
+            description: Base ref to diff against
+            default: origin/main
+        steps:
+          # Same staleness fix as `atmos fix lint` — keep the local remote-tracking ref for the
+          # base-ref current before diffing against it.
+          - type: shell
+            command: git fetch origin --quiet
+          - type: toast
+            level: info
+            content: 'Running scoped tests + coverage vs {{ index .Arguments "base-ref" }}...'
+          - type: shell
+            command: .claude/skills/test-coverage/scripts/patch-test-coverage.sh {{ index .Arguments "base-ref" }}
+
+      - name: tests
+        description: |
+          Alias for `atmos fix coverage` — the same scoped test run reports pass/fail status too,
+          this is just the entry point to reach for when the question is "are my tests passing"
+          rather than "is my patch covered."
+        arguments:
+          - name: base-ref
+            description: Base ref to diff against
+            default: origin/main
+        steps:
+          - type: atmos
+            command: fix coverage {{ index .Arguments "base-ref" }}
+
+      - name: comments
+        description: |
+          Reply to (and optionally resolve) a GitHub PR review thread. Hardcodes exactly two
+          GraphQL mutations (addPullRequestReviewThreadReply, then resolveReviewThread only with
+          --resolve) — never accepts arbitrary query text, so --body can't be repurposed into a
+          different mutation even if fully attacker-controlled.
+
+          Run `atmos fix threads` first to find a thread's ID.
+        flags:
+          - name: thread-id
+            required: true
+            description: GraphQL node ID of the review thread (see `atmos fix threads`)
+          - name: body
+            required: true
+            description: 'Reply text, e.g. `Fixed in COMMIT_SHA: one-line summary`'
+          - name: resolve
+            type: bool
+            default: false
+            description: Also mark the thread resolved — only pass this when a concrete fixing commit exists
+        steps:
+          - type: shell
+            command: |
+              set -eu
+              args=(--thread-id "{{ index .Flags "thread-id" }}" --body "{{ index .Flags "body" }}")
+              if [ "{{ .Flags.resolve }}" = "true" ]; then
+                args+=(--resolve)
+              fi
+              .claude/skills/pr-maintenance-loop/scripts/gh-resolve-review-thread.sh "${args[@]}"
+          - type: toast
+            level: success
+            content: 'Replied to review thread {{ index .Flags "thread-id" }}{{ if .Flags.resolve }} and marked it resolved{{ end }}.'
+
+      # Named `threads`, deliberately NOT sharing the `comments` prefix: a multi-word name like
+      # `comments list` still resolves through the same "comments" command node (same as a true
+      # nested `commands:` under it) and inherits its required --thread-id/--body flags before
+      # Cobra even dispatches — confirmed by testing, both ways failed identically on missing
+      # required flags that belong to the unrelated parent.
+      - name: threads
+        description: |
+          List unresolved, non-outdated CodeRabbit review threads on the current branch's PR —
+          read-only, no mutation. Prints each thread's node ID (what `atmos fix comments
+          --thread-id` needs), file path, comment URL, and a one-line preview.
+        steps:
+          - type: shell
+            command: .claude/skills/pr-maintenance-loop/scripts/list-review-threads.sh
+
+      - name: ci
+        description: |
+          List currently failing CI checks on the current branch's PR, with a failure-log excerpt
+          where fetchable, plus the diff vs a base ref — read-only, no mutation. Does not judge
+          whether a failure is caused by this patch or pre-existing; that's left to the consuming
+          agent, same as `atmos fix coverage`.
+        steps:
+          # Same staleness fix as `atmos fix lint` — this script's diff-vs-origin/main section at
+          # the end needs a current local ref.
+          - type: shell
+            command: git fetch origin main --quiet
+          - type: toast
+            level: info
+            content: "Checking CI status..."
+          - type: shell
+            command: .claude/skills/pr-maintenance-loop/scripts/list-failing-checks.sh

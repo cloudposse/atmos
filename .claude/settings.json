@@ -5,6 +5,8 @@
       "Bash(git diff:*)",
       "Bash(git log:*)",
       "Bash(git fetch:*)",
+      "Bash(git merge-base:*)",
+      "Bash(git merge --ff-only:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push origin HEAD:*)",
@@ -17,7 +19,10 @@
       "Bash(go build:*)",
       "Bash(go test:*)",
       "Bash(go vet:*)",
-      "Bash(date:*)"
+      "Bash(date:*)",
+      "Bash(atmos fix:*)",
+      "Bash(./custom-gcl:*)",
+      "Bash(say:*)"
     ],
     "deny": [
       "Bash(git push --force:*)",
