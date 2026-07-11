@@ -32,21 +32,21 @@ require (
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/aws/aws-sdk-go-v2 v1.42.1
-	github.com/aws/aws-sdk-go-v2/config v1.32.18
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.17
-	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.52.0
-	github.com/aws/aws-sdk-go-v2/service/ecr v1.57.2
+	github.com/aws/aws-sdk-go-v2/config v1.32.29
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.28
+	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.55.0
+	github.com/aws/aws-sdk-go-v2/service/ecr v1.59.0
 	github.com/aws/aws-sdk-go-v2/service/ecrpublic v1.40.0
-	github.com/aws/aws-sdk-go-v2/service/eks v1.84.0
+	github.com/aws/aws-sdk-go-v2/service/eks v1.89.0
 	github.com/aws/aws-sdk-go-v2/service/inspector2 v1.52.0
-	github.com/aws/aws-sdk-go-v2/service/organizations v1.51.3
-	github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.31.12
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.101.0
-	github.com/aws/aws-sdk-go-v2/service/securityhub v1.71.0
-	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.6
-	github.com/aws/aws-sdk-go-v2/service/sso v1.30.17
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.0
-	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1
+	github.com/aws/aws-sdk-go-v2/service/organizations v1.52.0
+	github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.34.0
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.105.0
+	github.com/aws/aws-sdk-go-v2/service/securityhub v1.73.0
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.71.0
+	github.com/aws/aws-sdk-go-v2/service/sso v1.32.0
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.37.0
+	github.com/aws/aws-sdk-go-v2/service/sts v1.44.0
 	github.com/aws/smithy-go v1.27.3
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/charmbracelet/bubbles v1.0.0
@@ -187,18 +187,18 @@ require (
 	github.com/arsham/rainbow v1.2.1 // indirect
 	github.com/avast/retry-go v3.0.0+incompatible // indirect
 	github.com/aws/aws-sdk-go v1.55.8 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.10 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.23 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.14 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.30 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.19 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.30 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.30 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.24 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.9 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.15 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.23 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.23 // indirect
-	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.7
-	github.com/aws/aws-sdk-go-v2/service/signin v1.0.11 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.31 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.13 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.23 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.30 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.31 // indirect
+	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.43.0
+	github.com/aws/aws-sdk-go-v2/service/signin v1.4.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
@@ -474,7 +474,7 @@ require sigs.k8s.io/controller-runtime v0.24.1
 
 require github.com/testcontainers/testcontainers-go v0.42.0
 
-require github.com/aws/aws-sdk-go-v2/service/kms v1.51.1
+require github.com/aws/aws-sdk-go-v2/service/kms v1.54.0
 
 require (
 	github.com/databus23/helm-diff/v3 v3.15.10
