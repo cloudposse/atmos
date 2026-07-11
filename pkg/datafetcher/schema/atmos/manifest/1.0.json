@@ -52,6 +52,9 @@
     },
     "workflows": {
       "$ref": "#/definitions/workflows"
+    },
+    "version": {
+      "$ref": "#/definitions/version"
     }
   },
   "additionalProperties": true,
@@ -2478,6 +2481,26 @@
             "additionalProperties": true
               }
             ]
+          }
+        }
+      ]
+    },
+    "version": {
+      "title": "version",
+      "description": "Stack-level Atmos Version Tracker track assertion. Selects which version track (`atmos version track`) this stack resolves `!version` and `{{ .version.* }}` against.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "track": {
+              "type": "string",
+              "description": "The version track this stack asserts (e.g. `dev`, `prod`). Defaults to `version.track` in `atmos.yaml` when omitted."
+            }
           }
         }
       ]

@@ -32,6 +32,9 @@ steps:
 
   <dt>`extensions`</dt>
   <dd>Optional file extension filters.</dd>
+
+  <dt>`default`</dt>
+  <dd>Optional path returned in a non-TTY environment (e.g. CI) instead of prompting.</dd>
 </dl>
 
-Interactive steps require a TTY. Reference the selected path later with `{{ .steps.manifest.value }}`.
+Interactive steps require a TTY; in a non-TTY environment such as CI, the step uses its [`default`](/workflows/steps#interactive-steps-in-ci-non-tty) path if set and otherwise errors. Reference the selected path later with `{{ .steps.manifest.value }}`.

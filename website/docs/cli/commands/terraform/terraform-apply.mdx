@@ -240,6 +240,47 @@ atmos terraform apply vpc -s dev
         ```
     </dd>
 
+    <dt>`--max-concurrency` <em>(optional)</em></dt>
+    <dd>
+        Maximum number of components to apply concurrently when running with `--all`, `--affected`, `--components`, or `--query`. Default is `1` (sequential).
+
+        **Environment variable:** `ATMOS_TERRAFORM_APPLY_MAX_CONCURRENCY`
+
+        ```shell
+        atmos terraform apply --all -s dev --max-concurrency 4
+        ```
+    </dd>
+
+    <dt>`--failure-mode` <em>(optional)</em></dt>
+    <dd>
+        Controls how the concurrent scheduler handles a failed component when using `--all`, `--affected`, `--components`, or `--query` with `--max-concurrency > 1`.
+
+        Supported values:
+        - `fail-fast` *(default)* — stop scheduling new components as soon as one fails
+        - `keep-going` — continue applying independent graph branches even after a failure
+
+        **Environment variable:** `ATMOS_TERRAFORM_APPLY_FAILURE_MODE`
+
+        ```shell
+        atmos terraform apply --all -s dev --max-concurrency 4 --failure-mode keep-going
+        ```
+    </dd>
+
+    <dt>`--log-order` <em>(optional)</em></dt>
+    <dd>
+        Controls how concurrent per-component logs are ordered when `--max-concurrency` is greater than `1`.
+
+        Supported values:
+        - `stream` *(default)* — print log lines as they arrive, interleaved across components
+        - `grouped` — buffer each component's output and print it as a contiguous block after the component finishes
+
+        **Environment variable:** `ATMOS_TERRAFORM_APPLY_LOG_ORDER`
+
+        ```shell
+        atmos terraform apply --all -s dev --max-concurrency 4 --log-order grouped
+        ```
+    </dd>
+
     <dt>`--ci` <em>(optional)</em></dt>
     <dd>
         Enable CI mode for automated pipelines. When enabled, Atmos writes job summaries, CI output variables, and status checks based on the [`ci` configuration](/cli/configuration/ci) in `atmos.yaml`.

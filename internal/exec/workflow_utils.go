@@ -43,6 +43,11 @@ import (
 // Workflow error title for formatted output.
 const WorkflowErrTitle = "Workflow Error"
 
+// workflowTemplatePasses is the number of template render passes the workflow
+// step executor uses, matching the custom command step path (cmd_utils.go) so
+// multi-level templates resolve identically in both.
+const workflowTemplatePasses = 3
+
 // bgRunIDLen is the length of the short per-run id used to scope background container
 // instance names when no explicit `--stack` is given.
 const bgRunIDLen = 8
@@ -282,6 +287,26 @@ func ExecuteWorkflow(
 	// Initialize step executor with stage count for stage step type.
 	initStepExecutorWithStages(workflowDefinition)
 
+	// Resolve inline workflow step commands and env through the same template
+	// engine custom command steps use (full Atmos renderer + multi-pass), so
+	// {{ .steps.* }} / {{ .env.* }} / {{ .flags.* }} and template functions
+	// behave identically in both. Flags are protected so a flag value containing
+	// template markers is not re-evaluated on later passes (mirrors cmd_utils).
+	workflowVars := stepExecutorState.Variables()
+	workflowVars.SetTemplateRenderer(func(name, input string, data any) (string, error) {
+		return ProcessTmpl(&atmosConfig, name, input, data, false)
+	})
+	workflowVars.SetTemplatePasses(workflowTemplatePasses)
+	workflowVars.ProtectTemplateRoots("Flags", "flags")
+
+	// Evaluate value-producing YAML functions (!env, !exec) in interactive step
+	// fields (default/prompt/placeholder/options). Workflow manifests are parsed
+	// with UnmarshalYAML, which leaves these as literal "!env ..." strings; this
+	// lets interactive steps source defaults from the environment in CI.
+	if err := resolveWorkflowStepFunctions(&atmosConfig, workflowDefinition); err != nil {
+		return err
+	}
+
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
@@ -480,10 +505,24 @@ func ExecuteWorkflow(
 			commandType = "atmos"
 		}
 
+		// Resolve step-variable templates in workflow/step env values (parity with
+		// custom command steps) so a value like `X: "{{ .steps.select.value }}"`
+		// is populated before it reaches the subprocess.
+		resolvedWorkflowEnv, resolvedStepEnv, err := resolveWorkflowStepEnvs(workflowDefinition.Env, step.Env, baseEnv)
+		if err != nil {
+			if workflowErr == nil {
+				workflowErr = err
+			} else {
+				workflowErr = errors.Join(workflowErr, err)
+			}
+			conditionStatus = schema.ConditionPredicateFailure
+			continue
+		}
+
 		// Prepare environment variables: start with baseEnv (system + global + toolchain).
 		// Then merge workflow-level and step-level env vars.
 		// If identity is specified, also authenticate and add credentials.
-		stepEnv, err := prepareStepEnvironment(baseEnv, stepIdentity, step.Name, authManager, workflowDefinition.Env, step.Env)
+		stepEnv, err := prepareStepEnvironment(baseEnv, stepIdentity, step.Name, authManager, resolvedWorkflowEnv, resolvedStepEnv)
 		if err != nil {
 			if workflowErr == nil {
 				workflowErr = err
@@ -525,6 +564,22 @@ func ExecuteWorkflow(
 				WithHint("Each step must specify a valid type: 'atmos', 'shell', 'script', 'exec', or an interactive type like 'input', 'confirm', 'choose'").
 				WithExitCode(1).
 				Err()
+		}
+
+		// Resolve step-variable templates ({{ .steps.* }} / {{ .env.* }} /
+		// {{ .flags.* }}) in inline command-bearing steps (shell/atmos/exec) so a
+		// value captured by an earlier step reaches the command — parity with
+		// custom command steps.
+		if workflowCommandSupportsTemplating(commandType) {
+			resolvedCommand, resolveErr := resolveWorkflowStepCommand(command, stepEnv)
+			if resolveErr != nil {
+				// errors.Join ignores a nil left operand, so this both starts and
+				// accumulates the workflow error without an extra nil check.
+				workflowErr = errors.Join(workflowErr, resolveErr)
+				conditionStatus = schema.ConditionPredicateFailure
+				continue
+			}
+			command = resolvedCommand
 		}
 
 		// If this step will be enclosed in a CI log group, mark the subprocess

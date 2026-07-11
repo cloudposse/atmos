@@ -481,3 +481,39 @@ func TestVariablesResolveError(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "error: something failed", result)
 }
+
+func TestVariablesResolveWith(t *testing.T) {
+	t.Run("overlays env for the call without mutating the persisted env", func(t *testing.T) {
+		vars := NewVariables()
+		vars.SetEnv("BASE", "base-value")
+
+		result, err := vars.ResolveWith(
+			"{{ .env.BASE }}/{{ .env.OVERLAY }}",
+			map[string]string{"OVERLAY": "overlay-value"},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, "base-value/overlay-value", result)
+
+		_, present := vars.Env["OVERLAY"]
+		assert.False(t, present, "overlay key leaked into persisted env")
+	})
+
+	t.Run("overlay wins over a persisted env value for the call only", func(t *testing.T) {
+		vars := NewVariables()
+		vars.SetEnv("REGION", "use1")
+
+		result, err := vars.ResolveWith("{{ .env.REGION }}", map[string]string{"REGION": "euc1"})
+		require.NoError(t, err)
+		assert.Equal(t, "euc1", result)
+		assert.Equal(t, "use1", vars.Env["REGION"], "persisted env changed after ResolveWith")
+	})
+
+	t.Run("nil overlay resolves against the persisted data", func(t *testing.T) {
+		vars := NewVariables()
+		vars.Set("app", NewStepResult("myapp"))
+
+		result, err := vars.ResolveWith("{{ .steps.app.value }}", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "myapp", result)
+	})
+}

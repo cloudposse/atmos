@@ -6,6 +6,8 @@ tags: [feature, dx]
 date: 2026-06-27
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Atmos workflows can now start long-running container services in the background, wait for them to become healthy, and tear them down automatically. Bring up an emulator, database, or registry with `background: true`, gate the next step on its container health check, and stop it with a `cancel` step — no shell scripts, no background jobs, no orphaned containers.
 
 <!--truncate-->
@@ -72,6 +74,12 @@ workflows:
 ```
 
 Atmos starts the emulator, blocks until its health check reports healthy, runs `apply`, then `cancel` stops and removes the container.
+
+Here it is running end to end:
+
+<CastPlayer src="/casts/examples/background-steps/service.cast" title="atmos background service" chrome controls scrubber />
+
+[View the full example](/examples/background-steps)
 
 ## Readiness Reuses the Health Check
 

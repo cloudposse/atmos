@@ -1,9 +1,9 @@
 ---
-title: Local GitOps
+title: GitOps with Flux
 tags: [Emulators, Kubernetes, Automation]
 cast:
   file: /casts/examples/local-gitops/lifecycle.cast
-  title: atmos local gitops lifecycle
+  title: atmos gitops with flux lifecycle
 ---
 
 # Example: Local GitOps Round Trip

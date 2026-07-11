@@ -125,6 +125,7 @@ var (
 	ErrVersionRenderDrift            = errors.New("rendered output differs from committed file")
 	ErrUnsupportedVersionTrackFormat = errors.New("unsupported output format (supported: yaml, json)")
 	ErrUnsupportedVersionShow        = errors.New("unsupported --show value (supported: desired, locked)")
+	ErrUnsupportedVersionField       = errors.New("unsupported --show value (supported: name, ecosystem, datasource, provider, package, desired, group, update, include, exclude, prerelease, labels, locked)")
 	ErrVersionFilesDrift             = errors.New("version-managed files are out of date; run `atmos version track apply`")
 	ErrUnknownVersionFileManager     = errors.New("unknown file manager")
 	ErrDuplicateVersionFileManager   = errors.New("duplicate file manager registration")
@@ -431,6 +432,7 @@ var (
 	ErrMerge                         = errors.New("merge error")
 	ErrMergeNilDst                   = errors.New("merge destination must not be nil")
 	ErrMergeTypeMismatch             = errors.New("cannot override two slices with different type")
+	ErrMergeKeyCollision             = errors.New("distinct map keys collide after normalization")
 	ErrEncode                        = errors.New("encoding error")
 	ErrDecode                        = errors.New("decoding error")
 

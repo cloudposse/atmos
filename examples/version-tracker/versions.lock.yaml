@@ -1,0 +1,95 @@
+version: 1
+tracks:
+  default:
+    checkout:
+      version: v6.1.0
+      ecosystem: github-actions
+      datasource: github-actions
+      package: actions/checkout
+    nginx:
+      version: 1.29.0
+      ecosystem: oci
+      datasource: oci
+      package: library/nginx
+    opentofu:
+      version: 1.10.6
+      ecosystem: toolchain
+      datasource: toolchain
+      package: opentofu
+    kubectl:
+      version: 1.29.4
+      ecosystem: toolchain
+      datasource: toolchain
+      package: kubectl
+    redis:
+      version: 7.2.5
+      ecosystem: oci
+      datasource: oci
+      package: library/redis
+    setup_node:
+      version: v4.0.0
+      ecosystem: github-actions
+      datasource: github-actions
+      package: actions/setup-node
+  dev:
+    checkout:
+      version: v6.1.0
+      ecosystem: github-actions
+      datasource: github-actions
+      package: actions/checkout
+    nginx:
+      version: 1.29.0
+      ecosystem: oci
+      datasource: oci
+      package: library/nginx
+    opentofu:
+      version: 1.10.6
+      ecosystem: toolchain
+      datasource: toolchain
+      package: opentofu
+    kubectl:
+      version: 1.31.0
+      ecosystem: toolchain
+      datasource: toolchain
+      package: kubectl
+    redis:
+      version: 7.4.0
+      ecosystem: oci
+      datasource: oci
+      package: library/redis
+    setup_node:
+      version: v4.1.0
+      ecosystem: github-actions
+      datasource: github-actions
+      package: actions/setup-node
+  prod:
+    checkout:
+      version: v6.1.0
+      ecosystem: github-actions
+      datasource: github-actions
+      package: actions/checkout
+    nginx:
+      version: 1.29.0
+      ecosystem: oci
+      datasource: oci
+      package: library/nginx
+    opentofu:
+      version: 1.10.6
+      ecosystem: toolchain
+      datasource: toolchain
+      package: opentofu
+    kubectl:
+      version: 1.29.4
+      ecosystem: toolchain
+      datasource: toolchain
+      package: kubectl
+    redis:
+      version: 7.2.5
+      ecosystem: oci
+      datasource: oci
+      package: library/redis
+    setup_node:
+      version: v4.0.0
+      ecosystem: github-actions
+      datasource: github-actions
+      package: actions/setup-node

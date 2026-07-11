@@ -691,7 +691,7 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	info.TerraformFailureMode = opts.FailureMode
 	info.FailFast = opts.FailureMode == terraformFailureModeFailFast
 	info.KeepGoing = opts.FailureMode == terraformFailureModeKeepGoing
-	info.TerraformPlanLogOrder = opts.PlanLogOrder
+	info.TerraformLogOrder = opts.LogOrder
 	info.TerraformPlanHide = opts.PlanHide
 	info.TerraformPlanHideNoChanges = opts.PlanHideNoChanges
 	info.TerraformPlanSummaryFile = opts.PlanSummaryFile
