@@ -105,6 +105,13 @@ var (
 			"opa": schema.ResourcePath{
 				BasePath: "stacks/schemas/opa",
 			},
+			"config": schema.SchemaRegistry{
+				Schema: "atmos://schema/config/global/1.0",
+				Matches: []string{
+					"atmos.yaml",
+					"atmos.yml",
+				},
+			},
 		},
 		Templates: schema.Templates{
 			Settings: schema.TemplatesSettings{

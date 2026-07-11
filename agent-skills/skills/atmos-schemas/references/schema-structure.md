@@ -4,12 +4,35 @@
 
 | File | Purpose | Embedding |
 |------|---------|-----------|
-| `website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` | Public schema for website and IDE integration | Not embedded; deployed to `atmos.tools` |
-|| `pkg/datafetcher/schema/config/global/1.0.json` | Global Atmos config schema | Embedded via `//go:embed schema/*` |
+| `website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` | Public stack manifest schema for website and IDE integration | Not embedded; deployed to `atmos.tools` |
+| `website/static/schemas/atmos/atmos-config/1.0/atmos-config.json` | Public root `atmos.yaml` schema for website and IDE integration | Not embedded; deployed to `atmos.tools` |
+| `pkg/datafetcher/schema/config/global/1.0.json` | Root `atmos.yaml` CLI config schema | Embedded via `//go:embed schema/*` as `atmos://schema/config/global/1.0` |
 
-## Top-Level Schema Structure
+## Atmos Config Schema Structure
 
-All manifest schemas follow this structure:
+The atmos-config schema validates root `atmos.yaml` files. Unlike stack manifests, all top-level
+properties are optional and there is no root `oneOf` requiring specific sections.
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://json.schemastore.org/atmos-config.json",
+  "title": "JSON Schema for Atmos CLI configuration (atmos.yaml). Version 1.0. https://atmos.tools",
+  "fileMatch": ["atmos.yaml", "atmos.yml", ".atmos.yaml", ".atmos.yml"],
+  "type": "object",
+  "additionalProperties": false,
+  "properties": { ... },
+  "definitions": { ... }
+}
+```
+
+Top-level properties include `base_path`, `stacks`, `components`, `settings`, `auth`, `stores`,
+`schemas`, `workflows`, `toolchain`, `ci`, `version`, and other `AtmosConfiguration` keys. Coverage
+is enforced by `pkg/datafetcher/atmos_config_schema_coverage_test.go`.
+
+## Stack Manifest Schema Structure
+
+All stack manifest schemas follow this structure:
 
 ```json
 {

@@ -163,8 +163,20 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 	}
 }
 
-// TestDisplayPath verifies user-facing validation output never leaks
-// machine-specific absolute paths for files inside the working directory.
+func TestPrepareSchemaValueConfigDefaults(t *testing.T) {
+	av := &atmosValidatorExecutor{
+		atmosConfig: &schema.AtmosConfiguration{
+			Schemas: map[string]any{
+				"config": schema.SchemaRegistry{},
+			},
+		},
+	}
+
+	value := av.prepareSchemaValue("config", "config", "")
+	assert.Equal(t, "atmos://schema/config/global/1.0", value.Schema)
+	assert.Equal(t, []string{"atmos.yaml", "atmos.yml"}, value.Matches)
+}
+
 func TestDisplayPath(t *testing.T) {
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
