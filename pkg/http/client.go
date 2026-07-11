@@ -375,6 +375,15 @@ func (c *DefaultClient) Do(req *http.Request) (*http.Response, error) {
 	return c.client.Do(req)
 }
 
+// HTTPClient returns the underlying *http.Client, for callers that need the
+// concrete stdlib type (e.g. third-party libraries with a `Client *http.Client`
+// field) rather than the [Client] interface.
+func (c *DefaultClient) HTTPClient() *http.Client {
+	defer perf.Track(nil, "http.DefaultClient.HTTPClient")()
+
+	return c.client
+}
+
 // Get performs an HTTP GET request with context using the provided client.
 func Get(ctx context.Context, url string, client Client) ([]byte, error) {
 	defer perf.Track(nil, "http.Get")()
