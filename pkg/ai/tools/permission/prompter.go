@@ -136,7 +136,7 @@ func (p *CLIPrompter) promptWithCache(toolName string) (bool, error) {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return false, errUtils.ErrUserAborted
 		}
-		return false, fmt.Errorf("permission prompt failed: %w", err)
+		return false, fmt.Errorf("%w: %w", errUtils.ErrAIPermissionPromptFailed, err)
 	}
 
 	return p.handleCachedResponse(response, toolName), nil
@@ -157,7 +157,7 @@ func (p *CLIPrompter) promptWithoutCache() (bool, error) {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return false, errUtils.ErrUserAborted
 		}
-		return false, fmt.Errorf("permission prompt failed: %w", err)
+		return false, fmt.Errorf("%w: %w", errUtils.ErrAIPermissionPromptFailed, err)
 	}
 
 	return allowed, nil
