@@ -100,8 +100,22 @@ jobs:
 
       - name: Get dependencies
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
+        shell: bash
         run: |
-          go mod download
+          # go mod download hits the network (proxy.golang.org, falling back to
+          # a direct github.com clone for modules it doesn't index) and has no
+          # built-in retry. A transient DNS resolution failure on the hosted
+          # runner otherwise fails this whole build matrix leg and cascades into
+          # skipped downstream jobs (e.g. k3s-required's "Check k3s matrix
+          # result" gate). Retry with backoff, mirroring the atmos test retry
+          # loop in the k3s job below.
+          for attempt in 1 2 3; do
+            go mod download && exit 0
+            status=$?
+            echo "go mod download failed (attempt ${attempt}/3, status ${status})" >&2
+            [ "${attempt}" -lt 3 ] && sleep 10
+          done
+          exit "${status}"
 
       - name: Build
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
