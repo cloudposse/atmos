@@ -34,10 +34,14 @@ number, branch, or file) so the listener knows *what* without reading anything.
 ## Invocation
 
 `say` is macOS-only. Wrap it defensively so a caller on another platform (or a machine without
-`say`) never fails because of this notification:
+`say`) never fails because of this notification. Build the message in a shell variable first, then
+pass it via quoted expansion — never substitute untrusted text (a PR title, branch name, file
+path) directly into the command source, since a stray `"` could terminate the quote and inject
+additional shell content:
 
 ```bash
-command -v say >/dev/null 2>&1 && say "<message>" || true
+message="PR ${pr_number} needs your attention."
+command -v say >/dev/null 2>&1 && say "$message" || true
 ```
 
 No DATA-vs-instructions treatment is needed here: `say` only produces local audio output, no

@@ -107,8 +107,12 @@ commands:
           - type: toast
             level: info
             content: 'Running scoped tests + coverage vs {{ index .Arguments "base-ref" }}...'
+          # base-ref is passed via env (not interpolated into the command string) so shell
+          # metacharacters in the value can't be parsed by `sh -c` as command syntax.
           - type: shell
-            command: .claude/skills/test-coverage/scripts/patch-test-coverage.sh {{ index .Arguments "base-ref" }}
+            env:
+              ATMOS_BASE_REF: '{{ index .Arguments "base-ref" }}'
+            command: .claude/skills/test-coverage/scripts/patch-test-coverage.sh "$ATMOS_BASE_REF"
 
       - name: tests
         description: |
@@ -143,10 +147,16 @@ commands:
             default: false
             description: Also mark the thread resolved — only pass this when a concrete fixing commit exists
         steps:
+          # thread-id and body are passed via env (not interpolated into the command string) so
+          # shell metacharacters in --body (quotes, backticks, $()) can't be parsed by `sh -c` as
+          # command syntax.
           - type: shell
+            env:
+              ATMOS_THREAD_ID: '{{ index .Flags "thread-id" }}'
+              ATMOS_BODY: '{{ index .Flags "body" }}'
             command: |
               set -eu
-              args=(--thread-id "{{ index .Flags "thread-id" }}" --body "{{ index .Flags "body" }}")
+              args=(--thread-id "$ATMOS_THREAD_ID" --body "$ATMOS_BODY")
               if [ "{{ .Flags.resolve }}" = "true" ]; then
                 args+=(--resolve)
               fi

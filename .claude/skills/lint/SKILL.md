@@ -36,9 +36,14 @@ Zero findings → one-line no-op summary, done.
 ## Full-repo mode (explicit only)
 
 Only when a human explicitly asks for a full lint (e.g. "run a full lint", "lint the whole repo"
-— never inferred, never run from the automated loop):
+— never inferred, never run from the automated loop). Run the same staleness-guarded build the
+patch-aware mode uses (`atmos lint custom-gcl` — only rebuilds `./custom-gcl` when missing or
+older than its build inputs) before invoking the binary directly, so a fresh checkout or a stale
+binary after `.custom-gcl.yml`/`lintroller` changes doesn't fail outright or silently report wrong
+findings:
 
 ```
+atmos lint custom-gcl
 ./custom-gcl run --config=.golangci.yml
 ```
 
