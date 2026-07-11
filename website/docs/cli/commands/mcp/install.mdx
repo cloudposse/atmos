@@ -1,0 +1,70 @@
+---
+title: atmos mcp install
+sidebar_label: install
+sidebar_class_name: command
+id: install
+description: Install configured MCP servers into MCP-capable AI clients
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Use this command to install the MCP servers configured in `atmos.yaml` directly into your AI client's config files — Claude Code, Cursor, VS Code, Codex, and Gemini.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos mcp install --help" src="/casts/screengrabs/atmos-mcp-install--help.cast" static chrome />
+
+## Description
+
+The `atmos mcp install` command reads servers from `mcp.servers` in `atmos.yaml` and writes the appropriate client config for Claude Code, Cursor, VS Code, Codex, and Gemini. Both local stdio servers and remote HTTP servers are supported.
+
+Unlike `atmos mcp export`, which produces a single `.mcp.json` file, `install` writes directly into each detected (or explicitly selected) client's own config format and location — project-scoped or user-scoped.
+
+## Usage
+
+```shell
+atmos mcp install [server-name...] [flags]
+```
+
+<dl>
+  <dt>`server-name...`</dt>
+  <dd>Optional list of specific server names to install. When omitted, all servers configured under `mcp.servers` are installed.</dd>
+  <dt>`--client`, `-c`</dt>
+  <dd>MCP client to install into (repeatable): `claude-code`, `cursor`, `vscode`, `codex`, `gemini`. When omitted, Atmos detects clients already configured in the project.</dd>
+  <dt>`--all-clients`</dt>
+  <dd>Install into all supported MCP clients instead of just detected or explicitly selected ones.</dd>
+  <dt>`--scope`</dt>
+  <dd>Install scope: `project` (writes into the current project, default) or `user` (writes into the client's user-level/global config).</dd>
+  <dt>`--global`, `-g`</dt>
+  <dd>Alias for `--scope user`.</dd>
+  <dt>`--yes`, `-y`</dt>
+  <dd>Skip confirmation prompts.</dd>
+  <dt>`--dry-run`</dt>
+  <dd>Show what would be installed without writing any files.</dd>
+  <dt>`--force`</dt>
+  <dd>Overwrite existing server entries without prompting.</dd>
+  <dt>`--gitignore`</dt>
+  <dd>Add generated project-scoped config files to `.gitignore`.</dd>
+</dl>
+
+### Examples
+
+```shell
+# Install all configured MCP servers into detected project clients.
+atmos mcp install
+
+# Install one server into Cursor and Claude Code project configs.
+atmos mcp install aws-docs --client cursor --client claude-code
+
+# Install into user-level config.
+atmos mcp install --scope user --client codex
+
+# Alias for --scope user.
+atmos mcp install --global --client claude-code
+
+# Preview what would be installed without writing files.
+atmos mcp install --dry-run
+```
