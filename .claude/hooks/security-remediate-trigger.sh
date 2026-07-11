@@ -47,6 +47,14 @@ run_with_timeout() {
     i=$((i + 1))
     if [ "$i" -ge "$secs" ]; then
       kill -TERM "$pid" 2>/dev/null
+      # Grace period for the child to exit on SIGTERM before forcing it, so an
+      # unresponsive process can't block this script (and the calling push) indefinitely.
+      local grace=0
+      while kill -0 "$pid" 2>/dev/null && [ "$grace" -lt 2 ]; do
+        sleep 1
+        grace=$((grace + 1))
+      done
+      kill -KILL "$pid" 2>/dev/null
       break
     fi
   done
