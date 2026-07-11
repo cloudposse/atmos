@@ -1,0 +1,81 @@
+---
+title: archive
+sidebar_label: archive
+slug: /workflows/steps/type/archive
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `archive` step type packages a directory or file into a zip or tar archive — most commonly zipping a Lambda function's source into a deployable `handler.zip` before `terraform plan`/`apply`. It is implemented on the Go standard library only (`archive/zip`, `archive/tar`, `compress/gzip`), so it behaves identically on macOS, Linux, and Windows. No shelling out to `zip` or `tar`.
+</Intro>
+
+```yaml
+steps:
+  - name: package
+    type: archive
+    source: src/
+    destination: handler.zip
+    exclude:
+      - "**/*.test.js"
+      - "**/node_modules/**"
+```
+
+The step has no dedicated hook kind — use the generic [`kind: step` hook bridge](/stacks/hooks) to run it before Terraform, replacing a Terragrunt-style `before_hook` shell-out:
+
+```yaml
+hooks:
+  package:
+    kind: step
+    type: archive
+    events: [before.terraform.plan, before.terraform.apply, before.terraform.destroy]
+    with:
+      source: src/
+      destination: handler.zip
+```
+
+## Fields
+
+<dl>
+  <dt>`source`</dt>
+  <dd>Required. The directory or file to archive. Supports Go templates.</dd>
+
+  <dt>`destination`</dt>
+  <dd>Required. The archive file to write. Supports Go templates.</dd>
+
+  <dt>`action`</dt>
+  <dd>`replace` (default) always rebuilds `destination` fresh from `source`, overwriting any prior contents. `update` adds new/refreshed entries into an existing archive, leaving untouched entries as-is — supported only for `zip` and uncompressed `tar` (see [Update vs. replace](#update-vs-replace)). `create` and `extract` are reserved for a future release.</dd>
+
+  <dt>`format`</dt>
+  <dd>`zip`, `tar`, `tgz`, `tar.bz2`, or `tar.xz`. When omitted, inferred from `destination`'s extension (`.zip`, `.tar`, `.tar.gz`/`.tgz`, `.tar.bz2`/`.tbz2`, `.tar.xz`/`.txz`). Writing `tar.bz2`/`tar.xz` is not yet implemented — use `zip`, `tar`, or `tgz`.</dd>
+
+  <dt>`subpath`</dt>
+  <dd>Nests `source`'s content under this path inside the archive (e.g. `subpath: opt/nodejs` for a Lambda Layer). Supports Go templates.</dd>
+
+  <dt>`include`</dt>
+  <dd>Glob(s); when set, only matching files are archived. Evaluated after `exclude`.</dd>
+
+  <dt>`exclude`</dt>
+  <dd>Glob(s); matching files are dropped, evaluated before `include`.</dd>
+</dl>
+
+## Update vs. replace
+
+`update` can only add or refresh entries without rewriting the whole archive stream, which is possible for `zip` (each entry is compressed independently) and uncompressed `tar` (no compression at all). `tgz`, `tar.bz2`, and `tar.xz` wrap the *entire* tar byte stream in one continuous compression pass, so touching a single entry requires decompressing and recompressing everything — not meaningfully cheaper than `replace`. Selecting `update` on one of these formats fails with a typed error naming the format; it is never silently downgraded to a full rebuild.
+
+For the common "always rebuild this archive fresh before every plan/apply" use case, `replace` (the default) is the right choice on every format.
+
+## Result
+
+<dl>
+  <dt>`{{ .steps.<name>.value }}`</dt>
+  <dd>The resolved `destination` path.</dd>
+
+  <dt>`{{ .steps.<name>.metadata.action }}`</dt>
+  <dd>The action that ran (`replace` or `update`).</dd>
+</dl>
+
+## See also
+
+- [Manage lifecycle events with hooks](/stacks/hooks)
+- [Generate Terraform Files](/stacks/generate) — a sibling declarative-file-producing mechanism for text/templated files, rather than binary archives.

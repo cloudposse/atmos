@@ -1,0 +1,97 @@
+---
+slug: archive-step-type
+title: "Archive Step Type: Pack Zip/Tar Archives Without Shelling Out"
+authors: [osterman]
+tags: [feature]
+date: 2026-07-11
+---
+
+Packaging a directory into a deployable archive — most commonly zipping a Lambda
+function's source into `handler.zip` before `terraform plan`/`apply` — had no native
+Atmos primitive. The only option was shelling out to `zip`/`tar` via a `kind: command`
+hook or `type: shell` step, which breaks on a Windows CI runner and gives you no typed
+validation. A new `archive` step type fixes that: it's implemented on the Go standard
+library only, so it behaves identically on macOS, Linux, and Windows.
+
+<!--truncate-->
+
+## The Problem
+
+This surfaced while migrating a Terragrunt Lambda example (Lambda + DynamoDB + IAM
+role) to Atmos. The source unit used a `before_hook "package"` wrapping
+`scripts/package.sh`, which itself wrapped the `zip` binary, before every
+`plan`/`apply`/`destroy`. Translating that directly meant an equivalent shell-based
+hook:
+
+```yaml
+hooks:
+  package:
+    kind: command
+    command: bash
+    args: ["-c", "cd src && zip -r ../handler.zip . -x '*.test.js'"]
+    events: [before.terraform.plan, before.terraform.apply, before.terraform.destroy]
+```
+
+That works on macOS and Linux, but `zip` isn't guaranteed to exist on a Windows CI
+runner — and any pattern like this that Atmos documents gets copied straight into
+user projects, spreading the same portability gap. A `data "archive_file"` Terraform
+data source was tried first; it failed for an unrelated reason — nothing forces it to
+run before a `locals` block elsewhere in the module reads the file it produces.
+
+## The Fix
+
+The new `archive` step type packages a directory or file into a `zip`, `tar`, or
+`tgz` archive using only Go's standard library — `archive/zip`, `archive/tar`,
+`compress/gzip`. No shelling out, so it behaves identically everywhere Atmos runs:
+
+```yaml
+steps:
+  - name: package
+    type: archive
+    source: src/
+    destination: handler.zip
+    exclude:
+      - "**/*.test.js"
+      - "**/node_modules/**"
+```
+
+It has no dedicated hook kind — like every step type added since
+[`kind: step`](/changelog/hooks-step-types) shipped, it reaches hooks through the same
+bridge, so it works as a lifecycle hook with zero extra plumbing:
+
+```yaml
+hooks:
+  package:
+    kind: step
+    type: archive
+    events: [before.terraform.plan, before.terraform.apply, before.terraform.destroy]
+    with:
+      source: src/
+      destination: handler.zip
+```
+
+## How to Use It
+
+- `source` / `destination` — required. What to archive, and where to write it.
+- `format` — `zip`, `tar`, `tgz`, `tar.bz2`, or `tar.xz`. Inferred from
+  `destination`'s extension when omitted (writing `tar.bz2`/`tar.xz` isn't
+  implemented yet — see below).
+- `subpath` — nests `source`'s content under a path inside the archive, e.g.
+  `subpath: opt/nodejs` for a Lambda Layer.
+- `include` / `exclude` — glob filters, evaluated exclude-then-include.
+- `action` — `replace` (default) always rebuilds the archive fresh from `source`.
+  `update` adds/refreshes entries in an existing archive without touching the rest —
+  supported for `zip` and uncompressed `tar` only, since `tgz`/`tar.bz2`/`tar.xz`
+  compress the whole stream as one unit and can't be edited surgically. Selecting
+  `update` on one of those formats fails with a clear error instead of silently
+  falling back to a full rebuild.
+
+`create` and `extract` are reserved in the schema for a future release, so it won't
+need a breaking change to add them later.
+
+## Get Involved
+
+See the [archive step reference](/workflows/steps/type/archive) for the full field
+list, and the [hooks reference](/stacks/hooks#kind-step-run-a-step-type) for using it
+as a lifecycle hook. Questions or ideas? Join us in the
+[Cloud Posse community Slack](https://cloudposse.com/slack).
