@@ -89,7 +89,8 @@ func setupOutputModeCapture(t *testing.T) (*bytes.Buffer, *bytes.Buffer, func())
 // FormatStepLabel is tested in output_mode_test.go.
 // RenderCommand is tested in output_mode_test.go.
 // StreamingOutputWriter is tested in output_mode_test.go.
-// formatStepFooter is tested in output_mode_test.go.
+// writeStepHeader/writeStepFooter are covered below via TestWriteStepHeaderFooterColor
+// and TestWriteStepFooterFailedColor.
 // This file tests the Execute() method variations.
 
 func TestOutputModeWriterExecuteNone(t *testing.T) {
@@ -168,8 +169,9 @@ func TestOutputModeWriterRawLabelsEnabledByDefault(t *testing.T) {
 
 	require.NoError(t, err)
 	cleanup()
-	assert.Contains(t, stderr.String(), "[raw_step]")
-	assert.Contains(t, stderr.String(), "raw_step completed")
+	assert.Contains(t, stderr.String(), "Running")
+	assert.Contains(t, stderr.String(), "raw_step")
+	assert.Contains(t, stderr.String(), "completed")
 }
 
 func TestOutputModeWriterRawLabelsCanBeDisabled(t *testing.T) {
@@ -183,8 +185,9 @@ func TestOutputModeWriterRawLabelsCanBeDisabled(t *testing.T) {
 
 	require.NoError(t, err)
 	cleanup()
-	assert.NotContains(t, stderr.String(), "[raw_step]")
-	assert.NotContains(t, stderr.String(), "raw_step completed")
+	assert.NotContains(t, stderr.String(), "Running")
+	assert.NotContains(t, stderr.String(), "raw_step")
+	assert.NotContains(t, stderr.String(), "completed")
 }
 
 func TestOutputModeWriterExecuteLog(t *testing.T) {
@@ -240,8 +243,47 @@ func TestOutputModeWriterLogLabelsCanBeDisabled(t *testing.T) {
 	cleanup()
 	assert.Equal(t, "logged output", out)
 	assert.Equal(t, "logged output", stdout.String())
-	assert.NotContains(t, stderr.String(), "[log_step]")
-	assert.NotContains(t, stderr.String(), "log_step completed")
+	assert.NotContains(t, stderr.String(), "Running")
+	assert.NotContains(t, stderr.String(), "completed")
+}
+
+// TestWriteStepHeaderFooterContent covers writeStepHeader/writeStepFooter's
+// success path through the shared ui.Info/ui.Success pipeline. Icon/color
+// rendering itself is covered in pkg/ui/formatter_test.go (which can inject a
+// mock terminal.Terminal); that seam isn't exported for use outside pkg/ui,
+// so here we only assert the rendered content, not ANSI byte presence.
+func TestWriteStepHeaderFooterContent(t *testing.T) {
+	_, stderr, cleanup := setupOutputModeCapture(t)
+	defer cleanup()
+
+	writer := NewOutputModeWriter(OutputModeRaw, "deploy", nil)
+	_, _, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+		return nil
+	})
+
+	require.NoError(t, err)
+	cleanup()
+
+	out := stderr.String()
+	assert.Contains(t, out, "Running")
+	assert.Contains(t, out, "deploy")
+	assert.Contains(t, out, "completed")
+}
+
+func TestWriteStepFooterFailedColor(t *testing.T) {
+	_, stderr, cleanup := setupOutputModeCapture(t)
+	defer cleanup()
+
+	writer := NewOutputModeWriter(OutputModeRaw, "deploy", nil)
+	_, _, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+		return assert.AnError
+	})
+	cleanup()
+
+	require.Error(t, err)
+	out := stderr.String()
+	assert.Contains(t, out, "deploy")
+	assert.Contains(t, out, "failed")
 }
 
 func TestOutputModeWriterExecuteDefaultMode(t *testing.T) {
