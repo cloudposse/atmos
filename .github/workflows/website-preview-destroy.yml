@@ -49,7 +49,7 @@ jobs:
         run: echo "branch=$(echo ${PR_HEAD#refs/heads/} | tr / -)" >> $GITHUB_OUTPUT
 
       - name: Seek deployment
-        uses: cloudposse/github-action-seek-deployment@0.1.1
+        uses: cloudposse/github-action-seek-deployment@9c18326d279eaf1683777086a61ca3c744aeb246 # 0.1.1
         id: deployment
         with:
           environment: preview
