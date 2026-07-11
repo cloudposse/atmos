@@ -1,6 +1,7 @@
 package archive
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -25,6 +26,10 @@ type packEntry struct {
 func collectEntries(source, subpath string, include, exclude []string) ([]packEntry, error) {
 	defer perf.Track(nil, "archive.collectEntries")()
 
+	if err := validateSubpath(subpath); err != nil {
+		return nil, err
+	}
+
 	info, err := os.Stat(source)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrArchiveSourceNotFound).
@@ -34,11 +39,48 @@ func collectEntries(source, subpath string, include, exclude []string) ([]packEn
 	}
 
 	if !info.IsDir() {
-		archivePath := archiveJoin(filepath.ToSlash(subpath), filepath.Base(source))
+		relPath := filepath.Base(source)
+		included, err := matchesFilters(relPath, include, exclude)
+		if err != nil {
+			return nil, err
+		}
+		if !included {
+			return nil, nil
+		}
+		archivePath := archiveJoin(filepath.ToSlash(subpath), relPath)
 		return []packEntry{{fsPath: source, archivePath: archivePath}}, nil
 	}
 
 	return collectDirEntries(source, subpath, include, exclude)
+}
+
+// validateSubpath rejects a subpath that could produce an archive entry
+// escaping the archive root (e.g. "../../outside"). Extracting an archive
+// built with such an entry could write outside the intended extraction
+// directory. Both "/" and "\" separators are checked so the rule holds
+// regardless of the platform the archive is built on.
+func validateSubpath(subpath string) error {
+	if subpath == "" {
+		return nil
+	}
+	normalized := strings.ReplaceAll(subpath, "\\", "/")
+	if filepath.IsAbs(subpath) || strings.HasPrefix(normalized, "/") {
+		return invalidSubpathError(subpath)
+	}
+	for _, seg := range strings.Split(normalized, "/") {
+		if seg == "." || seg == ".." {
+			return invalidSubpathError(subpath)
+		}
+	}
+	return nil
+}
+
+func invalidSubpathError(subpath string) error {
+	return errUtils.Build(errUtils.ErrArchiveInvalidSubpath).
+		WithExplanationf("subpath %q must be a relative path with no \".\" or \"..\" segments", subpath).
+		WithHint("Use a plain relative path like \"opt/nodejs\"").
+		WithContext("subpath", subpath).
+		Err()
 }
 
 func collectDirEntries(source, subpath string, include, exclude []string) ([]packEntry, error) {
@@ -74,7 +116,12 @@ func collectDirEntries(source, subpath string, include, exclude []string) ([]pac
 		return nil
 	})
 	if walkErr != nil {
-		return nil, errUtils.Build(errUtils.ErrArchiveSourceNotFound).
+		// matchesFilters already returns a typed ErrArchiveInvalidGlobPattern;
+		// propagate it as-is instead of relabeling it as a missing source.
+		if errors.Is(walkErr, errUtils.ErrArchiveInvalidGlobPattern) {
+			return nil, walkErr
+		}
+		return nil, errUtils.Build(errUtils.ErrArchiveWalkFailed).
 			WithCause(walkErr).
 			WithContext("source", source).
 			Err()

@@ -7,7 +7,7 @@ slug: /workflows/steps/type/archive
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `archive` step type packages a directory or file into a zip or tar archive — most commonly zipping a Lambda function's source into a deployable `handler.zip` before `terraform plan`/`apply`. It is implemented on the Go standard library only (`archive/zip`, `archive/tar`, `compress/gzip`), so it behaves identically on macOS, Linux, and Windows. No shelling out to `zip` or `tar`.
+The `archive` step type packages a directory or file into a zip, tar, or tgz archive — most commonly zipping a Lambda function's source into a deployable `handler.zip` before `terraform plan`/`apply`. It is implemented on the Go standard library only (`archive/zip`, `archive/tar`, `compress/gzip`), so it behaves identically on macOS, Linux, and Windows. No shelling out to `zip` or `tar`.
 </Intro>
 
 ```yaml

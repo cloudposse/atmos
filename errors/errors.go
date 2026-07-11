@@ -528,12 +528,15 @@ var (
 	ErrArchiveUnknownFormat           = errors.New("unknown or unsupported archive format")
 	ErrArchiveActionNotImplemented    = errors.New("archive action is not yet implemented")
 	ErrArchiveUpdateUnsupportedFormat = errors.New("archive update is not supported for this format")
+	ErrArchiveOptionsRequired         = errors.New("archive options are required")
 	ErrArchiveSourceRequired          = errors.New("archive source is required")
 	ErrArchiveSourceNotFound          = errors.New("archive source does not exist")
 	ErrArchiveDestinationRequired     = errors.New("archive destination is required")
 	ErrArchiveInvalidGlobPattern      = errors.New("invalid archive include/exclude glob pattern")
+	ErrArchiveInvalidSubpath          = errors.New("invalid archive subpath")
 	ErrArchiveFormatNotImplemented    = errors.New("archive format is not yet implemented")
 	ErrArchiveWriteFailed             = errors.New("failed to write archive")
+	ErrArchiveWalkFailed              = errors.New("failed to walk archive source")
 
 	// List command errors.
 	ErrInvalidStackPattern          = errors.New("invalid stack pattern")

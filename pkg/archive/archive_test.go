@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -302,4 +304,206 @@ func TestRun_Update_CreatesWhenDestinationMissing(t *testing.T) {
 
 	entries := zipEntries(t, dest)
 	assert.Contains(t, entries, "handler.js")
+}
+
+func TestRun_NilOptions(t *testing.T) {
+	for _, action := range []Action{ActionReplace, ActionUpdate} {
+		t.Run(string(action), func(t *testing.T) {
+			err := Run(action, nil)
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, errUtils.ErrArchiveOptionsRequired))
+		})
+	}
+}
+
+func TestRun_Replace_SingleFile_ExcludedByFilter(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "handler.test.js")
+	require.NoError(t, os.WriteFile(src, []byte("test();"), 0o644))
+	dest := filepath.Join(dir, "out.zip")
+
+	require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: dest, Exclude: []string{"**/*.test.js"}}))
+
+	entries := zipEntries(t, dest)
+	assert.Empty(t, entries, "a single-file source matching an exclude pattern must not be archived")
+}
+
+func TestRun_Replace_SingleFile_IncludeMustMatch(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "handler.js")
+	require.NoError(t, os.WriteFile(src, []byte("x=1"), 0o644))
+	dest := filepath.Join(dir, "out.zip")
+
+	require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: dest, Include: []string{"**/*.test.js"}}))
+
+	entries := zipEntries(t, dest)
+	assert.Empty(t, entries, "a single-file source not matching any include pattern must not be archived")
+}
+
+func TestRun_Replace_RejectsSubpathTraversal(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeFixture(t, src)
+
+	tests := []string{"../evil", "../../evil", "a/../../b", "..\\evil", "/absolute"}
+	for _, subpath := range tests {
+		t.Run(subpath, func(t *testing.T) {
+			err := Run(ActionReplace, &PackOptions{
+				Source:      src,
+				Destination: filepath.Join(dir, "out.zip"),
+				Subpath:     subpath,
+			})
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, errUtils.ErrArchiveInvalidSubpath), "got %v", err)
+		})
+	}
+}
+
+func TestRun_Replace_AllowsOrdinaryRelativeSubpath(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeFixture(t, src)
+	dest := filepath.Join(dir, "out.zip")
+
+	require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: dest, Subpath: "opt/nodejs"}))
+
+	entries := zipEntries(t, dest)
+	assert.Contains(t, entries, "opt/nodejs/handler.js")
+}
+
+func TestCollectDirEntries_PreservesInvalidGlobError(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeFixture(t, src)
+
+	_, err := collectEntries(src, "", nil, []string{"["})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrArchiveInvalidGlobPattern), "got %v", err)
+	assert.False(t, errors.Is(err, errUtils.ErrArchiveSourceNotFound), "an invalid glob pattern must not be misclassified as a missing source")
+}
+
+func TestRun_Update_PreservesDestinationMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file mode bits are not meaningfully enforced on Windows")
+	}
+
+	tests := []struct {
+		name string
+		ext  string
+	}{
+		{"zip", ".zip"},
+		{"tar", ".tar"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			src := filepath.Join(dir, "src")
+			writeFixture(t, src)
+			dest := filepath.Join(dir, "out"+tt.ext)
+
+			require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: dest, Exclude: []string{"**/*.test.js"}}))
+			require.NoError(t, os.Chmod(dest, 0o640))
+
+			require.NoError(t, os.WriteFile(filepath.Join(src, "handler.js"), []byte("exports.handler = 2;"), 0o644))
+			require.NoError(t, Run(ActionUpdate, &PackOptions{Source: filepath.Join(src, "handler.js"), Destination: dest}))
+
+			info, err := os.Stat(dest)
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(0o640), info.Mode().Perm(), "update must preserve the destination's existing file mode")
+		})
+	}
+}
+
+func TestRun_Replace_DefaultModeWhenDestinationMissing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file mode bits are not meaningfully enforced on Windows")
+	}
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeFixture(t, src)
+	dest := filepath.Join(dir, "out.zip")
+
+	require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: dest}))
+
+	info, err := os.Stat(dest)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(defaultArchivePerm), info.Mode().Perm())
+}
+
+func TestWriteZip_AtomicOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.txt")
+	dest := filepath.Join(dir, "out.zip")
+	entries := []packEntry{{fsPath: missing, archivePath: "missing.txt"}}
+
+	err := writeZip(dest, entries)
+	require.Error(t, err)
+
+	_, statErr := os.Stat(dest)
+	assert.True(t, os.IsNotExist(statErr), "a failed write must not leave a truncated destination behind")
+	assertNoLeftoverTempFiles(t, dir)
+}
+
+func TestWriteZip_AtomicOnFailure_PreservesExistingArchive(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeFixture(t, src)
+	dest := filepath.Join(dir, "out.zip")
+	require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: dest, Exclude: []string{"**/*.test.js"}}))
+	before := zipEntries(t, dest)
+
+	missing := filepath.Join(dir, "missing.txt")
+	entries := []packEntry{{fsPath: missing, archivePath: "missing.txt"}}
+	err := writeZip(dest, entries)
+	require.Error(t, err)
+
+	after := zipEntries(t, dest)
+	assert.Equal(t, before, after, "a failed replace must leave the previous valid archive untouched")
+	assertNoLeftoverTempFiles(t, dir)
+}
+
+func TestWriteTar_AtomicOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.txt")
+	dest := filepath.Join(dir, "out.tar")
+	entries := []packEntry{{fsPath: missing, archivePath: "missing.txt"}}
+
+	err := writeTar(dest, entries, false)
+	require.Error(t, err)
+
+	_, statErr := os.Stat(dest)
+	assert.True(t, os.IsNotExist(statErr), "a failed write must not leave a truncated destination behind")
+	assertNoLeftoverTempFiles(t, dir)
+}
+
+func TestWriteTar_AtomicOnFailure_PreservesExistingArchive(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeFixture(t, src)
+	dest := filepath.Join(dir, "out.tar")
+	require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: dest, Exclude: []string{"**/*.test.js"}}))
+	before := tarEntries(t, dest, false)
+
+	missing := filepath.Join(dir, "missing.txt")
+	entries := []packEntry{{fsPath: missing, archivePath: "missing.txt"}}
+	err := writeTar(dest, entries, false)
+	require.Error(t, err)
+
+	after := tarEntries(t, dest, false)
+	assert.Equal(t, before, after, "a failed replace must leave the previous valid archive untouched")
+	assertNoLeftoverTempFiles(t, dir)
+}
+
+// assertNoLeftoverTempFiles fails the test if any archive temp file (the
+// ".archive-write-*"/".archive-update-*" pattern used by the temp-file+rename
+// write path) was left behind in dir.
+func assertNoLeftoverTempFiles(t *testing.T, dir string) {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	for _, e := range entries {
+		assert.False(t, strings.HasPrefix(e.Name(), ".archive-"), "leftover temp file: %s", e.Name())
+	}
 }

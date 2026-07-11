@@ -6,27 +6,26 @@ import (
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// writeTar creates destination fresh, writing every entry. When gz is true,
-// the tar stream is wrapped in gzip compression (format: tgz); otherwise it
-// writes a plain tar.
+// writeTar creates destination fresh, writing every entry, via
+// atomicRewrite. When gz is true, the tar stream is wrapped in gzip
+// compression (format: tgz); otherwise it writes a plain tar.
 func writeTar(destination string, entries []packEntry, gz bool) error {
 	defer perf.Track(nil, "archive.writeTar")()
 
-	f, err := os.Create(destination)
-	if err != nil {
-		return writeFailedError(destination, err)
-	}
-	defer f.Close()
+	return atomicRewrite(destination, ".archive-write-*.tar", func(tmp *os.File) error {
+		return writeTarEntries(tmp, destination, entries, gz)
+	})
+}
 
-	var w io.Writer = f
+func writeTarEntries(tmp *os.File, destination string, entries []packEntry, gz bool) error {
+	var w io.Writer = tmp
 	var gzw *gzip.Writer
 	if gz {
-		gzw = gzip.NewWriter(f)
+		gzw = gzip.NewWriter(tmp)
 		w = gzw
 	}
 
@@ -62,26 +61,9 @@ func updateTar(destination string, entries []packEntry) error {
 		changed[e.archivePath] = true
 	}
 
-	tmp, err := os.CreateTemp(filepath.Dir(destination), ".archive-update-*.tar")
-	if err != nil {
-		return writeFailedError(destination, err)
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-
-	if err := writeTarUpdate(tmp, destination, changed, entries); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return writeFailedError(destination, err)
-	}
-	// destination is operator-provided step/hook configuration (the archive
-	// step's own `destination:` field), not externally tainted input.
-	if err := os.Rename(tmpPath, destination); err != nil { //nolint:gosec // G703: destination is trusted step config, not tainted input.
-		return writeFailedError(destination, err)
-	}
-	return nil
+	return atomicRewrite(destination, ".archive-update-*.tar", func(tmp *os.File) error {
+		return writeTarUpdate(tmp, destination, changed, entries)
+	})
 }
 
 func writeTarUpdate(dst *os.File, destination string, changed map[string]bool, entries []packEntry) error {

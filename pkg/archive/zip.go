@@ -4,23 +4,22 @@ import (
 	"archive/zip"
 	"io"
 	"os"
-	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// writeZip creates destination fresh, writing every entry.
+// writeZip creates destination fresh, writing every entry, via atomicRewrite.
 func writeZip(destination string, entries []packEntry) error {
 	defer perf.Track(nil, "archive.writeZip")()
 
-	f, err := os.Create(destination)
-	if err != nil {
-		return writeFailedError(destination, err)
-	}
-	defer f.Close()
+	return atomicRewrite(destination, ".archive-write-*.zip", func(tmp *os.File) error {
+		return writeZipEntries(tmp, destination, entries)
+	})
+}
 
-	zw := zip.NewWriter(f)
+func writeZipEntries(tmp *os.File, destination string, entries []packEntry) error {
+	zw := zip.NewWriter(tmp)
 	for _, e := range entries {
 		if err := addZipEntry(zw, e); err != nil {
 			zw.Close()
@@ -47,26 +46,9 @@ func updateZip(destination string, entries []packEntry) error {
 		changed[e.archivePath] = true
 	}
 
-	tmp, err := os.CreateTemp(filepath.Dir(destination), ".archive-update-*.zip")
-	if err != nil {
-		return writeFailedError(destination, err)
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-
-	if err := writeZipUpdate(tmp, destination, changed, entries); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return writeFailedError(destination, err)
-	}
-	// destination is operator-provided step/hook configuration (the archive
-	// step's own `destination:` field), not externally tainted input.
-	if err := os.Rename(tmpPath, destination); err != nil { //nolint:gosec // G703: destination is trusted step config, not tainted input.
-		return writeFailedError(destination, err)
-	}
-	return nil
+	return atomicRewrite(destination, ".archive-update-*.zip", func(tmp *os.File) error {
+		return writeZipUpdate(tmp, destination, changed, entries)
+	})
 }
 
 func writeZipUpdate(dst *os.File, destination string, changed map[string]bool, entries []packEntry) error {

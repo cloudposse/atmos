@@ -42,6 +42,10 @@ type PackOptions struct {
 // directory tree.
 const defaultDirPerm = 0o755
 
+// defaultArchivePerm is the file mode applied to a freshly written archive
+// when its destination doesn't already exist.
+const defaultArchivePerm = 0o644
+
 // Run executes action against opts.
 func Run(action Action, opts *PackOptions) error {
 	defer perf.Track(nil, "archive.Run")()
@@ -138,11 +142,72 @@ func update(opts *PackOptions) error {
 }
 
 func validatePackOptions(opts *PackOptions) error {
+	if opts == nil {
+		return errUtils.Build(errUtils.ErrArchiveOptionsRequired).Err()
+	}
 	if strings.TrimSpace(opts.Source) == "" {
 		return errUtils.Build(errUtils.ErrArchiveSourceRequired).Err()
 	}
 	if strings.TrimSpace(opts.Destination) == "" {
 		return errUtils.Build(errUtils.ErrArchiveDestinationRequired).Err()
+	}
+	return nil
+}
+
+// destinationMode returns the file mode to apply to a rebuilt/updated
+// destination archive: the existing file's mode when destination already
+// exists (so the temp-file+rename pattern used by replace/update doesn't
+// silently downgrade permissions to the temp file's default 0600), or
+// defaultArchivePerm when destination doesn't exist yet.
+func destinationMode(destination string) (os.FileMode, error) {
+	info, err := os.Stat(destination)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return defaultArchivePerm, nil
+		}
+		return 0, writeFailedError(destination, err)
+	}
+	return info.Mode().Perm(), nil
+}
+
+// atomicRewrite writes a fresh archive stream through write into a temp file
+// in destination's directory, then renames it into place only after a
+// successful close. A failure partway through write (a source file
+// vanishing mid-run, a read/close error) therefore never leaves destination
+// truncated or corrupt — the previous valid archive, if any, is untouched.
+// Destination's existing permissions are preserved across the rewrite (or
+// defaultArchivePerm applied to a brand-new file) rather than downgraded to
+// the temp file's default mode. Shared by writeZip/updateZip and
+// writeTar/updateTar, which otherwise differ only in their archive format.
+func atomicRewrite(destination, tmpPattern string, write func(tmp *os.File) error) error {
+	mode, err := destinationMode(destination)
+	if err != nil {
+		return err
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(destination), tmpPattern)
+	if err != nil {
+		return writeFailedError(destination, err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+
+	if err := write(tmp); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return writeFailedError(destination, err)
+	}
+	// tmpPath is created just above via os.CreateTemp in destination's own
+	// directory, not externally tainted input.
+	if err := os.Chmod(tmpPath, mode); err != nil { //nolint:gosec // G703: tmpPath is created above via os.CreateTemp, not tainted input.
+		return writeFailedError(destination, err)
+	}
+	// destination is operator-provided step/hook configuration (the archive
+	// step's own `destination:` field), not externally tainted input.
+	if err := os.Rename(tmpPath, destination); err != nil { //nolint:gosec // G703: destination is trusted step config, not tainted input.
+		return writeFailedError(destination, err)
 	}
 	return nil
 }
