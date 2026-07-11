@@ -3,6 +3,7 @@ package vendoring
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -343,6 +344,10 @@ func TestDiscoverComponentManifests_MissingBasePathReturnsEmpty(t *testing.T) {
 // exists but isn't a directory) is surfaced as an error, unlike the missing-basePath case above
 // (a legitimate "nothing vendored this way yet" state) which returns an empty result instead.
 func TestDiscoverComponentManifests_BasePathIsAFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.ReadDir on a regular file path doesn't return an error on Windows (unlike ENOTDIR on Unix)")
+	}
+
 	basePath := writeFile(t, t.TempDir(), "not-a-dir", "oops")
 
 	_, err := DiscoverComponentManifests(basePath, "terraform")

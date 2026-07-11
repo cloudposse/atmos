@@ -3,6 +3,7 @@ package vendor
 import (
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -324,6 +325,10 @@ func TestWaitForUpdateMsg_DoneChannel(t *testing.T) {
 // doWork's report/error unchanged once it completes -- the path
 // TestRunUpdateWithSpinner_NonTTY_* deliberately don't exercise.
 func TestRunUpdateWithSpinner_TTY_RunsSpinnerAndReturnsResult(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("pty not supported on Windows")
+	}
+
 	ptmx, ttyFile, err := pty.Open()
 	require.NoError(t, err)
 	defer func() { _ = ptmx.Close() }()
