@@ -331,6 +331,33 @@ func (v *Variables) Resolve(input string) (string, error) {
 	return v.resolveTemplate("step", input, v.templateData())
 }
 
+// ResolveWith resolves Go templates in input using the current variable data
+// with envOverlay merged on top of the persisted env for this call only. The
+// overlay does not mutate the Variables' env, so a per-step environment does
+// not leak into later steps' template context.
+func (v *Variables) ResolveWith(input string, envOverlay map[string]string) (string, error) {
+	defer perf.Track(nil, "step.Variables.ResolveWith")()
+
+	if input == "" {
+		return "", nil
+	}
+	data := v.templateData()
+	if len(envOverlay) > 0 {
+		merged := make(map[string]string, len(v.Env)+len(envOverlay))
+		for key, value := range v.Env {
+			merged[key] = value
+		}
+		for key, value := range envOverlay {
+			merged[key] = value
+		}
+		// templateData() returns a fresh map, so replacing these keys does not
+		// affect v.Env.
+		data["Env"] = merged
+		data["env"] = merged
+	}
+	return v.resolveTemplate("step", input, data)
+}
+
 // ResolveEnvMap resolves Go templates in a map of environment variables.
 func (v *Variables) ResolveEnvMap(envMap map[string]string) (map[string]string, error) {
 	defer perf.Track(nil, "step.Variables.ResolveEnvMap")()

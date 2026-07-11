@@ -39,12 +39,12 @@ func TestFormat_SimpleError(t *testing.T) {
 }
 
 func TestFormat_RendererFailureFallsBackToStructuredPlainError(t *testing.T) {
-	original := newTerminalMarkdownRenderer
-	newTerminalMarkdownRenderer = func(schema.AtmosConfiguration) (*markdown.Renderer, error) {
+	original := newMarkdownRendererWithWidth
+	newMarkdownRendererWithWidth = func(schema.AtmosConfiguration, int) (*markdown.Renderer, error) {
 		return nil, errors.New("renderer init failed")
 	}
 	defer func() {
-		newTerminalMarkdownRenderer = original
+		newMarkdownRendererWithWidth = original
 	}()
 
 	result := Format(errors.New("user aborted"), DefaultFormatterConfig())
@@ -884,7 +884,7 @@ func TestResolveFormatterWidth(t *testing.T) {
 	}
 }
 
-func TestResolveFormatterWidth_CapsConfiguredWidthToDetectedTerminal(t *testing.T) {
+func TestResolveFormatterWidth_HonorsConfiguredWidth(t *testing.T) {
 	originalConfig := atmosConfig
 	originalDetectWidth := detectFormatterTerminalWidth
 	defer func() {
@@ -901,7 +901,27 @@ func TestResolveFormatterWidth_CapsConfiguredWidthToDetectedTerminal(t *testing.
 		return 100
 	}
 
-	assert.Equal(t, 100, resolveFormatterWidth(DefaultFormatterConfig()))
+	assert.Equal(t, 160, resolveFormatterWidth(DefaultFormatterConfig()))
+}
+
+func TestResolveFormatterWidth_IgnoresDetectedDefaultWidth(t *testing.T) {
+	originalConfig := atmosConfig
+	originalDetectWidth := detectFormatterTerminalWidth
+	defer func() {
+		atmosConfig = originalConfig
+		detectFormatterTerminalWidth = originalDetectWidth
+	}()
+
+	atmosConfig = &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{MaxWidth: 80},
+		},
+	}
+	detectFormatterTerminalWidth = func() int {
+		return 80
+	}
+
+	assert.Equal(t, DefaultMarkdownWidth, resolveFormatterWidth(DefaultFormatterConfig()))
 }
 
 func TestResolveFormatterWidth_FallsBackToDefaultMarkdownWidth(t *testing.T) {

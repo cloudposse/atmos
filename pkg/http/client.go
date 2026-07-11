@@ -197,6 +197,29 @@ func NewDefaultClient(opts ...ClientOption) *DefaultClient {
 	return client
 }
 
+// NewGitHubAuthenticatedHTTPClient returns a stdlib *http.Client configured to attach a
+// GitHub token to requests targeting GitHub hosts, for consumers that require a raw
+// *http.Client rather than the Client interface — e.g. hashicorp/go-getter's HttpGetter,
+// which only accepts *http.Client. Unlike NewDefaultClient, no overall http.Client.Timeout
+// is set: go-getter's own default (unauthenticated) client relies on transport-level
+// dial/handshake timeouts rather than a total-request deadline, so large downloads aren't
+// truncated; this preserves that behavior while adding token authentication.
+// Returns an unauthenticated *http.Client when token is empty.
+func NewGitHubAuthenticatedHTTPClient(token string) *http.Client {
+	defer perf.Track(nil, "http.NewGitHubAuthenticatedHTTPClient")()
+
+	client := &http.Client{}
+	if token == "" {
+		return client
+	}
+	client.Transport = &GitHubAuthenticatedTransport{
+		Base:        http.DefaultTransport,
+		GitHubToken: token,
+	}
+	client.CheckRedirect = stripAuthOnCrossHostRedirect
+	return client
+}
+
 // GitHubAuthenticatedTransport wraps an http.Transport to add GitHub token authentication.
 type GitHubAuthenticatedTransport struct {
 	Base        http.RoundTripper

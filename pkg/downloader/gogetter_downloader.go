@@ -10,18 +10,13 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth/broker"
 	"github.com/cloudposse/atmos/pkg/github"
-	httppkg "github.com/cloudposse/atmos/pkg/http"
+	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // detectorsMutex guards modifications to getter.Detectors.
 var detectorsMutex sync.Mutex
-
-// getGitHubToken resolves a GitHub token for authenticating requests to
-// raw.githubusercontent.com and GitHub archive/release URLs (see
-// isGitHubHTTPURL). Overridable in tests.
-var getGitHubToken = github.GetGitHubToken
 
 type goGetterClient struct {
 	client *getter.Client
@@ -67,20 +62,18 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		clientMode = getter.ClientModeFile
 	}
 
-	// Create HTTP getter with optional custom client. For GitHub raw-content/archive
-	// URLs, attach a GitHub-token-authenticated client (when a token is available) so
-	// `!include https://raw.githubusercontent.com/...` and similar fetches use the
-	// authenticated rate limit instead of the much lower anonymous one. The transport
-	// itself scopes the Authorization header to GitHub hosts, and this only replaces
-	// go-getter's nil-Client default when a token is actually present, so behavior for
-	// non-GitHub HTTP(S) sources (or when no token is configured) is unchanged.
+	// Create HTTP getter with optional custom client. A caller-supplied test client always
+	// wins; otherwise attach a GitHub token when one is available so http(s):// sources with
+	// an explicit scheme (e.g. https://raw.githubusercontent.com/...) get authenticated
+	// requests too — go-getter's Detect() only runs CustomGitDetector (which already handles
+	// token injection) for scheme-less shorthand sources, never for URLs with a scheme.
 	httpGetter := &getter.HttpGetter{}
 	switch {
 	case f.httpClient != nil:
 		httpGetter.Client = f.httpClient
-	case isGitHubHTTPURL(src):
-		if token := getGitHubToken(); token != "" {
-			httpGetter.Client = httppkg.NewDefaultClient(httppkg.WithGitHubToken(token)).HTTPClient()
+	default:
+		if token := github.GetGitHubToken(); token != "" {
+			httpGetter.Client = httpClient.NewGitHubAuthenticatedHTTPClient(token)
 		}
 	}
 

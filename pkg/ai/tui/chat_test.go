@@ -2185,8 +2185,14 @@ func TestChatModel_CycleFilter(t *testing.T) {
 		assert.Equal(t, "gemini", m.sessionFilter)
 	})
 
-	t.Run("cycles from gemini to grok", func(t *testing.T) {
+	t.Run("cycles from gemini to github", func(t *testing.T) {
 		m.sessionFilter = "gemini"
+		m.cycleFilter()
+		assert.Equal(t, "github", m.sessionFilter)
+	})
+
+	t.Run("cycles from github to grok", func(t *testing.T) {
+		m.sessionFilter = "github"
 		m.cycleFilter()
 		assert.Equal(t, "grok", m.sessionFilter)
 	})

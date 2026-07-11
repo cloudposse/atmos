@@ -1,3 +1,11 @@
+---
+title: Local GitOps
+tags: [Emulators, Kubernetes, Automation]
+cast:
+  file: /casts/examples/local-gitops/lifecycle.cast
+  title: atmos local gitops lifecycle
+---
+
 # Example: Local GitOps Round Trip
 
 Stand up an **entire GitOps loop on your laptop** — no GitHub account, no real
@@ -18,9 +26,9 @@ Two local emulators do the heavy lifting:
 - **`kubernetes`** — a [k3s](https://k3s.io/) cluster (the `k3s` emulator driver).
   **Flux** runs inside it and reconciles the `deployments` repository.
 
-Both emulators join a shared per-stack network, so Flux (in k3s) reaches Gitea by
-name at `http://gitserver:3000`, while Atmos pushes from the host to the same
-server on `http://localhost:3000`.
+Both emulators join a shared per-stack network. Atmos pushes from the host through
+`http://localhost:3000`; Flux reaches the same Gitea server through an in-cluster
+`gitserver` Service whose EndpointSlice points at the live emulator IP.
 
 ## Try It
 
@@ -92,7 +100,7 @@ atmos gitops down       # stop + remove both emulators AND the managed clone
 | | URL | Why |
 |---|---|---|
 | **Atmos push** (host) | `http://atmos:atmos@localhost:3000/...` | Atmos runs on the host and pushes through Gitea's published port |
-| **Flux pull** (in-cluster) | `http://gitserver:3000/...` | Flux runs in k3s and reaches Gitea over the shared emulator network by alias |
+| **Flux pull** (in-cluster) | `http://gitserver.flux-system.svc.cluster.local:3000/...` | Flux runs in k3s and reaches Gitea through a Service/EndpointSlice backed by the emulator IP |
 
 Both point at the same Gitea server — one from outside, one from inside.
 
@@ -103,7 +111,7 @@ Both point at the same Gitea server — one from outside, one from inside.
 | `atmos.yaml` | `git.repositories.deployments` (local Gitea), the `local-k3s` identity, and the `atmos gitops up` / `atmos gitops down` commands |
 | `stacks/catalog/emulator/gitea.yaml` | The Git server emulator (`driver: gitea`) |
 | `stacks/catalog/emulator/kubernetes.yaml` | The Kubernetes emulator (`driver: k3s`) |
-| `stacks/catalog/flux.yaml` | `flux` (controllers, pulled JIT via its `source:` field) + `flux-sync` (GitRepository/Kustomization/Secret pointing at Gitea) |
+| `stacks/catalog/flux.yaml` | `flux` (controllers, pulled JIT via its `source:` field) + `flux-sync` (Service/EndpointSlice, GitRepository, Kustomization, and Secret pointing at Gitea) |
 | `stacks/catalog/demo-app.yaml` | The app delivered through the loop, with a `git` provision target |
 
 ## The Bigger Picture

@@ -76,7 +76,7 @@ Each skill in the `skills` map supports the following settings:
 
 ## Installing Skills
 
-Atmos AI skills are distributed via the [Agent Skills marketplace](https://agentskills.io). The official Atmos skills package contains 21+ specialized skills covering all aspects of infrastructure orchestration.
+Atmos AI skills are distributed via the [Agent Skills marketplace](https://agentskills.io). The official Atmos skills package contains 25 specialized skills covering all aspects of infrastructure orchestration.
 
 <Terminal title="shell">
 ```bash
@@ -299,7 +299,7 @@ For custom skills, keep them focused on a single domain. A skill that tries to h
 
 ## Marketplace Skills
 
-Atmos includes 21 marketplace skills covering all aspects of infrastructure orchestration:
+Atmos includes 25 marketplace skills covering all aspects of infrastructure orchestration:
 
 <dl>
   <dt>`atmos-terraform`</dt>
@@ -311,8 +311,20 @@ Atmos includes 21 marketplace skills covering all aspects of infrastructure orch
   <dt>`atmos-components`</dt>
   <dd>Component architecture: Terraform root modules, abstract components, inheritance, versioning, mixins, catalog patterns.</dd>
 
+  <dt>`atmos-ansible`</dt>
+  <dd>Ansible playbook execution, variable passing, inventory management.</dd>
+
+  <dt>`atmos-asciicast`</dt>
+  <dd>Terminal cast recording workflows, fixtures, validation, and website cast assets.</dd>
+
+  <dt>`atmos-aws-security`</dt>
+  <dd>AWS security findings, component mapping, remediation, and compliance reports.</dd>
+
   <dt>`atmos-validation`</dt>
   <dd>Policy validation: OPA/Rego policies, JSON Schema, schema manifests.</dd>
+
+  <dt>`atmos-schemas`</dt>
+  <dd>JSON Schema for stack manifests, IDE auto-completion, and validation.</dd>
 
   <dt>`atmos-config`</dt>
   <dd>Project configuration: atmos.yaml structure, all sections, discovery, merging, base paths, settings.</dd>
@@ -332,8 +344,35 @@ Atmos includes 21 marketplace skills covering all aspects of infrastructure orch
   <dt>`atmos-workflows`</dt>
   <dd>Workflow automation: multi-step workflows, Go template support, cross-component orchestration.</dd>
 
+  <dt>`atmos-custom-commands`</dt>
+  <dd>Project-specific CLI commands in atmos.yaml with arguments, flags, env maps, and shared steps.</dd>
+
+  <dt>`atmos-steps`</dt>
+  <dd>Shared step DSL for workflows, custom commands, hooks, and cast recordings.</dd>
+
+  <dt>`atmos-hooks`</dt>
+  <dd>Lifecycle hooks for Terraform operations, store publishing, scanners, git, commands, and steps.</dd>
+
   <dt>`atmos-gitops`</dt>
   <dd>CI/CD: GitHub Actions, Spacelift, Atlantis, `atmos describe affected` for change detection.</dd>
+
+  <dt>`atmos-helmfile`</dt>
+  <dd>Helmfile sync/apply/destroy/diff, Kubernetes deployments, and EKS integration.</dd>
+
+  <dt>`atmos-packer`</dt>
+  <dd>Packer init/build/validate, machine image building, and template management.</dd>
+
+  <dt>`atmos-stores`</dt>
+  <dd>Store backends and cross-component data sharing.</dd>
+
+  <dt>`atmos-toolchain`</dt>
+  <dd>CLI tool version management via Aqua registries, .tool-versions, install, and exec.</dd>
+
+  <dt>`atmos-introspection`</dt>
+  <dd>describe/list commands for querying stacks, components, dependencies, and change impact.</dd>
+
+  <dt>`atmos-devcontainer`</dt>
+  <dd>Devcontainer management: start/stop/shell/exec, Docker/Podman, and identity integration.</dd>
 
   <dt>`atmos-design-patterns`</dt>
   <dd>Design patterns: stack organization, component catalogs, inheritance, configuration composition.</dd>
@@ -342,7 +381,7 @@ Atmos includes 21 marketplace skills covering all aspects of infrastructure orch
 ## Custom Skill Examples
 
 :::tip Use Existing Skills First
-Atmos ships with 21+ [marketplace skills](/ai/skill-marketplace) covering Terraform, stacks, components, validation, auth, templates, and more. Check the marketplace before creating custom skills — most common use cases are already covered. Reserve custom skills for organization-specific needs that marketplace skills don't address.
+Atmos ships with 25 [marketplace skills](/ai/skill-marketplace) covering Terraform, stacks, components, validation, auth, templates, and more. Check the marketplace before creating custom skills - most common use cases are already covered. Reserve custom skills for organization-specific needs that marketplace skills don't address.
 :::
 
 Custom skills complement marketplace skills for organization-specific needs.

@@ -82,6 +82,12 @@ func valueForKey(endpoint *Endpoint, profile *Profile, ref, currentStack, key st
 		return envValue(profile, strings.TrimPrefix(key, envKeyPrefix)), nil
 	}
 	switch key {
+	case "network_ip":
+		ip, ok := endpoint.NetworkIP()
+		if !ok {
+			return nil, fmt.Errorf("%w: emulator %q has no container network IP", errUtils.ErrEmulatorNotRunning, ref)
+		}
+		return ip, nil
 	case "port":
 		port, ok := endpoint.PrimaryHostPort()
 		if !ok {
@@ -94,7 +100,7 @@ func valueForKey(endpoint *Endpoint, profile *Profile, ref, currentStack, key st
 	if v, ok := scalarValue(endpoint, key); ok {
 		return v, nil
 	}
-	return nil, fmt.Errorf("%w: unknown `!emulator` key %q (want endpoint|url|host|port|region|project|kubeconfig|env.<VAR>)",
+	return nil, fmt.Errorf("%w: unknown `!emulator` key %q (want endpoint|url|host|port|network_ip|region|project|kubeconfig|env.<VAR>)",
 		errUtils.ErrEmulatorConfigInvalid, key)
 }
 

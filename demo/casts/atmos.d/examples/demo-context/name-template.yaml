@@ -1,0 +1,90 @@
+commands:
+  - name: casts generate examples demo-context name-template
+    description: Regenerate the Configuration Context example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: name-template
+        working_directory: "../../.context/cast-fixtures/demo-context"
+        title: "Configuration Context: name templates from context values"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/demo-context/name-template.cast"
+        steps:
+          - type: simulate
+            text: "# context values come from defaults and mixins"
+          - type: simulate
+            text: &context_cmd atmos describe component demo -s acme-west-dev --query .providers.context.values
+          - type: shell
+            name: context-values
+            duration: 450ms
+            interval: 750ms
+            command: *context_cmd
+          - type: simulate
+            text: "# Atmos turns those values into stack names"
+          - type: simulate
+            text: &list_stacks_cmd atmos list stacks
+          - type: shell
+            name: list-stacks
+            duration: 450ms
+            interval: 750ms
+            command: *list_stacks_cmd
+          - type: simulate
+            text: "# the same context resolves component variables"
+          - type: simulate
+            text: &describe_component_cmd atmos describe component demo -s acme-west-dev --query .vars
+          - type: shell
+            name: describe-component
+            duration: 450ms
+            interval: 750ms
+            command: *describe_component_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples demo-context name-template
+  - name: casts validate examples demo-context name-template
+    description: Validate the Configuration Context example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/demo-context/name-template.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "# context values come from defaults and mixins",
+              "atmos describe component demo -s acme-west-dev --query .providers.context.values",
+              "product: acme",
+              "region: west",
+              "environment: dev",
+              "support_email: dev-support@acme.com",
+              "# Atmos turns those values into stack names",
+              "atmos list stacks",
+              "acme-west-dev",
+              "acme-west-prod",
+              "acme-west-staging",
+              "# the same context resolves component variables",
+              "atmos describe component demo -s acme-west-dev --query .vars",
+              "pet: dog",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"name-template cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "[describe-config]", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"name-template cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

@@ -1,3 +1,11 @@
+---
+title: Container Steps
+tags: [Automation]
+cast:
+  file: /casts/examples/container-step/build-run.cast
+  title: atmos container build run
+---
+
 # Example: Container Step
 
 Build, push, and run containers from Atmos workflows and custom commands.

@@ -18,7 +18,7 @@ const (
 )
 
 // SayHandler speaks the step content using text-to-speech, degrading to a
-// printed Markdown blockquote when audio is unavailable.
+// formatted info message when audio is unavailable.
 type SayHandler struct {
 	BaseHandler
 }
@@ -47,9 +47,9 @@ func (h *SayHandler) Execute(ctx context.Context, step *schema.WorkflowStep, var
 	}
 
 	printQuote := func(text string) error {
-		// Prefix every line so multi-line content stays a valid blockquote.
-		quoted := "> " + strings.ReplaceAll(text, "\n", "\n> ")
-		ui.MarkdownMessage(quoted)
+		for _, line := range strings.Split(text, "\n") {
+			ui.Info(line)
+		}
 		return nil
 	}
 	noop := func(string) error { return nil }

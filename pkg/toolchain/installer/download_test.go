@@ -2,6 +2,7 @@ package installer
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -80,6 +81,7 @@ func TestWriteResponseToCache(t *testing.T) {
 		_, err := writeResponseToCache(errReader, cachePath)
 
 		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrDownloadRetryable)
 		assert.Contains(t, err.Error(), "failed to read response body")
 	})
 }
@@ -111,10 +113,41 @@ func TestBuildDownloadError(t *testing.T) {
 			assert.Error(t, err)
 			// The error wraps ErrDownloadFailed sentinel error.
 			assert.ErrorIs(t, err, errUtils.ErrDownloadFailed)
+			assert.Contains(t, err.Error(), url)
+			assert.Contains(t, err.Error(), http.StatusText(tt.statusCode))
 			// Non-404 errors should NOT include ErrHTTP404.
 			assert.NotErrorIs(t, err, ErrHTTP404, "Only 404 should include ErrHTTP404")
 		})
 	}
+}
+
+func TestBuildDownloadRetryError_HTTPStatusIncludesUsefulContext(t *testing.T) {
+	url := "https://github.com/owner/repo/releases/download/v1.0.0/tool.tar.gz"
+	lastErr := buildDownloadError(url, http.StatusServiceUnavailable)
+
+	err := buildDownloadRetryError(url, downloadRetryMaxAttempts, lastErr)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDownloadFailed)
+	assert.Contains(t, err.Error(), "failed to download "+url)
+	assert.Contains(t, err.Error(), "after 5 attempts")
+	assert.Contains(t, err.Error(), "HTTP 503 Service Unavailable")
+}
+
+func TestBuildDownloadRetryError_RequestErrorIncludesUnderlyingCause(t *testing.T) {
+	url := "https://github.com/owner/repo/releases/download/v1.0.0/tool.tar.gz"
+	lastErr := errors.Join(
+		errUtils.ErrDownloadRetryable,
+		&downloadRequestError{url: url, err: io.ErrUnexpectedEOF},
+	)
+
+	err := buildDownloadRetryError(url, downloadRetryMaxAttempts, lastErr)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDownloadFailed)
+	assert.Contains(t, err.Error(), "failed to download "+url)
+	assert.Contains(t, err.Error(), "after 5 attempts")
+	assert.Contains(t, err.Error(), "unexpected EOF")
 }
 
 func TestBuildDownloadError_404IncludesErrHTTP404(t *testing.T) {
@@ -268,6 +301,33 @@ func TestDownloadToCache_RetriesTransientHTTPStatus(t *testing.T) {
 		attempt := attempts.Add(1)
 		if attempt < 3 {
 			http.Error(w, "bad gateway", http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("asset content"))
+	}))
+	defer server.Close()
+
+	cachePath := filepath.Join(t.TempDir(), "asset.zip")
+
+	result, err := downloadToCache(server.URL+"/asset.zip", cachePath)
+
+	require.NoError(t, err)
+	assert.Equal(t, cachePath, result)
+	assert.Equal(t, int32(3), attempts.Load())
+	data, err := os.ReadFile(cachePath)
+	require.NoError(t, err)
+	assert.Equal(t, "asset content", string(data))
+}
+
+func TestDownloadToCache_RetriesTransientResponseBodyError(t *testing.T) {
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempt := attempts.Add(1)
+		if attempt < 3 {
+			w.Header().Set("Content-Length", "100")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("partial"))
 			return
 		}
 		w.WriteHeader(http.StatusOK)

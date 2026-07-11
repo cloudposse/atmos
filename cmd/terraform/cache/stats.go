@@ -3,6 +3,8 @@ package cache
 import (
 	"fmt"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -11,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 var statsParser *flags.StandardParser
@@ -49,20 +52,33 @@ var statsCmd = &cobra.Command{
 }
 
 func printStats(s tfcache.Summary) {
-	// Labels are padded to align values in a column. "Registry cache root" names
-	// which cache this is — the proxy-managed registry cache, distinct from
-	// Terraform's own provider plugin cache (plugin_cache / TF_PLUGIN_CACHE_DIR).
-	ui.Writeln(fmt.Sprintf("Registry cache root:  %s", s.Root))
-	ui.Writeln(fmt.Sprintf("Objects:              %d (%d providers, %d modules)", s.ObjectCount, s.Providers, s.Modules))
+	rows := [][]string{
+		{"Registry cache root", s.Root},
+		{"Objects", fmt.Sprintf("%d (%d providers, %d modules)", s.ObjectCount, s.Providers, s.Modules)},
+	}
 	//nolint:gosec // total size is non-negative.
-	ui.Writeln(fmt.Sprintf("Total size:           %s", humanize.Bytes(uint64(s.TotalSize))))
+	rows = append(rows, []string{"Total size", humanize.Bytes(uint64(s.TotalSize))})
 	if s.Largest != nil {
 		//nolint:gosec // object size is non-negative.
-		ui.Writeln(fmt.Sprintf("Largest:              %s (%s)", s.Largest.Key, humanize.Bytes(uint64(s.Largest.Size))))
+		rows = append(rows, []string{"Largest", fmt.Sprintf("%s (%s)", s.Largest.Key, humanize.Bytes(uint64(s.Largest.Size)))})
 	}
 	if s.Oldest != nil && !s.Oldest.ModTime.IsZero() {
-		ui.Writeln(fmt.Sprintf("Oldest:               %s (%s)", s.Oldest.Key, humanize.Time(s.Oldest.ModTime)))
+		rows = append(rows, []string{"Oldest", fmt.Sprintf("%s (%s)", s.Oldest.Key, humanize.Time(s.Oldest.ModTime))})
 	}
+
+	t := table.New().
+		Headers("METRIC", "VALUE").
+		Rows(rows...).
+		BorderTop(false).BorderBottom(false).BorderLeft(false).BorderRight(false).
+		BorderRow(false).BorderColumn(false).
+		StyleFunc(func(row, _ int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan)).Bold(true).Padding(0, 2, 0, 0)
+			}
+			return lipgloss.NewStyle().Padding(0, 2, 0, 0)
+		})
+
+	ui.Writeln(t.String())
 }
 
 func init() {

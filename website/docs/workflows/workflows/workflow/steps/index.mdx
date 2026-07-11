@@ -73,9 +73,56 @@ In this example, `spin` is the value of `steps[].type`. The fields `title`, `com
 
   <dt>`outputs`</dt>
   <dd>Declared outputs derived from the step result. See [outputs](/workflows/steps/outputs).</dd>
+
+  <dt>`when`</dt>
+  <dd>Condition controlling whether the step runs. Omitted means success-only: the step runs while the workflow status is still `success`. Use `when: always` for cleanup steps that must run after a previous step fails, such as stopping an emulator, restoring a backup file, or removing Terraform state.</dd>
 </dl>
 
 Type-specific fields are documented with [type](/workflows/steps/type).
+
+## Referencing values from other steps
+
+A named step's result is available to later steps as `{{ .steps.<name>.value }}`
+(and `{{ .steps.<name>.values }}` for multi-value steps). These templates — along
+with `{{ .env.* }}` and `{{ .flags.* }}` and Sprig/Gomplate functions — resolve
+in `shell`, `atmos`, and `exec` step **commands** and in a step's **`env:`**
+values, the same way they do for [custom command steps](/cli/configuration/commands/steps):
+
+```yaml
+workflows:
+  deploy:
+    steps:
+      - name: component
+        type: choose
+        prompt: "Component"
+        options: [vpc, eks]
+      - type: atmos
+        command: terraform apply {{ .steps.component.value }} -auto-approve
+        env:
+          COMPONENT: "{{ .steps.component.value }}"
+```
+
+## Interactive Steps in CI (non-TTY)
+
+Interactive step types (`choose`, `input`, `confirm`, `filter`, `file`, `write`) prompt for input and need a terminal. When Atmos runs without a TTY — most commonly in CI — a step behaves based on whether it has a `default`:
+
+- **With a `default`**, the step uses the default value without prompting.
+- **Without a `default`**, the step fails with `interactive terminal required for step`. This preserves the previous behavior, so an unattended run never proceeds with an unintended value.
+
+This lets the *same* workflow prompt locally and run unattended in CI. Source the default from the environment with the `!env` function (`!env VAR fallback`):
+
+```yaml
+steps:
+  - name: account
+    type: choose
+    prompt: "Account"
+    options: [dev, prod]
+    default: !env STACK_ACCOUNT dev
+  - type: shell
+    command: 'echo "Deploying {{ .steps.account.value }}"'
+```
+
+Workflow step `default`, `prompt`, `options`, and `placeholder` evaluate the `!env` and `!exec` YAML functions. (Custom commands defined in `atmos.yaml` resolve these during config load.) The captured value — entered interactively or taken from the default — is available to later steps as `{{ .steps.<name>.value }}`.
 
 ## Conditional Execution
 
@@ -109,4 +156,34 @@ steps:
     when: !cel 'stack == "prod" && ci'
 ```
 
-Workflow step CEL expressions can use `ci`, `status`, `stack`, `component`, `workflow`, `step`, and `env`. Predicate keywords win over CEL for bare strings, so `when: ci` uses the built-in predicate while `when: !cel 'ci'` evaluates CEL. Workflow steps do not support the built-in `failure` predicate; in this version, step CEL sees `status == "success"`.
+Workflow step CEL expressions can use `ci`, `status`, `stack`, `component`, `workflow`, `step`, and `env`. Predicate keywords win over CEL for bare strings, so `when: ci` uses the built-in predicate while `when: !cel 'ci'` evaluates CEL. `status` starts as `success` and becomes `failure` after a previous step fails.
+
+## Cleanup Steps
+
+Atmos continues evaluating structured steps after a failure so failure-aware
+cleanup can run:
+
+```yaml
+steps:
+  - type: shell
+    name: start-emulator
+    command: atmos emulator up aws -s dev --ephemeral
+
+  - type: shell
+    name: record-or-test
+    command: atmos terraform apply demo -s dev -auto-approve
+
+  - type: shell
+    name: stop-emulator
+    when: always
+    command: atmos emulator down aws -s dev
+
+  - type: shell
+    name: validate
+    command: atmos terraform output demo -s dev
+```
+
+If `record-or-test` fails, `stop-emulator` still runs because it declares
+`when: always`. The `validate` step is skipped because omitted `when` means
+success-only. The workflow still exits with the original failure; cleanup does
+not make the failed workflow look successful.

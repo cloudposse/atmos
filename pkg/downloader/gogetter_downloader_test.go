@@ -10,6 +10,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/hashicorp/go-getter"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	httpClient "github.com/cloudposse/atmos/pkg/http"
 )
 
 func TestGoGetterClient_Get(t *testing.T) {
@@ -92,77 +95,6 @@ func TestGoGetterClientFactory_NewClient(t *testing.T) {
 	}
 }
 
-// stubGitHubToken overrides getGitHubToken for the duration of the test.
-func stubGitHubToken(t *testing.T, token string) {
-	t.Helper()
-	orig := getGitHubToken
-	t.Cleanup(func() { getGitHubToken = orig })
-	getGitHubToken = func() string { return token }
-}
-
-func TestGoGetterClientFactory_NewClient_GitHubTokenAuth(t *testing.T) {
-	t.Run("github raw URL with token gets an authenticated client", func(t *testing.T) {
-		stubGitHubToken(t, "test-token")
-
-		factory := &goGetterClientFactory{}
-		client, err := factory.NewClient(context.Background(), "https://raw.githubusercontent.com/org/repo/main/file.yaml", "dest.yaml", ClientModeFile)
-		assert.NoError(t, err)
-
-		gc, ok := client.(*goGetterClient)
-		assert.True(t, ok)
-
-		httpGetter, ok := gc.client.Getters["https"].(*getter.HttpGetter)
-		assert.True(t, ok)
-		assert.NotNil(t, httpGetter.Client, "expected an authenticated client to be attached")
-	})
-
-	t.Run("github raw URL with no token leaves the default client untouched", func(t *testing.T) {
-		stubGitHubToken(t, "")
-
-		factory := &goGetterClientFactory{}
-		client, err := factory.NewClient(context.Background(), "https://raw.githubusercontent.com/org/repo/main/file.yaml", "dest.yaml", ClientModeFile)
-		assert.NoError(t, err)
-
-		gc, ok := client.(*goGetterClient)
-		assert.True(t, ok)
-
-		httpGetter, ok := gc.client.Getters["https"].(*getter.HttpGetter)
-		assert.True(t, ok)
-		assert.Nil(t, httpGetter.Client, "no client should be attached without a token")
-	})
-
-	t.Run("non-GitHub URL is never authenticated even when a token is available", func(t *testing.T) {
-		stubGitHubToken(t, "test-token")
-
-		factory := &goGetterClientFactory{}
-		client, err := factory.NewClient(context.Background(), "https://example.com/file.yaml", "dest.yaml", ClientModeFile)
-		assert.NoError(t, err)
-
-		gc, ok := client.(*goGetterClient)
-		assert.True(t, ok)
-
-		httpGetter, ok := gc.client.Getters["https"].(*getter.HttpGetter)
-		assert.True(t, ok)
-		assert.Nil(t, httpGetter.Client, "non-GitHub sources must not receive the authenticated client")
-	})
-
-	t.Run("explicit custom client takes precedence over token auth", func(t *testing.T) {
-		stubGitHubToken(t, "test-token")
-
-		custom := &http.Client{}
-		factory := &goGetterClientFactory{httpClient: custom}
-		client, err := factory.NewClient(context.Background(), "https://raw.githubusercontent.com/org/repo/main/file.yaml", "dest.yaml", ClientModeFile)
-		assert.NoError(t, err)
-
-		gc, ok := client.(*goGetterClient)
-		assert.True(t, ok)
-
-		httpGetter, ok := gc.client.Getters["https"].(*getter.HttpGetter)
-		assert.True(t, ok)
-		assert.Same(t, custom, httpGetter.Client, "an explicitly configured client must win over token auth")
-	})
-}
-
 func TestRegisterCustomDetectors(t *testing.T) {
 	// Save and restore original detectors
 	originalDetectors := getter.Detectors
@@ -198,6 +130,72 @@ func TestDownloadDetectFormatAndParseFile(t *testing.T) {
 	} else if resMap["key"] != "value" {
 		t.Errorf("Expected key to be 'value', got %v", resMap["key"])
 	}
+}
+
+// TestNewClient_AttachesGitHubTokenToHTTPGetter reproduces cloudposse/atmos CI flakiness from
+// GitHub-side rate limiting: sources with an explicit scheme (e.g.
+// https://raw.githubusercontent.com/...) never reach CustomGitDetector — go-getter's own
+// Detect() short-circuits before any Detector runs once a URL has a scheme — so the http/https
+// getter must attach a GitHub token itself when one is available, mirroring what
+// CustomGitDetector already does for scheme-less shorthand sources.
+func TestNewClient_AttachesGitHubTokenToHTTPGetter(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "ghp_test_token")
+	t.Setenv("ATMOS_GITHUB_TOKEN", "")
+	t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
+
+	factory := &goGetterClientFactory{}
+	dc, err := factory.NewClient(context.Background(), "https://raw.githubusercontent.com/org/repo/main/file.yaml", t.TempDir(), ClientModeFile)
+	require.NoError(t, err)
+
+	ggc, ok := dc.(*goGetterClient)
+	require.True(t, ok)
+	httpGetter, ok := ggc.client.Getters["https"].(*getter.HttpGetter)
+	require.True(t, ok)
+	require.NotNil(t, httpGetter.Client, "an authenticated http.Client should be attached when a GitHub token is available")
+
+	transport, ok := httpGetter.Client.Transport.(*httpClient.GitHubAuthenticatedTransport)
+	require.True(t, ok, "Transport should be GitHubAuthenticatedTransport, got %T", httpGetter.Client.Transport)
+	assert.Equal(t, "ghp_test_token", transport.GitHubToken)
+}
+
+// TestNewClient_NoTokenLeavesHTTPGetterOnGoGetterDefault ensures that when no GitHub token is
+// resolvable, the http/https getter is left with a nil Client so go-getter falls back to its
+// own default (unauthenticated) client rather than an Atmos-constructed one — preserving
+// go-getter's existing timeout/transport semantics for the common no-token case.
+func TestNewClient_NoTokenLeavesHTTPGetterOnGoGetterDefault(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("ATMOS_GITHUB_TOKEN", "")
+	t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
+	// Disable the `gh auth token` CLI fallback (see pkg/github/token.go) so this test is
+	// deterministic on a dev machine that happens to have an authenticated gh CLI.
+	t.Setenv("ATMOS_GITHUB_CLI", "")
+
+	factory := &goGetterClientFactory{}
+	dc, err := factory.NewClient(context.Background(), "https://raw.githubusercontent.com/org/repo/main/file.yaml", t.TempDir(), ClientModeFile)
+	require.NoError(t, err)
+
+	ggc, ok := dc.(*goGetterClient)
+	require.True(t, ok)
+	httpGetter, ok := ggc.client.Getters["https"].(*getter.HttpGetter)
+	require.True(t, ok)
+	assert.Nil(t, httpGetter.Client, "go-getter's own default client should be used when no token is available")
+}
+
+// TestNewClient_CustomHTTPClientTakesPrecedenceOverToken ensures a caller-supplied test client
+// (WithHTTPClient) is never silently overridden by token-based auth injection.
+func TestNewClient_CustomHTTPClientTakesPrecedenceOverToken(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "ghp_test_token")
+
+	custom := &http.Client{}
+	factory := &goGetterClientFactory{httpClient: custom}
+	dc, err := factory.NewClient(context.Background(), "https://raw.githubusercontent.com/org/repo/main/file.yaml", t.TempDir(), ClientModeFile)
+	require.NoError(t, err)
+
+	ggc, ok := dc.(*goGetterClient)
+	require.True(t, ok)
+	httpGetter, ok := ggc.client.Getters["https"].(*getter.HttpGetter)
+	require.True(t, ok)
+	assert.Same(t, custom, httpGetter.Client, "an injected test client must take precedence over token-based auth")
 }
 
 // Unix-specific test moved to gogetter_downloader_unix_test.go:
