@@ -112,14 +112,21 @@ func (av *atmosValidatorExecutor) prepareSchemaValue(k, sourceKey, customSchema 
 	}
 	switch {
 	case value.Schema == "" && value.Manifest == "":
-		value.Schema = fmt.Sprintf("atmos://schema/%s/manifest/1.0", k)
+		if k == "config" {
+			value.Schema = "atmos://schema/config/global/1.0"
+		} else {
+			value.Schema = fmt.Sprintf("atmos://schema/%s/manifest/1.0", k)
+		}
 	case value.Schema == "" && value.Manifest != "":
 		value.Schema = value.Manifest
 	case customSchema != "":
 		value.Schema = customSchema
 	}
-	if len(value.Matches) == 0 && sourceKey == "atmos" {
-		value.Matches = []string{"atmos.yaml", "atmos.yml"}
+	if len(value.Matches) == 0 {
+		switch sourceKey {
+		case "atmos", "config":
+			value.Matches = []string{"atmos.yaml", "atmos.yml"}
+		}
 	}
 
 	return value

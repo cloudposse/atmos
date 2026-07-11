@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	goccyyaml "github.com/goccy/go-yaml"
@@ -215,4 +216,35 @@ func TestSchemaExtractor_Failure(t *testing.T) {
 	// Execute the method
 	_, err := v.getSchemaSourceFromYAML([]byte(`{}`))
 	assert.ErrorIs(t, err, ErrSchemaNotFound)
+}
+
+func TestValidateYAMLSchema_AtmosConfigSchema(t *testing.T) {
+	v := NewYAMLSchemaValidator(&schema.AtmosConfiguration{})
+	schemaSource := "atmos://schema/config/global/1.0"
+
+	validConfig, err := os.ReadFile("../../tests/fixtures/scenarios/invalid-config-schema/atmos.yaml")
+	require.NoError(t, err)
+
+	tmpDir := t.TempDir()
+	validPath := filepath.Join(tmpDir, "valid-atmos.yaml")
+	require.NoError(t, os.WriteFile(validPath, []byte(`base_path: "."
+stacks:
+  base_path: stacks
+  included_paths:
+    - orgs/**/*
+components:
+  terraform:
+    base_path: components/terraform
+`), 0o644))
+
+	invalidPath := filepath.Join(tmpDir, "invalid-atmos.yaml")
+	require.NoError(t, os.WriteFile(invalidPath, validConfig, 0o644))
+
+	validErrors, err := v.ValidateYAMLSchema(schemaSource, validPath)
+	require.NoError(t, err)
+	assert.Empty(t, validErrors)
+
+	invalidErrors, err := v.ValidateYAMLSchema(schemaSource, invalidPath)
+	require.NoError(t, err)
+	assert.NotEmpty(t, invalidErrors)
 }

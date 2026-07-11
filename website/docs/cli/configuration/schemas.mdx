@@ -2,7 +2,7 @@
 title: Schemas
 sidebar_label: schemas
 sidebar_class_name: command
-description: Configure paths for JSON Schema and OPA policy files to validate Atmos stack manifests and components.
+description: Configure paths for JSON Schema and OPA policy files to validate Atmos stack manifests, root atmos.yaml, and components.
 id: schemas
 slug: /cli/configuration/schemas
 ---
@@ -12,7 +12,9 @@ import Terminal from '@site/src/components/Terminal'
 import DocCardList from '@theme/DocCardList'
 
 <Intro>
-Configure the paths where Atmos finds OPA and JSON Schema files to validate stack manifests and components. Schemas enable you to enforce consistency and catch configuration errors early.
+Configure the paths where Atmos finds OPA and JSON Schema files to validate stack manifests, the root
+`atmos.yaml` CLI config, and components. Schemas enable you to enforce consistency and catch configuration
+errors early.
 </Intro>
 
 ## Configuration
@@ -33,11 +35,17 @@ schemas:
     # Can also be set using 'ATMOS_SCHEMAS_OPA_BASE_PATH' ENV var, or '--schemas-opa-dir' command-line argument
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/opa"
-  # JSON Schema to validate Atmos manifests
+  # JSON Schema to validate Atmos stack manifests
   atmos:
     # Can also be set using 'ATMOS_SCHEMAS_ATMOS_MANIFEST' ENV var, or '--schemas-atmos-manifest' command-line argument
     # Supports both absolute and relative paths (relative to the `base_path` setting in `atmos.yaml`)
     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
+  # JSON Schema to validate root atmos.yaml (enabled by default)
+  config:
+    schema: atmos://schema/config/global/1.0
+    matches:
+      - atmos.yaml
+      - atmos.yml
 ```
 </File>
 
@@ -57,6 +65,16 @@ schemas:
   <dt>`schemas.atmos.manifest`</dt>
   <dd>
     Path to the JSON Schema used to validate Atmos stack manifests. Supports both absolute and relative paths (relative to `base_path`). Can also be set using `ATMOS_SCHEMAS_ATMOS_MANIFEST` environment variable or `--schemas-atmos-manifest` command-line argument.
+  </dd>
+
+  <dt>`schemas.config.schema`</dt>
+  <dd>
+    Path or `atmos://` URI to the JSON Schema used to validate the root `atmos.yaml` file. Defaults to the embedded schema `atmos://schema/config/global/1.0`.
+  </dd>
+
+  <dt>`schemas.config.matches`</dt>
+  <dd>
+    Glob patterns for files validated by `schemas.config`. Defaults to `atmos.yaml` and `atmos.yml`.
   </dd>
 </dl>
 
@@ -108,6 +126,23 @@ atmos validate stacks --schemas-atmos-manifest stacks/schemas/atmos/atmos-manife
 ```
 
 If not specified, Atmos defaults to the schema corresponding to the currently installed version.
+
+## Atmos Config JSON Schema
+
+The [Atmos Config JSON Schema](pathname:///schemas/atmos/atmos-config/1.0/atmos-config.json) validates the root
+`atmos.yaml` CLI configuration and provides auto-completion in supported editors.
+
+Validate on the command line:
+
+```shell
+atmos validate schema config
+```
+
+For IDE integration, add this directive at the top of `atmos.yaml`:
+
+```yaml
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-config/1.0/atmos-config.json
+```
 
 ### Validation Output Example
 

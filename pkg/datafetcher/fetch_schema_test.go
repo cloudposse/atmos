@@ -18,6 +18,7 @@ func TestAtmosFetcher(t *testing.T) {
 		err                 error
 	}{
 		{"Valid key should work", "atmos://schema/atmos/manifest/1.0", true, nil},
+		{"Valid atmos config schema should work", "atmos://schema/config/global/1.0", true, nil},
 		{"Invalid key should not work", "atmos://unknown", false, ErrAtmosSchemaNotFound},
 	}
 	for _, tt := range tests {

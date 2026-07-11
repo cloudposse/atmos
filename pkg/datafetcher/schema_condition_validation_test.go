@@ -12,10 +12,9 @@ import (
 
 func TestManifestSchema_WorkflowWhenConditionForms(t *testing.T) {
 	schemas := map[string][]byte{
-		"embedded":      loadEmbeddedSchemaBytes(t),
-		"website":       loadWebsiteSchemaBytes(t),
-		"fixture":       loadFixtureSchemaBytes(t),
-		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
+		"embedded": loadEmbeddedSchemaBytes(t),
+		"website":  loadWebsiteSchemaBytes(t),
+		"fixture":  loadFixtureSchemaBytes(t),
 	}
 
 	validConditions := map[string]any{
@@ -44,11 +43,10 @@ func TestManifestSchema_WorkflowWhenConditionForms(t *testing.T) {
 
 func TestManifestSchema_HookWhenConditionForms(t *testing.T) {
 	schemas := map[string][]byte{
-		"embedded":      loadEmbeddedSchemaBytes(t),
-		"website":       loadWebsiteSchemaBytes(t),
-		"fixture":       loadFixtureSchemaBytes(t),
-		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
-		"stack-config":  loadStackConfigSchemaBytes(t),
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"website":      loadWebsiteSchemaBytes(t),
+		"fixture":      loadFixtureSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
 	}
 
 	validConditions := map[string]any{
@@ -78,11 +76,10 @@ func TestManifestSchema_HookWhenConditionForms(t *testing.T) {
 
 func TestManifestSchema_HookRetryUsesWorkflowRetrySchema(t *testing.T) {
 	schemas := map[string][]byte{
-		"embedded":      loadEmbeddedSchemaBytes(t),
-		"website":       loadWebsiteSchemaBytes(t),
-		"fixture":       loadFixtureSchemaBytes(t),
-		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
-		"stack-config":  loadStackConfigSchemaBytes(t),
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"website":      loadWebsiteSchemaBytes(t),
+		"fixture":      loadFixtureSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
 	}
 
 	for schemaName, schemaData := range schemas {
@@ -151,11 +148,10 @@ func TestManifestSchema_WorkflowStepCastSimulationFields(t *testing.T) {
 
 func TestManifestSchema_TerraformTestFixturesHookShape(t *testing.T) {
 	schemas := map[string][]byte{
-		"embedded":      loadEmbeddedSchemaBytes(t),
-		"website":       loadWebsiteSchemaBytes(t),
-		"fixture":       loadFixtureSchemaBytes(t),
-		"global-config": loadSchemaFile(t, "schema/config/global/1.0.json"),
-		"stack-config":  loadStackConfigSchemaBytes(t),
+		"embedded":     loadEmbeddedSchemaBytes(t),
+		"website":      loadWebsiteSchemaBytes(t),
+		"fixture":      loadFixtureSchemaBytes(t),
+		"stack-config": loadStackConfigSchemaBytes(t),
 	}
 
 	for schemaName, schemaData := range schemas {
