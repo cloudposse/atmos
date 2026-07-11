@@ -30,8 +30,12 @@ import (
 )
 
 const (
-	terraformDefaultCommand = "terraform"
-	terraformNodeIDFormat   = "%s-%s"
+	terraformDefaultCommand    = "terraform"
+	terraformNodeIDFormat      = "%s-%s"
+	terraformSubCommandPlan    = "plan"
+	terraformSubCommandApply   = "apply"
+	terraformSubCommandDeploy  = "deploy"
+	terraformSubCommandDestroy = "destroy"
 )
 
 const (
@@ -40,9 +44,9 @@ const (
 )
 
 const (
-	terraformPlanLogOrderStream  = "stream"
-	terraformPlanLogOrderGrouped = "grouped"
-	terraformPlanHideNoChanges   = "no-changes"
+	terraformLogOrderStream    = "stream"
+	terraformLogOrderGrouped   = "grouped"
+	terraformPlanHideNoChanges = "no-changes"
 )
 
 const (
@@ -148,7 +152,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	}
 	// Debug, not Info: the user-facing "Processing components..." line is emitted once
 	// by the caller (e.g. ExecuteTerraformAll); this duplicate carries only the count.
-	if opts.Info.SubCommand == "destroy" {
+	if opts.Info.SubCommand == terraformSubCommandDestroy {
 		log.Debug("Processing components in reverse dependency order for destroy", "count", graph.Size())
 	} else {
 		log.Debug("Processing components in dependency order", "count", graph.Size())
@@ -193,7 +197,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if processedCount(result) == 0 {
 		ui.Success("No components matched")
 	}
-	if opts.Info.SubCommand == "plan" && terraformPlanChanged(result) {
+	if opts.Info.SubCommand == terraformSubCommandPlan && terraformPlanChanged(result) {
 		return errUtils.ExitCodeError{Code: 2}
 	}
 	return nil
@@ -288,7 +292,7 @@ func filterTerraformGraphBySelection(graph *dependency.Graph, selection *Terrafo
 
 // prepareTerraformGraphForCommand adjusts graph ordering for command-specific execution.
 func prepareTerraformGraphForCommand(info *schema.ConfigAndStacksInfo, graph *dependency.Graph) (*dependency.Graph, error) {
-	if info == nil || graph == nil || info.SubCommand != "destroy" {
+	if info == nil || graph == nil || info.SubCommand != terraformSubCommandDestroy {
 		return graph, nil
 	}
 	return reverseTerraformGraph(graph)
@@ -368,7 +372,7 @@ func validateTerraformConcurrentExecution(atmosConfig *schema.AtmosConfiguration
 
 // requiresTerraformAutoApprove reports whether concurrent execution must be explicitly approved.
 func requiresTerraformAutoApprove(info *schema.ConfigAndStacksInfo) bool {
-	return info != nil && (info.SubCommand == "apply" || info.SubCommand == "destroy")
+	return info != nil && (info.SubCommand == terraformSubCommandApply || info.SubCommand == terraformSubCommandDestroy)
 }
 
 // hasTerraformAutoApprove detects auto-approve from config, CLI flags, or Terraform env flags.
@@ -376,7 +380,7 @@ func hasTerraformAutoApprove(atmosConfig *schema.AtmosConfiguration, info *schem
 	if info == nil {
 		return false
 	}
-	if info.SubCommand == "apply" && atmosConfig != nil && atmosConfig.Components.Terraform.ApplyAutoApprove {
+	if info.SubCommand == terraformSubCommandApply && atmosConfig != nil && atmosConfig.Components.Terraform.ApplyAutoApprove {
 		return true
 	}
 	if containsTerraformFlag(info.AdditionalArgsAndFlags, "-auto-approve") {
@@ -974,17 +978,17 @@ func newTerraformOutput(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	if maxConcurrency <= 1 && !hideNoChanges {
 		return nil, nil
 	}
-	logOrder := terraformPlanLogOrderStream
-	if info != nil && info.TerraformPlanLogOrder != "" {
-		logOrder = strings.ToLower(info.TerraformPlanLogOrder)
+	logOrder := terraformLogOrderStream
+	if info != nil && info.TerraformLogOrder != "" {
+		logOrder = strings.ToLower(info.TerraformLogOrder)
 	}
 	if hideNoChanges {
-		logOrder = terraformPlanLogOrderGrouped
+		logOrder = terraformLogOrderGrouped
 	}
 	switch logOrder {
-	case terraformPlanLogOrderStream, terraformPlanLogOrderGrouped:
+	case terraformLogOrderStream, terraformLogOrderGrouped:
 	default:
-		return nil, fmt.Errorf("%w: unsupported Terraform plan log order %q", errUtils.ErrInvalidConfig, logOrder)
+		return nil, fmt.Errorf("%w: unsupported Terraform log order %q", errUtils.ErrInvalidConfig, logOrder)
 	}
 	command := terraformOutputCommand(info)
 	logDir := terraformLogDir(atmosConfig, command)
@@ -998,7 +1002,7 @@ func newTerraformOutput(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 
 // captureOutput reports whether the executor should capture stdout and stderr.
 func (o *terraformOutput) captureOutput() bool {
-	return o != nil && o.logOrder == terraformPlanLogOrderGrouped
+	return o != nil && o.logOrder == terraformLogOrderGrouped
 }
 
 // nodeWriters returns stdout/stderr writers, a flush function, and created log paths for a node.
@@ -1007,7 +1011,7 @@ func (o *terraformOutput) nodeWriters(node *dependency.Node) (io.Writer, io.Writ
 		return nil, nil, nil, nil
 	}
 	stdoutFile, stderrFile, logFiles := o.openNodeLogFiles(node)
-	if o.logOrder == terraformPlanLogOrderGrouped {
+	if o.logOrder == terraformLogOrderGrouped {
 		stdout := combineWriters(io.Discard, stdoutFile)
 		stderr := combineWriters(io.Discard, stderrFile)
 		return stdout, stderr, closeTerraformLogFiles(stdoutFile, stderrFile), logFiles
@@ -1087,7 +1091,7 @@ func closeTerraformLogFiles(files ...*os.File) func() error {
 }
 
 func terraformPlanHideNoChangesEnabled(info *schema.ConfigAndStacksInfo) (bool, error) {
-	if info == nil || info.SubCommand != "plan" {
+	if info == nil || info.SubCommand != terraformSubCommandPlan {
 		return false, nil
 	}
 	hideNoChanges := info.TerraformPlanHideNoChanges
@@ -1139,7 +1143,7 @@ func safeTerraformLogName(label string) string {
 
 // finishNode replays grouped node output after the node completes.
 func (o *terraformOutput) finishNode(node *dependency.Node, result TerraformExecutionResult, execErr error) {
-	if o == nil || o.logOrder != terraformPlanLogOrderGrouped {
+	if o == nil || o.logOrder != terraformLogOrderGrouped {
 		return
 	}
 	if o.hideNoChanges && terraformPlanHasNoChanges(result, execErr) {
@@ -1197,7 +1201,7 @@ func terraformPlanHasNoChanges(result TerraformExecutionResult, execErr error) b
 
 // terraformPlanChangedError treats Terraform plan exit code 2 as a changed result.
 func terraformPlanChangedError(info *schema.ConfigAndStacksInfo, err error) bool {
-	if info == nil || info.SubCommand != "plan" {
+	if info == nil || info.SubCommand != terraformSubCommandPlan {
 		return false
 	}
 	var exitCodeErr errUtils.ExitCodeError
@@ -1487,7 +1491,7 @@ func effectiveTerraformFailureMode(info *schema.ConfigAndStacksInfo) string {
 // supportsTerraformConcurrency reports whether subCommand can run through the scheduler concurrently.
 func supportsTerraformConcurrency(subCommand string) bool {
 	switch subCommand {
-	case "plan", "apply", "destroy":
+	case terraformSubCommandPlan, terraformSubCommandApply, terraformSubCommandDeploy, terraformSubCommandDestroy:
 		return true
 	default:
 		return false

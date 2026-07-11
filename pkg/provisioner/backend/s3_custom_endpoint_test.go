@@ -3,7 +3,6 @@ package backend
 import (
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -51,20 +50,6 @@ func TestExtractS3PathStyle(t *testing.T) {
 	assert.False(t, extractS3PathStyle(map[string]any{}))
 }
 
-// TestS3ClientOptions verifies the custom-endpoint fields translate into the
-// correct AWS SDK S3 client options.
-func TestS3ClientOptions(t *testing.T) {
-	opts := s3ClientOptions(&s3Config{endpoint: "http://localhost:4566", usePathStyle: true})
-	require.Len(t, opts, 2)
-
-	o := &s3.Options{}
-	for _, fn := range opts {
-		fn(o)
-	}
-	require.NotNil(t, o.BaseEndpoint)
-	assert.Equal(t, "http://localhost:4566", *o.BaseEndpoint)
-	assert.True(t, o.UsePathStyle)
-
-	// No custom endpoint/path-style → no options (default AWS resolution).
-	assert.Empty(t, s3ClientOptions(&s3Config{}))
-}
+// See TestS3ClientOptions in s3_options_test.go for coverage of how the
+// custom-endpoint fields translate into AWS SDK S3 client options, including
+// the identity-endpoint fallback and config-endpoint priority.

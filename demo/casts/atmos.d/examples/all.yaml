@@ -168,6 +168,9 @@ commands:
       - type: shell
         name: scaffolds-aws-landing-zone-lifecycle
         command: atmos casts generate examples scaffolds aws-landing-zone-lifecycle
+      - type: shell
+        name: version-tracker-tracks-and-vars
+        command: atmos casts generate examples version-tracker tracks-and-vars
   - name: casts validate examples
     description: Validate every example-sourced cast
     env: !include cast-defaults.yaml .env.command
@@ -345,3 +348,6 @@ commands:
       - type: shell
         name: scaffolds-aws-landing-zone-lifecycle
         command: atmos casts validate examples scaffolds aws-landing-zone-lifecycle
+      - type: shell
+        name: version-tracker-tracks-and-vars
+        command: atmos casts validate examples version-tracker tracks-and-vars

@@ -28,4 +28,4 @@ steps:
   <dd>Optional default. Values such as `true` or `yes` default to confirmation.</dd>
 </dl>
 
-Interactive steps require a TTY. Reference the answer later with `{{ .steps.proceed.value }}`.
+Interactive steps require a TTY; in a non-TTY environment such as CI, the step uses its [`default`](/workflows/steps#interactive-steps-in-ci-non-tty) if set and otherwise errors. Reference the answer later with `{{ .steps.proceed.value }}`.

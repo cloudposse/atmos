@@ -60,6 +60,7 @@ const TITLES_MAP = {
   'custom-commands': 'Custom Commands',
   'emulator-aws': 'AWS Emulator',
   'emulator-k8s': 'Kubernetes Emulator',
+  'packer-docker': 'Packer + Docker',
 };
 
 // Tags mapping for examples (an example can have multiple tags; the first tag
@@ -97,7 +98,7 @@ const TAGS_MAP = {
   'demo-custom-command': ['Automation'],
   'generate-files': ['Automation'],
   'demo-ansible': ['Automation'],
-  'aws-ami-packer-github-actions': ['Automation'],
+  'packer-docker': ['Automation'],
   'background-steps': ['Automation'],
   'parallel-steps': ['Automation'],
   'workflow-retries': ['Automation'],
@@ -233,11 +234,10 @@ const DOCS_MAP = {
     { label: 'Authentication', url: '/stacks/auth' },
     { label: 'Toolchain', url: '/cli/configuration/toolchain' },
   ],
-  'aws-ami-packer-github-actions': [
+  'packer-docker': [
+    { label: 'Packer Components', url: '/components/packer' },
     { label: 'Packer Build', url: '/cli/commands/packer/build' },
-    { label: 'Custom Commands', url: '/cli/configuration/commands' },
-    { label: 'Go Templates', url: '/templates' },
-    { label: 'GitHub Actions', url: '/integrations/github-actions/setup-atmos' },
+    { label: 'Toolchain Configuration', url: '/cli/configuration/toolchain' },
   ],
   init: [
     { label: 'Init Command', url: '/cli/commands/init' },
@@ -472,18 +472,60 @@ function extractDescription(content) {
   if (!content) return '';
   const { body: text } = parseReadmeFrontmatter(content);
 
-  // Skip headers and find first paragraph.
+  // Skip leading headers/blank lines, then collect every line of the first
+  // paragraph (a blank line or the next heading ends it) so hard-wrapped
+  // markdown source doesn't get cut mid-sentence or mid-token.
   const lines = text.split('\n');
+  const paragraph = [];
   for (const line of lines) {
     const trimmed = line.trim();
-    // Skip empty lines and headers.
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    // Return the first non-empty, non-header line. Cards grow to fit the
-    // description, so avoid clipping meaningful example copy here.
-    return trimmed;
+    if (paragraph.length === 0) {
+      if (!trimmed || trimmed.startsWith('#')) continue;
+    } else if (!trimmed || trimmed.startsWith('#')) {
+      break;
+    }
+    paragraph.push(trimmed);
   }
 
-  return '';
+  return paragraph.join(' ');
+}
+
+// Target length for card descriptions, matching the length of the
+// hand-curated `description:` front matter values already in use.
+const MAX_DESCRIPTION_LENGTH = 200;
+
+/**
+ * Strips inline Markdown syntax down to plain text.
+ * @param {string} text - Markdown text.
+ * @returns {string} - Plain text.
+ */
+function stripMarkdown(text) {
+  return text
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\*\*([^*]*)\*\*/g, '$1')
+    .replace(/\*([^*]*)\*/g, '$1')
+    .replace(/_([^_]*)_/g, '$1');
+}
+
+/**
+ * Reduces a description to a safe length for card display. Short
+ * descriptions are returned untouched (preserving Markdown formatting);
+ * long ones are flattened to plain text and cut at a word boundary so
+ * truncation never leaves a dangling Markdown token.
+ * @param {string} description - Raw (possibly Markdown) description.
+ * @returns {string} - Description within MAX_DESCRIPTION_LENGTH.
+ */
+function reduceDescriptionLength(description) {
+  if (!description || description.length <= MAX_DESCRIPTION_LENGTH) return description;
+
+  const plain = stripMarkdown(description);
+  if (plain.length <= MAX_DESCRIPTION_LENGTH) return plain;
+
+  const truncated = plain.slice(0, MAX_DESCRIPTION_LENGTH);
+  const lastSpace = truncated.lastIndexOf(' ');
+  return `${(lastSpace > 0 ? truncated.slice(0, lastSpace) : truncated).trimEnd()}…`;
 }
 
 /**
@@ -510,8 +552,9 @@ function scanExamples(sourceDir, options) {
     // Get description: prefer explicit front matter, fall back to the README's first paragraph.
     const frontmatterDescription =
       typeof readmeMetadata.data.description === 'string' ? readmeMetadata.data.description.trim() : '';
-    const description =
-      frontmatterDescription || (tree.readme ? extractDescription(tree.readme.content) : '');
+    const description = reduceDescriptionLength(
+      frontmatterDescription || (tree.readme ? extractDescription(tree.readme.content) : '')
+    );
     // Guard against a scalar `cast:` value so a malformed README can't break the build.
     // Front matter wins; otherwise fall back to CAST_MAP (see its comment for why).
     const castMeta = readmeMetadata.data.cast;

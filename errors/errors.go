@@ -125,6 +125,7 @@ var (
 	ErrVersionRenderDrift            = errors.New("rendered output differs from committed file")
 	ErrUnsupportedVersionTrackFormat = errors.New("unsupported output format (supported: yaml, json)")
 	ErrUnsupportedVersionShow        = errors.New("unsupported --show value (supported: desired, locked)")
+	ErrUnsupportedVersionField       = errors.New("unsupported --show value (supported: name, ecosystem, datasource, provider, package, desired, group, update, include, exclude, prerelease, labels, locked)")
 	ErrVersionFilesDrift             = errors.New("version-managed files are out of date; run `atmos version track apply`")
 	ErrUnknownVersionFileManager     = errors.New("unknown file manager")
 	ErrDuplicateVersionFileManager   = errors.New("duplicate file manager registration")

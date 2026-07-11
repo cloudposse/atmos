@@ -44,7 +44,8 @@ type S3ClientAPI interface {
 // s3TestMu protects test-only variables for concurrent test execution.
 var s3TestMu sync.RWMutex
 
-// s3ClientFactory creates S3 clients from AWS config.
+// s3ClientFactory creates S3 clients from AWS config and functional options
+// (e.g. BaseEndpoint, UsePathStyle from s3ClientOptions).
 // Override in tests to inject fake S3 clients.
 // Protected by s3TestMu for thread-safe concurrent test execution.
 var s3ClientFactory = func(cfg aws.Config, optFns ...func(*s3.Options)) S3ClientAPI {
@@ -79,23 +80,35 @@ func ResetS3ClientFactory() {
 }
 
 // newS3Client builds an S3 client that honors any custom endpoint, path-style
-// addressing, and static credentials declared in the backend config. This lets
-// the provisioner create state buckets on any S3-compatible endpoint (MinIO,
-// other S3-compatible object stores, local emulators) exactly the way
-// Terraform's own S3 backend does — it is not specific to any one emulator.
-func newS3Client(awsConfig *aws.Config, config *s3Config) S3ClientAPI {
+// addressing, and static credentials declared in the backend config, falling
+// back to the active identity's resolved endpoint when the backend config
+// doesn't declare one explicitly. This lets the provisioner create state
+// buckets on any S3-compatible endpoint (MinIO, other S3-compatible object
+// stores, local emulators) exactly the way Terraform's own S3 backend does —
+// it is not specific to any one emulator.
+func newS3Client(awsConfig *aws.Config, config *s3Config, authContext *schema.AuthContext) S3ClientAPI {
 	if config.accessKey != "" && config.secretKey != "" {
 		awsConfig.Credentials = credentials.NewStaticCredentialsProvider(config.accessKey, config.secretKey, "")
 	}
-	return getS3ClientFactory()(*awsConfig, s3ClientOptions(config)...)
+	return getS3ClientFactory()(*awsConfig, s3ClientOptions(config, authContext)...)
 }
 
-// s3ClientOptions translates the custom-endpoint fields of s3Config into AWS SDK
-// S3 client options.
-func s3ClientOptions(config *s3Config) []func(*s3.Options) {
+// s3ClientOptions builds AWS SDK v2 S3 client functional options from the backend
+// config's custom-endpoint fields and, as a fallback, the identity's auth context.
+// SDK v2 endpoint overrides are per-service client options, not part of aws.Config,
+// so they must be applied at client construction time. Without BaseEndpoint, an
+// emulator-backed identity (aws/emulator) silently targets real AWS instead of the
+// local emulator endpoint — the endpoint is injected into the Terraform subprocess
+// but was never honored by this in-process S3 client. Mirrors
+// internal/terraform_backend/terraform_backend_s3.go's getCachedS3Client. An
+// explicit backend.s3 endpoint takes priority over the identity's endpoint.
+func s3ClientOptions(config *s3Config, authContext *schema.AuthContext) []func(*s3.Options) {
 	var optFns []func(*s3.Options)
-	if config.endpoint != "" {
-		endpoint := config.endpoint
+	endpoint := config.endpoint
+	if endpoint == "" && authContext != nil && authContext.AWS != nil {
+		endpoint = authContext.AWS.EndpointURL
+	}
+	if endpoint != "" {
 		optFns = append(optFns, func(o *s3.Options) { o.BaseEndpoint = aws.String(endpoint) })
 	}
 	if config.usePathStyle {
@@ -133,6 +146,8 @@ type s3Config struct {
 	roleArn string
 	// Custom-endpoint support (standard Terraform S3 backend settings). These
 	// let the provisioner target any S3-compatible endpoint, not just AWS.
+	// When endpoint is empty, newS3Client falls back to the active identity's
+	// resolved endpoint (schema.AWSAuthContext.EndpointURL).
 	endpoint     string
 	usePathStyle bool
 	accessKey    string
@@ -198,7 +213,7 @@ func CreateS3Backend(
 	}
 
 	// Create S3 client (honors custom endpoint / path-style / static creds).
-	client := newS3Client(&awsConfig, config)
+	client := newS3Client(&awsConfig, config, authContext)
 
 	// Check if bucket exists and create if needed.
 	bucketAlreadyExisted, err := ensureBucket(ctx, client, config.bucket, config.region)
@@ -404,7 +419,7 @@ func S3BackendExists(
 	}
 
 	// Create S3 client (honors custom endpoint / path-style / static creds).
-	client := newS3Client(&awsConfig, config)
+	client := newS3Client(&awsConfig, config, authContext)
 
 	// Check if bucket exists.
 	return bucketExists(ctx, client, config.bucket)

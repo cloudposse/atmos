@@ -94,6 +94,27 @@ func TestBuildComponentAuthCacheKey_NonSerializable(t *testing.T) {
 	assert.False(t, ok, "a section that cannot be JSON-serialized must be reported non-cacheable")
 }
 
+// TestBuildComponentAuthCacheKey_AuthContextWrapperNeverCaches verifies that a parent AuthManager
+// propagated via authContextWrapper (used by atmos.Component() and !terraform.state to carry an
+// enclosing component's AuthContext into a nested lookup) is never cached. Its GetChain method always
+// returns an empty slice (it deliberately cannot prove chain identity — see its doc comment), so
+// without this guard two DIFFERENT real identities wrapped this way would collapse onto the same cache
+// key for any shared-shape auth section, silently reusing one identity's AuthManager (and credentials)
+// for a different identity's nested lookup. See docs/fixes for the regression this guards against.
+func TestBuildComponentAuthCacheKey_AuthContextWrapperNeverCaches(t *testing.T) {
+	t.Parallel()
+
+	section := authSectionWithDefault()
+	wrapperA := newAuthContextWrapper(&schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "identity-a"}})
+	wrapperB := newAuthContextWrapper(&schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "identity-b"}})
+
+	_, cacheableA := buildComponentAuthCacheKey(wrapperA, section)
+	_, cacheableB := buildComponentAuthCacheKey(wrapperB, section)
+
+	assert.False(t, cacheableA, "an authContextWrapper-rooted lookup must never be cached")
+	assert.False(t, cacheableB, "an authContextWrapper-rooted lookup must never be cached")
+}
+
 // sentinelAuthManager is a distinguishable AuthManager used to assert pointer identity of cached results.
 type sentinelAuthManager struct{ auth.AuthManager }
 

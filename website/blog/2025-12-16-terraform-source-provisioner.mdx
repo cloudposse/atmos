@@ -5,9 +5,17 @@ authors: [osterman]
 tags: [feature]
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Atmos now supports just-in-time (JIT) vendoring of components directly from stack configuration using the top-level `source` field. This works for **Terraform**, **Helmfile**, and **Packer** components. Declare component sources inline without requiring separate `component.yaml` files—components are automatically downloaded on first use.
 
 <!--truncate-->
+
+See it in action:
+
+<CastPlayer src="/casts/examples/source-provisioning/sources.cast" title="atmos source provisioning" chrome controls scrubber />
+
+[View the full example](/examples/source-provisioning)
 
 ## What Changed
 

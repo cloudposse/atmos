@@ -522,6 +522,21 @@ func GetPrimaryColor() string {
 	return scheme.Primary
 }
 
+// GetSpinnerColor returns the spinner/loading-indicator color from the current theme.
+func GetSpinnerColor() string {
+	// Use cached color scheme if available
+	if lastColorScheme != nil {
+		return lastColorScheme.Spinner
+	}
+
+	// Fall back to loading from theme
+	scheme, err := GetColorSchemeForTheme(getActiveThemeName())
+	if err != nil || scheme == nil {
+		return "#00FFFF" // Default cyan
+	}
+	return scheme.Spinner
+}
+
 // GetSuccessColor returns the success color from the current theme.
 func GetSuccessColor() string {
 	// Use cached color scheme if available
