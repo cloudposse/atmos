@@ -40,6 +40,12 @@ const (
 )
 
 const (
+	terraformSubCommandPlan    = "plan"
+	terraformSubCommandApply   = "apply"
+	terraformSubCommandDestroy = "destroy"
+)
+
+const (
 	terraformPlanLogOrderStream  = "stream"
 	terraformPlanLogOrderGrouped = "grouped"
 	terraformPlanHideNoChanges   = "no-changes"
@@ -1487,7 +1493,7 @@ func effectiveTerraformFailureMode(info *schema.ConfigAndStacksInfo) string {
 // supportsTerraformConcurrency reports whether subCommand can run through the scheduler concurrently.
 func supportsTerraformConcurrency(subCommand string) bool {
 	switch subCommand {
-	case "plan", "apply", "destroy":
+	case terraformSubCommandPlan, terraformSubCommandApply, terraformSubCommandDestroy:
 		return true
 	default:
 		return false
