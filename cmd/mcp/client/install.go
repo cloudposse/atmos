@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -37,7 +38,11 @@ var installCmd = &cobra.Command{
 
 var installParser *flags.StandardParser
 
-const installScopeFlag = "scope"
+const (
+	installScopeFlag = "scope"
+	dryRunFlag       = "dry-run"
+	yesFlag          = "yes"
+)
 
 var (
 	errMCPServerNotConfigured = errors.New("MCP server is not configured")
@@ -55,10 +60,10 @@ func init() {
 		flags.WithValidValues(installScopeFlag, mcpinstall.ScopeProject, mcpinstall.ScopeUser),
 		flags.WithBoolFlag("global", "g", false, "Alias for --scope user"),
 		flags.WithEnvVars("global", "ATMOS_MCP_GLOBAL"),
-		flags.WithBoolFlag("yes", "y", false, "Skip confirmation prompts"),
-		flags.WithEnvVars("yes", "ATMOS_YES"),
-		flags.WithBoolFlag("dry-run", "", false, "Show what would be installed without writing files"),
-		flags.WithEnvVars("dry-run", "ATMOS_DRY_RUN"),
+		flags.WithBoolFlag(yesFlag, "y", false, "Skip confirmation prompts"),
+		flags.WithEnvVars(yesFlag, "ATMOS_YES"),
+		flags.WithBoolFlag(dryRunFlag, "", false, "Show what would be installed without writing files"),
+		flags.WithEnvVars(dryRunFlag, "ATMOS_DRY_RUN"),
 		flags.WithBoolFlag("force", "", false, "Overwrite existing server entries without prompting"),
 		flags.WithEnvVars("force", "ATMOS_FORCE"),
 		flags.WithBoolFlag("gitignore", "", false, "Add generated project config files to .gitignore"),
@@ -82,13 +87,16 @@ func executeMCPInstall(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if nudge := atmosProNudge(&atmosConfig); nudge != "" {
+		ui.Info(nudge)
+	}
+
 	servers, err := selectServers(atmosConfig.MCP.Servers, args)
 	if err != nil {
 		return err
 	}
 	if len(servers) == 0 {
-		ui.Info("No MCP servers configured. Add servers under `mcp.servers` in `atmos.yaml`.")
-		return nil
+		return handleNoServersToInstall(cmd, &atmosConfig, args, v.GetBool(yesFlag))
 	}
 
 	scope := resolveInstallScope(cmd, v)
@@ -101,9 +109,9 @@ func executeMCPInstall(cmd *cobra.Command, args []string) error {
 		clients:    clients,
 		scope:      scope,
 		allClients: v.GetBool("all-clients"),
-		yes:        v.GetBool("yes"),
+		yes:        v.GetBool(yesFlag),
 		force:      v.GetBool("force"),
-		dryRun:     v.GetBool("dry-run"),
+		dryRun:     v.GetBool(dryRunFlag),
 		gitignore:  v.GetBool("gitignore"),
 	})
 }
@@ -116,6 +124,24 @@ type installCommandOptions struct {
 	force      bool
 	dryRun     bool
 	gitignore  bool
+}
+
+// handleNoServersToInstall runs when `atmos mcp install` (or a name filter
+// that resolved to nothing) has nothing configured to install. With no
+// explicit server names, it offers to add+install the self preset
+// interactively; otherwise (or if declined) it prints the static hint.
+func handleNoServersToInstall(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, args []string, yes bool) error {
+	if len(args) == 0 {
+		installed, err := offerSelfInstall(cmd, atmosConfig, yes)
+		if err != nil {
+			return err
+		}
+		if installed {
+			return nil
+		}
+	}
+	ui.Info(noServersConfiguredMessage(atmosConfig.MCP.Enabled))
+	return nil
 }
 
 func selectServers(configured map[string]schema.MCPServerConfig, names []string) (map[string]schema.MCPServerConfig, error) {
@@ -151,7 +177,7 @@ func resolveInstallClients(atmosConfig *schema.AtmosConfiguration, scope string,
 
 	basePath := installBasePath(atmosConfig)
 	detected := mcpinstall.DetectClients(basePath, "", scope)
-	if v.GetBool("yes") {
+	if v.GetBool(yesFlag) {
 		if len(detected) > 0 {
 			return detected, nil
 		}
@@ -212,6 +238,9 @@ func installServers(
 	opts installCommandOptions,
 ) error {
 	basePath := installBasePath(atmosConfig)
+	if opts.scope == mcpinstall.ScopeUser {
+		servers = withUserScopeCwd(servers, basePath)
+	}
 	installer, err := mcpinstall.New(
 		mcpinstall.WithBasePath(basePath),
 		mcpinstall.WithScope(opts.scope),
@@ -232,6 +261,27 @@ func installServers(
 	}
 	reportMCPInstallResult(result, opts.dryRun)
 	return nil
+}
+
+// withUserScopeCwd returns a copy of servers with Cwd set to the absolute
+// project base path for stdio servers that don't already declare one.
+// User-scoped (global) client configs aren't colocated with the project, so
+// the server subprocess needs an explicit cwd to know which project to
+// operate on. HTTP servers don't spawn a subprocess, so cwd is meaningless
+// for them.
+func withUserScopeCwd(servers map[string]schema.MCPServerConfig, basePath string) map[string]schema.MCPServerConfig {
+	abs, err := filepath.Abs(basePath)
+	if err != nil {
+		return servers
+	}
+	result := make(map[string]schema.MCPServerConfig, len(servers))
+	for name, server := range servers { //nolint:gocritic // rangeValCopy: value must be copied to mutate Cwd before storing.
+		if server.Cwd == "" && server.TransportType() == schema.MCPTransportStdio {
+			server.Cwd = abs
+		}
+		result[name] = server
+	}
+	return result
 }
 
 func installBasePath(atmosConfig *schema.AtmosConfiguration) string {

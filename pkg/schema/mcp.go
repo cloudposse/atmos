@@ -40,7 +40,7 @@ func (r *MCPRoutingConfig) IsEnabled() bool {
 // provide additional functionality.
 type MCPServerConfig struct {
 	// Standard MCP server fields (compatible with mcpServers JSON format).
-	Command string            `yaml:"command" json:"command" mapstructure:"command"`
+	Command string            `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
 	Args    []string          `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`
 	Env     map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 	Type    string            `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
@@ -53,6 +53,10 @@ type MCPServerConfig struct {
 	Timeout     string `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
 	// Identity is the Atmos Auth identity (from the auth section) for credential injection.
 	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+	// Cwd is the working directory a stdio server subprocess should be launched from.
+	// Used for user-scoped (global) client installs, where the client config isn't
+	// colocated with the Atmos project, so the server needs an explicit cwd.
+	Cwd string `yaml:"cwd,omitempty" json:"cwd,omitempty" mapstructure:"cwd"`
 }
 
 // TransportType returns the configured MCP transport, inferring a default when

@@ -72,6 +72,47 @@ func TestInstallServersYesSkipsExistingServer(t *testing.T) {
 	assert.NotContains(t, string(data), `"new"`)
 }
 
+func TestWithUserScopeCwd(t *testing.T) {
+	abs, err := filepath.Abs("testdata-project")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name    string
+		servers map[string]schema.MCPServerConfig
+		wantCwd map[string]string
+	}{
+		{
+			name: "stdio server without cwd gets project abs path",
+			servers: map[string]schema.MCPServerConfig{
+				"self": {Command: "atmos", Args: []string{"mcp", "start"}},
+			},
+			wantCwd: map[string]string{"self": abs},
+		},
+		{
+			name: "stdio server with explicit cwd is left alone",
+			servers: map[string]schema.MCPServerConfig{
+				"self": {Command: "atmos", Args: []string{"mcp", "start"}, Cwd: "/already/set"},
+			},
+			wantCwd: map[string]string{"self": "/already/set"},
+		},
+		{
+			name: "http server never gets a cwd",
+			servers: map[string]schema.MCPServerConfig{
+				"atmos-pro": {Type: schema.MCPTransportHTTP, URL: "https://atmos-pro.com/mcp"},
+			},
+			wantCwd: map[string]string{"atmos-pro": ""},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := withUserScopeCwd(tt.servers, "testdata-project")
+			for name, wantCwd := range tt.wantCwd {
+				assert.Equal(t, wantCwd, result[name].Cwd, "server %s", name)
+			}
+		})
+	}
+}
+
 func newMCPInstallTestCmd(t *testing.T) *cobra.Command {
 	t.Helper()
 	cmd := &cobra.Command{Use: "install"}

@@ -55,6 +55,17 @@ enabling AI. This ensures that enabling AI chat features does not inadvertently 
 
 ### 2. Configure Claude Desktop
 
+<Terminal>
+```shell
+# Automated: writes mcp.enabled + the client entry for you.
+atmos mcp add self --install
+```
+</Terminal>
+
+`atmos mcp add self --install` does steps 1 and 2 for supported clients (Claude Code, Cursor, VS
+Code, Codex, Gemini) in one command — see [`atmos mcp add`](/cli/commands/mcp/add). Claude
+Desktop isn't one of the auto-installable clients yet, so configure it manually below.
+
 Create or edit the config file at `~/.config/claude/claude_desktop_config.json` (macOS/Linux)
 or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 

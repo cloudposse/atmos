@@ -171,6 +171,140 @@ func TestInstallGitignoreProjectOnly(t *testing.T) {
 	assert.True(t, strings.Contains(string(data), ".cursor/mcp.json"))
 }
 
+func TestUninstallJSONTarget_RemovesEntries(t *testing.T) {
+	base := t.TempDir()
+	path := filepath.Join(base, ".mcp.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"mcpServers":{"keep":{"command":"a"},"drop":{"command":"b"}}}`), 0o600))
+
+	installer, err := New(
+		WithBasePath(base),
+		WithHomeDir(t.TempDir()),
+		WithClients([]string{ClientClaudeCode}),
+	)
+	require.NoError(t, err)
+
+	result, err := installer.Uninstall([]string{"drop"})
+	require.NoError(t, err)
+	assert.Contains(t, result.RemovedServers, "claude-code:drop")
+	assert.Contains(t, result.UpdatedFiles, path)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var parsed struct {
+		Servers map[string]map[string]any `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(data, &parsed))
+	assert.Contains(t, parsed.Servers, "keep")
+	assert.NotContains(t, parsed.Servers, "drop")
+}
+
+func TestUninstallJSONTarget_LeavesEmptyMapNotDeletedFile(t *testing.T) {
+	base := t.TempDir()
+	path := filepath.Join(base, ".mcp.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"mcpServers":{"only":{"command":"a"}}}`), 0o600))
+
+	installer, err := New(
+		WithBasePath(base),
+		WithHomeDir(t.TempDir()),
+		WithClients([]string{ClientClaudeCode}),
+	)
+	require.NoError(t, err)
+
+	result, err := installer.Uninstall([]string{"only"})
+	require.NoError(t, err)
+	assert.Contains(t, result.RemovedServers, "claude-code:only")
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err, "file must not be deleted")
+	var parsed struct {
+		Servers map[string]map[string]any `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(data, &parsed))
+	assert.Empty(t, parsed.Servers)
+}
+
+func TestUninstallTOMLTarget_ReusesRemoveTOMLServer(t *testing.T) {
+	base := t.TempDir()
+	path := filepath.Join(base, ".codex", "config.toml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte("[mcp_servers.keep]\ncommand = \"a\"\n\n[mcp_servers.drop]\ncommand = \"b\"\n"), 0o600))
+
+	installer, err := New(
+		WithBasePath(base),
+		WithHomeDir(t.TempDir()),
+		WithClients([]string{ClientCodex}),
+	)
+	require.NoError(t, err)
+
+	result, err := installer.Uninstall([]string{"drop"})
+	require.NoError(t, err)
+	assert.Contains(t, result.RemovedServers, "codex:drop")
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "[mcp_servers.keep]")
+	assert.NotContains(t, content, "[mcp_servers.drop]")
+}
+
+func TestUninstall_NotFoundServersReported(t *testing.T) {
+	base := t.TempDir()
+	path := filepath.Join(base, ".mcp.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"mcpServers":{"keep":{"command":"a"}}}`), 0o600))
+
+	installer, err := New(
+		WithBasePath(base),
+		WithHomeDir(t.TempDir()),
+		WithClients([]string{ClientClaudeCode}),
+	)
+	require.NoError(t, err)
+
+	result, err := installer.Uninstall([]string{"missing"})
+	require.NoError(t, err)
+	assert.Contains(t, result.NotFoundServers, "claude-code:missing")
+	assert.Empty(t, result.RemovedServers)
+	assert.Empty(t, result.UpdatedFiles)
+}
+
+func TestUninstall_NotFoundWhenFileDoesNotExist(t *testing.T) {
+	base := t.TempDir()
+
+	installer, err := New(
+		WithBasePath(base),
+		WithHomeDir(t.TempDir()),
+		WithClients([]string{ClientClaudeCode}),
+	)
+	require.NoError(t, err)
+
+	result, err := installer.Uninstall([]string{"anything"})
+	require.NoError(t, err)
+	assert.Contains(t, result.NotFoundServers, "claude-code:anything")
+}
+
+func TestUninstall_DryRun(t *testing.T) {
+	base := t.TempDir()
+	path := filepath.Join(base, ".mcp.json")
+	original := `{"mcpServers":{"drop":{"command":"a"}}}`
+	require.NoError(t, os.WriteFile(path, []byte(original), 0o600))
+
+	installer, err := New(
+		WithBasePath(base),
+		WithHomeDir(t.TempDir()),
+		WithClients([]string{ClientClaudeCode}),
+		WithDryRun(true),
+	)
+	require.NoError(t, err)
+
+	result, err := installer.Uninstall([]string{"drop"})
+	require.NoError(t, err)
+	assert.Contains(t, result.RemovedServers, "claude-code:drop", "dry-run still reports what would be removed")
+	assert.Empty(t, result.UpdatedFiles, "dry-run must not write")
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, original, string(data))
+}
+
 func TestConfigFilePermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix file mode bits are not meaningful on Windows")

@@ -123,6 +123,14 @@ type Result struct {
 	UpdatedFiles    []string
 	SkippedServers  []string
 	GitignoredFiles []string
+	// RemovedServers lists servers removed (or, in DryRun mode, that would be
+	// removed) by Uninstall, formatted "<client>:<name>".
+	RemovedServers []string
+	// NotFoundServers lists servers Uninstall was asked to remove that
+	// weren't present in a given target, formatted "<client>:<name>". This is
+	// distinct from SkippedServers, which means a declined overwrite
+	// confirmation during Install.
+	NotFoundServers []string
 }
 
 type Installer struct {
@@ -260,6 +268,31 @@ func (i *Installer) Install(servers map[string]schema.MCPServerConfig) (*Result,
 	}
 	if i.opts.Gitignore && i.opts.Scope == ScopeProject && !i.opts.DryRun {
 		if err := i.updateGitignore(targets, result); err != nil {
+			return result, err
+		}
+	}
+	return result, nil
+}
+
+// Uninstall removes the named servers from each resolved client target.
+// Callers are responsible for resolving the server-name list before calling
+// (e.g. defaulting to "all currently declared" when no names are given) --
+// Uninstall itself just removes whatever names it's given, mirroring
+// Install's contract of receiving an already-resolved server map.
+func (i *Installer) Uninstall(names []string) (*Result, error) {
+	if len(i.opts.Clients) == 0 {
+		return nil, errNoMCPClientsSelected
+	}
+	if len(names) == 0 {
+		return nil, errNoMCPServersSelected
+	}
+	result := &Result{}
+	targets, err := i.targets()
+	if err != nil {
+		return result, err
+	}
+	for _, target := range targets {
+		if err := i.uninstallTarget(target, names, result); err != nil {
 			return result, err
 		}
 	}
@@ -486,6 +519,89 @@ func (i *Installer) installTOMLTarget(target Target, servers map[string]schema.M
 	}
 	recordFileResult(result, target.Path, existed)
 	return nil
+}
+
+func (i *Installer) uninstallTarget(target Target, names []string, result *Result) error {
+	if target.Format == "toml" {
+		return i.uninstallTOMLTarget(target, names, result)
+	}
+	return i.uninstallJSONTarget(target, names, result)
+}
+
+func (i *Installer) uninstallJSONTarget(target Target, names []string, result *Result) error {
+	if !fileOrDirExists(target.Path) {
+		recordNotFound(result, target.Client, names)
+		return nil
+	}
+	root, err := readJSONConfig(target.Path)
+	if err != nil {
+		return err
+	}
+	serverMap, err := jsonServerMap(root, target.Root)
+	if err != nil {
+		return err
+	}
+	changed := false
+	for _, name := range names {
+		if _, exists := serverMap[name]; !exists {
+			result.NotFoundServers = append(result.NotFoundServers, fmt.Sprintf("%s:%s", target.Client, name))
+			continue
+		}
+		delete(serverMap, name)
+		result.RemovedServers = append(result.RemovedServers, fmt.Sprintf("%s:%s", target.Client, name))
+		changed = true
+	}
+	if !changed || i.opts.DryRun {
+		return nil
+	}
+	root[target.Root] = serverMap
+	data, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := writeConfigFile(target.Path, append(data, '\n')); err != nil {
+		return err
+	}
+	result.UpdatedFiles = append(result.UpdatedFiles, target.Path)
+	return nil
+}
+
+func (i *Installer) uninstallTOMLTarget(target Target, names []string, result *Result) error {
+	if !fileOrDirExists(target.Path) {
+		recordNotFound(result, target.Client, names)
+		return nil
+	}
+	data, err := os.ReadFile(target.Path)
+	if err != nil {
+		return err
+	}
+	content := string(data)
+	changed := false
+	for _, name := range names {
+		if !tomlHasServer(content, name) {
+			result.NotFoundServers = append(result.NotFoundServers, fmt.Sprintf("%s:%s", target.Client, name))
+			continue
+		}
+		// removeTOMLServer already exists and is exercised by installTOMLTarget
+		// when re-rendering an overwritten entry -- reused here unchanged.
+		content = removeTOMLServer(content, name)
+		result.RemovedServers = append(result.RemovedServers, fmt.Sprintf("%s:%s", target.Client, name))
+		changed = true
+	}
+	if !changed || i.opts.DryRun {
+		return nil
+	}
+	if err := writeConfigFile(target.Path, []byte(strings.TrimLeft(content, "\n"))); err != nil {
+		return err
+	}
+	result.UpdatedFiles = append(result.UpdatedFiles, target.Path)
+	return nil
+}
+
+func recordNotFound(result *Result, client string, names []string) {
+	for _, name := range names {
+		result.NotFoundServers = append(result.NotFoundServers, fmt.Sprintf("%s:%s", client, name))
+	}
 }
 
 func sortedEntryNames(entries map[string]mcpclient.MCPJSONServer) []string {

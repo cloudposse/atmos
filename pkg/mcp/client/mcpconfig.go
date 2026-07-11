@@ -26,6 +26,7 @@ type MCPJSONServer struct {
 	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
+	Cwd     string            `json:"cwd,omitempty"`
 }
 
 // BuildMCPJSONEntry creates a .mcp.json entry for a server.
@@ -55,6 +56,7 @@ func BuildMCPJSONEntry(serverCfg *schema.MCPServerConfig, toolchainPATH string) 
 			Command: "atmos",
 			Args:    args,
 			Env:     env,
+			Cwd:     serverCfg.Cwd,
 		}
 	}
 
@@ -63,6 +65,7 @@ func BuildMCPJSONEntry(serverCfg *schema.MCPServerConfig, toolchainPATH string) 
 		Command: serverCfg.Command,
 		Args:    serverCfg.Args,
 		Env:     env,
+		Cwd:     serverCfg.Cwd,
 	}
 }
 

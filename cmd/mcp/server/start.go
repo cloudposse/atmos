@@ -155,7 +155,7 @@ func setupMCPServer() (*mcp.Server, error) {
 	// Check if MCP server is explicitly enabled.
 	if !atmosConfig.MCP.Enabled {
 		return nil, errUtils.Build(errUtils.ErrMCPNotEnabled).
-			WithHint("Add the following to atmos.yaml:\n\n```yaml\nmcp:\n  enabled: true\n```").
+			WithHint("Run `atmos config set mcp.enabled true`, or add to atmos.yaml:\n\n```yaml\nmcp:\n  enabled: true\n```").
 			Err()
 	}
 
