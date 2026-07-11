@@ -55,8 +55,8 @@ atmos version track status prod --group=infrastructure --format=json
 
 ## Example Output
 
-In an interactive terminal, `--format=table` (the default) renders a styled table. Non-interactive
-output (e.g. piped, or `--format=csv`) looks like:
+In an interactive terminal, `--format=table` (the default) renders a styled table.
+Use `--format=csv` or `--format=tsv` for delimited output; piped table output remains a table.
 
 ```shell
 > atmos version track status prod --format=csv

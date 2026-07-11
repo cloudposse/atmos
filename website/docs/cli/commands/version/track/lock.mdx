@@ -39,7 +39,8 @@ atmos version track lock prod --group=infrastructure
 ## Example Output
 
 In an interactive terminal, `--format=table` (the default) renders a styled table scoped to the
-resolved track's entries. Non-interactive output (e.g. piped, or `--format=csv`) looks like:
+resolved track's entries. Use `--format=csv` or `--format=tsv` for delimited output; piped table
+output remains a table.
 
 ```shell
 > atmos version track lock prod --format=csv

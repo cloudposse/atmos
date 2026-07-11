@@ -26,19 +26,19 @@ type DefaultTTYDetector struct{}
 
 // IsTTYForStdout checks if stdout supports TTY.
 func (d *DefaultTTYDetector) IsTTYForStdout() bool {
-	fd := int(os.Stdout.Fd())
+	fd := int(os.Stdout.Fd()) //nolint:gosec // G115: os.Stdout.Fd() is a small process-relative descriptor, safe to convert.
 	return term.IsTerminal(fd)
 }
 
 // IsTTYForStderr checks if stderr supports TTY.
 func (d *DefaultTTYDetector) IsTTYForStderr() bool {
-	fd := int(os.Stderr.Fd())
+	fd := int(os.Stderr.Fd()) //nolint:gosec // G115: os.Stderr.Fd() is a small process-relative descriptor, safe to convert.
 	return term.IsTerminal(fd)
 }
 
 // IsTTYForStdin checks if stdin supports TTY (interactive input).
 func (d *DefaultTTYDetector) IsTTYForStdin() bool {
-	fd := int(os.Stdin.Fd())
+	fd := int(os.Stdin.Fd()) //nolint:gosec // G115: os.Stdin.Fd() is a small process-relative descriptor, safe to convert.
 	return term.IsTerminal(fd)
 }
 

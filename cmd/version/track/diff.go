@@ -34,6 +34,6 @@ var trackDiffCmd = &cobra.Command{
 }
 
 func init() {
-	flags.NewStandardParser(trackParserOptions(groupFlagOption())...).RegisterFlags(trackDiffCmd)
+	flags.NewStandardParser(trackTableParserOptions(groupFlagOption())...).RegisterFlags(trackDiffCmd)
 	trackCmd.AddCommand(trackDiffCmd)
 }

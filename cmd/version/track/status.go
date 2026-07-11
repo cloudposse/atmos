@@ -64,6 +64,6 @@ func statusRows(track string, entries []manager.StatusEntry) []map[string]any {
 }
 
 func init() {
-	flags.NewStandardParser(trackParserOptions(groupFlagOption())...).RegisterFlags(trackStatusCmd)
+	flags.NewStandardParser(trackTableParserOptions(groupFlagOption())...).RegisterFlags(trackStatusCmd)
 	trackCmd.AddCommand(trackStatusCmd)
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -106,7 +107,7 @@ func validateTerraformRunOptions(opts *TerraformRunOptions) error {
 		case terraformFailureModeFailFast, terraformFailureModeKeepGoing:
 			opts.FailureMode = mode
 		default:
-			return fmt.Errorf("invalid --failure-mode %q: supported values are %q, %q", opts.FailureMode, terraformFailureModeFailFast, terraformFailureModeKeepGoing)
+			return fmt.Errorf("%w %q: supported values are %q, %q", errUtils.ErrInvalidFailureMode, opts.FailureMode, terraformFailureModeFailFast, terraformFailureModeKeepGoing)
 		}
 	}
 
@@ -115,7 +116,7 @@ func validateTerraformRunOptions(opts *TerraformRunOptions) error {
 		case terraformPlanLogOrderStream, terraformPlanLogOrderGrouped:
 			opts.PlanLogOrder = logOrder
 		default:
-			return fmt.Errorf("invalid --log-order %q: supported values are %q, %q", opts.PlanLogOrder, terraformPlanLogOrderStream, terraformPlanLogOrderGrouped)
+			return fmt.Errorf("%w %q: supported values are %q, %q", errUtils.ErrInvalidLogOrder, opts.PlanLogOrder, terraformPlanLogOrderStream, terraformPlanLogOrderGrouped)
 		}
 	}
 	return nil

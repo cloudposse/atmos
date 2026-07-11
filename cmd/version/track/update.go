@@ -63,7 +63,7 @@ func updateRows(u *manager.TrackUpdate) []map[string]any {
 }
 
 func init() {
-	flags.NewStandardParser(trackParserOptions(
+	flags.NewStandardParser(trackTableParserOptions(
 		groupFlagOption(),
 		flags.WithStringSliceFlag("only", "", nil, "Limit the update to the named entries (repeatable)"),
 	)...).RegisterFlags(trackUpdateCmd)

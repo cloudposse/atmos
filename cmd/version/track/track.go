@@ -56,20 +56,43 @@ var trackCmd = &cobra.Command{
 	Long:    "The Atmos Version Tracker manages external versions declared in atmos.yaml: named version tracks, a deterministic lock file (versions.lock.yaml), CI status and verification, and rendering locked versions into project files.",
 }
 
-// formatParserOptions returns the flag options shared by all track verbs.
-// The format flag defaults to empty, which resolves to a human-readable,
-// TTY-aware table (matching `version track list`); yaml/json remain
-// available as an explicit opt-in for full-fidelity, machine-readable output.
-func formatParserOptions() []flags.Option {
+// structuredFormatParserOptions returns the --format flag for verbs that only
+// support full-fidelity yaml/json output via writeFormatted (show/get/add/
+// set/remove/apply/verify). The format flag defaults to empty, which
+// resolves to yaml.
+func structuredFormatParserOptions() []flags.Option {
+	return []flags.Option{
+		flags.WithStringFlag(formatFlagName, "", "", "Output format: json, yaml"),
+	}
+}
+
+// tableFormatParserOptions returns the --format flag for verbs with a
+// curated table view (update/lock/status/diff). The format flag defaults to
+// empty, which resolves to a human-readable, TTY-aware table (matching
+// `version track list`); yaml/json remain available as an explicit opt-in
+// for full-fidelity, machine-readable output.
+func tableFormatParserOptions() []flags.Option {
 	return []flags.Option{
 		flags.WithStringFlag(formatFlagName, "", "", "Output format: table, json, yaml, csv, tsv"),
 	}
 }
 
-// trackParserOptions returns flag options for verbs that select a track.
+// trackParserOptions returns flag options for verbs that select a track and
+// only support the full-fidelity yaml/json output (writeFormatted).
 func trackParserOptions(extra ...flags.Option) []flags.Option {
 	opts := append(
-		formatParserOptions(),
+		structuredFormatParserOptions(),
+		flags.WithStringFlag("track", "", "", "Version track to operate on (defaults to version.track in atmos.yaml)"),
+	)
+	return append(opts, extra...)
+}
+
+// trackTableParserOptions returns flag options for verbs with a curated
+// table view (update/lock/status/diff), which support table/csv/tsv in
+// addition to yaml/json.
+func trackTableParserOptions(extra ...flags.Option) []flags.Option {
+	opts := append(
+		tableFormatParserOptions(),
 		flags.WithStringFlag("track", "", "", "Version track to operate on (defaults to version.track in atmos.yaml)"),
 	)
 	return append(opts, extra...)

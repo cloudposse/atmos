@@ -389,22 +389,22 @@ func TestTrackRenderCommandCheckMode(t *testing.T) {
 }
 
 func newUpdateCommand() *cobra.Command {
-	return newTrackCommand(trackUpdateCmd, trackParserOptions(
+	return newTrackCommand(trackUpdateCmd, trackTableParserOptions(
 		groupFlagOption(),
 		flags.WithStringSliceFlag("only", "", nil, "Limit the update to the named entries (repeatable)"),
 	)...)
 }
 
 func newLockCommand() *cobra.Command {
-	return newTrackCommand(trackLockCmd, trackParserOptions(groupFlagOption())...)
+	return newTrackCommand(trackLockCmd, trackTableParserOptions(groupFlagOption())...)
 }
 
 func newStatusCommand() *cobra.Command {
-	return newTrackCommand(trackStatusCmd, trackParserOptions(groupFlagOption())...)
+	return newTrackCommand(trackStatusCmd, trackTableParserOptions(groupFlagOption())...)
 }
 
 func newDiffCommand() *cobra.Command {
-	return newTrackCommand(trackDiffCmd, trackParserOptions(groupFlagOption())...)
+	return newTrackCommand(trackDiffCmd, trackTableParserOptions(groupFlagOption())...)
 }
 
 // TestTrackUpdateLockStatusDiffDefaultToTable verifies that update/lock/status/diff
@@ -425,6 +425,11 @@ func TestTrackUpdateLockStatusDiffDefaultToTable(t *testing.T) {
 		{"diff", newDiffCommand, "name: widget", `"name": "widget"`},
 	}
 
+	// All four commands share the "Track, Name, ..." column order (see
+	// updateColumns/lockColumns/statusColumns), so the Name field always
+	// lands at tab-split index 1.
+	const nameFieldIndex = 1
+
 	for _, tc := range commands {
 		t.Run(tc.name+"/default is not YAML", func(t *testing.T) {
 			setTrackConfigForTest(t, tableDemoConfig(t))
@@ -437,8 +442,37 @@ func TestTrackUpdateLockStatusDiffDefaultToTable(t *testing.T) {
 			if strings.Contains(output, "track: prod") || strings.Contains(output, "results:") || strings.Contains(output, "entries:") {
 				t.Fatalf("%s default output looks like YAML, want a table: %q", tc.name, output)
 			}
-			if !strings.Contains(output, "widget") {
-				t.Fatalf("%s default output = %q, want it to mention the entry name", tc.name, output)
+			if strings.Contains(output, `"name"`) || strings.Contains(output, "{") {
+				t.Fatalf("%s default output looks like JSON, want a table: %q", tc.name, output)
+			}
+			// Outside a TTY the shared renderer prints the table as a
+			// headerless tab-delimited row (pkg/list/renderer.formatPlainList);
+			// a JSON/YAML regression would never produce a raw tab.
+			line := strings.TrimRight(output, "\n")
+			fields := strings.Split(line, "\t")
+			if len(fields) <= nameFieldIndex || fields[nameFieldIndex] != "widget" {
+				t.Fatalf("%s default output = %q, want a tab-delimited row with Name (field %d) = %q", tc.name, output, nameFieldIndex, "widget")
+			}
+		})
+
+		t.Run(tc.name+"/format=tsv", func(t *testing.T) {
+			setTrackConfigForTest(t, tableDemoConfig(t))
+			stdout := setupTrackOutput(t)
+
+			if err := runTrackCommand(t, tc.new(), "--format", "tsv"); err != nil {
+				t.Fatalf("%s --format=tsv returned error: %v", tc.name, err)
+			}
+			output := stdout.String()
+			lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+			if len(lines) < 2 {
+				t.Fatalf("%s --format=tsv output = %q, want a header line and at least one row", tc.name, output)
+			}
+			if !strings.Contains(lines[0], "Name") {
+				t.Fatalf("%s --format=tsv header = %q, want it to contain the Name column", tc.name, lines[0])
+			}
+			fields := strings.Split(lines[1], "\t")
+			if len(fields) <= nameFieldIndex || fields[nameFieldIndex] != "widget" {
+				t.Fatalf("%s --format=tsv row = %q, want Name (field %d) = %q", tc.name, lines[1], nameFieldIndex, "widget")
 			}
 		})
 

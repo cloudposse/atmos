@@ -73,6 +73,6 @@ func lockRows(track string, entries map[string]manager.LockEntry) []map[string]a
 }
 
 func init() {
-	flags.NewStandardParser(trackParserOptions(groupFlagOption())...).RegisterFlags(trackLockCmd)
+	flags.NewStandardParser(trackTableParserOptions(groupFlagOption())...).RegisterFlags(trackLockCmd)
 	trackCmd.AddCommand(trackLockCmd)
 }

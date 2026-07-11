@@ -20,6 +20,9 @@ const certCommonName = "Atmos Terraform Registry Cache"
 
 const macosSystemKeychainPath = "/Library/Keychains/System.keychain"
 
+// macosSecurityCommand is the macOS `security` CLI used to manage the trust store.
+const macosSecurityCommand = "security"
+
 type windowsTrustStoreScope string
 
 const (
@@ -68,13 +71,13 @@ func InstallTrust(certPath string) error {
 	switch trustRuntimeGOOS {
 	case "darwin":
 		if macOSUsesSystemTrustStore() {
-			return runTrustCommandFunc("sudo", "security", "add-trusted-cert", "-d", "-r", "trustRoot", "-p", "ssl", "-k", macosSystemKeychainPath, certPath)
+			return runTrustCommandFunc("sudo", macosSecurityCommand, "add-trusted-cert", "-d", "-r", "trustRoot", "-p", "ssl", "-k", macosSystemKeychainPath, certPath)
 		}
 		keychain, err := loginKeychainPath()
 		if err != nil {
 			return err
 		}
-		return runTrustCommandFunc("security", "add-trusted-cert", "-r", "trustRoot", "-k", keychain, certPath)
+		return runTrustCommandFunc(macosSecurityCommand, "add-trusted-cert", "-r", "trustRoot", "-k", keychain, certPath)
 	case "windows":
 		if windowsUsesCertutilTrustCommand() {
 			return runTrustCommandFunc("certutil", "-addstore", "-enterprise", "-f", "Root", certPath)
@@ -95,9 +98,9 @@ func RemoveTrust(certPath string) error {
 	switch trustRuntimeGOOS {
 	case "darwin":
 		if macOSUsesSystemTrustStore() {
-			return runTrustCommandFunc("sudo", "security", "delete-certificate", "-c", certCommonName, macosSystemKeychainPath)
+			return runTrustCommandFunc("sudo", macosSecurityCommand, "delete-certificate", "-c", certCommonName, macosSystemKeychainPath)
 		}
-		return runTrustCommandFunc("security", "remove-trusted-cert", certPath)
+		return runTrustCommandFunc(macosSecurityCommand, "remove-trusted-cert", certPath)
 	case "windows":
 		if windowsUsesCertutilTrustCommand() {
 			return runTrustCommandFunc("certutil", "-delstore", "-enterprise", "Root", certCommonName)
