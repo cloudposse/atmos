@@ -481,7 +481,7 @@ func writeMergedDataToFile(tempDir string, mergedData map[string]interface{}) (*
 func writeOuterTopLevelFile(tempDir string, fileURL string, mergedData map[string]interface{}) (*url.URL, error) {
 	// Keep merged data at the template root for templates that use `.name`,
 	// while preserving the historical Env.README_YAML helper.
-	topLevel := make(map[string]interface{}, len(mergedData)+1)
+	topLevel := make(map[string]interface{}, len(mergedData))
 	for k, v := range mergedData {
 		topLevel[k] = v
 	}

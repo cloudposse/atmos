@@ -339,11 +339,7 @@ func (m *Manager) resolveRootlessRun(spec *Spec, command []string, rootless bool
 // mergeEnv layers env maps from lowest to highest precedence. Driver defaults
 // come first, then container.env, then resolved component/profile env.
 func mergeEnv(envs ...map[string]string) map[string]string {
-	size := 0
-	for _, env := range envs {
-		size += len(env)
-	}
-	merged := make(map[string]string, size)
+	merged := make(map[string]string)
 	for _, env := range envs {
 		for k, v := range env {
 			merged[k] = v

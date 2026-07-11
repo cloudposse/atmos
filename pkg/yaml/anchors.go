@@ -55,7 +55,7 @@ func guardAnchors(before, after []byte) error {
 // violation, or "" if the two anchor maps are compatible under the strict
 // contract.
 func compareAnchorSets(before, after map[string]anchorInfo) string {
-	names := make(map[string]struct{}, len(before)+len(after))
+	names := make(map[string]struct{}, len(before))
 	for name := range before {
 		names[name] = struct{}{}
 	}
