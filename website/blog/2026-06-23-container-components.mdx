@@ -6,6 +6,8 @@ tags: [feature, experimental]
 date: 2026-06-23
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Atmos now has a first-class **container component kind**. Where a `type: container` workflow step is a
 procedural `docker run --rm`, a `components.container` entry is declarative, stack-scoped
 infrastructure: one component is one service, with an image artifact Atmos builds/pushes/pulls and an
@@ -80,6 +82,10 @@ compositions:
 Run `atmos composition validate storefront -s dev` to see which declared services are fulfilled vs. not
 yet provided in a given stack — a closed contract for membership, open for fulfillment.
 
+<CastPlayer src="/casts/examples/compositions/validate.cast" title="atmos composition validation" chrome controls scrubber />
+
+[View the full example](/examples/compositions)
+
 ## Try It
 
 The new `examples/container-component` example defines an abstract base, a long-running web service with
@@ -90,6 +96,10 @@ cd examples/container-component
 atmos container up api -s local
 atmos container list
 ```
+
+<CastPlayer src="/casts/examples/container-component/lifecycle.cast" title="atmos container component lifecycle" chrome controls scrubber />
+
+[View the full example](/examples/container-component)
 
 Container components are experimental while the surface settles. The goal is unchanged: run the same
 declared system locally, in CI, and against real environments — without one-off shell scripts.

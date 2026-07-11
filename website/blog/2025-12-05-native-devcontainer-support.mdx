@@ -6,7 +6,7 @@ tags: [feature]
 date: 2025-12-05
 release: v1.201.0
 ---
-import EmbedExample from '@site/src/components/EmbedExample'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
@@ -404,7 +404,15 @@ brew upgrade atmos
 
 ### 2. Check Out the Examples
 
-<EmbedExample example="devcontainer" title="Devcontainer Example" />
+<CastPlayer src="/casts/examples/devcontainer/config.cast" title="atmos devcontainer config" chrome controls scrubber />
+
+[View the full example](/examples/devcontainer)
+
+Prefer to build your own image instead of pulling one? Here's the same workflow with a custom devcontainer build:
+
+<CastPlayer src="/casts/examples/devcontainer-build/build-config.cast" title="atmos devcontainer build config" chrome controls scrubber />
+
+[View the full example](/examples/devcontainer-build)
 
 ### 3. Add to Your Project
 

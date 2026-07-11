@@ -85,10 +85,13 @@ def sanitize_paths(text, repo_root):
 
 
 def assert_no_error_output(text):
-    """No Atmos error-builder output may appear in a committed cast.
+    """No Atmos error-builder or Terraform/OpenTofu warning output may appear in a committed cast.
 
-    Catches errors printed by commands that still exit zero; non-zero exits
-    already fail the recording (the cast step discards the cast).
+    Catches errors and warnings printed by commands that still exit zero; non-zero exits
+    already fail the recording (the cast step discards the cast). Includes Terraform's
+    "Incomplete lock file information" warning, which shows up whenever a component's
+    .terraform.lock.hcl isn't committed with checksums for every platform Atmos declares
+    (see docs/prd/terraform-registry-cache.md, "Multi-platform lock files").
     """
     for marker in (
         "# Error",
@@ -104,6 +107,7 @@ def assert_no_error_output(text):
         "You're now on a new, empty workspace",
         "currently selected workspace",
         "panic:",
+        "Incomplete lock file information for providers",
     ):
         if marker in text:
             raise SystemExit(f"cast contains error output marker {marker!r}")

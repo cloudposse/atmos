@@ -5,6 +5,7 @@ sidebar_label: Packer
 id: packer
 ---
 import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 Atmos natively supports opinionated workflows for [HashiCorp Packer](https://www.packer.io/). Packer automates the creation of machine images for multiple platforms, enabling you to build immutable infrastructure with consistent, versioned images.
@@ -133,3 +134,9 @@ To inspect a Packer template and see its configuration:
 ```shell
 atmos packer inspect ubuntu-base -s ue2-dev
 ```
+
+## Try It
+
+Explore a complete, working example that builds a local image with Packer's Docker builder — no cloud credentials required.
+
+<EmbedExample example="packer-docker" />

@@ -10,9 +10,9 @@
 {{- end }}
 
 <a href="https://atmos.tools/ci"><picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg">
-  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg" alt="Atmos CI" width="220px" align="right">
+  <source media="(prefers-color-scheme: dark)" srcset="https://atmos.tools/img/atmos-ci-gradient.svg?v={{.AtmosVersion}}">
+  <source media="(prefers-color-scheme: light)" srcset="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v={{.AtmosVersion}}">
+  <img src="https://atmos.tools/img/atmos-ci-gradient-on-light.svg?v={{.AtmosVersion}}" alt="Atmos CI" height="32" align="right">
 </picture></a>
 
 {{ if .Result.HasErrors -}}
