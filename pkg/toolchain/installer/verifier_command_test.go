@@ -2,6 +2,8 @@ package installer
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -121,6 +123,191 @@ func TestVerifierCommandRunnerAutoInstallUsesResolvedVersion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "v3.1.1", reg.requestedVersion)
 	assert.Equal(t, 1, reg.latestCalls, "cosign bootstrap should prefer latest when lookup succeeds")
+}
+
+func TestVerifierCommandRunnerAutoInstallVerifiesChecksum(t *testing.T) {
+	testBinary, err := os.ReadFile(os.Args[0])
+	require.NoError(t, err)
+	digest := sha256.Sum256(testBinary)
+	correctChecksum := hex.EncodeToString(digest[:])
+
+	newRegistry := func(checksumBody string) (*verifierBootstrapRegistry, *httptest.Server) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/checksums.txt", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(checksumBody))
+		})
+		mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write(testBinary)
+		})
+		ts := httptest.NewServer(mux)
+		reg := &verifierBootstrapRegistry{
+			latest: "v3.1.1",
+			tool: &registry.Tool{
+				Type:       "http",
+				RepoOwner:  "sigstore",
+				RepoName:   "cosign",
+				Asset:      ts.URL + "/{{.Version}}/cosign",
+				Format:     "raw",
+				BinaryName: "cosign",
+				Checksum: registry.ChecksumConfig{
+					Type:       "http",
+					URL:        ts.URL + "/checksums.txt",
+					FileFormat: "raw",
+				},
+			},
+		}
+		return reg, ts
+	}
+
+	t.Run("valid checksum allows install", func(t *testing.T) {
+		reg, ts := newRegistry(correctChecksum)
+		defer ts.Close()
+
+		inst := &Installer{
+			cacheDir:         t.TempDir(),
+			binDir:           t.TempDir(),
+			configuredReg:    reg,
+			useConfiguredReg: true,
+			registryFactory:  verifierBootstrapFactory{registry: reg},
+		}
+
+		t.Setenv("PATH", t.TempDir())
+		t.Setenv("ATMOS_VERIFIER_HELPER_PROCESS", "1")
+
+		err := verifierCommandRunner{
+			installer: inst,
+			policy: verification.Policy{
+				VerifierInstall: verification.VerifierInstallAuto,
+			},
+		}.Run(context.Background(), "cosign", "-test.run=TestVerifierCommandHelperProcess", "--", "success")
+
+		require.NoError(t, err)
+	})
+
+	t.Run("mismatched checksum blocks install", func(t *testing.T) {
+		wrongDigest := sha256.Sum256([]byte("not the verifier binary"))
+		reg, ts := newRegistry(hex.EncodeToString(wrongDigest[:]))
+		defer ts.Close()
+
+		inst := &Installer{
+			cacheDir:         t.TempDir(),
+			binDir:           t.TempDir(),
+			configuredReg:    reg,
+			useConfiguredReg: true,
+			registryFactory:  verifierBootstrapFactory{registry: reg},
+		}
+
+		t.Setenv("PATH", t.TempDir())
+
+		err := verifierCommandRunner{
+			installer: inst,
+			policy: verification.Policy{
+				VerifierInstall: verification.VerifierInstallAuto,
+			},
+		}.Run(context.Background(), "cosign", "-test.run=TestVerifierCommandHelperProcess", "--", "success")
+
+		require.ErrorIs(t, err, verification.ErrVerifierCommandRequired)
+		assert.Contains(t, err.Error(), "checksum mismatch")
+	})
+}
+
+func TestVerifierCommandRunnerTrustStepFailureDoesNotBlockExecution(t *testing.T) {
+	testBinary, err := os.ReadFile(os.Args[0])
+	require.NoError(t, err)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(testBinary)
+	}))
+	defer ts.Close()
+
+	reg := &verifierBootstrapRegistry{
+		latest: "v3.1.1",
+		tool: &registry.Tool{
+			Type:       "http",
+			RepoOwner:  "sigstore",
+			RepoName:   "cosign",
+			Asset:      ts.URL + "/{{.Version}}/cosign",
+			Format:     "raw",
+			BinaryName: "cosign",
+		},
+	}
+	inst := &Installer{
+		cacheDir:         t.TempDir(),
+		binDir:           t.TempDir(),
+		configuredReg:    reg,
+		useConfiguredReg: true,
+		registryFactory:  verifierBootstrapFactory{registry: reg},
+	}
+
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("ATMOS_VERIFIER_HELPER_PROCESS", "1")
+
+	prevTrustFunc := trustVerifierBinaryFunc
+	t.Cleanup(func() { trustVerifierBinaryFunc = prevTrustFunc })
+	trustVerifierBinaryFunc = func(string) error {
+		return errors.New("simulated trust failure")
+	}
+
+	err = verifierCommandRunner{
+		installer: inst,
+		policy: verification.Policy{
+			VerifierInstall: verification.VerifierInstallAuto,
+			VerifierTrust:   verification.VerifierTrustAuto,
+		},
+	}.Run(context.Background(), "cosign", "-test.run=TestVerifierCommandHelperProcess", "--", "success")
+
+	require.NoError(t, err, "trust-step failure must not block command execution")
+}
+
+func TestVerifierCommandRunnerSkipsTrustStepWhenDisabled(t *testing.T) {
+	testBinary, err := os.ReadFile(os.Args[0])
+	require.NoError(t, err)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(testBinary)
+	}))
+	defer ts.Close()
+
+	reg := &verifierBootstrapRegistry{
+		latest: "v3.1.1",
+		tool: &registry.Tool{
+			Type:       "http",
+			RepoOwner:  "sigstore",
+			RepoName:   "cosign",
+			Asset:      ts.URL + "/{{.Version}}/cosign",
+			Format:     "raw",
+			BinaryName: "cosign",
+		},
+	}
+	inst := &Installer{
+		cacheDir:         t.TempDir(),
+		binDir:           t.TempDir(),
+		configuredReg:    reg,
+		useConfiguredReg: true,
+		registryFactory:  verifierBootstrapFactory{registry: reg},
+	}
+
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("ATMOS_VERIFIER_HELPER_PROCESS", "1")
+
+	prevTrustFunc := trustVerifierBinaryFunc
+	t.Cleanup(func() { trustVerifierBinaryFunc = prevTrustFunc })
+	callCount := 0
+	trustVerifierBinaryFunc = func(string) error {
+		callCount++
+		return nil
+	}
+
+	err = verifierCommandRunner{
+		installer: inst,
+		policy: verification.Policy{
+			VerifierInstall: verification.VerifierInstallAuto,
+			VerifierTrust:   verification.VerifierTrustDisabled,
+		},
+	}.Run(context.Background(), "cosign", "-test.run=TestVerifierCommandHelperProcess", "--", "success")
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, callCount, "trust step must not run when VerifierTrust is disabled")
 }
 
 func TestVerifierCommandRunnerAutoInstallFallsBackToPinnedCosignWhenLatestLookupFails(t *testing.T) {
