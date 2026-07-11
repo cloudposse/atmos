@@ -20,15 +20,26 @@ type MCPJSONConfig struct {
 
 // MCPJSONServer represents a single MCP server entry in .mcp.json.
 type MCPJSONServer struct {
-	Command string            `json:"command"`
-	Args    []string          `json:"args"`
+	Type    string            `json:"type,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 // BuildMCPJSONEntry creates a .mcp.json entry for a server.
 // Servers with identity are wrapped with 'atmos auth exec' for credential injection.
 // If toolchainPATH is non-empty, it is prepended to the server's PATH env var.
 func BuildMCPJSONEntry(serverCfg *schema.MCPServerConfig, toolchainPATH string) MCPJSONServer {
+	if serverCfg.TransportType() == schema.MCPTransportHTTP {
+		return MCPJSONServer{
+			Type:    schema.MCPTransportHTTP,
+			URL:     serverCfg.URL,
+			Headers: copyStringMap(serverCfg.Headers),
+		}
+	}
+
 	env := copyEnv(serverCfg.Env)
 
 	// Inject toolchain PATH so the CLI tool's MCP subprocess can find uvx/npx.
@@ -126,9 +137,17 @@ func WriteMCPConfigToTempFile(servers map[string]schema.MCPServerConfig, toolcha
 // Viper lowercases all YAML map keys, but env vars are conventionally UPPERCASE.
 // This restores the expected casing (e.g., aws_region → AWS_REGION).
 func copyEnv(env map[string]string) map[string]string {
-	result := make(map[string]string, len(env))
-	for k, v := range env {
-		result[strings.ToUpper(k)] = v
+	return copyStringMapWithKeyFunc(env, strings.ToUpper)
+}
+
+func copyStringMap(m map[string]string) map[string]string {
+	return copyStringMapWithKeyFunc(m, func(k string) string { return k })
+}
+
+func copyStringMapWithKeyFunc(m map[string]string, keyFunc func(string) string) map[string]string {
+	result := make(map[string]string, len(m))
+	for k, v := range m {
+		result[keyFunc(k)] = v
 	}
 	return result
 }
