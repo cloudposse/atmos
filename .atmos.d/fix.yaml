@@ -99,6 +99,15 @@ commands:
           - name: base-ref
             description: Base ref to diff against
             default: origin/main
+        # base-ref is passed via command-level env (not interpolated into a step's command
+        # string) so shell metacharacters in the value can't be parsed by `sh -c` as command
+        # syntax. Must be command-level, list-of-key/value form — step-level `env:` (either map
+        # or list form) silently does not reach the shell subprocess on this atmos version,
+        # confirmed by testing; command-level list form (matching .atmos.d/build.yaml's existing
+        # convention) is the one that actually works.
+        env:
+          - key: ATMOS_BASE_REF
+            value: '{{ index .Arguments "base-ref" }}'
         steps:
           # Same staleness fix as `atmos fix lint` — keep the local remote-tracking ref for the
           # base-ref current before diffing against it.
@@ -107,11 +116,7 @@ commands:
           - type: toast
             level: info
             content: 'Running scoped tests + coverage vs {{ index .Arguments "base-ref" }}...'
-          # base-ref is passed via env (not interpolated into the command string) so shell
-          # metacharacters in the value can't be parsed by `sh -c` as command syntax.
           - type: shell
-            env:
-              ATMOS_BASE_REF: '{{ index .Arguments "base-ref" }}'
             command: .claude/skills/test-coverage/scripts/patch-test-coverage.sh "$ATMOS_BASE_REF"
 
       - name: tests
@@ -146,14 +151,17 @@ commands:
             type: bool
             default: false
             description: Also mark the thread resolved — only pass this when a concrete fixing commit exists
+        # thread-id and body are passed via command-level env (not interpolated into a step's
+        # command string) so shell metacharacters in --body (quotes, backticks, $()) can't be
+        # parsed by `sh -c` as command syntax. Must be command-level, list-of-key/value form —
+        # see the identical note on `fix coverage` above for why.
+        env:
+          - key: ATMOS_THREAD_ID
+            value: '{{ index .Flags "thread-id" }}'
+          - key: ATMOS_BODY
+            value: '{{ index .Flags "body" }}'
         steps:
-          # thread-id and body are passed via env (not interpolated into the command string) so
-          # shell metacharacters in --body (quotes, backticks, $()) can't be parsed by `sh -c` as
-          # command syntax.
           - type: shell
-            env:
-              ATMOS_THREAD_ID: '{{ index .Flags "thread-id" }}'
-              ATMOS_BODY: '{{ index .Flags "body" }}'
             command: |
               set -eu
               args=(--thread-id "$ATMOS_THREAD_ID" --body "$ATMOS_BODY")
