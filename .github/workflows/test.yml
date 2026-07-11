@@ -107,30 +107,21 @@ jobs:
           # built-in retry. A transient DNS resolution failure on the hosted
           # runner otherwise fails this whole build matrix leg and cascades into
           # skipped downstream jobs (e.g. k3s-required's "Check k3s matrix
-          # result" gate). Retry with backoff, mirroring the atmos test retry
-          # loop in the k3s job below.
-          for attempt in 1 2 3; do
-            go mod download && exit 0
-            status=$?
-            echo "go mod download failed (attempt ${attempt}/3, status ${status})" >&2
-            [ "${attempt}" -lt 3 ] && sleep 10
-          done
-          exit "${status}"
+          # result" gate). `atmos build deps` (.atmos.d/build.yaml) wraps it
+          # with a retry policy instead of hand-rolling a shell loop here.
+          atmos build deps
 
       - name: Build
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         shell: bash
         run: |
-          sh scripts/build-atmos.sh ${{ matrix.target }} test
+          atmos build binary --target=${{ matrix.target }} --version=test
 
       - name: Version
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         shell: bash
         run: |
-          case "${{ matrix.target }}" in
-            windows) ./build/atmos.exe version ;;
-            *) chmod +x ./build/atmos && ./build/atmos version ;;
-          esac
+          atmos build version --target=${{ matrix.target }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
