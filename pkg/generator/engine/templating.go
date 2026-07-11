@@ -543,8 +543,11 @@ func (p *Processor) ShouldSkipFile(renderedPath string) bool {
 		return true
 	}
 
-	// Split by path separator and check for empty or sentinel segments.
-	for _, segment := range strings.Split(renderedPath, string(os.PathSeparator)) {
+	// Split on "/", matching the template-path convention renderedPath always
+	// uses (it hasn't been through filepath.Join yet), not os.PathSeparator —
+	// on Windows that's "\", which would never split these forward-slash
+	// paths and silently skip this whole check.
+	for _, segment := range strings.Split(renderedPath, "/") {
 		if isSkippableSegment(segment) {
 			return true
 		}
