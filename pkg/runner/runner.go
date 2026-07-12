@@ -83,7 +83,7 @@ type Options struct {
 // It handles timeout enforcement via context and delegates to the appropriate
 // executor method based on task type. Extended step types (input, choose, etc.)
 // are handled via the step handler registry.
-func Run(ctx context.Context, task *Task, runner CommandRunner, opts Options) error {
+func Run(ctx context.Context, task *Task, runner CommandRunner, opts *Options) error {
 	defer perf.Track(opts.AtmosConfig, "runner.Run")()
 
 	// Apply timeout if specified.
@@ -112,7 +112,7 @@ func Run(ctx context.Context, task *Task, runner CommandRunner, opts Options) er
 	// These are the fundamental execution types.
 	switch taskType {
 	case schema.TaskTypeShell:
-		return runShellTask(ctx, task, runner, &opts, dir)
+		return runShellTask(ctx, task, runner, opts, dir)
 	case schema.TaskTypeAtmos:
 		return runAtmosTask(ctx, task, runner, opts, dir)
 	case schema.TaskTypeExec:
@@ -129,7 +129,7 @@ func Run(ctx context.Context, task *Task, runner CommandRunner, opts Options) er
 
 	// Check step handler registry for extended step types (input, choose, etc.).
 	if handler, ok := step.Get(taskType); ok {
-		return runStepHandler(ctx, task, handler, &opts)
+		return runStepHandler(ctx, task, handler, opts)
 	}
 
 	return fmt.Errorf("%w: %s", ErrUnknownTaskType, taskType)
@@ -137,7 +137,24 @@ func Run(ctx context.Context, task *Task, runner CommandRunner, opts Options) er
 
 // runStepHandler executes an extended step type via the step handler registry.
 func runStepHandler(ctx context.Context, task *Task, handler step.StepHandler, opts *Options) error {
-	// Use provided variables or create new instance.
+	vars := resolveStepHandlerVars(opts)
+	workflowStep := buildWorkflowStepForHandler(task, opts)
+
+	if err := handler.Validate(&workflowStep); err != nil {
+		return fmt.Errorf("step validation failed: %w", err)
+	}
+
+	result, err := executeStepHandlerWithRetry(ctx, task, handler, &workflowStep, vars)
+	if err != nil {
+		return err
+	}
+
+	return storeStepHandlerResult(task, &workflowStep, vars, result)
+}
+
+// resolveStepHandlerVars returns the shared step Variables from opts, creating a new
+// instance if none was provided, and wires in the atmos config when available.
+func resolveStepHandlerVars(opts *Options) *step.Variables {
 	vars := opts.StepVars
 	if vars == nil {
 		vars = step.NewVariables()
@@ -145,23 +162,32 @@ func runStepHandler(ctx context.Context, task *Task, handler step.StepHandler, o
 	if opts.AtmosConfig != nil {
 		vars.SetAtmosConfig(opts.AtmosConfig)
 	}
+	return vars
+}
 
-	// Convert Task to WorkflowStep for handler compatibility.
+// buildWorkflowStepForHandler converts task to a WorkflowStep for handler compatibility,
+// applying the dry-run and working-directory overrides from opts.
+func buildWorkflowStepForHandler(task *Task, opts *Options) schema.WorkflowStep {
 	workflowStep := task.ToWorkflowStep()
 	workflowStep.DryRun = opts.DryRun
 	if task.Type == "container" && workflowStep.WorkingDirectory == "" && opts.Dir != "" {
 		workflowStep.WorkingDirectory = opts.Dir
 	}
+	return workflowStep
+}
 
-	// Validate step configuration.
-	if err := handler.Validate(&workflowStep); err != nil {
-		return fmt.Errorf("step validation failed: %w", err)
-	}
-
+// executeStepHandlerWithRetry executes the handler, retrying per task.Retry when configured.
+func executeStepHandlerWithRetry(
+	ctx context.Context,
+	task *Task,
+	handler step.StepHandler,
+	workflowStep *schema.WorkflowStep,
+	vars *step.Variables,
+) (*step.StepResult, error) {
 	var result *step.StepResult
 	execute := func() error {
 		var execErr error
-		result, execErr = handler.Execute(ctx, &workflowStep, vars)
+		result, execErr = handler.Execute(ctx, workflowStep, vars)
 		return execErr
 	}
 
@@ -172,17 +198,17 @@ func runStepHandler(ctx context.Context, task *Task, handler step.StepHandler, o
 		err = execute()
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
+	return result, nil
+}
 
-	// Store result in variables if the step has a name.
-	if task.Name != "" && result != nil {
-		if outputErr := vars.SetWithOutputs(task.Name, result, workflowStep.Outputs); outputErr != nil {
-			return outputErr
-		}
+// storeStepHandlerResult saves the step result into vars when the step has a name.
+func storeStepHandlerResult(task *Task, workflowStep *schema.WorkflowStep, vars *step.Variables, result *step.StepResult) error {
+	if task.Name == "" || result == nil {
+		return nil
 	}
-
-	return nil
+	return vars.SetWithOutputs(task.Name, result, workflowStep.Outputs)
 }
 
 // runShellTask executes a shell-type task.
@@ -206,7 +232,7 @@ func runShellTask(ctx context.Context, task *Task, runner CommandRunner, opts *O
 }
 
 // runAtmosTask executes an atmos-type task.
-func runAtmosTask(ctx context.Context, task *Task, runner CommandRunner, opts Options, dir string) error {
+func runAtmosTask(ctx context.Context, task *Task, runner CommandRunner, opts *Options, dir string) error {
 	// Parse command using shell.Fields for proper quote handling.
 	args, parseErr := shell.Fields(task.Command, nil)
 	if parseErr != nil {
@@ -255,7 +281,7 @@ func appendStackArg(args []string, stack string) []string {
 
 // RunAll executes multiple tasks sequentially.
 // It stops at the first error and returns it.
-func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts Options) error {
+func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts *Options) error {
 	defer perf.Track(opts.AtmosConfig, "runner.RunAll")()
 
 	// An exec task replaces the Atmos process, so it must be the final task
@@ -276,8 +302,9 @@ func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts Options
 		}
 	}
 
-	for i, task := range tasks {
-		conditionContext, err := taskConditionContext(&task, i, &opts, schema.ConditionPredicateSuccess)
+	for i := range tasks {
+		task := &tasks[i]
+		conditionContext, err := taskConditionContext(task, i, opts, schema.ConditionPredicateSuccess)
 		if err != nil {
 			return err
 		}
@@ -288,8 +315,8 @@ func RunAll(ctx context.Context, tasks Tasks, runner CommandRunner, opts Options
 		if !runs {
 			continue
 		}
-		if err := Run(ctx, &task, runner, opts); err != nil {
-			return fmt.Errorf("task %d (%s) failed: %w", i, taskName(&task, i), err)
+		if err := Run(ctx, task, runner, opts); err != nil {
+			return fmt.Errorf("task %d (%s) failed: %w", i, taskName(task, i), err)
 		}
 	}
 	return nil

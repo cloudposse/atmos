@@ -35,7 +35,7 @@ func TestRun_ShellTask(t *testing.T) {
 		RunShell(ctx, "echo hello", "echo-task", "/app", []string(nil), false).
 		Return(nil)
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -58,7 +58,7 @@ func TestRun_ShellTaskWithDryRun(t *testing.T) {
 		RunShell(ctx, "rm -rf /", "", ".", []string(nil), true).
 		Return(nil)
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -88,7 +88,7 @@ func TestRun_AtmosTask(t *testing.T) {
 			return nil
 		})
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -116,7 +116,7 @@ func TestRun_AtmosTaskWithStackOverride(t *testing.T) {
 			return nil
 		})
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -140,7 +140,7 @@ func TestRun_WorkingDirectoryOverride(t *testing.T) {
 		RunShell(ctx, "make build", "", "/custom/dir", []string(nil), false).
 		Return(nil)
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -161,7 +161,7 @@ func TestRun_DefaultsToShellType(t *testing.T) {
 		RunShell(ctx, "echo hello", "", ".", []string(nil), false).
 		Return(nil)
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -178,7 +178,7 @@ func TestRun_UnknownType(t *testing.T) {
 	}
 	opts := Options{}
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrUnknownTaskType)
 }
@@ -201,7 +201,7 @@ func TestRun_PropagatesError(t *testing.T) {
 		RunShell(ctx, "exit 1", "", ".", []string(nil), false).
 		Return(expectedErr)
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.Error(t, err)
 	assert.Equal(t, expectedErr, err)
 }
@@ -230,7 +230,7 @@ func TestRun_Timeout(t *testing.T) {
 			return nil
 		})
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -254,7 +254,7 @@ func TestRunAll_Success(t *testing.T) {
 		mockRunner.EXPECT().RunShell(ctx, "echo 3", "", ".", []string(nil), false).Return(nil),
 	)
 
-	err := RunAll(ctx, tasks, mockRunner, opts)
+	err := RunAll(ctx, tasks, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -278,7 +278,7 @@ func TestRunAll_StopsOnFirstError(t *testing.T) {
 		// Third task should NOT be called.
 	)
 
-	err := RunAll(ctx, tasks, mockRunner, opts)
+	err := RunAll(ctx, tasks, mockRunner, &opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "task 1 (failing-task) failed")
 }
@@ -293,7 +293,7 @@ func TestRunAll_EmptyTasks(t *testing.T) {
 	tasks := Tasks{}
 	opts := Options{}
 
-	err := RunAll(ctx, tasks, mockRunner, opts)
+	err := RunAll(ctx, tasks, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -311,7 +311,7 @@ func TestRunAll_SkipsTaskWhenConditionIsFalse(t *testing.T) {
 
 	mockRunner.EXPECT().RunShell(ctx, "echo run", "run", ".", []string(nil), false).Return(nil)
 
-	err := RunAll(ctx, tasks, mockRunner, Options{})
+	err := RunAll(ctx, tasks, mockRunner, &Options{})
 	require.NoError(t, err)
 }
 
@@ -339,7 +339,7 @@ func TestRunAll_WhenConditionUsesEnv(t *testing.T) {
 
 	mockRunner.EXPECT().RunShell(ctx, "echo dev shell", "dev-shell-only", ".", []string{"ATMOS_DEV_SHELL=1"}, false).Return(nil)
 
-	err := RunAll(ctx, tasks, mockRunner, Options{Env: []string{"ATMOS_DEV_SHELL=1"}})
+	err := RunAll(ctx, tasks, mockRunner, &Options{Env: []string{"ATMOS_DEV_SHELL=1"}})
 	require.NoError(t, err)
 }
 
@@ -364,7 +364,7 @@ func TestRunAll_WhenConditionUsesResolvedTaskEnv(t *testing.T) {
 
 	mockRunner.EXPECT().RunShell(ctx, "echo rendered", "templated-env", ".", []string{"BASE_ENV=base"}, false).Return(nil)
 
-	err := RunAll(ctx, tasks, mockRunner, Options{Env: []string{"BASE_ENV=base"}})
+	err := RunAll(ctx, tasks, mockRunner, &Options{Env: []string{"BASE_ENV=base"}})
 	require.NoError(t, err)
 }
 
@@ -407,7 +407,7 @@ func TestRun_AtmosTaskWithoutStack(t *testing.T) {
 			return nil
 		})
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -435,7 +435,7 @@ func TestRun_AtmosTaskUsesTaskStackWhenNoOverride(t *testing.T) {
 			return nil
 		})
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -464,7 +464,7 @@ func TestRun_AtmosTaskShellParsingFallback(t *testing.T) {
 			return nil
 		})
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -491,7 +491,7 @@ func TestRun_AtmosTaskWithEnv(t *testing.T) {
 			return nil
 		})
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -521,7 +521,7 @@ func TestRun_AtmosTaskWithAtmosConfig(t *testing.T) {
 			return nil
 		})
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -547,7 +547,7 @@ func TestRun_AtmosTaskWithDryRun(t *testing.T) {
 			return nil
 		})
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -568,7 +568,7 @@ func TestRunAll_UsesTaskName(t *testing.T) {
 		RunShell(ctx, "echo 1", "", ".", []string(nil), false).
 		Return(errors.New("task failed"))
 
-	err := RunAll(ctx, tasks, mockRunner, opts)
+	err := RunAll(ctx, tasks, mockRunner, &opts)
 	require.Error(t, err)
 	// Should include step1 since no name was provided.
 	assert.Contains(t, err.Error(), "task 0 (step1) failed")
@@ -603,7 +603,7 @@ func TestRun_ShellTaskTty(t *testing.T) {
 	// The CommandRunner must NOT be called for tty tasks.
 	opts := Options{DryRun: true}
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -625,7 +625,7 @@ func TestRun_ShellTaskInteractiveUsesSession(t *testing.T) {
 	// suspension/attachment behavior is covered by pkg/process tests.
 	opts := Options{Dir: "/app", DryRun: true}
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 	assert.False(t, signals.InterruptExitSuspended(), "suspension must be released after the task")
 }
@@ -644,7 +644,7 @@ func TestRun_ExecTaskDryRun(t *testing.T) {
 	}
 	// Dry-run exercises the exec routing without replacing the process.
 	// The CommandRunner must NOT be called for exec tasks.
-	err := Run(ctx, &task, mockRunner, Options{DryRun: true})
+	err := Run(ctx, &task, mockRunner, &Options{DryRun: true})
 	require.NoError(t, err)
 }
 
@@ -661,7 +661,7 @@ func TestRunAll_RejectsNonFinalExecTask(t *testing.T) {
 	}
 
 	// Validation must fail before any task executes (no mock expectations).
-	err := RunAll(ctx, tasks, mockRunner, Options{DryRun: true})
+	err := RunAll(ctx, tasks, mockRunner, &Options{DryRun: true})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, schema.ErrExecStepNotLast)
 }
@@ -679,7 +679,7 @@ func TestRunAll_RejectsInvalidWhenBeforeRunningTasks(t *testing.T) {
 	}
 
 	// Validation must fail before any task executes (no mock expectations).
-	err := RunAll(ctx, tasks, mockRunner, Options{})
+	err := RunAll(ctx, tasks, mockRunner, &Options{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, schema.ErrInvalidWhenCondition)
 }
@@ -704,7 +704,7 @@ func TestRun_StepHandlerTaskSuccess(t *testing.T) {
 	opts := Options{StepVars: vars}
 
 	// The step handler registry path never touches the CommandRunner.
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 
 	value, ok := vars.GetValue("print-hint")
@@ -728,7 +728,7 @@ func TestRun_StepHandlerTaskCreatesVariablesWhenNil(t *testing.T) {
 	}
 	opts := Options{} // No StepVars and no AtmosConfig.
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -751,7 +751,7 @@ func TestRun_StepHandlerTaskSetsAtmosConfig(t *testing.T) {
 		AtmosConfig: &schema.AtmosConfiguration{BasePath: "/base"},
 	}
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 	assert.Equal(t, "/base", vars.AtmosConfig.BasePath)
 }
@@ -773,7 +773,7 @@ func TestRun_StepHandlerTaskValidationFailure(t *testing.T) {
 	}
 	opts := Options{}
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "step validation failed")
 }
@@ -796,7 +796,7 @@ func TestRun_StepHandlerTaskExecuteError(t *testing.T) {
 	}
 	opts := Options{StepVars: vars}
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.Error(t, err)
 
 	_, ok := vars.GetValue("bad-hint-template")
@@ -827,7 +827,7 @@ func TestRun_StepHandlerTaskWithRetry(t *testing.T) {
 	}
 	opts := Options{StepVars: vars}
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 
 	value, ok := vars.GetValue("retry-hint")
@@ -853,7 +853,7 @@ func TestRun_StepHandlerTaskWithoutNameSkipsOutputStorage(t *testing.T) {
 	}
 	opts := Options{StepVars: vars}
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -879,7 +879,7 @@ func TestRun_StepHandlerTaskOutputResolutionErrorPropagates(t *testing.T) {
 	}
 	opts := Options{StepVars: vars}
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve output")
 }
@@ -913,7 +913,7 @@ func TestRun_ContainerStepDefaultsWorkingDirectoryFromOptsDir(t *testing.T) {
 	}
 
 	// No mock expectations: container steps never touch the CommandRunner.
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.NoError(t, err)
 }
 
@@ -1004,7 +1004,7 @@ func TestRunAll_TaskConditionContextEnvParsingError(t *testing.T) {
 	}
 
 	// No mock expectations: the task must never reach RunShell.
-	err := RunAll(ctx, tasks, mockRunner, Options{})
+	err := RunAll(ctx, tasks, mockRunner, &Options{})
 	require.Error(t, err)
 }
 
@@ -1035,7 +1035,7 @@ func TestRunAll_EvaluateWhenErrorPropagates(t *testing.T) {
 	}
 
 	// No mock expectations: the task must never reach RunShell.
-	err := RunAll(ctx, tasks, mockRunner, Options{})
+	err := RunAll(ctx, tasks, mockRunner, &Options{})
 	require.Error(t, err)
 }
 
@@ -1060,7 +1060,7 @@ func TestRunStepHandler_ContainerTaskInheritsOptsDirAsWorkingDirectory(t *testin
 	}
 	opts := Options{Dir: "/opt/app"}
 
-	err := Run(ctx, &task, mockRunner, opts)
+	err := Run(ctx, &task, mockRunner, &opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "step validation failed")
 }
@@ -1088,6 +1088,6 @@ func TestRunAll_TaskConditionContextSkipsEnvItemsWithoutEquals(t *testing.T) {
 
 	mockRunner.EXPECT().RunShell(ctx, "echo run", "run", ".", opts.Env, false).Return(nil)
 
-	err := RunAll(ctx, tasks, mockRunner, opts)
+	err := RunAll(ctx, tasks, mockRunner, &opts)
 	require.NoError(t, err)
 }

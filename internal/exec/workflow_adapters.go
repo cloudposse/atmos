@@ -71,8 +71,8 @@ func (p *WorkflowAuthProvider) NeedsAuth(steps []schema.WorkflowStep, commandLin
 		return true
 	}
 
-	for _, step := range steps {
-		if step.Identity != "" {
+	for i := range steps {
+		if steps[i].Identity != "" {
 			return true
 		}
 	}
@@ -96,7 +96,8 @@ func (p *WorkflowAuthProvider) GetCachedCredentials(ctx context.Context, identit
 }
 
 // PrepareEnvironment prepares environment variables for the authenticated identity.
-// baseEnv contains additional workflow/step env vars to merge with the system environment.
+// The baseEnv parameter contains additional workflow/step env vars to merge with the
+// system environment.
 func (p *WorkflowAuthProvider) PrepareEnvironment(ctx context.Context, identity string, baseEnv []string) ([]string, error) {
 	defer perf.Track(nil, "exec.WorkflowAuthProvider.PrepareEnvironment")()
 
