@@ -268,8 +268,12 @@ func TestStackProvenanceFileForPath(t *testing.T) {
 }
 
 func TestStackRelativePathForDisplay(t *testing.T) {
-	repoRoot := filepath.Join(string(filepath.Separator), "repo")
-	stacksBase := filepath.Join(repoRoot, "stacks")
+	// stacksBase must be a real, platform-absolute path (drive letter on Windows) so
+	// filepath.IsAbs recognizes it and the filepath.Rel branch is actually exercised.
+	// A fabricated root like filepath.Join(string(filepath.Separator), "repo") is
+	// rooted but not absolute on Windows without a volume, so it fell through to the
+	// no-op branch there while passing on Unix.
+	stacksBase := filepath.Join(t.TempDir(), "stacks")
 	assert.Equal(t, "deploy/prod.yaml", stackRelativePathForDisplay(filepath.Join(stacksBase, "deploy", "prod.yaml"), stacksBase))
 	assert.Equal(t, "relative/prod.yaml", stackRelativePathForDisplay("relative/prod.yaml", stacksBase))
 	assert.Equal(t, "relative/prod.yaml", stackRelativePathForDisplay("relative/prod.yaml", ""))
