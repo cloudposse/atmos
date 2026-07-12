@@ -225,8 +225,8 @@ github.com/aws/aws-sdk-go-v2/service/ecr v1.57.2 h1:rHEW02JFJUV2/ttjzyPIvbD0Yraq
 github.com/aws/aws-sdk-go-v2/service/ecr v1.57.2/go.mod h1:gNS8pNht4VMzPd4UtQUL3NTUQbjEPLLmb9MqmqrqsCM=
 github.com/aws/aws-sdk-go-v2/service/ecrpublic v1.40.0 h1:j7MUNAlKyWkxGZ+/O+XpboGZjmpcHzf3N62yC1CQrxY=
 github.com/aws/aws-sdk-go-v2/service/ecrpublic v1.40.0/go.mod h1:vV0Rly70pxjRxz12gKLyiagzF1y/FyHl0aQny1cWz2I=
-github.com/aws/aws-sdk-go-v2/service/eks v1.84.0 h1:U9HMTDPdZtkCOTE8ACbHQJmXGBKP7/mBds7M1JbUZH0=
-github.com/aws/aws-sdk-go-v2/service/eks v1.84.0/go.mod h1:JQcyECIV9iZHm+GMrWn1pTPTJYRavOVsqPvlCbjt+Fg=
+github.com/aws/aws-sdk-go-v2/service/eks v1.87.0 h1:bftLltXNWmNr9ed3CaQnVlzNPTNTFdHguNhIsZF6DxM=
+github.com/aws/aws-sdk-go-v2/service/eks v1.87.0/go.mod h1:rbIASs+SfCDUXx2EdfMkNpDGptlW8hvMZ9AawRiUBqE=
 github.com/aws/aws-sdk-go-v2/service/inspector2 v1.52.0 h1:0pjqZJz0F2jwrrIuqQaQRwzA5cZGA/UNpnHjdrXBuGo=
 github.com/aws/aws-sdk-go-v2/service/inspector2 v1.52.0/go.mod h1:VEQnuB52NF3MOc0tn76II/rh9ShfJtxiZiFCobv3gOY=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.9 h1:FLudkZLt5ci0ozzgkVo8BJGwvqNaZbTWb3UcucAateA=
