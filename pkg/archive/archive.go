@@ -36,14 +36,17 @@ type PackOptions struct {
 	Include []string
 	// Exclude drops files matching any glob, evaluated before Include.
 	Exclude []string
-	// Reproducible enables deterministic output: "epoch" pins every entry
-	// to the same timestamp (the most recent git commit touching Source),
-	// "git" resolves each entry's own most recent commit and falls back to
-	// the epoch value for files git has no history for. Either mode also
-	// normalizes permission bits, since umask differences are the actual
-	// root cause of non-reproducible archives, not just timestamps. Empty
-	// (the default) preserves each source file's real mtime and mode.
-	Reproducible string
+	// Mtime controls the modification-time metadata stamped into each
+	// archive entry (not the source files on disk, and not the archive
+	// file's own OS-level mtime): "filesystem" (the default, same as
+	// omitting the field) preserves each source file's real mtime and mode;
+	// "epoch" pins every entry to the same timestamp (the most recent git
+	// commit touching Source); "git" resolves each entry's own most recent
+	// commit and falls back to the epoch value for files git has no history
+	// for. "epoch"/"git" also normalize permission bits, since umask
+	// differences are the actual root cause of non-reproducible archives,
+	// not just timestamps.
+	Mtime string
 }
 
 // defaultDirPerm is the mode used when creating a destination's parent
@@ -103,7 +106,7 @@ func replace(opts *PackOptions) error {
 	if err := os.MkdirAll(filepath.Dir(opts.Destination), defaultDirPerm); err != nil {
 		return writeFailedError(opts.Destination, err)
 	}
-	repro := newReproducibleTimestamps(opts.Reproducible, opts.Source)
+	repro := newMtimeConfig(opts.Mtime, opts.Source)
 	return writer(opts.Destination, entries, repro)
 }
 
@@ -136,7 +139,7 @@ func update(opts *PackOptions) error {
 	if err := os.MkdirAll(filepath.Dir(opts.Destination), defaultDirPerm); err != nil {
 		return writeFailedError(opts.Destination, err)
 	}
-	repro := newReproducibleTimestamps(opts.Reproducible, opts.Source)
+	repro := newMtimeConfig(opts.Mtime, opts.Source)
 
 	switch format {
 	case FormatZip:
@@ -161,7 +164,7 @@ func validatePackOptions(opts *PackOptions) error {
 	if strings.TrimSpace(opts.Destination) == "" {
 		return errUtils.Build(errUtils.ErrArchiveDestinationRequired).Err()
 	}
-	return validateReproducibleMode(opts.Reproducible)
+	return validateMtimeMode(opts.Mtime)
 }
 
 // destinationMode returns the file mode to apply to a rebuilt/updated
@@ -225,16 +228,16 @@ func atomicRewrite(destination, tmpPattern string, write func(tmp *os.File) erro
 // formatWriter returns the fresh-write function for format, or a typed
 // "not implemented" error for formats recognized but not yet supported for
 // writing (tar.bz2, tar.xz — see docs/prd/archive-step.md Open Questions).
-func formatWriter(format string) (func(destination string, entries []packEntry, repro *reproducibleTimestamps) error, error) {
+func formatWriter(format string) (func(destination string, entries []packEntry, repro *mtimeConfig) error, error) {
 	switch format {
 	case FormatZip:
 		return writeZip, nil
 	case FormatTar:
-		return func(destination string, entries []packEntry, repro *reproducibleTimestamps) error {
+		return func(destination string, entries []packEntry, repro *mtimeConfig) error {
 			return writeTar(destination, entries, false, repro)
 		}, nil
 	case FormatTGZ:
-		return func(destination string, entries []packEntry, repro *reproducibleTimestamps) error {
+		return func(destination string, entries []packEntry, repro *mtimeConfig) error {
 			return writeTar(destination, entries, true, repro)
 		}, nil
 	default:

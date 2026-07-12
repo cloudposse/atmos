@@ -10,7 +10,7 @@ import (
 )
 
 // writeZip creates destination fresh, writing every entry, via atomicRewrite.
-func writeZip(destination string, entries []packEntry, repro *reproducibleTimestamps) error {
+func writeZip(destination string, entries []packEntry, repro *mtimeConfig) error {
 	defer perf.Track(nil, "archive.writeZip")()
 
 	return atomicRewrite(destination, ".archive-write-*.zip", func(tmp *os.File) error {
@@ -18,7 +18,7 @@ func writeZip(destination string, entries []packEntry, repro *reproducibleTimest
 	})
 }
 
-func writeZipEntries(tmp *os.File, destination string, entries []packEntry, repro *reproducibleTimestamps) error {
+func writeZipEntries(tmp *os.File, destination string, entries []packEntry, repro *mtimeConfig) error {
 	zw := zip.NewWriter(tmp)
 	for _, e := range entries {
 		if err := addZipEntry(zw, e, repro); err != nil {
@@ -38,7 +38,7 @@ func writeZipEntries(tmp *os.File, destination string, entries []packEntry, repr
 // written through the same zip.Writer, since a zip.Writer tracks byte
 // offsets from the start of the underlying stream — two independent writers
 // over the same file would corrupt those offsets.
-func updateZip(destination string, entries []packEntry, repro *reproducibleTimestamps) error {
+func updateZip(destination string, entries []packEntry, repro *mtimeConfig) error {
 	defer perf.Track(nil, "archive.updateZip")()
 
 	changed := make(map[string]bool, len(entries))
@@ -51,7 +51,7 @@ func updateZip(destination string, entries []packEntry, repro *reproducibleTimes
 	})
 }
 
-func writeZipUpdate(dst *os.File, destination string, changed map[string]bool, entries []packEntry, repro *reproducibleTimestamps) error {
+func writeZipUpdate(dst *os.File, destination string, changed map[string]bool, entries []packEntry, repro *mtimeConfig) error {
 	zw := zip.NewWriter(dst)
 
 	if err := copyUnchangedZipEntries(zw, destination, changed); err != nil {
@@ -75,12 +75,15 @@ func writeZipUpdate(dst *os.File, destination string, changed map[string]bool, e
 // (no decompress/recompress). A missing destination is not an error — the
 // update behaves like a fresh write.
 //
-// These entries are not touched by reproducible normalization: they carry
-// whatever mtime/mode a prior write already gave them. Making an update
-// fully reproducible on top of a non-reproducible archive would require
-// re-encoding every existing entry instead of raw-copying it, which is a
-// materially different (and much more expensive) operation than update's
-// incremental contract promises. Only action: replace is the reproducible path.
+// These entries are not touched by mtime normalization: they carry
+// whatever mtime/mode a prior write already gave them. That means
+// action: update is not idempotent even with mtime set — the result
+// depends on the archive's prior history, not just Source's current
+// content. Making update idempotent would require re-encoding every
+// existing entry instead of raw-copying it, which is a materially
+// different (and much more expensive) operation than update's incremental
+// contract promises. Only action: replace + mtime is idempotent: same
+// Source, same bytes, every rerun.
 func copyUnchangedZipEntries(zw *zip.Writer, destination string, changed map[string]bool) error {
 	existing, err := zip.OpenReader(destination)
 	if err != nil {
@@ -106,7 +109,7 @@ func copyUnchangedZipEntries(zw *zip.Writer, destination string, changed map[str
 	return nil
 }
 
-func addZipEntry(zw *zip.Writer, e packEntry, repro *reproducibleTimestamps) error {
+func addZipEntry(zw *zip.Writer, e packEntry, repro *mtimeConfig) error {
 	src, err := os.Open(e.fsPath)
 	if err != nil {
 		return writeFailedError(e.fsPath, err)

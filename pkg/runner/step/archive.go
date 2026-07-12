@@ -33,10 +33,11 @@ var archiveValidActions = map[string]bool{
 	string(archive.ActionReplace): true,
 }
 
-var archiveValidReproducibleModes = map[string]bool{
-	"":                        true,
-	archive.ReproducibleEpoch: true,
-	archive.ReproducibleGit:   true,
+var archiveValidMtimeModes = map[string]bool{
+	"":                      true,
+	archive.MtimeFilesystem: true,
+	archive.MtimeEpoch:      true,
+	archive.MtimeGit:        true,
 }
 
 // Validate checks the archive step configuration before execution.
@@ -54,10 +55,10 @@ func (h *ArchiveHandler) Validate(step *schema.WorkflowStep) error {
 			WithHint("Use one of: create, extract, update, replace").
 			Err()
 	}
-	// reproducible is not validated here: it supports Go templates and
+	// mtime is not validated here: it supports Go templates and
 	// resolveArchiveOptions resolves it before archive.Run sees it, so
 	// checking the raw (possibly templated) value here would reject a
-	// template that resolves to a valid mode. See validateResolvedReproducible.
+	// template that resolves to a valid mode. See resolveArchiveMtime.
 
 	if _, err := archiveSourceString(step); err != nil {
 		return err
@@ -114,7 +115,7 @@ func resolveArchiveOptions(step *schema.WorkflowStep, vars *Variables) (archive.
 	if err != nil {
 		return archive.PackOptions{}, "", fmt.Errorf("step '%s': failed to resolve exclude: %w", step.Name, err)
 	}
-	reproducible, err := resolveArchiveReproducible(step, vars)
+	mtime, err := resolveArchiveMtime(step, vars)
 	if err != nil {
 		return archive.PackOptions{}, "", err
 	}
@@ -125,32 +126,32 @@ func resolveArchiveOptions(step *schema.WorkflowStep, vars *Variables) (archive.
 	}
 
 	return archive.PackOptions{
-		Source:       source,
-		Destination:  destination,
-		Format:       format,
-		Subpath:      subpath,
-		Include:      include,
-		Exclude:      exclude,
-		Reproducible: reproducible,
+		Source:      source,
+		Destination: destination,
+		Format:      format,
+		Subpath:     subpath,
+		Include:     include,
+		Exclude:     exclude,
+		Mtime:       mtime,
 	}, action, nil
 }
 
-// resolveArchiveReproducible resolves reproducible and validates the result,
-// not the raw field — validating before resolution would reject a template
-// that resolves to a valid mode.
-func resolveArchiveReproducible(step *schema.WorkflowStep, vars *Variables) (string, error) {
-	reproducible, err := vars.Resolve(step.Reproducible)
+// resolveArchiveMtime resolves mtime and validates the result, not the raw
+// field — validating before resolution would reject a template that
+// resolves to a valid mode.
+func resolveArchiveMtime(step *schema.WorkflowStep, vars *Variables) (string, error) {
+	mtime, err := vars.Resolve(step.Mtime)
 	if err != nil {
-		return "", fmt.Errorf("step '%s': failed to resolve reproducible: %w", step.Name, err)
+		return "", fmt.Errorf("step '%s': failed to resolve mtime: %w", step.Name, err)
 	}
-	if !archiveValidReproducibleModes[reproducible] {
-		return "", errUtils.Build(errUtils.ErrArchiveInvalidReproducibleMode).
+	if !archiveValidMtimeModes[mtime] {
+		return "", errUtils.Build(errUtils.ErrArchiveInvalidMtimeMode).
 			WithContext("step", step.Name).
-			WithContext("reproducible", reproducible).
-			WithHint("Use one of: epoch, git").
+			WithContext("mtime", mtime).
+			WithHint("Use one of: filesystem, epoch, git").
 			Err()
 	}
-	return reproducible, nil
+	return mtime, nil
 }
 
 // archiveSourceString reads step.Source as a plain string. The field is

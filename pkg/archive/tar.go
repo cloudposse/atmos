@@ -18,7 +18,7 @@ import (
 // when Header.ModTime is explicitly set — left as the zero value here, so
 // tgz output needs no extra reproducibility handling beyond the inner tar
 // stream's entries.
-func writeTar(destination string, entries []packEntry, gz bool, repro *reproducibleTimestamps) error {
+func writeTar(destination string, entries []packEntry, gz bool, repro *mtimeConfig) error {
 	defer perf.Track(nil, "archive.writeTar")()
 
 	return atomicRewrite(destination, ".archive-write-*.tar", func(tmp *os.File) error {
@@ -26,7 +26,7 @@ func writeTar(destination string, entries []packEntry, gz bool, repro *reproduci
 	})
 }
 
-func writeTarEntries(tmp *os.File, destination string, entries []packEntry, gz bool, repro *reproducibleTimestamps) error {
+func writeTarEntries(tmp *os.File, destination string, entries []packEntry, gz bool, repro *mtimeConfig) error {
 	var w io.Writer = tmp
 	var gzw *gzip.Writer
 	if gz {
@@ -58,7 +58,7 @@ func writeTarEntries(tmp *os.File, destination string, entries []packEntry, gz b
 // entries are written through the same tar.Writer, for the same reason as
 // updateZip: a second writer over the same file would restart its internal
 // state and corrupt the archive.
-func updateTar(destination string, entries []packEntry, repro *reproducibleTimestamps) error {
+func updateTar(destination string, entries []packEntry, repro *mtimeConfig) error {
 	defer perf.Track(nil, "archive.updateTar")()
 
 	changed := make(map[string]bool, len(entries))
@@ -71,7 +71,7 @@ func updateTar(destination string, entries []packEntry, repro *reproducibleTimes
 	})
 }
 
-func writeTarUpdate(dst *os.File, destination string, changed map[string]bool, entries []packEntry, repro *reproducibleTimestamps) error {
+func writeTarUpdate(dst *os.File, destination string, changed map[string]bool, entries []packEntry, repro *mtimeConfig) error {
 	tw := tar.NewWriter(dst)
 
 	if err := copyUnchangedTarEntries(tw, destination, changed); err != nil {
@@ -99,7 +99,7 @@ func writeTarUpdate(dst *os.File, destination string, changed map[string]bool, e
 //
 // As with copyUnchangedZipEntries, these entries keep whatever mtime/mode a
 // prior write already gave them — see that function's comment for why
-// action: replace, not update, is the reproducible path.
+// action: replace, not update, is the idempotent path even with mtime set.
 func copyUnchangedTarEntries(tw *tar.Writer, destination string, changed map[string]bool) error {
 	existing, err := os.Open(destination)
 	if err != nil {
@@ -133,7 +133,7 @@ func copyUnchangedTarEntries(tw *tar.Writer, destination string, changed map[str
 	}
 }
 
-func addTarEntry(tw *tar.Writer, e packEntry, repro *reproducibleTimestamps) error {
+func addTarEntry(tw *tar.Writer, e packEntry, repro *mtimeConfig) error {
 	src, err := os.Open(e.fsPath)
 	if err != nil {
 		return writeFailedError(e.fsPath, err)

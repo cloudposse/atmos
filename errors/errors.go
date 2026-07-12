@@ -537,7 +537,7 @@ var (
 	ErrArchiveFormatNotImplemented    = errors.New("archive format is not yet implemented")
 	ErrArchiveWriteFailed             = errors.New("failed to write archive")
 	ErrArchiveWalkFailed              = errors.New("failed to walk archive source")
-	ErrArchiveInvalidReproducibleMode = errors.New("invalid archive reproducible mode")
+	ErrArchiveInvalidMtimeMode        = errors.New("invalid archive mtime mode")
 
 	// List command errors.
 	ErrInvalidStackPattern          = errors.New("invalid stack pattern")

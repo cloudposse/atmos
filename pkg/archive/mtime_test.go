@@ -52,17 +52,23 @@ func gitFixture(t *testing.T) (root string, t1, t2, t3 time.Time) {
 	return dir, t1, t2, t3
 }
 
-func TestNewReproducibleTimestamps_EmptyMode(t *testing.T) {
+func TestNewMtimeConfig_EmptyMode(t *testing.T) {
 	dir := t.TempDir()
-	rt := newReproducibleTimestamps("", dir)
+	rt := newMtimeConfig("", dir)
 	assert.True(t, rt.modTimeFor(filepath.Join(dir, "x")).IsZero(), "empty mode must signal 'don't override' via a zero time")
 }
 
-func TestNewReproducibleTimestamps_EpochMode_UsesLastCommitTouchingSubtree(t *testing.T) {
+func TestNewMtimeConfig_FilesystemMode_SameAsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	rt := newMtimeConfig(MtimeFilesystem, dir)
+	assert.True(t, rt.modTimeFor(filepath.Join(dir, "x")).IsZero(), "filesystem mode must be canonicalized to the same 'don't override' state as an empty/omitted mode")
+}
+
+func TestNewMtimeConfig_EpochMode_UsesLastCommitTouchingSubtree(t *testing.T) {
 	root, _, t2, t3 := gitFixture(t)
 	src := filepath.Join(root, "src")
 
-	rt := newReproducibleTimestamps(ReproducibleEpoch, src)
+	rt := newMtimeConfig(MtimeEpoch, src)
 
 	// Every file under src/ gets the SAME timestamp: the most recent commit
 	// touching anything under src/ (t2, "add b"), not the repo-wide most
@@ -72,33 +78,33 @@ func TestNewReproducibleTimestamps_EpochMode_UsesLastCommitTouchingSubtree(t *te
 	assert.NotEqual(t, t3, rt.epoch, "epoch must not leak the repo-wide latest commit outside src/")
 }
 
-func TestNewReproducibleTimestamps_EpochMode_SourceIsRepoRoot(t *testing.T) {
+func TestNewMtimeConfig_EpochMode_SourceIsRepoRoot(t *testing.T) {
 	root, _, _, t3 := gitFixture(t)
 
 	// source == root: filepath.Rel(root, root) is ".", which must still match
 	// every git path (not fail to match anything and silently fall back to
-	// reproducibleFallbackEpoch).
-	rt := newReproducibleTimestamps(ReproducibleEpoch, root)
+	// mtimeFallbackEpoch).
+	rt := newMtimeConfig(MtimeEpoch, root)
 
 	assert.Equal(t, t3, rt.modTimeFor(filepath.Join(root, "README.md")), "repo-root source must resolve the repo-wide latest commit, not fall back to the fixed epoch")
 }
 
-func TestNewReproducibleTimestamps_GitMode_UsesPerFileCommit(t *testing.T) {
+func TestNewMtimeConfig_GitMode_UsesPerFileCommit(t *testing.T) {
 	root, t1, t2, _ := gitFixture(t)
 	src := filepath.Join(root, "src")
 
-	rt := newReproducibleTimestamps(ReproducibleGit, src)
+	rt := newMtimeConfig(MtimeGit, src)
 
 	assert.Equal(t, t1, rt.modTimeFor(filepath.Join(src, "a.txt")), "a.txt's own last commit is t1, not src/'s overall t2")
 	assert.Equal(t, t2, rt.modTimeFor(filepath.Join(src, "nested", "b.txt")))
 }
 
-func TestNewReproducibleTimestamps_GitMode_FallsBackToEpochForUntrackedFiles(t *testing.T) {
+func TestNewMtimeConfig_GitMode_FallsBackToEpochForUntrackedFiles(t *testing.T) {
 	root, _, t2, _ := gitFixture(t)
 	src := filepath.Join(root, "src")
 	require.NoError(t, os.WriteFile(filepath.Join(src, "generated.js"), []byte("build output"), 0o644))
 
-	rt := newReproducibleTimestamps(ReproducibleGit, src)
+	rt := newMtimeConfig(MtimeGit, src)
 
 	// generated.js was never committed (simulates build output like
 	// node_modules/ or a compiled binary) — falls back to the epoch value,
@@ -106,20 +112,20 @@ func TestNewReproducibleTimestamps_GitMode_FallsBackToEpochForUntrackedFiles(t *
 	assert.Equal(t, t2, rt.modTimeFor(filepath.Join(src, "generated.js")))
 }
 
-func TestNewReproducibleTimestamps_FallsBackWhenNotInGitRepo(t *testing.T) {
+func TestNewMtimeConfig_FallsBackWhenNotInGitRepo(t *testing.T) {
 	dir := t.TempDir() // plain temp dir, no .git anywhere above it in the tree
 	src := filepath.Join(dir, "src")
 	require.NoError(t, os.MkdirAll(src, 0o755))
 
-	for _, mode := range []string{ReproducibleEpoch, ReproducibleGit} {
+	for _, mode := range []string{MtimeEpoch, MtimeGit} {
 		t.Run(mode, func(t *testing.T) {
-			rt := newReproducibleTimestamps(mode, src)
-			assert.Equal(t, reproducibleFallbackEpoch, rt.modTimeFor(filepath.Join(src, "x.txt")))
+			rt := newMtimeConfig(mode, src)
+			assert.Equal(t, mtimeFallbackEpoch, rt.modTimeFor(filepath.Join(src, "x.txt")))
 		})
 	}
 }
 
-func TestNewReproducibleTimestamps_FallsBackWhenSourceHasNoCommitHistory(t *testing.T) {
+func TestNewMtimeConfig_FallsBackWhenSourceHasNoCommitHistory(t *testing.T) {
 	dir := t.TempDir()
 	_, err := git.PlainInit(dir, false)
 	require.NoError(t, err)
@@ -127,15 +133,15 @@ func TestNewReproducibleTimestamps_FallsBackWhenSourceHasNoCommitHistory(t *test
 	src := filepath.Join(dir, "src")
 	require.NoError(t, os.MkdirAll(src, 0o755))
 
-	rt := newReproducibleTimestamps(ReproducibleEpoch, src)
-	assert.Equal(t, reproducibleFallbackEpoch, rt.modTimeFor(filepath.Join(src, "x.txt")))
+	rt := newMtimeConfig(MtimeEpoch, src)
+	assert.Equal(t, mtimeFallbackEpoch, rt.modTimeFor(filepath.Join(src, "x.txt")))
 }
 
-func TestValidateReproducibleMode(t *testing.T) {
-	for _, mode := range []string{"", ReproducibleEpoch, ReproducibleGit} {
-		assert.NoError(t, validateReproducibleMode(mode), "mode %q should be valid", mode)
+func TestValidateMtimeMode(t *testing.T) {
+	for _, mode := range []string{"", MtimeFilesystem, MtimeEpoch, MtimeGit} {
+		assert.NoError(t, validateMtimeMode(mode), "mode %q should be valid", mode)
 	}
-	err := validateReproducibleMode("bogus")
+	err := validateMtimeMode("bogus")
 	require.Error(t, err)
 }
 
@@ -145,11 +151,11 @@ func TestNormalizeMode(t *testing.T) {
 		mode os.FileMode
 		want os.FileMode
 	}{
-		{"regular file, umask 0022", 0o644, reproducibleFileMode},
-		{"regular file, umask 0002 (group-writable)", 0o664, reproducibleFileMode},
-		{"read-only file", 0o444, reproducibleFileMode},
-		{"executable file", 0o755, reproducibleExecMode},
-		{"executable, group-writable", 0o775, reproducibleExecMode},
+		{"regular file, umask 0022", 0o644, normalizedFileMode},
+		{"regular file, umask 0002 (group-writable)", 0o664, normalizedFileMode},
+		{"read-only file", 0o444, normalizedFileMode},
+		{"executable file", 0o755, normalizedExecMode},
+		{"executable, group-writable", 0o775, normalizedExecMode},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

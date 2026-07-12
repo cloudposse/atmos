@@ -1,7 +1,7 @@
 # PRD: Native Archive Step (`type: archive`)
 
 **Status:** Phase 1 implemented
-**Version:** 1.2
+**Version:** 1.3
 **Last Updated:** 2026-07-12
 **Author:** Erik Osterman
 
@@ -29,12 +29,49 @@ an equivalent shell-based `kind: command` hook — which works, but:
   schema, no typed validation, and errors that surface only as opaque shell failures.
 - **Has no `terraform`-graph-native alternative that reliably works either.** A
   `data "archive_file"` (`hashicorp/archive` provider) data source was tried first
-  during the same migration; it failed because there's no dependency edge forcing it
-  to run before a `locals` block elsewhere in the same module reads the file it
-  produces — Terraform doesn't guarantee data-source-before-local-eval ordering
-  without an explicit reference. A `before.terraform.*` hook remains the only reliable
-  place to run packaging logic before Terraform starts, but that hook's *body*
-  shouldn't have to be a hand-rolled shell script.
+  during the same migration. `archive_file` works fine when a config references the
+  data source's own output attribute directly (`data.archive_file.lambda.output_path`
+  or `output_base64sha256`) — Terraform's graph orders that correctly. It broke here
+  because the migrated module's `locals` block computed the zip path independently
+  (mirroring the original Terragrunt script's own variable, which predates and doesn't
+  reference `archive_file` at all) instead of referencing the data source's attribute,
+  so there was no dependency edge forcing the data source to run first. This isn't a
+  one-off mistake specific to this migration — it's a known, still-open class of bug:
+  [hashicorp/terraform#30042](https://github.com/hashicorp/terraform/issues/30042)
+  documents the exact failure (`filebase64sha256(data.archive_file.default.output_path)`
+  racing the data source's own `Read()`, with "reference `output_base64sha256`
+  directly instead" as the standing workaround);
+  [hashicorp/terraform-provider-archive#218](https://github.com/hashicorp/terraform-provider-archive/issues/218)
+  covers the data source's odd plan-time lifecycle (it writes the archive to disk
+  during `plan`, not `apply`, and isn't cleaned up on `destroy`); and
+  [hashicorp/terraform-provider-archive#34](https://github.com/hashicorp/terraform-provider-archive/issues/34)
+  covers `archive_file` producing different bytes on different OSes for identical
+  source, the same non-reproducibility problem this PRD's own archive step has to
+  solve (see [Design: entry mtime & permission normalization](#design-entry-mtime--permission-normalization)).
+  A `before.terraform.*` hook remains the only reliable place to run packaging logic
+  before Terraform starts, but that hook's *body* shouldn't have to be a hand-rolled
+  shell script.
+
+### Which of these does the archive step actually close?
+
+Five of the six deficiencies above are closed structurally, not by asking users to
+write correct config:
+
+| Deficiency | Closed by |
+|---|---|
+| Shell portability (`zip`/`tar` flag differences across OSes) | Go stdlib only (`archive/zip`, `archive/tar`, `compress/gzip`) — no subprocess, no binary-specific flags. |
+| Opaque shell failures, no typed validation | `ArchiveHandler.Validate()` checks action/source/destination before `Execute` touches the filesystem, returning typed errors with hints. |
+| `archive_file`'s dependency-ordering footgun ([#30042](https://github.com/hashicorp/terraform/issues/30042)) | Structural, not cleverer HCL wiring: as a `before.terraform.*` hook, the step runs and completes on disk *before* Atmos shells out to the `terraform` binary. There's no Terraform graph involved at all, so there's nothing to wire correctly. |
+| `archive_file`'s odd plan-time lifecycle ([#218](https://github.com/hashicorp/terraform-provider-archive/issues/218)) | The step only runs on the `events:` explicitly listed — no implicit "runs during every plan whether wanted or not" behavior. |
+| `archive_file`'s cross-OS non-reproducibility ([#34](https://github.com/hashicorp/terraform-provider-archive/issues/34)) | Opt-in only: `mtime: epoch`/`git` normalizes mtime and permission bits regardless of OS/umask. Without setting it, this step has the same real-mtime/real-mode behavior `archive_file` has by default — that's an intentional non-breaking default, not an oversight. |
+
+The sixth is a genuine, **open** limitation, not a false claim: `action: update` +
+`mtime` is not idempotent — rerunning `update` in a different order, or against an
+archive with different prior history, is not guaranteed to converge to the same
+bytes, because `update`'s copy-forward entries keep whatever mtime/mode a prior write
+already gave them. Only `action: replace` + `mtime` is idempotent (same `source`,
+same bytes, every rerun). See
+[Design: entry mtime & permission normalization](#design-entry-mtime--permission-normalization).
 
 ## Goals
 
@@ -87,7 +124,7 @@ This halves the implementation versus the original draft — no
 kind-level tests — while producing an identical user-facing capability, consistent
 with how every other step type reaches hooks.
 
-## Design: reproducible output
+## Design: entry mtime & permission normalization
 
 By default, `replace`/`update` write every entry with the source file's real mtime and
 permission bits, straight through from `os.Stat`. That's a problem for the exact use
@@ -99,8 +136,16 @@ rebuild — which defeats anything downstream that keys off the archive's hash (
 only redeploying when the zip's checksum changes, a build cache, provenance/attestation
 checks that expect the same input to produce the same output).
 
+To be precise about what "entry" means: this is the modification-time metadata stored
+*inside each file entry* of the resulting zip/tar/tgz — the per-entry mtime field the
+archive format itself embeds for every file it packs in (visible via `unzip -l -v` or
+`tar -tvf`). It is **not** the real source files' mtime on disk (never touched — only
+read) and **not** the archive file's own OS-level mtime (`ls -la handler.zip` — just
+whenever the OS wrote the file, unrelated to this field).
+
 This is not a hypothetical: it's the same failure mode behind Terraform's
-`hashicorp/archive` provider's long-standing `archive_file` non-determinism reports —
+`hashicorp/archive` provider's long-standing `archive_file` non-determinism reports
+([hashicorp/terraform-provider-archive#34](https://github.com/hashicorp/terraform-provider-archive/issues/34)) —
 investigation for this PRD traced the root cause to exactly these two inputs (real
 mtime, real permission bits), not to anything inherent to zip/tar as formats. Neither
 `SOURCE_DATE_EPOCH` (an env-var convention some tools honor, but not a general fix — it
@@ -109,38 +154,52 @@ archives tracked files at a ref — not usable here, since this step packages *b
 artifacts*, e.g. compiled/bundled output that typically isn't committed to git at all)
 is a fit for this step's actual use case.
 
-**Decision: an opt-in `reproducible` field, not a default-on behavior.** Changing the
+**Decision: an opt-in `mtime` field, not a default-on behavior.** Changing the
 default would silently alter output for every existing user of this step (and of
-`archive_file`-style tools generally, if anyone diffs archive bytes today). Two modes,
-selected by one field, both git-derived per explicit direction to use git's own commit
-history as the timestamp source rather than introducing a new convention:
+`archive_file`-style tools generally, if anyone diffs archive bytes today). The field
+is named for the mechanism it controls — the per-entry mtime — rather than an
+opinionated outcome word: three values, all naming what they do rather than asserting
+a quality judgment:
 
-- `reproducible: epoch` — resolve one timestamp (the most recent commit touching
-  anything under `source`) and stamp every entry with it. Cheapest option: one Git log
-  walk per archive operation, regardless of file count.
-- `reproducible: git` — resolve each entry's *own* most recent commit and stamp it
+- `mtime: filesystem` — the default, and the same state as omitting the field
+  entirely: every entry carries the source file's real mtime and permission bits.
+- `mtime: epoch` — resolve one timestamp (the most recent commit touching anything
+  under `source`) and stamp every entry with it. Cheapest option: one Git log walk per
+  archive operation, regardless of file count. Named after the
+  [`SOURCE_DATE_EPOCH`](https://reproducible-builds.org/docs/source-date-epoch/)
+  reproducible-builds convention (originated by the Debian reproducible-builds
+  project, 2015, updated 2017) — `epoch` mirrors that same technique conceptually
+  (one shared reference timestamp for the whole build), even though the value comes
+  from git history here rather than an environment variable.
+- `mtime: git` — resolve each entry's *own* most recent commit and stamp it
   individually. More precise (unrelated files don't share a timestamp just because
   something else in the tree changed), at the cost of one Git log walk per file.
   Files with no commit history (the common case for this step, since it typically
   packages build output — `node_modules/`, compiled binaries — rather than tracked
   source) fall back to the same value `epoch` would compute.
 
-Both modes also normalize permission bits (every entry becomes `0644`, or `0755` if the
-source is executable) — independent of the timestamp strategy, since inconsistent
-umask-derived permission bits are just as capable of producing different archive bytes
-as inconsistent timestamps are. Outside a git repository, or for a source path with no
-commit history, both modes fall back to a fixed reference date (1980-01-01, the
-earliest a zip entry's DOS timestamp field can represent) rather than failing the
-step — a temp build directory or shallow clone should still degrade gracefully rather
-than block the archive operation.
+`epoch` and `git` both also normalize permission bits (every entry becomes `0644`, or
+`0755` if the source is executable) — independent of the timestamp strategy, since
+inconsistent umask-derived permission bits are just as capable of producing different
+archive bytes as inconsistent timestamps are. Outside a git repository, or for a
+source path with no commit history, both modes fall back to a fixed reference date
+(1980-01-01, the earliest a zip entry's DOS timestamp field can represent) rather than
+failing the step — a temp build directory or shallow clone should still degrade
+gracefully rather than block the archive operation.
 
 Implemented via `go-git/go-git` (already a direct dependency) rather than shelling out
-to `git log` — consistent with the step's zero-external-binary design goal. Only the
-`replace` path is fully reproducible; `update`'s copy-forward entries intentionally
-keep whatever mtime/mode a prior write already gave them (re-encoding every existing
-entry on every incremental update would defeat the point of `update` being cheaper
-than `replace`), so only the entries a given `update` call actually adds/refreshes are
-normalized.
+to `git log` — consistent with the step's zero-external-binary design goal.
+
+**Idempotent vs. reproducible — stated explicitly, not implied.** `action: replace` +
+`mtime: epoch`/`git` is idempotent: the same `source` produces the same bytes, every
+rerun, regardless of prior archive state, because `replace` always rebuilds from
+scratch. `action: update` + `mtime` is **not** idempotent: its copy-forward entries
+intentionally keep whatever mtime/mode a prior write already gave them (re-encoding
+every existing entry on every incremental update would defeat the point of `update`
+being cheaper than `replace`), so only the entries a given `update` call actually
+adds/refreshes are normalized — the final bytes depend on the archive's history, not
+just `source`'s current content. This is a known, intentional trade-off of `update`'s
+incremental contract, not an oversight.
 
 ## Non-Goals (V1)
 
@@ -198,8 +257,8 @@ include:
 exclude:
   - "**/*.test.js"
   - "**/node_modules/**"
-reproducible: ""            # "" (default, real mtime/mode) | epoch | git — see
-                            # Design: reproducible output
+mtime: filesystem           # filesystem (default) | epoch | git — see
+                            # Design: entry mtime & permission normalization
 ```
 
 `action` and `source` are shared fields on the step schema (`pkg/schema/workflow.go`,
@@ -254,14 +313,14 @@ ambiguous or absent.
     `included_paths`/`excluded_paths` already uses), and archive-path joining
     (always forward-slash, independent of OS).
   - `zip.go` / `tar.go` — format-specific pack/update, using stdlib only.
-  - `reproducible.go` — resolves the `reproducible` mode's deterministic mtime via
+  - `mtime.go` — resolves the `mtime` mode's deterministic entry timestamp via
     `go-git`, and normalizes permission bits; see
-    [Design: reproducible output](#design-reproducible-output).
+    [Design: entry mtime & permission normalization](#design-entry-mtime--permission-normalization).
 - **`pkg/runner/step/archive.go`** — the `ArchiveHandler` step type (`Register`ed
   as `"archive"`), following the `http` step type's structural precedent (own
   config, own error taxonomy, no shelling out).
 - **`pkg/schema/workflow.go`, `pkg/schema/task.go`** — new `Format`, `Destination`,
-  `Subpath`, `Include`, `Exclude`, `Reproducible` fields (flat, matching the `http`
+  `Subpath`, `Include`, `Exclude`, `Mtime` fields (flat, matching the `http`
   step's precedent), reusing the existing `Action` and `Source` fields; wired
   through `Task.ToWorkflowStep()` / `TaskFromWorkflowStep()`.
 - **`errors/errors.go`** — new sentinel errors for both the `pkg/archive` package
@@ -281,12 +340,13 @@ out to `zip`/`tar`/`unzip` — archives are built and read back purely through G
 rather than asserting it in prose. `pkg/runner/step/archive_test.go` covers
 `Validate`/`Execute` following the `http` step's test pattern.
 
-`pkg/archive/reproducible_test.go` builds a real temp git repository (via `go-git`,
+`pkg/archive/mtime_test.go` builds a real temp git repository (via `go-git`,
 not by shelling out to `git`) with commits at controlled timestamps, and asserts
 `epoch`/`git` mode resolution against exact expected values — plus the fallback paths
-(no repo, no commit history, untracked file). `pkg/archive/archive_test.go` proves the
-end-to-end claim directly: two builds from identical content but different real
-fs mtime/mode produce byte-identical `zip`/`tar` output when `reproducible: epoch` is
+(no repo, no commit history, untracked file) and that `mtime: filesystem` resolves to
+the same "don't override" state as omitting the field. `pkg/archive/archive_test.go`
+proves the end-to-end claim directly: two builds from identical content but different
+real fs mtime/mode produce byte-identical `zip`/`tar` output when `mtime: epoch` is
 set, and (as a control) different output when it isn't.
 
 ### Docs

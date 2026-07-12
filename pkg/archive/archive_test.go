@@ -771,14 +771,14 @@ func TestCollectDirEntries_PropagatesGenericWalkError(t *testing.T) {
 	assert.False(t, errors.Is(err, errUtils.ErrArchiveInvalidGlobPattern))
 }
 
-func TestRun_Replace_InvalidReproducibleMode(t *testing.T) {
+func TestRun_Replace_InvalidMtimeMode(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")
 	writeFixture(t, src)
 
-	err := Run(ActionReplace, &PackOptions{Source: src, Destination: filepath.Join(dir, "out.zip"), Reproducible: "bogus"})
+	err := Run(ActionReplace, &PackOptions{Source: src, Destination: filepath.Join(dir, "out.zip"), Mtime: "bogus"})
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrArchiveInvalidReproducibleMode))
+	assert.True(t, errors.Is(err, errUtils.ErrArchiveInvalidMtimeMode))
 }
 
 // writeVariantFixture writes the same logical content as writeFixture, but
@@ -797,7 +797,7 @@ func writeVariantFixture(t *testing.T, dir string, mtime time.Time, mode os.File
 	write("nested/util.js", "module.exports = {};")
 }
 
-func TestRun_Replace_Reproducible_ByteIdenticalRegardlessOfSourceMetadata(t *testing.T) {
+func TestRun_Replace_Mtime_ByteIdenticalRegardlessOfSourceMetadata(t *testing.T) {
 	tests := []struct {
 		name string
 		ext  string
@@ -812,25 +812,25 @@ func TestRun_Replace_Reproducible_ByteIdenticalRegardlessOfSourceMetadata(t *tes
 			srcA := filepath.Join(dirA, "src")
 			writeVariantFixture(t, srcA, time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC), 0o644)
 			destA := filepath.Join(dirA, "out"+tt.ext)
-			require.NoError(t, Run(ActionReplace, &PackOptions{Source: srcA, Destination: destA, Reproducible: ReproducibleEpoch}))
+			require.NoError(t, Run(ActionReplace, &PackOptions{Source: srcA, Destination: destA, Mtime: MtimeEpoch}))
 
 			dirB := t.TempDir()
 			srcB := filepath.Join(dirB, "src")
 			writeVariantFixture(t, srcB, time.Date(2024, 6, 30, 12, 0, 0, 0, time.UTC), 0o664)
 			destB := filepath.Join(dirB, "out"+tt.ext)
-			require.NoError(t, Run(ActionReplace, &PackOptions{Source: srcB, Destination: destB, Reproducible: ReproducibleEpoch}))
+			require.NoError(t, Run(ActionReplace, &PackOptions{Source: srcB, Destination: destB, Mtime: MtimeEpoch}))
 
 			bytesA, err := os.ReadFile(destA)
 			require.NoError(t, err)
 			bytesB, err := os.ReadFile(destB)
 			require.NoError(t, err)
-			assert.Equal(t, bytesA, bytesB, "archives built from identical content but different mtimes/modes must be byte-identical when reproducible: epoch is set")
+			assert.Equal(t, bytesA, bytesB, "archives built from identical content but different mtimes/modes must be byte-identical when mtime: epoch is set")
 		})
 	}
 }
 
-func TestRun_Replace_Reproducible_NotSetProducesDifferentBytes(t *testing.T) {
-	// Sanity check for the test above: without Reproducible, the same
+func TestRun_Replace_Mtime_NotSetProducesDifferentBytes(t *testing.T) {
+	// Sanity check for the test above: without Mtime set, the same
 	// content with different source mtimes/modes must NOT be byte-identical
 	// — otherwise the prior test wouldn't be proving anything.
 	dirA := t.TempDir()
@@ -849,10 +849,31 @@ func TestRun_Replace_Reproducible_NotSetProducesDifferentBytes(t *testing.T) {
 	require.NoError(t, err)
 	bytesB, err := os.ReadFile(destB)
 	require.NoError(t, err)
-	assert.NotEqual(t, bytesA, bytesB, "without reproducible: epoch, differing source mtimes must produce different archive bytes")
+	assert.NotEqual(t, bytesA, bytesB, "without mtime: epoch, differing source mtimes must produce different archive bytes")
 }
 
-func TestRun_Replace_Reproducible_NormalizesZipPermissions(t *testing.T) {
+func TestRun_Replace_Mtime_FilesystemSameAsOmitted(t *testing.T) {
+	// mtime: filesystem is canonicalized to the same internal state as an
+	// omitted field — same real-mtime/mode source content must therefore
+	// produce byte-identical archives either way.
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeVariantFixture(t, src, time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC), 0o644)
+
+	destOmitted := filepath.Join(dir, "omitted.zip")
+	require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: destOmitted}))
+
+	destFilesystem := filepath.Join(dir, "filesystem.zip")
+	require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: destFilesystem, Mtime: MtimeFilesystem}))
+
+	bytesOmitted, err := os.ReadFile(destOmitted)
+	require.NoError(t, err)
+	bytesFilesystem, err := os.ReadFile(destFilesystem)
+	require.NoError(t, err)
+	assert.Equal(t, bytesOmitted, bytesFilesystem, "mtime: filesystem must behave identically to omitting mtime entirely")
+}
+
+func TestRun_Replace_Mtime_NormalizesZipPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX file mode bits are not meaningfully enforced on Windows")
 	}
@@ -862,17 +883,17 @@ func TestRun_Replace_Reproducible_NormalizesZipPermissions(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(src, "handler.js"), []byte("x"), 0o664)) // group-writable, unlike the normalized 0644
 	dest := filepath.Join(dir, "out.zip")
 
-	require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: dest, Reproducible: ReproducibleEpoch}))
+	require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: dest, Mtime: MtimeEpoch}))
 
 	r, err := zip.OpenReader(dest)
 	require.NoError(t, err)
 	defer r.Close()
 	require.Len(t, r.File, 1)
-	assert.Equal(t, os.FileMode(reproducibleFileMode), r.File[0].Mode().Perm())
-	assert.Equal(t, reproducibleFallbackEpoch, r.File[0].Modified.UTC())
+	assert.Equal(t, os.FileMode(normalizedFileMode), r.File[0].Mode().Perm())
+	assert.Equal(t, mtimeFallbackEpoch, r.File[0].Modified.UTC())
 }
 
-func TestRun_Replace_Reproducible_NormalizesTarPermissions(t *testing.T) {
+func TestRun_Replace_Mtime_NormalizesTarPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX file mode bits are not meaningfully enforced on Windows")
 	}
@@ -882,7 +903,7 @@ func TestRun_Replace_Reproducible_NormalizesTarPermissions(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(src, "handler.js"), []byte("x"), 0o664))
 	dest := filepath.Join(dir, "out.tar")
 
-	require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: dest, Reproducible: ReproducibleEpoch}))
+	require.NoError(t, Run(ActionReplace, &PackOptions{Source: src, Destination: dest, Mtime: MtimeEpoch}))
 
 	f, err := os.Open(dest)
 	require.NoError(t, err)
@@ -890,8 +911,8 @@ func TestRun_Replace_Reproducible_NormalizesTarPermissions(t *testing.T) {
 	tr := tar.NewReader(f)
 	hdr, err := tr.Next()
 	require.NoError(t, err)
-	assert.Equal(t, int64(reproducibleFileMode), hdr.Mode)
-	assert.Equal(t, reproducibleFallbackEpoch, hdr.ModTime.UTC())
+	assert.Equal(t, int64(normalizedFileMode), hdr.Mode)
+	assert.Equal(t, mtimeFallbackEpoch, hdr.ModTime.UTC())
 	assert.Equal(t, 0, hdr.Uid)
 	assert.Equal(t, 0, hdr.Gid)
 	assert.Empty(t, hdr.Uname)

@@ -214,8 +214,8 @@ func TestArchiveHandler_Execute_ResolveErrors(t *testing.T) {
 			step: &schema.WorkflowStep{Name: "pkg", Type: "archive", Source: src, Destination: dest, Exclude: []string{malformed}},
 		},
 		{
-			name: "malformed reproducible template",
-			step: &schema.WorkflowStep{Name: "pkg", Type: "archive", Source: src, Destination: dest, Reproducible: malformed},
+			name: "malformed mtime template",
+			step: &schema.WorkflowStep{Name: "pkg", Type: "archive", Source: src, Destination: dest, Mtime: malformed},
 		},
 	}
 
@@ -227,40 +227,40 @@ func TestArchiveHandler_Execute_ResolveErrors(t *testing.T) {
 	}
 }
 
-// reproducible supports Go templates, and resolveArchiveOptions resolves it
+// mtime supports Go templates, and resolveArchiveOptions resolves it
 // before archive.Run sees it, so Validate must not reject the raw (possibly
 // templated) value: a template like "{{ .Env.MODE }}" would fail Validate
 // even though it resolves to a valid mode. Validate only guards structural
 // fields (action, source, destination); the resolved mode is checked in
-// TestArchiveHandler_Execute_Reproducible_InvalidMode below.
-func TestArchiveHandler_Validate_AcceptsAnyReproducibleValueIncludingTemplates(t *testing.T) {
+// TestArchiveHandler_Execute_Mtime_InvalidMode below.
+func TestArchiveHandler_Validate_AcceptsAnyMtimeValueIncludingTemplates(t *testing.T) {
 	handler := mustGetArchiveHandler(t)
-	for _, value := range []string{"", "epoch", "git", "{{ .Env.MODE }}"} {
+	for _, value := range []string{"", "filesystem", "epoch", "git", "{{ .Env.MODE }}"} {
 		t.Run(value, func(t *testing.T) {
 			err := handler.Validate(&schema.WorkflowStep{
-				Name: "pkg", Type: "archive", Source: "src/", Destination: "out.zip", Reproducible: value,
+				Name: "pkg", Type: "archive", Source: "src/", Destination: "out.zip", Mtime: value,
 			})
 			assert.NoError(t, err)
 		})
 	}
 }
 
-func TestArchiveHandler_Execute_Reproducible_InvalidMode(t *testing.T) {
+func TestArchiveHandler_Execute_Mtime_InvalidMode(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")
 	require.NoError(t, os.MkdirAll(src, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(src, "handler.js"), []byte("x"), 0o644))
 
 	step := &schema.WorkflowStep{
-		Name: "pkg", Type: "archive", Source: src, Destination: filepath.Join(dir, "out.zip"), Reproducible: "bogus",
+		Name: "pkg", Type: "archive", Source: src, Destination: filepath.Join(dir, "out.zip"), Mtime: "bogus",
 	}
 
 	_, err := mustGetArchiveHandler(t).Execute(context.Background(), step, NewVariables())
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrArchiveInvalidReproducibleMode))
+	assert.True(t, errors.Is(err, errUtils.ErrArchiveInvalidMtimeMode))
 }
 
-func TestArchiveHandler_Execute_Reproducible_TemplateResolvesToValidMode(t *testing.T) {
+func TestArchiveHandler_Execute_Mtime_TemplateResolvesToValidMode(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")
 	require.NoError(t, os.MkdirAll(src, 0o755))
@@ -270,14 +270,14 @@ func TestArchiveHandler_Execute_Reproducible_TemplateResolvesToValidMode(t *test
 	vars.SetEnv("MODE", "epoch")
 	step := &schema.WorkflowStep{
 		Name: "pkg", Type: "archive", Source: src, Destination: filepath.Join(dir, "out.zip"),
-		Reproducible: "{{ .Env.MODE }}",
+		Mtime: "{{ .Env.MODE }}",
 	}
 
 	_, err := mustGetArchiveHandler(t).Execute(context.Background(), step, vars)
 	require.NoError(t, err, "a template that resolves to a valid mode must not be rejected")
 }
 
-func TestArchiveHandler_Execute_Reproducible(t *testing.T) {
+func TestArchiveHandler_Execute_Mtime(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src")
 	require.NoError(t, os.MkdirAll(src, 0o755))
@@ -285,7 +285,7 @@ func TestArchiveHandler_Execute_Reproducible(t *testing.T) {
 	dest := filepath.Join(dir, "out.zip")
 
 	step := &schema.WorkflowStep{
-		Name: "pkg", Type: "archive", Source: src, Destination: dest, Reproducible: "epoch",
+		Name: "pkg", Type: "archive", Source: src, Destination: dest, Mtime: "epoch",
 	}
 
 	result, err := mustGetArchiveHandler(t).Execute(context.Background(), step, NewVariables())
@@ -296,7 +296,7 @@ func TestArchiveHandler_Execute_Reproducible(t *testing.T) {
 	require.NoError(t, err)
 	defer r.Close()
 	require.Len(t, r.File, 1)
-	// 0o644, not the source file's actual 0o664 — proves Reproducible
+	// 0o644, not the source file's actual 0o664 — proves Mtime
 	// reached pkg/archive and normalized the entry's permission bits.
 	assert.Equal(t, os.FileMode(0o644), r.File[0].Mode().Perm())
 }
