@@ -671,6 +671,7 @@ func performTagsLogout(ctx context.Context, authManager auth.AuthManager, filter
 			ui.Writef("  • %v\n", err)
 		}
 		ui.Writeln("")
+		return errors.Join(errs...)
 	}
 
 	ui.Success(fmt.Sprintf("Logged out from %d provider(s) matching tags %v", successCount, filterTags))

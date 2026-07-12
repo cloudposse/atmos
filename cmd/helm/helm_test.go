@@ -215,7 +215,7 @@ func TestValidateOperationArgs(t *testing.T) {
 			name:    "component cannot combine with all",
 			command: configuredOperationCommand(t, "apply", map[string]string{"all": "true"}),
 			args:    []string{"app"},
-			wantErr: "component argument cannot be used with --all or --affected",
+			wantErr: "component argument cannot be used with --all, --affected, --tags, or --labels",
 		},
 		{
 			name:    "template bulk cannot use output",
@@ -239,7 +239,13 @@ func TestValidateOperationArgs(t *testing.T) {
 			name:    "component cannot combine with tags",
 			command: configuredOperationCommand(t, "apply", map[string]string{"tags": "production"}),
 			args:    []string{"app"},
-			wantErr: "component argument cannot be used with --all or --affected",
+			wantErr: "component argument cannot be used with --all, --affected, --tags, or --labels",
+		},
+		{
+			name:    "component cannot combine with labels",
+			command: configuredOperationCommand(t, "apply", map[string]string{"labels": "cost-center=platform"}),
+			args:    []string{"app"},
+			wantErr: "component argument cannot be used with --all, --affected, --tags, or --labels",
 		},
 		{
 			name:    "malformed labels flag errors",
