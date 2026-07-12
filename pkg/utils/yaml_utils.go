@@ -56,6 +56,10 @@ const (
 	AtmosYamlFuncAwsOrganizationID       = "!aws.organization_id"
 	AtmosYamlFuncEmulator                = "!emulator"
 	AtmosYamlFuncVersion                 = "!version"
+	AtmosYamlFuncTags                    = "!tags"
+	AtmosYamlFuncLabels                  = "!labels"
+	AtmosYamlFuncLabelsKeys              = "!labels.keys"
+	AtmosYamlFuncLabelsValues            = "!labels.values"
 
 	DefaultYAMLIndent    = 2
 	cacheFingerprintBase = 16
@@ -95,6 +99,10 @@ var (
 		AtmosYamlFuncAwsOrganizationID,
 		AtmosYamlFuncEmulator,
 		AtmosYamlFuncVersion,
+		AtmosYamlFuncTags,
+		AtmosYamlFuncLabels,
+		AtmosYamlFuncLabelsKeys,
+		AtmosYamlFuncLabelsValues,
 	}
 
 	// AtmosYamlTagsMap provides O(1) lookup for custom tag checking.
@@ -132,6 +140,10 @@ var (
 		AtmosYamlFuncAwsOrganizationID:       true,
 		AtmosYamlFuncEmulator:                true,
 		AtmosYamlFuncVersion:                 true,
+		AtmosYamlFuncTags:                    true,
+		AtmosYamlFuncLabels:                  true,
+		AtmosYamlFuncLabelsKeys:              true,
+		AtmosYamlFuncLabelsValues:            true,
 	}
 
 	// ParsedYAML cache stores parsed yaml.Node objects and their position

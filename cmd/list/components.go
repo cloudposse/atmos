@@ -39,6 +39,8 @@ type ComponentsOptions struct {
 	ProcessTemplates bool
 	ProcessFunctions bool
 	Skip             []string
+	Tags             []string
+	LabelsRaw        string
 }
 
 // componentsCmd lists atmos components.
@@ -101,7 +103,47 @@ func parseComponentsOptions(cmd *cobra.Command, v *viper.Viper) *ComponentsOptio
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
+		Tags:             parseTagsFlag(v.GetString("tags")),
+		LabelsRaw:        v.GetString("labels"),
 	}
+}
+
+// parseTagsFlag parses a comma-separated tags string into a trimmed, non-empty slice.
+func parseTagsFlag(input string) []string {
+	if input == "" {
+		return nil
+	}
+
+	parts := strings.Split(input, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+// parseLabelsFlag parses a comma-separated key=value list into a map[string]string.
+func parseLabelsFlag(input string) (map[string]string, error) {
+	if input == "" {
+		return nil, nil
+	}
+
+	result := make(map[string]string)
+	for _, pair := range strings.Split(input, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		key, value, found := strings.Cut(pair, "=")
+		key = strings.TrimSpace(key)
+		if !found || key == "" {
+			return nil, fmt.Errorf("%w: invalid label %q, expected key=value", errUtils.ErrInvalidFlag, pair)
+		}
+		result[key] = strings.TrimSpace(value)
+	}
+	return result, nil
 }
 
 // columnsCompletionForComponents provides dynamic tab completion for --columns flag.
@@ -147,6 +189,8 @@ func init() {
 		WithProcessTemplatesFlag,
 		WithProcessFunctionsFlag,
 		WithSkipFlag,
+		WithTagsFlag,
+		WithLabelsFlag,
 	)
 
 	// Register flags.
@@ -238,7 +282,10 @@ func renderComponents(atmosConfig *schema.AtmosConfiguration, opts *ComponentsOp
 	defer perf.Track(nil, "list.components.renderComponents")()
 
 	// Build filters.
-	filters := buildComponentFilters(opts)
+	filters, err := buildComponentFilters(opts)
+	if err != nil {
+		return err
+	}
 
 	// Get column configuration.
 	columns := getComponentColumns(atmosConfig, opts.Columns)
@@ -264,7 +311,7 @@ func renderComponents(atmosConfig *schema.AtmosConfiguration, opts *ComponentsOp
 
 // buildComponentFilters creates filters based on command options.
 // Note: --stack filter is not applicable to unique components (use "list instances" for per-stack filtering).
-func buildComponentFilters(opts *ComponentsOptions) []filter.Filter {
+func buildComponentFilters(opts *ComponentsOptions) ([]filter.Filter, error) {
 	defer perf.Track(nil, "list.components.buildComponentFilters")()
 
 	var filters []filter.Filter
@@ -291,7 +338,21 @@ func buildComponentFilters(opts *ComponentsOptions) []filter.Filter {
 		filters = append(filters, filter.NewBoolFilter("locked", opts.Locked))
 	}
 
-	return filters
+	// Tags filter (any-match).
+	if len(opts.Tags) > 0 {
+		filters = append(filters, filter.NewTagFilter("tags", opts.Tags))
+	}
+
+	// Labels filter (all-match).
+	labels, err := parseLabelsFlag(opts.LabelsRaw)
+	if err != nil {
+		return nil, err
+	}
+	if len(labels) > 0 {
+		filters = append(filters, filter.NewLabelFilter("labels", labels))
+	}
+
+	return filters, nil
 }
 
 // getComponentColumns returns column configuration for unique components listing.

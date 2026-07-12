@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestAuthenticateIdentity(t *testing.T) {
@@ -209,6 +210,62 @@ func TestPromptForProvider_EmptyList(t *testing.T) {
 	require.Error(t, err)
 	assert.Empty(t, got)
 	assert.ErrorIs(t, err, errUtils.ErrNoProvidersAvailable)
+}
+
+// TestPromptForIdentity_EmptyList covers the deterministic guard at the top of
+// the interactive picker: with no identities, it returns ErrNoIdentitiesAvailable
+// without ever touching the huh form.
+func TestPromptForIdentity_EmptyList(t *testing.T) {
+	got, err := promptForIdentity("Choose an identity:", nil)
+	require.Error(t, err)
+	assert.Empty(t, got)
+	assert.ErrorIs(t, err, errUtils.ErrNoIdentitiesAvailable)
+}
+
+// TestSelectIdentityByTags covers the 0/1/many-match branches. The many-match
+// branch is forced non-interactive so it doesn't block on the huh prompt.
+func TestSelectIdentityByTags(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	identities := map[string]schema.Identity{
+		"prod-admin":    {Kind: "aws/permission-set", Tags: []string{"admin", "production"}},
+		"prod-readonly": {Kind: "aws/permission-set", Tags: []string{"readonly", "production"}},
+		"dev-readonly":  {Kind: "aws/permission-set", Tags: []string{"readonly", "development"}},
+	}
+
+	t.Run("zero matches returns ErrNoIdentitiesMatchTags", func(t *testing.T) {
+		mockAuthManager := authTypes.NewMockAuthManager(ctrl)
+		mockAuthManager.EXPECT().GetIdentities().Return(identities)
+
+		got, err := selectIdentityByTags(auth.AuthManager(mockAuthManager), []string{"nonexistent"})
+		require.Error(t, err)
+		assert.Empty(t, got)
+		assert.ErrorIs(t, err, errUtils.ErrNoIdentitiesMatchTags)
+	})
+
+	t.Run("single match returns directly without prompting", func(t *testing.T) {
+		mockAuthManager := authTypes.NewMockAuthManager(ctrl)
+		mockAuthManager.EXPECT().GetIdentities().Return(identities)
+
+		got, err := selectIdentityByTags(auth.AuthManager(mockAuthManager), []string{"admin"})
+		require.NoError(t, err)
+		assert.Equal(t, "prod-admin", got)
+	})
+
+	t.Run("multiple matches in non-interactive context returns TTY-required error", func(t *testing.T) {
+		orig := isInteractiveFn
+		t.Cleanup(func() { isInteractiveFn = orig })
+		isInteractiveFn = func() bool { return false }
+
+		mockAuthManager := authTypes.NewMockAuthManager(ctrl)
+		mockAuthManager.EXPECT().GetIdentities().Return(identities)
+
+		got, err := selectIdentityByTags(auth.AuthManager(mockAuthManager), []string{"readonly"})
+		require.Error(t, err)
+		assert.Empty(t, got)
+		assert.ErrorIs(t, err, errUtils.ErrIdentitySelectionRequiresTTY)
+	})
 }
 
 // TestExecuteAuthLoginCommand_SmokeNoConfig exercises the login orchestrator

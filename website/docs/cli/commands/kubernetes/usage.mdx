@@ -67,6 +67,12 @@ Plan only components affected by changes against `origin/main`:
 atmos kubernetes plan --affected --base origin/main
 ```
 
+Apply only affected components that are also tagged `production`:
+
+```shell
+atmos kubernetes apply --affected --tags production
+```
+
 Deploy to an EKS cluster after Atmos Auth writes kubeconfig:
 
 ```shell
@@ -200,6 +206,16 @@ environment rollout or a CI job scoped to changed components:
 
   <dt>`--include-dependents`</dt>
   <dd>When used with `--affected`, also include downstream Kubernetes components that depend on the affected components.</dd>
+
+<dt>`--tags`</dt>
+<dd>
+  Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Components are tagged via an optional `metadata.tags: [...]` list in stack manifests. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.
+</dd>
+
+<dt>`--labels`</dt>
+<dd>
+  Filter by labels (comma-separated `key=value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
+</dd>
 </dl>
 
 Affected detection supports `--base`, `--ref`, `--sha`, `--repo-path`,

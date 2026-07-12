@@ -2745,6 +2745,13 @@
               "type": "object",
               "additionalProperties": true,
               "description": "Provider-specific configuration"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "User-defined tags for categorizing and filtering providers (atmos auth list/logout --tags)."
             }
           },
           "required": [
@@ -2857,6 +2864,13 @@
             },
             "session": {
               "$ref": "#/definitions/auth_session"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "User-defined tags for categorizing and filtering identities (atmos auth list/login --tags)."
             }
           },
           "required": [

@@ -943,6 +943,8 @@ var (
 	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
 	ErrNoIdentitiesAvailable         = errors.New("no identities available")
 	ErrNoProvidersAvailable          = errors.New("no providers available")
+	ErrNoIdentitiesMatchTags         = errors.New("no identities match the specified tags")
+	ErrNoProvidersMatchTags          = errors.New("no providers match the specified tags")
 	ErrNoDefaultProvider             = errors.New("no default provider configured and multiple providers exist")
 	ErrIdentitySelectionRequiresTTY  = fmt.Errorf("interactive identity selection: %w", ErrTTYRequired)
 	ErrProviderSelectionRequiresTTY  = fmt.Errorf("interactive provider selection: %w", ErrTTYRequired)

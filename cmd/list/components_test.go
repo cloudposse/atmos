@@ -5,9 +5,11 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -330,10 +332,89 @@ func TestBuildComponentFilters(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := buildComponentFilters(tc.opts)
+			result, err := buildComponentFilters(tc.opts)
+			require.NoError(t, err)
 			assert.Equal(t, tc.expectedCount, len(result), tc.description)
 		})
 	}
+}
+
+func TestParseTagsFlag(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{"empty string returns nil", "", nil},
+		{"single tag", "production", []string{"production"}},
+		{"comma list is split and trimmed", "production, tier-1 , admin", []string{"production", "tier-1", "admin"}},
+		{"blank entries are dropped", "production,,tier-1", []string{"production", "tier-1"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, parseTagsFlag(tt.input))
+		})
+	}
+}
+
+func TestParseLabelsFlag(t *testing.T) {
+	t.Run("empty string returns nil", func(t *testing.T) {
+		got, err := parseLabelsFlag("")
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("single pair", func(t *testing.T) {
+		got, err := parseLabelsFlag("cost-center=platform")
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"cost-center": "platform"}, got)
+	})
+
+	t.Run("multiple pairs are split and trimmed", func(t *testing.T) {
+		got, err := parseLabelsFlag("cost-center=platform, compliance = sox")
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"cost-center": "platform", "compliance": "sox"}, got)
+	})
+
+	t.Run("missing equals sign errors", func(t *testing.T) {
+		got, err := parseLabelsFlag("cost-center")
+		require.Error(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("empty key errors", func(t *testing.T) {
+		got, err := parseLabelsFlag("=platform")
+		require.Error(t, err)
+		assert.Nil(t, got)
+	})
+}
+
+// TestBuildComponentFilters_TagsAndLabels covers the new filter wiring,
+// including that a malformed --labels value surfaces an error.
+func TestBuildComponentFilters_TagsAndLabels(t *testing.T) {
+	t.Run("tags filter is added when set", func(t *testing.T) {
+		result, err := buildComponentFilters(&ComponentsOptions{Tags: []string{"production"}})
+		require.NoError(t, err)
+		require.Len(t, result, 2) // abstract filter + tags filter
+		tagFilter, ok := result[1].(*filter.TagFilter)
+		require.True(t, ok)
+		assert.Equal(t, []string{"production"}, tagFilter.Tags)
+	})
+
+	t.Run("labels filter is added when set", func(t *testing.T) {
+		result, err := buildComponentFilters(&ComponentsOptions{LabelsRaw: "cost-center=platform"})
+		require.NoError(t, err)
+		require.Len(t, result, 2) // abstract filter + labels filter
+		labelFilter, ok := result[1].(*filter.LabelFilter)
+		require.True(t, ok)
+		assert.Equal(t, map[string]string{"cost-center": "platform"}, labelFilter.Labels)
+	})
+
+	t.Run("malformed labels flag surfaces an error", func(t *testing.T) {
+		_, err := buildComponentFilters(&ComponentsOptions{LabelsRaw: "not-valid"})
+		require.Error(t, err)
+	})
 }
 
 // TestGetComponentColumns tests column configuration logic.

@@ -42,6 +42,8 @@ type TerraformRunOptions struct {
 	// Multi-component flags.
 	Query      string
 	Components []string
+	Tags       []string
+	Labels     map[string]string
 	All        bool
 	Affected   bool
 
@@ -81,6 +83,7 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		DeployRunInit:           v.GetBool("deploy-run-init"),
 		Query:                   v.GetString("query"),
 		Components:              v.GetStringSlice("components"),
+		Tags:                    v.GetStringSlice("tags"),
 		All:                     v.GetBool("all"),
 		Affected:                v.GetBool("affected"),
 		MaxConcurrency:          v.GetInt("max-concurrency"),
@@ -91,10 +94,38 @@ func ParseTerraformRunOptions(v *viper.Viper) (*TerraformRunOptions, error) {
 		PlanSummaryFile:         v.GetString("execution-summary-file"),
 		UploadStatus:            v.GetBool("upload-status"),
 	}
+	labels, err := parseLabelsFlag(v.GetString("labels"))
+	if err != nil {
+		return nil, err
+	}
+	opts.Labels = labels
+
 	if err := validateTerraformRunOptions(opts); err != nil {
 		return nil, err
 	}
 	return opts, nil
+}
+
+// parseLabelsFlag parses a comma-separated key=value list into a map[string]string.
+func parseLabelsFlag(input string) (map[string]string, error) {
+	if input == "" {
+		return nil, nil
+	}
+
+	result := make(map[string]string)
+	for _, pair := range strings.Split(input, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		key, value, found := strings.Cut(pair, "=")
+		key = strings.TrimSpace(key)
+		if !found || key == "" {
+			return nil, fmt.Errorf("%w: invalid label %q, expected key=value", errUtils.ErrInvalidFlag, pair)
+		}
+		result[key] = strings.TrimSpace(value)
+	}
+	return result, nil
 }
 
 func validateTerraformRunOptions(opts *TerraformRunOptions) error {

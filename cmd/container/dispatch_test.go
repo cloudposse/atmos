@@ -45,6 +45,30 @@ func TestBuildConfigAndStacksInfo_NoStackNoDryRun(t *testing.T) {
 	assert.False(t, info.DryRun)
 }
 
+func TestBuildConfigAndStacksInfo_TagsAndLabels(t *testing.T) {
+	c := newBulkVerbCmd("up", "Up", "Up")
+	require.NoError(t, c.Flags().Set("tags", "production,tier-1"))
+	require.NoError(t, c.Flags().Set("labels", "cost-center=platform, compliance = sox"))
+
+	info := buildConfigAndStacksInfo(c)
+	assert.Equal(t, []string{"production", "tier-1"}, info.Tags)
+	assert.Equal(t, map[string]string{"cost-center": "platform", "compliance": "sox"}, info.Labels)
+}
+
+func TestBuildConfigAndStacksInfo_NoTagsOrLabelsFlag(t *testing.T) {
+	// A verb without withAllFlag (e.g. exec) never registers --tags/--labels;
+	// buildConfigAndStacksInfo must be nil-safe.
+	info := buildConfigAndStacksInfo(&cobra.Command{Use: "exec"})
+	assert.Empty(t, info.Tags)
+	assert.Empty(t, info.Labels)
+}
+
+func TestBuildVerbCmd_RejectsMalformedLabels(t *testing.T) {
+	c := newBulkVerbCmd("up", "Up", "Up")
+	require.NoError(t, c.Flags().Set("labels", "not-valid"))
+	require.Error(t, c.Args(c, nil))
+}
+
 func TestInitConfigAndStacksInfo_ComponentOnly(t *testing.T) {
 	withViperStack(t, "dev")
 

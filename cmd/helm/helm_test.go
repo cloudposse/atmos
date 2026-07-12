@@ -35,7 +35,7 @@ func TestCommandProviderMetadata(t *testing.T) {
 
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	templateCmd := newOperationCommand("template", "Render")
-	for _, name := range []string{"all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split"} {
+	for _, name := range []string{"all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels"} {
 		assert.NotNil(t, templateCmd.Flag(name), "expected template flag %q", name)
 	}
 
@@ -233,6 +233,19 @@ func TestValidateOperationArgs(t *testing.T) {
 			args:    []string{"app", "other"},
 			wantErr: "requires exactly one component argument unless --all or --affected is set",
 		},
+		{name: "tags with no component", command: configuredOperationCommand(t, "apply", map[string]string{"tags": "production"})},
+		{name: "labels with no component", command: configuredOperationCommand(t, "apply", map[string]string{"labels": "cost-center=platform"})},
+		{
+			name:    "component cannot combine with tags",
+			command: configuredOperationCommand(t, "apply", map[string]string{"tags": "production"}),
+			args:    []string{"app"},
+			wantErr: "component argument cannot be used with --all or --affected",
+		},
+		{
+			name:    "malformed labels flag errors",
+			command: configuredOperationCommand(t, "apply", map[string]string{"labels": "not-valid"}),
+			wantErr: "invalid label",
+		},
 	}
 
 	for _, tt := range tests {
@@ -245,4 +258,25 @@ func TestValidateOperationArgs(t *testing.T) {
 			require.ErrorContains(t, err, tt.wantErr)
 		})
 	}
+}
+
+func TestBuildConfigAndStacksInfoPopulatesTagsAndLabels(t *testing.T) {
+	cmd := configuredOperationCommand(t, "apply", map[string]string{
+		"tags":   "production,tier-1",
+		"labels": "cost-center=platform, compliance = sox",
+	})
+
+	info := buildConfigAndStacksInfo(cmd)
+
+	assert.Equal(t, []string{"production", "tier-1"}, info.Tags)
+	assert.Equal(t, map[string]string{"cost-center": "platform", "compliance": "sox"}, info.Labels)
+}
+
+func TestBuildConfigAndStacksInfoWithNoTagsOrLabels(t *testing.T) {
+	cmd := newOperationCommand("apply", "Apply")
+
+	info := buildConfigAndStacksInfo(cmd)
+
+	assert.Empty(t, info.Tags)
+	assert.Empty(t, info.Labels)
 }

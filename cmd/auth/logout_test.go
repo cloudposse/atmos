@@ -466,6 +466,59 @@ func realmInfoMatcher() realm.RealmInfo {
 	return realm.RealmInfo{Value: "test-realm", Source: "test"}
 }
 
+// TestPerformTagsLogout_NoMatches covers the zero-match error path.
+func TestPerformTagsLogout_NoMatches(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"sso-prod": {Kind: "aws/iam-identity-center", Tags: []string{"production"}},
+	})
+
+	err := performTagsLogout(context.Background(), m, []string{"nonexistent"}, false, false, false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNoProvidersMatchTags)
+}
+
+// TestPerformTagsLogout_DryRun covers the dry-run path: LogoutProvider must not
+// be called.
+func TestPerformTagsLogout_DryRun(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"sso-prod": {Kind: "aws/iam-identity-center", Tags: []string{"production"}},
+		"sso-dev":  {Kind: "aws/iam-identity-center", Tags: []string{"development"}},
+	})
+	m.EXPECT().LogoutProvider(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	err := performTagsLogout(context.Background(), m, []string{"production"}, true /*dryRun*/, false, false)
+	require.NoError(t, err)
+}
+
+// TestPerformTagsLogout_Success covers the happy path with a single matching
+// provider, verifying it delegates to performProviderLogout.
+func TestPerformTagsLogout_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	// Called once by performTagsLogout to compute matches, and once per matched
+	// provider by the delegated performProviderLogout.
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"sso-prod": {Kind: "aws/iam-identity-center", Tags: []string{"production"}},
+		"sso-dev":  {Kind: "aws/iam-identity-center", Tags: []string{"development"}},
+	}).AnyTimes()
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{}).AnyTimes()
+	m.EXPECT().GetRealm().Return(realmInfoMatcher()).AnyTimes()
+	m.EXPECT().LogoutProvider(gomock.Any(), "sso-prod", false).Return(nil)
+
+	err := performTagsLogout(context.Background(), m, []string{"production"}, false, false, false)
+	require.NoError(t, err)
+}
+
 // TestExecuteAuthLogoutCommand_SmokeNoConfig exercises the logout orchestrator
 // from a directory without an atmos.yaml. Contract: no panic.
 func TestExecuteAuthLogoutCommand_SmokeNoConfig(t *testing.T) {

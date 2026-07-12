@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -38,6 +39,8 @@ type instanceRow struct {
 	status    string // running | stopped | unknown
 	health    string // healthy | unhealthy | starting | "" (no healthcheck)
 	running   bool
+	tags      []string
+	labels    map[string]string
 }
 
 // ExecuteList lists all container components across stacks (optionally filtered
@@ -109,10 +112,13 @@ func collectContainerInstances(stacksMap map[string]any) []instanceRow {
 			if isAbstractComponent(compData) {
 				continue // abstract components are blueprints, not deployable instances
 			}
+			componentTags, componentLabels := tagsAndLabelsFromComponent(compData)
 			rows = append(rows, instanceRow{
 				stack:     stackName,
 				component: component,
 				image:     imageFromComponent(compData),
+				tags:      componentTags,
+				labels:    componentLabels,
 			})
 		}
 	}
@@ -138,6 +144,20 @@ func isAbstractComponent(compData any) bool {
 	}
 	t, _ := metadata["type"].(string)
 	return t == "abstract"
+}
+
+// tagsAndLabelsFromComponent extracts metadata.tags/metadata.labels from a
+// component section, if present.
+func tagsAndLabelsFromComponent(compData any) ([]string, map[string]string) {
+	compMap, ok := compData.(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	metadata, ok := compMap["metadata"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	return tags.ToStringSlice(metadata["tags"]), tags.ToStringMap(metadata["labels"])
 }
 
 // imageFromComponent extracts the first-class top-level `image` from a component
