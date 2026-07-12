@@ -5,8 +5,10 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/go-github/v59/github"
 	"github.com/stretchr/testify/assert"
@@ -177,6 +179,38 @@ func TestCreateVersionTable(t *testing.T) {
 				assert.NotNil(t, table)
 			}
 		})
+	}
+}
+
+// TestCreateVersionTable_IndicatorColumnStaysNarrow guards against a regression where
+// lipgloss/table's auto-expand algorithm balloons the narrow indicator column (col 0)
+// to match the width of the other columns when the table is stretched to fill the
+// terminal width, producing a large gap before the VERSION column.
+func TestCreateVersionTable_IndicatorColumnStaysNarrow(t *testing.T) {
+	rows := [][]string{
+		{"●", "v1.0.0", "2025-01-01", "Release title"},
+		{" ", "v0.9.0", "2024-12-01", "A much longer title to force the table to stretch across a wide terminal"},
+	}
+
+	tbl, err := createVersionTable(rows)
+	require.NoError(t, err)
+
+	// lines[0] = header, lines[1] = header separator border, lines[2:] = data rows.
+	lines := strings.Split(tbl.String(), "\n")
+	require.GreaterOrEqual(t, len(lines), 4, "expected header + separator + 2 data rows")
+
+	wantIdx := indicatorColumnWidth + 1 // Indicator column width + col 1's left padding.
+
+	versionIdx := strings.Index(lines[0], "VERSION")
+	require.NotEqual(t, -1, versionIdx, "header line must contain VERSION")
+	assert.Equal(t, wantIdx, versionIdx, "VERSION header should start right after the fixed-width indicator column")
+
+	for i, wantValue := range []string{"v1.0.0", "v0.9.0"} {
+		dataLine := lines[i+2]
+		trimmed := strings.TrimLeft(dataLine, " ●")
+		// Count runes, not bytes: "●" is 3 bytes in UTF-8 but a single visible character.
+		valueIdx := utf8.RuneCountInString(dataLine) - utf8.RuneCountInString(trimmed)
+		assert.Equal(t, wantIdx, valueIdx, "row %d: %s should start right after the fixed-width indicator column", i, wantValue)
 	}
 }
 
