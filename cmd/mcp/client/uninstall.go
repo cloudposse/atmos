@@ -78,6 +78,10 @@ func executeMCPUninstall(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if len(clients) == 0 {
+		ui.Warningf("No AI clients detected to uninstall from — run `atmos mcp uninstall --client <client>` (or `--all-clients`) to uninstall manually.")
+		return nil
+	}
 
 	basePath := installBasePath(&atmosConfig)
 	installer, err := mcpinstall.New(

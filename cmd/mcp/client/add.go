@@ -217,7 +217,7 @@ func enableMCPInteractively(cmd *cobra.Command, atmosConfig *schema.AtmosConfigu
 	if err != nil {
 		return err
 	}
-	if err := atmosyaml.SetFileWithType(file, "mcp.enabled", "true", atmosyaml.TypeBool); err != nil {
+	if _, err := atmosyaml.SetFileWithType(file, "mcp.enabled", "true", atmosyaml.TypeBool); err != nil {
 		return err
 	}
 	atmosConfig.MCP.Enabled = true

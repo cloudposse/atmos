@@ -49,6 +49,20 @@ func TestDetectClients_DoesNotDetectRootLevelConfigFromExistingRoot(t *testing.T
 	assert.Equal(t, []string{ClientClaudeCode}, DetectClients(base, home, ScopeUser))
 }
 
+func TestDetectClients_ClaudeCodeViaClaudeDir(t *testing.T) {
+	base := t.TempDir()
+	home := t.TempDir()
+
+	assert.Empty(t, DetectClients(base, home, ScopeProject))
+	assert.Empty(t, DetectClients(base, home, ScopeUser))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(base, ".claude", "agents"), 0o755))
+	assert.Equal(t, []string{ClientClaudeCode}, DetectClients(base, home, ScopeProject))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".claude"), 0o755))
+	assert.Equal(t, []string{ClientClaudeCode}, DetectClients(base, home, ScopeUser))
+}
+
 func TestInstallJSONTarget_HTTPAndStdio(t *testing.T) {
 	base := t.TempDir()
 	installer, err := New(
@@ -141,13 +155,126 @@ func TestInstallConflictSkipAndOverwrite(t *testing.T) {
 		WithOverwrite(true),
 	)
 	require.NoError(t, err)
-	_, err = overwrite.Install(map[string]schema.MCPServerConfig{
+	result, err = overwrite.Install(map[string]schema.MCPServerConfig{
 		"test": {Command: "new"},
 	})
 	require.NoError(t, err)
+	assert.Contains(t, result.UpdatedServers, "claude-code:test")
 	data, err = os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"new"`)
+}
+
+func TestInstallJSONTarget_AddedThenUnchanged(t *testing.T) {
+	base := t.TempDir()
+	installer, err := New(
+		WithBasePath(base),
+		WithHomeDir(t.TempDir()),
+		WithClients([]string{ClientClaudeCode}),
+		WithOnConflict(func(Target, string) (bool, error) {
+			t.Fatal("OnConflict must not be called for a new or identical entry")
+			return false, nil
+		}),
+	)
+	require.NoError(t, err)
+
+	servers := map[string]schema.MCPServerConfig{"test": {Command: "atmos"}}
+	result, err := installer.Install(servers)
+	require.NoError(t, err)
+	assert.Contains(t, result.AddedServers, "claude-code:test")
+	assert.Empty(t, result.UpdatedServers)
+	assert.Empty(t, result.UnchangedServers)
+
+	// Re-running with identical config must report Unchanged and must not
+	// trigger the OnConflict callback (it would panic the test if it did) or
+	// touch the file.
+	before, err := os.ReadFile(filepath.Join(base, ".mcp.json"))
+	require.NoError(t, err)
+
+	result, err = installer.Install(servers)
+	require.NoError(t, err)
+	assert.Empty(t, result.AddedServers)
+	assert.Empty(t, result.UpdatedServers)
+	assert.Contains(t, result.UnchangedServers, "claude-code:test")
+
+	after, err := os.ReadFile(filepath.Join(base, ".mcp.json"))
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "re-installing an identical entry must not rewrite the file")
+}
+
+func TestInstallTOMLTarget_AddedUpdatedUnchanged(t *testing.T) {
+	base := t.TempDir()
+	installer, err := New(
+		WithBasePath(base),
+		WithHomeDir(t.TempDir()),
+		WithClients([]string{ClientCodex}),
+	)
+	require.NoError(t, err)
+
+	servers := map[string]schema.MCPServerConfig{
+		"atmos-pro": {Type: schema.MCPTransportHTTP, URL: "https://atmos-pro.com/mcp"},
+	}
+	result, err := installer.Install(servers)
+	require.NoError(t, err)
+	assert.Contains(t, result.AddedServers, "codex:atmos-pro")
+
+	// Re-running with identical config reports Unchanged and doesn't rewrite the file.
+	path := filepath.Join(base, ".codex", "config.toml")
+	before, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	result, err = installer.Install(servers)
+	require.NoError(t, err)
+	assert.Contains(t, result.UnchangedServers, "codex:atmos-pro")
+	assert.Empty(t, result.UpdatedServers)
+
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, before, after)
+
+	// Changing the config and forcing overwrite reports Updated.
+	forced, err := New(
+		WithBasePath(base),
+		WithHomeDir(t.TempDir()),
+		WithClients([]string{ClientCodex}),
+		WithOverwrite(true),
+	)
+	require.NoError(t, err)
+	result, err = forced.Install(map[string]schema.MCPServerConfig{
+		"atmos-pro": {Type: schema.MCPTransportHTTP, URL: "https://atmos-pro.com/mcp/v2"},
+	})
+	require.NoError(t, err)
+	assert.Contains(t, result.UpdatedServers, "codex:atmos-pro")
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `url = "https://atmos-pro.com/mcp/v2"`)
+}
+
+func TestInstallDryRun_ReportsPerServerStatusWithoutWriting(t *testing.T) {
+	base := t.TempDir()
+	path := filepath.Join(base, ".mcp.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"mcpServers":{"existing":{"command":"old"}}}`), 0o600))
+
+	installer, err := New(
+		WithBasePath(base),
+		WithHomeDir(t.TempDir()),
+		WithClients([]string{ClientClaudeCode}),
+		WithDryRun(true),
+	)
+	require.NoError(t, err)
+
+	result, err := installer.Install(map[string]schema.MCPServerConfig{
+		"existing": {Command: "new"},
+		"fresh":    {Command: "atmos"},
+	})
+	require.NoError(t, err)
+	assert.Contains(t, result.AddedServers, "claude-code:fresh")
+	assert.Contains(t, result.UpdatedServers, "claude-code:existing")
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, `{"mcpServers":{"existing":{"command":"old"}}}`, string(data), "dry-run must not write")
 }
 
 func TestInstallGitignoreProjectOnly(t *testing.T) {

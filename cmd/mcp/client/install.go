@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
@@ -44,10 +45,7 @@ const (
 	yesFlag          = "yes"
 )
 
-var (
-	errMCPServerNotConfigured = errors.New("MCP server is not configured")
-	errNoMCPClientsSelected   = errors.New("no MCP clients selected")
-)
+var errMCPServerNotConfigured = errors.New("MCP server is not configured")
 
 func init() {
 	installParser = flags.NewStandardParser(
@@ -103,6 +101,10 @@ func executeMCPInstall(cmd *cobra.Command, args []string) error {
 	clients, err := resolveInstallClients(&atmosConfig, scope, v)
 	if err != nil {
 		return err
+	}
+	if len(clients) == 0 {
+		ui.Warningf("No AI clients detected to install into — run `atmos mcp install --client <client>` (or `--all-clients`) to install manually.")
+		return nil
 	}
 
 	return installServers(&atmosConfig, servers, installCommandOptions{
@@ -169,34 +171,36 @@ func resolveInstallScope(cmd *cobra.Command, v *viper.Viper) string {
 	return v.GetString(installScopeFlag)
 }
 
+// resolveInstallClients resolves which clients to install into. An explicit
+// --client/--all-clients flag always wins; otherwise this is "auto" mode:
+// only ever act on what DetectClients actually finds -- interactively, that
+// means pre-checking the detected clients in a picker the user can adjust;
+// non-interactively, it means using exactly the detected list, which may be
+// empty. Auto mode never silently falls back to installing into every
+// supported client just because nothing was detected -- that's what
+// --all-clients is for.
 func resolveInstallClients(atmosConfig *schema.AtmosConfiguration, scope string, v *viper.Viper) ([]string, error) {
 	clients := v.GetStringSlice("client")
-	if len(clients) > 0 || v.GetBool("all-clients") {
+	if len(clients) > 0 {
 		return clients, nil
+	}
+	if v.GetBool("all-clients") {
+		return append([]string(nil), mcpinstall.SupportedClients...), nil
 	}
 
 	basePath := installBasePath(atmosConfig)
 	detected := mcpinstall.DetectClients(basePath, "", scope)
-	if v.GetBool(yesFlag) {
+	if v.GetBool(yesFlag) || !term.IsTTYSupportForStdin() || telemetry.IsCI() {
 		if len(detected) > 0 {
-			return detected, nil
+			ui.Infof("Auto-detected AI clients: %s", strings.Join(detected, ", "))
 		}
-		return append([]string(nil), mcpinstall.SupportedClients...), nil
-	}
-	if term.IsTTYSupportForStdin() && !telemetry.IsCI() {
-		return promptForMCPClients(detected)
-	}
-	if len(detected) > 0 {
 		return detected, nil
 	}
-	return nil, errUtils.ErrInteractiveNotAvailable
+	return promptForMCPClients(detected)
 }
 
 func promptForMCPClients(defaultClients []string) ([]string, error) {
 	selected := append([]string(nil), defaultClients...)
-	if len(selected) == 0 {
-		selected = append([]string(nil), mcpinstall.SupportedClients...)
-	}
 	selectedByClient := make(map[string]bool, len(selected))
 	for _, client := range selected {
 		selectedByClient[client] = true
@@ -224,9 +228,6 @@ func promptForMCPClients(defaultClients []string) ([]string, error) {
 			return nil, errUtils.ErrUserAborted
 		}
 		return nil, err
-	}
-	if len(selected) == 0 {
-		return nil, errNoMCPClientsSelected
 	}
 	sort.Strings(selected)
 	return selected, nil
@@ -306,20 +307,23 @@ func mcpConflictHandler(yes bool) mcpinstall.ConflictFunc {
 }
 
 func reportMCPInstallResult(result *mcpinstall.Result, dryRun bool) {
-	prefixCreated := "Created"
+	prefixAdded := "Added"
 	prefixUpdated := "Updated"
 	if dryRun {
-		prefixCreated = "Would create"
+		prefixAdded = "Would add"
 		prefixUpdated = "Would update"
 	}
-	for _, path := range result.CreatedFiles {
-		ui.Successf("%s `%s`", prefixCreated, path)
+	for _, entry := range result.AddedServers {
+		ui.Successf("%s `%s`", prefixAdded, entry)
 	}
-	for _, path := range result.UpdatedFiles {
-		ui.Successf("%s `%s`", prefixUpdated, path)
+	for _, entry := range result.UpdatedServers {
+		ui.Successf("%s `%s`", prefixUpdated, entry)
 	}
-	for _, skipped := range result.SkippedServers {
-		ui.Warningf("Skipped `%s`", skipped)
+	for _, entry := range result.UnchangedServers {
+		ui.Infof("Already configured `%s`", entry)
+	}
+	for _, entry := range result.SkippedServers {
+		ui.Warningf("Skipped `%s`", entry)
 	}
 	for _, path := range result.GitignoredFiles {
 		ui.Successf("Added `%s` to .gitignore", path)

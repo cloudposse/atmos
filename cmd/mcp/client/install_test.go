@@ -119,3 +119,46 @@ func newMCPInstallTestCmd(t *testing.T) *cobra.Command {
 	installParser.RegisterFlags(cmd)
 	return cmd
 }
+
+func TestResolveInstallClients_AutoNoFallbackWhenNothingDetected(t *testing.T) {
+	base := t.TempDir()
+	v := viper.New()
+	v.Set(yesFlag, true)
+
+	clients, err := resolveInstallClients(&schema.AtmosConfiguration{BasePath: base}, mcpinstall.ScopeProject, v)
+	require.NoError(t, err)
+	assert.Empty(t, clients, "auto mode must not fall back to installing into every supported client")
+}
+
+func TestResolveInstallClients_AutoUsesExactlyWhatWasDetected(t *testing.T) {
+	base := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(base, ".cursor"), 0o755))
+	v := viper.New()
+	v.Set(yesFlag, true)
+
+	clients, err := resolveInstallClients(&schema.AtmosConfiguration{BasePath: base}, mcpinstall.ScopeProject, v)
+	require.NoError(t, err)
+	assert.Equal(t, []string{mcpinstall.ClientCursor}, clients)
+}
+
+func TestResolveInstallClients_ExplicitClientBypassesDetection(t *testing.T) {
+	base := t.TempDir()
+	v := viper.New()
+	v.Set(yesFlag, true)
+	v.Set("client", []string{"vscode"})
+
+	clients, err := resolveInstallClients(&schema.AtmosConfiguration{BasePath: base}, mcpinstall.ScopeProject, v)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vscode"}, clients)
+}
+
+func TestResolveInstallClients_AllClientsBypassesDetectionEvenWhenEmpty(t *testing.T) {
+	base := t.TempDir()
+	v := viper.New()
+	v.Set(yesFlag, true)
+	v.Set("all-clients", true)
+
+	clients, err := resolveInstallClients(&schema.AtmosConfiguration{BasePath: base}, mcpinstall.ScopeProject, v)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, mcpinstall.SupportedClients, clients)
+}

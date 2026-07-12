@@ -274,7 +274,8 @@ func Write(file, name string, cfg schema.MCPServerConfig) error { //nolint:gocri
 func Remove(file, name string) error {
 	defer perf.Track(nil, "mcpconfig.Remove")()
 
-	return atmosyaml.DeleteFile(file, mcpServersPathPrefix+name)
+	_, err := atmosyaml.DeleteFile(file, mcpServersPathPrefix+name)
+	return err
 }
 
 // Exists reports whether mcp.servers.<name> is already present in file.

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sort"
 	"strings"
@@ -123,6 +124,17 @@ type Result struct {
 	UpdatedFiles    []string
 	SkippedServers  []string
 	GitignoredFiles []string
+	// AddedServers lists server entries that didn't previously exist in a
+	// given target and were newly written, formatted "<client>:<name>".
+	AddedServers []string
+	// UpdatedServers lists server entries that existed with different
+	// content and were overwritten (confirmed or --force), formatted
+	// "<client>:<name>".
+	UpdatedServers []string
+	// UnchangedServers lists server entries that already existed with
+	// identical content, so nothing was written and no overwrite
+	// confirmation was asked for, formatted "<client>:<name>".
+	UnchangedServers []string
 	// RemovedServers lists servers removed (or, in DryRun mode, that would be
 	// removed) by Uninstall, formatted "<client>:<name>".
 	RemovedServers []string
@@ -227,21 +239,35 @@ func DetectClients(basePath, homeDir, scope string) []string {
 		if err != nil {
 			continue
 		}
-		scopeRoot := basePath
+		signalDir := projectSignalDir(basePath, client)
 		if scope == ScopeUser {
-			scopeRoot = homeDir
+			signalDir = userSignalDir(homeDir, client)
 		}
-		if fileOrDirExists(target.Path) || nestedConfigDirExists(target, scopeRoot) {
+		if fileOrDirExists(target.Path) || fileOrDirExists(signalDir) {
 			detected = append(detected, client)
 		}
 	}
 	return detected
 }
 
-func nestedConfigDirExists(target Target, scopeRoot string) bool {
-	parent := filepath.Clean(filepath.Dir(target.Path))
-	root := filepath.Clean(scopeRoot)
-	return parent != root && fileOrDirExists(parent)
+// projectSignalDir returns the directory whose existence indicates a client
+// is used by this project, at project scope. For most clients this is the
+// same directory their config file lives in (.cursor, .vscode, ...); Claude
+// Code's config file (.mcp.json) lives at the project root itself, so it
+// gets its own well-known directory (.claude) as the signal instead.
+func projectSignalDir(basePath, client string) string {
+	if client == ClientClaudeCode {
+		return filepath.Join(basePath, ".claude")
+	}
+	return filepath.Dir(projectPath(basePath, client))
+}
+
+// userSignalDir is projectSignalDir's user-scope (global) counterpart.
+func userSignalDir(homeDir, client string) string {
+	if client == ClientClaudeCode {
+		return filepath.Join(homeDir, ".claude")
+	}
+	return filepath.Dir(userPath(homeDir, client))
 }
 
 func fileOrDirExists(path string) bool {
@@ -386,14 +412,6 @@ func vscodeUserPath(homeDir string) string {
 }
 
 func (i *Installer) installTarget(target Target, servers map[string]schema.MCPServerConfig, result *Result) error {
-	if i.opts.DryRun {
-		if fileOrDirExists(target.Path) {
-			result.UpdatedFiles = append(result.UpdatedFiles, target.Path)
-		} else {
-			result.CreatedFiles = append(result.CreatedFiles, target.Path)
-		}
-		return nil
-	}
 	if target.Format == "toml" {
 		return i.installTOMLTarget(target, servers, result)
 	}
@@ -413,24 +431,22 @@ func (i *Installer) installJSONTarget(target Target, servers map[string]schema.M
 	entries := mcpclient.GenerateMCPConfig(servers, i.opts.ToolchainPath).MCPServers
 	changed := false
 	for _, name := range sortedEntryNames(entries) {
-		if _, exists := serverMap[name]; exists && !i.opts.Overwrite {
-			overwrite, err := i.confirmConflict(target, name)
-			if err != nil {
-				return err
-			}
-			if !overwrite {
-				result.SkippedServers = append(result.SkippedServers, fmt.Sprintf("%s:%s", target.Client, name))
-				continue
-			}
-		}
 		entryMap, err := structToMap(entries[name])
 		if err != nil {
 			return err
 		}
+		existing, exists := serverMap[name]
+		write, err := i.applyJSONEntry(target, name, entryMap, existing, exists, result)
+		if err != nil {
+			return err
+		}
+		if !write {
+			continue
+		}
 		serverMap[name] = entryMap
 		changed = true
 	}
-	if !changed {
+	if !changed || i.opts.DryRun {
 		return nil
 	}
 	root[target.Root] = serverMap
@@ -443,6 +459,38 @@ func (i *Installer) installJSONTarget(target Target, servers map[string]schema.M
 	}
 	recordFileResult(result, target.Path, existed)
 	return nil
+}
+
+// applyJSONEntry decides the Added/Updated/Unchanged/Skipped outcome for a
+// single server entry and records it on result, returning whether the
+// caller should write entryMap into serverMap. Split out of
+// installJSONTarget to keep that function's cyclomatic complexity down.
+func (i *Installer) applyJSONEntry(
+	target Target, name string, entryMap, existing any, exists bool, result *Result,
+) (bool, error) {
+	entryKey := fmt.Sprintf("%s:%s", target.Client, name)
+	switch {
+	case !exists:
+		result.AddedServers = append(result.AddedServers, entryKey)
+		return true, nil
+	case reflect.DeepEqual(existing, entryMap):
+		result.UnchangedServers = append(result.UnchangedServers, entryKey)
+		return false, nil
+	case i.opts.Overwrite || i.opts.DryRun:
+		result.UpdatedServers = append(result.UpdatedServers, entryKey)
+		return true, nil
+	default:
+		overwrite, err := i.confirmConflict(target, name)
+		if err != nil {
+			return false, err
+		}
+		if !overwrite {
+			result.SkippedServers = append(result.SkippedServers, entryKey)
+			return false, nil
+		}
+		result.UpdatedServers = append(result.UpdatedServers, entryKey)
+		return true, nil
+	}
 }
 
 func readJSONConfig(path string) (map[string]any, error) {
@@ -497,21 +545,33 @@ func (i *Installer) installTOMLTarget(target Target, servers map[string]schema.M
 	entries := mcpclient.GenerateMCPConfig(servers, i.opts.ToolchainPath).MCPServers
 	changed := false
 	for _, name := range sortedEntryNames(entries) {
-		if tomlHasServer(content, name) && !i.opts.Overwrite {
+		entryKey := fmt.Sprintf("%s:%s", target.Client, name)
+		existingBlock, exists := extractTOMLServerBlock(content, name)
+		newBlock := strings.TrimSpace(renderTOMLServer(name, entries[name]))
+		switch {
+		case !exists:
+			result.AddedServers = append(result.AddedServers, entryKey)
+		case strings.TrimSpace(existingBlock) == newBlock:
+			result.UnchangedServers = append(result.UnchangedServers, entryKey)
+			continue
+		case i.opts.Overwrite || i.opts.DryRun:
+			result.UpdatedServers = append(result.UpdatedServers, entryKey)
+		default:
 			overwrite, err := i.confirmConflict(target, name)
 			if err != nil {
 				return err
 			}
 			if !overwrite {
-				result.SkippedServers = append(result.SkippedServers, fmt.Sprintf("%s:%s", target.Client, name))
+				result.SkippedServers = append(result.SkippedServers, entryKey)
 				continue
 			}
+			result.UpdatedServers = append(result.UpdatedServers, entryKey)
 		}
 		content = removeTOMLServer(content, name)
 		content = strings.TrimRight(content, "\n") + "\n\n" + renderTOMLServer(name, entries[name])
 		changed = true
 	}
-	if !changed {
+	if !changed || i.opts.DryRun {
 		return nil
 	}
 	if err := writeConfigFile(target.Path, []byte(strings.TrimLeft(content, "\n"))); err != nil {
@@ -642,6 +702,33 @@ func removeTOMLServer(content, name string) string {
 		}
 	}
 	return strings.Join(kept, "\n")
+}
+
+// extractTOMLServerBlock returns the raw text of the [mcp_servers.<name>]
+// block (including any nested [mcp_servers.<name>.*] sub-tables), and
+// whether it was found. Used to detect an unchanged entry by comparing
+// against a freshly rendered block, mirroring removeTOMLServer's block
+// boundary logic.
+func extractTOMLServerBlock(content, name string) (string, bool) {
+	lines := strings.Split(content, "\n")
+	var block []string
+	collecting := false
+	found := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			if trimmed == "[mcp_servers."+name+"]" || strings.HasPrefix(trimmed, "[mcp_servers."+name+".") {
+				collecting = true
+				found = true
+			} else {
+				collecting = false
+			}
+		}
+		if collecting {
+			block = append(block, line)
+		}
+	}
+	return strings.Join(block, "\n"), found
 }
 
 func renderTOMLServer(name string, srv mcpclient.MCPJSONServer) string {

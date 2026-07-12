@@ -75,3 +75,19 @@ func TestExecuteMCPUninstall_NoServersConfiguredIsNoop(t *testing.T) {
 	err := executeMCPUninstall(cmd, nil)
 	require.NoError(t, err, "no configured servers and no explicit names must be a graceful no-op")
 }
+
+func TestExecuteMCPUninstall_NoClientsDetectedIsNoop(t *testing.T) {
+	tempDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"),
+		[]byte("base_path: \".\"\nmcp:\n  servers:\n    aws-docs:\n      command: uvx\n"), 0o644))
+	t.Chdir(tempDir)
+
+	cmd := newUninstallTestCmd(t)
+	require.NoError(t, cmd.Flags().Set("yes", "true"))
+
+	// No --client/--all-clients, and no AI client directories exist in
+	// tempDir, so auto-detection finds nothing. This must skip gracefully
+	// rather than erroring or falling back to every supported client.
+	err := executeMCPUninstall(cmd, nil)
+	require.NoError(t, err)
+}

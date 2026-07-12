@@ -1,9 +1,6 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
-
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -57,10 +54,15 @@ for paths the schema doesn't model (falls back to string).`,
 			return err
 		}
 
-		if err := atmosyaml.SetFileWithType(file, args[0], args[1], effectiveValueType(cmd, args[0])); err != nil {
+		created, err := atmosyaml.SetFileWithType(file, args[0], args[1], effectiveValueType(cmd, args[0]))
+		if err != nil {
 			return err
 		}
-		ui.Successf("Updated `%s` to `%s` in `%s`", args[0], args[1], displayPath(file))
+		if created {
+			ui.Successf("Created `%s` = `%s` in `%s`", args[0], args[1], atmosyaml.DisplayPath(file))
+			return nil
+		}
+		ui.Successf("Updated `%s` to `%s` in `%s`", args[0], args[1], atmosyaml.DisplayPath(file))
 		return nil
 	},
 }
@@ -95,10 +97,15 @@ var configDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		if err := atmosyaml.DeleteFile(file, args[0]); err != nil {
+		existed, err := atmosyaml.DeleteFile(file, args[0])
+		if err != nil {
 			return err
 		}
-		ui.Successf("Deleted `%s` from `%s`", args[0], displayPath(file))
+		if !existed {
+			ui.Successf("Nothing to delete — `%s` is not set in `%s`", args[0], atmosyaml.DisplayPath(file))
+			return nil
+		}
+		ui.Successf("Deleted `%s` from `%s`", args[0], atmosyaml.DisplayPath(file))
 		return nil
 	},
 }
@@ -121,7 +128,7 @@ Atmos YAML functions, and Go templates.`,
 		if err := atmosyaml.FormatFile(file); err != nil {
 			return err
 		}
-		ui.Successf("Formatted `%s`", displayPath(file))
+		ui.Successf("Formatted `%s`", atmosyaml.DisplayPath(file))
 		return nil
 	},
 }
@@ -149,21 +156,4 @@ func resolveConfigFile(cmd *cobra.Command) (string, error) {
 			Err()
 	}
 	return file, nil
-}
-
-// displayPath returns file relative to the current working directory for
-// display purposes, falling back to the absolute path if the relative form
-// can't be computed (e.g. a different volume on Windows). The absolute path
-// is still what every operation above actually reads/writes -- this only
-// affects what's echoed back to the user.
-func displayPath(file string) string {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return file
-	}
-	rel, err := filepath.Rel(cwd, file)
-	if err != nil {
-		return file
-	}
-	return rel
 }
