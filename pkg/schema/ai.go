@@ -3,7 +3,7 @@ package schema
 // AISettings contains configuration for AI assistant.
 type AISettings struct {
 	Enabled            bool                         `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	DefaultProvider    string                       `yaml:"default_provider,omitempty" json:"default_provider,omitempty" mapstructure:"default_provider"` // Default provider. If empty, Atmos auto-detects an installed CLI provider (claude-code, codex-cli, copilot-cli, gemini-cli) on PATH, then falls back to anthropic
+	DefaultProvider    string                       `yaml:"default_provider,omitempty" json:"default_provider,omitempty" mapstructure:"default_provider"` // Default provider. If empty or "auto", Atmos auto-detects an installed CLI provider (claude-code, codex-cli, copilot-cli, gemini-cli) on PATH, then falls back to anthropic
 	DefaultSkill       string                       `yaml:"default_skill,omitempty" json:"default_skill,omitempty" mapstructure:"default_skill"`          // Default skill (defaults to "general")
 	Providers          map[string]*AIProviderConfig `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`                      // Per-provider configurations
 	Skills             map[string]*AISkillConfig    `yaml:"skills,omitempty" json:"skills,omitempty" mapstructure:"skills"`                               // Custom skill configurations

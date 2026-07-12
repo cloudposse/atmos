@@ -46,11 +46,18 @@ func NewClientWithContext(ctx context.Context, atmosConfig *schema.AtmosConfigur
 	return factory(ctx, atmosConfig)
 }
 
+// AutoProvider is the explicit default_provider value requesting CLI auto-detection.
+// It behaves identically to leaving default_provider unset, but lets a shared atmos.yaml
+// (e.g. checked into git for a team) spell out the "pick whatever CLI tool is installed"
+// intent explicitly instead of relying on an absent field to mean the same thing.
+const AutoProvider = "auto"
+
 // GetProvider returns the AI provider to use: the explicitly configured provider if set,
 // otherwise the first CLI provider (claude-code, codex-cli, copilot-cli, gemini-cli) whose
-// binary is found on PATH, otherwise "anthropic".
+// binary is found on PATH, otherwise "anthropic". Leaving default_provider empty or setting
+// it to AutoProvider ("auto") both trigger auto-detection.
 func GetProvider(atmosConfig *schema.AtmosConfiguration) string {
-	if atmosConfig.AI.DefaultProvider != "" {
+	if atmosConfig.AI.DefaultProvider != "" && atmosConfig.AI.DefaultProvider != AutoProvider {
 		return atmosConfig.AI.DefaultProvider
 	}
 

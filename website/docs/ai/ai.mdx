@@ -46,11 +46,17 @@ ai:
 
 Use your locally installed Claude Code, OpenAI Codex, GitHub Copilot, or Gemini CLI binary. The CLI tool handles auth via its own subscription — no API key configuration needed.
 
+:::note Bring your own CLI tool
+Atmos assumes one of these is already installed and authenticated on your machine — it doesn't
+install or log you into `claude`/`codex`/`copilot`/`gemini` for you. If you don't have one yet,
+the commands below install and authenticate each.
+:::
+
 <File title="atmos.yaml">
 ```yaml
 ai:
   enabled: true
-  default_provider: "claude-code"  # or "codex-cli", "copilot-cli", "gemini-cli"
+  default_provider: "claude-code"  # or "codex-cli", "copilot-cli", "gemini-cli", or "auto" to auto-detect
   providers:
     claude-code:
       max_turns: 10

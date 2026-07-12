@@ -89,6 +89,12 @@ Each provider in the `providers` map supports the following settings:
 
 CLI providers invoke a locally installed AI tool as a subprocess. No API key needed — the CLI tool uses your existing subscription.
 
+:::note Bring your own CLI tool
+Atmos assumes you already have one of these CLI tools installed and authenticated — the same
+assumption it makes about `terraform` or `tofu`. Atmos does not install `claude`, `codex`,
+`copilot`, or `gemini`, or drive their login flows, on your behalf.
+:::
+
 <dl>
   <dt>**Claude Code** — `claude-code`</dt>
   <dd>Claude Pro/Max subscription. Full MCP support. Best for interactive development.</dd>
@@ -115,6 +121,11 @@ a CLI provider's binary on `PATH`, in this order, and uses the first one it find
 
 If none are found, Atmos falls back to `anthropic`, which requires an `api_key`. Setting
 `default_provider` explicitly always overrides auto-detection.
+
+Setting `default_provider: "auto"` does the same thing as leaving it unset, but says so
+explicitly. Useful for a shared `atmos.yaml` (checked into git) where teammates use different
+CLI tools — `auto` documents that everyone's Atmos picks up whatever they have installed,
+rather than leaving the field blank and looking like it was never configured.
 
 This means a minimal config works out of the box for anyone with one of these CLI tools
 already installed and authenticated:

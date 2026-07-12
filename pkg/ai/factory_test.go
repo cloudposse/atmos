@@ -281,6 +281,20 @@ func TestGetProvider(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{AI: schema.AISettings{}}
 		assert.Equal(t, "anthropic", GetProvider(atmosConfig))
 	})
+
+	t.Run("DefaultProvider auto and no CLI tool on PATH falls back to anthropic", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir())
+		atmosConfig := &schema.AtmosConfiguration{AI: schema.AISettings{DefaultProvider: AutoProvider}}
+		assert.Equal(t, "anthropic", GetProvider(atmosConfig))
+	})
+
+	t.Run("DefaultProvider auto behaves identically to leaving it empty", func(t *testing.T) {
+		// Uses the real PATH (whatever it is) for both configs so the comparison is
+		// meaningful regardless of what CLI tools happen to be installed on the runner.
+		emptyConfig := &schema.AtmosConfiguration{AI: schema.AISettings{DefaultProvider: ""}}
+		autoConfig := &schema.AtmosConfiguration{AI: schema.AISettings{DefaultProvider: AutoProvider}}
+		assert.Equal(t, GetProvider(emptyConfig), GetProvider(autoConfig))
+	})
 }
 
 func TestIsCLIProvider(t *testing.T) {
