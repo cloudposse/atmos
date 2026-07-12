@@ -42,7 +42,7 @@ older than its build inputs) before invoking the binary directly, so a fresh che
 binary after `.custom-gcl.yml`/`lintroller` changes doesn't fail outright or silently report wrong
 findings:
 
-```
+```bash
 atmos lint custom-gcl
 ./custom-gcl run --config=.golangci.yml
 ```

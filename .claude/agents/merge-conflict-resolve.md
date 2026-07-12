@@ -49,7 +49,10 @@ both sides correctly (remove the conflict markers, keep both changes). Validate 
   Python source, since a path containing `$()`/backticks/quotes could otherwise break out of the
   string: `python3 -c "import json, sys; json.load(open(sys.argv[1]))" "<file>"`.
 - YAML files: must still parse.
-- Go files: `go build .` and `go test ./...` on affected packages.
+- Go files: resolve the affected package paths, then run `go build ./<pkg>/...` and
+  `go test ./<pkg>/...` for each affected package — scoping both commands the same way keeps
+  nested package conflicts covered without pulling in unrelated packages that could fail the
+  merge for reasons unrelated to the conflict.
 - Confirm no conflict markers remain anywhere: `git grep -l '^<<<<<<<' -- .` should be empty. This
   alone isn't sufficient — binary conflicts, rename/delete conflicts, and submodule conflicts can
   leave the git index in a conflicted (unmerged) state with no text markers at all, so also require

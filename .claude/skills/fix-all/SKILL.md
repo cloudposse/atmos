@@ -191,17 +191,36 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
      `STATUS: ALL_CHECKS_GREEN`.
    - Zero unresolved, non-outdated CodeRabbit threads remain (same signal as step 3, re-verified
      after any step 4/5 resolutions this cycle).
-   - CodeRabbit's own review verdict is APPROVED, not just "no open threads" — read via:
-     `gh pr view <number> --json reviews -q '[.reviews[] | select(.author.login=="coderabbitai")] | last | .state'`
-     (already-allowlisted `gh pr view:*`, read-only; reviews are returned oldest-first, so `last`
-     is the current verdict). Must equal `APPROVED`.
+   - CodeRabbit's own review verdict is APPROVED against the PR's *current* head commit, not just
+     "no open threads" and not a stale APPROVED left over from an earlier commit that CodeRabbit
+     hasn't re-reviewed since (a review's `state` alone can't tell the two apart — its `commit.oid`
+     must be checked too). Read both in one query via GraphQL:
+     ```
+     gh api graphql -f query='
+     query($owner: String!, $repo: String!, $number: Int!) {
+       repository(owner: $owner, name: $repo) {
+         pullRequest(number: $number) {
+           headRefOid
+           reviews(first: 100) {
+             nodes { author { login } state commit { oid } }
+           }
+         }
+       }
+     }' -f owner="$owner" -f repo="$repo" -F number=<number> \
+       --jq '{head: .data.repository.pullRequest.headRefOid, last: ([.data.repository.pullRequest.reviews.nodes[] | select(.author.login=="coderabbitai")] | last)} | (.last.state == "APPROVED" and .last.commit.oid == .head)'
+     ```
+     (reviews are returned oldest-first, so `last` is the most recent coderabbitai review). Must
+     print `true`: both `state == "APPROVED"` and that review's `commit.oid` equal to `headRefOid`.
    - Step 7 ended clean: `STATUS: OK`/`STATUS: NO_GO_CHANGES` with no remaining gaps or unresolved
      failures (i.e. `say` triggers 4/5 did not fire).
-   - No local changes are uncommitted or unpushed: `git status --porcelain` is empty AND the local
-     branch has nothing ahead of its upstream (`git rev-list --count @{u}..HEAD` is `0`). Any fix
-     this cycle applied must already be committed and pushed by its own step (4-7 all end with a
-     commit + plain `git push`) — this is a final guard against a fix that got committed but not
-     pushed, or leftover local edits from a prior interrupted run, not a routine expectation.
+   - No local changes are uncommitted or unpushed, and the local branch isn't behind upstream
+     either: `git status --porcelain` is empty AND `git rev-list --left-right --count HEAD...@{u}`
+     prints ahead and behind both `0` (tab-separated `0\t0`) — the ahead-only form, `git rev-list
+     --count @{u}..HEAD`, would miss a local checkout that's stale/behind upstream and let this
+     fire on old code. Any fix this cycle applied must already be committed and pushed by its own
+     step (4-7 all end with a commit + plain `git push`) — this is a final guard against a fix
+     that got committed but not pushed, or leftover local edits from a prior interrupted run, not
+     a routine expectation.
 
    Once all five hold, reconcile the PR title and description before announcing anything — a PR
    that's technically green but whose description no longer matches what it does isn't actually
