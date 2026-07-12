@@ -290,6 +290,22 @@ func TestApplyFilters_Tags(t *testing.T) {
 		assert.Empty(t, gotProviders)
 		assert.Empty(t, gotIdentities)
 	})
+
+	t.Run("multiple requested tags use any-match semantics", func(t *testing.T) {
+		gotProviders, gotIdentities, err := applyFilters(providers, identities, &filterConfig{
+			tagNames: []string{"production", "development"},
+		})
+		require.NoError(t, err)
+
+		require.Len(t, gotProviders, 2)
+		assert.Contains(t, gotProviders, "sso-prod")
+		assert.Contains(t, gotProviders, "sso-dev")
+
+		require.Len(t, gotIdentities, 3)
+		assert.Contains(t, gotIdentities, "prod-admin")
+		assert.Contains(t, gotIdentities, "prod-readonly")
+		assert.Contains(t, gotIdentities, "dev-readonly")
+	})
 }
 
 func TestRenderJSON(t *testing.T) {

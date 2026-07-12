@@ -160,4 +160,12 @@ func TestFilterByTagsAndLabels(t *testing.T) {
 		require.Len(t, filtered, 1)
 		assert.Equal(t, "worker", filtered[0].component)
 	})
+
+	t.Run("tags and labels compose as an intersection", func(t *testing.T) {
+		filtered := filterByTagsAndLabels(rows, &schema.ConfigAndStacksInfo{
+			Tags:   []string{"production"},
+			Labels: map[string]string{"cost-center": "data"},
+		})
+		assert.Empty(t, filtered)
+	})
 }
