@@ -201,7 +201,7 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
        repository(owner: $owner, name: $repo) {
          pullRequest(number: $number) {
            headRefOid
-           reviews(first: 100) {
+           reviews(last: 100) {
              nodes { author { login } state commit { oid } }
            }
          }
@@ -209,7 +209,10 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
      }' -f owner="$owner" -f repo="$repo" -F number=<number> \
        --jq '{head: .data.repository.pullRequest.headRefOid, last: ([.data.repository.pullRequest.reviews.nodes[] | select(.author.login=="coderabbitai")] | last)} | (.last.state == "APPROVED" and .last.commit.oid == .head)'
      ```
-     (reviews are returned oldest-first, so `last` is the most recent coderabbitai review). Must
+     (reviews are returned oldest-first with no orderBy, so `last: 100` pages backward from the end
+     of the connection to fetch the newest 100 instead of the oldest 100 — this guarantees the most
+     recent review is included even on a PR with more than 100 total reviews; within that newest-100
+     window the jq `last` is still the most recent coderabbitai review). Must
      print `true`: both `state == "APPROVED"` and that review's `commit.oid` equal to `headRefOid`.
    - Step 7 ended clean: `STATUS: OK`/`STATUS: NO_GO_CHANGES` with no remaining gaps or unresolved
      failures (i.e. `say` triggers 4/5 did not fire).
