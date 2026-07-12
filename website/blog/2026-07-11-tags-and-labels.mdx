@@ -5,25 +5,26 @@ authors: [osterman]
 tags: [feature]
 ---
 
-Selecting which components to run against has always meant one of two things: list them out by name, or write a `--query` expression. Neither holds up once a stack has more than a handful of components — a `--components vpc,eks,rds,...` list grows stale the moment someone adds a component, and a YQ `--query` expression is one typo away from silently matching nothing.
+Cloud resources carry tags so you can act on them by what they are — cost center, environment, team — not just by name. Kubernetes objects carry labels for the same reason: a Service doesn't select pods by name, it selects "whichever pods look like this." Atmos manages the same kind of thing at scale — components, stacks, accounts, identities — and needed the same capability.
 
-Tags and labels fix this: a plain `[]string` list for simple categorization, a `map[string]string` for richer key-value metadata, and `--tags`/`--labels` filtering wherever Atmos already supports bulk selection. The same standard extends to auth identities and providers too, so picking `production` accounts works the same way as picking `production` components.
+Tags and labels bring that pattern to Atmos: a simple list of tags for basic categorization, a set of key-value labels for richer metadata, and `--tags`/`--labels` filtering wherever Atmos already supports bulk selection. The same standard extends to auth identities and providers too, so picking `production` accounts works the same way as picking `production` components.
 
 <!--truncate-->
 
 ## The Problem
 
-- **Selecting components by name doesn't scale.** A handful of `--components` works for a small stack; it's unmaintainable once a stack has hundreds.
-- **The `--query` alternative is powerful but heavyweight.** A YQ expression like `.settings.tier == "network"` works, but it has to be written, tested, and copy-pasted into every command and CI job that needs the same subset.
-- **Every component type reinvented its own selection story.** Terraform, Kubernetes, Helm, and container components each grew their own `--all`/`--affected`/`--components` flags, with no shared way to say "just the ones tagged `production`."
-- **Auth has the same problem, one level up.** `atmos auth login` needs an exact identity name, and picking the right one gets harder to remember as the number of providers and identities grows.
+Without a way to describe what a piece of infrastructure *is*, working at scale falls back to memorizing names or writing ad-hoc queries:
+
+- **"Just the production components" meant writing a query, every time.** There was no way to say what a component *is* — production, tier-1, owned-by-platform — so selecting by meaning meant a YQ expression like `.settings.tier == "network"`, rewritten and copy-pasted wherever you needed it.
+- **The same gap existed one level up, in auth.** Picking the right identity out of dozens of providers and permission sets meant remembering an exact name, not describing what you wanted — "the production admin one."
+- **Every part of Atmos that manages many things needed this independently.** Components across every type (Terraform, Kubernetes, Helm, containers) and auth identities/providers alike had no shared way to describe or select by meaning.
 
 ## The Fix
 
-Atmos now distinguishes two data shapes for categorization, matching how you'd actually query them:
+Atmos now supports two kinds of metadata for categorization, matching how you'd actually query them:
 
-- **Tags** — a `[]string` list, for simple categorical membership. Filtering matches *any* of the given tags.
-- **Labels** — a `map[string]string`, for richer key-value metadata. Filtering requires *all* of the given key=value pairs, the same semantics as a Kubernetes label selector.
+- **Tags** — a simple list of words, for basic categorical membership. Filtering matches *any* of the given tags.
+- **Labels** — a set of key-value pairs, for richer metadata. Filtering requires *all* of the given key=value pairs, the same semantics as a Kubernetes label selector.
 
 ```yaml title="stacks/orgs/acme/prod/network.yaml"
 components:
