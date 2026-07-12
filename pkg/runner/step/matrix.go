@@ -2,7 +2,6 @@ package step
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -19,17 +18,22 @@ func init() {
 	})
 }
 
-// Validate checks that the matrix control step is structurally valid.
+// Validate checks that the matrix control step is structurally valid and that no
+// child step is interactive (interactive steps cannot run concurrently).
 func (h *MatrixHandler) Validate(step *schema.WorkflowStep) error {
 	defer perf.Track(nil, "step.MatrixHandler.Validate")()
 
-	return schema.ValidateWorkflowSteps([]schema.WorkflowStep{*step})
+	if err := schema.ValidateWorkflowSteps([]schema.WorkflowStep{*step}); err != nil {
+		return err
+	}
+	return validateControlChildrenNonInteractive(step)
 }
 
-// Execute is intentionally not implemented here. The workflow executor handles
-// matrix control steps because it owns command execution, auth, retry, and output.
+// Execute expands the matrix and fans its children out via the registered
+// ControlRunner (see control_seam.go), so matrix steps work through the registry
+// from custom commands and lifecycle hooks, not just `atmos workflow`.
 func (h *MatrixHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	defer perf.Track(nil, "step.MatrixHandler.Execute")()
 
-	return nil, fmt.Errorf("%w: matrix steps require workflow executor context", schema.ErrWorkflowControlStepInvalid)
+	return runControlStep(ctx, step, vars)
 }
