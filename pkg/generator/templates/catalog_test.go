@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
@@ -36,6 +37,7 @@ func TestLoadCatalog(t *testing.T) {
 		assert.Equal(t, tc.cloud, entry.Cloud)
 		assert.Equal(t, tc.tier, entry.Tier)
 		assert.NotEmpty(t, entry.Source)
+		assert.NotContains(t, entry.Source, "ref=", "catalog sources must not hardcode a ref; ResolvedSource applies one at runtime")
 		assert.NotEmpty(t, entry.Version)
 		assert.NotEmpty(t, entry.Description)
 	}
@@ -63,15 +65,37 @@ func TestCatalogEntry_ResolvedSource(t *testing.T) {
 	e := CatalogEntry{
 		Cloud:  "aws",
 		Tier:   "landing-zone",
-		Source: "github.com/cloudposse/atmos.git//examples/scaffolds/aws/landing-zone?ref=main",
+		Source: "github.com/cloudposse/atmos.git//examples/scaffolds/aws/landing-zone",
 	}
 
-	// No override: the remote source is returned verbatim.
-	assert.Equal(t, e.Source, e.ResolvedSource(""))
+	// No override, no build commit (the default for `go test`, `go run`, `go
+	// install`): falls back to ref=main, no shallow-clone override needed.
+	assert.Equal(t, e.Source+"?ref=main", e.ResolvedSource(""))
 
 	// Override: a local path under <override>/<cloud>/<tier>.
 	got := e.ResolvedSource(filepath.Join("repo", "examples", "scaffolds"))
 	assert.Equal(t, filepath.Join("repo", "examples", "scaffolds", "aws", "landing-zone"), got)
+}
+
+// TestCatalogEntry_ResolvedSource_PinnedToBuildCommit verifies that once a
+// binary is built with a commit SHA (via ldflags, see scripts/build-atmos.sh
+// and .goreleaser*.yml), catalog sources pin to that exact commit and disable
+// the shallow clone go-getter otherwise applies -- git rejects a shallow
+// clone (`--depth`) combined with a ref that isn't a branch or tag, which a
+// full commit SHA never is.
+func TestCatalogEntry_ResolvedSource_PinnedToBuildCommit(t *testing.T) {
+	const sha = "0cf62afa883b1546f07f2eaf2d6f1690353d31b7"
+	original := version.Commit
+	version.Commit = sha
+	t.Cleanup(func() { version.Commit = original })
+
+	e := CatalogEntry{
+		Cloud:  "aws",
+		Tier:   "app",
+		Source: "github.com/cloudposse/atmos.git//examples/scaffolds/aws/app",
+	}
+
+	assert.Equal(t, e.Source+"?ref="+sha+"&depth=0", e.ResolvedSource(""))
 }
 
 func TestCatalogStubs(t *testing.T) {
@@ -87,6 +111,8 @@ func TestCatalogStubs(t *testing.T) {
 		assert.NotEmpty(t, stub.Source)
 		assert.Empty(t, stub.Files, "catalog stubs defer file loading until hydration")
 	}
+	assert.Equal(t, "github.com/cloudposse/atmos.git//examples/scaffolds/aws/app?ref=main", stubs["aws/app"].Source,
+		"without a build commit, the default ref falls back to main")
 
 	// With an override the stub source becomes the local path.
 	base := filepath.Join("repo", "examples", "scaffolds")
