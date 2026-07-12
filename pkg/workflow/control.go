@@ -72,8 +72,9 @@ type controlFailConfig struct {
 }
 
 type controlNode struct {
-	step   schema.WorkflowStep
-	matrix map[string]string
+	step        schema.WorkflowStep
+	matrix      map[string]string
+	displayName string
 }
 
 type ControlResult struct {
@@ -153,9 +154,10 @@ type controlDispatchConfig struct {
 func newControlDispatcher(cfg *controlDispatchConfig) scheduler.Dispatcher {
 	return scheduler.DispatcherFunc(func(ctx context.Context, node *dependency.Node) (scheduler.Result, error) {
 		child := node.Metadata["child"].(controlNode)
+		label := controlDisplayLabel(child.displayName, child.matrix)
 		resolved, err := resolveControlStep(&child.step, child.matrix, cfg.dataFunc)
 		if err != nil {
-			return scheduler.Result{Value: &ControlResult{Name: child.step.Name, Err: err, Status: string(scheduler.StatusFailed)}}, err
+			return scheduler.Result{Value: &ControlResult{Name: label, Err: err, Status: string(scheduler.StatusFailed)}}, err
 		}
 		child.step = resolved
 		childOutput := ControlChildOutput{
@@ -163,13 +165,37 @@ func newControlDispatcher(cfg *controlDispatchConfig) scheduler.Dispatcher {
 			Prefix: controlPrefix(cfg.outputCfg, child.step.Name, child.matrix, cfg.dataFunc),
 		}
 		execResult, dispatchErr := cfg.executor(ctx, &ControlChild{Step: child.step, Matrix: child.matrix}, childOutput)
-		nodeResult := controlNodeResult(child.step.Name, cfg.completedSeq.Add(1), execResult, dispatchErr)
+		nodeResult := controlNodeResult(label, cfg.completedSeq.Add(1), execResult, dispatchErr)
 		if dispatchErr != nil && shouldCancelControl(cfg.failCfg, cfg.failures.Add(1)) {
 			nodeResult.Canceled = nodeResult.Canceled || errors.Is(dispatchErr, context.Canceled)
 			cfg.cancel()
 		}
 		return scheduler.Result{Value: nodeResult}, dispatchErr
 	})
+}
+
+// controlDisplayLabel builds a human-readable name for a parallel/matrix
+// child result. Matrix children carry a hash-qualified graph node ID (see
+// matrixRowSuffix) that exists purely to keep dependency-graph IDs
+// collision-free after sanitization - it's not meant for display, so
+// banners/summaries use the original step name plus the raw matrix values
+// instead (e.g. "test (go=1.22, os=linux)").
+func controlDisplayLabel(name string, matrix map[string]string) string {
+	if len(matrix) == 0 {
+		return name
+	}
+	return name + " (" + matrixRowLabel(matrix) + ")"
+}
+
+// controlNodeLabel resolves a graph node's display label from its stored
+// controlNode metadata, which is set at graph-build time and so is available
+// even for skipped/canceled nodes that were never dispatched (unlike
+// ControlResult, which only exists once a node actually ran).
+func controlNodeLabel(node *dependency.Node) string {
+	if child, ok := node.Metadata["child"].(controlNode); ok {
+		return controlDisplayLabel(child.displayName, child.matrix)
+	}
+	return node.ID
 }
 
 func controlNodeResult(name string, completed int64, execResult *ControlChildResult, err error) *ControlResult {
@@ -212,7 +238,7 @@ func buildParallelGraph(parent *schema.WorkflowStep) (*dependency.Graph, []strin
 		if err := graph.AddNode(&dependency.Node{
 			ID: child.Name,
 			Metadata: map[string]any{
-				"child": controlNode{step: *child},
+				"child": controlNode{step: *child, displayName: child.Name},
 			},
 		}); err != nil {
 			return nil, nil, err
@@ -260,7 +286,7 @@ func addMatrixRowNodes(graph *dependency.Graph, steps []schema.WorkflowStep, chi
 		if err := graph.AddNode(&dependency.Node{
 			ID: expanded.Name,
 			Metadata: map[string]any{
-				"child": controlNode{step: expanded, matrix: row},
+				"child": controlNode{step: expanded, matrix: row, displayName: child.Name},
 			},
 		}); err != nil {
 			return err
@@ -321,16 +347,17 @@ func renderControlOutput(aggregate *scheduler.AggregateResult, definitionOrder [
 func renderControlChildBlock(result *scheduler.Result) {
 	child, _ := result.Value.(*ControlResult)
 	canceled := child != nil && child.Canceled
+	name := controlNodeLabel(&result.Node)
 
 	switch {
 	case canceled:
-		ui.Warningf("`%s` canceled", result.NodeID)
+		ui.Warningf("`%s` canceled", name)
 	case result.Status == scheduler.StatusFailed:
-		ui.Errorf("`%s` failed", result.NodeID)
+		ui.Errorf("`%s` failed", name)
 	case result.Status == scheduler.StatusSkipped:
-		ui.Warningf("`%s` skipped", result.NodeID)
+		ui.Warningf("`%s` skipped", name)
 	default:
-		ui.Successf("`%s` completed", result.NodeID)
+		ui.Successf("`%s` completed", name)
 	}
 
 	if child != nil {
