@@ -227,24 +227,54 @@ func TestArchiveHandler_Execute_ResolveErrors(t *testing.T) {
 	}
 }
 
-func TestArchiveHandler_Validate_RejectsInvalidReproducibleMode(t *testing.T) {
-	err := mustGetArchiveHandler(t).Validate(&schema.WorkflowStep{
-		Name: "pkg", Type: "archive", Source: "src/", Destination: "out.zip", Reproducible: "bogus",
-	})
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrArchiveInvalidReproducibleMode))
-}
-
-func TestArchiveHandler_Validate_AcceptsReproducibleModes(t *testing.T) {
+// reproducible supports Go templates, and resolveArchiveOptions resolves it
+// before archive.Run sees it, so Validate must not reject the raw (possibly
+// templated) value: a template like "{{ .Env.MODE }}" would fail Validate
+// even though it resolves to a valid mode. Validate only guards structural
+// fields (action, source, destination); the resolved mode is checked in
+// TestArchiveHandler_Execute_Reproducible_InvalidMode below.
+func TestArchiveHandler_Validate_AcceptsAnyReproducibleValueIncludingTemplates(t *testing.T) {
 	handler := mustGetArchiveHandler(t)
-	for _, mode := range []string{"", "epoch", "git"} {
-		t.Run(mode, func(t *testing.T) {
+	for _, value := range []string{"", "epoch", "git", "{{ .Env.MODE }}"} {
+		t.Run(value, func(t *testing.T) {
 			err := handler.Validate(&schema.WorkflowStep{
-				Name: "pkg", Type: "archive", Source: "src/", Destination: "out.zip", Reproducible: mode,
+				Name: "pkg", Type: "archive", Source: "src/", Destination: "out.zip", Reproducible: value,
 			})
 			assert.NoError(t, err)
 		})
 	}
+}
+
+func TestArchiveHandler_Execute_Reproducible_InvalidMode(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "handler.js"), []byte("x"), 0o644))
+
+	step := &schema.WorkflowStep{
+		Name: "pkg", Type: "archive", Source: src, Destination: filepath.Join(dir, "out.zip"), Reproducible: "bogus",
+	}
+
+	_, err := mustGetArchiveHandler(t).Execute(context.Background(), step, NewVariables())
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrArchiveInvalidReproducibleMode))
+}
+
+func TestArchiveHandler_Execute_Reproducible_TemplateResolvesToValidMode(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "handler.js"), []byte("x"), 0o644))
+
+	vars := NewVariables()
+	vars.SetEnv("MODE", "epoch")
+	step := &schema.WorkflowStep{
+		Name: "pkg", Type: "archive", Source: src, Destination: filepath.Join(dir, "out.zip"),
+		Reproducible: "{{ .Env.MODE }}",
+	}
+
+	_, err := mustGetArchiveHandler(t).Execute(context.Background(), step, vars)
+	require.NoError(t, err, "a template that resolves to a valid mode must not be rejected")
 }
 
 func TestArchiveHandler_Execute_Reproducible(t *testing.T) {

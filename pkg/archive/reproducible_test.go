@@ -72,6 +72,17 @@ func TestNewReproducibleTimestamps_EpochMode_UsesLastCommitTouchingSubtree(t *te
 	assert.NotEqual(t, t3, rt.epoch, "epoch must not leak the repo-wide latest commit outside src/")
 }
 
+func TestNewReproducibleTimestamps_EpochMode_SourceIsRepoRoot(t *testing.T) {
+	root, _, _, t3 := gitFixture(t)
+
+	// source == root: filepath.Rel(root, root) is ".", which must still match
+	// every git path (not fail to match anything and silently fall back to
+	// reproducibleFallbackEpoch).
+	rt := newReproducibleTimestamps(ReproducibleEpoch, root)
+
+	assert.Equal(t, t3, rt.modTimeFor(filepath.Join(root, "README.md")), "repo-root source must resolve the repo-wide latest commit, not fall back to the fixed epoch")
+}
+
 func TestNewReproducibleTimestamps_GitMode_UsesPerFileCommit(t *testing.T) {
 	root, t1, t2, _ := gitFixture(t)
 	src := filepath.Join(root, "src")

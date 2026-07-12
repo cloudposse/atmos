@@ -54,13 +54,10 @@ func (h *ArchiveHandler) Validate(step *schema.WorkflowStep) error {
 			WithHint("Use one of: create, extract, update, replace").
 			Err()
 	}
-	if !archiveValidReproducibleModes[step.Reproducible] {
-		return errUtils.Build(errUtils.ErrArchiveInvalidReproducibleMode).
-			WithContext("step", step.Name).
-			WithContext("reproducible", step.Reproducible).
-			WithHint("Use one of: epoch, git").
-			Err()
-	}
+	// reproducible is not validated here: it supports Go templates and
+	// resolveArchiveOptions resolves it before archive.Run sees it, so
+	// checking the raw (possibly templated) value here would reject a
+	// template that resolves to a valid mode. See validateResolvedReproducible.
 
 	if _, err := archiveSourceString(step); err != nil {
 		return err
@@ -117,9 +114,9 @@ func resolveArchiveOptions(step *schema.WorkflowStep, vars *Variables) (archive.
 	if err != nil {
 		return archive.PackOptions{}, "", fmt.Errorf("step '%s': failed to resolve exclude: %w", step.Name, err)
 	}
-	reproducible, err := vars.Resolve(step.Reproducible)
+	reproducible, err := resolveArchiveReproducible(step, vars)
 	if err != nil {
-		return archive.PackOptions{}, "", fmt.Errorf("step '%s': failed to resolve reproducible: %w", step.Name, err)
+		return archive.PackOptions{}, "", err
 	}
 
 	action := archive.Action(step.Action)
@@ -136,6 +133,24 @@ func resolveArchiveOptions(step *schema.WorkflowStep, vars *Variables) (archive.
 		Exclude:      exclude,
 		Reproducible: reproducible,
 	}, action, nil
+}
+
+// resolveArchiveReproducible resolves reproducible and validates the result,
+// not the raw field — validating before resolution would reject a template
+// that resolves to a valid mode.
+func resolveArchiveReproducible(step *schema.WorkflowStep, vars *Variables) (string, error) {
+	reproducible, err := vars.Resolve(step.Reproducible)
+	if err != nil {
+		return "", fmt.Errorf("step '%s': failed to resolve reproducible: %w", step.Name, err)
+	}
+	if !archiveValidReproducibleModes[reproducible] {
+		return "", errUtils.Build(errUtils.ErrArchiveInvalidReproducibleMode).
+			WithContext("step", step.Name).
+			WithContext("reproducible", reproducible).
+			WithHint("Use one of: epoch, git").
+			Err()
+	}
+	return reproducible, nil
 }
 
 // archiveSourceString reads step.Source as a plain string. The field is

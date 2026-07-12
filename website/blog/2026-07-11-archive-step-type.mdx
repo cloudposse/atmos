@@ -127,8 +127,8 @@ steps:
 ```
 
 - `epoch` — every entry gets the same timestamp: the most recent Git commit that
-  touched anything under `source`. One timestamp for the whole archive.
-- `git` — each entry gets its own timestamp, from its own most recent commit. Files
+  touched anything under `source`. One timestamp, whole archive.
+- `git` — each entry gets its own timestamp, from its most recent commit. Files
   with no Git history (build output, `node_modules/`) fall back to the same value
   `epoch` would use.
 
@@ -140,6 +140,10 @@ history via `go-git` — no shelling out to `git log`, and no dependency on
 repository, both modes fall back to a fixed reference date rather than failing the
 step. It's opt-in: existing workflows that don't set `reproducible` see no change in
 behavior.
+
+This only normalizes the `replace` path — `update`'s existing entries keep whatever
+mtime/mode they already had; only the entries a given `update` call adds or
+refreshes get normalized.
 
 ## Get Involved
 

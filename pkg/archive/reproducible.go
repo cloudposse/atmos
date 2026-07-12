@@ -212,10 +212,19 @@ func lastCommitForPrefix(repo *git.Repository, relPrefix string) (*object.Commit
 	if err != nil {
 		return nil, err
 	}
-	dirPrefix := relPrefix + "/"
-	pathFilter := func(p string) bool {
-		return p == relPrefix || strings.HasPrefix(p, dirPrefix)
+
+	// filepath.Rel returns "." when relPrefix is the repository root itself;
+	// no git path is ever literally "." or "./"-prefixed, so the general
+	// pathFilter below would never match anything and silently fall through
+	// to the epoch fallback. Match every path instead.
+	pathFilter := func(_ string) bool { return true }
+	if relPrefix != "." {
+		dirPrefix := relPrefix + "/"
+		pathFilter = func(p string) bool {
+			return p == relPrefix || strings.HasPrefix(p, dirPrefix)
+		}
 	}
+
 	iter, err := repo.Log(&git.LogOptions{From: head.Hash(), PathFilter: pathFilter})
 	if err != nil {
 		return nil, err
