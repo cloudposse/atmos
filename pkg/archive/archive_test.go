@@ -613,6 +613,9 @@ func TestDestinationMode(t *testing.T) {
 	}
 
 	t.Run("stat error other than not-exist", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Windows reports a path through a non-directory as ERROR_PATH_NOT_FOUND, which os.IsNotExist treats as true; POSIX's distinct ENOTDIR can't be reproduced this way on Windows")
+		}
 		notADir := filepath.Join(dir, "not-a-dir-mode")
 		require.NoError(t, os.WriteFile(notADir, []byte("x"), 0o644))
 		_, err := destinationMode(filepath.Join(notADir, "out.zip"))
@@ -721,6 +724,9 @@ func TestRun_Update_CreatesWhenDestinationMissing_Tar(t *testing.T) {
 }
 
 func TestCopyUnchangedTarEntries_OpenFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows reports a path through a non-directory as ERROR_PATH_NOT_FOUND, which os.IsNotExist treats as true; POSIX's distinct ENOTDIR can't be reproduced this way on Windows")
+	}
 	dir := t.TempDir()
 	notADir := filepath.Join(dir, "not-a-dir")
 	require.NoError(t, os.WriteFile(notADir, []byte("x"), 0o644))
