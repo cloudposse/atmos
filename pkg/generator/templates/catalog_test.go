@@ -1,11 +1,14 @@
 package templates
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 func TestLoadCatalog(t *testing.T) {
@@ -35,6 +38,24 @@ func TestLoadCatalog(t *testing.T) {
 		assert.NotEmpty(t, entry.Source)
 		assert.NotEmpty(t, entry.Version)
 		assert.NotEmpty(t, entry.Description)
+	}
+}
+
+// TestCatalogEntriesExistOnDisk asserts that every catalog entry's advertised
+// cloud/tier actually has a matching examples/scaffolds/<cloud>/<tier>/scaffold.yaml
+// in the working tree. It catches catalog/directory drift (renames, typos, deletions)
+// independently of network access or go-getter.
+func TestCatalogEntriesExistOnDisk(t *testing.T) {
+	entries, err := LoadCatalog()
+	require.NoError(t, err)
+
+	root, err := testhelpers.FindRepoRoot()
+	require.NoError(t, err)
+
+	for _, e := range entries {
+		scaffoldPath := filepath.Join(root, "examples", "scaffolds", e.Cloud, e.Tier, "scaffold.yaml")
+		_, statErr := os.Stat(scaffoldPath)
+		assert.NoErrorf(t, statErr, "catalog entry %s expects %s to exist", e.Name, scaffoldPath)
 	}
 }
 

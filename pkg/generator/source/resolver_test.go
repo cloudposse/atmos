@@ -1,7 +1,9 @@
 package source
 
 import (
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -157,6 +159,94 @@ func TestHydrate_LocalStubError(t *testing.T) {
 
 	cleanup, err := Hydrate(stub, "")
 	require.Error(t, err)
+	require.NotNil(t, cleanup)
+	cleanup()
+}
+
+// requireGit skips the test when the git binary is unavailable, matching the
+// inline-skip convention used elsewhere in the codebase for git-backed tests.
+func requireGit(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git binary not found on PATH")
+	}
+}
+
+// initSourceTestGitRepo creates a local git repository on branch "main" with the given
+// files committed, mirroring the local-git-fixture pattern used by
+// tests/cli_remote_imports_test.go and pkg/stack/imports/remote_test.go.
+func initSourceTestGitRepo(t *testing.T, files map[string]string) string {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	runSourceTestGit(t, repoDir, "init")
+	runSourceTestGit(t, repoDir, "checkout", "-b", "main")
+	runSourceTestGit(t, repoDir, "config", "user.email", "test@example.com")
+	runSourceTestGit(t, repoDir, "config", "user.name", "Test User")
+
+	for name, content := range files {
+		path := filepath.Join(repoDir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+
+	runSourceTestGit(t, repoDir, "add", ".")
+	runSourceTestGit(t, repoDir, "commit", "-m", "initial")
+	return repoDir
+}
+
+func runSourceTestGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, string(out))
+}
+
+func sourceTestGitFileURI(path string) string {
+	cleaned := filepath.ToSlash(filepath.Clean(path))
+	if filepath.VolumeName(path) != "" && cleaned != "" && cleaned[0] != '/' {
+		cleaned = "/" + cleaned
+	}
+	return (&url.URL{Scheme: "file", Path: cleaned}).String()
+}
+
+// TestResolve_RemoteGitSubdirSuccess exercises the remote-fetch branch of Resolve
+// (resolver.go's go-getter path) against a real local git remote using go-getter's
+// //subdir?ref= syntax — the exact mechanism `atmos init aws/app` relies on. No prior
+// test drove a successful fetch through this path; every other scaffold test sets
+// ATMOS_SCAFFOLD_SOURCE_OVERRIDE and bypasses it entirely.
+func TestResolve_RemoteGitSubdirSuccess(t *testing.T) {
+	requireGit(t)
+
+	repoDir := initSourceTestGitRepo(t, map[string]string{
+		"aws/app/scaffold.yaml": sampleScaffold,
+		"aws/app/file.txt":      "hello",
+	})
+	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/app?ref=main"
+
+	cfg, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/app", src, time.Minute)
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	defer cleanup()
+	require.NotNil(t, cfg)
+	assert.True(t, hasSampleFile(cfg.Files), "remote git subdir template files must be loaded")
+}
+
+// TestResolve_RemoteGitSubdirMissing pins the exact failure mode reported for
+// `atmos init aws/app`: a valid git remote whose requested //subdir does not exist.
+func TestResolve_RemoteGitSubdirMissing(t *testing.T) {
+	requireGit(t)
+
+	repoDir := initSourceTestGitRepo(t, map[string]string{
+		"aws/app/scaffold.yaml": sampleScaffold,
+		"aws/app/file.txt":      "hello",
+	})
+	src := "git::" + sourceTestGitFileURI(repoDir) + "//aws/missing?ref=main"
+
+	_, cleanup, err := Resolve(&schema.AtmosConfiguration{}, "aws/missing", src, time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrScaffoldFetchSource)
 	require.NotNil(t, cleanup)
 	cleanup()
 }
