@@ -507,3 +507,259 @@ func assertNoLeftoverTempFiles(t *testing.T, dir string) {
 		assert.False(t, strings.HasPrefix(e.Name(), ".archive-"), "leftover temp file: %s", e.Name())
 	}
 }
+
+func TestDetectFormat_InfersAllExtensions(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"out.tar.bz2", FormatTarBz2},
+		{"out.tbz2", FormatTarBz2},
+		{"out.tar.xz", FormatTarXz},
+		{"out.txz", FormatTarXz},
+		{"out.tar", FormatTar},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			got, err := DetectFormat("", tt.path)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestRun_UnknownAction(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeFixture(t, src)
+
+	err := Run(Action("bogus"), &PackOptions{Source: src, Destination: filepath.Join(dir, "out.zip")})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrArchiveActionNotImplemented))
+}
+
+func TestRun_Update_ValidationErrors(t *testing.T) {
+	dir := t.TempDir()
+	tests := []struct {
+		name    string
+		opts    *PackOptions
+		wantErr error
+	}{
+		{
+			name:    "unknown format",
+			opts:    &PackOptions{Source: dir, Destination: filepath.Join(dir, "out.zip"), Format: "rar"},
+			wantErr: errUtils.ErrArchiveUnknownFormat,
+		},
+		{
+			name:    "source does not exist",
+			opts:    &PackOptions{Source: filepath.Join(dir, "nope"), Destination: filepath.Join(dir, "out.zip")},
+			wantErr: errUtils.ErrArchiveSourceNotFound,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Run(ActionUpdate, tt.opts)
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, tt.wantErr), "got %v, want %v", err, tt.wantErr)
+		})
+	}
+}
+
+// notADirDestination returns a destination path nested under a regular file,
+// so os.MkdirAll(filepath.Dir(destination)) is guaranteed to fail.
+func notADirDestination(t *testing.T, dir string) string {
+	t.Helper()
+	notADir := filepath.Join(dir, "not-a-dir")
+	require.NoError(t, os.WriteFile(notADir, []byte("x"), 0o644))
+	return filepath.Join(notADir, "sub", "out.zip")
+}
+
+func TestRun_Replace_MkdirAllFailure(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeFixture(t, src)
+
+	err := Run(ActionReplace, &PackOptions{Source: src, Destination: notADirDestination(t, dir)})
+	require.Error(t, err)
+}
+
+func TestRun_Update_MkdirAllFailure(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeFixture(t, src)
+
+	err := Run(ActionUpdate, &PackOptions{Source: src, Destination: notADirDestination(t, dir)})
+	require.Error(t, err)
+}
+
+func TestDestinationMode(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Run("missing returns default", func(t *testing.T) {
+		mode, err := destinationMode(filepath.Join(dir, "nope.zip"))
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(defaultArchivePerm), mode)
+	})
+
+	if runtime.GOOS != "windows" {
+		t.Run("existing returns its mode", func(t *testing.T) {
+			f := filepath.Join(dir, "existing.zip")
+			require.NoError(t, os.WriteFile(f, []byte("x"), 0o640))
+			mode, err := destinationMode(f)
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(0o640), mode)
+		})
+	}
+
+	t.Run("stat error other than not-exist", func(t *testing.T) {
+		notADir := filepath.Join(dir, "not-a-dir-mode")
+		require.NoError(t, os.WriteFile(notADir, []byte("x"), 0o644))
+		_, err := destinationMode(filepath.Join(notADir, "out.zip"))
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrArchiveWriteFailed))
+	})
+}
+
+func TestAtomicRewrite_DestinationModeError(t *testing.T) {
+	dir := t.TempDir()
+	notADir := filepath.Join(dir, "not-a-dir")
+	require.NoError(t, os.WriteFile(notADir, []byte("x"), 0o644))
+	dest := filepath.Join(notADir, "out.zip")
+
+	err := atomicRewrite(dest, ".archive-write-*.zip", func(tmp *os.File) error { return nil })
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrArchiveWriteFailed))
+}
+
+func TestAtomicRewrite_CreateTempFailure(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "does-not-exist-dir", "out.zip")
+
+	err := atomicRewrite(dest, ".archive-write-*.zip", func(tmp *os.File) error { return nil })
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrArchiveWriteFailed))
+}
+
+func TestAtomicRewrite_WriteFuncError(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "out.zip")
+	sentinel := errors.New("boom")
+
+	err := atomicRewrite(dest, ".archive-write-*.zip", func(tmp *os.File) error { return sentinel })
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, sentinel))
+	assertNoLeftoverTempFiles(t, dir)
+}
+
+func TestAtomicRewrite_RenameFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("renaming a file over a non-empty directory has different semantics on Windows")
+	}
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "out.zip")
+	require.NoError(t, os.Mkdir(dest, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dest, "keep.txt"), []byte("x"), 0o644))
+
+	err := atomicRewrite(dest, ".archive-write-*.zip", func(tmp *os.File) error {
+		_, werr := tmp.WriteString("data")
+		return werr
+	})
+	require.Error(t, err)
+}
+
+func TestUpdateZip_MissingSourceEntry(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "out.zip")
+
+	err := updateZip(dest, []packEntry{{fsPath: filepath.Join(dir, "missing.txt"), archivePath: "missing.txt"}})
+	require.Error(t, err)
+	assertNoLeftoverTempFiles(t, dir)
+}
+
+func TestUpdateTar_MissingSourceEntry(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "out.tar")
+
+	err := updateTar(dest, []packEntry{{fsPath: filepath.Join(dir, "missing.txt"), archivePath: "missing.txt"}})
+	require.Error(t, err)
+	assertNoLeftoverTempFiles(t, dir)
+}
+
+func TestRun_Update_Zip_CorruptExistingArchive(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeFixture(t, src)
+	dest := filepath.Join(dir, "out.zip")
+	require.NoError(t, os.WriteFile(dest, []byte("not a zip file"), 0o644))
+
+	err := Run(ActionUpdate, &PackOptions{Source: src, Destination: dest, Exclude: []string{"**/*.test.js"}})
+	require.Error(t, err)
+}
+
+func TestRun_Update_Tar_CorruptExistingArchive(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeFixture(t, src)
+	dest := filepath.Join(dir, "out.tar")
+	require.NoError(t, os.WriteFile(dest, []byte("not a tar file"), 0o644))
+
+	err := Run(ActionUpdate, &PackOptions{Source: src, Destination: dest, Exclude: []string{"**/*.test.js"}})
+	require.Error(t, err)
+}
+
+func TestRun_Update_CreatesWhenDestinationMissing_Tar(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	writeFixture(t, src)
+	dest := filepath.Join(dir, "out.tar")
+
+	require.NoError(t, Run(ActionUpdate, &PackOptions{Source: src, Destination: dest, Exclude: []string{"**/*.test.js"}}))
+
+	entries := tarEntries(t, dest, false)
+	assert.Contains(t, entries, "handler.js")
+}
+
+func TestCopyUnchangedTarEntries_OpenFailure(t *testing.T) {
+	dir := t.TempDir()
+	notADir := filepath.Join(dir, "not-a-dir")
+	require.NoError(t, os.WriteFile(notADir, []byte("x"), 0o644))
+	dest := filepath.Join(notADir, "out.tar")
+
+	err := copyUnchangedTarEntries(nil, dest, map[string]bool{})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrArchiveWriteFailed))
+}
+
+func TestCollectEntries_SingleFile_InvalidGlobPattern(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "handler.js")
+	require.NoError(t, os.WriteFile(src, []byte("x"), 0o644))
+
+	_, err := collectEntries(src, "", nil, []string{"["})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrArchiveInvalidGlobPattern))
+}
+
+func TestMatchesFilters_InvalidIncludePattern(t *testing.T) {
+	_, err := matchesFilters("foo.js", []string{"["}, nil)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrArchiveInvalidGlobPattern))
+}
+
+func TestCollectDirEntries_PropagatesGenericWalkError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not enforced the same way on Windows")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	blocked := filepath.Join(src, "blocked")
+	require.NoError(t, os.MkdirAll(blocked, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(blocked, "f.txt"), []byte("x"), 0o644))
+	require.NoError(t, os.Chmod(blocked, 0o000))
+	defer os.Chmod(blocked, 0o755) // Best-effort restore so t.TempDir() cleanup can remove it.
+
+	_, err := collectEntries(src, "", nil, nil)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrArchiveWalkFailed), "got %v", err)
+	assert.False(t, errors.Is(err, errUtils.ErrArchiveInvalidGlobPattern))
+}

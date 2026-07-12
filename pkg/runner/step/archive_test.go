@@ -58,6 +58,11 @@ func TestArchiveHandler_Validate(t *testing.T) {
 			name: "valid explicit action",
 			step: &schema.WorkflowStep{Name: "pkg", Type: "archive", Source: "src/", Destination: "out.zip", Action: "update"},
 		},
+		{
+			name:    "empty source string",
+			step:    &schema.WorkflowStep{Name: "pkg", Type: "archive", Source: "", Destination: "out.zip"},
+			wantErr: errUtils.ErrArchiveSourceRequired,
+		},
 	}
 
 	handler := mustGetArchiveHandler(t)
@@ -136,4 +141,84 @@ func TestArchiveHandler_Execute_PropagatesArchiveError(t *testing.T) {
 	_, err := mustGetArchiveHandler(t).Execute(context.Background(), step, NewVariables())
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrArchiveSourceNotFound))
+}
+
+func TestArchiveHandler_Execute_WithIncludeExclude(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "handler.js"), []byte("x"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "handler.test.js"), []byte("test"), 0o644))
+	dest := filepath.Join(dir, "out.zip")
+
+	step := &schema.WorkflowStep{
+		Name:        "pkg",
+		Type:        "archive",
+		Source:      src,
+		Destination: dest,
+		Include:     []string{"**/*.js"},
+		Exclude:     []string{"**/*.test.js"},
+	}
+
+	result, err := mustGetArchiveHandler(t).Execute(context.Background(), step, NewVariables())
+	require.NoError(t, err)
+	assert.Equal(t, dest, result.Value)
+
+	r, err := zip.OpenReader(dest)
+	require.NoError(t, err)
+	defer r.Close()
+	require.Len(t, r.File, 1)
+	assert.Equal(t, "handler.js", r.File[0].Name)
+}
+
+// TestArchiveHandler_Execute_ResolveErrors covers every field resolveArchiveOptions
+// templates: an error in any one of them must propagate out of Execute, not just
+// the ones exercised by other tests (source, destination).
+func TestArchiveHandler_Execute_ResolveErrors(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+	dest := filepath.Join(dir, "out.zip")
+	const malformed = "{{ .Bad"
+
+	tests := []struct {
+		name string
+		step *schema.WorkflowStep
+	}{
+		{
+			name: "source is not a string",
+			step: &schema.WorkflowStep{Name: "pkg", Type: "archive", Source: 5, Destination: dest},
+		},
+		{
+			name: "malformed source template",
+			step: &schema.WorkflowStep{Name: "pkg", Type: "archive", Source: malformed, Destination: dest},
+		},
+		{
+			name: "malformed destination template",
+			step: &schema.WorkflowStep{Name: "pkg", Type: "archive", Source: src, Destination: malformed},
+		},
+		{
+			name: "malformed format template",
+			step: &schema.WorkflowStep{Name: "pkg", Type: "archive", Source: src, Destination: dest, Format: malformed},
+		},
+		{
+			name: "malformed subpath template",
+			step: &schema.WorkflowStep{Name: "pkg", Type: "archive", Source: src, Destination: dest, Subpath: malformed},
+		},
+		{
+			name: "malformed include template",
+			step: &schema.WorkflowStep{Name: "pkg", Type: "archive", Source: src, Destination: dest, Include: []string{malformed}},
+		},
+		{
+			name: "malformed exclude template",
+			step: &schema.WorkflowStep{Name: "pkg", Type: "archive", Source: src, Destination: dest, Exclude: []string{malformed}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := mustGetArchiveHandler(t).Execute(context.Background(), tt.step, NewVariables())
+			require.Error(t, err)
+		})
+	}
 }
