@@ -1292,6 +1292,7 @@ var (
 	ErrAICommandNotFound            = errors.New("command not found")
 	ErrAICommandTreeNotConfigured   = errors.New("command tree provider is not configured")
 	ErrAIToolInvalidOutputType      = errors.New("invalid output_type: must be one of 'list', 'map', or 'all'")
+	ErrAINoSchemaForFile            = errors.New("no schema registered for this file; pass schema_path explicitly")
 
 	// AWS security and compliance errors.
 	ErrAWSSecurityNotEnabled       = errors.New("security features are not enabled: add 'aws.security.enabled: true' to atmos.yaml")

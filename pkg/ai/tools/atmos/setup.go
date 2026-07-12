@@ -65,6 +65,9 @@ func registerCoreTools(registry *tools.Registry, atmosConfig *schema.AtmosConfig
 		NewStackConfigListTool(atmosConfig),
 		NewVendorConfigGetTool(atmosConfig),
 		NewVendorConfigListTool(atmosConfig),
+		NewVendorCheckUpdatesTool(atmosConfig),
+		NewVendorDiffTool(atmosConfig),
+		NewVersionTrackStatusTool(atmosConfig),
 		NewListCommandsTool(atmosConfig),
 		NewCommandHelpTool(atmosConfig),
 		NewDescribeDependentsTool(atmosConfig),
@@ -77,6 +80,7 @@ func registerCoreTools(registry *tools.Registry, atmosConfig *schema.AtmosConfig
 		NewToolchainListTool(atmosConfig),
 		NewSecretListTool(atmosConfig),
 		NewValidateComponentTool(atmosConfig),
+		NewValidateFileTool(atmosConfig),
 	}
 	return registerAll(registry, atmosConfig, coreTools)
 }
@@ -100,6 +104,14 @@ func registerWriteAndExecutionTools(registry *tools.Registry, atmosConfig *schem
 		NewVendorConfigSetTool(atmosConfig),
 		NewVendorConfigDeleteTool(atmosConfig),
 		NewVendorConfigFormatTool(atmosConfig),
+		NewVendorUpdateTool(atmosConfig),
+		NewVersionTrackAddTool(atmosConfig),
+		NewVersionTrackSetTool(atmosConfig),
+		NewVersionTrackRemoveTool(atmosConfig),
+		NewVersionTrackUpdateTool(atmosConfig),
+		NewToolchainAddTool(atmosConfig),
+		NewToolchainRemoveTool(atmosConfig),
+		NewToolchainSetTool(atmosConfig),
 	}
 	return registerAll(registry, atmosConfig, writeTools)
 }

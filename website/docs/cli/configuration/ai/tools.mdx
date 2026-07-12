@@ -187,6 +187,15 @@ regardless of `tools.enabled` — `mcp.enabled: true` is that command's own, suf
   <dt>`atmos_vendor_config_format`</dt>
   <dd>Format a vendor manifest file in place, preserving comments and anchors. Requires confirmation by default.</dd>
 
+  <dt>`atmos_vendor_check_updates`</dt>
+  <dd>Check whether vendored Git-sourced components have a newer version available than the one currently pinned. Read-only.</dd>
+
+  <dt>`atmos_vendor_diff`</dt>
+  <dd>Show a unified diff between a vendored component's pinned version and another ref. Read-only.</dd>
+
+  <dt>`atmos_vendor_update`</dt>
+  <dd>Update vendored Git-sourced components' pinned version to the latest available tag. Requires confirmation by default.</dd>
+
   <dt>`atmos_list_commands`</dt>
   <dd>List Atmos CLI commands and subcommands. Read-only.</dd>
 
@@ -216,6 +225,30 @@ regardless of `tools.enabled` — `mcp.enabled: true` is that command's own, suf
 
   <dt>`atmos_toolchain_list`</dt>
   <dd>List tools declared in the project's .tool-versions file. Read-only.</dd>
+
+  <dt>`atmos_toolchain_add`</dt>
+  <dd>Add a tool dependency to the project's .tool-versions file. Requires confirmation by default.</dd>
+
+  <dt>`atmos_toolchain_remove`</dt>
+  <dd>Remove a tool dependency from the project's .tool-versions file. Requires confirmation by default.</dd>
+
+  <dt>`atmos_toolchain_set`</dt>
+  <dd>Set a tool's default pinned version in the project's .tool-versions file. Requires confirmation by default.</dd>
+
+  <dt>`atmos_version_track_status`</dt>
+  <dd>Check every dependency in an Atmos version track against its datasource for available updates. Read-only.</dd>
+
+  <dt>`atmos_version_track_add`</dt>
+  <dd>Add a dependency entry to an Atmos version track. Requires confirmation by default.</dd>
+
+  <dt>`atmos_version_track_set`</dt>
+  <dd>Update fields of an existing Atmos version track dependency entry. Requires confirmation by default.</dd>
+
+  <dt>`atmos_version_track_remove`</dt>
+  <dd>Remove a dependency entry from an Atmos version track. Requires confirmation by default.</dd>
+
+  <dt>`atmos_version_track_update`</dt>
+  <dd>Advance an Atmos version track's locked versions within each entry's update policy. Requires confirmation by default.</dd>
 
   <dt>`atmos_secret_list`</dt>
   <dd>List declared secrets and their initialization status. Read-only.</dd>
@@ -270,6 +303,9 @@ regardless of `tools.enabled` — `mcp.enabled: true` is that command's own, suf
 <dl>
   <dt>`validate_file_lsp`</dt>
   <dd>Validate files using LSP diagnostics ([requires LSP](/lsp/lsp-client)). Read-only.</dd>
+
+  <dt>`atmos_validate_file`</dt>
+  <dd>Validate a YAML file against a JSON Schema with line numbers, no LSP required. Read-only.</dd>
 
   <dt>`web_search`</dt>
   <dd>Search the web via DuckDuckGo or Google. Requires confirmation by default.</dd>
