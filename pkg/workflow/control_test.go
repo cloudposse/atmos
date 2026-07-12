@@ -11,14 +11,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestExecuteControlStepWaitAllSkipsDependents(t *testing.T) {
@@ -133,7 +135,15 @@ func TestExecuteControlStepLiveCompletionOrderStreamsImmediately(t *testing.T) {
 		return strings.Contains(stdout.String(), "fast output")
 	}, time.Second, 5*time.Millisecond, "fast child's output should stream before the slow child finishes")
 	assert.NotContains(t, stdout.String(), "slow output", "slow child hasn't been released yet")
-	assert.Contains(t, stderr.String(), "fast completed")
+	// The completion banner is written to stderr right after the stdout
+	// write, inside the same renderMu-held critical section, but the two
+	// buffers have independent locks - poll rather than assume it has
+	// already landed by the time the stdout write above becomes visible
+	// (markdown rendering for the banner adds real, environment-dependent
+	// latency, e.g. slower when CI=true enables color).
+	require.Eventually(t, func() bool {
+		return strings.Contains(stderr.String(), "fast completed")
+	}, time.Second, 5*time.Millisecond, "fast child's completion banner should appear")
 
 	release()
 	require.Eventually(t, func() bool {
@@ -569,10 +579,18 @@ func (b *syncBuffer) Write(p []byte) (int, error) {
 	return b.buf.Write(p)
 }
 
+// String returns the captured text with ANSI escape codes stripped. Whether
+// color renders at all depends on terminal/CI detection the tests don't
+// control (e.g. banner text renders as separate "`name`"-styled and
+// plain-text spans joined by reset/color-change escapes when color is on,
+// which breaks naive substring assertions like Contains(..., "name done")
+// even though the plain-rendered text is identical) - assertions here only
+// ever care about content, never styling, so stripping once here keeps every
+// call site simple and environment-independent.
 func (b *syncBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.buf.String()
+	return ansi.Strip(b.buf.String())
 }
 
 // initControlTestIOCapture initializes the global data/ui writers against
