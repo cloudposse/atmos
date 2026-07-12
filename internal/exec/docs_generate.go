@@ -284,6 +284,10 @@ func runTerraformDocs(dir string, settings *schema.TerraformDocsReadmeSettings) 
 	config.Sections.Providers = settings.ShowProviders
 	config.Sections.Inputs = settings.ShowInputs
 	config.Sections.Outputs = settings.ShowOutputs
+	config.Settings.HideEmpty = settings.HideEmpty
+	if settings.IndentLevel > 0 {
+		config.Settings.Indent = settings.IndentLevel
+	}
 
 	if settings.SortBy != "" {
 		config.Sort.Enabled = true
@@ -297,18 +301,20 @@ func runTerraformDocs(dir string, settings *schema.TerraformDocsReadmeSettings) 
 
 	var formatter Formatter
 
-	// Assign the correct formatter based on settings.Format.
+	// Reuse the same config the module was loaded with so Sections/Settings/Sort (derived from
+	// the user's atmos.yaml terraform.* settings) actually reach the formatter. A fresh
+	// DefaultConfig() here would silently discard those settings.
 	switch settings.Format {
 	case "markdown table":
-		formatter = tfdocsFormat.NewMarkdownTable(tfdocsPrint.DefaultConfig())
+		formatter = tfdocsFormat.NewMarkdownTable(config)
 	case "markdown":
-		formatter = tfdocsFormat.NewMarkdownDocument(tfdocsPrint.DefaultConfig())
+		formatter = tfdocsFormat.NewMarkdownDocument(config)
 	case "tfvars hcl":
-		formatter = tfdocsFormat.NewTfvarsHCL(tfdocsPrint.DefaultConfig())
+		formatter = tfdocsFormat.NewTfvarsHCL(config)
 	case "tfvars json":
-		formatter = tfdocsFormat.NewTfvarsJSON(tfdocsPrint.DefaultConfig())
+		formatter = tfdocsFormat.NewTfvarsJSON(config)
 	default:
-		formatter = tfdocsFormat.NewMarkdownTable(tfdocsPrint.DefaultConfig())
+		formatter = tfdocsFormat.NewMarkdownTable(config)
 	}
 
 	// Generate content and return it.

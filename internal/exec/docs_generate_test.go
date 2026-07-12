@@ -380,6 +380,123 @@ func TestRunTerraformDocs_Error(t *testing.T) {
 	}
 }
 
+// writeTerraformDocsFixture writes a minimal module with one input, one output, and one
+// resource (which implies one provider) so section-visibility settings are observable.
+func writeTerraformDocsFixture(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	content := `
+variable "example_input" {
+  type        = string
+  description = "An example input"
+}
+
+output "example_output" {
+  value       = var.example_input
+  description = "An example output"
+}
+
+resource "null_resource" "example" {}
+`
+	if err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(content), defaultFilePermissions); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+	return dir
+}
+
+// TestRunTerraformDocs_SectionsRespected verifies that ShowInputs, ShowOutputs, and
+// ShowProviders actually control which sections appear in the rendered output. The
+// runTerraformDocs function builds a print.Config with these settings applied, but must pass
+// that same config to the formatter -- constructing the formatter with a fresh, uncustomized
+// config silently ignores the settings.
+func TestRunTerraformDocs_SectionsRespected(t *testing.T) {
+	dir := writeTerraformDocsFixture(t)
+
+	out, err := runTerraformDocs(dir, &schema.TerraformDocsReadmeSettings{
+		Enabled:       true,
+		Format:        "markdown table",
+		ShowInputs:    false,
+		ShowOutputs:   true,
+		ShowProviders: false,
+	})
+	if err != nil {
+		t.Fatalf("runTerraformDocs failed: %v", err)
+	}
+
+	if strings.Contains(out, "example_input") {
+		t.Errorf("expected Inputs section to be hidden (ShowInputs=false), got output containing it:\n%s", out)
+	}
+	if strings.Contains(out, "Providers") {
+		t.Errorf("expected Providers section to be hidden (ShowProviders=false), got output containing it:\n%s", out)
+	}
+	if !strings.Contains(out, "example_output") {
+		t.Errorf("expected Outputs section to be shown (ShowOutputs=true), got output missing it:\n%s", out)
+	}
+
+	// Flip every flag and confirm the output flips too.
+	out, err = runTerraformDocs(dir, &schema.TerraformDocsReadmeSettings{
+		Enabled:       true,
+		Format:        "markdown table",
+		ShowInputs:    true,
+		ShowOutputs:   false,
+		ShowProviders: true,
+	})
+	if err != nil {
+		t.Fatalf("runTerraformDocs failed: %v", err)
+	}
+	if !strings.Contains(out, "example_input") {
+		t.Errorf("expected Inputs section to be shown (ShowInputs=true), got output missing it:\n%s", out)
+	}
+	if !strings.Contains(out, "Providers") {
+		t.Errorf("expected Providers section to be shown (ShowProviders=true), got output missing it:\n%s", out)
+	}
+	if strings.Contains(out, "example_output") {
+		t.Errorf("expected Outputs section to be hidden (ShowOutputs=false), got output containing it:\n%s", out)
+	}
+}
+
+// TestRunTerraformDocs_HideEmptyRespected verifies that HideEmpty suppresses the heading and
+// "No inputs." placeholder for a section with no content, instead of always rendering it.
+func TestRunTerraformDocs_HideEmptyRespected(t *testing.T) {
+	dir := t.TempDir()
+	// No variables defined, so the Inputs section is empty.
+	content := `
+output "example_output" {
+  value       = "x"
+  description = "An example output"
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(content), defaultFilePermissions); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+
+	out, err := runTerraformDocs(dir, &schema.TerraformDocsReadmeSettings{
+		Enabled:    true,
+		Format:     "markdown table",
+		ShowInputs: true,
+		HideEmpty:  false,
+	})
+	if err != nil {
+		t.Fatalf("runTerraformDocs failed: %v", err)
+	}
+	if !strings.Contains(out, "No inputs.") {
+		t.Errorf("expected empty Inputs section to render the placeholder when HideEmpty=false, got:\n%s", out)
+	}
+
+	out, err = runTerraformDocs(dir, &schema.TerraformDocsReadmeSettings{
+		Enabled:    true,
+		Format:     "markdown table",
+		ShowInputs: true,
+		HideEmpty:  true,
+	})
+	if err != nil {
+		t.Fatalf("runTerraformDocs failed: %v", err)
+	}
+	if strings.Contains(out, "Inputs") || strings.Contains(out, "No inputs.") {
+		t.Errorf("expected empty Inputs section to be fully suppressed when HideEmpty=true, got:\n%s", out)
+	}
+}
+
 // TestResolvePath tests the resolvePath function with various path types.
 func TestResolvePath(t *testing.T) {
 	tests := []struct {
