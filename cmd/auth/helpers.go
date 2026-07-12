@@ -70,6 +70,7 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 	// Display success message.
 	ui.Writeln("")
 	ui.Success("Authentication successful!")
+	ui.Writeln("")
 
 	// Build table rows.
 	var rows [][]string

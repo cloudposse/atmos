@@ -39,6 +39,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
@@ -1738,6 +1739,20 @@ func shouldUnwrapMarkdownProseLine(line, next string) bool {
 // adjacent markdown prose during snapshot normalization.
 var snapshotLogLevelPrefixRe = regexp.MustCompile(`^(WARN|ERRO|INFO|DEBU|FATA)\s`)
 
+// snapshotToastIconPrefixes lists the canonical single-line toast icons from
+// pkg/ui/theme/icons.go. A line starting with one of these icons is always an
+// independent ui.Success/Info/Warning/Error/Experimental call, never a
+// word-wrapped continuation of the previous line's markdown paragraph, so it
+// must never be merged during snapshot normalization. Sourced directly from
+// the theme package so new icons don't silently reopen this bug.
+var snapshotToastIconPrefixes = []string{
+	theme.IconCheckmark,
+	theme.IconXMark,
+	theme.IconWarning,
+	theme.IconInfo,
+	theme.IconExperimental,
+}
+
 func isSnapshotStructuralLine(line string) bool {
 	switch {
 	case strings.HasPrefix(line, "#"):
@@ -1760,6 +1775,11 @@ func isSnapshotStructuralLine(line string) bool {
 	case snapshotLogLevelPrefixRe.MatchString(line):
 		return true
 	default:
+		for _, icon := range snapshotToastIconPrefixes {
+			if strings.HasPrefix(line, icon) {
+				return true
+			}
+		}
 		return false
 	}
 }

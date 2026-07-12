@@ -242,6 +242,7 @@ func generateDocument(
 
 	ui.Writeln("")
 	ui.Success("Generated docs")
+	ui.Writeln("")
 	log.Debug("Documentation generated", "output", outputPath)
 	return nil
 }

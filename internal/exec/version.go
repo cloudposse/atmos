@@ -206,7 +206,9 @@ func (v versionExec) checkRelease() {
 	currentRelease := strings.TrimPrefix(version.Version, "v")
 
 	if latestRelease == currentRelease {
+		ui.Writeln("")
 		ui.Success("You are running the latest version of Atmos")
+		ui.Writeln("")
 		log.Debug("Version check completed", "version", latestRelease)
 	} else {
 		v.printMessageToUpgradeToAtmosLatestRelease(latestRelease)

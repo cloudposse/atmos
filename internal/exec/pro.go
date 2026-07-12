@@ -163,7 +163,9 @@ func executeProLock(a *ProLockCmdArgs, apiClient pro.AtmosProAPIClientInterface,
 		return errors.Join(errUtils.ErrFailedToLockStack, err)
 	}
 
+	ui.Writeln("")
 	ui.Successf("Stack '%s' successfully locked", lock.Data.Key)
+	ui.Writeln("")
 	log.Debug("Stack lock acquired", "key", lock.Data.Key, "lockID", lock.Data.ID, "expires", lock.Data.ExpiresAt)
 
 	return nil
@@ -207,7 +209,9 @@ func executeProUnlock(a *ProUnlockCmdArgs, apiClient pro.AtmosProAPIClientInterf
 		return errors.Join(errUtils.ErrFailedToUnlockStack, err)
 	}
 
+	ui.Writeln("")
 	ui.Successf("Stack '%s' successfully unlocked", dto.Key)
+	ui.Writeln("")
 	log.Debug("Stack lock released", "key", dto.Key)
 
 	return nil
