@@ -20,7 +20,8 @@ tests:
       file_contains:
         "README.md":
           - "## Requirements"
-          - "## Providers" 
+          - "## Outputs"
+          - !not "## Providers"
 
   - name: "atmos docs generate with remote template"
     enabled: true
