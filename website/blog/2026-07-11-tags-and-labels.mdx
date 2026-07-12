@@ -5,19 +5,18 @@ authors: [osterman]
 tags: [feature]
 ---
 
-You have fifty SSO identities across a dozen AWS accounts, and you can never remember whether the one you want is `production/AdministratorAccess` or `prod-admin` or `plat-ue2-prod-admin`. You have hundreds of components across dozens of stacks, and "run this against everything tagged `tier-1`" means either hand-writing a `--components` list or reaching for a YQ `--query` expression. Atmos already tracks all of this — it just never gave you a lightweight, consistent way to categorize it and select by category.
+Selecting which components to run against has always meant one of two things: list them out by name, or write a `--query` expression. Neither holds up once a stack has more than a handful of components — a `--components vpc,eks,rds,...` list grows stale the moment someone adds a component, and a YQ `--query` expression is one typo away from silently matching nothing.
 
-Tags and labels close that gap: a plain `[]string` list for simple categorization, a `map[string]string` for richer key-value metadata, and `--tags`/`--labels` filtering wherever Atmos already supports bulk selection.
+Tags and labels fix this: a plain `[]string` list for simple categorization, a `map[string]string` for richer key-value metadata, and `--tags`/`--labels` filtering wherever Atmos already supports bulk selection. The same standard extends to auth identities and providers too, so picking `production` accounts works the same way as picking `production` components.
 
 <!--truncate-->
 
 ## The Problem
 
-Every part of Atmos that manages many things — identities, providers, components — makes you either remember exact names or fall back to a query language:
-
-- **Auth identities have no metadata.** `atmos auth login` needs the exact identity name. With one SSO provider and a handful of roles that's fine; with dozens of permission sets across multiple accounts, it's a name you look up every time.
-- **Components have no first-class categorization either.** `atmos terraform apply --all` is everything; `--query '.settings.tier == "network"'` works, but it's a YQ expression you write and re-write for something as simple as "just the networking components."
-- **The pattern repeats per component type.** Terraform, Kubernetes, Helm, and container components each grew their own `--all`/`--affected`/`--components` selection story, with no shared way to say "the ones tagged `production`."
+- **Selecting components by name doesn't scale.** A handful of `--components` works for a small stack; it's unmaintainable once a stack has hundreds.
+- **The `--query` alternative is powerful but heavyweight.** A YQ expression like `.settings.tier == "network"` works, but it has to be written, tested, and copy-pasted into every command and CI job that needs the same subset.
+- **Every component type reinvented its own selection story.** Terraform, Kubernetes, Helm, and container components each grew their own `--all`/`--affected`/`--components` flags, with no shared way to say "just the ones tagged `production`."
+- **Auth has the same problem, one level up.** `atmos auth login` needs an exact identity name, and picking the right one gets harder to remember as the number of providers and identities grows.
 
 ## The Fix
 
@@ -25,6 +24,17 @@ Atmos now distinguishes two data shapes for categorization, matching how you'd a
 
 - **Tags** — a `[]string` list, for simple categorical membership. Filtering matches *any* of the given tags.
 - **Labels** — a `map[string]string`, for richer key-value metadata. Filtering requires *all* of the given key=value pairs, the same semantics as a Kubernetes label selector.
+
+```yaml title="stacks/orgs/acme/prod/network.yaml"
+components:
+  terraform:
+    vpc:
+      metadata:
+        tags: [production, networking, tier-1]
+        labels:
+          cost-center: platform
+          compliance: sox
+```
 
 ```yaml title="atmos.yaml"
 auth:
@@ -45,26 +55,7 @@ auth:
       tags: [admin, production, elevated-access]
 ```
 
-```yaml title="stacks/orgs/acme/prod/network.yaml"
-components:
-  terraform:
-    vpc:
-      metadata:
-        tags: [production, networking, tier-1]
-        labels:
-          cost-center: platform
-          compliance: sox
-```
-
 ## How to Use It
-
-**Auth** — select an identity or provider by tag instead of exact name:
-
-```shell
-atmos auth list --tags production
-atmos auth login --tags admin,production   # auto-selects if exactly one match, else prompts
-atmos auth logout --tags production        # logs out every matching provider
-```
 
 **Listing and filtering components:**
 
@@ -84,6 +75,14 @@ atmos container up --all --tags production
 
 Because this lives in the shared component registry (`pkg/component`), any component type — built-in or custom — that adopts the standard bulk-execution pattern gets `--tags`/`--labels` filtering automatically, with no per-type code.
 
+**The same filtering works for auth**, since providers and identities are tagged the same way:
+
+```shell
+atmos auth list --tags production
+atmos auth login --tags admin,production   # auto-selects if exactly one match, else prompts
+atmos auth logout --tags production        # logs out every matching provider
+```
+
 **Bridging into your modules** — two new YAML functions read a component's own `metadata.tags`/`metadata.labels` without the usual `!template`/`toJson` boilerplate. The most common use is feeding `metadata.labels` into the `var.tags` a `terraform-null-label`-style module expects (Terraform and AWS call a map "tags"; Atmos calls it a "label" — same data, different name):
 
 ```yaml title="stacks/orgs/acme/prod/network.yaml"
@@ -102,4 +101,4 @@ components:
 
 ## Get Involved
 
-Tags and labels are now supported on auth identities/providers and on components across terraform, Kubernetes, Helm, and container components. Auto-discovering tags/labels from cloud provider metadata (for example, mapping AWS SSO PermissionSet tags into Atmos labels automatically) is a natural next step — if that's something you need, open an issue and let us know your use case.
+Tags and labels are supported today on components across terraform, Kubernetes, Helm, and container components, and on auth identities and providers. Auto-discovering tags/labels from cloud provider metadata (for example, mapping AWS SSO PermissionSet tags into Atmos labels automatically) is a natural next step — if that's something you need, open an issue and let us know your use case.
