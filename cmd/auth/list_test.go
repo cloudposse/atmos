@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -628,6 +630,48 @@ func TestListFlagCompletions_NoConfig(t *testing.T) {
 			_, _ = listIdentitiesFlagCompletion(cmd, nil, "")
 		})
 	})
+
+	t.Run("listTagsFlagCompletion", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			_, _ = listTagsFlagCompletion(cmd, nil, "")
+		})
+	})
+}
+
+// TestListTagsFlagCompletion_WithConfig covers the success path: the union of
+// every tag on any provider or identity, sorted and deduplicated.
+func TestListTagsFlagCompletion_WithConfig(t *testing.T) {
+	tmp := t.TempDir()
+	atmosYaml := `base_path: "./"
+stacks:
+  base_path: stacks
+  included_paths: ["**/*"]
+  name_pattern: "{stage}"
+auth:
+  providers:
+    sso-prod:
+      kind: mock/aws
+      tags: [production, sso]
+  identities:
+    prod-admin:
+      kind: mock/aws
+      via:
+        provider: sso-prod
+      tags: [production, admin]
+logs:
+  level: Info
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "atmos.yaml"), []byte(atmosYaml), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmp, "stacks"), 0o755))
+	t.Chdir(tmp)
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	cmd := &cobra.Command{Use: "list-completion-test"}
+	got, directive := listTagsFlagCompletion(cmd, nil, "")
+
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.Equal(t, []string{"admin", "production", "sso"}, got)
 }
 
 // TestLoadAuthManagerForList_SmokeFromEmptyTempDir exercises the helper from a
@@ -692,6 +736,22 @@ func TestExecuteAuthListCommand_JSONFormat(t *testing.T) {
 	resetAuthCmdFlags(t, cmd)
 	cmd.SetContext(context.Background())
 	require.NoError(t, cmd.ParseFlags([]string{"--format=json"}))
+
+	err := executeAuthListCommand(cmd, nil)
+	assert.NoError(t, err)
+}
+
+// TestExecuteAuthListCommand_TagsFilter exercises the --tags composition
+// path end-to-end. The fixture's provider/identity carry no tags, so
+// filtering by tag must succeed (no error) and simply produce an empty
+// result set, rather than erroring or panicking.
+func TestExecuteAuthListCommand_TagsFilter(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authListCmd
+	resetAuthCmdFlags(t, cmd)
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags([]string{"--tags=production"}))
 
 	err := executeAuthListCommand(cmd, nil)
 	assert.NoError(t, err)

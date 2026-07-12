@@ -519,6 +519,26 @@ func TestPerformTagsLogout_Success(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestPerformTagsLogout_PartialFailure covers the bugfix where a failed
+// per-provider logout must surface as a non-nil returned error (previously
+// performTagsLogout always returned nil even when errs was non-empty).
+func TestPerformTagsLogout_PartialFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"sso-prod": {Kind: "aws/iam-identity-center", Tags: []string{"production"}},
+	}).AnyTimes()
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{}).AnyTimes()
+	boom := errors.New("boom")
+	m.EXPECT().LogoutProvider(gomock.Any(), "sso-prod", false).Return(boom)
+
+	err := performTagsLogout(context.Background(), m, []string{"production"}, false, false, false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, boom)
+}
+
 // TestExecuteAuthLogoutCommand_SmokeNoConfig exercises the logout orchestrator
 // from a directory without an atmos.yaml. Contract: no panic.
 func TestExecuteAuthLogoutCommand_SmokeNoConfig(t *testing.T) {
@@ -548,6 +568,38 @@ func TestExecuteAuthLogoutCommand_WithMockAuthDryRun(t *testing.T) {
 	err := executeAuthLogoutCommand(cmd, []string{"mock-identity"})
 	assert.NoError(t, err,
 		"dry-run logout of a configured identity must succeed")
+}
+
+// TestExecuteAuthLogoutCommand_TagsMutuallyExclusiveWithProvider covers the
+// new guard: --tags cannot be combined with --provider/--all/--identity or a
+// positional identity argument.
+func TestExecuteAuthLogoutCommand_TagsMutuallyExclusiveWithProvider(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authLogoutCmd
+	resetAuthCmdFlags(t, cmd)
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags([]string{"--tags=production", "--provider=mock-provider"}))
+
+	err := executeAuthLogoutCommand(cmd, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+}
+
+// TestExecuteAuthLogoutCommand_TagsDispatch covers the --tags dispatch wiring
+// end-to-end: no provider in the fixture matches, so the command must surface
+// ErrNoProvidersMatchTags rather than falling through to another logout path.
+func TestExecuteAuthLogoutCommand_TagsDispatch(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authLogoutCmd
+	resetAuthCmdFlags(t, cmd)
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags([]string{"--tags=production"}))
+
+	err := executeAuthLogoutCommand(cmd, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNoProvidersMatchTags)
 }
 
 // TestDisplayExternalCredentialWarnings smoke-covers the I/O wrapper around

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -92,6 +93,36 @@ func TestAuthenticateIdentity(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAuthenticateIdentity_TagsDispatch covers the --tags dispatch branch:
+// when no --identity flag is set but --tags resolves to a single identity,
+// authenticateIdentity must authenticate against that identity without
+// falling through to GetDefaultIdentity.
+func TestAuthenticateIdentity_TagsDispatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	viper.Set(tagsKey, "admin")
+	t.Cleanup(func() { viper.Set(tagsKey, "") })
+
+	mockAuthManager := authTypes.NewMockAuthManager(ctrl)
+	mockAuthManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"prod-admin": {Kind: "aws/permission-set", Tags: []string{"admin", "production"}},
+	})
+	mockAuthManager.EXPECT().Authenticate(gomock.Any(), "prod-admin").Return(&authTypes.WhoamiInfo{
+		Identity: "prod-admin",
+		Provider: "aws-sso",
+	}, nil)
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String(IdentityFlagName, "", "identity")
+
+	whoami, needsFallback, err := authenticateIdentity(context.Background(), cmd, auth.AuthManager(mockAuthManager))
+	require.NoError(t, err)
+	assert.False(t, needsFallback)
+	require.NotNil(t, whoami)
+	assert.Equal(t, "prod-admin", whoami.Identity)
 }
 
 func TestAuthLoginCommand_Structure(t *testing.T) {
