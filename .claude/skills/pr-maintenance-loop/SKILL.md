@@ -16,10 +16,17 @@ govern it) lives in `fix-all`; this skill only owns the scheduling.
 
 ## Known limitations (surface these, don't hide them)
 
-- **Session-only.** The loop lives in this Claude Code process. It dies when the process ends and
+- **Session-only, and there's no cloud-compatible alternative.** The loop lives in this Claude
+  Code process, using this exact worktree and this local `gh`/`git` session (signing key, gh auth,
+  checkout state) — that's the whole point, per the intro above ("no new external service, no
+  secrets beyond the local git/gh session already in use"). It dies when the process ends and
   auto-expires after 7 days. It only fires while idle. There is no cross-session persistence —
   that's why this skill re-establishes the loop every session rather than assuming one is already
-  running.
+  running. A cloud-scheduled agent runs in a fresh, isolated environment with none of that local
+  state, so it **cannot** run this particular loop — there's no cloud path to fall back to. That's
+  why Step 1 below calls `CronCreate` directly instead of going through the generic `/loop` skill:
+  `/loop` would ask whether to use a cloud schedule for anything ≥60 minutes, and that question has
+  no useful answer here.
 - **Codex parity is unsolved.** This skill only covers Claude Code sessions. If the user runs a
   Codex workspace on the same branch, tell them explicitly that this loop does not cover it.
 
@@ -41,8 +48,18 @@ Print a one-line announcement before starting — never start this silently:
 Starting hourly PR-maintenance loop for PR #<number>...
 ```
 
-Then call `/loop 60m <hourly prompt>` using the template below, with `<number>` and `<repo>`
-filled in, and `started=<current timestamp>` for the self-expiry sentinel.
+Call `CronCreate` **directly** — `cron: "0 * * * *"` (every hour), `recurring: true`, `prompt` set
+to the hourly prompt template below with `<number>`/`<repo>` filled in and
+`started=<current timestamp>` for the self-expiry sentinel. **Do not** route this through the
+generic `/loop` skill: `/loop` asks whether to use a cloud schedule for any interval ≥60 minutes,
+but per "Known limitations" above there is no cloud-compatible way to run this loop, so that
+question has no useful answer — don't ask it, go straight to `CronCreate`. If a user explicitly
+insists on trying `/loop` anyway and it offers the cloud option, tell them plainly it won't work
+for this loop and point back to this skill instead of proceeding down that path.
+
+After scheduling, immediately run the hourly prompt's steps once now (don't wait for the first
+cron fire) — same as `/loop`'s own fixed-interval mode would have done automatically, but since
+this skill bypasses `/loop` it must do that step itself.
 
 ## Hourly prompt template
 
