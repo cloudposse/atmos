@@ -343,11 +343,24 @@ func renderControlOutput(aggregate *scheduler.AggregateResult, definitionOrder [
 // renderControlChildBlock reports a parallel/matrix child's completion status
 // through the shared ui.Success/ui.Warning/ui.Error pipeline, matching the
 // `AnnounceStepStart`/`AnnounceStepEnd` banner convention used by other
-// workflow step engines instead of a raw "[nodeID] status" line.
+// workflow step engines instead of a raw "[nodeID] status" line. Parallel and
+// matrix children run concurrently, so their stdout/stderr is buffered during
+// execution rather than streamed live; print that buffered output before the
+// completion banner so the log reads as "here's what happened, here's the
+// verdict" instead of announcing completion before showing any output.
 func renderControlChildBlock(result *scheduler.Result) {
 	child, _ := result.Value.(*ControlResult)
 	canceled := child != nil && child.Canceled
 	name := controlNodeLabel(&result.Node)
+
+	if child != nil {
+		if child.Stdout != "" {
+			_ = data.Write(child.Stdout)
+		}
+		if child.Stderr != "" {
+			ui.Write(child.Stderr)
+		}
+	}
 
 	switch {
 	case canceled:
@@ -358,15 +371,6 @@ func renderControlChildBlock(result *scheduler.Result) {
 		ui.Warningf("`%s` skipped", name)
 	default:
 		ui.Successf("`%s` completed", name)
-	}
-
-	if child != nil {
-		if child.Stdout != "" {
-			_ = data.Write(child.Stdout)
-		}
-		if child.Stderr != "" {
-			ui.Write(child.Stderr)
-		}
 	}
 }
 
