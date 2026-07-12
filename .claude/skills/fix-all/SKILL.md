@@ -35,6 +35,11 @@ Hard prohibitions for every run:
   human-attended exception to `--force-with-lease` — this is not that).
 - Never touch `.github/workflows/**`, `Makefile`, `go.mod`, `go.sum`, or anything secret-shaped.
 - Never `gh pr merge` or `gh pr close`. Merge is human-gated, full stop.
+- Never `gh pr edit --base` (retargeting the PR's base branch), `--add-reviewer`/`--remove-reviewer`,
+  `--milestone`, or `--add-label`/`--remove-label`. The only autonomous `gh pr edit` usage in this
+  skill is rewriting `--title`/`--body`/`--body-file` to keep the PR description in sync with the
+  patch's actual scope (step 8) — labels and reviewers stay human-owned via the `pull-request`
+  skill's decision tree.
 - Never bypass commit signing (`--no-gpg-sign`, `-c commit.gpgsign=false`).
 - Never `git add -A` / `git add .` / `git add --all`. Add only the specific files touched.
 - Never `git reset --hard` or `git clean`.
@@ -55,9 +60,11 @@ directly), you may be prompted for approval instead of stalling — that's expec
 
 That guarantee only holds where the allow/deny rules are precise. Several of the allow rules are
 necessarily broad prefix matches (`git add:*`, `git commit:*`, `git push origin HEAD:*`,
-`gh api graphql:*`, `gh api repos/cloudposse/atmos/pulls/*`) because legitimate commands vary in
-their trailing arguments. Broad prefixes can also match a prohibited variant (`git add -A`,
-`git commit --no-gpg-sign`, a GraphQL mutation, a non-GET call against the `pulls` endpoint) unless
+`gh api graphql:*`, `gh api repos/cloudposse/atmos/pulls/*`, `gh pr edit:*`) because legitimate
+commands vary in their trailing arguments. Broad prefixes can also match a prohibited variant
+(`git add -A`, `git commit --no-gpg-sign`, a GraphQL mutation, a non-GET call against the `pulls`
+endpoint, `gh pr edit --base`/`--add-reviewer`/`--remove-reviewer`/`--milestone`/`--add-label`/
+`--remove-label`) unless
 an explicit `deny` entry blocks that specific variant first — `deny` always wins over `allow`, but
 only for patterns someone remembered to add. Treat the prohibitions above as the source of truth
 and the deny list as an incomplete, best-effort mirror of them. When you add a new hard
@@ -196,8 +203,32 @@ The `say` skill owns the phrasing rule and the defensive invocation wrapper — 
      commit + plain `git push`) — this is a final guard against a fix that got committed but not
      pushed, or leftover local edits from a prior interrupted run, not a routine expectation.
 
-   If all five hold, invoke `say` trigger 7 (`"PR <number> is ready for final review."`) and make
-   sure the step-9 summary carries a matching banner: `✅ PR #<number> is ready for final review.`
+   Once all five hold, reconcile the PR title and description before announcing anything — a PR
+   that's technically green but whose description no longer matches what it does isn't actually
+   ready for a human's final pass:
+
+   - Read the **full** scope of the patch, not just this cycle's commits: `git log
+     origin/main..HEAD --oneline` and `git diff origin/main...HEAD --stat`. Multi-cycle loops
+     accumulate CodeRabbit/lint/coverage fix commits on top of the original patch — the title/body
+     written when the PR was first opened can go stale as scope grows.
+   - Compare against the current `gh pr view <number> --json title,body`. If the title no longer
+     names what the diff actually does, or the body is missing a what/why/references section for
+     something the diff now includes, it needs a rewrite.
+   - If a rewrite is needed: title ≤70 chars, body using the `pull-request` skill's what/why/
+     references template — see that skill for the full convention, don't re-derive it here. Write
+     the body to a temp file and pass `--body-file` (never inline `--body` with backticks — see
+     that skill's documented escaping gotcha), then:
+     `gh pr edit <number> --title "..." --body-file <tmpfile>`.
+     This is the **only** autonomous `gh pr edit` usage in this skill — pass just `--title` and
+     `--body-file`, never `--base`, `--add-reviewer`, `--milestone`, or a label flag (all denied in
+     `.claude/settings.json`). Labels stay human-owned via the `pull-request` skill's decision
+     tree; don't touch them here even if scope growth means the semver label looks wrong now — note
+     that mismatch in the step-9 summary instead, as something for the human to reconsider.
+   - Already accurate: no-op, don't call `gh pr edit` just to touch it.
+
+   With the five conditions holding and the description reconciled, invoke `say` trigger 7
+   (`"PR <number> is ready for final review."`) and make sure the step-9 summary carries a matching
+   banner: `✅ PR #<number> is ready for final review.`
 
 9. Always end with a clear summary of what was found and fixed, even on the all-clean path. If
    step 8 fired, the summary must include its `✅ PR #<number> is ready for final review.` banner
