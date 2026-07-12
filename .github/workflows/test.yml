@@ -51,8 +51,9 @@ jobs:
     # and on top of that the post-job Go cache save (tar + zstd of
     # GOMODCACHE/GOCACHE) takes several minutes. A cold cache after dependency
     # changes plus that save pushes the job past a tight limit and the run gets
-    # cancelled. Give the slowest target enough headroom for build + cache save.
-    timeout-minutes: 30
+    # cancelled mid-save (see #2713's windows build being killed at 30m10s).
+    # Give the slowest target real headroom for build + cache save.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
