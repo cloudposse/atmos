@@ -165,6 +165,6 @@ func loadAtmosConfigSchemaFile(t *testing.T, relPath string) map[string]any {
 	data, err := os.ReadFile(filepath.Clean(relPath))
 	require.NoErrorf(t, err, "failed to read atmos-config schema at %s", relPath)
 	var schema map[string]any
-	require.NoError(t, json.Unmarshal(data, &schema), "failed to parse atmos-config schema at %s", relPath)
+	require.NoErrorf(t, json.Unmarshal(data, &schema), "failed to parse atmos-config schema at %s", relPath)
 	return schema
 }

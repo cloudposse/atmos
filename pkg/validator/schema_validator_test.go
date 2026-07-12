@@ -222,7 +222,7 @@ func TestValidateYAMLSchema_AtmosConfigSchema(t *testing.T) {
 	v := NewYAMLSchemaValidator(&schema.AtmosConfiguration{})
 	schemaSource := "atmos://schema/config/global/1.0"
 
-	validConfig, err := os.ReadFile("../../tests/fixtures/scenarios/invalid-config-schema/atmos.yaml")
+	invalidConfig, err := os.ReadFile("../../tests/fixtures/scenarios/invalid-config-schema/atmos.yaml")
 	require.NoError(t, err)
 
 	tmpDir := t.TempDir()
@@ -238,7 +238,7 @@ components:
 `), 0o644))
 
 	invalidPath := filepath.Join(tmpDir, "invalid-atmos.yaml")
-	require.NoError(t, os.WriteFile(invalidPath, validConfig, 0o644))
+	require.NoError(t, os.WriteFile(invalidPath, invalidConfig, 0o644))
 
 	validErrors, err := v.ValidateYAMLSchema(schemaSource, validPath)
 	require.NoError(t, err)
