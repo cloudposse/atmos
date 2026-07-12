@@ -48,6 +48,18 @@ func ResetNestedAuthManagerCache() {
 // serialized (e.g. a channel/func value), so callers resolve without caching. Shared by
 // describeStacksProcessor and the nested terraform.state path so the two cannot drift.
 func buildComponentAuthCacheKey(parent auth.AuthManager, authSection map[string]any) (string, bool) {
+	// authContextWrapper only propagates an enclosing component's AuthContext for template/YAML-function
+	// evaluation (see terraform_output_utils.go) and cannot prove chain identity: its GetChain always
+	// returns an empty slice by design, since a non-empty chain would incorrectly make nested targets
+	// with their own default-identity auth section inherit the caller's identity instead of their own
+	// (see createComponentAuthManager). Without this guard, two different real identities propagated via
+	// authContextWrapper would collapse onto the same cache key for any shared-shape auth section,
+	// silently reusing one identity's AuthManager (and credentials) for a different identity's nested
+	// lookup. Always resolve fresh for these parents.
+	if _, isWrapper := parent.(*authContextWrapper); isWrapper {
+		return "", false
+	}
+
 	fingerprint, err := json.Marshal(authSection)
 	if err != nil {
 		return "", false

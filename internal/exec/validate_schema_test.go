@@ -1,9 +1,12 @@
 package exec
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/xeipuuv/gojsonschema"
 	"go.uber.org/mock/gomock"
 
@@ -156,6 +159,45 @@ func TestExecuteAtmosValidateSchemaCmd(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+// TestDisplayPath verifies user-facing validation output never leaks
+// machine-specific absolute paths for files inside the working directory.
+func TestDisplayPath(t *testing.T) {
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		file string
+		want string
+	}{
+		{
+			name: "file inside cwd becomes relative",
+			file: filepath.Join(cwd, "config.yaml"),
+			want: "config.yaml",
+		},
+		{
+			name: "nested file inside cwd becomes relative",
+			file: filepath.Join(cwd, "stacks", "dev.yaml"),
+			want: filepath.Join("stacks", "dev.yaml"),
+		},
+		{
+			name: "file outside cwd stays absolute",
+			file: filepath.Join(filepath.Dir(cwd), "elsewhere", "x.yaml"),
+			want: filepath.Join(filepath.Dir(cwd), "elsewhere", "x.yaml"),
+		},
+		{
+			name: "relative path passes through",
+			file: "config.yaml",
+			want: "config.yaml",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, displayPath(tt.file))
 		})
 	}
 }

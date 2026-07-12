@@ -508,6 +508,21 @@ func TestProcessStackConfig_HappyPath(t *testing.T) {
 			},
 		},
 		{
+			name: "config with stack-level version track assertion",
+			config: map[string]any{
+				cfg.VersionSectionName: map[string]any{
+					"track": "dev",
+				},
+				cfg.VarsSectionName: map[string]any{
+					"environment": "dev",
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				require.NotNil(t, result)
+				assert.Equal(t, map[string]any{"track": "dev"}, result[cfg.VersionSectionName])
+			},
+		},
+		{
 			name: "config with stack-level name override",
 			config: map[string]any{
 				cfg.NameSectionName: "custom-stack-name",

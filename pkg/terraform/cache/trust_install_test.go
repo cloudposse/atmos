@@ -248,6 +248,28 @@ func TestInstallTrust_DarwinGitHubActionsUsesSystemKeychain(t *testing.T) {
 	assert.Equal(t, []string{"security", "add-trusted-cert", "-d", "-r", "trustRoot", "-p", "ssl", "-k", macosSystemKeychainPath, cert}, (*commands)[0].args)
 }
 
+func TestInstallTrust_DarwinGitHubActionsFallsBackToLoginKeychain(t *testing.T) {
+	commands := forceTrustPlatform(t, "darwin", func(name string, _ ...string) error {
+		if name == "sudo" {
+			return assert.AnError
+		}
+		return nil
+	})
+	forceGitHubActions(t, true)
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	require.NoError(t, os.WriteFile(cert, []byte("placeholder"), tlsCertPerm))
+
+	require.NoError(t, InstallTrust(cert))
+	require.Len(t, *commands, 2)
+	assert.Equal(t, "sudo", (*commands)[0].name)
+	assert.Equal(t, []string{"security", "add-trusted-cert", "-d", "-r", "trustRoot", "-p", "ssl", "-k", macosSystemKeychainPath, cert}, (*commands)[0].args)
+	assert.Equal(t, "security", (*commands)[1].name)
+	assert.Equal(t, "add-trusted-cert", (*commands)[1].args[0])
+	assert.Contains(t, (*commands)[1].args, "-k")
+	assert.Contains(t, (*commands)[1].args, cert)
+	assert.NotContains(t, (*commands)[1].args, macosSystemKeychainPath)
+}
+
 func TestInstallTrust_WindowsUsesCurrentUserRootStore(t *testing.T) {
 	forceTrustPlatform(t, "windows", nil)
 	forceGitHubActions(t, false)
@@ -327,6 +349,24 @@ func TestRemoveTrust_DarwinGitHubActionsUsesSystemKeychain(t *testing.T) {
 	require.Len(t, *commands, 1)
 	assert.Equal(t, "sudo", (*commands)[0].name)
 	assert.Equal(t, []string{"security", "delete-certificate", "-c", certCommonName, macosSystemKeychainPath}, (*commands)[0].args)
+}
+
+func TestRemoveTrust_DarwinGitHubActionsFallsBackToLoginKeychain(t *testing.T) {
+	commands := forceTrustPlatform(t, "darwin", func(name string, _ ...string) error {
+		if name == "sudo" {
+			return assert.AnError
+		}
+		return nil
+	})
+	forceGitHubActions(t, true)
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+
+	require.NoError(t, RemoveTrust(cert))
+	require.Len(t, *commands, 2)
+	assert.Equal(t, "sudo", (*commands)[0].name)
+	assert.Equal(t, []string{"security", "delete-certificate", "-c", certCommonName, macosSystemKeychainPath}, (*commands)[0].args)
+	assert.Equal(t, "security", (*commands)[1].name)
+	assert.Equal(t, []string{"remove-trusted-cert", cert}, (*commands)[1].args)
 }
 
 func TestRemoveTrust_WindowsUsesCurrentUserRootStore(t *testing.T) {

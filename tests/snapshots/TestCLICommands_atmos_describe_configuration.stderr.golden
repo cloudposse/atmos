@@ -4,6 +4,8 @@
  DEBU  Found atmos.d directory, loading configurations path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d
  DEBU  Loaded configuration directory source=atmos.d files=5 pattern=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/**/*
  DEBU  Loading toolchain registries from atmos.yaml registryCount=0
+ DEBU  GitHub CLI token lookup failed (CLI may not be installed or authenticated) cli=gh error="exit status 1"
+ DEBU  No GitHub token resolved; using anonymous (unauthenticated) GitHub access (subject to rate limits)
  DEBU  Successfully loaded configured registry from atmos.yaml
  DEBU  Found atmos.d directory, loading configurations path=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d
  DEBU  Loaded configuration directory source=atmos.d files=5 pattern=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/atmos.d/**/*

@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // atmosConfig is set by SetAtmosConfig before command execution.
@@ -81,14 +82,31 @@ func trackFromArgs(cmd *cobra.Command, args []string) string {
 	return track
 }
 
-// writeFormatted writes v to the data channel in the requested --format.
+// writeFormatted writes v to the data channel in the requested --format,
+// using the same canonically-indented, syntax-highlighted rendering as the
+// rest of the CLI (pkg/utils.GetHighlightedYAML/GetHighlightedJSON, which
+// self-detect TTY/ForceColor and degrade to plain output otherwise).
 func writeFormatted(cmd *cobra.Command, v any) error {
 	format, _ := cmd.Flags().GetString("format")
 	switch strings.ToLower(format) {
 	case "", "yaml":
-		return data.WriteYAML(v)
+		if atmosConfig == nil {
+			return data.WriteYAML(v)
+		}
+		y, err := u.GetHighlightedYAML(atmosConfig, v)
+		if err != nil {
+			return err
+		}
+		return data.Write(y)
 	case "json":
-		return data.WriteJSON(v)
+		if atmosConfig == nil {
+			return data.WriteJSON(v)
+		}
+		j, err := u.GetHighlightedJSON(atmosConfig, v)
+		if err != nil {
+			return err
+		}
+		return data.Write(j + "\n")
 	default:
 		return fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}

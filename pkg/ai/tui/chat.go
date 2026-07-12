@@ -86,6 +86,7 @@ var availableProviders = []struct {
 	{providerAnthropic, "Anthropic (Claude) - Industry-leading reasoning and coding"},
 	{"openai", "OpenAI (GPT) - Most popular, widely adopted models"},
 	{"gemini", "Google (Gemini) - Strong multimodal capabilities"},
+	{"github", "GitHub Models - Zero-secret CI with the built-in GITHUB_TOKEN"},
 	{"grok", "xAI (Grok) - Real-time data access"},
 	{"ollama", "Ollama - Local models for privacy and offline use"},
 	{"bedrock", "AWS Bedrock - Enterprise-grade AI with AWS security and compliance"},

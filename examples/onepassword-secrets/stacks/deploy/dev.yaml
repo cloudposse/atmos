@@ -4,4 +4,5 @@ vars:
   stage: dev
 
 import:
+  - catalog/emulator/onepassword-connect
   - catalog/api

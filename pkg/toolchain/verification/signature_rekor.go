@@ -66,11 +66,28 @@ const (
 
 var rekorTlog5xxStatuses = []string{"500", "502", "503", "504"}
 
+// cosignHTTPFetchMarker is the literal prefix cosign's own HTTP client uses
+// when a direct fetch (e.g. of a --certificate/--signature URL pointing at a
+// release asset) returns a non-2xx response, such as:
+//
+//	loading cert: loading URL https://.../tofu_1.12.2_SHA256SUMS.pem: server returned HTTP 504
+//
+// This is distinct from rekorTlogEndpointMarker above: cosign fetches
+// --certificate/--signature URLs itself rather than atmos's own downloader
+// pre-fetching them, so the toolchain's asset-download retry logic
+// (pkg/toolchain/installer/download.go) never sees this request. The status
+// codes mirror download.go's isRetryableHTTPStatus so a transient CDN error
+// gets the same treatment whether atmos or cosign made the request.
+const cosignHTTPFetchMarker = "server returned HTTP "
+
+var cosignHTTPFetchRetryableStatuses = []string{"429", "500", "502", "503", "504"}
+
 // classifyCosignError joins ErrSignatureRetryable into err when the cosign
-// output contains a known transient failure marker. Two classes qualify:
-// Sigstore Rekor API flakes (rekorFlakeMarkers, tlog 5xx) and
-// transport-level network errors (transportFlakeMarkers).
-// Otherwise returns err unchanged.
+// output contains a known transient failure marker. Three classes qualify:
+// Sigstore Rekor API flakes (rekorFlakeMarkers, tlog 5xx), transport-level
+// network errors (transportFlakeMarkers), and generic upstream HTTP 5xx/429
+// responses cosign surfaces when it directly fetches a URL
+// (cosignHTTPFetchMarker). Otherwise returns err unchanged.
 //
 // Never broaden what counts as retryable beyond known upstream-service
 // flakes and transport failures — real signature failures (tampering,
@@ -102,6 +119,13 @@ func classifyCosignError(err error) error {
 	}
 	if isRekorStreamInternalError(msg) {
 		return errors.Join(errUtils.ErrSignatureRetryable, err)
+	}
+	if strings.Contains(msg, cosignHTTPFetchMarker) {
+		for _, status := range cosignHTTPFetchRetryableStatuses {
+			if strings.Contains(msg, cosignHTTPFetchMarker+status) {
+				return errors.Join(errUtils.ErrSignatureRetryable, err)
+			}
+		}
 	}
 	return err
 }

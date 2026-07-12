@@ -21,6 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -217,6 +218,16 @@ func (h *HTTPHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 		return lastResult, buildHTTPError(step, req, retryErr)
 	}
 
+	if lastResult != nil {
+		ui.Infof(
+			"Webhook %q sent %s request to %s and received HTTP %v",
+			step.Name,
+			req.method,
+			sanitizeHTTPDestination(req.url),
+			lastResult.Metadata[metaStatusCode],
+		)
+	}
+
 	return lastResult, nil
 }
 
@@ -339,7 +350,7 @@ func buildHTTPError(step *schema.WorkflowStep, req *httpRequest, retryErr error)
 		return errUtils.Build(errUtils.ErrHTTPStepRequestFailed).
 			WithCause(httpErr.cause).
 			WithContext("step", step.Name).
-			WithContext("url", req.url).
+			WithContext("url", sanitizeHTTPDestination(req.url)).
 			WithHint("Verify the URL is reachable and the timeout is large enough").
 			Err()
 	}
@@ -347,7 +358,7 @@ func buildHTTPError(step *schema.WorkflowStep, req *httpRequest, retryErr error)
 	if httpErr.reason == reasonResponse {
 		return errUtils.Build(errUtils.ErrHTTPStepUnexpectedResponse).
 			WithContext("step", step.Name).
-			WithContext("url", req.url).
+			WithContext("url", sanitizeHTTPDestination(req.url)).
 			WithContext("status", httpErr.status).
 			WithHint("Adjust 'expect.response' or fix the endpoint so the body matches").
 			Err()
@@ -355,10 +366,18 @@ func buildHTTPError(step *schema.WorkflowStep, req *httpRequest, retryErr error)
 
 	return errUtils.Build(errUtils.ErrHTTPStepUnexpectedStatus).
 		WithContext("step", step.Name).
-		WithContext("url", req.url).
+		WithContext("url", sanitizeHTTPDestination(req.url)).
 		WithContext("status", httpErr.status).
 		WithHint("Set 'expect.status' to the codes the endpoint returns, or add a retry policy for transient failures").
 		Err()
+}
+
+func sanitizeHTTPDestination(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Host == "" {
+		return rawURL
+	}
+	return parsed.Host
 }
 
 // buildHTTPRequest resolves templates and assembles the request spec.

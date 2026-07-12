@@ -35,11 +35,11 @@ Multiple Claude sessions may be working on the same branch or worktree simultane
 
 ```bash
 # Build & Test
-atmos build           # Build to ./build/atmos
+atmos build                  # Build to ./build/atmos
 atmos test                   # Run short tests
-atmos test --full            # Run full tests
+atmos test --full            # Run full acceptance tests
 atmos test --coverage        # Tests with coverage
-atmos lint changed           # golangci-lint on changed files
+atmos lint --changed         # golangci-lint on changed files
 ```
 
 ## Architecture
@@ -198,7 +198,7 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 - Use interfaces + dependency injection for testability
 - Generate mocks with `go.uber.org/mock/mockgen`
 - Table-driven tests for comprehensive coverage
-- Target >80% coverage
+- Target >85% coverage
 
 ### Test Isolation (MANDATORY)
 ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, args).
@@ -294,12 +294,11 @@ ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken
 ### Regenerating Screengrabs (IMPORTANT)
 **When:** After modifying CLI behavior/help/output, adding commands. NOT for doc-only changes.
 
-**How (Linux/CI only):**
-1. GitHub Actions: `gh workflow run screengrabs.yaml` (creates PR)
-2. Local Linux: `atmos screengrabs all`
-3. Docker (macOS): `atmos screengrabs docker-all`
+**How (any OS — native, no containers; screengrabs are casts custom commands, never a side-car tool):**
+1. Local: `atmos --chdir=demo/casts casts generate screengrabs cli` (the `casts setup` step builds atmos from the working tree; the command list lives inline in `demo/casts/atmos.d/screengrabs/cli.yaml` and each command is recorded via the global `--cast` flag into `website/static/casts/screengrabs/<slug>.cast`)
+2. GitHub Actions: `gh workflow run screengrabs.yaml` (creates PR; builds atmos from the checkout the same way)
 
-**Notes:** Captures exact output, ANSI→HTML, `script` syntax differs BSD/GNU, regenerate all together, no pipe indirection.
+**Notes:** Recording uses no PTY; correct TrueColor and layout width come from `ATMOS_FORCE_COLOR` and `COLUMNS`/`ATMOS_CAST_RECORDING_WIDTH` (recorded at 90 cols to fit the docs column). Machine-specific repo paths are rewritten to `/absolute/path/to/repo` (the test-harness convention) and validation (`atmos --chdir=demo/casts casts validate screengrabs cli`) fails on error output, path leaks, or docs referencing a missing cast. Regenerate all together; never pipe the output.
 
 ### PRD Documentation (MANDATORY)
 All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames.
@@ -384,7 +383,7 @@ Don't commit: todos, research, scratch files. Do commit: code, tests, requested 
 Always ask first: "This will discard uncommitted changes. Proceed? [y/N]"
 
 ### Test Coverage (MANDATORY)
-80% minimum (CodeCov enforced). All features need tests. `atmos test --coverage` for reports.
+85% minimum (CodeCov enforced). All features need tests. `atmos test --coverage` for reports.
 
 ### Cyclomatic Complexity (MANDATORY)
 golangci-lint enforces `cyclop: max-complexity: 15` and `funlen: lines: 60, statements: 40`.
@@ -461,10 +460,10 @@ Auto-enabled via `RootCmd.ExecuteC()`. Non-standard paths use `telemetry.Capture
 **Build**: CGO disabled, cross-platform, version via ldflags, output to `./build/`
 
 ### Compilation (MANDATORY)
-ALWAYS compile after changes: `go build . && go test ./...`. Fix errors immediately.
+ALWAYS compile after changes: `go build ./... && atmos test`. Fix errors immediately. `atmos test` runs short-mode tests only; use `atmos test --full` before opening a PR or when a change touches slow/integration-style tests.
 
 ### Pre-commit (MANDATORY)
-NEVER use `--no-verify`. Run `atmos lint changed` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
+NEVER use `--no-verify`. Run `atmos lint --changed` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,

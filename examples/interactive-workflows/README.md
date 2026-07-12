@@ -1,3 +1,11 @@
+---
+title: Interactive Workflows
+tags: [Automation]
+cast:
+  file: /casts/examples/interactive-workflows/table-and-build.cast
+  title: atmos interactive workflow steps
+---
+
 # Interactive Workflows Demo
 
 This example demonstrates Atmos's powerful interactive workflow step types. These step types enable building sophisticated CLI wizards and interactive deployment pipelines.

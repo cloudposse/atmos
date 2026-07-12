@@ -43,22 +43,23 @@ type S3ClientAPI interface {
 // s3TestMu protects test-only variables for concurrent test execution.
 var s3TestMu sync.RWMutex
 
-// s3ClientFactory creates S3 clients from AWS config.
+// s3ClientFactory creates S3 clients from AWS config and functional options
+// (e.g. BaseEndpoint, UsePathStyle from s3ClientOptions).
 // Override in tests to inject fake S3 clients.
 // Protected by s3TestMu for thread-safe concurrent test execution.
-var s3ClientFactory = func(cfg aws.Config) S3ClientAPI {
-	return s3.NewFromConfig(cfg)
+var s3ClientFactory = func(cfg aws.Config, optFns ...func(*s3.Options)) S3ClientAPI {
+	return s3.NewFromConfig(cfg, optFns...)
 }
 
 // getS3ClientFactory returns the current S3 client factory with thread-safe read access.
-func getS3ClientFactory() func(aws.Config) S3ClientAPI {
+func getS3ClientFactory() func(aws.Config, ...func(*s3.Options)) S3ClientAPI {
 	s3TestMu.RLock()
 	defer s3TestMu.RUnlock()
 	return s3ClientFactory
 }
 
 // SetS3ClientFactory sets a custom S3 client factory for testing.
-func SetS3ClientFactory(f func(aws.Config) S3ClientAPI) {
+func SetS3ClientFactory(f func(aws.Config, ...func(*s3.Options)) S3ClientAPI) {
 	defer perf.Track(nil, "backend.SetS3ClientFactory")()
 
 	s3TestMu.Lock()
@@ -72,8 +73,8 @@ func ResetS3ClientFactory() {
 
 	s3TestMu.Lock()
 	defer s3TestMu.Unlock()
-	s3ClientFactory = func(cfg aws.Config) S3ClientAPI {
-		return s3.NewFromConfig(cfg)
+	s3ClientFactory = func(cfg aws.Config, optFns ...func(*s3.Options)) S3ClientAPI {
+		return s3.NewFromConfig(cfg, optFns...)
 	}
 }
 
@@ -101,9 +102,10 @@ func SetS3SkipUnsupportedTestOps(skip bool) {
 
 // s3Config holds S3 backend configuration.
 type s3Config struct {
-	bucket  string
-	region  string
-	roleArn string
+	bucket       string
+	region       string
+	roleArn      string
+	usePathStyle bool
 }
 
 func init() {
@@ -165,7 +167,7 @@ func CreateS3Backend(
 	}
 
 	// Create S3 client using factory (allows test injection).
-	client := getS3ClientFactory()(awsConfig)
+	client := getS3ClientFactory()(awsConfig, s3ClientOptions(authContext, config.usePathStyle)...)
 
 	// Check if bucket exists and create if needed.
 	bucketAlreadyExisted, err := ensureBucket(ctx, client, config.bucket, config.region)
@@ -206,11 +208,36 @@ func extractS3Config(backendConfig map[string]any) (*s3Config, error) {
 		}
 	}
 
+	// Extract path-style addressing if specified (optional). Mirrors Terraform's own
+	// `backend.s3.use_path_style` setting — required by S3-compatible endpoints (e.g.
+	// a local AWS emulator) that don't support virtual-hosted-style bucket addressing.
+	usePathStyleVal, _ := backendConfig["use_path_style"].(bool)
+
 	return &s3Config{
-		bucket:  bucketVal,
-		region:  regionVal,
-		roleArn: roleArnVal,
+		bucket:       bucketVal,
+		region:       regionVal,
+		roleArn:      roleArnVal,
+		usePathStyle: usePathStyleVal,
 	}, nil
+}
+
+// s3ClientOptions builds AWS SDK v2 S3 client functional options from the identity's
+// auth context and backend config. SDK v2 endpoint overrides are per-service client
+// options, not part of aws.Config, so they must be applied at client construction time.
+// Without BaseEndpoint, an emulator-backed identity (aws/emulator) silently targets
+// real AWS instead of the local emulator endpoint — the endpoint is injected into the
+// Terraform subprocess but was never honored by this in-process S3 client. Mirrors
+// internal/terraform_backend/terraform_backend_s3.go's getCachedS3Client.
+func s3ClientOptions(authContext *schema.AuthContext, usePathStyle bool) []func(*s3.Options) {
+	var opts []func(*s3.Options)
+	if authContext != nil && authContext.AWS != nil && authContext.AWS.EndpointURL != "" {
+		endpoint := authContext.AWS.EndpointURL
+		opts = append(opts, func(o *s3.Options) { o.BaseEndpoint = aws.String(endpoint) })
+	}
+	if usePathStyle {
+		opts = append(opts, func(o *s3.Options) { o.UsePathStyle = true })
+	}
+	return opts
 }
 
 // ensureBucket checks if bucket exists and creates it if needed.
@@ -337,7 +364,7 @@ func S3BackendExists(
 	}
 
 	// Create S3 client using factory (allows test injection).
-	client := getS3ClientFactory()(awsConfig)
+	client := getS3ClientFactory()(awsConfig, s3ClientOptions(authContext, config.usePathStyle)...)
 
 	// Check if bucket exists.
 	return bucketExists(ctx, client, config.bucket)

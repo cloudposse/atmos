@@ -59,28 +59,72 @@ func (h BaseHandler) RequiresTTY() bool {
 	return h.requiresTTY
 }
 
-// CheckTTY verifies TTY availability for interactive steps.
-// Returns an error if TTY is required but not available.
-func (h BaseHandler) CheckTTY(step *schema.WorkflowStep) error {
-	defer perf.Track(nil, "step.BaseHandler.CheckTTY")()
-
-	if !h.requiresTTY {
-		return nil
-	}
+// hasInteractiveTTY reports whether an interactive terminal is available.
+// Interactive steps require both stdin and stdout to be TTYs. It honors
+// --force-tty / ATMOS_FORCE_TTY via terminal.New().
+func (h BaseHandler) hasInteractiveTTY() bool {
+	defer perf.Track(nil, "step.BaseHandler.hasInteractiveTTY")()
 
 	term := terminal.New()
 	// Interactive steps require both stdin and stdout to be TTYs.
-	if !term.IsTTY(terminal.Stdin) || !term.IsTTY(terminal.Stdout) {
-		return errUtils.Build(errUtils.ErrStepTTYRequired).
+	return term.IsTTY(terminal.Stdin) && term.IsTTY(terminal.Stdout)
+}
+
+// ttyRequiredError builds the error returned when an interactive step cannot run
+// because there is no TTY and no default value is configured.
+func (h BaseHandler) ttyRequiredError(step *schema.WorkflowStep) error {
+	defer perf.Track(nil, "step.BaseHandler.ttyRequiredError")()
+
+	return errUtils.Build(errUtils.ErrStepTTYRequired).
+		WithContext("step", step.Name).
+		WithContext("type", step.Type).
+		WithExplanation(fmt.Sprintf("The step type '%s' requires a TTY for user input", step.Type)).
+		WithHint("Use --dry-run to preview workflow without interactive steps").
+		WithHint("Set default values in workflow configuration").
+		WithHint("Use environment variables instead of interactive prompts in CI").
+		Err()
+}
+
+// resolveInteractive decides how an interactive step should obtain its value
+// based on TTY availability and whether a `default` is configured:
+//
+//   - (true, nil): a TTY is available; the caller renders the interactive prompt.
+//   - (false, nil): there is no TTY but the step has a `default`; the caller
+//     uses the default value non-interactively (e.g. in CI).
+//   - (false, err): there is no TTY and no `default` is set; err is
+//     ErrStepTTYRequired (the historical behavior).
+//
+// Non-interactive handlers (requiresTTY == false) always return (true, nil).
+func (h BaseHandler) resolveInteractive(step *schema.WorkflowStep) (bool, error) {
+	defer perf.Track(nil, "step.BaseHandler.resolveInteractive")()
+
+	if !h.requiresTTY || h.hasInteractiveTTY() {
+		return true, nil
+	}
+	if step.Default != "" {
+		return false, nil
+	}
+	return false, h.ttyRequiredError(step)
+}
+
+// ResolveDefault resolves Go templates in the step's default value, returning an
+// empty string when no default is configured. Shared by all interactive
+// handlers so default resolution is defined in exactly one place.
+func (h BaseHandler) ResolveDefault(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (string, error) {
+	defer perf.Track(nil, "step.BaseHandler.ResolveDefault")()
+
+	if step.Default == "" {
+		return "", nil
+	}
+	resolved, err := vars.Resolve(step.Default)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
+			WithCause(err).
 			WithContext("step", step.Name).
-			WithContext("type", step.Type).
-			WithExplanation(fmt.Sprintf("The step type '%s' requires a TTY for user input", step.Type)).
-			WithHint("Use --dry-run to preview workflow without interactive steps").
-			WithHint("Set default values in workflow configuration").
-			WithHint("Use environment variables instead of interactive prompts in CI").
+			WithContext("field", "default").
 			Err()
 	}
-	return nil
+	return resolved, nil
 }
 
 // ValidateRequired checks that a required field is not empty.

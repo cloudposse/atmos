@@ -1,0 +1,62 @@
+commands:
+  - name: casts generate examples remote-stack-imports remote-vars
+    description: Regenerate the Remote Stack Imports example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: remote-vars
+        working_directory: "../../.context/cast-fixtures/remote-stack-imports"
+        title: "Remote Stack Imports: merge local and remote stack data"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/remote-stack-imports/remote-vars.cast"
+        steps:
+          - type: simulate
+            text: "# trace where stack imports came from"
+          - type: simulate
+            text: &tree_cmd atmos list stacks --format tree --provenance
+          - type: shell
+            name: import-tree
+            duration: 550ms
+            interval: 750ms
+            command: *tree_cmd
+          - type: simulate
+            text: "# remote imports merge values into the local stack"
+          - type: simulate
+            text: &cmd atmos describe component myapp -s demo --query .vars
+          - type: shell
+            name: describe-vars
+            duration: 450ms
+            interval: 750ms
+            command: *cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples remote-stack-imports remote-vars
+  - name: casts validate examples remote-stack-imports remote-vars
+    description: Validate the Remote Stack Imports example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/remote-stack-imports/remote-vars.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          for needle in ["atmos list stacks --format tree --provenance", "atmos describe component myapp -s demo --query .vars", "imported_from: remote", "remote_import_test: true", "shared_setting: value-from-remote"]:
+              if needle not in plain:
+                  raise SystemExit(f"remote-stack-imports cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

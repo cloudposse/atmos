@@ -478,12 +478,17 @@ func writeMergedDataToFile(tempDir string, mergedData map[string]interface{}) (*
 }
 
 // Write the 'outer' top-level file and return its final file URL.
-func writeOuterTopLevelFile(tempDir string, fileURL string) (*url.URL, error) {
+func writeOuterTopLevelFile(tempDir string, fileURL string, mergedData map[string]interface{}) (*url.URL, error) {
 	// Write the 'outer' top-level file.
-	topLevel := map[string]interface{}{
-		"Env": map[string]interface{}{
-			"README_YAML": fileURL,
-		},
+	topLevel := make(map[string]interface{}, len(mergedData))
+	for key, value := range mergedData {
+		topLevel[key] = value
+	}
+	topLevel["Env"] = map[string]interface{}{
+		// Legacy Cloud Posse README templates call `defineDatasource "config" .Env.README_YAML`.
+		// Keep that path available while still exposing mergedData as root fields
+		// for fallback templates such as `{{ .name }}`.
+		"README_YAML": fileURL,
 	}
 	outerJSON, err := json.Marshal(topLevel)
 	if err != nil {
@@ -533,7 +538,7 @@ func ProcessTmplWithDatasourcesGomplate(
 		return "", err
 	}
 
-	finalTopLevelFileURL, err := writeOuterTopLevelFile(tempDir, finalFileUrl.String())
+	finalTopLevelFileURL, err := writeOuterTopLevelFile(tempDir, finalFileUrl.String(), mergedData)
 	if err != nil {
 		return "", err
 	}

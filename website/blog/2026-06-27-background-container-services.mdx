@@ -6,6 +6,8 @@ tags: [feature, dx]
 date: 2026-06-27
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Atmos workflows can now start long-running container services in the background, wait for them to become healthy, and tear them down automatically. Bring up an emulator, database, or registry with `background: true`, gate the next step on its container health check, and stop it with a `cancel` step — no shell scripts, no background jobs, no orphaned containers.
 
 <!--truncate-->
@@ -73,6 +75,12 @@ workflows:
 
 Atmos starts the emulator, blocks until its health check reports healthy, runs `apply`, then `cancel` stops and removes the container.
 
+Here it is running end to end:
+
+<CastPlayer src="/casts/examples/background-steps/service.cast" title="atmos background service" chrome controls scrubber />
+
+[View the full example](/examples/background-steps)
+
 ## Readiness Reuses the Health Check
 
 The key idea is that readiness is not a new concept — it's the container's own `healthcheck`, the same shape you already use for [container components](/changelog/container-components). When a background service declares a health check, Atmos blocks until it's healthy before continuing. No `sleep` guesses, no polling scripts.
@@ -113,6 +121,12 @@ Background services turn "stand up a dependency for these steps" into a first-cl
 - The same workflow runs locally, in CI, or inside a larger runbook.
 
 This is especially useful for end-to-end tests against emulators, integration steps that need a database or registry, and any workflow where a service has to be up *while* the real work runs.
+
+Atmos's built-in emulator drivers cover AWS (`floci/aws`, `ministack/aws`, `localstack/aws`),
+GCP (`floci/gcp`), Azure (`floci/az`), Kubernetes (`k3s`), Vault/OpenBao (`openbao`,
+`vault`), OCI/Terraform registries (`registry`), and a Mockoon-backed 1Password Connect server
+(`mockoon/1password-connect`). See the [emulator component reference](/stacks/components/emulator#supported-drivers--targets)
+for the current driver and target list.
 
 ## Get Involved
 

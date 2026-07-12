@@ -22,6 +22,7 @@ import (
 	"github.com/mattn/go-isatty"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/cachepaths"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/browser"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -42,11 +43,14 @@ const (
 	webflowGrantTypeRefresh  = "refresh_token"
 	webflowCallbackTimeout   = 5 * time.Minute
 	webflowTokenMaxBodyBytes = 1 << 20 // 1 MB max response body.
-	webflowCacheSubdir       = "aws-webflow"
-	webflowCacheFilename     = "refresh.json"
-	webflowCacheDirPerms     = 0o700
-	webflowCacheFilePerms    = 0o600
-	webflowSessionDuration   = 12 * time.Hour
+	// This aliases cachepaths.AWSWebflowSubdir, the single source of truth
+	// also used by pkg/ci/cache to exclude this directory from CI cache
+	// archives.
+	webflowCacheSubdir     = cachepaths.AWSWebflowSubdir
+	webflowCacheFilename   = "refresh.json"
+	webflowCacheDirPerms   = 0o700
+	webflowCacheFilePerms  = 0o600
+	webflowSessionDuration = 12 * time.Hour
 	// Buffer before expiration at which webflowTokenRefreshBuffer triggers a refresh.
 	webflowTokenRefreshBuffer = 1 * time.Minute
 	// Byte length for generated state strings (CSRF protection).

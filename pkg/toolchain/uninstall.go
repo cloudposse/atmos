@@ -202,7 +202,7 @@ func handleToolNotFound(owner, repo, version string, err error, showProgressBar 
 func showUninstallProgress() {
 	spinner := bspinner.New()
 	fps.Apply(&spinner)
-	progressBar := progress.New(progress.WithDefaultGradient())
+	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
 
 	// Show progress for finding tool
 	bar := progressBar.ViewAs(progressFindingTool)
@@ -234,7 +234,7 @@ func handleUninstallError(owner, repo, version string, err error, showProgressBa
 
 // showUninstallCompletion displays completion message after successful uninstall.
 func showUninstallCompletion(owner, repo, version string) {
-	progressBar := progress.New(progress.WithDefaultGradient())
+	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
 	spinner := bspinner.New()
 	fps.Apply(&spinner)
 	bar := progressBar.ViewAs(1.0)
@@ -349,7 +349,7 @@ func processToolUninstalls(installedTools []uninstallToolInfo, installer *Instal
 	spinner.Spinner = bspinner.Dot
 	styles := theme.GetCurrentStyles()
 	spinner.Style = styles.Spinner
-	progressBar := progress.New(progress.WithDefaultGradient())
+	progressBar := progress.New(progress.WithGradient(theme.GetSpinnerColor(), theme.GetSuccessColor()))
 
 	var result uninstallResult
 	for i, tool := range installedTools {

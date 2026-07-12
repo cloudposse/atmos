@@ -26,6 +26,7 @@ type ControlCommandRequest struct {
 	Context context.Context
 	Program string
 	Args    []string
+	Dir     string
 	Env     []string
 	Streams process.Streams
 	Stdout  *bytes.Buffer
@@ -34,13 +35,31 @@ type ControlCommandRequest struct {
 
 type ControlCommandRunner func(request *ControlCommandRequest) error
 
+// ControlShellRequest carries the inputs for a control shell child's execution.
+type ControlShellRequest struct {
+	Command string
+	Dir     string
+	Env     []string
+	Stdout  io.Writer
+	Stderr  io.Writer
+}
+
+// ControlShellRunner executes a `type: shell` child's command string. When set on
+// a ControlCommandExecutor it replaces the host `sh -c` / `RunCommand` path so
+// shell children run through the in-process mvdan/sh interpreter (cross-platform,
+// masked, cancellable). The workflow executor leaves it nil to keep its
+// auth-aware RunCommand path; the registry bridge sets it.
+type ControlShellRunner func(ctx context.Context, req *ControlShellRequest) error
+
 type ControlCommandExecutor struct {
 	WorkflowDefinition  *schema.WorkflowDefinition
+	BasePath            string
 	BaseEnv             []string
 	CommandLineStack    string
 	CommandLineIdentity string
 	PrepareEnv          ControlEnvironmentFunc
 	RunCommand          ControlCommandRunner
+	ShellRunner         ControlShellRunner
 
 	outputMu sync.Mutex
 }
@@ -53,13 +72,16 @@ func (executor *ControlCommandExecutor) Execute(ctx context.Context, child *Cont
 	}
 
 	switch stepType {
-	case schema.TaskTypeShell, schema.TaskTypeAtmos:
+	case schema.TaskTypeShell, schema.TaskTypeAtmos, schema.TaskTypeScript:
 		stepEnv, err := executor.stepEnv(&step)
 		if err != nil {
 			return &ControlChildResult{}, err
 		}
 		if stepType == schema.TaskTypeShell {
 			return executor.executeShell(ctx, &step, stepEnv, output)
+		}
+		if stepType == schema.TaskTypeScript {
+			return executor.executeScript(ctx, &step, stepEnv, output)
 		}
 		return executor.executeAtmos(ctx, &step, stepEnv, output)
 	case "sleep":
@@ -84,14 +106,61 @@ func (executor *ControlCommandExecutor) stepEnv(step *schema.WorkflowStep) ([]st
 	return executor.PrepareEnv(executor.BaseEnv, stepIdentity, step.Name, workflowEnv, step.Env)
 }
 
+func (executor *ControlCommandExecutor) executeScript(ctx context.Context, step *schema.WorkflowStep, stepEnv []string, output ControlChildOutput) (*ControlChildResult, error) {
+	argv, stdin := process.ScriptInvocation(step.Interpreter, step.Script)
+	dir := executor.workingDirectory(step)
+	ioSpec := executor.commandStreams(output)
+	if stdin != nil {
+		ioSpec.streams.Stdin = stdin
+	}
+	err := retry.Do(ctx, step.Retry, func() error {
+		return executor.runCommand(&ControlCommandRequest{
+			Context: ctx,
+			Program: argv[0],
+			Args:    argv[1:],
+			Dir:     dir,
+			Env:     stepEnv,
+			Streams: ioSpec.streams,
+			Stdout:  ioSpec.stdout,
+			Stderr:  ioSpec.stderr,
+		})
+	})
+	ioSpec.flush()
+	return controlChildExecutionResult(ioSpec.stdout, ioSpec.stderr, err), err
+}
+
 func (executor *ControlCommandExecutor) executeShell(ctx context.Context, step *schema.WorkflowStep, stepEnv []string, output ControlChildOutput) (*ControlChildResult, error) {
 	ioSpec := executor.commandStreams(output)
+
+	// When a ShellRunner is wired (registry bridge), run the command through the
+	// in-process interpreter instead of shelling out. Output is teed to the live
+	// stream (which masks via the data layer) and the capture buffer (kept raw for
+	// downstream template references, matching the RunCommand path).
+	if executor.ShellRunner != nil {
+		outW := io.MultiWriter(ioSpec.streams.Stdout, ioSpec.stdout)
+		errW := io.MultiWriter(ioSpec.streams.Stderr, ioSpec.stderr)
+		dir := executor.workingDirectory(step)
+		err := retry.Do(ctx, step.Retry, func() error {
+			return executor.ShellRunner(ctx, &ControlShellRequest{
+				Command: step.Command,
+				Dir:     dir,
+				Env:     stepEnv,
+				Stdout:  outW,
+				Stderr:  errW,
+			})
+		})
+		ioSpec.flush()
+		return controlChildExecutionResult(ioSpec.stdout, ioSpec.stderr, err), err
+	}
+
 	program, args := controlShellInvocation(step.Command)
+	dir := executor.workingDirectory(step)
 	err := retry.Do(ctx, step.Retry, func() error {
 		return executor.runCommand(&ControlCommandRequest{
 			Context: ctx,
 			Program: program,
 			Args:    args,
+			Dir:     dir,
 			Env:     stepEnv,
 			Streams: ioSpec.streams,
 			Stdout:  ioSpec.stdout,
@@ -123,6 +192,7 @@ func (executor *ControlCommandExecutor) executeAtmos(ctx context.Context, step *
 		args = strings.Fields(step.Command)
 	}
 	args = appendControlStack(args, executor.finalStack(step))
+	dir := executor.workingDirectory(step)
 
 	ioSpec := executor.commandStreams(output)
 	err := retry.Do(ctx, step.Retry, func() error {
@@ -130,6 +200,7 @@ func (executor *ControlCommandExecutor) executeAtmos(ctx context.Context, step *
 			Context: ctx,
 			Program: "atmos",
 			Args:    args,
+			Dir:     dir,
 			Env:     stepEnv,
 			Streams: ioSpec.streams,
 			Stdout:  ioSpec.stdout,
@@ -145,6 +216,18 @@ func (executor *ControlCommandExecutor) runCommand(request *ControlCommandReques
 		return fmt.Errorf("%w: control command runner is not configured", schema.ErrWorkflowControlStepInvalid)
 	}
 	return executor.RunCommand(request)
+}
+
+func (executor *ControlCommandExecutor) workingDirectory(step *schema.WorkflowStep) string {
+	workflowDef := executor.WorkflowDefinition
+	if workflowDef == nil {
+		workflowDef = &schema.WorkflowDefinition{}
+	}
+	dir := CalculateWorkingDirectory(workflowDef, step, executor.BasePath)
+	if dir == "" {
+		return currentDir
+	}
+	return dir
 }
 
 type controlCommandIO struct {

@@ -1,0 +1,111 @@
+commands:
+  - name: casts generate examples source-provisioning sources
+    description: Regenerate the Source Provisioning example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-workdir
+        working_directory: &source_fixture "../../.context/cast-fixtures/source-provisioning"
+        output: none
+        command: rm -rf .workdir
+      - type: shell
+        name: provision-workdir
+        working_directory: *source_fixture
+        output: none
+        command: atmos terraform init weather -s dev -backend=false >/dev/null 2>&1
+      - type: cast
+        name: sources
+        working_directory: *source_fixture
+        title: "Source Provisioning: provision local component sources"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/source-provisioning/sources.cast"
+        steps:
+          - type: simulate
+            text: "# list source definitions before provisioning"
+          - type: simulate
+            text: &source_list_cmd atmos terraform source list
+          - type: shell
+            name: source-list
+            duration: 450ms
+            interval: 750ms
+            command: *source_list_cmd
+          - type: simulate
+            text: "# inspect the weather source mapping"
+          - type: simulate
+            text: &source_describe_cmd atmos terraform source describe weather -s dev
+          - type: shell
+            name: source-describe
+            duration: 450ms
+            interval: 750ms
+            command: *source_describe_cmd
+          - type: simulate
+            text: "# inspect the provisioned workdir"
+          - type: simulate
+            text: &workdir_cmd atmos terraform workdir list
+          - type: shell
+            name: workdir-list
+            duration: 450ms
+            interval: 750ms
+            command: *workdir_cmd
+          - type: simulate
+            text: "# show the exact files Atmos provisioned"
+          - type: simulate
+            text: &workdir_show_cmd atmos terraform workdir show weather -s dev
+          - type: shell
+            name: workdir-show
+            duration: 450ms
+            interval: 750ms
+            command: *workdir_show_cmd
+          - type: simulate
+            text: "# delete the provisioned source workdir"
+          - type: simulate
+            text: &source_delete_cmd atmos terraform source delete weather -s dev --force
+          - type: shell
+            name: source-delete
+            duration: 450ms
+            interval: 750ms
+            command: *source_delete_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples source-provisioning sources
+  - name: casts validate examples source-provisioning sources
+    description: Validate the Source Provisioning example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/source-provisioning/sources.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "atmos terraform source list",
+              "atmos terraform source describe weather -s dev",
+              "atmos terraform workdir list",
+              "atmos terraform workdir show weather -s dev",
+              "atmos terraform source delete weather -s dev --force",
+              "dev-weather",
+              "Deleted .workdir/terraform/dev-weather",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"source-provisioning cast missing {needle!r}")
+          for bad in ["Value for undeclared variable", "undeclared variable", "Workspace \"default\" doesn't exist", "Incomplete lock file information", "wttr.in", "Weather report"]:
+              if bad in plain:
+                  raise SystemExit(f"source-provisioning cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

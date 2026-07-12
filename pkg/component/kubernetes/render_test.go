@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // requireReadOnlyDirSupport skips tests that depend on a read-only directory
@@ -84,6 +85,19 @@ func TestRenderObjectsWritesToStdoutByDefault(t *testing.T) {
 	require.Contains(t, output, "kind: ConfigMap")
 	require.Contains(t, output, "---")
 	require.Contains(t, output, "kind: Service")
+}
+
+func TestRenderObjectsHighlightsStdoutWhenColorForced(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	atmosConfig.Settings.Terminal.ForceColor = true
+	atmosConfig.Settings.Terminal.SyntaxHighlighting.Enabled = true
+
+	output := captureKubernetesStdout(t, func() {
+		require.NoError(t, renderObjects(testRenderObjects(), renderOptions{AtmosConfig: atmosConfig}))
+	})
+
+	require.Contains(t, output, "\x1b[")
+	require.Contains(t, output, "ConfigMap")
 }
 
 func TestResolveRenderOptions(t *testing.T) {

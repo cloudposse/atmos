@@ -29,6 +29,22 @@ Run a nested subcommand by chaining the names:
 atmos list stacks
 ```
 
+## Path-Based Names
+
+When intermediate command levels only exist to spell out the command path, you can put the full path in `name` instead of writing nested `commands` arrays:
+
+```yaml
+commands:
+  - name: list stacks
+    description: List all Atmos stacks
+    steps:
+      - atmos list stacks
+```
+
+Atmos expands path-based names into the normal recursive command tree before merging configuration. That keeps the same deep merge behavior as nested `commands`: later configs can override matching command fields by segment name, and sibling leaves that share a prefix merge under the same parent command.
+
+Spaces in `commands[].name` are path separators. Literal spaces inside one command segment are not supported.
+
 ## Advanced Examples
 
 ### Define a New Terraform Command

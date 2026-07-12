@@ -36,6 +36,9 @@ steps:
 
   <dt>`limit`</dt>
   <dd>Optional maximum number of selections.</dd>
+
+  <dt>`default`</dt>
+  <dd>Optional value used in a non-TTY environment (e.g. CI). For multi-select (`multiple: true`) it is a comma-separated list.</dd>
 </dl>
 
-Interactive steps require a TTY. Multiple selections are available through `{{ .steps.components.values }}`.
+Interactive steps require a TTY; in a non-TTY environment such as CI, the step uses its [`default`](/workflows/steps#interactive-steps-in-ci-non-tty) if set and otherwise errors. Multiple selections are available through `{{ .steps.components.values }}`.
