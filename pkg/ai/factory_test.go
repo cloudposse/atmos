@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -186,6 +187,119 @@ func TestNewClient(t *testing.T) {
 			// Unexpected error.
 			assert.NoError(t, err)
 			assert.NotNil(t, client)
+		})
+	}
+}
+
+func TestDetectCLIProvider(t *testing.T) {
+	tests := []struct {
+		name     string
+		lookup   func(string) (string, error)
+		expected string
+	}{
+		{
+			name: "claude found returns claude-code (first priority)",
+			lookup: func(bin string) (string, error) {
+				if bin == "claude" {
+					return "/usr/local/bin/claude", nil
+				}
+				return "", errNotFound
+			},
+			expected: "claude-code",
+		},
+		{
+			name: "codex found returns codex-cli",
+			lookup: func(bin string) (string, error) {
+				if bin == "codex" {
+					return "/usr/local/bin/codex", nil
+				}
+				return "", errNotFound
+			},
+			expected: "codex-cli",
+		},
+		{
+			name: "copilot found returns copilot-cli",
+			lookup: func(bin string) (string, error) {
+				if bin == "copilot" {
+					return "/usr/local/bin/copilot", nil
+				}
+				return "", errNotFound
+			},
+			expected: "copilot-cli",
+		},
+		{
+			name: "gemini found returns gemini-cli",
+			lookup: func(bin string) (string, error) {
+				if bin == "gemini" {
+					return "/usr/local/bin/gemini", nil
+				}
+				return "", errNotFound
+			},
+			expected: "gemini-cli",
+		},
+		{
+			name: "claude and codex both found returns claude-code (priority order)",
+			lookup: func(bin string) (string, error) {
+				if bin == "claude" || bin == "codex" {
+					return "/usr/local/bin/" + bin, nil
+				}
+				return "", errNotFound
+			},
+			expected: "claude-code",
+		},
+		{
+			name: "none found returns empty string",
+			lookup: func(string) (string, error) {
+				return "", errNotFound
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, detectCLIProvider(tt.lookup))
+		})
+	}
+}
+
+var errNotFound = errors.New("binary not found")
+
+func TestGetProvider(t *testing.T) {
+	t.Run("explicit DefaultProvider always wins over PATH", func(t *testing.T) {
+		// Force PATH to an empty directory so no real CLI binary can be found, then confirm
+		// an explicit DefaultProvider is still returned regardless.
+		t.Setenv("PATH", t.TempDir())
+		atmosConfig := &schema.AtmosConfiguration{
+			AI: schema.AISettings{DefaultProvider: "openai"},
+		}
+		assert.Equal(t, "openai", GetProvider(atmosConfig))
+	})
+
+	t.Run("no DefaultProvider and no CLI tool on PATH falls back to anthropic", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir())
+		atmosConfig := &schema.AtmosConfiguration{AI: schema.AISettings{}}
+		assert.Equal(t, "anthropic", GetProvider(atmosConfig))
+	})
+}
+
+func TestIsCLIProvider(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		expected bool
+	}{
+		{"claude-code is CLI", "claude-code", true},
+		{"codex-cli is CLI", "codex-cli", true},
+		{"copilot-cli is CLI", "copilot-cli", true},
+		{"gemini-cli is CLI", "gemini-cli", true},
+		{"anthropic is not CLI", "anthropic", false},
+		{"openai is not CLI", "openai", false},
+		{"empty is not CLI", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, IsCLIProvider(tt.provider))
 		})
 	}
 }

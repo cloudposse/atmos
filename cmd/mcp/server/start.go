@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
@@ -278,13 +279,30 @@ func logServerInfo(server *mcp.Server, transportType, addr string) {
 // not have an LSP context. RegisterTools handles this gracefully (the
 // LSP-only `validate_file_lsp` tool is skipped when lspManager is nil).
 func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}, interface{}, error) {
-	if !atmosConfig.AI.Tools.Enabled {
-		return nil, nil, errUtils.ErrAIToolsDisabled
-	}
+	registry := tools.NewRegistry()
 
+	// `ai.tools.enabled` governs whether `atmos ai chat`/`ask`/`exec` — Atmos's own AI
+	// assistant — is allowed to call tools during its reasoning loop. It doesn't apply here:
+	// the MCP server's entire purpose is exposing Atmos tools to external clients, and
+	// `mcp.enabled: true` (already required to reach this function) is its own, sufficient
+	// opt-in. So tools are always registered for MCP, regardless of ai.tools.enabled.
 	log.Debug("Initializing AI tools")
 
-	registry := tools.NewRegistry()
+	// atmos_list_commands/atmos_command_help snapshot the Cobra command tree lazily via this
+	// injected provider, since pkg/ai/tools/atmos cannot import cmd/internal directly (Go's
+	// internal-package visibility rule restricts it to importers rooted at cmd/). This is the
+	// one place in the cmd/ tree wired to do that lookup.
+	atmosTools.SetCommandTreeProvider(func() []*atmosTools.CommandNode {
+		var roots []*atmosTools.CommandNode
+		for group, providers := range internal.ListProviders() {
+			for _, provider := range providers {
+				if cmd := provider.GetCommand(); cmd != nil {
+					roots = append(roots, atmosTools.NewCommandNodeFromCobra(cmd, group))
+				}
+			}
+		}
+		return roots
+	})
 
 	// Delegate to the shared registration factory. Errors are surfaced as
 	// warnings rather than fatals to preserve the previous hand-rolled
@@ -296,14 +314,16 @@ func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}
 
 	log.Debugf("Registered %d tools", registry.Count())
 
-	// Create permission checker with MCP-appropriate settings.
+	// Create permission checker with MCP-appropriate settings. Allowed/Restricted/Blocked
+	// still apply — they govern *which* tools and *how* they run, not whether tool-serving
+	// is enabled at all.
 	// For MCP server, use a non-interactive prompter since stdio is used for protocol.
 	permConfig := &permission.Config{
-		Mode:            getPermissionMode(atmosConfig),
-		AllowedTools:    atmosConfig.AI.Tools.AllowedTools,
-		RestrictedTools: atmosConfig.AI.Tools.RestrictedTools,
-		BlockedTools:    atmosConfig.AI.Tools.BlockedTools,
-		YOLOMode:        atmosConfig.AI.Tools.YOLOMode,
+		Mode:       getPermissionMode(atmosConfig),
+		Allowed:    atmosConfig.AI.Tools.Allowed,
+		Restricted: atmosConfig.AI.Tools.Restricted,
+		Blocked:    atmosConfig.AI.Tools.Blocked,
+		YOLOMode:   atmosConfig.AI.Tools.YOLOMode,
 	}
 	// Use YOLO mode for MCP to avoid blocking on prompts (client handles permissions).
 	permConfig.YOLOMode = true

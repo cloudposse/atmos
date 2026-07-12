@@ -103,6 +103,33 @@ CLI providers invoke a locally installed AI tool as a subprocess. No API key nee
   <dd>Google account (free tier: 1K req/day). MCP blocked for personal accounts.</dd>
 </dl>
 
+### Default Provider
+
+`default_provider` is optional. When it's not set (and `ai.enabled: true`), Atmos looks for
+a CLI provider's binary on `PATH`, in this order, and uses the first one it finds:
+
+1. `claude-code` (`claude`)
+1. `codex-cli` (`codex`)
+1. `copilot-cli` (`copilot`)
+1. `gemini-cli` (`gemini`)
+
+If none are found, Atmos falls back to `anthropic`, which requires an `api_key`. Setting
+`default_provider` explicitly always overrides auto-detection.
+
+This means a minimal config works out of the box for anyone with one of these CLI tools
+already installed and authenticated:
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  enabled: true
+```
+</File>
+
+Auto-detection only looks for the default binary name on `PATH`. If you point `binary` at
+a custom, non-`PATH` location, also set `default_provider` explicitly so Atmos doesn't fall
+through to a different provider.
+
 ### CLI Provider Settings
 
 In addition to `model`, CLI providers support:

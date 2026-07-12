@@ -49,18 +49,22 @@ var askCmd = &cobra.Command{
 		noTools := v.GetBool("no-tools")
 		mcpServers := v.GetStringSlice("mcp")
 
-		// Initialize configuration.
+		// Initialize configuration. Stack graph tools load stack manifests lazily so
+		// ask can start before stacks exist or while stack imports are temporarily broken.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			return err
 		}
 
 		// Check if AI is enabled.
 		if !isAIEnabled(&atmosConfig) {
-			return fmt.Errorf("%w: Set 'ai.enabled: true' in your atmos.yaml configuration",
-				errUtils.ErrAINotEnabled)
+			return errAINotEnabled()
 		}
+
+		// Resolve provider (explicit config, auto-detected CLI tool, or anthropic) once
+		// so downstream tool/MCP and logging logic see a consistent value.
+		atmosConfig.AI.DefaultProvider = ai.GetProvider(&atmosConfig)
 
 		// Apply context discovery overrides.
 		if noAutoContext {

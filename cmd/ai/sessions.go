@@ -150,16 +150,17 @@ func init() {
 
 // initSessionManager initializes and validates session management.
 func initSessionManager() (*session.Manager, func(), error) {
-	// Initialize configuration.
+	// Initialize configuration. Stack graph tools load stack manifests lazily so
+	// sessions can start before stacks exist or while stack imports are temporarily broken.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Check if AI is enabled.
 	if !isAIEnabled(&atmosConfig) {
-		return nil, nil, fmt.Errorf("%w: Set 'ai.enabled: true' in atmos.yaml", errUtils.ErrAINotEnabled)
+		return nil, nil, errAINotEnabled()
 	}
 
 	// Check if sessions are enabled.

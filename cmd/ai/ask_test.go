@@ -454,6 +454,11 @@ func TestAskCommand_CommandName(t *testing.T) {
 }
 
 func TestAskCommand_InvalidConfigPath(t *testing.T) {
+	// The "empty path" case below falls through to ambient config discovery instead of an
+	// isolated fixture. Force PATH to an empty directory so provider auto-detection can't
+	// find a real claude/codex/copilot/gemini CLI binary and actually invoke it.
+	t.Setenv("PATH", t.TempDir())
+
 	tests := []struct {
 		name       string
 		configPath string
@@ -1529,6 +1534,50 @@ ai:
 		// Should fail at client creation after processing context settings.
 		assert.Contains(t, err.Error(), "failed to create AI client")
 	})
+}
+
+// TestAskCommand_NoStacksYet verifies ask can start in a brand-new project that has
+// no stack manifests at all (no stacks/ directory). It must not fail with a
+// stack-discovery error such as "failed to find import" -- stack graph tools load
+// stack manifests lazily, so config init must succeed regardless of stacks.
+func TestAskCommand_NoStacksYet(t *testing.T) {
+	tempDir := t.TempDir()
+
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+
+	configContent := `base_path: "./"
+components:
+  terraform:
+    base_path: "` + filepath.ToSlash(filepath.Join("components", "terraform")) + `"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+ai:
+  enabled: true
+  default_provider: "invalid_provider"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(configContent), 0o600))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	t.Chdir(tempDir)
+
+	testCmd := &cobra.Command{
+		Use:  "ask",
+		Args: cobra.MinimumNArgs(1),
+	}
+	testCmd.Flags().StringSlice("include", nil, "Include patterns")
+	testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+	testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+	testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
+
+	err := askCmd.RunE(testCmd, []string{"What is in my stacks?"})
+	require.Error(t, err)
+	// Should fail at client creation (invalid provider), never at stack discovery.
+	assert.Contains(t, err.Error(), "failed to create AI client")
+	assert.NotContains(t, err.Error(), "failed to find import")
+	assert.NotContains(t, err.Error(), "no stack manifests found")
 }
 
 func TestAskCommand_ExamplesInLong(t *testing.T) {

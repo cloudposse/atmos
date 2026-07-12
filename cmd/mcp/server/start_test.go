@@ -674,9 +674,9 @@ func TestGetPermissionMode_AllCombinations(t *testing.T) {
 					Tools: schema.AIToolSettings{
 						YOLOMode:            tt.yoloMode,
 						RequireConfirmation: tt.requireConfirmation,
-						AllowedTools:        tt.allowedTools,
-						RestrictedTools:     tt.restrictedTools,
-						BlockedTools:        tt.blockedTools,
+						Allowed:             tt.allowedTools,
+						Restricted:          tt.restrictedTools,
+						Blocked:             tt.blockedTools,
 					},
 				},
 			}
@@ -751,14 +751,20 @@ func TestInitializeAIComponents_AIDisabled(t *testing.T) {
 	assert.NotNil(t, executor)
 }
 
-// TestInitializeAIComponents_ToolsDisabled tests that initializeAIComponents returns error when tools are disabled.
+// TestInitializeAIComponents_ToolsDisabled tests that initializeAIComponents still registers
+// and exposes tools over MCP even when ai.tools.enabled is false: that setting governs
+// atmos ai chat/ask/exec's own tool-use loop, not MCP tool-serving — mcp.enabled: true is
+// the MCP server's own, sufficient opt-in for exposing tools to external clients.
 func TestInitializeAIComponents_ToolsDisabled(t *testing.T) {
 	atmosConfig := createFullTestAtmosConfig(true, false, false)
 
-	_, _, err := initializeAIComponents(atmosConfig)
+	registryRaw, executorRaw, err := initializeAIComponents(atmosConfig)
 
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrAIToolsDisabled), "error should be ErrAIToolsDisabled")
+	require.NoError(t, err)
+	registry, ok := registryRaw.(*tools.Registry)
+	require.True(t, ok, "registry MUST be a *tools.Registry")
+	assert.Positive(t, registry.Count(), "tools should still be registered for MCP even when ai.tools.enabled is false")
+	assert.NotNil(t, executorRaw)
 }
 
 // TestInitializeAIComponents_ToolsEnabled tests that initializeAIComponents succeeds when tools are enabled.
@@ -851,10 +857,10 @@ func TestInitializeAIComponents_WithToolLists(t *testing.T) {
 		AI: schema.AISettings{
 			Enabled: true,
 			Tools: schema.AIToolSettings{
-				Enabled:         true,
-				AllowedTools:    []string{"describe_component", "list_stacks"},
-				RestrictedTools: []string{"write_component_file"},
-				BlockedTools:    []string{"dangerous_tool"},
+				Enabled:    true,
+				Allowed:    []string{"describe_component", "list_stacks"},
+				Restricted: []string{"write_component_file"},
+				Blocked:    []string{"dangerous_tool"},
 			},
 		},
 	}
@@ -1212,10 +1218,10 @@ func TestInitializeAIComponents_PermissionCheckerConfiguration(t *testing.T) {
 				AI: schema.AISettings{
 					Enabled: true,
 					Tools: schema.AIToolSettings{
-						Enabled:      true,
-						YOLOMode:     tt.yoloMode,
-						AllowedTools: tt.allowedTools,
-						BlockedTools: tt.blockedTools,
+						Enabled:  true,
+						YOLOMode: tt.yoloMode,
+						Allowed:  tt.allowedTools,
+						Blocked:  tt.blockedTools,
 					},
 				},
 			}
@@ -1734,9 +1740,9 @@ func TestInitializeAIComponents_WithRestrictedTools(t *testing.T) {
 		AI: schema.AISettings{
 			Enabled: true,
 			Tools: schema.AIToolSettings{
-				Enabled:         true,
-				RestrictedTools: []string{"write_component_file", "write_stack_file"},
-				YOLOMode:        false,
+				Enabled:    true,
+				Restricted: []string{"write_component_file", "write_stack_file"},
+				YOLOMode:   false,
 			},
 		},
 	}
@@ -2115,10 +2121,10 @@ func TestInitializeAIComponents_PermissionConfig(t *testing.T) {
 				AI: schema.AISettings{
 					Enabled: true,
 					Tools: schema.AIToolSettings{
-						Enabled:         true,
-						AllowedTools:    tt.allowedTools,
-						RestrictedTools: tt.restrictedTools,
-						BlockedTools:    tt.blockedTools,
+						Enabled:    true,
+						Allowed:    tt.allowedTools,
+						Restricted: tt.restrictedTools,
+						Blocked:    tt.blockedTools,
 					},
 				},
 			}
@@ -2486,10 +2492,10 @@ func TestInitializeAIComponents_EmptyToolLists(t *testing.T) {
 		AI: schema.AISettings{
 			Enabled: true,
 			Tools: schema.AIToolSettings{
-				Enabled:         true,
-				AllowedTools:    []string{},
-				RestrictedTools: []string{},
-				BlockedTools:    []string{},
+				Enabled:    true,
+				Allowed:    []string{},
+				Restricted: []string{},
+				Blocked:    []string{},
 			},
 		},
 	}
@@ -2816,9 +2822,9 @@ func TestInitializeAIComponents_WithAllSettings(t *testing.T) {
 				Enabled:             true,
 				YOLOMode:            true,
 				RequireConfirmation: &boolTrue,
-				AllowedTools:        []string{"tool1", "tool2"},
-				RestrictedTools:     []string{"tool3"},
-				BlockedTools:        []string{"tool4"},
+				Allowed:             []string{"tool1", "tool2"},
+				Restricted:          []string{"tool3"},
+				Blocked:             []string{"tool4"},
 			},
 		},
 	}
@@ -2905,9 +2911,9 @@ func TestGetPermissionMode_DeepNesting(t *testing.T) {
 				Enabled:             true,
 				YOLOMode:            false,
 				RequireConfirmation: &boolFalse,
-				AllowedTools:        []string{"a", "b", "c"},
-				RestrictedTools:     []string{"d", "e"},
-				BlockedTools:        []string{"f"},
+				Allowed:             []string{"a", "b", "c"},
+				Restricted:          []string{"d", "e"},
+				Blocked:             []string{"f"},
 			},
 		},
 	}
@@ -3189,16 +3195,17 @@ func TestSetupMCPServer_StartsWithBrokenStackImport(t *testing.T) {
 }
 
 // TestSetupMCPServer_ToolsDisabled tests setupMCPServer when AI tools are disabled.
+// TestSetupMCPServer_ToolsDisabled tests that setupMCPServer starts successfully (with an
+// empty tool registry) rather than failing when ai.tools.enabled is false; mcp.enabled: true
+// is the server's own explicit opt-in.
 func TestSetupMCPServer_ToolsDisabled(t *testing.T) {
 	tmpDir := createTestAtmosDir(t, true, false)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
 
-	// setupMCPServer should return error because tools are disabled.
 	server, err := setupMCPServer()
 
-	assert.Error(t, err)
-	assert.Nil(t, server)
-	assert.Contains(t, err.Error(), "failed to initialize AI components")
+	require.NoError(t, err)
+	assert.NotNil(t, server)
 }
 
 // TestSetupMCPServer_Success tests setupMCPServer with valid configuration.
@@ -3404,7 +3411,15 @@ func TestExecuteMCPServer_HTTPTransportWithQuickShutdown(t *testing.T) {
 }
 
 // TestExecuteMCPServer_ToolsDisabled tests executeMCPServer when tools are disabled.
+// TestExecuteMCPServer_ToolsDisabled tests that executeMCPServer starts successfully (with an
+// empty tool registry) rather than failing when ai.tools.enabled is false; mcp.enabled: true
+// is the server's own explicit opt-in.
 func TestExecuteMCPServer_ToolsDisabled(t *testing.T) {
+	// Skip in short mode since this test involves server startup.
+	if testing.Short() {
+		t.Skip("Skipping server startup test in short mode")
+	}
+
 	tmpDir := createTestAtmosDir(t, true, false)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
 
@@ -3414,11 +3429,25 @@ func TestExecuteMCPServer_ToolsDisabled(t *testing.T) {
 	cmd.Flags().String("host", "localhost", "")
 	cmd.Flags().Int("port", 8080, "")
 
-	err := executeMCPServer(cmd, nil)
+	// Run in goroutine since a successful start blocks waiting for shutdown.
+	done := make(chan error, 1)
+	go func() {
+		done <- executeMCPServer(cmd, nil)
+	}()
 
-	// Should fail because tools are disabled.
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to initialize AI components")
+	// Give the server time to start past the setup phase.
+	time.Sleep(100 * time.Millisecond)
+
+	select {
+	case err := <-done:
+		// Server may exit due to stdin being closed; it must not be the old setup error.
+		if err != nil {
+			assert.NotContains(t, err.Error(), "failed to initialize AI components")
+		}
+	case <-time.After(500 * time.Millisecond):
+		// Server is running, test passes.
+		t.Log("Server is running")
+	}
 }
 
 // TestStartHTTPServer_WithHTTPRequest tests that the HTTP server handles requests.
