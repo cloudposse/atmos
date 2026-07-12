@@ -4,8 +4,10 @@ This reference covers replacing a standalone [terraform-docs](https://terraform-
 (`.terraform-docs.yml` plus a manual invocation, Makefile target, or pre-commit hook) with
 `atmos docs generate`. This is not a lossy swap: `atmos docs generate` imports
 `github.com/terraform-docs/terraform-docs` directly as a Go module (a direct dependency in `go.mod`,
-not a shelled-out binary) and uses it to render the same Terraform documentation, merged into a
-Gomplate-templated document alongside any other YAML input. See
+not a shelled-out binary) and uses it to render equivalent supported Terraform documentation, merged
+into a Gomplate-templated document alongside any other YAML input — "equivalent supported" because
+Atmos exposes a subset of terraform-docs' formats and settings and has no recursive multi-module scan
+(see Common Gotchas below). See
 [atmos.tools/cli/configuration/docs](https://atmos.tools/cli/configuration/docs) and
 [atmos.tools/cli/commands/docs/generate](https://atmos.tools/cli/commands/docs/generate) for the
 full user-facing docs.
@@ -27,6 +29,8 @@ full user-facing docs.
    | `formatter:`                        | `format:`                         | Atmos supports `markdown table`, `markdown`, `tfvars hcl`, `tfvars json` — not the full upstream set (no `asciidoc`, `json`, `pretty`, `toml`, `xml`, `yaml`) |
    | `sort.by:`                          | `sort_by:`                        | Sort is implicitly enabled whenever `sort_by` is non-empty; there's no separate `sort.enabled` field |
    | `sections.show`/`sections.hide` for `inputs`, `outputs`, `providers` | `show_inputs:` / `show_outputs:` / `show_providers:` (booleans) | Only these three sections are controllable; `header`, `footer`, `requirements`, `resources`, `data-sources`, `modules` have no Atmos equivalent |
+   | `settings.hide-empty:`              | `hide_empty:`                     | Suppresses both the heading and the "No X." placeholder for an empty section |
+   | `settings.indent:`                  | `indent_level:`                   | Base Markdown heading depth (e.g. `2` renders `##`); only applied when greater than `0` |
    | (module root directory)             | `source:` (relative to `base-dir`) | |
    | `.terraform-docs.yml` file itself   | the `terraform:` block             | No separate config file — it's inline in `atmos.yaml` |
 
@@ -48,6 +52,8 @@ full user-facing docs.
            show_outputs: true
            show_providers: false
            sort_by: "name"
+           hide_empty: false
+           indent_level: 2
    ```
 
 2. **Add a Go template that renders the `terraform_docs` data key.** `atmos docs generate` injects
@@ -90,9 +96,11 @@ single recursive pass.
 ### Running both tools at once
 
 Don't leave the standalone `terraform-docs` binary wired into CI/pre-commit alongside
-`atmos docs generate` — both write into the same `<!-- BEGIN_TF_DOCS -->` / `<!-- END_TF_DOCS -->`
-markers (or overwrite the whole file, depending on template), so running both produces
-duplicate or conflicting content.
+`atmos docs generate` if both target the same output file or generated section — whichever runs
+last wins, producing duplicate or conflicting content. This applies even without
+`<!-- BEGIN_TF_DOCS -->` / `<!-- END_TF_DOCS -->` markers: `atmos docs generate` always renders and
+writes the whole configured `output` file from its template, it doesn't do terraform-docs' marker-based
+partial injection. Those markers only matter if your own template happens to include them.
 
 ### Hand-edited content inside generated sections
 
