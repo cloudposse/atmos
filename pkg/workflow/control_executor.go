@@ -35,6 +35,22 @@ type ControlCommandRequest struct {
 
 type ControlCommandRunner func(request *ControlCommandRequest) error
 
+// ControlShellRequest carries the inputs for a control shell child's execution.
+type ControlShellRequest struct {
+	Command string
+	Dir     string
+	Env     []string
+	Stdout  io.Writer
+	Stderr  io.Writer
+}
+
+// ControlShellRunner executes a `type: shell` child's command string. When set on
+// a ControlCommandExecutor it replaces the host `sh -c` / `RunCommand` path so
+// shell children run through the in-process mvdan/sh interpreter (cross-platform,
+// masked, cancellable). The workflow executor leaves it nil to keep its
+// auth-aware RunCommand path; the registry bridge sets it.
+type ControlShellRunner func(ctx context.Context, req *ControlShellRequest) error
+
 type ControlCommandExecutor struct {
 	WorkflowDefinition  *schema.WorkflowDefinition
 	BasePath            string
@@ -43,6 +59,7 @@ type ControlCommandExecutor struct {
 	CommandLineIdentity string
 	PrepareEnv          ControlEnvironmentFunc
 	RunCommand          ControlCommandRunner
+	ShellRunner         ControlShellRunner
 
 	outputMu sync.Mutex
 }
@@ -114,6 +131,28 @@ func (executor *ControlCommandExecutor) executeScript(ctx context.Context, step 
 
 func (executor *ControlCommandExecutor) executeShell(ctx context.Context, step *schema.WorkflowStep, stepEnv []string, output ControlChildOutput) (*ControlChildResult, error) {
 	ioSpec := executor.commandStreams(output)
+
+	// When a ShellRunner is wired (registry bridge), run the command through the
+	// in-process interpreter instead of shelling out. Output is teed to the live
+	// stream (which masks via the data layer) and the capture buffer (kept raw for
+	// downstream template references, matching the RunCommand path).
+	if executor.ShellRunner != nil {
+		outW := io.MultiWriter(ioSpec.streams.Stdout, ioSpec.stdout)
+		errW := io.MultiWriter(ioSpec.streams.Stderr, ioSpec.stderr)
+		dir := executor.workingDirectory(step)
+		err := retry.Do(ctx, step.Retry, func() error {
+			return executor.ShellRunner(ctx, &ControlShellRequest{
+				Command: step.Command,
+				Dir:     dir,
+				Env:     stepEnv,
+				Stdout:  outW,
+				Stderr:  errW,
+			})
+		})
+		ioSpec.flush()
+		return controlChildExecutionResult(ioSpec.stdout, ioSpec.stderr, err), err
+	}
+
 	program, args := controlShellInvocation(step.Command)
 	dir := executor.workingDirectory(step)
 	err := retry.Do(ctx, step.Retry, func() error {
