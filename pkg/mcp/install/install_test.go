@@ -70,7 +70,6 @@ func TestInstallJSONTarget_HTTPAndStdio(t *testing.T) {
 		WithHomeDir(t.TempDir()),
 		WithClients([]string{ClientVSCode}),
 		WithOverwrite(true),
-		WithToolchainPath("/toolchain/bin"),
 	)
 	require.NoError(t, err)
 
@@ -96,8 +95,9 @@ func TestInstallJSONTarget_HTTPAndStdio(t *testing.T) {
 	assert.Equal(t, "http", parsed.Servers["atmos-pro"]["type"])
 	assert.Equal(t, "https://atmos-pro.com/mcp", parsed.Servers["atmos-pro"]["url"])
 	assert.Equal(t, "uvx", parsed.Servers["aws-docs"]["command"])
-	env := parsed.Servers["aws-docs"]["env"].(map[string]any)
-	assert.Contains(t, env["PATH"], "/toolchain/bin")
+	// No toolchain PATH is ever injected by the installer -- installed configs
+	// must stay portable across contributors' machines, so aws-docs has no env at all.
+	assert.NotContains(t, parsed.Servers["aws-docs"], "env")
 }
 
 func TestInstallTOMLTarget_HTTP(t *testing.T) {

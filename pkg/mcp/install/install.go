@@ -57,16 +57,15 @@ var (
 type ConflictFunc func(target Target, serverName string) (bool, error)
 
 type Options struct {
-	BasePath      string
-	HomeDir       string
-	Scope         string
-	Clients       []string
-	AllClients    bool
-	Overwrite     bool
-	DryRun        bool
-	Gitignore     bool
-	ToolchainPath string
-	OnConflict    ConflictFunc
+	BasePath   string
+	HomeDir    string
+	Scope      string
+	Clients    []string
+	AllClients bool
+	Overwrite  bool
+	DryRun     bool
+	Gitignore  bool
+	OnConflict ConflictFunc
 }
 
 type Option func(*Options)
@@ -101,10 +100,6 @@ func WithDryRun(dryRun bool) Option {
 
 func WithGitignore(gitignore bool) Option {
 	return func(o *Options) { o.Gitignore = gitignore }
-}
-
-func WithToolchainPath(path string) Option {
-	return func(o *Options) { o.ToolchainPath = path }
 }
 
 func WithOnConflict(fn ConflictFunc) Option {
@@ -428,7 +423,7 @@ func (i *Installer) installJSONTarget(target Target, servers map[string]schema.M
 	if err != nil {
 		return err
 	}
-	entries := mcpclient.GenerateMCPConfig(servers, i.opts.ToolchainPath).MCPServers
+	entries := mcpclient.GenerateMCPConfig(servers, "").MCPServers
 	changed := false
 	for _, name := range sortedEntryNames(entries) {
 		entryMap, err := structToMap(entries[name])
@@ -542,7 +537,7 @@ func (i *Installer) installTOMLTarget(target Target, servers map[string]schema.M
 		return err
 	}
 	content := string(data)
-	entries := mcpclient.GenerateMCPConfig(servers, i.opts.ToolchainPath).MCPServers
+	entries := mcpclient.GenerateMCPConfig(servers, "").MCPServers
 	changed := false
 	for _, name := range sortedEntryNames(entries) {
 		entryKey := fmt.Sprintf("%s:%s", target.Client, name)

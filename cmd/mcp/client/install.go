@@ -250,7 +250,6 @@ func installServers(
 		mcpinstall.WithOverwrite(opts.force),
 		mcpinstall.WithDryRun(opts.dryRun),
 		mcpinstall.WithGitignore(opts.gitignore),
-		mcpinstall.WithToolchainPath(buildToolchainPATH(atmosConfig)),
 		mcpinstall.WithOnConflict(mcpConflictHandler(opts.yes)),
 	)
 	if err != nil {
