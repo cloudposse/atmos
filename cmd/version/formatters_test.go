@@ -196,7 +196,10 @@ func TestCreateVersionTable_IndicatorColumnStaysNarrow(t *testing.T) {
 	require.NoError(t, err)
 
 	// lines[0] = header, lines[1] = header separator border, lines[2:] = data rows.
-	lines := strings.Split(tbl.String(), "\n")
+	// Strip ANSI first: under CI=true the header/indicator styling renders with
+	// color codes (e.g. "\x1b[1mVERSION"), and byte-offset assertions below would
+	// otherwise count those escape bytes as part of the column position.
+	lines := strings.Split(ansi.Strip(tbl.String()), "\n")
 	require.GreaterOrEqual(t, len(lines), 4, "expected header + separator + 2 data rows")
 
 	wantIdx := indicatorColumnWidth + 1 // Indicator column width + col 1's left padding.
