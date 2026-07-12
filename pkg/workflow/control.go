@@ -12,6 +12,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -103,8 +104,15 @@ func ExecuteControlStep(ctx context.Context, parent *schema.WorkflowStep, execut
 
 	var completedSeq atomic.Int64
 	var failures atomic.Int64
-	completionOrder := make([]string, 0, len(order))
-	var completionMu sync.Mutex
+
+	// renderMu serializes every grouped-mode print (start banners and
+	// completion blocks) across worker goroutines - nothing in pkg/ui,
+	// pkg/data, or pkg/io serializes concurrent writers for us. rendered
+	// tracks which node IDs were already streamed live from the completion
+	// hook so the post-Run flush below doesn't print them a second time.
+	var renderMu sync.Mutex
+	rendered := make(map[string]bool, len(order))
+	liveStream := outputCfg.mode == ControlOutputGrouped && outputCfg.order == ControlOutputCompletion
 
 	dispatcher := newControlDispatcher(&controlDispatchConfig{
 		executor:     executor,
@@ -118,18 +126,36 @@ func ExecuteControlStep(ctx context.Context, parent *schema.WorkflowStep, execut
 
 	schedOpts := []scheduler.Option{
 		scheduler.WithMaxConcurrency(effectiveControlConcurrency(parent, len(order))),
-		scheduler.WithNodeCompleteHook(func(node *dependency.Node, _ scheduler.Result) {
-			completionMu.Lock()
-			completionOrder = append(completionOrder, node.ID)
-			completionMu.Unlock()
+		scheduler.WithNodeCompleteHook(func(node *dependency.Node, result scheduler.Result) {
+			if !liveStream {
+				return
+			}
+			renderMu.Lock()
+			defer renderMu.Unlock()
+			renderControlChildBlock(&result)
+			rendered[node.ID] = true
 		}),
+	}
+	if outputCfg.mode == ControlOutputGrouped {
+		// Starting has no ordering constraint to preserve (unlike completion
+		// blocks under order: definition), so announce every child live
+		// regardless of the configured order.
+		schedOpts = append(schedOpts, scheduler.WithNodeStartHook(func(node *dependency.Node) {
+			renderMu.Lock()
+			defer renderMu.Unlock()
+			stepPkg.AnnounceStepStart(nil, controlNodeLabel(node))
+		}))
 	}
 	if failCfg.mode == ControlFailFast && failCfg.maxFailures <= 1 {
 		schedOpts = append(schedOpts, scheduler.WithFailFast(true))
 	}
 
 	aggregate := scheduler.New(graph, dispatcher, schedOpts...).Run(runCtx)
-	renderControlOutput(aggregate, order, completionOrder, outputCfg)
+	// Flush anything not already streamed live: everything, in definition
+	// order, when order: definition (liveStream is false so rendered stays
+	// empty); only skipped/never-dispatched nodes when order: completion
+	// (liveStream already streamed dispatched nodes, rendered filters them out).
+	renderControlOutput(aggregate, order, rendered, outputCfg)
 	storeControlResults(aggregate, opts.StoreResult)
 	if outputCfg.showSummary {
 		renderControlSummary(parent, aggregate)
@@ -318,13 +344,18 @@ func addMatrixRowDependencies(graph *dependency.Graph, steps []schema.WorkflowSt
 	return nil
 }
 
-func renderControlOutput(aggregate *scheduler.AggregateResult, definitionOrder []string, completionOrder []string, outputCfg controlOutputConfig) {
+// renderControlOutput renders any child blocks not already streamed live.
+// Order is always the graph's definition order; skip marks node IDs already
+// printed by the live WithNodeCompleteHook callback in ExecuteControlStep
+// (order: completion mode) so they aren't printed twice. When nothing was
+// streamed live (order: definition, or an empty/nil skip set), this
+// reproduces a full replay in declared order - which also covers
+// skipped/never-dispatched nodes, since the scheduler's node-complete hook
+// never fires for them (they're synthesized directly by the scheduler
+// without going through a worker).
+func renderControlOutput(aggregate *scheduler.AggregateResult, order []string, skip map[string]bool, outputCfg controlOutputConfig) {
 	if aggregate == nil || outputCfg.mode != ControlOutputGrouped {
 		return
-	}
-	order := definitionOrder
-	if outputCfg.order == ControlOutputCompletion {
-		order = completionOrder
 	}
 	resultsByID := make(map[string]scheduler.Result, len(aggregate.Results))
 	for i := range aggregate.Results {
@@ -332,6 +363,9 @@ func renderControlOutput(aggregate *scheduler.AggregateResult, definitionOrder [
 		resultsByID[result.NodeID] = result
 	}
 	for _, nodeID := range order {
+		if skip[nodeID] {
+			continue
+		}
 		result, ok := resultsByID[nodeID]
 		if !ok {
 			continue
@@ -343,9 +377,16 @@ func renderControlOutput(aggregate *scheduler.AggregateResult, definitionOrder [
 // renderControlChildBlock reports a parallel/matrix child's completion status
 // through the shared ui.Success/ui.Warning/ui.Error pipeline, matching the
 // `AnnounceStepStart`/`AnnounceStepEnd` banner convention used by other
-// workflow step engines instead of a raw "[nodeID] status" line. Parallel and
-// matrix children run concurrently, so their stdout/stderr is buffered during
-// execution rather than streamed live; print that buffered output before the
+// workflow step engines instead of a raw "[nodeID] status" line. A child's
+// own stdout/stderr is still buffered for the duration of its own execution
+// (grouped mode doesn't stream a running child's output line-by-line - see
+// `prefixed` mode for that), but the finished block is emitted live, the
+// moment that child completes, for the default order: completion mode
+// (called from ExecuteControlStep's WithNodeCompleteHook, under renderMu);
+// for order: definition it's still emitted once for the whole group, in
+// declared order, after every child has finished (called from
+// renderControlOutput, which runs single-threaded after Run() returns so no
+// lock is needed there). Either way, the buffered output prints before the
 // completion banner so the log reads as "here's what happened, here's the
 // verdict" instead of announcing completion before showing any output.
 func renderControlChildBlock(result *scheduler.Result) {
