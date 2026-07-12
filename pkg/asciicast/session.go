@@ -13,9 +13,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -138,6 +142,32 @@ func normalizeSessionOptions(opts *SessionOptions) {
 	if opts.KeyInterval < 0 {
 		opts.KeyInterval = 0
 	}
+	if opts.Env == nil {
+		opts.Env = map[string]string{}
+	}
+	if _, ok := opts.Env["PS1"]; !ok {
+		opts.Env["PS1"] = defaultSessionPrompt()
+	}
+}
+
+// getCurrentStyles resolves the active theme styles; a package-level var so
+// tests can stub the "no styles available" fallback in defaultSessionPrompt.
+var getCurrentStyles = theme.GetCurrentStyles
+
+// defaultSessionPrompt renders a fixed "> " prompt in the same themed
+// "command" style (bold, theme Primary color) that simulate-mode casts use,
+// so a real shell spawned for a session-mode cast shows a prompt consistent
+// with every other recording instead of leaking the shell's own default
+// PS1 (which would also include the local hostname/cwd).
+func defaultSessionPrompt() string {
+	styles := getCurrentStyles()
+	if styles == nil {
+		return "> "
+	}
+	renderer := lipgloss.NewRenderer(io.Discard)
+	renderer.SetColorProfile(termenv.TrueColor)
+	renderer.SetHasDarkBackground(true)
+	return styles.Command.Bold(true).Renderer(renderer).Render("> ")
 }
 
 func sessionShell(configured string) string {

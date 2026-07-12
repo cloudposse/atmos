@@ -5,6 +5,8 @@ authors: [osterman]
 tags: [enhancement, dx]
 ---
 
+import CastPlayer from '@site/src/components/CastPlayer'
+
 Custom command steps can now read their own command-line flags through `{{ .Flags.<name> }}`, and the [`table`](/workflows/steps/type/table) step templates its `data`, `columns`, and `title` per-step. Together they let you build flag-driven runbooks — rich, dynamic output assembled declaratively in `atmos.yaml`, no shell scripting required.
 
 <!--truncate-->
@@ -56,6 +58,10 @@ atmos platform status -s plat-ue2-dev
 ```
 
 Every `{{ .Flags.stack }}` resolves to `plat-ue2-dev`, the stage titles and table rows fill in, and the shell steps run against the right stack.
+
+<CastPlayer src="/casts/examples/interactive-workflows/table-and-build.cast" title="atmos interactive workflow steps" chrome controls scrubber />
+
+[View the full example](/examples/interactive-workflows)
 
 ## Why It Matters
 

@@ -93,6 +93,7 @@ const (
 	SecretsSectionName                = "secrets"
 	VarsSectionName                   = "vars"
 	SettingsSectionName               = "settings"
+	VersionSectionName                = "version"
 	LocalsSectionName                 = "locals"
 	EnvSectionName                    = "env"
 	DependenciesSectionName           = "dependencies"

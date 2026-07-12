@@ -24,7 +24,7 @@ commands:
           - type: simulate
             text: "# inspect the hook attached to the demo component"
           - type: simulate
-            text: &hook_cmd atmos describe component demo -s test --format yaml | sed -n '/^hooks:/,/^imports:/p'
+            text: &hook_cmd atmos describe component demo -s test --format yaml -q .hooks
           - type: shell
             name: hook-config
             duration: 450ms
@@ -55,7 +55,7 @@ commands:
           text = load_text("../../website/static/casts/examples/hooks-custom-command/hook-config.cast")
           plain = strip_ansi(text)
           assert_no_experimental(text)
-          for needle in ["hooks:", "notify:", "command: python3", "after.terraform.plan", "kind: command", "format: markdown", "ATMOS_OUTPUT_FILE", "custom-command demo"]:
+          for needle in ["-q .hooks", "notify:", "command: python3", "after.terraform.plan", "kind: command", "format: markdown", "ATMOS_OUTPUT_FILE", "custom-command demo"]:
               if needle not in plain:
                   raise SystemExit(f"hooks-custom-command cast missing {needle!r}")
           assert_no_error_output(text)

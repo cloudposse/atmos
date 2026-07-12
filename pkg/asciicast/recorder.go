@@ -338,9 +338,27 @@ func (r *Recorder) writeJSON(v any) error {
 	return nil
 }
 
+// redrawControlSequence matches ANSI CSI sequences that reposition the
+// cursor or erase existing screen content (cursor-up, erase-line,
+// erase-screen, cursor-position/home) — the operations a non-altscreen
+// Bubbletea (or similar) renderer uses to repaint a frame in place. It
+// deliberately excludes SGR color sequences ("...m"), which appear in
+// ordinary colorized scrolling output and must not trigger this path.
+var redrawControlSequence = regexp.MustCompile(`\x1b\[[0-9;]*[AJKH]`)
+
+// isRedrawChunk reports whether content represents a single in-place
+// terminal redraw rather than sequentially produced scrolling text. Such
+// chunks arrive from the child process as one atomic write; the embedded
+// newlines are separate rendered rows of the same frame, not lines that
+// were actually produced one after another over real time, so they must
+// not be stretched apart by the per-line output-rate pacing below.
+func isRedrawChunk(content string) bool {
+	return redrawControlSequence.MatchString(content)
+}
+
 func (r *Recorder) writeEventLocked(stream, content string) error {
 	now := time.Since(r.started)
-	if r.outputRate <= 0 || stream == "i" || stream == "r" {
+	if r.outputRate <= 0 || stream == "i" || stream == "r" || isRedrawChunk(content) {
 		eventTime := maxDuration(now, r.lastEventTime)
 		return r.writeRelativeEvent(eventTime, stream, content)
 	}

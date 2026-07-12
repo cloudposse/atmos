@@ -70,6 +70,7 @@ var manifestSections = map[string]sectionScope{
 	"remote_state_backend_type": {component: true},
 	"provision":                 {component: true},
 	"source":                    {component: true},
+	"version":                   {topLevel: true},
 }
 
 // nonManifestSections are `*SectionName` constants that are NOT authored stack-manifest sections

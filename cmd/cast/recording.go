@@ -18,6 +18,7 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -250,7 +251,7 @@ func StartHelpRecording(cmd *cobra.Command, atmosConfig *schema.AtmosConfigurati
 
 	if activeCast == nil {
 		if err := StartRecordingIfRequested(cmd, atmosConfig, os.Args[1:]); err != nil {
-			_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Failed to start cast recording: %v\n", err)
+			ui.Errorf("Failed to start cast recording: %v", err)
 			return nil
 		}
 	}
@@ -297,7 +298,7 @@ func FinalizeRecording() {
 	// back into the recording.
 	activeCast = nil
 	if err := rec.Close(); err != nil {
-		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Failed to close cast recording: %v\n", err)
+		ui.Errorf("Failed to close cast recording: %v", err)
 		return
 	}
 	if removeCast {
@@ -305,13 +306,13 @@ func FinalizeRecording() {
 	}
 	if renderOutput != "" {
 		if err := renderRecordedCast(rec.Path(), renderOutput); err != nil {
-			_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Failed to render cast: %v\n", err)
+			ui.Errorf("Failed to render cast: %v", err)
 			return
 		}
-		_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast rendered: %s\n", renderOutput)
+		ui.Successf("Cast rendered: %s", renderOutput)
 		return
 	}
-	_, _ = fmt.Fprintf(iolib.GetContext().UI(), "Cast recorded: %s\n", rec.Path())
+	ui.Successf("Cast recorded: %s", rec.Path())
 }
 
 func renderRecordedCast(castPath, output string) error {
