@@ -10,6 +10,7 @@ import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import Card from '@site/src/components/Card'
 
 <Intro>
 Atmos supports the [Model Context Protocol](https://modelcontextprotocol.io) (MCP) in both directions: connect Atmos *out* to external MCP servers (AWS, GCP, custom tooling), or expose Atmos's *own* tools to your AI assistant.
@@ -17,14 +18,40 @@ Atmos supports the [Model Context Protocol](https://modelcontextprotocol.io) (MC
 
 <Experimental />
 
-| Direction | What it does | Config key |
-|---|---|---|
-| [**As a Client**](#as-a-client) | Connects Atmos to external MCP servers and installs them into your AI coding assistant | `mcp.servers` |
-| [**As a Server**](#as-a-server) | Exposes Atmos's own tools (`describe`, `list`, `validate`, and more) to AI assistants | `mcp.enabled` |
+Without Atmos, MCP server config lives separately in every tool -- Claude Code, Cursor, VS Code, Codex, and Gemini each want it their own way. Atmos manages that configuration once, installs it consistently everywhere your team works, and is an MCP server in its own right -- so any of those same clients can call Atmos's own tools back.
+
+<div className="row">
+  <div className="col col--6">
+    <Card title="As a Client">
+      Connects Atmos to external MCP servers and installs them into your AI coding assistant.
+
+      Config key: `mcp.servers` · [Learn more](#as-a-client)
+    </Card>
+  </div>
+  <div className="col col--6">
+    <Card title="As a Server">
+      Exposes Atmos's own tools (`describe`, `list`, `validate`, and more) to AI assistants.
+
+      Config key: `mcp.enabled` · [Learn more](#as-a-server)
+    </Card>
+  </div>
+</div>
+
+<div className="row" style={{marginTop: '1rem'}}>
+  <div className="col col--12">
+    <Card title="As a Hub">
+      Define MCP servers once in `atmos.yaml`, then keep Atmos and every AI coding assistant on your team working from the same servers.
+
+      Command: `atmos mcp install` · [Learn more](#as-a-client)
+    </Card>
+  </div>
+</div>
 
 ## As a Client
 
 Connect Atmos to external MCP servers -- AWS documentation, pricing, security tooling, or your own custom servers -- and install them straight into the AI coding assistant you already use: Claude Code, Cursor, VS Code, Codex, or Gemini.
+
+The same servers are also available directly inside `atmos ai chat`/`ask`/`exec`, Atmos's own [agent harness](/ai#agent-harness), with no installation step at all -- see [MCP](/ai#mcp) on the Atmos AI page for smart routing and CLI pass-through details.
 
 ### Quick Start
 
@@ -85,6 +112,10 @@ Running `atmos mcp add` with no argument at all defaults to `atmos mcp add self`
 #### Configuring servers
 
 Servers are declared under `mcp.servers` in `atmos.yaml`, as local `stdio` processes or remote `http` endpoints. Servers with an `identity` are automatically wrapped with `atmos auth exec` so credentials are injected when the client starts them. See [MCP Configuration](/cli/configuration/mcp) for the full settings reference.
+
+#### Transport types
+
+`type: stdio` spawns a local subprocess and talks to it over stdin/stdout -- no network exposure, one client per process. `type: http` connects to a remote endpoint using the **Streamable HTTP** transport (a single endpoint, optionally upgrading to a stream) -- use it for servers that already run remotely, like Atmos Pro or a shared internal MCP server. [`atmos mcp start --transport http`](/cli/commands/mcp/start) speaks this same transport, so one Atmos instance can connect to another over `http` too -- though the [`self` preset](#built-in-presets) still defaults to `stdio`, since it's simpler when both sides run on the same machine.
 
 #### Installing into your client
 

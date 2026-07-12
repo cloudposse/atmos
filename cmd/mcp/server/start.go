@@ -233,13 +233,15 @@ func startHTTPServer(server *mcp.Server, host string, port int, errChan chan err
 	addr := fmt.Sprintf("%s:%d", host, port)
 	logServerInfo(server, transportHTTP, addr)
 	go func() {
-		handler := mcpsdk.NewSSEHandler(func(req *http.Request) *mcpsdk.Server {
+		mux := http.NewServeMux()
+		mux.Handle("/", mcpsdk.NewStreamableHTTPHandler(func(req *http.Request) *mcpsdk.Server {
 			return server.SDK()
-		}, nil)
+		}, nil))
+		mux.HandleFunc("/health", handleHealthCheck)
 
 		httpServer := &http.Server{
 			Addr:              addr,
-			Handler:           handler,
+			Handler:           mux,
 			ReadTimeout:       30 * time.Second,
 			WriteTimeout:      30 * time.Second,
 			IdleTimeout:       60 * time.Second,
@@ -247,6 +249,12 @@ func startHTTPServer(server *mcp.Server, host string, port int, errChan chan err
 		}
 		errChan <- httpServer.ListenAndServe()
 	}()
+}
+
+// handleHealthCheck responds to liveness probes against the HTTP transport.
+func handleHealthCheck(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"status":"healthy"}`))
 }
 
 // logServerInfo displays the server startup information to the user.
@@ -257,8 +265,8 @@ func logServerInfo(server *mcp.Server, transportType, addr string) {
 	ui.Writef("  Protocol: MCP %s\n", mcpProtocolVersion)
 	if transportType == transportHTTP {
 		ui.Writef("  Transport: HTTP (listening on %s)\n", addr)
-		ui.Writef("    - SSE endpoint: http://%s/sse\n", addr)
-		ui.Writef("    - Message endpoint: http://%s/message\n", addr)
+		ui.Writef("    - MCP endpoint: http://%s/\n", addr)
+		ui.Writef("    - Health check: http://%s/health\n", addr)
 	} else {
 		ui.Writeln("  Transport: stdio")
 	}

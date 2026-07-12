@@ -129,6 +129,99 @@ regardless of `tools.enabled` — `mcp.enabled: true` is that command's own, suf
 
   <dt>`execute_atmos_command`</dt>
   <dd>Execute any Atmos CLI command. Permissions vary by command.</dd>
+
+  <dt>`atmos_list_findings`</dt>
+  <dd>List security findings from AWS Security Hub for Atmos stacks. Read-only.</dd>
+
+  <dt>`atmos_describe_finding`</dt>
+  <dd>Get detailed information about a specific security finding by ID. Read-only.</dd>
+
+  <dt>`atmos_analyze_finding`</dt>
+  <dd>Analyze a security finding using AI to determine root cause and remediation steps. Read-only.</dd>
+
+  <dt>`atmos_compliance_report`</dt>
+  <dd>Generate a compliance posture report for a framework (CIS AWS, PCI DSS, SOC2, HIPAA, NIST). Read-only.</dd>
+
+  <dt>`atmos_config_get`</dt>
+  <dd>Read a value from the active atmos.yaml using a dot-notation path. Read-only.</dd>
+
+  <dt>`atmos_config_list`</dt>
+  <dd>List the dot-notation setting paths defined in the active atmos.yaml. Read-only.</dd>
+
+  <dt>`atmos_config_set`</dt>
+  <dd>Set a value in the active atmos.yaml using a dot-notation path, preserving comments and anchors. Requires confirmation by default.</dd>
+
+  <dt>`atmos_config_delete`</dt>
+  <dd>Delete a value from the active atmos.yaml using a dot-notation path. Requires confirmation by default.</dd>
+
+  <dt>`atmos_config_format`</dt>
+  <dd>Format the active atmos.yaml file in place, preserving comments and anchors. Requires confirmation by default.</dd>
+
+  <dt>`atmos_stack_config_get`</dt>
+  <dd>Read the effective value of a component-relative dot-path for a component in a stack. Read-only.</dd>
+
+  <dt>`atmos_stack_config_list`</dt>
+  <dd>List editable component-relative config paths for a component in a stack. Read-only.</dd>
+
+  <dt>`atmos_stack_config_set`</dt>
+  <dd>Set a component-relative value for a component in a stack, using provenance to find the defining manifest. Requires confirmation by default.</dd>
+
+  <dt>`atmos_stack_config_delete`</dt>
+  <dd>Delete a component-relative value from the manifest that defines it for a component in a stack. Requires confirmation by default.</dd>
+
+  <dt>`atmos_stack_config_format`</dt>
+  <dd>Format the manifest files that define a stack component in place. Requires confirmation by default.</dd>
+
+  <dt>`atmos_vendor_config_get`</dt>
+  <dd>Read a raw value from a vendor manifest (vendor.yaml) by dot-notation path. Read-only.</dd>
+
+  <dt>`atmos_vendor_config_list`</dt>
+  <dd>List raw setting paths from a vendor manifest and its imports. Read-only.</dd>
+
+  <dt>`atmos_vendor_config_set`</dt>
+  <dd>Set a raw value in a vendor manifest by dot-notation path. Requires confirmation by default.</dd>
+
+  <dt>`atmos_vendor_config_delete`</dt>
+  <dd>Delete a raw value from a vendor manifest by dot-notation path. Requires confirmation by default.</dd>
+
+  <dt>`atmos_vendor_config_format`</dt>
+  <dd>Format a vendor manifest file in place, preserving comments and anchors. Requires confirmation by default.</dd>
+
+  <dt>`atmos_list_commands`</dt>
+  <dd>List Atmos CLI commands and subcommands. Read-only.</dd>
+
+  <dt>`atmos_command_help`</dt>
+  <dd>Get detailed help for a specific Atmos CLI command. Read-only.</dd>
+
+  <dt>`atmos_describe_dependents`</dt>
+  <dd>List the Atmos components that depend on a given component/stack pair. Read-only.</dd>
+
+  <dt>`atmos_describe_workflows`</dt>
+  <dd>List all Atmos workflows discovered under the configured workflows base path. Read-only.</dd>
+
+  <dt>`atmos_list_workflows`</dt>
+  <dd>List all Atmos workflows with their defining file, description, and step count. Read-only.</dd>
+
+  <dt>`atmos_list_components`</dt>
+  <dd>List unique Atmos components defined across all stacks. Read-only.</dd>
+
+  <dt>`atmos_list_values`</dt>
+  <dd>List a component's values across every stack where it's used. Read-only.</dd>
+
+  <dt>`atmos_auth_whoami`</dt>
+  <dd>Show the currently active Atmos authentication identity and credential status. Read-only.</dd>
+
+  <dt>`atmos_auth_list`</dt>
+  <dd>List configured Atmos authentication providers and identities. Read-only.</dd>
+
+  <dt>`atmos_toolchain_list`</dt>
+  <dd>List tools declared in the project's .tool-versions file. Read-only.</dd>
+
+  <dt>`atmos_secret_list`</dt>
+  <dd>List declared secrets and their initialization status. Read-only.</dd>
+
+  <dt>`atmos_validate_component`</dt>
+  <dd>Validate an Atmos component's configuration in a stack using JSON Schema or OPA policies. Read-only.</dd>
 </dl>
 
 ### File Operations
@@ -154,6 +247,12 @@ regardless of `tools.enabled` — `mcp.enabled: true` is that command's own, suf
 
   <dt>`write_component_file`</dt>
   <dd>Write or modify a component file. Requires confirmation by default.</dd>
+
+  <dt>`atmos_terraform_component_hcl_get`</dt>
+  <dd>Read an attribute value or block from a Terraform component file using an hcledit-style HCL address. Read-only.</dd>
+
+  <dt>`atmos_terraform_component_hcl_edit`</dt>
+  <dd>Structurally edit a Terraform component file using hcledit, preserving comments and formatting. Requires confirmation by default.</dd>
 
   <dt>`write_stack_file`</dt>
   <dd>Write or modify a stack file. Requires confirmation by default.</dd>

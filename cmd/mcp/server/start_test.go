@@ -2652,31 +2652,6 @@ func TestWaitForShutdown_DeeplyWrappedContextCanceled(t *testing.T) {
 	assert.False(t, cancelCalled)
 }
 
-// TestMCPServerEndpoints_HTTPFormat tests the endpoint URL format for HTTP transport.
-func TestMCPServerEndpoints_HTTPFormat(t *testing.T) {
-	tests := []struct {
-		host            string
-		port            int
-		expectedSSE     string
-		expectedMessage string
-	}{
-		{"localhost", 8080, "http://localhost:8080/sse", "http://localhost:8080/message"},
-		{"0.0.0.0", 3000, "http://0.0.0.0:3000/sse", "http://0.0.0.0:3000/message"},
-		{"192.168.1.1", 9000, "http://192.168.1.1:9000/sse", "http://192.168.1.1:9000/message"},
-	}
-
-	for _, tt := range tests {
-		t.Run(fmt.Sprintf("%s:%d", tt.host, tt.port), func(t *testing.T) {
-			addr := fmt.Sprintf("%s:%d", tt.host, tt.port)
-			sseEndpoint := fmt.Sprintf("http://%s/sse", addr)
-			messageEndpoint := fmt.Sprintf("http://%s/message", addr)
-
-			assert.Equal(t, tt.expectedSSE, sseEndpoint)
-			assert.Equal(t, tt.expectedMessage, messageEndpoint)
-		})
-	}
-}
-
 // TestInitializeAIComponents_YOLOModeOverride tests that YOLO mode is always set to true for MCP.
 func TestInitializeAIComponents_YOLOModeOverride(t *testing.T) {
 	// Even if YOLOMode is false in config, it should be set to true for MCP.
@@ -3450,44 +3425,7 @@ func TestExecuteMCPServer_ToolsDisabled(t *testing.T) {
 	}
 }
 
-// TestStartHTTPServer_WithHTTPRequest tests that the HTTP server handles requests.
-func TestStartHTTPServer_WithHTTPRequest(t *testing.T) {
-	// Create a real MCP server.
-	registry := tools.NewRegistry()
-	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
-	adapter := mcp.NewAdapter(registry, executor)
-	server := mcp.NewServer(adapter)
-
-	errChan := make(chan error, 1)
-
-	// Use a random available port.
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := listener.Addr().(*net.TCPAddr).Port
-	listener.Close()
-
-	// Start the HTTP server.
-	startHTTPServer(server, "127.0.0.1", port, errChan)
-
-	// Give the server time to start.
-	time.Sleep(100 * time.Millisecond)
-
-	// Make a request to the SSE endpoint.
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/sse", port))
-	if err != nil {
-		// Server might not be ready yet, which is acceptable.
-		t.Logf("HTTP request failed: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	// The SSE endpoint should return a response.
-	// Status code doesn't matter as long as the handler was invoked.
-	t.Logf("SSE endpoint returned status: %d", resp.StatusCode)
-}
-
-// TestStartHTTPServer_MessageEndpoint tests the message endpoint.
+// TestStartHTTPServer_MessageEndpoint tests posting a message to the streamable HTTP endpoint.
 func TestStartHTTPServer_MessageEndpoint(t *testing.T) {
 	// Create a real MCP server.
 	registry := tools.NewRegistry()
@@ -3509,16 +3447,44 @@ func TestStartHTTPServer_MessageEndpoint(t *testing.T) {
 	// Give the server time to start.
 	time.Sleep(100 * time.Millisecond)
 
-	// Make a POST request to the message endpoint.
+	// Streamable HTTP handles every message on a single endpoint (no separate /message path).
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Post(fmt.Sprintf("http://127.0.0.1:%d/message", port), "application/json", nil)
+	resp, err := client.Post(fmt.Sprintf("http://127.0.0.1:%d/", port), "application/json", nil)
 	if err != nil {
 		t.Logf("HTTP request failed: %v", err)
 		return
 	}
 	defer resp.Body.Close()
 
-	t.Logf("Message endpoint returned status: %d", resp.StatusCode)
+	t.Logf("Streamable HTTP endpoint returned status: %d", resp.StatusCode)
+}
+
+// TestStartHTTPServer_HealthEndpoint tests the liveness probe endpoint.
+func TestStartHTTPServer_HealthEndpoint(t *testing.T) {
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := mcp.NewAdapter(registry, executor)
+	server := mcp.NewServer(adapter)
+
+	errChan := make(chan error, 1)
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := listener.Addr().(*net.TCPAddr).Port
+	listener.Close()
+
+	startHTTPServer(server, "127.0.0.1", port, errChan)
+	time.Sleep(100 * time.Millisecond)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/health", port))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := stdio.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"status":"healthy"}`, string(body))
 }
 
 // TestStartHTTPServer_RootEndpoint tests the root endpoint.
@@ -3606,13 +3572,13 @@ func TestStartHTTPServer_MultipleRequests(t *testing.T) {
 		wg.Add(1)
 		go func(reqNum int) {
 			defer wg.Done()
-			resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/sse", port))
+			resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/health", port))
 			if err != nil {
-				t.Logf("Request %d failed: %v", reqNum, err)
+				t.Errorf("request %d failed: %v", reqNum, err)
 				return
 			}
-			resp.Body.Close()
-			t.Logf("Request %d returned status: %d", reqNum, resp.StatusCode)
+			defer resp.Body.Close()
+			assert.Equal(t, http.StatusOK, resp.StatusCode, "request %d", reqNum)
 		}(i)
 	}
 

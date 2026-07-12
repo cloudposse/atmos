@@ -54,6 +54,7 @@ func registerCoreTools(registry *tools.Registry, atmosConfig *schema.AtmosConfig
 		NewSearchFilesTool(atmosConfig),
 		NewListComponentFilesTool(atmosConfig),
 		NewGetTemplateContextTool(atmosConfig),
+		NewTerraformComponentHCLGetTool(atmosConfig),
 		NewListFindingsTool(atmosConfig),
 		NewDescribeFindingTool(atmosConfig),
 		NewAnalyzeFindingTool(atmosConfig),
@@ -84,6 +85,7 @@ func registerCoreTools(registry *tools.Registry, atmosConfig *schema.AtmosConfig
 func registerWriteAndExecutionTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration) error {
 	writeTools := []tools.Tool{
 		NewWriteComponentFileTool(atmosConfig),
+		NewTerraformComponentHCLEditTool(atmosConfig),
 		NewWriteStackFileTool(atmosConfig),
 		NewEditFileTool(atmosConfig),
 		NewExecuteAtmosCommandTool(atmosConfig),
