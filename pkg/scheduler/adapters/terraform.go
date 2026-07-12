@@ -480,11 +480,17 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 		execution.CaptureOutput = d.output.captureOutput()
 		outcome.LogFiles = logFiles
 	}
-	if d.info != nil && d.info.TerraformPlanCIResultHandler != nil {
+	if d.info != nil && (d.info.TerraformPlanCIResultHandler != nil || d.info.NodeHooks != nil) {
 		execution.CaptureOutput = true
 	}
 
-	execResult, err := d.executor(execution)
+	var execResult TerraformExecutionResult
+	var err error
+	if beforeErr := d.runBeforeNodeHooks(ctx, &nodeInfo); beforeErr != nil {
+		err = beforeErr
+	} else {
+		execResult, err = d.executor(execution)
+	}
 	outcome.ExitCode = terraformExitCode(err)
 	outcome.Changed = terraformPlanChangedError(d.info, err)
 	outcome.Output = execResult.CombinedOutput()
@@ -494,6 +500,13 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 			outcome.ExitCode = terraformExitCode(err)
 		}
 	}
+
+	// After-hooks run before output finalization so a hook failure (on_failure:
+	// fail) is reflected in this node's reported status/output, matching
+	// single-component Terraform behavior where an after-hook failure fails the
+	// command's own exit code.
+	err = d.runAfterNodeHooks(ctx, &nodeInfo, &outcome, err)
+
 	if d.output != nil {
 		execResult.Changed = outcome.Changed
 		d.output.finishNode(node, execResult, err)
@@ -505,6 +518,43 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusFailed, Value: outcome}, terraformExecutionError(node, execResult, err)
 	}
 	return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: outcome}, nil
+}
+
+// runBeforeNodeHooks runs this node's before-event hooks, if wired, aborting
+// execution of that node (the executor is never called) on failure. Wraps a
+// failure with ErrPerComponentHookFailed so it's distinguishable in logs/
+// errors from a real Terraform execution failure — the outer
+// terraformExecutionError wrap already adds component/stack context.
+func (d *TerraformDispatcher) runBeforeNodeHooks(ctx context.Context, nodeInfo *schema.ConfigAndStacksInfo) error {
+	if d.info == nil || d.info.NodeHooks == nil {
+		return nil
+	}
+	if err := d.info.NodeHooks.Before(ctx, nodeInfo); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, err)
+	}
+	return nil
+}
+
+// runAfterNodeHooks runs this node's after-event hooks, if wired, and returns
+// the effective error for this node. A hook failure always fails the node —
+// even if the plan itself reported changes — since outcome.Changed is reset
+// to false here so Dispatch's success short-circuit does not apply.
+func (d *TerraformDispatcher) runAfterNodeHooks(ctx context.Context, nodeInfo *schema.ConfigAndStacksInfo, outcome *TerraformNodeOutcome, err error) error {
+	if d.info == nil || d.info.NodeHooks == nil {
+		return err
+	}
+	afterErr := d.info.NodeHooks.After(ctx, nodeInfo, outcome.Output, err)
+	if afterErr == nil {
+		return err
+	}
+	outcome.Changed = false
+	if err == nil {
+		err = afterErr
+	} else {
+		err = errors.Join(err, afterErr)
+	}
+	outcome.ExitCode = terraformExitCode(err)
+	return err
 }
 
 func terraformExecutionError(node *dependency.Node, result TerraformExecutionResult, err error) error {

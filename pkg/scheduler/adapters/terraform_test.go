@@ -113,6 +113,136 @@ func TestExecuteTerraformDestroyUsesReverseDependencyOrder(t *testing.T) {
 	require.Equal(t, []string{"app@dev", "database@dev", "vpc@dev"}, executed)
 }
 
+// testNodeHooks is a schema.ComponentNodeHooks test double that records every
+// Before/After call (keyed by "component@stack") and can be configured to
+// fail for specific nodes, so tests can assert the Dispatch-level wiring
+// added to fix component hooks.RunAll not firing under bulk dispatch.
+type testNodeHooks struct {
+	mu          sync.Mutex
+	beforeCalls []string
+	afterCalls  []string
+	beforeErr   map[string]error
+	afterErr    map[string]error
+}
+
+func (n *testNodeHooks) Before(_ context.Context, info *schema.ConfigAndStacksInfo) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	key := info.Component + "@" + info.Stack
+	n.beforeCalls = append(n.beforeCalls, key)
+	if n.beforeErr != nil {
+		return n.beforeErr[key]
+	}
+	return nil
+}
+
+func (n *testNodeHooks) After(_ context.Context, info *schema.ConfigAndStacksInfo, _ string, _ error) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	key := info.Component + "@" + info.Stack
+	n.afterCalls = append(n.afterCalls, key)
+	if n.afterErr != nil {
+		return n.afterErr[key]
+	}
+	return nil
+}
+
+// TestExecuteTerraformFiresNodeHooksBeforeAndAfter is a regression test for
+// the bug where component hooks.RunAll never fired under --all/--affected/
+// --query bulk dispatch (only CI hooks did, via the old PerComponentHook
+// callback, and only after execution). It asserts Before fires for each node
+// prior to the executor running, and After fires afterward, both with the
+// per-node Component/Stack values set.
+func TestExecuteTerraformFiresNodeHooksBeforeAndAfter(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	var executed []string
+	nodeHooks := &testNodeHooks{}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "plan",
+			NodeHooks:  nodeHooks,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			executed = append(executed, info.Component+"@"+info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.NoError(t, err)
+	want := []string{"vpc@dev", "database@dev", "app@dev"}
+	require.Equal(t, want, executed)
+	require.Equal(t, want, nodeHooks.beforeCalls, "Before must fire once per node with the executed order")
+	require.Equal(t, want, nodeHooks.afterCalls, "After must fire once per node with the executed order")
+}
+
+// TestExecuteTerraformNodeHooksBeforeFailureAbortsNodeWithoutExecutor asserts
+// that a before-hook failure (on_failure: fail, per hooks.RunAll's own
+// resolution) aborts that node's execution — the injected Executor must never
+// be called for it — mirroring how a failing before-hook prevents a
+// single-component command's RunE from ever running.
+func TestExecuteTerraformNodeHooksBeforeFailureAbortsNodeWithoutExecutor(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	var executed []string
+	sentinelErr := errors.New("before hook failed")
+	nodeHooks := &testNodeHooks{
+		beforeErr: map[string]error{"vpc@dev": sentinelErr},
+	}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "plan",
+			NodeHooks:  nodeHooks,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			executed = append(executed, info.Component+"@"+info.Stack)
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, errUtils.ErrPerComponentHookFailed)
+	require.ErrorIs(t, err, sentinelErr)
+	require.NotContains(t, executed, "vpc@dev", "the executor must never run for a node whose before-hook failed")
+}
+
+// TestExecuteTerraformNodeHooksAfterFailurePromotesSuccessToFailure asserts
+// that an after-hook failure (again, only possible for on_failure: fail) is
+// treated as that node's execution failing even though the real Terraform
+// executor succeeded — matching single-component behavior where an
+// after-hook failure fails the command.
+func TestExecuteTerraformNodeHooksAfterFailurePromotesSuccessToFailure(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	sentinelErr := errors.New("after hook failed")
+	nodeHooks := &testNodeHooks{
+		afterErr: map[string]error{"vpc@dev": sentinelErr},
+	}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "plan",
+			NodeHooks:  nodeHooks,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err, "an after-hook failure must fail the node even though the executor succeeded")
+	require.ErrorIs(t, err, sentinelErr)
+}
+
 func TestExecuteTerraformAffectedSelectionUsesGraphBackedPath(t *testing.T) {
 	stacks := terraformAdapterTestStacks()
 	var executed []string
