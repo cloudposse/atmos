@@ -243,6 +243,40 @@ func TestExecuteTerraformNodeHooksAfterFailurePromotesSuccessToFailure(t *testin
 	require.ErrorIs(t, err, sentinelErr)
 }
 
+// TestExecuteTerraformNodeHooksAfterFailureJoinsExecutorError asserts that
+// when the node executor itself already failed AND the after-hook also
+// fails, runAfterNodeHooks joins both errors (errors.Join) rather than
+// dropping either one.
+func TestExecuteTerraformNodeHooksAfterFailureJoinsExecutorError(t *testing.T) {
+	stacks := terraformAdapterTestStacks()
+	execErr := errors.New("executor failed")
+	afterErr := errors.New("after hook failed")
+	nodeHooks := &testNodeHooks{
+		afterErr: map[string]error{"vpc@dev": afterErr},
+	}
+
+	err := ExecuteTerraform(context.Background(), TerraformOptions{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			All:        true,
+			SubCommand: "plan",
+			NodeHooks:  nodeHooks,
+		},
+		Stacks: stacks,
+		Executor: func(execution TerraformExecution) (TerraformExecutionResult, error) {
+			info := execution.Info
+			if info.Component+"@"+info.Stack == "vpc@dev" {
+				return TerraformExecutionResult{}, execErr
+			}
+			return TerraformExecutionResult{}, nil
+		},
+	})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, execErr, "the original executor error must survive the join")
+	require.ErrorIs(t, err, afterErr, "the after-hook error must survive the join")
+}
+
 func TestExecuteTerraformAffectedSelectionUsesGraphBackedPath(t *testing.T) {
 	stacks := terraformAdapterTestStacks()
 	var executed []string

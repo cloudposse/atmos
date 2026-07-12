@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -267,6 +268,74 @@ func TestTerraformNodeHooksAfter_ApplyDemoStacks(t *testing.T) {
 
 	// Failure path: non-nil execErr is forwarded with its exit code.
 	assert.NoError(t, nodeHooks.After(context.Background(), info, "", errUtils.ExitCodeError{Code: 1}))
+}
+
+// TestRunCIHooksForNode_RunCIHooksError covers runCIHooksForNode's RunCIHooks
+// error branch (log.Warn). Constructing an AtmosConfiguration directly with
+// CI.Enabled=true and Settings.Experimental="disable" makes checkExperimental
+// (inside RunCIHooks) return an error without needing any fixture on disk —
+// runCIHooksForNode takes atmosConfig as a parameter rather than loading it
+// itself.
+func TestRunCIHooksForNode_RunCIHooksError(t *testing.T) {
+	withoutCIDetection(t)
+
+	cmd := newHookTestCmd()
+	require.NoError(t, cmd.Flags().Set("ci", "true"))
+	nodeHooks := &terraformNodeHooks{cmd: cmd, afterEvent: hooks.AfterTerraformPlan}
+	atmosConfig := &schema.AtmosConfiguration{
+		CI:       schema.CIConfig{Enabled: true},
+		Settings: schema.AtmosSettings{Experimental: "disable"},
+	}
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", Component: "myapp", ComponentFromArg: "myapp"}
+
+	// runCIHooksForNode has no return value — this just exercises the error
+	// branch (log.Warn) without panicking.
+	assert.NotPanics(t, func() {
+		nodeHooks.runCIHooksForNode(atmosConfig, info, "output", nil)
+	})
+}
+
+// TestTerraformNodeHooksBeforeAfter_ConfigInitFailure covers the
+// config-init-failure branch in both Before and After (log.Warn; return nil)
+// — every other terraformNodeHooks test above chdirs into a valid fixture, so
+// cfg.InitCliConfig always succeeds and this branch was never reached.
+func TestTerraformNodeHooksBeforeAfter_ConfigInitFailure(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	nodeHooks := &terraformNodeHooks{cmd: newHookTestCmd(), beforeEvent: hooks.BeforeTerraformPlan, afterEvent: hooks.AfterTerraformPlan}
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", Component: "myapp", ComponentFromArg: "myapp", ComponentType: "terraform"}
+
+	assert.NoError(t, nodeHooks.Before(context.Background(), info),
+		"config-init failures are logged, not surfaced, from Before")
+	assert.NoError(t, nodeHooks.After(context.Background(), info, "output", nil),
+		"config-init failures are logged, not surfaced, from After")
+}
+
+// TestTerraformNodeHooksRunUserHooksForNode_EmptyEvent covers
+// runUserHooksForNode's `event == ""` guard. Unreachable via production
+// wiring today (terraformHookEvents returns ok=false for any subcommand
+// without an event pair, and wirePerComponentHook never constructs a
+// terraformNodeHooks in that case), so it must be exercised directly.
+func TestTerraformNodeHooksRunUserHooksForNode_EmptyEvent(t *testing.T) {
+	nodeHooks := &terraformNodeHooks{cmd: newHookTestCmd()}
+	err := nodeHooks.runUserHooksForNode(&schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, "", hooks.Outcome{})
+	assert.NoError(t, err)
+}
+
+// TestTerraformAggregateEvent pins the aggregate CI hook event mapping for
+// every Terraform command HandleTerraformPlanCIResults can be invoked with.
+func TestTerraformAggregateEvent(t *testing.T) {
+	cases := map[string]hooks.HookEvent{
+		"apply":   hooks.AfterTerraformApplyAggregate,
+		"destroy": hooks.AfterTerraformDestroyAggregate,
+		"plan":    hooks.AfterTerraformPlanAggregate,
+		"":        hooks.AfterTerraformPlanAggregate,
+	}
+	for command, want := range cases {
+		t.Run(command, func(t *testing.T) {
+			assert.Equal(t, want, terraformAggregateEvent(command))
+		})
+	}
 }
 
 // TestDeployPostRunE_SuppressedWhenMultiComponent verifies that deployCmd.PostRunE
@@ -716,6 +785,45 @@ func TestTerraformPlanCIResultHandler(t *testing.T) {
 
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrInitializeCLIConfig)
+	})
+
+	t.Run("returns RunCIHooks errors", func(t *testing.T) {
+		// Covers the `if err := h.RunCIHooks(...); err != nil { return err }`
+		// branch — distinct from the "returns config init errors" subtest
+		// above, which fails earlier at cfg.InitCliConfig. This needs a valid
+		// project (so InitCliConfig succeeds) with ci.enabled=true and
+		// settings.experimental=disable, so RunCIHooks itself fails inside
+		// checkExperimental.
+		tempDir := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "stacks", "test.yaml"), []byte("vars:\n  stage: test\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(`base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+schemas: {}
+ci:
+  enabled: true
+settings:
+  experimental: disable
+`), 0o644))
+		t.Chdir(tempDir)
+
+		cmd := newHookTestCmd()
+		require.NoError(t, cmd.Flags().Set("ci", "true"))
+		handler := &terraformPlanCIResultHandler{
+			cmd:     cmd,
+			info:    &schema.ConfigAndStacksInfo{},
+			command: "apply",
+		}
+
+		err := handler.HandleTerraformPlanCIResults(schema.TerraformPlanCIResultSet{})
+		require.Error(t, err)
 	})
 }
 

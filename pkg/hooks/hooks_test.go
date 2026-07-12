@@ -522,6 +522,32 @@ func TestRunPerComponentHooks(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("nil opts is a no-op", func(t *testing.T) {
+		assert.NoError(t, RunPerComponentHooks(nil))
+	})
+
+	t.Run("nil Info is a no-op", func(t *testing.T) {
+		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+			Event:       AfterTerraformApply,
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info:        nil,
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("GetHooks error is propagated", func(t *testing.T) {
+		// A non-empty component/stack pair that doesn't exist in any stack
+		// forces ExecuteDescribeComponent (called by GetHooks) to fail, which
+		// RunPerComponentHooks must surface rather than swallow.
+		t.Chdir(t.TempDir())
+		err := RunPerComponentHooks(&RunPerComponentHooksOptions{
+			Event:       AfterTerraformApply,
+			AtmosConfig: &schema.AtmosConfiguration{},
+			Info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "nonexistent", Stack: "nonexistent"},
+		})
+		assert.Error(t, err)
+	})
+
 	// newFixture writes a minimal atmos project with one terraform component
 	// ("vpc") whose after.terraform.apply hook always fails (kind: command,
 	// running the test binary itself with _ATMOS_TEST_EXIT_ONE=1 — a

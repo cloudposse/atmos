@@ -140,3 +140,36 @@ func TestHelmfileRun_HelpRequest(t *testing.T) {
 	err = helmfileRun(helmfileCmd, "apply", []string{"help"})
 	assert.NoError(t, err)
 }
+
+// newHelmfileRunTestCmd builds a minimal command carrying the global flags
+// getConfigAndStacksInfo/ProcessCommandLineArgs expect (base-path, config,
+// stack, ...) — mirroring newHookTestCmd in cmd/terraform's hook tests. These
+// flags are normally inherited from RootCmd; helmfileRun is exercised here
+// without going through RootCmd.Execute(), so they must be registered
+// directly.
+func newHelmfileRunTestCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "diff"}
+	cmd.Flags().String("base-path", "", "base path")
+	cmd.Flags().StringSlice("config", nil, "config")
+	cmd.Flags().StringSlice("config-path", nil, "config path")
+	cmd.Flags().StringSlice("profile", nil, "profile")
+	cmd.Flags().StringP("stack", "s", "", "stack flag")
+	cmd.Flags().Bool("ci", false, "ci flag")
+	return cmd
+}
+
+// TestHelmfileRun_NodeHooksFallbackOnEarlyFailure is a regression test for
+// the helmfileRun fallback (err != nil && !nodeHooks.called): when
+// ExecuteHelmfile fails before ever reaching info.NodeHooks.Before/After
+// (e.g., a component/stack whose config resolves but whose Helm auth profile
+// doesn't exist), helmfileRun must still fire the after-hook itself so CI/user
+// hooks see the failure. This also exercises helmfileNodeHooks.After's
+// execErr != nil branch through the real call path (not just the direct-call
+// unit test), since the underlying error is non-nil here.
+func TestHelmfileRun_NodeHooksFallbackOnEarlyFailure(t *testing.T) {
+	skipIfHelmfileNotInstalled(t)
+	t.Chdir("../../tests/fixtures/scenarios/complete")
+
+	err := helmfileRun(newHelmfileRunTestCmd(), "diff", []string{"echo-server", "-s", "tenant1-ue2-dev"})
+	require.Error(t, err, "diff should fail: the fixture's helm auth profile does not exist locally")
+}
