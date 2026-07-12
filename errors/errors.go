@@ -1409,6 +1409,10 @@ var (
 	ErrParseVendorFile = errors.New("failed to parse vendor manifest")
 	// ErrInvalidGitRef indicates a Git ref (tag, branch, or commit) could not be resolved.
 	ErrInvalidGitRef = errors.New("invalid Git ref")
+	// ErrComponentManifestNotFound indicates no component.yaml/component.yml exists in a component's directory.
+	ErrComponentManifestNotFound = errors.New("component vendoring manifest not found")
+	// ErrInvalidComponentManifestKind indicates a component.yaml's "kind" is not "ComponentVendorConfig".
+	ErrInvalidComponentManifestKind = errors.New("invalid kind in component vendoring manifest; expected ComponentVendorConfig")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
