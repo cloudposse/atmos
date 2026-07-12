@@ -51,7 +51,13 @@ jobs:
           #   license scan comes from LICENSE.docs, which covers documentation only (see
           #   https://github.com/opencontainers/go-digest#copyright-and-license).
           #   Transitive dependency of github.com/updatecli/updatecli (Version Tracker).
-          allow-dependencies-licenses: "pkg:golang/github.com/antlr4-go/antlr/v4, pkg:golang/github.com/google/cel-go, pkg:golang/golang.org/x/image, pkg:golang/modernc.org/libc, pkg:golang/github.com/opencontainers/go-digest"
+          # pako: "MIT AND Zlib" (verified at https://github.com/nodeca/pako/blob/master/LICENSE) -
+          #   MIT-licensed JS wrapper around zlib's permissively-licensed C sources.
+          #   Transitive dependency of @excalidraw/excalidraw (website diagram embeds).
+          # sax: BlueOak-1.0.0 (verified at https://github.com/isaacs/sax-js/blob/main/LICENSE.md) -
+          #   Blue Oak Model License, a permissive OSS license.
+          #   Transitive dependency of svgo (website SVG optimization).
+          allow-dependencies-licenses: "pkg:golang/github.com/antlr4-go/antlr/v4, pkg:golang/github.com/google/cel-go, pkg:golang/golang.org/x/image, pkg:golang/modernc.org/libc, pkg:golang/github.com/opencontainers/go-digest, pkg:npm/pako, pkg:npm/sax"
 
           # Fail on moderate or higher severity vulnerabilities
           fail-on-severity: moderate

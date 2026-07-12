@@ -215,7 +215,7 @@ func mergeLocals(base, override map[string]any) map[string]any {
 	if err != nil {
 		// On merge error, fall back to shallow merge for robustness.
 		log.Warn("Deep-merge failed, falling back to shallow merge", "error", err)
-		result = make(map[string]any, len(base)+len(override))
+		result = make(map[string]any, len(base))
 		for k, v := range base {
 			result[k] = v
 		}

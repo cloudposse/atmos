@@ -480,7 +480,7 @@ func writeMergedDataToFile(tempDir string, mergedData map[string]interface{}) (*
 // Write the 'outer' top-level file and return its final file URL.
 func writeOuterTopLevelFile(tempDir string, fileURL string, mergedData map[string]interface{}) (*url.URL, error) {
 	// Write the 'outer' top-level file.
-	topLevel := make(map[string]interface{}, len(mergedData)+1)
+	topLevel := make(map[string]interface{}, len(mergedData))
 	for key, value := range mergedData {
 		topLevel[key] = value
 	}

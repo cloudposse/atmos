@@ -33,6 +33,8 @@ const (
 	terraformDefaultCommand    = "terraform"
 	terraformNodeIDFormat      = "%s-%s"
 	terraformSubCommandPlan    = "plan"
+	terraformSubCommandApply   = "apply"
+	terraformSubCommandDeploy  = "deploy"
 	terraformSubCommandDestroy = "destroy"
 )
 
@@ -370,7 +372,7 @@ func validateTerraformConcurrentExecution(atmosConfig *schema.AtmosConfiguration
 
 // requiresTerraformAutoApprove reports whether concurrent execution must be explicitly approved.
 func requiresTerraformAutoApprove(info *schema.ConfigAndStacksInfo) bool {
-	return info != nil && (info.SubCommand == "apply" || info.SubCommand == terraformSubCommandDestroy)
+	return info != nil && (info.SubCommand == terraformSubCommandApply || info.SubCommand == terraformSubCommandDestroy)
 }
 
 // hasTerraformAutoApprove detects auto-approve from config, CLI flags, or Terraform env flags.
@@ -378,7 +380,7 @@ func hasTerraformAutoApprove(atmosConfig *schema.AtmosConfiguration, info *schem
 	if info == nil {
 		return false
 	}
-	if info.SubCommand == "apply" && atmosConfig != nil && atmosConfig.Components.Terraform.ApplyAutoApprove {
+	if info.SubCommand == terraformSubCommandApply && atmosConfig != nil && atmosConfig.Components.Terraform.ApplyAutoApprove {
 		return true
 	}
 	if containsTerraformFlag(info.AdditionalArgsAndFlags, "-auto-approve") {
@@ -1489,7 +1491,7 @@ func effectiveTerraformFailureMode(info *schema.ConfigAndStacksInfo) string {
 // supportsTerraformConcurrency reports whether subCommand can run through the scheduler concurrently.
 func supportsTerraformConcurrency(subCommand string) bool {
 	switch subCommand {
-	case terraformSubCommandPlan, "apply", "deploy", terraformSubCommandDestroy:
+	case terraformSubCommandPlan, terraformSubCommandApply, terraformSubCommandDeploy, terraformSubCommandDestroy:
 		return true
 	default:
 		return false
